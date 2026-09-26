@@ -111,6 +111,69 @@ test('computeRunnerSourceFingerprint ignores development-only SwiftPM trees but 
   assert.notEqual(computeRunnerSourceFingerprint(root), afterIgnoredChanges);
 });
 
+test('computeRunnerSourceFingerprint covers Xcode project, scheme, and workspace files', () => {
+  const root = makeTempRoot();
+  const projectRoot = path.join(root, 'apple', 'runner', 'AgentDeviceRunner');
+  const projectPackage = path.join(projectRoot, 'AgentDeviceRunner.xcodeproj');
+  const scheme = path.join(
+    projectPackage,
+    'xcshareddata',
+    'xcschemes',
+    'AgentDeviceRunner.xcscheme',
+  );
+  const workspaceData = path.join(
+    projectPackage,
+    'project.xcworkspace',
+    'contents.xcworkspacedata',
+  );
+  const pbxproj = path.join(projectPackage, 'project.pbxproj');
+  fs.mkdirSync(path.dirname(scheme), { recursive: true });
+  fs.mkdirSync(path.dirname(workspaceData), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, 'Runner.swift'), 'runner\n');
+  fs.writeFileSync(pbxproj, '// Begin project\n');
+  fs.writeFileSync(scheme, '<Scheme/>\n');
+  fs.writeFileSync(workspaceData, '<Workspace/>\n');
+
+  const before = computeRunnerSourceFingerprint(root);
+
+  fs.writeFileSync(pbxproj, '// Begin project\n// membership changed\n');
+  const afterPbxproj = computeRunnerSourceFingerprint(root);
+  assert.notEqual(afterPbxproj, before);
+
+  fs.writeFileSync(scheme, `<Scheme testableReference="changed"/>\n`);
+  const afterScheme = computeRunnerSourceFingerprint(root);
+  assert.notEqual(afterScheme, afterPbxproj);
+
+  fs.writeFileSync(workspaceData, `<Workspace data="changed"/>\n`);
+  assert.notEqual(computeRunnerSourceFingerprint(root), afterScheme);
+});
+
+test('computeRunnerSourceFingerprint ignores per-user Xcode state', () => {
+  const root = makeTempRoot();
+  const projectPackage = path.join(
+    root,
+    'apple',
+    'runner',
+    'AgentDeviceRunner',
+    'AgentDeviceRunner.xcodeproj',
+  );
+  const userScheme = path.join(
+    projectPackage,
+    'xcuserdata',
+    'someone.xcuserdatad',
+    'xcschemes',
+    'AgentDeviceRunner.xcscheme',
+  );
+  fs.mkdirSync(path.dirname(userScheme), { recursive: true });
+  fs.writeFileSync(path.join(projectPackage, 'project.pbxproj'), '// project\n');
+  fs.writeFileSync(userScheme, '<Scheme/>\n');
+
+  const before = computeRunnerSourceFingerprint(root);
+  fs.writeFileSync(userScheme, `<Scheme state="dirty"/>\n`);
+
+  assert.equal(computeRunnerSourceFingerprint(root), before);
+});
+
 const IGNORED_SOURCE_DIRECTORY_NAMES = [
   'Tests',
   'SnapshotPresentationConformance',

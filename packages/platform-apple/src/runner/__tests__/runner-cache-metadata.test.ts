@@ -121,7 +121,7 @@ test('resolveRunnerSandboxBuildArgs disables nested Xcode and Swift sandboxing',
     '-IDEPackageSupportDisableManifestSandbox=1',
     '-IDEPackageSupportDisablePluginExecutionSandbox=1',
     'ENABLE_USER_SCRIPT_SANDBOXING=NO',
-    'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox',
+    'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox -D AGENT_DEVICE_RUNNER_ISOLATION_CANARY',
   ]);
 });
 
@@ -133,7 +133,7 @@ test('resolveRunnerSandboxBuildArgs includes Swift runner unit tests only when r
       '-IDEPackageSupportDisableManifestSandbox=1',
       '-IDEPackageSupportDisablePluginExecutionSandbox=1',
       'ENABLE_USER_SCRIPT_SANDBOXING=NO',
-      'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox -D AGENT_DEVICE_RUNNER_UNIT_TESTS',
+      'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox -D AGENT_DEVICE_RUNNER_ISOLATION_CANARY -D AGENT_DEVICE_RUNNER_UNIT_TESTS',
     ]);
   } finally {
     if (previous === undefined) {
@@ -172,9 +172,10 @@ test('metadata diff names only the comparable keys that differ, with expected an
     runnerPerformanceBuildSettings: ['ENABLE_CODE_COVERAGE=YES'],
     artifacts: {
       xctestrunPath: '/tmp/derived/Runner.xctestrun',
-      xctestrunMtimeMs: 1,
       xctestrunSize: 2,
-      productPaths: [{ path: '/tmp/derived/Runner.app', mtimeMs: 1, size: 2 }],
+      xctestrunDigest: 'a'.repeat(64),
+      productPaths: ['/tmp/derived/Runner.app'],
+      entries: [{ path: 'Runner.app/Runner', size: 2, mode: 0o755, digest: 'b'.repeat(64) }],
     },
   };
 

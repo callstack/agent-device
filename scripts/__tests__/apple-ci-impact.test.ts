@@ -95,6 +95,9 @@ test('Apple runner build cache uses only declared source and schema hashes', () 
     'scripts/build-xcuitest-apple.sh',
   ]);
   expect(steps[restoreIndex]?.with?.key).toContain('steps.cache-schema.outputs.value');
+  // Restoring under a prefix would hand a job products whose content manifest belongs to
+  // another identity, so the cache is exact-match only and the source hash must be in the key.
+  expect(steps[restoreIndex]?.with?.key).toContain('steps.source-hash.outputs.value');
   expect(steps[restoreIndex]?.with?.['restore-keys']).toBeUndefined();
   expect(cacheInputs(text)).not.toContain('scripts/patch-xcuitest-runner-icon.ts');
 });
@@ -107,6 +110,9 @@ test('restored native products are rebuilt before caching and icon patching', ()
   );
   const saveIndex = steps.findIndex((step) => step.name === 'Save Apple runner build cache');
   const patchIndex = steps.findIndex((step) => step.name === 'Patch XCTest runner icon');
+  const republishIndex = steps.findIndex(
+    (step) => step.name === 'Re-publish Apple runner cache metadata',
+  );
   expect(buildIndex).toBeGreaterThan(restoreIndex);
   expect(steps[buildIndex]?.if).toBeUndefined();
   expect(steps[buildIndex]?.env?.AGENT_DEVICE_XCUITEST_SKIP_ICON_PATCH).toBe('1');
@@ -115,6 +121,11 @@ test('restored native products are rebuilt before caching and icon patching', ()
   expect(patchIndex).toBeGreaterThan(saveIndex);
   expect(steps[patchIndex]?.if).toBeUndefined();
   expect(steps[patchIndex]?.run).toContain('scripts/patch-xcuitest-runner-icon.ts');
+  // The cache is saved unpatched, so the manifest that ships inside it certifies unpatched
+  // bytes. The tree that actually runs is republished after the patch rewrote those bytes.
+  expect(republishIndex).toBeGreaterThan(patchIndex);
+  expect(steps[republishIndex]?.run).toContain('scripts/write-xcuitest-cache-metadata.ts');
+  expect(steps[republishIndex]?.run).toContain('agent-device-build-for-testing.log');
   expect(fs.readFileSync(path.join(repoRoot, 'scripts/build-xcuitest-apple.sh'), 'utf8')).toContain(
     'if ! is_truthy "${AGENT_DEVICE_XCUITEST_SKIP_ICON_PATCH:-}"; then',
   );

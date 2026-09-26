@@ -87,7 +87,7 @@ test('prepareIosRunner marks a bad restored artifact and rebuilds once after hea
 test('prepareIosRunner invalidates rebuilt sessions when bad-cache recovery health fails', async () => {
   const restoredArtifact = makeRunnerArtifact({
     xctestrunPath: '/tmp/restored.xctestrun',
-    cache: 'restore-key',
+    cache: 'exact',
     artifact: 'valid',
   });
   const rebuiltArtifact = makeRunnerArtifact({

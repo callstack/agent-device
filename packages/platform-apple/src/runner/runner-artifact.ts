@@ -30,6 +30,7 @@ import {
   evaluateExistingXctestrun,
   requireRunnerPhaseRemainingMs,
   resolveExpectedRunnerCacheMetadata,
+  resolveRunnerArchBuildSettings,
   resolveRunnerBundleBuildSettings,
   resolveRunnerDerivedPath,
   resolveRunnerMaxConcurrentDestinationsFlag,
@@ -66,7 +67,7 @@ export type RunnerXctestrunArtifact = {
   cache: RunnerXctestrunCacheKind;
   artifact: RunnerXctestrunArtifactState;
   buildMs: number;
-  xctestrunPathSource: 'manifest' | 'scan' | 'build' | 'external';
+  xctestrunPathSource: 'manifest' | 'build' | 'external';
   reason?: string;
 };
 
@@ -174,17 +175,11 @@ async function ensureXctestrunUnderCacheLock(params: {
 }): Promise<RunnerXctestrunArtifact> {
   const { device, options, projectRoot, expectedCacheMetadata, derived } = params;
   cleanRunnerDerivedBeforeEvaluation(derived, params.forceRebuild);
-  const existing = await evaluateExistingXctestrunForDevice({
-    device,
+  const existing = await evaluateExistingXctestrun({
     derived,
-    projectRoot,
     expectedCacheMetadata,
   });
-  const cache =
-    existing.reason === 'reuse_ready' ? 'exact' : existing.xctestrunPath ? 'restore-key' : 'miss';
-  if (existing.reason !== 'reuse_ready') {
-    emitRunnerXctestrunRebuildDecision(existing, derived);
-  }
+  const cache = existing.reason === 'reuse_ready' ? 'exact' : 'miss';
   const reusable = await resolveReusableXctestrunArtifact({
     device,
     derived,
@@ -193,7 +188,13 @@ async function ensureXctestrunUnderCacheLock(params: {
     cache,
   });
   if (reusable) return reusable;
-  if (existing.xctestrunPath) {
+  if (existing.reason !== 'reuse_ready') {
+    emitRunnerXctestrunRebuildDecision(existing, derived);
+  }
+  // Nothing survived evaluation — a certified state that failed repair, or one the manifest
+  // refuses — so the tree is discarded before the rebuild. A missing manifest is not ours to
+  // delete: that directory is either a first build or one the caller laid out itself.
+  if (existing.reason !== 'cache_metadata_missing') {
     assertSafeDerivedCleanup(derived);
     cleanRunnerDerivedArtifacts(derived);
   }
@@ -230,7 +231,7 @@ async function resolveReusableXctestrunArtifact(params: {
     cache,
     artifact: 'valid',
     buildMs: 0,
-    xctestrunPathSource: existing.source,
+    xctestrunPathSource: 'manifest',
   };
 }
 
@@ -273,6 +274,7 @@ async function buildXctestrunArtifact(params: {
   await repairMacOsRunnerProductsIfNeeded(device, builtProductPaths, built);
   // Release/dev script builds patch the synthesized XCTest runner app in scripts/.
   // This covers direct local xcodebuilds triggered by ensureXctestrunArtifact on cache miss.
+  // The manifest is written last so it certifies the bytes that actually run.
   await applyXctestRunnerAppIcon(builtProductPaths);
   writeRunnerCacheMetadataForArtifacts(derived, expectedCacheMetadata, built, builtProductPaths);
   emitRunnerXctestrunDecision('build', 'built_new', {
@@ -322,42 +324,21 @@ async function tryReuseExistingXctestrun(
 }
 
 // Cache probe for preflight surfaces (doctor): runs the same no-build reuse
-// evaluation as the ensure path (cache metadata + product-path validation),
-// so a partial or stale cache never reports as ready. Resolving the expected
-// metadata stats the runner sources and reads tool versions (~100ms, cached
-// per process) but never builds.
+// evaluation as the ensure path (cache metadata + content-manifest validation),
+// so a partial, restored, or tampered cache never reports as ready. Resolving
+// the expected metadata stats the runner sources and reads tool versions
+// (~100ms, cached per process) and the manifest digests the products (tens of
+// ms) but never builds.
 export async function hasCachedAppleRunnerArtifact(device: DeviceInfo): Promise<boolean> {
   try {
     const projectRoot = findProjectRoot();
     const expectedCacheMetadata = resolveExpectedRunnerCacheMetadata(device, projectRoot);
     const derived = resolveRunnerDerivedPath(device, expectedCacheMetadata);
-    const existing = await evaluateExistingXctestrunForDevice({
-      device,
-      derived,
-      projectRoot,
-      expectedCacheMetadata,
-    });
+    const existing = await evaluateExistingXctestrun({ derived, expectedCacheMetadata });
     return existing.reason === 'reuse_ready';
   } catch {
     return false;
   }
-}
-
-function evaluateExistingXctestrunForDevice(params: {
-  device: DeviceInfo;
-  derived: string;
-  projectRoot: string;
-  expectedCacheMetadata: RunnerXctestrunCacheMetadata;
-}): Promise<ExistingXctestrunState> {
-  const { device, derived, projectRoot, expectedCacheMetadata } = params;
-  return evaluateExistingXctestrun({
-    derived,
-    projectRoot,
-    expectedCacheMetadata,
-    findXctestrun: (root) => findXctestrun(root, device),
-    xctestrunReferencesProjectRoot,
-    resolveExistingXctestrunProductPaths,
-  });
 }
 
 type XctestrunCandidate = {
@@ -438,27 +419,6 @@ export function scoreXctestrunCandidate(candidatePath: string, device: DeviceInf
   return score;
 }
 
-export function xctestrunReferencesProjectRoot(
-  xctestrunPath: string,
-  projectRoot: string,
-): boolean {
-  try {
-    const contents = fs.readFileSync(xctestrunPath, 'utf8');
-    const candidateRoots = new Set<string>([projectRoot]);
-    try {
-      candidateRoots.add(fs.realpathSync(projectRoot));
-    } catch {}
-    for (const root of candidateRoots) {
-      if (contents.includes(root)) {
-        return true;
-      }
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
 async function buildRunnerXctestrun(
   device: DeviceInfo,
   projectPath: string,
@@ -475,6 +435,7 @@ async function buildRunnerXctestrun(
   );
   const provisioningArgs = device.kind === 'device' ? ['-allowProvisioningUpdates'] : [];
   const performanceBuildSettings = resolveRunnerPerformanceBuildSettings();
+  const archBuildSettings = resolveRunnerArchBuildSettings(process.env);
   const sandboxBuildArgs = resolveRunnerSandboxBuildArgs();
   try {
     await runCmdStreaming(
@@ -493,6 +454,7 @@ async function buildRunnerXctestrun(
         '-derivedDataPath',
         derived,
         ...performanceBuildSettings,
+        ...archBuildSettings,
         ...sandboxBuildArgs,
         ...runnerBundleBuildSettings,
         ...provisioningArgs,

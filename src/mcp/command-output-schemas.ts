@@ -596,7 +596,7 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
       kind: enumSchema(DEVICE_KINDS),
       durationMs: numberSchema(),
       runner: objectSchema({}, []),
-      cache: enumSchema(['exact', 'restore-key', 'miss', 'external']),
+      cache: enumSchema(['exact', 'miss', 'external']),
       artifact: enumSchema(['valid', 'rebuilt']),
       buildMs: numberSchema(),
       connectMs: numberSchema(),

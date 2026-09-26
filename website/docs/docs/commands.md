@@ -270,7 +270,7 @@ agent-device prepare ios-runner --platform ios --timeout 240000
 - If health checking exposes a bad restored runner artifact, Agent Device marks that artifact bad and rebuilds once.
 - If a fresh runner launch gets stuck before accepting connections, Agent Device invalidates that runner session and launches it once more without forcing a rebuild.
 - CI may cache `~/.agent-device/apple-runner/derived` when the cache key includes the exact Agent Device package contents and selected Xcode version.
-- Avoid broad `restore-keys` fallbacks for runner caches. Reusing runner artifacts across Agent Device or Xcode versions can restore stale `.xctestrun` products; `prepare ios-runner` already handles bad exact-cache artifacts and one retryable non-connecting runner launch.
+- Runner reuse is authorized only by the cache metadata's content manifest: a restored tree whose files no longer match the recorded digests, modes, or symlink targets is discarded and rebuilt. A cache key must stay exact — the runtime never falls back to a broader cache.
 - Runner build/start output is written to the session's `runner.log`. The top-level `daemon.log` is reserved for daemon lifecycle/startup issues.
 
 ## TV targets

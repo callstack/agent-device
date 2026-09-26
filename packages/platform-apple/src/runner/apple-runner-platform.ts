@@ -127,6 +127,51 @@ const RUNNER_PLATFORM_PROFILES: Record<RunnerApplePlatformName, RunnerPlatformPr
   },
 };
 
+const RUNNER_XCUITEST_SCRIPT_PLATFORMS = ['ios', 'macos', 'tvos', 'visionos'] as const;
+export type RunnerXcuitestScriptPlatform = (typeof RUNNER_XCUITEST_SCRIPT_PLATFORMS)[number];
+
+const RUNNER_SCRIPT_TARGET: Record<
+  RunnerXcuitestScriptPlatform,
+  NonNullable<DeviceInfo['target']>
+> = {
+  ios: 'mobile',
+  macos: 'desktop',
+  tvos: 'tv',
+  visionos: 'mobile',
+};
+
+const RUNNER_SCRIPT_APPLE_OS: Record<
+  RunnerXcuitestScriptPlatform,
+  NonNullable<DeviceInfo['appleOs']>
+> = {
+  ios: 'ios',
+  macos: 'macos',
+  tvos: 'tvos',
+  visionos: 'visionos',
+};
+
+/**
+ * The device a build-script invocation stands in for: the script names its platform as a
+ * literal and a destination string, and the cache metadata owner speaks `DeviceInfo`.
+ * Resolving identity through this one mapping keeps a script-written manifest comparable to
+ * the metadata a daemon resolves for the same build.
+ */
+export function resolveRunnerScriptDevice(
+  platform: RunnerXcuitestScriptPlatform,
+  destination: string,
+): DeviceInfo {
+  const kind: DeviceInfo['kind'] =
+    platform === 'macos' || !destination.includes('Simulator') ? 'device' : 'simulator';
+  return {
+    platform: 'apple',
+    id: `runner-script-${platform}`,
+    name: `Apple runner build script (${platform})`,
+    kind,
+    target: RUNNER_SCRIPT_TARGET[platform],
+    appleOs: RUNNER_SCRIPT_APPLE_OS[platform],
+  };
+}
+
 export function resolveRunnerPlatformName(device: DeviceInfo): RunnerApplePlatformName {
   if (!isApplePlatform(device.platform)) {
     throw new AppError(

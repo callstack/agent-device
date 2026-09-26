@@ -1,6 +1,7 @@
 export {
   applyXctestRunnerAppIconFromDerivedPath,
   detachIosRunnerSessionsForShutdown,
+  findRunnerXctestrun,
   hasLiveIosRunnerSession,
   notifyIosRunnerAppRelaunched,
   prepareIosRunner,
@@ -10,11 +11,21 @@ export {
   readStaleRunnerLease,
   releaseIosRunnerOnClose,
   releaseSpeculativeIosRunnerSessionFor,
+  resolveExistingRunnerProductPaths,
+  resolveExpectedRunnerCacheMetadata,
   resolveRunnerAppBundleId,
+  resolveRunnerArchBuildSettings,
+  resolveRunnerBundleBuildSettings,
+  resolveRunnerPerformanceBuildSettings,
+  resolveRunnerSandboxBuildArgs,
+  resolveRunnerScriptDevice,
+  resolveRunnerSigningBuildSettings,
+  requireRunnerBuildSettingsMatchBuildLog,
   runAppleRunnerCommand,
   stopAllIosRunnerSessions,
   stopIosRunnerSession,
   verifyLeaseRunnerPidIdentity,
+  writeRunnerCacheMetadataForArtifacts,
 } from './core/runner-client.ts';
 export { queryAppleRunnerSelector } from './core/runner-selector-query.ts';
 export { restoreLegacyXctestDeviceSetRedirect } from './runner/runner-device-set.ts';

@@ -1039,7 +1039,7 @@ Required freshness gate before device verification:
   Before local Android verification, run pnpm build:android before pnpm clean:daemon so the bundled helpers match current source.
   For an Apple runner change, run pnpm build:xcuitest and avoid inherited retained runners from older source. Do not build the Apple runner for TypeScript-only changes.
   Use open --relaunch when startup state matters. Use a purpose-specific --session for multi-step validation.
-  CI may cache ~/.agent-device/apple-runner/derived with an exact key that includes the agent-device package and Xcode version. Avoid broad restore-key fallbacks; prepare ios-runner already recovers bad restored runner artifacts and one retryable non-connecting runner launch.
+  CI may cache ~/.agent-device/apple-runner/derived with an exact key that includes the agent-device package and Xcode version. Runner reuse is authorized only by the cache metadata's content manifest, so a restore that fails validation rebuilds; prepare ios-runner already recovers one retryable non-connecting runner launch.
 
 Loop:
   1. Build or prepare the changed surface with the repo command that owns it.

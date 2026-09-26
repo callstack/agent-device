@@ -38,3 +38,16 @@ export {
   hasCachedAppleRunnerArtifact,
   resolveRunnerAppBundleId,
 } from '../runner/runner-xctestrun.ts';
+export { findXctestrun as findRunnerXctestrun } from '../runner/runner-artifact.ts';
+export { resolveExistingXctestrunProductPaths as resolveExistingRunnerProductPaths } from '../runner/runner-xctestrun-products.ts';
+export {
+  requireRunnerBuildSettingsMatchBuildLog,
+  resolveExpectedRunnerCacheMetadata,
+  resolveRunnerArchBuildSettings,
+  resolveRunnerBundleBuildSettings,
+  resolveRunnerPerformanceBuildSettings,
+  resolveRunnerSandboxBuildArgs,
+  resolveRunnerSigningBuildSettings,
+} from '../runner/runner-cache-metadata.ts';
+export { resolveRunnerScriptDevice } from '../runner/apple-runner-platform.ts';
+export { writeRunnerCacheMetadataForArtifacts } from '../runner/runner-cache.ts';

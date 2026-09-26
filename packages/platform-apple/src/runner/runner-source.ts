@@ -116,44 +116,61 @@ function collectRunnerSourceFilesUnderRoot(
   ignoredDirectoryNames: ReadonlySet<string>,
 ): string[] {
   return fs.existsSync(root)
-    ? collectRunnerSourceFilesInDirectory(root, ignoredDirectoryNames)
+    ? collectRunnerSourceFilesInDirectory(root, ignoredDirectoryNames, false)
     : [];
 }
 
 function collectRunnerSourceFilesInDirectory(
   directory: string,
   ignoredDirectoryNames: ReadonlySet<string>,
+  includeEveryFile: boolean,
 ): string[] {
   const files: string[] = [];
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const fullPath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
-      if (!ignoredDirectoryNames.has(entry.name)) {
-        files.push(...collectRunnerSourceFilesInDirectory(fullPath, ignoredDirectoryNames));
-      }
-    } else if (entry.isFile() && isRunnerSourceFile(entry.name, fullPath)) {
+      if (ignoredDirectoryNames.has(entry.name)) continue;
+      const nestedIncludeEveryFile = includeEveryFile || isXcodePackageDirectory(entry.name);
+      files.push(
+        ...collectRunnerSourceFilesInDirectory(
+          fullPath,
+          ignoredDirectoryNames,
+          nestedIncludeEveryFile,
+        ),
+      );
+    } else if (entry.isFile() && (includeEveryFile || isRunnerSourceFile(entry.name))) {
       files.push(fullPath);
     }
   }
   return files;
 }
 
-function isRunnerSourceFile(fileName: string, filePath: string): boolean {
-  if (fileName === 'project.pbxproj') {
-    return filePath.includes(`${path.sep}.xcodeproj${path.sep}`);
-  }
-  return [
-    '.jpg',
-    '.json',
-    '.png',
-    '.swift',
-    '.m',
-    '.h',
-    '.plist',
-    '.entitlements',
-    '.xctestplan',
-    '.xcconfig',
-    '.storyboard',
-    '.xib',
-  ].includes(path.extname(fileName));
+/**
+ * Xcode owns the contents of a project or workspace package — `project.pbxproj`, shared
+ * schemes, and workspace data all change what a build produces — so every file inside one
+ * is build input, not just the ones with a recognizable extension.
+ */
+function isXcodePackageDirectory(directoryName: string): boolean {
+  return directoryName.endsWith('.xcodeproj') || directoryName.endsWith('.xcworkspace');
+}
+
+const RUNNER_SOURCE_FILE_EXTENSIONS = new Set([
+  '.jpg',
+  '.json',
+  '.png',
+  '.swift',
+  '.m',
+  '.h',
+  '.plist',
+  '.entitlements',
+  '.xctestplan',
+  '.xcconfig',
+  '.storyboard',
+  '.xib',
+  '.xcscheme',
+  '.xcworkspacedata',
+]);
+
+function isRunnerSourceFile(fileName: string): boolean {
+  return RUNNER_SOURCE_FILE_EXTENSIONS.has(path.extname(fileName));
 }
