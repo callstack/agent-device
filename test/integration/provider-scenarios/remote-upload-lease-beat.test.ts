@@ -110,36 +110,7 @@ async function startFakeRemoteDaemon(behaviour: UploadBehaviour): Promise<FakeDa
     }
     readJsonBody(req, (payload) => {
       if (payload.method === 'agent_device.lease.heartbeat') {
-        beatsAnswered += 1;
-        seen.push('lease_heartbeat');
-        assert.equal(payload.params?.leaseId, LEASE_ID, 'a beat names the lease it protects');
-        // Only the beat that is not the first can say something about the upload: the loop fires
-        // one at t=0, while the artifact is still being hashed.
-        const leaseGone = behaviour === 'backpressure' && beatsAnswered >= 2;
-        if (leaseGone) {
-          leaseDeclaredLost = true;
-          // A writer stalled on backpressure and a writer that was just canceled look identical from
-          // here, so the daemon releases the pressure and lets the difference show: the canceled
-          // request is already destroyed and stops short, while one nobody canceled drains.
-          // Deferring it is what keeps that a causal gap rather than a race for the same tick.
-          setTimeout(() => stopBackpressure?.(), CANCEL_NOTICE_MS).unref();
-        }
-        if (leaseGone) {
-          writeLeaseLostError(res, payload.id);
-        } else {
-          const now = Date.now();
-          writeJson(res, 200, {
-            jsonrpc: '2.0',
-            id: payload.id,
-            result: {
-              ok: true,
-              data: { lease: { heartbeatAt: now, expiresAt: now + LEASE_WINDOW_MS } },
-            },
-          });
-        }
-        // A beat that reports the lease gone must not also complete the upload it is meant to
-        // stop: the artifact's fate is decided by the abort, not by a response from here.
-        if (!leaseGone) writeUploadResponse?.();
+        answerBeat(res, payload);
         return;
       }
       seen.push(String(payload.params?.command ?? payload.method));
@@ -150,6 +121,34 @@ async function startFakeRemoteDaemon(behaviour: UploadBehaviour): Promise<FakeDa
       });
     });
   });
+
+  function answerBeat(res: http.ServerResponse, payload: RpcPayload): void {
+    beatsAnswered += 1;
+    seen.push('lease_heartbeat');
+    assert.equal(payload.params?.leaseId, LEASE_ID, 'a beat names the lease it protects');
+    // Only a beat after the first can say anything about the upload: the loop fires one at t=0,
+    // while the artifact is still being hashed.
+    const leaseGone = behaviour === 'backpressure' && beatsAnswered >= 2;
+    if (leaseGone) {
+      leaseDeclaredLost = true;
+      // A writer stalled on backpressure and a writer that was just canceled look identical from
+      // here, so the daemon releases the pressure and lets the difference show: the canceled
+      // request is already destroyed and stops short, while one nobody canceled drains. Deferring
+      // it is what keeps that a causal gap rather than a race for the same tick.
+      setTimeout(() => stopBackpressure?.(), CANCEL_NOTICE_MS).unref();
+      writeLeaseLostError(res, payload.id);
+      // A beat that reports the lease gone must not also complete the upload it is meant to stop:
+      // the artifact's fate is decided by the abort, not by a response from here.
+      return;
+    }
+    const now = Date.now();
+    writeJson(res, 200, {
+      jsonrpc: '2.0',
+      id: payload.id,
+      result: { ok: true, data: { lease: { heartbeatAt: now, expiresAt: now + LEASE_WINDOW_MS } } },
+    });
+    writeUploadResponse?.();
+  }
   server.keepAliveTimeout = 100;
 
   const port = await listenOnLoopback(server);
@@ -158,13 +157,12 @@ async function startFakeRemoteDaemon(behaviour: UploadBehaviour): Promise<FakeDa
     seen,
     uploadBytesDelivered: () => uploadBytesDelivered,
     async uploadOutcome(graceMs = 1_000) {
-      const raced = await Promise.race([
+      return await Promise.race([
         settled,
         new Promise<'unresolved'>((resolve) => {
           setTimeout(() => resolve('unresolved'), graceMs).unref();
         }),
       ]);
-      return raced;
     },
     async close() {
       server.closeAllConnections();
@@ -220,17 +218,16 @@ function handleUpload(
   });
 }
 
-function readJsonBody(
-  req: http.IncomingMessage,
-  done: (payload: { id: unknown; method: string; params?: Record<string, unknown> }) => void,
-): void {
+type RpcPayload = Readonly<{ id: unknown; method: string; params?: Record<string, unknown> }>;
+
+function readJsonBody(req: http.IncomingMessage, done: (payload: RpcPayload) => void): void {
   let body = '';
   req.setEncoding('utf8');
   req.on('data', (chunk) => {
     body += chunk;
   });
   req.on('end', () => {
-    done(JSON.parse(body) as { id: unknown; method: string; params?: Record<string, unknown> });
+    done(JSON.parse(body) as RpcPayload);
   });
 }
 
