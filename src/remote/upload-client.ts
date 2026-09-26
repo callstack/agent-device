@@ -14,6 +14,11 @@ type UploadArtifactOptions = {
   token: string;
   platform?: string;
   onProgress?: UploadProgressSink;
+  /**
+   * Ends the upload when the thing it is uploading for stops being worth finishing — today, a beat
+   * that found the device's lease gone. Aborted requests reject with the signal's own reason.
+   */
+  signal?: AbortSignal;
 };
 
 type UploadResponse = {
@@ -54,6 +59,7 @@ export async function uploadArtifact(options: UploadArtifactOptions): Promise<st
       token: options.token,
       artifact: prepared,
       uploadAttemptId,
+      signal: options.signal,
     });
 
     if (preflight?.kind === 'cache-hit') {
@@ -67,6 +73,7 @@ export async function uploadArtifact(options: UploadArtifactOptions): Promise<st
         preflight,
         uploadAttemptId,
         onProgress: options.onProgress,
+        signal: options.signal,
       });
       if (directUpload) return directUpload;
       options.onProgress?.({
@@ -80,6 +87,7 @@ export async function uploadArtifact(options: UploadArtifactOptions): Promise<st
         token: options.token,
         artifact: prepared,
         onProgress: options.onProgress,
+        signal: options.signal,
       });
     }
 
@@ -88,6 +96,7 @@ export async function uploadArtifact(options: UploadArtifactOptions): Promise<st
       token: options.token,
       artifact: prepared,
       onProgress: options.onProgress,
+      signal: options.signal,
     });
   } finally {
     prepared.cleanup();
@@ -101,40 +110,69 @@ async function tryDirectUploadWithResume(options: {
   preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>;
   uploadAttemptId: string;
   onProgress?: UploadProgressSink;
+  signal?: AbortSignal;
 }): Promise<string | undefined> {
   const uploadOnce = async (
     preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>,
   ): Promise<string> => {
-    await uploadDirectArtifact(options.artifact, preflight, options.onProgress);
+    await uploadDirectArtifact(options.artifact, preflight, options.onProgress, options.signal);
     return await finalizeDirectUpload({
       normalizedBase: options.normalizedBase,
       token: options.token,
       uploadId: preflight.uploadId,
+      signal: options.signal,
     });
   };
 
   try {
     return await uploadOnce(options.preflight);
   } catch (error) {
+    // A canceled upload resumes for no reason: the thing it was uploaded for is already gone, and
+    // re-preflighting would ask the daemon for a fresh ticket to send bytes nobody is waiting on.
+    if (options.signal?.aborted) throw error;
     if (!shouldRetryDirectUpload(error)) return undefined;
-    const retryPreflight = await requestUploadPreflight({
-      normalizedBase: options.normalizedBase,
-      token: options.token,
-      artifact: options.artifact,
-      uploadAttemptId: options.uploadAttemptId,
-    });
-    if (retryPreflight?.kind === 'cache-hit') {
-      return retryPreflight.uploadId;
-    }
-    if (retryPreflight?.kind === 'direct-upload') {
-      try {
-        return await uploadOnce(retryPreflight);
-      } catch {
-        return undefined;
-      }
-    }
-    return undefined;
+    return await retryDirectUpload(options, uploadOnce);
   }
+}
+
+/**
+ * One fresh attempt after a retryable stream failure, asked for under the same attempt id.
+ *
+ * Anything short of a usable ticket — a cache hit excepted, which is itself a finished upload —
+ * hands the caller back to the legacy path. A second failure is not retried again: a ticket that
+ * failed twice is a transport or ticket problem the legacy route may still survive.
+ */
+async function retryDirectUpload(
+  options: {
+    normalizedBase: string;
+    token: string;
+    artifact: PreparedUploadArtifact;
+    uploadAttemptId: string;
+    onProgress?: UploadProgressSink;
+    signal?: AbortSignal;
+  },
+  uploadOnce: (
+    preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>,
+  ) => Promise<string>,
+): Promise<string | undefined> {
+  const retryPreflight = await requestUploadPreflight({
+    normalizedBase: options.normalizedBase,
+    token: options.token,
+    artifact: options.artifact,
+    uploadAttemptId: options.uploadAttemptId,
+    signal: options.signal,
+  });
+  if (retryPreflight?.kind === 'cache-hit') {
+    return retryPreflight.uploadId;
+  }
+  if (retryPreflight?.kind === 'direct-upload') {
+    try {
+      return await uploadOnce(retryPreflight);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
 }
 
 function shouldRetryDirectUpload(error: unknown): boolean {
@@ -147,6 +185,7 @@ async function uploadLegacyArtifact(options: {
   token: string;
   artifact: PreparedUploadArtifact;
   onProgress?: UploadProgressSink;
+  signal?: AbortSignal;
 }): Promise<string> {
   const { normalizedBase, token, artifact } = options;
   const uploadUrl = new URL('upload', normalizedBase);
@@ -170,6 +209,7 @@ async function uploadLegacyArtifact(options: {
     timeoutHint: 'The upload to the remote daemon exceeded the 5-minute timeout.',
     errorMessage: 'Failed to upload artifact to remote daemon',
     errorHint: 'Verify the remote daemon is reachable and supports artifact uploads.',
+    signal: options.signal,
     progress: {
       stage: 'legacy',
       fileName: artifact.fileName,
@@ -194,6 +234,7 @@ async function requestUploadPreflight(options: {
   token: string;
   artifact: PreparedUploadArtifact;
   uploadAttemptId: string;
+  signal?: AbortSignal;
 }): Promise<UploadPreflightResult | undefined> {
   const preflightUrl = new URL('upload/preflight', options.normalizedBase);
   const headers: Record<string, string> = {
@@ -204,7 +245,7 @@ async function requestUploadPreflight(options: {
   const response = await fetch(preflightUrl, {
     method: 'POST',
     headers,
-    signal: AbortSignal.timeout(UPLOAD_PREFLIGHT_TIMEOUT_MS),
+    signal: combineUploadSignals(options.signal, UPLOAD_PREFLIGHT_TIMEOUT_MS),
     body: JSON.stringify({
       uploadAttemptId: options.uploadAttemptId,
       sha256: options.artifact.sha256,
@@ -214,13 +255,27 @@ async function requestUploadPreflight(options: {
       ...(options.artifact.platform ? { platform: options.artifact.platform } : {}),
       contentType: options.artifact.contentType,
     }),
-  }).catch(() => undefined);
+  }).catch((error: unknown) => {
+    // A failed preflight is ordinary here — the caller falls back to the legacy upload. A canceled
+    // one is not: there is nothing to fall back to when the lease that paid for this upload is gone.
+    if (options.signal?.aborted) throw error;
+    return undefined;
+  });
 
   if (!response?.ok) {
     return undefined;
   }
 
   return parseUploadPreflightResult(await response.json().catch(() => undefined));
+}
+
+/**
+ * The signal one upload request runs under: the caller's cancellation and the request's own
+ * timeout, whichever fires first.
+ */
+function combineUploadSignals(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
 function parseUploadPreflightResult(value: unknown): UploadPreflightResult | undefined {
@@ -265,6 +320,7 @@ async function uploadDirectArtifact(
   artifact: PreparedUploadArtifact,
   ticket: Extract<UploadPreflightResult, { kind: 'direct-upload' }>,
   onProgress: UploadProgressSink | undefined,
+  signal: AbortSignal | undefined,
 ): Promise<void> {
   const response = await streamFileToHttpRequest({
     url: new URL(ticket.url),
@@ -275,6 +331,7 @@ async function uploadDirectArtifact(
     timeoutHint: 'The direct upload ticket did not accept the artifact within the timeout.',
     errorMessage: 'Failed to upload artifact with direct upload ticket',
     retryable: true,
+    signal,
     progress: {
       stage: 'direct',
       fileName: artifact.fileName,
@@ -294,6 +351,7 @@ async function finalizeDirectUpload(options: {
   normalizedBase: string;
   token: string;
   uploadId: string;
+  signal?: AbortSignal;
 }): Promise<string> {
   const finalizeUrl = new URL('upload/finalize', options.normalizedBase);
   const headers: Record<string, string> = {
@@ -304,7 +362,7 @@ async function finalizeDirectUpload(options: {
   const response = await fetch(finalizeUrl, {
     method: 'POST',
     headers,
-    signal: AbortSignal.timeout(UPLOAD_PREFLIGHT_TIMEOUT_MS),
+    signal: combineUploadSignals(options.signal, UPLOAD_PREFLIGHT_TIMEOUT_MS),
     body: JSON.stringify({ uploadId: options.uploadId }),
   }).catch((error) => {
     throw new AppError('COMMAND_FAILED', 'Failed to finalize direct artifact upload', {}, error);

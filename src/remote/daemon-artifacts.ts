@@ -31,6 +31,7 @@ type PreparedRemoteRequest = {
 export async function prepareRemoteRequestArtifacts(
   req: Omit<DaemonRequest, 'token'>,
   info: DaemonArtifactEndpoint,
+  signal: AbortSignal,
 ): Promise<PreparedRemoteRequest> {
   const positionals = [...(req.positionals ?? [])];
   let flags = req.flags ? { ...req.flags } : undefined;
@@ -51,7 +52,7 @@ export async function prepareRemoteRequestArtifacts(
 
   assertRemoteDaemonSupportsSaveScript(req);
   flags = applyRemoteArtifactCommand(req, positionals, flags, clientArtifactPaths);
-  const remoteInstallSource = await prepareRemoteInstallSource(req, info, uploadProgress);
+  const remoteInstallSource = await prepareRemoteInstallSource(req, info, uploadProgress, signal);
   if (remoteInstallSource) {
     installSource = remoteInstallSource.installSource;
     uploadedArtifactId = remoteInstallSource.uploadedArtifactId ?? uploadedArtifactId;
@@ -72,6 +73,7 @@ export async function prepareRemoteRequestArtifacts(
     info,
     positionals,
     uploadProgress,
+    signal,
   );
   uploadedArtifactId = installPackageResult ?? uploadedArtifactId;
   return baseResult();
@@ -103,6 +105,7 @@ async function prepareRemoteInstallPackage(
   info: DaemonArtifactEndpoint,
   positionals: string[],
   onProgress: UploadProgressSink | undefined,
+  signal: AbortSignal,
 ): Promise<string | undefined> {
   const pathIndex = positionals.length === 1 ? 0 : 1;
   const rawPath = positionals[pathIndex];
@@ -121,6 +124,7 @@ async function prepareRemoteInstallPackage(
     token: info.token,
     platform: req.flags?.platform,
     onProgress,
+    signal,
   });
 }
 
@@ -178,6 +182,7 @@ async function prepareRemoteInstallSource(
   req: Omit<DaemonRequest, 'token'>,
   info: DaemonArtifactEndpoint,
   onProgress: UploadProgressSink | undefined,
+  signal: AbortSignal,
 ): Promise<{
   installSource: NonNullable<DaemonRequest['meta']>['installSource'];
   uploadedArtifactId?: string;
@@ -218,6 +223,7 @@ async function prepareRemoteInstallSource(
     token: info.token,
     platform: req.flags?.platform,
     onProgress,
+    signal,
   });
   return {
     installSource: {
