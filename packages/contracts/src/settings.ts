@@ -221,6 +221,18 @@ export function readTextSizeCategory(value: string | undefined): TextSizeCategor
 }
 
 /**
+ * What a setting declares to refuse a leaf it was never verified on: the sentence, the next command
+ * to run, and the reason both legs of that setting answer with. The shape is declared here so every
+ * setting's refusal is checked against it at its declaration, and the Apple leaf guard can name it
+ * without inventing a second vocabulary.
+ */
+export type AppleSettingLeafRefusal = Readonly<{
+  message: string;
+  hint: string;
+  reason: 'setting-unsupported-on-leaf';
+}>;
+
+/**
  * The one refusal an Apple target gives for a text-size request its leaf does not serve, shared by
  * the three surfaces that can answer it: the daemon (before it binds, so a request that never touched
  * a device also never expires the session ref frame), the Apple runtime's read fact, and the Apple
@@ -233,7 +245,7 @@ export const APPLE_TEXT_SIZE_LEAF_REFUSAL = Object.freeze({
   message: 'Reading or setting a text size is supported on iOS and iPadOS simulators.',
   hint: 'Run `xcrun simctl ui <device> content_size` on a booted iPhone or iPad simulator.',
   reason: 'setting-unsupported-on-leaf',
-} as const);
+} as const) satisfies AppleSettingLeafRefusal;
 
 /**
  * Simulator biometrics are driven through BiometricKit_Sim notifications, which only the iPhone and
@@ -244,7 +256,7 @@ export const APPLE_BIOMETRIC_LEAF_REFUSAL = Object.freeze({
   message: 'Face ID and Touch ID simulation is supported on iOS and iPadOS simulators.',
   hint: 'Select a booted iPhone or iPad simulator, then run `settings faceid <state>` or `settings touchid <state>`.',
   reason: 'setting-unsupported-on-leaf',
-} as const);
+} as const) satisfies AppleSettingLeafRefusal;
 
 /** The one membership rule every settings-vocabulary parser shares: a name matches itself, any casing. */
 function findVocabularyName<const TNames extends readonly string[]>(
