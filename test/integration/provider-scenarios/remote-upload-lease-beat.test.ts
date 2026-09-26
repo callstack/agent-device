@@ -17,8 +17,6 @@ const TOKEN = 'upload-beat-token';
 const APK_BYTES = 4 * 1024 * 1024;
 /** Renewed window the fake daemon reports; a third of it is the cadence the client beats on. */
 const LEASE_WINDOW_MS = 3_000;
-/** How long a stalled upload gets to observe its own cancellation before the daemon drains it. */
-const CANCEL_NOTICE_MS = 150;
 
 /**
  * #2946's route end to end: `sendToDaemon` uploads an artifact for a remote install before the
@@ -33,10 +31,14 @@ type FakeDaemon = {
   seen: string[];
   uploadBytesDelivered(): number;
   /**
-   * How the upload ended, as the daemon observed it: the artifact drained, or the request carrying
-   * it was destroyed. Waits for the first of the two, because neither is instantaneous.
+   * Lets a stalled artifact through, and reports how the upload ended: `drained` if the whole
+   * artifact arrived, `canceled` if the request carrying it was destroyed first.
+   *
+   * The caller releases it rather than a beat answering, so the answer is causal: the client has
+   * already been told the lease is gone by then, and an upload it did not cancel has nothing left
+   * that could stop it.
    */
-  uploadOutcome(graceMs?: number): Promise<'drained' | 'canceled' | 'unresolved'>;
+  releaseUploadAndObserveOutcome(graceMs?: number): Promise<'drained' | 'canceled' | 'unresolved'>;
   close(): Promise<void>;
 };
 
@@ -131,11 +133,6 @@ async function startFakeRemoteDaemon(behaviour: UploadBehaviour): Promise<FakeDa
     const leaseGone = behaviour === 'backpressure' && beatsAnswered >= 2;
     if (leaseGone) {
       leaseDeclaredLost = true;
-      // A writer stalled on backpressure and a writer that was just canceled look identical from
-      // here, so the daemon releases the pressure and lets the difference show: the canceled
-      // request is already destroyed and stops short, while one nobody canceled drains. Deferring
-      // it is what keeps that a causal gap rather than a race for the same tick.
-      setTimeout(() => stopBackpressure?.(), CANCEL_NOTICE_MS).unref();
       writeLeaseLostError(res, payload.id);
       // A beat that reports the lease gone must not also complete the upload it is meant to stop:
       // the artifact's fate is decided by the abort, not by a response from here.
@@ -156,7 +153,8 @@ async function startFakeRemoteDaemon(behaviour: UploadBehaviour): Promise<FakeDa
     baseUrl: `http://127.0.0.1:${String(port)}`,
     seen,
     uploadBytesDelivered: () => uploadBytesDelivered,
-    async uploadOutcome(graceMs = 1_000) {
+    async releaseUploadAndObserveOutcome(graceMs = 2_000) {
+      stopBackpressure?.();
       return await Promise.race([
         settled,
         new Promise<'unresolved'>((resolve) => {
@@ -309,8 +307,8 @@ test('an install beats the lease while its artifact uploads, before the install 
       `a beat has to land while the upload is held open, daemon saw: ${daemon.seen.join(', ')}`,
     );
     assert.equal(
-      await daemon.uploadOutcome(),
-      'drained',
+      daemon.uploadBytesDelivered(),
+      APK_BYTES,
       'the artifact arrived whole on a lease that was being renewed under it',
     );
     assert.deepEqual(daemon.seen, ['lease_heartbeat', 'lease_heartbeat', 'install']);
@@ -332,13 +330,16 @@ test('a lease lost mid-upload aborts the upload and no install request goes out'
     );
 
     assert.ok(
-      daemon.uploadBytesDelivered() > 0,
-      'bytes were already in flight, which is what had to be stopped',
+      daemon.uploadBytesDelivered() > 0 && daemon.uploadBytesDelivered() < APK_BYTES,
+      `bytes were in flight and the daemon stopped reading at ${String(
+        daemon.uploadBytesDelivered(),
+      )} of ${String(APK_BYTES)}, which is what had to be stopped`,
     );
-    // The daemon released its backpressure after the beat that lost the lease, so an upload nobody
-    // canceled would have drained to the end. A destroyed request is the only other way this ends.
+    // The daemon never read past the first chunk, so this is the only way the artifact can stop
+    // short: the client destroyed the request. An upload nobody canceled drains once the pressure
+    // comes off, and by now the client has long since been told the lease is gone.
     assert.equal(
-      await daemon.uploadOutcome(),
+      await daemon.releaseUploadAndObserveOutcome(),
       'canceled',
       'the upload was stopped, not left to finish on a lease nobody held',
     );
