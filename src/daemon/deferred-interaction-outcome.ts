@@ -325,8 +325,9 @@ export async function capturePostGestureStabilizedResult<T>(params: {
     return { value: params.initial ?? (await capture()) };
   }
 
-  // Entering the loop consumes the record: it is cleared however the loop leaves, settle, timeout
-  // or a capture that threw, so a later capture on the session never pays this gesture's loop again.
+  // Entering the loop consumes the record. It is cleared on every exit: a settled surface, the
+  // stabilization timeout, or a capture that threw. A later capture on the session never pays this
+  // gesture's loop again.
   try {
     return await runPostGestureStabilityLoop({
       pending: {
