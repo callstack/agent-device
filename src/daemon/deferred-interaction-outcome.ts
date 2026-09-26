@@ -325,9 +325,8 @@ export async function capturePostGestureStabilizedResult<T>(params: {
     return { value: params.initial ?? (await capture()) };
   }
 
-  // The record is consumed by entering the loop, not by finishing it. A capture the caller's
-  // deadline aborted mid-loop (a `wait stable` poll) must not leave the record armed, or every later
-  // capture on the session pays the same loop again and the wait never counts a capture (#2885).
+  // Entering the loop consumes the record: it is cleared however the loop leaves, settle, timeout
+  // or a capture that threw, so a later capture on the session never pays this gesture's loop again.
   try {
     return await runPostGestureStabilityLoop({
       pending: {
