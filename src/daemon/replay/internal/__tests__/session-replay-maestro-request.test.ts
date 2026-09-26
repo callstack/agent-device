@@ -102,6 +102,19 @@ test('folds Maestro settings app targeting into dispatch', () => {
   expect(request.dispatch).toEqual({ settingsAppBundleId: 'com.example.app' });
 });
 
+test('folds Maestro killApp targeting into dispatch', () => {
+  const request = maestroOperationDispatchRequest(
+    { token: 'token', session: 'session', command: 'replay', positionals: [] },
+    {
+      command: 'close',
+      positionals: ['com.example.app'],
+      dispatch: { closeAppOnly: true, killApp: true },
+    },
+  );
+
+  expect(request.dispatch).toEqual({ closeAppOnly: true, killApp: true });
+});
+
 test('leaves dispatch options the operation does not set untouched', () => {
   const viewport = { x: 0, y: 0, width: 402, height: 874 };
   const request = maestroOperationDispatchRequest(

@@ -4,14 +4,17 @@ import { runAndroidShell } from './adb.ts';
 import {
   ANDROID_FOCUSED_WINDOW_MARKER,
   ANDROID_FOCUS_MARKERS,
+  ANDROID_RESUMED_ACTIVITY_MARKERS,
+  parseAndroidResumedActivity,
   readAndroidBlockingDialogFocus,
   type AndroidBlockingDialogFocus,
 } from './app-parsers.ts';
 
 /**
- * What is on the Android screen right now: which app owns the foreground, and whether a blocking
- * system dialog owns the focus. Both answers come out of the same `dumpsys` text, so the dump
- * sequence is owned here once instead of being repeated per question.
+ * What is on the Android screen right now: which app owns the foreground, which activity AMS
+ * reports resumed, and whether a blocking system dialog owns the focus. Every answer comes out
+ * of the same `dumpsys` text, so the dump sequence is owned here once instead of being repeated
+ * per question.
  */
 
 // What WMS says owns the focus. Ranked ahead of the activity dumps because that is what the user
@@ -48,6 +51,14 @@ const ANDROID_WINDOW_QUESTIONS = {
   foreground: {
     tiers: [ANDROID_WINDOW_FOCUS_DUMPS, ANDROID_RESUMED_ACTIVITY_DUMPS],
     section: markerSectionPattern(ANDROID_FOCUS_MARKERS),
+  },
+  // Which activity AMS reports resumed: the authority for `am kill`, which reaps on process
+  // state rather than input focus. WMS focus can lag activity resume after `launchApp`, name a
+  // system window holding focus instead of the resumed app (#592), or name a transient window
+  // (IME, dialog), so the kill precondition asks this rather than `foreground`.
+  resumedActivity: {
+    tiers: [ANDROID_RESUMED_ACTIVITY_DUMPS],
+    section: markerSectionPattern(ANDROID_RESUMED_ACTIVITY_MARKERS),
   },
   // Whether a blocking dialog owns the focus: only the focused-window line can carry that title,
   // and only the window dumps print it.
@@ -130,6 +141,21 @@ export async function getAndroidAppState(
 ): Promise<AppStateRuntimeResult> {
   for (const args of orderAndroidWindowDumps(device, 'foreground')) {
     const state = parseLegacyAndroidForegroundApp(await read(args));
+    if (state) return state;
+  }
+  return {};
+}
+
+/**
+ * Which app AMS reports resumed, without consulting WMS focus. Backed only by the activity
+ * dumps: the kill precondition's source of truth for whether `am kill` can reap the target.
+ */
+export async function getAndroidResumedActivity(
+  device: DeviceInfo,
+  read: AndroidWindowDumpReader = createAndroidWindowDumpReader(device),
+): Promise<AppStateRuntimeResult> {
+  for (const args of orderAndroidWindowDumps(device, 'resumedActivity')) {
+    const state = parseAndroidResumedActivity(await read(args));
     if (state) return state;
   }
   return {};

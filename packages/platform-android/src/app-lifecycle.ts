@@ -22,7 +22,7 @@ import {
   parseAndroidLaunchablePackages,
   parseAndroidUserInstalledPackages,
 } from './app-parsers.ts';
-import { getAndroidAppState } from './window-state.ts';
+import { getAndroidAppState, getAndroidResumedActivity } from './window-state.ts';
 
 const ANDROID_LAUNCHER_CATEGORY = 'android.intent.category.LAUNCHER';
 const ANDROID_LEANBACK_CATEGORY = 'android.intent.category.LEANBACK_LAUNCHER';
@@ -488,6 +488,54 @@ export async function closeAndroidApp(device: DeviceInfo, app: string): Promise<
   await waitForAndroidPackageStopped(device, resolved.value);
 }
 
+/**
+ * Maestro `killApp` on Android: system-initiated process death (`am kill`),
+ * which only reaps a backgrounded/cached process — unlike `closeAndroidApp`'s
+ * `am force-stop`. Callers background the app first (e.g. `pressKey: Home`).
+ * A foreground target fails loud naming the precondition, and a process that
+ * survives the kill fails rather than reading as success.
+ */
+export async function killAndroidApp(device: DeviceInfo, app: string): Promise<void> {
+  const trimmed = app.trim();
+  if (trimmed.toLowerCase() === 'settings') {
+    await killAndroidPackage(device, 'com.android.settings');
+    return;
+  }
+  const resolved = await resolveAndroidApp(device, app);
+  if (resolved.type === 'intent') {
+    throw new AppError('INVALID_ARGS', 'Kill requires a package name, not an intent');
+  }
+  await killAndroidPackage(device, resolved.value);
+}
+
+async function killAndroidPackage(device: DeviceInfo, packageName: string): Promise<void> {
+  const resumed = await readAndroidResumedActivity(device);
+  if (resumed?.package === packageName) {
+    throw new AppError('COMMAND_FAILED', `Cannot kill foreground app ${packageName}`, {
+      reason: 'android-kill-requires-background-app',
+      hint: 'Background the app before killApp (for example pressKey: Home): am kill only reaps background processes.',
+    });
+  }
+  if (!resumed) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Could not read resumed activity state before killing ${packageName}`,
+      {
+        reason: 'android-process-probe-unavailable',
+        hint: 'adb dumpsys did not answer; retry once the device is reachable.',
+      },
+    );
+  }
+  await runAndroidShell(device, ['am', 'kill', packageName]);
+  await waitForAndroidPackageStopped(device, packageName);
+  if (await isAndroidPackageProcessRunning(device, packageName)) {
+    throw new AppError('COMMAND_FAILED', `am kill did not stop ${packageName}`, {
+      reason: 'android-kill-process-survived',
+      hint: 'The app was backgrounded but its process survived am kill (for example a foreground service is still running): use stopApp (am force-stop) to terminate it.',
+    });
+  }
+}
+
 async function waitForAndroidPackageStopped(
   device: DeviceInfo,
   packageName: string,
@@ -513,6 +561,13 @@ async function readAndroidForegroundApp(device: DeviceInfo): Promise<AppStateRun
   return foreground.package ? foreground : null;
 }
 
+async function readAndroidResumedActivity(
+  device: DeviceInfo,
+): Promise<AppStateRuntimeResult | null> {
+  const resumed = await getAndroidResumedActivity(device);
+  return resumed.package ? resumed : null;
+}
+
 async function waitForAndroidPackageProcessGone(
   device: DeviceInfo,
   packageName: string,
@@ -534,5 +589,15 @@ async function isAndroidPackageProcessRunning(
   const result = await runAndroidShell(device, ['pidof', packageName], {
     allowFailure: true,
   });
-  return (result.stdout ?? '').trim().length > 0;
+  if ((result.stdout ?? '').trim().length > 0) return true;
+  // `pidof` exits 1 with empty streams when no process matches; anything else
+  // with empty stdout is the probe itself failing (device unreachable, missing
+  // binary), which must not read as a reaped process.
+  if ((result.exitCode === 0 || result.exitCode === 1) && (result.stderr ?? '').trim() === '') {
+    return false;
+  }
+  throw new AppError('COMMAND_FAILED', `Could not read process state for ${packageName}`, {
+    reason: 'android-process-probe-unavailable',
+    hint: 'adb pidof did not answer; retry once the device is reachable.',
+  });
 }

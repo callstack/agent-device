@@ -21,6 +21,7 @@ export type MaestroPublicOperation =
       launchArgs: string[];
     }
   | { kind: 'stopApp'; appId?: string }
+  | { kind: 'killApp'; appId?: string }
   | { kind: 'clearState'; appId?: string }
   | {
       kind: 'settingsPermission';
@@ -53,6 +54,8 @@ export type MaestroPublicOperation =
 export type MaestroDaemonDispatchOptions = Readonly<{
   /** Terminate the targeted app without ending the owning daemon session. */
   closeAppOnly?: true;
+  /** With `closeAppOnly`: Maestro `killApp` process death (`am kill` on Android) instead of `stop`. */
+  killApp?: true;
   /** A hierarchy capture used as operational evidence only; it issues no client ref authority. */
   observationOnly?: true;
   /** Provider-owned viewport already resolved for a nested gesture command. */
@@ -88,12 +91,15 @@ export function projectMaestroPublicOperation(
 
 type MaestroAppOperation = Extract<
   MaestroPublicOperation,
-  { kind: 'launchApp' | 'stopApp' | 'openLink' }
+  { kind: 'launchApp' | 'stopApp' | 'killApp' | 'openLink' }
 >;
 
 function isAppOperation(operation: MaestroPublicOperation): operation is MaestroAppOperation {
   return (
-    operation.kind === 'launchApp' || operation.kind === 'stopApp' || operation.kind === 'openLink'
+    operation.kind === 'launchApp' ||
+    operation.kind === 'stopApp' ||
+    operation.kind === 'killApp' ||
+    operation.kind === 'openLink'
   );
 }
 
@@ -103,6 +109,8 @@ function projectAppOperation(operation: MaestroAppOperation): MaestroDaemonOpera
       return projectLaunchApp(operation);
     case 'stopApp':
       return projectStopApp(operation);
+    case 'killApp':
+      return projectKillApp(operation);
     case 'openLink':
       return projectOpenLink(operation);
   }
@@ -129,6 +137,16 @@ function projectStopApp(
     command: 'close',
     positionals: operation.appId ? [operation.appId] : [],
     dispatch: { closeAppOnly: true },
+  };
+}
+
+function projectKillApp(
+  operation: Extract<MaestroAppOperation, { kind: 'killApp' }>,
+): MaestroDaemonOperationRequest {
+  return {
+    command: 'close',
+    positionals: operation.appId ? [operation.appId] : [],
+    dispatch: { closeAppOnly: true, killApp: true },
   };
 }
 

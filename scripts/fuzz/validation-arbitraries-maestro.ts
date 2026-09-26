@@ -22,6 +22,8 @@ function validMaestroCommand(pick: number, salt: number): string[] {
     () => ['- back'],
     () => ['- hideKeyboard'],
     () => ['- stopApp'],
+    () => ['- killApp'],
+    () => [`- killApp: ${text}`],
     () => ['- clearState'],
     () => [`- clearState: ${text}`],
     () => ['- scroll'],

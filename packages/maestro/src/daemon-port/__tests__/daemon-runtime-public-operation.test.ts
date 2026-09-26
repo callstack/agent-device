@@ -50,6 +50,22 @@ describe('Maestro public operation projection', () => {
       expected: { command: 'close', positionals: [], dispatch: { closeAppOnly: true } },
     },
     {
+      operation: { kind: 'killApp', appId: 'com.example' },
+      expected: {
+        command: 'close',
+        positionals: ['com.example'],
+        dispatch: { closeAppOnly: true, killApp: true },
+      },
+    },
+    {
+      operation: { kind: 'killApp' },
+      expected: {
+        command: 'close',
+        positionals: [],
+        dispatch: { closeAppOnly: true, killApp: true },
+      },
+    },
+    {
       operation: { kind: 'clearState', appId: 'com.example' },
       expected: { command: 'settings', positionals: ['clear-app-state', 'com.example'] },
     },

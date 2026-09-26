@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 
-type ExpectedAppError = { code: string; message?: RegExp; hint?: string | RegExp };
+type ExpectedAppError = {
+  code: string;
+  message?: RegExp;
+  hint?: string | RegExp;
+  details?: Readonly<Record<string, unknown>>;
+};
 
 function assertAppError(error: unknown, expected: ExpectedAppError): true {
   assert.ok(
@@ -15,6 +20,11 @@ function assertAppError(error: unknown, expected: ExpectedAppError): true {
     assert.ok(typeof hint === 'string', `expected a hint on ${error.code}, got ${String(hint)}`);
     if (typeof expected.hint === 'string') assert.equal(hint, expected.hint);
     else assert.match(hint, expected.hint);
+  }
+  if (expected.details !== undefined) {
+    for (const [key, value] of Object.entries(expected.details)) {
+      assert.deepEqual(error.details?.[key], value);
+    }
   }
   return true;
 }

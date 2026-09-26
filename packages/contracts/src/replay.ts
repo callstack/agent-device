@@ -278,6 +278,11 @@ export type ReplayDispatchOptions = Readonly<{
   /** Terminate the targeted app without ending the owning daemon session. */
   closeAppOnly?: boolean;
   /**
+   * With `closeAppOnly`: Maestro `killApp` system-initiated process death
+   * (`am kill` on Android, `stopApp` alias elsewhere) instead of `stop`.
+   */
+  killApp?: boolean;
+  /**
    * Daemon-composed hierarchy capture used as operational evidence only. It must not issue or
    * replace client ref authority.
    */

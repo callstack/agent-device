@@ -15,6 +15,7 @@ import {
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { observeAndroidLaunch } from './launch-observation.ts';
 import { ensureAndroidReady } from './readiness/runtime.ts';
+import { killAndroidApp } from './app-lifecycle.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -65,6 +66,14 @@ export function bindAndroidApplicationLifecycle(
     closeApplication: async (input) => {
       if (input.ensureReady) {
         await ensureAndroidReady(host, device, { headless: false }, signal);
+      }
+      if (input.mode === 'kill') {
+        const target = input.positionals[0]?.trim() || input.appBundleId?.trim();
+        if (!target) {
+          throw new AppError('INVALID_ARGS', 'Kill requires an app target');
+        }
+        await killAndroidApp(device, target);
+        return;
       }
       await invokeApplicationClose({
         device,

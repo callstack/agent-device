@@ -39,6 +39,7 @@ function maestroDispatchOptions(
 ): Pick<ReplayDispatchOptions, keyof MaestroDaemonDispatchOptions> {
   return stripUndefined({
     closeAppOnly: dispatch?.closeAppOnly,
+    killApp: dispatch?.killApp,
     observationOnly: dispatch?.observationOnly,
     gestureViewport: dispatch?.gestureViewport,
     gestureExecutionProfile: dispatch?.gestureExecutionProfile,

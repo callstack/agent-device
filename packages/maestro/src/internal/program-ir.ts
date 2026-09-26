@@ -208,6 +208,12 @@ export type MaestroStopAppCommand = {
   appId?: string;
 };
 
+export type MaestroKillAppCommand = {
+  kind: 'killApp';
+  source: MaestroSourceLocation;
+  appId?: string;
+};
+
 export type MaestroSetPermissionsCommand = MaestroOptionalCommand & {
   kind: 'setPermissions';
   source: MaestroSourceLocation;
@@ -286,6 +292,7 @@ export type MaestroCommand =
   | MaestroBackCommand
   | MaestroWaitForAnimationToEndCommand
   | MaestroStopAppCommand
+  | MaestroKillAppCommand
   | MaestroSetPermissionsCommand
   | MaestroClearStateCommand
   | MaestroRunScriptCommand

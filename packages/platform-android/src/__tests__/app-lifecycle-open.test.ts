@@ -162,6 +162,47 @@ test('closeAndroidApp waits until package process exits after force-stop', async
   ]);
 });
 
+test('closeAndroidApp fails when the liveness probe itself cannot answer', async () => {
+  const device: DeviceInfo = {
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator',
+    booted: true,
+  };
+
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        if (args.join(' ') === 'shell dumpsys window windows') {
+          return {
+            stdout: 'mCurrentFocus=Window{43 u0 com.android.launcher/.Launcher}\n',
+            stderr: '',
+            exitCode: 0,
+          };
+        }
+        if (args.join(' ') === 'shell pidof com.example.app') {
+          return { stdout: '', stderr: 'error: device offline\n', exitCode: 1 };
+        }
+        return { stdout: '', stderr: '', exitCode: 0 };
+      },
+      reverse: {
+        ensure: async () => {},
+        remove: async () => {},
+        removeAllOwned: async () => {},
+      },
+    },
+    { serial: 'emulator-5554' },
+    async () => {
+      await assertRejectsAppError(() => closeAndroidApp(device, 'com.example.app'), {
+        code: 'COMMAND_FAILED',
+        hint: /pidof did not answer/,
+        details: { reason: 'android-process-probe-unavailable' },
+      });
+    },
+  );
+});
+
 test('openAndroidApp ensures Android reverse before localhost deep link launch', async () => {
   const device: DeviceInfo = {
     platform: 'android',
