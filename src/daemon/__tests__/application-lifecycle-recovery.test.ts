@@ -188,6 +188,30 @@ test('daemon lifecycle finalization admits facts once, binds once, and disposes 
   expect(dispose).toHaveBeenCalledOnce();
 });
 
+// #2833: an idle-session expiry is the one daemon-owned teardown with no successor to hand a healthy
+// execution host to. Deferring runner termination to the gateway's shutdown phase would park the
+// runner — and the device behind it — until process exit, which is the opposite of why the expiry ran.
+test('a daemon that stays alive finalizes without the shutdown deferral', async () => {
+  const finalize = vi.fn(async () => {});
+  const runtime = gateway({ finalize });
+
+  await finalizeDaemonSessionApplicationLifecycle({
+    gateway: runtime.gateway,
+    scope: scope(),
+    session,
+    stateDir: '/state',
+    runtimeHints: {},
+    daemonLeaving: false,
+  });
+
+  expect(finalize).toHaveBeenCalledWith({
+    appBundleId: undefined,
+    surface: 'app',
+    retainRunner: false,
+    stateDir: '/state',
+  });
+});
+
 test.each([
   {
     name: 'Android provider device',

@@ -26,7 +26,7 @@ import {
 } from './request-binding.ts';
 import { beginOpenDeviceWait, readOpenWaitBudgetMs } from './open-device-contention-wait.ts';
 import { createRequestExecutionLocks } from './request-execution-locks.ts';
-import { throwIfRequestCanceled } from '@agent-device/host-kit/request';
+import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-kit/request';
 import { finalizeDaemonResponse } from './request-finalization.ts';
 import { refreshRecordingHealth } from './request-recording-health.ts';
 import { runAdmittedLeaseWork } from './request-lease-work.ts';
@@ -134,6 +134,10 @@ export async function createRequestExecutionScope(params: {
 
   const command = scopedReq.command;
   const startedAtMs = Date.now();
+  // The one trait that says a request acts *through* a session rather than merely resolving one:
+  // it is what puts the session's execution lock in this request's plan, and therefore the only
+  // trait under which an activity stamp can be written while holding that lock.
+  const attachesToSession = shouldLockSessionExecution(command);
   const sessionName = resolveEffectiveSessionName(scopedReq, sessionStore, {
     // Inventory commands (`session list`, `devices`, `doctor`, …) route only to locate their own
     // artifacts and never act through a session, so they must keep resolving an address even when
@@ -249,29 +253,47 @@ export async function createRequestExecutionScope(params: {
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
       runAdmitted: async (task) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
-        await cleanupExpiredLeasedSession({
-          sessionName,
-          sessionStore,
-          leaseRegistry,
-          teardownSession: async (session, expiredSessionName) =>
-            await teardownExpiredSession({
-              session,
-              sessionName: expiredSessionName,
-              sessionStore,
-              inspectFacts: scope.inspectFacts,
-              bindDevice: scope.bindDevice,
-              platformCleanup: requirePlatformCleanup(params.platformResourceCleanup),
-            }),
-        });
-        scopedReq = admitRequestLeaseForLockedScope({
-          req: scopedReq,
-          sessionName,
-          sessionStore,
-          leaseRegistry,
-          providerAppCatalog: params.providerAppCatalog,
-        });
-        scope.req = scopedReq;
-        return await runAdmittedLeaseWork({ leaseRegistry, req: scopedReq, task });
+        try {
+          await cleanupExpiredLeasedSession({
+            sessionName,
+            sessionStore,
+            leaseRegistry,
+            teardownSession: async (session, expiredSessionName) =>
+              await teardownExpiredSession({
+                session,
+                sessionName: expiredSessionName,
+                sessionStore,
+                inspectFacts: scope.inspectFacts,
+                bindDevice: scope.bindDevice,
+                platformCleanup: requirePlatformCleanup(params.platformResourceCleanup),
+              }),
+          });
+          scopedReq = admitRequestLeaseForLockedScope({
+            req: scopedReq,
+            sessionName,
+            sessionStore,
+            leaseRegistry,
+            providerAppCatalog: params.providerAppCatalog,
+          });
+          scope.req = scopedReq;
+          return await runAdmittedLeaseWork({ leaseRegistry, req: scopedReq, task });
+        } finally {
+          // The #2833 inactivity deadline is measured from the END of the last command that ATTACHED
+          // to this session, stamped here under the session's own execution lock. The lock is what
+          // makes this one stamp enough: an expiry has to acquire it too, so it can never catch a
+          // session mid-command, and one command slower than the window keeps the session it is
+          // working on — the same guarantee admitted work gives a remote lease (ADR 0007).
+          //
+          // Two exclusions carry that parity. Inventory commands (`devices`, `doctor`, `session list`)
+          // resolve a session address only to locate their own artifacts, so on a shared host they run
+          // against a session they never act through — stamping there would let a bystander agent's
+          // polling keep another agent's abandoned claim alive forever. And a request whose client
+          // hung up preserves nothing, exactly as a canceled request renews no lease: an agent that
+          // timed out is the behavior this feature exists to catch.
+          if (attachesToSession && !isRequestCanceled(scopedReq.meta?.requestId)) {
+            sessionStore.noteSessionActivity(sessionName);
+          }
+        }
       },
       runLocked: async (task) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
@@ -554,7 +576,13 @@ function contextFromRequestFlags(
   };
 }
 
-function getLeaseRegistryExecutionLocks(
+/**
+ * The per-`LeaseRegistry` execution-lock map a request's session and device locks are taken from.
+ * Exported because the #2833 session-idle reaper expires sessions through this same map: an expiry
+ * that did not wait on the session's execution lock could tear down a session mid-command, and a
+ * second map would make that race invisible rather than impossible.
+ */
+export function getLeaseRegistryExecutionLocks(
   leaseRegistry: LeaseRegistry,
 ): Map<string, Promise<unknown>> {
   let locks = leaseRegistryExecutionLocks.get(leaseRegistry);
