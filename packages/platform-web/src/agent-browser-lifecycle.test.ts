@@ -204,6 +204,14 @@ test('cleanup does not treat the shared socket directory mtime as browser activi
   }
 });
 
+// INT32_MAX exceeds every platform's pid range, so kill(pid, 0) is ESRCH by
+// construction: a recorded owner that is dead on every host and cannot be
+// recycled mid-test. A literal like 101 is not — on a Mac with a simulator
+// runtime mounted, PID 101 is a live `appleaccountd`, the reaper reads it as
+// ownership-lost, retains the record instead of clearing it, and this test goes
+// red on that machine while staying green on CI.
+const NEVER_A_PID = 2_147_483_647;
+
 test('cleanup reads recorded browser identities without reconstructing a process tree', async () => {
   const stateDir = mkdtempForTestSync('agent-device-web-life-');
   const originalIdleTimeout = process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS;
@@ -216,9 +224,9 @@ test('cleanup reads recorded browser identities without reconstructing a process
         status: 'decoded' as const,
         records: [
           {
-            pid: 101,
-            startTime: 'start-101',
-            command: 'command-101',
+            pid: NEVER_A_PID,
+            startTime: `start-${NEVER_A_PID}`,
+            command: `command-${NEVER_A_PID}`,
             purpose: 'managed-web-browser',
           },
         ],
@@ -235,7 +243,7 @@ test('cleanup reads recorded browser identities without reconstructing a process
       ownedProcessRecords,
     });
 
-    assert.deepEqual(result.pids, [101]);
+    assert.deepEqual(result.pids, [NEVER_A_PID]);
     assert.deepEqual(result.signalPids, []);
     assert.equal(mockRunCmd.mock.calls.length, 0);
     expect(ownedProcessRecords.clear).toHaveBeenCalledOnce();
