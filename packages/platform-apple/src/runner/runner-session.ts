@@ -135,7 +135,7 @@ export async function ensureRunnerSession(
   // Any runner use means the device is active again: a pending idle stop
   // from a retained-after-close runner no longer applies.
   cancelIosRunnerIdleStop(device.id);
-  return await withRunnerSessionLock(device.id, async () => {
+  const start = withRunnerSessionLock(device.id, async () => {
     // One budget for the whole startup phase, opened here from the request-level
     // `startupTimeoutMs`: the reuse check's toolchain probes, adoption and the startup
     // itself all spend this one clock. The request's cancellation rides with it, so a
@@ -159,6 +159,31 @@ export async function ensureRunnerSession(
       device.id,
       async () => await startRunnerSessionWithLease(device, options, startupBudget),
     );
+  });
+  return await raceRunnerStartAgainstCaller(start, options.signal);
+}
+
+/**
+ * The start runs detached under the session lock; the caller only waits for it as long as its own
+ * signal allows. A caller whose deadline lands during a cold xctestrun build leaves on time, the
+ * build keeps going under the lock, and the next request for the device queues behind it and joins
+ * the session it registers (#2894). Whatever the abort reason, the caller sees the same cancelled
+ * request it would have seen from any later step; a cancelled request's abort also reaches the
+ * start through its own startup signal, so nothing here decides whether the start survives.
+ */
+async function raceRunnerStartAgainstCaller(
+  start: Promise<RunnerSession>,
+  signal: AbortSignal | undefined,
+): Promise<RunnerSession> {
+  if (!signal) return await start;
+  return await new Promise<RunnerSession>((resolve, reject) => {
+    const abort = () => reject(createRequestCanceledError(undefined, signal.reason));
+    if (signal.aborted) {
+      abort();
+    } else {
+      signal.addEventListener('abort', abort, { once: true });
+    }
+    start.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
   });
 }
 
@@ -338,7 +363,9 @@ async function startRunnerSessionWithLease(
     inFlightCommands: 0,
     hasAbandonedCommands: false,
     startupRetryWake: runnerProcess.startupRetryWake,
-    startupTimeoutMs: normalizeRunnerStartupTimeoutMs(startupTimeoutMs),
+    launchDeadline: Deadline.fromTimeoutMs(
+      normalizeRunnerStartupTimeoutMs(startupTimeoutMs) ?? RUNNER_STARTUP_TIMEOUT_MS,
+    ),
     startupTimings,
     startupDeviceStates: deviceStates,
     logicalLeaseContext,
@@ -406,6 +433,24 @@ async function isRunnerSessionServing(
   // A registered session already being taken down or already handed off is not usable, even when
   // its runner process is still there for a moment while disposal works.
   if (liveness !== 'starting' && liveness !== 'ready') return false;
+  if (liveness === 'starting' && existing.launchDeadline?.isExpired()) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'ios_runner_session_invalidated',
+      data: {
+        deviceId: device.id,
+        sessionId: existing.sessionId,
+        reason: 'runner_launch_budget_exhausted',
+      },
+    });
+    await measureRunnerStartupStep({}, 'stop_expired_starting_session', async () => {
+      await stopRunnerSessionInternal(device.id, existing, {
+        graceful: false,
+        waitTimeoutMs: RUNNER_INVALIDATE_WAIT_TIMEOUT_MS,
+      });
+    });
+    return false;
+  }
   if (isSameRunnerSimulator(existing.device, device)) return true;
   await measureRunnerStartupStep({}, 'stop_other_simulator_set_session', async () => {
     await stopRunnerSessionInternal(device.id, existing);
@@ -1283,10 +1328,15 @@ function markRunnerPreflightError(error: unknown, details: Record<string, unknow
   );
 }
 
-export function readRunnerStartupTimeoutMs(
-  session: Pick<RunnerSession, 'startupTimeoutMs'>,
-): number {
-  return session.startupTimeoutMs ?? RUNNER_STARTUP_TIMEOUT_MS;
+/**
+ * What a request waiting on a `starting` session may spend on its readiness: the rest of the
+ * session's launch budget, never a fresh one per joiner. A session with no recorded launch (a
+ * fixture, or one registered before the deadline existed) falls back to the default budget.
+ */
+export function readRunnerStartupTimeoutMs(session: Pick<RunnerSession, 'launchDeadline'>): number {
+  const launchDeadline = session.launchDeadline;
+  if (!launchDeadline) return RUNNER_STARTUP_TIMEOUT_MS;
+  return Math.max(0, Math.floor(launchDeadline.remainingMs()));
 }
 
 async function measureRunnerStartupStep<T>(

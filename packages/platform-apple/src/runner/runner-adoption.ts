@@ -25,17 +25,12 @@ import {
   type RunnerLeaseAdoptionRefusal,
 } from './runner-lease.ts';
 import {
-  requireRunnerPhaseRemainingMs,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
   type RunnerPhaseBudget,
   type RunnerXctestrunArtifact,
 } from './runner-xctestrun.ts';
-import {
-  normalizeRunnerStartupTimeoutMs,
-  type RunnerProcessHandle,
-  type RunnerSession,
-} from './runner-session-types.ts';
+import type { RunnerProcessHandle, RunnerSession } from './runner-session-types.ts';
 
 // A healthy localhost runner answers uptime in tens of milliseconds and a dead
 // port refuses immediately; the timeout only bounds the wedged-runner case,
@@ -132,7 +127,7 @@ export async function tryAdoptRunnerSessionFromLease(
     return skip('runner_pid_recycled', lease);
   }
 
-  const session = buildAdoptedRunnerSession(device, lease, runnerPid, expectedDerived, options);
+  const session = buildAdoptedRunnerSession(device, lease, runnerPid, expectedDerived);
   try {
     writeRunnerLease(session.lease);
   } catch {
@@ -276,7 +271,6 @@ function buildAdoptedRunnerSession(
   lease: RunnerLease,
   runnerPid: number,
   expectedDerived: string,
-  options: { budget?: RunnerPhaseBudget },
 ): RunnerSession & { lease: RunnerLease } {
   const sessionId = lease.sessionId;
   const artifact: RunnerXctestrunArtifact = {
@@ -306,9 +300,6 @@ function buildAdoptedRunnerSession(
     state: 'ready',
     inFlightCommands: 0,
     hasAbandonedCommands: false,
-    startupTimeoutMs: normalizeRunnerStartupTimeoutMs(
-      requireRunnerPhaseRemainingMs(options.budget, 'runner_session_adoption'),
-    ),
     lease: buildRunnerLease({
       device,
       sessionId,

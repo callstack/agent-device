@@ -544,24 +544,33 @@ test('read-only commands retry when completed status has no retained response', 
   });
 });
 
-test('read-only startup commands use the session startup timeout override', async () => {
-  const session = makeRunnerSession({
-    port: 8100,
-    state: 'starting',
-    startupTimeoutMs: 240_000,
-  });
+test('read-only startup commands measure readiness from the session launch deadline', async () => {
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(1_000);
+    const session = makeRunnerSession({
+      port: 8100,
+      state: 'starting',
+      launchDeadline: Deadline.fromTimeoutMs(240_000),
+    });
 
-  mockEnsureRunnerSession.mockResolvedValue(session);
-  mockExecuteRunnerCommandWithSession.mockResolvedValue({ currentUptimeMs: 42 });
+    mockEnsureRunnerSession.mockImplementationOnce(async () => {
+      vi.setSystemTime(41_000);
+      return session;
+    });
+    mockExecuteRunnerCommandWithSession.mockResolvedValue({ currentUptimeMs: 42 });
 
-  const result = await runAppleRunnerCommand(
-    IOS_SIMULATOR,
-    { command: 'uptime' },
-    { startupTimeoutMs: 240_000 },
-  );
+    const result = await runAppleRunnerCommand(
+      IOS_SIMULATOR,
+      { command: 'uptime' },
+      { startupTimeoutMs: 240_000 },
+    );
 
-  assert.deepEqual(result, { currentUptimeMs: 42 });
-  assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[0]?.[4], 240_000);
+    assert.deepEqual(result, { currentUptimeMs: 42 });
+    assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[0]?.[4], 200_000);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('read-only commands retry when status shows in-flight work', async () => {

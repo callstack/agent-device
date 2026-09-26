@@ -1,6 +1,7 @@
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { Deadline } from './host.ts';
 import type { RunnerXctestrunArtifact } from './runner-xctestrun.ts';
 import type { RunnerLease } from './runner-lease.ts';
 import type { IosRunnerDeviceStates } from './runner-error-classification.ts';
@@ -80,7 +81,12 @@ export type RunnerSession = {
   state: RunnerSessionState;
   /** Wakes one startup retry when the listener becomes ready or its process exits. */
   startupRetryWake?: AbortSignal;
-  startupTimeoutMs?: number;
+  /**
+   * The budget the runner has to answer its first command, opened the moment its process was
+   * launched. Every request that joins the `starting` session measures readiness from this one
+   * clock, so a runner that never answers is given up once, not once per joiner (#2894).
+   */
+  launchDeadline?: Deadline;
   /**
    * Commands the runner accepted that this process has not seen answered. It comes down only when a
    * response is decoded: an aborted or dropped exchange leaves the command running on the runner,
