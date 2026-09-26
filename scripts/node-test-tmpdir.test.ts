@@ -271,16 +271,40 @@ const GLOBAL_SWEEP_TEST_FILES = [
   'scripts/vitest-tmpdir-global-setup.test.ts',
 ];
 
-// The flag must sit among the args the wrapper FORWARDS to its child: the
-// wrapper spawns `node <forwarded...> --test`, so a flag written before the
-// wrapper path is parsed by the wrapper's own node process and never reaches
-// the runner — the lane would silently go parallel while still containing the
-// string. Everything after the wrapper path is what the child receives.
-function forwardedNodeArgs(command: string): string {
-  const wrapperIndex = command.indexOf('scripts/node-test-tmpdir.ts');
-  return wrapperIndex === -1
-    ? ''
-    : command.slice(wrapperIndex + 'scripts/node-test-tmpdir.ts'.length);
+// Serialization must reach the CHILD runner, and must mean one file at a time.
+// The wrapper spawns `node <args after its own path> --test`, so a flag written
+// before the wrapper path is parsed by the wrapper's own node process and never
+// gets there; a bare substring test would also accept `--test-concurrency=10`,
+// which is ten files in flight and the same race. Read the forwarded tokens of
+// the one segment that runs both sweep files, the way the wrapper test above
+// segments `&&` chains.
+const TEST_CONCURRENCY_ONE = '--test-concurrency=1';
+const WRAPPER_SCRIPT_TOKEN = 'scripts/node-test-tmpdir.ts';
+
+function sweepSegmentRunsParallel(command: string): boolean {
+  const segment = command
+    .split('&&')
+    .find(
+      (part) =>
+        part.includes(WRAPPER_SCRIPT_TOKEN) &&
+        GLOBAL_SWEEP_TEST_FILES.every((file) => part.includes(file)),
+    );
+  if (segment === undefined) {
+    return false;
+  }
+
+  const tokens = segment.trim().split(/\s+/);
+  const wrapperIndex = tokens.indexOf(WRAPPER_SCRIPT_TOKEN);
+  if (wrapperIndex === -1) {
+    // The wrapper is only ever invoked with its path as a standalone argument;
+    // any other shape is one this check cannot reason about, so report it as
+    // unsynchronized rather than guessing.
+    return true;
+  }
+
+  const forwarded = tokens.slice(wrapperIndex + 1);
+  const declared = forwarded.filter((token) => token.startsWith('--test-concurrency='));
+  return declared.length !== 1 || declared[0] !== TEST_CONCURRENCY_ONE;
 }
 
 test('lanes that sweep the shared run-directory root serialize their files', () => {
@@ -290,7 +314,7 @@ test('lanes that sweep the shared run-directory root serialize their files', () 
 
   const unsynchronized = Object.entries(manifest.scripts ?? {})
     .filter(([, command]) => GLOBAL_SWEEP_TEST_FILES.every((file) => command.includes(file)))
-    .filter(([, command]) => !forwardedNodeArgs(command).includes('--test-concurrency=1'))
+    .filter(([, command]) => sweepSegmentRunsParallel(command))
     .map(([name]) => name);
 
   assert.deepEqual(

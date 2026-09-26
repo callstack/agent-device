@@ -204,12 +204,14 @@ test('cleanup does not treat the shared socket directory mtime as browser activi
   }
 });
 
-// INT32_MAX exceeds every platform's pid range, so kill(pid, 0) is ESRCH by
-// construction: a recorded owner that is dead on every host and cannot be
-// recycled mid-test. A literal like 101 is not — on a Mac with a simulator
-// runtime mounted, PID 101 is a live `appleaccountd`, the reaper reads it as
-// ownership-lost, retains the record instead of clearing it, and this test goes
-// red on that machine while staying green on CI.
+// INT32_MAX is above any pid a real host mints in practice — Linux pid_max caps
+// at 2^22, macOS at 99999, and a Windows pid counter would need hundreds of
+// millions of process creations to get near 2^31 — so on every host this suite
+// runs on the owner is absent and cannot be recycled mid-test. A literal like
+// 101 is not: on a Mac with a simulator runtime mounted, PID 101 is a live
+// `appleaccountd`, the reaper reads it as ownership-lost, retains the record
+// instead of clearing it, and this test goes red on that machine while staying
+// green on CI.
 const NEVER_A_PID = 2_147_483_647;
 
 test('cleanup reads recorded browser identities without reconstructing a process tree', async () => {
