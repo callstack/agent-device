@@ -33,6 +33,7 @@ import {
 } from './runner-xctestrun.ts';
 import {
   normalizeRunnerStartupTimeoutMs,
+  RunnerCommandAccounting,
   type RunnerProcessHandle,
   type RunnerSession,
 } from './runner-session-types.ts';
@@ -304,8 +305,7 @@ function buildAdoptedRunnerSession(
     runnerLogPath: lease.runnerLogPath,
     // The probe already proved the runner answers commands.
     state: 'ready',
-    inFlightCommands: 0,
-    hasAbandonedCommands: false,
+    commandCharges: new RunnerCommandAccounting(),
     startupTimeoutMs: normalizeRunnerStartupTimeoutMs(
       requireRunnerPhaseRemainingMs(options.budget, 'runner_session_adoption'),
     ),

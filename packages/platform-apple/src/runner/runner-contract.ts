@@ -37,7 +37,7 @@ export const MAIN_THREAD_TIMEOUT_RUNNER_CODE = 'MAIN_THREAD_TIMEOUT';
  * starting when the next read arrives, so it is retriable for a `wait`, while the transport reads
  * it as a definite answer and never resends it.
  */
-export const APP_NOT_RUNNING_RUNNER_CODE = 'APP_NOT_RUNNING';
+const APP_NOT_RUNNING_RUNNER_CODE = 'APP_NOT_RUNNING';
 
 export type RunnerCommand = {
   command:
@@ -238,9 +238,12 @@ export type RunnerResponsePayload = {
  * The one decoding of a runner response body (#2662). The envelope arrives at three readers — a
  * command's own response, the lifecycle journal a status probe reads back after the transport
  * response was lost, and the adoption `uptime` probe — and all three must agree on what is
- * readable, or a body one of them refuses becomes an answer for another. A body that is not JSON
- * at all is transport-shaped failure: a runner that died mid-write must not be read as having
- * answered.
+ * readable, or a body one of them refuses becomes an answer for another.
+ *
+ * Only a JSON object can be an envelope. A body that is not JSON at all, and a JSON scalar or array
+ * that carries no `ok`, are both transport-shaped: neither is something the runner's encoder emits,
+ * and reading either as an empty reply would let a proxy page or a half-written body answer for a
+ * command the runner may still be executing.
  */
 export function decodeRunnerResponseBody(text: string): RunnerResponsePayload {
   let parsed: unknown;
@@ -249,7 +252,14 @@ export function decodeRunnerResponseBody(text: string): RunnerResponsePayload {
   } catch {
     throw new AppError('COMMAND_FAILED', 'Invalid runner response', { text });
   }
-  return parsed && typeof parsed === 'object' ? (parsed as RunnerResponsePayload) : {};
+  if (!isRunnerEnvelopeObject(parsed)) {
+    throw new AppError('COMMAND_FAILED', 'Invalid runner response', { text });
+  }
+  return parsed;
+}
+
+function isRunnerEnvelopeObject(parsed: unknown): parsed is RunnerResponsePayload {
+  return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed);
 }
 
 /** The runner's `ok` is a Swift `Bool`, so only the literal `true` is an answer. */

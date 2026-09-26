@@ -7,6 +7,7 @@ import {
   isRunnerResponseOk,
   readRunnerResponseData,
 } from '../runner-contract.ts';
+import { isStructuredRunnerFailure } from '../runner-error-classification.ts';
 import { parseRunnerResponse } from '../runner-session.ts';
 import type { RunnerSessionState } from '../runner-session-types.ts';
 
@@ -34,16 +35,24 @@ describe('decodeRunnerResponseBody', () => {
     );
   });
 
-  test('never reads a JSON body that is not an envelope as an answer', () => {
+  test('refuses a JSON body that is not an envelope instead of inventing one', () => {
+    // A JSON scalar is not something the runner's encoder emits. Reading it as an empty reply would
+    // count as an answer and discharge a command the runner may still be executing.
     for (const body of ['null', '42', '"ok"']) {
-      assert.equal(isRunnerResponseOk(decodeRunnerResponseBody(body)), false, body);
+      assert.throws(
+        () => decodeRunnerResponseBody(body),
+        (error: unknown) =>
+          error instanceof AppError && error.message === 'Invalid runner response',
+        body,
+      );
     }
   });
 
-  test('carries a bare-array body through unread rather than inventing an envelope', () => {
-    const payload = decodeRunnerResponseBody('[]');
-    assert.equal(isRunnerResponseOk(payload), false);
-    assert.deepEqual(readRunnerResponseData(payload), {});
+  test('refuses a bare-array body for the same reason', () => {
+    assert.throws(
+      () => decodeRunnerResponseBody('[]'),
+      (error: unknown) => error instanceof AppError && error.message === 'Invalid runner response',
+    );
   });
 });
 
@@ -131,6 +140,26 @@ describe('parseRunnerResponse', () => {
         assert.equal(error.details?.text, TRUNCATED_BODY);
         // Transport-shaped: no `runner` detail, so the session keeps its recency bets (#2552).
         assert.equal(error.details?.runner, undefined);
+        return true;
+      },
+    );
+
+    assert.equal(session.state, 'starting');
+  });
+
+  test('reads a JSON scalar body as transport-shaped, not as an empty reply', async () => {
+    // The chain #2965 turns on: an error carrying a `runner` detail counts as an answer and discharges
+    // the command's charge. A bare `null` is not an envelope the runner's encoder emits, so decoding it
+    // into `{}` and erroring from that would have answered a command the runner may still be running.
+    const session: { state: RunnerSessionState } = { state: 'starting' };
+
+    await assert.rejects(
+      () => parseRunnerResponse(new Response('null'), session),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.message, 'Invalid runner response');
+        assert.equal(error.details?.runner, undefined);
+        assert.equal(isStructuredRunnerFailure(error), false);
         return true;
       },
     );

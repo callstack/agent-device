@@ -84,6 +84,7 @@ import {
   normalizeRunnerStartupTimeoutMs,
   resolveRunnerDetachDecision,
   resolveRunnerSessionLiveness,
+  RunnerCommandAccounting,
   type RunnerDetachRefusal,
   type RunnerSession,
   type RunnerSessionLiveness,
@@ -339,8 +340,7 @@ async function startRunnerSessionWithLease(
     endOutputObservation: runnerProcess.endOutputObservation,
     readLogTail: runnerProcess.readLogTail,
     state: 'starting',
-    inFlightCommands: 0,
-    hasAbandonedCommands: false,
+    commandCharges: new RunnerCommandAccounting(),
     startupRetryWake: runnerProcess.startupRetryWake,
     startupTimeoutMs: normalizeRunnerStartupTimeoutMs(startupTimeoutMs),
     startupTimings,
@@ -758,6 +758,11 @@ export async function detachIosRunnerSessionsForShutdown(): Promise<number> {
           sessionId: session.sessionId,
           lane: outcome.lane,
           reason: outcome.reason,
+          // A refused handoff is read from the daemon log, and the two refusals that name a charge look
+          // identical without this: an exchange still awaited is recovered by its own answer, while an
+          // abandoned residue waits for terminal evidence for its `commandId` (#2965).
+          outstandingCharges: session.commandCharges.outstandingChargeCount,
+          hasAbandonedCharges: session.commandCharges.hasAbandonedCharges,
         },
       });
       continue;
@@ -867,10 +872,12 @@ export function validateRunnerDevice(device: DeviceInfo): void {
 }
 
 /**
- * Runs one command through a session. The command send charges the session and only a decoded
- * response discharges it: an exchange this process abandoned to a cancellation or a dropped
+ * Runs one command through a session. The command send charges the session and only this command's
+ * own answer discharges it: an exchange this process abandoned to a cancellation or a dropped
  * transport keeps the runner occupied, which is what a graceful shutdown reads before handing it to
- * the next daemon (#2681). The readiness preflight's own `uptime` probe is not charged.
+ * the next daemon (#2681). A command the runner answers inline is not charged at all, the same way
+ * the readiness preflight's own probe is not: an inline reply is no evidence about the queued work a
+ * charge stands for, so charging one would let it settle another command's debt (#2965).
  */
 export async function executeRunnerCommandWithSession(
   device: DeviceInfo,
@@ -924,40 +931,10 @@ export async function executeRunnerCommandWithSession(
   }
   try {
     const data = await parseRunnerResponse(response, session, logAttempt);
-    settleRunnerCommandAnswered(session);
-    // Mirror the runner's own main-thread occupancy stamped on this response: a runner that
-    // served a read off the XCTest channel (e.g. a private-AX capture) while a tree crawl it
-    // abandoned still grinds reports busy, so the healthy response must not be read as drained.
-    // Only a present stamp carries information; a recovered or journal-replayed response is
-    // written unstamped by design, and its absence must leave a prior busy report intact.
-    const stampedMainThreadBusy = readRunnerMainThreadBusy(data);
-    if (stampedMainThreadBusy !== undefined) {
-      session.runnerMainThreadBusy = stampedMainThreadBusy;
-    }
-    const runnerFatalReason = resolveRunnerFatalReason(data);
-    if (runnerFatalReason) {
-      session.lastHealthyMutation = undefined;
-      await invalidateRunnerSession(session, runnerFatalReason);
-    } else if (canSkipRunnerReadinessPreflightAfterHealthyMutation(runnerCommand)) {
-      session.lastHealthyMutation = {
-        atMs: Date.now(),
-        appBundleId: runnerCommand.appBundleId,
-      };
-    }
+    await settleRunnerAnsweredExchange(session, runnerCommand, data);
     return data;
   } catch (error) {
-    // A structured runner reply is an answer whatever it reports; a transport-shaped failure
-    // (aborted body read, malformed payload) answered nothing and keeps the runner charged (#2681).
-    settleRunnerCommandExchange(session, error);
-    // A main-thread occupancy report (`RUNNER_BUSY`, or the `MAIN_THREAD_TIMEOUT` the stalling
-    // command itself returns) marks the runner still draining. Any OTHER structured runner reply was
-    // served off that abandoned work, so it has drained; a transport-shaped error answered nothing
-    // and leaves the report intact (#2552).
-    if (isRunnerMainThreadOccupiedError(error)) {
-      session.runnerMainThreadBusy = true;
-    } else if (isStructuredRunnerFailure(error)) {
-      session.runnerMainThreadBusy = false;
-    }
+    const answered = recordUnansweredRunnerExchange(session, runnerCommand, error);
     const runnerFatalReason = resolveRunnerFatalErrorReason(error);
     if (runnerFatalReason) {
       session.lastHealthyMutation = undefined;
@@ -968,9 +945,69 @@ export async function executeRunnerCommandWithSession(
     // runner died mid-response); structured runner failures carry a `runner`
     // detail and keep their recency — the runner proved it is alive by
     // answering at all.
-    if (isStructuredRunnerFailure(error)) throw error;
+    if (answered) throw error;
     throw markSkippedPreflightTransportError(error, session, preflightDecision);
   }
+}
+
+/**
+ * Records that this command's exchange got an answer: it discharges the charge, mirrors the
+ * runner's occupancy report, and applies what the payload says about the session.
+ */
+async function settleRunnerAnsweredExchange(
+  session: RunnerSession,
+  runnerCommand: RunnerCommand,
+  data: Record<string, unknown>,
+): Promise<void> {
+  session.commandCharges.settleAnswered(runnerCommand.commandId);
+  // Mirror the runner's own main-thread occupancy stamped on this response: a runner that
+  // served a read off the XCTest channel (e.g. a private-AX capture) while a tree crawl it
+  // abandoned still grinds reports busy, so the healthy response must not be read as drained.
+  // Only a present stamp carries information; a recovered or journal-replayed response is
+  // written unstamped by design, and its absence must leave a prior busy report intact.
+  const stampedMainThreadBusy = readRunnerMainThreadBusy(data);
+  if (stampedMainThreadBusy !== undefined) {
+    session.runnerMainThreadBusy = stampedMainThreadBusy;
+  }
+  const runnerFatalReason = resolveRunnerFatalReason(data);
+  if (runnerFatalReason) {
+    session.lastHealthyMutation = undefined;
+    await invalidateRunnerSession(session, runnerFatalReason);
+  } else if (canSkipRunnerReadinessPreflightAfterHealthyMutation(runnerCommand)) {
+    session.lastHealthyMutation = {
+      atMs: Date.now(),
+      appBundleId: runnerCommand.appBundleId,
+    };
+  }
+}
+
+/**
+ * Records what a failed response proves about this command's exchange, and returns whether the
+ * runner answered it.
+ */
+function recordUnansweredRunnerExchange(
+  session: RunnerSession,
+  runnerCommand: RunnerCommand,
+  error: unknown,
+): boolean {
+  // A structured runner reply is an answer whatever it reports; a transport-shaped failure
+  // (aborted body read, malformed payload) answered nothing and keeps the runner charged (#2681).
+  const answered = isStructuredRunnerFailure(error);
+  if (answered) {
+    session.commandCharges.settleAnswered(runnerCommand.commandId);
+  } else {
+    session.commandCharges.markAbandoned(runnerCommand.commandId);
+  }
+  // A main-thread occupancy report (`RUNNER_BUSY`, or the `MAIN_THREAD_TIMEOUT` the stalling
+  // command itself returns) marks the runner still draining. Any OTHER structured runner reply was
+  // served off that abandoned work, so it has drained; a transport-shaped error answered nothing
+  // and leaves the report intact (#2552).
+  if (isRunnerMainThreadOccupiedError(error)) {
+    session.runnerMainThreadBusy = true;
+  } else if (answered) {
+    session.runnerMainThreadBusy = false;
+  }
+  return answered;
 }
 
 function readRunnerMainThreadBusy(data: Record<string, unknown>): boolean | undefined {
@@ -1023,9 +1060,12 @@ async function sendRunnerCommandAfterPreflight(params: {
     : { command: runnerCommand.command, commandId: runnerCommand.commandId };
 
   // From here the runner holds our request, and a shutdown that hands it off would orphan a command
-  // nobody is waiting for any more. The charge is released only where a response is decoded, so a
-  // cancellation or transport drop leaves the occupancy it really created (#2681).
-  session.inFlightCommands += 1;
+  // nobody is waiting for any more. A readiness probe is charged no more than the preflight's own
+  // probe is: the runner serves it inline, so its reply says nothing about the queued work a charge
+  // stands for, and charging it would let one probe settle another command's debt (#2965). The trait
+  // that names the probe is pinned to the runner's inline routing by `runner-readiness-routing.test.ts`.
+  const charged = !isRunnerReadinessProbeCommand(runnerCommand);
+  if (charged) session.commandCharges.charge(runnerCommand.commandId);
   try {
     return await withDiagnosticTimer(
       'ios_runner_command_send',
@@ -1052,38 +1092,9 @@ async function sendRunnerCommandAfterPreflight(params: {
       diagnosticData,
     );
   } catch (error) {
-    markRunnerCommandAbandoned(session);
+    if (charged) session.commandCharges.markAbandoned(runnerCommand.commandId);
     throw error;
   }
-}
-
-/**
- * The runner answered this exchange, so it is serving again: this command is answered, and so is the
- * abandoned charge an earlier cancellation left behind — work still draining is stamped on this very
- * reply (#2552, #2681). A run of abandoned exchanges leaves one residue charge per extra exchange,
- * which keeps such a runner on the kill path rather than guessing it drained.
- */
-function settleRunnerCommandAnswered(session: RunnerSession): void {
-  const abandonedCharge = session.hasAbandonedCommands ? 1 : 0;
-  session.inFlightCommands = Math.max(0, session.inFlightCommands - 1 - abandonedCharge);
-  session.hasAbandonedCommands = false;
-}
-
-/**
- * This process stopped waiting without ever seeing an answer. The command may still be executing on
- * the runner, so its occupancy stays charged: only an answered exchange clears it (#2681).
- */
-function markRunnerCommandAbandoned(session: RunnerSession): void {
-  session.hasAbandonedCommands = true;
-}
-
-/**
- * Settles the charge for an exchange that ended outside the success path. A structured runner reply
- * answers even when it reports a failure; a transport-shaped one answers nothing (#2681).
- */
-function settleRunnerCommandExchange(session: RunnerSession, error: unknown): void {
-  if (isStructuredRunnerFailure(error)) settleRunnerCommandAnswered(session);
-  else markRunnerCommandAbandoned(session);
 }
 
 async function runRunnerReadinessPreflight(params: {

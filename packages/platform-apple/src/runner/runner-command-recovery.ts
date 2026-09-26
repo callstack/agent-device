@@ -10,6 +10,7 @@ import {
   type RunnerResponsePayload,
 } from './runner-contract.ts';
 import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';
+import type { RunnerChargeSettlement } from './runner-session-types.ts';
 import type { AppleRunnerCommandOptions } from './runner-provider.ts';
 import { executeRunnerCommandWithSession, type RunnerSession } from './runner-session.ts';
 
@@ -160,6 +161,10 @@ async function tryRecoverRunnerCommandAfterTransportError(
   }
 
   const lifecycleState = typeof status.lifecycleState === 'string' ? status.lifecycleState : '';
+  // Terminal evidence says the runner finished *this* command, so that command's abandoned charge pays
+  // off and no other's does. `accepted`, `started`, and a state this daemon cannot name all keep the
+  // charge: the command may still be executing, and a runner kept on the kill path is the safe answer.
+  const charge = settleRunnerChargeForTerminalStatus(session, command, lifecycleState);
   emitDiagnostic({
     level: 'debug',
     phase: 'ios_runner_command_status_recovery',
@@ -168,6 +173,7 @@ async function tryRecoverRunnerCommandAfterTransportError(
       commandId: command.commandId,
       lifecycleState,
       ...readinessPreflight,
+      ...chargeSettlementDiagnostic(charge),
     },
   });
   return handleRunnerCommandStatusRecovery(
@@ -177,6 +183,45 @@ async function tryRecoverRunnerCommandAfterTransportError(
     transportError,
     options,
   );
+}
+
+/**
+ * The runner journal vocabulary, so the charge settlement below and the recovery verdict in
+ * {@link handleRunnerCommandStatusRecovery} cannot disagree about what a state means.
+ * `runner-swift-settlement-fixtures.ts` pins these names to `RunnerCommandLifecycleState`, and the
+ * recovery wiring rows are derived from that same declaration, so a state the runner gains has to be
+ * ruled here before it can decide a handoff.
+ *
+ * `completed` and `failed` close an entry — from the response's `ok` in `finish`, or a thrown error in
+ * `fail` — so execution ended, and each gets its own recovery verdict below. `accepted` and `started`
+ * are written as execution opens, so they share one in-flight verdict. `notAccepted` is what `status`
+ * reports for an id the journal never held, which this daemon cannot read as terminal.
+ */
+const RUNNER_TERMINAL_LIFECYCLE_STATES: ReadonlySet<string> = new Set(['completed', 'failed']);
+const RUNNER_IN_FLIGHT_LIFECYCLE_STATES: ReadonlySet<string> = new Set(['accepted', 'started']);
+
+/**
+ * Discharges the abandoned charge terminal status proves landed (#2965). A status reply is served
+ * inline, so it is no evidence that queued work finished; this is the only place a status answer may
+ * settle a charge, and only the one its `statusCommandId` names.
+ */
+function settleRunnerChargeForTerminalStatus(
+  session: RunnerSession,
+  command: RunnerCommand,
+  lifecycleState: string,
+): RunnerChargeSettlement | undefined {
+  if (!RUNNER_TERMINAL_LIFECYCLE_STATES.has(lifecycleState)) return undefined;
+  return session.commandCharges.settleTerminalEvidence(command.commandId);
+}
+
+function chargeSettlementDiagnostic(
+  settlement: RunnerChargeSettlement | undefined,
+): Record<string, unknown> {
+  if (!settlement) return {};
+  return {
+    abandonedChargeSettled: settlement.settled,
+    ...(settlement.refused ? { abandonedChargeRefused: settlement.refused } : {}),
+  };
 }
 
 function handleRunnerCommandStatusRecovery(
@@ -199,7 +244,7 @@ function handleRunnerCommandStatusRecovery(
     };
   }
 
-  if (lifecycleState === 'accepted' || lifecycleState === 'started') {
+  if (RUNNER_IN_FLIGHT_LIFECYCLE_STATES.has(lifecycleState)) {
     return {
       type: 'skipInvalidation',
       reason: 'command_still_in_flight',

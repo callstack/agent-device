@@ -1,11 +1,14 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
-import { createTestRequestCancellation, runnerConnectFailure } from './runner-session-fixtures.ts';
+import {
+  createTestRequestCancellation,
+  makeRunnerSession,
+  runnerConnectFailure,
+} from './runner-session-fixtures.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { Deadline } from '../host.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
-import type { RunnerSession } from '../runner-session-types.ts';
 
 const {
   mockEnsureRunnerSession,
@@ -1088,21 +1091,6 @@ function assertDiagnosticDecision(expected: {
     }),
     `missing invalidation decision diagnostic ${JSON.stringify(expected)}`,
   );
-}
-
-function makeRunnerSession(overrides: Partial<RunnerSession> = {}): RunnerSession {
-  return {
-    sessionId: `session-${overrides.port ?? 8100}`,
-    device: IOS_SIMULATOR,
-    deviceId: IOS_SIMULATOR.id,
-    port: 8100,
-    xctestrunPath: '/tmp/runner.xctestrun',
-    jsonPath: '/tmp/runner.json',
-    testPromise: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
-    child: { pid: 1234, exitCode: null },
-    state: 'ready',
-    ...overrides,
-  } as RunnerSession;
 }
 
 function makeRunnerArtifact(
