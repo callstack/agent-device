@@ -11,7 +11,7 @@ import { makeCachedRunnerBuild } from './runner-cache.fixtures.ts';
 
 stubAppleToolchainProbes();
 test('reuse ignores the non-comparable package version', async () => {
-  const { derived, expected } = makeCachedRunnerBuild();
+  const { derived, expected } = await makeCachedRunnerBuild();
 
   const state = await evaluateExistingXctestrun({
     derived,

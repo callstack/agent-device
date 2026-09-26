@@ -62,7 +62,7 @@ async function writeXcuitestCacheMetadata(
     throw new Error(`Runner products referenced by ${xctestrunPath} are missing`);
   }
   requireCertifiedRunnerCacheArtifacts(
-    writeRunnerCacheMetadataForArtifacts(derivedPath, metadata, xctestrunPath, productPaths),
+    await writeRunnerCacheMetadataForArtifacts(derivedPath, metadata, xctestrunPath, productPaths),
     derivedPath,
   );
   return metadata;

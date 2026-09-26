@@ -33,13 +33,13 @@ import {
 } from './runner-xctestrun.fixtures.ts';
 
 /** Certifies a fixture tree the way the production writer would, and proves it worked. */
-function writeCertifiedRunnerMetadata(params: {
+async function writeCertifiedRunnerMetadata(params: {
   derivedPath: string;
   device: DeviceInfo;
   xctestrunPath: string;
   productPaths: string[];
-}): void {
-  assert.equal(writeRunnerCacheMetadataWithArtifacts(params), null);
+}): Promise<void> {
+  assert.equal(await writeRunnerCacheMetadataWithArtifacts(params), null);
 }
 
 const mockRunCmdStreaming = vi.fn();
@@ -104,7 +104,7 @@ test('ensureXctestrunArtifact reuses matching manifest artifacts from another pr
     projectRoot: '/tmp/other-agent-device-worktree',
     productRelativePaths: ['Runner.app'],
   });
-  writeCertifiedRunnerMetadata({
+  await writeCertifiedRunnerMetadata({
     derivedPath,
     device: macOsDevice,
     xctestrunPath,
@@ -131,7 +131,7 @@ test('ensureXctestrunArtifact rebuilds foreign artifacts when metadata does not 
     projectRoot: '/tmp/other-agent-device-worktree',
     productRelativePaths: ['Runner.app'],
   });
-  writeCertifiedRunnerMetadata({
+  await writeCertifiedRunnerMetadata({
     derivedPath,
     device: macOsDevice,
     xctestrunPath: foreignXctestrunPath,
@@ -368,7 +368,7 @@ test('ensureXctestrunArtifact prefers validated cache manifest over recursive sc
     new Date(now.getTime() + 5_000),
     new Date(now.getTime() + 5_000),
   );
-  writeCertifiedRunnerMetadata({
+  await writeCertifiedRunnerMetadata({
     derivedPath,
     device: macOsDevice,
     xctestrunPath: manifestXctestrunPath,
@@ -409,7 +409,7 @@ test('ensureXctestrunArtifact ignores a newer foreign xctestrun beside a certifi
     new Date(now.getTime() + 5_000),
     new Date(now.getTime() + 5_000),
   );
-  writeCertifiedRunnerMetadata({
+  await writeCertifiedRunnerMetadata({
     derivedPath,
     device: macOsDevice,
     xctestrunPath: manifestXctestrunPath,
@@ -435,7 +435,7 @@ test('ensureXctestrunArtifact discards and rebuilds a manifest whose bytes no lo
     projectRoot: repoRoot,
     productRelativePaths: ['Runner.app'],
   });
-  writeCertifiedRunnerMetadata({
+  await writeCertifiedRunnerMetadata({
     derivedPath,
     device: macOsDevice,
     xctestrunPath: cachedXctestrunPath,
@@ -586,7 +586,7 @@ test('ensureXctestrunArtifact stress-recovers after a bad restored artifact', as
     projectRoot,
     productRelativePaths: ['Runner.app'],
   });
-  writeCertifiedRunnerMetadata({
+  await writeCertifiedRunnerMetadata({
     derivedPath,
     device: macOsDevice,
     xctestrunPath: cachedXctestrunPath,

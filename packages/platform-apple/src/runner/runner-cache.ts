@@ -17,11 +17,9 @@ import {
   type RunnerCacheMetadataDifference,
   type RunnerXctestrunCacheMetadata,
 } from './runner-cache-metadata.ts';
-import {
-  buildRunnerCacheArtifactManifest,
-  validateRunnerCacheArtifactManifest,
-  type RunnerCacheArtifactMismatch,
-  type RunnerCacheRefusal,
+import type {
+  RunnerCacheArtifactMismatch,
+  RunnerCacheRefusal,
 } from './runner-artifact-manifest.ts';
 export {
   requireRunnerPhaseRemainingMs,
@@ -162,12 +160,13 @@ export function cleanRunnerDerivedBeforeEvaluation(derived: string, forceRebuild
  * miss, and the refusal is returned so the caller can name it. Silently uncertifiable products
  * would otherwise cost a full rebuild on every launch with nothing to trace.
  */
-export function writeRunnerCacheMetadataForArtifacts(
+export async function writeRunnerCacheMetadataForArtifacts(
   derived: string,
   metadata: RunnerXctestrunCacheMetadata,
   xctestrunPath: string,
   productPaths: readonly string[],
-): RunnerCacheRefusal | null {
+): Promise<RunnerCacheRefusal | null> {
+  const { buildRunnerCacheArtifactManifest } = await import('./runner-artifact-manifest.ts');
   const built = buildRunnerCacheArtifactManifest(derived, xctestrunPath, productPaths);
   writeRunnerCacheMetadata(
     derived,
@@ -331,6 +330,7 @@ export async function evaluateExistingXctestrun(options: {
         }
       : { reason: cacheMetadata.reason, xctestrunPath: null, productPaths: [] };
   }
+  const { validateRunnerCacheArtifactManifest } = await import('./runner-artifact-manifest.ts');
   const artifacts = validateRunnerCacheArtifactManifest(options.derived, cacheMetadata.metadata);
   if (!artifacts.ok) {
     return artifacts.mismatch

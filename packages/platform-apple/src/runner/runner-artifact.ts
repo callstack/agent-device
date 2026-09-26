@@ -278,7 +278,12 @@ async function buildXctestrunArtifact(params: {
   // The manifest is written last so it certifies the bytes that actually run.
   await applyXctestRunnerAppIcon(builtProductPaths);
   requireCertifiedRunnerCacheArtifacts(
-    writeRunnerCacheMetadataForArtifacts(derived, expectedCacheMetadata, built, builtProductPaths),
+    await writeRunnerCacheMetadataForArtifacts(
+      derived,
+      expectedCacheMetadata,
+      built,
+      builtProductPaths,
+    ),
     derived,
   );
   emitRunnerXctestrunDecision('build', 'built_new', {
@@ -309,7 +314,7 @@ async function tryReuseExistingXctestrun(
       xctestrunPath: existing.xctestrunPath,
     });
     requireCertifiedRunnerCacheArtifacts(
-      writeRunnerCacheMetadataForArtifacts(
+      await writeRunnerCacheMetadataForArtifacts(
         derived,
         expectedCacheMetadata,
         existing.xctestrunPath,

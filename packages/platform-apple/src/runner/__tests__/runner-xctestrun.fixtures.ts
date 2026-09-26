@@ -131,12 +131,12 @@ export async function seedRunnerProductBundle(bundlePath: string): Promise<void>
  * Publishes the metadata the production writer would, so a fixture tree is really certified.
  * Returns the refusal when the tree cannot be certified, which callers assert rather than ignore.
  */
-export function writeRunnerCacheMetadataWithArtifacts(params: {
+export async function writeRunnerCacheMetadataWithArtifacts(params: {
   derivedPath: string;
   device: DeviceInfo;
   xctestrunPath: string;
   productPaths: string[];
-}): RunnerCacheRefusal | null {
+}): Promise<RunnerCacheRefusal | null> {
   return writeRunnerCacheMetadataForArtifacts(
     params.derivedPath,
     resolveExpectedRunnerCacheMetadata(params.device, REPO_ROOT_FOR_TEST),
@@ -163,7 +163,7 @@ export async function makeCachedRunnerXctestrun(device: DeviceInfo): Promise<{
     projectRoot: REPO_ROOT_FOR_TEST,
     productRelativePaths: ['Runner.app'],
   });
-  writeRunnerCacheMetadataWithArtifacts({
+  await writeRunnerCacheMetadataWithArtifacts({
     derivedPath,
     device,
     xctestrunPath: existingXctestrunPath,

@@ -28,7 +28,7 @@ export type CachedRunnerBuild = {
  * A cache root laid out the way a build leaves it: the `.xctestrun` under Build/Products, a
  * product bundle with an executable, and a manifest certifying both.
  */
-export function makeCachedRunnerBuild(): CachedRunnerBuild {
+export async function makeCachedRunnerBuild(): Promise<CachedRunnerBuild> {
   const derived = mkdtempForTestSync('agent-device-runner-cache-eval-');
   onTestFinished(() => fs.rmSync(derived, { recursive: true, force: true }));
   const productsPath = path.join(derived, 'Build', 'Products');
@@ -39,7 +39,7 @@ export function makeCachedRunnerBuild(): CachedRunnerBuild {
   const executablePath = path.join(runnerAppPath, 'Runner');
   fs.writeFileSync(executablePath, EXECUTABLE_BYTES, { mode: 0o755 });
   const expected = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
-  writeRunnerCacheMetadataForArtifacts(derived, expected, xctestrunPath, [runnerAppPath]);
+  await writeRunnerCacheMetadataForArtifacts(derived, expected, xctestrunPath, [runnerAppPath]);
   return { derived, xctestrunPath, runnerAppPath, executablePath, expected };
 }
 

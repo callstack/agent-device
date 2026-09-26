@@ -23,7 +23,7 @@ import {
 stubAppleToolchainProbes();
 
 test('a manifest-certified build is reused', async () => {
-  const { derived, xctestrunPath, executablePath, expected } = makeCachedRunnerBuild();
+  const { derived, xctestrunPath, executablePath, expected } = await makeCachedRunnerBuild();
 
   const state = await evaluateExistingXctestrun({ derived, expectedCacheMetadata: expected });
 
@@ -36,7 +36,7 @@ test('a manifest-certified build is reused', async () => {
 });
 
 test('executable bytes rewritten with equal size and preserved stats break reuse', async () => {
-  const { derived, executablePath, expected } = makeCachedRunnerBuild();
+  const { derived, executablePath, expected } = await makeCachedRunnerBuild();
   const stat = fs.statSync(executablePath);
 
   fs.writeFileSync(executablePath, Buffer.alloc(EXECUTABLE_BYTES.length, 9), { mode: 0o755 });
@@ -53,7 +53,7 @@ test('executable bytes rewritten with equal size and preserved stats break reuse
 });
 
 test('a size change breaks reuse', async () => {
-  const { derived, executablePath, expected } = makeCachedRunnerBuild();
+  const { derived, executablePath, expected } = await makeCachedRunnerBuild();
 
   fs.appendFileSync(executablePath, 'x');
 
@@ -65,7 +65,7 @@ test('a size change breaks reuse', async () => {
 });
 
 test('a lost permission bit breaks reuse', async () => {
-  const { derived, executablePath, expected } = makeCachedRunnerBuild();
+  const { derived, executablePath, expected } = await makeCachedRunnerBuild();
 
   fs.chmodSync(executablePath, 0o644);
 
@@ -77,7 +77,7 @@ test('a lost permission bit breaks reuse', async () => {
 });
 
 test('a missing executable breaks reuse', async () => {
-  const { derived, executablePath, expected } = makeCachedRunnerBuild();
+  const { derived, executablePath, expected } = await makeCachedRunnerBuild();
 
   fs.rmSync(executablePath);
 
@@ -89,7 +89,7 @@ test('a missing executable breaks reuse', async () => {
 });
 
 test('a certified executable replaced by a directory breaks reuse', async () => {
-  const { derived, executablePath, expected } = makeCachedRunnerBuild();
+  const { derived, executablePath, expected } = await makeCachedRunnerBuild();
 
   fs.rmSync(executablePath);
   fs.mkdirSync(executablePath);
@@ -103,7 +103,7 @@ test('a certified executable replaced by a directory breaks reuse', async () => 
 });
 
 test('a file added under a certified product breaks reuse', async () => {
-  const { derived, runnerAppPath, expected } = makeCachedRunnerBuild();
+  const { derived, runnerAppPath, expected } = await makeCachedRunnerBuild();
 
   fs.writeFileSync(path.join(runnerAppPath, 'injected.dylib'), 'injected');
 
@@ -117,11 +117,11 @@ test('a file added under a certified product breaks reuse', async () => {
 test('a certified symlink that starts escaping the cache root breaks reuse', async () => {
   const outside = mkdtempForTestSync('agent-device-runner-cache-outside-');
   onTestFinished(() => fs.rmSync(outside, { recursive: true, force: true }));
-  const { derived, runnerAppPath, expected } = makeCachedRunnerBuild();
+  const { derived, runnerAppPath, expected } = await makeCachedRunnerBuild();
   const linkPath = path.join(runnerAppPath, 'Frameworks');
   fs.mkdirSync(path.join(runnerAppPath, 'FrameworksInside'), { recursive: true });
   fs.symlinkSync('FrameworksInside', linkPath);
-  writeRunnerCacheMetadataForArtifacts(derived, expected, publishedXctestrun(derived), [
+  await writeRunnerCacheMetadataForArtifacts(derived, expected, publishedXctestrun(derived), [
     runnerAppPath,
   ]);
 
@@ -137,12 +137,12 @@ test('a certified symlink that starts escaping the cache root breaks reuse', asy
 });
 
 test('a symlink that changes target but stays inside the cache is a target change', async () => {
-  const { derived, runnerAppPath, expected } = makeCachedRunnerBuild();
+  const { derived, runnerAppPath, expected } = await makeCachedRunnerBuild();
   const linkPath = path.join(runnerAppPath, 'Frameworks');
   fs.mkdirSync(path.join(runnerAppPath, 'FrameworksInside'), { recursive: true });
   fs.mkdirSync(path.join(runnerAppPath, 'FrameworksMoved'), { recursive: true });
   fs.symlinkSync('FrameworksInside', linkPath);
-  writeRunnerCacheMetadataForArtifacts(derived, expected, publishedXctestrun(derived), [
+  await writeRunnerCacheMetadataForArtifacts(derived, expected, publishedXctestrun(derived), [
     runnerAppPath,
   ]);
 
@@ -174,7 +174,7 @@ test('a product root that is a symlink out of the cache is never certified', asy
   fs.writeFileSync(xctestrunPath, '<plist>xctestrun</plist>');
   const expected = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
 
-  writeRunnerCacheMetadataForArtifacts(derived, expected, xctestrunPath, [linkedProduct]);
+  await writeRunnerCacheMetadataForArtifacts(derived, expected, xctestrunPath, [linkedProduct]);
 
   const published = JSON.parse(
     fs.readFileSync(resolveRunnerCacheMetadataPath(derived), 'utf8'),
@@ -196,7 +196,7 @@ test('a symlinked product root that stays inside the cache is certified', async 
   fs.writeFileSync(xctestrunPath, '<plist>xctestrun</plist>');
   const expected = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
 
-  writeRunnerCacheMetadataForArtifacts(derived, expected, xctestrunPath, [linkedProduct]);
+  await writeRunnerCacheMetadataForArtifacts(derived, expected, xctestrunPath, [linkedProduct]);
 
   // Names describe where the bytes actually live, not the link that reached them, so re-pointing
   // the in-cache symlink at another bundle cannot make reuse read an uncertified tree.
@@ -225,7 +225,7 @@ test('a symlinked product root that stays inside the cache is certified', async 
 test('a manifest that certifies an escaping symlink refuses reuse', async () => {
   const outside = mkdtempForTestSync('agent-device-runner-cache-outside-');
   onTestFinished(() => fs.rmSync(outside, { recursive: true, force: true }));
-  const { derived, runnerAppPath, expected } = makeCachedRunnerBuild();
+  const { derived, runnerAppPath, expected } = await makeCachedRunnerBuild();
   const escapingTarget = path.join(outside, 'Frameworks');
   fs.symlinkSync(escapingTarget, path.join(runnerAppPath, 'Frameworks'));
   writeRunnerCacheMetadata(derived, {
@@ -262,10 +262,10 @@ test('a manifest that certifies an escaping symlink refuses reuse', async () => 
 });
 
 test('a build holding an escaping symlink publishes no manifest at all', async () => {
-  const { derived, runnerAppPath, xctestrunPath, expected } = makeCachedRunnerBuild();
+  const { derived, runnerAppPath, xctestrunPath, expected } = await makeCachedRunnerBuild();
   fs.symlinkSync('../../../../../outside', path.join(runnerAppPath, 'Frameworks'));
 
-  writeRunnerCacheMetadataForArtifacts(derived, expected, xctestrunPath, [runnerAppPath]);
+  await writeRunnerCacheMetadataForArtifacts(derived, expected, xctestrunPath, [runnerAppPath]);
 
   const published = JSON.parse(
     fs.readFileSync(resolveRunnerCacheMetadataPath(derived), 'utf8'),
@@ -274,7 +274,7 @@ test('a build holding an escaping symlink publishes no manifest at all', async (
 });
 
 test('an unreadable product subtree is refused and reported, not silently uncertified', async () => {
-  const { derived, runnerAppPath, expected, xctestrunPath } = makeCachedRunnerBuild();
+  const { derived, runnerAppPath, expected, xctestrunPath } = await makeCachedRunnerBuild();
   const sealed = path.join(runnerAppPath, 'Sealed.framework');
   fs.mkdirSync(sealed, { recursive: true });
   fs.writeFileSync(path.join(sealed, 'Binary'), 'binary');
@@ -283,7 +283,7 @@ test('an unreadable product subtree is refused and reported, not silently uncert
     fs.chmodSync(sealed, 0o755);
   });
 
-  const refusal = writeRunnerCacheMetadataForArtifacts(derived, expected, xctestrunPath, [
+  const refusal = await writeRunnerCacheMetadataForArtifacts(derived, expected, xctestrunPath, [
     runnerAppPath,
   ]);
 
@@ -300,7 +300,7 @@ test('an unreadable product subtree is refused and reported, not silently uncert
 test('a manifest whose .xctestrun was replaced by a symlink refuses reuse', async () => {
   const outside = mkdtempForTestSync('agent-device-runner-cache-outside-');
   onTestFinished(() => fs.rmSync(outside, { recursive: true, force: true }));
-  const { derived, expected, runnerAppPath } = makeCachedRunnerBuild();
+  const { derived, expected, runnerAppPath } = await makeCachedRunnerBuild();
   const realXctestrun = path.join(outside, 'real.xctestrun');
   fs.writeFileSync(realXctestrun, fs.readFileSync(publishedXctestrun(derived)));
   const linkedXctestrun = path.join(derived, 'Build', 'Products', 'linked.xctestrun');
@@ -340,14 +340,14 @@ test('a manifest whose .xctestrun was replaced by a symlink refuses reuse', asyn
 test('a build whose .xctestrun is a symlink out of the cache publishes no manifest', async () => {
   const outside = mkdtempForTestSync('agent-device-runner-cache-outside-');
   onTestFinished(() => fs.rmSync(outside, { recursive: true, force: true }));
-  const { derived, runnerAppPath, expected } = makeCachedRunnerBuild();
+  const { derived, runnerAppPath, expected } = await makeCachedRunnerBuild();
   const staged = path.join(outside, 'real.xctestrun');
   fs.writeFileSync(staged, '<plist>xctestrun</plist>');
   const linkedXctestrun = path.join(derived, 'Build', 'Products', 'linked.xctestrun');
   fs.rmSync(publishedXctestrun(derived));
   fs.symlinkSync(staged, linkedXctestrun);
 
-  const refusal = writeRunnerCacheMetadataForArtifacts(derived, expected, linkedXctestrun, [
+  const refusal = await writeRunnerCacheMetadataForArtifacts(derived, expected, linkedXctestrun, [
     runnerAppPath,
   ]);
 
@@ -359,7 +359,7 @@ test('a build whose .xctestrun is a symlink out of the cache publishes no manife
 });
 
 test('products without a content manifest are a miss, never a reuse', async () => {
-  const { derived, expected } = makeCachedRunnerBuild();
+  const { derived, expected } = await makeCachedRunnerBuild();
 
   writeRunnerCacheMetadata(derived, expected);
 
@@ -371,7 +371,7 @@ test('products without a content manifest are a miss, never a reuse', async () =
 test('a manifest naming paths outside the cache root is a miss', async () => {
   const outside = mkdtempForTestSync('agent-device-runner-cache-outside-');
   onTestFinished(() => fs.rmSync(outside, { recursive: true, force: true }));
-  const { derived, expected } = makeCachedRunnerBuild();
+  const { derived, expected } = await makeCachedRunnerBuild();
   const foreignXctestrun = path.join(outside, 'foreign.xctestrun');
   fs.writeFileSync(foreignXctestrun, '<plist>xctestrun</plist>');
   writeRunnerCacheMetadata(derived, {
@@ -391,8 +391,8 @@ test('a manifest naming paths outside the cache root is a miss', async () => {
 });
 
 test('a manifest written for a foreign cache root certifies nothing', async () => {
-  const { derived, expected } = makeCachedRunnerBuild();
-  writeRunnerCacheMetadataForArtifacts(
+  const { derived, expected } = await makeCachedRunnerBuild();
+  await writeRunnerCacheMetadataForArtifacts(
     derived,
     expected,
     path.join(derived, 'Build', 'Products', 'other.xctestrun'),
@@ -423,7 +423,7 @@ test('a cache root reached through a symlinked ancestor is certified and reused'
   const expected = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
 
   assert.equal(
-    writeRunnerCacheMetadataForArtifacts(derived, expected, xctestrunPath, [runnerAppPath]),
+    await writeRunnerCacheMetadataForArtifacts(derived, expected, xctestrunPath, [runnerAppPath]),
     null,
   );
 
