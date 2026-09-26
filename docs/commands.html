@@ -9,7 +9,7 @@
 <script defer src="/agent-device/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/static/js/index.712cd6203a.js"></script>
+<script defer src="/agent-device/static/js/index.9160438f9b.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -673,7 +673,7 @@ Two-finger <code>gesture pan</code> and <code>gesture transform</code> are suppo
 <li><code>settings location set &lt;lat&gt; &lt;lon&gt;</code> sets precise coordinates on iOS simulators and Android emulators.</li>
 <li><code>settings clear-app-state [app-id]</code> clears the active session app data, or the provided app id. Android uses <code>pm clear</code>, which removes SharedPreferences, databases, files, and cache. iOS simulator removes the app data container contents. iOS physical devices and macOS are unsupported. It does not touch the keychain, so keychain-backed credentials (e.g. Firebase auth) survive it.</li>
 <li><code>settings reset-keychain clear</code> resets the iOS simulator&#x27;s keychain (<code>xcrun simctl keychain &lt;device&gt; reset</code>), removing keychain-backed credentials such as Firebase auth tokens that <code>clear-app-state</code> leaves behind. simctl has no per-app keychain reset, so this clears the keychain for every app installed on that simulator, not only the app under test — treat it as a whole-simulator, opt-in operation and pair it with <code>clear-app-state</code> for a full fresh-install reset. iOS physical devices, Android, and macOS are unsupported.</li>
-<li>Face ID and Touch ID controls are iOS simulator-only.</li>
+<li>Face ID and Touch ID controls are iPhone and iPad simulator-only; Apple TV and Vision Pro simulators refuse them. They post the same Darwin notifications the Simulator.app Features menu posts (<code>xcrun simctl spawn &lt;device&gt; notifyutil</code>): <code>com.apple.BiometricKit_Sim.&lt;pearl|fingerTouch&gt;.&lt;match|nomatch&gt;</code> for match/nonmatch, and <code>com.apple.BiometricKit.enrollmentChanged</code> (set to <code>1</code>/<code>0</code>, then posted, then read back) for enroll/unenroll. No <code>simctl biometric</code> subcommand exists, so this route works on any Xcode.</li>
 <li>Android <code>settings airplane on|off</code> is applied by the connectivity service (<code>cmd connectivity airplane-mode</code>, Android 11+), which drives the radios rather than only writing the <code>airplane_mode_on</code> setting. The response reports the <code>airplaneMode</code> that service holds after the change, and Android builds without that command fail without changing device state. Connectivity takes a moment to settle after the switch, so poll the app under test rather than asserting offline behavior immediately.</li>
 <li>Fingerprint simulation is supported on Android targets where <code>cmd fingerprint</code> or <code>adb emu finger</code> is available.
 On physical Android devices, only <code>cmd fingerprint</code> is attempted.</li>
