@@ -84,10 +84,14 @@ window too; the window a lease carries is the one its client named when it alloc
 
 The first beat is fired when the phase starts, not one cadence in, because a beat is what proves the
 lease the upload is spending time on is still alive — a lease shorter than any fixed cadence would
-otherwise lapse before anything renewed it, and a lease already gone is worth learning that before any
-bytes move. Each beat answers with the window it just renewed, and the next one is armed a third of
-that window after the beat lands: beats never overlap, and one slower than the cadence delays its
-successor instead of replacing the schedule or suppressing every beat behind it.
+otherwise lapse before anything renewed it. A lease already gone is caught early, but not before the
+phase begins: hashing, the preflight, and the start of the stream can all run while the first beat is
+still outstanding, so what the first beat buys is that the loss is learned during the upload rather
+than after it. Each beat answers with the window it just renewed, and the loop arms its successor when
+the beat starts rather than when it settles, so a beat that never answers is abandoned on schedule
+instead of taking the schedule with it; the beat's own budget is capped at the cadence it started on,
+which is what keeps one stalled round trip from outliving the window it exists to protect. A phase
+that settles does not wait on a beat still in flight.
 
 A beat is a fresh request each time, never the protected request rewritten: a request identity is
 what a timed-out beat is canceled under, and beats must not inherit each other's cancellation. A beat
@@ -95,7 +99,9 @@ that finds the lease gone, or finds that this request can never renew it — its
 belongs to another lease, or the daemon rejects the scope and window the beat itself was built with,
 which no successor will ask differently — ends the phase with that error and cancels the upload rather
 than finishing bytes against a device nobody owns or a lease that will stop renewing. A beat that fails
-for any other reason is reported and survived, because a later beat covers one lost request.
+for any other reason is reported and survived, because a later beat covers one lost request — including
+one that was abandoned at its budget rather than answered, which is what makes that promise hold for a
+stalled round trip and not only for one that fails fast.
 
 ## Human control
 
