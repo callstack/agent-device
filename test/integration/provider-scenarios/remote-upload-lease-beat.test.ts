@@ -15,6 +15,7 @@ import {
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
 } from '../../../src/__tests__/test-utils/loopback.ts';
+import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from './test-timeouts.ts';
 
 const LEASE_ID = 'lease-upload-beat';
 const TOKEN = 'upload-beat-token';
@@ -344,41 +345,45 @@ test('a lease lost mid-upload aborts the upload and no install request goes out'
   });
 });
 
-test('a beat that takes over a second to answer sets the cadence instead of timing out', async (t) => {
-  await withUploadedArtifact(t, 'slow', async (daemon, apkPath) => {
-    let timeoutsDuringUpload = -1;
-    let beatsDuringUpload = -1;
-    let response: Awaited<ReturnType<typeof sendToDaemon>> | undefined;
+test(
+  'a beat that takes over a second to answer sets the cadence instead of timing out',
+  async (t) => {
+    await withUploadedArtifact(t, 'slow', async (daemon, apkPath) => {
+      let timeoutsDuringUpload = -1;
+      let beatsDuringUpload = -1;
+      let response: Awaited<ReturnType<typeof sendToDaemon>> | undefined;
 
-    // The request has to run inside a diagnostics scope for the absence of a timeout to mean
-    // anything: outside one, `emitDiagnostic` records nothing at all and every count reads zero.
-    await withDiagnosticsScope({ session: 'upload-beat', command: 'install' }, async () => {
-      const running = sendToDaemon(installRequest(daemon.baseUrl, apkPath), TRANSPORT);
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, SLOW_BEAT_OBSERVATION_MS).unref();
+      // The request has to run inside a diagnostics scope for the absence of a timeout to mean
+      // anything: outside one, `emitDiagnostic` records nothing at all and every count reads zero.
+      await withDiagnosticsScope({ session: 'upload-beat', command: 'install' }, async () => {
+        const running = sendToDaemon(installRequest(daemon.baseUrl, apkPath), TRANSPORT);
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, SLOW_BEAT_OBSERVATION_MS).unref();
+        });
+        timeoutsDuringUpload = countDiagnosticEventsByPhase(['daemon_request_timeout']);
+        beatsDuringUpload = daemon.beatArrivals.length;
+        // Only now does the artifact get the rest of its way in, so everything above was measured
+        // while the upload was genuinely still running.
+        resumeUploadNow();
+        response = await running;
       });
-      timeoutsDuringUpload = countDiagnosticEventsByPhase(['daemon_request_timeout']);
-      beatsDuringUpload = daemon.beatArrivals.length;
-      // Only now does the artifact get the rest of its way in, so everything above was measured
-      // while the upload was genuinely still running.
-      resumeUploadNow();
-      response = await running;
+
+      assert.equal(response!.ok, true);
+      // Two beats, not three: the opening one, and the successor the loop had already armed at the
+      // cadence it assumes before any window is known. The first beat's late answer then moves the
+      // loop to a third of the 30s window it just renewed, so nothing else is due inside the
+      // observation. A beat budgeted at its cadence is cut off before that answer lands, never learns
+      // the window, and keeps arriving every assumed cadence with a `daemon_request_timeout` behind it
+      // — which is #2946's slow link wearing the beat down instead of protecting it.
+      assert.equal(beatsDuringUpload, 2, `beats seen: ${String(beatsDuringUpload)}`);
+      assert.equal(
+        timeoutsDuringUpload,
+        0,
+        'a heartbeat the transport cut off is a timeout, not a slow answer',
+      );
+
+      assert.deepEqual(daemon.seen, ['lease_heartbeat', 'lease_heartbeat', 'install']);
     });
-
-    assert.equal(response!.ok, true);
-    // Two beats, not three: the opening one, and the successor the loop had already armed at the
-    // cadence it assumes before any window is known. The first beat's late answer then moves the
-    // loop to a third of the 30s window it just renewed, so nothing else is due inside the
-    // observation. A beat budgeted at its cadence is cut off before that answer lands, never learns
-    // the window, and keeps arriving every assumed cadence with a `daemon_request_timeout` behind it
-    // — which is #2946's slow link wearing the beat down instead of protecting it.
-    assert.equal(beatsDuringUpload, 2, `beats seen: ${String(beatsDuringUpload)}`);
-    assert.equal(
-      timeoutsDuringUpload,
-      0,
-      'a heartbeat the transport cut off is a timeout, not a slow answer',
-    );
-
-    assert.deepEqual(daemon.seen, ['lease_heartbeat', 'lease_heartbeat', 'install']);
-  });
-});
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
