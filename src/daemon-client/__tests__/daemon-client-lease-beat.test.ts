@@ -7,10 +7,9 @@ import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import {
   buildLeaseHeartbeatRequest,
   buildUploadLeaseHeartbeat,
-  createLeaseRenewalBeat,
-  leaseScopeForHeartbeat,
   runProtectedLeaseWork,
 } from '../daemon-client-lease-beat.ts';
+import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 import type { DaemonRequest } from '../../daemon/daemon-request.ts';
 
 function lostLeaseError(reason: string): AppError {
@@ -455,23 +454,6 @@ describe('runProtectedLeaseWork', () => {
   });
 });
 
-describe('leaseScopeForHeartbeat', () => {
-  test('names no lease for a request that carries none', () => {
-    assert.equal(leaseScopeForHeartbeat({ flags: {}, meta: undefined }), undefined);
-  });
-
-  test('reads the lease scope from the request meta, then from the flags', () => {
-    assert.equal(
-      leaseScopeForHeartbeat({ meta: { leaseId: 'lease-meta', tenantId: 'acme' } })?.leaseId,
-      'lease-meta',
-    );
-    assert.equal(
-      leaseScopeForHeartbeat({ flags: { leaseId: 'lease-flag' } })?.leaseId,
-      'lease-flag',
-    );
-  });
-});
-
 describe('buildLeaseHeartbeatRequest', () => {
   test('carries the lease scope and nothing that belongs to the request it is protecting', () => {
     const beat = buildLeaseHeartbeatRequest(
@@ -521,7 +503,7 @@ describe('buildLeaseHeartbeatRequest', () => {
       flags: { leaseId: 'lease-1', platform: 'android' },
       meta: { leaseId: 'lease-1', tenantId: 'acme' },
     };
-    const scope = leaseScopeForHeartbeat(installRequest)!;
+    const scope = leaseScopeFromRequest(installRequest);
     const beat = buildLeaseHeartbeatRequest(scope, {
       session: 'default',
       requestId: 'beat-1',
@@ -531,76 +513,16 @@ describe('buildLeaseHeartbeatRequest', () => {
   });
 
   test('a caller that did name a ttl keeps renewing on it', () => {
-    const scope = leaseScopeForHeartbeat({
+    const scope = leaseScopeFromRequest({
       flags: { leaseId: 'lease-1' },
       meta: { leaseId: 'lease-1', leaseTtlMs: 600_000 },
-    })!;
+    });
     const beat = buildLeaseHeartbeatRequest(scope, {
       session: 'default',
       requestId: 'beat-1',
       token: 't',
     });
     assert.equal(beat.meta?.leaseTtlMs, 600_000);
-  });
-});
-
-describe('createLeaseRenewalBeat', () => {
-  const scope = {
-    leaseId: 'lease-1',
-    tenantId: 'acme',
-    runId: 'run-1',
-    leaseBackend: 'android-instance',
-  } as const;
-
-  function beatContext(send: (request: DaemonRequest, budgetMs: number) => Promise<unknown>) {
-    return {
-      session: 'adc-android',
-      sessionIsolation: 'tenant' as const,
-      token: 'daemon-token',
-      send,
-    };
-  }
-
-  test('sends one lease_heartbeat naming the lease it is protecting', async () => {
-    const sent: DaemonRequest[] = [];
-    await createLeaseRenewalBeat(
-      scope,
-      beatContext(async (request) => void sent.push(request)),
-    )(1_000);
-
-    assert.equal(sent.length, 1);
-    assert.equal(sent[0]!.command, 'lease_heartbeat');
-    assert.equal(sent[0]!.meta?.leaseId, 'lease-1');
-    assert.equal(sent[0]!.meta?.tenantId, 'acme');
-    assert.equal(sent[0]!.meta?.runId, 'run-1');
-    assert.equal(sent[0]!.meta?.sessionIsolation, 'tenant');
-    assert.equal(sent[0]!.session, 'adc-android');
-    assert.equal(sent[0]!.token, 'daemon-token');
-  });
-
-  test('every beat is a distinct request, so a timed-out beat cannot cancel the next one', async () => {
-    const sent: DaemonRequest[] = [];
-    const beat = createLeaseRenewalBeat(
-      scope,
-      beatContext(async (request) => void sent.push(request)),
-    );
-    await beat(1_000);
-    await beat(1_000);
-    await beat(1_000);
-
-    const ids = sent.map((request) => request.meta?.requestId);
-    assert.equal(new Set(ids).size, 3, 'three beats, three request ids');
-    assert.ok(ids.every((id) => typeof id === 'string' && id.length > 0));
-  });
-
-  test('a transport failure propagates to the caller that survives it', async () => {
-    const beat = createLeaseRenewalBeat(
-      scope,
-      beatContext(async () => {
-        throw new AppError('COMMAND_FAILED', 'connection reset');
-      }),
-    );
-    await assert.rejects((async () => await beat(1_000))(), /connection reset/);
   });
 });
 
@@ -651,27 +573,37 @@ describe('buildUploadLeaseHeartbeat', () => {
 
   test('the beat reaches a remote daemon over its HTTP endpoint', async () => {
     const requests: { method?: string; path?: string; body: string }[] = [];
+    const connections: net.Socket[] = [];
     const server = net.createServer((socket) => {
-      let body = '';
+      connections.push(socket);
+      // Answers every request the connection carries, and stays open: the beat is sent repeatedly
+      // and the transport keeps its socket, so closing after the first answer would surface the
+      // second beat as a reset rather than as a beat.
+      let buffered = '';
       socket.on('data', (chunk) => {
-        body += chunk.toString('utf8');
-        const headerEnd = body.indexOf('\r\n\r\n');
-        if (headerEnd < 0) return;
-        const head = body.slice(0, headerEnd);
-        const [requestLine] = head.split('\r\n');
-        const [method, path] = requestLine?.split(' ') ?? [];
-        requests.push({ method, path, body: body.slice(headerEnd + 4) });
-        const payload = JSON.stringify({
-          jsonrpc: '2.0',
-          id: 'x',
-          result: { ok: true },
-        });
-        socket.write(
-          `HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: ${String(
-            payload.length,
-          )}\r\n\r\n${payload}`,
-        );
-        socket.end();
+        buffered += chunk.toString('utf8');
+        for (;;) {
+          const headerEnd = buffered.indexOf('\r\n\r\n');
+          if (headerEnd < 0) return;
+          const head = buffered.slice(0, headerEnd);
+          const [requestLine] = head.split('\r\n');
+          const [method, path] = requestLine?.split(' ') ?? [];
+          const declaredLength = Number(head.match(/content-length: (\d+)/i)?.[1] ?? '0');
+          if (buffered.length < headerEnd + 4 + declaredLength) return;
+          const body = buffered.slice(headerEnd + 4, headerEnd + 4 + declaredLength);
+          buffered = buffered.slice(headerEnd + 4 + declaredLength);
+          requests.push({ method, path, body });
+          const payload = JSON.stringify({
+            jsonrpc: '2.0',
+            id: (JSON.parse(body) as { id: string }).id,
+            result: { ok: true },
+          });
+          socket.write(
+            `HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: ${String(
+              payload.length,
+            )}\r\n\r\n${payload}`,
+          );
+        }
       });
     });
     const port = await listenOnLoopback(server);
@@ -684,26 +616,34 @@ describe('buildUploadLeaseHeartbeat', () => {
       );
       assert.ok(beat);
       await beat!(5_000);
+      // Two beats, because a beat that times out is canceled under its own id: sharing one would
+      // let a later beat inherit an earlier cancellation and stop renewing a live lease.
+      await beat!(5_000);
     } finally {
+      // The server keeps the connection open, and `close()` waits for it.
+      for (const connection of connections) connection.destroy();
       await closeLoopbackServer(server);
     }
 
-    const posted = requests.find((request) => request.method === 'POST');
-    assert.ok(posted, 'the beat POSTs to the remote daemon');
-    const payload = JSON.parse(posted!.body) as {
-      method: string;
-      params: Record<string, unknown>;
-    };
-    assert.equal(posted!.path, '/agent-device/rpc');
-    assert.equal(payload.method, 'agent_device.lease.heartbeat');
-    assert.equal(payload.params.leaseId, 'lease-1');
-    assert.equal(payload.params.tenantId, 'acme');
-    assert.equal(payload.params.runId, 'run-1');
-    assert.equal(payload.params.deviceKey, 'android:mobile:emulator-5554');
+    const posted = requests.filter((request) => request.method === 'POST');
+    assert.equal(posted.length, 2, 'every beat is its own request');
+    const payloads = posted.map(
+      (request) =>
+        JSON.parse(request.body) as { id: string; method: string; params: Record<string, unknown> },
+    );
+    assert.equal(new Set(payloads.map((payload) => payload.id)).size, 2);
+
+    const [first] = payloads;
+    assert.equal(posted[0]!.path, '/agent-device/rpc');
+    assert.equal(first!.method, 'agent_device.lease.heartbeat');
+    assert.equal(first!.params.leaseId, 'lease-1');
+    assert.equal(first!.params.tenantId, 'acme');
+    assert.equal(first!.params.runId, 'run-1');
+    assert.equal(first!.params.deviceKey, 'android:mobile:emulator-5554');
 
     // A beat asks for the same lease to keep going: it names no window, so the daemon renews the one
     // the lease already carries.
-    assert.equal('ttlMs' in payload.params, false);
+    assert.equal('ttlMs' in first!.params, false);
   });
 
   test('a beat that never answers dies at its budget, not at the heartbeat policy', async () => {

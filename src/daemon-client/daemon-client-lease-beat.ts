@@ -222,35 +222,6 @@ async function captureOutcome<T>(promise: Promise<T>): Promise<Outcome<T>> {
 }
 
 /**
- * The beat that keeps a remote lease alive across a long client-side phase.
- *
- * `send` is the caller's transport and `budgetMs` is how long this beat may take: the beat's answer
- * only matters before the next one is due, so a stalled round trip is cut off at the cadence rather
- * than at the command's own 90-second heartbeat policy. A beat is only ever sent to a remote daemon,
- * where a transport timeout performs no local cleanup.
- */
-export function createLeaseRenewalBeat(
-  leaseScope: LeaseScope,
-  context: Readonly<{
-    session: string;
-    sessionIsolation?: NonNullable<DaemonRequest['meta']>['sessionIsolation'];
-    token: string;
-    send: (request: DaemonRequest, budgetMs: number) => Promise<unknown>;
-  }>,
-): (budgetMs: number) => Promise<unknown> {
-  return async (budgetMs) =>
-    await context.send(
-      buildLeaseHeartbeatRequest(leaseScope, {
-        session: context.session,
-        sessionIsolation: context.sessionIsolation,
-        requestId: createRequestId(),
-        token: context.token,
-      }),
-      budgetMs,
-    );
-}
-
-/**
  * The request one beat sends: the command's lease scope, its own id, and nothing else.
  *
  * It is a fresh request rather than the install rewritten, so nothing about the upload — its source,
@@ -282,14 +253,6 @@ export function buildLeaseHeartbeatRequest(
   };
 }
 
-/** The lease a request is running under, when it names one. */
-export function leaseScopeForHeartbeat(
-  request: Pick<DaemonRequest, 'flags' | 'meta'>,
-): LeaseScope | undefined {
-  const scope = leaseScopeFromRequest(request);
-  return scope.leaseId ? scope : undefined;
-}
-
 /**
  * The beat that renews a remote lease across an artifact upload, or `undefined` when there is no
  * lease to protect: only a remote daemon uploads, so only one can be waiting on a billed device, and
@@ -305,25 +268,25 @@ export function buildUploadLeaseHeartbeat(
   request: Omit<DaemonRequest, 'token'>,
 ): ((budgetMs: number) => Promise<unknown>) | undefined {
   if (!isRemoteDaemon(info)) return undefined;
-  const leaseScope = leaseScopeForHeartbeat(request);
-  if (!leaseScope) return undefined;
+  const leaseScope = leaseScopeFromRequest(request);
+  if (!leaseScope.leaseId) return undefined;
   const policyTimeoutMs = resolveCommandRequestTimeoutMs(
     resolveCommandTimeoutPolicy(INTERNAL_COMMANDS.leaseHeartbeat),
     { positionals: [] },
   );
-  return createLeaseRenewalBeat(leaseScope, {
-    session: request.session,
-    sessionIsolation: request.meta?.sessionIsolation,
-    token: info.token,
-    send: async (beat, budgetMs) =>
-      await sendRequest(
-        info,
-        beat,
-        settings.transportPreference,
-        settings.paths,
-        // The beat's own budget governs; the command's heartbeat policy only ever caps it, and an
-        // unbounded policy leaves the budget standing on its own.
-        policyTimeoutMs === undefined ? budgetMs : Math.min(policyTimeoutMs, budgetMs),
-      ),
-  });
+  return async (budgetMs) =>
+    await sendRequest(
+      info,
+      buildLeaseHeartbeatRequest(leaseScope, {
+        session: request.session,
+        sessionIsolation: request.meta?.sessionIsolation,
+        requestId: createRequestId(),
+        token: info.token,
+      }),
+      settings.transportPreference,
+      settings.paths,
+      // The beat's own budget governs; the command's heartbeat policy only ever caps it, and an
+      // unbounded policy leaves the budget standing on its own.
+      policyTimeoutMs === undefined ? budgetMs : Math.min(policyTimeoutMs, budgetMs),
+    );
 }

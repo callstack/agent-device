@@ -25,59 +25,47 @@ const LEASE_WINDOW_MS = 3_000;
  * none of them would notice the wiring between the three being dropped.
  */
 
-type FakeDaemon = {
+type FakeDaemon = Readonly<{
   baseUrl: string;
   /** Beats and commands the daemon saw, in arrival order. */
-  seen: string[];
-  uploadBytesDelivered(): number;
+  seen: readonly string[];
+  /** Bytes of the artifact the daemon actually read. */
+  uploadBytes(): number;
   /**
-   * Lets a stalled artifact through, and reports how the upload ended: `drained` if the whole
-   * artifact arrived, `canceled` if the request carrying it was destroyed first.
-   *
-   * The caller releases it rather than a beat answering, so the answer is causal: the client has
-   * already been told the lease is gone by then, and an upload it did not cancel has nothing left
-   * that could stop it.
+   * Stops withholding the artifact and reports how the upload ended. The caller releases it after
+   * `sendToDaemon` settles, so the answer is causal rather than timed: an upload the client did not
+   * cancel has nothing left that could stop it by then, and one it did cannot arrive.
    */
-  releaseUploadAndObserveOutcome(graceMs?: number): Promise<'drained' | 'canceled' | 'unresolved'>;
+  releaseUpload(graceMs?: number): Promise<'drained' | 'canceled' | 'unresolved'>;
   close(): Promise<void>;
-};
-
-type UploadBehaviour = 'complete' | 'backpressure';
+}>;
 
 /**
- * A remote daemon that only answers a beat, and treats the upload as the long phase it is:
+ * A remote daemon that answers a beat and treats the upload as the long phase it is.
  *
- * - `complete` drains the artifact and withholds the upload response until a second beat has
- *   arrived, so "the lease was renewed while the artifact was still uploading" is a fact of the
- *   test rather than a race it happens to win.
- * - `backpressure` stops reading after the first chunk, so the artifact is still in flight when the
- *   next beat reports the lease gone — the state the abort exists for.
+ * `stallUpload` decides how the artifact is held: withheld while it drains until a second beat has
+ * landed, or stopped in flight after the first chunk. Without that hold, "the lease was renewed
+ * during the upload" would be a race the test happens to win rather than something it establishes.
  */
-async function startFakeRemoteDaemon(behaviour: UploadBehaviour): Promise<FakeDaemon> {
+async function startFakeRemoteDaemon(stallUpload: boolean): Promise<FakeDaemon> {
   const seen: string[] = [];
-  let uploadBytesDelivered = 0;
-  let resolveOutcome!: (outcome: 'drained' | 'canceled') => void;
-  const settled = new Promise<'drained' | 'canceled'>((resolve) => {
-    resolveOutcome = resolve;
-  });
-  let stopBackpressure: (() => void) | undefined;
+  let uploadBytes = 0;
   let beatsAnswered = 0;
   let leaseDeclaredLost = false;
-  let writeUploadResponse: (() => void) | undefined;
+  let resumeUpload: (() => void) | undefined;
+  let resolveOutcome!: (outcome: 'drained' | 'canceled') => void;
+  const outcome = new Promise<'drained' | 'canceled'>((resolve) => {
+    resolveOutcome = resolve;
+  });
 
   const server = http.createServer((req, res) => {
     if (req.method === 'GET' && (req.url ?? '').startsWith('/health')) {
       writeJson(res, 200, { ok: true });
       return;
     }
-    if (req.method !== 'POST') {
-      res.writeHead(404);
-      res.end('not found');
-      return;
-    }
     if (req.url === '/upload/preflight') {
-      // Draining before the 404 keeps the connection usable; an early end would make the client's
-      // fallback to the legacy upload route a matter of socket recycling rather than the protocol.
+      // Drained before the 404, so the fallback to the legacy upload route is the protocol's doing
+      // and not a matter of socket recycling.
       readJsonBody(req, () => {
         res.writeHead(404);
         res.end('not found');
@@ -85,27 +73,10 @@ async function startFakeRemoteDaemon(behaviour: UploadBehaviour): Promise<FakeDa
       return;
     }
     if (req.url === '/upload') {
-      handleUpload(req, res, behaviour, {
-        onBytes: (length) => {
-          uploadBytesDelivered += length;
-        },
-        onBodyArrived: () => {
-          resolveOutcome('drained');
-        },
-        onCanceled: () => {
-          resolveOutcome('canceled');
-        },
-        holdResponse: (write) => {
-          writeUploadResponse = write;
-          if (!leaseDeclaredLost && beatsAnswered >= 2) write();
-        },
-        releaseBackpressure: (resume) => {
-          stopBackpressure = resume;
-        },
-      });
+      handleUpload(req, res);
       return;
     }
-    if (req.url !== '/rpc') {
+    if (req.method !== 'POST' || req.url !== '/rpc') {
       res.writeHead(404);
       res.end('not found');
       return;
@@ -124,18 +95,54 @@ async function startFakeRemoteDaemon(behaviour: UploadBehaviour): Promise<FakeDa
     });
   });
 
+  function handleUpload(req: http.IncomingMessage, res: http.ServerResponse): void {
+    let answered = false;
+    let bodyArrived = false;
+    let stalled = false;
+    // The artifact's response is withheld until a beat has renewed the lease mid-upload, so the
+    // first case proves the renewal landed while the install was still in flight. A beat that
+    // reports the lease gone must not also complete the upload it exists to stop: that artifact's
+    // fate belongs to the abort, not to a response from here.
+    const answerUpload = (): void => {
+      if (answered || !bodyArrived || leaseDeclaredLost || beatsAnswered < 2) return;
+      answered = true;
+      writeJson(res, 200, { ok: true, uploadId: 'upload-demo.apk' });
+    };
+    resumeUpload = () => {
+      if (stalled) req.resume();
+      answerUpload();
+    };
+    req.on('data', (chunk: Buffer) => {
+      uploadBytes += chunk.length;
+      // Pausing once, not per chunk: releasing the pressure has to let the artifact through, or a
+      // stalled upload and a canceled one are the same observation from here.
+      if (stallUpload && !stalled) {
+        req.pause();
+        stalled = true;
+      }
+    });
+    req.on('end', () => {
+      bodyArrived = true;
+      resolveOutcome('drained');
+      answerUpload();
+    });
+    req.on('aborted', () => {
+      if (!answered) resolveOutcome('canceled');
+    });
+    res.on('close', () => {
+      if (!answered) resolveOutcome('canceled');
+    });
+  }
+
   function answerBeat(res: http.ServerResponse, payload: RpcPayload): void {
     beatsAnswered += 1;
     seen.push('lease_heartbeat');
     assert.equal(payload.params?.leaseId, LEASE_ID, 'a beat names the lease it protects');
     // Only a beat after the first can say anything about the upload: the loop fires one at t=0,
     // while the artifact is still being hashed.
-    const leaseGone = behaviour === 'backpressure' && beatsAnswered >= 2;
-    if (leaseGone) {
+    if (stallUpload && beatsAnswered >= 2) {
       leaseDeclaredLost = true;
       writeLeaseLostError(res, payload.id);
-      // A beat that reports the lease gone must not also complete the upload it is meant to stop:
-      // the artifact's fate is decided by the abort, not by a response from here.
       return;
     }
     const now = Date.now();
@@ -144,7 +151,7 @@ async function startFakeRemoteDaemon(behaviour: UploadBehaviour): Promise<FakeDa
       id: payload.id,
       result: { ok: true, data: { lease: { heartbeatAt: now, expiresAt: now + LEASE_WINDOW_MS } } },
     });
-    writeUploadResponse?.();
+    resumeUpload?.();
   }
   server.keepAliveTimeout = 100;
 
@@ -152,68 +159,23 @@ async function startFakeRemoteDaemon(behaviour: UploadBehaviour): Promise<FakeDa
   return {
     baseUrl: `http://127.0.0.1:${String(port)}`,
     seen,
-    uploadBytesDelivered: () => uploadBytesDelivered,
-    async releaseUploadAndObserveOutcome(graceMs = 2_000) {
-      stopBackpressure?.();
+    uploadBytes: () => uploadBytes,
+    async releaseUpload(graceMs = 2_000) {
+      resumeUpload?.();
       return await Promise.race([
-        settled,
+        outcome,
         new Promise<'unresolved'>((resolve) => {
           setTimeout(() => resolve('unresolved'), graceMs).unref();
         }),
       ]);
     },
-    async close() {
+    close: async () => {
       server.closeAllConnections();
       await new Promise<void>((resolve) => {
         server.close(() => resolve());
       });
     },
   };
-}
-
-function handleUpload(
-  req: http.IncomingMessage,
-  res: http.ServerResponse,
-  behaviour: UploadBehaviour,
-  hooks: Readonly<{
-    onBytes(length: number): void;
-    onBodyArrived(): void;
-    onCanceled(): void;
-    holdResponse(write: () => void): void;
-    releaseBackpressure(resume: () => void): void;
-  }>,
-): void {
-  let answered = false;
-  const respond = (): void => {
-    if (answered) return;
-    answered = true;
-    writeJson(res, 200, { ok: true, uploadId: 'upload-demo.apk' });
-  };
-  const requestSettled = (): void => {
-    if (answered) return;
-    hooks.onCanceled();
-  };
-  req.on('aborted', requestSettled);
-  res.on('close', requestSettled);
-  let stalled = false;
-  req.on('data', (chunk: Buffer) => {
-    hooks.onBytes(chunk.length);
-    // Stopping the read applies backpressure, so the artifact stays in flight instead of racing
-    // through loopback and making "stopped early" a matter of timing.
-    // Pausing once, rather than on every chunk: releasing the pressure has to actually let the
-    // artifact through, otherwise a stalled upload and a canceled one are the same observation.
-    if (behaviour === 'backpressure' && !stalled) {
-      req.pause();
-      stalled = true;
-    }
-  });
-  req.on('end', () => {
-    hooks.onBodyArrived();
-    hooks.holdResponse(respond);
-  });
-  hooks.releaseBackpressure(() => {
-    if (stalled) req.resume();
-  });
 }
 
 type RpcPayload = Readonly<{ id: unknown; method: string; params?: Record<string, unknown> }>;
@@ -250,11 +212,8 @@ function writeLeaseLostError(res: http.ServerResponse, id: unknown): void {
   });
 }
 
-function installRequest(
-  baseUrl: string,
-  apkPath: string,
-  stateDir: string,
-): Omit<DaemonRequest, 'token'> {
+/** An install of `apkPath` against a remote daemon, under the lease the beat has to renew. */
+function installRequest(baseUrl: string, apkPath: string): Omit<DaemonRequest, 'token'> {
   return {
     session: 'upload-beat',
     command: 'install',
@@ -262,7 +221,7 @@ function installRequest(
     flags: {
       platform: 'android',
       daemonBaseUrl: baseUrl,
-      stateDir,
+      stateDir: path.dirname(apkPath),
       leaseId: LEASE_ID,
       tenant: 'acme',
       runId: 'run-1',
@@ -276,16 +235,16 @@ function installRequest(
 
 const TRANSPORT = { authToken: TOKEN } as const;
 
-async function withUploadFixture<R>(
+async function withUploadedArtifact<R>(
   t: { skip(reason?: string): void },
-  behaviour: UploadBehaviour,
+  stallUpload: boolean,
   run: (daemon: FakeDaemon, apkPath: string) => Promise<R>,
 ): Promise<R | undefined> {
   if (await skipWhenLoopbackUnavailable(t)) return undefined;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-upload-beat-'));
   const apkPath = path.join(dir, 'demo.apk');
   fs.writeFileSync(apkPath, Buffer.alloc(APK_BYTES, 'x'));
-  const daemon = await startFakeRemoteDaemon(behaviour);
+  const daemon = await startFakeRemoteDaemon(stallUpload);
   try {
     return await run(daemon, apkPath);
   } finally {
@@ -295,53 +254,32 @@ async function withUploadFixture<R>(
 }
 
 test('an install beats the lease while its artifact uploads, before the install RPC', async (t) => {
-  await withUploadFixture(t, 'complete', async (daemon, apkPath) => {
-    const response = await sendToDaemon(
-      installRequest(daemon.baseUrl, apkPath, path.dirname(apkPath)),
-      TRANSPORT,
-    );
+  await withUploadedArtifact(t, false, async (daemon, apkPath) => {
+    const response = await sendToDaemon(installRequest(daemon.baseUrl, apkPath), TRANSPORT);
 
     assert.equal(response.ok, true);
-    assert.ok(
-      daemon.seen.filter((entry) => entry === 'lease_heartbeat').length >= 2,
-      `a beat has to land while the upload is held open, daemon saw: ${daemon.seen.join(', ')}`,
-    );
-    assert.equal(
-      daemon.uploadBytesDelivered(),
-      APK_BYTES,
-      'the artifact arrived whole on a lease that was being renewed under it',
-    );
+    assert.equal(daemon.uploadBytes(), APK_BYTES, 'the artifact arrived whole');
+    // The response was withheld until the second beat, so that beat proves the lease was renewed
+    // while the install was still mid-flight.
     assert.deepEqual(daemon.seen, ['lease_heartbeat', 'lease_heartbeat', 'install']);
   });
 });
 
 test('a lease lost mid-upload aborts the upload and no install request goes out', async (t) => {
-  await withUploadFixture(t, 'backpressure', async (daemon, apkPath) => {
+  await withUploadedArtifact(t, true, async (daemon, apkPath) => {
     await assert.rejects(
-      async () =>
-        await sendToDaemon(
-          installRequest(daemon.baseUrl, apkPath, path.dirname(apkPath)),
-          TRANSPORT,
-        ),
+      async () => await sendToDaemon(installRequest(daemon.baseUrl, apkPath), TRANSPORT),
       (error: unknown) =>
         error instanceof AppError &&
         error.code === 'UNAUTHORIZED' &&
         error.details?.reason === 'LEASE_NOT_FOUND',
     );
 
-    assert.ok(
-      daemon.uploadBytesDelivered() > 0 && daemon.uploadBytesDelivered() < APK_BYTES,
-      `bytes were in flight and the daemon stopped reading at ${String(
-        daemon.uploadBytesDelivered(),
-      )} of ${String(APK_BYTES)}, which is what had to be stopped`,
-    );
-    // The daemon never read past the first chunk, so this is the only way the artifact can stop
-    // short: the client destroyed the request. An upload nobody canceled drains once the pressure
-    // comes off, and by now the client has long since been told the lease is gone.
+    assert.ok(daemon.uploadBytes() < APK_BYTES, 'the artifact stopped short of the end');
     assert.equal(
-      await daemon.releaseUploadAndObserveOutcome(),
+      await daemon.releaseUpload(),
       'canceled',
-      'the upload was stopped, not left to finish on a lease nobody held',
+      'the request was destroyed, not left to finish on a lease nobody held',
     );
     assert.ok(
       !daemon.seen.includes('install'),
