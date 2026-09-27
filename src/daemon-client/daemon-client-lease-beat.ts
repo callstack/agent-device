@@ -142,8 +142,8 @@ export async function runProtectedLeaseWork<T>(
         // An answer that names no window keeps the cadence it was asked at: the loop only ever
         // moves on evidence of how long the lease is good for, and never on the absence of it.
         if (renewed === undefined) return;
-        const cadence = leaseBeatIntervalMs(renewed);
         if (renewed === windowMs) return;
+        const cadence = leaseBeatIntervalMs(renewed);
         windowMs = renewed;
         intervalMs = cadence;
         // The window just moved, so the next beat is due one cadence from this answer.
@@ -201,6 +201,11 @@ export async function runProtectedLeaseWork<T>(
   return phase.value;
 }
 
+/** The cadence a window of `windowMs` beats at: a third of it, never faster than the floor. */
+function leaseBeatIntervalMs(windowMs: number): number {
+  return Math.max(MIN_LEASE_BEAT_INTERVAL_MS, Math.floor(windowMs / 3));
+}
+
 /**
  * The inactivity window a beat just renewed, read from the lease its response carries.
  *
@@ -208,11 +213,6 @@ export async function runProtectedLeaseWork<T>(
  * extended — the same pair `leaseOwnTtlMs` renews on. Anything unrecognizable leaves the caller on
  * the fallback cadence rather than guessing one.
  */
-/** The cadence a window of `windowMs` beats at: a third of it, never faster than the floor. */
-function leaseBeatIntervalMs(windowMs: number): number {
-  return Math.max(MIN_LEASE_BEAT_INTERVAL_MS, Math.floor(windowMs / 3));
-}
-
 function leaseWindowFromHeartbeatResponse(response: unknown): number | undefined {
   const lease = (
     response as Readonly<{ data?: Readonly<{ lease?: Readonly<Record<string, unknown>> }> }>

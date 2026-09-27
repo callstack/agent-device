@@ -26,11 +26,14 @@ const LEASE_WINDOW_MS = 3_000;
  * A heartbeat round trip on a slow link.
  *
  * The number has to land between the two budgets the loop can be holding a beat to: longer than the
- * cadence it assumes before a window is known (a third of the registry's five-second minimum), and
- * shorter than that assumed window itself. Anything shorter and a beat budgeted at the cadence still
- * answers in time, so the test would pass on a budget sized to the wrong thing.
+ * cadence it assumes before a window is known (1666ms, a third of the registry's five-second
+ * minimum), and short enough to answer before that assumed cadence arms a third beat (3332ms).
+ * Anything slower than the cadence and a beat budgeted at it is cut off before the answer lands, so
+ * the test would pass on a budget sized to the wrong thing; anything past the third arrival and the
+ * correct loop is caught with an extra beat too. This sits at the middle of that window so a loaded
+ * runner has room on both sides.
  */
-const SLOW_BEAT_MS = 3_000;
+const SLOW_BEAT_MS = 2_500;
 /** The window the fake daemon reports on the slow-link case, whose third is its cadence. */
 const SLOW_BEAT_LEASE_WINDOW_MS = 30_000;
 /** How long the slow-link case watches the beat before letting the artifact finish. */
