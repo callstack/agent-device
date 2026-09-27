@@ -117,7 +117,7 @@ export const inspectPointDaemonWriter: DaemonWriter = direct(
 
 export const inspectPointCommandFacet = defineCommandFacet({
   name: 'inspect-point',
-  text: { summary: 'Inspect accessibility elements at a screen coordinate' },
+  text: { summary: 'Inspect elements at a screen coordinate' },
   metadata: inspectPointMetadata,
   run: (client, input) => client.capture.inspectPoint(input),
   cliSchema: { allowedFlags: ['pointX', 'pointY'] },
