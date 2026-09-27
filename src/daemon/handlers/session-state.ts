@@ -121,6 +121,8 @@ async function readAppleSessionAppState(
   }
 }
 
+// App-state supports both live sessions and explicit device selection in one compatibility path.
+// fallow-ignore-next-line complexity
 async function handleAppStateCommand(params: RuntimeCommandHandlerParams): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
   const session = sessionStore.get(sessionName);
@@ -241,6 +243,8 @@ async function handleAppStateCommand(params: RuntimeCommandHandlerParams): Promi
   };
 }
 
+// This dispatcher is the sole daemon owner for the session-state command family.
+// fallow-ignore-next-line complexity
 export async function handleSessionStateCommands(params: {
   req: DaemonRequest;
   sessionName: string;

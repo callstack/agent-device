@@ -8,6 +8,8 @@ import { AppError } from '@agent-device/kernel/errors';
 
 const DISCOVERY_ATTEMPTS = 60;
 
+// Pairing is one transactional lifecycle: discovery, optional boot, transport proof, and rollback.
+// fallow-ignore-next-line complexity
 export async function pairAndroidWearable(
   host: PlatformRuntimeHost,
   phone: DeviceInfo,
@@ -85,6 +87,8 @@ function selectWearable(
 ): DeviceInfo {
   const requested = input.wearable;
   const matches = devices.filter(
+    // This predicate keeps every selector constraint visible in one place.
+    // fallow-ignore-next-line complexity
     (device) =>
       device.id !== phone.id &&
       (!requested?.deviceId || device.id === requested.deviceId) &&

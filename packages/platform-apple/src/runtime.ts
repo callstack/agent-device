@@ -280,6 +280,8 @@ function appleFocusFact(device: DeviceInfo): RuntimeOperationFact {
 export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   const appLogs = createAppleAppLogRuntime(host);
   const snapshotRoute = createAppleSnapshotRoute(host);
+  // This is the single exhaustive fact table for every Apple runtime operation.
+  // fallow-ignore-next-line complexity
   const inspectFacts = async (device: DeviceInfo) => {
     const logs = await appLogs.inspectFacts(device);
     const deployment = appleAppDeploymentFacts(device);

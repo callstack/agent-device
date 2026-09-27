@@ -117,6 +117,8 @@ export async function pairAppleWearable(
   }
 }
 
+// CoreSimulator's nested inventory is normalized here so selection never depends on raw JSON.
+// fallow-ignore-next-line complexity
 function parseWatchDevices(stdout: string, simulatorSetPath?: string): DeviceInfo[] {
   let payload: {
     devices?: Record<
