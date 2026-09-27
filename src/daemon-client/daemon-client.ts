@@ -13,7 +13,10 @@ import {
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
 import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/timeout-policy';
-import { prepareRemoteRequestArtifacts } from '../remote/daemon-artifacts.ts';
+import {
+  prepareRemoteRequestArtifacts,
+  type PreparedRemoteRequest,
+} from '../remote/daemon-artifacts.ts';
 import {
   attachActiveSessionAddressHint,
   attachRepairSessionAddressHint,
@@ -26,7 +29,8 @@ import {
   type EnsuredDaemon,
 } from './daemon-client-lifecycle.ts';
 import { sendRequest } from './daemon-client-transport.ts';
-import { buildUploadLeaseHeartbeat, runProtectedLeaseWork } from './daemon-client-lease-beat.ts';
+import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
+import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
 export type DaemonRequest = SharedDaemonRequest;
 export type DaemonResponse = SharedDaemonResponse;
@@ -62,10 +66,11 @@ export async function sendToDaemon(
     { requestId, session: req.session },
   );
   const info = daemon.info;
-  const preparedRemoteRequest = await runProtectedLeaseWork({
-    heartbeat: buildUploadLeaseHeartbeat(info, settings, requestWithoutAuthFlag),
-    task: (signal) => prepareRemoteRequestArtifacts(requestWithoutAuthFlag, info, signal),
-  });
+  const preparedRemoteRequest = await protectArtifactUploadWithLeaseBeats(
+    info,
+    settings,
+    requestWithoutAuthFlag,
+  );
   writeInstallInProgressNotice(requestWithoutAuthFlag.command);
 
   const request = buildTransportRequest(
@@ -284,4 +289,30 @@ function isInstallLikeCommand(command: string | undefined): boolean {
     command === PUBLIC_COMMANDS.reinstall ||
     command === INTERNAL_COMMANDS.installSource
   );
+}
+
+/**
+ * Uploads a remote request's artifact under a lease beat, so a large artifact cannot outlive the
+ * lease paying for the device it is going to (#2946).
+ *
+ * Only a remote daemon uploads, and a request that names no lease has nothing to renew, so those two
+ * guards answer for the overwhelming majority of requests — and they are what let the beat module
+ * stay out of `cli.ts`'s eager closure, which every command pays for. Both are cheap and local: the
+ * lease scope is read from the request the caller already built.
+ */
+async function protectArtifactUploadWithLeaseBeats(
+  info: DaemonInfo,
+  settings: DaemonClientSettings,
+  request: Omit<DaemonRequest, 'token'>,
+): Promise<PreparedRemoteRequest> {
+  const leaseScope = leaseScopeFromRequest(request);
+  if (!isRemoteDaemon(info) || !leaseScope.leaseId) {
+    return await prepareRemoteRequestArtifacts(request, info, new AbortController().signal);
+  }
+  const { buildUploadLeaseHeartbeat, runProtectedLeaseWork } =
+    await import('./daemon-client-lease-beat.ts');
+  return await runProtectedLeaseWork({
+    heartbeat: buildUploadLeaseHeartbeat(info, settings, request),
+    task: (signal) => prepareRemoteRequestArtifacts(request, info, signal),
+  });
 }

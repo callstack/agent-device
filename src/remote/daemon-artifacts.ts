@@ -20,7 +20,7 @@ export type DaemonArtifactEndpoint = {
   token: string;
 };
 
-type PreparedRemoteRequest = {
+export type PreparedRemoteRequest = {
   positionals: string[];
   flags?: DaemonRequest['flags'];
   installSource?: NonNullable<DaemonRequest['meta']>['installSource'];
