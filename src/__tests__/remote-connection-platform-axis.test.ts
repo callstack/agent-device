@@ -660,12 +660,18 @@ test('an undecided record narrows to the requested leaf or refuses, and never se
     'agent-device-connect-undecided-leaf-',
   );
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+  const allocations: ReturnType<typeof recordedLeaseAllocate>[] = [];
   const command = (
     session: string,
     leaseBackend: 'ios-simulator' | 'ios-instance',
     platform: 'apple' | 'macos',
-  ) =>
-    materializeRemoteConnectionForCommand({
+  ) => {
+    const allocation = recordedLeaseAllocate({
+      leaseId: 'undecided-lease-1',
+      backend: leaseBackend,
+    });
+    allocations.push(allocation);
+    return materializeRemoteConnectionForCommand({
       command: 'snapshot',
       flags: {
         json: true,
@@ -679,11 +685,9 @@ test('an undecided record narrows to the requested leaf or refuses, and never se
         session,
         platform,
       },
-      client: createTestClient({
-        allocate: recordedLeaseAllocate({ leaseId: 'undecided-lease-1', backend: leaseBackend })
-          .stub,
-      }),
+      client: createTestClient({ allocate: allocation.stub }),
     });
+  };
 
   seedConnectionState({
     stateDir,
@@ -702,6 +706,11 @@ test('an undecided record narrows to the requested leaf or refuses, and never se
     narrowed.flags.platform,
     'macos',
     'a runner guard rents no leaf, so the request keeps its own',
+  );
+  assert.equal(
+    allocations[0]?.request?.platform,
+    'macos',
+    'the lease request the provider sees names the leaf, not the family the record held',
   );
 
   seedConnectionState({
@@ -724,6 +733,11 @@ test('an undecided record narrows to the requested leaf or refuses, and never se
       error.details?.platform === 'ios' &&
       error.details?.requestedPlatform === 'macos',
     'a backend that rents iOS is a bound device, alias or no alias',
+  );
+  assert.equal(
+    allocations[1]?.request,
+    undefined,
+    'the refused request never reached the allocator with a platform to name',
   );
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
