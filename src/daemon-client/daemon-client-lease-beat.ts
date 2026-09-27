@@ -5,6 +5,7 @@ import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
 import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/timeout-policy';
 import {
+  MIN_LEASE_WINDOW_MS,
   isInactiveLeaseError,
   leaseScopeFromRequest,
   leaseScopeToRequestMeta,
@@ -24,14 +25,12 @@ import { sendRequest } from './daemon-client-transport.ts';
 // knows nothing about transports beyond the `send` it is handed.
 
 /**
- * The fastest cadence a phase beats at, and the budget each beat gets until the window is known.
+ * The fastest cadence a phase beats at.
  *
- * Before the first beat answers, the window is unknown and the worst legal case is the registry's
- * five-second minimum: a beat that stalls must be abandoned and retried inside that window, or the
- * thing the beat exists to prevent happens while it waits. One second is a fifth of that minimum,
- * and no window-derived cadence is ever allowed below it, so it is also the loop's floor: a
- * misreported or pathologically short window cannot turn the beat into a request loop faster than
- * this.
+ * A cadence is a third of a window, and a window can be as short as the registry's five-second
+ * minimum, so without a floor a short lease would turn the beat into a request loop. One second is
+ * a fifth of that minimum: it keeps the shortest legal window beaten five times over, and no
+ * window-derived cadence is ever allowed below it.
  */
 const MIN_LEASE_BEAT_INTERVAL_MS = 1_000;
 
@@ -82,12 +81,16 @@ function isTerminalLeaseBeatError(error: unknown): boolean {
  * and the first bytes can all happen while the opening beat is still outstanding. Each beat answers
  * with the window it just renewed, and the cadence becomes a third of that window.
  *
- * A beat's budget is the cadence it started on, and its successor is armed when the beat starts
- * rather than when it settles. A beat that never returns — a half-open connection, a daemon wedged
- * before it admits anything — is therefore abandoned on schedule instead of holding the schedule:
- * the lease is still beaten at window/3, and the abandoned round trip is cut off by its own budget
- * in the transport rather than by the command's 90-second heartbeat policy. An abandoned beat is
- * still listened to, because the answer it eventually gives can be a lost lease.
+ * The cadence and the budget are two numbers, and only one of them is the cadence. A beat is armed
+ * every third of the window, and its budget is the whole window it protects: a heartbeat that needs
+ * more than a cadence to come back — a tunneled proxy, a slow uplink the upload itself is
+ * saturating — still answers inside the lease it is renewing, and the cadence it proves becomes the
+ * loop's. Budgeting a beat at the cadence instead would hand a slow link no window in which to
+ * answer at all and re-time-out every beat forever. Successors are armed when a beat starts rather
+ * than when it settles, so a beat that never returns at all is abandoned on schedule instead of
+ * taking the schedule with it. A stalled beat is never awaited, so the outstanding ones are bounded
+ * by the budget divided by the cadence rather than by the phase's length. An abandoned beat is still
+ * listened to, because the answer it eventually gives can be a lost lease.
  *
  * A beat that fails for a reason that says nothing about this lease is reported and survived — one
  * lost request must not fail an upload that a later beat will cover. A beat that finds the lease
@@ -98,8 +101,10 @@ function isTerminalLeaseBeatError(error: unknown): boolean {
 export async function runProtectedLeaseWork<T>(
   options: Readonly<{
     /**
-     * One renewal. `budgetMs` is how long this beat may take before the loop abandons it. Absent
-     * when the request names no lease to renew, which is the ordinary unleased install.
+     * One renewal. `budgetMs` is how long this beat may take before the loop abandons it: the window
+     * the beat protects, so a slow round trip still gets a chance to answer inside the lease it is
+     * renewing. Absent when the request names no lease to renew, which is the ordinary unleased
+     * install.
      */
     heartbeat?: ((budgetMs: number) => Promise<unknown>) | undefined;
     task: (signal: AbortSignal) => Promise<T>;
@@ -109,9 +114,10 @@ export async function runProtectedLeaseWork<T>(
   if (!heartbeat) return await options.task(new AbortController().signal);
 
   const control = new AbortController();
-  // Until a beat names the window, the loop assumes the shortest window the daemon will accept: the
-  // budget of the beat that has to prove a short lease is alive cannot itself be longer than it.
-  let intervalMs = MIN_LEASE_BEAT_INTERVAL_MS;
+  // Until a beat names the window, the loop assumes the shortest window the daemon will accept: a
+  // beat that budgets itself on a longer window than the lease actually has would outlive it.
+  let windowMs = MIN_LEASE_WINDOW_MS;
+  let intervalMs = leaseBeatIntervalMs(windowMs);
   let timer: ReturnType<typeof setTimeout> | undefined;
   let stopped = false;
   let terminalError: unknown;
@@ -130,14 +136,15 @@ export async function runProtectedLeaseWork<T>(
     };
     arm(intervalMs);
     const settle = (async () => {
-      const budgetMs = intervalMs;
+      const budgetMs = windowMs;
       try {
         const renewed = leaseWindowFromHeartbeatResponse(await heartbeat(budgetMs));
         // An answer that names no window keeps the cadence it was asked at: the loop only ever
-        // slows down on evidence of how long the lease is good for, and never on the absence of it.
+        // moves on evidence of how long the lease is good for, and never on the absence of it.
         if (renewed === undefined) return;
-        const cadence = Math.max(MIN_LEASE_BEAT_INTERVAL_MS, Math.floor(renewed / 3));
-        if (cadence === intervalMs) return;
+        const cadence = leaseBeatIntervalMs(renewed);
+        if (renewed === windowMs) return;
+        windowMs = renewed;
         intervalMs = cadence;
         // The window just moved, so the next beat is due one cadence from this answer.
         arm(cadence);
@@ -201,6 +208,11 @@ export async function runProtectedLeaseWork<T>(
  * extended — the same pair `leaseOwnTtlMs` renews on. Anything unrecognizable leaves the caller on
  * the fallback cadence rather than guessing one.
  */
+/** The cadence a window of `windowMs` beats at: a third of it, never faster than the floor. */
+function leaseBeatIntervalMs(windowMs: number): number {
+  return Math.max(MIN_LEASE_BEAT_INTERVAL_MS, Math.floor(windowMs / 3));
+}
+
 function leaseWindowFromHeartbeatResponse(response: unknown): number | undefined {
   const lease = (
     response as Readonly<{ data?: Readonly<{ lease?: Readonly<Record<string, unknown>> }> }>

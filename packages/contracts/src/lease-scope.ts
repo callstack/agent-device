@@ -296,6 +296,15 @@ export function findMissingProxyLeaseFields(scope: LeaseScope): string[] {
 }
 
 /**
+ * The shortest inactivity window a lease can hold by default.
+ *
+ * The registry clamps every ttl to this floor, so it is also the worst case a client plans against
+ * before it has seen a lease answer: work that has to finish inside a lease window it does not know
+ * yet must assume this one, or it can be planning for a window the daemon would never grant.
+ */
+export const MIN_LEASE_WINDOW_MS = 5_000;
+
+/**
  * Why a lease stopped being ours: it is gone, spent, or taken back.
  *
  * This is the whole taxonomy of "the lease is no longer usable" as the daemon reports it, and both

@@ -133,17 +133,23 @@ describe('runProtectedLeaseWork', () => {
       heartbeat,
     });
 
-    await vi.advanceTimersByTimeAsync(1_000);
+    // No window named, so the loop stays on the cadence it assumed: a third of the shortest window
+    // the daemon will accept.
+    await vi.advanceTimersByTimeAsync(1_666);
     assert.equal(heartbeat.mock.calls.length, 2, 'immediate first, then the same cadence again');
-    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(1_666);
     assert.equal(heartbeat.mock.calls.length, 3);
 
     upload.resolve('installed');
     assert.equal(await running, 'installed');
   });
 
-  test('each beat is given a budget no longer than the cadence it starts on', async () => {
+  test('each beat is given the window it protects as its budget, not the cadence', async () => {
     vi.useFakeTimers();
+    // Cadence and budget are separate numbers. A beat is armed every third of the window, but it is
+    // allowed the whole window to answer in: budgeting it at the cadence would leave a heartbeat
+    // that needs more than a third of a window for its round trip with no chance to answer, on
+    // exactly the slow links the beat exists to protect.
     const budgets: number[] = [];
     const heartbeat = vi.fn(async (budgetMs: number) => {
       budgets.push(budgetMs);
@@ -156,11 +162,9 @@ describe('runProtectedLeaseWork', () => {
     });
 
     await vi.advanceTimersByTimeAsync(40_000);
-    // Before the first answer the loop assumes the shortest window the daemon accepts, so the beat
-    // that has to prove that lease is alive cannot itself take longer than a fifth of it. Once the
-    // window is known the budget is the cadence: a stalled beat dies inside one, not the 90s the
-    // command's own heartbeat policy would allow.
-    assert.deepEqual(budgets, [1_000, 20_000, 20_000]);
+    // Before the first answer the loop assumes the shortest window the daemon will accept; once the
+    // lease names its own, the budget is that window, not the 90s the heartbeat policy would allow.
+    assert.deepEqual(budgets, [5_000, 60_000, 60_000]);
 
     upload.resolve('installed');
     assert.equal(await running, 'installed');
@@ -215,7 +219,7 @@ describe('runProtectedLeaseWork', () => {
       heartbeat,
     });
 
-    await vi.advanceTimersByTimeAsync(3_000);
+    await vi.advanceTimersByTimeAsync(5_000);
     assert.equal(heartbeat.mock.calls.length, 4, 'the stalled beats were abandoned, not awaited');
 
     upload.resolve('installed');
@@ -253,11 +257,12 @@ describe('runProtectedLeaseWork', () => {
       heartbeat,
     });
 
-    await vi.advanceTimersByTimeAsync(2_500);
+    await vi.advanceTimersByTimeAsync(3_332);
     assert.equal(heartbeat.mock.calls.length, 3, 'one failed beat does not stop the others');
 
     heartbeat.mockImplementation(async () => renewedLeaseResponse(30_000));
-    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(10_000);
+    assert.equal(heartbeat.mock.calls.length, 4, 'the window the beat reported sets the cadence');
     upload.resolve('installed');
     assert.equal(await running, 'installed');
   });

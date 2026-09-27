@@ -89,9 +89,14 @@ phase begins: hashing, the preflight, and the start of the stream can all run wh
 still outstanding, so what the first beat buys is that the loss is learned during the upload rather
 than after it. Each beat answers with the window it just renewed, and the loop arms its successor when
 the beat starts rather than when it settles, so a beat that never answers is abandoned on schedule
-instead of taking the schedule with it; the beat's own budget is capped at the cadence it started on,
-which is what keeps one stalled round trip from outliving the window it exists to protect. A phase
-that settles does not wait on a beat still in flight.
+instead of taking the schedule with it. A phase that settles does not wait on a beat still in flight.
+
+Cadence and budget are deliberately two numbers. A beat is armed every third of the window, but it is
+allowed the whole window to answer in. Budgeting a beat at its cadence instead would give a heartbeat
+that needs more than a third of a window for its round trip — a tunneled proxy, an uplink the upload
+itself is saturating — no way to answer at all, and every beat would re-time-out on exactly the slow
+links the beat exists to protect. The window, not the cadence, is the interval in which being alive
+still matters, so it is also the longest a beat's answer is worth waiting for.
 
 A beat is a fresh request each time, never the protected request rewritten: a request identity is
 what a timed-out beat is canceled under, and beats must not inherit each other's cancellation. A beat
