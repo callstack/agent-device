@@ -20,10 +20,6 @@ const backKindUnavailable = Object.freeze({
   reason: 'unsupported-device-kind',
   hint: 'back is supported on Apple simulators and physical devices.',
 } as const);
-/** watchOS has no XCUITest-driveable UI (ADR-0009): no Apple interactor can be constructed for
- * it, so every interactor-backed operation below stays unavailable there regardless of what the
- * retired per-command capability table said for it — facts are the support authority (ADR 0019),
- * not a mirror of a table that never modeled interactor constructibility. */
 const backOsUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
@@ -32,7 +28,9 @@ const backOsUnavailable = Object.freeze({
  * included (the interactor drives the remote's Menu button there), supports it. */
 function appleBackFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return backKindUnavailable;
-  return resolveDeviceAppleOs(device) === 'watchos' ? backOsUnavailable : available;
+  const os = resolveDeviceAppleOs(device);
+  if (os === 'watchos') return device.kind === 'simulator' ? available : backOsUnavailable;
+  return available;
 }
 
 const homeKindUnavailable = Object.freeze({
@@ -41,8 +39,8 @@ const homeKindUnavailable = Object.freeze({
   hint: 'home is supported on Apple simulators and physical devices.',
 } as const);
 /** Parity with the retired `supportsAppAndDeviceLifecycle` closure: unavailable on macOS, which
- * drives an already-running app with no springboard home; also unavailable on watchOS, whose
- * interactor cannot be constructed at all (see {@link backOsUnavailable}). */
+ * drives an already-running app with no springboard home. watchOS Simulator maps home to the
+ * Digital Crown hardware button through the isolated CoreSimulator backend. */
 const homeLifecycleUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
@@ -64,7 +62,13 @@ function appleSpringboardFact(
 ): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return kindUnavailable;
   const os = resolveDeviceAppleOs(device);
-  return os === 'macos' || os === 'watchos' ? homeLifecycleUnavailable : available;
+  if (os === 'watchos') return device.kind === 'simulator' ? available : homeLifecycleUnavailable;
+  return os === 'macos' ? homeLifecycleUnavailable : available;
+}
+
+function appleAppSwitcherFact(device: DeviceInfo): RuntimeOperationFact {
+  if (resolveDeviceAppleOs(device) === 'watchos') return homeLifecycleUnavailable;
+  return appleSpringboardFact(device, appSwitcherKindUnavailable);
 }
 
 /**
@@ -169,7 +173,7 @@ export function appleNavigationFacts(device: DeviceInfo) {
     ...systemButtonRuntimeOperationFacts({
       unsupported: systemButtonUnavailable,
       home: appleSpringboardFact(device, homeKindUnavailable),
-      appSwitcher: appleSpringboardFact(device, appSwitcherKindUnavailable),
+      appSwitcher: appleAppSwitcherFact(device),
       actionButton: appleActionButtonFact(device),
     }),
     ...orientationRuntimeOperationFacts({ orientation: appleOrientationFact(device) }),

@@ -15,8 +15,8 @@ export {
 // collapses to the single `apple` platform (ADR-0009 / issue #979).
 export type ApplePlatform = 'ios' | 'macos';
 // Explicit, stored Apple operating system. All six literals are reserved so the
-// type is stable as platform support grows, but discovery only ever populates
-// the four currently supported ones ('ios' | 'ipados' | 'tvos' | 'macos').
+// type is stable as platform support grows. Local discovery populates iOS,
+// iPadOS, tvOS, watchOS, visionOS, and macOS when the corresponding runtime is installed.
 const APPLE_OS_VALUES = ['ios', 'ipados', 'tvos', 'watchos', 'visionos', 'macos'] as const;
 export type AppleOS = (typeof APPLE_OS_VALUES)[number];
 // Internal device platforms. Apple OSes collapse to a single `apple` platform; the
@@ -271,10 +271,9 @@ function resolveRunnerPlatformNameForAppleOs(
       return 'macOS';
     case 'visionos':
       return 'visionOS';
-    // iOS and iPadOS share the single iOS runner profile/SDK. watchOS remains
-    // reserved in the type but is never produced by discovery; defaulting it to
-    // iOS keeps any future record on a valid runner profile without introducing
-    // watchOS support.
+    // iOS and iPadOS share the single iOS runner profile/SDK. watchOS uses the
+    // isolated host backend and never asks for this runner platform; the default
+    // remains a valid legacy projection for persisted records.
     default:
       return 'iOS';
   }

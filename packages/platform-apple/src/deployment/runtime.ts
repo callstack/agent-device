@@ -247,6 +247,8 @@ async function runAppleTool(
 }
 
 function appleDeployFact(device: DeviceInfo): RuntimeOperationFact {
+  if (device.appleOs === 'watchos')
+    return device.kind === 'simulator' ? available : unsupportedLeaf;
   if (!isSupportedAppleDeploymentLeaf(device)) return unsupportedLeaf;
   if (device.kind !== 'simulator' && device.kind !== 'device') return unsupportedKind;
   if (device.kind === 'device' && device.iosPhysicalDeviceBackend === 'xctest') {

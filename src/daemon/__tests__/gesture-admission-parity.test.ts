@@ -163,7 +163,8 @@ test('TV, spatial, watch, desktop, Linux, and web gesture policy stays explicit'
   await expectRefused(twoFingerPan, androidTv, /Android TV/, /Android TV has no touch input/);
   await expectRefused(twoFingerPan, tvOs, /tvOS/);
   await expectRefused(twoFingerPan, visionOs, /visionOS/);
-  await expectRefused(oneFingerPan, watchOs, /watchos/);
+  await expectAdmitted(oneFingerPan, watchOs);
+  await expectRefused(twoFingerPan, watchOs, /watchos/);
   await expectAdmitted(oneFingerPan, macOs);
   await expectRefused(twoFingerPan, macOs, /macOS/);
   await expectAdmitted(oneFingerPan, linux);

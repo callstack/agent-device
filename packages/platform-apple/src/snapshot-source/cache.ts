@@ -66,6 +66,7 @@ export async function ensureSnapshotBridgeBinary(
       // Placeholder paths keep the key independent of the install location and build directory.
       compileArgv: buildSnapshotBridgeCompileArgv({
         architecture: toolchain.architecture,
+        runtime: input.runtime,
         sourceRoot: '',
         outputPath: '',
       }),
@@ -76,6 +77,7 @@ export async function ensureSnapshotBridgeBinary(
         deadline,
         argv: buildSnapshotBridgeCompileArgv({
           architecture: toolchain.architecture,
+          runtime: input.runtime,
           sourceRoot,
           outputPath,
         }),
@@ -107,17 +109,19 @@ export async function ensureSnapshotBridgeBinary(
 export function buildSnapshotBridgeCompileArgv(
   input: Readonly<{
     architecture: SnapshotSourceToolchainIdentity['architecture'];
+    runtime?: string;
     sourceRoot: string;
     outputPath: string;
   }>,
 ): readonly string[] {
+  const watch = input.runtime?.toLowerCase().includes('watchos') === true;
   return [
     '--sdk',
-    'iphonesimulator',
+    watch ? 'watchsimulator' : 'iphonesimulator',
     'clang',
     '-arch',
     input.architecture,
-    '-mios-simulator-version-min=15.0',
+    watch ? '-mwatchos-simulator-version-min=10.0' : '-mios-simulator-version-min=15.0',
     '-fobjc-arc',
     '-Wall',
     '-Wextra',

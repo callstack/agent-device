@@ -134,6 +134,24 @@ test('the runtime clang build never uses -Werror', () => {
   assert.ok(!argv.includes('-Werror'));
 });
 
+test('watchOS runtime compiles the bridge against watchsimulator', () => {
+  const argv = buildSnapshotBridgeCompileArgv({
+    architecture: 'arm64',
+    runtime: 'com.apple.CoreSimulator.SimRuntime.watchOS-27-0',
+    sourceRoot: '/source',
+    outputPath: '/output',
+  });
+  assert.deepEqual(argv.slice(0, 7), [
+    '--sdk',
+    'watchsimulator',
+    'clang',
+    '-arch',
+    'arm64',
+    '-mwatchos-simulator-version-min=10.0',
+    '-fobjc-arc',
+  ]);
+});
+
 test('concurrent snapshot bridge preparation publishes one cache entry', async () => {
   const root = await mkdtempForTest('agent-device-snapshot-source-concurrent-');
   const sourceRoot = path.join(root, 'source');

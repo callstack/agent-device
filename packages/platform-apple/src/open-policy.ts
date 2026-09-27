@@ -31,6 +31,9 @@ export function resolveRunnerPrewarmPolicy(
   input: OpenApplicationInput,
   localIosSimulator: boolean,
 ): RunnerPrewarmPolicy {
+  if (device.appleOs === 'watchos') {
+    return { runnerDemand: 'none', shouldPrewarmRunner: false, awaitPrewarmAfterOpen: false };
+  }
   // Only a Simulator with the host AX bridge has a runner-free observation path, so only it
   // consults the plan and skips the relaunch wait; every other Apple target keeps its lifecycle.
   const bridge = localIosSimulator && hasSimulatorBridge(device);

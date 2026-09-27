@@ -4,9 +4,8 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerContext } from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
 
-// watchOS is an explicit unsupported sentinel: XCUITest cannot drive watchOS UI,
-// so a `appleOs: 'watchos'` device must be rejected at interactor creation (the
-// admission seam) rather than silently falling through to the iOS runner.
+// Physical watchOS remains an explicit unsupported sentinel. Simulator watchOS uses
+// the isolated CoreSimulator backend rather than silently falling through to XCTest.
 const watchOsDevice: DeviceInfo = {
   platform: 'apple',
   id: 'watch-1',
@@ -27,6 +26,17 @@ test('createAppleInteractor rejects a watchOS device as UNSUPPORTED_PLATFORM', (
     expect((error as AppError).code).toBe('UNSUPPORTED_PLATFORM');
     expect((error as AppError).message).toMatch(/watchOS/i);
   }
+});
+
+test('createAppleInteractor constructs the isolated backend for a watchOS simulator', () => {
+  const simulator = createAppleInteractor(
+    { ...watchOsDevice, kind: 'simulator', booted: true },
+    {} as RunnerContext,
+  );
+  expect(simulator.tap).toBeTypeOf('function');
+  expect(simulator.screenshot).toBeTypeOf('function');
+  expect(simulator.home).toBeTypeOf('function');
+  expect(simulator.appSwitcher).toBeUndefined();
 });
 
 test('a non-watchOS appleOs does not trigger the watchOS sentinel', () => {

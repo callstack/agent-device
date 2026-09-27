@@ -118,7 +118,10 @@ export function createAppleSnapshotRoute(
       // otherwise serves the app, so this is correct even while a dismissed host lingers. Anything
       // but a proven `absent` takes the runner: an unproven probe must not fall through to a bridge
       // capture that would answer confidently from the occluded app tree.
-      const surfacePresence = await systemSurfacePresent(device, signal);
+      const surfacePresence =
+        device.appleOs === 'watchos'
+          ? ('absent' as const)
+          : await systemSurfacePresent(device, signal);
       if (surfacePresence === 'unknown') {
         // The probe could not answer. Take the runner rather than a bridge capture that would
         // answer confidently from the occluded app tree — but say so: silently losing the bridge
@@ -259,7 +262,7 @@ function rethrowIfResolutionCancelled(signal: AbortSignal, error: unknown): void
 function isEligible(device: DeviceInfo, input: CaptureSnapshotInput): boolean {
   return (
     device.platform === 'apple' &&
-    device.appleOs === 'ios' &&
+    (device.appleOs === 'ios' || device.appleOs === 'watchos') &&
     device.kind === 'simulator' &&
     Boolean(input.options?.appBundleId) &&
     input.options?.customActions !== true &&

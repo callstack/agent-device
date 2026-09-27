@@ -44,9 +44,13 @@ const LAUNCH_TRANSITION_WINDOW_MS: ReadonlyMap<string, number> = new Map([
   ['foreground-owner-changed', 1_000],
 ]);
 
-/** Only iOS Simulators carry the host AX bridge; other Apple simulators observe through XCTest. */
+/** iOS and watchOS Simulators carry the host AX bridge; other Apple simulators use XCTest. */
 export function hasSimulatorBridge(device: DeviceInfo): boolean {
-  return device.platform === 'apple' && device.appleOs === 'ios' && device.kind === 'simulator';
+  return (
+    device.platform === 'apple' &&
+    (device.appleOs === 'ios' || device.appleOs === 'watchos') &&
+    device.kind === 'simulator'
+  );
 }
 
 export function createLaunchObservationProbe(
