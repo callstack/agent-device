@@ -154,7 +154,13 @@ export async function materializeRemoteConnectionForCommand(options: {
     requestedPlatform: nextFlags.platform,
   });
   if (!carriedPlatform.ok) {
-    throw connectionPlatformConflict(state, nextState.leaseBackend, carriedPlatform);
+    throw connectionPlatformConflict({
+      session: state.session,
+      leaseBackend: nextState.leaseBackend,
+      boundPlatform: carriedPlatform.boundPlatform,
+      requestedPlatform: carriedPlatform.requestedPlatform,
+      detail: 'bound-connection',
+    });
   }
   nextState = { ...nextState, platform: carriedPlatform.platform };
   nextFlags.platform = carriedPlatform.platform;
@@ -345,7 +351,13 @@ async function materializeLeaseForCommand(options: {
     requestedPlatform: nextFlags.platform,
   });
   if (!platform.ok) {
-    throw connectionPlatformConflict(state, leaseBackend, platform);
+    throw connectionPlatformConflict({
+      session: state.session,
+      leaseBackend,
+      boundPlatform: platform.boundPlatform,
+      requestedPlatform: platform.requestedPlatform,
+      detail: 'bound-connection',
+    });
   }
   // Read after the platform is settled: a request that asks for another Apple leaf also asks for a
   // different target, and the platform is the reason it is being refused.
@@ -952,22 +964,31 @@ async function resolveSelectedDevice(
   );
 }
 
-function connectionPlatformConflict(
-  state: RemoteConnectionState,
-  leaseBackend: LeaseBackend | undefined,
-  conflict: Readonly<{
+/**
+ * The refusal raised when the platform axis cannot be decided: two of the backend, the record, and
+ * the request name devices that are not the same device. `detail` says which of the three disagreed,
+ * because the advice differs — a bound connection is replaced with `--force`, and a request that
+ * contradicts itself has no `--force` to reach.
+ */
+export function connectionPlatformConflict(
+  options: Readonly<{
+    session: string;
+    leaseBackend: LeaseBackend | undefined;
     boundPlatform?: CliFlags['platform'];
     requestedPlatform?: CliFlags['platform'];
+    detail: 'bound-connection' | 'requested-backend';
   }>,
 ): AppError {
   return new AppError(
     'INVALID_ARGS',
-    'Active remote connection is already bound to a different platform. Re-run connect --force to replace it.',
+    options.detail === 'bound-connection'
+      ? 'Active remote connection is already bound to a different platform. Re-run connect --force to replace it.'
+      : 'The requested platform does not match the device this lease backend rents.',
     {
-      session: state.session,
-      leaseBackend,
-      platform: conflict.boundPlatform,
-      requestedPlatform: conflict.requestedPlatform,
+      session: options.session,
+      leaseBackend: options.leaseBackend,
+      platform: options.boundPlatform,
+      requestedPlatform: options.requestedPlatform,
       reason: 'CONNECTION_PLATFORM_CONFLICT',
     },
   );

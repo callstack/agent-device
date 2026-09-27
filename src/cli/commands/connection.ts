@@ -29,6 +29,7 @@ import {
   verifyResolvedConnectProvider,
 } from '../connection/connect-provider-adapters.ts';
 import {
+  connectionPlatformConflict,
   hasDeferredMetroConfig,
   releaseRemoteConnectionLease,
   releasePreviousLease,
@@ -163,7 +164,13 @@ function buildConnectedState(options: {
     : null;
   const now = new Date().toISOString();
   const leaseBinding = buildConnectionLeaseBinding(flags, previous, connectionMetadata);
-  const runtimeBinding = buildConnectionRuntimeBinding(flags, previous, now, leaseBinding);
+  const runtimeBinding = buildConnectionRuntimeBinding(
+    flags,
+    previous,
+    now,
+    leaseBinding,
+    context.session,
+  );
   return {
     version: 1,
     session: context.session,
@@ -208,14 +215,24 @@ function buildConnectionRuntimeBinding(
   previous: RemoteConnectionState | null,
   now: string,
   leaseBinding: Pick<RemoteConnectionState, 'leaseBackend'>,
+  session: string,
 ): Pick<RemoteConnectionState, 'connectedAt' | 'metro' | 'platform' | 'runtime' | 'target'> {
   const platform = narrowConnectionPlatform({
     leaseBackend: leaseBinding.leaseBackend,
     recordedPlatform: previous?.platform,
     requestedPlatform: flags.platform,
   });
+  if (!platform.ok) {
+    throw connectionPlatformConflict({
+      session,
+      leaseBackend: leaseBinding.leaseBackend,
+      boundPlatform: platform.boundPlatform,
+      requestedPlatform: platform.requestedPlatform,
+      detail: previous ? 'bound-connection' : 'requested-backend',
+    });
+  }
   return {
-    platform: platform.ok ? platform.platform : flags.platform,
+    platform: platform.platform,
     target: flags.target ?? previous?.target,
     runtime: previous?.runtime,
     metro: previous?.metro,

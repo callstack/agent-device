@@ -727,3 +727,50 @@ test('an undecided record narrows to the requested leaf or refuses, and never se
   );
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
+
+// `--force` drops the previous record before the platform is decided, so the backend is the only
+// thing left naming a leaf. A connect that pairs an `ios-instance` backend with `--platform macos`
+// is a contradiction on the request itself, not a reuse of a bound connection, and it must not be
+// written out as a connection whose record says macOS while its backend can only ever rent iOS —
+// the next command on that record would then ask a macOS device of an iOS lease.
+test('connect --force refuses a backend and platform that name different devices', async () => {
+  const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
+    'agent-device-connect-force-conflict-',
+  );
+  fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+
+  await assert.rejects(
+    async () =>
+      await connectCommand({
+        positionals: [],
+        flags: {
+          json: true,
+          help: false,
+          version: false,
+          stateDir,
+          remoteConfig: remoteConfigPath,
+          daemonBaseUrl: 'https://daemon.example',
+          tenant: 'acme',
+          runId: 'run-9',
+          session: 'adc-force-conflict',
+          force: true,
+          platform: 'macos',
+          leaseBackend: 'ios-instance',
+        },
+        client: createTestClient(),
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.details?.reason === 'CONNECTION_PLATFORM_CONFLICT' &&
+      error.details?.platform === 'ios' &&
+      error.details?.requestedPlatform === 'macos',
+    'a backend that rents iOS cannot be asked for macOS, --force or not',
+  );
+  assert.equal(
+    readRemoteConnectionState({ stateDir, session: 'adc-force-conflict' }),
+    null,
+    'the refused connect wrote no connection state',
+  );
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
