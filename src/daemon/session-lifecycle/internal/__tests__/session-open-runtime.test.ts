@@ -219,6 +219,7 @@ test('open applies launch-only flags only to the direct app launch before runtim
     positionals: string[];
     launchConsole?: string;
     launchArgs?: readonly string[];
+    launchEnvironment?: Readonly<Record<string, string>>;
   }> = [];
 
   sessionStore.setRuntimeHints('launch-console-runtime', {
@@ -232,6 +233,7 @@ test('open applies launch-only flags only to the direct app launch before runtim
       positionals,
       launchConsole: context?.launchConsole,
       launchArgs: context?.launchArgs,
+      launchEnvironment: context?.launchEnvironment,
     });
     return undefined;
   });
@@ -242,7 +244,12 @@ test('open applies launch-only flags only to the direct app launch before runtim
       session: 'launch-console-runtime',
       command: 'open',
       positionals: ['Demo'],
-      flags: { platform: 'ios', launchConsole: launchConsolePath, launchArgs: ['-Flag', 'YES'] },
+      flags: {
+        platform: 'ios',
+        launchConsole: launchConsolePath,
+        launchArgs: ['-Flag', 'YES'],
+        launchEnvironment: { MODE: 'test' },
+      },
     },
     sessionName: 'launch-console-runtime',
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
@@ -257,12 +264,14 @@ test('open applies launch-only flags only to the direct app launch before runtim
       positionals: ['Demo'],
       launchConsole: launchConsolePath,
       launchArgs: ['-Flag', 'YES'],
+      launchEnvironment: { MODE: 'test' },
     },
     {
       command: 'open',
       positionals: ['myapp://dev-client'],
       launchConsole: undefined,
       launchArgs: undefined,
+      launchEnvironment: undefined,
     },
   ]);
 });

@@ -377,6 +377,17 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
+    key: 'launchEnvironmentEntries',
+    names: ['--launch-env'],
+    type: 'string',
+    multiple: true,
+    usageLabel: '--launch-env <KEY=VALUE>',
+    usageDescription:
+      'open: repeatable iOS Simulator child-process environment entry; values are treated as sensitive',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'header',
     names: ['--header'],
     type: 'string',

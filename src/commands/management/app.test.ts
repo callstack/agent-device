@@ -64,6 +64,60 @@ describe('open startup budget', () => {
   });
 });
 
+describe('open launch environment', () => {
+  test('parses repeatable entries and preserves equals signs in values', () => {
+    const parsed = parseArgs(
+      [
+        'open',
+        'com.example.app',
+        '--launch-env',
+        '_XCAppClipURL=https://example.com/clip?id=42',
+        '--launch-env',
+        'MODE=test',
+      ],
+      { strictFlags: true },
+    );
+
+    expect(parsed.flags.launchEnvironmentEntries).toEqual([
+      '_XCAppClipURL=https://example.com/clip?id=42',
+      'MODE=test',
+    ]);
+    expect(openCommandFacet.cliReader(parsed.positionals, parsed.flags)).toMatchObject({
+      launchEnvironment: {
+        _XCAppClipURL: 'https://example.com/clip?id=42',
+        MODE: 'test',
+      },
+    });
+  });
+
+  test.each([
+    { entries: ['MISSING_SEPARATOR'], message: /KEY=VALUE/ },
+    { entries: ['=value'], message: /non-empty/ },
+    { entries: ['MODE=one', 'MODE=two'], message: /duplicate key MODE/ },
+    { entries: ['SIMCTL_CHILD_MODE=test'], message: /omit the SIMCTL_CHILD_/ },
+  ])('rejects invalid CLI entries: $entries', ({ entries, message }) => {
+    expect(() =>
+      openCommandFacet.cliReader(['com.example.app'], flags({ launchEnvironmentEntries: entries })),
+    ).toThrow(message);
+  });
+
+  test('rejects non-string typed values before sending the daemon request', async () => {
+    const stateDir = tempStateDir();
+    try {
+      const { client, calls } = createOpenClient({ stateDir, session: 'launch-env' });
+      await expect(
+        openCommandFacet.definition.invoke(client, {
+          app: 'com.example.app',
+          launchEnvironment: { MODE: 42 } as unknown as Record<string, string>,
+        }),
+      ).rejects.toThrow(/value for MODE must be a string/);
+      expect(calls).toHaveLength(0);
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('open command metro session hints', () => {
   test('CLI parser accepts --metro-host/--metro-port/--bundle-url/--launch-url on open', () => {
     const parsed = parseArgs(

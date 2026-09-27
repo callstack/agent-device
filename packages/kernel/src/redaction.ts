@@ -1,5 +1,5 @@
 const SENSITIVE_KEY_RE =
-  /(token|secret|password|authorization|cookie|api[_-]?key|access[_-]?key|private[_-]?key|user[_-]?code|device[_-]?code|refresh[_-]?credential)/i;
+  /(token|secret|password|authorization|cookie|api[_-]?key|access[_-]?key|private[_-]?key|user[_-]?code|device[_-]?code|refresh[_-]?credential|launch[_-]?environment)/i;
 const SECRET_TOKEN_RE =
   /\b(?:bearer\s+[a-z0-9._-]+|adc_(?:agent|live|refresh|cli)_[a-z0-9._-]+)\b/gi;
 const SENSITIVE_ASSIGNMENT_RE =

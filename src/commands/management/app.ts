@@ -21,6 +21,58 @@ import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { withCommandRuntimeHints } from '../runtime-hints.ts';
 import { managementCliOutputFormatters } from './output.ts';
+import { AppError } from '@agent-device/kernel/errors';
+
+const SIMCTL_CHILD_PREFIX = 'SIMCTL_CHILD_';
+
+function readLaunchEnvironment(value: unknown): Readonly<Record<string, string>> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new AppError('INVALID_ARGS', 'launchEnvironment must be an object of string values.');
+  }
+  const result: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    assertLaunchEnvironmentKey(key);
+    if (typeof entry !== 'string') {
+      throw new AppError('INVALID_ARGS', `launchEnvironment value for ${key} must be a string.`);
+    }
+    result[key] = entry;
+  }
+  return Object.freeze(result);
+}
+
+function parseLaunchEnvironmentEntries(
+  entries: readonly string[] | undefined,
+): Readonly<Record<string, string>> | undefined {
+  if (entries === undefined) return undefined;
+  const result: Record<string, string> = {};
+  for (const entry of entries) {
+    const separator = entry.indexOf('=');
+    if (separator < 0) throw new AppError('INVALID_ARGS', '--launch-env requires KEY=VALUE.');
+    const key = entry.slice(0, separator);
+    assertLaunchEnvironmentKey(key);
+    if (Object.hasOwn(result, key)) {
+      throw new AppError('INVALID_ARGS', `--launch-env contains duplicate key ${key}.`);
+    }
+    result[key] = entry.slice(separator + 1);
+  }
+  return Object.freeze(result);
+}
+
+function assertLaunchEnvironmentKey(key: string): void {
+  if (key.trim().length === 0 || key.includes('=') || key.includes('\0')) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'launchEnvironment keys must be non-empty environment names.',
+    );
+  }
+  if (key.startsWith(SIMCTL_CHILD_PREFIX)) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `launchEnvironment keys must omit the ${SIMCTL_CHILD_PREFIX} transport prefix.`,
+    );
+  }
+}
 
 const appsCommandMetadata = defineFieldCommandMetadata(
   'apps',
@@ -48,6 +100,12 @@ const openCommandMetadata = defineFieldCommandMetadata(
     launchArgs: stringArrayField(
       'Launch arguments forwarded verbatim to the platform launch command.',
     ),
+    launchEnvironment: jsonSchemaField<Readonly<Record<string, string>>>({
+      type: 'object',
+      description:
+        'iOS Simulator child-process environment. Provide child variable names without SIMCTL_CHILD_. Values are sensitive.',
+      additionalProperties: { type: 'string' },
+    }),
     relaunch: booleanField('Force relaunch.'),
     timeoutMs: integerField(
       'Startup budget in milliseconds. Bounds the Simulator boot wait, so a never-booted Simulator can finish its first-boot migration; omit for the default startup behavior.',
@@ -102,7 +160,10 @@ function toAppOpenOptions(
     launchUrl?: string;
   },
 ): AppOpenOptions {
-  return withCommandRuntimeHints(input);
+  return withCommandRuntimeHints({
+    ...input,
+    launchEnvironment: readLaunchEnvironment(input.launchEnvironment),
+  });
 }
 
 const appsCliSchema = {
@@ -115,6 +176,7 @@ const openCliSchema = {
     'activity',
     'launchConsole',
     'launchArgs',
+    'launchEnvironmentEntries',
     'testIme',
     'saveScript',
     'force',
@@ -147,6 +209,7 @@ const openCliReader: CliReader = (positionals, flags) => ({
   activity: flags.activity,
   launchConsole: flags.launchConsole,
   launchArgs: flags.launchArgs,
+  launchEnvironment: parseLaunchEnvironmentEntries(flags.launchEnvironmentEntries),
   relaunch: flags.relaunch,
   foreground: flags.foreground,
   timeoutMs: flags.timeoutMs,

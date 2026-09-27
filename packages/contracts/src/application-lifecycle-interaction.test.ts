@@ -33,6 +33,12 @@ const WEB_DEVICE: DeviceInfo = {
   booted: true,
 };
 
+const IOS_PHYSICAL_DEVICE: DeviceInfo = {
+  ...IOS_SIMULATOR,
+  id: 'ios-device',
+  kind: 'device',
+};
+
 function interactorWithOpen(open: Interactor['open'] = async () => undefined): Interactor {
   return {
     open,
@@ -112,6 +118,27 @@ test.each([
     positionals: [],
     execution: { launchArgs: ['--flag'] },
     message: /launch-args requires an app target/,
+  },
+  {
+    name: 'launch environment without an app',
+    device: IOS_SIMULATOR,
+    positionals: [],
+    execution: { launchEnvironment: { MODE: 'test' } },
+    message: /launch-env requires an app target/,
+  },
+  {
+    name: 'launch environment on a physical iOS device',
+    device: IOS_PHYSICAL_DEVICE,
+    positionals: ['com.example.app'],
+    execution: { launchEnvironment: { MODE: 'test' } },
+    message: /only for iOS Simulator/,
+  },
+  {
+    name: 'launch environment on Linux',
+    device: LINUX_DEVICE,
+    positionals: ['org.example.App'],
+    execution: { launchEnvironment: { MODE: 'test' } },
+    message: /only for iOS Simulator/,
   },
   {
     name: 'launch console outside an iOS simulator',

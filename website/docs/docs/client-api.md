@@ -113,6 +113,8 @@ The canonical client example is embedded below. It is also runnable from [`examp
 For direct iOS simulator app launches, `client.apps.open({ app, platform: 'ios', launchConsole: './artifacts/app.console.log' })` captures launch-time
 stdout/stderr. The option mirrors `open --launch-console` and is not valid for URL opens or non-simulator targets.
 
+`client.apps.open({ app, platform: 'ios', launchEnvironment: { _XCAppClipURL: clipUrl } })` sets child-process environment for an iOS Simulator app launch. Keys omit the `SIMCTL_CHILD_` transport prefix. Values are treated as sensitive and are not included in ordinary diagnostics or traces. The option is rejected on physical devices, macOS, and non-Apple platforms.
+
 `client.sessions.stateDir()` mirrors `session state-dir` and returns the resolved daemon state directory as a pure local resolution — it never starts
 or contacts the daemon. Pass `{ stateDir }` to resolve an explicit override the same way the CLI resolves `--state-dir`.
 

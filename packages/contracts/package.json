@@ -144,6 +144,10 @@
       "types": "./src/clipboard-runtime.ts",
       "default": "./src/clipboard-runtime.ts"
     },
+    "./launch-environment": {
+      "types": "./src/launch-environment.ts",
+      "default": "./src/launch-environment.ts"
+    },
     "./command": {
       "types": "./src/facades/command.ts",
       "default": "./src/facades/command.ts"

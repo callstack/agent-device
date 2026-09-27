@@ -340,6 +340,28 @@ test('openIosApp emits a clean simctl launch when launchArgs is an empty array',
   );
 });
 
+test('openIosApp translates launch environment keys for the iOS simulator child process', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue();
+  mockRunCmd.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
+
+  await openIosApp(IOS_TEST_SIMULATOR, 'MyApp', {
+    appBundleId: 'com.example.app',
+    launchArgs: ['-FeatureFlag', 'YES'],
+    launchEnvironment: {
+      _XCAppClipURL: 'https://example.com/clip?id=42',
+      MODE: 'test',
+    },
+  });
+
+  assert.equal(mockRunCmd.mock.calls.length, 1);
+  const [command, args, options] = mockRunCmd.mock.calls[0] ?? [];
+  assert.equal(command, 'xcrun');
+  assert.deepEqual(args, ['simctl', 'launch', 'sim-1', 'com.example.app', '-FeatureFlag', 'YES']);
+  assert.equal(options?.envPatch?.SIMCTL_CHILD__XCAppClipURL, 'https://example.com/clip?id=42');
+  assert.equal(options?.envPatch?.SIMCTL_CHILD_MODE, 'test');
+  assert.equal(options?.envPatch?._XCAppClipURL, undefined);
+});
+
 test('openIosApp appends launchArgs after the bundle id on iOS device', async () => {
   await withFakeAppleTool(
     () => '',
@@ -469,6 +491,37 @@ test('openIosApp rejects launchArgs combined with bare URL deep link on iOS simu
         launchArgs: ['-FeatureFlag', 'YES'],
       }),
     { code: 'INVALID_ARGS', message: /simctl openurl/ },
+  );
+});
+
+test('openIosApp rejects launchEnvironment combined with bare URL deep link', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue();
+  await assertRejectsAppError(
+    () =>
+      openIosApp(IOS_TEST_SIMULATOR, 'myapp://item/42', {
+        launchEnvironment: { MODE: 'test' },
+      }),
+    { code: 'INVALID_ARGS', message: /simctl openurl/ },
+  );
+});
+
+test('openIosApp rejects launchEnvironment on a physical iOS device', async () => {
+  await assertRejectsAppError(
+    () =>
+      openIosApp(IOS_TEST_DEVICE, 'MyApp', {
+        launchEnvironment: { MODE: 'test' },
+      }),
+    { code: 'UNSUPPORTED_OPERATION', message: /iOS Simulator/ },
+  );
+});
+
+test('openIosApp rejects launchEnvironment on macOS', async () => {
+  await assertRejectsAppError(
+    () =>
+      openIosApp(MACOS_TEST_DEVICE, 'TextEdit', {
+        launchEnvironment: { MODE: 'test' },
+      }),
+    { code: 'UNSUPPORTED_OPERATION', message: /iOS Simulator/ },
   );
 });
 

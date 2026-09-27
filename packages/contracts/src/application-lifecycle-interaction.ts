@@ -4,7 +4,7 @@ import {
   LAUNCH_CONSOLE_IOS_SIMULATOR_ONLY_MESSAGE,
 } from './launch-console.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { isIosFamily } from '@agent-device/kernel/device';
+import { isIosFamily, resolveDeviceAppleOs } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type {
@@ -181,6 +181,9 @@ async function invokeDeviceOpen(params: DirectOpenParameters): Promise<void> {
   if (params.execution.launchArgs && params.execution.launchArgs.length > 0) {
     throw new AppError('INVALID_ARGS', '--launch-args requires an app target');
   }
+  if (params.execution.launchEnvironment !== undefined) {
+    throw new AppError('INVALID_ARGS', '--launch-env requires an app target');
+  }
   await params.interactor.openDevice();
 }
 
@@ -193,6 +196,22 @@ function assertOpenDeviceSupport(
   }
   if (device.platform === 'linux' && execution.launchArgs && execution.launchArgs.length > 0) {
     throw new AppError('UNSUPPORTED_OPERATION', '--launch-args is not supported on Linux.');
+  }
+  assertLaunchEnvironmentSupport(device, execution.launchEnvironment);
+}
+
+function assertLaunchEnvironmentSupport(
+  device: DeviceInfo,
+  launchEnvironment: ApplicationLifecycleExecution['launchEnvironment'],
+): void {
+  if (
+    launchEnvironment !== undefined &&
+    !(resolveDeviceAppleOs(device) === 'ios' && device.kind === 'simulator')
+  ) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      '--launch-env is supported only for iOS Simulator app launches.',
+    );
   }
 }
 
@@ -217,6 +236,7 @@ async function invokeApplicationUrlOpen(
     activity: params.execution.activity,
     appBundleId: params.appBundleId,
     launchArgs: params.execution.launchArgs ? [...params.execution.launchArgs] : undefined,
+    launchEnvironment: params.execution.launchEnvironment,
     terminateRunningApp: params.terminateRunningApp,
     url,
   });
@@ -244,6 +264,7 @@ async function invokeApplicationTargetOpen(
     appBundleId: params.appBundleId,
     launchConsole: execution.launchConsole,
     launchArgs: execution.launchArgs ? [...execution.launchArgs] : undefined,
+    launchEnvironment: execution.launchEnvironment,
     terminateRunningApp: params.terminateRunningApp,
   });
 }

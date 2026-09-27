@@ -225,6 +225,7 @@ async function dispatchAppleLaunchUrl(
     clearAppState: undefined,
     launchConsole: undefined,
     launchArgs: undefined,
+    launchEnvironment: undefined,
   };
   const startedAtMs = Date.now();
   await invokeApplicationOpen({
@@ -439,7 +440,8 @@ function isDirectAppLaunch(input: OpenApplicationInput): boolean {
   return (
     input.execution.clearAppState === true ||
     Boolean(input.execution.launchConsole?.trim()) ||
-    Boolean(input.execution.launchArgs?.length)
+    Boolean(input.execution.launchArgs?.length) ||
+    input.execution.launchEnvironment !== undefined
   );
 }
 

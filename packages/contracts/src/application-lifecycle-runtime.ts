@@ -6,6 +6,7 @@ import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { ProviderPortReverseOptions } from './provider-device-runtime.ts';
 import type { TargetShutdownResult } from './target-shutdown-contract.ts';
+import type { LaunchEnvironment } from './launch-environment.ts';
 
 /**
  * A deliberately neutral runtime-hint payload. Daemon policy owns parsing and
@@ -40,6 +41,7 @@ export type ApplicationLifecycleExecution = Readonly<{
   activity?: string;
   launchConsole?: string;
   launchArgs?: readonly string[];
+  launchEnvironment?: LaunchEnvironment;
   clearAppState?: boolean;
   iosXctestrunFile?: string;
   iosXctestDerivedDataPath?: string;

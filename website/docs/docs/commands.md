@@ -79,6 +79,8 @@ agent-device fold open
 - `open <app> <url>` opens a deep link on iOS.
 - `open <app> --launch-console <path>` captures launch-time stdout/stderr for direct iOS simulator app launches. It is not valid for URL opens or
   non-simulator targets.
+- `open <app> --launch-env KEY=VALUE` sets one child-process environment variable for an iOS Simulator app launch. Repeat the flag for multiple variables. Use child names such as `_XCAppClipURL`; do not add the `SIMCTL_CHILD_` transport prefix. Duplicate or empty keys are rejected, values are redacted from diagnostics, and physical iOS devices, macOS, and other platforms report `UNSUPPORTED_OPERATION`.
+- Launch environment can be combined with repeatable `--launch-args`. With `open <app> <url>`, agent-device launches the app with both settings before opening the URL. A bare `open <url>` cannot accept launch arguments or environment because `simctl openurl` does not configure an app process.
 - `open --platform macos --surface app|frontmost-app|desktop|menubar` selects the macOS session surface explicitly. `app` is the default when an app argument is provided.
 - `back` now defaults to app-owned back navigation. On Apple targets that means visible in-app back UI only. On Android this currently maps to the same back keyevent because Android routes in-app back through that platform event.
 - `back --in-app` is an explicit alias for the default app-owned behavior.

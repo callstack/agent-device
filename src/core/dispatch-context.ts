@@ -30,6 +30,7 @@ export const DISPATCH_CONTEXT_FLAG_KEYS = [
   'activity',
   'launchConsole',
   'launchArgs',
+  'launchEnvironment',
   'clearAppState',
   'verbose',
   'iosXctestrunFile',

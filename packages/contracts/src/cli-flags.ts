@@ -122,6 +122,7 @@ export type CliFlags = CloudProviderProfileFields &
     activity?: string;
     launchConsole?: string;
     launchArgs?: string[];
+    launchEnvironmentEntries?: string[];
     header?: string[];
     githubActionsArtifact?: string;
     installSource?: DaemonInstallSource;

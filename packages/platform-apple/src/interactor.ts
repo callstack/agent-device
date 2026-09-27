@@ -60,6 +60,7 @@ export function createAppleInteractor(
         appBundleId: options?.appBundleId,
         launchConsole: options?.launchConsole,
         launchArgs: options?.launchArgs,
+        launchEnvironment: options?.launchEnvironment,
         terminateRunningApp: options?.terminateRunningApp,
         url: options?.url,
         runnerOptions: runnerOpts,
