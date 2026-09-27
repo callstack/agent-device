@@ -90,15 +90,20 @@ export function leaseBackendForPlatform(
  * A connection binds a platform at the same moment it binds a lease, and the lease is the stronger
  * evidence: it names the backend that is actually holding the device. `ios-simulator` maps to no
  * leaf because it is a runner/process guard below device leases, not a platform a selector names.
+ *
+ * Derived from the forward table rather than written beside it, so the two axes cannot drift, and held
+ * in a `Map` because a `leaseBackend` reaching here can be any string an older binary left on disk: a
+ * plain object would answer `constructor` and friends with an inherited function, which is a platform
+ * nobody rents.
  */
-const PLATFORM_BY_LEASE_BACKEND: Partial<Record<LeaseBackend, PublicPlatform>> = {
-  'ios-instance': 'ios',
-  'android-instance': 'android',
-  'harmonyos-instance': 'harmonyos',
-};
+const PLATFORM_BY_LEASE_BACKEND = new Map<string, PublicPlatform>(
+  Object.entries(LEASE_BACKEND_BY_PLATFORM).flatMap(([platform, backend]) =>
+    backend === undefined ? [] : [[backend, platform as PublicPlatform] as const],
+  ),
+);
 
-export function platformForLeaseBackend(backend: LeaseBackend): PublicPlatform | undefined {
-  return PLATFORM_BY_LEASE_BACKEND[backend];
+export function platformForLeaseBackend(backend: string): PublicPlatform | undefined {
+  return PLATFORM_BY_LEASE_BACKEND.get(backend);
 }
 
 const DAEMON_SERVER_MODES = ['socket', 'http', 'dual'] as const;

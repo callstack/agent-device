@@ -26,10 +26,77 @@ test('HarmonyOS platform resolves to its proxy lease backend', () => {
   ).toBe('harmonyos-instance');
 });
 
-test.each(['apple', 'harmonyos', 'ios', 'android'] as const)(
-  'stored Harmony runtime compatibility respects %s selection',
+test('stored Harmony runtime compatibility keeps the HarmonyOS runtime for a HarmonyOS selection', async () => {
+  const { stateDir, remoteConfigPath } = connectionWorkspace('harmonyos-runtime-');
+  fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+  seedConnectionState({
+    stateDir,
+    state: {
+      session: 'runtime-compat',
+      remoteConfigPath,
+      daemon: { baseUrl: 'https://daemon.example' },
+      tenant: 'proxy',
+      runId: 'compat-run',
+      leaseId: 'compat-existing',
+      leaseBackend: 'harmonyos-instance',
+      runtime: { platform: 'harmonyos', launchUrl: 'demo://open' },
+    },
+  });
+  const materialized = await materializeRemoteConnectionForCommand({
+    command: 'snapshot',
+    client: createTestClient(),
+    flags: {
+      json: true,
+      help: false,
+      version: false,
+      stateDir,
+      remoteConfig: remoteConfigPath,
+      session: 'runtime-compat',
+      platform: 'harmonyos',
+    },
+  });
+  expect(materialized.runtime?.platform).toBe('harmonyos');
+});
+
+/**
+ * A backend that rents HarmonyOS devices is the device this connection holds, even when the record
+ * never wrote a platform, so any other family is refused rather than sent along the existing lease
+ * (#2962). Before the backend was read, `apple` silently ran as a HarmonyOS snapshot and `ios` went
+ * out as an `ios` snapshot — both against a `harmonyos-instance` lease.
+ */
+async function expectRejectedSelection(
+  stateDir: string,
+  remoteConfigPath: string,
+  platform: 'apple' | 'ios' | 'android',
+): Promise<void> {
+  await expect(
+    materializeRemoteConnectionForCommand({
+      command: 'snapshot',
+      client: createTestClient(),
+      flags: {
+        json: true,
+        help: false,
+        version: false,
+        stateDir,
+        remoteConfig: remoteConfigPath,
+        session: 'runtime-compat',
+        platform,
+      },
+    }),
+  ).rejects.toMatchObject({
+    code: 'INVALID_ARGS',
+    details: {
+      reason: 'CONNECTION_PLATFORM_CONFLICT',
+      platform: 'harmonyos',
+      requestedPlatform: platform,
+    },
+  });
+}
+
+test.each(['apple', 'ios', 'android'] as const)(
+  'a harmonyos-instance lease refuses a %s selection',
   async (platform) => {
-    const { stateDir, remoteConfigPath } = connectionWorkspace('harmonyos-runtime-');
+    const { stateDir, remoteConfigPath } = connectionWorkspace('harmonyos-runtime-reject-');
     fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
     seedConnectionState({
       stateDir,
@@ -44,24 +111,7 @@ test.each(['apple', 'harmonyos', 'ios', 'android'] as const)(
         runtime: { platform: 'harmonyos', launchUrl: 'demo://open' },
       },
     });
-    const materialized = await materializeRemoteConnectionForCommand({
-      command: 'snapshot',
-      client: createTestClient(),
-      flags: {
-        json: true,
-        help: false,
-        version: false,
-        stateDir,
-        remoteConfig: remoteConfigPath,
-        session: 'runtime-compat',
-        platform,
-      },
-    });
-    if (platform === 'apple' || platform === 'harmonyos') {
-      expect(materialized.runtime?.platform).toBe('harmonyos');
-    } else {
-      expect(materialized.runtime).toBeUndefined();
-    }
+    await expectRejectedSelection(stateDir, remoteConfigPath, platform);
   },
 );
 

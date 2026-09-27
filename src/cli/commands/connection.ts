@@ -12,6 +12,7 @@ import {
   remoteConnectionLeaseIdentityMatches,
   removeRemoteConnectionState,
   connectionPlatformMatchesSelection,
+  narrowConnectionPlatform,
   writeRemoteConnectionState,
   type RemoteConnectionState,
   type RemoteConnectionRequestMetadata,
@@ -162,7 +163,7 @@ function buildConnectedState(options: {
     : null;
   const now = new Date().toISOString();
   const leaseBinding = buildConnectionLeaseBinding(flags, previous, connectionMetadata);
-  const runtimeBinding = buildConnectionRuntimeBinding(flags, previous, now);
+  const runtimeBinding = buildConnectionRuntimeBinding(flags, previous, now, leaseBinding);
   return {
     version: 1,
     session: context.session,
@@ -194,13 +195,27 @@ function buildConnectionLeaseBinding(
   };
 }
 
+/**
+ * Writes what a reused connection is bound to on the platform axis.
+ *
+ * `--platform apple` on a connection whose backend rents iOS instances is the family being named
+ * again, not a request to widen the record back to the family: once a lease is bound the leaf is the
+ * truth, and a record that loses it lets the next command ask for any Apple leaf and be served on
+ * this one (#2962). The lease binding is asked first because the backend is what decides a family.
+ */
 function buildConnectionRuntimeBinding(
   flags: CliFlags,
   previous: RemoteConnectionState | null,
   now: string,
+  leaseBinding: Pick<RemoteConnectionState, 'leaseBackend'>,
 ): Pick<RemoteConnectionState, 'connectedAt' | 'metro' | 'platform' | 'runtime' | 'target'> {
+  const platform = narrowConnectionPlatform({
+    leaseBackend: leaseBinding.leaseBackend,
+    recordedPlatform: previous?.platform,
+    requestedPlatform: flags.platform,
+  });
   return {
-    platform: flags.platform ?? previous?.platform,
+    platform: platform.ok ? platform.platform : flags.platform,
     target: flags.target ?? previous?.target,
     runtime: previous?.runtime,
     metro: previous?.metro,

@@ -9,13 +9,12 @@ import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 import { readRemoteConfigFile } from '../../remote/remote-config-core.ts';
 import {
   deviceFieldsFromPublicPlatform,
-  platformSelectorsConflict,
   resolveDevice,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
 import {
-  boundConnectionPlatform,
+  narrowConnectionPlatform,
   buildConnectionDeviceKey,
   buildRemoteConnectionDaemonState,
   buildRemoteConnectionRequestMetadata,
@@ -144,6 +143,21 @@ export async function materializeRemoteConnectionForCommand(options: {
     changed = changed || materializedLease.changed;
     acquiredLeaseForCleanup = materializedLease.acquiredLeaseForCleanup;
   }
+
+  // A command that allocates no lease still returns flags and a record on the platform axis, and the
+  // record can carry an alias the request asked to narrow. Same rule as the binding path above, so a
+  // connection whose backend rents one leaf cannot serve another leaf simply because this command
+  // never reached the allocator.
+  const carriedPlatform = narrowConnectionPlatform({
+    leaseBackend: nextState.leaseBackend,
+    recordedPlatform: nextState.platform,
+    requestedPlatform: nextFlags.platform,
+  });
+  if (!carriedPlatform.ok) {
+    throw connectionPlatformConflict(state, nextState.leaseBackend, carriedPlatform);
+  }
+  nextState = { ...nextState, platform: carriedPlatform.platform };
+  nextFlags.platform = carriedPlatform.platform;
 
   const runtimePreparation = await prepareRuntimeForCommand({
     command,
@@ -321,18 +335,23 @@ async function materializeLeaseForCommand(options: {
     nextState.leaseBackend ??
     preliminaryLeaseBackend ??
     requireRequestedLeaseBackend(nextFlags, command);
-  assertRequestedConnectionScope(state, nextFlags, leaseBackend);
-  // Binding a lease is the moment the platform family is decided, so every field this command
-  // records or sends from here on — the allocate payload, the flags the request carries, the state
-  // written below — names the leaf the backend rents, never the `apple` alias asked for.
-  nextState = {
-    ...nextState,
-    platform: boundConnectionPlatform({
-      platform: nextState.platform ?? nextFlags.platform,
-      leaseBackend,
-    }),
-  };
-  nextFlags.platform = nextState.platform ?? nextFlags.platform;
+  assertRequestedConnectionBackend(state, leaseBackend);
+  // One decision for one axis. Whichever of the backend, the record, and the request names the
+  // narrowest platform, that is what this command records, sends, allocates, and returns; two that
+  // cannot name the same device are refused here rather than resolved later by whoever read first.
+  const platform = narrowConnectionPlatform({
+    leaseBackend,
+    recordedPlatform: nextState.platform,
+    requestedPlatform: nextFlags.platform,
+  });
+  if (!platform.ok) {
+    throw connectionPlatformConflict(state, leaseBackend, platform);
+  }
+  // Read after the platform is settled: a request that asks for another Apple leaf also asks for a
+  // different target, and the platform is the reason it is being refused.
+  assertRequestedConnectionTarget(state, nextFlags);
+  nextState = { ...nextState, platform: platform.platform };
+  nextFlags.platform = platform.platform;
   const materializedLease = await allocateOrReuseLease(
     client,
     nextState,
@@ -344,7 +363,6 @@ async function materializeLeaseForCommand(options: {
   const lease = materializedLease.lease;
   nextFlags.leaseId = lease.leaseId;
   nextFlags.leaseBackend = leaseBackend;
-  nextFlags.platform = nextState.platform ?? nextFlags.platform;
   nextFlags.target = nextState.target ?? nextFlags.target;
   if (leaseStateMatches(nextState, lease, leaseBackend)) {
     return {
@@ -934,9 +952,29 @@ async function resolveSelectedDevice(
   );
 }
 
-function assertRequestedConnectionScope(
+function connectionPlatformConflict(
   state: RemoteConnectionState,
-  flags: CliFlags,
+  leaseBackend: LeaseBackend | undefined,
+  conflict: Readonly<{
+    boundPlatform?: CliFlags['platform'];
+    requestedPlatform?: CliFlags['platform'];
+  }>,
+): AppError {
+  return new AppError(
+    'INVALID_ARGS',
+    'Active remote connection is already bound to a different platform. Re-run connect --force to replace it.',
+    {
+      session: state.session,
+      leaseBackend,
+      platform: conflict.boundPlatform,
+      requestedPlatform: conflict.requestedPlatform,
+      reason: 'CONNECTION_PLATFORM_CONFLICT',
+    },
+  );
+}
+
+function assertRequestedConnectionBackend(
+  state: RemoteConnectionState,
   requestedLeaseBackend: LeaseBackend,
 ): void {
   if (state.leaseBackend && state.leaseBackend !== requestedLeaseBackend) {
@@ -946,21 +984,9 @@ function assertRequestedConnectionScope(
       { session: state.session, leaseBackend: state.leaseBackend },
     );
   }
-  // A record saved before the collapse existed, or one whose lease already matched so nothing
-  // rewrote it, still names the `apple` family beside the backend that decided it. The guard reads
-  // the leaf that record owes; a connection that recorded no platform is bound to none, so a
-  // selector cannot conflict with it.
-  const boundPlatform = boundConnectionPlatform({
-    platform: state.platform,
-    leaseBackend: state.leaseBackend,
-  });
-  if (platformSelectorsConflict(flags.platform, boundPlatform)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Active remote connection is already bound to a different platform. Re-run connect --force to replace it.',
-      { session: state.session, platform: boundPlatform },
-    );
-  }
+}
+
+function assertRequestedConnectionTarget(state: RemoteConnectionState, flags: CliFlags): void {
   if (state.target && flags.target && state.target !== flags.target) {
     throw new AppError(
       'INVALID_ARGS',

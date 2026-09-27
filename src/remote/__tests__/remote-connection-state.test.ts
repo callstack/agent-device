@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { mkdtempForTest } from '../../__tests__/test-utils/tmp-dir.ts';
 import {
-  boundConnectionPlatform,
+  narrowConnectionPlatform,
   buildConnectionDeviceKey,
   connectionPlatformMatchesSelection,
   buildRemoteConnectionDaemonState,
@@ -187,27 +187,63 @@ test('resolveRemoteConnectionDefaults falls back to the environment token', asyn
   assert.equal(defaults?.flags.daemonAuthToken, FAKE_DAEMON_TOKEN);
 });
 
-// The rule that decides whether a recorded platform is still a family selection: the backend is what
-// settles it. With none, the alias is kept rather than guessed — a connection that named no backend
-// can legitimately serve either Apple leaf.
-test('boundConnectionPlatform collapses apple only when a backend names the leaf', () => {
-  const bound = boundConnectionPlatform({ platform: 'apple', leaseBackend: undefined });
-  assert.equal(bound, 'apple');
-  // A backend is what decides it, including one whose platform the backend does not name.
-  assert.equal(
-    boundConnectionPlatform({ platform: 'apple', leaseBackend: 'ios-simulator' }),
-    'apple',
-    'a runner-guard backend names no platform to collapse to',
+// The one rule for the platform axis. A backend that rents a leaf platform has decided the family
+// whether or not the record ever wrote it; a backend that names none (`ios-simulator`, a runner guard)
+// decides nothing and must not invent a leaf; and a wider `apple` never beats a leaf that is already
+// known, which is what stops a recorded alias from rewriting a narrower request.
+test('narrowConnectionPlatform takes the narrowest candidate and refuses a real conflict', () => {
+  assert.deepEqual(
+    narrowConnectionPlatform({ leaseBackend: 'ios-instance', recordedPlatform: 'apple' }),
+    { ok: true, platform: 'ios' },
+    'the backend decides a family the record never collapsed',
   );
-  assert.equal(
-    boundConnectionPlatform({ platform: 'apple', leaseBackend: 'android-instance' }),
-    'android',
+  assert.deepEqual(
+    narrowConnectionPlatform({
+      leaseBackend: 'ios-simulator',
+      recordedPlatform: 'apple',
+      requestedPlatform: 'macos',
+    }),
+    { ok: true, platform: 'macos' },
+    'a runner-guard backend invents no leaf, so the requested one narrows the alias',
   );
-  // A leaf is already decided, whichever backend it leased on.
-  assert.equal(
-    boundConnectionPlatform({ platform: 'ios', leaseBackend: 'ios-instance' }),
-    'ios',
-    'a leaf passes through untouched',
+  assert.deepEqual(
+    narrowConnectionPlatform({
+      leaseBackend: undefined,
+      recordedPlatform: 'apple',
+      requestedPlatform: undefined,
+    }),
+    { ok: true, platform: 'apple' },
+    'with nothing to decide from, the family selection stands',
+  );
+  assert.deepEqual(
+    narrowConnectionPlatform({
+      leaseBackend: 'ios-instance',
+      recordedPlatform: undefined,
+      requestedPlatform: 'macos',
+    }),
+    { ok: false, boundPlatform: 'ios', requestedPlatform: 'macos' },
+    'an unplatformed record still cannot rent an iOS backend for macOS',
+  );
+  assert.deepEqual(
+    narrowConnectionPlatform({
+      // A `leaseBackend` reaching here can be any string an older binary left on disk, and the
+      // backend-to-leaf table used to be a plain object, where these resolved to inherited
+      // Object members — a platform nobody rents.
+      leaseBackend: 'constructor' as never,
+      recordedPlatform: 'apple',
+      requestedPlatform: undefined,
+    }),
+    { ok: true, platform: 'apple' },
+    'an unrecognized backend decides nothing rather than resolving to an inherited property',
+  );
+  assert.deepEqual(
+    narrowConnectionPlatform({
+      leaseBackend: 'android-instance',
+      recordedPlatform: 'ios',
+      requestedPlatform: undefined,
+    }),
+    { ok: false, boundPlatform: 'android', requestedPlatform: undefined },
+    'a record that disagrees with its own backend is refused by itself, not resolved by whichever field was read first',
   );
 });
 

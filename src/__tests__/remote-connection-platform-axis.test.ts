@@ -577,9 +577,16 @@ test('connect refuses to reuse an apple-bound connection for the other leaf', as
       client: createTestClient(),
     });
 
+  // `connect` asks whether this is the same connection before it binds anything, so it refuses with
+  // its own "different connection, needs --force" rather than the platform conflict a command that
+  // does bind raises. Both refuse; only one names the axis.
   await assert.rejects(
     async () => await connect('macos'),
-    /A different remote connection is already active/,
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.details?.session === 'adc-apple-reuse' &&
+      error.details?.remoteConfig === remoteConfigPath,
     "the other leaf of the family can't ride along on this lease",
   );
   await connect('ios');
@@ -587,6 +594,136 @@ test('connect refuses to reuse an apple-bound connection for the other leaf', as
     readRemoteConnectionState({ stateDir, session: 'adc-apple-reuse' })?.platform,
     'ios',
     'the leaf the backend rents is what the reconnected record carries',
+  );
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+// `connect` writes the platform it is asked for, which let a reused connection widen its own record
+// back to the family: an `ios` lease re-declared with `--platform apple` recorded `apple`, and the
+// next command could then ask for any Apple leaf and be served on the iOS device that lease holds.
+// The family and the leaf name the same device here, so nothing conflicts — the record simply has to
+// keep the leaf it already had.
+test('connect keeps the bound leaf when re-declared with the family selector', async () => {
+  const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
+    'agent-device-connect-apple-redeclare-',
+  );
+  fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+  seedConnectionState({
+    stateDir,
+    state: {
+      session: 'adc-redeclare',
+      remoteConfigPath,
+      daemon: { baseUrl: 'https://daemon.example' },
+      tenant: 'acme',
+      runId: 'run-9',
+      leaseId: 'ios-lease-1',
+      leaseBackend: 'ios-instance',
+      platform: 'ios',
+    },
+  });
+
+  await connectCommand({
+    positionals: [],
+    flags: {
+      json: true,
+      help: false,
+      version: false,
+      stateDir,
+      remoteConfig: remoteConfigPath,
+      daemonBaseUrl: 'https://daemon.example',
+      tenant: 'acme',
+      runId: 'run-9',
+      session: 'adc-redeclare',
+      platform: 'apple',
+      leaseBackend: 'ios-instance',
+    },
+    client: createTestClient(),
+  });
+
+  assert.equal(
+    readRemoteConnectionState({ stateDir, session: 'adc-redeclare' })?.platform,
+    'ios',
+    'the family selector restates the connection, it does not widen it',
+  );
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+// The two shapes where nothing in the record settles the Apple leaf, so the answer has to come from
+// the backend or the request and never from the wider of the two.
+//
+// - A runner-guard backend (`ios-simulator`) rents no platform, so the requested leaf is the only
+//   leaf on the table and the recorded alias must not win it.
+// - A backend that rents iOS instances has decided the leaf even when the record never wrote one, and
+//   that is a device this request cannot have.
+test('an undecided record narrows to the requested leaf or refuses, and never sends apple', async () => {
+  const { tempRoot, stateDir, remoteConfigPath } = connectionWorkspace(
+    'agent-device-connect-undecided-leaf-',
+  );
+  fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+  const command = (
+    session: string,
+    leaseBackend: 'ios-simulator' | 'ios-instance',
+    platform: 'apple' | 'macos',
+  ) =>
+    materializeRemoteConnectionForCommand({
+      command: 'snapshot',
+      flags: {
+        json: true,
+        help: false,
+        version: false,
+        stateDir,
+        remoteConfig: remoteConfigPath,
+        daemonBaseUrl: 'https://daemon.example',
+        tenant: 'acme',
+        runId: 'run-9',
+        session,
+        platform,
+      },
+      client: createTestClient({
+        allocate: recordedLeaseAllocate({ leaseId: 'undecided-lease-1', backend: leaseBackend })
+          .stub,
+      }),
+    });
+
+  seedConnectionState({
+    stateDir,
+    state: {
+      session: 'adc-guard',
+      remoteConfigPath,
+      daemon: { baseUrl: 'https://daemon.example' },
+      tenant: 'acme',
+      runId: 'run-9',
+      leaseBackend: 'ios-simulator',
+      platform: 'apple',
+    },
+  });
+  const narrowed = await command('adc-guard', 'ios-simulator', 'macos');
+  assert.equal(
+    narrowed.flags.platform,
+    'macos',
+    'a runner guard rents no leaf, so the request keeps its own',
+  );
+
+  seedConnectionState({
+    stateDir,
+    state: {
+      session: 'adc-unplatformed',
+      remoteConfigPath,
+      daemon: { baseUrl: 'https://daemon.example' },
+      tenant: 'acme',
+      runId: 'run-9',
+      leaseBackend: 'ios-instance',
+    },
+  });
+  await assert.rejects(
+    async () => await command('adc-unplatformed', 'ios-instance', 'macos'),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.details?.reason === 'CONNECTION_PLATFORM_CONFLICT' &&
+      error.details?.platform === 'ios' &&
+      error.details?.requestedPlatform === 'macos',
+    'a backend that rents iOS is a bound device, alias or no alias',
   );
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
