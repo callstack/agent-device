@@ -41,6 +41,7 @@ const pairWearableCommandMetadata = defineFieldCommandMetadata(
     phone: requiredField(
       jsonSchemaField<{ platform: 'ios' | 'android'; deviceId: string }>({
         type: 'object',
+        description: 'Phone endpoint containing platform and deviceId.',
         properties: {
           platform: { type: 'string', enum: ['ios', 'android'] },
           deviceId: { type: 'string' },
@@ -51,6 +52,7 @@ const pairWearableCommandMetadata = defineFieldCommandMetadata(
     ),
     wearable: jsonSchemaField<{ deviceId?: string; name?: string }>({
       type: 'object',
+      description: 'Optional wearable selector by deviceId, name, or both.',
       properties: {
         deviceId: { type: 'string' },
         name: { type: 'string' },

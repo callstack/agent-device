@@ -53,6 +53,12 @@ const RESPONSE_FIXTURES: Partial<Record<CommandName, unknown>> = {
     matchedImages: [],
   },
   devices: [],
+  'pair-wearable': {
+    pairId: 'pair-1',
+    phone: { name: 'iPhone 17' },
+    wearable: { name: 'Apple Watch Series 11' },
+    status: 'paired',
+  },
   session: { sessions: [] },
 };
 

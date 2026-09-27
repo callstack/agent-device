@@ -72,6 +72,7 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
   [PUBLIC_COMMANDS.devices]: () => one(),
   [PUBLIC_COMMANDS.doctor]: () => one(),
   [PUBLIC_COMMANDS.boot]: () => one(),
+  [PUBLIC_COMMANDS.pairWearable]: () => one(['sim-1', 'watch-1'], { platform: 'ios', boot: false }),
   [PUBLIC_COMMANDS.prepare]: () => one(['ios-runner']),
   [PUBLIC_COMMANDS.snapshot]: () => one([], { snapshotInteractiveOnly: true }),
   [PUBLIC_COMMANDS.perf]: () => [{ positionals: [] }, { positionals: ['frames'] }],
