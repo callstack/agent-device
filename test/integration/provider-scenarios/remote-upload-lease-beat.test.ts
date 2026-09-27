@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
+import { MIN_LEASE_WINDOW_MS } from '@agent-device/contracts/lease-scope';
 import {
   countDiagnosticEventsByPhase,
   withDiagnosticsScope,
@@ -36,8 +37,16 @@ const LEASE_WINDOW_MS = 3_000;
 const SLOW_BEAT_MS = 2_500;
 /** The window the fake daemon reports on the slow-link case, whose third is its cadence. */
 const SLOW_BEAT_LEASE_WINDOW_MS = 30_000;
-/** How long the slow-link case watches the beat before letting the artifact finish. */
-const SLOW_BEAT_OBSERVATION_MS = 4_500;
+/** The cadence the loop assumes before any window is known: a third of the registry minimum. */
+const ASSUMED_BEAT_INTERVAL_MS = Math.floor(MIN_LEASE_WINDOW_MS / 3);
+/**
+ * How long the slow-link case watches for an extra beat after the second one lands. Two assumed
+ * cadences: a loop that budgets a beat at its cadence re-sends every one of them and is caught
+ * inside this window, while the correct loop has moved to a third of the 30s window by then and is
+ * quiet until ten seconds in. Sampling on arrivals plus a quiet window — rather than a fixed wall
+ * clock — keeps a runner stall from reading as a missing beat.
+ */
+const SLOW_BEAT_QUIET_WINDOW_MS = ASSUMED_BEAT_INTERVAL_MS * 2;
 
 /**
  * How the fake daemon makes the upload the long phase it is.
@@ -298,6 +307,37 @@ function installRequest(baseUrl: string, apkPath: string): Omit<DaemonRequest, '
 
 const TRANSPORT = { authToken: TOKEN } as const;
 
+function sleep(ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms).unref();
+  });
+}
+
+/**
+ * How many beats arrived, once the loop has been seen to go quiet.
+ *
+ * Waits for `expected` arrivals, then keeps watching through one quiet window and returns the count.
+ * A loop that keeps beating at the cadence it assumed is still arriving inside that window, so it is
+ * counted rather than awaited; a loop that moved to the window it just renewed is silent through it.
+ * Settling on arrivals instead of a fixed wall clock means a runner stall delays the sample instead
+ * of dropping a beat from it. The deadline bounds the wait so a beat that never comes fails on that
+ * fact rather than on the lane's timeout.
+ */
+async function settleBeatArrivals(daemon: FakeDaemon, expected: number): Promise<number> {
+  const deadline = Date.now() + ASSUMED_BEAT_INTERVAL_MS * 3;
+  while (daemon.beatArrivals.length < expected) {
+    if (Date.now() > deadline) {
+      throw new Error(
+        `only ${String(daemon.beatArrivals.length)} of ${String(expected)} beats arrived; ` +
+          `daemon saw: ${daemon.seen.join(', ') || 'nothing'}`,
+      );
+    }
+    await sleep(25);
+  }
+  await sleep(SLOW_BEAT_QUIET_WINDOW_MS);
+  return daemon.beatArrivals.length;
+}
+
 async function withUploadedArtifact<R>(
   t: { skip(reason?: string): void },
   mode: UploadMode,
@@ -363,11 +403,16 @@ test(
       // anything: outside one, `emitDiagnostic` records nothing at all and every count reads zero.
       await withDiagnosticsScope({ session: 'upload-beat', command: 'install' }, async () => {
         const running = sendToDaemon(installRequest(daemon.baseUrl, apkPath), TRANSPORT);
-        await new Promise<void>((resolve) => {
-          setTimeout(resolve, SLOW_BEAT_OBSERVATION_MS).unref();
-        });
+        // Two beats, not three: the opening one, and the successor the loop had already armed at
+        // the cadence it assumes before any window is known. The first beat's late answer then
+        // moves the loop to a third of the 30s window it just renewed, so nothing else is due for
+        // ten seconds. A beat budgeted at its cadence is cut off before that answer lands, never
+        // learns the window, and keeps arriving every assumed cadence with a `daemon_request_timeout`
+        // behind it — which is #2946's slow link wearing the beat down instead of protecting it.
+        // The count settles on arrivals going quiet rather than on a wall-clock sample, so a loaded
+        // runner delays the read instead of moving a beat across it.
+        beatsDuringUpload = await settleBeatArrivals(daemon, 2);
         timeoutsDuringUpload = countDiagnosticEventsByPhase(['daemon_request_timeout']);
-        beatsDuringUpload = daemon.beatArrivals.length;
         // Only now does the artifact get the rest of its way in, so everything above was measured
         // while the upload was genuinely still running.
         daemon.resumeUpload();
@@ -375,12 +420,6 @@ test(
       });
 
       assert.equal(response!.ok, true);
-      // Two beats, not three: the opening one, and the successor the loop had already armed at the
-      // cadence it assumes before any window is known. The first beat's late answer then moves the
-      // loop to a third of the 30s window it just renewed, so nothing else is due inside the
-      // observation. A beat budgeted at its cadence is cut off before that answer lands, never learns
-      // the window, and keeps arriving every assumed cadence with a `daemon_request_timeout` behind it
-      // — which is #2946's slow link wearing the beat down instead of protecting it.
       assert.equal(beatsDuringUpload, 2, `beats seen: ${String(beatsDuringUpload)}`);
       assert.equal(
         timeoutsDuringUpload,
