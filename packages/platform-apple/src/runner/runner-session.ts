@@ -1,4 +1,8 @@
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  isRequestCanceledError,
+} from '@agent-device/kernel/errors';
 import {
   withKeyedLock,
   Deadline,
@@ -130,6 +134,33 @@ function withRunnerSessionLock<T>(deviceId: string, task: () => Promise<T>): Pro
   return withKeyedLock(runnerSessionLocks, deviceId, task);
 }
 
+/**
+ * What a runner start may spend when its caller sets no `startupTimeoutMs`: the reuse probe,
+ * adoption, boot, device readiness, the xctestrun build and the launch, on one clock the start owns
+ * (#2894). Sized for a cold build: `prepare` defaults to 240 s for the same work plus its health
+ * check (`PREPARE_STARTUP_BUDGET_MS`), the iOS CI lane gives a cold `prepare` on a shared macOS
+ * runner 420 s (`AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS`), and a daemon queued on another process's
+ * build of the same artifact already gives up after 10 minutes
+ * (`RUNNER_XCTESTRUN_CACHE_LOCK_TIMEOUT_MS`). The two ceilings agree, so a start never waits on a
+ * peer's build longer than it would spend on its own.
+ */
+export const DEFAULT_RUNNER_START_BUDGET_MS = 10 * 60_000;
+
+/**
+ * The budget one runner start spends, with the clock that enforces it. The abort fires when the
+ * deadline is spent, so every step that takes the signal (the xctestrun build and the launch kill
+ * their process tree through exec, the probes stop retrying) ends on the same clock the deadline
+ * reads. `close` retires the timer once the start has settled: a registered session is bounded by
+ * its {@link RunnerSession.launchDeadline} from then on, never by this abort.
+ */
+type RunnerStartBudget = Readonly<{
+  phase: RunnerPhaseBudget;
+  timeoutMs: number;
+  explicit: boolean;
+  exhausted: AbortSignal;
+  close: () => void;
+}>;
+
 export async function ensureRunnerSession(
   device: DeviceInfo,
   options: RunnerSessionOptions,
@@ -138,31 +169,75 @@ export async function ensureRunnerSession(
   // from a retained-after-close runner no longer applies.
   cancelIosRunnerIdleStop(device.id);
   const start = withRunnerSessionLock(device.id, async () => {
-    // One budget for the whole startup phase, opened here from the request-level
-    // `startupTimeoutMs`: the reuse check's toolchain probes, adoption and the startup
-    // itself all spend this one clock. The request's cancellation rides with it, so a
-    // client disconnect kills the blocking xctestrun build and runner launch
-    // (killProcessTree via exec) instead of orphaning them; a caller's own deadline does
-    // not, so the start it interrupts is still there for the retry (#2894). Request-scoped:
-    // only this request's device startup reacts, and a signal-less internal caller
-    // (shutdown) simply gets undefined.
-    const startupBudget = createRunnerPhaseBudget(
-      options.startupTimeoutMs,
-      resolveRunnerStartupSignal(options),
-    );
-    const existing = runnerSessions.get(device.id);
-    if (existing) {
-      assertExpectedRunnerSession(existing, options.expectedRunnerSessionId);
-      const reusable = await resolveReusableRunnerSession(device, existing, startupBudget);
-      if (reusable) return reusable;
-    }
+    // One budget for the whole start, opened once the lock is held so a start queued behind
+    // another does not spend its clock waiting: the reuse check's toolchain probes, adoption and
+    // the startup itself all read it. The request's cancellation rides with it, so a client
+    // disconnect kills the blocking xctestrun build and runner launch (killProcessTree via exec)
+    // instead of orphaning them; a caller's own deadline does not, so the start it interrupts is
+    // still there for the retry (#2894). A start that outlives its caller is still bounded: once
+    // the budget is spent the same signal ends it, the lock is released and the device is usable.
+    const budget = openRunnerStartBudget(options);
+    try {
+      const existing = runnerSessions.get(device.id);
+      if (existing) {
+        assertExpectedRunnerSession(existing, options.expectedRunnerSessionId);
+        const reusable = await resolveReusableRunnerSession(device, existing, budget.phase);
+        if (reusable) return reusable;
+      }
 
-    return await withRunnerLeaseLock(
-      device.id,
-      async () => await startRunnerSessionWithLease(device, options, startupBudget),
-    );
+      return await withRunnerLeaseLock(
+        device.id,
+        async () => await startRunnerSessionWithLease(device, options, budget),
+      );
+    } catch (error) {
+      throw budget.exhausted.aborted ? budget.exhausted.reason : error;
+    } finally {
+      budget.close();
+    }
   });
   return await raceRunnerStartAgainstCaller(start, options.signal);
+}
+
+/**
+ * Opens the start's budget from `startupTimeoutMs`, or {@link DEFAULT_RUNNER_START_BUDGET_MS}
+ * when the caller sets none. The startup signal (a cancelled request, never a caller's deadline)
+ * and the budget's own expiry abort the same signal.
+ */
+function openRunnerStartBudget(options: RunnerSessionOptions): RunnerStartBudget {
+  const explicitTimeoutMs = normalizeRunnerStartupTimeoutMs(options.startupTimeoutMs);
+  const timeoutMs = explicitTimeoutMs ?? DEFAULT_RUNNER_START_BUDGET_MS;
+  const exhausted = new AbortController();
+  const timer = setTimeout(() => {
+    exhausted.abort(runnerStartBudgetExhaustedError(timeoutMs, explicitTimeoutMs !== undefined));
+  }, timeoutMs);
+  timer.unref?.();
+  const startupSignal = resolveRunnerStartupSignal(options);
+  const signal = startupSignal
+    ? AbortSignal.any([startupSignal, exhausted.signal])
+    : exhausted.signal;
+  return {
+    phase: createRunnerPhaseBudget(timeoutMs, signal),
+    timeoutMs,
+    explicit: explicitTimeoutMs !== undefined,
+    exhausted: exhausted.signal,
+    close: () => clearTimeout(timer),
+  };
+}
+
+/** Says the start's own budget ran out, whichever step it was in; the next request starts over. */
+function runnerStartBudgetExhaustedError(timeoutMs: number, explicit: boolean): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `Apple runner start exceeded its ${explicit ? 'startup timeout' : 'default start budget'} of ${timeoutMs}ms`,
+    {
+      reason: 'runner_start_budget_exhausted',
+      timeoutMs,
+      retriable: true,
+      hint: explicit
+        ? 'Raise the startup timeout, or run `prepare ios-runner` first so the runner is built before it is needed.'
+        : 'Run `prepare ios-runner --timeout <ms>` so the cold build has a budget of your choosing; the session runner.log names the step that stalled.',
+    },
+  );
 }
 
 /**
@@ -171,7 +246,8 @@ export async function ensureRunnerSession(
  * build keeps going under the lock, and the next request for the device queues behind it and joins
  * the session it registers (#2894). Whatever the abort reason, the caller sees the same cancelled
  * request it would have seen from any later step; a cancelled request's abort also reaches the
- * start through its own startup signal, so nothing here decides whether the start survives.
+ * start through its own startup signal, so nothing here decides whether the start survives. A
+ * start that fails after its caller left has nobody to report to, so its failure is logged here.
  */
 async function raceRunnerStartAgainstCaller(
   start: Promise<RunnerSession>,
@@ -179,7 +255,10 @@ async function raceRunnerStartAgainstCaller(
 ): Promise<RunnerSession> {
   if (!signal) return await start;
   return await new Promise<RunnerSession>((resolve, reject) => {
-    const abort = () => reject(createRequestCanceledError(undefined, signal.reason));
+    const abort = () => {
+      reject(createRequestCanceledError(undefined, signal.reason));
+      start.catch(emitDetachedRunnerStartFailed);
+    };
     if (signal.aborted) {
       abort();
     } else {
@@ -189,15 +268,31 @@ async function raceRunnerStartAgainstCaller(
   });
 }
 
+/** A cancelled request killed its start on purpose; any other failure of a start nobody awaits is news. */
+function emitDetachedRunnerStartFailed(error: unknown): void {
+  if (isRequestCanceledError(error)) return;
+  const appErr = error instanceof AppError ? error : undefined;
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'ios_runner_detached_start_failed',
+    data: {
+      code: appErr?.code,
+      reason: appErr?.details?.reason,
+      error: error instanceof Error ? error.message : String(error),
+    },
+  });
+}
+
 /** How long the device-readiness probe may take, bounded by the startup budget it runs inside. */
 const RUNNER_DEVICE_READINESS_BUDGET_MS = 10_000;
 
 async function startRunnerSessionWithLease(
   device: DeviceInfo,
   options: RunnerSessionOptions,
-  startupBudget: RunnerPhaseBudget,
+  budget: RunnerStartBudget,
 ): Promise<RunnerSession> {
   const startupTimings: Record<string, number> = {};
+  const startupBudget = budget.phase;
   const signal = startupBudget.signal;
   const logicalLeaseContext = normalizeRunnerLogicalLeaseContext(
     options.runnerLeaseContext,
@@ -269,8 +364,6 @@ async function startRunnerSessionWithLease(
       phase: 'ios_runner_startup_cleanup_stale_bundles_skipped',
     });
   }
-  // Read before the build, which is a phase of its own with its own budget (#2422).
-  const startupTimeoutMs = requireRunnerPhaseRemainingMs(startupBudget, 'runner_session_startup');
   let xctestrunArtifact: Awaited<ReturnType<typeof ensureXctestrunArtifact>>;
   let port: number;
   let xctestrunPath: string;
@@ -288,7 +381,7 @@ async function startRunnerSessionWithLease(
       async () =>
         await ensureXctestrunArtifact(device, {
           ...options,
-          budget: createRunnerPhaseBudget(options.buildTimeoutMs, signal),
+          budget: createRunnerPhaseBudget(resolveRunnerBuildTimeoutMs(options, budget), signal),
         }),
     );
     startupTimings.build_xctestrun = xctestrunArtifact.buildMs;
@@ -368,9 +461,7 @@ async function startRunnerSessionWithLease(
     state: 'starting',
     commandCharges: new RunnerCommandAccounting(),
     startupRetryWake: runnerProcess.startupRetryWake,
-    launchDeadline: Deadline.fromTimeoutMs(
-      normalizeRunnerStartupTimeoutMs(startupTimeoutMs) ?? RUNNER_STARTUP_TIMEOUT_MS,
-    ),
+    launchDeadline: Deadline.fromTimeoutMs(resolveRunnerLaunchReadinessMs(budget)),
     startupTimings,
     startupDeviceStates: deviceStates,
     logicalLeaseContext,
@@ -1353,6 +1444,34 @@ export function readRunnerStartupTimeoutMs(session: Pick<RunnerSession, 'launchD
   const launchDeadline = session.launchDeadline;
   if (!launchDeadline) return RUNNER_STARTUP_TIMEOUT_MS;
   return Math.max(0, Math.floor(launchDeadline.remainingMs()));
+}
+
+/**
+ * What the xctestrun build may spend: the rest of the start budget, which an explicit
+ * `buildTimeoutMs` can only shorten. The build is the one step with no ceiling of its own, so a
+ * start with no caller left is still ended by the clock it opened (#2894). Throws when the start
+ * has nothing left, so a spent budget fails before xcodebuild is spawned.
+ */
+function resolveRunnerBuildTimeoutMs(
+  options: RunnerSessionOptions,
+  budget: RunnerStartBudget,
+): number {
+  const remainingMs =
+    requireRunnerPhaseRemainingMs(budget.phase, 'runner_xctestrun_build') ?? budget.timeoutMs;
+  const explicitMs = normalizeRunnerStartupTimeoutMs(options.buildTimeoutMs);
+  return explicitMs === undefined ? remainingMs : Math.min(explicitMs, remainingMs);
+}
+
+/**
+ * What the launched runner has to answer its first command, measured from launch. An explicit
+ * `startupTimeoutMs` bounds the whole start, readiness included, so readiness gets what is left of
+ * it. A defaulted start keeps the runner's own readiness window ({@link RUNNER_STARTUP_TIMEOUT_MS}):
+ * the default budget is sized for a cold build, and a runner that never answers must not be joined
+ * for the rest of it. Neither exceeds what the start budget has left.
+ */
+function resolveRunnerLaunchReadinessMs(budget: RunnerStartBudget): number {
+  const remainingMs = Math.floor(budget.phase.deadline?.remainingMs() ?? budget.timeoutMs);
+  return budget.explicit ? remainingMs : Math.min(RUNNER_STARTUP_TIMEOUT_MS, remainingMs);
 }
 
 async function measureRunnerStartupStep<T>(
