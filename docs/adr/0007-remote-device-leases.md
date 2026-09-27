@@ -98,6 +98,15 @@ itself is saturating — no way to answer at all, and every beat would re-time-o
 links the beat exists to protect. The window, not the cadence, is the interval in which being alive
 still matters, so it is also the longest a beat's answer is worth waiting for.
 
+That ceiling is the shorter of the window and the heartbeat's own request policy, currently ninety
+seconds. A ten-minute lease therefore gives a beat ninety seconds rather than the full window, which
+costs nothing the beat exists to buy: the daemon renews the lease when it handles the request, before
+it answers, so a round trip abandoned at the cap has still extended the lease if the request ever
+landed — and if it never landed, a transport that has stopped carrying traffic is not served by holding
+the socket open for the rest of a window measured in minutes. What the cap refuses is exactly that
+idle hold. It binds only on windows longer than the policy, and on those the beat already has the
+longest answer deadline any lease gets; shorter windows are bounded by their own window, as above.
+
 A beat is a fresh request each time, never the protected request rewritten: a request identity is
 what a timed-out beat is canceled under, and beats must not inherit each other's cancellation. A beat
 that finds the lease gone, or finds that this request can never renew it — its scope is missing or

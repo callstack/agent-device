@@ -70,6 +70,11 @@ type FakeDaemon = Readonly<{
    * cancel has nothing left that could stop it by then, and one it did cannot arrive.
    */
   releaseUpload(graceMs?: number): Promise<'drained' | 'canceled' | 'unresolved'>;
+  /**
+   * Stops withholding the artifact without waiting for it. Fails when no upload reached this daemon,
+   * so a caller that expected one learns that now instead of awaiting a response that never comes.
+   */
+  resumeUpload(): void;
   close(): Promise<void>;
 }>;
 
@@ -86,7 +91,7 @@ async function startFakeRemoteDaemon(mode: UploadMode): Promise<FakeDaemon> {
   let beatsAnswered = 0;
   const beatArrivals: bigint[] = [];
   let leaseDeclaredLost = false;
-  let resumeUpload: (() => void) | undefined;
+  let releaseWithheldUpload: (() => void) | undefined;
   let resolveOutcome!: (outcome: 'drained' | 'canceled') => void;
   const outcome = new Promise<'drained' | 'canceled'>((resolve) => {
     resolveOutcome = resolve;
@@ -146,11 +151,10 @@ async function startFakeRemoteDaemon(mode: UploadMode): Promise<FakeDaemon> {
       answered = true;
       writeJson(res, 200, { ok: true, uploadId: 'upload-demo.apk' });
     };
-    resumeUpload = () => {
+    releaseWithheldUpload = () => {
       if (stalled) req.resume();
       answerUpload();
     };
-    releaseArtifact = resumeUpload;
     req.on('data', (chunk: Buffer) => {
       uploadBytes += chunk.length;
       // Pausing once, not per chunk: releasing the pressure has to let the artifact through, or a
@@ -187,7 +191,7 @@ async function startFakeRemoteDaemon(mode: UploadMode): Promise<FakeDaemon> {
     }
     const windowMs = mode === 'slow' ? SLOW_BEAT_LEASE_WINDOW_MS : LEASE_WINDOW_MS;
     writeBeatAnswer(res, payload.id, windowMs);
-    if (mode !== 'slow') resumeUpload?.();
+    if (mode !== 'slow') releaseWithheldUpload?.();
   }
 
   function writeBeatAnswer(res: http.ServerResponse, id: unknown, windowMs: number): void {
@@ -214,13 +218,19 @@ async function startFakeRemoteDaemon(mode: UploadMode): Promise<FakeDaemon> {
     uploadBytes: () => uploadBytes,
     beatArrivals,
     async releaseUpload(graceMs = 2_000) {
-      resumeUpload?.();
+      releaseWithheldUpload?.();
       return await Promise.race([
         outcome,
         new Promise<'unresolved'>((resolve) => {
           setTimeout(() => resolve('unresolved'), graceMs).unref();
         }),
       ]);
+    },
+    resumeUpload() {
+      if (releaseWithheldUpload === undefined) {
+        throw new Error('no artifact ever reached this daemon, so nothing was being withheld');
+      }
+      releaseWithheldUpload();
     },
     close: async () => {
       server.closeAllConnections();
@@ -242,11 +252,6 @@ function readJsonBody(req: http.IncomingMessage, done: (payload: RpcPayload) => 
   req.on('end', () => {
     done(JSON.parse(body) as RpcPayload);
   });
-}
-
-/** Lets a withheld artifact finish, for the case that measures the phase before ending it. */
-function resumeUploadNow(): void {
-  releaseArtifact();
 }
 
 function writeJson(res: http.ServerResponse, statusCode: number, payload: unknown): void {
@@ -292,8 +297,6 @@ function installRequest(baseUrl: string, apkPath: string): Omit<DaemonRequest, '
 }
 
 const TRANSPORT = { authToken: TOKEN } as const;
-
-let releaseArtifact!: () => void;
 
 async function withUploadedArtifact<R>(
   t: { skip(reason?: string): void },
@@ -367,7 +370,7 @@ test(
         beatsDuringUpload = daemon.beatArrivals.length;
         // Only now does the artifact get the rest of its way in, so everything above was measured
         // while the upload was genuinely still running.
-        resumeUploadNow();
+        daemon.resumeUpload();
         response = await running;
       });
 
