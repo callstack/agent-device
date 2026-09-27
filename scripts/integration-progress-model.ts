@@ -143,6 +143,7 @@ function summarizeProviderScenarioFlagCoverage(files) {
     ['saveScript', 'open/close replay recording output'],
     ['relaunch', 'open terminates before launch'],
     ['shutdown', 'close/disconnect shutdown behavior'],
+    ['boot', 'wearable pairing optionally starts a stopped wearable target'],
     ['appsFilter', 'apps --all vs default filtering'],
     ['header', 'install-from-source URL headers', ['headers']],
     ['retainPaths', 'retained install-source materialization'],

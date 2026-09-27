@@ -471,6 +471,22 @@ test('every public command is driven or explicitly skipped (no silent escape)', 
   }
 });
 
+test('wearable pairing reaches the provider-backed Apple runtime boundary', async () => {
+  const daemon = await createWorldDaemon('ios');
+  try {
+    await assert.rejects(
+      daemon.client().devices.pairWearable({
+        phone: { platform: 'ios', deviceId: 'sim-1' },
+        wearable: { deviceId: 'watch-1' },
+        boot: false,
+      }),
+      (error: unknown) => error instanceof Error && /watchOS simulator/i.test(error.message),
+    );
+  } finally {
+    await daemon.close();
+  }
+});
+
 test('macOS Apple session never emits the internal apple platform on the wire', async () => {
   await runWorldGuard('macos');
 }, 120_000);
