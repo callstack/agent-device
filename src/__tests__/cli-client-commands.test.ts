@@ -1251,6 +1251,7 @@ function createStubClient(params: {
         })),
     },
     capture: {
+      inspectPoint: unexpectedCommandCall,
       snapshot: async () => ({
         nodes: [],
         truncated: false,

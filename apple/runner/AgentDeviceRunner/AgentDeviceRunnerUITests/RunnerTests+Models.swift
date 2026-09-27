@@ -391,6 +391,7 @@ struct DataPayload: Codable {
   var message: String?
   var imageBase64: String?
   var text: String?
+  var elements: [PointInspectionElementPayload]?
   var found: Bool?
   var items: [String]?
   var nodes: [PresentedNode]?
@@ -449,6 +450,17 @@ struct DataPayload: Codable {
   /// Present on a screenshot the runner captured from a display it resolved, alongside the
   /// `message` path or `imageBase64` payload that carries the image itself (#2728).
   var screenshotMetadata: ScreenshotMetadataPayload?
+}
+
+struct PointInspectionElementPayload: Codable {
+  let text: String?
+  let label: String?
+  let identifier: String?
+  let type: String?
+  let role: String?
+  let value: String?
+  let frame: SnapshotRect
+  let hittable: Bool?
 }
 
 /// `kind` mirrors the TS `SnapshotKeyboardBandFact`: "visible" carries `frame`, "unmeasurable"

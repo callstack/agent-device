@@ -2,6 +2,7 @@ import { applicationLifecycleOperationFacts } from '@agent-device/contracts/appl
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
+import { pointInspectionRuntimeOperationFacts } from '@agent-device/contracts/point-inspection-runtime';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import type {
@@ -60,6 +61,7 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   ...gestureRuntimeOperationFacts({ unsupported: unavailable }),
   ...scrollRuntimeOperationFacts({ scroll: unavailable }),
   ...elementTextRuntimeOperationFacts({ readTextAtPoint: unavailable }),
+  ...pointInspectionRuntimeOperationFacts({ inspectPoint: unavailable }),
   back: unavailable,
   setOrientation: unavailable,
   tvRemote: unavailable,

@@ -16,6 +16,7 @@ import {
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
+import { pointInspectionRuntimeOperationFacts } from '@agent-device/contracts/point-inspection-runtime';
 import {
   bindLocalFocusInteractor,
   focusRuntimeOperationFacts,
@@ -417,6 +418,7 @@ function webRuntimeFacts(
       // The web backend has no point-addressed read: `get` answers from the captured DOM tree,
       // which is what the legacy dispatch already did once its Apple-runner attempt failed.
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
+      ...pointInspectionRuntimeOperationFacts({ inspectPoint: elementTextUnavailable }),
       ...backRuntimeOperationFacts({ back: navigationUnavailable }),
       ...orientationRuntimeOperationFacts({ orientation: navigationUnavailable }),
       ...tvRemoteRuntimeOperationFacts({ tvRemote: navigationUnavailable }),

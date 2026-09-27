@@ -71,6 +71,28 @@ test('Provider-backed integration iOS Settings flow uses scripted simctl and run
           },
         },
         {
+          name: 'inspect the accessibility elements at a settings coordinate',
+          command: 'inspect-point',
+          positionals: ['196', '122'],
+          flags: { pointX: 196, pointY: 122 },
+          expectData: {
+            status: 'inspected',
+            point: { x: 196, y: 122 },
+            elements: [
+              {
+                text: 'General',
+                label: 'General',
+                identifier: 'General',
+                type: 'Button',
+                role: 'button',
+                value: 'General',
+                frame: { x: 146, y: 102, width: 100, height: 40 },
+                hittable: true,
+              },
+            ],
+          },
+        },
+        {
           name: 'reopen existing session app',
           command: 'open',
           positionals: ['com.apple.Preferences'],

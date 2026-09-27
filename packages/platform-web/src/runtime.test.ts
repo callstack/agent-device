@@ -60,6 +60,7 @@ test('preserves a narrow web provider dump including empty successful entries', 
   // No point-addressed read on the web backend: `get` answers from the captured DOM tree. The
   // legacy `read` dispatch had no web arm at all and threw on every call before falling back.
   expect(binding.facts.operations.readTextAtPoint.available).toBe(false);
+  expect(binding.facts.operations.inspectPoint.available).toBe(false);
   expect(binding.operations.readTextAtPoint).toBeUndefined();
   // R40/R41: the browser device drives touch and text through the one web interactor.
   expect(binding.facts.operations.focusPoint).toEqual({ available: true });

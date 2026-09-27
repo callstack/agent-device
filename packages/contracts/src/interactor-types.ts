@@ -39,6 +39,24 @@ export type RunnerContext = {
   runnerLeaseContext?: RunnerLogicalLeaseContext;
 };
 
+/** One bounded accessibility descriptor returned by a native point inspection. */
+export type PointInspectionElement = Readonly<{
+  text?: string;
+  label?: string;
+  identifier?: string;
+  type?: string;
+  role?: string;
+  value?: string;
+  frame: Rect;
+  hittable?: boolean;
+}>;
+
+/** Native point-read payload. Elements are ordered from smallest to largest containing frame. */
+export type PointInspectionRead = Readonly<{
+  text?: string;
+  elements: readonly PointInspectionElement[];
+}>;
+
 /** Subset of {@link RunnerContext} forwarded to runner command invocations. */
 export type RunnerCallOptions = Pick<
   RunnerContext,
@@ -355,6 +373,10 @@ export type Interactor = {
     point: Point,
     options?: { appBundleId?: string; surface?: SessionSurface; signal?: AbortSignal },
   ): Promise<string | undefined>;
+  inspectPoint?(
+    point: Point,
+    options?: { appBundleId?: string; surface?: SessionSurface; signal?: AbortSignal },
+  ): Promise<PointInspectionRead>;
   /**
    * Native text-presence reading, when the backend has one that does not require a tree capture.
    * A `true` answer is authoritative; anything else means "not proven here" and the caller

@@ -90,6 +90,10 @@ function expectAppStateFact(
   expect(binding.operations.appState).toBeTypeOf('function');
 }
 
+function expectsPointInspection(device: DeviceInfo): boolean {
+  return device.appleOs === 'ios' && device.kind === 'simulator';
+}
+
 test.each([
   ['iOS simulator', leaves.ios, true, undefined],
   [
@@ -131,6 +135,7 @@ test.each([
   // available across it (parity with the retired buckets).
   expect(facts.operations.focusPoint).toEqual({ available: true });
   expect(facts.operations.typeText).toEqual({ available: true });
+  expect(facts.operations.inspectPoint.available).toBe(expectsPointInspection(device));
   expect(binding.operations.focusPoint).toBeTypeOf('function');
   expect(binding.operations.typeText).toBeTypeOf('function');
   for (const operation of ['appLogInspect', 'appLogDoctor', 'appLogStart'] as const) {

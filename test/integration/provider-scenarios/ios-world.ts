@@ -41,6 +41,32 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
     },
     runnerSnapshot(),
     {
+      command: 'ios.runner.readText',
+      deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+      platform: 'apple',
+      request: {
+        command: 'readText',
+        x: 196,
+        y: 122,
+        appBundleId: 'com.apple.Preferences',
+      },
+      result: {
+        text: 'General',
+        elements: [
+          {
+            text: 'General',
+            label: 'General',
+            identifier: 'General',
+            type: 'Button',
+            role: 'button',
+            value: 'General',
+            frame: { x: 146, y: 102, width: 100, height: 40 },
+            hittable: true,
+          },
+        ],
+      },
+    },
+    {
       command: 'ios.runner.tap',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
       platform: 'apple',

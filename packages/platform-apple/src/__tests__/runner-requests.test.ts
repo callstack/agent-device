@@ -171,6 +171,10 @@ const INTERACTOR_SITES: Record<string, InteractorDrive> = {
     IOS_SIMULATOR,
     (i) => i.readTextAtPoint!({ x: 10, y: 20 }, { appBundleId: APP }),
   ],
+  'ios-simulator.interactor-inspect-point': [
+    IOS_SIMULATOR,
+    (i) => i.inspectPoint!({ x: 10, y: 20 }, { appBundleId: APP }),
+  ],
   'ios-simulator.alert.get': [IOS_SIMULATOR, (i) => i.readAlert!({ appBundleId: APP })],
   'ios-simulator.alert.accept': [IOS_SIMULATOR, (i) => i.acceptAlert!({ appBundleId: APP })],
   'ios-simulator.alert.dismiss': [IOS_SIMULATOR, (i) => i.dismissAlert!({ appBundleId: APP })],

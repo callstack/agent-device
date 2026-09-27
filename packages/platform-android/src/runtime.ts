@@ -15,6 +15,7 @@ import {
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
+import { pointInspectionRuntimeOperationFacts } from '@agent-device/contracts/point-inspection-runtime';
 import { focusRuntimeOperationFacts } from '@agent-device/contracts/focus-runtime';
 import {
   ANDROID_TV_MULTI_TOUCH_UNSUPPORTED_HINT,
@@ -365,6 +366,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         ...elementTextRuntimeOperationFacts({
           readTextAtPoint: device.kind === 'simulator' ? elementTextKindUnavailable : available,
         }),
+        ...pointInspectionRuntimeOperationFacts({ inspectPoint: elementTextKindUnavailable }),
         ...backRuntimeOperationFacts({ back: androidTouchFact(device) }),
         // `home` and `app-switcher` are one `input keyevent` each, admitted wherever the retired
         // `ANDROID_ALL` bucket admitted them.

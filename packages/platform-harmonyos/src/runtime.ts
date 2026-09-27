@@ -10,6 +10,7 @@ import {
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
+import { pointInspectionRuntimeOperationFacts } from '@agent-device/contracts/point-inspection-runtime';
 import {
   bindLocalFocusInteractor,
   focusRuntimeOperationFacts,
@@ -270,6 +271,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // HarmonyOS has no point-read tool: `get` answers from the captured tree, which is what
         // the legacy dispatch already did after its Apple-runner attempt failed.
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
+        ...pointInspectionRuntimeOperationFacts({ inspectPoint: elementTextUnavailable }),
         ...backRuntimeOperationFacts({ back: harmonyFocusFact(device) }),
         // Home and the app switcher ride the same HDC-driven key input; no other system button
         // has a HarmonyOS control for HDC to press.

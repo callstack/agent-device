@@ -301,6 +301,7 @@ const REPLAY_SCRIPT_LINE_PLANS = {
   focus: GENERIC_REPLAY_LINE,
   home: GENERIC_REPLAY_LINE,
   install: GENERIC_REPLAY_LINE,
+  'inspect-point': GENERIC_REPLAY_LINE,
   'install-from-source': GENERIC_REPLAY_LINE,
   is: GENERIC_REPLAY_LINE,
   keyboard: GENERIC_REPLAY_LINE,

@@ -22,6 +22,11 @@ import {
   elementTextRuntimeOperationFacts,
 } from '@agent-device/contracts/element-text-runtime';
 import {
+  bindPointInspectionRuntime,
+  pointInspectionRuntimeOperationFacts,
+  type PointInspectionRuntimeOperations,
+} from '@agent-device/contracts/point-inspection-runtime';
+import {
   bindLocalFocusInteractor,
   focusRuntimeOperationFacts,
 } from '@agent-device/contracts/focus-runtime';
@@ -322,6 +327,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
           ...(isIosFamily(device) ? { tapElementSelector: appleFocusFact(device) } : {}),
         }),
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: appleElementTextFact(device) }),
+        ...pointInspectionRuntimeOperationFacts({ inspectPoint: applePointInspectionFact(device) }),
         ...appleNavigationFacts(device),
         ...appleFoldableFacts(device),
         ...appleSystemFacts(device),
@@ -357,8 +363,18 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             resolveInteractor: host.localInteractors.resolve,
           }),
       );
+      const pointInspectionOperations: Partial<PointInspectionRuntimeOperations> = whenAdmitted(
+        facts.operations.inspectPoint,
+        () =>
+          bindPointInspectionRuntime({
+            device: request.device,
+            signal: request.scope.signal,
+            resolveInteractor: host.localInteractors.resolve,
+          }),
+      );
       const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = {
         ...appStateOperations,
+        ...pointInspectionOperations,
         ...logs.operations,
         ...createAppleAppDeploymentOperations({
           host,
@@ -545,6 +561,12 @@ function appleElementTextFact(device: DeviceInfo) {
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : elementTextKindUnavailable;
+}
+
+function applePointInspectionFact(device: DeviceInfo): RuntimeOperationFact {
+  return resolveDeviceAppleOs(device) === 'ios' && device.kind === 'simulator'
+    ? available
+    : unavailable;
 }
 
 function appleSnapshotFact(device: DeviceInfo) {

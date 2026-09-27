@@ -57,6 +57,7 @@ import {
   gestureRuntimePlanUses,
   gestureViewportRuntimeUse,
   homeRuntimeUse,
+  inspectPointRuntimeUse,
   hoverRuntimeUses,
   keyboardRuntimePlanUses,
   longPressRuntimeUses,
@@ -1076,6 +1077,21 @@ export const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
     platformExecution: { kind: 'device-runtime', uses: closeApplicationRuntimePlanUses },
+  },
+
+  {
+    name: 'inspect-point',
+    deviceClaimPolicy: 'require-owner',
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['src/commands/capture/inspect-point.ts'] as const }
+      : {}),
+    catalog: { group: 'public' },
+    frameworkTier: 'extended',
+    recordsSessionAction: false,
+    daemon: { route: 'generic', refFrameEffect: 'preserve' },
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: true,
+    platformExecution: { kind: 'device-runtime', uses: [inspectPointRuntimeUse] },
   },
 
   // -- snapshot (route: snapshot) --

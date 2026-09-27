@@ -1388,6 +1388,37 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     linux: linux.gap('No Linux-specific source-install command evidence exists yet'),
   },
+  [C['inspect-point']]: {
+    androidEmulator: androidEmulator.contract(
+      ANDROID_HOVER_RUNTIME_CONTRACT_EVIDENCE,
+      'the Android runtime reports point inspection unavailable instead of dispatching an unsupported command',
+    ),
+    iosSimulator: iosSimulator.contract(
+      'packages/platform-apple/src/__tests__/interactor-runner-provider.test.ts',
+      'inspectPoint',
+      'the Apple runner returns ordered accessibility descriptors for a screen coordinate',
+    ),
+    macos: macos.contract(
+      'packages/platform-apple/src/runtime.test.ts',
+      'classifies the %s leaf explicitly',
+      'the Apple runtime refuses point inspection outside iOS Simulator',
+    ),
+    tvos: tvos.contract(
+      'packages/platform-apple/src/runtime.test.ts',
+      'classifies the %s leaf explicitly',
+      'the Apple runtime refuses point inspection outside iOS Simulator',
+    ),
+    web: web.contract(
+      'packages/platform-web/src/runtime.test.ts',
+      'preserves a narrow web provider dump including empty successful entries',
+      'the web runtime reports point inspection unavailable',
+    ),
+    linux: linux.contract(
+      'packages/platform-linux/src/runtime.test.ts',
+      'classifies the Linux $name lifecycle denominator against the legacy dispatch cell',
+      'the Linux runtime reports point inspection unavailable',
+    ),
+  },
 } satisfies Record<PublicCommand, CommandCoverageDeclaration>;
 
 /**

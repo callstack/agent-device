@@ -20,6 +20,7 @@ import { gestureRuntimeOperationFacts } from './gesture-runtime.ts';
 import { scrollRuntimeOperationFacts } from './scroll-runtime.ts';
 import { typeTextRuntimeOperationFacts } from './type-text-runtime.ts';
 import { elementTextRuntimeOperationFacts } from './element-text-runtime.ts';
+import { pointInspectionRuntimeOperationFacts } from './point-inspection-runtime.ts';
 import { backRuntimeOperationFacts } from './back-runtime.ts';
 import { orientationRuntimeOperationFacts } from './orientation-runtime.ts';
 import { tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';
@@ -237,6 +238,7 @@ export function createUnavailablePlatformRuntimeFacts(
         fill: frozen.touch,
       }),
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: frozen.elementText }),
+      ...pointInspectionRuntimeOperationFacts({ inspectPoint: frozen.elementText }),
       ...backRuntimeOperationFacts({ back: frozen.back }),
       ...orientationRuntimeOperationFacts({ orientation: frozen.orientation }),
       // Stated directly rather than through `foldRuntimeOperationFacts`, so this hub does not

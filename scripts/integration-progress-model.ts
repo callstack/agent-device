@@ -148,6 +148,8 @@ function summarizeProviderScenarioFlagCoverage(files) {
     ['retainPaths', 'retained install-source materialization'],
     ['retentionMs', 'install-source materialization TTL'],
     ['count', 'repeated press/click/swipe input'],
+    ['pointX', 'point inspection horizontal coordinate'],
+    ['pointY', 'point inspection vertical coordinate'],
     ['pointerCount', 'one- vs two-pointer pan gesture topology'],
     ['fps', 'recording frame-rate request'],
     ['quality', 'recording quality scaling'],

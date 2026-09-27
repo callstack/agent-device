@@ -1,6 +1,7 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
+import { pointInspectionRuntimeOperationFacts } from '@agent-device/contracts/point-inspection-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { RuntimeFacts } from '@agent-device/contracts/platform-runtime';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
@@ -191,6 +192,7 @@ export function limrunAppLogFacts(
       // device always has one, so it is available wherever a capture is.
       ...limrunInteractionOperationFacts(device),
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
+      ...pointInspectionRuntimeOperationFacts({ inspectPoint: elementTextUnavailable }),
       ...limrunNavigationOperationFacts(device),
       ...limrunKeyboardOperationFacts(device),
       ...limrunClipboardOperationFacts(device),

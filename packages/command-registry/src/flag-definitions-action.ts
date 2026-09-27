@@ -4,6 +4,24 @@ import type { FlagDefinition } from './flag-types.ts';
 
 export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
   {
+    key: 'pointX',
+    names: ['--x'],
+    type: 'number',
+    usageLabel: '--x <number>',
+    usageDescription: 'Inspect-point: horizontal screen coordinate',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
+    key: 'pointY',
+    names: ['--y'],
+    type: 'number',
+    usageLabel: '--y <number>',
+    usageDescription: 'Inspect-point: vertical screen coordinate',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'keyframes',
     names: ['--keyframes'],
     type: 'string',

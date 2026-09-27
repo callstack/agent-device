@@ -318,31 +318,56 @@ extension RunnerTests {
   }
 
   func readTextAt(app: XCUIApplication, x: Double, y: Double) -> String? {
+    readPointAt(app: app, x: x, y: y).text
+  }
+
+  func readPointAt(
+    app: XCUIApplication,
+    x: Double,
+    y: Double
+  ) -> (text: String?, elements: [PointInspectionElementPayload]) {
     let point = CGPoint(x: x, y: y)
     let textInputCandidates = textInputCandidatesAt(app: app, point: point)
-    for element in textInputCandidates where prefersExpandedTextRead(element) {
-      if let text = readableText(for: element) {
-        return text
-      }
-    }
-
     let candidates = app.descendants(matching: .any).allElementsBoundByIndex
       .filter { element in
         element.exists && !element.frame.isEmpty && element.frame.contains(point)
       }
       .sorted(by: smallestElementFirst)
 
+    let elements = Array(candidates.prefix(24)).map { element in
+      let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
+      let identifier = element.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+      let value = String(describing: element.value ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      return PointInspectionElementPayload(
+        text: readableText(for: element),
+        label: label.isEmpty ? nil : label,
+        identifier: identifier.isEmpty ? nil : identifier,
+        type: elementTypeName(element.elementType),
+        role: elementTypeName(element.elementType),
+        value: value.isEmpty ? nil : value,
+        frame: SnapshotRect(element.frame),
+        hittable: element.isHittable
+      )
+    }
+
+    for element in textInputCandidates where prefersExpandedTextRead(element) {
+      if let text = readableText(for: element) {
+        return (text, elements)
+      }
+    }
+
     for element in candidates where prefersExpandedTextRead(element) {
       if let text = readableText(for: element) {
-        return text
+        return (text, elements)
       }
     }
     for element in candidates {
       if let text = readableText(for: element) {
-        return text
+        return (text, elements)
       }
     }
-    return nil
+    return (nil, elements)
   }
 
   private func readableText(for element: XCUIElement) -> String? {

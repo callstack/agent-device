@@ -15,6 +15,7 @@ import {
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
+import { pointInspectionRuntimeOperationFacts } from '@agent-device/contracts/point-inspection-runtime';
 import { focusRuntimeOperationFacts } from '@agent-device/contracts/focus-runtime';
 import { TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT } from '@agent-device/contracts/gesture-admission';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
@@ -261,6 +262,7 @@ function linuxFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations>
       ...elementTextRuntimeOperationFacts({
         readTextAtPoint: linuxDesktopFact(device, elementTextKindUnavailable),
       }),
+      ...pointInspectionRuntimeOperationFacts({ inspectPoint: elementTextKindUnavailable }),
       // Parity with the retired `back`/`home` capability bucket (`{ device: true }`): the desktop
       // is the only Linux cell with a target to drive.
       ...backRuntimeOperationFacts({ back: linuxDesktopFact(device, backKindUnavailable) }),

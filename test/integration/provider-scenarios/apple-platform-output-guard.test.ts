@@ -142,13 +142,14 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
 
 // ---------------------------------------------------------------------------
 // SKIPPED_COMMANDS — catalog commands that genuinely cannot be driven against the
-// fake-provider harness, each with a reason. Intentionally EMPTY: every public
-// command is driveable here (an orchestrator with no real workload simply returns a
-// fast, still-scanned error response). Kept as an explicit, enforced set so a future
-// undriveable command has a home and the partition test keeps a new command from
-// escaping the guard silently.
+// fake-provider harness, each with a reason. Kept as an explicit, enforced set so a future
+// undriveable command has a home and the partition test keeps a new command from escaping the
+// guard silently.
 // ---------------------------------------------------------------------------
-const SKIPPED_COMMANDS: Record<string, string> = {};
+const SKIPPED_COMMANDS: Record<string, string> = {
+  [PUBLIC_COMMANDS['inspect-point']]:
+    'requires a local iOS Simulator XCTest runner; provider worlds do not expose that runtime',
+};
 
 // Commands driven last so the priority commands run against a live session.
 const DRIVE_LAST = new Set<string>([PUBLIC_COMMANDS.shutdown, PUBLIC_COMMANDS.close]);

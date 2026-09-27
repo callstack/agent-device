@@ -108,6 +108,7 @@ test.each([
     // The Linux read is value-first where the captured tree is label-first, so the desktop row
     // genuinely reads differently from its snapshot text and advertises the live read.
     expect(binding.facts.operations.readTextAtPoint.available).toBe(device.kind === 'device');
+    expect(binding.facts.operations.inspectPoint.available).toBe(false);
     expect(binding.facts.operations.captureSnapshotWithCustomActions.available).toBe(false);
     expect(binding.facts.operations.captureSnapshotWithoutActiveApp.available).toBe(
       device.kind === 'device',

@@ -16,6 +16,7 @@ import type {
   CaptureScreenshotResult,
   CaptureSnapshotOptions,
   CaptureSnapshotResult,
+  PointInspectionResult,
   DragOptions,
   FlingOptions,
   MaterializationReleaseOptions,
@@ -356,6 +357,8 @@ export function createAgentDeviceClient(
         }),
     },
     capture: {
+      inspectPoint: async (options) =>
+        await executeCommand<PointInspectionResult>('inspect-point', options),
       snapshot: async (options: CaptureSnapshotOptions = {}) => {
         const session = resolveRequestSession(options);
         const data = await executeCommand<Record<string, unknown>>('snapshot', options);

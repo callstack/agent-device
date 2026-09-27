@@ -20,6 +20,7 @@ import type { GestureRuntimeOperations } from './gesture-runtime.ts';
 import type { ScrollRuntimeOperations } from './scroll-runtime.ts';
 import type { TypeTextRuntimeOperations } from './type-text-runtime.ts';
 import type { ElementTextRuntimeOperations } from './element-text-runtime.ts';
+import type { PointInspectionRuntimeOperations } from './point-inspection-runtime.ts';
 import type { BackRuntimeOperations } from './back-runtime.ts';
 import type { OrientationRuntimeOperations } from './orientation-runtime.ts';
 import type { FoldRuntimeOperations } from './fold-runtime.ts';
@@ -74,6 +75,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   ScrollRuntimeOperations &
   TypeTextRuntimeOperations &
   ElementTextRuntimeOperations &
+  PointInspectionRuntimeOperations &
   BackRuntimeOperations &
   OrientationRuntimeOperations &
   FoldRuntimeOperations &
@@ -108,6 +110,7 @@ export const captureSnapshotUse = defineUse({ required: ['captureSnapshot'] });
 export const viewportRuntimeUse = defineUse({ required: ['setViewport'] });
 export const focusRuntimeUse = defineUse({ required: ['focusPoint'] });
 export const typeTextRuntimeUse = defineUse({ required: ['typeText'] });
+export const inspectPointRuntimeUse = defineUse({ required: ['inspectPoint'] });
 export const backRuntimeUse = defineUse({ required: ['back'] });
 export const homeRuntimeUse = defineUse({ required: ['home'] });
 export const orientationRuntimeUse = defineUse({ required: ['setOrientation'] });
