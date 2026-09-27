@@ -1168,11 +1168,8 @@ function createStubClient(params: {
   return {
     command,
     devices: {
+      ...createThrowingMethodGroup<AgentDeviceClient['devices']>(),
       list: async () => [],
-      capabilities: unexpectedCommandCall,
-      boot: unexpectedCommandCall,
-      shutdown: unexpectedCommandCall,
-      pairWearable: unexpectedCommandCall,
     },
     sessions: {
       list: async () => [],
