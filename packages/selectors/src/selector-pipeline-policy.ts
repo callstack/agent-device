@@ -73,9 +73,13 @@ export type SelectorPollBudget = {
 
 /**
  * Consumed by `selectorPollBudget`, which `createWaitPolling` derives its
- * deadline and sleep from. `'none'` is an answer, not an omission: a row that
- * resolves against one capture has no polling contract, so asking for its
- * budget is a caller bug — never a place to default one in.
+ * deadline and sleep from, and — for `promotedTarget` — by
+ * `resolveSelectorInteractionTarget`'s target-readiness loop. `'none'` is an
+ * answer, not an omission: a row that resolves against one capture has no
+ * polling contract, so asking for its budget is a caller bug — never a place
+ * to default one in. Acting rows are not all `'none'`: `promotedTarget` polls
+ * for the target to exist, while `resolvedTarget` and every read row still
+ * resolve against a single capture.
  */
 export type SelectorPollStage = SelectorPollBudget | 'none';
 
@@ -108,13 +112,18 @@ export type SelectorPipelinePolicy = SelectorListPolicy & {
 const WAIT_POLL_BUDGET: SelectorPollBudget = { defaultTimeoutMs: 10_000, intervalMs: 300 };
 
 export const SELECTOR_PIPELINE_POLICIES = {
-  /** `click`/`press`/`longpress`: the tap lands on the actionable owner of the match. */
+  /**
+   * `click`/`press`/`longpress`: the tap lands on the actionable owner of the
+   * match. Polls for the target to appear and become resolvable (a rect) before
+   * refusing — resolution only; occlusion, off-screen, and promotion still run
+   * once, against the winning capture, after the loop ends (#1656).
+   */
   promotedTarget: {
     resolution: SELECTOR_RESOLUTION_POLICIES.act,
     occlusion: 'exclude-and-refuse',
     offscreen: 'refuse',
     promotion: 'hittable-ancestor',
-    poll: 'none',
+    poll: { defaultTimeoutMs: 2_000, intervalMs: 200 },
   },
   /**
    * `fill`/`focus`/`scroll`/gesture endpoints, and the native-ref preflight —

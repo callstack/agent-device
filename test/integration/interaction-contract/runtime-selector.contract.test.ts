@@ -19,6 +19,7 @@ import {
   nonHittableButtonSnapshot,
   RUNNER_CONTINUE_NODES,
   settledWelcomeSnapshot,
+  viewportOnlySnapshot,
 } from './fixtures.ts';
 import { createContractDevice } from './runtime-harness.ts';
 import { runnerSnapshotEntry, runnerTapEntry, withIosContractDaemon } from './daemon-harness.ts';
@@ -195,6 +196,33 @@ test(scenario('nonHittable'), async () => {
   assert.equal(result.kind, 'selector');
   assert.equal(result.targetHittable, false);
   assert.match(result.hint ?? '', /hittable: false/);
+});
+
+test(scenario('targetReadiness'), async () => {
+  const taps: Point[] = [];
+  let captures = 0;
+  const device = createContractDevice(viewportOnlySnapshot(), {
+    captureSnapshot: async (_context, options) => {
+      captures += 1;
+      return {
+        // Polls after the first bypass the selector capture cache (forceFresh); the button appears
+        // only once that bypass is in effect, so a resolution the loop never actually polled for
+        // would leave `captures` at 1 and the tap unsent.
+        snapshot: options?.forceFresh ? continueButtonSnapshot() : viewportOnlySnapshot(),
+      };
+    },
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
+  });
+
+  const result = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+  });
+
+  assert.equal(result.kind, 'selector');
+  assert.ok(captures >= 3, `expected at least 2 polls (>=3 captures), got ${captures}`);
+  assert.deepEqual(taps, [{ x: 60, y: 40 }]);
 });
 
 test(scenario('verifyEvidence'), async () => {

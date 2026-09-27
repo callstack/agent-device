@@ -73,6 +73,16 @@ export const INTERACTION_GUARANTEES = [
   // unique/disambiguated/exact/label-fallback/not-observed provenance,
   // pre-action diagnostics only — never ref-issued or MCP-pinned.
   'resolutionDisclosure',
+  // How the path waits for the target to exist and become actionable before acting: a declared
+  // budget under which a plain no-match keeps retrying, versus a target that must already exist at
+  // dispatch time. Distinct from occlusion/offscreen/nonHittable, which judge a target already
+  // found; this is about whether one is found at all.
+  'targetReadiness',
+  // What the path observes after dispatch to back its success claim, and whether that observation
+  // is advisory (a hint the caller may ignore) or can change the response (a corroborated failure,
+  // a settled diff). Distinct from the opt-in verifyEvidence/settleObservation features; this is the
+  // path's baseline, always-on claim.
+  'outcomeObservation',
 ] as const;
 
 export type InteractionGuarantee = (typeof INTERACTION_GUARANTEES)[number];
@@ -147,6 +157,45 @@ const PARENT_OWNED_TOUCH_POINT_GAP_ISSUE = 'https://github.com/callstack/agent-d
 const SHARED_RESPONSE_CONSTRUCTION: GuaranteeEnforcement = {
   kind: 'runtime',
   via: 'src/daemon/interaction/internal/interaction-touch-response.ts#buildInteractionResponseData',
+};
+
+// runtime-selector and runtime-ref share this waiver by construction: neither path observes the tap
+// outcome by default. The deferred/corroborated-failure outcome mark (a recorded XCTest failure
+// after a tap is an ambiguous outcome, per docs/agents/selector-capture.md) is scoped to
+// navigation-sensitive Android actions and target-authored gestures, not the tap-shaped runtime
+// paths; --settle/--verify are the opt-in ways to observe one.
+const TAP_OUTCOME_NOT_OBSERVED_GAP: GuaranteeEnforcement = {
+  kind: 'waived',
+  reason:
+    'gap: neither path observes the tap outcome by default; only --settle/--verify capture post-action evidence, and the deferred/corroborated-failure outcome mark applies only to navigation-sensitive Android actions and target-authored gestures.',
+  trackingIssue: GAPS_UMBRELLA_ISSUE,
+};
+
+// Both Maestro-compatible fast paths (src/daemon/interaction/internal/interaction-touch-direct-ios.ts)
+// dispatch ONE fused XCTest runner request (`command: 'tap'` with a selectorKey/selectorValue) built
+// in packages/platform-apple/src/interactions.ts#tapElementSelector — not the separate
+// packages/maestro/ flow-script engine, which drives standalone `.yaml` Maestro flows and never
+// participates in an ordinary daemon click. Verified by reading the dispatch call graph
+// (interaction-touch-direct-ios.ts -> BoundTouchExecutor.tapElementSelector ->
+// platform-apple/src/interactions.ts) before writing this cell (AGENTS.md: verify each claim
+// against the native implementation).
+const DIRECT_IOS_SINGLE_QUERY_READINESS: GuaranteeEnforcement = {
+  kind: 'waived',
+  reason:
+    "Intentional: the fused runner request performs a single XCTest selector/frame query per dispatch and does not itself retry for an as-yet-nonexistent target; a miss is a runner failure (see errorTaxonomy) rather than a wait, and delegation-on-error (ADR 0011) is a different path's guarantee, not a retry of this one.",
+};
+
+// Shares the SAME reasoning as TAP_OUTCOME_NOT_OBSERVED_GAP: the tap outcome is not observed on the
+// success path here either. The shared ambiguous-XCTest-failure corroboration
+// (src/daemon/interaction/internal/interaction-ios-tap-outcome.ts#corroborateIosTapFailure) is
+// invoked identically from this fast path and from the tree-based runtime dispatch, but only ever
+// reconsiders a THROWN error — it never validates a call that returned success, so it is not a
+// baseline outcome claim for either path.
+const DIRECT_IOS_OUTCOME_NOT_OBSERVED_GAP: GuaranteeEnforcement = {
+  kind: 'waived',
+  reason:
+    "gap: this replay-only route observes no outcome beyond the runner's own report; --verify/--settle do not apply here (see the inapplicable cells on this row), and the shared ambiguous-failure corroboration only reconsiders a thrown error, never a successful dispatch.",
+  trackingIssue: GAPS_UMBRELLA_ISSUE,
 };
 
 // The two runtime tree paths (selector and ref resolution) run the SAME shared
@@ -238,6 +287,14 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/selector-action-resolution.ts#resolveActionSelector',
       },
+      // press/click/longpress poll the promotedTarget row's readiness budget; fill/hover resolve
+      // against the resolvedTarget row, which declares no poll budget (#1656).
+      targetReadiness: {
+        kind: 'runtime',
+        via: 'src/commands/interaction/runtime/resolution.ts#resolveSelectorInteractionTarget',
+        appliesTo: ['press', 'click', 'longpress'],
+      },
+      outcomeObservation: TAP_OUTCOME_NOT_OBSERVED_GAP,
     },
   },
   'runtime-ref': {
@@ -263,6 +320,12 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/resolution.ts#buildRefResolution',
       },
+      targetReadiness: {
+        kind: 'inapplicable',
+        reason:
+          'A resolved @ref names exactly one node in its authorized frame; ADR 0014 fails a stale or unusable ref at once instead of waiting for a fresher observation to authorize it, so there is no existence budget to poll under.',
+      },
+      outcomeObservation: TAP_OUTCOME_NOT_OBSERVED_GAP,
     },
   },
   'target-drag': {
@@ -319,6 +382,17 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       resolutionDisclosure: {
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/gestures.ts#dragCommand',
+      },
+      targetReadiness: {
+        kind: 'inapplicable',
+        reason:
+          'Both endpoints resolve through the resolvedTarget row (#1656), which declares no poll budget; the readiness budget this feature adds is scoped to the promotedTarget row only.',
+      },
+      outcomeObservation: {
+        kind: 'waived',
+        reason:
+          'gap: target-authored drag has no --settle/--verify observation of the destination; the tap-shaped runtime paths are the only ones with an opt-in evidence route today.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
     },
   },
@@ -394,6 +468,17 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/resolution.ts#EXACT_REF_RESOLUTION',
       },
+      targetReadiness: {
+        kind: 'waived',
+        reason:
+          "Intentional: the fast path dispatches to the web provider's own element handle (clickRef/fillRef/hoverRef), which owns its own auto-wait/actionability semantics outside this repo. The shared preflight still refuses an already-resolved node that fails occlusion/offscreen/keyboard; it does not wait for one to first exist.",
+      },
+      outcomeObservation: {
+        kind: 'waived',
+        reason:
+          'gap: the fast path observes no post-action outcome by default; --settle/--verify disable it and delegate to runtime-ref instead of running here.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
+      },
     },
   },
   coordinate: {
@@ -450,6 +535,16 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       resolutionDisclosure: {
         kind: 'inapplicable',
         reason: 'Coordinates name a point; no element was resolved to disclose.',
+      },
+      targetReadiness: {
+        kind: 'inapplicable',
+        reason:
+          'Coordinates name a point, not an element; there is no target existence to wait for.',
+      },
+      outcomeObservation: {
+        kind: 'inapplicable',
+        reason:
+          'No element was resolved, so there is no target identity to corroborate a post-action outcome against beyond the backend result and opt-in --verify/--settle.',
       },
     },
   },
@@ -513,6 +608,8 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/daemon/interaction/internal/interaction-touch-response.ts#buildInteractionResponseData',
       },
+      targetReadiness: DIRECT_IOS_SINGLE_QUERY_READINESS,
+      outcomeObservation: DIRECT_IOS_OUTCOME_NOT_OBSERVED_GAP,
     },
   },
   'maestro-non-hittable-fallback': {
@@ -575,6 +672,8 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         reason:
           'Maestro owns matching; the fallback is coordinate execution. Cell membership is usage-based: only a dispatch whose runner actually executed the coordinate fallback is this path — allowed-but-not-taken is the direct path and discloses not-observed.',
       },
+      targetReadiness: DIRECT_IOS_SINGLE_QUERY_READINESS,
+      outcomeObservation: DIRECT_IOS_OUTCOME_NOT_OBSERVED_GAP,
     },
   },
 };

@@ -308,6 +308,10 @@
       "types": "./src/facades/observability.ts",
       "default": "./src/facades/observability.ts"
     },
+    "./observation": {
+      "types": "./src/observation.ts",
+      "default": "./src/observation.ts"
+    },
     "./orientation-runtime": {
       "types": "./src/orientation-runtime.ts",
       "default": "./src/orientation-runtime.ts"

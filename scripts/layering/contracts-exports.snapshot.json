@@ -74,6 +74,7 @@
   "@agent-device/contracts/network-runtime-plan",
   "@agent-device/contracts/network-traffic",
   "@agent-device/contracts/observability",
+  "@agent-device/contracts/observation",
   "@agent-device/contracts/orientation-runtime",
   "@agent-device/contracts/perf-runtime",
   "@agent-device/contracts/perf-runtime-host",

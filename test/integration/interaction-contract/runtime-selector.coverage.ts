@@ -29,4 +29,6 @@ export const RUNTIME_SELECTOR_COVERAGE = definePathCoverage('runtime-selector', 
     'runtime-selector resolutionDisclosure: a unique match discloses the unique runtime shape',
     'runtime-selector resolutionDisclosure: an equivalent wrapper chain discloses matchCount, winnerDiagnostic, and structural equivalence',
   ],
+  targetReadiness:
+    'runtime-selector targetReadiness: a target missing on the first capture resolves once a later poll observes it',
 });

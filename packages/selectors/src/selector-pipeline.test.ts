@@ -323,7 +323,13 @@ test('the poll stage answers only for the rows that poll', () => {
       intervalMs: 300,
     });
   }
-  for (const row of NODE_STAGE_ROWS.filter((name) => name !== 'wait' && name !== 'findWait')) {
+  assert.deepEqual(selectorPollBudget(SELECTOR_PIPELINE_POLICIES.promotedTarget), {
+    defaultTimeoutMs: 2_000,
+    intervalMs: 200,
+  });
+  for (const row of NODE_STAGE_ROWS.filter(
+    (name) => name !== 'wait' && name !== 'findWait' && name !== 'promotedTarget',
+  )) {
     assert.throws(() => selectorPollBudget(SELECTOR_PIPELINE_POLICIES[row]), /no poll budget/, row);
   }
 });
@@ -390,7 +396,7 @@ test('the documented per-caller pipelines are the ones declared', () => {
       }),
     ),
     {
-      promotedTarget: ['exclude-and-refuse', 'refuse', 'hittable-ancestor', 'no-poll'],
+      promotedTarget: ['exclude-and-refuse', 'refuse', 'hittable-ancestor', 'poll'],
       resolvedTarget: ['exclude-and-refuse', 'refuse', 'none', 'no-poll'],
       coveredDiagnosis: ['refuse', 'ignore', 'none', 'no-poll'],
       readText: ['ignore', 'ignore', 'none', 'no-poll'],

@@ -408,6 +408,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/ios-snapshot-runtime',
     '@agent-device/capture-kit/ios-snapshot-tree',
     '@agent-device/capture-kit/mobile-snapshot-semantics',
+    '@agent-device/capture-kit/observe-until',
     '@agent-device/capture-kit/perf-capture-admission-ledger',
     '@agent-device/capture-kit/perf-capture-recovery',
     '@agent-device/capture-kit/perf-capture-resource-store',

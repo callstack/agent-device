@@ -46,6 +46,10 @@
       "types": "./src/capture-admission/durable-capture-runtime-recovery.ts",
       "default": "./src/capture-admission/durable-capture-runtime-recovery.ts"
     },
+    "./observe-until": {
+      "types": "./src/observe-until.ts",
+      "default": "./src/observe-until.ts"
+    },
     "./perf-capture-admission-ledger": {
       "types": "./src/capture-admission/perf-capture-admission-ledger.ts",
       "default": "./src/capture-admission/perf-capture-admission-ledger.ts"
