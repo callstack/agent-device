@@ -10,6 +10,8 @@ import type {
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime-operations';
+import { pairAndroidWearable } from './wearable-pairing.ts';
+import type { PairWearableInput } from '@agent-device/contracts/wearable-pairing-runtime';
 import {
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
@@ -424,6 +426,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         ensureReady: available,
         bootTarget: available,
         bootTargetHeadless: device.kind === 'emulator' ? available : headlessUnavailable,
+        pairWearable: available,
         listApps: available,
         ...androidLifecycleFacts(device),
         shutdownTarget: device.kind === 'emulator' ? available : shutdownKindUnavailable,
@@ -502,6 +505,8 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
               { ...input, headless: false },
               request.scope.signal,
             ),
+          pairWearable: async (input: PairWearableInput) =>
+            await pairAndroidWearable(host, request.device, input, request.scope.signal),
           ...(facts.operations.bootTargetHeadless.available
             ? {
                 bootTargetHeadless: async (input: EnsureReadyInput) =>

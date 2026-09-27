@@ -7,6 +7,7 @@ import type {
   AppInstallFromSourceResult,
   AppOpenResult,
   CommandRequestResult,
+  PairWearableResult,
   SessionCloseResult,
   SessionSaveScriptResult,
 } from '@agent-device/contracts/client';
@@ -182,6 +183,14 @@ function shutdownCliOutput(result: CommandRequestResult): CliOutput {
   return { data, text: `${status}: ${device} (${platform})` };
 }
 
+function pairWearableCliOutput(result: PairWearableResult): CliOutput {
+  const text =
+    result.status === 'human-step-required'
+      ? `Wearable transport ready; human step required: ${result.remainingHumanStep ?? 'complete device setup'}`
+      : `Wearable ${result.status}: ${result.wearable.name} with ${result.phone.name}`;
+  return { data: result as unknown as Record<string, unknown>, text };
+}
+
 export async function doctorCliOutput(
   result: CommandRequestResult,
   progress?: CommandProgressState,
@@ -215,6 +224,7 @@ export const managementCliOutputFormatters = {
   shutdown: resultOutput(shutdownCliOutput),
   devices: resultOutput(devicesCliOutput),
   capabilities: resultOutput(capabilitiesCliOutput),
+  pairWearable: resultOutput(pairWearableCliOutput),
   doctor: ({ result, progress }) => doctorCliOutput(result as CommandRequestResult, progress),
   apps: ({ input, result }) =>
     appsCliOutput({

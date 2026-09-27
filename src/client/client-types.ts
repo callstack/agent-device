@@ -86,6 +86,8 @@ import type {
   CommandRequestResult,
   DeviceBootOptions,
   DeviceShutdownOptions,
+  PairWearableOptions,
+  PairWearableResult,
   DoctorCommandOptions,
   DragOptions,
   EventsOptions,
@@ -196,6 +198,7 @@ export type AgentDeviceClient = {
     ) => Promise<AgentDeviceCapabilitiesResult>;
     boot: (options?: DeviceBootOptions) => Promise<CommandResult<'boot'>>;
     shutdown: (options?: DeviceShutdownOptions) => Promise<CommandResult<'shutdown'>>;
+    pairWearable: (options: PairWearableOptions) => Promise<PairWearableResult>;
   };
   sessions: {
     list: (options?: AgentDeviceRequestOverrides) => Promise<AgentDeviceSession[]>;

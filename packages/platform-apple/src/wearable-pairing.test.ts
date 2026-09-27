@@ -1,0 +1,101 @@
+import { expect, test, vi } from 'vitest';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { pairAppleWearable } from './wearable-pairing.ts';
+
+const phone: DeviceInfo = {
+  platform: 'apple',
+  id: 'phone-1',
+  name: 'iPhone 16',
+  kind: 'simulator',
+  target: 'mobile',
+  appleOs: 'ios',
+  booted: true,
+};
+
+const watchInventory = JSON.stringify({
+  devices: {
+    'com.apple.CoreSimulator.SimRuntime.watchOS-11-0': [
+      { name: 'Apple Watch Series 10', udid: 'watch-1', state: 'Booted', isAvailable: true },
+    ],
+  },
+});
+
+test('pairs and activates a selected watchOS simulator', async () => {
+  const calls: string[][] = [];
+  let pairListCount = 0;
+  const run = vi.fn(async ({ args }: { args: readonly string[] }) => {
+    const argv = [...args];
+    calls.push(argv);
+    if (argv.includes('devices')) return result(watchInventory);
+    if (argv.includes('pairs')) {
+      pairListCount += 1;
+      if (pairListCount === 1) return result(JSON.stringify({ pairs: {} }));
+      return result(
+        JSON.stringify({
+          pairs: {
+            'pair-1': {
+              phone: { udid: phone.id },
+              watch: { udid: 'watch-1' },
+              state: pairListCount > 2 ? 'active, connected' : 'paired',
+            },
+          },
+        }),
+      );
+    }
+    if (argv.includes('pair')) return result('pair-1');
+    return result('');
+  });
+
+  const paired = await pairAppleWearable(host(run), phone, { boot: false }, signal());
+
+  expect(paired).toMatchObject({ pairId: 'pair-1', status: 'connected' });
+  expect(paired.wearable).toMatchObject({ id: 'watch-1', appleOs: 'watchos' });
+  expect(calls.some((args) => args.includes('pair_activate'))).toBe(true);
+});
+
+test('rolls back only a pair created by the failed request', async () => {
+  const calls: string[][] = [];
+  const run = vi.fn(async ({ args }: { args: readonly string[] }) => {
+    const argv = [...args];
+    calls.push(argv);
+    if (argv.includes('devices')) return result(watchInventory);
+    if (argv.includes('pairs')) {
+      return calls.filter((entry) => entry.includes('pairs')).length === 1
+        ? result(JSON.stringify({ pairs: {} }))
+        : result(
+            JSON.stringify({
+              pairs: {
+                'pair-1': {
+                  phone: { udid: phone.id },
+                  watch: { udid: 'watch-1' },
+                  state: 'paired',
+                },
+              },
+            }),
+          );
+    }
+    if (argv.includes('pair_activate')) return result('', 1, 'activation failed');
+    if (argv.includes('pair')) return result('pair-1');
+    return result('');
+  });
+
+  await expect(
+    pairAppleWearable(host(run), phone, { boot: false }, signal()),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+  });
+  expect(calls.some((args) => args.includes('unpair') && args.includes('pair-1'))).toBe(true);
+});
+
+function host(run: ReturnType<typeof vi.fn>): PlatformRuntimeHost {
+  return { appleTools: { run } } as unknown as PlatformRuntimeHost;
+}
+
+function result(stdout: string, exitCode = 0, stderr = '') {
+  return { stdout, stderr, exitCode };
+}
+
+function signal() {
+  return new AbortController().signal;
+}

@@ -39,6 +39,7 @@ const unavailableShutdownOperationFacts = Object.freeze({
 });
 
 export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.freeze({
+  pairWearable: unavailable,
   ...unavailableDeploymentOperationFacts,
   ...snapshotRuntimeOperationFacts({
     capture: unavailable,

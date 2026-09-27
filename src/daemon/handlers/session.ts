@@ -130,6 +130,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
       bindDevice,
     }),
   boot: handleSessionStateCommandGroup,
+  'pair-wearable': handleSessionStateCommandGroup,
   shutdown: handleSessionStateCommandGroup,
   appstate: handleSessionStateCommandGroup,
   session_save_script: async ({ req, sessionName, sessionStore }) =>

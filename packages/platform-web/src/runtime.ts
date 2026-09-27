@@ -370,6 +370,7 @@ function webRuntimeFacts(
       providerMode: transport.mode,
     },
     operations: {
+      pairWearable: readinessUnavailable,
       appLogInspect: appLogUnavailable,
       appLogDoctor: appLogUnavailable,
       appLogStart: appLogUnavailable,

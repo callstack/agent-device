@@ -1172,6 +1172,7 @@ function createStubClient(params: {
       capabilities: unexpectedCommandCall,
       boot: unexpectedCommandCall,
       shutdown: unexpectedCommandCall,
+      pairWearable: unexpectedCommandCall,
     },
     sessions: {
       list: async () => [],

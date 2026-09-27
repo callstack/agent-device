@@ -45,6 +45,7 @@ test('every command that deviates from require-owner is a reviewed, diffable set
       'boot',
       'install',
       'install_source',
+      'pair-wearable',
       'prepare',
       'push',
       'reinstall',

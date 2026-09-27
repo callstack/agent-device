@@ -61,6 +61,16 @@ test('simctl parser keeps available supported runtimes and their target semantic
       booted: false,
       simulatorSetPath: '/tmp/custom-set',
     },
+    {
+      platform: 'apple',
+      id: 'watch-1',
+      name: 'Apple Watch',
+      kind: 'simulator',
+      target: 'mobile',
+      appleOs: 'watchos',
+      booted: true,
+      simulatorSetPath: '/tmp/custom-set',
+    },
   ]);
 });
 
@@ -111,9 +121,9 @@ test('simulator inventory scopes bounded simctl and reports fresh booted observa
   ]);
   assert.deepEqual(
     devices.map((device) => device.id),
-    ['iphone-1', 'tv-1'],
+    ['watch-1', 'iphone-1', 'tv-1'],
   );
-  assert.deepEqual(observed, ['iphone-1']);
+  assert.deepEqual(observed, ['iphone-1', 'watch-1']);
 });
 
 test('simulator inventory classifies malformed native output as a command failure', async () => {

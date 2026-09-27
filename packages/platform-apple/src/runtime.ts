@@ -71,6 +71,11 @@ import { appleSystemFacts, createAppleSystemOperations } from './system/runtime.
 import { appleFoldableFacts, createAppleFoldableOperations } from './foldable/runtime.ts';
 import { bindAppleFindTextRuntime, bindAppleSnapshotRuntime } from './runtime-snapshot.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
+import { pairAppleWearable } from './wearable-pairing.ts';
+import type {
+  PairWearableInput,
+  WearablePairingRuntimeOperations,
+} from '@agent-device/contracts/wearable-pairing-runtime';
 
 const owner = localRuntimeOwner('apple');
 const available = Object.freeze({ available: true } as const);
@@ -333,6 +338,11 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         ensureReady: readiness,
         bootTarget: boot,
         bootTargetHeadless: headlessUnavailable,
+        pairWearable:
+          device.kind === 'simulator' &&
+          (resolveDeviceAppleOs(device) === 'ios' || resolveDeviceAppleOs(device) === 'ipados')
+            ? available
+            : unavailable,
         listApps: apps,
         ...appleApplicationLifecycleFacts(device),
         shutdownTarget: shutdownFact(device),
@@ -357,8 +367,16 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             resolveInteractor: host.localInteractors.resolve,
           }),
       );
+      const wearablePairingOperations: Partial<WearablePairingRuntimeOperations> = whenAdmitted(
+        facts.operations.pairWearable,
+        () => ({
+          pairWearable: async (input: PairWearableInput) =>
+            await pairAppleWearable(host, request.device, input, request.scope.signal),
+        }),
+      );
       const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = {
         ...appStateOperations,
+        ...wearablePairingOperations,
         ...logs.operations,
         ...createAppleAppDeploymentOperations({
           host,

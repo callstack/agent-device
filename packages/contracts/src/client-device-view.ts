@@ -6,7 +6,11 @@ import type {
   DeviceTarget,
   PublicPlatform,
 } from '@agent-device/kernel/device';
-import type { AgentDeviceIdentifiers, DeviceCommandBaseOptions } from './client-connection.ts';
+import type {
+  AgentDeviceIdentifiers,
+  AgentDeviceRequestOverrides,
+  DeviceCommandBaseOptions,
+} from './client-connection.ts';
 
 export type AgentDeviceDevice = {
   platform: PublicPlatform;
@@ -104,3 +108,23 @@ export type DeviceBootOptions = DeviceCommandBaseOptions & {
 };
 
 export type DeviceShutdownOptions = DeviceCommandBaseOptions;
+
+export type PairWearableOptions = AgentDeviceRequestOverrides & {
+  phone: {
+    platform: Extract<PublicPlatform, 'ios' | 'android'>;
+    deviceId: string;
+  };
+  wearable?: {
+    deviceId?: string;
+    name?: string;
+  };
+  boot: boolean;
+};
+
+export type PairWearableResult = {
+  pairId: string;
+  phone: AgentDeviceDevice;
+  wearable: AgentDeviceDevice;
+  status: 'connected' | 'paired' | 'human-step-required';
+  remainingHumanStep?: string;
+};

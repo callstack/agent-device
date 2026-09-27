@@ -14,6 +14,7 @@ import {
 import {
   type PlatformRuntimeOperations,
   appStateUse,
+  pairWearableUse,
 } from '@agent-device/contracts/platform-runtime-operations';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
@@ -388,4 +389,208 @@ test('sessionless Android appstate inspects once, binds once, and preserves oper
     'ensureReady:{"androidSerialAllowlist":["emulator-5554","emulator-5555"]}',
     'appState',
   ]);
+});
+
+test('pair-wearable returns both devices and the exact pairing status', async () => {
+  const phone: DeviceInfo = {
+    platform: 'apple',
+    id: 'phone-1',
+    name: 'iPhone 16',
+    kind: 'simulator',
+    target: 'mobile',
+    appleOs: 'ios',
+    booted: true,
+  };
+  const wearable: DeviceInfo = {
+    platform: 'apple',
+    id: 'watch-1',
+    name: 'Apple Watch',
+    kind: 'simulator',
+    target: 'mobile',
+    appleOs: 'watchos',
+    booted: true,
+  };
+  const unavailable = { available: false, reason: 'owner-capability-missing' } as const;
+  const unavailableFacts = createUnavailablePlatformRuntimeFacts(
+    phone,
+    localRuntimeOwner('apple'),
+    {
+      appLog: unavailable,
+      network: unavailable,
+      screenshot: unavailable,
+      viewport: unavailable,
+      focus: unavailable,
+      gesture: unavailable,
+      scroll: unavailable,
+      typeText: unavailable,
+      touch: unavailable,
+      elementText: unavailable,
+      back: unavailable,
+      orientation: unavailable,
+      fold: unavailable,
+      tvRemote: unavailable,
+      keyboard: unavailable,
+      clipboard: unavailable,
+      systemButton: unavailable,
+      triggerAppEvent: unavailable,
+      settings: unavailable,
+      readAlert: unavailable,
+      awaitAlert: unavailable,
+      acceptAlert: unavailable,
+      dismissAlert: unavailable,
+      audioProbeCapture: unavailable,
+      audioProbeQuery: unavailable,
+      lifecycle: applicationLifecycleOperationFacts({
+        resolveOpenTarget: unavailable,
+        prepareApplicationOpen: unavailable,
+        openApplication: unavailable,
+        applyRuntimeHints: unavailable,
+        clearRuntimeHints: unavailable,
+        closeApplication: unavailable,
+        finalizeApplicationClose: unavailable,
+        prepareAppleRunner: unavailable,
+        configureProviderPortReverse: unavailable,
+      }),
+    },
+  );
+  const facts: RuntimeFacts<PlatformRuntimeOperations> = {
+    ...unavailableFacts,
+    operations: { ...unavailableFacts.operations, pairWearable: { available: true } },
+  };
+  const binding: DeviceBinding<PlatformRuntimeOperations> = {
+    device: phone,
+    owner: localRuntimeOwner('apple'),
+    facts,
+    operations: {
+      pairWearable: async () => ({
+        pairId: 'pair-1',
+        phone,
+        wearable,
+        status: 'connected',
+      }),
+    },
+    [Symbol.asyncDispose]: async () => undefined,
+  };
+
+  const response = await withTestDeviceInventory(
+    { local: async () => [phone] },
+    async () =>
+      await handleSessionStateCommands({
+        req: {
+          token: 't',
+          session: 'default',
+          command: 'pair-wearable',
+          positionals: [],
+          input: { phone: { platform: 'ios', deviceId: phone.id }, boot: true },
+        },
+        sessionName: 'default',
+        sessionStore: makeSessionStore('agent-device-session-state-'),
+        inspectFacts: async () => facts,
+        bindDevice: async (selected, use) => {
+          expect(selected).toEqual(phone);
+          expect(use).toBe(pairWearableUse);
+          return narrowDeviceBinding(binding, use);
+        },
+      }),
+  );
+
+  expect(response).toEqual({
+    ok: true,
+    data: {
+      pairId: 'pair-1',
+      phone: {
+        platform: 'ios',
+        appleOs: 'ios',
+        id: 'phone-1',
+        name: 'iPhone 16',
+        kind: 'simulator',
+        target: 'mobile',
+        booted: true,
+      },
+      wearable: {
+        platform: 'ios',
+        appleOs: 'watchos',
+        id: 'watch-1',
+        name: 'Apple Watch',
+        kind: 'simulator',
+        target: 'mobile',
+        booted: true,
+      },
+      status: 'connected',
+    },
+  });
+});
+
+test('pair-wearable rejects unsupported platform leaves before dispatch', async () => {
+  const watch: DeviceInfo = {
+    platform: 'apple',
+    id: 'watch-1',
+    name: 'Apple Watch',
+    kind: 'simulator',
+    target: 'mobile',
+    appleOs: 'watchos',
+    booted: true,
+  };
+  const unavailable = { available: false, reason: 'unsupported-platform-leaf' } as const;
+  const facts = createUnavailablePlatformRuntimeFacts(watch, localRuntimeOwner('apple'), {
+    appLog: unavailable,
+    network: unavailable,
+    screenshot: unavailable,
+    viewport: unavailable,
+    focus: unavailable,
+    gesture: unavailable,
+    scroll: unavailable,
+    typeText: unavailable,
+    touch: unavailable,
+    elementText: unavailable,
+    back: unavailable,
+    orientation: unavailable,
+    fold: unavailable,
+    tvRemote: unavailable,
+    keyboard: unavailable,
+    clipboard: unavailable,
+    systemButton: unavailable,
+    triggerAppEvent: unavailable,
+    settings: unavailable,
+    readAlert: unavailable,
+    awaitAlert: unavailable,
+    acceptAlert: unavailable,
+    dismissAlert: unavailable,
+    audioProbeCapture: unavailable,
+    audioProbeQuery: unavailable,
+    wearablePairing: unavailable,
+    lifecycle: applicationLifecycleOperationFacts({
+      resolveOpenTarget: unavailable,
+      prepareApplicationOpen: unavailable,
+      openApplication: unavailable,
+      applyRuntimeHints: unavailable,
+      clearRuntimeHints: unavailable,
+      closeApplication: unavailable,
+      finalizeApplicationClose: unavailable,
+      prepareAppleRunner: unavailable,
+      configureProviderPortReverse: unavailable,
+    }),
+  });
+  const bindDevice = vi.fn();
+
+  const response = await withTestDeviceInventory(
+    { local: async () => [watch] },
+    async () =>
+      await handleSessionStateCommands({
+        req: {
+          token: 't',
+          session: 'default',
+          command: 'pair-wearable',
+          positionals: [],
+          input: { phone: { platform: 'ios', deviceId: watch.id }, boot: false },
+        },
+        sessionName: 'default',
+        sessionStore: makeSessionStore('agent-device-session-state-'),
+        inspectFacts: async () => facts,
+        bindDevice: bindDevice as BindDeviceRuntime,
+      }),
+  );
+
+  expect(response).toMatchObject({ ok: false, error: { code: 'UNSUPPORTED_OPERATION' } });
+  expect(bindDevice).not.toHaveBeenCalled();
 });

@@ -58,6 +58,7 @@ import {
 } from './platform-runtime.ts';
 import { runtimeUse } from './platform-runtime-use.ts';
 import type { AndroidToolHost } from './platform-runtime-host.ts';
+import type { WearablePairingRuntimeOperations } from './wearable-pairing-runtime.ts';
 
 export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   AppInventoryRuntimeOperations &
@@ -89,6 +90,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   TouchRuntimeOperations &
   DeviceReadinessRuntimeOperations &
   DeviceShutdownRuntimeOperations &
+  WearablePairingRuntimeOperations &
   ApplicationLifecycleRuntimeOperations;
 
 /**
@@ -100,6 +102,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
 export const defineUse = runtimeUse<PlatformRuntimeOperations>();
 
 export const bootTargetUse = defineUse({ required: ['bootTarget'] });
+export const pairWearableUse = defineUse({ required: ['pairWearable'] });
 export const bootTargetHeadlessUse = defineUse({
   required: ['bootTargetHeadless'],
 });

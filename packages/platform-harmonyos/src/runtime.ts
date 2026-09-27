@@ -323,6 +323,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         listApps: available,
         ...harmonyLifecycleFacts(device),
         shutdownTarget: unavailable,
+        pairWearable: unavailable,
       },
     });
   };
