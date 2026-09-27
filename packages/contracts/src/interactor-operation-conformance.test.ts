@@ -35,6 +35,7 @@ const EXPECTATIONS: {
   writeClipboard: { method: 'writeClipboard', input: { text: '' } },
   appSwitcher: { method: 'appSwitcher', input: {} },
   actionButton: { method: 'actionButton', input: {} },
+  screenLock: { method: 'screenLock', input: {} },
   triggerAppEvent: { method: 'open', input: { eventUrl: 'myapp://x' } },
   setSetting: {
     method: 'setSetting',

@@ -151,6 +151,7 @@ const INTERACTOR_SITES: Record<string, InteractorDrive> = {
   'ios-simulator.interactor-app-state.read': [IOS_SIMULATOR, (i) => i.appState!()],
   'ios-simulator.interactor-app-switcher.open': [IOS_SIMULATOR, (i) => i.appSwitcher!()],
   'ios-simulator.interactor-action-button.press': [IOS_SIMULATOR, (i) => i.actionButton!()],
+  'ios-simulator.interactor-screen-lock.lock': [IOS_SIMULATOR, (i) => i.screenLock!()],
   'tvos.interactor-tv-remote.hold': [TVOS_SIMULATOR, (i) => i.tvRemote!('select', 500)],
   'ios-simulator.interactor-keyboard-dismiss.dismiss': [IOS_SIMULATOR, (i) => i.keyboardDismiss!()],
   'ios-simulator.interactor-keyboard-enter.return': [IOS_SIMULATOR, (i) => i.keyboardEnter!()],

@@ -23,6 +23,7 @@ enum CommandType: String, Codable, CaseIterable {
   case rotate
   case appSwitcher
   case actionButton
+  case screenLock
   case keyboardDismiss
   case keyboardReturn
   case alert
@@ -253,7 +254,7 @@ extension Command {
     case .recordStop, .uptime, .terminate, .targetReset, .shutdown:
       return .runnerLifecycle
 
-    case .actionButton:
+    case .actionButton, .screenLock:
       return .presentedSurfaceMutation
 
     case .querySelector:
@@ -389,6 +390,7 @@ struct TargetActivationFactPayload: Codable {
 
 struct DataPayload: Codable {
   var message: String?
+  var state: String?
   var imageBase64: String?
   var text: String?
   var found: Bool?

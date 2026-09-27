@@ -49,6 +49,7 @@ export const systemCliOutputFormatters = withSettleCapableNotes({
   fold: messageOutput,
   'app-switcher': messageOutput,
   'action-button': messageOutput,
+  'screen-lock': messageOutput,
   keyboard: resultOutput(keyboardCliOutput),
   clipboard: resultOutput(clipboardCliOutput),
   'tv-remote': messageOutput,

@@ -12,6 +12,7 @@ import {
   actionButtonRuntimeUse,
   appSwitcherRuntimeUse,
   homeRuntimeUse,
+  screenLockRuntimeUse,
   type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { SystemButton } from '@agent-device/contracts/system-button-runtime';
@@ -63,7 +64,13 @@ const unavailable = Object.freeze({
  */
 const EXPECTED: Record<
   SystemButtonCommand,
-  { button: SystemButton; use: unknown; message: string; refusedOn: DeviceInfo }
+  {
+    button: SystemButton;
+    use: unknown;
+    message: string;
+    refusedOn: DeviceInfo;
+    state?: 'locked';
+  }
 > = {
   home: { button: 'home', use: homeRuntimeUse, message: 'Home', refusedOn: macOsDevice },
   'app-switcher': {
@@ -77,6 +84,13 @@ const EXPECTED: Record<
     use: actionButtonRuntimeUse,
     message: 'Pressed Action Button',
     refusedOn: iosSimulator,
+  },
+  'screen-lock': {
+    button: 'screenLock',
+    use: screenLockRuntimeUse,
+    message: 'Screen locked',
+    refusedOn: macOsDevice,
+    state: 'locked',
   },
 };
 
@@ -149,6 +163,7 @@ test.each(Object.keys(EXPECTED) as SystemButtonCommand[])(
     expect(await resolved.execute(executionParams(command))).toEqual({
       action: command,
       message: expected.message,
+      ...(expected.state === undefined ? {} : { state: expected.state }),
     });
     expect(harness.press).toHaveBeenCalledTimes(1);
   },

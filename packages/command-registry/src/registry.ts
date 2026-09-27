@@ -41,6 +41,7 @@ import { inventoryUse } from '@agent-device/contracts/platform-module';
 import {
   alertRuntimePlanUses,
   actionButtonRuntimeUse,
+  screenLockRuntimeUse,
   foldRuntimeUse,
   appEventRuntimeUse,
   appStateRuntimeUses,
@@ -1574,6 +1575,16 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // to leave alone (#2699).
     ...GENERIC_MUTATING_COMMAND_TRAITS,
     platformExecution: { kind: 'device-runtime', uses: [actionButtonRuntimeUse] },
+  },
+  {
+    name: 'screen-lock',
+    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
+    catalog: { group: 'public', key: 'screenLock' },
+    frameworkTier: 'extended',
+    // A verified Lock Screen transition is a system mutation. It deliberately has no settle
+    // observation: reactivating the session app would destroy the surface this command creates.
+    ...GENERIC_MUTATING_COMMAND_TRAITS,
+    platformExecution: { kind: 'device-runtime', uses: [screenLockRuntimeUse] },
   },
   {
     name: 'install-from-source',

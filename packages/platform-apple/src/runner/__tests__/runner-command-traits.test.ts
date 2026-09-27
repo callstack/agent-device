@@ -57,6 +57,7 @@ test('runner command trait table pins lifecycle-sensitive command groups', () =>
       'recordStop',
       'remotePress',
       'rotate',
+      'screenLock',
       'shutdown',
       'type',
     ],

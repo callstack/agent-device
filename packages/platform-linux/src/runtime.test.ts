@@ -220,6 +220,8 @@ function expectLinuxNavigationAndKeyboardFacts(
     'appSwitcher',
     // The Action Button is iPhone/iPad hardware; the Linux desktop has no equivalent control.
     'actionButton',
+    // Lock Screen transitions are an iPhone/iPad Simulator host operation.
+    'screenLock',
     // Nor does it have a foldable hinge to pose.
     'setFoldPose',
     // R57: the retired `trigger-app-event` descriptor declared `linux: {}` too.

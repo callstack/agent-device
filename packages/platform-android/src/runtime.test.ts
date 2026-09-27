@@ -215,6 +215,25 @@ test('Android refuses the action-button fact on every kind', async () => {
   }
 });
 
+test('Android refuses screen-lock on every kind', async () => {
+  for (const runtimeDevice of [
+    ANDROID_EMULATOR,
+    { ...ANDROID_EMULATOR, kind: 'device' as const },
+    UNKNOWN_KIND_DEVICE,
+  ]) {
+    const binding = await bindOrdinary(
+      createAndroidPlatformRuntime(androidNavigationHost()),
+      runtimeDevice,
+    );
+    expect(binding.facts.operations.screenLock).toEqual({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: 'Android has no key event for this system button.',
+    });
+    expect(binding.operations.screenLock).toBeUndefined();
+  }
+});
+
 test('Android refuses the fold fact on every kind', async () => {
   for (const runtimeDevice of [
     ANDROID_EMULATOR,

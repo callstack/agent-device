@@ -374,6 +374,18 @@ function expectNavigationAndKeyboardFacts(
   expectOperationAvailability(binding, 'home', springboard);
   expectOperationAvailability(binding, 'appSwitcher', springboard);
 
+  // Screen locking is a simulator-only host transition on iPhone and iPad. Physical devices and
+  // every other Apple platform leaf must refuse it before runner dispatch.
+  const screenLock =
+    device.kind === 'simulator' && (device.appleOs === 'ios' || device.appleOs === 'ipados');
+  expectOperationAvailability(binding, 'screenLock', screenLock);
+  if (!screenLock) {
+    expect(binding.facts.operations.screenLock).toHaveProperty(
+      'reason',
+      device.kind === 'simulator' ? 'unsupported-platform-leaf' : 'unsupported-device-kind',
+    );
+  }
+
   // orientation and keyboard dismiss/enter share mobile-input eligibility: unavailable on tvOS
   // (focus-only XCUIRemote navigation), macOS (an AppKit desktop host), and watchOS.
   const mobileInputEligible =

@@ -98,6 +98,11 @@ export const INTERACTOR_OPERATIONS = [
     label: SYSTEM_BUTTON_LABELS.actionButton,
     bind: (signal, resolve) => bindSystemButton('actionButton', signal, resolve),
   },
+  {
+    operation: 'screenLock',
+    label: SYSTEM_BUTTON_LABELS.screenLock,
+    bind: (signal, resolve) => bindSystemButton('screenLock', signal, resolve),
+  },
   { operation: 'triggerAppEvent', label: 'trigger-app-event', bind: bindAppEvent },
   { operation: 'setSetting', label: 'settings', bind: bindSetSetting },
   { operation: 'readSetting', label: 'settings read', bind: bindReadSetting },

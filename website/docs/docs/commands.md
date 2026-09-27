@@ -54,6 +54,7 @@ agent-device orientation portrait
 agent-device orientation landscape-left
 agent-device app-switcher
 agent-device action-button
+agent-device screen-lock --platform ios --device <simulator-udid>
 agent-device fold closed
 agent-device fold half-open
 agent-device fold open
@@ -96,6 +97,8 @@ agent-device fold open
 - A simulator scoped to a non-default set with `--ios-simulator-device-set` is refused before any hinge is touched with `UNSUPPORTED_OPERATION` and `details.reason: "unsupported-device-scope"`. The HID send accepts `--set`, but `devicectl device info displays` and `devicectl device motion hinge-angle` accept only `--device` and resolve a scoped simulator as not found, so the pose could not be read back (ADR 0025). Run `fold` against a simulator in the default set.
 - `fold` costs one bounded hinge stream per read, and devicectl's smallest stream is five seconds: `closed` and `open` take about ten seconds, `half-open` about sixteen, because the hinge animates and the command waits for it to stop. A hinge whose last reading is some other pose fails with `COMMAND_FAILED` and `reason: fold-pose-unverified`, naming the angle CoreDevice still reports. A hinge seen `half-open` but never at rest fails with `reason: fold-pose-unsettled`, naming the observed and previous angles: the requested category was observed, and what is missing is a pose the hinge holds (#2730).
 - `action-button` is not a cheap command to loop. On an iPhone 17 Pro Simulator the press itself spent about five seconds inside XCUITest, while `home` and `app-switcher` on the same session took under two seconds each.
+- `screen-lock` transitions an iPhone or iPad Simulator to its Lock Screen. It is idempotent and returns `{ action: "screen-lock", state: "locked" }` only after both SpringBoard's lock state and a visible, non-empty SpringBoard surface agree. It never means a process mutex, device claim, or runner lease.
+- `screen-lock` is unsupported on physical devices, macOS, tvOS, watchOS, visionOS, Android, web, Linux, HarmonyOS, and Vega. Unsupported targets fail with `UNSUPPORTED_OPERATION` before dispatch.
 - On iOS devices, `http(s)://` URLs open in Safari when no app is active. Custom scheme URLs require an active app in the session.
 - Commands that need one concrete device refuse to guess: if no `--device`/`--udid`/`--serial` is given and several candidates are equally preferred (for example two booted emulators), the command fails with `AMBIGUOUS_MATCH` and lists them, rather than picking one and returning a successful answer about a device you did not select. Preferences still apply first — virtual over physical, booted over offline — so one booted emulator beside offline ones resolves normally, as does any command running inside an existing session. `devices` lists everything as before.
 - Commands that omit `--session` use an implicit `default` session scoped to the caller's current git worktree or working directory. This keeps independent local agents from accidentally attaching to each other's default session.

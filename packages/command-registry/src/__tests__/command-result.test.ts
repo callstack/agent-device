@@ -14,6 +14,7 @@ import type {
   BackCommandResult,
   HomeCommandResult,
   OrientationCommandResult,
+  ScreenLockCommandResult,
   TvRemoteCommandResult,
 } from '@agent-device/contracts/navigation';
 import type { ClipboardCommandResult } from '@agent-device/contracts/clipboard';
@@ -56,6 +57,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
   const back: Equal<CommandResult<'back'>, BackCommandResult> = true;
   const orientation: Equal<CommandResult<'orientation'>, OrientationCommandResult> = true;
   const appSwitcher: Equal<CommandResult<'app-switcher'>, AppSwitcherCommandResult> = true;
+  const screenLock: Equal<CommandResult<'screen-lock'>, ScreenLockCommandResult> = true;
   const clipboard: Equal<CommandResult<'clipboard'>, ClipboardCommandResult> = true;
   const appstate: Equal<CommandResult<'appstate'>, AppStateCommandResult> = true;
   const keyboard: Equal<CommandResult<'keyboard'>, KeyboardCommandResult> = true;
@@ -86,6 +88,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
     back,
     orientation,
     appSwitcher,
+    screenLock,
     clipboard,
     appstate,
     keyboard,
@@ -127,6 +130,7 @@ test('CommandResultMap is seeded only from already-existing contract result type
     | 'orientation'
     | 'app-switcher'
     | 'action-button'
+    | 'screen-lock'
     | 'fold'
     | 'clipboard'
     | 'appstate'

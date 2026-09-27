@@ -154,6 +154,13 @@ export function createAppleInteractor(
         runnerOpts,
       );
     },
+    screenLock: async () => {
+      await runAppleRunnerCommand(
+        device,
+        { command: 'screenLock', appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+    },
     tvRemote: async (button, durationMs) => {
       await runAppleRunnerCommand(
         device,

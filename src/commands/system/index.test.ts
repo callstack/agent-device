@@ -7,6 +7,7 @@ import type {
   FoldCommandOptions,
   HomeCommandOptions,
   OrientationCommandOptions,
+  ScreenLockCommandOptions,
   TvRemoteCommandOptions,
 } from '../../client/client-types.ts';
 import type { CommandResult } from '@agent-device/command-registry/command-result';
@@ -62,12 +63,21 @@ describe('system command interface', () => {
     expectTypeOf<AgentDeviceCommandClient['actionButton']>().toEqualTypeOf<
       (options?: ActionButtonCommandOptions) => Promise<CommandResult<'action-button'>>
     >();
+    expectTypeOf<AgentDeviceCommandClient['screenLock']>().toEqualTypeOf<
+      (options?: ScreenLockCommandOptions) => Promise<CommandResult<'screen-lock'>>
+    >();
     expectTypeOf<AgentDeviceCommandClient['tvRemote']>().toEqualTypeOf<
       (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>
     >();
   });
 
-  const parameterless = ['appstate', 'home', 'app-switcher', 'action-button'] as const;
+  const parameterless = [
+    'appstate',
+    'home',
+    'app-switcher',
+    'action-button',
+    'screen-lock',
+  ] as const;
 
   test('parameterless readers project common selection flags through', () => {
     for (const command of parameterless) {

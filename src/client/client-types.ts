@@ -115,6 +115,7 @@ import type {
   PrepareCommandOptions,
   PressOptions,
   ReactNativeCommandOptions,
+  ScreenLockCommandOptions,
   RecordOptions,
   ReplayRunOptions,
   ReplayTestOptions,
@@ -169,6 +170,7 @@ export type AgentDeviceCommandClient = {
   fold: (options: FoldCommandOptions) => Promise<CommandResult<'fold'>>;
   appSwitcher: (options?: AppSwitcherCommandOptions) => Promise<CommandResult<'app-switcher'>>;
   actionButton: (options?: ActionButtonCommandOptions) => Promise<CommandResult<'action-button'>>;
+  screenLock: (options?: ScreenLockCommandOptions) => Promise<CommandResult<'screen-lock'>>;
   tvRemote: (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>;
   wait: (options: WaitCommandOptions) => Promise<CommandResult<'wait'>>;
   alert: (options?: AlertCommandOptions) => Promise<CommandRequestResult>;
