@@ -13,14 +13,16 @@ import type {
 } from './platform-runtime.ts';
 import { screenshotRuntimeOperationFacts } from './screenshot-runtime.ts';
 import { snapshotRuntimeOperationFacts } from './snapshot-runtime.ts';
-import { selectorObservationRuntimeOperationFacts } from './selector-observation-runtime.ts';
+import {
+  pointInspectionRuntimeOperationFacts,
+  selectorObservationRuntimeOperationFacts,
+} from './selector-observation-runtime.ts';
 import { viewportRuntimeOperationFacts } from './viewport-runtime.ts';
 import { focusRuntimeOperationFacts } from './focus-runtime.ts';
 import { gestureRuntimeOperationFacts } from './gesture-runtime.ts';
 import { scrollRuntimeOperationFacts } from './scroll-runtime.ts';
 import { typeTextRuntimeOperationFacts } from './type-text-runtime.ts';
 import { elementTextRuntimeOperationFacts } from './element-text-runtime.ts';
-import { pointInspectionRuntimeOperationFacts } from './point-inspection-runtime.ts';
 import { backRuntimeOperationFacts } from './back-runtime.ts';
 import { orientationRuntimeOperationFacts } from './orientation-runtime.ts';
 import { tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';

@@ -11,7 +11,10 @@ import type { ScreenRecordingRuntimeHost } from './screen-recording-runtime-host
 import type { ScreenRecordingRuntimeOperations } from './screen-recording-runtime.ts';
 import type { ScreenshotRuntimeOperations } from './screenshot-runtime.ts';
 import type { SnapshotRuntimeHost, SnapshotRuntimeOperations } from './snapshot-runtime.ts';
-import type { SelectorObservationRuntimeOperations } from './selector-observation-runtime.ts';
+import type {
+  PointInspectionRuntimeOperations,
+  SelectorObservationRuntimeOperations,
+} from './selector-observation-runtime.ts';
 import type { ViewportRuntimeOperations } from './viewport-runtime.ts';
 import type { FocusRuntimeOperations } from './focus-runtime.ts';
 import type { GestureCommandInput, GestureSemanticInput } from './gesture-plan-types.ts';
@@ -20,7 +23,6 @@ import type { GestureRuntimeOperations } from './gesture-runtime.ts';
 import type { ScrollRuntimeOperations } from './scroll-runtime.ts';
 import type { TypeTextRuntimeOperations } from './type-text-runtime.ts';
 import type { ElementTextRuntimeOperations } from './element-text-runtime.ts';
-import type { PointInspectionRuntimeOperations } from './point-inspection-runtime.ts';
 import type { BackRuntimeOperations } from './back-runtime.ts';
 import type { OrientationRuntimeOperations } from './orientation-runtime.ts';
 import type { FoldRuntimeOperations } from './fold-runtime.ts';
