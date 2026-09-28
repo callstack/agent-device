@@ -272,6 +272,8 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       ...from(
         KERNEL_ERRORS,
         'DaemonError',
+        'ErrorWireDetails',
+        'DispatchDisclosure',
         'DiagnosticsRecordRef',
         'ErrorCause',
         'readDiagnosticsRecordRef',

@@ -6,6 +6,7 @@
 // gesture/viewport calls against it to pin the session transport contract.
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
 import net from 'node:net';
 import { PassThrough } from 'node:stream';
@@ -13,6 +14,11 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 import './test-utils/android-host-test-setup.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import {
+  assertDispatchDisclosureDriversMatchRows,
+  DISPATCH_DISCLOSURE_TABLE_PATH,
+  dispatchDisclosureRowsOwnedBy,
+} from '@agent-device/contracts/dispatch-disclosure-fixtures';
 import {
   withAndroidAdbProvider,
   type AndroidAdbProcess,
@@ -746,3 +752,62 @@ test('a structured ok=false viewport response stops the session before the one-s
   assert.deepEqual(viewportResult, { viewport: { x: 5, y: 6, width: 300, height: 400 } });
   assert.ok(oneShotArgs?.includes('viewport'));
 });
+
+// contracts/fixtures/dispatch-disclosure.json, persistent-session gesture rows.
+
+async function sessionGestureFailure(answerGesture: (requestId: string) => string): Promise<void> {
+  const device = makeIsolatedDevice();
+  await startFakeTouchHelperSession(device, (command, requestId) =>
+    command.startsWith('gesture')
+      ? answerGesture(requestId)
+      : sessionHeaderResponse({
+          agentDeviceProtocol: 'android-snapshot-helper-v1',
+          requestId,
+          ok: 'true',
+        }),
+  );
+  await withAndroidAdbProvider(
+    { exec: currentVersionAdb(async () => ({ exitCode: 0, stdout: '', stderr: '' })) },
+    { serial: device.id },
+    async () => await executeAndroidTouchHelperPlan(device, lowerAndroidTouchPlan(flingPlan())),
+  );
+}
+
+const SESSION_DISPATCH_DRIVERS: Record<string, () => Promise<void>> = {
+  'android-helper.gesture-session.reported-failure': () =>
+    sessionGestureFailure((requestId) =>
+      sessionHeaderResponse({
+        agentDeviceProtocol: 'android-snapshot-helper-v1',
+        requestId,
+        ok: 'false',
+        errorType: 'java.lang.IllegalStateException',
+        message: 'injectInputEvent returned false',
+      }),
+    ),
+  'android-helper.gesture-session.transport-failure': () =>
+    sessionGestureFailure(() => 'not a session response'),
+};
+
+const SESSION_DISPATCH_ROWS = dispatchDisclosureRowsOwnedBy(
+  import.meta.url,
+  fs.readFileSync(DISPATCH_DISCLOSURE_TABLE_PATH, 'utf8'),
+);
+
+test('every persistent-session gesture dispatch-disclosure row has exactly one driver', () => {
+  assertDispatchDisclosureDriversMatchRows(
+    SESSION_DISPATCH_ROWS,
+    Object.keys(SESSION_DISPATCH_DRIVERS),
+  );
+});
+
+for (const row of SESSION_DISPATCH_ROWS) {
+  test(`${row.id}: ${row.trigger} → dispatched ${row.dispatched}`, async () => {
+    const drive = SESSION_DISPATCH_DRIVERS[row.id];
+    assert.ok(drive, `no driver for ${row.id}`);
+    await assert.rejects(drive(), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.dispatched, row.dispatched);
+      return true;
+    });
+  });
+}

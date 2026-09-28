@@ -31,7 +31,7 @@ import {
   sendAndroidImeHelperText,
 } from './ime-helper.ts';
 import { isAndroidTestImeActive } from './ime-lifecycle.ts';
-import { focusAndroid } from './input-actions.ts';
+import { discloseAdbInputDispatch, focusAndroid } from './input-actions.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
 /**
@@ -269,17 +269,27 @@ async function typeAndroidShell(
   options: { action: AndroidTextInputAction; text: string; chunkSize: number; delayMs: number },
 ): Promise<void> {
   const parts = options.text.split('\n');
-  for (const [partIndex, part] of parts.entries()) {
-    const chunks = chunkAndroidInputText(part, options.chunkSize);
-    for (const [chunkIndex, chunk] of chunks.entries()) {
-      await typeAndroidShellChunk(device, chunk);
-      if (options.delayMs > 0 && (chunkIndex + 1 < chunks.length || partIndex + 1 < parts.length)) {
-        await sleep(options.delayMs);
+  let dispatchedSteps = 0;
+  try {
+    for (const [partIndex, part] of parts.entries()) {
+      const chunks = chunkAndroidInputText(part, options.chunkSize);
+      for (const [chunkIndex, chunk] of chunks.entries()) {
+        await typeAndroidShellChunk(device, chunk);
+        dispatchedSteps += 1;
+        if (
+          options.delayMs > 0 &&
+          (chunkIndex + 1 < chunks.length || partIndex + 1 < parts.length)
+        ) {
+          await sleep(options.delayMs);
+        }
+      }
+      if (partIndex + 1 < parts.length) {
+        await runAndroidShell(device, ['input', 'keyevent', 'ENTER']);
+        dispatchedSteps += 1;
       }
     }
-    if (partIndex + 1 < parts.length) {
-      await runAndroidShell(device, ['input', 'keyevent', 'ENTER']);
-    }
+  } catch (error) {
+    throw discloseAdbInputDispatch(error, dispatchedSteps);
   }
   emitAndroidTextDiagnostic(options.action, 'adb-shell', options.text);
 }

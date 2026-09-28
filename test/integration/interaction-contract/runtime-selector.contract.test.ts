@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
 import type { Point } from '@agent-device/kernel/snapshot';
 import { selector } from '../../../src/commands/interaction/runtime/selector-read-utils.ts';
-import { assertRpcOk } from '../provider-scenarios/assertions.ts';
+import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import { scenarioName, scenarioNames } from './coverage-manifest.ts';
 import { RUNTIME_SELECTOR_COVERAGE } from './runtime-selector.coverage.ts';
@@ -289,6 +289,21 @@ test(scenario('errorTaxonomy'), async () => {
     },
   );
 });
+
+test(
+  scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'errorTaxonomy')[1]!,
+  async () => {
+    await withIosContractDaemon(
+      [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerSnapshotEntry(RUNNER_CONTINUE_NODES)],
+      async (daemon) => {
+        const press = await daemon.callCommand('press', ['label=Missing']);
+        const error = assertRpcError(press, 'COMMAND_FAILED', /Selector did not match/);
+        assert.equal((error.details as Record<string, unknown>)?.dispatched, 'no');
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
 
 test(scenario('responseIdentity'), async () => {
   const device = createContractDevice(continueButtonSnapshot(), {

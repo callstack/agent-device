@@ -172,6 +172,10 @@
       "types": "./src/device-shutdown-runtime.ts",
       "default": "./src/device-shutdown-runtime.ts"
     },
+    "./dispatch-disclosure-fixtures": {
+      "types": "./src/dispatch-disclosure.fixtures.ts",
+      "default": "./src/dispatch-disclosure.fixtures.ts"
+    },
     "./divergence": {
       "types": "./src/facades/divergence.ts",
       "default": "./src/facades/divergence.ts"

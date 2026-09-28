@@ -40,6 +40,7 @@
   "@agent-device/contracts/device-boot",
   "@agent-device/contracts/device-readiness-runtime",
   "@agent-device/contracts/device-shutdown-runtime",
+  "@agent-device/contracts/dispatch-disclosure-fixtures",
   "@agent-device/contracts/divergence",
   "@agent-device/contracts/durable-resource",
   "@agent-device/contracts/durable-resource-envelope",
