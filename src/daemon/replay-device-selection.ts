@@ -9,7 +9,7 @@ import {
   buildMaestroReplayTargetDeviceResolutionOptions,
   buildReplayScriptPlatformFlags,
   readScriptReplaySelection,
-} from './replay/index.ts';
+} from '@agent-device/replay-port/replay-script-selection';
 
 export type ReplayTargetDeviceResolution = {
   flags: CommandFlags;

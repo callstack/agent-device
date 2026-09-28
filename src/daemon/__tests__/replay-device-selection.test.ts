@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseReplayInput } from '@agent-device/ad-script';
 import { buildReplayTargetDeviceResolution } from '../replay-device-selection.ts';
-import { buildReplayScriptPlatformFlags } from '../replay/index.ts';
+import { buildReplayScriptPlatformFlags } from '@agent-device/replay-port/replay-script-selection';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { replayScriptSourceBundleFor } from '../../__tests__/test-utils/replay-script-source.ts';
 

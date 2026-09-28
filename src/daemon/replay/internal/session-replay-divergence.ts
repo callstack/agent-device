@@ -7,7 +7,7 @@ import { displayLabel, formatRole } from '@agent-device/capture-kit/snapshot-lin
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { collectReplaySelectorCandidates } from './session-replay-heal.ts';
+import { collectReplaySelectorCandidates } from '@agent-device/replay-port/session-replay-heal';
 import { buildSelectorCandidates, resolveReplaySuggestionCandidate } from '@agent-device/selectors';
 import { collectSettleChromeRefs } from '@agent-device/capture-kit/snapshot-chrome';
 import { buildAndPersistReplayDivergenceResume } from './session-replay-resume.ts';

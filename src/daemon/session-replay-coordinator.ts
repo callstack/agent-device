@@ -16,7 +16,7 @@ import {
   scriptTargetPath,
   type SessionScriptPublicationState,
 } from './session-script-publication-state.ts';
-import { healedScriptSiblingPath } from './replay/index.ts';
+import { healedScriptSiblingPath } from '@agent-device/replay-port/session-replay-heal';
 import type {
   ReplayCoordinator,
   ReplayResumeStamper,

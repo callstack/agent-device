@@ -18,13 +18,13 @@ import {
 import { createDaemonMaestroRuntimePort } from '@agent-device/maestro/daemon-runtime-port';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { buildReplayBuiltinVars } from '@agent-device/replay-port/session-replay-vars';
-import { createMaestroReplayObserver } from './session-replay-maestro-observer.ts';
+import { createMaestroReplayObserver } from '@agent-device/replay-port/session-replay-maestro-observer';
 import { maestroOperationDispatchRequest } from '@agent-device/replay-port/session-replay-maestro-request';
 import {
   buildTypedMaestroReplayErrorResponse,
   buildTypedMaestroSuccessResponse,
 } from './session-replay-maestro-response.ts';
-import { buildMaestroReplayTargetDeviceResolutionOptions } from './replay-script-selection.ts';
+import { buildMaestroReplayTargetDeviceResolutionOptions } from '@agent-device/replay-port/replay-script-selection';
 import {
   readReplayScriptSourceFile,
   REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE,

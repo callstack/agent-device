@@ -6,7 +6,7 @@ import type {
   ReplaySessionView,
 } from '@agent-device/replay-port/command-types';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
-import { healedScriptSiblingPath } from './session-replay-heal.ts';
+import { healedScriptSiblingPath } from '@agent-device/replay-port/session-replay-heal';
 import {
   errorResponse,
   noActiveSessionError,

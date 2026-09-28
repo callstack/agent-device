@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import type { MaestroActionEvent } from '@agent-device/maestro';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
 import { createMaestroReplayObserver } from '../session-replay-maestro-observer.ts';
 
 test('forwards command labels to progress and replay trace projection', () => {

@@ -515,6 +515,9 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-device/device-selection':
+        specifier: workspace:*
+        version: link:../device-selection
       '@agent-device/host-kit':
         specifier: workspace:*
         version: link:../host-kit

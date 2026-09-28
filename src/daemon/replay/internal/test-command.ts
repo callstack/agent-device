@@ -36,7 +36,7 @@ import {
   buildReplayTestShardFlags,
   buildReplayTestShardTargetResolver,
   readReplayTestShardSelection,
-} from './session-test-shard-devices.ts';
+} from '@agent-device/replay-port/session-test-shard-devices';
 import {
   toReplayTestAttemptOutcome,
   toReplayTestFinalizeFailure,
@@ -45,7 +45,7 @@ import {
   buildReplayTestVideoOpenLifecycle,
   finalizeReplayTestVideoRecording,
   startReplayTestVideoRecordingIfReady,
-} from './session-replay-video-recording.ts';
+} from '@agent-device/replay-port/session-replay-video-recording';
 import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from '@agent-device/replay-port/session-replay-test-policy';
 import {
   errorResponse,

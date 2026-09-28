@@ -9,6 +9,7 @@
     "@agent-device/ad-script": "workspace:*",
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
+    "@agent-device/device-selection": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*",
     "@agent-device/maestro": "workspace:*",
@@ -28,9 +29,25 @@
       "types": "./src/daemon-port/replay-dispatch-envelope.ts",
       "default": "./src/daemon-port/replay-dispatch-envelope.ts"
     },
+    "./replay-script-selection": {
+      "types": "./src/daemon-port/replay-script-selection.ts",
+      "default": "./src/daemon-port/replay-script-selection.ts"
+    },
+    "./replay-session-binding": {
+      "types": "./src/daemon-port/replay-session-binding.ts",
+      "default": "./src/daemon-port/replay-session-binding.ts"
+    },
     "./script-source": {
       "types": "./src/daemon-port/script-source.ts",
       "default": "./src/daemon-port/script-source.ts"
+    },
+    "./session-replay-heal": {
+      "types": "./src/daemon-port/session-replay-heal.ts",
+      "default": "./src/daemon-port/session-replay-heal.ts"
+    },
+    "./session-replay-maestro-observer": {
+      "types": "./src/daemon-port/session-replay-maestro-observer.ts",
+      "default": "./src/daemon-port/session-replay-maestro-observer.ts"
     },
     "./session-replay-maestro-request": {
       "types": "./src/daemon-port/session-replay-maestro-request.ts",
@@ -60,6 +77,10 @@
       "types": "./src/session-replay-vars.ts",
       "default": "./src/session-replay-vars.ts"
     },
+    "./session-replay-video-recording": {
+      "types": "./src/daemon-port/session-replay-video-recording.ts",
+      "default": "./src/daemon-port/session-replay-video-recording.ts"
+    },
     "./session-test-infrastructure": {
       "types": "./src/daemon-port/session-test-infrastructure.ts",
       "default": "./src/daemon-port/session-test-infrastructure.ts"
@@ -67,6 +88,10 @@
     "./session-test-outcome": {
       "types": "./src/daemon-port/session-test-outcome.ts",
       "default": "./src/daemon-port/session-test-outcome.ts"
+    },
+    "./session-test-shard-devices": {
+      "types": "./src/daemon-port/session-test-shard-devices.ts",
+      "default": "./src/daemon-port/session-test-shard-devices.ts"
     },
     "./target-classification": {
       "types": "./src/daemon-port/target-classification.ts",

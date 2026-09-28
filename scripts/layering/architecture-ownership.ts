@@ -13,16 +13,7 @@ export type LogicalModulePolicy = Readonly<{
 
 const DAEMON_REPLAY_FACADE = {
   root: 'src/daemon/replay/index.ts',
-  exports: [
-    'appTargetResolutionOptions',
-    'bindReplaySession',
-    'buildMaestroReplayTargetDeviceResolutionOptions',
-    'buildReplayScriptPlatformFlags',
-    'healedScriptSiblingPath',
-    'readScriptReplaySelection',
-    'runReplayCommand',
-    'runReplayTestCommand',
-  ],
+  exports: ['runReplayCommand', 'runReplayTestCommand'],
 } as const;
 
 const DAEMON_SESSION_LIFECYCLE_FACADE = {
