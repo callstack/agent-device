@@ -3,7 +3,7 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { extractReplayTargetToken, readRefLabel } from '../session-replay-target-token.ts';
+import { extractReplayTargetToken, readRefLabel } from '../target-token.ts';
 
 // ---------------------------------------------------------------------------
 

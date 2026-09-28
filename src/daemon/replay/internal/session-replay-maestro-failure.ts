@@ -26,7 +26,7 @@ import {
   type DivergenceFieldSanitizer,
 } from './session-replay-divergence.ts';
 import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';
-import { computeReplayRepairHint } from './session-replay-repair-hint.ts';
+import { computeReplayRepairHint } from '@agent-device/replay-port/repair-hint';
 import {
   buildReplayDivergenceFailureResponseFromDescriptor,
   hoistReplayFailureCauseDiagnosticMeta,

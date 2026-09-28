@@ -2,10 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
-import {
-  computeReplayRepairHint,
-  type ReplayRepairHintCapture,
-} from '../session-replay-repair-hint.ts';
+import { computeReplayRepairHint, type ReplayRepairHintCapture } from '../repair-hint.ts';
 
 /**
  * ADR 0012 decision 6, R3: `computeReplayRepairHint` must be a TOTAL mapping

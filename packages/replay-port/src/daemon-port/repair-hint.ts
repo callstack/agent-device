@@ -1,5 +1,5 @@
 /**
- * ADR 0012 decision 6, R3: the daemon-side `repairHint` computation.
+ * ADR 0012 decision 6, R3: the replay port's `repairHint` computation.
  *
  * Computed daemon-side at divergence time, never by the agent, from (i) the
  * recorded `target-v1` evidence for the diverged action (decision 3's
@@ -13,8 +13,7 @@
  * evidence, or a sparse/unavailable capture — so `repairHint` is always
  * defined.
  *
- * Lives in the daemon zone because the container-presence test
- * below is a genuine structural containment check over `parentIndex` — the
+ * The container-presence test below is a genuine structural containment check over `parentIndex` — the
  * same tree-walking machinery decision 3's own identity-set filter uses
  * (`buildAncestryChain`/`computeScrollRegionKey`, `@agent-device/selectors/target-evidence`)
  * — not a flat identity-string search.

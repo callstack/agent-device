@@ -2,7 +2,7 @@ import { inspectMaestroFlow } from '@agent-device/maestro';
 import { parseReplayInput, resolveReplayFormat } from '@agent-device/ad-script';
 import type { ResolveTargetDeviceOptions } from '@agent-device/device-selection/dispatch-resolve';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { readReplayScriptSourceFile } from './replay-script-source.ts';
+import { readReplayScriptSourceFile } from '@agent-device/replay-port/script-source';
 import type { DaemonRequest } from './daemon-request.ts';
 import {
   appTargetResolutionOptions,

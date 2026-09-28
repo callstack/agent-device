@@ -49,11 +49,11 @@ import type {
 import {
   computeReplayRepairHint,
   type ReplayRepairHintCapture,
-} from './session-replay-repair-hint.ts';
+} from '@agent-device/replay-port/repair-hint';
 import { buildReplayDivergenceFailureResponse } from './session-replay-runtime-failure-response.ts';
 import { buildAndPersistReplayDivergenceResume } from './session-replay-resume.ts';
 import { classifyReplayTarget } from './session-replay-target-classification.ts';
-import { extractReplayTargetToken, readRefLabel } from './session-replay-target-token.ts';
+import { extractReplayTargetToken, readRefLabel } from '@agent-device/replay-port/target-token';
 
 // ---------------------------------------------------------------------------
 // #1555 review R3 ("target verification must happen INSIDE the engine"): the

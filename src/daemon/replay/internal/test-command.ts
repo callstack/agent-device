@@ -8,7 +8,7 @@ import type {
   ReplaySuiteResult,
   ReplayScriptSourceBundle,
 } from '@agent-device/contracts/replay';
-import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '../../replay-script-source.ts';
+import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '@agent-device/replay-port/script-source';
 import type { ReplayScriptMetadata } from '@agent-device/ad-script';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import type { ReplayCommand, ReplayTestCommand } from './command-types.ts';

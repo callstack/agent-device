@@ -15,7 +15,7 @@ import { formatDivergenceActionLabel, isTouchTargetCommand } from '@agent-device
 import {
   computeReplayRepairHint,
   type ReplayRepairHintCapture,
-} from './session-replay-repair-hint.ts';
+} from '@agent-device/replay-port/repair-hint';
 import type {
   ReplayResumeStamper,
   ReplaySessionObservation,

@@ -28,7 +28,7 @@ import { buildMaestroReplayTargetDeviceResolutionOptions } from './replay-script
 import {
   readReplayScriptSourceFile,
   REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE,
-} from '../../replay-script-source.ts';
+} from '@agent-device/replay-port/script-source';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import type { ReplayCommand, ReplayDispatchRequest, ReplaySessionStore } from './command-types.ts';
 import {

@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { readReplayScriptSourceFile } from '../replay-script-source.ts';
+import { readReplayScriptSourceFile } from '../script-source.ts';
 
 test('reading a file the bundle does not carry names the file and the entry', () => {
   const bundle = { entry: '/flows/login.yaml', files: { '/flows/login.yaml': '---\n- back\n' } };
