@@ -95,6 +95,7 @@ describe('open launch environment', () => {
     { entries: ['=value'], message: /non-empty/ },
     { entries: ['MODE=one', 'MODE=two'], message: /duplicate key MODE/ },
     { entries: ['SIMCTL_CHILD_MODE=test'], message: /omit the SIMCTL_CHILD_/ },
+    { entries: ['MODE=bad\0value'], message: /cannot contain NUL/ },
   ])('rejects invalid CLI entries: $entries', ({ entries, message }) => {
     expect(() =>
       openCommandFacet.cliReader(['com.example.app'], flags({ launchEnvironmentEntries: entries })),
@@ -112,6 +113,52 @@ describe('open launch environment', () => {
         }),
       ).rejects.toThrow(/value for MODE must be a string/);
       expect(calls).toHaveLength(0);
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test('preserves __proto__ as an ordinary CLI environment variable name', () => {
+    const fromCli = openCommandFacet.cliReader(
+      ['com.example.app'],
+      flags({ launchEnvironmentEntries: ['__proto__=safe'] }),
+    );
+
+    expect(Object.hasOwn(fromCli.launchEnvironment ?? {}, '__proto__')).toBe(true);
+    expect((fromCli.launchEnvironment as Record<string, string> | undefined)?.['__proto__']).toBe(
+      'safe',
+    );
+  });
+
+  test('rejects NUL-containing typed environment values', async () => {
+    const stateDir = tempStateDir();
+    try {
+      const { client, calls } = createOpenClient({ stateDir, session: 'launch-env-nul' });
+      await expect(
+        openCommandFacet.definition.invoke(client, {
+          app: 'com.example.app',
+          launchEnvironment: { MODE: 'bad\0value' },
+        }),
+      ).rejects.toThrow(/cannot contain NUL/);
+      expect(calls).toHaveLength(0);
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test('preserves __proto__ on typed requests', async () => {
+    const stateDir = tempStateDir();
+    try {
+      const { client, calls } = createOpenClient({ stateDir, session: 'launch-env-proto' });
+      await openCommandFacet.definition.invoke(client, {
+        app: 'com.example.app',
+        launchEnvironment: JSON.parse('{"__proto__":"safe"}') as Record<string, string>,
+      });
+      const launchEnvironment = calls[0]?.flags?.launchEnvironment as
+        | Record<string, string>
+        | undefined;
+      expect(Object.hasOwn(launchEnvironment ?? {}, '__proto__')).toBe(true);
+      expect(launchEnvironment?.['__proto__']).toBe('safe');
     } finally {
       rmSync(stateDir, { recursive: true, force: true });
     }

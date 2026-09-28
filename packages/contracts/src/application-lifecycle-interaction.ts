@@ -4,7 +4,7 @@ import {
   LAUNCH_CONSOLE_IOS_SIMULATOR_ONLY_MESSAGE,
 } from './launch-console.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { isIosFamily, resolveDeviceAppleOs } from '@agent-device/kernel/device';
+import { isHandheldAppleSimulator } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type {
@@ -191,7 +191,7 @@ function assertOpenDeviceSupport(
   device: DeviceInfo,
   execution: ApplicationLifecycleExecution,
 ): void {
-  if (execution.launchConsole && (!isIosFamily(device) || device.kind !== 'simulator')) {
+  if (execution.launchConsole && !isHandheldAppleSimulator(device)) {
     throw new AppError('UNSUPPORTED_OPERATION', LAUNCH_CONSOLE_IOS_SIMULATOR_ONLY_MESSAGE);
   }
   if (device.platform === 'linux' && execution.launchArgs && execution.launchArgs.length > 0) {
@@ -204,10 +204,7 @@ function assertLaunchEnvironmentSupport(
   device: DeviceInfo,
   launchEnvironment: ApplicationLifecycleExecution['launchEnvironment'],
 ): void {
-  if (
-    launchEnvironment !== undefined &&
-    !(resolveDeviceAppleOs(device) === 'ios' && device.kind === 'simulator')
-  ) {
+  if (launchEnvironment !== undefined && !isHandheldAppleSimulator(device)) {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       '--launch-env is supported only for iOS Simulator app launches.',
@@ -353,6 +350,7 @@ async function openDirectApplication(
         clearAppState: undefined,
         launchConsole: undefined,
         launchArgs: undefined,
+        launchEnvironment: undefined,
       },
     });
   }

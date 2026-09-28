@@ -53,16 +53,16 @@ export async function openIosApp(
   const launchConsole = options?.launchConsole?.trim();
   const launchArgs = options?.launchArgs;
   const launchEnvironment = options?.launchEnvironment;
+  if (launchEnvironment !== undefined && (!isIosFamily(device) || device.kind !== 'simulator')) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      '--launch-env is supported only for iOS Simulator app launches.',
+    );
+  }
   if (launchConsole && (!isIosFamily(device) || device.kind !== 'simulator')) {
     throw new AppError('UNSUPPORTED_OPERATION', LAUNCH_CONSOLE_IOS_SIMULATOR_ONLY_MESSAGE);
   }
   if (isMacOs(device)) {
-    if (launchEnvironment !== undefined) {
-      throw new AppError(
-        'UNSUPPORTED_OPERATION',
-        '--launch-env is supported only for iOS Simulator app launches.',
-      );
-    }
     if (launchArgs && launchArgs.length > 0) {
       throw new AppError(
         'UNSUPPORTED_OPERATION',
@@ -71,12 +71,6 @@ export async function openIosApp(
     }
     await openMacOsApp(device, app, options);
     return;
-  }
-  if (launchEnvironment !== undefined && device.kind !== 'simulator') {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      '--launch-env is supported only for iOS Simulator app launches.',
-    );
   }
   const explicitUrl = options?.url?.trim();
   if (explicitUrl) {
@@ -112,12 +106,6 @@ export async function openIosApp(
         'Deep link open on iOS devices requires an active app bundle ID. Open the app first, then open the URL.',
       );
     }
-    if (launchEnvironment !== undefined) {
-      throw new AppError(
-        'UNSUPPORTED_OPERATION',
-        '--launch-env is supported only for iOS Simulator app launches.',
-      );
-    }
     await launchIosDeviceProcess(device, bundleId, {
       payloadUrl: explicitUrl,
       launchArgs,
@@ -134,12 +122,6 @@ export async function openIosApp(
     if (device.kind === 'simulator') {
       await openIosSimulatorUrl(device, deepLinkTarget, launchArgs, launchEnvironment);
       return;
-    }
-    if (launchEnvironment !== undefined) {
-      throw new AppError(
-        'UNSUPPORTED_OPERATION',
-        '--launch-env is supported only for iOS Simulator app launches.',
-      );
     }
     const bundleId = resolveIosDeviceDeepLinkBundleId(options?.appBundleId, deepLinkTarget);
     if (!bundleId) {
@@ -167,12 +149,6 @@ export async function openIosApp(
     return;
   }
 
-  if (launchEnvironment !== undefined) {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      '--launch-env is supported only for iOS Simulator app launches.',
-    );
-  }
   await launchIosDeviceProcess(device, bundleId, {
     launchArgs,
     runnerOptions: options?.runnerOptions,

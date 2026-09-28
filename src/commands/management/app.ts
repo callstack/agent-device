@@ -30,11 +30,14 @@ function readLaunchEnvironment(value: unknown): Readonly<Record<string, string>>
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new AppError('INVALID_ARGS', 'launchEnvironment must be an object of string values.');
   }
-  const result: Record<string, string> = {};
+  const result: Record<string, string> = Object.create(null);
   for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
     assertLaunchEnvironmentKey(key);
     if (typeof entry !== 'string') {
       throw new AppError('INVALID_ARGS', `launchEnvironment value for ${key} must be a string.`);
+    }
+    if (entry.includes('\0')) {
+      throw new AppError('INVALID_ARGS', `launchEnvironment value for ${key} cannot contain NUL.`);
     }
     result[key] = entry;
   }
@@ -45,7 +48,7 @@ function parseLaunchEnvironmentEntries(
   entries: readonly string[] | undefined,
 ): Readonly<Record<string, string>> | undefined {
   if (entries === undefined) return undefined;
-  const result: Record<string, string> = {};
+  const result: Record<string, string> = Object.create(null);
   for (const entry of entries) {
     const separator = entry.indexOf('=');
     if (separator < 0) throw new AppError('INVALID_ARGS', '--launch-env requires KEY=VALUE.');
@@ -54,7 +57,11 @@ function parseLaunchEnvironmentEntries(
     if (Object.hasOwn(result, key)) {
       throw new AppError('INVALID_ARGS', `--launch-env contains duplicate key ${key}.`);
     }
-    result[key] = entry.slice(separator + 1);
+    const value = entry.slice(separator + 1);
+    if (value.includes('\0')) {
+      throw new AppError('INVALID_ARGS', `launchEnvironment value for ${key} cannot contain NUL.`);
+    }
+    result[key] = value;
   }
   return Object.freeze(result);
 }

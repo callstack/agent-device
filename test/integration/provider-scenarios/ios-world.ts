@@ -22,7 +22,7 @@ type IosSettingsWorld = {
   appleTool: { calls: FlatToolCall[] };
   runnerTranscript: ProviderScenarioTranscript;
   inventoryRequests: DeviceInventoryRequest[];
-  launchEnvironments: Array<Readonly<Record<string, string | undefined>>>;
+  launchEnvironments: Array<Readonly<Record<string, string>>>;
   appPath: string;
   close: () => Promise<void>;
 };
@@ -180,7 +180,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
     'ios.runner',
   );
   let clipboardText = '';
-  const launchEnvironments: Array<Readonly<Record<string, string | undefined>>> = [];
+  const launchEnvironments: Array<Readonly<Record<string, string>>> = [];
   const appleTool = createRecordingAppleToolProvider({
     plist: {
       readJson: async (plistPath) => {
@@ -252,13 +252,10 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
 function recordLaunchEnvironment(
   args: readonly string[],
   options: Readonly<{ envPatch?: Readonly<Record<string, string>> }> | undefined,
-  launchEnvironments: Array<Readonly<Record<string, string | undefined>>>,
+  launchEnvironments: Array<Readonly<Record<string, string>>>,
 ): void {
   if (args[0] !== 'launch' || !options?.envPatch) return;
-  launchEnvironments.push({
-    SIMCTL_CHILD__XCAppClipURL: options.envPatch.SIMCTL_CHILD__XCAppClipURL,
-    SIMCTL_CHILD_MODE: options.envPatch.SIMCTL_CHILD_MODE,
-  });
+  launchEnvironments.push({ ...options.envPatch });
 }
 
 type IosPhysicalReinstallWorld = {

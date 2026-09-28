@@ -362,6 +362,23 @@ test('openIosApp translates launch environment keys for the iOS simulator child 
   assert.equal(options?.envPatch?._XCAppClipURL, undefined);
 });
 
+test('openIosApp captures launch console output when launch environment is set', async () => {
+  const tmpDir = await mkdtempForTest('agent-device-ios-console-env-test-');
+  const launchConsolePath = path.join(tmpDir, 'console.log');
+  mockEnsureBootedSimulator.mockResolvedValue();
+  mockRunCmd.mockResolvedValue({ stdout: 'started', stderr: '', exitCode: 0 });
+
+  await openIosApp(IOS_TEST_SIMULATOR, 'MyApp', {
+    appBundleId: 'com.example.app',
+    launchConsole: launchConsolePath,
+    launchEnvironment: { MODE: 'private-mode' },
+  });
+
+  const [, , options] = mockRunCmd.mock.calls[0] ?? [];
+  assert.equal(options?.envPatch?.SIMCTL_CHILD_MODE, 'private-mode');
+  assert.equal(await fs.readFile(launchConsolePath, 'utf8'), 'started');
+});
+
 test('openIosApp appends launchArgs after the bundle id on iOS device', async () => {
   await withFakeAppleTool(
     () => '',
@@ -451,6 +468,25 @@ test('openIosApp launches iOS simulator app before opening custom-scheme URL wit
       allowFailure: true,
     },
   ]);
+  assert.deepEqual(mockRunCmd.mock.calls[1], [
+    'xcrun',
+    ['simctl', 'openurl', 'sim-1', 'myapp://item/42'],
+    undefined,
+  ]);
+});
+
+test('openIosApp applies launch environment before opening custom-scheme URL', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue();
+  mockRunCmd.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
+
+  await openIosApp(IOS_TEST_SIMULATOR, 'MyApp', {
+    appBundleId: 'com.example.app',
+    url: 'myapp://item/42',
+    launchEnvironment: { MODE: 'test' },
+  });
+
+  assert.equal(mockRunCmd.mock.calls.length, 2);
+  assert.equal(mockRunCmd.mock.calls[0]?.[2]?.envPatch?.SIMCTL_CHILD_MODE, 'test');
   assert.deepEqual(mockRunCmd.mock.calls[1], [
     'xcrun',
     ['simctl', 'openurl', 'sim-1', 'myapp://item/42'],

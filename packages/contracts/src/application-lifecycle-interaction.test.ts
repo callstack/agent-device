@@ -17,18 +17,24 @@ const IOS_SIMULATOR: DeviceInfo = {
   booted: true,
 };
 
+const IPADOS_SIMULATOR: DeviceInfo = {
+  ...IOS_SIMULATOR,
+  appleOs: 'ipados',
+  id: 'ipados-simulator',
+  name: 'iPad',
+};
+
+const TVOS_SIMULATOR: DeviceInfo = {
+  ...IOS_SIMULATOR,
+  appleOs: 'tvos',
+  id: 'tvos-simulator',
+  name: 'Apple TV',
+};
+
 const LINUX_DEVICE: DeviceInfo = {
   platform: 'linux',
   id: 'linux-local',
   name: 'Linux',
-  kind: 'device',
-  booted: true,
-};
-
-const WEB_DEVICE: DeviceInfo = {
-  platform: 'web',
-  id: 'web-local',
-  name: 'Browser',
   kind: 'device',
   booted: true,
 };
@@ -71,20 +77,24 @@ test('direct lifecycle owners preserve the daemon runtime launch URL follow-up',
     calls.push({ app, options });
   });
   const binding = bindLocalApplicationLifecycleInteractor({
-    device: WEB_DEVICE,
+    device: IOS_SIMULATOR,
     signal: new AbortController().signal,
     resolveInteractor: async () => interactor,
   });
   const lifecycle = bindDirectApplicationLifecycle({
     binding,
-    owner: 'Linux',
+    owner: 'iOS Simulator',
     openTargetIdentity: 'app-name',
   });
 
   await lifecycle.openApplication(
     openInput({
       runtimeLaunchUrl: 'example://after-open',
-      execution: { clearAppState: true, launchArgs: ['--first-launch'] },
+      execution: {
+        clearAppState: true,
+        launchArgs: ['--first-launch'],
+        launchEnvironment: { MODE: 'test' },
+      },
     }),
   );
 
@@ -92,9 +102,11 @@ test('direct lifecycle owners preserve the daemon runtime launch URL follow-up',
   expect(calls[0]?.options).toMatchObject({
     appBundleId: 'com.example.app',
     launchArgs: ['--first-launch'],
+    launchEnvironment: { MODE: 'test' },
   });
   expect(calls[1]?.options).toMatchObject({ appBundleId: 'com.example.app' });
   expect(calls[1]?.options).toHaveProperty('launchArgs', undefined);
+  expect(calls[1]?.options).toHaveProperty('launchEnvironment', undefined);
 });
 
 test.each([
@@ -129,6 +141,13 @@ test.each([
   {
     name: 'launch environment on a physical iOS device',
     device: IOS_PHYSICAL_DEVICE,
+    positionals: ['com.example.app'],
+    execution: { launchEnvironment: { MODE: 'test' } },
+    message: /only for iOS Simulator/,
+  },
+  {
+    name: 'launch environment on a non-iOS Apple simulator',
+    device: TVOS_SIMULATOR,
     positionals: ['com.example.app'],
     execution: { launchEnvironment: { MODE: 'test' } },
     message: /only for iOS Simulator/,
@@ -191,4 +210,27 @@ test.each([
       execution,
     }),
   ).rejects.toThrow(message);
+});
+
+test('iPadOS Simulator accepts launch environment for app launches', async () => {
+  const calls: Array<{ app: string; options: unknown }> = [];
+  const lifecycle = bindDirectApplicationLifecycle({
+    binding: bindLocalApplicationLifecycleInteractor({
+      device: IPADOS_SIMULATOR,
+      signal: new AbortController().signal,
+      resolveInteractor: async () =>
+        interactorWithOpen(async (app, options) => {
+          calls.push({ app, options });
+        }),
+    }),
+    owner: 'iPadOS Simulator',
+    openTargetIdentity: 'bundle-id',
+  });
+
+  await lifecycle.openApplication(
+    openInput({ execution: { launchEnvironment: { MODE: 'test' } } }),
+  );
+
+  expect(calls).toHaveLength(1);
+  expect(calls[0]?.options).toMatchObject({ launchEnvironment: { MODE: 'test' } });
 });
