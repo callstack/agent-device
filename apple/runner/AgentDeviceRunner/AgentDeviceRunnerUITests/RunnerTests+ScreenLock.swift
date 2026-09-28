@@ -11,7 +11,7 @@ extension RunnerTests {
   /// The pre-read makes the operation idempotent; a dispatch alone is never reported as success.
   func executeScreenLockCommand() -> Response {
     #if os(iOS) && targetEnvironment(simulator)
-      let deadline = Date().addingTimeInterval(Self.screenLockVerificationTimeout)
+      var deadline = Date().addingTimeInterval(Self.screenLockVerificationTimeout)
       return executeScreenLockTransition(
         readState: currentScreenLockState,
         dispatch: dispatchScreenLock,
@@ -21,6 +21,9 @@ extension RunnerTests {
           RunLoop.current.run(
             until: Date().addingTimeInterval(Self.screenLockPollInterval)
           )
+        },
+        startVerificationWindow: {
+          deadline = Date().addingTimeInterval(Self.screenLockVerificationTimeout)
         }
       )
     #else
@@ -45,7 +48,8 @@ extension RunnerTests {
       dispatch: () -> Response?,
       verifyVisibleSurface: () -> Bool,
       shouldContinue: () -> Bool,
-      wait: () -> Void
+      wait: () -> Void,
+      startVerificationWindow: () -> Void = {}
     ) -> Response {
       switch readState() {
       case .success(true):
@@ -62,6 +66,7 @@ extension RunnerTests {
       }
 
       if let dispatchFailure = dispatch() { return dispatchFailure }
+      startVerificationWindow()
 
       while shouldContinue() {
         switch readState() {

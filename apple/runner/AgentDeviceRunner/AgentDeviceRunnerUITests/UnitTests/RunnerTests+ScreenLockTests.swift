@@ -2,6 +2,30 @@ import XCTest
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS) && targetEnvironment(simulator)
 extension RunnerTests {
+  func testScreenLockStartsVerificationWindowAfterDispatchReturns() {
+    var dispatchStarted = false
+    var verificationWindowStarted = false
+    var reads = 0
+    let response = executeScreenLockTransition(
+      readState: {
+        reads += 1
+        return .success(reads > 1)
+      },
+      dispatch: {
+        dispatchStarted = true
+        return nil
+      },
+      verifyVisibleSurface: { true },
+      shouldContinue: { dispatchStarted && verificationWindowStarted },
+      wait: {},
+      startVerificationWindow: { verificationWindowStarted = dispatchStarted }
+    )
+
+    XCTAssertTrue(response.ok)
+    XCTAssertTrue(verificationWindowStarted)
+    XCTAssertEqual(reads, 3)
+  }
+
   func testScreenLockReportsSuccessOnlyForLockScreenSpecificSurface() {
     let response = executeScreenLockCommand()
 
