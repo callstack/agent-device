@@ -522,6 +522,48 @@ test('readiness and boot keep the Apple automation helper warm inside the platfo
   expect(keepHot).toHaveBeenNthCalledWith(3, device);
 });
 
+test('bootTarget forwards a --timeout budget as the Simulator boot deadline (#3004)', async () => {
+  const host = platformRuntimeHostFixture();
+  let state = 'Shutdown';
+  const calls: Array<{ args: readonly string[]; timeoutMs?: number }> = [];
+  const runtime = createApplePlatformRuntime({
+    ...host,
+    appleTools: {
+      ...host.appleTools,
+      run: vi.fn(async (request) => {
+        calls.push({ args: request.args, timeoutMs: request.timeoutMs });
+        if (request.args.includes('list')) {
+          return {
+            stdout: JSON.stringify({ devices: { ios: [{ udid: 'apple-fact', state }] } }),
+            stderr: '',
+            exitCode: 0,
+          };
+        }
+        if (request.args.includes('boot')) state = 'Booted';
+        return { stdout: '', stderr: '', exitCode: 0 };
+      }),
+    },
+  });
+  const device = appleDevice({ booted: false });
+  const binding = await runtime.bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+
+  await binding.operations.bootTarget?.({ timeoutMs: 45_000 });
+
+  // The startup budget reaches the boot wait, same as open/prepare (#2325): the
+  // envelope's --timeout is the deadline the simctl calls run under, not a fixed default.
+  const bootCall = calls.find((call) => call.args.includes('boot'));
+  expect(bootCall?.timeoutMs).toBeLessThanOrEqual(45_000);
+  expect(bootCall?.timeoutMs).toBeGreaterThan(0);
+});
+
 test('macOS readiness is a no-op while boot remains unavailable', async () => {
   const host = platformRuntimeHostFixture();
   const ensureConnected = vi.fn(host.deviceReadiness.applePhysical.ensureConnected);

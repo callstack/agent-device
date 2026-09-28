@@ -85,7 +85,7 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 1,
     usageLabel: '--timeout <ms>',
     usageDescription:
-      'Open/Prepare: startup budget covering the Simulator boot (and runner preparation for prepare). Replay/Snapshot/Test: maximum wall-clock time for the command or attempt. With --settle: the settle-wait deadline (default 10s)',
+      'Boot/Open/Prepare: startup budget covering the Simulator boot (and runner preparation for prepare). Replay/Snapshot/Test: maximum wall-clock time for the command or attempt. With --settle: the settle-wait deadline (default 10s)',
     projectConfig: true,
     recorded: false,
   },

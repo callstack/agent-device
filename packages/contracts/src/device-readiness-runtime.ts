@@ -4,6 +4,8 @@ import type { DeviceInventoryRequest } from './device-inventory.ts';
 export type EnsureReadyInput = Readonly<{
   serial?: string;
   androidSerialAllowlist?: readonly string[];
+  /** Startup budget in milliseconds, from `boot --timeout`. Bounds a cold Simulator boot wait. */
+  timeoutMs?: number;
 }>;
 
 export type DeviceReadinessRuntimeOperations = Readonly<{

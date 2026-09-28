@@ -302,7 +302,7 @@ export async function handleSessionStateCommands(params: {
     });
     if (admitted.type === 'response') return admitted.response;
 
-    const input = { serial: flags.serial, androidSerialAllowlist };
+    const input = { serial: flags.serial, androidSerialAllowlist, timeoutMs: flags.timeoutMs };
     if (plan.kind === 'boot-target-headless') {
       device = await (await admitted.bind(device, plan.use)).operations.bootTargetHeadless(input);
     } else {

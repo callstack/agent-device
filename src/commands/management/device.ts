@@ -5,6 +5,7 @@ import { DEVICE_KINDS, DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/ke
 import {
   booleanField,
   booleanSchema,
+  integerField,
   enumSchema,
   looseObjectSchema,
   numberSchema,
@@ -77,6 +78,10 @@ const bootCommandMetadata = defineFieldCommandMetadata(
   'Boot or prepare the selected device or simulator so later commands can target it. The device is chosen through the device-selection inputs, not by naming it here.',
   {
     headless: booleanField('Boot without showing simulator UI when supported.'),
+    timeoutMs: integerField(
+      'Startup budget in milliseconds. Bounds the Simulator boot wait, so a never-booted Simulator can finish its first-boot migration; omit for the default startup behavior.',
+      { min: 1 },
+    ),
   },
 );
 
@@ -87,7 +92,7 @@ const shutdownCommandMetadata = defineFieldCommandMetadata(
 );
 
 const bootCliSchema = {
-  allowedFlags: ['headless'],
+  allowedFlags: ['headless', 'timeoutMs'],
 } as const satisfies CommandSchemaOverride;
 
 const devicesCliSchema = {} as const satisfies CommandSchemaOverride;
@@ -101,6 +106,7 @@ const commonCliReader: CliReader = (_positionals, flags) => commonInputFromFlags
 const bootCliReader: CliReader = (_positionals, flags) => ({
   ...commonInputFromFlags(flags),
   headless: flags.headless,
+  timeoutMs: flags.timeoutMs,
 });
 
 const devicesDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.devices);

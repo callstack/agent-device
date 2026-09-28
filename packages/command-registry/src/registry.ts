@@ -714,7 +714,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
       sessionKind: 'state',
     },
     platformExecution: { kind: 'device-runtime', uses: deviceBootRuntimeUses },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    // --timeout is a startup budget: it reaches the Simulator boot wait, same as open/prepare
+    // (#2325). A first boot can outlast the fixed 90s envelope (#3004).
+    timeoutPolicy: { ...DEFAULT_TIMEOUT_POLICY, budget: { source: 'flag', envelope: 'margin' } },
     batchable: true,
   },
   {

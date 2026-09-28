@@ -60,6 +60,7 @@ import {
   appleScreenRecordingFacts,
   createAppleScreenRecordingOperations,
 } from './recording/runtime.ts';
+import type { EnsureReadyInput } from '@agent-device/contracts/device-readiness-runtime';
 import { ensureAppleReady } from './readiness/runtime.ts';
 import { bindAppleApplicationLifecycle } from './lifecycle.ts';
 import {
@@ -475,8 +476,11 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             await ensureAppleReady(host, request.device, request.scope.signal),
         })),
         ...whenAdmitted(facts.operations.bootTarget, () => ({
-          bootTarget: async () =>
-            await ensureAppleReady(host, request.device, request.scope.signal),
+          bootTarget: async (input: EnsureReadyInput) =>
+            await ensureAppleReady(host, request.device, request.scope.signal, {
+              deadlineAtMs:
+                typeof input.timeoutMs === 'number' ? Date.now() + input.timeoutMs : undefined,
+            }),
         })),
         ...whenAdmitted(facts.operations.listApps, () => ({
           listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) => {

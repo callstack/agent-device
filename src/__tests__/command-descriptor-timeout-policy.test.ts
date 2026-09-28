@@ -113,9 +113,9 @@ test('budget sources deviating from the default are bounded, reviewed sets', () 
   }
   // --timeout bounds the request envelope for these commands only.
   assert.deepEqual(flagBoundBudget.sort(), ['replay', 'snapshot']);
-  // --timeout is a daemon-side startup budget on these commands (#2324); the
+  // --timeout is a daemon-side startup budget on these commands (#2324, #3004); the
   // envelope keeps a margin over it so the daemon's own timeout wins the race.
-  assert.deepEqual(flagMarginBudget.sort(), ['open', 'prepare']);
+  assert.deepEqual(flagMarginBudget.sort(), ['boot', 'open', 'prepare']);
   // --timeout bounds the --settle wait on these commands (#1101); like wait's
   // positional budget it only ever widens the envelope, never shrinks it.
   assert.deepEqual(flagWidenBudget.sort(), settleObservationCommandNames());

@@ -101,6 +101,8 @@ export type StartupPerfSample = {
 
 export type DeviceBootOptions = DeviceCommandBaseOptions & {
   headless?: boolean;
+  /** Startup budget in milliseconds: bounds the Simulator boot wait on a cold device. */
+  timeoutMs?: number;
 };
 
 export type DeviceShutdownOptions = DeviceCommandBaseOptions;
