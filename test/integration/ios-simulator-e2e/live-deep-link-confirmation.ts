@@ -73,7 +73,8 @@ export async function answerDeepLinkConfirmation(
       reason === WAIT_REASONS.targetAbsent || reason === WAIT_REASONS.deadlineExceeded;
     const interruptedObservation =
       reason === WAIT_REASONS.captureStalled ||
-      reason === WAIT_REASONS.readinessExhausted ||
+      (reason === WAIT_REASONS.readinessExhausted &&
+        details?.readinessPhase === 'target-discovery') ||
       reason === WAIT_REASONS.runnerRestartExhausted;
     if (!launchPending && !readableMiss && !interruptedObservation) return;
     if (!answered) answered = await acceptOpenConfirmation(device);

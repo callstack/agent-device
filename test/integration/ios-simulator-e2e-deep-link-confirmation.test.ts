@@ -38,6 +38,16 @@ const READINESS_TIMEOUT = result(1, {
     },
   },
 });
+const RUNNER_START_TIMEOUT = result(1, {
+  error: {
+    code: 'COMMAND_FAILED',
+    details: {
+      reason: WAIT_REASONS.readinessExhausted,
+      readinessPhase: 'runner-start',
+      readableCaptures: 0,
+    },
+  },
+});
 const OPEN_PROMPT = result(0, {
   data: { message: 'Open in “Agent Device Tester”?', items: ['Cancel', 'Open'] },
 });
@@ -100,6 +110,14 @@ test('target discovery exhaustion still answers a deep-link confirmation', async
     'alert accept',
     'wait for the deep-link destination (2/5)',
   ]);
+});
+
+test('runner startup exhaustion returns without probing for a deep-link confirmation', async () => {
+  const { device, log } = simulator([RUNNER_START_TIMEOUT]);
+
+  await answerDeepLinkConfirmation(device);
+
+  assert.deepEqual(log, ['wait for the deep-link destination (1/5)']);
 });
 
 test('a readable no-match that answers Open waits for the released launch', async () => {
