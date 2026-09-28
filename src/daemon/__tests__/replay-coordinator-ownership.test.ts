@@ -50,8 +50,9 @@ type ImportSite = {
   declarationTypeOnly: boolean;
 };
 
+const PRODUCTION_ROOTS = ['src', 'packages/replay-port/src'] as const;
+
 function listProductionSourceFiles(): string[] {
-  const roots = ['src', 'packages/replay-port/src'];
   const out: string[] = [];
   const walk = (dir: string): void => {
     for (const entry of fs.readdirSync(path.join(REPO_ROOT, dir), { withFileTypes: true })) {
@@ -65,14 +66,14 @@ function listProductionSourceFiles(): string[] {
       out.push(relPath);
     }
   };
-  for (const root of roots) walk(root);
+  for (const root of PRODUCTION_ROOTS) walk(root);
   return out;
 }
 
 function resolveRelativeTarget(fromFile: string, spec: string): string | null {
   if (!spec.startsWith('.')) return null;
   const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(fromFile), spec));
-  return resolved.startsWith('src/') ? resolved : null;
+  return PRODUCTION_ROOTS.some((root) => resolved.startsWith(`${root}/`)) ? resolved : null;
 }
 
 function collectImportSites(
@@ -398,6 +399,17 @@ test('coordinator ownership scanning catches aliases, namespaces, and dynamic im
       ({ kind }) => kind,
     ),
     ['call', 'call', 'dynamic-import'],
+  );
+});
+
+test('a package-relative dynamic import resolves within the scanned replay port', () => {
+  const probe = 'packages/replay-port/src/daemon-port/probe.ts';
+  const source = "void import('./session-replay-divergence.ts');";
+  const overrides = new Map([[probe, source]]);
+  assert.deepEqual(unresolvedDynamicImportSites([probe], overrides), []);
+  assert.equal(
+    collectImportSites(probe, source)[0]?.target,
+    'packages/replay-port/src/daemon-port/session-replay-divergence.ts',
   );
 });
 
