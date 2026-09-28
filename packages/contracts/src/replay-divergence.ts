@@ -181,7 +181,7 @@ export type ReplayDivergenceOverflow = {
 /**
  * ADR 0012 decision 6, R3: the daemon-computed repair routing hint. Always
  * defined (never absent/null) — the mapping in
- * `src/daemon/replay/internal/session-replay-repair-hint.ts` is total, defaulting
+ * `packages/replay-port/src/daemon-port/repair-hint.ts` is total, defaulting
  * to `manual` whenever no safer routing can be proven. A small fixed token,
  * so it is carried at every response level (including `--level digest`) and
  * every projection (text, JSON, client `AppError`, MCP `structuredContent`).
