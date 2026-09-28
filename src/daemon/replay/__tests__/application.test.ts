@@ -17,12 +17,11 @@ import {
   createReplaySession,
   replayDaemonDependencies,
 } from '../../handlers/session-replay-command.ts';
+import { runReplayCommand, runReplayTestCommand } from '../index.ts';
 import {
   replayInvokeOverDispatch,
-  runReplayCommand,
-  runReplayTestCommand,
   splitReplayCommandRequest,
-} from '../index.ts';
+} from '@agent-device/replay-port/replay-dispatch-envelope';
 import type { ReplayCommand, ReplayTestCommand } from '@agent-device/replay-port/command-types';
 import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
 import {

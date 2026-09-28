@@ -1,9 +1,12 @@
 import { expect, test } from 'vitest';
-import type { DaemonRequest } from '../../../daemon-request.ts';
+import type { ReplayDispatchOptions } from '@agent-device/contracts/replay';
+import type { ReplayPrivateAdmission, ReplayRequest } from '../replay-dispatch-envelope.ts';
 import { replayInvokeOverDispatch } from '../replay-dispatch-envelope.ts';
 
+type TestRequest = ReplayRequest<ReplayPrivateAdmission & ReplayDispatchOptions>;
+
 test('replayInvokeOverDispatch re-attaches the originating private half, then folds the dispatch bag over it', async () => {
-  const base: DaemonRequest = {
+  const base: TestRequest = {
     token: 'token',
     session: 'default',
     command: 'replay',
@@ -16,7 +19,7 @@ test('replayInvokeOverDispatch re-attaches the originating private half, then fo
       },
     },
   };
-  const invoked: DaemonRequest[] = [];
+  const invoked: TestRequest[] = [];
   const invoke = replayInvokeOverDispatch(async (request) => {
     invoked.push(request);
     return { ok: true, data: {} };
@@ -50,7 +53,7 @@ test('replayInvokeOverDispatch re-attaches the originating private half, then fo
 });
 
 test('replayInvokeOverDispatch sends no private half when neither side carries one', async () => {
-  const invoked: DaemonRequest[] = [];
+  const invoked: TestRequest[] = [];
   const invoke = replayInvokeOverDispatch(
     async (request) => {
       invoked.push(request);

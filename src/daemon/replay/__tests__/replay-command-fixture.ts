@@ -5,7 +5,11 @@ import {
   createReplaySession,
   replayDaemonDependencies,
 } from '../../handlers/session-replay-command.ts';
-import { replayInvokeOverDispatch, runReplayCommand, splitReplayCommandRequest } from '../index.ts';
+import { runReplayCommand } from '../index.ts';
+import {
+  replayInvokeOverDispatch,
+  splitReplayCommandRequest,
+} from '@agent-device/replay-port/replay-dispatch-envelope';
 import type { ReplayCommand } from '@agent-device/replay-port/command-types';
 
 export type ReplayCommandTestInput = Readonly<{

@@ -6,11 +6,11 @@ import { beforeEach, test, vi } from 'vitest';
 import { SessionStore } from '../../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { runReplayTestCommand } from '../../index.ts';
 import {
   replayInvokeOverDispatch,
-  runReplayTestCommand,
   splitReplayCommandRequest,
-} from '../../index.ts';
+} from '@agent-device/replay-port/replay-dispatch-envelope';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import { replayScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import {

@@ -13,11 +13,11 @@ import {
   createReplaySession,
   replayDaemonDependencies,
 } from '../../../handlers/session-replay-command.ts';
+import { runReplayTestCommand } from '../../index.ts';
 import {
   replayInvokeOverDispatch,
-  runReplayTestCommand,
   splitReplayCommandRequest,
-} from '../../index.ts';
+} from '@agent-device/replay-port/replay-dispatch-envelope';
 import type { ReplayTestCommand } from '@agent-device/replay-port/command-types';
 import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from '../session-replay-test-policy.ts';
 import { replayCommandFamily } from '../../../../commands/replay/index.ts';

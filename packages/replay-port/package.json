@@ -10,6 +10,7 @@
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/kernel": "workspace:*",
+    "@agent-device/maestro": "workspace:*",
     "@agent-device/replay-test": "workspace:*",
     "@agent-device/selectors": "workspace:*"
   },
@@ -22,9 +23,17 @@
       "types": "./src/daemon-port/repair-hint.ts",
       "default": "./src/daemon-port/repair-hint.ts"
     },
+    "./replay-dispatch-envelope": {
+      "types": "./src/daemon-port/replay-dispatch-envelope.ts",
+      "default": "./src/daemon-port/replay-dispatch-envelope.ts"
+    },
     "./script-source": {
       "types": "./src/daemon-port/script-source.ts",
       "default": "./src/daemon-port/script-source.ts"
+    },
+    "./session-replay-maestro-request": {
+      "types": "./src/daemon-port/session-replay-maestro-request.ts",
+      "default": "./src/daemon-port/session-replay-maestro-request.ts"
     },
     "./session-replay-vars": {
       "types": "./src/session-replay-vars.ts",

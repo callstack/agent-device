@@ -20,10 +20,8 @@ const DAEMON_REPLAY_FACADE = {
     'buildReplayScriptPlatformFlags',
     'healedScriptSiblingPath',
     'readScriptReplaySelection',
-    'replayInvokeOverDispatch',
     'runReplayCommand',
     'runReplayTestCommand',
-    'splitReplayCommandRequest',
   ],
 } as const;
 

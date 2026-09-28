@@ -6,13 +6,11 @@ import { bindInternalObservationAuthority } from '../internal-observation.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { PlatformResourceCleanup } from '../platform-resource-cleanup.ts';
+import { bindReplaySession, runReplayCommand, runReplayTestCommand } from '../replay/index.ts';
 import {
-  bindReplaySession,
   replayInvokeOverDispatch,
-  runReplayCommand,
-  runReplayTestCommand,
   splitReplayCommandRequest,
-} from '../replay/index.ts';
+} from '@agent-device/replay-port/replay-dispatch-envelope';
 import type {
   ReplayDaemonDependencies,
   ReplaySession,

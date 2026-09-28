@@ -518,6 +518,9 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@agent-device/maestro':
+        specifier: workspace:*
+        version: link:../maestro
       '@agent-device/replay-test':
         specifier: workspace:*
         version: link:../replay-test
