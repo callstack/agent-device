@@ -68,6 +68,11 @@ test('Provider-backed integration iOS Settings flow uses scripted simctl and run
             },
           },
           expectData: { appBundleId: 'com.apple.Preferences' },
+          assert: (response) => {
+            const serialized = JSON.stringify(response.json);
+            assert.equal(serialized.includes('https://example.com/clip?id=42'), false);
+            assert.equal(serialized.includes('provider-test'), false);
+          },
         },
         {
           name: 'prepare iOS runner',

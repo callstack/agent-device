@@ -5,7 +5,7 @@ const SECRET_TOKEN_RE =
 const SENSITIVE_ASSIGNMENT_RE =
   /\b([a-z0-9_-]*(?:api[_-]?key|token|secret|password|user[_-]?code|device[_-]?code|refresh[_-]?credential)[a-z0-9_-]*)(\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi;
 const LAUNCH_ENV_ASSIGNMENT_RE =
-  /((?:SIMCTL_CHILD_)?[A-Za-z_][A-Za-z0-9_]*=)("[^"]*"|'[^']*'|\S+)/g;
+  /(--launch-env(?:=\s*|\s+))((?:SIMCTL_CHILD_)?[A-Za-z_][A-Za-z0-9_]*=)("[^"]*"|'[^']*'|\S+)/;
 const URL_RE = /https?:\/\/[^\s"'<>]+/gi;
 const REDACTED_STRING_MAX_LENGTH = 400;
 const TRUNCATION_SUFFIX = '...<truncated>';
@@ -86,9 +86,13 @@ function redactString(value: string, keyHint?: string): string {
       return `${key}${separator}[REDACTED]`;
     },
   );
-  if (output.includes('--launch-env')) {
-    output = output.replaceAll(LAUNCH_ENV_ASSIGNMENT_RE, '$1[REDACTED]');
-  }
+  output = output.replace(
+    LAUNCH_ENV_ASSIGNMENT_RE,
+    (_match, flag: string, assignment: string, rawValue: string) =>
+      /^VALUE\.?$/i.test(rawValue)
+        ? `${flag}${assignment}${rawValue}`
+        : `${flag}${assignment}[REDACTED]`,
+  );
   output = output.replaceAll(
     /(SIMCTL_CHILD_[A-Za-z_][A-Za-z0-9_]*=)("[^"]*"|'[^']*'|\S+)/g,
     '$1[REDACTED]',

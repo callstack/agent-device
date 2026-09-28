@@ -33,3 +33,16 @@ test('redacts launch environment values in command arguments and free-text diagn
   expect(serialized).toContain('SIMCTL_CHILD_MODE');
   expect(serialized).toContain('[REDACTED]');
 });
+
+test('redacts plain launch environment values without hiding unrelated assignments', () => {
+  const redacted = redactDiagnosticData({
+    argv: ['--launch-env', 'MODE=plain-secret'],
+    message: '--launch-env requires KEY=VALUE. Example: PORT=8080 HOST=localhost',
+  });
+
+  expect(redacted).toEqual({
+    argv: ['--launch-env', 'MODE=[REDACTED]'],
+    message: '--launch-env requires KEY=VALUE. Example: PORT=8080 HOST=localhost',
+  });
+  expect(JSON.stringify(redacted)).not.toContain('plain-secret');
+});

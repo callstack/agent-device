@@ -42,6 +42,7 @@ import { withFakeAppleTool, type FakeAppleToolResponse } from '../../__tests__/f
 import {
   IOS_TEST_DEVICE,
   IOS_TEST_SIMULATOR,
+  IPADOS_TEST_SIMULATOR,
   MACOS_TEST_DEVICE,
 } from './apple-core-stub-helpers.ts';
 
@@ -360,6 +361,19 @@ test('openIosApp translates launch environment keys for the iOS simulator child 
   assert.equal(options?.envPatch?.SIMCTL_CHILD__XCAppClipURL, 'https://example.com/clip?id=42');
   assert.equal(options?.envPatch?.SIMCTL_CHILD_MODE, 'test');
   assert.equal(options?.envPatch?._XCAppClipURL, undefined);
+});
+
+test('openIosApp translates launch environment keys for an iPadOS simulator', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue();
+  mockRunCmd.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
+
+  await openIosApp(IPADOS_TEST_SIMULATOR, 'MyApp', {
+    appBundleId: 'com.example.app',
+    launchEnvironment: { MODE: 'ipad-test' },
+  });
+
+  const [, , options] = mockRunCmd.mock.calls[0] ?? [];
+  assert.equal(options?.envPatch?.SIMCTL_CHILD_MODE, 'ipad-test');
 });
 
 test('openIosApp captures launch console output when launch environment is set', async () => {
