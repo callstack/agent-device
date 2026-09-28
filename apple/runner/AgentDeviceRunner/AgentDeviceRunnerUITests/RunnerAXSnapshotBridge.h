@@ -11,6 +11,7 @@ FOUNDATION_EXPORT NSString *const RunnerAXSnapshotDeepExtensionCallsKey;
 FOUNDATION_EXPORT NSString *const RunnerAXSnapshotDeepExtensionNodesAddedKey;
 FOUNDATION_EXPORT NSString *const RunnerAXSnapshotDeepExtensionPendingKey;
 FOUNDATION_EXPORT NSString *const RunnerAXSnapshotDeepExtensionMissedKey;
+FOUNDATION_EXPORT NSString *const RunnerAXSnapshotDeepExtensionBlockedKey;
 
 /// Keys of the `customActions` dictionary in the snapshot response: how many
 /// merged elements were eligible for an action read, and how many the bounded

@@ -5,6 +5,15 @@ import AgentDeviceSnapshotPresentation
 // MARK: - In-bundle unit tests
 
 extension RunnerTests {
+  func testPrivateAXContainmentFailureIsTypedAndNotADepthLimit() {
+    XCTAssertNil(Self.privateAXContainmentFailure(blockedFrontiers: nil))
+    XCTAssertNil(Self.privateAXContainmentFailure(blockedFrontiers: 0))
+    XCTAssertEqual(
+      Self.privateAXContainmentFailure(blockedFrontiers: 1)?.code,
+      "IOS_SNAPSHOT_AX_CONTAINMENT_FAILED"
+    )
+  }
+
   func testPrivateAXAttemptDepthsAppliesRememberedDepth() {
     XCTAssertEqual(
       Self.privateAXAttemptDepths(requestedDepth: 64, rememberedDepth: nil),
@@ -24,12 +33,10 @@ extension RunnerTests {
     XCTAssertEqual(Self.privateAXAttemptDepths(requestedDepth: 24, rememberedDepth: 56), [24, 12])
   }
 
-  /// Executed producer contract for the #1627 review blocker: a frontier whose
-  /// live element vanished, and one whose re-rooted request fails, must BOTH
-  /// count as missed — an all-miss extension reporting itself drained would
-  /// present a capped capture as complete. Goes red if either miss-path
-  /// increment in extendSnapshotFrontiers is removed.
-  func testDeepExtensionCountsMissedFrontiers() {
+  /// A vanished element is a missed frontier; a contained request failure is
+  /// a blocked frontier and must fail the backend instead of degrading to a
+  /// benign depth-limit verdict.
+  func testDeepExtensionSeparatesMissedAndBlockedFrontiers() {
     // Element vanished (list churn between serialization and extension): the
     // fabricated snapshot answers nil for accessibilityElement — missed, and
     // no request call is consumed. (An explicit nil property: bare NSObject
@@ -38,7 +45,7 @@ extension RunnerTests {
     orphan.snapshot = FrontierSnapshotWithoutElementForTesting()
     orphan.node = NSMutableDictionary()
     // Re-rooted request fails: the element resolves but the client cannot
-    // serve requestSnapshotForElement — one consumed call AND a miss.
+    // serve requestSnapshotForElement — one consumed call AND a blocked read.
     let unreachable = RunnerAXSnapshotFrontier()
     unreachable.snapshot = FrontierSnapshotWithElementForTesting()
     unreachable.node = NSMutableDictionary()
@@ -58,15 +65,13 @@ extension RunnerTests {
       deadline: nil
     )
 
-    XCTAssertEqual(outcome?[RunnerAXSnapshotDeepExtensionMissedKey] as? Int, 2)
+    XCTAssertEqual(outcome?[RunnerAXSnapshotDeepExtensionMissedKey] as? Int, 1)
+    XCTAssertEqual(outcome?[RunnerAXSnapshotDeepExtensionBlockedKey] as? Int, 1)
     XCTAssertEqual(outcome?[RunnerAXSnapshotDeepExtensionCallsKey] as? Int, 1)
-    XCTAssertEqual(outcome?[RunnerAXSnapshotDeepExtensionPendingKey] as? Int, 0)
+    XCTAssertEqual(outcome?[RunnerAXSnapshotDeepExtensionPendingKey] as? Int, 1)
     XCTAssertEqual(outcome?[RunnerAXSnapshotDeepExtensionNodesAddedKey] as? Int, 0)
-    XCTAssertFalse(truncated.boolValue)
-    // And the consumer verdict over exactly this outcome: still depth-limited.
-    XCTAssertTrue(
-      Self.privateAXDepthLimited(
-        effectiveDepth: 56, requestedDepth: 64, pendingFrontiers: 0, missedFrontiers: 2))
+    XCTAssertTrue(truncated.boolValue)
+    XCTAssertNotNil(Self.privateAXContainmentFailure(blockedFrontiers: 1))
   }
 
   func testPrivateAXDepthLimitedRequiresEveryFrontierResolved() {
@@ -543,9 +548,8 @@ extension RunnerTests {
   }
 }
 
-/// Stands in for an AX client whose `attributesForElement:` never returns —
-/// the wedged-server case the containment exists for. `release()` lets the
-/// hung call finish so recovery is observable.
+/// Stands in for a snapshot AX client whose request never returns. `release()`
+/// lets the contained request finish so timeout recovery is observable.
 private final class HungSnapshotAXClientForTesting: NSObject {
   private let gate = DispatchSemaphore(value: 0)
   private let lock = NSLock()
@@ -576,6 +580,9 @@ private final class HungSnapshotAXClientForTesting: NSObject {
   }
 }
 
+/// Stands in for an AX client whose `attributesForElement:` never returns —
+/// the wedged-server case the containment exists for. `release()` lets the
+/// hung call finish so recovery is observable.
 private final class HungAXClientForTesting: NSObject {
   private let gate = DispatchSemaphore(value: 0)
   private let releasedOnce = NSLock()

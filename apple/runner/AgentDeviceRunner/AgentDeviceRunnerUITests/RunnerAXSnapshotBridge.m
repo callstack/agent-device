@@ -14,6 +14,7 @@ NSString *const RunnerAXSnapshotDeepExtensionCallsKey = @"calls";
 NSString *const RunnerAXSnapshotDeepExtensionNodesAddedKey = @"nodesAdded";
 NSString *const RunnerAXSnapshotDeepExtensionPendingKey = @"pendingFrontiers";
 NSString *const RunnerAXSnapshotDeepExtensionMissedKey = @"missedFrontiers";
+NSString *const RunnerAXSnapshotDeepExtensionBlockedKey = @"blockedFrontiers";
 
 NSString *const RunnerAXSnapshotCustomActionsKey = @"customActions";
 NSString *const RunnerAXSnapshotCustomActionsReadKey = @"read";
@@ -252,10 +253,11 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
   NSInteger callsUsed = 0;
   NSInteger nodesAdded = 0;
   // A frontier whose live element vanished (list churn between serialization
-  // and extension) or whose re-rooted request failed leaves its subtree
-  // unresolved — it must count as missed, never as drained, or an all-miss
-  // extension would present a capped capture as complete.
+  // and extension) leaves an unresolved subtree and counts as missed. A
+  // contained request failure is tracked separately as blocked so it cannot be
+  // misreported as a benign depth limit.
   NSInteger missedFrontiers = 0;
+  NSInteger blockedFrontiers = 0;
   while (frontiers.count > 0) {
     if (callsUsed >= callsAllowed || *nodeCount >= maxNodes
         || (nil != deadline && deadline.timeIntervalSinceNow <= 0)) {
@@ -280,6 +282,14 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
                                                  deadline:deadline
                                                     error:&error];
     if (nil == subRoot) {
+      if (nil != error) {
+        blockedFrontiers += 1;
+        [frontiers insertObject:frontier atIndex:0];
+        *truncated = YES;
+        NSLog(@"AGENT_DEVICE_RUNNER_PRIVATE_AX_DEEP_EXTENSION_BLOCKED=%@",
+              error.localizedDescription ?: @"contained snapshot request failed");
+        break;
+      }
       missedFrontiers += 1;
       NSLog(@"AGENT_DEVICE_RUNNER_PRIVATE_AX_DEEP_EXTENSION_MISS=%@",
             error.localizedDescription ?: @"nil subtree");
@@ -312,13 +322,15 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     [frontiers addObjectsFromArray:[self cappedFrontiersFromCandidates:subCandidates
                                                               maxDepth:maxDepth]];
   }
-  NSLog(@"AGENT_DEVICE_RUNNER_PRIVATE_AX_DEEP_EXTENSION calls=%ld nodes=%ld pending=%ld missed=%ld",
-        (long)callsUsed, (long)nodesAdded, (long)frontiers.count, (long)missedFrontiers);
+  NSLog(@"AGENT_DEVICE_RUNNER_PRIVATE_AX_DEEP_EXTENSION calls=%ld nodes=%ld pending=%ld missed=%ld blocked=%ld",
+        (long)callsUsed, (long)nodesAdded, (long)frontiers.count, (long)missedFrontiers,
+        (long)blockedFrontiers);
   return @{
     RunnerAXSnapshotDeepExtensionCallsKey: @(callsUsed),
     RunnerAXSnapshotDeepExtensionNodesAddedKey: @(nodesAdded),
     RunnerAXSnapshotDeepExtensionPendingKey: @(frontiers.count),
     RunnerAXSnapshotDeepExtensionMissedKey: @(missedFrontiers),
+    RunnerAXSnapshotDeepExtensionBlockedKey: @(blockedFrontiers),
   };
 }
 

@@ -91,6 +91,16 @@ test('Provider-backed integration iOS Settings flow uses scripted simctl and run
           },
         },
         {
+          name: 'reports an honest miss for an empty settings coordinate',
+          command: 'inspect-point',
+          positionals: ['0', '0'],
+          expectData: {
+            status: 'no-element-at-point',
+            point: { x: 0, y: 0 },
+            elements: [],
+          },
+        },
+        {
           name: 'reopen existing session app',
           command: 'open',
           positionals: ['com.apple.Preferences'],

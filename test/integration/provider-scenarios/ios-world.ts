@@ -67,6 +67,19 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       },
     },
     {
+      command: 'ios.runner.readText',
+      deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+      platform: 'apple',
+      request: {
+        command: 'readText',
+        inspectPoint: true,
+        x: 0,
+        y: 0,
+        appBundleId: 'com.apple.Preferences',
+      },
+      result: { elements: [] },
+    },
+    {
       command: 'ios.runner.tap',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
       platform: 'apple',

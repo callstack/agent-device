@@ -408,7 +408,8 @@ extension RunnerTests {
       if let pending = deepExtension[RunnerAXSnapshotDeepExtensionPendingKey] as? Int,
         let missed = deepExtension[RunnerAXSnapshotDeepExtensionMissedKey] as? Int
       {
-        completeDeepExtension = pending == 0 && missed == 0
+        let blocked = deepExtension[RunnerAXSnapshotDeepExtensionBlockedKey] as? Int ?? 0
+        completeDeepExtension = pending == 0 && missed == 0 && blocked == 0
       } else {
         completeDeepExtension = false
       }

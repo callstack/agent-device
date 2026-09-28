@@ -31,6 +31,15 @@ extension RunnerTests {
     guard let pendingFrontiers, let missedFrontiers else { return true }
     return pendingFrontiers > 0 || missedFrontiers > 0
   }
+
+  static func privateAXContainmentFailure(blockedFrontiers: Int?) -> SnapshotCaptureFailure? {
+    guard let blockedFrontiers, blockedFrontiers > 0 else { return nil }
+    return SnapshotCaptureFailure(
+      code: "IOS_SNAPSHOT_AX_CONTAINMENT_FAILED",
+      message: "The private AX snapshot could not complete a contained accessibility read.",
+      hint: "Retry after the accessibility server responds; no partial tree was treated as complete."
+    )
+  }
   /// Deep React Native trees make the AX server reject bulk snapshot requests outright with
   /// kAXErrorIllegalArgument once the requested depth crosses a tree-size-dependent limit
   /// (observed between depth 56 and 64 on the Bluesky Home feed; the limit moves with live
@@ -165,7 +174,7 @@ extension RunnerTests {
     target: SnapshotCaptureTarget,
     hint: CaptureHint,
     deadline: Date = .distantFuture
-  ) -> SnapshotAcquisition? {
+  ) throws -> SnapshotAcquisition? {
     #if os(iOS) && targetEnvironment(simulator)
       let app = target.app
       let requestedDepth = hint.rawTraversalDepth ?? 64
@@ -238,6 +247,11 @@ extension RunnerTests {
       // depth-limited would send agents chasing deeper content that is not
       // there. Pending or missed frontiers keep the depth-limited verdict.
       let deepExtension = response[RunnerAXSnapshotDeepExtensionKey] as? [String: Any]
+      if let failure = Self.privateAXContainmentFailure(
+        blockedFrontiers: deepExtension?[RunnerAXSnapshotDeepExtensionBlockedKey] as? Int
+      ) {
+        throw failure
+      }
       let depthLimited = Self.privateAXDepthLimited(
         effectiveDepth: effectiveDepth,
         requestedDepth: requestedDepth,
