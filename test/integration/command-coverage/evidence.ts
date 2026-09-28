@@ -76,7 +76,7 @@ export const TVOS_AUDIO_EVIDENCE: RepositoryEvidence = {
 /** The Apple owner's one navigation-fact classification, cited by every leaf it refuses. */
 export const APPLE_NAVIGATION_FACTS_EVIDENCE: RepositoryEvidence = {
   path: 'packages/platform-apple/src/runtime.test.ts',
-  test: 'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
+  test: 'classifies back/home/app-switcher/screen-lock/orientation/tv-remote/keyboard facts for the %s leaf',
 };
 export const APPLE_ACTION_BUTTON_FACT_EVIDENCE: RepositoryEvidence = {
   path: 'packages/platform-apple/src/runtime.test.ts',

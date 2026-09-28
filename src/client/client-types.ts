@@ -34,17 +34,11 @@ export type {
 // them from the declaring module instead. Fallow therefore sees no consumer, which is exactly
 // right and exactly not actionable: deleting them would remove names from the package's public
 // types. Suppressed per name rather than baselined so the reason travels with the code.
-// fallow-ignore-next-line unused-type
 export type { TargetShutdownResult } from '@agent-device/contracts/device';
-// fallow-ignore-next-line unused-type
 export type { MetroBridgeScope } from '@agent-device/contracts/remote';
-// fallow-ignore-next-line unused-type
 export type { AppsFilter } from '@agent-device/contracts/device';
-// fallow-ignore-next-line unused-type
 export type { AlertAction } from '@agent-device/contracts/alert-contract';
-// fallow-ignore-next-line unused-type
 export type { AppleOS } from '@agent-device/kernel/device';
-// fallow-ignore-next-line unused-type
 export type { JsonObject } from '@agent-device/contracts/client';
 export type { BatchRunResult } from '@agent-device/command-registry/batch';
 
