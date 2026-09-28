@@ -65,10 +65,10 @@
     "src/daemon-client/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
     "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:df6b92e343a451a03b194e1e4aacac0c89b48a632723af24e087b377e73e05e3",
     "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealthLink": "sha256:464809c9bb14b44d098781722e9e9e2ff044c45464e3c7c4cb5690886e857fdf",
-    "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:5e75af39e96045ce7faba986c900744cee76cdaa1e0df360ea38f3c020520711",
+    "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:6b64ae9b8e461a4b7dc1afb88465fcbaef908c31cc0be24499b2f440616e1cb5",
     "src/daemon-client/daemon-client-transport.ts#readHealthLink": "sha256:d7a84687d1c9b089460151a0532870e92a932d45f9567d248cea7accf8908593",
     "src/daemon-client/daemon-client-transport.ts#readHealthPayload": "sha256:4e85ffc3e35e02379c393e9312344757e003cf1f0ad9eb8d1f77d90c81c861f1",
-    "src/daemon-client/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:d833b61b242d0f594d69282b2de2362066c1bcfee2f0c687bd2394d585550c22",
+    "src/daemon-client/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:bcefa89fbb7fcbd6fee1b5ecb217955b9eee8d6fd2ad175fb653011edbd199d9",
     "src/daemon/downloadable-artifact-http.ts#DownloadableArtifactHttpAuthorizer": "sha256:1b2702a929ca9170db2ca97c08e3ab67e17edb3ee75325a576c4c1b9cdbebb44",
     "src/daemon/downloadable-artifact-http.ts#DownloadableArtifactHttpRoute": "sha256:e63c4581ccde668913914149c9092d16ecf8a5cbd7ab33c6eb8617e77fc1015e",
     "src/daemon/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:7f96d17b7c605230fb3cc21ceaa5b2e515d7445653ff95b2b0f6f15fa6214d4e",
@@ -182,7 +182,7 @@
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_HEADER": "sha256:d2bb3f4846470188a0fc1724271da0f0bcbdf2337bd6bf331508142cadcb65d8",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER": "sha256:4564c2ce437d30d7a823e3326f4375c0750ba8d42bec22b4d02e8eb7f7db2973",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_MISMATCH_HEADER": "sha256:a197edaf7f9fa94a6aab269856aa852da3204cc586f5fd23198689eb11908b61",
-    "src/daemon/server/http-server.ts#refuseStaleDaemonInstance": "sha256:7df100f86c1fcda9ef983a7141e6c3f1fd162c1fd8968a43c03419ccfc8a4413",
+    "src/daemon/server/http-instance-precondition.ts#refuseStaleDaemonInstance": "sha256:cf9b6f9dd95bb2593e4810c5b5939936b6d6358bf2614c7c234266cab1922d29",
     "src/remote/daemon-proxy.ts#refuseStaleProxyInstance": "sha256:82d39a1c241f1fb91c6bda2a55e9fde7b6d70db1a1a1496bef0eabf546ea706e",
     "src/remote/daemon-proxy.ts#sendInstanceMismatch": "sha256:d61ce46ef35d7aee9be4a41a79c84f372b05370097e3d8c8c109f06d494bfc55",
     "packages/contracts/src/daemon-http.ts#buildDaemonInstanceMismatchRpcResponse": "sha256:24e50130bbd0c4a21dfc51005cabf118525b9121f918719a2c16f73fcfcfbcf9",
@@ -268,9 +268,14 @@
       "rationale": "#2198 slice B teaches the client to read the `upstream` link a proxy's /health already nests. The field is optional and additive: a daemon or proxy that does not send it parses exactly as before, and no request shape changes. readHealthPayload reads the same top-level fields through readHealthLink and additionally the nested `upstream` object when present; a payload without it yields the previous shape."
     },
     {
+      "declaration": "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth",
+      "digest": "sha256:6b64ae9b8e461a4b7dc1afb88465fcbaef908c31cc0be24499b2f440616e1cb5",
+      "rationale": "#2650 bounds a retry's health probe by the RPC's remaining deadline, including response-body reads. The health request and accepted payload fields are unchanged; only a stalled probe ends sooner when the command deadline is near."
+    },
+    {
       "declaration": "src/daemon-client/daemon-client-transport.ts#readRemoteDaemonHealth",
-      "digest": "sha256:d833b61b242d0f594d69282b2de2362066c1bcfee2f0c687bd2394d585550c22",
-      "rationale": "#2198 slice B: the ADR 0006 refusal now covers every link a command RPC crosses, so a proxy whose daemon speaks another protocol version fails at health, before the RPC, exactly like a skewed proxy. The comparison against DAEMON_RPC_PROTOCOL_VERSION is unchanged and strictly wider; a compatible chain passes as before."
+      "digest": "sha256:bcefa89fbb7fcbd6fee1b5ecb217955b9eee8d6fd2ad175fb653011edbd199d9",
+      "rationale": "#2198 checks every link a command RPC crosses for protocol skew. #2650 caps a retry health probe at the request's remaining deadline. Health payload parsing and protocol mismatch refusal are unchanged; released peers still receive the same RPCs."
     },
     {
       "declaration": "src/daemon/server/http-server.ts#authorizeAuxiliaryHttpRequest",
@@ -388,8 +393,8 @@
       "rationale": "#2650 shares the existing conditional 409 JSON-RPC error envelope between daemon and proxy. Its status, header, error code, and normalized reason are unchanged; released peers omit the instance precondition and never receive this response."
     },
     {
-      "declaration": "src/daemon/server/http-server.ts#refuseStaleDaemonInstance",
-      "digest": "sha256:7df100f86c1fcda9ef983a7141e6c3f1fd162c1fd8968a43c03419ccfc8a4413",
+      "declaration": "src/daemon/server/http-instance-precondition.ts#refuseStaleDaemonInstance",
+      "digest": "sha256:cf9b6f9dd95bb2593e4810c5b5939936b6d6358bf2614c7c234266cab1922d29",
       "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before."
     },
     {

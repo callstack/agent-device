@@ -51,7 +51,7 @@ type WireMutation = {
 const MUTATIONS: readonly WireMutation[] = [
   {
     breakClass: 'instance refusal: the daemon drops the mismatch response header',
-    file: 'src/daemon/server/http-server.ts',
+    file: 'src/daemon/server/http-instance-precondition.ts',
     name: 'refuseStaleDaemonInstance',
     from: "res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');",
     to: '',

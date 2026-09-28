@@ -45,6 +45,7 @@ const REQUEST_PROGRESS = 'packages/contracts/src/request-progress.ts';
 const DAEMON_HTTP = 'packages/contracts/src/daemon-http.ts';
 const HTTP_ERRORS = 'src/daemon/http-errors.ts';
 const HTTP_SERVER = 'src/daemon/server/http-server.ts';
+const HTTP_INSTANCE_PRECONDITION = 'src/daemon/server/http-instance-precondition.ts';
 const UPLOAD_HTTP = 'src/daemon/upload-http.ts';
 const ARTIFACT_HTTP = 'src/daemon/downloadable-artifact-http.ts';
 const REQUEST_DIAGNOSTICS_HTTP = 'src/daemon/request-diagnostics-http.ts';
@@ -84,7 +85,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'buildDaemonHealthPayload',
         'buildDaemonInstanceMismatchRpcResponse',
       ),
-      ...from(HTTP_SERVER, 'refuseStaleDaemonInstance'),
+      ...from(HTTP_INSTANCE_PRECONDITION, 'refuseStaleDaemonInstance'),
       ...from(
         DAEMON_PROXY,
         'refuseStaleProxyInstance',
