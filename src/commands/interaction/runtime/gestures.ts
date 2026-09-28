@@ -27,13 +27,13 @@ import {
 } from './post-action-observation.ts';
 import {
   assertSupportedInteractionSurface,
-  captureInteractionSnapshot,
   dispatchNativeRefInteraction,
   resolveInteractionTarget,
   type ExpectedResolvedTarget,
   type InteractionTarget,
   type ResolvedInteractionTarget,
 } from './resolution.ts';
+import { captureInteractionSnapshot } from './interaction-snapshot-capture.ts';
 import { resolveVisibleSnapshotViewport } from './viewport.ts';
 
 type DragRecordingTarget = {
@@ -95,6 +95,11 @@ export type FocusCommandResult = ResolvedInteractionTarget & BackendResultEnvelo
 export type LongPressCommandOptions = CommandContext & {
   target: InteractionTarget;
   durationMs?: number;
+  /**
+   * Operator-only readiness budget (#1656 promotedTarget row): polls for the target to exist and
+   * become actionable, capped at the row's maxTimeoutMs. Absent takes the one-attempt path.
+   */
+  readinessTimeoutMs?: number;
   /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
   expectedResolvedTarget?: ExpectedResolvedTarget;
 } & SettlePostActionObservationOptions;
@@ -142,6 +147,7 @@ export const longPressCommand: RuntimeCommand<
     pipeline: SELECTOR_PIPELINE_POLICIES.promotedTarget,
     captureEvidenceBaseline: observation.needsPreActionBaseline,
     expectedResolvedTarget: options.expectedResolvedTarget,
+    readinessTimeoutMs: options.readinessTimeoutMs,
   });
   if (!runtime.backend.longPress) {
     throw new AppError('UNSUPPORTED_OPERATION', 'longPress is not supported by this backend');

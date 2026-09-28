@@ -38,6 +38,12 @@ export type CommandExecutionOptions = Partial<ScreenshotRequestFlags> &
     durationMs?: number;
     holdMs?: number;
     jitterPx?: number;
+    /**
+     * Operator-only: the readiness budget a tap-shaped interaction (press/click/longpress) may
+     * spend polling for a target that does not exist yet, capped at the promotedTarget row's
+     * maxTimeoutMs. Never model- or CLI-writable; absent means the one-attempt resolution path.
+     */
+    readinessTimeoutMs?: number;
     pixels?: number;
     /** Scroll: repeat passes until this selector is visible on screen. */
     until?: string;

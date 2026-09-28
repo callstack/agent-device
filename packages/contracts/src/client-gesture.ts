@@ -35,11 +35,22 @@ export type SettleCommandOptions = {
   timeoutMs?: number;
 };
 
+/**
+ * Operator-only readiness budget (#1656 promotedTarget row): how long a tap-shaped interaction may
+ * poll for a target that does not exist yet, capped at the row's maxTimeoutMs. Never model- or
+ * CLI-writable; omitted means the one-attempt resolution path unchanged from before this option
+ * existed.
+ */
+export type ReadinessBudgetOptions = {
+  readinessTimeoutMs?: number;
+};
+
 export type ClickOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions &
   InteractionTarget &
   RepeatedPressOptions &
-  SettleCommandOptions & {
+  SettleCommandOptions &
+  ReadinessBudgetOptions & {
     button?: ClickButton;
     /**
      * Opt-in (#1047): return cheap post-action evidence (AX digest, node counts,
@@ -53,14 +64,16 @@ export type PressOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions &
   InteractionTarget &
   RepeatedPressOptions &
-  SettleCommandOptions & {
+  SettleCommandOptions &
+  ReadinessBudgetOptions & {
     verify?: boolean;
   };
 
 export type LongPressOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions &
   InteractionTarget &
-  SettleCommandOptions & {
+  SettleCommandOptions &
+  ReadinessBudgetOptions & {
     durationMs?: number;
   };
 

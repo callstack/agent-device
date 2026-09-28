@@ -1,4 +1,5 @@
 import type { CliFlags } from '@agent-device/contracts/command';
+import { readOptionalInteger } from '@agent-device/contracts/command';
 import type {
   AgentDeviceRequestOverrides,
   AgentDeviceSelectionOptions,
@@ -30,6 +31,12 @@ export type CommonCommandInput = Pick<
   androidDeviceAllowlist?: string;
   /** `--no-record`: common to every recordable command (see `commonInputFromFlags`). */
   noRecord?: boolean;
+  /**
+   * Operator-only readiness budget for a tap-shaped interaction (press/click/longpress), capped at
+   * the promotedTarget row's maxTimeoutMs. No `flagIn`/`flagKey`: it never rides a CLI flag or the
+   * client "selection" projection, only the CLI/Node structured-input and SDK client option seams.
+   */
+  readinessTimeoutMs?: number;
 };
 
 export type CommonInputReadOptions = { readTargetAlias?: boolean };
@@ -211,6 +218,22 @@ const COMMON_INPUT_FIELDS = {
     read: (record) => optionalBoolean(record, 'noRecord'),
     flagKey: 'noRecord',
     flagIn: ['input', 'selection'],
+  },
+  readinessTimeoutMs: {
+    schema: {
+      type: 'integer',
+      minimum: 1,
+      description:
+        "Operator-only: how long press/click/longpress may poll for a target that does not exist yet, in milliseconds. Capped at the promotedTarget row's maxTimeoutMs; omitted takes the one-attempt resolution path.",
+    },
+    read: (record) => readOptionalInteger(record, 'readinessTimeoutMs', { min: 1 }),
+    // Not accepted as a tool argument, and no CLI flag exists for it (deliberately: agents mostly
+    // miss on a wrong selector, where fast feedback matters more than absorbing a render race) — an
+    // operator supplies it directly through the CLI/Node structured input or the SDK client option.
+    audience: operatorAudience({
+      operatorPath:
+        'Pass readinessTimeoutMs directly as CLI/Node.js command input; it is not exposed to model-facing tools.',
+    }),
   },
   daemonBaseUrl: {
     schema: { type: 'string', description: 'Remote daemon base URL.' },

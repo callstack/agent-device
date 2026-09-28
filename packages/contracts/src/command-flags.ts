@@ -35,6 +35,12 @@ export type CommandFlags = Omit<CliFlags, DaemonExcludedCliFlag> & {
   kind?: string;
   maestro?: MaestroRuntimeFlags;
   postGestureStabilization?: boolean;
+  /**
+   * Operator-only readiness budget for press/click/longpress (#1656 promotedTarget row), capped at
+   * its maxTimeoutMs. No CliFlags counterpart: never CLI- or model-writable, so it is a daemon-side
+   * addition here rather than an `Omit<CliFlags, ...>` member.
+   */
+  readinessTimeoutMs?: number;
   snapshotIncludeHiddenContentHints?: boolean;
   leaseProvider?: string;
   provider?: string;

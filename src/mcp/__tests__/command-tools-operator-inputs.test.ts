@@ -24,6 +24,7 @@ const OPERATOR_OWNED_KEYS = [
   'iosXctestrunFile',
   'iosXctestDerivedDataPath',
   'iosXctestEnvDir',
+  'readinessTimeoutMs',
 ] as const;
 
 // The rest of the shared common input: keys a model may write, because they

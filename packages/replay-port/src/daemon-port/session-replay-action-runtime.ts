@@ -145,7 +145,7 @@ async function invokeResolvedReplayAction(params: {
 }): Promise<DaemonResponse> {
   const { req, sessionName, resolved, sourceAction, invoke, resolvedSessionScope, dependencies } =
     params;
-  const flags = buildReplayActionFlags(req.flags, resolved.flags);
+  const flags = buildReplayActionFlags(req.flags, resolved.flags, resolved.command);
   const recordedInputVariable =
     sourceAction.command === 'fill'
       ? readRecordedInputVariableName(inferFillText(sourceAction))
@@ -215,9 +215,28 @@ function readResponseTiming(data: unknown): Record<string, unknown> | undefined 
   );
 }
 
+/**
+ * A press/click/longpress step replays against a UI that may still be a render or two behind where
+ * it was recorded — the same render race #1656's operator-only readiness budget absorbs live. A
+ * replayed step carries no recorded budget of its own (there is no CLI flag for it), so every such
+ * step defaults to one here unless the merged flags already name one — future-proofing against a
+ * flag source this PR does not add, rather than a live possibility today.
+ */
+const REPLAY_DEFAULT_READINESS_TIMEOUT_MS = 2_000;
+const READINESS_BUDGETED_REPLAY_COMMANDS: ReadonlySet<string> = new Set([
+  'press',
+  'click',
+  'longpress',
+]);
+
 function buildReplayActionFlags(
   parentFlags: CommandFlags | undefined,
   actionFlags: SessionAction['flags'] | undefined,
+  command: string,
 ): CommandFlags {
-  return mergeParentFlags(parentFlags, { ...(actionFlags ?? {}) });
+  const flags = mergeParentFlags(parentFlags, { ...(actionFlags ?? {}) });
+  if (READINESS_BUDGETED_REPLAY_COMMANDS.has(command) && flags.readinessTimeoutMs === undefined) {
+    flags.readinessTimeoutMs = REPLAY_DEFAULT_READINESS_TIMEOUT_MS;
+  }
+  return flags;
 }

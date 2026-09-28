@@ -85,5 +85,6 @@ function commonInputValueFor(key: string): unknown {
   if (key === 'platform') return 'ios';
   if (key === 'deviceTarget' || key === 'target') return 'mobile';
   if (key === 'debug') return true;
+  if (key === 'readinessTimeoutMs') return 2_000;
   return `value-${key}`;
 }

@@ -287,11 +287,13 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/selector-action-resolution.ts#resolveActionSelector',
       },
-      // press/click/longpress poll the promotedTarget row's readiness budget; fill/hover resolve
-      // against the resolvedTarget row, which declares no poll budget (#1656).
+      // press/click/longpress poll the promotedTarget row's readiness budget only when the caller
+      // (operator-only readinessTimeoutMs, never model- or CLI-writable) supplies one, capped at the
+      // row's maxTimeoutMs; fill/hover resolve against the resolvedTarget row, which declares no
+      // poll budget at all (#1656).
       targetReadiness: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/resolution.ts#resolveSelectorInteractionTarget',
+        via: 'src/commands/interaction/runtime/selector-readiness.ts#pollForSelectorReadiness',
         appliesTo: ['press', 'click', 'longpress'],
       },
       outcomeObservation: TAP_OUTCOME_NOT_OBSERVED_GAP,

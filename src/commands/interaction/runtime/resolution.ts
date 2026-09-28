@@ -5,11 +5,7 @@ import type {
   SnapshotNode,
   SnapshotState,
 } from '@agent-device/kernel/snapshot';
-import {
-  findNodeByRef,
-  inheritPostGestureOutcome,
-  normalizeRef,
-} from '@agent-device/kernel/snapshot';
+import { findNodeByRef, normalizeRef } from '@agent-device/kernel/snapshot';
 import { resolveRectCenter } from '@agent-device/kernel/rect-center';
 import type {
   AgentDeviceRuntime,
@@ -17,14 +13,11 @@ import type {
   CommandSessionRecord,
 } from '../../../runtime-contract.ts';
 import {
-  formatSelectorFailure,
-  selectorFailureHint,
   STALE_REF_HINT,
   type SelectorResolution,
   buildSelectorChainForNode,
 } from '@agent-device/selectors';
 import {
-  resolveSelectorPipeline,
   runNodePipelineStages,
   type SelectorPipelineHooks,
 } from '@agent-device/selectors/selector-pipeline';
@@ -32,11 +25,19 @@ import {
   SELECTOR_PIPELINE_POLICIES,
   type ActingPipelinePolicy,
   type SelectorPipelinePolicy,
-  type SelectorPollBudget,
 } from '@agent-device/selectors/selector-pipeline-policy';
-import { observeUntil } from '@agent-device/capture-kit/observe-until';
-import { isUnreadableCaptureContentError } from '@agent-device/contracts/android-snapshot-quality';
 import { resolvePressRecordingTarget } from '@agent-device/selectors/press-retarget';
+import {
+  attemptSelectorResolution,
+  pollForSelectorReadiness,
+  selectorInteractionFailure,
+  type ReadinessSchedule,
+} from './selector-readiness.ts';
+import {
+  captureInteractionSnapshot,
+  type InteractionSnapshot,
+} from './interaction-snapshot-capture.ts';
+import { buildCoveredInteractionError } from './covered-interaction-error.ts';
 import { requireSnapshotSession } from './selector-read-shared.ts';
 import { findNodeByLabel, resolveRefLabel } from '@agent-device/capture-kit/snapshot-node-lookup';
 import { containsPoint } from '@agent-device/kernel/rect';
@@ -63,7 +64,7 @@ import type {
   BackendCommandContext,
   BackendRefTarget,
 } from '../../../backend.ts';
-import { now, toBackendContext } from '../../runtime-common.ts';
+import { toBackendContext } from '../../runtime-common.ts';
 import { toBackendResult } from '../../runtime-types.ts';
 import { resolveInteractionTouchPoint } from '@agent-device/selectors/interaction-touch-point';
 import {
@@ -76,12 +77,10 @@ import {
   REPLAY_TARGET_GUARD_MISMATCH_REASON,
   type ReplayTargetGuardDenotation,
 } from '@agent-device/contracts/replay';
-import { resolveActionSelector } from './selector-action-resolution.ts';
 import {
   assertTapTargetClearOfVisibleKeyboard,
   describeKeyboardOccludedPointWarning,
 } from './keyboard-occlusion.ts';
-import { interactionVerb } from './interaction-verb.ts';
 
 export type { InteractionTarget, ResolvedInteractionTarget };
 
@@ -156,11 +155,7 @@ export type InteractionAction =
   | 'rotate'
   | 'transform';
 
-export type InteractionSnapshot = {
-  snapshot: SnapshotState;
-};
-
-type ResolveInteractionTargetParams = {
+export type ResolveInteractionTargetParams = {
   action: InteractionAction;
   requireInteractive: boolean;
   /**
@@ -170,6 +165,14 @@ type ResolveInteractionTargetParams = {
    * the element they resolved.
    */
   pipeline: ActingPipelinePolicy;
+  /**
+   * Operator-only readiness budget (never model- or CLI-writable): how long a `promotedTarget` row
+   * may poll for a target that does not exist yet, before `resolveSelectorInteractionTarget` caps it
+   * at the row's `maxTimeoutMs`. Anything other than a positive integer — including `resolvedTarget`
+   * rows, which declare no poll budget at all — takes the one-attempt path unchanged from before
+   * this budget existed.
+   */
+  readinessTimeoutMs?: number;
   /**
    * `--verify` (#1047): also capture the pre-action node set for a `point` target
    * so `changedFromBefore` evidence has a baseline. Ref/selector targets already
@@ -382,197 +385,27 @@ async function resolveRefInteractionTarget(
   };
 }
 
-/** One poll's outcome: the capture it read the tree from, and what it resolved (if anything). */
-type SelectorResolutionAttempt = {
-  capture: InteractionSnapshot;
-  resolved: SelectorResolution | null;
-};
-
-/** The narrowed attempt a readiness poll accepts: a resolution with a usable rect. */
-type ResolvedSelectorAttempt = {
-  capture: InteractionSnapshot;
-  resolved: SelectorResolution;
-};
-
-/**
- * One capture-and-resolve attempt: interactive capture, resolve; on a miss that requires
- * interactivity, fall back to a full (non-interactive) capture and resolve again. Identical body
- * whether run once (`promotedTarget.poll === 'none'`'s twins, `resolvedTarget`) or repeated under
- * `observeUntil` for a row that polls — this function draws no distinction, and does not decide
- * whether the miss is a refusal (ambiguity, occlusion, off-screen) or a plain no-match: those stay
- * the caller's decisions, made from `resolved`/thrown errors exactly as before.
- */
-async function attemptSelectorResolution(
-  runtime: AgentDeviceRuntime,
-  options: CommandContext,
-  selectorExpression: string,
-  params: ResolveInteractionTargetParams,
-  forceFresh: boolean,
-): Promise<SelectorResolutionAttempt> {
-  let capture = await captureInteractionSnapshot(
-    runtime,
-    options,
-    params.requireInteractive,
-    forceFresh,
-  );
-  let resolved = resolveActionSelector(
-    capture.snapshot.nodes,
-    selectorExpression,
-    runtime.backend.platform,
-    params.pipeline,
-  );
-  if ((!resolved || !resolved.node.rect) && params.requireInteractive) {
-    const interactive = capture.snapshot;
-    capture = await captureInteractionSnapshot(runtime, options, false, forceFresh);
-    inheritPostGestureOutcome(interactive, capture.snapshot);
-    resolved = resolveActionSelector(
-      capture.snapshot.nodes,
-      selectorExpression,
-      runtime.backend.platform,
-      params.pipeline,
-    );
-  }
-  return { capture, resolved };
-}
-
-/** The readiness poll's evidence, attached to a target-not-found failure only (never to a refusal). */
-type SelectorReadinessDetails = {
-  polls: number;
-  waitedMs: number;
-  end: 'expired' | 'stalled';
-};
-
-/**
- * `promotedTarget`'s readiness budget: the target may not exist yet, so a
- * plain no-match (no resolution, or a resolution with no usable rect) keeps polling under the row's
- * budget instead of refusing on the first capture. Every other outcome stays terminal exactly as a
- * single attempt would produce it — an ambiguity throw from `resolveActionSelector`, or a capture
- * error the loop does not ride out, ends the loop on this same poll, and is rethrown unchanged.
- * Occlusion, off-screen, non-hittable, and keyboard refusals are not judged here: they run once,
- * after this loop returns a rect-bearing resolution, exactly as `runInteractionPipelineStages`
- * always has.
- *
- * The first poll is unbounded and reuses today's snapshot cache (`forceFresh: false`), so a caller
- * whose first capture already matches pays the same one-or-two-capture cost as before. Only a poll
- * that follows a miss (poll 2+) forces a fresh capture, mirroring how `wait` bypasses the cache.
- */
-async function pollForSelectorReadiness(
-  runtime: AgentDeviceRuntime,
-  options: CommandContext,
-  selectorExpression: string,
-  params: ResolveInteractionTargetParams,
-  poll: SelectorPollBudget,
-): Promise<ResolvedSelectorAttempt> {
-  const signal = options.signal ?? runtime.signal;
-  let previousPoll: InteractionSnapshot | undefined;
-  const observed = await observeUntil<SelectorResolutionAttempt, ResolvedSelectorAttempt>({
-    capture: async (pollSignal) => {
-      const attempt = await pollSelectorReadinessOnce(
-        runtime,
-        { ...options, signal: pollSignal },
-        selectorExpression,
-        params,
-        previousPoll,
-      );
-      previousPoll = attempt.capture;
-      return attempt;
-    },
-    verdict: (latest) =>
-      latest.resolved && latest.resolved.node.rect
-        ? { kind: 'done', result: { capture: latest.capture, resolved: latest.resolved } }
-        : { kind: 'continue' },
-    schedule: {
-      intervalMs: poll.intervalMs,
-      budgetMs: poll.defaultTimeoutMs,
-      budgetFrom: 'first-capture',
-    },
-    rideOut: isUnreadableCaptureContentError,
-    ...(signal ? { signal } : {}),
-    ...(runtime.clock ? { clock: runtime.clock } : {}),
-    phase: 'interaction_target_readiness',
-  });
-  if (observed.kind === 'done') return observed.result;
-  if (observed.kind === 'failed') throw observed.error;
-  throw await readinessExhaustedFailure(runtime, selectorExpression, params, observed);
+function isPositiveInteger(value: number | undefined): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
 /**
- * One readiness poll: today's capture-and-resolve attempt, the previous poll's post-gesture outcome
- * carried forward, and the covered-target probe on a miss. A covered candidate is excluded by
- * promotedTarget's own occlusion stage before it reaches `resolved`, so it looks identical to
- * "not found yet"; detecting it here ends the loop on this poll instead of spending the budget on a
- * target that will never stop being covered.
+ * The schedule THIS call may poll `promotedTarget` under: `undefined` when the row resolves
+ * against one capture (`resolvedTarget`'s `poll: 'none'`), or when the caller supplied no
+ * `readinessTimeoutMs` — both take the one-attempt path exactly as before this budget existed
+ * (MCP and CLI never supply one, so neither surface changes). Otherwise the row's own cadence, and
+ * a budget capped at the row's `maxTimeoutMs` so an operator-supplied value can shrink the wait but
+ * never stretch past what the row allows.
  */
-async function pollSelectorReadinessOnce(
-  runtime: AgentDeviceRuntime,
-  options: CommandContext,
-  selectorExpression: string,
-  params: ResolveInteractionTargetParams,
-  previousPoll: InteractionSnapshot | undefined,
-): Promise<SelectorResolutionAttempt> {
-  const attempt = await attemptSelectorResolution(
-    runtime,
-    options,
-    selectorExpression,
-    params,
-    previousPoll !== undefined,
-  );
-  if (previousPoll) inheritPostGestureOutcome(previousPoll.snapshot, attempt.capture.snapshot);
-  if (attempt.resolved?.node.rect) return attempt;
-  const covered = await detectCoveredSelectorTarget({
-    runtime,
-    nodes: attempt.capture.snapshot.nodes,
-    selectorExpression,
-    action: params.action,
-  });
-  if (covered) throw covered;
-  return attempt;
+function readinessScheduleFor(
+  poll: ActingPipelinePolicy['poll'],
+  readinessTimeoutMs: number | undefined,
+): ReadinessSchedule | undefined {
+  if (poll === 'none' || !isPositiveInteger(readinessTimeoutMs)) return undefined;
+  return { intervalMs: poll.intervalMs, budgetMs: Math.min(readinessTimeoutMs, poll.maxTimeoutMs) };
 }
 
-/**
- * The budget is spent or a capture stalled at the deadline. When no poll ever observed the tree, the
- * last ridden-out capture error is the cause and is raised as such; otherwise the ordinary
- * selector failure carries the readiness evidence.
- */
-async function readinessExhaustedFailure(
-  runtime: AgentDeviceRuntime,
-  selectorExpression: string,
-  params: ResolveInteractionTargetParams,
-  observed: Extract<
-    Awaited<ReturnType<typeof observeUntil<SelectorResolutionAttempt, ResolvedSelectorAttempt>>>,
-    { kind: 'expired' | 'stalled' }
-  >,
-): Promise<AppError | unknown> {
-  if (
-    observed.last === undefined &&
-    observed.kind === 'expired' &&
-    observed.lastError !== undefined
-  ) {
-    return observed.lastError;
-  }
-  const readiness: SelectorReadinessDetails = {
-    polls: observed.polls.length,
-    waitedMs: observed.waitedMs,
-    end: observed.kind,
-  };
-  const failure = await selectorInteractionFailure({
-    runtime,
-    nodes: observed.last?.capture.snapshot.nodes ?? [],
-    selectorExpression,
-    action: params.action,
-    resolved: observed.last?.resolved ?? null,
-  });
-  failure.details = { ...failure.details, readiness };
-  return failure;
-}
-
-/**
- * Exported as an ADR 0011 registry anchor: interaction-guarantees.ts cites this as the
- * runtime-selector `targetReadiness` `via` symbol, and the gate test imports it dynamically, which
- * fallow cannot trace statically.
- */
-// fallow-ignore-next-line unused-export
-export async function resolveSelectorInteractionTarget(
+async function resolveSelectorInteractionTarget(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
   target: Extract<InteractionTarget, { kind: 'selector' }>,
@@ -581,7 +414,8 @@ export async function resolveSelectorInteractionTarget(
   const selectorExpression = target.selector;
   let capture: InteractionSnapshot;
   let resolved: SelectorResolution | null;
-  if (params.pipeline.poll === 'none') {
+  const readinessSchedule = readinessScheduleFor(params.pipeline.poll, params.readinessTimeoutMs);
+  if (!readinessSchedule) {
     const attempt = await attemptSelectorResolution(
       runtime,
       options,
@@ -606,7 +440,7 @@ export async function resolveSelectorInteractionTarget(
       options,
       selectorExpression,
       params,
-      params.pipeline.poll,
+      readinessSchedule,
     );
     capture = ready.capture;
     resolved = ready.resolved;
@@ -644,65 +478,6 @@ export async function resolveSelectorInteractionTarget(
       buildSelectorResolutionDisclosure(resolved, capture.snapshot.nodes),
     ),
   };
-}
-
-/**
- * No usable acting target. Before reporting "did not match", re-probe the same
- * tree through the diagnosis row: a selector that DOES match but landed on a
- * covered node is a different failure with a different recovery, and the
- * acting row — rect-required, candidates rejected — cannot tell the caller
- * that. Both probes name a policy row, so the two contracts stay visible side
- * by side instead of as two sets of engine knobs (#1630).
- */
-/**
- * The diagnosis row keeps covered nodes as candidates precisely so its occlusion stage can report
- * them: "matched but covered" is a different failure than "did not match", produced by re-probing
- * the same tree under `coveredDiagnosis` rather than by the acting row's own (candidate-excluding)
- * resolution. Shared by the single-attempt failure path and the readiness poll: a covered target is
- * a refusal, not an absence, and must end a poll loop rather than spend its budget (a `promotedTarget`
- * poll cannot otherwise tell "excluded because covered" apart from "does not exist yet").
- */
-async function detectCoveredSelectorTarget(params: {
-  runtime: AgentDeviceRuntime;
-  nodes: SnapshotState['nodes'];
-  selectorExpression: string;
-  action: InteractionAction;
-}): Promise<AppError | undefined> {
-  const { runtime, nodes, selectorExpression, action } = params;
-  const covered = await resolveSelectorPipeline(
-    SELECTOR_PIPELINE_POLICIES.coveredDiagnosis,
-    nodes,
-    selectorExpression,
-    { platform: runtime.backend.platform },
-  );
-  if (covered.kind !== 'occluded') return undefined;
-  return buildCoveredInteractionError({
-    label: `Selector ${covered.selector}`,
-    node: covered.node,
-    action,
-    selector: covered.selector,
-  });
-}
-
-async function selectorInteractionFailure(params: {
-  runtime: AgentDeviceRuntime;
-  nodes: SnapshotState['nodes'];
-  selectorExpression: string;
-  action: InteractionAction;
-  resolved: SelectorResolution | null;
-}): Promise<AppError> {
-  const { runtime, nodes, selectorExpression, action, resolved } = params;
-  const covered = await detectCoveredSelectorTarget({ runtime, nodes, selectorExpression, action });
-  if (covered) return covered;
-  const diagnostics = resolved?.diagnostics ?? [];
-  return new AppError(
-    'COMMAND_FAILED',
-    formatSelectorFailure(selectorExpression, diagnostics, { unique: true }),
-    {
-      reason: INTERACTION_ERROR_REASONS.selectorNotFound,
-      hint: selectorFailureHint(diagnostics),
-    },
-  );
 }
 
 function assertReplayTargetResolution(
@@ -925,58 +700,6 @@ async function runInteractionPipelineStages<TPoint extends Point | null>(params:
     tapPoint,
   });
   return { node: target.node, tapPoint };
-}
-
-function buildCoveredInteractionError(params: {
-  label: string;
-  node: SnapshotNode;
-  action: InteractionAction;
-  selector?: string;
-}): AppError {
-  return new AppError(
-    'COMMAND_FAILED',
-    `${params.label} is covered by another visible element and cannot ${interactionVerb(params.action)} safely`,
-    {
-      hint: 'Use a different visible target, scroll it clear of the overlay, or inspect with snapshot/screenshot before retrying.',
-      ...(params.selector ? { selector: params.selector } : {}),
-      ref: `@${params.node.ref}`,
-      interactionBlocked: params.node.interactionBlocked,
-    },
-  );
-}
-
-export async function captureInteractionSnapshot(
-  runtime: AgentDeviceRuntime,
-  options: CommandContext,
-  interactiveOnly: boolean,
-  /**
-   * Bypasses the daemon's short-lived selector capture cache, the way `wait`'s capture already does
-   * (`src/daemon/selector-runtime-backend.ts`). Defaults to false: every caller before the readiness
-   * poll relied on the cache, and the poll itself only sets this from its second capture on.
-   */
-  forceFresh?: boolean,
-): Promise<InteractionSnapshot> {
-  if (!runtime.backend.captureSnapshot) {
-    throw new AppError('UNSUPPORTED_OPERATION', 'snapshot is not supported by this backend');
-  }
-  const sessionName = options.session ?? 'default';
-  const session = await runtime.sessions.get(sessionName);
-  if (!session) throw new AppError('SESSION_NOT_FOUND', 'No active session. Run open first.');
-  const result = await runtime.backend.captureSnapshot(toBackendContext(runtime, options), {
-    interactiveOnly,
-    includeRects: true,
-    ...(forceFresh ? { forceFresh: true } : {}),
-  });
-  const snapshot =
-    result.snapshot ??
-    ({
-      nodes: result.nodes ?? [],
-      truncated: result.truncated,
-      backend: result.backend as SnapshotState['backend'],
-      createdAt: now(runtime),
-    } satisfies SnapshotState);
-  await runtime.sessions.set({ ...session, snapshot });
-  return { snapshot };
 }
 
 export async function assertSupportedInteractionSurface(

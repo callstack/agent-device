@@ -57,3 +57,89 @@ test.each(['', '   '])(
     expect(session.actions[0]?.result?.text).toBe('${PASSWORD}');
   },
 );
+
+// #1656 follow-up: a replayed press/click/longpress step races the same render gap the operator-
+// only readiness budget exists for, but a replay step has no CLI flag to carry one — so the one
+// place replay builds a step's dispatched flags (`invokeResolvedReplayAction`'s
+// `buildReplayActionFlags`) defaults it in for those three commands.
+test.each(['press', 'click', 'longpress'])(
+  'replay defaults readinessTimeoutMs onto a dispatched %s step',
+  async (command) => {
+    const action: SessionAction = { ts: 0, command, positionals: ['label="Continue"'], flags: {} };
+    let dispatchedFlags: Record<string, unknown> | undefined;
+    const response = await invokeReplayAction({
+      req: REPLAY_REQUEST,
+      sessionName: 'default',
+      action,
+      resolved: action,
+      filePath: 'flow.ad',
+      line: 1,
+      step: 1,
+      resolvedSessionScope: undefined,
+      dependencies: replayDaemonDependencies,
+      invoke: async (request) => {
+        dispatchedFlags = request.flags;
+        return { ok: true, data: {} };
+      },
+    });
+
+    expect(response.ok).toBe(true);
+    expect(dispatchedFlags?.readinessTimeoutMs).toBe(2_000);
+  },
+);
+
+test('replay keeps a readinessTimeoutMs the step already carries instead of overwriting it', async () => {
+  const action: SessionAction = {
+    ts: 0,
+    command: 'press',
+    positionals: ['label="Continue"'],
+    flags: { readinessTimeoutMs: 500 },
+  };
+  let dispatchedFlags: Record<string, unknown> | undefined;
+  const response = await invokeReplayAction({
+    req: REPLAY_REQUEST,
+    sessionName: 'default',
+    action,
+    resolved: action,
+    filePath: 'flow.ad',
+    line: 1,
+    step: 1,
+    resolvedSessionScope: undefined,
+    dependencies: replayDaemonDependencies,
+    invoke: async (request) => {
+      dispatchedFlags = request.flags;
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(dispatchedFlags?.readinessTimeoutMs).toBe(500);
+});
+
+test('replay never defaults readinessTimeoutMs onto a non-acting step', async () => {
+  const action: SessionAction = {
+    ts: 0,
+    command: 'wait',
+    positionals: ['label="Continue"'],
+    flags: {},
+  };
+  let dispatchedFlags: Record<string, unknown> | undefined;
+  const response = await invokeReplayAction({
+    req: REPLAY_REQUEST,
+    sessionName: 'default',
+    action,
+    resolved: action,
+    filePath: 'flow.ad',
+    line: 1,
+    step: 1,
+    resolvedSessionScope: undefined,
+    dependencies: replayDaemonDependencies,
+    invoke: async (request) => {
+      dispatchedFlags = request.flags;
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(dispatchedFlags?.readinessTimeoutMs).toBeUndefined();
+});

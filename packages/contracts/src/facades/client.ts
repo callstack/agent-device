@@ -55,6 +55,7 @@ export type {
   PanOptions,
   PinchOptions,
   PressOptions,
+  ReadinessBudgetOptions,
   RepeatedPressOptions,
   RotateGestureOptions,
   ScrollOptions,

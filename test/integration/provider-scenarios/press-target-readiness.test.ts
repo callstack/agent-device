@@ -111,7 +111,11 @@ test('press waits for a selector missing on the first two captures, then taps on
       tapEntry(200, 322),
     ],
     async (daemon, transcript) => {
-      const press = await daemon.callCommand('press', ['label=Continue']);
+      // Operator-only readiness budget: never CLI- or model-writable, so this scenario supplies it
+      // directly as a request flag, the one route it reaches a call through in this PR.
+      const press = await daemon.callCommand('press', ['label=Continue'], {
+        readinessTimeoutMs: 2_000,
+      });
       const data = assertRpcOk(press);
       assert.equal(data.x, 200);
       assert.equal(data.y, 322);
@@ -144,7 +148,9 @@ test('press fails with the standard no-match error, carrying readiness evidence,
     // No fake clock is wired into this daemon-composed runtime path (AgentDeviceRuntime.clock is
     // never set by daemon composition), so this genuinely spends the ~2s promotedTarget readiness
     // budget in wall-clock time before failing.
-    const press = await daemon.callCommand('press', ['label=Continue']);
+    const press = await daemon.callCommand('press', ['label=Continue'], {
+      readinessTimeoutMs: 2_000,
+    });
     const error = assertRpcError(press, 'COMMAND_FAILED', /Selector did not match/);
     const details = error.details as {
       reason: unknown;
@@ -166,6 +172,32 @@ test('press resolving on the first capture costs exactly one snapshot call (zero
     async (daemon) => {
       const press = await daemon.callCommand('press', ['label=Continue']);
       assertRpcOk(press);
+    },
+  );
+});
+
+// (d) #1656 follow-up: reviewers found the row-wide 2s wait wrong for agents, whose misses are
+// usually a wrong selector — fast feedback matters more than absorbing a render race. Without an
+// explicit readinessTimeoutMs (never CLI- or model-writable, so MCP and CLI never supply one), a
+// miss takes the one-attempt path: exactly one capture-and-resolve attempt (the pre-existing
+// interactive-then-full-capture fallback, unchanged from main — not the readiness loop's repeated
+// polling), and no readiness evidence to attach.
+test('press without a readinessTimeoutMs flag fails on the first capture attempt, with no readiness poll', async () => {
+  await withPressReadinessDaemon(
+    // Interactive capture, then the interactive->full fallback — both miss, exactly like poll 1 of
+    // the readiness loop above, because this IS that same one attempt, just never repeated.
+    [snapshotEntry(APPLICATION_ONLY_NODES), snapshotEntry(APPLICATION_ONLY_NODES)],
+    async (daemon, transcript) => {
+      const callsBeforePress = transcript.calls.length;
+      const press = await daemon.callCommand('press', ['label=Continue']);
+      const error = assertRpcError(press, 'COMMAND_FAILED', /Selector did not match/);
+      const details = error.details as { reason: unknown; readiness: unknown };
+      assert.equal(details.reason, 'selector_not_found');
+      assert.equal(details.readiness, undefined);
+
+      const commands = transcript.calls.slice(callsBeforePress).map((call) => call.command);
+      assert.deepEqual(commands, ['ios.runner.snapshot', 'ios.runner.snapshot']);
+      transcript.assertComplete();
     },
   );
 });

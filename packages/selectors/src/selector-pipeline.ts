@@ -14,9 +14,9 @@ import type {
   CandidateSetPipelinePolicy,
   SelectorListPolicy,
   SelectorPipelinePolicy,
-  SelectorPollBudget,
   SelectorPromotionStage,
   SingleTargetPipelinePolicy,
+  WaitPollBudget,
 } from './selector-pipeline-policy.ts';
 
 /**
@@ -262,11 +262,20 @@ async function guardOffscreen(
   return await hooks.offscreen(node, nodes);
 }
 
-/** The poll stage: the budget `createWaitPolling` runs the row under. */
-export function selectorPollBudget(policy: SelectorPipelinePolicy): SelectorPollBudget {
+/**
+ * The poll stage: the caller-default budget `createWaitPolling` runs a wait-shaped row under.
+ * `promotedTarget`'s row polls too, but under a caller-supplied, row-capped budget rather than a
+ * row-owned default — it has no `defaultTimeoutMs` to hand back, so it is not a legal input here.
+ */
+export function selectorPollBudget(policy: SelectorPipelinePolicy): WaitPollBudget {
   if (policy.poll === 'none') {
     throw new Error(
       'selector pipeline row resolves against one capture and declares no poll budget',
+    );
+  }
+  if (!('defaultTimeoutMs' in policy.poll)) {
+    throw new Error(
+      'selector pipeline row polls under a caller-capped readiness budget, not a caller-default one',
     );
   }
   return policy.poll;
