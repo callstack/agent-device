@@ -28,6 +28,16 @@ const READABLE_TIMEOUT = result(1, {
     details: { reason: WAIT_REASONS.deadlineExceeded, readableCaptures: 5, captureTruncated: true },
   },
 });
+const READINESS_TIMEOUT = result(1, {
+  error: {
+    code: 'COMMAND_FAILED',
+    details: {
+      reason: WAIT_REASONS.readinessExhausted,
+      readinessPhase: 'target-discovery',
+      readableCaptures: 0,
+    },
+  },
+});
 const OPEN_PROMPT = result(0, {
   data: { message: 'Open in “Agent Device Tester”?', items: ['Cancel', 'Open'] },
 });
@@ -68,6 +78,19 @@ test('a destination that arrives never probes for the confirmation', async () =>
 
 test('a readable destination timeout still answers a real Open confirmation', async () => {
   const { device, log } = simulator([READABLE_TIMEOUT, LANDED]);
+
+  await answerDeepLinkConfirmation(device);
+
+  assert.deepEqual(log, [
+    'wait for the deep-link destination (1/5)',
+    'alert get',
+    'alert accept',
+    'wait for the deep-link destination (2/5)',
+  ]);
+});
+
+test('target discovery exhaustion still answers a deep-link confirmation', async () => {
+  const { device, log } = simulator([READINESS_TIMEOUT, LANDED]);
 
   await answerDeepLinkConfirmation(device);
 
