@@ -8,7 +8,7 @@ import {
   readRunnerResponseData,
 } from '../runner-contract.ts';
 import { isStructuredRunnerFailure } from '../runner-error-classification.ts';
-import { parseRunnerResponse } from '../runner-session.ts';
+import { parseRunnerResponse } from '../runner-exchange.ts';
 import type { RunnerSessionState } from '../runner-session-types.ts';
 
 // A body cut off mid-write: the shape a runner that died while answering leaves behind.

@@ -15,7 +15,6 @@ import {
   ensureRunnerSession,
   invalidateRunnerSession,
   executeRunnerCommandWithSession,
-  readRunnerStartupTimeoutMs,
   markRunnerSessionServed,
   readRunnerSessionLiveness,
 } from './runner-session.ts';
@@ -295,8 +294,11 @@ export async function executeRunnerCommand(
       commitRunnerRecycle(recycleKey);
     }
     markRunnerRequestTouchedSession(recycleKey);
-    const timeoutMs =
-      session.state === 'ready' ? RUNNER_COMMAND_TIMEOUT_MS : readRunnerStartupTimeoutMs(session);
+    let timeoutMs = RUNNER_COMMAND_TIMEOUT_MS;
+    if (session.state !== 'ready') {
+      const { readRunnerStartupTimeoutMs } = await import('./runner-exchange.ts');
+      timeoutMs = readRunnerStartupTimeoutMs(session);
+    }
     return await executeRunnerCommandWithSession(
       device,
       session,
