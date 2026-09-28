@@ -204,7 +204,7 @@ export function runTypeScriptCase(testCase: DifferentialCase): DifferentialOutco
   }
 }
 
-function runnerPresentationAgrees(
+export function runnerPresentationAgrees(
   testCase: DifferentialCase,
   swift: DifferentialOutcome,
   acquired: DifferentialOutcome,
