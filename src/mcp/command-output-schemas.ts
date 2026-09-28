@@ -12,6 +12,7 @@ import {
   stringSchema,
 } from '../commands/command-input.ts';
 import { WAIT_COMMAND_OUTPUT_SCHEMAS } from '../commands/capture/wait.ts';
+import { PREPARE_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/prepare.ts';
 import { DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/device.ts';
 import { PUSH_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/push.ts';
 import { VIEWPORT_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/viewport.ts';
@@ -183,65 +184,6 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
     ['direction'],
   ),
 
-  // packages/contracts/src/prepare.ts — prepare is not MCP-exposed, but the schema stays
-  // map-complete with CommandResultMap.
-  prepare: objectSchema(
-    {
-      action: constSchema('ios-runner'),
-      // PublicPlatform leaf, mirroring PrepareCommandResult (packages/contracts/src/prepare.ts).
-      platform: enumSchema(PUBLIC_PLATFORMS),
-      deviceId: stringSchema(),
-      deviceName: stringSchema(),
-      kind: enumSchema(DEVICE_KINDS),
-      durationMs: numberSchema(),
-      runner: objectSchema({}, []),
-      cache: enumSchema(['exact', 'miss', 'external']),
-      artifact: enumSchema(['valid', 'rebuilt']),
-      buildMs: numberSchema(),
-      connectMs: numberSchema(),
-      healthCheckMs: numberSchema(),
-      xctestrunPath: stringSchema(),
-      recoveryReason: stringSchema(),
-      failureReason: stringSchema(),
-      timing: objectSchema(
-        {
-          totalMs: numberSchema(),
-          additiveParts: objectSchema(
-            {
-              buildMs: numberSchema(),
-              connectAfterBuildMs: numberSchema(),
-              healthCheckMs: numberSchema(),
-            },
-            ['connectAfterBuildMs', 'healthCheckMs'],
-          ),
-          containment: objectSchema(
-            {
-              connectMs: { type: 'array', items: constSchema('buildMs') },
-              healthCheckMs: { type: 'array', items: stringSchema() },
-            },
-            ['healthCheckMs'],
-          ),
-          note: stringSchema(),
-        },
-        ['totalMs', 'additiveParts', 'containment', 'note'],
-      ),
-      message: stringSchema(),
-    },
-    [
-      'action',
-      'platform',
-      'deviceId',
-      'deviceName',
-      'kind',
-      'durationMs',
-      'runner',
-      'connectMs',
-      'healthCheckMs',
-      'timing',
-      'message',
-    ],
-  ),
-
   // packages/contracts/src/doctor.ts
   doctor: objectSchema(
     {
@@ -304,6 +246,7 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
   // a projected command then fails as TS2783 instead of quietly overriding the family's,
   // and this map's `satisfies` still refuses a missing `CommandResultMap` key.
   ...WAIT_COMMAND_OUTPUT_SCHEMAS,
+  ...PREPARE_COMMAND_OUTPUT_SCHEMAS,
   ...DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS,
   ...PUSH_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS,
   ...VIEWPORT_COMMAND_OUTPUT_SCHEMAS,

@@ -4,6 +4,7 @@ import type { ReplayCommandResult, ReplaySuiteResult } from '@agent-device/contr
 import { ownerFilesForCommand } from '@agent-device/command-registry/owner-files';
 import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import { WAIT_COMMAND_OUTPUT_SCHEMAS } from '../../commands/capture/wait.ts';
+import { PREPARE_COMMAND_OUTPUT_SCHEMAS } from '../../commands/management/prepare.ts';
 import { DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS } from '../../commands/management/device.ts';
 import { PUSH_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS } from '../../commands/management/push.ts';
 import { VIEWPORT_COMMAND_OUTPUT_SCHEMAS } from '../../commands/management/viewport.ts';
@@ -79,6 +80,7 @@ const PROJECTED_FAMILIES = [
   { name: 'system', schemas: SYSTEM_COMMAND_OUTPUT_SCHEMAS },
   { name: 'interaction', schemas: INTERACTION_COMMAND_OUTPUT_SCHEMAS },
   { name: 'capture-wait', schemas: WAIT_COMMAND_OUTPUT_SCHEMAS },
+  { name: 'management-prepare', schemas: PREPARE_COMMAND_OUTPUT_SCHEMAS },
   { name: 'management-device', schemas: DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS },
   { name: 'management-push', schemas: PUSH_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS },
   { name: 'management-viewport', schemas: VIEWPORT_COMMAND_OUTPUT_SCHEMAS },
