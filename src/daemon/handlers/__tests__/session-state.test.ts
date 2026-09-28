@@ -611,6 +611,9 @@ test('pair-wearable rejects a watchOS simulator as an iOS phone before dispatch'
       }),
   );
 
-  await expect(result).rejects.toMatchObject({ code: 'DEVICE_NOT_FOUND' });
+  await expect(result).resolves.toMatchObject({
+    ok: false,
+    error: { code: 'UNSUPPORTED_OPERATION' },
+  });
   expect(bindDevice).not.toHaveBeenCalled();
 });

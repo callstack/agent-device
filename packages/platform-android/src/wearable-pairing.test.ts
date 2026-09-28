@@ -46,6 +46,32 @@ test('reports a human step after proving the Wear identity and ADB transport', a
   expect(runAdb).toHaveBeenCalledWith(watch, ['get-state'], expect.anything(), expect.anything());
 });
 
+test('automatic selection recognizes a booted Wear target without a Wear label', async () => {
+  const unnamedWearable = { ...watch, name: 'Fossil Gen 6' };
+  const runAdb = vi.fn(async (_device, args: string[]) => ({
+    stdout: args[0] === 'get-state'
+      ? 'device\n'
+      : args.includes('getprop')
+        ? 'watch\n'
+        : 'feature:android.hardware.type.watch\n',
+    stderr: '',
+    exitCode: 0,
+  }));
+  const result = await pairAndroidWearable(
+    host({ discover: async () => [phone, unnamedWearable], runAdb }),
+    phone,
+    { boot: false },
+    signal(),
+  );
+  expect(result.wearable.name).toBe('Fossil Gen 6');
+  expect(runAdb).toHaveBeenCalledWith(
+    unnamedWearable,
+    ['shell', 'pm', 'list', 'features'],
+    expect.anything(),
+    expect.anything(),
+  );
+});
+
 test('an explicit wearable selector cannot make a phone pass Wear identity verification', async () => {
   const runAdb = vi.fn(async (_device, args: string[]) => ({
     stdout: args[0] === 'get-state' ? 'device\n' : 'phone\n',

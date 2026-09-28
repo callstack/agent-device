@@ -23,7 +23,7 @@ test('devicectl classification recognizes Apple families without relying on a de
   );
 });
 
-test('devicectl classification resolves tvOS, iPadOS, and visionOS vocabulary', () => {
+test('devicectl classification resolves tvOS, iPadOS, watchOS, and visionOS vocabulary', () => {
   assert.equal(
     resolveAppleTargetFromDevicectlDevice({
       hardwareProperties: { platform: 'tvOS' },

@@ -261,7 +261,9 @@ export async function handleSessionStateCommands(params: {
       session: undefined,
       flags:
         input.phone.platform === 'ios'
-          ? { platform: 'ios', udid: input.phone.deviceId }
+          // Resolve the exact Apple identity in the family namespace so a watchOS
+          // simulator can be reported as an unsupported phone target, not as missing.
+          ? { platform: 'apple', udid: input.phone.deviceId }
           : { platform: 'android', serial: input.phone.deviceId },
       androidAvdSelection: 'include-stopped',
     });

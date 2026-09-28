@@ -17,7 +17,7 @@ export async function pairAndroidWearable(
   signal: AbortSignal,
 ): Promise<WearablePairingRuntimeResult> {
   let devices = await discover(host, signal);
-  let wearable = selectWearable(devices, phone, input);
+  let wearable = await selectWearable(host, devices, phone, input, signal);
   let launchedPid: number | undefined;
   try {
     if (wearable.kind !== 'emulator') {
@@ -129,31 +129,60 @@ async function discover(host: PlatformRuntimeHost, signal: AbortSignal) {
   );
 }
 
-function selectWearable(
+async function selectWearable(
+  host: PlatformRuntimeHost,
   devices: readonly DeviceInfo[],
   phone: DeviceInfo,
   input: PairWearableInput,
-): DeviceInfo {
+  signal: AbortSignal,
+): Promise<DeviceInfo> {
   const requested = input.wearable;
-  const matches = devices.filter(
-    // This predicate keeps every selector constraint visible in one place.
-    // fallow-ignore-next-line complexity
+  const candidates = devices.filter(
     (device) =>
       device.id !== phone.id &&
       device.target !== 'tv' &&
-      /\b(?:wear|watch)\b/i.test(device.name) &&
       (!requested?.deviceId || device.id === requested.deviceId) &&
       (!requested?.name || device.name === requested.name),
   );
-  if (matches.length === 1) return { ...matches[0]! };
-  if (matches.length === 0) {
+  const namedWearables = candidates.filter((device) => /\b(?:wear|watch)\b/i.test(device.name));
+  if (requested && candidates.length === 1) return { ...candidates[0]! };
+  if (!requested && namedWearables.length === 1) return { ...namedWearables[0]! };
+  if (candidates.length === 0 || (!requested && namedWearables.length === 0)) {
+    if (!requested) {
+      const runningCandidates = candidates.filter((device) => device.booted === true);
+      const featureMatches: DeviceInfo[] = [];
+      for (const device of runningCandidates) {
+        const result = await host.androidTools.runAdb(
+          device,
+          ['shell', 'pm', 'list', 'features'],
+          { allowFailure: true, timeoutMs: 10_000 },
+          signal,
+        );
+        if (result.exitCode !== 0) {
+          throw new AppError(
+            'COMMAND_FAILED',
+            `Unable to inspect Android target ${device.id} for Wear OS features.`,
+          );
+        }
+        if (/^feature:android\.hardware\.type\.watch\s*$/im.test(result.stdout)) {
+          featureMatches.push(device);
+        }
+      }
+      if (featureMatches.length === 1) return { ...featureMatches[0]! };
+      if (featureMatches.length > 1) {
+        throw new AppError('INVALID_ARGS', 'More than one Wear OS target matches; provide deviceId or name.', {
+          candidates: featureMatches.map(({ id, name }) => ({ id, name })),
+        });
+      }
+      const stoppedEmulators = candidates.filter(
+        (device) => device.kind === 'emulator' && device.booted === false,
+      );
+      if (input.boot && stoppedEmulators.length === 1) return { ...stoppedEmulators[0]! };
+    }
     throw new AppError('DEVICE_NOT_FOUND', 'No matching Wear OS device or emulator is available.');
   }
-  throw new AppError(
-    'INVALID_ARGS',
-    'More than one Wear OS target matches; provide deviceId or name.',
-    {
-      candidates: matches.map(({ id, name }) => ({ id, name })),
-    },
-  );
+  const matches = requested ? candidates : namedWearables;
+  throw new AppError('INVALID_ARGS', 'More than one Wear OS target matches; provide deviceId or name.', {
+    candidates: matches.map(({ id, name }) => ({ id, name })),
+  });
 }

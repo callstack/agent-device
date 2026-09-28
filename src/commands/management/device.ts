@@ -177,7 +177,7 @@ const pairWearableCommandFacet = defineCommandFacet({
     return {
       ...commonInputFromFlags(flags),
       phone: { platform: flags.platform, deviceId: positionals[0] },
-      ...(positionals[1] ? { wearable: { deviceId: positionals[1] } } : {}),
+      ...(positionals[1]?.trim() ? { wearable: { deviceId: positionals[1].trim() } } : {}),
       boot: flags.boot === true,
     };
   },
