@@ -75,6 +75,9 @@ test.each([
   expect(facts.operations.ensureReady).toEqual({ available: true });
   expect(facts.operations.bootTarget).toEqual({ available: true });
   expect(facts.operations.bootTargetHeadless.available).toBe(runtimeDevice.kind === 'emulator');
+  expect(facts.operations.pairWearable.available).toBe(
+    runtimeDevice.kind === 'emulator' || runtimeDevice.kind === 'device',
+  );
   expect(facts.operations.captureSnapshot).toEqual({ available: true });
   // uiautomator reads text at a point over the same adb transport the capture uses.
   expect(facts.operations.readTextAtPoint).toEqual({ available: true });
@@ -133,6 +136,17 @@ test.each([
   } else {
     expect(binding.operations.bootTargetHeadless).toBeUndefined();
   }
+});
+
+test('Android TV refuses wearable pairing as an unsupported platform leaf', async () => {
+  const facts = await createAndroidPlatformRuntime(androidRuntimeHost()).inspectFacts({
+    ...ANDROID_EMULATOR,
+    target: 'tv',
+  });
+  expect(facts.operations.pairWearable).toMatchObject({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
 });
 
 test('rejects the non-discovered Android simulator cell for appstate', async () => {

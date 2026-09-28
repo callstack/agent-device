@@ -1,6 +1,8 @@
 import type { AppleOS, DeviceInfo, DeviceTarget } from '@agent-device/kernel/device';
 
-const APPLE_PRODUCT_TYPE_PATTERN = /^(iphone|ipad|ipod|appletv|watch|realitydevice)/i;
+const APPLE_PRODUCT_TYPE_PATTERN = /^(iphone|ipad|ipod|appletv|watch(?:\d+,\d+)?|realitydevice)/i;
+const APPLE_WATCH_PRODUCT_TYPE_PATTERN = /^watch\d+,\d+$/i;
+const APPLE_WATCH_RUNTIME_PATTERN = /(?:^|[./])watchos(?:[-.]|$)/i;
 const APPLE_IPAD_PATTERN = /ipad/i;
 const APPLE_VISION_PATTERN = /\b(apple vision|vision pro|xros|visionos|realitydevice)\b/i;
 const APPLE_MOBILE_LABEL_PATTERN = /\b(iphone|ipad|ipod)\b/i;
@@ -58,7 +60,17 @@ export function resolveAppleTargetFromLabel(value: string): DeviceTarget | null 
 }
 
 export function resolveAppleOs(target: DeviceTarget, descriptors: string[]): AppleOS {
-  if (descriptors.some((descriptor) => /\b(watch|watchos)\b/i.test(descriptor))) return 'watchos';
+  // Device names are user-editable (an iPhone can be named "Watch"). Only the
+  // structured product-type/runtime vocabulary may determine the watchOS leaf.
+  if (
+    descriptors.some(
+      (descriptor) =>
+        APPLE_WATCH_PRODUCT_TYPE_PATTERN.test(descriptor.trim()) ||
+        APPLE_WATCH_RUNTIME_PATTERN.test(descriptor.trim()),
+    )
+  ) {
+    return 'watchos';
+  }
   if (target === 'tv') return 'tvos';
   if (descriptors.some((descriptor) => APPLE_VISION_PATTERN.test(descriptor))) return 'visionos';
   if (descriptors.some((descriptor) => APPLE_IPAD_PATTERN.test(descriptor))) return 'ipados';

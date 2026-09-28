@@ -521,7 +521,7 @@ test('pair-wearable returns both devices and the exact pairing status', async ()
   });
 });
 
-test('pair-wearable rejects unsupported platform leaves before dispatch', async () => {
+test('pair-wearable rejects a watchOS simulator as an iOS phone before dispatch', async () => {
   const watch: DeviceInfo = {
     platform: 'apple',
     id: 'watch-1',
@@ -573,7 +573,7 @@ test('pair-wearable rejects unsupported platform leaves before dispatch', async 
   });
   const bindDevice = vi.fn();
 
-  const response = await withTestDeviceInventory(
+  const result = withTestDeviceInventory(
     { local: async () => [watch] },
     async () =>
       await handleSessionStateCommands({
@@ -591,6 +591,6 @@ test('pair-wearable rejects unsupported platform leaves before dispatch', async 
       }),
   );
 
-  expect(response).toMatchObject({ ok: false, error: { code: 'UNSUPPORTED_OPERATION' } });
+  await expect(result).rejects.toMatchObject({ code: 'DEVICE_NOT_FOUND' });
   expect(bindDevice).not.toHaveBeenCalled();
 });

@@ -74,7 +74,7 @@ const capabilitiesCliSchema = {} as const satisfies CommandSchemaOverride;
 const shutdownCliSchema = {} as const satisfies CommandSchemaOverride;
 const pairWearableCliSchema = {
   allowedFlags: ['boot'],
-  positionalArgs: ['phone-device-id', 'wearable-device-id'],
+  positionalArgs: ['phone-device-id', 'wearable-device-id?'],
 } as const satisfies CommandSchemaOverride;
 
 const commonCliReader: CliReader = (_positionals, flags) => commonInputFromFlags(flags);
@@ -164,6 +164,9 @@ const pairWearableCommandFacet = defineCommandFacet({
         'INVALID_ARGS',
         'pair-wearable requires --platform ios or --platform android.',
       );
+    }
+    if (!positionals[0]?.trim()) {
+      throw new AppError('INVALID_ARGS', 'pair-wearable requires a phone device id.');
     }
     return {
       ...commonInputFromFlags(flags),

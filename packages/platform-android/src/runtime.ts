@@ -222,6 +222,16 @@ const androidTvDragUnavailable = Object.freeze({
   reason: 'unsupported-platform-leaf',
   hint: TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
 } as const);
+const wearablePairingKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'Wearable pairing requires an Android phone device or emulator.',
+} as const);
+const wearablePairingTargetUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'Wearable pairing is supported only from a mobile Android phone target.',
+} as const);
 
 /**
  * A TV target has no touch input at all, which is the one Android gate the retired admission
@@ -240,6 +250,13 @@ function androidGestureFact(device: DeviceInfo) {
 /** adb drives every interaction cell the same way; only the synthetic `simulator` row lacks a device. */
 function androidTouchFact(device: DeviceInfo) {
   return device.kind === 'simulator' ? focusKindUnavailable : available;
+}
+
+function androidWearablePairingFact(device: DeviceInfo) {
+  if (device.target === 'tv') return wearablePairingTargetUnavailable;
+  return device.kind === 'emulator' || device.kind === 'device'
+    ? available
+    : wearablePairingKindUnavailable;
 }
 
 const clipboardShellUnavailable = Object.freeze({
@@ -426,7 +443,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         ensureReady: available,
         bootTarget: available,
         bootTargetHeadless: device.kind === 'emulator' ? available : headlessUnavailable,
-        pairWearable: available,
+        pairWearable: androidWearablePairingFact(device),
         listApps: available,
         ...androidLifecycleFacts(device),
         shutdownTarget: device.kind === 'emulator' ? available : shutdownKindUnavailable,
