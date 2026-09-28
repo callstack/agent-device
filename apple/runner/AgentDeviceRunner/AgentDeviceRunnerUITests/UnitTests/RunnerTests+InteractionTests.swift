@@ -67,6 +67,29 @@ extension RunnerTests {
     XCTAssertNil(inspection.text)
     XCTAssertTrue(inspection.elements.isEmpty)
   }
+
+  func testPrivateAXPointInspectionOmitsOwningApplicationLabel() {
+    let root: [String: Any] = [
+      "type": NSNumber(value: XCUIElement.ElementType.application.rawValue),
+      "label": "ET N Action",
+      "identifier": "com.expotargets.example.native.action",
+      "value": "",
+      "frame": ["x": 0, "y": 0, "width": 400, "height": 800],
+      "children": [[
+        "type": NSNumber(value: XCUIElement.ElementType.window.rawValue),
+        "label": "Share Sheet",
+        "identifier": "share-sheet",
+        "value": "",
+        "frame": ["x": 0, "y": 400, "width": 400, "height": 400],
+        "children": [],
+      ]],
+    ]
+
+    let inspection = privateAXPointInspection(root: root, point: CGPoint(x: 200, y: 520))
+
+    XCTAssertEqual(inspection.text, "Share Sheet")
+    XCTAssertFalse(inspection.elements.contains { $0.label == "ET N Action" })
+  }
 #endif
 }
 #endif

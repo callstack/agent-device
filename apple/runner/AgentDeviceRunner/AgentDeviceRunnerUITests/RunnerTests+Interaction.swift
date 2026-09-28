@@ -411,6 +411,15 @@ extension RunnerTests {
       let frame = privateAXRect(raw["frame"])
       if !frame.isEmpty && frame.contains(point) {
         let rawType = (raw["type"] as? NSNumber)?.intValue ?? 0
+        // The private tree includes the owning application at the full screen
+        // frame. Its label is the app name, not a control under the point, so
+        // returning it can make point-based system-UI probes tap a false match.
+        if rawType == XCUIElement.ElementType.application.rawValue {
+          for child in raw["children"] as? [[String: Any]] ?? [] {
+            visit(child)
+          }
+          return
+        }
         let type = Self.elementTypeNamesByRawValue[UInt(rawType)] ?? "Element(\(rawType))"
         let label = pointInspectionText(raw["label"])
         let identifier = pointInspectionText(raw["identifier"])
