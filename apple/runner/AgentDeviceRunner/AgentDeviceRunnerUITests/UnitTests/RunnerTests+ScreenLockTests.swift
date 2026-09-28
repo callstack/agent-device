@@ -20,7 +20,7 @@ extension RunnerTests {
   }
 
   func testScreenLockWaitsForTheVerifiedTransition() {
-    var reads = [false, false, true]
+    var reads = [false, false, true, true]
     var dispatches = 0
     var waits = 0
     let response = executeScreenLockTransition(
@@ -90,6 +90,22 @@ extension RunnerTests {
     XCTAssertEqual(waits, 1)
   }
 
+  func testScreenLockDoesNotReportSuccessIfTheDeviceUnlocksDuringSurfaceVerification() {
+    var states = [true, false]
+    var waits = 0
+    let response = executeScreenLockTransition(
+      readState: { .success(states.removeFirst()) },
+      dispatch: { nil },
+      verifyVisibleSurface: { false },
+      shouldContinue: { true },
+      wait: { waits += 1 }
+    )
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "COMMAND_FAILED")
+    XCTAssertTrue(response.error?.message.contains("no longer reports") == true)
+    XCTAssertEqual(waits, 0)
+  }
+
   func testScreenLockTimesOutWhileSimulatorIsStillBooting() {
     var dispatches = 0
     let response = executeScreenLockTransition(
@@ -112,7 +128,7 @@ extension RunnerTests {
     let response = executeScreenLockTransition(
       readState: {
         reads += 1
-        return .success(reads == 3)
+        return .success(reads >= 3)
       },
       dispatch: { nil },
       verifyVisibleSurface: { true },

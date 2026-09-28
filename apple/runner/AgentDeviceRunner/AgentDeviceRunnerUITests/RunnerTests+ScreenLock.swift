@@ -49,7 +49,12 @@ extension RunnerTests {
     ) -> Response {
       switch readState() {
       case .success(true):
-        return screenLockVisibleResponse(verifyVisibleSurface, shouldContinue: shouldContinue, wait: wait)
+        return screenLockVisibleResponse(
+          readState: readState,
+          verifyVisibleSurface: verifyVisibleSurface,
+          shouldContinue: shouldContinue,
+          wait: wait
+        )
       case .failure(let response):
         return response
       case .success(false):
@@ -61,7 +66,12 @@ extension RunnerTests {
       while shouldContinue() {
         switch readState() {
         case .success(true):
-          return screenLockVisibleResponse(verifyVisibleSurface, shouldContinue: shouldContinue, wait: wait)
+          return screenLockVisibleResponse(
+            readState: readState,
+            verifyVisibleSurface: verifyVisibleSurface,
+            shouldContinue: shouldContinue,
+            wait: wait
+          )
         case .failure(let response):
           return response
         case .success(false):
@@ -73,7 +83,12 @@ extension RunnerTests {
       // deadline. Read once more before reporting timeout so a completed transition is not lost.
       switch readState() {
       case .success(true):
-        return screenLockVisibleResponse(verifyVisibleSurface, shouldContinue: shouldContinue, wait: wait)
+        return screenLockVisibleResponse(
+          readState: readState,
+          verifyVisibleSurface: verifyVisibleSurface,
+          shouldContinue: shouldContinue,
+          wait: wait
+        )
       case .failure(let response):
         return response
       case .success(false):
@@ -91,11 +106,26 @@ extension RunnerTests {
     }
 
     private func screenLockVisibleResponse(
-      _ verifyVisibleSurface: () -> Bool,
+      readState: () -> ScreenLockStateRead,
+      verifyVisibleSurface: () -> Bool,
       shouldContinue: () -> Bool,
       wait: () -> Void
     ) -> Response {
       while true {
+        switch readState() {
+        case .success(false):
+          return Response(
+            ok: false,
+            error: ErrorPayload(
+              code: "COMMAND_FAILED",
+              message: "SpringBoard no longer reports a locked screen while verifying the Lock Screen surface"
+            )
+          )
+        case .failure(let response):
+          return response
+        case .success(true):
+          break
+        }
         if verifyVisibleSurface() {
           return Response(ok: true, data: DataPayload(message: "Screen locked", state: "locked"))
         }
