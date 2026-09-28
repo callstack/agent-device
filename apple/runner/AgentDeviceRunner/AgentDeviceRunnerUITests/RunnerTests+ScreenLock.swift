@@ -167,10 +167,13 @@ extension RunnerTests {
       let dateView = springboard.descendants(matching: .any)
         .matching(identifier: "lockscreen-date-view")
         .firstMatch
-      return springboard.exists && dateView.exists && !dateView.frame.isEmpty
+      let coverSheet = springboard.windows.matching(identifier: "SBCoverSheetWindow").firstMatch
+      return springboard.exists
+        && ((dateView.exists && !dateView.frame.isEmpty)
+          || (coverSheet.exists && !coverSheet.frame.isEmpty))
     }
 
-    private func currentScreenLockState() -> ScreenLockStateRead {
+    func currentScreenLockState() -> ScreenLockStateRead {
       var token: Int32 = 0
       let registerStatus = notify_register_check(Self.screenLockStateNotification, &token)
       guard registerStatus == NOTIFY_STATUS_OK else {

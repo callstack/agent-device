@@ -27,6 +27,8 @@ extension RunnerTests {
   }
 
   func testScreenLockReportsSuccessOnlyForLockScreenSpecificSurface() {
+    defer { unlockSimulatorScreenIfNeeded() }
+
     let response = executeScreenLockCommand()
 
     XCTAssertTrue(response.ok, response.error?.message ?? "Expected verified screen lock")
@@ -34,8 +36,12 @@ extension RunnerTests {
     let dateView = springboard.descendants(matching: .any)
       .matching(identifier: "lockscreen-date-view")
       .firstMatch
-    XCTAssertTrue(dateView.exists)
-    XCTAssertFalse(dateView.frame.isEmpty)
+    let coverSheet = springboard.windows.matching(identifier: "SBCoverSheetWindow").firstMatch
+    XCTAssertTrue(
+      (dateView.exists && !dateView.frame.isEmpty)
+        || (coverSheet.exists && !coverSheet.frame.isEmpty),
+      springboard.debugDescription
+    )
   }
 
   func testScreenLockIsIdempotentWhenAlreadyLocked() {
@@ -189,6 +195,27 @@ extension RunnerTests {
     )
     XCTAssertFalse(response.ok)
     XCTAssertEqual(response.error?.message, "notify failure")
+  }
+
+  private func unlockSimulatorScreenIfNeeded() {
+    guard case .success(true) = currentScreenLockState() else { return }
+
+    // XCTest's simulator app launch path wakes the Lock Screen without requiring test-only
+    // passcode or biometric setup. Use the built-in Settings app so cleanup is independent of the
+    // optional Agent Device Tester fixture.
+    XCUIApplication(bundleIdentifier: "com.apple.Preferences").launch()
+    if case .success(false) = currentScreenLockState() { return }
+
+    let start = springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9))
+    let end = springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1))
+    start.press(forDuration: 0.1, thenDragTo: end)
+
+    let deadline = Date().addingTimeInterval(5)
+    while Date() < deadline {
+      if case .success(false) = currentScreenLockState() { return }
+      RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    }
+    XCTFail("The screen-lock integration test could not restore the Simulator to unlocked state")
   }
 }
 #endif
