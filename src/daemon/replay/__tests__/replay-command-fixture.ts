@@ -6,7 +6,7 @@ import {
   replayDaemonDependencies,
 } from '../../handlers/session-replay-command.ts';
 import { replayInvokeOverDispatch, runReplayCommand, splitReplayCommandRequest } from '../index.ts';
-import type { ReplayCommand } from '../internal/command-types.ts';
+import type { ReplayCommand } from '@agent-device/replay-port/command-types';
 
 export type ReplayCommandTestInput = Readonly<{
   req: DaemonRequest;

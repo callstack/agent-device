@@ -15,7 +15,7 @@ import type {
   ReplaySessionObservation,
   ReplaySessionState,
   ReplaySessionStore,
-} from './command-types.ts';
+} from '@agent-device/replay-port/command-types';
 import type { ReplayReportAction } from './session-replay-report-action.ts';
 import { rankAndDedupeReplaySuggestions } from './session-replay-suggestion-ranking.ts';
 import {

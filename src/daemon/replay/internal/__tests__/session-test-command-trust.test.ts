@@ -11,7 +11,7 @@ import {
   replayDaemonDependencies,
 } from '../../../handlers/session-replay-command.ts';
 import { runReplayTestCommand } from '../../index.ts';
-import type { ReplayCommand, ReplayTestCommand } from '../command-types.ts';
+import type { ReplayCommand, ReplayTestCommand } from '@agent-device/replay-port/command-types';
 import { replayScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon-request.ts';

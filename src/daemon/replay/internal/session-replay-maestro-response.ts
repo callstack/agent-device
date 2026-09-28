@@ -3,7 +3,7 @@ import type { MaestroExecutionOutcome } from '@agent-device/maestro';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { summarizeSnapshotTimingSamples } from '@agent-device/contracts/capture';
 import { buildTypedMaestroFailureResponse } from './session-replay-maestro-failure.ts';
-import type { ReplayCommand, ReplaySessionStore } from './command-types.ts';
+import type { ReplayCommand, ReplaySessionStore } from '@agent-device/replay-port/command-types';
 import { type DaemonResponse } from '@agent-device/kernel/contracts';
 
 type TypedMaestroSuccessResponseParams = Readonly<{

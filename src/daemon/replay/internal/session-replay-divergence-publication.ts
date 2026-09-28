@@ -5,7 +5,10 @@ import { redactDiagnosticData } from '@agent-device/kernel/redaction';
 import { type ReplayDivergence } from '@agent-device/contracts/divergence';
 import { boundReplayDivergence } from '@agent-device/ad-replay/divergence';
 import type { ReplayObservationEvidence } from '@agent-device/contracts/replay';
-import type { ReplaySessionObservation, ReplaySessionStore } from './command-types.ts';
+import type {
+  ReplaySessionObservation,
+  ReplaySessionStore,
+} from '@agent-device/replay-port/command-types';
 
 /**
  * Daemon-owned replay projection and publication boundary. The response or

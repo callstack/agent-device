@@ -7,7 +7,7 @@ import type {
   ReplayInvoke,
   ReplaySessionObservation,
   ReplaySessionStore,
-} from './command-types.ts';
+} from '@agent-device/replay-port/command-types';
 import { readReplaySelectorDisplayValue } from '@agent-device/selectors';
 import {
   type DaemonResponse,

@@ -45,7 +45,7 @@ import type {
   ReplaySessionObservation,
   ReplaySessionState,
   ReplaySessionStore,
-} from './command-types.ts';
+} from '@agent-device/replay-port/command-types';
 import {
   computeReplayRepairHint,
   type ReplayRepairHintCapture,

@@ -23,7 +23,7 @@ import {
   runReplayTestCommand,
   splitReplayCommandRequest,
 } from '../index.ts';
-import type { ReplayCommand, ReplayTestCommand } from '../internal/command-types.ts';
+import type { ReplayCommand, ReplayTestCommand } from '@agent-device/replay-port/command-types';
 import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
 import {
   legacyDispatchCapture,

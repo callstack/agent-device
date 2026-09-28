@@ -1,6 +1,6 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { ReplayDivergenceResume, ReplayRepairHint } from '@agent-device/contracts/divergence';
-import type { ReplayResumeStamper } from './command-types.ts';
+import type { ReplayResumeStamper } from '@agent-device/replay-port/command-types';
 
 /**
  * Builds the `resume` object and, through the caller's `ReplayResumeStamper` — the narrow

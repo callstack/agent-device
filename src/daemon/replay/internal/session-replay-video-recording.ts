@@ -9,7 +9,7 @@ import type {
   ReplayRecordVideoRequest,
   ReplaySessionStore,
   ReplayTestVideoOwner,
-} from './command-types.ts';
+} from '@agent-device/replay-port/command-types';
 import {
   defaultRecordingPath,
   recordingExtensionForPlatform,

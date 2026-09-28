@@ -4,7 +4,7 @@ import type {
   ReplayDaemonDependencies,
   ReplayDispatchRequest,
   ReplayInvoke,
-} from './command-types.ts';
+} from '@agent-device/replay-port/command-types';
 import { mergeParentFlags } from '@agent-device/command-registry/batch';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {

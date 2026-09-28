@@ -30,7 +30,11 @@ import {
   REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE,
 } from '@agent-device/replay-port/script-source';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
-import type { ReplayCommand, ReplayDispatchRequest, ReplaySessionStore } from './command-types.ts';
+import type {
+  ReplayCommand,
+  ReplayDispatchRequest,
+  ReplaySessionStore,
+} from '@agent-device/replay-port/command-types';
 import {
   errorResponse,
   type DaemonResponse,

@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import type { ReplayCoordinator, ReplaySessionStore, ReplaySessionView } from './command-types.ts';
+import type {
+  ReplayCoordinator,
+  ReplaySessionStore,
+  ReplaySessionView,
+} from '@agent-device/replay-port/command-types';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import { healedScriptSiblingPath } from './session-replay-heal.ts';
 import {

@@ -18,7 +18,7 @@ import {
   runReplayTestCommand,
   splitReplayCommandRequest,
 } from '../../index.ts';
-import type { ReplayTestCommand } from '../command-types.ts';
+import type { ReplayTestCommand } from '@agent-device/replay-port/command-types';
 import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from '../session-replay-test-policy.ts';
 import { replayCommandFamily } from '../../../../commands/replay/index.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';

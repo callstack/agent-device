@@ -7,7 +7,7 @@ import type {
   ReplayDispatchRequest,
   ReplaySessionState,
   ReplaySessionStore,
-} from './command-types.ts';
+} from '@agent-device/replay-port/command-types';
 import { buildReplayScriptPlatformFlags } from './replay-script-selection.ts';
 import {
   inspectAdReplay,

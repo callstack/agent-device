@@ -21,7 +21,7 @@ import type {
   ReplaySessionObservation,
   ReplaySessionState,
   ReplaySessionStore,
-} from './command-types.ts';
+} from '@agent-device/replay-port/command-types';
 
 import type { ReplayObservationEvidence } from '@agent-device/contracts/replay';
 import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';

@@ -5,7 +5,7 @@ import type {
   ReplaySessionObservation,
   ReplaySessionState,
   ReplaySessionStore,
-} from './command-types.ts';
+} from '@agent-device/replay-port/command-types';
 
 /**
  * The live session record reached through the reads replay binds over. The daemon implements it

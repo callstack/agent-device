@@ -12,9 +12,11 @@ import {
   runReplayCommand,
   runReplayTestCommand,
   splitReplayCommandRequest,
-  type ReplayDaemonDependencies,
-  type ReplaySession,
 } from '../replay/index.ts';
+import type {
+  ReplayDaemonDependencies,
+  ReplaySession,
+} from '@agent-device/replay-port/command-types';
 import { createReplayCoordinator } from '../session-replay-coordinator.ts';
 import { assertSessionSelectorMatches } from '../session-selector.ts';
 import { resolveSessionScope } from '../session-routing.ts';

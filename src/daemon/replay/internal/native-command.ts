@@ -20,7 +20,7 @@ import type {
   ReplayCoordinator,
   ReplaySessionState,
   ReplaySessionStore,
-} from './command-types.ts';
+} from '@agent-device/replay-port/command-types';
 import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
 
 /**

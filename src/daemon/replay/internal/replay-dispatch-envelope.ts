@@ -3,7 +3,11 @@ import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { ReplayDispatchOptions } from '@agent-device/contracts/replay';
 import { stripUndefined } from '@agent-device/kernel/record';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import type { ReplayCommand, ReplayDispatchRequest, ReplayInvoke } from './command-types.ts';
+import type {
+  ReplayCommand,
+  ReplayDispatchRequest,
+  ReplayInvoke,
+} from '@agent-device/replay-port/command-types';
 
 /** The request-private facts replay's own decisions read, as the daemon resolves them. */
 export type ReplayPrivateAdmission = Readonly<{

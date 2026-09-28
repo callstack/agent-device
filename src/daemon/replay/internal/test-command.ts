@@ -11,7 +11,7 @@ import type {
 import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '@agent-device/replay-port/script-source';
 import type { ReplayScriptMetadata } from '@agent-device/ad-script';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
-import type { ReplayCommand, ReplayTestCommand } from './command-types.ts';
+import type { ReplayCommand, ReplayTestCommand } from '@agent-device/replay-port/command-types';
 import {
   runReplayTestSuite,
   type ReplayTestBindAttemptCancellation,
