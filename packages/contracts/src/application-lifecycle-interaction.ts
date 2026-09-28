@@ -25,6 +25,7 @@ import type {
  */
 export type ApplicationLifecycleInteractorBinding = Readonly<{
   device: DeviceInfo;
+  providerOwned: boolean;
   signal: AbortSignal;
   resolveInteractor(
     execution: ApplicationLifecycleExecution,
@@ -83,6 +84,7 @@ function bindApplicationLifecycleInteractor(
   const { device, signal, ownership } = params;
   return Object.freeze({
     device,
+    providerOwned: ownership !== 'local',
     signal,
     resolveInteractor: async (execution, appBundleId) => {
       const runner = applicationLifecycleRunnerContext(execution, appBundleId, signal);
@@ -323,6 +325,13 @@ async function openDirectApplication(
   input: OpenApplicationInput,
 ): Promise<OpenApplicationOutcome> {
   const { binding } = params;
+  if (binding.providerOwned && input.execution.launchEnvironment !== undefined) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      `Launch environment is not supported by the ${params.owner} application provider.`,
+      { reason: 'unsupported-provider-mode' },
+    );
+  }
   const interactor = await binding.resolveInteractor(input.execution, input.appBundleId);
   if (params.closeBeforeRelaunch && input.relaunch && input.target !== undefined) {
     await invokeApplicationClose({

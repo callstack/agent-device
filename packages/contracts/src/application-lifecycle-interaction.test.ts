@@ -1,10 +1,11 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor } from './interactor-types.ts';
 import type { OpenApplicationInput } from './application-lifecycle-runtime.ts';
 import {
   bindDirectApplicationLifecycle,
   bindLocalApplicationLifecycleInteractor,
+  bindProviderApplicationLifecycleInteractor,
   invokeApplicationOpen,
 } from './application-lifecycle-interaction.ts';
 
@@ -233,4 +234,25 @@ test('iPadOS Simulator accepts launch environment for app launches', async () =>
 
   expect(calls).toHaveLength(1);
   expect(calls[0]?.options).toMatchObject({ launchEnvironment: { MODE: 'test' } });
+});
+
+test('provider-owned iOS Simulator lifecycle rejects launch environment before dispatch', async () => {
+  const open = vi.fn(async () => undefined);
+  const lifecycle = bindDirectApplicationLifecycle({
+    binding: bindProviderApplicationLifecycleInteractor({
+      device: IOS_SIMULATOR,
+      signal: new AbortController().signal,
+      resolveInteractor: () => interactorWithOpen(open),
+    }),
+    owner: 'Limrun',
+    openTargetIdentity: 'bundle-id',
+  });
+
+  await expect(
+    lifecycle.openApplication(openInput({ execution: { launchEnvironment: { MODE: 'test' } } })),
+  ).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    details: { reason: 'unsupported-provider-mode' },
+  });
+  expect(open).not.toHaveBeenCalled();
 });

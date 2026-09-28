@@ -1,5 +1,10 @@
 import path from 'node:path';
-import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  isHandheldAppleSimulator,
+  isIosFamily,
+  isMacOs,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -53,7 +58,7 @@ export async function openIosApp(
   const launchConsole = options?.launchConsole?.trim();
   const launchArgs = options?.launchArgs;
   const launchEnvironment = options?.launchEnvironment;
-  if (launchEnvironment !== undefined && (!isIosFamily(device) || device.kind !== 'simulator')) {
+  if (launchEnvironment !== undefined && !isHandheldAppleSimulator(device)) {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       '--launch-env is supported only for iOS Simulator app launches.',
