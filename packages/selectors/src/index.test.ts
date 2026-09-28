@@ -13,11 +13,13 @@ import {
   SELECTOR_RESOLUTION_POLICIES,
 } from './index.ts';
 import { loginFormNodes } from './internal/__tests__/login-form-nodes.ts';
+import { formatRole } from '@agent-device/kernel/snapshot';
 
 const saveNode: SnapshotNode = {
   ref: 'e1',
   index: 0,
   type: 'Button',
+  kind: formatRole('Button'),
   label: 'Save',
   identifier: 'save',
   rect: { x: 0, y: 0, width: 40, height: 20 },

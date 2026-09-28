@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
+import { buildSnapshotPresentationKey, formatRole } from '@agent-device/kernel/snapshot';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { buildSnapshotDiff } from '../snapshot-diff.ts';
 
@@ -10,6 +10,7 @@ function card(actions?: string[]): SnapshotNode {
     index: 0,
     depth: 0,
     type: 'Link',
+    kind: formatRole('Link'),
     label: 'feedItem-by-whiskers.test',
     enabled: true,
     hittable: true,

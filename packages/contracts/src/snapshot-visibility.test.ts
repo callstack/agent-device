@@ -1,9 +1,16 @@
 import { expect, test } from 'vitest';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { createSnapshotVisibility } from './snapshot-visibility.ts';
+import { formatRole } from '@agent-device/kernel/snapshot';
 
-function snapshotNodes(nodes: Array<Omit<SnapshotNode, 'ref'>>): SnapshotNode[] {
-  return nodes.map((node) => ({ ref: `@e${node.index}`, ...node }));
+function snapshotNodes(
+  nodes: Array<Omit<SnapshotNode, 'ref' | 'kind'> & { kind?: string }>,
+): SnapshotNode[] {
+  return nodes.map((node) => ({
+    ref: `@e${node.index}`,
+    kind: formatRole(node.type ?? 'Element'),
+    ...node,
+  }));
 }
 
 test('rootless effective visibility never resolves a target-dependent containing rectangle', () => {
@@ -11,12 +18,14 @@ test('rootless effective visibility never resolves a target-dependent containing
     {
       index: 0,
       type: 'android.widget.FrameLayout',
+      kind: formatRole('android.widget.FrameLayout'),
       rect: { x: 0, y: 0, width: 1080, height: 2400 },
     },
     ...Array.from({ length: 64 }, (_, offset) => ({
       index: offset + 1,
       parentIndex: 0,
       type: 'android.widget.TextView',
+      kind: formatRole('android.widget.TextView'),
       rect: { x: 20, y: offset * 30, width: 200, height: 24 },
     })),
   ]);
@@ -40,18 +49,21 @@ test('effective visibility keeps explicit-root and nearest-scroll clipping seman
       index: 1,
       parentIndex: 0,
       type: 'Button',
+      kind: formatRole('Button'),
       rect: { x: 120, y: 20, width: 20, height: 20 },
     },
     {
       index: 2,
       parentIndex: 0,
       type: 'ScrollView',
+      kind: formatRole('ScrollView'),
       rect: { x: 0, y: 0, width: 50, height: 50 },
     },
     {
       index: 3,
       parentIndex: 2,
       type: 'Button',
+      kind: formatRole('Button'),
       rect: { x: 0, y: 60, width: 20, height: 20 },
     },
   ]);

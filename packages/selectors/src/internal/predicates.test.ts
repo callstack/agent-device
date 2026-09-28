@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { evaluateIsPredicate, normalizeIsPositionals } from './predicates.ts';
+import { formatRole } from '@agent-device/kernel/snapshot';
 
 test('normalizeIsPositionals keeps canonical predicate-first arguments untouched', () => {
   assert.deepEqual(normalizeIsPositionals(['visible', 'text=Zzznope']), [
@@ -51,6 +52,7 @@ test('focused predicate reads snapshot focus state', () => {
     index: 0,
     ref: 'e0',
     type: 'android.widget.Button',
+    kind: formatRole('android.widget.Button'),
     label: 'Play',
     focused: true,
   };
@@ -72,6 +74,7 @@ test('visible predicate treats zero-height hittable Android nodes as hidden', ()
       index: 0,
       ref: 'e0',
       type: 'android.widget.FrameLayout',
+      kind: formatRole('android.widget.FrameLayout'),
       rect: { x: 0, y: 0, width: 400, height: 800 },
     },
     {
@@ -79,6 +82,7 @@ test('visible predicate treats zero-height hittable Android nodes as hidden', ()
       ref: 'e1',
       parentIndex: 0,
       type: 'android.widget.Button',
+      kind: formatRole('android.widget.Button'),
       identifier: 'tab-4',
       label: 'Tab 4',
       rect: { x: 0, y: 800, width: 100, height: 0 },
@@ -102,12 +106,14 @@ test('visible predicate treats rectless hittable Android nodes as hidden', () =>
       index: 0,
       ref: 'e0',
       type: 'android.widget.FrameLayout',
+      kind: formatRole('android.widget.FrameLayout'),
       rect: { x: 0, y: 0, width: 400, height: 800 },
     },
     {
       index: 1,
       ref: 'e1',
       type: 'android.widget.Button',
+      kind: formatRole('android.widget.Button'),
       label: 'Library',
       hittable: true,
     },
@@ -129,6 +135,7 @@ test('visible predicate uses visible Android ancestor geometry for rectless text
       index: 0,
       ref: 'e0',
       type: 'android.widget.FrameLayout',
+      kind: formatRole('android.widget.FrameLayout'),
       rect: { x: 0, y: 0, width: 400, height: 800 },
     },
     {
@@ -136,6 +143,7 @@ test('visible predicate uses visible Android ancestor geometry for rectless text
       ref: 'e1',
       parentIndex: 0,
       type: 'android.widget.Button',
+      kind: formatRole('android.widget.Button'),
       label: 'Library',
       rect: { x: 20, y: 100, width: 160, height: 80 },
       hittable: true,
@@ -145,6 +153,7 @@ test('visible predicate uses visible Android ancestor geometry for rectless text
       ref: 'e2',
       parentIndex: 1,
       type: 'android.widget.TextView',
+      kind: formatRole('android.widget.TextView'),
       label: 'Library',
       hittable: false,
     },
@@ -166,6 +175,7 @@ test('visible predicate treats Android nodes hidden from users as hidden', () =>
       index: 0,
       ref: 'e0',
       type: 'android.widget.Button',
+      kind: formatRole('android.widget.Button'),
       label: 'Drawer item',
       rect: { x: 0, y: 0, width: 200, height: 80 },
       hittable: true,
@@ -189,6 +199,7 @@ test('visible predicate does not use non-hittable Android layout ancestors for r
       index: 0,
       ref: 'e0',
       type: 'android.widget.FrameLayout',
+      kind: formatRole('android.widget.FrameLayout'),
       rect: { x: 0, y: 0, width: 1080, height: 2340 },
     },
     {
@@ -196,6 +207,7 @@ test('visible predicate does not use non-hittable Android layout ancestors for r
       ref: 'e1',
       parentIndex: 0,
       type: 'android.view.ViewGroup',
+      kind: formatRole('android.view.ViewGroup'),
       rect: { x: 0, y: 0, width: 816, height: 2340 },
       hittable: false,
     },
@@ -204,6 +216,7 @@ test('visible predicate does not use non-hittable Android layout ancestors for r
       ref: 'e2',
       parentIndex: 1,
       type: 'android.widget.Button',
+      kind: formatRole('android.widget.Button'),
       label: 'Albums',
       hittable: true,
     },
@@ -212,6 +225,7 @@ test('visible predicate does not use non-hittable Android layout ancestors for r
       ref: 'e3',
       parentIndex: 2,
       type: 'android.widget.TextView',
+      kind: formatRole('android.widget.TextView'),
       label: 'Albums',
       value: 'Albums',
     },
@@ -229,12 +243,19 @@ test('visible predicate does not use non-hittable Android layout ancestors for r
 
 /** One capture whose two rows share a label: one on screen, one below the fold. */
 const SHARED_CAPTURE: SnapshotNode[] = [
-  { index: 0, ref: 'e0', type: 'Application', rect: { x: 0, y: 0, width: 400, height: 800 } },
+  {
+    index: 0,
+    ref: 'e0',
+    type: 'Application',
+    kind: formatRole('Application'),
+    rect: { x: 0, y: 0, width: 400, height: 800 },
+  },
   {
     index: 1,
     parentIndex: 0,
     ref: 'e1',
     type: 'TextField',
+    kind: formatRole('TextField'),
     label: 'Email',
     rect: { x: 0, y: 200, width: 400, height: 40 },
   },
@@ -243,6 +264,7 @@ const SHARED_CAPTURE: SnapshotNode[] = [
     parentIndex: 0,
     ref: 'e2',
     type: 'TextField',
+    kind: formatRole('TextField'),
     label: 'Email',
     rect: { x: 0, y: 2400, width: 400, height: 40 },
   },

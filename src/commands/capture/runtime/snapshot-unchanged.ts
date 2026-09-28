@@ -103,6 +103,9 @@ const PRESENTATION_SCALAR_FIELDS = {
   depth: true,
   parentIndex: true,
   type: true,
+  // Derived from `type` alone (formatRole), so it never disagrees with the type comparison above;
+  // listed for exhaustiveness against ComparableSnapshotNode.
+  kind: true,
   role: true,
   subrole: true,
   label: true,

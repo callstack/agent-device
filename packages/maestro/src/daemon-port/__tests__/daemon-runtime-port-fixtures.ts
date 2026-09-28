@@ -1,14 +1,19 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import { formatRole } from '@agent-device/kernel/snapshot';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import type { MaestroSourceReader } from '@agent-device/maestro';
 import type { CreateDaemonMaestroRuntimeOperationsOptions } from '../daemon-runtime-port.ts';
 
 export function makeSnapshot(
-  nodes: Array<Omit<SnapshotNode, 'ref'> & { ref?: string }>,
+  nodes: Array<Omit<SnapshotNode, 'ref' | 'kind'> & { ref?: string; kind?: string }>,
 ): SnapshotState {
   return {
     createdAt: 0,
-    nodes: nodes.map((node) => ({ ref: `e${node.index + 1}`, ...node })),
+    nodes: nodes.map((node) => ({
+      ref: `e${node.index + 1}`,
+      kind: formatRole(node.type ?? 'Element'),
+      ...node,
+    })),
   };
 }
 

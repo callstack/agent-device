@@ -341,6 +341,16 @@ export type SnapshotKeyboardBandFact =
 export type SnapshotNode = RawSnapshotNode & {
   ref: string;
   /**
+   * Normalized role, from the same table the text presenter reads (`formatRole` below). `type`
+   * stays the raw platform class; `kind` is the presenter's own answer, published so a `--json`
+   * consumer gets the presented role without re-deriving it from `type` (#2656). `attachRefs` is
+   * the one production construction path and always sets it; optional here (rather than required
+   * like `ref`) only so the many hand-built `SnapshotNode` fixtures across the daemon/selector test
+   * suites that predate #2656 and never route through `attachRefs` do not all need updating for a
+   * field their assertions never read.
+   */
+  kind?: string;
+  /**
    * Output-only marker set by client-serialization dedup (see
    * ../snapshot/snapshot-label-dedup.ts) when `label`/`identifier` was omitted
    * because it string-equals the nearest ancestor's value in the parent chain.
@@ -349,6 +359,87 @@ export type SnapshotNode = RawSnapshotNode & {
   inheritsLabel?: true;
   inheritsIdentifier?: true;
 };
+
+/**
+ * Platform role vocabulary → the text presenter's normalized label. Owned here (rather than
+ * capture-kit) so `attachRefs` can publish the same `kind` on every node without capture-kit
+ * depending on kernel in the wrong direction; capture-kit's snapshot-lines module re-exports
+ * `formatRole` for its existing callers.
+ */
+const ROLE_LABELS: Record<string, string> = {
+  application: 'application',
+  navigationbar: 'navigation-bar',
+  tabbar: 'tab-bar',
+  button: 'button',
+  imagebutton: 'button',
+  link: 'link',
+  cell: 'cell',
+  statictext: 'text',
+  checkedtextview: 'text',
+  textbox: 'text-field',
+  textfield: 'text-field',
+  edittext: 'text-field',
+  textarea: 'text-view',
+  switch: 'switch',
+  slider: 'slider',
+  image: 'image',
+  imageview: 'image',
+  webview: 'webview',
+  framelayout: 'group',
+  linearlayout: 'group',
+  relativelayout: 'group',
+  constraintlayout: 'group',
+  viewgroup: 'group',
+  view: 'group',
+  listview: 'list',
+  recyclerview: 'list',
+  collectionview: 'collection',
+  searchfield: 'search',
+  heading: 'heading',
+  activityindicator: 'activity-indicator',
+  progressindicator: 'progress-indicator',
+  segmentedcontrol: 'segmented-control',
+  group: 'group',
+  window: 'window',
+  checkbox: 'checkbox',
+  radio: 'radio',
+  menuitem: 'menu-item',
+  toolbar: 'toolbar',
+  scrollarea: 'scroll-area',
+  scrollview: 'scroll-area',
+  nestedscrollview: 'scroll-area',
+  table: 'table',
+};
+
+function lookupRoleLabel(normalized: string): string | undefined {
+  return Object.prototype.hasOwnProperty.call(ROLE_LABELS, normalized)
+    ? ROLE_LABELS[normalized]
+    : undefined;
+}
+
+export function formatRole(type: string): string {
+  const raw = type;
+  let normalized = type.replaceAll(/XCUIElementType/gi, '').toLowerCase();
+  const isAndroidClass =
+    raw.includes('.') &&
+    (raw.startsWith('android.') || raw.startsWith('androidx.') || raw.startsWith('com.'));
+  if (normalized.includes('.')) {
+    normalized = normalized
+      .replace(/^android\.widget\./, '')
+      .replace(/^android\.view\./, '')
+      .replace(/^android\.webkit\./, '')
+      .replace(/^androidx\./, '')
+      .replace(/^com\.google\.android\./, '')
+      .replace(/^com\.android\./, '');
+    if (isAndroidClass && normalized.includes('.')) {
+      normalized = normalized.slice(normalized.lastIndexOf('.') + 1);
+    }
+  }
+  if (normalized === 'textview') {
+    return isAndroidClass ? 'text' : 'text-view';
+  }
+  return lookupRoleLabel(normalized) || normalized || 'element';
+}
 
 /**
  * The channel↔producer pairs that can actually occur. One channel is fed by several producers
@@ -620,7 +711,11 @@ export type ScreenshotOverlayRef = {
  * not mint refs get dense `e${index}` numbering, matching the historical behavior.
  */
 export function attachRefs(nodes: RawSnapshotNode[]): SnapshotNode[] {
-  return nodes.map((node, idx) => ({ ...node, ref: node.ref ?? `e${idx + 1}` }));
+  return nodes.map((node, idx) => ({
+    ...node,
+    ref: node.ref ?? `e${idx + 1}`,
+    kind: formatRole(node.type ?? 'Element'),
+  }));
 }
 
 /**

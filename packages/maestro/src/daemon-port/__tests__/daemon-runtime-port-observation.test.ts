@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { formatRole } from '@agent-device/kernel/snapshot';
 import {
   executeMaestroFlow,
   inspectMaestroFlow,
@@ -38,12 +39,14 @@ test('replaces pre-mutation evidence with the stable post-mutation snapshot', as
             {
               index: 0,
               type: 'Application',
+              kind: formatRole('Application'),
               rect: { x: 0, y: 0, width: 402, height: 874 },
             },
             {
               index: 1,
               parentIndex: 0,
               type: 'Text',
+              kind: formatRole('Text'),
               identifier: 'ready',
               rect: { x: 20, y: 40, width: 120, height: 44 },
             },
@@ -51,6 +54,7 @@ test('replaces pre-mutation evidence with the stable post-mutation snapshot', as
               index: 2,
               parentIndex: 0,
               type: 'Button',
+              kind: formatRole('Button'),
               identifier: 'continue',
               rect: { x: targetX, y: 100, width: 120, height: 44 },
             },
@@ -103,6 +107,7 @@ test('computes expensive target evidence only for the command policies that cons
       index: 1,
       parentIndex: 0,
       type: 'Button',
+      kind: formatRole('Button'),
       identifier: 'continue',
       hittable: true,
       rect: { x: 20, y: 40, width: 120, height: 44 },
@@ -152,6 +157,7 @@ test('matches iOS Maestro ids on semantic nodes suppressed from interactive pres
       index: 1,
       parentIndex: 0,
       type: 'Other',
+      kind: formatRole('Other'),
       identifier: 'inert-title',
       rect: { x: 20, y: 100, width: 180, height: 32 },
     },
@@ -159,6 +165,7 @@ test('matches iOS Maestro ids on semantic nodes suppressed from interactive pres
       index: 2,
       parentIndex: 1,
       type: 'StaticText',
+      kind: formatRole('StaticText'),
       label: 'Inert surface',
       rect: { x: 20, y: 100, width: 180, height: 32 },
     },
@@ -184,6 +191,7 @@ test('reports iOS Maestro evidence refs in semantic snapshot space after earlier
       index: 2,
       parentIndex: 1,
       type: 'StaticText',
+      kind: formatRole('StaticText'),
       label: 'Earlier content',
       rect: { x: 20, y: 40, width: 180, height: 32 },
     },
@@ -191,6 +199,7 @@ test('reports iOS Maestro evidence refs in semantic snapshot space after earlier
       index: 3,
       parentIndex: 0,
       type: 'Other',
+      kind: formatRole('Other'),
       identifier: 'target-wrapper',
       rect: { x: 20, y: 100, width: 180, height: 32 },
     },
@@ -198,6 +207,7 @@ test('reports iOS Maestro evidence refs in semantic snapshot space after earlier
       index: 4,
       parentIndex: 3,
       type: 'StaticText',
+      kind: formatRole('StaticText'),
       label: 'Target content',
       rect: { x: 20, y: 100, width: 180, height: 32 },
     },
@@ -218,8 +228,14 @@ test('reports iOS Maestro evidence refs in semantic snapshot space after earlier
 test('compares snapshots before sleeping and captures once beyond a zero settle budget', async () => {
   const clock = { value: 0 };
   const captures = [
-    { createdAt: 1, nodes: [{ ref: '@e1', index: 0, type: 'Text', value: 'moving' }] },
-    { createdAt: 2, nodes: [{ ref: '@e1', index: 0, type: 'Text', value: 'settled' }] },
+    {
+      createdAt: 1,
+      nodes: [{ ref: '@e1', index: 0, type: 'Text', kind: formatRole('Text'), value: 'moving' }],
+    },
+    {
+      createdAt: 2,
+      nodes: [{ ref: '@e1', index: 0, type: 'Text', kind: formatRole('Text'), value: 'settled' }],
+    },
   ];
   let captureIndex = 0;
 
@@ -283,6 +299,7 @@ test('canonicalizes rect key order before comparing snapshot signatures', () => 
     {
       index: 0,
       type: 'Button',
+      kind: formatRole('Button'),
       label: 'Continue',
       rect: { x: 10, y: 20, width: 100, height: 40 },
     },
@@ -291,6 +308,7 @@ test('canonicalizes rect key order before comparing snapshot signatures', () => 
     {
       index: 0,
       type: 'Button',
+      kind: formatRole('Button'),
       label: 'Continue',
       rect: { height: 40, width: 100, y: 20, x: 10 },
     },
@@ -314,6 +332,7 @@ test('compares truncated rect edges like Maestro hierarchy bounds', () => {
     {
       index: 0,
       type: 'Button',
+      kind: formatRole('Button'),
       label: 'Continue',
       rect: { x: 10.9, y: 20.9, width: 99.2, height: 39.2 },
     },
@@ -322,6 +341,7 @@ test('compares truncated rect edges like Maestro hierarchy bounds', () => {
     {
       index: 0,
       type: 'Button',
+      kind: formatRole('Button'),
       label: 'Continue',
       rect: { x: 10.1, y: 20.1, width: 100.8, height: 40.8 },
     },
@@ -353,6 +373,7 @@ test('normalizes absent attributes like Maestro iOS hierarchy mapping', () => {
     {
       index: 0,
       type: 'Button',
+      kind: formatRole('Button'),
       identifier: '',
       label: '',
       value: '',
@@ -384,6 +405,7 @@ test('excludes agent-device presentation metadata from Maestro hierarchy signatu
     {
       index: 0,
       type: 'Button',
+      kind: formatRole('Button'),
       label: 'Continue',
       hittable: false,
       hiddenContentBelow: true,
@@ -396,6 +418,7 @@ test('excludes agent-device presentation metadata from Maestro hierarchy signatu
     {
       index: 0,
       type: 'Button',
+      kind: formatRole('Button'),
       label: 'Continue',
       hittable: true,
       hiddenContentAbove: true,
@@ -414,6 +437,7 @@ test('assertVisible and assertNotVisible scope duplicate matching children by ch
       index: 1,
       parentIndex: 0,
       type: 'Text',
+      kind: formatRole('Text'),
       identifier: 'parent_id_1',
       label: 'parent_id_1',
       rect: { x: 20, y: 40, width: 120, height: 44 },
@@ -422,6 +446,7 @@ test('assertVisible and assertNotVisible scope duplicate matching children by ch
       index: 2,
       parentIndex: 1,
       type: 'Text',
+      kind: formatRole('Text'),
       identifier: 'child_id',
       label: 'child_id',
       rect: { x: 24, y: 44, width: 112, height: 40 },
@@ -430,6 +455,7 @@ test('assertVisible and assertNotVisible scope duplicate matching children by ch
       index: 3,
       parentIndex: 0,
       type: 'Text',
+      kind: formatRole('Text'),
       identifier: 'parent_id_3',
       label: 'parent_id_3',
       rect: { x: 20, y: 200, width: 120, height: 44 },
@@ -438,6 +464,7 @@ test('assertVisible and assertNotVisible scope duplicate matching children by ch
       index: 4,
       parentIndex: 0,
       type: 'Text',
+      kind: formatRole('Text'),
       identifier: 'child_id',
       label: 'child_id',
       rect: { x: 24, y: 300, width: 112, height: 40 },

@@ -4,6 +4,7 @@ import {
   isScrollableNodeLike,
   isViewportRootNode,
 } from '@agent-device/contracts/snapshot';
+import { formatRole } from '@agent-device/kernel/snapshot';
 import type {
   HiddenContentHint,
   Point,
@@ -52,6 +53,7 @@ function normalizeSnapshotNodes(
   return nodes.map((node, index) => ({
     ...node,
     ref: 'ref' in node && node.ref ? node.ref : `e${index + 1}`,
+    kind: 'kind' in node && node.kind ? node.kind : formatRole(node.type ?? 'Element'),
   }));
 }
 

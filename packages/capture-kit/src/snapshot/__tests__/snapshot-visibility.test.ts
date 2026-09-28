@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { buildSnapshotVisibility } from '../snapshot-visibility.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import { formatRole } from '@agent-device/kernel/snapshot';
 
 const FULLSCREEN_ROOT = { x: 0, y: 0, width: 390, height: 844 };
 const OFFSCREEN_RECT = { x: 0, y: 1200, width: 120, height: 44 };
@@ -13,6 +14,7 @@ function nodesWithOffscreenChild(): SnapshotNode[] {
       index: 0,
       depth: 0,
       type: 'Window',
+      kind: formatRole('Window'),
       role: 'document',
       rect: FULLSCREEN_ROOT,
     },
@@ -22,6 +24,7 @@ function nodesWithOffscreenChild(): SnapshotNode[] {
       depth: 1,
       parentIndex: 0,
       type: 'web.button',
+      kind: formatRole('web.button'),
       role: 'button',
       label: 'Offscreen action',
       rect: OFFSCREEN_RECT,

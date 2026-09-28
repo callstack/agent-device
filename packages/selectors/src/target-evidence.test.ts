@@ -1,5 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { formatRole } from '@agent-device/kernel/snapshot';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { computeTargetEvidence } from './target-evidence.ts';
 import {
@@ -12,7 +13,11 @@ import {
 } from '@agent-device/ad-script';
 
 function toSnapshotNodes(raw: RawSnapshotNode[]): SnapshotNode[] {
-  return raw.map((node, position) => ({ ...node, ref: `e${position + 1}` }));
+  return raw.map((node, position) => ({
+    ...node,
+    ref: `e${position + 1}`,
+    kind: formatRole(node.type ?? 'Element'),
+  }));
 }
 
 function findByLabel(nodes: SnapshotNode[], label: string): SnapshotNode {

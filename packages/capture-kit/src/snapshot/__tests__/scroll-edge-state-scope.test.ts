@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { captureScrollEdgeState } from '../scroll-edge-state.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { capture, scopeFor, scrollNode, windowRoot } from './scroll-edge-state-fixtures.ts';
+import { formatRole } from '@agent-device/kernel/snapshot';
 
 // ---------------------------------------------------------------------------
 // buildScrollContainerScope / isUsefulScope
@@ -90,6 +91,7 @@ test('isUniqueScopeValue: an unrelated sibling with its own distinct, non-matchi
       index: 2,
       parentIndex: 0,
       type: 'Toolbar',
+      kind: formatRole('Toolbar'),
       label: 'Toolbar',
       rect: { x: 0, y: 0, width: 400, height: 100 },
     },
@@ -109,6 +111,7 @@ test('duplicate scroll-container labels do not scope edge verification to a chil
       index: 1,
       ref: 'e1',
       type: 'ScrollView',
+      kind: formatRole('ScrollView'),
       label: 'Automation lab',
       hiddenContentAbove: true,
       rect: { x: 18, y: 178, width: 366, height: 662 },
@@ -118,6 +121,7 @@ test('duplicate scroll-container labels do not scope edge verification to a chil
       ref: 'e2',
       parentIndex: 1,
       type: 'StaticText',
+      kind: formatRole('StaticText'),
       label: 'Automation lab',
       rect: { x: 18, y: -344, width: 311, height: 36 },
     },
@@ -143,6 +147,7 @@ for (const collision of ['Automation lab details', 'AUTOMATION LAB']) {
         index: 1,
         ref: 'e1',
         type: 'ScrollView',
+        kind: formatRole('ScrollView'),
         label: 'Automation lab',
         hiddenContentAbove: true,
         rect: { x: 18, y: 178, width: 366, height: 662 },
@@ -152,6 +157,7 @@ for (const collision of ['Automation lab details', 'AUTOMATION LAB']) {
         ref: 'e2',
         parentIndex: 1,
         type: 'StaticText',
+        kind: formatRole('StaticText'),
         label: collision,
         rect: { x: 18, y: -344, width: 311, height: 36 },
       },
@@ -172,6 +178,7 @@ test('value collision does not scope edge verification to an ambiguous subtree',
       index: 1,
       ref: 'e1',
       type: 'ScrollView',
+      kind: formatRole('ScrollView'),
       label: 'Automation lab',
       hiddenContentAbove: true,
       rect: { x: 18, y: 178, width: 366, height: 662 },
@@ -180,6 +187,7 @@ test('value collision does not scope edge verification to an ambiguous subtree',
       index: 2,
       ref: 'e2',
       type: 'Other',
+      kind: formatRole('Other'),
       value: 'Automation lab ready',
       rect: { x: 0, y: 0, width: 402, height: 874 },
     },

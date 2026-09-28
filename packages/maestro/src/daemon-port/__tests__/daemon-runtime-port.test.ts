@@ -19,6 +19,7 @@ import {
   noMaestroIncludeSources,
 } from './daemon-runtime-port-fixtures.ts';
 import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
+import { formatRole } from '@agent-device/kernel/snapshot';
 
 test('registers Maestro inputText as sensitive before nested platform work', async () => {
   const root = mkdtempForTestSync('agent-device-maestro-input-diagnostics-');
@@ -68,6 +69,7 @@ test('delegates lifecycle and coordinate gestures through public daemon commands
               {
                 index: 0,
                 type: 'Application',
+                kind: formatRole('Application'),
                 rect: { x: 0, y: 0, width: 393, height: 852 },
               },
             ],
@@ -373,6 +375,7 @@ test('carries the runtime envelope flags into every projected operation', async 
                 {
                   index: 0,
                   type: 'Application',
+                  kind: formatRole('Application'),
                   rect: { x: 0, y: 0, width: 393, height: 852 },
                 },
               ],
@@ -487,6 +490,7 @@ test('keeps absent negative observations, script output, and artifacts typed', a
             {
               index: 0,
               type: 'Application',
+              kind: formatRole('Application'),
               rect: { x: 0, y: 0, width: 402, height: 874 },
             },
           ],
@@ -548,6 +552,7 @@ test('takes one final observation when polling wakes after the deadline', async 
             {
               index: 0,
               type: 'Application',
+              kind: formatRole('Application'),
               rect: { x: 0, y: 0, width: 402, height: 874 },
             },
             ...(now.value < 500
@@ -557,6 +562,7 @@ test('takes one final observation when polling wakes after the deadline', async 
                     index: 1,
                     parentIndex: 0,
                     type: 'Text',
+                    kind: formatRole('Text'),
                     identifier: 'ready',
                     rect: { x: 20, y: 40, width: 120, height: 44 },
                   },
@@ -655,6 +661,7 @@ test('waitForAnimationToEnd between two taps does not throw a stability-generati
       index: 1,
       parentIndex: 0,
       type: 'Button',
+      kind: formatRole('Button'),
       identifier: 'settings',
       label: 'Settings',
       rect: { x: 20, y: 40, width: 120, height: 44 },
@@ -663,6 +670,7 @@ test('waitForAnimationToEnd between two taps does not throw a stability-generati
       index: 2,
       parentIndex: 0,
       type: 'Button',
+      kind: formatRole('Button'),
       identifier: 'catalog',
       label: 'Catalog',
       rect: { x: 20, y: 100, width: 120, height: 44 },
@@ -725,6 +733,7 @@ test('timed-out waitForAnimationToEnd retains the pending hierarchy settle', asy
       index: 1,
       parentIndex: 0,
       type: 'Button',
+      kind: formatRole('Button'),
       identifier: 'settings',
       label: 'Settings',
       rect: { x: 20, y: 40, width: 120, height: 44 },
@@ -733,6 +742,7 @@ test('timed-out waitForAnimationToEnd retains the pending hierarchy settle', asy
       index: 2,
       parentIndex: 0,
       type: 'Button',
+      kind: formatRole('Button'),
       identifier: 'catalog',
       label: 'Catalog',
       rect: { x: 20, y: 100, width: 120, height: 44 },

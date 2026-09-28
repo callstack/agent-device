@@ -5,6 +5,7 @@ import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { parseSelectorChain } from './parse.ts';
 import { findSelectorChainMatch, resolveSelectorChain } from './resolve.ts';
 import { loginFormNodes } from './__tests__/login-form-nodes.ts';
+import { formatRole } from '@agent-device/kernel/snapshot';
 
 test('resolveSelectorChain matches newline labels decoded from replay selectors', () => {
   const newlineNodes: SnapshotState['nodes'] = [
@@ -12,6 +13,7 @@ test('resolveSelectorChain matches newline labels decoded from replay selectors'
       ref: 'n1',
       index: 0,
       type: 'XCUIElementTypeButton',
+      kind: formatRole('XCUIElementTypeButton'),
       label: 'Switch\nMy Community',
       rect: { x: 0, y: 0, width: 120, height: 44 },
       enabled: true,
@@ -51,6 +53,7 @@ test('role selector normalization matches Android class names by leaf type', () 
       ref: 'a1',
       index: 0,
       type: 'android.widget.Button',
+      kind: formatRole('android.widget.Button'),
       label: 'Continue',
       identifier: 'auth_continue',
       rect: { x: 0, y: 0, width: 120, height: 44 },
@@ -74,6 +77,7 @@ test('focused selector matches snapshot focus state', () => {
       ref: 'tv1',
       index: 0,
       type: 'android.widget.TextView',
+      kind: formatRole('android.widget.TextView'),
       label: 'Search',
       focused: false,
     },
@@ -81,6 +85,7 @@ test('focused selector matches snapshot focus state', () => {
       ref: 'tv2',
       index: 1,
       type: 'android.widget.Button',
+      kind: formatRole('android.widget.Button'),
       label: 'Play',
       focused: true,
     },
@@ -103,6 +108,7 @@ test('appName selector matches nodes with appName field', () => {
       ref: 'd1',
       index: 0,
       type: 'Button',
+      kind: formatRole('Button'),
       label: 'OK',
       appName: 'Calculator',
       windowTitle: 'Main Window',
@@ -113,6 +119,7 @@ test('appName selector matches nodes with appName field', () => {
       ref: 'd2',
       index: 1,
       type: 'Button',
+      kind: formatRole('Button'),
       label: 'OK',
       appName: 'TextEditor',
       windowTitle: 'Untitled',

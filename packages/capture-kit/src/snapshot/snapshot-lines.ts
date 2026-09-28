@@ -1,10 +1,15 @@
 import { isSystemScrollIndicatorLabel } from '@agent-device/kernel/scroll-indicator';
+import { formatRole } from '@agent-device/kernel/snapshot';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   buildTextPreview,
   describeTextSurface,
   trimText,
 } from './snapshot-presentation/text-surface.ts';
+
+// `formatRole` is owned by kernel now (`attachRefs` publishes its answer as every node's `kind`,
+// #2656); re-exported here so this module's existing callers are unaffected.
+export { formatRole };
 
 type SnapshotDisplayLine = {
   node: SnapshotNode;
@@ -15,51 +20,6 @@ type SnapshotDisplayLine = {
 
 type SnapshotLineFormatOptions = {
   summarizeTextSurfaces?: boolean;
-};
-
-const ROLE_LABELS: Record<string, string> = {
-  application: 'application',
-  navigationbar: 'navigation-bar',
-  tabbar: 'tab-bar',
-  button: 'button',
-  imagebutton: 'button',
-  link: 'link',
-  cell: 'cell',
-  statictext: 'text',
-  checkedtextview: 'text',
-  textbox: 'text-field',
-  textfield: 'text-field',
-  edittext: 'text-field',
-  textarea: 'text-view',
-  switch: 'switch',
-  slider: 'slider',
-  image: 'image',
-  imageview: 'image',
-  webview: 'webview',
-  framelayout: 'group',
-  linearlayout: 'group',
-  relativelayout: 'group',
-  constraintlayout: 'group',
-  viewgroup: 'group',
-  view: 'group',
-  listview: 'list',
-  recyclerview: 'list',
-  collectionview: 'collection',
-  searchfield: 'search',
-  heading: 'heading',
-  activityindicator: 'activity-indicator',
-  progressindicator: 'progress-indicator',
-  segmentedcontrol: 'segmented-control',
-  group: 'group',
-  window: 'window',
-  checkbox: 'checkbox',
-  radio: 'radio',
-  menuitem: 'menu-item',
-  toolbar: 'toolbar',
-  scrollarea: 'scroll-area',
-  scrollview: 'scroll-area',
-  nestedscrollview: 'scroll-area',
-  table: 'table',
 };
 
 export function buildSnapshotDisplayLines(
@@ -171,30 +131,6 @@ export function displayLabel(node: SnapshotNode, type: string): string {
   return identifier;
 }
 
-export function formatRole(type: string): string {
-  const raw = type;
-  let normalized = type.replaceAll(/XCUIElementType/gi, '').toLowerCase();
-  const isAndroidClass =
-    raw.includes('.') &&
-    (raw.startsWith('android.') || raw.startsWith('androidx.') || raw.startsWith('com.'));
-  if (normalized.includes('.')) {
-    normalized = normalized
-      .replace(/^android\.widget\./, '')
-      .replace(/^android\.view\./, '')
-      .replace(/^android\.webkit\./, '')
-      .replace(/^androidx\./, '')
-      .replace(/^com\.google\.android\./, '')
-      .replace(/^com\.android\./, '');
-    if (isAndroidClass && normalized.includes('.')) {
-      normalized = normalized.slice(normalized.lastIndexOf('.') + 1);
-    }
-  }
-  if (normalized === 'textview') {
-    return isAndroidClass ? 'text' : 'text-view';
-  }
-  return lookupRoleLabel(normalized) || normalized || 'element';
-}
-
 /**
  * The state markers every rendering path prints, and the states a snapshot diff compares: the diff
  * renders its lines without text-surface summarizing, and a fact it weighs has to be visible in the
@@ -208,12 +144,6 @@ export function stateMarkers(node: SnapshotNode): string[] {
   if (node.selected === true) markers.push('selected');
   if (node.checked !== undefined) markers.push(node.checked ? 'checked' : 'unchecked');
   return markers;
-}
-
-function lookupRoleLabel(normalized: string): string | undefined {
-  return Object.prototype.hasOwnProperty.call(ROLE_LABELS, normalized)
-    ? ROLE_LABELS[normalized]
-    : undefined;
 }
 
 function isEditableRole(type: string): boolean {

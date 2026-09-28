@@ -1,3 +1,4 @@
+import { formatRole } from '@agent-device/kernel/snapshot';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 
 /**
@@ -5,7 +6,7 @@ import type { SnapshotState } from '@agent-device/kernel/snapshot';
  * and `id=` unique — the smallest tree that exercises alternative fallback,
  * strict-uniqueness refusal, and first-match existence in one shape.
  */
-export const loginFormNodes: SnapshotState['nodes'] = [
+const rawLoginFormNodes = [
   {
     ref: 'e1',
     index: 0,
@@ -37,4 +38,9 @@ export const loginFormNodes: SnapshotState['nodes'] = [
     enabled: true,
     hittable: true,
   },
-];
+] as const;
+
+export const loginFormNodes: SnapshotState['nodes'] = rawLoginFormNodes.map((node) => ({
+  ...node,
+  kind: formatRole(node.type),
+}));

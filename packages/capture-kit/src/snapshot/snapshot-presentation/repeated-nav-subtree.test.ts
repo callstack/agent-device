@@ -2,6 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { detectPossibleRepeatedNavSubtree } from './repeated-nav-subtree.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import { formatRole } from '@agent-device/kernel/snapshot';
 
 test('detectPossibleRepeatedNavSubtree warns for overlapping duplicate rows', () => {
   const nodes = makeNodes(24, (index) => ({
@@ -66,12 +67,16 @@ function makeNodes(
   count: number,
   build: (index: number) => Pick<SnapshotNode, 'type' | 'label' | 'rect'>,
 ): SnapshotNode[] {
-  return Array.from({ length: count }, (_, index) => ({
-    ref: `e${index + 1}`,
-    index,
-    depth: index === 0 ? 0 : 1,
-    hittable: index !== 0,
-    enabled: true,
-    ...build(index),
-  }));
+  return Array.from({ length: count }, (_, index) => {
+    const built = build(index);
+    return {
+      ref: `e${index + 1}`,
+      index,
+      depth: index === 0 ? 0 : 1,
+      hittable: index !== 0,
+      enabled: true,
+      kind: formatRole(built.type ?? 'Element'),
+      ...built,
+    };
+  });
 }

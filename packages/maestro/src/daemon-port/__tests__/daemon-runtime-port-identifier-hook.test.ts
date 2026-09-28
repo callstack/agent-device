@@ -20,7 +20,7 @@ const BELOW_VIEWPORT = { x: 18, y: 2000, width: 366, height: 144 };
 function hookCapture(
   rect: typeof ON_SCREEN,
   hittable: boolean | undefined,
-): Array<Omit<SnapshotNode, 'ref'>> {
+): Array<Omit<SnapshotNode, 'ref' | 'kind'> & { kind?: string }> {
   return [
     { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 402, height: 874 } },
     {

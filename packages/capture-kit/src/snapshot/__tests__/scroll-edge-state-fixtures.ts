@@ -4,6 +4,7 @@ import {
   type ScrollEdgeTarget,
 } from '../scroll-edge-state.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { formatRole } from '@agent-device/kernel/snapshot';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 export function windowRoot(): SnapshotNode {
@@ -12,6 +13,7 @@ export function windowRoot(): SnapshotNode {
     index: 0,
     depth: 0,
     type: 'Window',
+    kind: formatRole('Window'),
     rect: { x: 0, y: 0, width: 400, height: 800 },
   };
 }
@@ -35,6 +37,7 @@ export function scrollNode(index: number, overrides: Partial<SnapshotNode> = {})
     index,
     parentIndex: 0,
     type: 'ScrollView',
+    kind: formatRole('ScrollView'),
     rect: { x: 0, y: 100, width: 400, height: 600 },
     ...overrides,
   };
@@ -51,6 +54,7 @@ export function scrollSnapshot(hiddenContentBelow: boolean): SnapshotNode[] {
       index: 1,
       ref: 'e1',
       type: 'ScrollView',
+      kind: formatRole('ScrollView'),
       label: 'Messages',
       hiddenContentBelow: hiddenContentBelow ? true : undefined,
       rect: { x: 0, y: 100, width: 400, height: 600 },
@@ -60,6 +64,7 @@ export function scrollSnapshot(hiddenContentBelow: boolean): SnapshotNode[] {
       ref: 'e2',
       parentIndex: 1,
       type: 'Button',
+      kind: formatRole('Button'),
       label: hiddenContentBelow ? 'Middle message' : 'Latest message',
       rect: { x: 0, y: 640, width: 400, height: 56 },
     },
@@ -76,6 +81,7 @@ export function recycledCellSnapshot(label: string): SnapshotNode[] {
       index: 1,
       ref: 'e1',
       type: 'ScrollView',
+      kind: formatRole('ScrollView'),
       label: 'Feed',
       hiddenContentBelow: true,
       rect: { x: 0, y: 100, width: 400, height: 600 },
@@ -85,6 +91,7 @@ export function recycledCellSnapshot(label: string): SnapshotNode[] {
       ref: 'e2',
       parentIndex: 1,
       type: 'StaticText',
+      kind: formatRole('StaticText'),
       identifier: 'cell-0',
       label,
       rect: { x: 0, y: 640, width: 400, height: 56 },

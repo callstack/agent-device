@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { formatSnapshotLine } from '../snapshot-lines.ts';
+import { formatRole } from '@agent-device/kernel/snapshot';
 
 const mergedCard = {
   ref: 'e72',
   index: 0,
   depth: 0,
   type: 'Link',
+  kind: formatRole('Link'),
   label: 'feedItem-by-whiskers.test',
   enabled: true,
 };

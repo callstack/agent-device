@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { buildSnapshotDiff } from '../snapshot-diff.ts';
+import { formatRole } from '@agent-device/kernel/snapshot';
 
 function toggle(checked?: boolean): SnapshotNode {
   return {
@@ -9,6 +10,7 @@ function toggle(checked?: boolean): SnapshotNode {
     index: 0,
     depth: 0,
     type: 'android.widget.Switch',
+    kind: formatRole('android.widget.Switch'),
     label: 'Wi-Fi switch',
     enabled: true,
     hittable: true,

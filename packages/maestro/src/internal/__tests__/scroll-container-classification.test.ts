@@ -6,6 +6,7 @@ import { resolveMaestroScrollableGesture } from '../runtime-port-geometry.ts';
 import type { MaestroPlatform } from '../runtime-target-policy.ts';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { isMaestroNodeVisible } from '../snapshot-policy.ts';
+import { formatRole } from '@agent-device/kernel/snapshot';
 
 // Maestro asks two questions about a scrollable node, and they must agree:
 //
@@ -24,6 +25,7 @@ const APPLICATION: SnapshotNode = {
   index: 0,
   ref: '@e1',
   type: 'Application',
+  kind: formatRole('Application'),
   visibleToUser: true,
   rect: { x: 0, y: 0, width: 402, height: 874 },
 };
@@ -41,6 +43,7 @@ function snapshotWithContainer(containerType: string) {
       ref: '@e2',
       parentIndex: 0,
       type: containerType,
+      kind: formatRole(containerType),
       visibleToUser: true,
       rect: CONTAINER_RECT,
     },
@@ -49,6 +52,7 @@ function snapshotWithContainer(containerType: string) {
       ref: '@e3',
       parentIndex: 1,
       type: 'Button',
+      kind: formatRole('Button'),
       identifier: 'target',
       visibleToUser: true,
       rect: TARGET_RECT,
