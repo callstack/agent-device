@@ -37,6 +37,7 @@ import {
 import {
   buildDaemonHealthPayload,
   DAEMON_HTTP_INSTANCE_HEADER,
+  DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_HTTP_TENANT_HEADER,
@@ -160,6 +161,32 @@ function createRpcError(
     id,
     error: { code, message, data },
   };
+}
+
+function refuseStaleDaemonInstance(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  rpcId: JsonRpcId,
+  instanceId: string,
+): boolean {
+  const expectedInstanceId = readHeaderValue(req.headers, DAEMON_HTTP_INSTANCE_HEADER);
+  if (!expectedInstanceId || expectedInstanceId === instanceId) return false;
+  res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
+  sendJson(
+    res,
+    createRpcError(
+      rpcId,
+      -32001,
+      'Daemon instance changed',
+      normalizeError(
+        new AppError('COMMAND_FAILED', 'Daemon instance changed', {
+          reason: 'remote_instance_mismatch',
+        }),
+      ),
+    ),
+    409,
+  );
+  return true;
 }
 
 function sendJson(
@@ -578,9 +605,6 @@ export async function createDaemonHttpServer(options: {
   const authHook = await loadHttpAuthHook(environment);
   const { handleRequest, token, retainArtifacts = false, resolveRequestDiagnosticsPath } = options;
   return http.createServer((req, res) => {
-    if (req.method === 'POST' && req.url === '/rpc') {
-      res.setHeader(DAEMON_HTTP_INSTANCE_HEADER, instanceId);
-    }
     if (req.method === 'GET' && req.url === '/health') {
       res.statusCode = 200;
       res.setHeader('content-type', 'application/json');
@@ -706,6 +730,7 @@ export async function createDaemonHttpServer(options: {
         sendJson(res, createRpcError(rpcRequest.id ?? null, -32602, 'Invalid params'), 400);
         return;
       }
+      if (refuseStaleDaemonInstance(req, res, rpcRequest.id ?? null, instanceId)) return;
 
       let requestIdForCleanup: string | undefined;
       let requestAbortRegistration: ReturnType<typeof registerRequestAbort>;

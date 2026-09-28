@@ -28,11 +28,7 @@ import {
   type DaemonClientSettings,
   type EnsuredDaemon,
 } from './daemon-client-lifecycle.ts';
-import {
-  cacheRemoteDaemonHealth,
-  invalidateRemoteDaemonHealth,
-  sendRequest,
-} from './daemon-client-transport.ts';
+import { sendRequest } from './daemon-client-transport.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
@@ -98,31 +94,19 @@ export async function sendToDaemon(
     daemon,
     settings,
     async () => {
-      let response: DaemonResponse;
-      try {
-        response = await withDiagnosticTimer(
-          'daemon_request',
-          async () =>
-            await sendRequest(
-              info,
-              request,
-              settings.transportPreference,
-              settings.paths,
-              requestTimeoutMs,
-              {
-                onProgress: options.onProgress,
-                onIdentityChange: (health) => {
-                  if (health) cacheRemoteDaemonHealth(info, health);
-                  else invalidateRemoteDaemonHealth(info);
-                },
-              },
-            ),
-          { requestId, command: req.command },
-        );
-      } catch (error) {
-        invalidateRemoteDaemonHealth(info);
-        throw error;
-      }
+      const response = await withDiagnosticTimer(
+        'daemon_request',
+        async () =>
+          await sendRequest(
+            info,
+            request,
+            settings.transportPreference,
+            settings.paths,
+            requestTimeoutMs,
+            { onProgress: options.onProgress },
+          ),
+        { requestId, command: req.command },
+      );
       return withActiveSessionAddressHint(
         withRepairSessionAddressHintIfOwned(response, settings),
         requestWithoutAuthFlag,

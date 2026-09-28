@@ -40,6 +40,7 @@ export const DAEMON_RPC_PROTOCOL_VERSION = 2;
 
 export const DAEMON_HTTP_INSTANCE_HEADER = 'x-agent-device-instance';
 export const DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER = 'x-agent-device-upstream-instance';
+export const DAEMON_HTTP_INSTANCE_MISMATCH_HEADER = 'x-agent-device-instance-mismatch';
 
 export type DaemonHealthPayload = {
   ok: true;

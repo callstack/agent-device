@@ -8,6 +8,7 @@ import {
   buildDaemonHealthPayload,
   DAEMON_HTTP_BASE_PATH,
   DAEMON_HTTP_INSTANCE_HEADER,
+  DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
   DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
@@ -48,16 +49,13 @@ const FORWARDED_RESPONSE_HEADERS = [
   'content-type',
   'content-disposition',
   'x-request-id',
-  DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
+  DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
 ];
 
 export function createDaemonProxyServer(options: DaemonProxyOptions): http.Server {
   const normalized = normalizeProxyOptions(options);
   const instanceId = randomUUID();
   return http.createServer((req, res) => {
-    if (req.method === 'POST' && resolveProxyRoute(req.url ?? '/') === '/rpc') {
-      res.setHeader(DAEMON_HTTP_INSTANCE_HEADER, instanceId);
-    }
     void handleProxyRequest(req, res, normalized, instanceId).catch((error: unknown) => {
       sendProxyError(res, error);
     });
@@ -95,6 +93,10 @@ async function handleProxyRequest(
 
   if (!isAuthorized(req, options.clientToken, rpcBody)) {
     sendUnauthorized(res, route, readJsonRpcId(rpcBody));
+    return;
+  }
+
+  if (refuseStaleProxyInstance(req, res, route, readJsonRpcId(rpcBody), instanceId)) {
     return;
   }
 
@@ -193,10 +195,6 @@ async function sendProxyResponse(params: {
   const { req, res, route, response, clientToken } = params;
   res.statusCode = response.status;
   copyProxyResponseHeaders(response, res);
-  if (route === '/rpc') {
-    const upstreamInstance = response.headers.get(DAEMON_HTTP_INSTANCE_HEADER);
-    if (upstreamInstance) res.setHeader(DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER, upstreamInstance);
-  }
   ensureProxyRequestId(req, res);
 
   if (isUploadPreflightRoute(route)) {
@@ -391,6 +389,15 @@ function buildUpstreamUrl(upstreamBaseUrl: string, route: string, rawUrl: string
   return upstreamUrl;
 }
 
+function buildUpstreamInstancePreconditionHeaders(
+  req: Pick<IncomingMessage, 'headers'>,
+): Record<string, string> {
+  const expectedUpstreamInstance = req.headers[DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER];
+  return typeof expectedUpstreamInstance === 'string'
+    ? { [DAEMON_HTTP_INSTANCE_HEADER]: expectedUpstreamInstance }
+    : {};
+}
+
 function buildUpstreamHeaders(
   req: Pick<IncomingMessage, 'headers'>,
   upstreamToken: string,
@@ -406,6 +413,9 @@ function buildUpstreamHeaders(
   }
   if (route === '/rpc') {
     headers.set(DAEMON_HTTP_NETWORK_ACCESS_HEADER, DAEMON_HTTP_PUBLIC_NETWORK_ACCESS);
+    for (const [name, value] of Object.entries(buildUpstreamInstancePreconditionHeaders(req))) {
+      headers.set(name, value);
+    }
   }
   for (const [name, value] of Object.entries(buildDaemonHttpAuthHeaders(upstreamToken))) {
     headers.set(name, value);
@@ -475,6 +485,41 @@ function resolveRequestId(req: IncomingMessage): string {
   const header = req.headers['x-request-id'];
   if (typeof header === 'string' && header.trim()) return header.trim().slice(0, 128);
   return randomUUID();
+}
+
+function refuseStaleProxyInstance(
+  req: IncomingMessage,
+  res: ServerResponse,
+  route: string,
+  rpcId: unknown,
+  instanceId: string,
+): boolean {
+  if (route !== '/rpc') return false;
+  const expectedInstanceId = req.headers[DAEMON_HTTP_INSTANCE_HEADER];
+  if (typeof expectedInstanceId !== 'string' || expectedInstanceId === instanceId) return false;
+  sendInstanceMismatch(res, rpcId);
+  return true;
+}
+
+function sendInstanceMismatch(res: ServerResponse, rpcId: unknown): void {
+  res.statusCode = 409;
+  res.setHeader('content-type', 'application/json');
+  res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
+  res.end(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      id: rpcId,
+      error: {
+        code: -32001,
+        message: 'Proxy instance changed',
+        data: normalizeError(
+          new AppError('COMMAND_FAILED', 'Proxy instance changed', {
+            reason: 'remote_instance_mismatch',
+          }),
+        ),
+      },
+    }),
+  );
 }
 
 function sendUnauthorized(res: ServerResponse, route: string, rpcId: unknown): void {

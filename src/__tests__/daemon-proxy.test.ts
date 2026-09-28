@@ -9,6 +9,7 @@ import { executeRunScriptHttpRequest } from '@agent-device/maestro/run-script-ht
 import {
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_INSTANCE_HEADER,
+  DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
   DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_RPC_PROTOCOL_VERSION,
@@ -34,6 +35,8 @@ test('daemon proxy forwards rpc requests with upstream daemon token', async (t) 
   let upstreamAuth = '';
   let upstreamTokenHeader = '';
   let upstreamNetworkAccess = '';
+  let upstreamExpectedInstance = '';
+  let upstreamExecutions = 0;
   let upstreamBody: Record<string, any> | undefined;
   const upstream = http.createServer((req, res) => {
     if (req.url === '/health') {
@@ -45,6 +48,13 @@ test('daemon proxy forwards rpc requests with upstream daemon token', async (t) 
     upstreamAuth = String(req.headers.authorization ?? '');
     upstreamTokenHeader = String(req.headers['x-agent-device-token'] ?? '');
     upstreamNetworkAccess = String(req.headers[DAEMON_HTTP_NETWORK_ACCESS_HEADER] ?? '');
+    upstreamExpectedInstance = String(req.headers[DAEMON_HTTP_INSTANCE_HEADER] ?? '');
+    if (upstreamExpectedInstance && upstreamExpectedInstance !== 'upstream-instance') {
+      res.statusCode = 409;
+      res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
+      res.end(JSON.stringify({ jsonrpc: '2.0', id: 'req-1', error: { code: -32001 } }));
+      return;
+    }
     let body = '';
     req.setEncoding('utf8');
     req.on('data', (chunk) => {
@@ -52,8 +62,8 @@ test('daemon proxy forwards rpc requests with upstream daemon token', async (t) 
     });
     req.on('end', () => {
       upstreamBody = JSON.parse(body) as Record<string, any>;
+      upstreamExecutions += 1;
       res.setHeader('content-type', 'application/json');
-      res.setHeader(DAEMON_HTTP_INSTANCE_HEADER, 'upstream-instance');
       res.end(
         JSON.stringify({
           jsonrpc: '2.0',
@@ -72,11 +82,15 @@ test('daemon proxy forwards rpc requests with upstream daemon token', async (t) 
 
   try {
     const proxyPort = await listenOnLoopback(proxy);
+    const healthResponse = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/health`);
+    const health = (await healthResponse.json()) as Record<string, any>;
     const response = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/rpc`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         authorization: 'Bearer proxy-secret',
+        [DAEMON_HTTP_INSTANCE_HEADER]: health.instanceId as string,
+        [DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER]: health.upstream.instanceId as string,
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -93,15 +107,6 @@ test('daemon proxy forwards rpc requests with upstream daemon token', async (t) 
     });
 
     assert.equal(response.status, 200);
-    assert.equal(typeof response.headers.get(DAEMON_HTTP_INSTANCE_HEADER), 'string');
-    assert.equal(response.headers.get(DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER), 'upstream-instance');
-    const healthResponse = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/health`);
-    const health = (await healthResponse.json()) as Record<string, any>;
-    assert.equal(health.instanceId, response.headers.get(DAEMON_HTTP_INSTANCE_HEADER));
-    assert.equal(
-      health.upstream.instanceId,
-      response.headers.get(DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER),
-    );
     assert.deepEqual(await response.json(), {
       jsonrpc: '2.0',
       id: 'req-1',
@@ -110,8 +115,46 @@ test('daemon proxy forwards rpc requests with upstream daemon token', async (t) 
     assert.equal(upstreamAuth, 'Bearer daemon-secret');
     assert.equal(upstreamTokenHeader, 'daemon-secret');
     assert.equal(upstreamNetworkAccess, DAEMON_HTTP_PUBLIC_NETWORK_ACCESS);
+    assert.equal(upstreamExpectedInstance, 'upstream-instance');
+    assert.equal(upstreamExecutions, 1);
     assert.equal(upstreamBody?.params?.token, 'daemon-secret');
     assert.equal(upstreamBody?.params?.command, 'devices');
+    const staleProxyResponse = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/rpc`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer proxy-secret',
+        [DAEMON_HTTP_INSTANCE_HEADER]: 'old-proxy',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'req-1',
+        method: 'agent_device.command',
+        params: {},
+      }),
+    });
+    assert.equal(staleProxyResponse.status, 409);
+    assert.equal(staleProxyResponse.headers.get(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER), 'true');
+    assert.equal(upstreamExecutions, 1);
+
+    const staleUpstreamResponse = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/rpc`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer proxy-secret',
+        [DAEMON_HTTP_INSTANCE_HEADER]: health.instanceId as string,
+        [DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER]: 'old-upstream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'req-1',
+        method: 'agent_device.command',
+        params: {},
+      }),
+    });
+    assert.equal(staleUpstreamResponse.status, 409);
+    assert.equal(staleUpstreamResponse.headers.get(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER), 'true');
+    assert.equal(upstreamExecutions, 1);
   } finally {
     await closeLoopbackServer(proxy);
     await closeLoopbackServer(upstream);

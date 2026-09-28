@@ -14,6 +14,7 @@ import {
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpUrl,
   DAEMON_HTTP_INSTANCE_HEADER,
+  DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
   DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
   DAEMON_RPC_PROTOCOL_VERSION,
 } from '@agent-device/contracts/daemon-http';
@@ -25,7 +26,6 @@ import { readVersion } from '@agent-device/host-kit/version';
 type ResolvedDaemonTransport = 'socket' | 'http';
 type SendRequestOptions = {
   onProgress?: RequestProgressSink;
-  onIdentityChange?: (health: RemoteDaemonHealth | undefined) => void;
 };
 
 const LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS = 500;
@@ -207,10 +207,60 @@ export async function sendRequest(
   try {
     return await sendRequestWithTransport(info, req, statePaths, timeoutMs, transport, options);
   } catch (error) {
+    if (info.baseUrl && isRemoteInstanceMismatch(error)) {
+      return await retryAfterRemoteInstanceMismatch(
+        info,
+        req,
+        statePaths,
+        timeoutMs,
+        transport,
+        options,
+      );
+    }
+    if (isRemoteTransportFailure(error)) invalidateRemoteDaemonHealth(info);
     const fallback = chooseAutoFallbackTransport(info, preference, transport);
     if (!fallback || !isSafeAutoTransportFallbackError(error, transport)) throw error;
     return await sendRequestWithTransport(info, req, statePaths, timeoutMs, fallback, options);
   }
+}
+
+async function retryAfterRemoteInstanceMismatch(
+  info: DaemonInfo,
+  req: DaemonRequest,
+  statePaths: DaemonPaths,
+  timeoutMs: number | undefined,
+  transport: ResolvedDaemonTransport,
+  options: SendRequestOptions,
+): Promise<DaemonResponse> {
+  invalidateRemoteDaemonHealth(info);
+  const health = await readRemoteDaemonHealth(info);
+  if (!health.reachable) {
+    throw new AppError('COMMAND_FAILED', 'Remote daemon is unavailable', {
+      daemonBaseUrl: info.baseUrl,
+    });
+  }
+  info.remoteInstanceId = health.instanceId;
+  info.remoteUpstreamInstanceId = health.upstream?.instanceId;
+  cacheRemoteDaemonHealth(info, health);
+  try {
+    return await sendRequestWithTransport(info, req, statePaths, timeoutMs, transport, options);
+  } catch (error) {
+    if (isRemoteTransportFailure(error)) invalidateRemoteDaemonHealth(info);
+    throw error;
+  }
+}
+
+function isRemoteInstanceMismatch(error: unknown): boolean {
+  return error instanceof AppError && error.details?.reason === 'remote_instance_mismatch';
+}
+
+function isRemoteTransportFailure(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    (error.details?.reason === 'daemon_transport_failure' ||
+      error.details?.reason === 'daemon_transport_timeout' ||
+      error.details?.reason === 'daemon_response_read_failure')
+  );
 }
 
 async function sendRequestWithTransport(
@@ -310,6 +360,7 @@ function handleTransportError(
     'Failed to communicate with daemon',
     {
       ...details,
+      reason: 'daemon_transport_failure',
       requestId,
       hint: remote
         ? 'Retry command. If this persists, verify the remote daemon URL, auth token, and remote host reachability.'
@@ -400,78 +451,20 @@ function timeoutRequestContext(
   };
 }
 
-type RemoteInstanceHeaders = {
-  instanceId?: string;
-  upstreamInstanceId?: string;
-};
-
-function readRemoteInstanceHeaders(
-  headers: Record<string, string | string[] | undefined>,
-): RemoteInstanceHeaders {
-  const instanceId = headers[DAEMON_HTTP_INSTANCE_HEADER];
-  const upstreamInstanceId = headers[DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER];
+function buildRemoteInstancePreconditionHeaders(info: DaemonInfo): Record<string, string> {
   return {
-    instanceId: typeof instanceId === 'string' ? instanceId : undefined,
-    upstreamInstanceId: typeof upstreamInstanceId === 'string' ? upstreamInstanceId : undefined,
+    ...(info.remoteInstanceId ? { [DAEMON_HTTP_INSTANCE_HEADER]: info.remoteInstanceId } : {}),
+    ...(info.remoteUpstreamInstanceId
+      ? { [DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER]: info.remoteUpstreamInstanceId }
+      : {}),
   };
 }
 
-async function verifyRemoteInstance(
-  info: DaemonInfo,
+function isRemoteInstanceMismatchResponse(
+  statusCode: number | undefined,
   headers: Record<string, string | string[] | undefined>,
-  onIdentityChange?: (health: RemoteDaemonHealth | undefined) => void,
-): Promise<void> {
-  if (!info.baseUrl || !info.remoteInstanceId) return;
-  const observed = readRemoteInstanceHeaders(headers);
-  if (
-    observed.instanceId === info.remoteInstanceId &&
-    observed.upstreamInstanceId === info.remoteUpstreamInstanceId
-  )
-    return;
-  await recheckChangedRemoteInstance(info, observed, onIdentityChange);
-}
-
-function hasCompleteRemoteInstanceHeaders(
-  info: DaemonInfo,
-  observed: RemoteInstanceHeaders,
 ): boolean {
-  return (
-    Boolean(observed.instanceId) &&
-    (!info.remoteUpstreamInstanceId || Boolean(observed.upstreamInstanceId))
-  );
-}
-
-function healthMatchesRemoteInstance(
-  health: RemoteDaemonHealth,
-  observed: RemoteInstanceHeaders,
-): boolean {
-  return (
-    health.instanceId === observed.instanceId &&
-    health.upstream?.instanceId === observed.upstreamInstanceId
-  );
-}
-
-async function recheckChangedRemoteInstance(
-  info: DaemonInfo,
-  observed: RemoteInstanceHeaders,
-  onIdentityChange?: (health: RemoteDaemonHealth | undefined) => void,
-): Promise<void> {
-  const health = await readRemoteDaemonHealth(info);
-  if (!health.reachable) {
-    throw new AppError('COMMAND_FAILED', 'Remote daemon is unavailable', {
-      daemonBaseUrl: info.baseUrl,
-    });
-  }
-  if (!hasCompleteRemoteInstanceHeaders(info, observed)) {
-    onIdentityChange?.(undefined);
-    return;
-  }
-  if (!healthMatchesRemoteInstance(health, observed)) {
-    throw new AppError('COMMAND_FAILED', 'Remote daemon identity changed during RPC', {
-      daemonBaseUrl: info.baseUrl,
-    });
-  }
-  onIdentityChange?.(health);
+  return statusCode === 409 && headers[DAEMON_HTTP_INSTANCE_MISMATCH_HEADER] === 'true';
 }
 
 async function sendHttpRequest(
@@ -494,6 +487,7 @@ async function sendHttpRequest(
   };
   if (info.baseUrl) {
     Object.assign(headers, buildDaemonHttpAuthHeaders(info.token));
+    Object.assign(headers, buildRemoteInstancePreconditionHeaders(info));
   }
   const transport = await loadNodeHttpRequester(rpcUrl.protocol);
 
@@ -508,16 +502,18 @@ async function sendHttpRequest(
         headers,
       },
       (res) => {
-        const identityCheck = verifyRemoteInstance(
-          info,
-          res.headers ?? {},
-          options.onIdentityChange,
-        );
+        if (isRemoteInstanceMismatchResponse(res.statusCode, res.headers ?? {})) {
+          res.resume();
+          if (timeoutHandle) clearTimeout(timeoutHandle);
+          reject(
+            new AppError('COMMAND_FAILED', 'Remote daemon instance changed', {
+              reason: 'remote_instance_mismatch',
+              daemonBaseUrl: info.baseUrl,
+            }),
+          );
+          return;
+        }
         if (shouldReadDaemonProgressStream(req, res.headers?.['content-type'])) {
-          void identityCheck.catch((error: unknown) => {
-            if (timeoutHandle) clearTimeout(timeoutHandle);
-            reject(error);
-          });
           readDaemonHttpProgressResponse(res, {
             req,
             onProgress: options.onProgress,
@@ -526,17 +522,13 @@ async function sendHttpRequest(
               if (timeoutHandle) clearTimeout(timeoutHandle);
             },
             handleResponseBody: (body) => {
-              void identityCheck
-                .then(() =>
-                  handleDaemonHttpResponseBody(body, {
-                    info,
-                    req,
-                    stateDir: statePaths.baseDir,
-                    resolve,
-                    reject,
-                  }),
-                )
-                .catch(reject);
+              handleDaemonHttpResponseBody(body, {
+                info,
+                req,
+                stateDir: statePaths.baseDir,
+                resolve,
+                reject,
+              });
             },
           });
           return;
@@ -545,12 +537,12 @@ async function sendHttpRequest(
           throw new AppError(
             'COMMAND_FAILED',
             'Failed to read daemon response',
-            { requestId: req.meta?.requestId },
+            { requestId: req.meta?.requestId, reason: 'daemon_response_read_failure' },
             error instanceof Error ? error : undefined,
           );
         });
-        void Promise.all([identityCheck, responseBody])
-          .then(([, body]) => {
+        void responseBody
+          .then((body) => {
             if (timeoutHandle) clearTimeout(timeoutHandle);
             handleDaemonHttpResponseBody(body, {
               info,
@@ -596,33 +588,26 @@ type RemoteHealthCacheEntry = {
   baseUrl: string;
   token: string;
   pid: number;
-  instanceId?: string;
   health: Promise<RemoteDaemonHealth>;
 };
 
 let remoteHealthCache: RemoteHealthCacheEntry | undefined;
 
 function matchesRemoteIdentity(entry: RemoteHealthCacheEntry, info: DaemonInfo): boolean {
-  return (
-    entry.baseUrl === info.baseUrl &&
-    entry.token === info.token &&
-    entry.pid === info.pid &&
-    (!info.remoteInstanceId || !entry.instanceId || entry.instanceId === info.remoteInstanceId)
-  );
+  return entry.baseUrl === info.baseUrl && entry.token === info.token && entry.pid === info.pid;
 }
 
-export function cacheRemoteDaemonHealth(info: DaemonInfo, health: RemoteDaemonHealth): void {
+function cacheRemoteDaemonHealth(info: DaemonInfo, health: RemoteDaemonHealth): void {
   if (!health.instanceId || (health.upstream && !health.upstream.instanceId)) return;
   remoteHealthCache = {
     baseUrl: info.baseUrl ?? '',
     token: info.token,
     pid: info.pid,
-    instanceId: health.instanceId,
     health: Promise.resolve(health),
   };
 }
 
-export function invalidateRemoteDaemonHealth(info: DaemonInfo): void {
+function invalidateRemoteDaemonHealth(info: DaemonInfo): void {
   if (remoteHealthCache && matchesRemoteIdentity(remoteHealthCache, info)) {
     remoteHealthCache = undefined;
   }
@@ -641,7 +626,6 @@ export async function cachedRemoteDaemonHealth(info: DaemonInfo): Promise<Remote
   remoteHealthCache = entry;
   try {
     const health = await entry.health;
-    entry.instanceId = health.instanceId;
     if (
       (!health.reachable ||
         !health.instanceId ||
