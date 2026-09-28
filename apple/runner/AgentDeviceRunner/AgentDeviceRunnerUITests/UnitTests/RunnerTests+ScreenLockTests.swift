@@ -136,7 +136,7 @@ extension RunnerTests {
       wait: {}
     )
     XCTAssertTrue(response.ok)
-    XCTAssertEqual(reads, 3)
+    XCTAssertEqual(reads, 4)
   }
 
   func testScreenLockPropagatesLockStateReadFailure() {
