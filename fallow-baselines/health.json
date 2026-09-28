@@ -199,7 +199,7 @@
         "count": 1
       }
     },
-    "src/daemon/replay/internal/__tests__/session-test-runner.test.ts": {
+    "src/daemon/__tests__/replay-suite/session-test-runner.test.ts": {
       "crap_high": {
         "count": 1
       },
