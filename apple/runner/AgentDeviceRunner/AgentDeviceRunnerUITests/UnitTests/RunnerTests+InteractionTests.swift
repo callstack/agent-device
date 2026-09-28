@@ -52,6 +52,44 @@ extension RunnerTests {
     XCTAssertNil(inspection.elements.first?.hittable)
   }
 
+  func testPrivateAXPointInspectionPrefersTextInputValueAndDescribesNumericValues() {
+    let root: [String: Any] = [
+      "type": NSNumber(value: XCUIElement.ElementType.window.rawValue),
+      "label": "",
+      "identifier": "root",
+      "value": "",
+      "frame": ["x": 0, "y": 0, "width": 400, "height": 800],
+      "children": [[
+        "type": NSNumber(value: XCUIElement.ElementType.textField.rawValue),
+        "label": "Search",
+        "identifier": "search-field",
+        "value": "long live field value",
+        "frame": ["x": 100, "y": 500, "width": 200, "height": 48],
+        "children": [[
+          "type": NSNumber(value: XCUIElement.ElementType.button.rawValue),
+          "label": "Clear",
+          "identifier": "clear-button",
+          "value": "",
+          "frame": ["x": 250, "y": 510, "width": 24, "height": 24],
+          "children": [],
+        ]],
+      ], [
+        "type": NSNumber(value: XCUIElement.ElementType.switch.rawValue),
+        "label": "Enabled",
+        "identifier": "enabled-switch",
+        "value": NSNumber(value: 1),
+        "frame": ["x": 255, "y": 515, "width": 10, "height": 10],
+        "children": [],
+      ]],
+    ]
+
+    let inspection = privateAXPointInspection(root: root, point: CGPoint(x: 260, y: 520))
+
+    XCTAssertEqual(inspection.text, "long live field value")
+    XCTAssertEqual(inspection.elements.first?.identifier, "clear-button")
+    XCTAssertEqual(inspection.elements.last(where: { $0.identifier == "enabled-switch" })?.value, "1")
+  }
+
   func testPrivateAXPointInspectionReturnsNoElementForHonestMiss() {
     let root: [String: Any] = [
       "type": NSNumber(value: XCUIElement.ElementType.window.rawValue),

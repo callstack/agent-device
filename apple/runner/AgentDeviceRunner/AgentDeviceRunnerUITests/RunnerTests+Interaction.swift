@@ -438,7 +438,8 @@ extension RunnerTests {
     func visit(_ raw: [String: Any]) {
       let frame = privateAXRect(raw["frame"])
       if !frame.isEmpty && frame.contains(point) {
-        let rawType = (raw["type"] as? NSNumber)?.intValue ?? 0
+        let fields = privateAXFields(raw)
+        let rawType = fields.rawType
         // The private tree includes the owning application at the full screen
         // frame. Its label is the app name, not a control under the point, so
         // returning it can make point-based system-UI probes tap a false match.
@@ -448,10 +449,10 @@ extension RunnerTests {
           }
           return
         }
-        let type = Self.elementTypeNamesByRawValue[UInt(rawType)] ?? "Element(\(rawType))"
-        let label = pointInspectionText(raw["label"])
-        let identifier = pointInspectionText(raw["identifier"])
-        let value = pointInspectionText(raw["value"])
+        let type = fields.elementType.map(elementTypeName) ?? "Element(\(rawType))"
+        let label = fields.label.isEmpty ? nil : fields.label
+        let identifier = fields.identifier.isEmpty ? nil : fields.identifier
+        let value = fields.value.isEmpty ? nil : fields.value
         let text = pointInspectionReadableText(
           type: type,
           label: label,
@@ -491,12 +492,10 @@ extension RunnerTests {
       }
       .prefix(24)
       .map(\.payload)
-    return (elements.compactMap(\.text).first, elements, true)
-  }
-
-  private func pointInspectionText(_ value: Any?) -> String? {
-    let text = (value as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-    return text.isEmpty ? nil : text
+    let textInputTypes: Set<String> = ["TextField", "SecureTextField", "SearchField", "TextView"]
+    let text = elements.first(where: { textInputTypes.contains($0.type ?? "") && $0.text != nil })?.text
+      ?? elements.compactMap(\.text).first
+    return (text, elements, true)
   }
 
   private func pointInspectionReadableText(
