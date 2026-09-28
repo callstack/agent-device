@@ -55,6 +55,7 @@ const PROGRESS_PROTOCOL = 'src/request-progress-protocol.ts';
 const CLIENT_RPC = 'src/daemon-client/daemon-client-rpc.ts';
 const CLIENT_PROGRESS = 'src/daemon-client/daemon-client-progress.ts';
 const CLIENT_TRANSPORT = 'src/daemon-client/daemon-client-transport.ts';
+const DAEMON_PROXY = 'src/remote/daemon-proxy.ts';
 const UPLOAD_CLIENT = 'src/remote/upload-client.ts';
 const REMOTE_ARTIFACTS = 'src/remote/daemon-artifacts.ts';
 const ARTIFACT_DOWNLOAD = 'src/remote/artifact-download.ts';
@@ -72,11 +73,25 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         DAEMON_HTTP,
         'DAEMON_HTTP_BASE_PATH',
         'DAEMON_HTTP_INSTANCE_HEADER',
+        'DAEMON_HTTP_INSTANCE_MISMATCH_HEADER',
         'DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER',
         'buildDaemonHttpUrl',
         'buildDaemonHttpBaseUrl',
       ),
       ...from(DAEMON_HTTP, 'DaemonHealthPayload', 'buildDaemonHealthPayload'),
+      ...from(HTTP_SERVER, 'refuseStaleDaemonInstance'),
+      ...from(
+        DAEMON_PROXY,
+        'refuseStaleProxyInstance',
+        'sendInstanceMismatch',
+        'buildUpstreamInstancePreconditionHeaders',
+      ),
+      ...from(
+        CLIENT_TRANSPORT,
+        'buildRemoteInstancePreconditionHeaders',
+        'isRemoteInstanceMismatchResponse',
+        'isRemoteInstanceMismatch',
+      ),
       // A shrunk body limit rejects payloads a released client still sends, so
       // it is a route requirement rather than an implementation detail.
       ...from(HTTP_SERVER, 'MAX_HTTP_RPC_BODY_BYTES'),

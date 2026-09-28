@@ -2,16 +2,13 @@
   "protocolVersion": 2,
   "declarations": {
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_BASE_PATH": "sha256:a1ada25c6f90d9c69c8c836538e8882547bf239559f7c1accacd0654355802dd",
-    "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_HEADER": "sha256:d2bb3f4846470188a0fc1724271da0f0bcbdf2337bd6bf331508142cadcb65d8",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_TENANT_HEADER": "sha256:ed49119d232500885f014ac73f6123d298d404c6c176abdae59cf324825927e5",
-    "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER": "sha256:4564c2ce437d30d7a823e3326f4375c0750ba8d42bec22b4d02e8eb7f7db2973",
     "packages/contracts/src/daemon-http.ts#DaemonHealthPayload": "sha256:eb6e382ff2f1e6e3837b650a59e4280bb7d0f87ac1c05132578e18e562b83da2",
     "packages/contracts/src/daemon-http.ts#buildDaemonHealthPayload": "sha256:4398710f0faac4dbe76ca448c1dd87ff6d062016c1f4e52f610f7a8729453688",
     "packages/contracts/src/daemon-http.ts#buildDaemonHttpAuthHeaders": "sha256:5548a44d6248ed858d19a0b2985ec4ae8a7181bae8294b85edf3c1b3b58e80d4",
     "packages/contracts/src/daemon-http.ts#buildDaemonHttpBaseUrl": "sha256:f92697208d9f42ec0dcfb006b6f2dce761bd5307db27ce2e52927fd7742e3a9a",
     "packages/contracts/src/daemon-http.ts#buildDaemonHttpTenantHeaders": "sha256:e38a5f0b5ab07ee3a5fe3db229d0de750888660c55bf31692e100002be96de1d",
     "packages/contracts/src/daemon-http.ts#buildDaemonHttpUrl": "sha256:d38f1f8877588fbcb1fea8c52a5cb7dc205043e3fc698b3d78fdcf821fa80471",
-    "packages/contracts/src/lease-scope.ts#LeaseRpcCommand": "sha256:714f66efa725a5d0654e492a76daeb4059caad31b79562cfc9133029ea95bfe5",
     "packages/contracts/src/request-progress.ts#CommandProgressEvent": "sha256:2dc6ff7f3b619d9b917210d47ebf9eee8095563389c8956b4e9f2bd994e1942d",
     "packages/contracts/src/request-progress.ts#ReplayTestProgressEvent": "sha256:61df00308d0e21f2acfc4f73cb2c07cd0c251e827f1c87628e2d08338e1b5c84",
     "packages/contracts/src/request-progress.ts#ReplayTestSuiteProgressEvent": "sha256:2d6599bfcf1e94596c61f85a8a986874b59b8c05e82e5e00dd31e381a5b0fe84",
@@ -35,10 +32,10 @@
     "packages/kernel/src/contracts.ts#ResponseCost": "sha256:2a44de54e8b5c886b36da1500e22d634ec7e12961d2c93b689d2b1aa8c15f186",
     "packages/kernel/src/contracts.ts#ResponseLevel": "sha256:c7329d28e745b5e69b86aa1a686befa314b98248afbe5e0e2d7d395f0d777f9b",
     "packages/kernel/src/contracts.ts#SESSION_ISOLATION_MODES": "sha256:3d4b3048e22bb0ceccc98cf8fd93a87a1a1e2dad96fa03cffff6d0ecedb58689",
-    "packages/kernel/src/contracts.ts#SESSION_RUNTIME_PLATFORMS": "sha256:6164fc8ca226b5beb3ba52a8dddd3c11633a8accec58b9f8972c44c8339a1bf7",
     "packages/kernel/src/contracts.ts#SessionIsolationMode": "sha256:beea941fe57b000902da28af15a27aa18d0c957408209e3ec372fcf7f605fa7c",
-    "packages/kernel/src/contracts.ts#SessionRuntimeHints": "sha256:94b4d9778b6bd3c5fb401fab6fe253473e4950f477e2d7c2fc02630ef7fdbb62",
+    "packages/kernel/src/contracts.ts#SESSION_RUNTIME_PLATFORMS": "sha256:6164fc8ca226b5beb3ba52a8dddd3c11633a8accec58b9f8972c44c8339a1bf7",
     "packages/kernel/src/contracts.ts#SessionRuntimePlatform": "sha256:694b301564f2c9da5d252be7e26c20bd53eed715b27033c2162c2a11606a9092",
+    "packages/kernel/src/contracts.ts#SessionRuntimeHints": "sha256:94b4d9778b6bd3c5fb401fab6fe253473e4950f477e2d7c2fc02630ef7fdbb62",
     "packages/kernel/src/contracts.ts#commandRpcParamsSchema": "sha256:d0ce05c236ce5b0b52631ab7b8a75d38859fbfba58cfb28dd3f9d84f2dba2c1f",
     "packages/kernel/src/contracts.ts#daemonRuntimeSchema": "sha256:3b99926ce9deb5d66186a55b1168011dc1ae4d010ada5ac5d79c4c7225a1f80f",
     "packages/kernel/src/contracts.ts#jsonRpcRequestSchema": "sha256:67e6b8a28b39a3883424a565ae7033c336dc2ea6b193e9b32bb98eb3e18dca7c",
@@ -52,6 +49,7 @@
     "packages/kernel/src/errors.ts#normalizeError": "sha256:5d9f906fd326676b4c3095cd6bd675c784cb26f36f4b8344a108cf5f7628f9dc",
     "packages/kernel/src/errors.ts#readDiagnosticsRecordRef": "sha256:3a210f401221c0a15eb75d488450034885c7b73be39f5e93424c72874d14c395",
     "src/commands/cli-grammar/types.ts#DaemonCommandRequest": "sha256:ea3f4118244711f0eaec0e471f62b0de42ca97181c085df165d37b63301a4619",
+    "packages/contracts/src/lease-scope.ts#LeaseRpcCommand": "sha256:714f66efa725a5d0654e492a76daeb4059caad31b79562cfc9133029ea95bfe5",
     "src/daemon-client/daemon-client-progress.ts#ProgressResponseFormat": "sha256:6d7a99ac13fd422671fd86f8fe093efa40ca369f4ae1f97c98d40a7132543637",
     "src/daemon-client/daemon-client-progress.ts#createInvalidDaemonResponseError": "sha256:0af812346b667a23fdfef641b242cd86d07edaa05eb928c4c531628c09a4031b",
     "src/daemon-client/daemon-client-progress.ts#shouldReadDaemonProgressStream": "sha256:6811404f41d8db3fa6fc751332c7186a2399ec7ecbc4e9c547d9cb9f14dbb350",
@@ -88,6 +86,14 @@
     "src/daemon/request-diagnostics-http.ts#RequestDiagnosticsHttpOptions": "sha256:cd2c0dda77d2bc434857aea07206a5491ce5f0b82cb86628569f607d6c2cebcf",
     "src/daemon/request-diagnostics-http.ts#handleRequestDiagnostics": "sha256:32c3d100176dd99ecbb61f8050d05b1cda64b7be1944a2cd16633e83fa78660b",
     "src/daemon/request-diagnostics-http.ts#resolveRequestDiagnosticsHttpRoute": "sha256:4ff07623b27a6f7461e1addb87aabd149904da63f7462149ae4114d14336cde0",
+    "src/request-progress-protocol.ts#DaemonProgressEnvelope": "sha256:16162d01cfc43fc6a0198dbba3358981c1a278a70f7494ebe70d051f517cfb22",
+    "src/request-progress-protocol.ts#DaemonResponseEnvelope": "sha256:202ae64836af890549a1d95963903f9a506294b80bd0862c1b708e72d7f286d0",
+    "src/request-progress-protocol.ts#isDaemonProgressEnvelope": "sha256:e38ec26b64d20e257ff00860548e9c12ac22faf5a6308749d4715129814b381f",
+    "src/request-progress-protocol.ts#isDaemonResponseEnvelope": "sha256:d754aee28bdba524a4b5ea71cc0a2393a7ecc5103a30a2c57c56706a8b0ceb52",
+    "src/request-progress-protocol.ts#serializeDaemonProgressEnvelope": "sha256:c48467b58393d88c947a89559f704c0c8fdbbbdf36cf5381936b6b5136c57442",
+    "src/request-progress-protocol.ts#serializeDaemonResponseEnvelope": "sha256:bc2b651df28446c51d8b92b7fd47a3bced9fade9ae50e2cd73e453ba89fd33b5",
+    "src/request-progress-protocol.ts#serializeDaemonRpcResponseEnvelope": "sha256:e244291bef44cedfb59ad07c45337bb8e5fdde00b712ebdf5ca9627f6355f111",
+    "src/request-progress-protocol.ts#shouldStreamRequestProgress": "sha256:cf7b26ccea9cd5c33c93477f783a3bdb9a1b0ce629da8b77fef0d49d6c6f4112",
     "src/daemon/resumable-upload.ts#BeginResumableUploadOptions": "sha256:ef804e321b8cd1f23a51566919fc0cda79c1b0ef82aeceed54ce3f2a398d8457",
     "src/daemon/server/http-server.ts#COMMAND_RPC_METHODS": "sha256:4b675a84ef475c2fe0e864457c254c2e888de942e4ae428d5b3e1fa72101e97b",
     "src/daemon/server/http-server.ts#HttpAuthDecision": "sha256:a7fc2a91f998ce62b107b14dd9b6fcf1f4ca5abe2e30d4df5a0896d56a0a52f8",
@@ -173,14 +179,16 @@
     "src/remote/upload-stream.ts#parseUploadResumeOffset": "sha256:297184ea22a6dc1cda9aee17034122ae0ea2f43d0355647f6fcf02f3f4b5ca0e",
     "src/remote/upload-stream.ts#streamFileToHttpRequest": "sha256:ce07ea33a275e06e4cceaf0c75a079bd0c7938f36df6817407dbb1cc8c4ff900",
     "src/remote/upload-stream.ts#streamFileToHttpRequestAttempt": "sha256:aa73fb51890ca5e43d4aa80c1d2124b574568380a73b19eae7da0ee3e3e7acf8",
-    "src/request-progress-protocol.ts#DaemonProgressEnvelope": "sha256:16162d01cfc43fc6a0198dbba3358981c1a278a70f7494ebe70d051f517cfb22",
-    "src/request-progress-protocol.ts#DaemonResponseEnvelope": "sha256:202ae64836af890549a1d95963903f9a506294b80bd0862c1b708e72d7f286d0",
-    "src/request-progress-protocol.ts#isDaemonProgressEnvelope": "sha256:e38ec26b64d20e257ff00860548e9c12ac22faf5a6308749d4715129814b381f",
-    "src/request-progress-protocol.ts#isDaemonResponseEnvelope": "sha256:d754aee28bdba524a4b5ea71cc0a2393a7ecc5103a30a2c57c56706a8b0ceb52",
-    "src/request-progress-protocol.ts#serializeDaemonProgressEnvelope": "sha256:c48467b58393d88c947a89559f704c0c8fdbbbdf36cf5381936b6b5136c57442",
-    "src/request-progress-protocol.ts#serializeDaemonResponseEnvelope": "sha256:bc2b651df28446c51d8b92b7fd47a3bced9fade9ae50e2cd73e453ba89fd33b5",
-    "src/request-progress-protocol.ts#serializeDaemonRpcResponseEnvelope": "sha256:e244291bef44cedfb59ad07c45337bb8e5fdde00b712ebdf5ca9627f6355f111",
-    "src/request-progress-protocol.ts#shouldStreamRequestProgress": "sha256:cf7b26ccea9cd5c33c93477f783a3bdb9a1b0ce629da8b77fef0d49d6c6f4112"
+    "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_HEADER": "sha256:d2bb3f4846470188a0fc1724271da0f0bcbdf2337bd6bf331508142cadcb65d8",
+    "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER": "sha256:4564c2ce437d30d7a823e3326f4375c0750ba8d42bec22b4d02e8eb7f7db2973",
+    "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_MISMATCH_HEADER": "sha256:a197edaf7f9fa94a6aab269856aa852da3204cc586f5fd23198689eb11908b61",
+    "src/daemon/server/http-server.ts#refuseStaleDaemonInstance": "sha256:d9a0faed538cef220f012f520fa6d0ac64497c5208af62a882ff96a24b947a7a",
+    "src/remote/daemon-proxy.ts#refuseStaleProxyInstance": "sha256:82d39a1c241f1fb91c6bda2a55e9fde7b6d70db1a1a1496bef0eabf546ea706e",
+    "src/remote/daemon-proxy.ts#sendInstanceMismatch": "sha256:e67c35489c9e5e51acbfc658b0e2e911f84bc11fea14d6968ef3d24a87b60407",
+    "src/remote/daemon-proxy.ts#buildUpstreamInstancePreconditionHeaders": "sha256:9f7a2f1a3f86fce2c939f03fce3c6db061c31d1a4bb8074a563e3c81196ecfbe",
+    "src/daemon-client/daemon-client-transport.ts#buildRemoteInstancePreconditionHeaders": "sha256:70241561c4070a8ebbdbbdb4ebcdbdfcb9543501cbb649a6d71cf041aee55a08",
+    "src/daemon-client/daemon-client-transport.ts#isRemoteInstanceMismatchResponse": "sha256:7670f48fe0fc7344f8a000cd303e49788ec7ea9d1c729bcdc2af73ff02dae04d",
+    "src/daemon-client/daemon-client-transport.ts#isRemoteInstanceMismatch": "sha256:6d4cfdd36bd44686d2a48990491faf63ba9117fb760f982fd72922c99be8daee"
   },
   "compatibleChanges": [
     {
@@ -191,7 +199,7 @@
     {
       "declaration": "src/remote/daemon-artifacts.ts#DownloadRemoteArtifactParams",
       "digest": "sha256:3ec63be2dbdb542e30b19d1500bc16874607823afb7ae392e92b0b535865859e",
-      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state \u2014 never serialized, never sent to the daemon \u2014 that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before."
+      "rationale": "#2246 adds the optional isDirectory field. It is pure client-local state — never serialized, never sent to the daemon — that tells the CLIENT'S OWN download logic to extract a tar body instead of writing it verbatim; the GET /artifacts/:id request and response framing are unchanged. Every existing call site (screenshot, recording) omits it and keeps writing a single file exactly as before."
     },
     {
       "declaration": "src/remote/daemon-artifacts.ts#downloadRemoteArtifact",
@@ -206,7 +214,7 @@
     {
       "declaration": "src/daemon-client/daemon-client-rpc.ts#buildHttpRpcPayload",
       "digest": "sha256:caddf184cd57a41d9910c414bba72ce5a0503e22a2a4ef3a47f95fed67037127",
-      "rationale": "#2110 added the optional providerApp parameter to lease allocation; #2494 extends the same additive projection to the full provider-allocation flag set the lease-lifecycle provider reads in prepareSession \u2014 device selection (platform, device), the app/os, the session-naming fields, and the configured device-feature and AWS knobs \u2014 so a fresh remote allocation reaches BrowserStack/AWS with a named, configured session instead of failing on a missing --device/--platform or landing in Untitled Project/Build. Producer and consumer both read one shared projection (readLeaseAllocateProviderFlags). Every field is optional and forwarded only when the caller supplied it: a released protocol-2 daemon ignores unknown JSON-RPC parameters, and a request carrying none of these retains the previous payload byte-for-byte."
+      "rationale": "#2110 added the optional providerApp parameter to lease allocation; #2494 extends the same additive projection to the full provider-allocation flag set the lease-lifecycle provider reads in prepareSession — device selection (platform, device), the app/os, the session-naming fields, and the configured device-feature and AWS knobs — so a fresh remote allocation reaches BrowserStack/AWS with a named, configured session instead of failing on a missing --device/--platform or landing in Untitled Project/Build. Producer and consumer both read one shared projection (readLeaseAllocateProviderFlags). Every field is optional and forwarded only when the caller supplied it: a released protocol-2 daemon ignores unknown JSON-RPC parameters, and a request carrying none of these retains the previous payload byte-for-byte."
     },
     {
       "declaration": "src/daemon/server/http-server.ts#toLeaseDaemonRequest",
@@ -266,7 +274,7 @@
     {
       "declaration": "src/daemon/server/http-server.ts#authorizeAuxiliaryHttpRequest",
       "digest": "sha256:1c323f97c3cefec8f95633b6abd127342bf75494bfb109d1cc6eadf3ceacaeae",
-      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers \u2014 sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added \u2014 an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses."
+      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers — sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added — an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses."
     },
     {
       "declaration": "src/daemon/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer",
@@ -311,7 +319,7 @@
     {
       "declaration": "src/remote/upload-client.ts#tryDirectUploadWithResume",
       "digest": "sha256:67596a2ff2b8a5402566c3b7b99a6fa1baaf9d5de3d647bf35398185cc45eea6",
-      "rationale": "#2946 stops a canceled upload from re-preflighting and lifts the retry leg into its own function. The request sequence a daemon sees \u2014 preflight, direct PUT, finalize, or the legacy fallback after a retryable failure \u2014 is unchanged."
+      "rationale": "#2946 stops a canceled upload from re-preflighting and lifts the retry leg into its own function. The request sequence a daemon sees — preflight, direct PUT, finalize, or the legacy fallback after a retryable failure — is unchanged."
     },
     {
       "declaration": "src/remote/upload-client.ts#finalizeDirectUpload",
@@ -361,12 +369,52 @@
     {
       "declaration": "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_HEADER",
       "digest": "sha256:d2bb3f4846470188a0fc1724271da0f0bcbdf2337bd6bf331508142cadcb65d8",
-      "rationale": "#2650 adds an optional daemon or upstream instance response header. Older clients ignore the header; new clients continue to probe every command when an older peer omits it."
+      "rationale": "#2650 adds an optional instance precondition header. Released peers do not advertise an instance ID, so a new client probes them on every command and never sends the header; older clients omit it and keep their existing RPC behavior."
     },
     {
       "declaration": "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER",
       "digest": "sha256:4564c2ce437d30d7a823e3326f4375c0750ba8d42bec22b4d02e8eb7f7db2973",
-      "rationale": "#2650 adds an optional daemon or upstream instance response header. Older clients ignore the header; new clients continue to probe every command when an older peer omits it."
+      "rationale": "#2650 adds an optional instance precondition header. Released peers do not advertise an instance ID, so a new client probes them on every command and never sends the header; older clients omit it and keep their existing RPC behavior."
+    },
+    {
+      "declaration": "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_MISMATCH_HEADER",
+      "digest": "sha256:a197edaf7f9fa94a6aab269856aa852da3204cc586f5fd23198689eb11908b61",
+      "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before."
+    },
+    {
+      "declaration": "src/daemon/server/http-server.ts#refuseStaleDaemonInstance",
+      "digest": "sha256:d9a0faed538cef220f012f520fa6d0ac64497c5208af62a882ff96a24b947a7a",
+      "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before."
+    },
+    {
+      "declaration": "src/remote/daemon-proxy.ts#refuseStaleProxyInstance",
+      "digest": "sha256:82d39a1c241f1fb91c6bda2a55e9fde7b6d70db1a1a1496bef0eabf546ea706e",
+      "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before."
+    },
+    {
+      "declaration": "src/remote/daemon-proxy.ts#sendInstanceMismatch",
+      "digest": "sha256:e67c35489c9e5e51acbfc658b0e2e911f84bc11fea14d6968ef3d24a87b60407",
+      "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before."
+    },
+    {
+      "declaration": "src/remote/daemon-proxy.ts#buildUpstreamInstancePreconditionHeaders",
+      "digest": "sha256:9f7a2f1a3f86fce2c939f03fce3c6db061c31d1a4bb8074a563e3c81196ecfbe",
+      "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before."
+    },
+    {
+      "declaration": "src/daemon-client/daemon-client-transport.ts#buildRemoteInstancePreconditionHeaders",
+      "digest": "sha256:70241561c4070a8ebbdbbdb4ebcdbdfcb9543501cbb649a6d71cf041aee55a08",
+      "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before."
+    },
+    {
+      "declaration": "src/daemon-client/daemon-client-transport.ts#isRemoteInstanceMismatchResponse",
+      "digest": "sha256:7670f48fe0fc7344f8a000cd303e49788ec7ea9d1c729bcdc2af73ff02dae04d",
+      "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before."
+    },
+    {
+      "declaration": "src/daemon-client/daemon-client-transport.ts#isRemoteInstanceMismatch",
+      "digest": "sha256:6d4cfdd36bd44686d2a48990491faf63ba9117fb760f982fd72922c99be8daee",
+      "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before."
     }
   ]
 }
