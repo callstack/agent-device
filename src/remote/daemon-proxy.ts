@@ -6,7 +6,11 @@ import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { readNodeHttpRequestBody, timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import {
   buildDaemonHealthPayload,
+  buildDaemonInstanceMismatchRpcResponse,
   DAEMON_HTTP_BASE_PATH,
+  DAEMON_HTTP_INSTANCE_HEADER,
+  DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
+  DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_HTTP_TENANT_HEADER,
@@ -42,12 +46,18 @@ const FORWARDED_REQUEST_HEADERS = [
   'x-artifact-hash-algorithm',
   DAEMON_HTTP_TENANT_HEADER,
 ];
-const FORWARDED_RESPONSE_HEADERS = ['content-type', 'content-disposition', 'x-request-id'];
+const FORWARDED_RESPONSE_HEADERS = [
+  'content-type',
+  'content-disposition',
+  'x-request-id',
+  DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
+];
 
 export function createDaemonProxyServer(options: DaemonProxyOptions): http.Server {
   const normalized = normalizeProxyOptions(options);
+  const instanceId = randomUUID();
   return http.createServer((req, res) => {
-    void handleProxyRequest(req, res, normalized).catch((error: unknown) => {
+    void handleProxyRequest(req, res, normalized, instanceId).catch((error: unknown) => {
       sendProxyError(res, error);
     });
   });
@@ -57,10 +67,11 @@ async function handleProxyRequest(
   req: IncomingMessage,
   res: ServerResponse,
   options: Required<DaemonProxyOptions>,
+  instanceId: string,
 ): Promise<void> {
   const route = resolveProxyRoute(req.url ?? '/');
   if (req.method === 'GET' && route === '/health') {
-    await sendProxyHealth(res, options);
+    await sendProxyHealth(res, options, instanceId);
     return;
   }
 
@@ -86,6 +97,10 @@ async function handleProxyRequest(
     return;
   }
 
+  if (refuseStaleProxyInstance(req, res, route, readJsonRpcId(rpcBody), instanceId)) {
+    return;
+  }
+
   if (carriesUnbackedHostPathInstallSource(rpcBody)) {
     sendHostPathInstallSourceRefused(res, readJsonRpcId(rpcBody));
     return;
@@ -94,12 +109,18 @@ async function handleProxyRequest(
   await forwardProxyRequest({ req, res, route, options, rpcBody });
 }
 
-async function sendProxyHealth(res: ServerResponse, options: Required<DaemonProxyOptions>) {
+async function sendProxyHealth(
+  res: ServerResponse,
+  options: Required<DaemonProxyOptions>,
+  instanceId: string,
+) {
   const upstream = await readUpstreamHealth(options);
   res.statusCode = 200;
   res.setHeader('content-type', 'application/json');
   res.end(
-    JSON.stringify(buildDaemonHealthPayload('agent-device-proxy', readVersion(), { upstream })),
+    JSON.stringify(
+      buildDaemonHealthPayload('agent-device-proxy', readVersion(), { upstream, instanceId }),
+    ),
   );
 }
 
@@ -369,6 +390,15 @@ function buildUpstreamUrl(upstreamBaseUrl: string, route: string, rawUrl: string
   return upstreamUrl;
 }
 
+function buildUpstreamInstancePreconditionHeaders(
+  req: Pick<IncomingMessage, 'headers'>,
+): Record<string, string> {
+  const expectedUpstreamInstance = req.headers[DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER];
+  return typeof expectedUpstreamInstance === 'string'
+    ? { [DAEMON_HTTP_INSTANCE_HEADER]: expectedUpstreamInstance }
+    : {};
+}
+
 function buildUpstreamHeaders(
   req: Pick<IncomingMessage, 'headers'>,
   upstreamToken: string,
@@ -384,6 +414,9 @@ function buildUpstreamHeaders(
   }
   if (route === '/rpc') {
     headers.set(DAEMON_HTTP_NETWORK_ACCESS_HEADER, DAEMON_HTTP_PUBLIC_NETWORK_ACCESS);
+    for (const [name, value] of Object.entries(buildUpstreamInstancePreconditionHeaders(req))) {
+      headers.set(name, value);
+    }
   }
   for (const [name, value] of Object.entries(buildDaemonHttpAuthHeaders(upstreamToken))) {
     headers.set(name, value);
@@ -453,6 +486,39 @@ function resolveRequestId(req: IncomingMessage): string {
   const header = req.headers['x-request-id'];
   if (typeof header === 'string' && header.trim()) return header.trim().slice(0, 128);
   return randomUUID();
+}
+
+function refuseStaleProxyInstance(
+  req: IncomingMessage,
+  res: ServerResponse,
+  route: string,
+  rpcId: unknown,
+  instanceId: string,
+): boolean {
+  if (route !== '/rpc') return false;
+  const expectedInstanceId = req.headers[DAEMON_HTTP_INSTANCE_HEADER];
+  if (typeof expectedInstanceId !== 'string' || expectedInstanceId === instanceId) return false;
+  sendInstanceMismatch(res, rpcId);
+  return true;
+}
+
+function sendInstanceMismatch(res: ServerResponse, rpcId: unknown): void {
+  res.statusCode = 409;
+  res.setHeader('content-type', 'application/json');
+  res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
+  res.end(
+    JSON.stringify(
+      buildDaemonInstanceMismatchRpcResponse(
+        rpcId,
+        'Proxy instance changed',
+        normalizeError(
+          new AppError('COMMAND_FAILED', 'Proxy instance changed', {
+            reason: 'remote_instance_mismatch',
+          }),
+        ),
+      ),
+    ),
+  );
 }
 
 function sendUnauthorized(res: ServerResponse, route: string, rpcId: unknown): void {

@@ -10,7 +10,7 @@ import { SnapshotSourceError } from './errors.ts';
 import { createSnapshotSourceDeadline } from './deadline.ts';
 import { DEFAULT_SNAPSHOT_SOURCE_LIMITS } from './limits.ts';
 import type { SnapshotSourceHost } from './types.ts';
-import { execKillTimeoutError } from './__tests__/exec-timeout-fixture.ts';
+import { execKillTimeoutError } from '../native-build/__tests__/exec-timeout-fixture.ts';
 import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
 
 test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt or stale entries', async () => {
@@ -150,6 +150,28 @@ test('watchOS runtime compiles the bridge against watchsimulator', () => {
     '-mwatchos-simulator-version-min=10.0',
     '-fobjc-arc',
   ]);
+});
+
+test('snapshot bridge runtime selection rejects non-iOS and non-watchOS simulator runtimes', () => {
+  for (const runtime of [
+    'com.apple.CoreSimulator.SimRuntime.tvOS-27-0',
+    'com.apple.CoreSimulator.SimRuntime.xrOS-27-0',
+    'not-a-watchOS-runtime',
+  ]) {
+    assert.throws(
+      () =>
+        buildSnapshotBridgeCompileArgv({
+          architecture: 'arm64',
+          runtime,
+          sourceRoot: '/source',
+          outputPath: '/output',
+        }),
+      (error: unknown) =>
+        error instanceof SnapshotSourceError &&
+        error.failureKind === 'unsupported' &&
+        error.failureCode === 'unsupported-simulator-runtime',
+    );
+  }
 });
 
 test('concurrent snapshot bridge preparation publishes one cache entry', async () => {

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
+  launchCoreDeviceApp,
   parseIosDeviceDetailsPayload,
   readIosDeviceReadiness,
   resolveIosReadyHint,
@@ -15,6 +16,7 @@ import {
 } from '../devicectl.ts';
 import { resolveIosPhysicalDeviceControl } from '../physical-device-control.ts';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
+import { withFakeAppleTool } from '../../__tests__/fake-apple-tool.ts';
 
 /**
  * `xcrun devicectl device info details` is the one tool that answers what a device thinks of itself,
@@ -28,6 +30,59 @@ const DEVICE_INFO_DETAILS_CAPTURE = JSON.parse(
     'utf8',
   ),
 ) as unknown;
+
+test('launchCoreDeviceApp puts --payload-url before the bundle ID', async () => {
+  await withFakeAppleTool(
+    () => '',
+    async ({ calls }) => {
+      await launchCoreDeviceApp(IOS_DEVICE, 'com.example.app', {
+        payloadUrl: 'myapp://item/42',
+      });
+      assert.deepEqual(calls, [
+        [
+          'devicectl',
+          'device',
+          'process',
+          'launch',
+          '--device',
+          IOS_DEVICE.id,
+          '--payload-url',
+          'myapp://item/42',
+          'com.example.app',
+        ],
+      ]);
+    },
+    { device: IOS_DEVICE },
+  );
+});
+
+test('launchCoreDeviceApp keeps launch args after the bundle ID, separated by --', async () => {
+  await withFakeAppleTool(
+    () => '',
+    async ({ calls }) => {
+      await launchCoreDeviceApp(IOS_DEVICE, 'com.example.app', {
+        payloadUrl: 'myapp://item/42',
+        launchArgs: ['--debug'],
+      });
+      assert.deepEqual(calls, [
+        [
+          'devicectl',
+          'device',
+          'process',
+          'launch',
+          '--device',
+          IOS_DEVICE.id,
+          '--payload-url',
+          'myapp://item/42',
+          'com.example.app',
+          '--',
+          '--debug',
+        ],
+      ]);
+    },
+    { device: IOS_DEVICE },
+  );
+});
 
 test('parseIosDeviceDetailsPayload reads direct and nested tunnel state', () => {
   assert.equal(

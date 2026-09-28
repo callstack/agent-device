@@ -22,6 +22,8 @@ export type DaemonInfo = {
   codeSignature?: string;
   processStartTime?: string;
   baseUrl?: string;
+  remoteInstanceId?: string;
+  remoteUpstreamInstanceId?: string;
 };
 
 type DaemonLockInfo = {

@@ -30,6 +30,18 @@ import {
 } from './runner-error-classification.ts';
 import type { RunnerCommand } from './runner-contract.ts';
 import type { RunnerSession } from './runner-session-types.ts';
+
+export type RunnerConnectionSession = Pick<
+  RunnerSession,
+  | 'startupRetryWake'
+  | 'child'
+  | 'startupDeviceStates'
+  | 'state'
+  | 'testPromise'
+  | 'readLogTail'
+  | 'device'
+  | 'runnerLogPath'
+>;
 import {
   runnerSimulatorSetFailureDetails,
   simulatorSetDestinationNotFoundMessage,
@@ -53,7 +65,7 @@ export async function waitForRunner(
   command: RunnerCommand,
   logPath?: string,
   timeoutMs: number = RUNNER_STARTUP_TIMEOUT_MS,
-  session?: RunnerSession,
+  session?: RunnerConnectionSession,
   signal?: AbortSignal,
 ): Promise<Response> {
   const deadline = Deadline.fromTimeoutMs(timeoutMs);
@@ -148,7 +160,7 @@ async function attemptRunnerConnection(params: {
   command: RunnerCommand;
   timeoutMs: number;
   logPath?: string;
-  session?: RunnerSession;
+  session?: RunnerConnectionSession;
   route: RunnerCommandRoute;
   resolveRoute: RunnerRouteResolver;
   markUsbmuxUnattached: () => void;
@@ -172,7 +184,7 @@ async function ensureRunnerAttemptCanStart(params: {
   port: number;
   timeoutMs: number;
   logPath?: string;
-  session?: RunnerSession;
+  session?: RunnerConnectionSession;
   attemptDeadline?: Deadline;
 }): Promise<void> {
   if (params.attemptDeadline?.isExpired()) {
@@ -246,7 +258,7 @@ async function tryReadySimulatorEndpoint(params: {
   device: DeviceInfo;
   port: number;
   command: RunnerCommand;
-  session?: RunnerSession;
+  session?: RunnerConnectionSession;
   signal?: AbortSignal;
   attemptDeadline?: Deadline;
   setLastError: (error: unknown) => void;
@@ -516,7 +528,7 @@ function buildRunnerConnectError(params: {
 }
 
 export async function buildRunnerEarlyExitError(params: {
-  session: RunnerSession;
+  session: RunnerConnectionSession;
   port: number;
   logPath?: string;
 }): Promise<AppError> {

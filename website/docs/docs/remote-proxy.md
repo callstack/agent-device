@@ -45,7 +45,7 @@ agent-device disconnect
 
 Passing `--daemon-auth-token <token>` instead of exporting the environment variable also works, but only authenticates the single command it is passed to; subsequent commands need the token again through the env var, a `daemonAuthToken` entry in your remote config profile, or a repeated `--daemon-auth-token` flag.
 
-`connect proxy` stores the proxy profile and client identity. Device leases are automatic on `open` and expire after five minutes without commands. `close` releases the active session and device lease; `disconnect` clears local connection state.
+`connect proxy` stores the proxy profile and client identity. Device leases are automatic on `open` and expire after five minutes without commands. That five minutes is the window `open` asks for; a lease allocated directly over the RPC without `ttlMs` keeps the daemon's one-minute inactivity default instead. `close` releases the active session and device lease; `disconnect` clears local connection state.
 
 Multiple agents can share one proxy when each uses the normal `connect proxy`, `open`, commands, `close`, and `disconnect` flow. A busy device error means another agent owns the device until it closes or its inactivity lease expires.
 

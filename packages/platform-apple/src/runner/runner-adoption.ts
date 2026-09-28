@@ -25,14 +25,12 @@ import {
   type RunnerLeaseAdoptionRefusal,
 } from './runner-lease.ts';
 import {
-  requireRunnerPhaseRemainingMs,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
   type RunnerPhaseBudget,
   type RunnerXctestrunArtifact,
 } from './runner-xctestrun.ts';
 import {
-  normalizeRunnerStartupTimeoutMs,
   RunnerCommandAccounting,
   type RunnerProcessHandle,
   type RunnerSession,
@@ -133,7 +131,7 @@ export async function tryAdoptRunnerSessionFromLease(
     return skip('runner_pid_recycled', lease);
   }
 
-  const session = buildAdoptedRunnerSession(device, lease, runnerPid, expectedDerived, options);
+  const session = buildAdoptedRunnerSession(device, lease, runnerPid, expectedDerived);
   try {
     writeRunnerLease(session.lease);
   } catch {
@@ -277,7 +275,6 @@ function buildAdoptedRunnerSession(
   lease: RunnerLease,
   runnerPid: number,
   expectedDerived: string,
-  options: { budget?: RunnerPhaseBudget },
 ): RunnerSession & { lease: RunnerLease } {
   const sessionId = lease.sessionId;
   const artifact: RunnerXctestrunArtifact = {
@@ -306,9 +303,6 @@ function buildAdoptedRunnerSession(
     // The probe already proved the runner answers commands.
     state: 'ready',
     commandCharges: new RunnerCommandAccounting(),
-    startupTimeoutMs: normalizeRunnerStartupTimeoutMs(
-      requireRunnerPhaseRemainingMs(options.budget, 'runner_session_adoption'),
-    ),
     lease: buildRunnerLease({
       device,
       sessionId,

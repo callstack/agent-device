@@ -15,7 +15,7 @@ import type {
 
 /**
  * #1478 P5 stage C2b: the `.ad` step-loop ENGINE policy, split out of
- * `src/daemon/replay/internal/native-command.ts`'s replay orchestration /
+ * `packages/replay-port/src/daemon-port/native-command.ts`'s replay orchestration /
  * `resolveReplayStepResponse` / `buildReplayActionFailure`. Everything that
  * touches a real device, a snapshot, `SessionStore`, or the P4b repair
  * coordinator is daemon authority and stays behind the narrow

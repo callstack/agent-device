@@ -1,13 +1,13 @@
-import { Deadline } from '@agent-device/host-kit/retry';
 import { waitForDetachedAttempt } from '../detached-attempt.ts';
-import { snapshotSourceError } from './errors.ts';
+import {
+  createNativeBuildDeadline,
+  remainingNativeBuildMs,
+  type NativeBuildDeadline,
+} from '../native-build/deadline.ts';
+import { fromNativeBuildError, snapshotSourceError } from './errors.ts';
 
-export type SnapshotSourceDeadline = Readonly<{
-  clock: Deadline;
-  /** The clock the deadline is read against; injected so a test can move time (#2422). */
-  now: () => number;
-  signal: AbortSignal | undefined;
-}>;
+/** The same deadline shape every native build/cache in this package reads against (#2970). */
+export type SnapshotSourceDeadline = NativeBuildDeadline;
 
 export function createSnapshotSourceDeadline(
   timeoutMs: number,
@@ -15,14 +15,16 @@ export function createSnapshotSourceDeadline(
   now: () => number = Date.now,
 ): SnapshotSourceDeadline {
   if (signal?.aborted) throw snapshotSourceError('cancelled', 'abort-signal');
-  return { clock: Deadline.fromTimeoutMs(timeoutMs, now()), now, signal };
+  return createNativeBuildDeadline(timeoutMs, signal, now);
 }
 
+/** Behaves exactly like the shared `remainingNativeBuildMs`, but keys its failure on `SnapshotSourceError`. */
 export function remainingSnapshotSourceMs(deadline: SnapshotSourceDeadline, code: string): number {
-  if (deadline.signal?.aborted) throw snapshotSourceError('cancelled', 'abort-signal');
-  const remainingMs = deadline.clock.remainingMs(deadline.now());
-  if (remainingMs <= 0) throw snapshotSourceError('timeout', code);
-  return Math.max(1, Math.floor(remainingMs));
+  try {
+    return remainingNativeBuildMs(deadline, code);
+  } catch (error) {
+    throw fromNativeBuildError(error);
+  }
 }
 
 /**

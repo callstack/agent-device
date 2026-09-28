@@ -42,9 +42,9 @@ import {
 } from './daemon-client-metadata.ts';
 import {
   canConnect,
+  cachedRemoteDaemonHealth,
   DAEMON_HTTP_ENDPOINT_UNAVAILABLE_MESSAGE,
   DAEMON_SOCKET_ENDPOINT_UNAVAILABLE_MESSAGE,
-  readRemoteDaemonHealth,
 } from './daemon-client-transport.ts';
 
 export type DaemonClientSettings = {
@@ -172,7 +172,10 @@ async function ensureRemoteDaemon(settings: DaemonClientSettings): Promise<Ensur
     pid: 0,
     baseUrl: settings.remoteBaseUrl,
   };
-  if ((await readRemoteDaemonHealth(remoteInfo)).reachable) {
+  const health = await cachedRemoteDaemonHealth(remoteInfo);
+  if (health.reachable) {
+    remoteInfo.remoteInstanceId = health.instanceId;
+    remoteInfo.remoteUpstreamInstanceId = health.upstream?.instanceId;
     return { info: remoteInfo, startedByClient: false };
   }
   throw new AppError('COMMAND_FAILED', 'Remote daemon is unavailable', {

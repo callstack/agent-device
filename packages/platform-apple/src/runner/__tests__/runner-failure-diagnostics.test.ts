@@ -5,7 +5,7 @@ import { onTestFinished, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { logChunk } from '../runner-io.ts';
 import { captureRunnerLogAttempt } from '../runner-failure-diagnostics.ts';
-import { parseRunnerResponse } from '../runner-session.ts';
+import { parseRunnerResponse } from '../runner-exchange.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
 /**

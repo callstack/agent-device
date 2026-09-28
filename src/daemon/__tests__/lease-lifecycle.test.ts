@@ -48,7 +48,9 @@ test('admitRequestLeaseForLockedScope heartbeats and stores admitted lease on th
 
   expect(req.internal?.admittedLease?.leaseId).toBe(lease.leaseId);
   expect(req.internal?.admittedLease?.heartbeatAt).toBe(2_000);
-  expect(sessionStore.get('default')?.lease?.expiresAt).toBe(302_000);
+  // Renewal is for the window the lease carries — the registry default here, since this client
+  // named none — not the proxy-specific default admission used to name on every request (#2946).
+  expect(sessionStore.get('default')?.lease?.expiresAt).toBe(62_000);
 });
 
 test('cleanupExpiredLeasedSession consumes expired lease and deletes the session after teardown', async () => {
