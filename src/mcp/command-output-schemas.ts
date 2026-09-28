@@ -17,10 +17,9 @@ import {
   INTERACTION_COMMAND_OUTPUT_SCHEMAS,
   postActionSurfaceChangeSchema,
 } from '../commands/interaction/index.ts';
+import { RECORDING_COMMAND_OUTPUT_SCHEMAS } from '../commands/recording/index.ts';
 import { REPLAY_COMMAND_OUTPUT_SCHEMAS } from '../commands/replay/index.ts';
 import { SYSTEM_COMMAND_OUTPUT_SCHEMAS } from '../commands/system/index.ts';
-import { NATIVE_PATH_DISPOSITION_VALUES } from '@agent-device/contracts/recording-native-path';
-import { RECORDER_OBSERVATION_VALUES } from '@agent-device/contracts/recording-stop-observation';
 import { DEVICE_KINDS, DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
 
 /**
@@ -51,17 +50,6 @@ import { DEVICE_KINDS, DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/ke
  * exactly the entries whose descriptor declares the post-action observation
  * trait (#1652).
  */
-
-const artifactSchema = objectSchema(
-  {
-    field: stringSchema(),
-    artifactType: stringSchema(),
-    path: stringSchema(),
-    localPath: stringSchema(),
-    fileName: stringSchema(),
-  },
-  ['field'],
-);
 
 // SettleObservation (packages/contracts/src/interaction.ts) — opt-in `--settle` settled
 // diff observation (#1101).
@@ -330,70 +318,6 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
     ['mode', 'baselineInitialized', 'summary', 'lines'],
   ),
 
-  // packages/contracts/src/recording.ts
-  record: {
-    type: 'object',
-    oneOf: [
-      objectSchema(
-        {
-          recording: constSchema('started'),
-          outPath: stringSchema(),
-          sessionStateDir: stringSchema(),
-          recordingBackend: stringSchema(),
-          recordingScope: stringSchema(),
-          recordOnlySession: booleanSchema(),
-          activeSessionApp: looseObjectSchema(),
-          showTouches: booleanSchema(),
-        },
-        ['recording', 'outPath', 'sessionStateDir', 'showTouches'],
-      ),
-      objectSchema(
-        {
-          recording: constSchema('stopped'),
-          outPath: stringSchema(),
-          telemetryPath: stringSchema(),
-          artifacts: { type: 'array', items: artifactSchema },
-          recordingBackend: stringSchema(),
-          recordingScope: stringSchema(),
-          recordOnlySession: booleanSchema(),
-          activeSessionApp: looseObjectSchema(),
-          durationMs: numberSchema(),
-          capturedDurationMs: numberSchema(),
-          recorder: enumSchema(
-            RECORDER_OBSERVATION_VALUES,
-            'What the recorder was observed doing when the recording was stopped: confirmed, or lost when the session holding it died. ADR 0024 reserves unconfirmed for the step that gains the probe.',
-          ),
-          nativePathDisposition: enumSchema(
-            NATIVE_PATH_DISPOSITION_VALUES,
-            'What became of the artifact path the recorder writes to: retirable while it still owes a removal, retired once that removal was verified. ADR 0024 reserves pending.',
-          ),
-          showTouches: booleanSchema(),
-          warning: stringSchema(),
-          overlayWarning: stringSchema(),
-          chunks: { type: 'array', items: looseObjectSchema() },
-        },
-        ['recording', 'outPath', 'artifacts', 'durationMs', 'showTouches'],
-      ),
-    ],
-  },
-  trace: {
-    type: 'object',
-    oneOf: [
-      objectSchema({ trace: constSchema('started'), outPath: stringSchema() }, [
-        'trace',
-        'outPath',
-      ]),
-      objectSchema(
-        {
-          trace: constSchema('stopped'),
-          outPath: stringSchema(),
-          artifacts: { type: 'array', items: artifactSchema },
-        },
-        ['trace', 'outPath', 'artifacts'],
-      ),
-    ],
-  },
-
   // A family that owns its commands authors their advertised response shape beside the
   // command surface and projects it here. This spread stays last: a hand-written entry for
   // a projected command then fails as TS2783 instead of quietly overriding the family's,
@@ -401,6 +325,7 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
   ...DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS,
   ...PUSH_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS,
   ...INTERACTION_COMMAND_OUTPUT_SCHEMAS,
+  ...RECORDING_COMMAND_OUTPUT_SCHEMAS,
   ...REPLAY_COMMAND_OUTPUT_SCHEMAS,
   ...SYSTEM_COMMAND_OUTPUT_SCHEMAS,
 } satisfies Record<keyof CommandResultMap, JsonSchema>;
