@@ -39,7 +39,7 @@ export type PublicPlatform = (typeof PUBLIC_PLATFORMS)[number];
 // aliases `ios`/`macos`, which still resolve to `apple` devices (read-path back-compat).
 export const PLATFORM_SELECTORS = [...PLATFORMS, 'ios', 'macos'] as const;
 export type PlatformSelector = (typeof PLATFORM_SELECTORS)[number];
-const DEVICE_KINDS = ['simulator', 'emulator', 'device'] as const;
+export const DEVICE_KINDS = ['simulator', 'emulator', 'device'] as const;
 export type DeviceKind = (typeof DEVICE_KINDS)[number];
 export const DEVICE_TARGETS = ['mobile', 'tv', 'desktop'] as const;
 export type DeviceTarget = (typeof DEVICE_TARGETS)[number];

@@ -11,6 +11,7 @@ import {
   stringArraySchema,
   stringSchema,
 } from '../commands/command-input.ts';
+import { DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/device.ts';
 import {
   INTERACTION_COMMAND_OUTPUT_SCHEMAS,
   postActionSurfaceChangeSchema,
@@ -19,7 +20,7 @@ import { REPLAY_COMMAND_OUTPUT_SCHEMAS } from '../commands/replay/index.ts';
 import { SYSTEM_COMMAND_OUTPUT_SCHEMAS } from '../commands/system/index.ts';
 import { NATIVE_PATH_DISPOSITION_VALUES } from '@agent-device/contracts/recording-native-path';
 import { RECORDER_OBSERVATION_VALUES } from '@agent-device/contracts/recording-stop-observation';
-import { DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
+import { DEVICE_KINDS, DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
 
 /**
  * Registry of per-command MCP `outputSchema`s, keyed by the daemon command
@@ -50,7 +51,6 @@ import { DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
  * trait (#1652).
  */
 
-export const DEVICE_KINDS = ['simulator', 'emulator', 'device'] as const;
 
 const artifactSchema = objectSchema(
   {
@@ -132,30 +132,6 @@ const settleObservationSchema: JsonSchema = objectSchema(
   ['settled', 'waitedMs', 'captures', 'quietMs', 'timeoutMs'],
 );
 
-// boot / shutdown share the resolved-device header (packages/contracts/src/device.ts).
-const deviceHeaderProperties: Record<string, JsonSchema> = {
-  // Public leaf vocabulary (ios | macos | android | linux | web): boot/shutdown
-  // emit publicPlatformString, never the internal `apple` platform.
-  platform: enumSchema(PUBLIC_PLATFORMS),
-  target: enumSchema(DEVICE_TARGETS),
-  device: stringSchema('Human-readable device name.'),
-  id: stringSchema('Stable device id.'),
-  kind: enumSchema(DEVICE_KINDS),
-};
-const deviceHeaderRequired = ['platform', 'target', 'device', 'id', 'kind'] as const;
-
-// TargetShutdownResult (packages/contracts/src/target-shutdown-contract.ts).
-const targetShutdownResultSchema: JsonSchema = objectSchema(
-  {
-    success: booleanSchema(),
-    exitCode: numberSchema(),
-    stdout: stringSchema(),
-    stderr: stringSchema(),
-    error: looseObjectSchema('Normalized error detail when shutdown failed.'),
-  },
-  ['success', 'exitCode', 'stdout', 'stderr'],
-);
-
 /** Grafts the opt-in `--settle` observation onto a closed schema or union branch. */
 function withSettleObservation(schema: JsonSchema): JsonSchema {
   // Union-shaped results (fill) carry the observation in EACH branch, never
@@ -189,16 +165,6 @@ function deriveSettleObservationSchemas(
 }
 
 const BASE_COMMAND_OUTPUT_SCHEMAS = {
-  // packages/contracts/src/device.ts
-  boot: objectSchema({ ...deviceHeaderProperties, booted: { type: 'boolean', const: true } }, [
-    ...deviceHeaderRequired,
-    'booted',
-  ]),
-  shutdown: objectSchema({ ...deviceHeaderProperties, shutdown: targetShutdownResultSchema }, [
-    ...deviceHeaderRequired,
-    'shutdown',
-  ]),
-
   // packages/contracts/src/viewport.ts
   viewport: objectSchema(
     { width: numberSchema(), height: numberSchema(), message: stringSchema() },
@@ -464,6 +430,7 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
   // command surface and projects it here. This spread stays last: a hand-written entry for
   // a projected command then fails as TS2783 instead of quietly overriding the family's,
   // and this map's `satisfies` still refuses a missing `CommandResultMap` key.
+  ...DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS,
   ...INTERACTION_COMMAND_OUTPUT_SCHEMAS,
   ...REPLAY_COMMAND_OUTPUT_SCHEMAS,
   ...SYSTEM_COMMAND_OUTPUT_SCHEMAS,

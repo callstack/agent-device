@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import type { ReplayCommandResult, ReplaySuiteResult } from '@agent-device/contracts/replay';
 import { ownerFilesForCommand } from '@agent-device/command-registry/owner-files';
 import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
+import { DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS } from '../../commands/management/device.ts';
 import { INTERACTION_COMMAND_OUTPUT_SCHEMAS } from '../../commands/interaction/index.ts';
 import { REPLAY_COMMAND_OUTPUT_SCHEMAS } from '../../commands/replay/index.ts';
 import { SYSTEM_COMMAND_OUTPUT_SCHEMAS } from '../../commands/system/index.ts';
@@ -73,6 +74,7 @@ const PROJECTED_FAMILIES = [
   { name: 'replay', schemas: REPLAY_COMMAND_OUTPUT_SCHEMAS },
   { name: 'system', schemas: SYSTEM_COMMAND_OUTPUT_SCHEMAS },
   { name: 'interaction', schemas: INTERACTION_COMMAND_OUTPUT_SCHEMAS },
+  { name: 'management-device', schemas: DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS },
 ] as const;
 
 test('projected output-schema families claim disjoint commands and survive the composition intact', () => {

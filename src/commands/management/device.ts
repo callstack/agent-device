@@ -1,11 +1,64 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
-import { booleanField } from '../command-input.ts';
+import type { CommandResultMap } from '@agent-device/command-registry/command-result';
+import { DEVICE_KINDS, DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
+import {
+  booleanField,
+  booleanSchema,
+  enumSchema,
+  looseObjectSchema,
+  numberSchema,
+  objectSchema,
+  stringSchema,
+} from '../command-input.ts';
+import type { JsonSchema } from '../command-contract.ts';
 import { commonInputFromFlags, direct } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { managementCliOutputFormatters } from './output.ts';
+
+// boot / shutdown share the resolved-device header (packages/contracts/src/device.ts).
+const deviceHeaderProperties: Record<string, JsonSchema> = {
+  // Public leaf vocabulary (ios | macos | android | harmonyos | vega | linux | web): boot/shutdown
+  // emit publicPlatformString, never the internal `apple` platform.
+  platform: enumSchema(PUBLIC_PLATFORMS),
+  target: enumSchema(DEVICE_TARGETS),
+  device: stringSchema('Human-readable device name.'),
+  id: stringSchema('Stable device id.'),
+  kind: enumSchema(DEVICE_KINDS),
+};
+const deviceHeaderRequired = ['platform', 'target', 'device', 'id', 'kind'] as const;
+
+// TargetShutdownResult (packages/contracts/src/target-shutdown-contract.ts).
+const targetShutdownResultSchema: JsonSchema = objectSchema(
+  {
+    success: booleanSchema(),
+    exitCode: numberSchema(),
+    stdout: stringSchema(),
+    stderr: stringSchema(),
+    error: looseObjectSchema('Normalized error detail when shutdown failed.'),
+  },
+  ['success', 'exitCode', 'stdout', 'stderr'],
+);
+
+/**
+ * This family's advertised MCP `outputSchema`s, keyed by daemon command name and projected into
+ * the command map by `src/mcp/command-output-schemas.ts`. Non-strict like every other entry: no
+ * `additionalProperties: false`, so additive response fields such as `cost` keep validating.
+ * Neither command carries the post-action observation trait (#1652): both are device-runtime
+ * commands, not interaction commands, so no settle graft applies here.
+ */
+export const DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS = {
+  boot: objectSchema({ ...deviceHeaderProperties, booted: { type: 'boolean', const: true } }, [
+    ...deviceHeaderRequired,
+    'booted',
+  ]),
+  shutdown: objectSchema({ ...deviceHeaderProperties, shutdown: targetShutdownResultSchema }, [
+    ...deviceHeaderRequired,
+    'shutdown',
+  ]),
+} satisfies Pick<Record<keyof CommandResultMap, JsonSchema>, 'boot' | 'shutdown'>;
 
 const devicesCommandMetadata = defineFieldCommandMetadata(
   'devices',
