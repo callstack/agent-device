@@ -6,6 +6,7 @@ import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { readNodeHttpRequestBody, timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import {
   buildDaemonHealthPayload,
+  buildDaemonInstanceMismatchRpcResponse,
   DAEMON_HTTP_BASE_PATH,
   DAEMON_HTTP_INSTANCE_HEADER,
   DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
@@ -506,19 +507,17 @@ function sendInstanceMismatch(res: ServerResponse, rpcId: unknown): void {
   res.setHeader('content-type', 'application/json');
   res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
   res.end(
-    JSON.stringify({
-      jsonrpc: '2.0',
-      id: rpcId,
-      error: {
-        code: -32001,
-        message: 'Proxy instance changed',
-        data: normalizeError(
+    JSON.stringify(
+      buildDaemonInstanceMismatchRpcResponse(
+        rpcId,
+        'Proxy instance changed',
+        normalizeError(
           new AppError('COMMAND_FAILED', 'Proxy instance changed', {
             reason: 'remote_instance_mismatch',
           }),
         ),
-      },
-    }),
+      ),
+    ),
   );
 }
 

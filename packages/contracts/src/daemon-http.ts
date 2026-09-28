@@ -42,6 +42,14 @@ export const DAEMON_HTTP_INSTANCE_HEADER = 'x-agent-device-instance';
 export const DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER = 'x-agent-device-upstream-instance';
 export const DAEMON_HTTP_INSTANCE_MISMATCH_HEADER = 'x-agent-device-instance-mismatch';
 
+export function buildDaemonInstanceMismatchRpcResponse<Id>(
+  id: Id,
+  message: string,
+  data: Record<string, unknown>,
+) {
+  return { jsonrpc: '2.0' as const, id, error: { code: -32001, message, data } };
+}
+
 export type DaemonHealthPayload = {
   ok: true;
   service: 'agent-device-daemon' | 'agent-device-proxy';

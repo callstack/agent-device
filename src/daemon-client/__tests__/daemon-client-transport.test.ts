@@ -8,6 +8,8 @@ import {
   DAEMON_RPC_PROTOCOL_VERSION,
 } from '@agent-device/contracts/daemon-http';
 import { sendToDaemon } from '../daemon-client.ts';
+import { sendRequest } from '../daemon-client-transport.ts';
+import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { createDaemonProxyServer } from '../../remote/daemon-proxy.ts';
 import {
   closeLoopbackServer,
@@ -135,6 +137,50 @@ test('persistent remote client caches health and retries a refused stale instanc
     assert.equal((await request('legacy')).ok, true);
     assert.deepEqual(paths.slice(19), ['GET /health', 'POST /rpc', 'GET /health', 'POST /rpc']);
     assert.deepEqual(rpcHeaders.slice(-2), [undefined, undefined]);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
+test('instance retry uses the remaining request timeout', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let rpcCount = 0;
+  const server = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      res.end(JSON.stringify({ ok: true, instanceId: 'replacement-instance' }));
+      return;
+    }
+    rpcCount += 1;
+    if (rpcCount === 1) {
+      setTimeout(() => {
+        res.statusCode = 409;
+        res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
+        res.end();
+      }, 80);
+    }
+  });
+  try {
+    const port = await listenOnLoopback(server);
+    await assert.rejects(
+      sendRequest(
+        {
+          baseUrl: `http://127.0.0.1:${port}`,
+          token: 'secret',
+          pid: 1,
+          remoteInstanceId: 'previous-instance',
+        },
+        { token: 'secret', command: 'devices', session: 'default', positionals: [], flags: {} },
+        'auto',
+        resolveDaemonPaths('/tmp/agent-device-instance-retry-test'),
+        400,
+      ),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.details?.reason === 'daemon_transport_timeout' &&
+        typeof error.details.timeoutMs === 'number' &&
+        error.details.timeoutMs < 400,
+    );
+    assert.equal(rpcCount, 2);
   } finally {
     await closeLoopbackServer(server);
   }

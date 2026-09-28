@@ -36,6 +36,7 @@ import {
 } from '../../request-progress-protocol.ts';
 import {
   buildDaemonHealthPayload,
+  buildDaemonInstanceMismatchRpcResponse,
   DAEMON_HTTP_INSTANCE_HEADER,
   DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
@@ -174,9 +175,8 @@ function refuseStaleDaemonInstance(
   res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
   sendJson(
     res,
-    createRpcError(
+    buildDaemonInstanceMismatchRpcResponse(
       rpcId,
-      -32001,
       'Daemon instance changed',
       normalizeError(
         new AppError('COMMAND_FAILED', 'Daemon instance changed', {
@@ -730,7 +730,6 @@ export async function createDaemonHttpServer(options: {
         sendJson(res, createRpcError(rpcRequest.id ?? null, -32602, 'Invalid params'), 400);
         return;
       }
-      if (refuseStaleDaemonInstance(req, res, rpcRequest.id ?? null, instanceId)) return;
 
       let requestIdForCleanup: string | undefined;
       let requestAbortRegistration: ReturnType<typeof registerRequestAbort>;
@@ -784,6 +783,16 @@ export async function createDaemonHttpServer(options: {
           );
           return;
         }
+        const tokenError = enforceDaemonToken(daemonRequest.token, token);
+        if (tokenError) {
+          sendJson(
+            res,
+            createRpcError(rpcRequest.id ?? null, -32001, tokenError.message, tokenError),
+            401,
+          );
+          return;
+        }
+        if (refuseStaleDaemonInstance(req, res, rpcRequest.id ?? null, instanceId)) return;
         daemonRequest.meta = {
           ...daemonRequest.meta,
           tenantId: tenantTrust.tenantId,

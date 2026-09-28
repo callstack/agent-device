@@ -66,6 +66,7 @@ test('a stale RPC instance is refused before command dispatch', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   let handlerCalls = 0;
   const server = await createDaemonHttpServer({
+    token: 'daemon-secret',
     handleRequest: async () => {
       handlerCalls += 1;
       return { ok: true, data: {} };
@@ -75,11 +76,12 @@ test('a stale RPC instance is refused before command dispatch', async (t) => {
     const port = await listenOnLoopback(server);
     const endpoint = `http://127.0.0.1:${port}`;
     const health = (await (await fetch(`${endpoint}/health`)).json()) as { instanceId: string };
-    const rpc = (expectedInstance: string) =>
+    const rpc = (expectedInstance: string, authToken = 'daemon-secret') =>
       fetch(`${endpoint}/rpc`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
+          authorization: `Bearer ${authToken}`,
           [DAEMON_HTTP_INSTANCE_HEADER]: expectedInstance,
         },
         body: JSON.stringify({
@@ -89,6 +91,13 @@ test('a stale RPC instance is refused before command dispatch', async (t) => {
           params: { command: 'devices', positionals: [] },
         }),
       });
+    const unauthorized = await rpc('previous-instance', 'wrong-token');
+    assert.equal(unauthorized.status, 401);
+    assert.equal(unauthorized.headers.get(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER), null);
+    assert.equal(
+      ((await unauthorized.json()) as RpcErrorResponse).error?.data?.code,
+      'UNAUTHORIZED',
+    );
     const stale = await rpc('previous-instance');
     assert.equal(stale.status, 409);
     assert.equal(stale.headers.get(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER), 'true');

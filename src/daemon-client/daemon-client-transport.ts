@@ -204,6 +204,7 @@ export async function sendRequest(
   options: SendRequestOptions = {},
 ): Promise<DaemonResponse> {
   const transport = chooseTransport(info, preference);
+  const deadline = typeof timeoutMs === 'number' ? performance.now() + timeoutMs : undefined;
   try {
     return await sendRequestWithTransport(info, req, statePaths, timeoutMs, transport, options);
   } catch (error) {
@@ -213,6 +214,7 @@ export async function sendRequest(
         req,
         statePaths,
         timeoutMs,
+        deadline,
         transport,
         options,
       );
@@ -229,6 +231,7 @@ async function retryAfterRemoteInstanceMismatch(
   req: DaemonRequest,
   statePaths: DaemonPaths,
   timeoutMs: number | undefined,
+  deadline: number | undefined,
   transport: ResolvedDaemonTransport,
   options: SendRequestOptions,
 ): Promise<DaemonResponse> {
@@ -242,8 +245,16 @@ async function retryAfterRemoteInstanceMismatch(
   info.remoteInstanceId = health.instanceId;
   info.remoteUpstreamInstanceId = health.upstream?.instanceId;
   cacheRemoteDaemonHealth(info, health);
+  const remainingMs = deadline === undefined ? undefined : deadline - performance.now();
+  if (typeof timeoutMs === 'number' && remainingMs !== undefined && remainingMs <= 0) {
+    throw handleRequestTimeout({
+      info,
+      statePaths,
+      ...timeoutRequestContext(req, true, timeoutMs),
+    });
+  }
   try {
-    return await sendRequestWithTransport(info, req, statePaths, timeoutMs, transport, options);
+    return await sendRequestWithTransport(info, req, statePaths, remainingMs, transport, options);
   } catch (error) {
     if (isRemoteTransportFailure(error)) invalidateRemoteDaemonHealth(info);
     throw error;

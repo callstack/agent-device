@@ -84,6 +84,9 @@ test('daemon proxy forwards rpc requests with upstream daemon token', async (t) 
     const proxyPort = await listenOnLoopback(proxy);
     const healthResponse = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/health`);
     const health = (await healthResponse.json()) as Record<string, any>;
+    assert.equal(healthResponse.status, 200);
+    assert.equal(typeof health.instanceId, 'string');
+    assert.equal(typeof health.upstream?.instanceId, 'string');
     const response = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/rpc`, {
       method: 'POST',
       headers: {
