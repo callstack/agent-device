@@ -73,12 +73,12 @@ test('physical Wear targets fail closed instead of reporting an automated pairin
   ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
 });
 
-test('rejects an explicitly selected phone as the wearable', async () => {
+test('rejects the phone id itself as the wearable even when another candidate is named Wear', async () => {
   await expect(
     pairAndroidWearable(
-      host({ discover: async () => [phone, { ...watch, name: 'Pixel 10' }] }),
+      host({ discover: async () => [phone, watch] }),
       phone,
-      { wearable: { deviceId: watch.id }, boot: false },
+      { wearable: { deviceId: phone.id }, boot: false },
       signal(),
     ),
   ).rejects.toMatchObject({ code: 'DEVICE_NOT_FOUND' });

@@ -440,14 +440,20 @@ function selectDefaultDevice(
   selector: DeviceSelector,
   context: DeviceSelectionContext,
 ): DeviceInfo {
-  const onlyCandidate = candidates[0];
-  if (onlyCandidate !== undefined && candidates.length === 1) return onlyCandidate;
+  // watchOS simulators are mobile-target devices in CoreSimulator inventory, but they are not
+  // valid implicit phone targets. Explicit identity/name selection remains available to the
+  // pair-wearable command; ordinary default resolution must prefer a phone or fail closed.
+  const defaultCandidates = candidates.filter(
+    (device) => !(isApplePlatform(device.platform) && device.appleOs === 'watchos'),
+  );
+  const onlyCandidate = defaultCandidates[0];
+  if (onlyCandidate !== undefined && defaultCandidates.length === 1) return onlyCandidate;
 
-  if (candidates.length === 0) {
+  if (defaultCandidates.length === 0) {
     throwNoDevicesFound(selector, context);
   }
 
-  const preferred = preferredDeviceCandidates(candidates);
+  const preferred = preferredDeviceCandidates(defaultCandidates);
   if (preferred.length > 1) throwAmbiguousDeviceSelection(preferred);
   const selected = preferred[0];
   if (!selected) throwNoDevicesFound(selector, context);
