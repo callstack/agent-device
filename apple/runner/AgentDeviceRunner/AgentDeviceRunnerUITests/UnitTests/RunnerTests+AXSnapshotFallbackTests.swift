@@ -291,6 +291,65 @@ extension RunnerTests {
       RunnerAXSnapshotBridge.customActionReadDispatchCount(), dispatchesBefore + 2)
   }
 
+  func testHungInitialSnapshotRequestIsContainedAndRecovers() {
+    let client = HungSnapshotAXClientForTesting()
+    let dispatchesBefore = RunnerAXSnapshotBridge.snapshotReadDispatchCount()
+    let blockedBefore = RunnerAXSnapshotBridge.snapshotReadBlockedCount()
+    defer { client.release() }
+
+    let firstStarted = Date()
+    let first = RunnerAXSnapshotBridge.snapshotTree(
+      withClient: client,
+      target: NSObject(),
+      maxDepth: 4,
+      maxNodes: 16,
+      deepExtensionCallLimit: 0,
+      customActionLimit: 0,
+      deadline: Date().addingTimeInterval(0.25)
+    )
+    XCTAssertEqual(first["ok"] as? Bool, false)
+    XCTAssertGreaterThanOrEqual(-firstStarted.timeIntervalSinceNow, 0.2)
+    XCTAssertEqual(RunnerAXSnapshotBridge.snapshotReadsInFlight(), 1)
+    XCTAssertEqual(RunnerAXSnapshotBridge.snapshotReadDispatchCount(), dispatchesBefore + 1)
+
+    // Repeated captures fail closed without adding work behind the wedged XPC call.
+    for _ in 0..<4 {
+      let repeated = RunnerAXSnapshotBridge.snapshotTree(
+        withClient: client,
+        target: NSObject(),
+        maxDepth: 4,
+        maxNodes: 16,
+        deepExtensionCallLimit: 0,
+        customActionLimit: 0,
+        deadline: Date().addingTimeInterval(1)
+      )
+      XCTAssertEqual(repeated["ok"] as? Bool, false)
+    }
+    XCTAssertEqual(RunnerAXSnapshotBridge.snapshotReadDispatchCount(), dispatchesBefore + 1)
+    XCTAssertEqual(RunnerAXSnapshotBridge.snapshotReadBlockedCount(), blockedBefore + 4)
+
+    client.release()
+    let drained = expectation(description: "wedged initial request drains")
+    DispatchQueue.global().async {
+      while RunnerAXSnapshotBridge.snapshotReadsInFlight() > 0 {
+        usleep(20_000)
+      }
+      drained.fulfill()
+    }
+    wait(for: [drained], timeout: 5)
+
+    _ = RunnerAXSnapshotBridge.snapshotTree(
+      withClient: client,
+      target: NSObject(),
+      maxDepth: 4,
+      maxNodes: 16,
+      deepExtensionCallLimit: 0,
+      customActionLimit: 0,
+      deadline: Date().addingTimeInterval(1)
+    )
+    XCTAssertEqual(RunnerAXSnapshotBridge.snapshotReadDispatchCount(), dispatchesBefore + 2)
+  }
+
   /// The element budget bounds how many elements we read; these caps bound what
   /// any ONE element can put in the response. Clipping must be reported, since
   /// a clipped list looks exactly like a complete one.
@@ -487,6 +546,36 @@ extension RunnerTests {
 /// Stands in for an AX client whose `attributesForElement:` never returns —
 /// the wedged-server case the containment exists for. `release()` lets the
 /// hung call finish so recovery is observable.
+private final class HungSnapshotAXClientForTesting: NSObject {
+  private let gate = DispatchSemaphore(value: 0)
+  private let lock = NSLock()
+  private var released = false
+
+  @objc(requestSnapshotForElement:attributes:parameters:error:)
+  func requestSnapshot(
+    forElement element: Any,
+    attributes: Any,
+    parameters: Any,
+    error: NSErrorPointer
+  ) -> Any? {
+    lock.lock()
+    let alreadyReleased = released
+    lock.unlock()
+    if !alreadyReleased {
+      gate.wait()
+    }
+    return nil
+  }
+
+  func release() {
+    lock.lock()
+    defer { lock.unlock() }
+    guard !released else { return }
+    released = true
+    gate.signal()
+  }
+}
+
 private final class HungAXClientForTesting: NSObject {
   private let gate = DispatchSemaphore(value: 0)
   private let releasedOnce = NSLock()

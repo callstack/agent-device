@@ -30,6 +30,25 @@ static NSString *const RunnerAXCustomActionsAttribute = @"XC_kAXXCAttributeCusto
 /// capture's budget and starve every remaining candidate, turning a bounded
 /// enrichment into a capture-length stall.
 static const NSTimeInterval RunnerAXCustomActionReadTimeout = 1.0;
+static const NSTimeInterval RunnerAXSnapshotReadTimeout = 2.0;
+
+/// Snapshot requests are synchronous private-XPC calls too. Keep them off the
+/// XCTest main thread and refuse a second request while a timed-out call is
+/// still outstanding; the client call itself cannot be cancelled.
+static dispatch_queue_t RunnerAXSnapshotReadQueue(void)
+{
+  static dispatch_queue_t queue;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    queue = dispatch_queue_create("com.callstack.agentdevice.runner.ax-snapshot",
+                                  DISPATCH_QUEUE_SERIAL);
+  });
+  return queue;
+}
+
+static atomic_int RunnerAXSnapshotReadsInFlight = 0;
+static atomic_long RunnerAXSnapshotReadDispatches = 0;
+static atomic_long RunnerAXSnapshotReadBlocked = 0;
 
 /// The AX call is a synchronous XPC round trip that cannot be cancelled once
 /// issued, so the deadline above only frees the CALLER — the call itself keeps
@@ -85,6 +104,16 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
 @implementation RunnerAXSnapshotFrontier
 @end
 
+@interface RunnerAXSnapshotBridge ()
++ (nullable id)requestSnapshotContainedFromClient:(id)axClient
+                                           target:(id)target
+                                       attributes:(NSArray *)attributes
+                                         maxDepth:(NSInteger)maxDepth
+                                         maxNodes:(NSInteger)maxNodes
+                                         deadline:(nullable NSDate *)deadline
+                                            error:(NSError **)error;
+@end
+
 @implementation RunnerAXSnapshotBridge
 
 + (NSDictionary<NSString *, id> *)snapshotTreeForApplication:(XCUIApplication *)application
@@ -127,12 +156,13 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
   @try {
     NSArray *attributes = [self snapshotAttributes];
     NSError *error = nil;
-    id root = [self requestSnapshotFromClient:axClient
-                                      target:target
-                                  attributes:attributes
-                                    maxDepth:maxDepth
-                                    maxNodes:maxNodes
-                                       error:&error];
+    id root = [self requestSnapshotContainedFromClient:axClient
+                                                target:target
+                                            attributes:attributes
+                                              maxDepth:maxDepth
+                                              maxNodes:maxNodes
+                                              deadline:deadline
+                                                 error:&error];
     if (nil == root) {
       return [self failure:error.localizedDescription ?: @"AX snapshot request returned nil"];
     }
@@ -242,12 +272,13 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     }
     callsUsed += 1;
     NSError *error = nil;
-    id subRoot = [self requestSnapshotFromClient:axClient
-                                          target:element
-                                      attributes:attributes
-                                        maxDepth:maxDepth
-                                        maxNodes:maxNodes - *nodeCount
-                                           error:&error];
+    id subRoot = [self requestSnapshotContainedFromClient:axClient
+                                                   target:element
+                                               attributes:attributes
+                                                 maxDepth:maxDepth
+                                                 maxNodes:maxNodes - *nodeCount
+                                                 deadline:deadline
+                                                    error:&error];
     if (nil == subRoot) {
       missedFrontiers += 1;
       NSLog(@"AGENT_DEVICE_RUNNER_PRIVATE_AX_DEEP_EXTENSION_MISS=%@",
@@ -356,6 +387,75 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     root = nil;
   }
   return root ?: result;
+}
+
++ (nullable id)requestSnapshotContainedFromClient:(id)axClient
+                                           target:(id)target
+                                       attributes:(NSArray *)attributes
+                                         maxDepth:(NSInteger)maxDepth
+                                         maxNodes:(NSInteger)maxNodes
+                                         deadline:(nullable NSDate *)deadline
+                                            error:(NSError **)error
+{
+  if (nil != deadline && deadline.timeIntervalSinceNow <= 0) {
+    if (NULL != error) {
+      *error = [NSError errorWithDomain:@"agent-device.runner" code:4 userInfo:@{
+        NSLocalizedDescriptionKey: @"AX snapshot deadline expired before request dispatch"
+      }];
+    }
+    return nil;
+  }
+  int expected = 0;
+  if (!atomic_compare_exchange_strong(&RunnerAXSnapshotReadsInFlight, &expected, 1)) {
+    atomic_fetch_add(&RunnerAXSnapshotReadBlocked, 1);
+    if (NULL != error) {
+      *error = [NSError errorWithDomain:@"agent-device.runner" code:2 userInfo:@{
+        NSLocalizedDescriptionKey: @"A previous AX snapshot request is still outstanding"
+      }];
+    }
+    return nil;
+  }
+
+  atomic_fetch_add(&RunnerAXSnapshotReadDispatches, 1);
+  NSMutableArray *resultBox = [NSMutableArray array];
+  NSMutableArray *errorBox = [NSMutableArray array];
+  dispatch_semaphore_t finished = dispatch_semaphore_create(0);
+  dispatch_async(RunnerAXSnapshotReadQueue(), ^{
+    NSError *requestError = nil;
+    @try {
+      id result = [self requestSnapshotFromClient:axClient
+                                           target:target
+                                       attributes:attributes
+                                         maxDepth:maxDepth
+                                         maxNodes:maxNodes
+                                            error:&requestError];
+      if (nil != result) [resultBox addObject:result];
+    } @catch (NSException *exception) {
+      requestError = [NSError errorWithDomain:@"agent-device.runner" code:5 userInfo:@{
+        NSLocalizedDescriptionKey: exception.reason ?: exception.name ?: @"AX snapshot request failed"
+      }];
+    } @finally {
+      if (nil != requestError) [errorBox addObject:requestError];
+      atomic_store(&RunnerAXSnapshotReadsInFlight, 0);
+      dispatch_semaphore_signal(finished);
+    }
+  });
+
+  NSTimeInterval remaining = deadline ? [deadline timeIntervalSinceNow] : RunnerAXSnapshotReadTimeout;
+  remaining = MIN(RunnerAXSnapshotReadTimeout, MAX(0, remaining));
+  long waited = dispatch_semaphore_wait(
+    finished,
+    dispatch_time(DISPATCH_TIME_NOW, (int64_t)(remaining * NSEC_PER_SEC)));
+  if (waited != 0) {
+    if (NULL != error) {
+      *error = [NSError errorWithDomain:@"agent-device.runner" code:3 userInfo:@{
+        NSLocalizedDescriptionKey: @"AX snapshot request exceeded its contained deadline"
+      }];
+    }
+    return nil;
+  }
+  if (NULL != error) *error = errorBox.firstObject;
+  return resultBox.firstObject;
 }
 
 + (NSArray *)snapshotAttributes
@@ -647,6 +747,21 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
 + (NSInteger)customActionReadBlockedCount
 {
   return (NSInteger)atomic_load(&RunnerAXCustomActionReadBlocked);
+}
+
++ (NSInteger)snapshotReadsInFlight
+{
+  return atomic_load(&RunnerAXSnapshotReadsInFlight);
+}
+
++ (NSInteger)snapshotReadDispatchCount
+{
+  return (NSInteger)atomic_load(&RunnerAXSnapshotReadDispatches);
+}
+
++ (NSInteger)snapshotReadBlockedCount
+{
+  return (NSInteger)atomic_load(&RunnerAXSnapshotReadBlocked);
 }
 
 + (nullable id)accessibilityClient

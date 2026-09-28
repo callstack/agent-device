@@ -202,12 +202,31 @@ function summarizeProviderScenarioFlagCoverage(files) {
   ];
   const sources = files.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
   return flagTargets.map(([key, reason, aliases = []]) => {
-    const references = [key, ...aliases].reduce(
-      (count, candidate) => count + countFlagReferences(sources, candidate),
-      0,
-    );
+    // inspect-point takes x/y as positional arguments, unlike the named
+    // workflow flags counted below. Attribute those coordinates only to an
+    // inspect-point provider scenario so an unrelated geometry literal cannot
+    // satisfy this coverage row.
+    const positionalCoordinate = key === 'pointX' ? 0 : key === 'pointY' ? 1 : null;
+    const references =
+      positionalCoordinate === null
+        ? [key, ...aliases].reduce(
+            (count, candidate) => count + countFlagReferences(sources, candidate),
+            0,
+          )
+        : countInspectPointCoordinateReferences(sources, positionalCoordinate);
     return { key, reason, references };
   });
+}
+
+function countInspectPointCoordinateReferences(text, coordinateIndex) {
+  let count = 0;
+  const scenarios =
+    /command\s*:\s*['"]inspect-point['"][\s\S]{0,240}?positionals\s*:\s*\[([^\]]*)\]/g;
+  for (const match of text.matchAll(scenarios)) {
+    const positionals = match[1]?.match(/['"][^'"]*['"]/g) ?? [];
+    if (positionals.length > coordinateIndex) count += 1;
+  }
+  return count;
 }
 
 function countFlagReferences(text, key) {

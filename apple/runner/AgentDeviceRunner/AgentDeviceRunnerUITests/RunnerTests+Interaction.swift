@@ -357,6 +357,20 @@ extension RunnerTests {
       }
       .sorted(by: smallestElementFirst)
 
+    // Resolve the legacy text field before building optional point-inspection
+    // descriptors. The descriptor pass is still needed by inspect-point, but
+    // must not delay the primary text result with hittability AX reads.
+    func firstReadableText(in elements: [XCUIElement], preferredOnly: Bool) -> String? {
+      for element in elements {
+        if preferredOnly && !prefersExpandedTextRead(element) { continue }
+        if let text = readableText(for: element) { return text }
+      }
+      return nil
+    }
+    let text = firstReadableText(in: textInputCandidates, preferredOnly: true)
+      ?? firstReadableText(in: candidates, preferredOnly: true)
+      ?? firstReadableText(in: candidates, preferredOnly: false)
+
     let elements = Array(candidates.prefix(24)).map { element in
       let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
       let identifier = element.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -367,29 +381,13 @@ extension RunnerTests {
         label: label.isEmpty ? nil : label,
         identifier: identifier.isEmpty ? nil : identifier,
         type: elementTypeName(element.elementType),
+        role: nil,
         value: value.isEmpty ? nil : value,
         frame: SnapshotRect(element.frame),
-        hittable: element.isHittable
+        hittable: nil
       )
     }
-
-    for element in textInputCandidates where prefersExpandedTextRead(element) {
-      if let text = readableText(for: element) {
-        return (text, elements, true)
-      }
-    }
-
-    for element in candidates where prefersExpandedTextRead(element) {
-      if let text = readableText(for: element) {
-        return (text, elements, true)
-      }
-    }
-    for element in candidates {
-      if let text = readableText(for: element) {
-        return (text, elements, true)
-      }
-    }
-    return (nil, elements, true)
+    return (text, elements, true)
   }
 
 #if os(iOS) && targetEnvironment(simulator)
@@ -455,6 +453,7 @@ extension RunnerTests {
             label: label,
             identifier: identifier,
             type: type,
+            role: nil,
             value: value,
             frame: SnapshotRect(frame),
             hittable: nil

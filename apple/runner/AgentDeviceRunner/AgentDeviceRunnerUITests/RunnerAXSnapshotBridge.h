@@ -112,6 +112,12 @@ FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsBlockedKey;
 /// Total reads refused by single-flight admission.
 + (NSInteger)customActionReadBlockedCount;
 
+/// Contained snapshot-request counters, exposed so the unit bundle can pin the
+/// no-queued-work invariant for a wedged private AX snapshot request.
++ (NSInteger)snapshotReadsInFlight;
++ (NSInteger)snapshotReadDispatchCount;
++ (NSInteger)snapshotReadBlockedCount;
+
 /// The shared AX client (`XCUIDevice.accessibilityInterface`), or nil when the
 /// private interface is unavailable.
 + (nullable id)accessibilityClient;
