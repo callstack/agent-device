@@ -52,18 +52,15 @@ export async function pairAppleWearable(
 
     let pair = findPair(await listPairs(host, phone, signal), phone.id, wearable.id);
     if (!pair) {
-      const paired = await runRequired(
+      await runRequired(
         host,
         phone,
-        ['pair', wearable.id, phone.id],
+        ['pair', phone.id, wearable.id],
         signal,
         'CoreSimulator could not pair the selected phone and watch.',
       );
-      createdPairId = paired.stdout.trim() || undefined;
       pair = findPair(await listPairs(host, phone, signal), phone.id, wearable.id);
-    }
-    if (!pair && createdPairId) {
-      pair = { pairId: createdPairId, phoneId: phone.id, wearableId: wearable.id, state: 'paired' };
+      createdPairId = pair?.pairId;
     }
     if (!pair) {
       throw new AppError(
@@ -72,7 +69,7 @@ export async function pairAppleWearable(
       );
     }
 
-    if (!/active|connected/i.test(pair.state)) {
+    if (!hasPairState(pair.state, 'active') && !hasPairState(pair.state, 'connected')) {
       await runRequired(
         host,
         phone,
@@ -86,7 +83,7 @@ export async function pairAppleWearable(
       pairId: pair.pairId,
       phone,
       wearable,
-      status: /connected/i.test(pair.state) ? 'connected' : 'paired',
+      status: hasPairState(pair.state, 'connected') ? 'connected' : 'paired',
     };
   } catch (error) {
     if (createdPairId) {
@@ -115,6 +112,13 @@ export async function pairAppleWearable(
     }
     throw error;
   }
+}
+
+function hasPairState(state: string, expected: 'active' | 'connected'): boolean {
+  return state
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .includes(expected);
 }
 
 // CoreSimulator's nested inventory is normalized here so selection never depends on raw JSON.

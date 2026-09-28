@@ -38,6 +38,17 @@ test('reports a human step after proving the Wear ADB transport', async () => {
   expect(runAdb).toHaveBeenCalledWith(watch, ['get-state'], expect.anything(), expect.anything());
 });
 
+test('rejects an explicitly selected phone as the wearable', async () => {
+  await expect(
+    pairAndroidWearable(
+      host({ discover: async () => [phone, { ...watch, name: 'Pixel 10' }] }),
+      phone,
+      { wearable: { deviceId: watch.id }, boot: false },
+      signal(),
+    ),
+  ).rejects.toMatchObject({ code: 'DEVICE_NOT_FOUND' });
+});
+
 test('terminates a wearable emulator launched by a request that does not become ready', async () => {
   const terminate = vi.fn(async () => {});
   const stopped = { ...watch, id: 'Wear_OS_Large_Round', booted: false };

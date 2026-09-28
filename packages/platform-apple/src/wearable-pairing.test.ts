@@ -51,6 +51,7 @@ test('pairs and activates a selected watchOS simulator', async () => {
 
   expect(paired).toMatchObject({ pairId: 'pair-1', status: 'connected' });
   expect(paired.wearable).toMatchObject({ id: 'watch-1', appleOs: 'watchos' });
+  expect(calls).toContainEqual(['pair', phone.id, 'watch-1']);
   expect(calls.some((args) => args.includes('pair_activate'))).toBe(true);
 });
 
@@ -86,6 +87,31 @@ test('rolls back only a pair created by the failed request', async () => {
     code: 'COMMAND_FAILED',
   });
   expect(calls.some((args) => args.includes('unpair') && args.includes('pair-1'))).toBe(true);
+});
+
+test('does not treat inactive or disconnected pair states as active', async () => {
+  const calls: string[][] = [];
+  const run = vi.fn(async ({ args }: { args: readonly string[] }) => {
+    const argv = [...args];
+    calls.push(argv);
+    if (argv.includes('devices')) return result(watchInventory);
+    if (argv.includes('pairs'))
+      return result(
+        JSON.stringify({
+          pairs: {
+            'pair-1': {
+              phone: { udid: phone.id },
+              watch: { udid: 'watch-1' },
+              state: 'inactive, disconnected',
+            },
+          },
+        }),
+      );
+    return result('');
+  });
+
+  await pairAppleWearable(host(run), phone, { boot: false }, signal());
+  expect(calls.some((args) => args.includes('pair_activate'))).toBe(true);
 });
 
 function host(run: ReturnType<typeof vi.fn>): PlatformRuntimeHost {

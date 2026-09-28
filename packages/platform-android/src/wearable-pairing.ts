@@ -91,11 +91,10 @@ function selectWearable(
     // fallow-ignore-next-line complexity
     (device) =>
       device.id !== phone.id &&
+      device.target !== 'tv' &&
+      /\b(?:wear|watch)\b/i.test(device.name) &&
       (!requested?.deviceId || device.id === requested.deviceId) &&
-      (!requested?.name || device.name === requested.name) &&
-      (requested?.deviceId !== undefined ||
-        requested?.name !== undefined ||
-        /\bwear\b/i.test(device.name)),
+      (!requested?.name || device.name === requested.name),
   );
   if (matches.length === 1) return { ...matches[0]! };
   if (matches.length === 0) {
