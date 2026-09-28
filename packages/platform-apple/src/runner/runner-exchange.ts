@@ -410,7 +410,7 @@ function resolveRunnerReadinessPreflightDecision(
   command: RunnerCommand,
 ): RunnerReadinessPreflightDecision {
   const readOnlyCommand = isReadOnlyRunnerCommand(command);
-  if (canSkipReadySessionPreflightForExemptCommand(session, command)) {
+  if (isRunnerReadinessPreflightExempt(command)) {
     return { action: 'skip', reason: 'preflight_exempt_command' };
   }
   if (session.state !== 'ready') {
@@ -466,13 +466,6 @@ function resolveRunnerReadinessPreflightDecision(
     reason: 'recent_healthy_mutation',
     lastHealthyMutationAgeMs,
   };
-}
-
-function canSkipReadySessionPreflightForExemptCommand(
-  session: RunnerExchangeSession,
-  command: RunnerCommand,
-): boolean {
-  return session.state === 'ready' && isRunnerReadinessPreflightExempt(command);
 }
 
 function markRunnerReadinessPreflightError(error: unknown): AppError {

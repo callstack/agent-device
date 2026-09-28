@@ -76,28 +76,28 @@ test('the readiness probe preserves its main-thread busy report when the command
   assert.equal(session.runnerMainThreadBusy, true);
 });
 
-test('a preflight-exempt command still waits for a starting runner', async () => {
-  server = await startFakeRunnerServer({
-    uptime: [{ kind: 'ok', data: { uptimeMs: 5 } }],
-    terminate: [{ kind: 'ok', data: { terminated: true } }],
-  });
-  const session = sessionFor(server.port);
-  session.state = 'starting';
+test.each(['activate', 'terminate', 'targetReset'] as const)(
+  'a starting runner sends exempt %s without a readiness preflight',
+  async (command) => {
+    server = await startFakeRunnerServer([{ kind: 'ok', data: {} }]);
+    const session = sessionFor(server.port);
+    session.state = 'starting';
 
-  await executeRunnerExchange(
-    IOS_SIMULATOR,
-    session,
-    { command: 'terminate', appBundleId: 'com.example.app' },
-    undefined,
-    10_000,
-    async () => {},
-  );
+    await executeRunnerExchange(
+      IOS_SIMULATOR,
+      session,
+      { command, appBundleId: 'com.example.app' },
+      undefined,
+      10_000,
+      async () => {},
+    );
 
-  assert.deepEqual(
-    server.requests.map(({ command }) => command),
-    ['uptime', 'terminate'],
-  );
-});
+    assert.deepEqual(
+      server.requests.map((request) => request.command),
+      [command],
+    );
+  },
+);
 
 test('the exchange awaits owner invalidation before returning a fatal answer', async () => {
   server = await startFakeRunnerServer({
