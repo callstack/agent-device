@@ -1083,7 +1083,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'inspect-point',
     deviceClaimPolicy: 'require-owner',
     ...(ownerFilesEnabled
-      ? { ownerFiles: ['src/commands/capture/inspect-point.ts'] as const }
+      ? { ownerFiles: ['src/commands/capture/index.ts'] as const }
       : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
