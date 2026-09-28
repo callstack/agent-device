@@ -4,7 +4,7 @@ import { expect, test } from 'vitest';
 import { stringify } from 'yaml';
 import { runTypedMaestroReplay } from '../../replay/internal/session-replay-maestro-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
-import { replayCommandForTest } from '../../replay/__tests__/replay-command-fixture.ts';
+import { replayCommandForTest } from '../replay-runtime/replay-command-fixture.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { maestroScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';

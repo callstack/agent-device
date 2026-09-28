@@ -15,8 +15,8 @@ import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fix
 import {
   ref as interactionRef,
   selector,
-} from '../../../../commands/interaction/runtime/selector-read-utils.ts';
-import { createInteractionDevice } from '../../../../commands/interaction/runtime/__tests__/test-utils/index.ts';
+} from '../../../commands/interaction/runtime/selector-read-utils.ts';
+import { createInteractionDevice } from '../../../commands/interaction/runtime/__tests__/test-utils/index.ts';
 import { classifyReplayTarget } from '@agent-device/replay-port/target-classification';
 /** The verified-member guard denotation the replay loop mints (identity + structural position). */
 function guardFor(node: SnapshotNode, nodes: SnapshotNode[]): ReplayTargetGuardDenotation {

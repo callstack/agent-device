@@ -46,7 +46,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { SessionStore } from '../../session-store.ts';
-import { runReplayForTest } from '../../replay/__tests__/replay-command-fixture.ts';
+import { runReplayForTest } from '../replay-runtime/replay-command-fixture.ts';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import {
   maestroScriptSourceBundleFor,
@@ -54,7 +54,7 @@ import {
 } from '../../../__tests__/test-utils/replay-script-source.ts';
 import { captureSnapshotThroughLegacyDispatchFixture } from '../legacy-snapshot-capture-fixture.ts';
 import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
-import { seedReplayFixtureSession } from '../../replay/__tests__/session-replay-runtime.fixtures.ts';
+import { seedReplayFixtureSession } from '../replay-runtime/session-replay-runtime.fixtures.ts';
 
 vi.mocked(captureSnapshotWithInteractor).mockImplementation(
   captureSnapshotThroughLegacyDispatchFixture,

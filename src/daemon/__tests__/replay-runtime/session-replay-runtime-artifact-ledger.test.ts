@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { runReplayForTest } from '../../replay/__tests__/replay-command-fixture.ts';
+import { runReplayForTest } from './replay-command-fixture.ts';
 import { SessionStore } from '../../session-store.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
-} from '../../replay/__tests__/session-replay-runtime.fixtures.ts';
+} from './session-replay-runtime.fixtures.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 /**

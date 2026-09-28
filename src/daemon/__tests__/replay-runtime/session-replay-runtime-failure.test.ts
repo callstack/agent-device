@@ -11,7 +11,7 @@ vi.mock('../../snapshot-interactor-capture.ts', () => ({
 }));
 import fs from 'node:fs';
 import path from 'node:path';
-import { runReplayForTest } from '../../replay/__tests__/replay-command-fixture.ts';
+import { runReplayForTest } from './replay-command-fixture.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonResponse } from '../../daemon-request.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
@@ -25,7 +25,7 @@ import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
-} from '../../replay/__tests__/session-replay-runtime.fixtures.ts';
+} from './session-replay-runtime.fixtures.ts';
 
 const mockDispatchCommand = legacyDispatchCapture;
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);

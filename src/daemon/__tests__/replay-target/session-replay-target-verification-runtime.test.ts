@@ -14,7 +14,7 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
   return { ...actual, resolveTargetDevice: vi.fn() };
 });
 
-vi.mock('../../../snapshot-interactor-capture.ts', () => ({
+vi.mock('../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
@@ -32,8 +32,8 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   legacyDispatchCapture,
   resetLegacySnapshotCapture,
-} from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
-import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
+} from '../legacy-snapshot-capture-fixture.ts';
+import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
 import {
   DRAG_ANNOTATION,
   DRAG_NODES,
@@ -593,7 +593,7 @@ import { WAIT_LANDMARK_MISMATCH_REASON } from '@agent-device/contracts/replay';
 test('an annotated selector wait dispatches with the landmark guard and no eager pre-action refusal', async () => {
   const scene = replayScriptScene('agent-device-replay-wait-landmark-thread-', [
     WAIT_ANNOTATION,
-    'wait "label=\\"Screen X\\"" 2000',
+    String.raw`wait "label=\"Screen X\"" 2000`,
   ]);
 
   const response = await scene.replay({
@@ -619,7 +619,7 @@ test('an annotated selector wait dispatches with the landmark guard and no eager
 test('a recorded-unverifiable wait annotation refuses before polling with matchCount omitted', async () => {
   const scene = replayScriptScene('agent-device-replay-wait-landmark-unverifiable-', [
     WAIT_UNVERIFIABLE_ANNOTATION,
-    'wait "label=\\"Screen X\\"" 2000',
+    String.raw`wait "label=\"Screen X\"" 2000`,
   ]);
 
   mockDispatchCommand.mockResolvedValue(emptyCapture());
@@ -638,7 +638,7 @@ test('a recorded-unverifiable wait annotation refuses before polling with matchC
 test("the wait loop's landmark refusal converts into an identity-mismatch divergence", async () => {
   const scene = replayScriptScene('agent-device-replay-wait-landmark-miss-', [
     WAIT_ANNOTATION,
-    'wait "label=\\"Screen X\\"" 2000',
+    String.raw`wait "label=\"Screen X\"" 2000`,
   ]);
 
   // The divergence screen capture after the refusal.
@@ -692,7 +692,7 @@ test("the wait loop's landmark refusal converts into an identity-mismatch diverg
 test('a plain wait timeout on an annotated wait stays an action-failure divergence', async () => {
   const scene = replayScriptScene('agent-device-replay-wait-plain-timeout-', [
     WAIT_ANNOTATION,
-    'wait "label=\\"Screen X\\"" 2000',
+    String.raw`wait "label=\"Screen X\"" 2000`,
   ]);
 
   mockDispatchCommand.mockResolvedValue(emptyCapture());

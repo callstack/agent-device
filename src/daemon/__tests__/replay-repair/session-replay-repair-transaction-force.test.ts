@@ -37,7 +37,7 @@ vi.mock('../../snapshot-interactor-capture.ts', () => ({
 }));
 import fs from 'node:fs';
 import path from 'node:path';
-import { runReplayForTest } from '../../replay/__tests__/replay-command-fixture.ts';
+import { runReplayForTest } from '../replay-runtime/replay-command-fixture.ts';
 import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
 import {
   legacyDispatchCapture,
@@ -61,7 +61,7 @@ import type { SessionState } from '../../session-state.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
-} from '../../replay/__tests__/session-replay-runtime.fixtures.ts';
+} from '../replay-runtime/session-replay-runtime.fixtures.ts';
 import { freshEvidence, makeRecordingReplayInvoke } from './session-replay-repair.fixtures.ts';
 import {
   handleCloseCommand,

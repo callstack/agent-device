@@ -6,32 +6,32 @@
  * path is refused with a message that says so.
  */
 import { beforeEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
   return { ...actual, resolveTargetDevice: vi.fn() };
 });
-vi.mock('../../../snapshot-interactor-capture.ts', () => ({
+vi.mock('../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
-import { SessionStore } from '../../../session-store.ts';
-import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { runReplayForTest } from './replay-command-fixture.ts';
+import { SessionStore } from '../../session-store.ts';
+import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import {
   maestroScriptSourceBundleFor,
   replayScriptSourceBundleFor,
-} from '../../../../__tests__/test-utils/replay-script-source.ts';
+} from '../../../__tests__/test-utils/replay-script-source.ts';
 import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '@agent-device/replay-port/script-source';
 import {
   captureSnapshotThroughLegacyDispatchFixture,
   legacyDispatchCapture,
-} from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
-import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
+} from '../legacy-snapshot-capture-fixture.ts';
+import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
 
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
 

@@ -5,7 +5,7 @@ import {
   createReplaySession,
   replayDaemonDependencies,
 } from '../../handlers/session-replay-command.ts';
-import { runReplayCommand } from '../index.ts';
+import { runReplayCommand } from '../../replay/index.ts';
 import {
   replayInvokeOverDispatch,
   splitReplayCommandRequest,

@@ -24,11 +24,11 @@ import {
   buildTypedMaestroFailureReportProjection,
   buildTypedMaestroFailureResponse,
 } from '../../replay/internal/session-replay-maestro-failure.ts';
-import { runReplayForTest } from '../../replay/__tests__/replay-command-fixture.ts';
+import { runReplayForTest } from '../replay-runtime/replay-command-fixture.ts';
 import { SessionStore } from '../../session-store.ts';
 import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
-import { baseReplayRequest as baseReq } from '../../replay/__tests__/session-replay-runtime.fixtures.ts';
+import { baseReplayRequest as baseReq } from '../replay-runtime/session-replay-runtime.fixtures.ts';
 import { replaySessionForTest } from '../replay-divergence/replay-session-fixture.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import {

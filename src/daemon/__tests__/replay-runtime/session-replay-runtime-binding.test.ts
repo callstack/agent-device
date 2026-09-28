@@ -5,9 +5,9 @@ import { makeIosSession } from '../../../__tests__/test-utils/session-factories.
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { captureSnapshotThroughLegacyDispatchFixture } from '../legacy-snapshot-capture-fixture.ts';
 import { SessionStore } from '../../session-store.ts';
-import { runReplayForTest } from '../../replay/__tests__/replay-command-fixture.ts';
+import { runReplayForTest } from './replay-command-fixture.ts';
 import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
-import { baseReplayRequest as baseReq } from '../../replay/__tests__/session-replay-runtime.fixtures.ts';
+import { baseReplayRequest as baseReq } from './session-replay-runtime.fixtures.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {

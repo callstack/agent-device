@@ -1,10 +1,10 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { expect, test } from 'vitest';
-import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import { recordActionEntry } from '../../../session-action-recorder.ts';
-import type { DaemonRequest } from '../../../daemon-request.ts';
-import { invokeReplayAction } from '../session-replay-action-runtime.ts';
-import { replayDaemonDependencies } from '../../../handlers/session-replay-command.ts';
+import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { recordActionEntry } from '../../session-action-recorder.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
+import { invokeReplayAction } from '../../replay/internal/session-replay-action-runtime.ts';
+import { replayDaemonDependencies } from '../../handlers/session-replay-command.ts';
 import { resolveReplayAction } from '@agent-device/ad-script';
 
 const REPLAY_REQUEST: DaemonRequest = {

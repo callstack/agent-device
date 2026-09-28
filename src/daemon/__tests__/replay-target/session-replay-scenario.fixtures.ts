@@ -1,13 +1,13 @@
 import path from 'node:path';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
-import { makeIosAppSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import { SessionStore } from '../../../session-store.ts';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
-import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { makeIosAppSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { SessionStore } from '../../session-store.ts';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import { runReplayForTest } from '../replay-runtime/replay-command-fixture.ts';
 import {
   baseReplayRequest,
   writeReplayFile,
-} from '../../__tests__/session-replay-runtime.fixtures.ts';
+} from '../replay-runtime/session-replay-runtime.fixtures.ts';
 
 /** A temp root with one seeded session in its store: the ground every replay scenario stands on. */
 type ReplaySessionScene = Readonly<{

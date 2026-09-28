@@ -17,7 +17,7 @@ import {
   createReplaySession,
   replayDaemonDependencies,
 } from '../../handlers/session-replay-command.ts';
-import { runReplayCommand, runReplayTestCommand } from '../index.ts';
+import { runReplayCommand, runReplayTestCommand } from '../../replay/index.ts';
 import {
   replayInvokeOverDispatch,
   splitReplayCommandRequest,
@@ -27,7 +27,7 @@ import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture
 import {
   legacyDispatchCapture,
   resetLegacySnapshotCapture,
-} from '../../__tests__/legacy-snapshot-capture-fixture.ts';
+} from '../legacy-snapshot-capture-fixture.ts';
 import { baseReplayRequest, writeReplayFile } from './session-replay-runtime.fixtures.ts';
 
 vi.mock('../../snapshot-interactor-capture.ts', () => ({

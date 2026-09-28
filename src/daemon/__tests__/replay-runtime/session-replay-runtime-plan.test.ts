@@ -13,7 +13,7 @@ vi.mock('../../snapshot-interactor-capture.ts', () => ({
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { runReplayForTest } from '../../replay/__tests__/replay-command-fixture.ts';
+import { runReplayForTest } from './replay-command-fixture.ts';
 import { SessionStore } from '../../session-store.ts';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import {
@@ -28,7 +28,7 @@ import {
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
-} from '../../replay/__tests__/session-replay-runtime.fixtures.ts';
+} from './session-replay-runtime.fixtures.ts';
 import { replayCoordinatorForTest } from '../replay-divergence/replay-session-fixture.ts';
 
 const mockDispatchCommand = legacyDispatchCapture;
