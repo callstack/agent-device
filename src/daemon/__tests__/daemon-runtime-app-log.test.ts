@@ -2,14 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import type { ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-live-handle.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import {
-  recoverAppLogResourcesAfterDaemonLock,
-  type AppLogRecoveryDiagnostic,
-} from '../app-log-resource-recovery.ts';
+import { recoverAppLogResourcesAfterDaemonLock } from '../app-log-resource-recovery.ts';
 import { appLogResourceStore } from '../app-log-resource-store.ts';
 import {
   flushDaemonStartupDiagnostics,
@@ -58,7 +56,7 @@ test('retained startup recovery evidence is flushed after daemon.log publication
   const resourcePath = path.join(sessionsDir, 'session', 'app-log.resource.json');
   fs.mkdirSync(path.dirname(resourcePath), { recursive: true });
   fs.writeFileSync(resourcePath, '{');
-  const diagnostics: AppLogRecoveryDiagnostic[] = [];
+  const diagnostics: ResourceDiagnostic[] = [];
 
   await recoverAppLogResourcesAfterDaemonLock({
     sessionsDir,

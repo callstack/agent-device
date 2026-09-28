@@ -18,7 +18,6 @@ export type {
 } from './definition.ts';
 export type { FinishRecoveredDurableCaptureParams } from './finish-recovered.ts';
 export type {
-  DurableCaptureRecoveryDiagnostic,
   DurableCaptureRecoveryOutcome,
   DurableCaptureRecoveryParams,
   DurableCaptureRecoverySummary,

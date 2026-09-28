@@ -11,10 +11,8 @@ import type {
   ScreenRecordingLiveHandle,
 } from '@agent-device/contracts/screen-recording-runtime';
 import { screenRecordingRecoveryUse } from '@agent-device/contracts/screen-recording-runtime-plan';
-import type {
-  DurableCaptureRecoveryControl,
-  DurableCaptureRecoveryDiagnostic,
-} from '../durable-capture/index.ts';
+import type { DurableCaptureRecoveryControl } from '../durable-capture/index.ts';
+import type { ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { acquireExactDurableCaptureRecoveryControl } from './durable-capture-runtime-recovery.ts';
 import { screenRecordingDurableResource } from './screen-recording-session-resource.ts';
 
@@ -26,7 +24,7 @@ export function recoverScreenRecordingResourceAfterDaemonLock(params: {
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
   perRecordDeadlineMs?: number;
-  onDiagnostic?: (diagnostic: DurableCaptureRecoveryDiagnostic) => void;
+  onDiagnostic?: (diagnostic: ResourceDiagnostic) => void;
 }) {
   return screenRecordingDurableResource.recoverOne(
     {

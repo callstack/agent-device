@@ -6,7 +6,7 @@ import {
   isConfirmedCleanup,
 } from '@agent-device/contracts/durable-resource';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   acquireDurableCaptureRecoveryAuthorityBeforeDeadline,
   DurableCaptureRecoveryDeadlineError,
@@ -28,12 +28,6 @@ export type DurableCaptureRecoverySummary = Readonly<{
 
 export type DurableCaptureRecoveryOutcome = 'ignored' | 'recovered' | 'retained';
 
-export type DurableCaptureRecoveryDiagnostic = Readonly<{
-  phase: string;
-  resourcePath: string;
-  data: Readonly<Record<string, unknown>>;
-}>;
-
 export type DurableCaptureRecoveryParams<K extends string, H extends LiveResourceHandle<C>, C> = {
   definition: DurableCaptureRecordDefinition<K, C>;
   sessionsDir: string;
@@ -48,7 +42,7 @@ export type DurableCaptureRecoveryParams<K extends string, H extends LiveResourc
     scope: PlatformRequestScope,
   ): Promise<DurableCaptureRecoveryControl<K, H, C>>;
   perRecordDeadlineMs?: number;
-  onDiagnostic?: (diagnostic: DurableCaptureRecoveryDiagnostic) => void;
+  onDiagnostic?: (diagnostic: ResourceDiagnostic) => void;
 };
 
 export async function recoverDurableCaptureResourcesAfterDaemonLock<

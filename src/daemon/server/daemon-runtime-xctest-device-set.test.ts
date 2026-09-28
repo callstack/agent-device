@@ -10,16 +10,18 @@ const legacyRedirect = vi.hoisted(() => ({
   infoPath: '',
 }));
 
-vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
+vi.mock('@agent-device/platform-apple/runner-owner', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-apple/runner-owner')>();
   return {
     ...actual,
-    restoreLegacyXctestDeviceSetRedirect: (
+    restoreLegacyXctestDeviceSetRedirect: async (
       onDiagnostic: Parameters<typeof actual.restoreLegacyXctestDeviceSetRedirect>[0],
     ) => {
       legacyRedirect.infoPublishedAtRestore.push(fs.existsSync(legacyRedirect.infoPath));
-      actual.restoreLegacyXctestDeviceSetRedirect(onDiagnostic, legacyRedirect.xctestDeviceSetPath);
+      await actual.restoreLegacyXctestDeviceSetRedirect(
+        onDiagnostic,
+        legacyRedirect.xctestDeviceSetPath,
+      );
     },
   };
 });
@@ -69,21 +71,8 @@ function loggedEvents(logPath: string): Array<{ phase: string; data?: Record<str
     .filter((event) => event.phase.startsWith('ios_runner_legacy_xctest_device_set_'));
 }
 
-test('macOS daemon startup puts back a redirected XCTestDevices before it publishes readiness', async () => {
-  const root = mkdtempForTestSync('agent-device-daemon-xctest-device-set-');
-  roots.push(root);
-  const stateDir = path.join(root, 'state');
-  const developer = path.join(root, 'Library', 'Developer');
-  const scopedSetPath = path.join(root, 'tenant-set');
-  fs.mkdirSync(path.join(scopedSetPath, 'SCOPED-UDID'), { recursive: true });
-  fs.mkdirSync(path.join(developer, 'XCTestDevices.agent-device-backup', 'HOST-UDID'), {
-    recursive: true,
-  });
-  legacyRedirect.xctestDeviceSetPath = path.join(developer, 'XCTestDevices');
-  legacyRedirect.infoPath = path.join(stateDir, 'daemon.json');
-  fs.symlinkSync(scopedSetPath, legacyRedirect.xctestDeviceSetPath, 'dir');
-
-  const runtime = await withMockedPlatform('darwin', () =>
+function startDarwinDaemon(stateDir: string) {
+  return withMockedPlatform('darwin', () =>
     startDaemonRuntime({
       env: {
         ...process.env,
@@ -97,6 +86,29 @@ test('macOS daemon startup puts back a redirected XCTestDevices before it publis
       stdout: { write: () => {} },
     }),
   );
+}
+
+function makeLegacyRedirect(): { stateDir: string; developer: string; scopedSetPath: string } {
+  const root = mkdtempForTestSync('agent-device-daemon-xctest-device-set-');
+  roots.push(root);
+  const stateDir = path.join(root, 'state');
+  const developer = path.join(root, 'Library', 'Developer');
+  const scopedSetPath = path.join(root, 'tenant-set');
+  fs.mkdirSync(path.join(scopedSetPath, 'SCOPED-UDID'), { recursive: true });
+  fs.mkdirSync(developer, { recursive: true });
+  legacyRedirect.xctestDeviceSetPath = path.join(developer, 'XCTestDevices');
+  legacyRedirect.infoPath = path.join(stateDir, 'daemon.json');
+  fs.symlinkSync(scopedSetPath, legacyRedirect.xctestDeviceSetPath, 'dir');
+  return { stateDir, developer, scopedSetPath };
+}
+
+test('macOS daemon startup puts back a redirected XCTestDevices before it publishes readiness', async () => {
+  const { stateDir, developer, scopedSetPath } = makeLegacyRedirect();
+  fs.mkdirSync(path.join(developer, 'XCTestDevices.agent-device-backup', 'HOST-UDID'), {
+    recursive: true,
+  });
+
+  const runtime = await startDarwinDaemon(stateDir);
   try {
     expect(runtime).not.toBeNull();
     expect(legacyRedirect.infoPublishedAtRestore).toEqual([false]);
@@ -117,3 +129,30 @@ test('macOS daemon startup puts back a redirected XCTestDevices before it publis
     await runtime?.shutdown();
   }
 });
+
+test.skipIf(process.getuid?.() === 0)(
+  'a restore the host refuses is logged and the daemon still starts',
+  async () => {
+    const { stateDir, developer } = makeLegacyRedirect();
+    fs.chmodSync(developer, 0o555);
+
+    try {
+      const runtime = await startDarwinDaemon(stateDir);
+      try {
+        expect(runtime).not.toBeNull();
+        expect(fs.existsSync(legacyRedirect.infoPath)).toBe(true);
+        expect(fs.lstatSync(legacyRedirect.xctestDeviceSetPath).isSymbolicLink()).toBe(true);
+        expect(loggedEvents(path.join(stateDir, 'daemon.log'))).toEqual([
+          expect.objectContaining({
+            phase: 'ios_runner_legacy_xctest_device_set_restore_failed',
+            data: expect.objectContaining({ resourcePath: legacyRedirect.xctestDeviceSetPath }),
+          }),
+        ]);
+      } finally {
+        await runtime?.shutdown();
+      }
+    } finally {
+      fs.chmodSync(developer, 0o755);
+    }
+  },
+);

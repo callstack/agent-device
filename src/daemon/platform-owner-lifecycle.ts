@@ -1,4 +1,5 @@
 import type { DeviceIdentity, DeviceInfo } from '@agent-device/kernel/device';
+import type { ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 
 /** Predicate answering whether this process currently holds an active claim on the device. */
@@ -12,13 +13,6 @@ export type LegacyAppLogMarkerRecoveryOutcome = Readonly<{
     message?: string;
     device?: DeviceIdentity;
   }>[];
-}>;
-
-/** A startup finding the daemon holds until daemon.log is published, then records as a warning. */
-export type DaemonStartupDiagnostic = Readonly<{
-  phase: string;
-  resourcePath: string;
-  data: Readonly<Record<string, unknown>>;
 }>;
 
 /**
@@ -37,7 +31,7 @@ export type PlatformOwnerLifecycle = Readonly<{
     input: Readonly<{
       stateDir: string;
       hasDeviceClaimAuthority: DeviceClaimAuthorityProbe;
-      onDiagnostic: (diagnostic: DaemonStartupDiagnostic) => void;
+      onDiagnostic: (diagnostic: ResourceDiagnostic) => void;
     }>,
   ): Promise<void>;
   /** Clears the configuration above: on a failed lock acquisition, and on shutdown. */

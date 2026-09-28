@@ -123,6 +123,13 @@ export function countDiagnosticEventsByPhase(phases: readonly string[]): number 
   return total;
 }
 
+/** A warning about one on-disk resource, handed to a caller that records it once its log exists. */
+export type ResourceDiagnostic = Readonly<{
+  phase: string;
+  resourcePath: string;
+  data: Readonly<Record<string, unknown>>;
+}>;
+
 export type DiagnosticEventInput = {
   level?: DiagnosticLevel;
   phase: string;

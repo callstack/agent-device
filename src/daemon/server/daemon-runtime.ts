@@ -53,6 +53,7 @@ import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,
+  type ResourceDiagnostic,
 } from '@agent-device/host-kit/diagnostics';
 import {
   createOwnedProcessRecordStore,
@@ -84,7 +85,6 @@ import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup
 import { platformDaemonLifecycleOwners } from '../../platform-runtime-daemon-lifecycle.ts';
 import { openWebSessionNames } from '../web-session-names.ts';
 import { recoverAppLogResourcesAfterDaemonLock } from '../app-log-resource-recovery.ts';
-import type { DaemonStartupDiagnostic } from '../platform-owner-lifecycle.ts';
 import { createDaemonRecoveryPlatformScope } from '../platform-request-scope.ts';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 
@@ -218,7 +218,7 @@ export type DaemonRuntimeController = {
 
 export async function flushDaemonStartupDiagnostics(
   logPath: string,
-  diagnostics: readonly DaemonStartupDiagnostic[],
+  diagnostics: readonly ResourceDiagnostic[],
 ): Promise<void> {
   if (diagnostics.length === 0) return;
   await withDiagnosticsScope(
@@ -568,7 +568,7 @@ export async function startDaemonRuntime(
   let servers: DaemonServer[] = [];
   let socketPort: number | undefined;
   let httpPort: number | undefined;
-  const startupDiagnostics: DaemonStartupDiagnostic[] = [];
+  const startupDiagnostics: ResourceDiagnostic[] = [];
   try {
     await platformDaemonLifecycleOwners.configureForDaemonLock({
       stateDir: baseDir,

@@ -237,7 +237,7 @@ test('a scoped-set destination error before any cache decision read the Xcode st
   assert.equal('xcodeVersion' in (error.details ?? {}), false);
   assert.equal(
     error.message,
-    `Runner did not accept connection (xcodebuild exited early): xcodebuild found no simulator ${CAPTURED_SCOPED_SIMULATOR.udid} in simulator set ${SET_WITHOUT_UDID} with Xcode (version unreadable)`,
+    `Runner did not accept connection (xcodebuild exited early): xcodebuild found no simulator ${CAPTURED_SCOPED_SIMULATOR.udid} in simulator set ${SET_WITHOUT_UDID}`,
   );
   assert.equal(toolchainProbe.mock.calls.length, 0);
 });

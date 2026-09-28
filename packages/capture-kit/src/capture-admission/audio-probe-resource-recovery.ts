@@ -11,10 +11,8 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import type {
-  DurableCaptureRecoveryControl,
-  DurableCaptureRecoveryDiagnostic,
-} from '../durable-capture/index.ts';
+import type { DurableCaptureRecoveryControl } from '../durable-capture/index.ts';
+import type { ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { audioProbeDurableResource } from './audio-probe-session-resource.ts';
 import { acquireExactDurableCaptureRecoveryControl } from './durable-capture-runtime-recovery.ts';
 
@@ -26,7 +24,7 @@ export function recoverAudioProbeResourceAfterDaemonLock(params: {
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
   perRecordDeadlineMs?: number;
-  onDiagnostic?: (diagnostic: DurableCaptureRecoveryDiagnostic) => void;
+  onDiagnostic?: (diagnostic: ResourceDiagnostic) => void;
 }) {
   return audioProbeDurableResource.recoverOne(
     {
