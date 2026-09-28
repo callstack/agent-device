@@ -5,7 +5,6 @@ import {
   booleanSchema,
   constSchema,
   enumSchema,
-  looseObjectSchema,
   numberSchema,
   objectSchema,
   stringArraySchema,
@@ -13,6 +12,7 @@ import {
 } from '../commands/command-input.ts';
 import { WAIT_COMMAND_OUTPUT_SCHEMAS } from '../commands/capture/wait.ts';
 import { PREPARE_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/prepare.ts';
+import { DOCTOR_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/doctor.ts';
 import { DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/device.ts';
 import { PUSH_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/push.ts';
 import { VIEWPORT_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/viewport.ts';
@@ -23,7 +23,6 @@ import {
 import { RECORDING_COMMAND_OUTPUT_SCHEMAS } from '../commands/recording/output-schemas.ts';
 import { REPLAY_COMMAND_OUTPUT_SCHEMAS } from '../commands/replay/index.ts';
 import { SYSTEM_COMMAND_OUTPUT_SCHEMAS } from '../commands/system/index.ts';
-import { DEVICE_TARGETS } from '@agent-device/kernel/device';
 
 /**
  * Registry of per-command MCP `outputSchema`s, keyed by the daemon command
@@ -184,34 +183,6 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
     ['direction'],
   ),
 
-  // packages/contracts/src/doctor.ts
-  doctor: objectSchema(
-    {
-      status: enumSchema(['pass', 'warn', 'fail', 'info']),
-      summary: stringSchema(),
-      kind: enumSchema(['auto', 'react-native', 'expo', 'repack']),
-      platform: stringSchema(),
-      target: enumSchema(DEVICE_TARGETS),
-      targetApp: stringSchema(),
-      metro: objectSchema({ host: stringSchema(), port: numberSchema() }, ['host', 'port']),
-      checks: {
-        type: 'array',
-        items: objectSchema(
-          {
-            id: stringSchema(),
-            status: enumSchema(['pass', 'warn', 'fail', 'info']),
-            summary: stringSchema(),
-            hint: stringSchema(),
-            command: stringSchema(),
-            evidence: looseObjectSchema(),
-          },
-          ['id', 'status', 'summary'],
-        ),
-      },
-    },
-    ['status', 'summary', 'kind', 'checks'],
-  ),
-
   // packages/contracts/src/diff.ts — the public Node command accepts snapshot diffs.
   diff: objectSchema(
     {
@@ -247,6 +218,7 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
   // and this map's `satisfies` still refuses a missing `CommandResultMap` key.
   ...WAIT_COMMAND_OUTPUT_SCHEMAS,
   ...PREPARE_COMMAND_OUTPUT_SCHEMAS,
+  ...DOCTOR_COMMAND_OUTPUT_SCHEMAS,
   ...DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS,
   ...PUSH_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS,
   ...VIEWPORT_COMMAND_OUTPUT_SCHEMAS,
