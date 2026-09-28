@@ -2,20 +2,26 @@ import assert from 'node:assert/strict';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { test } from 'vitest';
+import { runCmd } from '@agent-device/host-kit/command';
 import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
-import { createSnapshotSourceDeadline } from './deadline.ts';
-import { createSnapshotSourceHost } from './host.ts';
-import { ensureNativeBuildCacheEntry, fingerprintNativeBuildSource } from './native-build-cache.ts';
-import type { SnapshotSourceHost } from './types.ts';
+import { createNativeBuildDeadline } from './deadline.ts';
+import { createNativeBuildHost, type NativeBuildHost } from './host.ts';
+import { ensureNativeBuildCacheEntry, fingerprintNativeBuildSource } from './cache.ts';
 
 function testDeadline() {
-  return createSnapshotSourceDeadline(30_000, undefined);
+  return createNativeBuildDeadline(30_000, undefined);
+}
+
+function testHost(): NativeBuildHost {
+  return createNativeBuildHost(
+    async (command, args, options) => await runCmd(command, args, options),
+  );
 }
 
 test('a cache hit skips the build, and a key-input or binary change rebuilds', async () => {
   const root = await mkdtempForTest('agent-device-native-build-cache-');
   const cacheRoot = path.join(root, 'cache');
-  const host = createSnapshotSourceHost();
+  const host = testHost();
   let builds = 0;
 
   const ensure = (keyInputs: Readonly<Record<string, unknown>> = { sourceHash: 'abc' }) =>
@@ -57,7 +63,7 @@ test('a cache hit skips the build, and a key-input or binary change rebuilds', a
 test('a failed build leaves no cache entry, and a later call can retry', async () => {
   const root = await mkdtempForTest('agent-device-native-build-cache-failure-');
   const cacheRoot = path.join(root, 'cache');
-  const host = createSnapshotSourceHost();
+  const host = testHost();
   let attempts = 0;
 
   const ensure = () =>
@@ -89,7 +95,7 @@ test('a failed build leaves no cache entry, and a later call can retry', async (
 
 test('fingerprintNativeBuildSource keys on filename as well as content, so a rename busts the cache', async () => {
   const root = await mkdtempForTest('agent-device-native-fingerprint-');
-  const host: SnapshotSourceHost = createSnapshotSourceHost();
+  const host = testHost();
   await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(root);
   await writeFile(path.join(root, 'A.m'), 'same content');
   await writeFile(path.join(root, 'B.m'), 'same content');

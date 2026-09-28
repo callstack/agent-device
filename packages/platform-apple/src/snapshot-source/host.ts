@@ -2,27 +2,12 @@ import { createHash } from 'node:crypto';
 import net from 'node:net';
 import path from 'node:path';
 import { runCmd, runCmdBackground } from '@agent-device/host-kit/command';
-import { acquireProcessLock } from '@agent-device/host-kit/file';
-import {
-  chmodHostFile,
-  ensureHostDirectory,
-  hostFileExistsSync,
-  hostHomeDirectory,
-  readHostBinaryFile,
-  readHostTextFile,
-  removeHostPath,
-  renameHostPath,
-  writeHostTextFile,
-} from '@agent-device/host-kit/host-file';
-import {
-  hostProcessId,
-  readProcessStartTime,
-  signalProcessGroupBestEffort,
-} from '@agent-device/host-kit/process';
+import { hostHomeDirectory } from '@agent-device/host-kit/host-file';
+import { signalProcessGroupBestEffort } from '@agent-device/host-kit/process';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import { findProjectRoot } from '@agent-device/host-kit/version';
-import { SnapshotSourceError, snapshotSourceError } from './errors.ts';
-import { remainingSnapshotSourceMs } from './deadline.ts';
+import { createNativeBuildHost } from '../native-build/host.ts';
+import { snapshotSourceError } from './errors.ts';
 import type { SnapshotSourceHost, SnapshotSourceProcess, SnapshotSourceSocket } from './types.ts';
 import { readSnapshotTargetProcessStartTime } from '../snapshot-process.ts';
 import { buildSimctlArgsForAddress, type SimulatorAddress } from '../core/simctl.ts';
@@ -32,24 +17,20 @@ const MAX_PROCESS_LOG_BYTES = 64 * 1024;
 const SNAPSHOT_SOCKET_ROOT = '/tmp';
 
 export function createSnapshotSourceHost(): SnapshotSourceHost {
+  // The bridge's build/cache access is the shared native-build host (#2970); this adds only what a
+  // bridge session needs beyond a build: socket start/connect, diagnostics, and target inspection.
+  // A native-build cache failure surfaces here as `NativeBuildError`; the cache's own callers
+  // (`snapshot-source/cache.ts`) map it onto `SnapshotSourceError`, so this host does not.
   return {
+    ...createNativeBuildHost(
+      async (command, args, options) => await runCmd(command, args, options),
+    ),
     projectRoot: findProjectRoot,
     homeDirectory: hostHomeDirectory,
-    run: async (command, args, options) => await runCmd(command, args, options),
     start: startSnapshotBridge,
     connect: connectSnapshotBridge,
-    readText: readHostTextFile,
-    readBinary: readHostBinaryFile,
-    writeText: writeHostTextFile,
-    ensureDirectory: ensureHostDirectory,
-    chmod: chmodHostFile,
-    exists: hostFileExistsSync,
-    rename: renameHostPath,
-    remove: removeHostPath,
-    acquireLock: acquireSnapshotSourceLock,
     emitDiagnostic,
     withDiagnosticTimer,
-    processId: hostProcessId,
     readTargetProcessStartTime: readSnapshotTargetProcessStartTime,
   };
 }
@@ -159,62 +140,6 @@ async function connectSnapshotBridge(
     options.signal?.addEventListener('abort', onAbort, { once: true });
     if (options.signal?.aborted) onAbort();
   });
-}
-
-async function acquireSnapshotSourceLock(
-  lockPath: string,
-  options: Parameters<SnapshotSourceHost['acquireLock']>[1],
-): Promise<() => Promise<void>> {
-  const pid = hostProcessId();
-  const deadline = options.deadline;
-  const pending = acquireProcessLock({
-    lockDirPath: lockPath,
-    owner: {
-      pid,
-      startTime: readProcessStartTime(pid),
-      acquiredAtMs: Date.now(),
-    },
-    timeoutMs: remainingSnapshotSourceMs(deadline, 'cache-lock-deadline'),
-    pollMs: 100,
-    ownerGraceMs: 5_000,
-    description: options.description,
-  });
-  const signal = deadline.signal;
-  if (!signal) return await pending;
-
-  let canceled = false;
-  let onAbort!: () => void;
-  const aborted = new Promise<never>((_, reject) => {
-    onAbort = () => {
-      canceled = true;
-      reject(snapshotSourceError('cancelled', 'abort-signal'));
-    };
-    signal.addEventListener('abort', onAbort, { once: true });
-    if (signal.aborted) onAbort();
-  });
-  try {
-    return await Promise.race([pending, aborted]);
-  } catch (error) {
-    if (canceled) {
-      // The task is abandoned, so its lock is released best effort. A release that
-      // cannot prove ownership leaves the lock to the stale-clear path, which is the
-      // outcome this branch already accepts; it must not arrive as an unhandled
-      // rejection on a promise nobody is awaiting any more.
-      void pending.then(
-        (release) => release().catch(() => undefined),
-        () => undefined,
-      );
-    }
-    if (
-      deadline.clock.isExpired() &&
-      !(error instanceof SnapshotSourceError && error.failureKind === 'cancelled')
-    ) {
-      throw snapshotSourceError('timeout', 'cache-lock-deadline');
-    }
-    throw error;
-  } finally {
-    signal.removeEventListener('abort', onAbort);
-  }
 }
 
 function appendBoundedLog(current: string, addition: string): string {
