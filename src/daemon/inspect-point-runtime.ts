@@ -1,18 +1,10 @@
 import { inspectPointRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { readPointPositionals } from '@agent-device/kernel/validation';
 import type { DaemonCommandContext } from './context.ts';
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
 import { resolveBoundGenericRuntime, type RuntimeAdmissionBindings } from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
-
-function coordinate(value: string | undefined, name: string): number {
-  const parsed = value === undefined ? Number.NaN : Number(value);
-  if (!Number.isFinite(parsed)) {
-    throw new AppError('INVALID_ARGS', `inspect-point requires a finite ${name} coordinate`);
-  }
-  return parsed;
-}
 
 export async function resolveBoundInspectPointRuntime(
   params: {
@@ -20,10 +12,7 @@ export async function resolveBoundInspectPointRuntime(
     positionals: string[];
   } & RuntimeAdmissionBindings,
 ): Promise<ResolvedGenericExecution> {
-  const point = {
-    x: coordinate(params.positionals[0], 'x'),
-    y: coordinate(params.positionals[1], 'y'),
-  };
+  const point = readPointPositionals(params.positionals, 'inspect-point requires x y');
   return await resolveBoundGenericRuntime(
     {
       command: 'inspect-point',
