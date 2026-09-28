@@ -1,5 +1,4 @@
 import { expect, test } from 'vitest';
-import { formatRole } from '@agent-device/kernel/snapshot';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { MaestroSelector } from '../program-ir.ts';
 import { createMaestroSnapshotResolver } from '../runtime-selector-resolution.ts';
@@ -12,7 +11,6 @@ test('computes recursive selector sets once per snapshot instead of once per can
     ref: `candidate-${offset}`,
     identifier: 'candidate',
     parentIndex: 0,
-    kind: formatRole('Element'),
     rect: { x: 20, y: 200 + offset, width: 40, height: 30 },
   }));
   const snapshot = makeSnapshot([

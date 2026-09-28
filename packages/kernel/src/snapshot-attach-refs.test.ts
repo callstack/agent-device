@@ -23,7 +23,7 @@ describe('attachRefs', () => {
     expect(attached.map((n) => n.ref)).toEqual(['e1', 'e7', 'e3']);
   });
 
-  test('publishes the presenter role as kind, on every platform vocabulary, on every node (#2656)', () => {
+  test('publishes the presenter role as kind, for Android and Apple vocabularies, on every node (#2656)', () => {
     const attached = attachRefs([
       node(0, { type: 'android.widget.Button' }),
       node(1, { type: 'XCUIElementTypeButton' }),

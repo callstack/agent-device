@@ -24,8 +24,13 @@ const ANDROID_FIXTURE: RawSnapshotNode[] = [
   { index: 3, type: 'android.widget.EditText', label: 'Promo code', parentIndex: 0 },
 ];
 
-function assertKindMatchesPresentedRole(fixture: RawSnapshotNode[]): void {
-  for (const node of attachRefs(fixture)) {
+function assertKindMatchesPresentedRole(fixture: RawSnapshotNode[], expected: string[]): void {
+  const attached = attachRefs(fixture);
+  assert.deepEqual(
+    attached.map((node) => node.kind),
+    expected,
+  );
+  for (const node of attached) {
     const line = formatSnapshotLine(node, 0, false);
     const presentedRole = /^@?\S*\s*\[([^\]]+)\]/.exec(line)?.[1];
     assert.equal(node.kind, presentedRole, `kind mismatch for ${node.type}: line was "${line}"`);
@@ -33,9 +38,9 @@ function assertKindMatchesPresentedRole(fixture: RawSnapshotNode[]): void {
 }
 
 test('kind equals the presenter role for every node of an iOS fixture tree', () => {
-  assertKindMatchesPresentedRole(IOS_FIXTURE);
+  assertKindMatchesPresentedRole(IOS_FIXTURE, ['application', 'button', 'text', 'text-field']);
 });
 
 test('kind equals the presenter role for every node of an Android fixture tree', () => {
-  assertKindMatchesPresentedRole(ANDROID_FIXTURE);
+  assertKindMatchesPresentedRole(ANDROID_FIXTURE, ['group', 'button', 'text', 'text-field']);
 });

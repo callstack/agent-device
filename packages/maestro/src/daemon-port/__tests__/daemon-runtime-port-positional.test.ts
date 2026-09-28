@@ -1,21 +1,18 @@
 import { expect, test } from 'vitest';
 import { resolveTypedMaestroTarget } from '../daemon-runtime-port-observation.ts';
 import { makeSnapshot } from './daemon-runtime-port-fixtures.ts';
-import { formatRole } from '@agent-device/kernel/snapshot';
 
 test('nested positional relations never use atomic iOS selector dispatch', () => {
   const snapshot = makeSnapshot([
     {
       index: 0,
       type: 'StaticText',
-      kind: formatRole('StaticText'),
       identifier: 'header',
       rect: { x: 20, y: 20, width: 100, height: 30 },
     },
     {
       index: 1,
       type: 'Other',
-      kind: formatRole('Other'),
       identifier: 'card',
       rect: { x: 20, y: 100, width: 300, height: 180 },
     },
@@ -23,7 +20,6 @@ test('nested positional relations never use atomic iOS selector dispatch', () =>
       index: 2,
       parentIndex: 1,
       type: 'TextField',
-      kind: formatRole('TextField'),
       identifier: 'field',
       rect: { x: 40, y: 160, width: 180, height: 40 },
     },
@@ -50,7 +46,6 @@ test('an empty recursive relation also opts out of atomic iOS dispatch', () => {
     {
       index: 0,
       type: 'TextField',
-      kind: formatRole('TextField'),
       identifier: 'field',
       rect: { x: 40, y: 160, width: 180, height: 40 },
     },

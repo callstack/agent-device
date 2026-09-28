@@ -3,7 +3,6 @@ import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot'
 
 export type SnapshotNodeFixture = Omit<SnapshotNode, 'ref' | 'kind'> & {
   ref?: string;
-  kind?: string;
 };
 
 export function makeSnapshot(nodes: SnapshotNodeFixture[]): SnapshotState {
@@ -11,8 +10,8 @@ export function makeSnapshot(nodes: SnapshotNodeFixture[]): SnapshotState {
     createdAt: Date.now(),
     nodes: nodes.map((node) => ({
       ref: `e${node.index}`,
-      kind: formatRole(node.type ?? 'Element'),
       ...node,
+      kind: formatRole(node.type ?? 'Element'),
     })),
   };
 }

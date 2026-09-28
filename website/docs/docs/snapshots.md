@@ -89,7 +89,7 @@ agent-device snapshot -i
 
 ## Structured node fields (`--json`)
 
-Every node in `snapshot --json` output carries both `type` and `kind`:
+Every node in `snapshot --json` output carries `kind`, next to `type` when the platform reports one:
 
 - `type` is the raw platform class, verbatim: `Button` / `StaticText` from XCUI, `android.widget.Button`
   from the Android hierarchy. It differs by platform for the same UI role.
