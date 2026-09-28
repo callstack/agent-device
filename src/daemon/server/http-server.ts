@@ -36,9 +36,7 @@ import {
 } from '../../request-progress-protocol.ts';
 import {
   buildDaemonHealthPayload,
-  buildDaemonInstanceMismatchRpcResponse,
   DAEMON_HTTP_INSTANCE_HEADER,
-  DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_HTTP_TENANT_HEADER,
@@ -162,31 +160,6 @@ function createRpcError(
     id,
     error: { code, message, data },
   };
-}
-
-function refuseStaleDaemonInstance(
-  req: http.IncomingMessage,
-  res: http.ServerResponse,
-  rpcId: JsonRpcId,
-  instanceId: string,
-): boolean {
-  const expectedInstanceId = readHeaderValue(req.headers, DAEMON_HTTP_INSTANCE_HEADER);
-  if (!expectedInstanceId || expectedInstanceId === instanceId) return false;
-  res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
-  sendJson(
-    res,
-    buildDaemonInstanceMismatchRpcResponse(
-      rpcId,
-      'Daemon instance changed',
-      normalizeError(
-        new AppError('COMMAND_FAILED', 'Daemon instance changed', {
-          reason: 'remote_instance_mismatch',
-        }),
-      ),
-    ),
-    409,
-  );
-  return true;
 }
 
 function sendJson(
@@ -792,7 +765,10 @@ export async function createDaemonHttpServer(options: {
           );
           return;
         }
-        if (refuseStaleDaemonInstance(req, res, rpcRequest.id ?? null, instanceId)) return;
+        if (req.headers[DAEMON_HTTP_INSTANCE_HEADER]) {
+          const { refuseStaleDaemonInstance } = await import('./http-instance-precondition.ts');
+          if (refuseStaleDaemonInstance(req, res, rpcRequest.id ?? null, instanceId)) return;
+        }
         daemonRequest.meta = {
           ...daemonRequest.meta,
           tenantId: tenantTrust.tenantId,

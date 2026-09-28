@@ -94,8 +94,11 @@ function canConnectHttp(info: DaemonInfo): Promise<boolean> {
   return readDaemonHttpHealth(info).then((health) => health.reachable);
 }
 
-export async function readRemoteDaemonHealth(info: DaemonInfo): Promise<RemoteDaemonHealth> {
-  const health = await readDaemonHttpHealth(info);
+export async function readRemoteDaemonHealth(
+  info: DaemonInfo,
+  probeTimeoutMs?: number,
+): Promise<RemoteDaemonHealth> {
+  const health = await readDaemonHttpHealth(info, probeTimeoutMs);
   if (!info.baseUrl || !health.reachable) return health;
   // Every link a command RPC crosses has to speak the client's protocol: a proxy that reports a
   // skewed daemon behind it fails here, before the RPC, exactly like a skewed proxy does.
@@ -118,7 +121,10 @@ export async function readRemoteDaemonHealth(info: DaemonInfo): Promise<RemoteDa
   return health;
 }
 
-async function readDaemonHttpHealth(info: DaemonInfo): Promise<RemoteDaemonHealth> {
+async function readDaemonHttpHealth(
+  info: DaemonInfo,
+  probeTimeoutMs?: number,
+): Promise<RemoteDaemonHealth> {
   const endpoint = info.baseUrl
     ? buildDaemonHttpUrl(info.baseUrl, 'health')
     : info.httpPort
@@ -127,9 +133,11 @@ async function readDaemonHttpHealth(info: DaemonInfo): Promise<RemoteDaemonHealt
   if (!endpoint) return { reachable: false };
   const url = new URL(endpoint);
   const transport = await loadNodeHttpRequester(url.protocol);
-  const timeoutMs = info.baseUrl
-    ? REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS
-    : LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS;
+  const timeoutMs = Math.min(
+    info.baseUrl ? REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS : LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS,
+    probeTimeoutMs ?? Number.POSITIVE_INFINITY,
+  );
+  if (timeoutMs <= 0) return { reachable: false };
   return await new Promise((resolve) => {
     const headers = info.baseUrl ? buildDaemonHttpAuthHeaders(info.token) : {};
     const req = transport.request(
@@ -140,6 +148,7 @@ async function readDaemonHttpHealth(info: DaemonInfo): Promise<RemoteDaemonHealt
         path: url.pathname + url.search,
         method: 'GET',
         timeout: timeoutMs,
+        signal: AbortSignal.timeout(Math.ceil(timeoutMs)),
         headers,
       },
       (res) => {
@@ -156,6 +165,8 @@ async function readDaemonHttpHealth(info: DaemonInfo): Promise<RemoteDaemonHealt
             ...readHealthPayload(body),
           });
         });
+        res.on('error', () => resolve({ reachable: false }));
+        res.on('aborted', () => resolve({ reachable: false }));
       },
     );
     req.on('timeout', () => {
@@ -236,7 +247,15 @@ async function retryAfterRemoteInstanceMismatch(
   options: SendRequestOptions,
 ): Promise<DaemonResponse> {
   invalidateRemoteDaemonHealth(info);
-  const health = await readRemoteDaemonHealth(info);
+  const probeTimeoutMs = remainingRemoteRequestTimeoutMs(
+    info,
+    req,
+    statePaths,
+    timeoutMs,
+    deadline,
+  );
+  const health = await readRemoteDaemonHealth(info, probeTimeoutMs);
+  const remainingMs = remainingRemoteRequestTimeoutMs(info, req, statePaths, timeoutMs, deadline);
   if (!health.reachable) {
     throw new AppError('COMMAND_FAILED', 'Remote daemon is unavailable', {
       daemonBaseUrl: info.baseUrl,
@@ -245,20 +264,29 @@ async function retryAfterRemoteInstanceMismatch(
   info.remoteInstanceId = health.instanceId;
   info.remoteUpstreamInstanceId = health.upstream?.instanceId;
   cacheRemoteDaemonHealth(info, health);
-  const remainingMs = deadline === undefined ? undefined : deadline - performance.now();
-  if (typeof timeoutMs === 'number' && remainingMs !== undefined && remainingMs <= 0) {
-    throw handleRequestTimeout({
-      info,
-      statePaths,
-      ...timeoutRequestContext(req, true, timeoutMs),
-    });
-  }
   try {
     return await sendRequestWithTransport(info, req, statePaths, remainingMs, transport, options);
   } catch (error) {
     if (isRemoteTransportFailure(error)) invalidateRemoteDaemonHealth(info);
     throw error;
   }
+}
+
+function remainingRemoteRequestTimeoutMs(
+  info: DaemonInfo,
+  req: DaemonRequest,
+  statePaths: DaemonPaths,
+  timeoutMs: number | undefined,
+  deadline: number | undefined,
+): number | undefined {
+  if (deadline === undefined || timeoutMs === undefined) return undefined;
+  const remainingMs = deadline - performance.now();
+  if (remainingMs > 0) return remainingMs;
+  throw handleRequestTimeout({
+    info,
+    statePaths,
+    ...timeoutRequestContext(req, true, timeoutMs),
+  });
 }
 
 function isRemoteInstanceMismatch(error: unknown): boolean {

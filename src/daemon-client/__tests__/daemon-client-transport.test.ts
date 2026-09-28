@@ -17,6 +17,21 @@ import {
   skipWhenLoopbackUnavailable,
 } from '../../__tests__/test-utils/loopback.ts';
 
+function sendWithStaleInstance(port: number, timeoutMs: number) {
+  return sendRequest(
+    {
+      baseUrl: `http://127.0.0.1:${port}`,
+      token: 'secret',
+      pid: 1,
+      remoteInstanceId: 'previous-instance',
+    },
+    { token: 'secret', command: 'devices', session: 'default', positionals: [], flags: {} },
+    'auto',
+    resolveDaemonPaths('/tmp/agent-device-instance-retry-test'),
+    timeoutMs,
+  );
+}
+
 test('persistent remote client caches health and retries a refused stale instance before dispatch', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const paths: string[] = [];
@@ -162,18 +177,7 @@ test('instance retry uses the remaining request timeout', async (t) => {
   try {
     const port = await listenOnLoopback(server);
     await assert.rejects(
-      sendRequest(
-        {
-          baseUrl: `http://127.0.0.1:${port}`,
-          token: 'secret',
-          pid: 1,
-          remoteInstanceId: 'previous-instance',
-        },
-        { token: 'secret', command: 'devices', session: 'default', positionals: [], flags: {} },
-        'auto',
-        resolveDaemonPaths('/tmp/agent-device-instance-retry-test'),
-        400,
-      ),
+      sendWithStaleInstance(port, 400),
       (error: unknown) =>
         error instanceof AppError &&
         error.details?.reason === 'daemon_transport_timeout' &&
@@ -181,6 +185,38 @@ test('instance retry uses the remaining request timeout', async (t) => {
         error.details.timeoutMs < 400,
     );
     assert.equal(rpcCount, 2);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
+test('a delayed restart health probe stops at the RPC deadline without retrying', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let rpcCount = 0;
+  let healthResponded = false;
+  const server = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      const delayedResponse = setTimeout(() => {
+        healthResponded = true;
+        res.end(JSON.stringify({ ok: true, instanceId: 'replacement-instance' }));
+      }, 1000);
+      res.on('close', () => clearTimeout(delayedResponse));
+      return;
+    }
+    rpcCount += 1;
+    res.statusCode = 409;
+    res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
+    res.end();
+  });
+  try {
+    const port = await listenOnLoopback(server);
+    await assert.rejects(
+      sendWithStaleInstance(port, 150),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'daemon_transport_timeout',
+    );
+    assert.equal(healthResponded, false);
+    assert.equal(rpcCount, 1);
   } finally {
     await closeLoopbackServer(server);
   }

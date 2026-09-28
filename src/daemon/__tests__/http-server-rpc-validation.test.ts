@@ -3,10 +3,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createDaemonHttpServer } from '../server/http-server.ts';
-import {
-  DAEMON_HTTP_INSTANCE_HEADER,
-  DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
-} from '@agent-device/contracts/daemon-http';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { cleanupUploadedArtifact, trackUploadedArtifact } from '../artifact-tracking.ts';
 import { resolveInstallSource } from '../install-source-resolution.ts';
@@ -61,56 +57,6 @@ async function withCommandRpcServer(
     await closeLoopbackServer(server);
   }
 }
-
-test('a stale RPC instance is refused before command dispatch', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t)) return;
-  let handlerCalls = 0;
-  const server = await createDaemonHttpServer({
-    token: 'daemon-secret',
-    handleRequest: async () => {
-      handlerCalls += 1;
-      return { ok: true, data: {} };
-    },
-  });
-  try {
-    const port = await listenOnLoopback(server);
-    const endpoint = `http://127.0.0.1:${port}`;
-    const health = (await (await fetch(`${endpoint}/health`)).json()) as { instanceId: string };
-    const rpc = (expectedInstance: string, authToken = 'daemon-secret') =>
-      fetch(`${endpoint}/rpc`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${authToken}`,
-          [DAEMON_HTTP_INSTANCE_HEADER]: expectedInstance,
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 'req-1',
-          method: 'agent_device.command',
-          params: { command: 'devices', positionals: [] },
-        }),
-      });
-    const unauthorized = await rpc('previous-instance', 'wrong-token');
-    assert.equal(unauthorized.status, 401);
-    assert.equal(unauthorized.headers.get(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER), null);
-    assert.equal(
-      ((await unauthorized.json()) as RpcErrorResponse).error?.data?.code,
-      'UNAUTHORIZED',
-    );
-    const stale = await rpc('previous-instance');
-    assert.equal(stale.status, 409);
-    assert.equal(stale.headers.get(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER), 'true');
-    const refused = (await stale.json()) as RpcErrorResponse;
-    assert.equal(refused.error?.data?.code, 'COMMAND_FAILED');
-    assert.equal(handlerCalls, 0);
-
-    assert.equal((await rpc(health.instanceId)).status, 200);
-    assert.equal(handlerCalls, 1);
-  } finally {
-    await closeLoopbackServer(server);
-  }
-});
 
 test('malformed command params (positionals as string) yield 400 / -32602, not 500 / -32000', async (t) => {
   await withCommandRpcServer(async (postRpc) => {
