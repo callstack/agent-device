@@ -296,8 +296,9 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
       device.appleOs === 'watchos' && device.kind !== 'simulator'
         ? physicalWatchUnavailable
         : available;
-    const boot =
-      isMacOs(device) || (device.appleOs === 'watchos' && device.kind !== 'simulator')
+    const boot = isMacOs(device)
+      ? unavailable
+      : device.appleOs === 'watchos' && device.kind !== 'simulator'
         ? physicalWatchUnavailable
         : available;
     const apps = appInventoryFacts(device);

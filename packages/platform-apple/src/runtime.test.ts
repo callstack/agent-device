@@ -578,6 +578,10 @@ test('macOS readiness is a no-op while boot remains unavailable', async () => {
 
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({ booted: true });
   expect(ensureConnected).not.toHaveBeenCalled();
+  expect(binding.facts.operations.bootTarget).toMatchObject({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
   expect(binding.operations.bootTarget).toBeUndefined();
 });
 

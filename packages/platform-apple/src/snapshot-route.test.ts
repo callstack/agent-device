@@ -78,7 +78,11 @@ test('watchOS bridge failures preserve their failure code instead of claiming un
   };
   const source = sourceReturning({
     stage: 'failed',
-    failure: { kind: 'transport-failure', code: 'bridge-disconnected' },
+    failure: {
+      kind: 'transport-failure',
+      code: 'bridge-disconnected',
+      details: { reason: 'untrusted-detail', deviceId: 'untrusted-device' },
+    },
   });
   const fallback = vi.fn(async () => runnerResult());
   const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
@@ -91,6 +95,39 @@ test('watchOS bridge failures preserve their failure code instead of claiming un
     details: {
       reason: 'watchos-ax-bridge-failed',
       bridgeFailureCode: 'bridge-disconnected',
+    },
+  });
+  expect(fallback).not.toHaveBeenCalled();
+});
+
+test('watchOS bridge preparation is reported as a retriable state, not a bridge failure', async () => {
+  const watch = { ...ios, appleOs: 'watchos', id: 'watch-1', name: 'Apple Watch' } as const;
+  const watchTarget = {
+    ...target,
+    simulator: simulatorAddressFor(watch),
+    targetId: `${watch.id}:com.example.app`,
+  };
+  const source = sourceReturning({
+    stage: 'failed',
+    failure: {
+      kind: 'preparing',
+      code: 'bridge-preparation-pending',
+      details: { reason: 'untrusted-detail', retryable: false },
+    },
+  });
+  const fallback = vi.fn(async () => runnerResult());
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source,
+    resolveTarget: vi.fn(async () => watchTarget),
+  });
+
+  await expect(route.capture(watch, input, signal(), fallback)).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: {
+      reason: 'watchos-ax-bridge-preparing',
+      deviceId: watch.id,
+      bridgeFailureCode: 'bridge-preparation-pending',
+      retryable: true,
     },
   });
   expect(fallback).not.toHaveBeenCalled();

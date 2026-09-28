@@ -188,6 +188,19 @@ export function createAppleSnapshotRoute(
           });
         }
         if (device.appleOs === 'watchos') {
+          if (outcome.failure.kind === 'preparing') {
+            throw new AppError(
+              'COMMAND_FAILED',
+              'watchOS Simulator accessibility bridge preparation is still running; retry the snapshot shortly.',
+              {
+                ...(outcome.failure.details ?? {}),
+                reason: 'watchos-ax-bridge-preparing',
+                deviceId: device.id,
+                bridgeFailureCode: outcome.failure.code,
+                retryable: true,
+              },
+            );
+          }
           throw watchSnapshotBridgeFailure(device, outcome.failure.code, outcome.failure.details);
         }
         const fallbackIdentity = await resolveFailureFallbackIdentity(
@@ -247,10 +260,10 @@ function watchSnapshotBridgeFailure(
     'COMMAND_FAILED',
     'watchOS Simulator accessibility bridge failed; no XCTest fallback is available.',
     {
+      ...(details ?? {}),
       reason: 'watchos-ax-bridge-failed',
       deviceId: device.id,
       bridgeFailureCode,
-      ...(details ?? {}),
     },
     cause,
   );
