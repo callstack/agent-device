@@ -319,6 +319,63 @@ test('a supported Android close clears admitted runtime hints exactly once', asy
   );
 });
 
+test('an app-only kill close carries mode kill while a stop close carries none', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-app-only-kill-carries-mode';
+  const device = {
+    platform: 'android' as const,
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator' as const,
+    target: 'mobile' as const,
+    booted: true,
+  };
+  const session = makeSession(sessionName, device);
+  session.appBundleId = 'com.example.app';
+  sessionStore.set(sessionName, session);
+  const seenModes: Array<unknown> = [];
+  const baseBind = mockBindDeviceRuntime.getMockImplementation();
+  const recordModes = async (
+    boundDevice: Parameters<NonNullable<typeof baseBind>>[0],
+    use: Parameters<NonNullable<typeof baseBind>>[1],
+  ) => {
+    const binding = await baseBind!(boundDevice, use);
+    const innerClose = binding.operations.closeApplication;
+    if (!innerClose) return binding;
+    return {
+      ...binding,
+      operations: {
+        ...binding.operations,
+        // This test proves mode propagation through session-close dispatch. The
+        // platform effect itself stays stubbed: delegating would execute the
+        // real Android kill against a live adb device instead of a fake.
+        closeApplication: async (input: Parameters<typeof innerClose>[0]) => {
+          seenModes.push(input.mode);
+        },
+      },
+    };
+  };
+  mockBindDeviceRuntime.mockImplementationOnce(recordModes);
+  mockBindDeviceRuntime.mockImplementationOnce(recordModes);
+
+  const killed = await close({
+    sessionName,
+    sessionStore,
+    positionals: ['com.example.app'],
+    internal: { closeAppOnly: true, killApp: true },
+  });
+  const stopped = await close({
+    sessionName,
+    sessionStore,
+    positionals: ['com.example.app'],
+    internal: { closeAppOnly: true },
+  });
+
+  expect(killed?.ok).toBe(true);
+  expect(stopped?.ok).toBe(true);
+  expect(seenModes).toEqual(['kill', undefined]);
+});
+
 test('close expires the ref frame immediately before its admitted platform mutation', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'close-ref-frame-seam';

@@ -1,6 +1,10 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { parseAndroidLaunchablePackages, readAndroidBlockingDialogFocus } from '../app-parsers.ts';
+import {
+  parseAndroidLaunchablePackages,
+  parseAndroidResumedActivity,
+  readAndroidBlockingDialogFocus,
+} from '../app-parsers.ts';
 
 test('parseAndroidLaunchablePackages ignores cmd package query metadata lines', () => {
   assert.deepEqual(
@@ -30,5 +34,37 @@ test('readAndroidBlockingDialogFocus preserves responding window text without re
         raw: 'mCurrentFocus=Window{123 u0 com.example.app/com.example.MainActivity Demo is not responding}',
       },
     },
+  );
+});
+
+test('parseAndroidResumedActivity reads every resumed-marker shape', () => {
+  assert.deepEqual(
+    parseAndroidResumedActivity(
+      '  mResumedActivity: ActivityRecord{99 u0 com.example.app/.MainActivity t7}\n',
+    ),
+    { package: 'com.example.app', activity: '.MainActivity' },
+  );
+  assert.deepEqual(
+    parseAndroidResumedActivity(
+      '  ResumedActivity: ActivityRecord{99 u0 com.example.app/.MainActivity t7}\n',
+    ),
+    { package: 'com.example.app', activity: '.MainActivity' },
+  );
+  assert.deepEqual(
+    parseAndroidResumedActivity(
+      '  topResumedActivity=ActivityRecord{99 u0 com.example.app/.MainActivity t7}\n',
+    ),
+    { package: 'com.example.app', activity: '.MainActivity' },
+  );
+});
+
+test('parseAndroidResumedActivity ignores a stale last-resumed record', () => {
+  // `mLastResumedActivity:` contains `ResumedActivity:` as a substring. Matching it would let a
+  // stale record refuse a kill whose current resumed field is null or names another app.
+  assert.equal(
+    parseAndroidResumedActivity(
+      '  mLastResumedActivity: ActivityRecord{98 u0 com.example.app/.MainActivity t7}\n',
+    ),
+    null,
   );
 });

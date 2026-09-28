@@ -173,6 +173,47 @@ test('projects standalone clearState to settings without opening the app', async
   ]);
 });
 
+test('projects standalone killApp to an app-only close carrying the kill mode', async () => {
+  const requests: MaestroDaemonOperationRequest[] = [];
+  const invoke: MaestroDaemonOperationInvoke = async (request) => {
+    requests.push(request);
+    return { ok: true, data: {} };
+  };
+  const port = createDaemonMaestroRuntimePort({
+    ...makeRuntimeEnvelope({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    invoke,
+    dependencies: makeDependencies(),
+    platform: 'android',
+  });
+
+  await port.execute({
+    command: { kind: 'killApp', source: { line: 2 }, appId: 'com.example.app' },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+  await port.execute({
+    command: { kind: 'killApp', source: { line: 3 } },
+    generation: 1,
+    env: {},
+    appId: 'com.example.session',
+    invalidateObservation() {},
+  });
+
+  expect(requests).toEqual([
+    expect.objectContaining({
+      command: 'close',
+      positionals: ['com.example.app'],
+      dispatch: { closeAppOnly: true, killApp: true },
+    }),
+    expect.objectContaining({
+      command: 'close',
+      positionals: ['com.example.session'],
+      dispatch: { closeAppOnly: true, killApp: true },
+    }),
+  ]);
+});
+
 test('uses the direct viewport without snapshot and pairs it with the nested gesture request', async () => {
   const requests: MaestroDaemonOperationRequest[] = [];
   const viewport = { x: 10, y: 20, width: 400, height: 800 };

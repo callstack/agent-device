@@ -189,6 +189,10 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       const appId = input.appId ?? context.appId;
       await invokeMutation({ kind: 'stopApp', ...(appId ? { appId } : {}) }, context);
     },
+    killApp: async (input, context) => {
+      const appId = input.appId ?? context.appId;
+      await invokeMutation({ kind: 'killApp', ...(appId ? { appId } : {}) }, context);
+    },
     setPermissions: async (input, context) => {
       await applyPermissionMutations(
         input.appId ?? context.appId,

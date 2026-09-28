@@ -178,6 +178,25 @@ describe('MaestroRuntimePort', () => {
     expect(calls[1]).toMatchObject({ input: { appId: 'com.example.checkout' } });
   });
 
+  test('dispatches standalone killApp with an explicit or config app id', async () => {
+    const calls: RecordedCall[] = [];
+    const operations = makeOperations({
+      killApp: vi.fn(async (input, context) => record(calls, 'killApp', input, context)),
+    });
+    const program = parseMaestroProgram(
+      ['appId: com.example.checkout', '---', '- killApp: com.example.other', '- killApp'].join(
+        '\n',
+      ),
+    );
+
+    const result = await executeMaestroProgram(program, createMaestroRuntimePort(operations));
+
+    expect(result).toMatchObject({ executed: 2, skipped: 0 });
+    expect(calls.map(({ kind }) => kind)).toEqual(['killApp', 'killApp']);
+    expect(calls[0]).toMatchObject({ input: { appId: 'com.example.other' } });
+    expect(calls[1]).toMatchObject({ input: { appId: 'com.example.checkout' } });
+  });
+
   test('preserves observation validity after visual waits and scripts', async () => {
     const waitInvalidation = vi.fn();
     const scriptInvalidation = vi.fn();

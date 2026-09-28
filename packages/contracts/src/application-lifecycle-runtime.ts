@@ -178,6 +178,14 @@ export type CloseApplicationInput = Readonly<{
   surface: SessionSurface;
   /** A selector-only close establishes readiness inside its admitted lifecycle binding. */
   ensureReady?: boolean;
+  /**
+   * `kill` is Maestro `killApp` (system-initiated process death: `am kill` on
+   * Android); absent means `stop`. Only the Android owner reads it and calls
+   * its own kill, which prefers the positional target and falls back to the
+   * session app identity; owners that ignore it keep `force-stop`, which is
+   * the `stopApp` alias Maestro uses elsewhere (iOS included).
+   */
+  mode?: 'kill';
   execution: ApplicationLifecycleExecution;
 }>;
 

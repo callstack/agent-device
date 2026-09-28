@@ -30,7 +30,7 @@ type MaestroCommandOf<K extends MaestroRuntimeCommand['kind']> = Extract<
 >;
 
 type MaestroLifecycleCommand = MaestroCommandOf<
-  'launchApp' | 'stopApp' | 'setPermissions' | 'clearState' | 'openLink'
+  'launchApp' | 'stopApp' | 'killApp' | 'setPermissions' | 'clearState' | 'openLink'
 >;
 type MaestroTargetCommand = MaestroCommandOf<'tapOn' | 'doubleTapOn' | 'longPressOn'>;
 type MaestroTextCommand = MaestroCommandOf<'inputText' | 'eraseText'>;
@@ -55,6 +55,7 @@ type MaestroRuntimeCommandHandlers = {
 const MAESTRO_RUNTIME_COMMAND_HANDLERS = {
   launchApp: executeLifecycleCommand,
   stopApp: executeLifecycleCommand,
+  killApp: executeLifecycleCommand,
   setPermissions: executeLifecycleCommand,
   clearState: executeLifecycleCommand,
   openLink: executeLifecycleCommand,
@@ -82,6 +83,7 @@ const MAESTRO_RUNTIME_COMMAND_HANDLERS = {
 const MAESTRO_COMMAND_REQUIRES_SETTLED_PREDECESSOR = {
   launchApp: true,
   stopApp: true,
+  killApp: true,
   setPermissions: true,
   clearState: true,
   openLink: true,
@@ -129,6 +131,19 @@ function dispatchMaestroRuntimeCommand<K extends MaestroCommandKind>(
   return handler(command, request, operations, context);
 }
 
+type MaestroAppTargetLifecycleCommand = MaestroCommandOf<'stopApp' | 'killApp' | 'clearState'>;
+
+/** Lifecycle commands carrying only an app target share one dispatch shape. */
+const MAESTRO_APP_TARGET_OPERATIONS: {
+  [K in MaestroAppTargetLifecycleCommand['kind']]: (
+    operations: MaestroRuntimeOperations,
+  ) => MaestroRuntimeOperations[K];
+} = {
+  stopApp: (operations) => operations.stopApp,
+  killApp: (operations) => operations.killApp,
+  clearState: (operations) => operations.clearState,
+};
+
 async function executeLifecycleCommand(
   command: MaestroLifecycleCommand,
   request: MaestroRuntimeRequest,
@@ -143,13 +158,6 @@ async function executeLifecycleCommand(
         context,
         'invalidate',
       );
-    case 'stopApp':
-      return await invokeOperation(
-        operations.stopApp,
-        { appId: command.appId ?? request.appId },
-        context,
-        'invalidate',
-      );
     case 'setPermissions':
       return await invokeOperation(
         operations.setPermissions,
@@ -160,13 +168,6 @@ async function executeLifecycleCommand(
         context,
         'invalidate',
       );
-    case 'clearState':
-      return await invokeOperation(
-        operations.clearState,
-        { appId: command.appId ?? request.appId },
-        context,
-        'invalidate',
-      );
     case 'openLink':
       return await invokeOperation(
         operations.openLink,
@@ -174,6 +175,22 @@ async function executeLifecycleCommand(
         context,
         'invalidate',
       );
+    case 'stopApp':
+    case 'killApp':
+    case 'clearState':
+      return await invokeOperation(
+        MAESTRO_APP_TARGET_OPERATIONS[command.kind](operations),
+        { appId: command.appId ?? request.appId },
+        context,
+        'invalidate',
+      );
+    default: {
+      const exhaustive: never = command;
+      throw new AppError(
+        'COMMAND_FAILED',
+        `Unsupported Maestro lifecycle command ${(exhaustive as { kind: string }).kind}.`,
+      );
+    }
   }
 }
 

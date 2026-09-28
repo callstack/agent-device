@@ -12,12 +12,18 @@ export type AndroidBlockingDialogFocus = {
  */
 export const ANDROID_FOCUSED_WINDOW_MARKER = 'mCurrentFocus=Window{';
 
+/** Markers that name the ActivityManager resumed activity in a `dumpsys activity` dump. */
+export const ANDROID_RESUMED_ACTIVITY_MARKERS = [
+  'mResumedActivity:',
+  'ResumedActivity:',
+  'topResumedActivity=',
+] as const;
+
 /** The line prefixes a `dumpsys` dump uses to name the focused window or resumed activity. */
 export const ANDROID_FOCUS_MARKERS = [
   ANDROID_FOCUSED_WINDOW_MARKER,
   'mFocusedApp=AppWindowToken{',
-  'mResumedActivity:',
-  'ResumedActivity:',
+  ...ANDROID_RESUMED_ACTIVITY_MARKERS,
 ] as const;
 const ANDROID_ANR_TITLE_PATTERN = /\bApplication Not Responding:\s*([A-Za-z0-9_.]+)/i;
 const ANDROID_PACKAGE_PATTERN = /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\b/;
@@ -85,6 +91,32 @@ export function parseAndroidFocusSegment<T>(
       const raw = line.trim();
       const parsed = parse(line.slice(markerIndex + marker.length), raw, marker);
       if (parsed) return parsed;
+    }
+  }
+  return null;
+}
+
+/**
+ * Reads the resumed activity out of an AMS dump (`dumpsys activity …`). Only a
+ * resumed-marker line counts: an activity dump lists the whole back stack, so any
+ * other `package/Activity` token is not evidence about what is resumed.
+ */
+export function parseAndroidResumedActivity(
+  text: string,
+): { package: string; activity: string } | null {
+  for (const line of text.split('\n')) {
+    for (const marker of ANDROID_RESUMED_ACTIVITY_MARKERS) {
+      const markerIndex = line.indexOf(marker);
+      // Unanchored match would also hit stale fields such as `mLastResumedActivity:`: a
+      // marker only counts at the start of a field, i.e. at line start or after whitespace.
+      if (markerIndex === -1 || (markerIndex > 0 && /\S/.test(line[markerIndex - 1] ?? '')))
+        continue;
+      const component = line
+        .slice(markerIndex + marker.length)
+        .match(/\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/([A-Za-z0-9_.$]+)/);
+      if (component?.[1] && component[2]) {
+        return { package: component[1], activity: component[2] };
+      }
     }
   }
   return null;

@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import type {
+  CloseApplicationInput,
   LocalApplicationInteractorHost,
   OpenApplicationInput,
 } from '@agent-device/contracts/application-lifecycle-runtime';
@@ -8,6 +9,13 @@ import type { Interactor, SnapshotOptions } from '@agent-device/contracts/intera
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { bindAndroidApplicationLifecycle } from './lifecycle.ts';
+import { killAndroidApp } from './app-lifecycle.ts';
+
+vi.mock('./app-lifecycle.ts', () => ({
+  killAndroidApp: vi.fn(async () => {}),
+}));
+
+const mockKillAndroidApp = vi.mocked(killAndroidApp);
 
 const device: DeviceInfo = {
   platform: 'android',
@@ -20,6 +28,7 @@ const device: DeviceInfo = {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  mockKillAndroidApp.mockClear();
 });
 
 type LifecycleFixture = Readonly<{
@@ -211,4 +220,135 @@ test('an app open whose launched package cannot be identified reports it unident
 
   expect(calls).toEqual(['open:Example']);
   expect(outcome.timing.postOpenObservation).toBe('app-unidentified');
+});
+
+function closeLifecycleHost(resolve: LocalApplicationInteractorHost['resolve']) {
+  return {
+    localInteractors: { resolve },
+    deviceReadiness: {
+      android: { ensureReady: async () => ({ ...device, booted: true }) },
+    },
+    deviceShutdown: {
+      android: { shutdownTarget: async () => undefined },
+    },
+    androidApplications: {
+      resolveOpenTarget: async () => ({}),
+      inferOpenedAppBundleId: async () => 'com.example.app',
+      resetFramePerfStats: async () => {},
+      applyRuntimeHints: async () => {},
+      clearRuntimeHints: async () => {},
+      activateTestIme: async () => {},
+      restoreTestIme: async () => {},
+      recoverTestImeStartup: async () => {},
+      hasTestImeRecoveryEvidence: async () => false,
+    },
+  } as unknown as Pick<
+    PlatformRuntimeHost,
+    | 'androidApplications'
+    | 'clock'
+    | 'commands'
+    | 'deviceReadiness'
+    | 'deviceShutdown'
+    | 'localInteractors'
+    | 'toolchains'
+  >;
+}
+
+function closeInput(overrides: Partial<CloseApplicationInput> = {}): CloseApplicationInput {
+  return {
+    positionals: ['com.example.app'],
+    appBundleId: 'com.example.app',
+    surface: 'app',
+    execution: {},
+    ...overrides,
+  };
+}
+
+test('kill mode calls killAndroidApp without resolving an interactor', async () => {
+  let resolved = 0;
+  const closed: string[] = [];
+  const host = closeLifecycleHost(async () => {
+    resolved += 1;
+    return {
+      open: async () => {},
+      openDevice: async () => {},
+      close: async (app: string) => {
+        closed.push(app);
+      },
+      setSetting: async () => {},
+    } as unknown as Interactor;
+  });
+  const lifecycle = bindAndroidApplicationLifecycle({
+    host,
+    device,
+    signal: new AbortController().signal,
+  });
+
+  await lifecycle.closeApplication(closeInput({ mode: 'kill' }));
+
+  expect(resolved).toBe(0);
+  expect(closed).toEqual([]);
+  expect(mockKillAndroidApp).toHaveBeenCalledOnce();
+  expect(mockKillAndroidApp).toHaveBeenCalledWith(device, 'com.example.app');
+});
+
+test('stop close resolves an interactor and closes', async () => {
+  let resolved = 0;
+  const closed: string[] = [];
+  const host = closeLifecycleHost(async () => {
+    resolved += 1;
+    return {
+      open: async () => {},
+      openDevice: async () => {},
+      close: async (app: string) => {
+        closed.push(app);
+      },
+      setSetting: async () => {},
+    } as unknown as Interactor;
+  });
+  const lifecycle = bindAndroidApplicationLifecycle({
+    host,
+    device,
+    signal: new AbortController().signal,
+  });
+
+  await lifecycle.closeApplication(closeInput());
+
+  expect(resolved).toBe(1);
+  expect(closed).toEqual(['com.example.app']);
+  expect(mockKillAndroidApp).not.toHaveBeenCalled();
+});
+
+test('kill mode falls back to the session app identity when no positional target exists', async () => {
+  const host = closeLifecycleHost(async () => {
+    throw new Error('kill must not resolve an interactor');
+  });
+  const lifecycle = bindAndroidApplicationLifecycle({
+    host,
+    device,
+    signal: new AbortController().signal,
+  });
+
+  await lifecycle.closeApplication(closeInput({ mode: 'kill', positionals: [] }));
+
+  expect(mockKillAndroidApp).toHaveBeenCalledOnce();
+  expect(mockKillAndroidApp).toHaveBeenCalledWith(device, 'com.example.app');
+});
+
+test('kill mode without any target fails loud instead of reading as success', async () => {
+  const host = closeLifecycleHost(async () => {
+    throw new Error('kill must not resolve an interactor');
+  });
+  const lifecycle = bindAndroidApplicationLifecycle({
+    host,
+    device,
+    signal: new AbortController().signal,
+  });
+
+  await expect(
+    lifecycle.closeApplication(
+      closeInput({ mode: 'kill', positionals: [], appBundleId: undefined }),
+    ),
+  ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+  expect(mockKillAndroidApp).not.toHaveBeenCalled();
 });

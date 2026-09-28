@@ -613,6 +613,27 @@ describe('parseMaestroProgram', () => {
     });
   });
 
+  test('parses standalone killApp with an explicit or config app id', () => {
+    const program = parseMaestroProgram(
+      `appId: example.app
+---
+- killApp: example.app
+- killApp
+`,
+      { sourcePath: '/flows/kill.yaml' },
+    );
+
+    assert.deepEqual(program.commands[0], {
+      kind: 'killApp',
+      source: { path: '/flows/kill.yaml', line: 3 },
+      appId: 'example.app',
+    });
+    assert.deepEqual(program.commands[1], {
+      kind: 'killApp',
+      source: { path: '/flows/kill.yaml', line: 4 },
+    });
+  });
+
   test('preserves source paths for unsupported and malformed flows', () => {
     const sourcePath = '/flows/includes/child.yaml';
     assert.throws(
