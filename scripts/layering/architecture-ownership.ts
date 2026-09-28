@@ -14,12 +14,6 @@ export type LogicalModulePolicy = Readonly<{
 const DAEMON_REPLAY_FACADE = {
   root: 'src/daemon/replay/index.ts',
   exports: [
-    'ReplayCoordinator',
-    'ReplayDaemonDependencies',
-    'ReplayResumeStamper',
-    'ReplaySession',
-    'ReplaySessionView',
-    'ReplayTestVideoOwner',
     'appTargetResolutionOptions',
     'bindReplaySession',
     'buildMaestroReplayTargetDeviceResolutionOptions',

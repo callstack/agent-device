@@ -518,6 +518,9 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@agent-device/replay-test':
+        specifier: workspace:*
+        version: link:../replay-test
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors

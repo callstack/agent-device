@@ -10,9 +10,14 @@
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/kernel": "workspace:*",
+    "@agent-device/replay-test": "workspace:*",
     "@agent-device/selectors": "workspace:*"
   },
   "exports": {
+    "./command-types": {
+      "types": "./src/daemon-port/command-types.ts",
+      "default": "./src/daemon-port/command-types.ts"
+    },
     "./repair-hint": {
       "types": "./src/daemon-port/repair-hint.ts",
       "default": "./src/daemon-port/repair-hint.ts"
