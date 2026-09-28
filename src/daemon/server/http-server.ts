@@ -36,7 +36,6 @@ import {
 } from '../../request-progress-protocol.ts';
 import {
   buildDaemonHealthPayload,
-  DAEMON_HTTP_INSTANCE_HEADER,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_HTTP_TENANT_HEADER,
@@ -48,6 +47,7 @@ import { tryHandleUploadHttpRoute } from '../upload-http.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../downloadable-artifact-http.ts';
 import { tryHandleRequestDiagnosticsHttpRoute } from '../request-diagnostics-http.ts';
 import { resolveTrustedTenant, tenantTrustRejectionError } from './tenant-trust.ts';
+import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
 import type { TenantSessionNamespace } from '../session-tenant-scope.ts';
 import { tryHandleHumanControlHttpRoute } from '../human-control-http.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
@@ -760,15 +760,12 @@ export async function createDaemonHttpServer(options: {
         if (tokenError) {
           sendJson(
             res,
-            createRpcError(rpcRequest.id ?? null, -32001, tokenError.message, tokenError),
+            createRpcError(rpcRequest.id ?? null, -32000, tokenError.message, tokenError),
             401,
           );
           return;
         }
-        if (req.headers[DAEMON_HTTP_INSTANCE_HEADER]) {
-          const { refuseStaleDaemonInstance } = await import('./http-instance-precondition.ts');
-          if (refuseStaleDaemonInstance(req, res, rpcRequest.id ?? null, instanceId)) return;
-        }
+        if (refuseStaleDaemonInstance(req, res, rpcRequest.id ?? null, instanceId)) return;
         daemonRequest.meta = {
           ...daemonRequest.meta,
           tenantId: tenantTrust.tenantId,

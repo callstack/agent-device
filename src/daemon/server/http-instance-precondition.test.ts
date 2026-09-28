@@ -11,7 +11,7 @@ import {
   skipWhenLoopbackUnavailable,
 } from '../../__tests__/test-utils/loopback.ts';
 
-type RpcErrorResponse = { error?: { data?: { code?: string } } };
+type RpcErrorResponse = { error?: { code?: number; data?: { code?: string } } };
 
 test('a stale RPC instance is refused after authentication and before command dispatch', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
@@ -45,10 +45,9 @@ test('a stale RPC instance is refused after authentication and before command di
     const unauthorized = await rpc('previous-instance', 'wrong-token');
     assert.equal(unauthorized.status, 401);
     assert.equal(unauthorized.headers.get(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER), null);
-    assert.equal(
-      ((await unauthorized.json()) as RpcErrorResponse).error?.data?.code,
-      'UNAUTHORIZED',
-    );
+    const unauthorizedBody = (await unauthorized.json()) as RpcErrorResponse;
+    assert.equal(unauthorizedBody.error?.code, -32000);
+    assert.equal(unauthorizedBody.error?.data?.code, 'UNAUTHORIZED');
     const stale = await rpc('previous-instance');
     assert.equal(stale.status, 409);
     assert.equal(stale.headers.get(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER), 'true');

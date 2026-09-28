@@ -270,7 +270,7 @@
     {
       "declaration": "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth",
       "digest": "sha256:6b64ae9b8e461a4b7dc1afb88465fcbaef908c31cc0be24499b2f440616e1cb5",
-      "rationale": "#2650 bounds a retry's health probe by the RPC's remaining deadline, including response-body reads. The health request and accepted payload fields are unchanged; only a stalled probe ends sooner when the command deadline is near."
+      "rationale": "#2650 gives every HTTP health probe a total-time cap (3s remote or 500ms local), including response-body reads. A restart retry also uses the RPC's remaining deadline. The health request and accepted payload fields are unchanged; stalled probes now end sooner."
     },
     {
       "declaration": "src/daemon-client/daemon-client-transport.ts#readRemoteDaemonHealth",
