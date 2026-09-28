@@ -137,6 +137,7 @@ test('web provider is scoped through the request router and dispatch path', asyn
         depth: 0,
         parentIndex: undefined,
         ref: 'e1',
+        kind: 'section',
       },
       {
         index: 1,
@@ -148,6 +149,7 @@ test('web provider is scoped through the request router and dispatch path', asyn
         depth: 1,
         parentIndex: 0,
         ref: 'e2',
+        kind: 'button',
       },
     ]);
 
