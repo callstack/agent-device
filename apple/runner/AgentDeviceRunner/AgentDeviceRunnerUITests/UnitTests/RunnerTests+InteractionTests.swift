@@ -23,5 +23,50 @@ extension RunnerTests {
     XCTAssertEqual(events.count, 1)
     XCTAssertEqual(events.first?.vertical, -200)
   }
+
+#if os(iOS) && targetEnvironment(simulator)
+  func testPrivateAXPointInspectionReturnsContainingElementsSmallestFirst() {
+    let root: [String: Any] = [
+      "type": NSNumber(value: XCUIElement.ElementType.window.rawValue),
+      "label": "",
+      "identifier": "root",
+      "value": "",
+      "frame": ["x": 0, "y": 0, "width": 400, "height": 800],
+      "children": [[
+        "type": NSNumber(value: XCUIElement.ElementType.button.rawValue),
+        "label": "Native Action",
+        "identifier": "native-action",
+        "value": "",
+        "frame": ["x": 100, "y": 500, "width": 200, "height": 48],
+        "children": [],
+      ]],
+    ]
+
+    let inspection = privateAXPointInspection(root: root, point: CGPoint(x: 200, y: 520))
+
+    XCTAssertEqual(inspection.text, "Native Action")
+    XCTAssertEqual(inspection.elements.count, 2)
+    XCTAssertEqual(inspection.elements.first?.identifier, "native-action")
+    XCTAssertEqual(inspection.elements.last?.identifier, "root")
+    XCTAssertEqual(inspection.elements.first?.frame, SnapshotRect(x: 100, y: 500, width: 200, height: 48))
+    XCTAssertNil(inspection.elements.first?.hittable)
+  }
+
+  func testPrivateAXPointInspectionReturnsNoElementForHonestMiss() {
+    let root: [String: Any] = [
+      "type": NSNumber(value: XCUIElement.ElementType.window.rawValue),
+      "label": "Root",
+      "identifier": "root",
+      "value": "",
+      "frame": ["x": 0, "y": 0, "width": 100, "height": 100],
+      "children": [],
+    ]
+
+    let inspection = privateAXPointInspection(root: root, point: CGPoint(x: 200, y: 200))
+
+    XCTAssertNil(inspection.text)
+    XCTAssertTrue(inspection.elements.isEmpty)
+  }
+#endif
 }
 #endif

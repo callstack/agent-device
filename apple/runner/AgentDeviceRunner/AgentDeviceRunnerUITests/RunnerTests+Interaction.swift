@@ -326,6 +326,15 @@ extension RunnerTests {
     x: Double,
     y: Double
   ) -> (text: String?, elements: [PointInspectionElementPayload]) {
+#if os(iOS) && targetEnvironment(simulator)
+    // System-owned sheets can make XCTest's unbounded descendants query hold
+    // the main thread past the command watchdog. The Simulator-only private AX
+    // bridge already provides a deadline-bounded tree for snapshot recovery;
+    // filter that tree at the requested point before touching the XCTest query.
+    if let inspection = privateAXPointInspection(app: app, x: x, y: y) {
+      return inspection
+    }
+#endif
     let point = CGPoint(x: x, y: y)
     let textInputCandidates = textInputCandidatesAt(app: app, point: point)
     let candidates = app.descendants(matching: .any).allElementsBoundByIndex
@@ -369,6 +378,102 @@ extension RunnerTests {
     }
     return (nil, elements)
   }
+
+#if os(iOS) && targetEnvironment(simulator)
+  func privateAXPointInspection(
+    app: XCUIApplication,
+    x: Double,
+    y: Double
+  ) -> (text: String?, elements: [PointInspectionElementPayload])? {
+    let response = RunnerAXSnapshotBridge.snapshotTree(
+      for: app,
+      maxDepth: 56,
+      maxNodes: 5_000,
+      deepExtensionCallLimit: 4,
+      customActionLimit: 0,
+      deadline: Date().addingTimeInterval(8)
+    )
+    guard (response["ok"] as? NSNumber)?.boolValue == true,
+      let root = response["root"] as? [String: Any]
+    else {
+      return nil
+    }
+    return privateAXPointInspection(root: root, point: CGPoint(x: x, y: y))
+  }
+
+  func privateAXPointInspection(
+    root: [String: Any],
+    point: CGPoint
+  ) -> (text: String?, elements: [PointInspectionElementPayload]) {
+    var candidates: [(payload: PointInspectionElementPayload, area: CGFloat)] = []
+
+    func visit(_ raw: [String: Any]) {
+      let frame = privateAXRect(raw["frame"])
+      if !frame.isEmpty && frame.contains(point) {
+        let rawType = (raw["type"] as? NSNumber)?.intValue ?? 0
+        let type = Self.elementTypeNamesByRawValue[UInt(rawType)] ?? "Element(\(rawType))"
+        let label = pointInspectionText(raw["label"])
+        let identifier = pointInspectionText(raw["identifier"])
+        let value = pointInspectionText(raw["value"])
+        let text = pointInspectionReadableText(
+          type: type,
+          label: label,
+          identifier: identifier,
+          value: value
+        )
+        candidates.append((
+          PointInspectionElementPayload(
+            text: text,
+            label: label,
+            identifier: identifier,
+            type: type,
+            role: type,
+            value: value,
+            frame: SnapshotRect(frame),
+            hittable: nil
+          ),
+          max(1, frame.width * frame.height)
+        ))
+      }
+      for child in raw["children"] as? [[String: Any]] ?? [] {
+        visit(child)
+      }
+    }
+
+    visit(root)
+    let elements = candidates
+      .sorted { left, right in
+        if left.area != right.area { return left.area < right.area }
+        if left.payload.frame.y != right.payload.frame.y {
+          return left.payload.frame.y < right.payload.frame.y
+        }
+        if left.payload.frame.x != right.payload.frame.x {
+          return left.payload.frame.x < right.payload.frame.x
+        }
+        return (left.payload.type ?? "") < (right.payload.type ?? "")
+      }
+      .prefix(24)
+      .map(\.payload)
+    return (elements.compactMap(\.text).first, elements)
+  }
+
+  private func pointInspectionText(_ value: Any?) -> String? {
+    let text = (value as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    return text.isEmpty ? nil : text
+  }
+
+  private func pointInspectionReadableText(
+    type: String,
+    label: String?,
+    identifier: String?,
+    value: String?
+  ) -> String? {
+    if ["TextField", "SecureTextField", "SearchField", "TextView"].contains(type) {
+      return value ?? label ?? identifier
+    }
+    return label ?? value ?? identifier
+  }
+#endif
 
   private func readableText(for element: XCUIElement) -> String? {
     let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
