@@ -11,14 +11,9 @@ import {
   stringSchema,
 } from '../commands/command-input.ts';
 import { REPLAY_COMMAND_OUTPUT_SCHEMAS } from '../commands/replay/index.ts';
-import { BACK_MODES } from '@agent-device/contracts/back-mode';
-import { APPLE_APPLICATION_STATES } from '@agent-device/kernel/snapshot';
+import { SYSTEM_COMMAND_OUTPUT_SCHEMAS } from '../commands/system/index.ts';
 import { NATIVE_PATH_DISPOSITION_VALUES } from '@agent-device/contracts/recording-native-path';
 import { RECORDER_OBSERVATION_VALUES } from '@agent-device/contracts/recording-stop-observation';
-import { DEVICE_ROTATIONS, FOLD_POSES } from '@agent-device/contracts/device';
-import { FOLD_SCREEN_COORDINATE_SPACE } from '@agent-device/contracts/fold-runtime';
-import { SESSION_SURFACES } from '@agent-device/contracts/session';
-import { TV_REMOTE_BUTTONS } from '@agent-device/contracts/tv-remote';
 import { DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
 
 /**
@@ -477,70 +472,6 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
     ['width', 'height', 'message'],
   ),
 
-  // packages/contracts/src/navigation.ts. `back`'s settle observation is grafted
-  // by the derivation pass below.
-  back: objectSchema(
-    {
-      action: constSchema('back'),
-      mode: enumSchema(BACK_MODES),
-      message: stringSchema(),
-    },
-    ['action', 'mode', 'message'],
-  ),
-  home: objectSchema({ action: constSchema('home'), message: stringSchema() }, [
-    'action',
-    'message',
-  ]),
-  orientation: objectSchema(
-    {
-      action: constSchema('orientation'),
-      orientation: enumSchema(DEVICE_ROTATIONS),
-      message: stringSchema(),
-      confirmed: booleanSchema(),
-      warning: stringSchema(),
-    },
-    ['action', 'orientation', 'message'],
-  ),
-  'app-switcher': objectSchema({ action: constSchema('app-switcher'), message: stringSchema() }, [
-    'action',
-    'message',
-  ]),
-  fold: objectSchema(
-    {
-      action: constSchema('fold'),
-      pose: enumSchema(FOLD_POSES),
-      hingeAngleDegrees: numberSchema('Hinge angle CoreDevice read back after the pose settled.'),
-      screen: objectSchema(
-        {
-          display: stringSchema('CoreDevice name of the panel the device now lights.'),
-          coordinateSpace: constSchema(FOLD_SCREEN_COORDINATE_SPACE),
-          widthPt: numberSchema(
-            'Panel width in native panel points (pixels divided by point scale), NOT snapshot coordinates; take a fresh snapshot to place a tap.',
-          ),
-          heightPt: numberSchema(
-            'Panel height in native panel points (pixels divided by point scale), NOT snapshot coordinates; take a fresh snapshot to place a tap.',
-          ),
-        },
-        ['display', 'coordinateSpace', 'widthPt', 'heightPt'],
-      ),
-      message: stringSchema(),
-    },
-    ['action', 'pose', 'hingeAngleDegrees', 'message'],
-  ),
-  'action-button': objectSchema({ action: constSchema('action-button'), message: stringSchema() }, [
-    'action',
-    'message',
-  ]),
-  'tv-remote': objectSchema(
-    {
-      action: constSchema('tv-remote'),
-      button: enumSchema(TV_REMOTE_BUTTONS),
-      durationMs: numberSchema(),
-      message: stringSchema(),
-    },
-    ['action', 'button', 'message'],
-  ),
-
   // packages/contracts/src/wait.ts — compact public daemon projection.
   wait: objectSchema(
     {
@@ -675,75 +606,6 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
     ['event', 'eventUrl', 'transport', 'message'],
   ),
 
-  // packages/contracts/src/clipboard.ts — discriminated union on `action`.
-  clipboard: {
-    type: 'object',
-    oneOf: [
-      objectSchema({ action: constSchema('read'), text: stringSchema() }, ['action', 'text']),
-      objectSchema(
-        { action: constSchema('write'), textLength: numberSchema(), message: stringSchema() },
-        ['action', 'textLength', 'message'],
-      ),
-    ],
-  },
-
-  // packages/contracts/src/app-state.ts — discriminated union on `platform`.
-  appstate: {
-    type: 'object',
-    oneOf: [
-      objectSchema(
-        {
-          platform: enumSchema(['ios', 'macos']),
-          appName: stringSchema(),
-          appBundleId: stringSchema(),
-          source: enumSchema(
-            ['session', 'runner'],
-            'runner when a live runner read the session app state; session when the record alone answered.',
-          ),
-          state: enumSchema(
-            APPLE_APPLICATION_STATES,
-            'The session app XCUIApplication state as a live runner reads it; absent with source session.',
-          ),
-          surface: enumSchema(SESSION_SURFACES),
-          device_udid: stringSchema('iOS only — the session device UDID.'),
-          ios_simulator_device_set: {
-            type: ['string', 'null'],
-            description: 'iOS only — the simulator set path, or null when unknown.',
-          },
-        },
-        ['platform', 'appName', 'source', 'surface'],
-      ),
-      objectSchema(
-        {
-          platform: constSchema('android'),
-          package: stringSchema(),
-          activity: stringSchema(),
-        },
-        ['platform', 'package', 'activity'],
-      ),
-    ],
-  },
-
-  // packages/contracts/src/keyboard.ts — flat closed shape; `platform`/`action` always present.
-  keyboard: objectSchema(
-    {
-      platform: enumSchema(['android', 'ios']),
-      action: enumSchema(['status', 'dismiss', 'enter']),
-      visible: booleanSchema(),
-      wasVisible: booleanSchema(),
-      dismissed: booleanSchema(),
-      attempts: numberSchema(),
-      inputType: stringSchema(),
-      type: enumSchema(['text', 'number', 'email', 'phone', 'password', 'datetime', 'unknown']),
-      inputMethodPackage: stringSchema(),
-      focusedPackage: stringSchema(),
-      focusedResourceId: stringSchema(),
-      inputOwner: enumSchema(['app', 'ime', 'unknown']),
-      message: stringSchema(),
-    },
-    ['platform', 'action'],
-  ),
-
   // packages/contracts/src/doctor.ts
   doctor: objectSchema(
     {
@@ -870,6 +732,7 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
   // a projected command then fails as TS2783 instead of quietly overriding the family's,
   // and this map's `satisfies` still refuses a missing `CommandResultMap` key.
   ...REPLAY_COMMAND_OUTPUT_SCHEMAS,
+  ...SYSTEM_COMMAND_OUTPUT_SCHEMAS,
 } satisfies Record<keyof CommandResultMap, JsonSchema>;
 
 export const COMMAND_OUTPUT_SCHEMAS = deriveSettleObservationSchemas(BASE_COMMAND_OUTPUT_SCHEMAS);

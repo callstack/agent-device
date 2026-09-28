@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { ReplayCommandResult, ReplaySuiteResult } from '@agent-device/contracts/replay';
 import { ownerFilesForCommand } from '@agent-device/command-registry/owner-files';
+import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import { REPLAY_COMMAND_OUTPUT_SCHEMAS } from '../../commands/replay/index.ts';
+import { SYSTEM_COMMAND_OUTPUT_SCHEMAS } from '../../commands/system/index.ts';
 import { COMMAND_OUTPUT_SCHEMAS } from '../command-output-schemas.ts';
 import { validateAgainstSchema } from './output-schema-validator.ts';
 
@@ -66,7 +68,10 @@ test('the projected family map declares exactly the commands its module owns', (
  * stays the compiler's; this owns the shadowing half. Every family the seam spreads is listed here,
  * so registering a new family is the migration step.
  */
-const PROJECTED_FAMILIES = [{ name: 'replay', schemas: REPLAY_COMMAND_OUTPUT_SCHEMAS }] as const;
+const PROJECTED_FAMILIES = [
+  { name: 'replay', schemas: REPLAY_COMMAND_OUTPUT_SCHEMAS },
+  { name: 'system', schemas: SYSTEM_COMMAND_OUTPUT_SCHEMAS },
+] as const;
 
 test('projected output-schema families claim disjoint commands and survive the composition intact', () => {
   const claimedBy = new Map<string, string>();
@@ -83,11 +88,23 @@ test('projected output-schema families claim disjoint commands and survive the c
   }
   for (const family of PROJECTED_FAMILIES) {
     for (const [command, schema] of Object.entries(family.schemas)) {
-      assert.equal(
-        COMMAND_OUTPUT_SCHEMAS[command as keyof typeof COMMAND_OUTPUT_SCHEMAS],
-        schema,
-        `${family.name}.${command} is not the schema the map publishes`,
-      );
+      const published = COMMAND_OUTPUT_SCHEMAS[command as keyof typeof COMMAND_OUTPUT_SCHEMAS];
+      // A command with the post-action observation trait (#1652) is grafted onto a COPY by
+      // deriveSettleObservationSchemas, so it is deliberately not reference-equal here; a
+      // trait-free command must survive the spread untouched.
+      if (commandSupportsSettleObservation(command)) {
+        assert.notEqual(
+          published,
+          schema,
+          `${family.name}.${command} carries the settle trait but was not copied by the derivation pass`,
+        );
+      } else {
+        assert.equal(
+          published,
+          schema,
+          `${family.name}.${command} is not the schema the map publishes`,
+        );
+      }
     }
   }
 });
