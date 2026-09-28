@@ -68,7 +68,14 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
   {
     adrBullet: 'HTTP route requirements for /health, /rpc, /upload, or /artifacts/*.',
     declarations: [
-      ...from(DAEMON_HTTP, 'DAEMON_HTTP_BASE_PATH', 'buildDaemonHttpUrl', 'buildDaemonHttpBaseUrl'),
+      ...from(
+        DAEMON_HTTP,
+        'DAEMON_HTTP_BASE_PATH',
+        'DAEMON_HTTP_INSTANCE_HEADER',
+        'DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER',
+        'buildDaemonHttpUrl',
+        'buildDaemonHttpBaseUrl',
+      ),
       ...from(DAEMON_HTTP, 'DaemonHealthPayload', 'buildDaemonHealthPayload'),
       // A shrunk body limit rejects payloads a released client still sends, so
       // it is a route requirement rather than an implementation detail.
