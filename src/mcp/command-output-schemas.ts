@@ -3,13 +3,12 @@ import type { CommandResultMap } from '@agent-device/command-registry/command-re
 import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import {
   booleanSchema,
-  constSchema,
   enumSchema,
   numberSchema,
   objectSchema,
-  stringArraySchema,
   stringSchema,
 } from '../commands/command-input.ts';
+import { DIFF_COMMAND_OUTPUT_SCHEMAS } from '../commands/capture/diff.ts';
 import { WAIT_COMMAND_OUTPUT_SCHEMAS } from '../commands/capture/wait.ts';
 import { PREPARE_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/prepare.ts';
 import { DOCTOR_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/doctor.ts';
@@ -183,39 +182,11 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
     ['direction'],
   ),
 
-  // packages/contracts/src/diff.ts — the public Node command accepts snapshot diffs.
-  diff: objectSchema(
-    {
-      mode: constSchema('snapshot'),
-      baselineInitialized: booleanSchema(),
-      summary: objectSchema(
-        {
-          additions: numberSchema(),
-          removals: numberSchema(),
-          unchanged: numberSchema(),
-        },
-        ['additions', 'removals', 'unchanged'],
-      ),
-      lines: {
-        type: 'array',
-        items: objectSchema(
-          {
-            kind: enumSchema(['added', 'removed']),
-            text: stringSchema(),
-            ref: stringSchema(),
-          },
-          ['kind', 'text'],
-        ),
-      },
-      warnings: stringArraySchema(),
-    },
-    ['mode', 'baselineInitialized', 'summary', 'lines'],
-  ),
-
   // A family that owns its commands authors their advertised response shape beside the
   // command surface and projects it here. This spread stays last: a hand-written entry for
   // a projected command then fails as TS2783 instead of quietly overriding the family's,
   // and this map's `satisfies` still refuses a missing `CommandResultMap` key.
+  ...DIFF_COMMAND_OUTPUT_SCHEMAS,
   ...WAIT_COMMAND_OUTPUT_SCHEMAS,
   ...PREPARE_COMMAND_OUTPUT_SCHEMAS,
   ...DOCTOR_COMMAND_OUTPUT_SCHEMAS,

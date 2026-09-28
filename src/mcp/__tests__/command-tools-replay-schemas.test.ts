@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import type { ReplayCommandResult, ReplaySuiteResult } from '@agent-device/contracts/replay';
 import { ownerFilesForCommand } from '@agent-device/command-registry/owner-files';
 import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
+import { DIFF_COMMAND_OUTPUT_SCHEMAS } from '../../commands/capture/diff.ts';
 import { WAIT_COMMAND_OUTPUT_SCHEMAS } from '../../commands/capture/wait.ts';
 import { PREPARE_COMMAND_OUTPUT_SCHEMAS } from '../../commands/management/prepare.ts';
 import { DOCTOR_COMMAND_OUTPUT_SCHEMAS } from '../../commands/management/doctor.ts';
@@ -80,6 +81,7 @@ const PROJECTED_FAMILIES = [
   { name: 'replay', schemas: REPLAY_COMMAND_OUTPUT_SCHEMAS },
   { name: 'system', schemas: SYSTEM_COMMAND_OUTPUT_SCHEMAS },
   { name: 'interaction', schemas: INTERACTION_COMMAND_OUTPUT_SCHEMAS },
+  { name: 'capture-diff', schemas: DIFF_COMMAND_OUTPUT_SCHEMAS },
   { name: 'capture-wait', schemas: WAIT_COMMAND_OUTPUT_SCHEMAS },
   { name: 'management-prepare', schemas: PREPARE_COMMAND_OUTPUT_SCHEMAS },
   { name: 'management-doctor', schemas: DOCTOR_COMMAND_OUTPUT_SCHEMAS },

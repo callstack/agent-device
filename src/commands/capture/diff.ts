@@ -1,19 +1,66 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { SNAPSHOT_FLAGS } from '@agent-device/command-registry/flag-groups';
+import type { CommandResultMap } from '@agent-device/command-registry/command-result';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   booleanField,
+  booleanSchema,
+  constSchema,
+  enumSchema,
   integerField,
   jsonSchemaField,
+  numberSchema,
+  objectSchema,
   requiredField,
+  stringArraySchema,
   stringField,
+  stringSchema,
 } from '../command-input.ts';
 import { commonInputFromFlags, direct, requiredDaemonString } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
+import type { JsonSchema } from '../command-contract.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 
 const DIFF_COMMAND_NAME = 'diff';
+
+/**
+ * This family's advertised MCP `outputSchema`, keyed by daemon command name and projected into
+ * the command map by `src/mcp/command-output-schemas.ts`. Non-strict like every other entry: no
+ * `additionalProperties: false`, so additive response fields keep validating. `diff` does not
+ * carry the post-action observation trait (#1652): it reports a snapshot comparison, not an
+ * interaction, so no settle-graft copy applies here.
+ */
+export const DIFF_COMMAND_OUTPUT_SCHEMAS = {
+  // packages/contracts/src/diff.ts — the public Node command accepts snapshot diffs.
+  diff: objectSchema(
+    {
+      mode: constSchema('snapshot'),
+      baselineInitialized: booleanSchema(),
+      summary: objectSchema(
+        {
+          additions: numberSchema(),
+          removals: numberSchema(),
+          unchanged: numberSchema(),
+        },
+        ['additions', 'removals', 'unchanged'],
+      ),
+      lines: {
+        type: 'array',
+        items: objectSchema(
+          {
+            kind: enumSchema(['added', 'removed', 'unchanged']),
+            text: stringSchema(),
+            ref: stringSchema(),
+          },
+          ['kind', 'text'],
+        ),
+      },
+      warnings: stringArraySchema(),
+    },
+    ['mode', 'baselineInitialized', 'summary', 'lines'],
+  ),
+} satisfies Pick<Record<keyof CommandResultMap, JsonSchema>, 'diff'>;
 
 const diffCommandDescription =
   'Compare accessibility snapshots or screenshots to identify UI changes. Use snapshot comparisons for semantic tree changes and screenshot comparisons for pixel differences.';
