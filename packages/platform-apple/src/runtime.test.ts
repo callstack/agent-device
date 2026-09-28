@@ -222,7 +222,7 @@ function expectAppleSnapshotAvailability(
 }
 
 test.each(Object.entries(leaves))(
-  'classifies back/home/app-switcher/orientation/tv-remote/keyboard/screen-lock facts for the %s leaf',
+  'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
   async (_name, device) => {
     const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
       device,
@@ -238,9 +238,20 @@ test.each(Object.entries(leaves))(
 );
 
 test('physical watchOS refuses lifecycle and touch facts before dispatch', async () => {
-  const facts = await createApplePlatformRuntime(platformRuntimeHostFixture()).inspectFacts(
-    appleDevice({ appleOs: 'watchos', kind: 'device' }),
-  );
+  const device = appleDevice({ appleOs: 'watchos', kind: 'device' });
+  const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+  const facts = await createApplePlatformRuntime(platformRuntimeHostFixture()).inspectFacts(device);
+  expectAppleCaptureAvailability(binding, device);
+  expectAppleSnapshotAvailability(binding, device);
+  expectNavigationAndKeyboardFacts(binding, device);
   expect(facts.operations.ensureReady).toMatchObject({
     available: false,
     reason: 'unsupported-device-kind',
@@ -392,7 +403,8 @@ function expectNavigationAndKeyboardFacts(
   // home and app-switcher share one springboard reading (R56): both are unavailable on macOS,
   // which drives an already-running app with no springboard, and on watchOS. That is parity, not
   // convenience — the retired `supportsAppAndDeviceLifecycle` closure gated both off the same row.
-  const home = device.appleOs !== 'macos';
+  const home =
+    device.appleOs !== 'macos' && (device.appleOs !== 'watchos' || device.kind === 'simulator');
   const appSwitcher = device.appleOs !== 'macos' && device.appleOs !== 'watchos';
   expectOperationAvailability(binding, 'home', home);
   expectOperationAvailability(binding, 'appSwitcher', appSwitcher);

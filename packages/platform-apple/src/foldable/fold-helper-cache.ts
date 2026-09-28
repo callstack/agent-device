@@ -1,19 +1,11 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
-import { hostHomeDirectory } from '@agent-device/host-kit/host-file';
 import { findProjectRoot } from '@agent-device/host-kit/version';
-import { runAppleToolCommand } from '../core/tool-provider.ts';
-import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../runner/apple-runner-platform.ts';
-import { createNativeBuildDeadline, type NativeBuildDeadline } from '../native-build/deadline.ts';
-import { NativeBuildError } from '../native-build/errors.ts';
-import { createNativeBuildHost, type NativeBuildHost } from '../native-build/host.ts';
-import { readHostToolchainIdentity } from '../native-build/toolchain-identity.ts';
-import {
-  ensureNativeBuildCacheEntry,
-  execNativeBuildClang,
-  fingerprintNativeBuildSource,
-} from '../native-build/cache.ts';
+import type { NativeBuildDeadline } from '../native-build/deadline.ts';
+import type { NativeBuildHost } from '../native-build/host.ts';
+import { execNativeBuildClang } from '../native-build/cache.ts';
+import { ensureNativeHelperBinary } from '../native-build/helper-cache.ts';
 
 const FOLD_HELPER_SOURCE_FILENAME = 'Fold.m';
 const FOLD_HELPER_BINARY_FILENAME = 'fold-helper';
@@ -24,10 +16,6 @@ const FOLD_HELPER_BUILD_HINT =
 
 /** Upper bound on a single fold-helper clang invocation; the same budget the prior per-call build used. */
 export const FOLD_HELPER_BUILD_TIMEOUT_MS = 30_000;
-
-/** Ceiling on locating, probing and (if needed) building a cached fold-helper binary. */
-const FOLD_HELPER_PREPARATION_DEADLINE_MS =
-  COLD_TOOLCHAIN_PROBE_TIMEOUT_MS + FOLD_HELPER_BUILD_TIMEOUT_MS;
 
 /**
  * The fold helper binary for the host's active toolchain, building and caching it if needed. Shares
@@ -47,45 +35,21 @@ export async function ensureFoldHelperBinary(
     sourceRoot?: string;
   }> = {},
 ): Promise<Readonly<{ path: string }>> {
-  const host = input.host ?? createFoldHelperCacheHost();
-  const deadline = createNativeBuildDeadline(FOLD_HELPER_PREPARATION_DEADLINE_MS, input.signal);
-  try {
-    const sourceRoot = input.sourceRoot ?? path.join(findProjectRoot(), 'apple', 'fold-helper');
-    const sourceHash = await fingerprintNativeBuildSource(
-      host,
-      sourceRoot,
-      [FOLD_HELPER_SOURCE_FILENAME],
-      deadline,
-    );
-    const toolchain = await readHostToolchainIdentity(host, deadline);
-    const cacheRoot =
-      input.cacheRoot ?? path.join(hostHomeDirectory(), '.agent-device', 'fold-helper');
-    return await ensureNativeBuildCacheEntry({
-      host,
-      deadline,
-      lockDescription: FOLD_HELPER_LOCK_DESCRIPTION,
-      cacheRoot,
-      binaryFilename: FOLD_HELPER_BINARY_FILENAME,
-      keyInputs: {
-        schemaVersion: FOLD_HELPER_SCHEMA_VERSION,
-        sourceHash,
-        toolchain,
-        // Placeholder paths keep the key independent of the install location and build directory.
-        compileArgv: buildFoldHelperCompileArgv({ sourceRoot: '', outputPath: '' }),
-      },
-      build: (outputPath) => compileFoldHelper(host, deadline, sourceRoot, outputPath),
-    });
-  } catch (error) {
-    throw asFoldHelperCacheError(error);
-  }
-}
-
-function createFoldHelperCacheHost(): NativeBuildHost {
-  // Routed through the Apple tool-provider scope, not `run`'s default `runCmd`, so a fold test can
-  // fake every exec this cache makes the same way it fakes the simctl dispatch (#2796). A narrow
-  // build host, not the full snapshot-bridge host: compilation needs no bridge socket and no
-  // target-process inspection (#2970).
-  return createNativeBuildHost(runAppleToolCommand);
+  return await ensureNativeHelperBinary({
+    ...input,
+    resolveSourceRoot: () => path.join(findProjectRoot(), 'apple', 'fold-helper'),
+    sourceFilenames: [FOLD_HELPER_SOURCE_FILENAME],
+    cacheDirectory: 'fold-helper',
+    schemaVersion: FOLD_HELPER_SCHEMA_VERSION,
+    lockDescription: FOLD_HELPER_LOCK_DESCRIPTION,
+    binaryFilename: FOLD_HELPER_BINARY_FILENAME,
+    buildTimeoutMs: FOLD_HELPER_BUILD_TIMEOUT_MS,
+    compileArgv: buildFoldHelperCompileArgv,
+    build: ({ host, deadline, sourceRoot, outputPath }) =>
+      compileFoldHelper(host, deadline, sourceRoot, outputPath),
+    wrapFailure: (error) =>
+      foldHelperBuildFailed({ ...error.buildDetails, cause: error.buildFailureCode }, error),
+  });
 }
 
 /**
@@ -137,11 +101,6 @@ async function compileFoldHelper(
  * details; a cancellation, and any error that is not a native-build failure (including the fold
  * helper's own `foldHelperBuildFailed`, already in its public shape), passes through unchanged.
  */
-function asFoldHelperCacheError(error: unknown): unknown {
-  if (!(error instanceof NativeBuildError) || error.buildFailureKind === 'cancelled') return error;
-  return foldHelperBuildFailed({ ...error.buildDetails, cause: error.buildFailureCode }, error);
-}
-
 function foldHelperBuildFailed(details: Readonly<Record<string, unknown>>, cause?: unknown) {
   return new AppError(
     'COMMAND_FAILED',
