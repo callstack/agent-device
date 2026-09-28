@@ -5,6 +5,7 @@ import { ownerFilesForCommand } from '@agent-device/command-registry/owner-files
 import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import { DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS } from '../../commands/management/device.ts';
 import { PUSH_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS } from '../../commands/management/push.ts';
+import { VIEWPORT_COMMAND_OUTPUT_SCHEMAS } from '../../commands/management/viewport.ts';
 import { INTERACTION_COMMAND_OUTPUT_SCHEMAS } from '../../commands/interaction/index.ts';
 import { RECORDING_COMMAND_OUTPUT_SCHEMAS } from '../../commands/recording/output-schemas.ts';
 import { REPLAY_COMMAND_OUTPUT_SCHEMAS } from '../../commands/replay/index.ts';
@@ -78,6 +79,7 @@ const PROJECTED_FAMILIES = [
   { name: 'interaction', schemas: INTERACTION_COMMAND_OUTPUT_SCHEMAS },
   { name: 'management-device', schemas: DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS },
   { name: 'management-push', schemas: PUSH_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS },
+  { name: 'management-viewport', schemas: VIEWPORT_COMMAND_OUTPUT_SCHEMAS },
   { name: 'recording', schemas: RECORDING_COMMAND_OUTPUT_SCHEMAS },
 ] as const;
 

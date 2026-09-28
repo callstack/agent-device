@@ -13,6 +13,7 @@ import {
 } from '../commands/command-input.ts';
 import { DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/device.ts';
 import { PUSH_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/push.ts';
+import { VIEWPORT_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/viewport.ts';
 import {
   INTERACTION_COMMAND_OUTPUT_SCHEMAS,
   postActionSurfaceChangeSchema,
@@ -153,12 +154,6 @@ function deriveSettleObservationSchemas(
 }
 
 const BASE_COMMAND_OUTPUT_SCHEMAS = {
-  // packages/contracts/src/viewport.ts
-  viewport: objectSchema(
-    { width: numberSchema(), height: numberSchema(), message: stringSchema() },
-    ['width', 'height', 'message'],
-  ),
-
   // packages/contracts/src/wait.ts — compact public daemon projection.
   wait: objectSchema(
     {
@@ -324,6 +319,7 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
   // and this map's `satisfies` still refuses a missing `CommandResultMap` key.
   ...DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS,
   ...PUSH_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS,
+  ...VIEWPORT_COMMAND_OUTPUT_SCHEMAS,
   ...INTERACTION_COMMAND_OUTPUT_SCHEMAS,
   ...RECORDING_COMMAND_OUTPUT_SCHEMAS,
   ...REPLAY_COMMAND_OUTPUT_SCHEMAS,
