@@ -9,7 +9,11 @@ import {
   type IosDeveloperDiskImageState,
   type IosDeveloperModeState,
 } from './host.ts';
-import { MAIN_THREAD_TIMEOUT_RUNNER_CODE, RUNNER_BUSY_RUNNER_CODE } from './runner-contract.ts';
+import {
+  MAIN_THREAD_TIMEOUT_RUNNER_CODE,
+  RUNNER_BUSY_RUNNER_CODE,
+  RUNNER_WEDGED_RUNNER_CODE,
+} from './runner-contract.ts';
 
 export const RUNNER_CACHE_RECOVERY_HINT =
   'If runner build products look stale or corrupted, run `pnpm clean:xcuitest` in a local checkout, or remove ~/.agent-device/apple-runner/derived, then retry.';
@@ -311,7 +315,7 @@ export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
     // threshold (#1105): only a restart cures it. The per-request recycle budget
     // still bounds how many boots one request pays for.
     reason: 'runner_main_thread_wedged',
-    match: { code: 'RUNNER_WEDGED' },
+    match: { code: RUNNER_WEDGED_RUNNER_CODE },
     verdicts: { sessionFatalReason: 'runner_main_thread_wedged' },
   },
   // ── Startup classification (#2680) ───────────────────────────────────────────────────────────

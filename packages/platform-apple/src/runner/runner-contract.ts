@@ -1,4 +1,9 @@
-import { AppError, createRequestCanceledError, toAppErrorCode } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  toAppErrorCode,
+  type DispatchDisclosure,
+} from '@agent-device/kernel/errors';
 import crypto from 'node:crypto';
 import { ALERT_NOT_FOUND_RUNNER_CODE } from '@agent-device/contracts/alert-contract';
 import type { DeviceRotation } from '@agent-device/contracts/device';
@@ -26,6 +31,12 @@ export const RUNNER_BUSY_RUNNER_CODE = 'RUNNER_BUSY';
  * immediate retry would only meet `RUNNER_BUSY`.
  */
 export const MAIN_THREAD_TIMEOUT_RUNNER_CODE = 'MAIN_THREAD_TIMEOUT';
+
+/**
+ * The runner's own code for a command it refused because abandoned main-thread work has occupied it
+ * past the wedge threshold (#1105). Like `RUNNER_BUSY`, the refused command never ran.
+ */
+export const RUNNER_WEDGED_RUNNER_CODE = 'RUNNER_WEDGED';
 
 /**
  * The runner's own code for a read whose session app is not running. No runner read launches the
@@ -260,10 +271,29 @@ const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlyMap<string, { retriable?: true
   ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, {}] as const),
 ]);
 
+/**
+ * Runner codes whose reply proves something other than "the command executed and failed". The
+ * refusals answer before the command runs; `MAIN_THREAD_TIMEOUT` abandons work that may still land.
+ * Every other structured reply comes from a command the runner executed.
+ */
+const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new Map([
+  [RUNNER_BUSY_RUNNER_CODE, 'no'],
+  [RUNNER_WEDGED_RUNNER_CODE, 'no'],
+  [APP_NOT_RUNNING_RUNNER_CODE, 'no'],
+  [SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE, 'no'],
+  [ALERT_NOT_FOUND_RUNNER_CODE, 'no'],
+  ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, 'no'] as const),
+  [MAIN_THREAD_TIMEOUT_RUNNER_CODE, 'unknown'],
+]);
+
 /** Wire code plus the details every path must publish for one runner-reported error code. */
 export type RunnerReportedErrorClass = Readonly<{
   code: AppError['code'];
-  details: Readonly<{ runnerErrorCode?: string; retriable?: true }>;
+  details: Readonly<{
+    runnerErrorCode?: string;
+    retriable?: true;
+    dispatched: DispatchDisclosure;
+  }>;
 }>;
 
 /**
@@ -281,7 +311,14 @@ export function classifyRunnerReportedError(
       : DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES.get(runnerErrorCode);
   return Object.freeze({
     code: diagnosticOnly ? 'COMMAND_FAILED' : toAppErrorCode(runnerErrorCode),
-    details: Object.freeze({ runnerErrorCode, ...diagnosticOnly }),
+    details: Object.freeze({
+      runnerErrorCode,
+      ...diagnosticOnly,
+      dispatched:
+        (runnerErrorCode === undefined
+          ? undefined
+          : RUNNER_ERROR_CODE_DISPATCH.get(runnerErrorCode)) ?? 'yes',
+    }),
   });
 }
 

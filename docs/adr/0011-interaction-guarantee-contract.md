@@ -150,6 +150,16 @@ Parity is enforced by **golden fixture tables**: JSON files under
 Drift between TS and Swift then turns CI red on whichever side changed,
 without needing a simulator.
 
+`contracts/fixtures/dispatch-disclosure.json` is the table for
+`AppErrorDetails.dispatched` on interaction failures: one row per producer
+event, each with the value it must leave. The ADR 0014 side-effect seam is the
+anchor: a failure raised before this request advanced the session runtime
+revision is `no`, one raised after it is `unknown` unless a producer proved
+`yes` (or `no`) first; the daemon applies that rule once, around interaction
+dispatch, and never overwrites a producer's value. Each row names its driver
+file by id prefix, that file drives the real producer, and a row marked
+`implementedBy` waits for the branch that ships it.
+
 For `responseFields`, one `buildInteractionResponseData(...)` becomes the only
 construction site for interaction response payloads (this deletes the class of
 bug where `fill @ref` rebuilt its response by hand and dropped `evidence`). A

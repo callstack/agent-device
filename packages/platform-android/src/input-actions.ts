@@ -17,7 +17,7 @@ import {
 } from '@agent-device/contracts/scroll-gesture';
 import { type TvRemoteButton, toAndroidTvRemoteKeyevent } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { sleep } from '@agent-device/host-kit/retry';
 import { runAndroidShell } from './adb.ts';
@@ -25,7 +25,25 @@ import { executeAndroidTouchPlan, readAndroidGestureViewportReading } from './to
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
 export async function pressAndroid(device: DeviceInfo, x: number, y: number): Promise<void> {
-  await runAndroidShell(device, ['input', 'tap', x, y]);
+  try {
+    await runAndroidShell(device, ['input', 'tap', x, y]);
+  } catch (error) {
+    throw discloseAdbInputDispatch(error);
+  }
+}
+
+/**
+ * An `adb shell input` failure after `dispatchedSteps` earlier inputs succeeded: adb that never
+ * started delivered nothing; once any input ran, the event may have reached the device.
+ */
+export function discloseAdbInputDispatch(error: unknown, dispatchedSteps = 0): unknown {
+  if (!(error instanceof AppError)) return error;
+  const neverStarted = error.code === 'TOOL_MISSING' && dispatchedSteps === 0;
+  return discloseDispatch(
+    error,
+    neverStarted ? 'no' : 'unknown',
+    dispatchedSteps > 0 ? { dispatchedSteps } : {},
+  );
 }
 
 export async function pressAndroidTvRemote(

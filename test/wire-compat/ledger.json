@@ -41,11 +41,13 @@
     "packages/kernel/src/contracts.ts#jsonRpcRequestSchema": "sha256:67e6b8a28b39a3883424a565ae7033c336dc2ea6b193e9b32bb98eb3e18dca7c",
     "packages/kernel/src/device.ts#PLATFORM_SELECTORS": "sha256:36e9da1cc660c0ddfb4cf52521f7f230341ff20e3ebda3405ba7c1799476c42d",
     "packages/kernel/src/device.ts#PlatformSelector": "sha256:61de3f003507ea2f53b396b0146c17670bf674a2db2132e19c462ca6c10cc8fd",
-    "packages/kernel/src/errors.ts#DaemonError": "sha256:ae49c9c9c8fb93bb6b31ab865f37cc8b0db6c1b6ff026cc2791425b772c162a6",
+    "packages/kernel/src/errors.ts#DaemonError": "sha256:d6cb31f516102d147bd4e4058ea4ace1d48584280f5b49205234c6dd5ada6e1c",
     "packages/kernel/src/errors.ts#DiagnosticsRecordRef": "sha256:c5ef4185d01814fbfddcdcf797ce892f6ebfe1fd3c3fa73c7560ce2d3b6fce60",
+    "packages/kernel/src/errors.ts#DispatchDisclosure": "sha256:c1ec9dcec06b23bb3b001fd03d6211d432b9635049d9ca2369a825c5a2898e8e",
     "packages/kernel/src/errors.ts#ErrorCause": "sha256:2f38679b0e9ec997fe8d94b5d5025404fd6ebb21f2c91ed2ab5d4133e578dfc4",
+    "packages/kernel/src/errors.ts#ErrorWireDetails": "sha256:79169f66b0935b8140c0e8329a8cdfd1db368fdadf34deeed404ea5ae7b6afe0",
     "packages/kernel/src/errors.ts#NormalizeErrorContext": "sha256:98567378fc456335c8751474152edcf989e676ad0d9f4b54afdd8e6a96b03ae2",
-    "packages/kernel/src/errors.ts#NormalizedError": "sha256:dfe0e0066292d29eec7f6defea648dc488a6c0b62c268c3dac8233f8556e4bbb",
+    "packages/kernel/src/errors.ts#NormalizedError": "sha256:99d880cce96cf364c4937045c704f2e34a870fef37af35c2115df33f8e8355af",
     "packages/kernel/src/errors.ts#normalizeError": "sha256:5d9f906fd326676b4c3095cd6bd675c784cb26f36f4b8344a108cf5f7628f9dc",
     "packages/kernel/src/errors.ts#readDiagnosticsRecordRef": "sha256:3a210f401221c0a15eb75d488450034885c7b73be39f5e93424c72874d14c395",
     "src/commands/cli-grammar/types.ts#DaemonCommandRequest": "sha256:ea3f4118244711f0eaec0e471f62b0de42ca97181c085df165d37b63301a4619",
@@ -224,13 +226,13 @@
     },
     {
       "declaration": "packages/kernel/src/errors.ts#DaemonError",
-      "digest": "sha256:ae49c9c9c8fb93bb6b31ab865f37cc8b0db6c1b6ff026cc2791425b772c162a6",
-      "rationale": "#1801 and #1862 add optional error fields, most recently the structured `cause`. A peer on protocol 2 that does not send them is unchanged, and one that does not read them keeps parsing every field it read before."
+      "digest": "sha256:d6cb31f516102d147bd4e4058ea4ace1d48584280f5b49205234c6dd5ada6e1c",
+      "rationale": "details.dispatched is a new OPTIONAL field inside details, which was already an open record: an older peer ignores the key and every existing field keeps its shape. It carries no | yes | unknown for whether a failed interaction reached the device (the dispatch-disclosure golden table)."
     },
     {
       "declaration": "packages/kernel/src/errors.ts#NormalizedError",
-      "digest": "sha256:dfe0e0066292d29eec7f6defea648dc488a6c0b62c268c3dac8233f8556e4bbb",
-      "rationale": "#1801 and #1862 add optional fields to the normalized error the daemon serializes, most recently `cause`; they are omitted unless set, and a released client ignores them otherwise."
+      "digest": "sha256:99d880cce96cf364c4937045c704f2e34a870fef37af35c2115df33f8e8355af",
+      "rationale": "details.dispatched is a new OPTIONAL field inside details, which was already an open record: an older peer ignores the key and every existing field keeps its shape. It carries no | yes | unknown for whether a failed interaction reached the device (the dispatch-disclosure golden table)."
     },
     {
       "declaration": "src/daemon-client/daemon-client-rpc.ts#handleDaemonHttpResponseBody",

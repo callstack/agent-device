@@ -1,0 +1,133 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { afterEach, beforeEach, test, vi } from 'vitest';
+import './test-utils/android-host-test-setup.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import {
+  assertDispatchDisclosureDriversMatchRows,
+  DISPATCH_DISCLOSURE_TABLE_PATH,
+  dispatchDisclosureRowsOwnedBy,
+} from '@agent-device/contracts/dispatch-disclosure-fixtures';
+import { withAndroidAdbProvider, type AndroidAdbExecutor } from '../adb-executor.ts';
+import { pressAndroid } from '../input-actions.ts';
+import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
+import { typeAndroid } from '../text-input.ts';
+import { executeAndroidTouchHelperPlan } from '../touch-helper.ts';
+import { lowerAndroidTouchPlan } from '../touch-plan-lowering.ts';
+import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from './test-utils/android-snapshot-helper.ts';
+import { withFakeAdb } from './test-utils/fake-adb.ts';
+import {
+  ANDROID_TOUCH_HELPER_MANIFEST as manifest,
+  androidTouchHelperResultRecord as resultRecord,
+  currentVersionAdb,
+  flingPlan,
+  makeIsolatedDevice,
+} from './touch-helper.fixtures.ts';
+
+// contracts/fixtures/dispatch-disclosure.json, adb-input and one-shot helper rows: each drives the
+// production entry point over a scripted adb and asserts the `details.dispatched` it fails with.
+
+vi.mock('../helper-package-install.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../helper-package-install.ts')>();
+  return {
+    ...actual,
+    resolveAndroidHelperArtifact: vi.fn(async () => ({
+      apkPath: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.apkPath,
+      manifest: { ...manifest, sha256: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.manifest.sha256 },
+    })),
+  };
+});
+
+beforeEach(async () => {
+  delete process.env.AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION;
+  await resetAndroidSnapshotHelperSessions();
+});
+
+afterEach(async () => {
+  delete process.env.AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION;
+  await resetAndroidSnapshotHelperSessions();
+});
+
+function isShellInput(args: readonly string[], subcommand: 'tap' | 'text'): boolean {
+  return args[0] === 'shell' && args[1] === 'input' && args[2] === subcommand;
+}
+
+async function tapWithAdbAnswer(answer: Error | { exitCode: number; stderr: string }) {
+  await withFakeAdb(
+    (args) => (isShellInput(args, 'tap') ? answer : undefined),
+    async ({ device }) => await pressAndroid(device, 10, 20),
+  );
+}
+
+async function typeFailingOnSecondChunk(): Promise<void> {
+  let textChunks = 0;
+  await withFakeAdb(
+    (args) => {
+      if (!isShellInput(args, 'text')) return undefined;
+      textChunks += 1;
+      return textChunks === 2 ? { exitCode: 1, stderr: 'error: device offline' } : undefined;
+    },
+    async ({ device }) => await typeAndroid(device, 'filed the expense'),
+  );
+}
+
+async function oneShotGesture(instrument: AndroidAdbExecutor): Promise<void> {
+  const device = makeIsolatedDevice();
+  await withAndroidAdbProvider(
+    { exec: currentVersionAdb(instrument) },
+    { serial: device.id },
+    async () => await executeAndroidTouchHelperPlan(device, lowerAndroidTouchPlan(flingPlan())),
+  );
+}
+
+const HELPER_REPORTED_FAILURE = resultRecord({
+  ok: 'false',
+  errorType: 'java.lang.IllegalStateException',
+  message: 'injectInputEvent returned false',
+});
+const HELPER_RESULT = resultRecord({ ok: 'true', kind: 'swipe', injectedEvents: '4' });
+
+const DRIVERS: Record<string, { drive: () => Promise<unknown>; dispatchedSteps?: number }> = {
+  'android-adb.input-tap.tool-missing': {
+    drive: () => tapWithAdbAnswer(new AppError('TOOL_MISSING', 'adb not found in PATH')),
+  },
+  'android-adb.input-tap.failed': {
+    drive: () => tapWithAdbAnswer({ exitCode: 1, stderr: 'error: device offline' }),
+  },
+  'android-adb.input-text.failed-after-chunk': {
+    drive: typeFailingOnSecondChunk,
+    dispatchedSteps: 1,
+  },
+  'android-helper.gesture.reported-failure': {
+    drive: () =>
+      oneShotGesture(async () => ({ exitCode: 0, stdout: HELPER_REPORTED_FAILURE, stderr: '' })),
+  },
+  'android-helper.gesture.failed-after-result': {
+    drive: () => oneShotGesture(async () => ({ exitCode: 1, stdout: HELPER_RESULT, stderr: '' })),
+  },
+  'android-helper.gesture.no-parseable-output': {
+    drive: () => oneShotGesture(async () => ({ exitCode: 1, stdout: '', stderr: 'boom' })),
+  },
+};
+
+const ROWS = dispatchDisclosureRowsOwnedBy(
+  import.meta.url,
+  fs.readFileSync(DISPATCH_DISCLOSURE_TABLE_PATH, 'utf8'),
+);
+
+test('every adb-input and one-shot helper dispatch-disclosure row has exactly one driver', () => {
+  assertDispatchDisclosureDriversMatchRows(ROWS, Object.keys(DRIVERS));
+});
+
+for (const row of ROWS) {
+  test(`${row.id}: ${row.trigger} → dispatched ${row.dispatched}`, async () => {
+    const driver = DRIVERS[row.id];
+    assert.ok(driver, `no driver for ${row.id}`);
+    await assert.rejects(driver.drive(), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.dispatched, row.dispatched);
+      assert.equal(error.details?.dispatchedSteps, driver.dispatchedSteps);
+      return true;
+    });
+  });
+}

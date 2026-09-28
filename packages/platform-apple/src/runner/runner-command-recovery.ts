@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type DispatchDisclosure, discloseDispatch } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from './host.ts';
 import {
@@ -7,6 +7,7 @@ import {
   isRunnerResponseOk,
   readRunnerResponseData,
   type RunnerCommand,
+  type RunnerReportedErrorClass,
   type RunnerResponsePayload,
 } from './runner-contract.ts';
 import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';
@@ -15,8 +16,20 @@ import { executeRunnerCommandWithSession, type RunnerSession } from './runner-se
 
 type RunnerTransportRecovery =
   | { type: 'recovered'; data: Record<string, unknown>; reason: string; lifecycleState?: string }
-  | { type: 'skipInvalidation'; error: AppError; reason: string; lifecycleState?: string }
-  | { type: 'retainInvalidation'; error?: AppError; reason: string; lifecycleState?: string };
+  | {
+      type: 'skipInvalidation';
+      error: AppError;
+      dispatched: DispatchDisclosure;
+      reason: string;
+      lifecycleState?: string;
+    }
+  | {
+      type: 'retainInvalidation';
+      error?: AppError;
+      dispatched: DispatchDisclosure;
+      reason: string;
+      lifecycleState?: string;
+    };
 
 type RunnerTransportRecoveryContext = {
   command: RunnerCommand;
@@ -66,12 +79,15 @@ async function applyRunnerTransportRecovery(
   recovery: RunnerTransportRecovery | undefined,
   context: RunnerTransportRecoveryContext,
 ): Promise<Record<string, unknown>> {
-  if (!recovery) return await retainRunnerInvalidation(context, 'status_recovery_unavailable');
+  if (!recovery) {
+    return await retainRunnerInvalidation(context, 'status_recovery_unavailable', 'unknown');
+  }
   if (recovery.type === 'recovered') return recoverRunnerResponse(recovery, context);
   if (recovery.type === 'skipInvalidation') throw skipRunnerInvalidation(recovery, context);
   return await retainRunnerInvalidation(
     context,
     recovery.reason,
+    recovery.dispatched,
     recovery.lifecycleState,
     recovery.error,
   );
@@ -104,12 +120,13 @@ function skipRunnerInvalidation(
     reason: recovery.reason,
     lifecycleState: recovery.lifecycleState,
   });
-  return recovery.error;
+  return discloseDispatch(recovery.error, recovery.dispatched);
 }
 
 async function retainRunnerInvalidation(
   context: RunnerTransportRecoveryContext,
   reason: string,
+  dispatched: DispatchDisclosure,
   lifecycleState?: string,
   error?: AppError,
 ): Promise<never> {
@@ -122,7 +139,7 @@ async function retainRunnerInvalidation(
     lifecycleState,
   });
   await context.invalidateSession(context.session, context.invalidationReason);
-  throw error ?? context.transportError;
+  throw discloseDispatch(error ?? context.transportError, dispatched);
 }
 
 async function tryRecoverRunnerCommandAfterTransportError(
@@ -156,7 +173,7 @@ async function tryRecoverRunnerCommandAfterTransportError(
         ...readinessPreflight,
       },
     });
-    return { type: 'retainInvalidation', reason: 'status_probe_failed' };
+    return { type: 'retainInvalidation', reason: 'status_probe_failed', dispatched: 'unknown' };
   }
 
   const lifecycleState = typeof status.lifecycleState === 'string' ? status.lifecycleState : '';
@@ -230,11 +247,19 @@ function handleRunnerCommandStatusRecovery(
   }
 
   if (lifecycleState === 'failed') {
+    // The journal's code means exactly what the same code means on a live response, so read it with
+    // the one classifier (#2484 follow-up): a `RUNNER_BUSY` recovered from the lifecycle journal must
+    // stay `COMMAND_FAILED` + retriable, or a polling `wait` sees an unclassified failure and
+    // surrenders its budget to a condition that clears on its own.
+    const classification = classifyRunnerReportedError(
+      typeof status.lifecycleErrorCode === 'string' ? status.lifecycleErrorCode : undefined,
+    );
     return {
       type: 'skipInvalidation',
       reason: 'runner_reported_failure',
       lifecycleState,
-      error: runnerStatusFailureError(status, command, transportError, options),
+      dispatched: classification.details.dispatched,
+      error: runnerStatusFailureError(status, classification, command, transportError, options),
     };
   }
 
@@ -243,6 +268,7 @@ function handleRunnerCommandStatusRecovery(
       type: 'skipInvalidation',
       reason: 'command_still_in_flight',
       lifecycleState,
+      dispatched: 'unknown',
       error: runnerStatusInFlightError(lifecycleState, command, transportError, options),
     };
   }
@@ -251,6 +277,7 @@ function handleRunnerCommandStatusRecovery(
     type: 'retainInvalidation',
     reason: lifecycleState ? 'unknown_lifecycle_state' : 'missing_lifecycle_state',
     lifecycleState,
+    dispatched: 'unknown',
     error: new AppError(
       'COMMAND_FAILED',
       `Runner command "${command.command}" lost its transport response and lifecycle status was ${lifecycleState ? `"${lifecycleState}"` : 'missing'}, so agent-device invalidated the runner session instead of replaying the command.`,
@@ -287,6 +314,7 @@ function handleCompletedRunnerStatus(
     return {
       type: 'skipInvalidation',
       error: transportError,
+      dispatched: 'yes',
       reason: 'read_only_completed_without_retained_response',
       lifecycleState: 'completed',
     };
@@ -296,6 +324,7 @@ function handleCompletedRunnerStatus(
     type: 'skipInvalidation',
     reason: 'completed_without_retained_response',
     lifecycleState: 'completed',
+    dispatched: 'yes',
     error: new AppError(
       'COMMAND_FAILED',
       `Runner command "${command.command}" completed after the transport response was lost, but no recoverable response was retained.`,
@@ -316,12 +345,11 @@ function handleCompletedRunnerStatus(
 
 function runnerStatusFailureError(
   status: Record<string, unknown>,
+  classification: RunnerReportedErrorClass,
   command: RunnerCommand,
   transportError: AppError,
   options: AppleRunnerCommandOptions,
 ): AppError {
-  const errorCode =
-    typeof status.lifecycleErrorCode === 'string' ? status.lifecycleErrorCode : undefined;
   const errorMessage =
     typeof status.lifecycleErrorMessage === 'string'
       ? status.lifecycleErrorMessage
@@ -329,11 +357,6 @@ function runnerStatusFailureError(
   const hint =
     typeof status.lifecycleErrorHint === 'string' ? status.lifecycleErrorHint : undefined;
   const readinessPreflight = readReadinessPreflightRecoveryDetails(transportError);
-  // The journal's code means exactly what the same code means on a live response, so read it with
-  // the one classifier (#2484 follow-up): a `RUNNER_BUSY` recovered from the lifecycle journal must
-  // stay `COMMAND_FAILED` + retriable, or a polling `wait` sees an unclassified failure and
-  // surrenders its budget to a condition that clears on its own.
-  const classification = classifyRunnerReportedError(errorCode);
   return new AppError(
     classification.code,
     errorMessage,

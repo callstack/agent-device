@@ -1,0 +1,229 @@
+[
+  {
+    "id": "daemon.refusal-before-seam",
+    "phase": "before-seam",
+    "producer": "daemon",
+    "trigger": "interaction failure raised before expireRefFrame advanced the session runtime revision",
+    "dispatched": "no"
+  },
+  {
+    "id": "daemon.unclassified-after-seam",
+    "phase": "after-seam",
+    "producer": "daemon",
+    "trigger": "interaction failure raised after expireRefFrame with no producer verdict",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "post-action-guard.android-press-left-app",
+    "phase": "after-seam",
+    "producer": "post-action-guard",
+    "trigger": "assertAndroidPressStayedInApp observed an escape surface in the foreground",
+    "dispatched": "yes"
+  },
+  {
+    "id": "ios-runner.reply.RUNNER_BUSY",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code RUNNER_BUSY: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.RUNNER_WEDGED",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code RUNNER_WEDGED: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.APP_NOT_RUNNING",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code APP_NOT_RUNNING: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.SCROLL_KEYBOARD_OCCLUDES_SURFACE",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code SCROLL_KEYBOARD_OCCLUDES_SURFACE: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.ALERT_NOT_FOUND",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code ALERT_NOT_FOUND: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.APP_SCREEN_WINDOW_UNRESOLVED",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code APP_SCREEN_WINDOW_UNRESOLVED: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.APP_SCREEN_UNRESOLVED",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code APP_SCREEN_UNRESOLVED: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.APP_SCREEN_CAPTURE_UNRENDERABLE",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code APP_SCREEN_CAPTURE_UNRENDERABLE: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.MAIN_THREAD_TIMEOUT",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code MAIN_THREAD_TIMEOUT: abandoned work may still land",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.reply.executed-failure",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with any other code, e.g. XCTEST_RECORDED_FAILURE",
+    "dispatched": "yes"
+  },
+  {
+    "id": "ios-runner.status.failed",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "transport lost; status probe reports lifecycleState failed",
+    "dispatched": "yes"
+  },
+  {
+    "id": "ios-runner.status.failed-RUNNER_BUSY",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "transport lost; status probe reports lifecycleState failed with journal code RUNNER_BUSY",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.status.completed-without-retained-reply",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "transport lost; status probe reports lifecycleState completed without a readable retained reply",
+    "dispatched": "yes"
+  },
+  {
+    "id": "ios-runner.status.accepted",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "transport lost; status probe reports lifecycleState accepted",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.status.started",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "transport lost; status probe reports lifecycleState started",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.status.notAccepted",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "transport lost; status probe reports lifecycleState notAccepted (the journal may not have survived a restart)",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.status.probe-failed",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "transport lost; the status probe itself failed",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.status.unavailable",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "transport lost; the command carries no commandId to probe",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-adb.input-tap.tool-missing",
+    "phase": "after-seam",
+    "producer": "android-adb",
+    "trigger": "adb input tap could not start: TOOL_MISSING",
+    "dispatched": "no"
+  },
+  {
+    "id": "android-adb.input-tap.failed",
+    "phase": "after-seam",
+    "producer": "android-adb",
+    "trigger": "adb input tap started and failed",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-adb.input-text.failed-after-chunk",
+    "phase": "after-seam",
+    "producer": "android-adb",
+    "trigger": "adb input text failed after at least one chunk was typed (details.dispatchedSteps)",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-helper.gesture.reported-failure",
+    "phase": "after-seam",
+    "producer": "android-helper",
+    "trigger": "one-shot helper gesture returned a parsed final result with ok=false",
+    "dispatched": "yes"
+  },
+  {
+    "id": "android-helper.gesture.failed-after-result",
+    "phase": "after-seam",
+    "producer": "android-helper",
+    "trigger": "one-shot helper gesture returned a parsed final result and exited non-zero",
+    "dispatched": "yes"
+  },
+  {
+    "id": "android-helper.gesture.no-parseable-output",
+    "phase": "after-seam",
+    "producer": "android-helper",
+    "trigger": "one-shot helper gesture failed before returning parseable output",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-helper.gesture-session.reported-failure",
+    "phase": "after-seam",
+    "producer": "android-helper",
+    "trigger": "persistent helper session answered the gesture with ok=false",
+    "dispatched": "yes"
+  },
+  {
+    "id": "android-helper.gesture-session.transport-failure",
+    "phase": "after-seam",
+    "producer": "android-helper",
+    "trigger": "persistent helper session transport failed during the gesture",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "webdriver.connect-refused",
+    "phase": "after-seam",
+    "producer": "webdriver",
+    "trigger": "connect-refused",
+    "dispatched": "no",
+    "implementedBy": "fix/webdriver-no-mutation-resend"
+  },
+  {
+    "id": "webdriver.timeout-after-send",
+    "phase": "after-seam",
+    "producer": "webdriver",
+    "trigger": "timeout-after-send",
+    "dispatched": "unknown",
+    "implementedBy": "fix/webdriver-no-mutation-resend"
+  },
+  {
+    "id": "webdriver.http-5xx-after-send",
+    "phase": "after-seam",
+    "producer": "webdriver",
+    "trigger": "http-5xx-after-send",
+    "dispatched": "unknown",
+    "implementedBy": "fix/webdriver-no-mutation-resend"
+  }
+]
