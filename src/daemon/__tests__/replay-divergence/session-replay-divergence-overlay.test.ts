@@ -1,27 +1,27 @@
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
-import { makeAndroidSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
 import {
   ANDROID_IME_CAPTURE_RAW_NODES,
   walkNonRawAndroidFixture,
-} from '../../../../__tests__/test-utils/android-ui-hierarchy-fixtures.ts';
-import { SessionStore } from '../../../session-store.ts';
-import { buildReplayFailureDivergence } from '../session-replay-divergence.ts';
+} from '../../../__tests__/test-utils/android-ui-hierarchy-fixtures.ts';
+import { SessionStore } from '../../session-store.ts';
+import { buildReplayFailureDivergence } from '../../replay/internal/session-replay-divergence.ts';
 import { replayDivergenceForTest } from './replay-session-fixture.ts';
-import { refFrameScope, refFrameState } from '../../../ref-frame.ts';
+import { refFrameScope, refFrameState } from '../../ref-frame.ts';
 import {
   legacyDispatchCapture,
   resetLegacySnapshotCapture,
-} from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
-import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
+} from '../legacy-snapshot-capture-fixture.ts';
+import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
   return { ...actual, resolveTargetDevice: vi.fn() };
 });
-vi.mock('../../../snapshot-interactor-capture.ts', () => ({
+vi.mock('../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 

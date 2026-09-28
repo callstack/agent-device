@@ -29,7 +29,7 @@ import { SessionStore } from '../../session-store.ts';
 import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { baseReplayRequest as baseReq } from '../../replay/__tests__/session-replay-runtime.fixtures.ts';
-import { replaySessionForTest } from '../../replay/internal/__tests__/replay-session-fixture.ts';
+import { replaySessionForTest } from '../replay-divergence/replay-session-fixture.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   captureSnapshotThroughLegacyDispatchFixture,

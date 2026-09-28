@@ -1,5 +1,5 @@
 import { test, expect, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 /**
  * #1555 structural-quality review ("topology fix... its subject now lives
@@ -40,14 +40,14 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
-import { SessionStore } from '../../../session-store.ts';
-import type { DaemonRequest } from '../../../daemon-request.ts';
-import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { runReplayForTest } from '../../replay/__tests__/replay-command-fixture.ts';
+import { SessionStore } from '../../session-store.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
+import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
-} from '../../__tests__/session-replay-runtime.fixtures.ts';
+} from '../../replay/__tests__/session-replay-runtime.fixtures.ts';
 
 test('--keep-session suppresses a close that is terminal among executable actions', async () => {
   const root = mkdtempForTestSync('agent-device-replay-keep-marker-tail-');

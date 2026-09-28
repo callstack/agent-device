@@ -2,14 +2,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
-import { SessionStore } from '../../../session-store.ts';
-import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { runReplayForTest } from '../../replay/__tests__/replay-command-fixture.ts';
+import { SessionStore } from '../../session-store.ts';
+import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
-} from '../../__tests__/session-replay-runtime.fixtures.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+} from '../../replay/__tests__/session-replay-runtime.fixtures.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 /**
  * #1478 P5 follow-up (one daemon-owned artifact ledger): artifact-path

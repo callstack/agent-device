@@ -1,23 +1,23 @@
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import { SessionStore } from '../../../session-store.ts';
-import { captureDivergenceObservation } from '../session-replay-divergence.ts';
+import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { SessionStore } from '../../session-store.ts';
+import { captureDivergenceObservation } from '../../replay/internal/session-replay-divergence.ts';
 import { replayDivergenceForTest } from './replay-session-fixture.ts';
 import {
   legacyDispatchCapture,
   resetLegacySnapshotCapture,
-} from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
-import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
+} from '../legacy-snapshot-capture-fixture.ts';
+import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
   return { ...actual, resolveTargetDevice: vi.fn() };
 });
-vi.mock('../../../snapshot-interactor-capture.ts', () => ({
+vi.mock('../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 // Stubs the Android freshness-retry delay to a no-op so the retry branch runs without

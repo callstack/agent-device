@@ -1,5 +1,5 @@
-import { createReplaySession } from '../../../handlers/session-replay-command.ts';
-import type { SessionStore } from '../../../session-store.ts';
+import { createReplaySession } from '../../handlers/session-replay-command.ts';
+import type { SessionStore } from '../../session-store.ts';
 
 export function replaySessionForTest(sessionStore: SessionStore, sessionName: string) {
   return createReplaySession(sessionName, '', sessionStore);

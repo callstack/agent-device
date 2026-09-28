@@ -1,26 +1,26 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../../../snapshot-interactor-capture.ts', () => ({
+vi.mock('../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
-import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
-import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
+import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { ReplayDivergence } from '@agent-device/contracts/divergence';
-import { expireRefFrame, refFrameScope, refFrameState, refFrameTree } from '../../../ref-frame.ts';
-import { markSessionPartialRefsIssued, setSessionSnapshot } from '../../../session-snapshot.ts';
-import { SessionStore } from '../../../session-store.ts';
-import { captureDivergenceObservation } from '../session-replay-divergence.ts';
-import { boundReplayDivergenceForSession } from '../session-replay-divergence-publication.ts';
+import { expireRefFrame, refFrameScope, refFrameState, refFrameTree } from '../../ref-frame.ts';
+import { markSessionPartialRefsIssued, setSessionSnapshot } from '../../session-snapshot.ts';
+import { SessionStore } from '../../session-store.ts';
+import { captureDivergenceObservation } from '../../replay/internal/session-replay-divergence.ts';
+import { boundReplayDivergenceForSession } from '../../replay/internal/session-replay-divergence-publication.ts';
 import { replaySessionForTest } from './replay-session-fixture.ts';
 import {
   captureSnapshotThroughLegacyDispatchFixture,
   legacyDispatchCapture,
-} from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
+} from '../legacy-snapshot-capture-fixture.ts';
 
 const mockDispatchCommand = legacyDispatchCapture;
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);

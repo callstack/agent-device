@@ -1,5 +1,5 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
@@ -7,29 +7,29 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
   return { ...actual, resolveTargetDevice: vi.fn() };
 });
 
-vi.mock('../../../snapshot-interactor-capture.ts', () => ({
+vi.mock('../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
-import { SessionStore } from '../../../session-store.ts';
+import { runReplayForTest } from '../../replay/__tests__/replay-command-fixture.ts';
+import { SessionStore } from '../../session-store.ts';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import {
   captureSnapshotThroughLegacyDispatchFixture,
   legacyDispatchCapture,
-} from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
-import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
+} from '../legacy-snapshot-capture-fixture.ts';
+import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
 import {
   makeAndroidSession,
   makeIosSession,
-} from '../../../../__tests__/test-utils/session-factories.ts';
+} from '../../../__tests__/test-utils/session-factories.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
-} from '../../__tests__/session-replay-runtime.fixtures.ts';
-import { replayCoordinatorForTest } from './replay-session-fixture.ts';
+} from '../../replay/__tests__/session-replay-runtime.fixtures.ts';
+import { replayCoordinatorForTest } from '../replay-divergence/replay-session-fixture.ts';
 
 const mockDispatchCommand = legacyDispatchCapture;
 const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
