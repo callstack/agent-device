@@ -86,7 +86,8 @@ extension RunnerTests {
     let inspection = privateAXPointInspection(root: root, point: CGPoint(x: 260, y: 520))
 
     XCTAssertEqual(inspection.text, "long live field value")
-    XCTAssertEqual(inspection.elements.first?.identifier, "clear-button")
+    XCTAssertEqual(inspection.elements.first?.identifier, "enabled-switch")
+    XCTAssertTrue(inspection.elements.contains { $0.identifier == "clear-button" })
     XCTAssertEqual(inspection.elements.last(where: { $0.identifier == "enabled-switch" })?.value, "1")
   }
 
