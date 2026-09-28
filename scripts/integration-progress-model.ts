@@ -263,6 +263,27 @@ function maskScenarioStringsAndComments(text) {
       }
       continue;
     }
+    if (char === '/' && beginsRegexLiteral(chars, index)) {
+      chars[index++] = ' ';
+      let inCharacterClass = false;
+      while (index < chars.length && chars[index] !== '\n') {
+        const current = chars[index];
+        if (current === '\\') {
+          chars[index++] = ' ';
+          if (index < chars.length && chars[index] !== '\n') chars[index++] = ' ';
+          continue;
+        }
+        if (current === '[') inCharacterClass = true;
+        if (current === ']') inCharacterClass = false;
+        if (current === '/' && !inCharacterClass) {
+          chars[index++] = ' ';
+          while (index < chars.length && /[a-z]/i.test(chars[index])) chars[index++] = ' ';
+          break;
+        }
+        chars[index++] = ' ';
+      }
+      continue;
+    }
     if (char === '"' || char === "'" || char === '`') {
       const quote = char;
       chars[index++] = ' ';
@@ -285,6 +306,12 @@ function maskScenarioStringsAndComments(text) {
     index += 1;
   }
   return chars.join('');
+}
+
+function beginsRegexLiteral(chars, index) {
+  let previous = index - 1;
+  while (previous >= 0 && /\s/.test(chars[previous])) previous -= 1;
+  return previous < 0 || /[(:,=!?&|;{[>]/.test(chars[previous]);
 }
 
 function findEnclosingBrace(code, position) {

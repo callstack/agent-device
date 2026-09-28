@@ -156,6 +156,17 @@ test('inspectPoint rejects a malformed runner payload instead of reporting an ho
   );
 });
 
+test('inspectPoint preserves an empty elements payload as an honest miss', async () => {
+  const interactor = createAppleInteractor(
+    IOS_SIMULATOR,
+    {},
+    recordingRunnerProvider([], { readText: { elements: [] } }),
+  );
+
+  const result = await interactor.inspectPoint!({ x: 10, y: 20 });
+  assert.deepEqual(result, { elements: [] });
+});
+
 test('inspectPoint rejects non-finite accessibility frames', async () => {
   const interactor = createAppleInteractor(
     IOS_SIMULATOR,

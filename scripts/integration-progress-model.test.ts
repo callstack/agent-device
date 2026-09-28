@@ -28,6 +28,18 @@ test('integration progress scopes point coordinates to each inspect-point step o
   assert.equal(countInspectPointCoordinateReferences(source, 1), 1);
 });
 
+test('integration progress ignores regex literals while finding inspect-point steps', () => {
+  const source = String.raw`
+    const steps = [
+      { command: 'inspect-point', positionals: ['1', '2'], assert: (response) => /[{]/.test(response.json) },
+      { command: 'inspect-point', positionals: ['3', '4'] },
+    ];
+  `;
+
+  assert.equal(countInspectPointCoordinateReferences(source, 0), 2);
+  assert.equal(countInspectPointCoordinateReferences(source, 1), 2);
+});
+
 test('integration progress counts explicit generic Apple host-tool usage only', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'agent-device-progress-'));
   try {
