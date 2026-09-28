@@ -4,7 +4,7 @@ import {
   isRequestCanceledError,
 } from '@agent-device/kernel/errors';
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
-import { beforeEach, onTestFinished, test, vi } from 'vitest';
+import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,7 +15,6 @@ import {
   createRunnerPhaseBudget,
   markRunnerXctestrunArtifactBadForRun,
   resolveExpectedRunnerCacheMetadata,
-  resolveRunnerDerivedPath,
 } from '../runner-xctestrun.ts';
 import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
 import { digestFile } from './digest-file.ts';
@@ -228,15 +227,6 @@ test('ensureXctestrunArtifact aborts only the disconnected request build and pre
   withoutRunnerDerivedPathEnv();
   const canceledDevice = iosSimulator;
   const survivorDevice = macOsDevice;
-  for (const device of [canceledDevice, survivorDevice]) {
-    const derived = resolveRunnerDerivedPath(
-      device,
-      resolveExpectedRunnerCacheMetadata(device, repoRoot),
-    );
-    onTestFinished(async () => {
-      await fs.promises.rm(derived, { recursive: true, force: true });
-    });
-  }
 
   const canceledController = new AbortController();
   const survivorController = new AbortController();

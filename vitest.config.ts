@@ -205,7 +205,11 @@ export default defineConfig({
           // package from importing root utilities directly).
           name: 'apple-runner',
           include: ['packages/platform-apple/src/runner/**/*.test.ts'],
-          setupFiles: [...SETUP_FILES, 'scripts/vitest-apple-runner-host-setup.ts'],
+          setupFiles: [
+            ...SETUP_FILES,
+            'scripts/vitest-apple-runner-home-setup.ts',
+            'scripts/vitest-apple-runner-host-setup.ts',
+          ],
         },
       },
       {
