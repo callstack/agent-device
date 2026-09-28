@@ -383,7 +383,7 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     multiple: true,
     usageLabel: '--launch-env <KEY=VALUE>',
     usageDescription:
-      'open: repeatable iOS Simulator child-process environment entry; values are treated as sensitive',
+      'open: repeatable iOS Simulator child-process environment entry; values are treated as sensitive. For Android intent extras, use --launch-args.',
     projectConfig: false,
     recorded: false,
   },
