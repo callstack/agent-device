@@ -51,7 +51,6 @@ import { DEVICE_KINDS, DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/ke
  * trait (#1652).
  */
 
-
 const artifactSchema = objectSchema(
   {
     field: stringSchema(),
