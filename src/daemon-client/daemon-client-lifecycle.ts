@@ -11,6 +11,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 
+import { isAgentDeviceDaemonProcess } from '../daemon-process.ts';
 import { findUnrecoveredRepairCommitFailure } from '../session-repair-tombstone.ts';
 import {
   resolveDaemonPaths,
@@ -76,6 +77,8 @@ type DaemonStartupWaitResult =
   | { kind: 'timeout' };
 
 const DAEMON_STARTUP_TIMEOUT_MS = 15_000;
+const LIVE_DAEMON_PROBE_RETRIES = 3;
+const LIVE_DAEMON_PROBE_RETRY_DELAY_MS = 200;
 const DAEMON_STARTUP_ATTEMPTS = 2;
 const DAEMON_STARTUP_LOG_TAIL_BYTES = 64_000;
 const LOOPBACK_BLOCK_LIST = new net.BlockList();
@@ -192,7 +195,7 @@ async function readReusableLocalDaemon(settings: DaemonClientSettings): Promise<
   const existing = readDaemonInfo(settings.paths.infoPath);
   if (!existing) return null;
 
-  const viaClientTransport = await canConnectReusableDaemon(existing, settings.transportPreference);
+  const viaClientTransport = await canReachReusableDaemon(existing, settings.transportPreference);
   const decision = await resolveDaemonTakeover(existing, {
     viaClientTransport,
     onAnyAdvertisedTransport: async () =>
@@ -207,6 +210,32 @@ async function readReusableLocalDaemon(settings: DaemonClientSettings): Promise<
   await stopDaemonProcessForTakeover(existing);
   removeDaemonInfo(settings.paths.infoPath);
   return null;
+}
+
+/**
+ * A daemon whose process is still the one its metadata recorded is probed again before it can be
+ * judged unreachable. A probe's budget is wall-clock time on this client's event loop, so a client
+ * that stalls past it (a large synchronous parse, a GC pause on a loaded host) reads a listening
+ * daemon as unreachable, and replacing it ends every session the daemon holds.
+ */
+async function canReachReusableDaemon(
+  info: DaemonInfo,
+  preference: DaemonTransportPreference,
+): Promise<boolean> {
+  if (await canConnectReusableDaemon(info, preference)) return true;
+  for (let retry = 1; retry <= LIVE_DAEMON_PROBE_RETRIES; retry += 1) {
+    if (!isAgentDeviceDaemonProcess(info.pid, info.processStartTime)) return false;
+    await sleep(LIVE_DAEMON_PROBE_RETRY_DELAY_MS);
+    if (await canConnectReusableDaemon(info, preference)) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'daemon_probe_recovered',
+        data: { pid: info.pid, retry },
+      });
+      return true;
+    }
+  }
+  return false;
 }
 
 async function canConnectReusableDaemon(
