@@ -62,7 +62,9 @@ export function baseProductionPathOf(
   renamedFrom: ReadonlyMap<string, string>,
 ): string | null {
   const baseFile = renamedFrom.get(entryFile) ?? entryFile;
-  return isProductionSourceFile(baseFile) && baseTree.isFile(path.resolve(repoRoot, baseFile))
+  return WALKED_SOURCE.test(baseFile) &&
+    isProductionSourceFile(baseFile) &&
+    baseTree.isFile(path.resolve(repoRoot, baseFile))
     ? baseFile
     : null;
 }

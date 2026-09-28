@@ -379,6 +379,8 @@ function mkGitFixtureRepo(prefix: string): string {
   fs.writeFileSync(path.join(pkgDir, 'src/facades/top.ts'), 'export const b = 2;\n');
   fs.writeFileSync(path.join(pkgDir, 'src/facades/nested/deep.ts'), 'export const c = 3;\n');
   fs.writeFileSync(path.join(pkgDir, 'src/facades/skip.test.ts'), 'export const d = 4;\n');
+  fs.mkdirSync(path.join(repo, 'scripts'));
+  fs.writeFileSync(path.join(repo, 'scripts/standalone.ts'), 'export const outside = 1;\n');
   execFileSync('git', ['init', '-q'], { cwd: repo });
   execFileSync('git', ['add', '.'], { cwd: repo });
   execFileSync(
@@ -427,6 +429,13 @@ test('a renamed entry is followed to its path at the base, not treated as first-
   );
   expect(
     baseProductionPathOf(repo, 'packages/demo/src/fixture.ts', baseTree, withFixtureRename),
+  ).toBe(null);
+  execFileSync('git', ['mv', 'scripts/standalone.ts', 'packages/demo/src/standalone.ts'], {
+    cwd: repo,
+  });
+  const withOutsideRename = renamedSince(repo, 'HEAD');
+  expect(
+    baseProductionPathOf(repo, 'packages/demo/src/standalone.ts', baseTree, withOutsideRename),
   ).toBe(null);
 });
 
