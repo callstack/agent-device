@@ -14,5 +14,21 @@
   "workflow.mutation-confirm.cli.text": {
     "bytes": 161,
     "reason": "ADR 0014 (#1638 follow-up): the routine-workflow mutation-confirm step renders the same pinned added-line refs in human-CLI text (+8 bytes). See settle.default.text."
+  },
+  "mcp.snapshot.default.json": {
+    "bytes": 1239,
+    "reason": "#2656: every node now carries `kind`, the presenter's platform-neutral role, alongside the raw `type` (+66 bytes for this fixture's 4 nodes). `kind` is the cross-platform vocabulary role= selectors do not yet share; see website/docs/docs/snapshots.md."
+  },
+  "selector-read.default.json": {
+    "bytes": 460,
+    "reason": "#2656: `kind` on the resolved node (+20 bytes). See mcp.snapshot.default.json."
+  },
+  "snapshot.default.json": {
+    "bytes": 926,
+    "reason": "#2656: `kind` on every node (+66 bytes for this fixture's 4 nodes). See mcp.snapshot.default.json."
+  },
+  "workflow.orient.mcp.json": {
+    "bytes": 1239,
+    "reason": "#2656: `kind` on every node in the orient step's snapshot payload (+66 bytes). See mcp.snapshot.default.json."
   }
 }
