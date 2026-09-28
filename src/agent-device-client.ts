@@ -391,6 +391,8 @@ export function createAgentDeviceClient(
       type: async (options) => await executeCommand('type', options),
       fill: async (options) => await executeCommand('fill', options),
       scroll: async (options) => await executeCommand('scroll', options),
+      keyboardDismiss: async (options: { udid?: string }) =>
+        await executeCommand('keyboard', { action: 'dismiss', udid: options.udid }),
       pinch: async (options) => await executeCommand('gesture', pinchGestureInput(options)),
       rotateGesture: async (options) =>
         await executeCommand('gesture', rotateGestureInput(options)),

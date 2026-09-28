@@ -707,6 +707,27 @@ test('apps.installFromSource forwards GitHub Actions artifact sources unchanged'
   });
 });
 
+test('interactions.keyboardDismiss issues system keyboard dismiss for the device', async () => {
+  const setup = createTransport(async (req) => {
+    assert.equal(req.command, 'keyboard');
+    assert.deepEqual(req.positionals, ['dismiss']);
+    assert.equal((req.flags as Record<string, unknown>).udid, 'UDID-1');
+    return {
+      ok: true,
+      data: {
+        kind: 'keyboardDismissed',
+        action: 'dismiss',
+        state: { visible: false },
+        message: 'Keyboard hidden',
+      },
+    };
+  });
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const result = await client.interactions.keyboardDismiss({ udid: 'UDID-1' });
+  assert.equal(result.kind, 'keyboardDismissed');
+});
+
 test('interactions.rotateGesture rejects partial centers on the client side', async () => {
   const setup = createTransport(async () => {
     throw new Error('transport should not run for invalid input');
