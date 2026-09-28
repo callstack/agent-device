@@ -563,7 +563,7 @@
     "packages/platform-android/src/settings.ts:complexity",
     "packages/capture-kit/src/snapshot/snapshot-presentation/text-surface.ts:high impact",
     "src/daemon/handlers/session-test-sharding.ts:high impact",
-    "src/daemon/replay/internal/native-command.ts:complexity",
+    "packages/replay-port/src/daemon-port/native-command.ts:complexity",
     "packages/platform-apple/src/core/debug-symbols/utils.ts:high impact",
     "packages/platform-linux/src/snapshot.ts:high impact",
     "packages/selectors/src/interaction-targeting.ts:high impact",
