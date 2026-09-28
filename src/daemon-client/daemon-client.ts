@@ -28,11 +28,11 @@ import {
   type DaemonClientSettings,
   type EnsuredDaemon,
 } from './daemon-client-lifecycle.ts';
-import { sendRequest } from './daemon-client-transport.ts';
 import {
   cacheRemoteDaemonHealth,
   invalidateRemoteDaemonHealth,
-} from './daemon-client-health-cache.ts';
+  sendRequest,
+} from './daemon-client-transport.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
@@ -120,7 +120,7 @@ export async function sendToDaemon(
           { requestId, command: req.command },
         );
       } catch (error) {
-        if (isRemoteDaemon(info)) invalidateRemoteDaemonHealth(info);
+        invalidateRemoteDaemonHealth(info);
         throw error;
       }
       return withActiveSessionAddressHint(

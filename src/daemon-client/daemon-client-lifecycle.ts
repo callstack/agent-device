@@ -42,10 +42,10 @@ import {
 } from './daemon-client-metadata.ts';
 import {
   canConnect,
+  cachedRemoteDaemonHealth,
   DAEMON_HTTP_ENDPOINT_UNAVAILABLE_MESSAGE,
   DAEMON_SOCKET_ENDPOINT_UNAVAILABLE_MESSAGE,
 } from './daemon-client-transport.ts';
-import { cachedRemoteDaemonHealth } from './daemon-client-health-cache.ts';
 
 export type DaemonClientSettings = {
   paths: DaemonPaths;
