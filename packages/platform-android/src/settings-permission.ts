@@ -211,8 +211,11 @@ async function applyAllPermissionUnit(ctx: AllUnitContext, unit: AllPermissionUn
   return await applyAllPmUnit(ctx, unit.value);
 }
 
+// Notifications self-clears its reset flags inside `setAndroidNotificationPermission`, so it
+// records the applied id directly instead of going through `finishAllUnit` (which would clear
+// them a second time).
 async function applyAllNotificationsUnit(ctx: AllUnitContext): Promise<void> {
-  const { device, appPackage, action, userArgs, grants, applied, warnings } = ctx;
+  const { device, appPackage, action, userArgs } = ctx;
   await setAndroidNotificationPermission(
     device,
     appPackage,
@@ -220,8 +223,7 @@ async function applyAllNotificationsUnit(ctx: AllUnitContext): Promise<void> {
     { appOps: 'POST_NOTIFICATION', permission: 'android.permission.POST_NOTIFICATIONS' },
     userArgs,
   );
-  applied.push('android.permission.POST_NOTIFICATIONS');
-  warnIfRevoked(warnings, grants, appPackage, 'android.permission.POST_NOTIFICATIONS');
+  recordAppliedPermission(ctx, 'android.permission.POST_NOTIFICATIONS');
 }
 
 async function applyAllPhotosUnit(ctx: AllUnitContext): Promise<void> {
@@ -243,27 +245,33 @@ async function applyAllPhotosUnit(ctx: AllUnitContext): Promise<void> {
 
 async function applyAllPmUnit(ctx: AllUnitContext, permission: string): Promise<void> {
   const { device, appPackage, action, userArgs, warnings } = ctx;
-  const attempt = await tryPmUnit(
+  const outcome = await tryPmUnit(
     device,
     action === 'grant' ? 'grant' : 'revoke',
     userArgs,
     appPackage,
     permission,
   );
-  if (!attempt.ok) {
-    warnings.push(`Skipped ${permission} for ${appPackage}: ${attempt.reason}`);
+  if (outcome.kind === 'skipped') {
+    warnings.push(`Skipped ${permission} for ${appPackage}: ${outcome.detail}`);
     return;
   }
   await finishAllUnit(ctx, permission);
 }
 
-/** Record a landed mutation: reset its flags when asked, then warn if it may have killed the app. */
-async function finishAllUnit(ctx: AllUnitContext, permission: string): Promise<void> {
-  const { device, appPackage, action, userArgs, grants, applied, warnings } = ctx;
+/** The shared `applied`/relaunch-warning accounting every unit records once it lands. */
+function recordAppliedPermission(ctx: AllUnitContext, permission: string): void {
+  const { appPackage, action, grants, applied, warnings } = ctx;
   applied.push(permission);
-  if (action === 'reset')
-    await clearAndroidPermissionFlags(device, appPackage, permission, userArgs);
   if (action !== 'grant') warnIfRevoked(warnings, grants, appPackage, permission);
+}
+
+/** Record a landed mutation, then reset its flags when asked. */
+async function finishAllUnit(ctx: AllUnitContext, permission: string): Promise<void> {
+  recordAppliedPermission(ctx, permission);
+  if (ctx.action === 'reset') {
+    await clearAndroidPermissionFlags(ctx.device, ctx.appPackage, permission, ctx.userArgs);
+  }
 }
 
 type AllPermissionUnit =
@@ -304,45 +312,68 @@ function warnIfRevoked(
   if (warning) warnings.push(warning);
 }
 
+/**
+ * Reasons `pm` gives for refusing an `all`-fanout mutation, established once at the pm
+ * boundary: an install permission `pm` cannot touch, an id the package never requested, a
+ * name the runtime does not know as a runtime permission, an id managed by a role
+ * (`WRITE_SETTINGS` on API 36 reports "managed by role"), or an unknown id. Anything else
+ * (offline device, dropped transport, denied op) does not classify and must abort the
+ * fan-out rather than let launchApp continue with half-applied permissions.
+ */
+type AndroidPmSkipReason =
+  | 'not-changeable'
+  | 'not-requested'
+  | 'not-runtime-permission'
+  | 'unknown-permission'
+  | 'role-managed';
+
+const ANDROID_PM_SKIP_PATTERNS: ReadonlyArray<readonly [RegExp, AndroidPmSkipReason]> = [
+  [/not a changeable permission/, 'not-changeable'],
+  [/has not requested permission/, 'not-requested'],
+  [/is not a runtime permission/, 'not-runtime-permission'],
+  [/unknown permission/, 'unknown-permission'],
+  [/managed by role/, 'role-managed'],
+];
+
+/**
+ * The one place `pm` stderr is read to decide whether a refusal is skippable. Every other
+ * function in this file consumes the typed reason this returns instead of re-matching stderr.
+ */
+function classifyAndroidPmSkip(stderr: string): AndroidPmSkipReason | undefined {
+  const text = stderr.toLowerCase();
+  return ANDROID_PM_SKIP_PATTERNS.find(([pattern]) => pattern.test(text))?.[1];
+}
+
+type AndroidPmUnitOutcome =
+  | { kind: 'applied' }
+  | { kind: 'skipped'; reason: AndroidPmSkipReason; detail: string };
+
+/** One candidate `pm` refused while resolving the photos permission, classified once. */
+type AndroidPmSkipAttempt = {
+  permission: string;
+  reason: AndroidPmSkipReason | undefined;
+  detail: string;
+};
+
 async function tryPmUnit(
   device: DeviceInfo,
   pmAction: 'grant' | 'revoke',
   userArgs: AndroidUserArgs,
   appPackage: string,
   permission: string,
-): Promise<{ ok: true } | { ok: false; reason: string }> {
+): Promise<AndroidPmUnitOutcome> {
   const result = await runAndroidShell(
     device,
     ['pm', pmAction, ...userArgs, appPackage, permission],
     { allowFailure: true },
   );
-  if (result.exitCode === 0) return { ok: true };
-  if (isSkippablePmStderr(result.stderr)) {
-    return { ok: false, reason: firstStderrLine(result.stderr) };
-  }
+  if (result.exitCode === 0) return { kind: 'applied' };
+  const reason = classifyAndroidPmSkip(result.stderr);
+  if (reason) return { kind: 'skipped', reason, detail: firstStderrLine(result.stderr) };
   throw androidAdbResultError(
     `Failed to ${pmAction} Android permission ${permission} for ${appPackage}`,
     result,
     { appPackage, permission },
-  );
-}
-
-/**
- * Only established non-changeable signals are skipped under `all`: an install
- * permission `pm` cannot touch, an id the package never requested, a name
- * the runtime does not know as a runtime permission, or an id managed by a
- * role (`WRITE_SETTINGS` on API 36 reports "managed by role"). Anything else
- * (offline device, dropped transport, denied op) is operational and must abort
- * the fan-out rather than let launchApp continue with half-applied permissions.
- */
-function isSkippablePmStderr(stderr: string): boolean {
-  const text = stderr.toLowerCase();
-  return (
-    text.includes('not a changeable permission') ||
-    text.includes('has not requested permission') ||
-    text.includes('is not a runtime permission') ||
-    text.includes('unknown permission') ||
-    text.includes('managed by role')
   );
 }
 
@@ -355,20 +386,36 @@ async function tryPhotosUnit(
   try {
     return await setAndroidPhotoPermission(device, appPackage, pmAction, userArgs);
   } catch (error) {
-    if (isSkippablePhotosError(error)) return undefined;
+    if (isAndroidPhotosSkipAttempts(error)) return undefined;
     throw error;
   }
 }
 
-/** A photos probe failure is skippable only when every candidate was refused as non-changeable. */
-function isSkippablePhotosError(error: unknown): boolean {
+/**
+ * A photos probe failure is skippable only when the pm boundary already classified every
+ * candidate it tried; this reads the typed `attempts` `setAndroidPhotoPermission` recorded
+ * instead of re-matching stderr.
+ */
+function isAndroidPhotosSkipAttempts(error: unknown): boolean {
   if (!(error instanceof AppError) || error.code !== 'COMMAND_FAILED') return false;
   const attempts = error.details?.attempts;
-  if (!Array.isArray(attempts) || attempts.length === 0) return false;
-  return attempts.every(
-    (attempt) =>
-      typeof (attempt as { stderr?: unknown }).stderr === 'string' &&
-      isSkippablePmStderr((attempt as { stderr: string }).stderr),
+  return (
+    isAndroidPmSkipAttemptList(attempts) &&
+    attempts.length > 0 &&
+    attempts.every((attempt) => attempt.reason !== undefined)
+  );
+}
+
+function isAndroidPmSkipAttemptList(value: unknown): value is readonly AndroidPmSkipAttempt[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        typeof item === 'object' &&
+        item !== null &&
+        typeof (item as { permission?: unknown }).permission === 'string' &&
+        typeof (item as { detail?: unknown }).detail === 'string',
+    )
   );
 }
 
@@ -578,7 +625,7 @@ async function setAndroidPhotoPermission(
       ? ['android.permission.READ_MEDIA_IMAGES', 'android.permission.READ_EXTERNAL_STORAGE']
       : ['android.permission.READ_EXTERNAL_STORAGE', 'android.permission.READ_MEDIA_IMAGES'];
 
-  const failures: Array<{ permission: string; stderr: string; exitCode: number }> = [];
+  const attempts: AndroidPmSkipAttempt[] = [];
   for (const permission of candidates) {
     const result = await runAndroidShell(
       device,
@@ -586,13 +633,17 @@ async function setAndroidPhotoPermission(
       { allowFailure: true },
     );
     if (result.exitCode === 0) return permission;
-    failures.push({ permission, stderr: result.stderr, exitCode: result.exitCode });
+    attempts.push({
+      permission,
+      reason: classifyAndroidPmSkip(result.stderr),
+      detail: firstStderrLine(result.stderr),
+    });
   }
 
   throw new AppError('COMMAND_FAILED', `Failed to ${pmAction} Android photos permission`, {
     appPackage,
     sdkInt,
-    attempts: failures,
+    attempts,
   });
 }
 
