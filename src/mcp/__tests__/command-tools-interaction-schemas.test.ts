@@ -10,7 +10,7 @@ const INTERACTION_COMMANDS = Object.keys(INTERACTION_COMMAND_OUTPUT_SCHEMAS) as 
 
 // press, click, fill, longpress, and hover carry the post-action observation trait (#1652): the
 // composed map grafts a `settle` property onto a COPY, so they are not reference-equal to the
-// module's own object. find is read-only and carries no such trait.
+// module's own object. find carries no such trait.
 const SETTLE_DERIVED_COMMANDS = new Set(['press', 'click', 'fill', 'longpress', 'hover']);
 
 test('MCP interaction family output schemas are the family module entries, not copies', () => {

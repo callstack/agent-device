@@ -11,7 +11,10 @@ import {
   stringArraySchema,
   stringSchema,
 } from '../commands/command-input.ts';
-import { INTERACTION_COMMAND_OUTPUT_SCHEMAS } from '../commands/interaction/index.ts';
+import {
+  INTERACTION_COMMAND_OUTPUT_SCHEMAS,
+  postActionSurfaceChangeSchema,
+} from '../commands/interaction/index.ts';
 import { REPLAY_COMMAND_OUTPUT_SCHEMAS } from '../commands/replay/index.ts';
 import { SYSTEM_COMMAND_OUTPUT_SCHEMAS } from '../commands/system/index.ts';
 import { NATIVE_PATH_DISPOSITION_VALUES } from '@agent-device/contracts/recording-native-path';
@@ -58,21 +61,6 @@ const artifactSchema = objectSchema(
     fileName: stringSchema(),
   },
   ['field'],
-);
-
-// PostActionSurfaceChange (packages/contracts/src/interaction.ts) — the post-action capture
-// describes a different surface than the pre-action baseline (#2438), so no same-surface
-// comparison is presented across it. Also mirrored in the interaction family module
-// (src/commands/interaction/index.ts), which needs it for its own InteractionEvidence
-// projection without importing back into this file.
-const postActionSurfaceChangeSchema: JsonSchema = objectSchema(
-  {
-    from: stringSchema('Surface the pre-action baseline described: a host bundle id, or app.'),
-    to: stringSchema('Surface the post-action capture describes: a host bundle id, or app.'),
-    disclosure: stringSchema('Agent-facing sentence explaining the surface transition.'),
-  },
-  ['from', 'to', 'disclosure'],
-  'Present when an in-place system surface (web sign-in or Apple Pay sheet) was presented over the app, or left it.',
 );
 
 // SettleObservation (packages/contracts/src/interaction.ts) — opt-in `--settle` settled

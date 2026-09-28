@@ -115,6 +115,10 @@ export function stringSchema(description?: string): JsonSchema {
   return { type: 'string', ...(description ? { description } : {}) };
 }
 
+export function nullableStringSchema(description?: string): JsonSchema {
+  return { type: ['string', 'null'], ...(description ? { description } : {}) };
+}
+
 export function numberSchema(
   description?: string,
   options: { min?: number; max?: number } = {},

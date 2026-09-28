@@ -29,8 +29,10 @@ import { postActionObservationCliFlags } from '../post-action-observation-gramma
 import type { JsonSchema } from '../command-contract.ts';
 import {
   booleanSchema,
+  constSchema,
   enumSchema,
   looseObjectSchema,
+  nullableStringSchema,
   numberSchema,
   objectSchema,
   stringArraySchema,
@@ -63,19 +65,10 @@ import {
 import { interactionCliOutputFormatters } from './output.ts';
 import { selectorCliReaders, selectorDaemonWriters } from './selectors.ts';
 
-function constSchema(value: string): JsonSchema {
-  return { type: 'string', const: value };
-}
-
-function nullableStringSchema(description?: string): JsonSchema {
-  return { type: ['string', 'null'], ...(description ? { description } : {}) };
-}
-
 // PostActionSurfaceChange (packages/contracts/src/interaction.ts) — the post-action capture
 // describes a different surface than the pre-action baseline (#2438), so no same-surface
-// comparison is presented across it. Mirrored in src/mcp/command-output-schemas.ts for the
-// generic `--settle` observation, which every family (not only this one) can carry.
-const postActionSurfaceChangeSchema: JsonSchema = objectSchema(
+// comparison is presented across it.
+export const postActionSurfaceChangeSchema: JsonSchema = objectSchema(
   {
     from: stringSchema('Surface the pre-action baseline described: a host bundle id, or app.'),
     to: stringSchema('Surface the post-action capture describes: a host bundle id, or app.'),
