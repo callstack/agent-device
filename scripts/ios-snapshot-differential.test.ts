@@ -13,12 +13,30 @@ import {
 } from '../packages/capture-kit/src/ios-snapshot-engine/conformance-harness.ts';
 import { differentialBatchArbitrary } from '../packages/capture-kit/src/ios-snapshot-engine/conformance-generator.ts';
 import { readIosSnapshotEngineFixture } from '../packages/capture-kit/src/ios-snapshot-engine/conformance-fixture.ts';
+import {
+  hostRowNodes,
+  runnerNodes,
+  safariWebViewNodes,
+  threadNodes,
+  viewport as capturedViewport,
+} from '../packages/capture-kit/src/ios-snapshot-engine/runner-presentation-fixtures.ts';
 
 type DifferentialCase = Parameters<typeof compareDifferentialCases>[0][number];
 
 const FUZZ_SEEDS = [219101, 219102, 219103, 219104];
 const RUNS_PER_SEED = 8;
 const MAX_TOTAL_DURATION_MS = 60_000;
+
+const RUNNER_UNSUPPORTED: Readonly<Record<string, string>> = {
+  'geometryless cursor nodes keep independent descendants':
+    'Swift conformance input requires a rectangle for every node',
+  'unavailable hittability fails closed':
+    'Swift conformance input requires a resolved hittability bit',
+  'malformed parent is a typed failure': 'Swift presenter takes a validated preorder graph',
+  'missing viewport is a typed failure':
+    'runner route requires a reported viewport for regular payload validation',
+  'invalid viewport is a typed failure': 'runner route requires a positive reported viewport',
+};
 
 if (!swiftToolchainAvailable()) {
   throw new Error('iOS snapshot differential requires the macOS Swift toolchain');
@@ -27,11 +45,12 @@ if (!swiftToolchainAvailable()) {
 test('authored Swift and TypeScript golden cases agree', { timeout: SWIFT_RUN_TIMEOUT_MS }, () => {
   const fixture = readIosSnapshotEngineFixture();
   const cases = fixture.cases
-    .filter((testCase) => testCase.swift && !testCase.interactiveOnly)
+    .filter((testCase) => testCase.swift)
     .map((testCase) => ({
       name: testCase.name,
+      route: 'acquired' as const,
       projection: testCase.projection,
-      interactiveOnly: false as const,
+      interactiveOnly: testCase.interactiveOnly,
       depth: testCase.depth,
       scope: testCase.scope,
       foldPolicy: testCase.foldPolicy,
@@ -41,6 +60,103 @@ test('authored Swift and TypeScript golden cases agree', { timeout: SWIFT_RUN_TI
   const mismatch = compareDifferentialCases(cases);
   assert.equal(mismatch, undefined, mismatch ? JSON.stringify(mismatch, null, 2) : '');
 });
+
+test(
+  'Swift presenter and host compaction preserve authored semantic membership',
+  { timeout: SWIFT_RUN_TIMEOUT_MS },
+  () => {
+    const fixture = readIosSnapshotEngineFixture();
+    assert.deepEqual(
+      fixture.cases
+        .filter(
+          (testCase) =>
+            !testCase.swift &&
+            ![
+              'interactive only compacts semantic representatives',
+              'scroll indicator owned by a parent web view keeps list rows',
+            ].includes(testCase.name),
+        )
+        .map((testCase) => testCase.name),
+      Object.keys(RUNNER_UNSUPPORTED),
+      'every omitted authored case needs a declared Swift/runner asymmetry',
+    );
+    assert.ok(Object.values(RUNNER_UNSUPPORTED).every((reason) => reason.length > 0));
+    const cases = fixture.cases
+      .filter(
+        (testCase) =>
+          testCase.swift ||
+          [
+            'interactive only compacts semantic representatives',
+            'scroll indicator owned by a parent web view keeps list rows',
+          ].includes(testCase.name),
+      )
+      .map((testCase) => ({
+        name: testCase.name,
+        route: 'runner-presented' as const,
+        projection: testCase.projection,
+        interactiveOnly: testCase.interactiveOnly,
+        depth: testCase.depth,
+        scope: testCase.scope,
+        foldPolicy: testCase.foldPolicy,
+        viewport: fixture.viewport,
+        nodes: testCase.nodes,
+      }));
+    const mismatch = compareDifferentialCases(cases);
+    assert.equal(mismatch, undefined, mismatch ? JSON.stringify(mismatch, null, 2) : '');
+  },
+);
+
+const CAPTURED_INTERACTIVE_CASES = [
+  {
+    name: 'Settings chrome',
+    nodes: runnerNodes(),
+    requiredLabels: ['Screen Time'],
+    absentLabels: ['Offscreen'],
+  },
+  {
+    name: 'TextView control',
+    nodes: threadNodes(),
+    requiredLabels: ['Reply (58 replies)', 'Reply 37', 'Like (0 likes)'],
+  },
+  {
+    name: 'WebView row',
+    nodes: hostRowNodes('WebView'),
+    requiredLabels: ['Reply (58 replies)', 'Reply 37', 'Like (0 likes)'],
+  },
+  {
+    name: 'paged Cell row',
+    nodes: hostRowNodes('Cell'),
+    requiredLabels: ['Reply (58 replies)', 'Reply 37', 'Like (0 likes)'],
+  },
+  {
+    name: 'Safari same-frame wrapper',
+    nodes: safariWebViewNodes(),
+    absentLabels: ['History'],
+    clippedLabel: { label: 'iOS - Wikipedia', rect: { x: 0, y: 62, width: 402, height: 750 } },
+  },
+] as const;
+
+for (const capture of CAPTURED_INTERACTIVE_CASES) {
+  test(
+    `runner-presented interactive ${capture.name} preserves membership and clipping`,
+    { timeout: SWIFT_RUN_TIMEOUT_MS },
+    () => {
+      const mismatch = compareDifferentialCases([
+        {
+          ...capture,
+          route: 'runner-presented',
+          projection: 'regular',
+          interactiveOnly: true,
+          depth: null,
+          scope: null,
+          foldPolicy: 'cursor-projected',
+          viewport: capturedViewport,
+        },
+      ]);
+      assert.equal(mismatch, undefined, mismatch ? JSON.stringify(mismatch, null, 2) : '');
+    },
+  );
+}
 
 test(
   'raw unscoped depth compares the same acquisition frontier',
@@ -56,6 +172,7 @@ test(
     const mismatch = compareDifferentialCases([
       {
         name: 'raw-depth-frontier-with-malformed-tail',
+        route: 'acquired',
         projection: 'raw',
         interactiveOnly: false,
         depth: 1,

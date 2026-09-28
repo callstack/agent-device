@@ -3,8 +3,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { IosSnapshotAcquisition } from '@agent-device/contracts/ios-snapshot';
-import { createIosSnapshotRequest, deriveIosCaptureHint } from '../ios-snapshot-planning.ts';
-import { IosSnapshotEngineError, presentIosSnapshot } from './index.ts';
+import {
+  buildIosSnapshotPresentationKey,
+  createIosSnapshotRequest,
+  deriveIosCaptureHint,
+} from '../ios-snapshot-planning.ts';
+import { IosSnapshotEngineError, presentIosSnapshot, publishIosSnapshot } from './index.ts';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '..', '..', '..', '..');
@@ -16,19 +20,26 @@ let swiftHarnessExecutable: string | undefined;
 
 type DifferentialCase = Readonly<{
   name: string;
+  route: 'acquired' | 'runner-presented';
   projection: 'regular' | 'raw';
-  interactiveOnly: false;
+  interactiveOnly: boolean;
   depth: number | null;
   scope: string | null;
   foldPolicy: 'cursor-projected' | 'plain-viewport';
   viewport: Rect;
   nodes: readonly RawSnapshotNode[];
+  requiredLabels?: readonly string[];
+  absentLabels?: readonly string[];
+  clippedLabel?: Readonly<{ label: string; rect: Rect }>;
 }>;
 
 type DifferentialOutcome = Readonly<{
   name?: string;
   outcome: 'success' | 'failure';
   nodes: readonly CanonicalNode[];
+  rawNodes?: readonly RawSnapshotNode[];
+  qualityNodes?: readonly RawSnapshotNode[];
+  canonicalQualityNodes?: readonly CanonicalNode[];
   error?: Readonly<{ code: string; reason: string }>;
 }>;
 
@@ -71,7 +82,12 @@ export function compareDifferentialCases(
     const swift = swiftCases.find((entry) => entry.name === testCase.name);
     const typescript = runTypeScriptCase(testCase);
     const normalizedSwift = swift ? withoutName(swift) : undefined;
-    if (!normalizedSwift || JSON.stringify(normalizedSwift) !== JSON.stringify(typescript)) {
+    if (
+      !normalizedSwift ||
+      (testCase.route === 'acquired'
+        ? JSON.stringify(normalizedSwift) !== JSON.stringify(typescript)
+        : !runnerPresentationAgrees(testCase, swift!, typescript))
+    ) {
       return { case: testCase, swift: normalizedSwift, typescript };
     }
   }
@@ -93,6 +109,7 @@ function runSwiftCases(cases: readonly DifferentialCase[]): DifferentialOutcome[
       name: string;
       outcome: 'success' | 'failure';
       nodes?: RawSnapshotNode[];
+      qualityNodes?: RawSnapshotNode[];
       error?: { code: string; reason: string };
     }>;
   };
@@ -100,6 +117,8 @@ function runSwiftCases(cases: readonly DifferentialCase[]): DifferentialOutcome[
     name: entry.name,
     outcome: entry.outcome,
     nodes: canonicalNodes(entry.nodes ?? []),
+    rawNodes: entry.nodes ?? [],
+    ...(entry.qualityNodes ? { qualityNodes: entry.qualityNodes } : {}),
     ...(entry.error ? { error: entry.error } : {}),
   }));
 }
@@ -135,7 +154,13 @@ function prepareDifferentialAcquisition(testCase: DifferentialCase): Differentia
 
 /* c8 ignore start */
 function withoutName(outcome: DifferentialOutcome): Omit<DifferentialOutcome, 'name'> {
-  const { name: _name, ...normalized } = outcome;
+  const {
+    name: _name,
+    rawNodes: _rawNodes,
+    qualityNodes: _qualityNodes,
+    canonicalQualityNodes: _canonicalQualityNodes,
+    ...normalized
+  } = outcome;
   return normalized;
 }
 /* c8 ignore stop */
@@ -162,7 +187,13 @@ export function runTypeScriptCase(testCase: DifferentialCase): DifferentialOutco
     const result = presentIosSnapshot({ stage: 'acquired', acquisition }, request, {
       foldPolicy: testCase.foldPolicy,
     });
-    return { outcome: 'success', nodes: canonicalNodes(result.nodes) };
+    return {
+      outcome: 'success',
+      nodes: canonicalNodes(result.nodes),
+      ...(testCase.route === 'runner-presented' && result.qualityNodes
+        ? { canonicalQualityNodes: canonicalNodes(result.qualityNodes) }
+        : {}),
+    };
   } catch (error) {
     if (!(error instanceof IosSnapshotEngineError)) throw error;
     return {
@@ -171,6 +202,89 @@ export function runTypeScriptCase(testCase: DifferentialCase): DifferentialOutco
       error: { code: error.code, reason: error.reason },
     };
   }
+}
+
+function runnerPresentationAgrees(
+  testCase: DifferentialCase,
+  swift: DifferentialOutcome,
+  acquired: DifferentialOutcome,
+): boolean {
+  if (swift.outcome !== acquired.outcome) return false;
+  if (swift.outcome === 'failure')
+    return JSON.stringify(swift.error) === JSON.stringify(acquired.error);
+  const request = createIosSnapshotRequest(testCase);
+  const input = {
+    stage: 'presented' as const,
+    presentation: {
+      producer: 'apple-runner' as const,
+      intent: 'full' as const,
+      payload: { nodes: swift.rawNodes ?? [], truncated: false },
+      ...(swift.qualityNodes
+        ? { qualityPayload: { nodes: swift.qualityNodes, truncated: false, scope: null } }
+        : {}),
+    },
+    validation: {
+      presentationKey: buildIosSnapshotPresentationKey(request),
+      viewport: { kind: 'reported' as const, rect: testCase.viewport },
+      hittability: { kind: 'available' as const },
+      lineage: { targetId: 'differential-target', generation: 'differential-generation' },
+      residue: [],
+    },
+  };
+  const presented = presentIosSnapshot(input, request, { foldPolicy: testCase.foldPolicy });
+  const published = canonicalNodes(
+    publishIosSnapshot(input, request, { foldPolicy: testCase.foldPolicy }).payload.nodes,
+  );
+  if (
+    testCase.scope !== null &&
+    JSON.stringify(semanticMembership(canonicalNodes(presented.qualityNodes ?? []))) !==
+      JSON.stringify(semanticMembership(acquired.canonicalQualityNodes ?? []))
+  )
+    return false;
+  const outputIndexes = new Set(presented.nodes.map((node) => node.index));
+  if (
+    (swift.rawNodes ?? []).some((node) => !presented.presentedIndexesBySourceIndex.has(node.index))
+  )
+    return false;
+  for (const indexes of presented.presentedIndexesBySourceIndex.values()) {
+    if (indexes.some((index) => !outputIndexes.has(index))) return false;
+  }
+  for (const label of testCase.requiredLabels ?? []) {
+    const sources = swift.rawNodes?.filter((node) => node.label === label) ?? [];
+    if (
+      sources.length === 0 ||
+      !sources.some(
+        (source) => (presented.presentedIndexesBySourceIndex.get(source.index) ?? []).length > 0,
+      )
+    )
+      return false;
+    if (!published.some((node) => node.label === label)) return false;
+  }
+  if ((testCase.absentLabels ?? []).some((label) => published.some((node) => node.label === label)))
+    return false;
+  if (
+    testCase.clippedLabel &&
+    !published.some(
+      (node) =>
+        node.label === testCase.clippedLabel!.label &&
+        JSON.stringify(node.rect) === JSON.stringify(testCase.clippedLabel!.rect),
+    )
+  )
+    return false;
+  return (
+    JSON.stringify(semanticMembership(published)) ===
+    JSON.stringify(semanticMembership(acquired.nodes))
+  );
+}
+
+function semanticMembership(nodes: readonly CanonicalNode[]): string[] {
+  return [
+    ...new Set(
+      nodes
+        .filter((node) => node.label !== null)
+        .map((node) => JSON.stringify([node.type, node.label])),
+    ),
+  ].sort();
 }
 
 export function canonicalNodes(nodes: readonly RawSnapshotNode[]): CanonicalNode[] {

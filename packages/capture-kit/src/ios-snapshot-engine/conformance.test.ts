@@ -119,6 +119,7 @@ test('the differential TypeScript runner preserves typed failures', () => {
   assert.ok(source);
   const result = runTypeScriptCase({
     name: source.name,
+    route: 'acquired',
     projection: source.projection,
     interactiveOnly: false,
     depth: source.depth,
@@ -136,6 +137,7 @@ test('differential failure artifacts preserve replay metadata', () => {
   const source = fixture.cases[0]!;
   const testCase = {
     name: source.name,
+    route: 'acquired' as const,
     projection: source.projection,
     interactiveOnly: false as const,
     depth: source.depth,
