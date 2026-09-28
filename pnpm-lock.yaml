@@ -506,6 +506,9 @@ importers:
 
   packages/replay-port:
     dependencies:
+      '@agent-device/ad-replay':
+        specifier: workspace:*
+        version: link:../ad-replay
       '@agent-device/ad-script':
         specifier: workspace:*
         version: link:../ad-script
@@ -533,6 +536,9 @@ importers:
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors
+      '@agent-device/session-journal':
+        specifier: workspace:*
+        version: link:../session-journal
 
   packages/replay-test:
     dependencies:

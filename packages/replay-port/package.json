@@ -6,6 +6,7 @@
   "type": "module",
   "description": "Daemon-side replay port: the adapter over the ad-replay, ad-script and replay-test engines.",
   "dependencies": {
+    "@agent-device/ad-replay": "workspace:*",
     "@agent-device/ad-script": "workspace:*",
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
@@ -14,7 +15,8 @@
     "@agent-device/kernel": "workspace:*",
     "@agent-device/maestro": "workspace:*",
     "@agent-device/replay-test": "workspace:*",
-    "@agent-device/selectors": "workspace:*"
+    "@agent-device/selectors": "workspace:*",
+    "@agent-device/session-journal": "workspace:*"
   },
   "exports": {
     "./command-types": {
@@ -57,9 +59,17 @@
       "types": "./src/daemon-port/session-replay-report-action.ts",
       "default": "./src/daemon-port/session-replay-report-action.ts"
     },
+    "./session-replay-resume": {
+      "types": "./src/daemon-port/session-replay-resume.ts",
+      "default": "./src/daemon-port/session-replay-resume.ts"
+    },
     "./session-replay-runtime-artifacts": {
       "types": "./src/daemon-port/session-replay-runtime-artifacts.ts",
       "default": "./src/daemon-port/session-replay-runtime-artifacts.ts"
+    },
+    "./session-replay-runtime-failure-response": {
+      "types": "./src/daemon-port/session-replay-runtime-failure-response.ts",
+      "default": "./src/daemon-port/session-replay-runtime-failure-response.ts"
     },
     "./session-replay-suggestion-ranking": {
       "types": "./src/daemon-port/session-replay-suggestion-ranking.ts",

@@ -32,11 +32,11 @@ const RUNTIME_FILE = 'src/daemon/handlers/session-replay-command.ts';
 
 /** The divergence-report chain: never a second `ReplayCoordinator`, never a bare `SessionStore`. */
 const DIVERGENCE_CHAIN_FILES = [
-  'src/daemon/replay/internal/session-replay-resume.ts',
+  'packages/replay-port/src/daemon-port/session-replay-resume.ts',
   'src/daemon/replay/internal/session-replay-divergence.ts',
   'src/daemon/replay/internal/session-replay-target-verification.ts',
   'src/daemon/replay/internal/session-replay-runtime-failure.ts',
-  'src/daemon/replay/internal/session-replay-runtime-failure-response.ts',
+  'packages/replay-port/src/daemon-port/session-replay-runtime-failure-response.ts',
 ] as const;
 
 type ImportSite = {
