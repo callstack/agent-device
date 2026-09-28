@@ -244,7 +244,8 @@ export function matchesPlatformSelector(
   if (selector === 'apple') return isApplePlatform(device.platform);
   // Legacy leaf selectors resolve within the collapsed `apple` platform via `appleOs`,
   // preserving the pre-collapse `--platform ios|macos` device sets exactly.
-  if (selector === 'ios') return isApplePlatform(device.platform) && !isMacOs(device);
+  if (selector === 'ios')
+    return isApplePlatform(device.platform) && !isMacOs(device) && device.appleOs !== 'watchos';
   if (selector === 'macos') return isApplePlatform(device.platform) && isMacOs(device);
   return device.platform === selector;
 }
