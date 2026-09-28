@@ -10,7 +10,7 @@ import { createNativeBuildDeadline, type NativeBuildDeadline } from './deadline.
 import { NativeBuildError } from './errors.ts';
 import { createNativeBuildHost, type NativeBuildHost } from './host.ts';
 import { readHostToolchainIdentity } from './toolchain-identity.ts';
-import { execKillTimeoutError } from '../snapshot-source/__tests__/exec-timeout-fixture.ts';
+import { execKillTimeoutError } from './__tests__/exec-timeout-fixture.ts';
 
 // Apple's syspolicyd signature scan blocks the first exec of an Xcode-owned tool after a fresh
 // macOS host boots for roughly 18 to 19 seconds; the immediate next exec of the same tool is
@@ -76,8 +76,9 @@ test('a toolchain host that never returns reports the stalled probe after one re
       return true;
     },
   );
-  // Exactly one retry, not an unbounded loop, and the retry is charged the
-  // remainder rather than a fresh ceiling.
+  // Exactly one retry, not an unbounded loop: with 90 s left after the first 30 s stall, the
+  // retry still gets the full per-probe ceiling. The cold-start case above is where the retry is
+  // charged the remainder instead ([30_000, 10_000]).
   assert.deepEqual(timeouts, [30_000, 30_000]);
   assert.equal(clock.nowMs, 60_000);
 });

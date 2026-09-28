@@ -23,7 +23,12 @@ export class NativeBuildError extends AppError {
     super(
       'COMMAND_FAILED',
       message,
-      { ...details, nativeBuildFailure: kind, nativeBuildFailureCode: code },
+      {
+        ...details,
+        nativeBuildFailure: kind,
+        nativeBuildFailureCode: code,
+        ...(kind === 'cancelled' ? { reason: 'request_canceled' } : {}),
+      },
       cause,
     );
     this.name = 'NativeBuildError';

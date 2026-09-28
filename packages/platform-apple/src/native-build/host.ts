@@ -72,7 +72,13 @@ async function acquireNativeBuildLock(
     description: options.description,
   });
   const signal = deadline.signal;
-  if (!signal) return await pending;
+  if (!signal) {
+    try {
+      return await pending;
+    } catch (error) {
+      throw mapExpiredLockError(error, deadline);
+    }
+  }
 
   let canceled = false;
   let onAbort!: () => void;
@@ -97,14 +103,19 @@ async function acquireNativeBuildLock(
         () => undefined,
       );
     }
-    if (
-      deadline.clock.isExpired() &&
-      !(error instanceof NativeBuildError && error.buildFailureKind === 'cancelled')
-    ) {
-      throw nativeBuildError('timeout', 'cache-lock-deadline');
-    }
-    throw error;
+    throw mapExpiredLockError(error, deadline);
   } finally {
     signal.removeEventListener('abort', onAbort);
   }
+}
+
+/** A lock wait that outlives the native-build deadline reports the deadline, not the raw lock error. */
+function mapExpiredLockError(error: unknown, deadline: NativeBuildDeadline): unknown {
+  if (
+    deadline.clock.isExpired() &&
+    !(error instanceof NativeBuildError && error.buildFailureKind === 'cancelled')
+  ) {
+    return nativeBuildError('timeout', 'cache-lock-deadline');
+  }
+  return error;
 }

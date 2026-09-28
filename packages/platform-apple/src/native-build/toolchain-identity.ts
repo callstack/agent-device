@@ -1,4 +1,5 @@
 import { isCommandTimeoutError, type ExecResult } from '@agent-device/host-kit/command';
+import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../runner/apple-runner-platform.ts';
 import { nativeBuildError, NativeBuildError } from './errors.ts';
 import { remainingNativeBuildMs, type NativeBuildDeadline } from './deadline.ts';
@@ -89,12 +90,30 @@ async function runToolchainProbe(
     try {
       return await execToolchainProbe(host, command, args, deadline, timeoutMs);
     } catch (error) {
-      if (!isCommandTimeoutError(error)) throw error;
-      if (deadline.signal?.aborted) throw nativeBuildError('cancelled', 'abort-signal');
-      stalledBy = toolchainProbeStallError(command, attemptTimeoutsMs, error);
+      stalledBy = classifyToolchainProbeFailure(error, command, deadline, attemptTimeoutsMs);
       if (attempt >= TOOLCHAIN_PROBE_ATTEMPTS) throw stalledBy;
     }
   }
+}
+
+/**
+ * Sorts a failed probe exec into the module's cancellation/stall contract: a raw exec-layer
+ * cancellation (a mid-exec abort settles through `exec.ts` as `REQUEST_CANCELED`, not a timeout)
+ * and a post-timeout abort both surface as the domain `cancelled` shape; anything but a structured
+ * exec timeout rethrows unchanged; only an actual stall is handed back for the retry loop to count.
+ */
+function classifyToolchainProbeFailure(
+  error: unknown,
+  command: string,
+  deadline: NativeBuildDeadline,
+  attemptTimeoutsMs: readonly number[],
+): NativeBuildError {
+  if (isRequestCanceledError(error)) {
+    throw nativeBuildError('cancelled', 'abort-signal', {}, error);
+  }
+  if (!isCommandTimeoutError(error)) throw error;
+  if (deadline.signal?.aborted) throw nativeBuildError('cancelled', 'abort-signal');
+  return toolchainProbeStallError(command, attemptTimeoutsMs, error);
 }
 
 /**

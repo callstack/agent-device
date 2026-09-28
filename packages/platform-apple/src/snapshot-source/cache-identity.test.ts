@@ -41,7 +41,7 @@ test('the bridge toolchain identity carries the simulator runtime alongside the 
   assert.equal(identity.simulatorRuntime, 'iOS 26.2');
 });
 
-test('a blank simulator runtime is rejected before any probe runs', async () => {
+test('a blank simulator runtime is rejected only after the shared identity read succeeds', async () => {
   let probed = false;
   const host = fakeToolchainHost((command, args) => {
     probed = true;
