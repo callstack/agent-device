@@ -2,22 +2,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
-import { LeaseRegistry } from '../../../lease-registry.ts';
-import { platformResourceCleanup } from '../../../../platform-runtime-resource-cleanup.ts';
-import { SessionStore } from '../../../session-store.ts';
-import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import { maestroScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
-import type { DaemonRequest } from '../../../daemon-request.ts';
+import { LeaseRegistry } from '../../lease-registry.ts';
+import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
+import { SessionStore } from '../../session-store.ts';
+import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { maestroScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 import {
   unavailableBindDevice,
   unavailableBindExactDevice,
-} from '../../../__tests__/test-device-runtime-gateway.ts';
+} from '../test-device-runtime-gateway.ts';
 import {
   handleReplayCommand,
   handleReplayTestCommand,
-} from '../../../handlers/session-replay-command.ts';
-import type { SessionCommandParams } from '../../../handlers/session-command-input.ts';
+} from '../../handlers/session-replay-command.ts';
+import type { SessionCommandParams } from '../../handlers/session-command-input.ts';
 import * as maestro from '@agent-device/maestro';
 
 const spy = vi.spyOn(maestro, 'executeMaestroFlow');

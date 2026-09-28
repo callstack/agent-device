@@ -35,7 +35,7 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
   };
 });
 
-vi.mock('../../../snapshot-interactor-capture.ts', () => ({
+vi.mock('../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
@@ -43,18 +43,18 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
-import { SessionStore } from '../../../session-store.ts';
-import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { SessionStore } from '../../session-store.ts';
+import { runReplayForTest } from '../../replay/__tests__/replay-command-fixture.ts';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import {
   maestroScriptSourceBundleFor,
   replayScriptSourceBundleFor,
-} from '../../../../__tests__/test-utils/replay-script-source.ts';
-import { captureSnapshotThroughLegacyDispatchFixture } from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
-import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
-import { seedReplayFixtureSession } from '../../__tests__/session-replay-runtime.fixtures.ts';
+} from '../../../__tests__/test-utils/replay-script-source.ts';
+import { captureSnapshotThroughLegacyDispatchFixture } from '../legacy-snapshot-capture-fixture.ts';
+import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
+import { seedReplayFixtureSession } from '../../replay/__tests__/session-replay-runtime.fixtures.ts';
 
 vi.mocked(captureSnapshotWithInteractor).mockImplementation(
   captureSnapshotThroughLegacyDispatchFixture,

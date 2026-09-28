@@ -2,13 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { stringify } from 'yaml';
-import { runTypedMaestroReplay } from '../session-replay-maestro-runtime.ts';
-import { SessionStore } from '../../../session-store.ts';
-import { replayCommandForTest } from '../../__tests__/replay-command-fixture.ts';
-import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import { maestroScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
-import type { DaemonRequest } from '../../../daemon-request.ts';
+import { runTypedMaestroReplay } from '../../replay/internal/session-replay-maestro-runtime.ts';
+import { SessionStore } from '../../session-store.ts';
+import { replayCommandForTest } from '../../replay/__tests__/replay-command-fixture.ts';
+import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { maestroScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 
 // A replay error raised before any step runs carries no `failure`, so the route
 // projects the normalized error directly instead of through the divergence
