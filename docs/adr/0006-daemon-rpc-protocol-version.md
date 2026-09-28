@@ -24,6 +24,12 @@ Package `version` is diagnostic only and must not be used as a compatibility gat
 `rpcProtocolVersion` is treated as a legacy remote daemon and is allowed unless a later security or
 protocol decision explicitly retires legacy compatibility.
 
+A persistent client may cache a successful probe for a daemon instance advertised by both `/health`
+and `/rpc`. A changed instance in a successful RPC response requires a new compatibility probe before that
+response is returned. Peers that do not advertise an instance keep per-command probes. A restart at
+the same address can accept one RPC before the client observes its new instance; commands that require
+pre-RPC rejection across such a restart need a separate conditional RPC handshake.
+
 `rpcProtocolVersion` changes only when an older client and newer daemon, or newer client and older
 daemon, cannot safely communicate over the HTTP RPC boundary for existing commands. Bump it for
 breaking changes to:

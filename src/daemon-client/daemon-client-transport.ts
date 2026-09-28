@@ -13,6 +13,8 @@ import {
 import {
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpUrl,
+  DAEMON_HTTP_INSTANCE_HEADER,
+  DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
   DAEMON_RPC_PROTOCOL_VERSION,
 } from '@agent-device/contracts/daemon-http';
 import { buildHttpRpcPayload, handleDaemonHttpResponseBody } from './daemon-client-rpc.ts';
@@ -23,6 +25,7 @@ import { readVersion } from '@agent-device/host-kit/version';
 type ResolvedDaemonTransport = 'socket' | 'http';
 type SendRequestOptions = {
   onProgress?: RequestProgressSink;
+  onIdentityChange?: (health: RemoteDaemonHealth | undefined) => void;
 };
 
 const LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS = 500;
@@ -36,13 +39,14 @@ export type RemoteDaemonHealth = {
   service?: string;
   version?: string;
   rpcProtocolVersion?: number;
+  instanceId?: string;
   /** The daemon behind a proxy, as the proxy's health reported it. */
   upstream?: RemoteDaemonHealthLink;
 };
 
 type RemoteDaemonHealthLink = Pick<
   RemoteDaemonHealth,
-  'service' | 'version' | 'rpcProtocolVersion'
+  'service' | 'version' | 'rpcProtocolVersion' | 'instanceId'
 >;
 
 export async function canConnect(
@@ -187,6 +191,7 @@ function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink
     version: typeof parsed.version === 'string' ? parsed.version : undefined,
     rpcProtocolVersion:
       typeof parsed.rpcProtocolVersion === 'number' ? parsed.rpcProtocolVersion : undefined,
+    ...(typeof parsed.instanceId === 'string' ? { instanceId: parsed.instanceId } : {}),
   };
 }
 
@@ -395,6 +400,80 @@ function timeoutRequestContext(
   };
 }
 
+type RemoteInstanceHeaders = {
+  instanceId?: string;
+  upstreamInstanceId?: string;
+};
+
+function readRemoteInstanceHeaders(
+  headers: Record<string, string | string[] | undefined>,
+): RemoteInstanceHeaders {
+  const instanceId = headers[DAEMON_HTTP_INSTANCE_HEADER];
+  const upstreamInstanceId = headers[DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER];
+  return {
+    instanceId: typeof instanceId === 'string' ? instanceId : undefined,
+    upstreamInstanceId: typeof upstreamInstanceId === 'string' ? upstreamInstanceId : undefined,
+  };
+}
+
+async function verifyRemoteInstance(
+  info: DaemonInfo,
+  headers: Record<string, string | string[] | undefined>,
+  onIdentityChange?: (health: RemoteDaemonHealth | undefined) => void,
+): Promise<void> {
+  if (!info.baseUrl || !info.remoteInstanceId) return;
+  const observed = readRemoteInstanceHeaders(headers);
+  if (
+    observed.instanceId === info.remoteInstanceId &&
+    observed.upstreamInstanceId === info.remoteUpstreamInstanceId
+  )
+    return;
+  await recheckChangedRemoteInstance(info, observed, onIdentityChange);
+}
+
+function hasCompleteRemoteInstanceHeaders(
+  info: DaemonInfo,
+  observed: RemoteInstanceHeaders,
+): boolean {
+  return (
+    Boolean(observed.instanceId) &&
+    (!info.remoteUpstreamInstanceId || Boolean(observed.upstreamInstanceId))
+  );
+}
+
+function healthMatchesRemoteInstance(
+  health: RemoteDaemonHealth,
+  observed: RemoteInstanceHeaders,
+): boolean {
+  return (
+    health.instanceId === observed.instanceId &&
+    health.upstream?.instanceId === observed.upstreamInstanceId
+  );
+}
+
+async function recheckChangedRemoteInstance(
+  info: DaemonInfo,
+  observed: RemoteInstanceHeaders,
+  onIdentityChange?: (health: RemoteDaemonHealth | undefined) => void,
+): Promise<void> {
+  const health = await readRemoteDaemonHealth(info);
+  if (!health.reachable) {
+    throw new AppError('COMMAND_FAILED', 'Remote daemon is unavailable', {
+      daemonBaseUrl: info.baseUrl,
+    });
+  }
+  if (!hasCompleteRemoteInstanceHeaders(info, observed)) {
+    onIdentityChange?.(undefined);
+    return;
+  }
+  if (!healthMatchesRemoteInstance(health, observed)) {
+    throw new AppError('COMMAND_FAILED', 'Remote daemon identity changed during RPC', {
+      daemonBaseUrl: info.baseUrl,
+    });
+  }
+  onIdentityChange?.(health);
+}
+
 async function sendHttpRequest(
   info: DaemonInfo,
   req: DaemonRequest,
@@ -429,7 +508,16 @@ async function sendHttpRequest(
         headers,
       },
       (res) => {
+        const identityCheck = verifyRemoteInstance(
+          info,
+          res.headers ?? {},
+          options.onIdentityChange,
+        );
         if (shouldReadDaemonProgressStream(req, res.headers?.['content-type'])) {
+          void identityCheck.catch((error: unknown) => {
+            if (timeoutHandle) clearTimeout(timeoutHandle);
+            reject(error);
+          });
           readDaemonHttpProgressResponse(res, {
             req,
             onProgress: options.onProgress,
@@ -437,19 +525,32 @@ async function sendHttpRequest(
             clearTimeout: () => {
               if (timeoutHandle) clearTimeout(timeoutHandle);
             },
-            handleResponseBody: (body) =>
-              handleDaemonHttpResponseBody(body, {
-                info,
-                req,
-                stateDir: statePaths.baseDir,
-                resolve,
-                reject,
-              }),
+            handleResponseBody: (body) => {
+              void identityCheck
+                .then(() =>
+                  handleDaemonHttpResponseBody(body, {
+                    info,
+                    req,
+                    stateDir: statePaths.baseDir,
+                    resolve,
+                    reject,
+                  }),
+                )
+                .catch(reject);
+            },
           });
           return;
         }
-        void readNodeHttpResponseBody(res)
-          .then((body) => {
+        const responseBody = readNodeHttpResponseBody(res).catch((error: unknown) => {
+          throw new AppError(
+            'COMMAND_FAILED',
+            'Failed to read daemon response',
+            { requestId: req.meta?.requestId },
+            error instanceof Error ? error : undefined,
+          );
+        });
+        void Promise.all([identityCheck, responseBody])
+          .then(([, body]) => {
             if (timeoutHandle) clearTimeout(timeoutHandle);
             handleDaemonHttpResponseBody(body, {
               info,
@@ -461,14 +562,7 @@ async function sendHttpRequest(
           })
           .catch((error: unknown) => {
             if (timeoutHandle) clearTimeout(timeoutHandle);
-            reject(
-              new AppError(
-                'COMMAND_FAILED',
-                'Failed to read daemon response',
-                { requestId: req.meta?.requestId },
-                error instanceof Error ? error : undefined,
-              ),
-            );
+            reject(error);
           });
       },
     );

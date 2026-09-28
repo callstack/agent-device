@@ -8,6 +8,8 @@ import { getRequestSignal } from '@agent-device/host-kit/request';
 import { executeRunScriptHttpRequest } from '@agent-device/maestro/run-script-http';
 import {
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
+  DAEMON_HTTP_INSTANCE_HEADER,
+  DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_RPC_PROTOCOL_VERSION,
 } from '@agent-device/contracts/daemon-http';
@@ -36,7 +38,7 @@ test('daemon proxy forwards rpc requests with upstream daemon token', async (t) 
   const upstream = http.createServer((req, res) => {
     if (req.url === '/health') {
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ ok: true }));
+      res.end(JSON.stringify({ ok: true, instanceId: 'upstream-instance' }));
       return;
     }
     assert.equal(req.url, '/rpc');
@@ -51,6 +53,7 @@ test('daemon proxy forwards rpc requests with upstream daemon token', async (t) 
     req.on('end', () => {
       upstreamBody = JSON.parse(body) as Record<string, any>;
       res.setHeader('content-type', 'application/json');
+      res.setHeader(DAEMON_HTTP_INSTANCE_HEADER, 'upstream-instance');
       res.end(
         JSON.stringify({
           jsonrpc: '2.0',
@@ -90,6 +93,15 @@ test('daemon proxy forwards rpc requests with upstream daemon token', async (t) 
     });
 
     assert.equal(response.status, 200);
+    assert.equal(typeof response.headers.get(DAEMON_HTTP_INSTANCE_HEADER), 'string');
+    assert.equal(response.headers.get(DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER), 'upstream-instance');
+    const healthResponse = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/health`);
+    const health = (await healthResponse.json()) as Record<string, any>;
+    assert.equal(health.instanceId, response.headers.get(DAEMON_HTTP_INSTANCE_HEADER));
+    assert.equal(
+      health.upstream.instanceId,
+      response.headers.get(DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER),
+    );
     assert.deepEqual(await response.json(), {
       jsonrpc: '2.0',
       id: 'req-1',
@@ -399,6 +411,7 @@ test('daemon proxy leaves health endpoint unauthenticated', async (t) => {
     assert.equal(payload.service, 'agent-device-proxy');
     assert.equal(typeof payload.version, 'string');
     assert.equal(payload.rpcProtocolVersion, DAEMON_RPC_PROTOCOL_VERSION);
+    assert.equal(typeof payload.instanceId, 'string');
     assert.deepEqual(payload.upstream, { ok: true });
     assert.equal(upstreamAuth, 'Bearer daemon-secret');
     assert.equal(upstreamTokenHeader, 'daemon-secret');

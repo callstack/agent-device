@@ -487,14 +487,12 @@ test(
       });
       assert.equal(response.ok, true);
 
-      // The WHOLE wire conversation, not just the RPC, so any new call of any kind breaks
-      // this. `GET /health` is the client's own ADR 0006 protocol-compatibility probe on the
-      // remote path (`ensureRemoteDaemon`); it is not the bridge, and it predates the bridge.
-      // The bridge itself contributes nothing: no helper, admin or acquisition route appears.
+      // The open above established the daemon identity. A persistent client should now
+      // forward only the snapshot RPC, with no additional health or helper request.
       assert.deepEqual(
         forwarded.map((entry) => `${entry.method} ${entry.route}`),
-        ['GET /health', 'POST /rpc'],
-        'a proxied snapshot must cross the wire only as the compat probe and the RPC',
+        ['POST /rpc'],
+        'a proxied snapshot must cross the wire as one RPC',
       );
 
       // What crossed, read rather than sized, at every level of the payload. Comparing the

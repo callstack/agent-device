@@ -1,5 +1,6 @@
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import http, { type IncomingHttpHeaders } from 'node:http';
+import { randomUUID } from 'node:crypto';
 import {
   AppError,
   normalizeError,
@@ -35,6 +36,7 @@ import {
 } from '../../request-progress-protocol.ts';
 import {
   buildDaemonHealthPayload,
+  DAEMON_HTTP_INSTANCE_HEADER,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_HTTP_TENANT_HEADER,
@@ -571,14 +573,22 @@ export async function createDaemonHttpServer(options: {
    */
   resolveRequestDiagnosticsPath?: (ref: DiagnosticsRecordRef) => string;
 }): Promise<http.Server> {
+  const instanceId = randomUUID();
   const environment = options.env ?? process.env;
   const authHook = await loadHttpAuthHook(environment);
   const { handleRequest, token, retainArtifacts = false, resolveRequestDiagnosticsPath } = options;
   return http.createServer((req, res) => {
+    if (req.method === 'POST' && req.url === '/rpc') {
+      res.setHeader(DAEMON_HTTP_INSTANCE_HEADER, instanceId);
+    }
     if (req.method === 'GET' && req.url === '/health') {
       res.statusCode = 200;
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify(buildDaemonHealthPayload('agent-device-daemon', readVersion())));
+      res.end(
+        JSON.stringify(
+          buildDaemonHealthPayload('agent-device-daemon', readVersion(), { instanceId }),
+        ),
+      );
       return;
     }
 

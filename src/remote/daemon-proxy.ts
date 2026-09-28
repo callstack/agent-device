@@ -7,6 +7,8 @@ import { readNodeHttpRequestBody, timingSafeStringEqual } from '@agent-device/ho
 import {
   buildDaemonHealthPayload,
   DAEMON_HTTP_BASE_PATH,
+  DAEMON_HTTP_INSTANCE_HEADER,
+  DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_HTTP_TENANT_HEADER,
@@ -42,12 +44,21 @@ const FORWARDED_REQUEST_HEADERS = [
   'x-artifact-hash-algorithm',
   DAEMON_HTTP_TENANT_HEADER,
 ];
-const FORWARDED_RESPONSE_HEADERS = ['content-type', 'content-disposition', 'x-request-id'];
+const FORWARDED_RESPONSE_HEADERS = [
+  'content-type',
+  'content-disposition',
+  'x-request-id',
+  DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
+];
 
 export function createDaemonProxyServer(options: DaemonProxyOptions): http.Server {
   const normalized = normalizeProxyOptions(options);
+  const instanceId = randomUUID();
   return http.createServer((req, res) => {
-    void handleProxyRequest(req, res, normalized).catch((error: unknown) => {
+    if (req.method === 'POST' && resolveProxyRoute(req.url ?? '/') === '/rpc') {
+      res.setHeader(DAEMON_HTTP_INSTANCE_HEADER, instanceId);
+    }
+    void handleProxyRequest(req, res, normalized, instanceId).catch((error: unknown) => {
       sendProxyError(res, error);
     });
   });
@@ -57,10 +68,11 @@ async function handleProxyRequest(
   req: IncomingMessage,
   res: ServerResponse,
   options: Required<DaemonProxyOptions>,
+  instanceId: string,
 ): Promise<void> {
   const route = resolveProxyRoute(req.url ?? '/');
   if (req.method === 'GET' && route === '/health') {
-    await sendProxyHealth(res, options);
+    await sendProxyHealth(res, options, instanceId);
     return;
   }
 
@@ -94,12 +106,18 @@ async function handleProxyRequest(
   await forwardProxyRequest({ req, res, route, options, rpcBody });
 }
 
-async function sendProxyHealth(res: ServerResponse, options: Required<DaemonProxyOptions>) {
+async function sendProxyHealth(
+  res: ServerResponse,
+  options: Required<DaemonProxyOptions>,
+  instanceId: string,
+) {
   const upstream = await readUpstreamHealth(options);
   res.statusCode = 200;
   res.setHeader('content-type', 'application/json');
   res.end(
-    JSON.stringify(buildDaemonHealthPayload('agent-device-proxy', readVersion(), { upstream })),
+    JSON.stringify(
+      buildDaemonHealthPayload('agent-device-proxy', readVersion(), { upstream, instanceId }),
+    ),
   );
 }
 
@@ -175,6 +193,10 @@ async function sendProxyResponse(params: {
   const { req, res, route, response, clientToken } = params;
   res.statusCode = response.status;
   copyProxyResponseHeaders(response, res);
+  if (route === '/rpc') {
+    const upstreamInstance = response.headers.get(DAEMON_HTTP_INSTANCE_HEADER);
+    if (upstreamInstance) res.setHeader(DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER, upstreamInstance);
+  }
   ensureProxyRequestId(req, res);
 
   if (isUploadPreflightRoute(route)) {
