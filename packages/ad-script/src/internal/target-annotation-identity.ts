@@ -50,7 +50,7 @@ type IdentityTreeNode = Pick<RawSnapshotNode, 'type' | 'identifier' | 'label'>;
  * normalized (NFC, label whitespace collapse, `normalizeType` role) AND
  * 256-byte field-capped, on every path. Shared by the record-time writer
  * (`@agent-device/selectors/target-evidence`), replay-time verification
- * (`src/daemon/replay/internal/session-replay-target-verification.ts`), and the
+ * (`packages/replay-port/src/daemon-port/session-replay-target-verification.ts`), and the
  * dispatch-side post-resolution guard
  * (`src/commands/interaction/runtime/resolution.ts`), so all three compute
  * a node's identity with byte-identical semantics.

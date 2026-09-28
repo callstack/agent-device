@@ -515,6 +515,9 @@ importers:
       '@agent-device/capture-kit':
         specifier: workspace:*
         version: link:../capture-kit
+      '@agent-device/command-registry':
+        specifier: workspace:*
+        version: link:../command-registry
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts

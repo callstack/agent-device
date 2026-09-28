@@ -9,6 +9,7 @@
     "@agent-device/ad-replay": "workspace:*",
     "@agent-device/ad-script": "workspace:*",
     "@agent-device/capture-kit": "workspace:*",
+    "@agent-device/command-registry": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/device-selection": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
@@ -22,6 +23,10 @@
     "./command-types": {
       "types": "./src/daemon-port/command-types.ts",
       "default": "./src/daemon-port/command-types.ts"
+    },
+    "./native-command": {
+      "types": "./src/daemon-port/native-command.ts",
+      "default": "./src/daemon-port/native-command.ts"
     },
     "./repair-hint": {
       "types": "./src/daemon-port/repair-hint.ts",
@@ -43,9 +48,25 @@
       "types": "./src/daemon-port/script-source.ts",
       "default": "./src/daemon-port/script-source.ts"
     },
+    "./session-replay-action-runtime": {
+      "types": "./src/daemon-port/session-replay-action-runtime.ts",
+      "default": "./src/daemon-port/session-replay-action-runtime.ts"
+    },
+    "./session-replay-divergence": {
+      "types": "./src/daemon-port/session-replay-divergence.ts",
+      "default": "./src/daemon-port/session-replay-divergence.ts"
+    },
+    "./session-replay-divergence-publication": {
+      "types": "./src/daemon-port/session-replay-divergence-publication.ts",
+      "default": "./src/daemon-port/session-replay-divergence-publication.ts"
+    },
     "./session-replay-heal": {
       "types": "./src/daemon-port/session-replay-heal.ts",
       "default": "./src/daemon-port/session-replay-heal.ts"
+    },
+    "./session-replay-maestro-failure": {
+      "types": "./src/daemon-port/session-replay-maestro-failure.ts",
+      "default": "./src/daemon-port/session-replay-maestro-failure.ts"
     },
     "./session-replay-maestro-observer": {
       "types": "./src/daemon-port/session-replay-maestro-observer.ts",
@@ -54,6 +75,10 @@
     "./session-replay-maestro-request": {
       "types": "./src/daemon-port/session-replay-maestro-request.ts",
       "default": "./src/daemon-port/session-replay-maestro-request.ts"
+    },
+    "./session-replay-maestro-runtime": {
+      "types": "./src/daemon-port/session-replay-maestro-runtime.ts",
+      "default": "./src/daemon-port/session-replay-maestro-runtime.ts"
     },
     "./session-replay-report-action": {
       "types": "./src/daemon-port/session-replay-report-action.ts",
@@ -103,6 +128,10 @@
       "types": "./src/daemon-port/session-test-shard-devices.ts",
       "default": "./src/daemon-port/session-test-shard-devices.ts"
     },
+    "./session-test-source-discovery": {
+      "types": "./src/daemon-port/session-test-source-discovery.ts",
+      "default": "./src/daemon-port/session-test-source-discovery.ts"
+    },
     "./target-classification": {
       "types": "./src/daemon-port/target-classification.ts",
       "default": "./src/daemon-port/target-classification.ts"
@@ -114,6 +143,10 @@
     "./target-token": {
       "types": "./src/daemon-port/target-token.ts",
       "default": "./src/daemon-port/target-token.ts"
+    },
+    "./test-command": {
+      "types": "./src/daemon-port/test-command.ts",
+      "default": "./src/daemon-port/test-command.ts"
     }
   }
 }

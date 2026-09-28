@@ -33,9 +33,9 @@ const RUNTIME_FILE = 'src/daemon/handlers/session-replay-command.ts';
 /** The divergence-report chain: never a second `ReplayCoordinator`, never a bare `SessionStore`. */
 const DIVERGENCE_CHAIN_FILES = [
   'packages/replay-port/src/daemon-port/session-replay-resume.ts',
-  'src/daemon/replay/internal/session-replay-divergence.ts',
-  'src/daemon/replay/internal/session-replay-target-verification.ts',
-  'src/daemon/replay/internal/session-replay-runtime-failure.ts',
+  'packages/replay-port/src/daemon-port/session-replay-divergence.ts',
+  'packages/replay-port/src/daemon-port/session-replay-target-verification.ts',
+  'packages/replay-port/src/daemon-port/session-replay-runtime-failure.ts',
   'packages/replay-port/src/daemon-port/session-replay-runtime-failure-response.ts',
 ] as const;
 
@@ -51,7 +51,7 @@ type ImportSite = {
 };
 
 function listProductionSourceFiles(): string[] {
-  const roots = ['src'];
+  const roots = ['src', 'packages/replay-port/src'];
   const out: string[] = [];
   const walk = (dir: string): void => {
     for (const entry of fs.readdirSync(path.join(REPO_ROOT, dir), { withFileTypes: true })) {
@@ -404,7 +404,7 @@ test('coordinator ownership scanning catches aliases, namespaces, and dynamic im
 test('daemon replay production files never import the P4a ReplaySessionTransaction projection', () => {
   const offenders = PRODUCTION_FILES.filter(
     (file) =>
-      file.startsWith('src/daemon/replay/') &&
+      file.startsWith('packages/replay-port/src/') &&
       collectImportSites(file).some((site) => importsAnyBinding(site, TRANSACTION_MODULE)),
   );
   assert.deepEqual(
