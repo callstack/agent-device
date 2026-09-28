@@ -222,7 +222,7 @@ function expectAppleSnapshotAvailability(
 }
 
 test.each(Object.entries(leaves))(
-  'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
+  'classifies back/home/app-switcher/screen-lock/orientation/tv-remote/keyboard facts for the %s leaf',
   async (_name, device) => {
     const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
       device,

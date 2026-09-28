@@ -27,7 +27,7 @@ type SystemButtonUse = RuntimeUse<
 type SystemButtonCommandRow = Readonly<{
   /** The registry's declared use for the command: exactly one system-button cell. */
   use: SystemButtonUse;
-  /** The success text the press reports; the response carries nothing else by design. */
+  /** The success text the press reports. */
   message: string;
   state?: 'locked';
 }>;
@@ -35,7 +35,7 @@ type SystemButtonCommandRow = Readonly<{
 /**
  * The generic-route commands that are one system-button press each (ADR 0019). A press has no
  * arguments, no settle and no observation payload: it is delivered to whatever the system routes
- * it to, and the response is the button's success text. One row per command is what keeps a new
+ * it to. Screen lock additionally reports its verified terminal state. One row per command keeps a new
  * button from growing a module, a dispatcher arm and a conformance entry of its own.
  */
 const SYSTEM_BUTTON_COMMANDS = {

@@ -49,7 +49,7 @@ extension RunnerTests {
     ) -> Response {
       switch readState() {
       case .success(true):
-        return screenLockVisibleResponse(verifyVisibleSurface)
+        return screenLockVisibleResponse(verifyVisibleSurface, shouldContinue: shouldContinue, wait: wait)
       case .failure(let response):
         return response
       case .success(false):
@@ -61,12 +61,23 @@ extension RunnerTests {
       while shouldContinue() {
         switch readState() {
         case .success(true):
-          return screenLockVisibleResponse(verifyVisibleSurface)
+          return screenLockVisibleResponse(verifyVisibleSurface, shouldContinue: shouldContinue, wait: wait)
         case .failure(let response):
           return response
         case .success(false):
           wait()
         }
+      }
+
+      // The lock transition may complete during the last wait even when that wait crosses the
+      // deadline. Read once more before reporting timeout so a completed transition is not lost.
+      switch readState() {
+      case .success(true):
+        return screenLockVisibleResponse(verifyVisibleSurface, shouldContinue: shouldContinue, wait: wait)
+      case .failure(let response):
+        return response
+      case .success(false):
+        break
       }
 
       return Response(
@@ -79,17 +90,25 @@ extension RunnerTests {
       )
     }
 
-    private func screenLockVisibleResponse(_ verifyVisibleSurface: () -> Bool) -> Response {
-      guard verifyVisibleSurface() else {
-        return Response(
-          ok: false,
-          error: ErrorPayload(
-            code: "COMMAND_FAILED",
-            message: "SpringBoard reported a locked state, but the Lock Screen surface was not visible"
-          )
-        )
+    private func screenLockVisibleResponse(
+      _ verifyVisibleSurface: () -> Bool,
+      shouldContinue: () -> Bool,
+      wait: () -> Void
+    ) -> Response {
+      while true {
+        if verifyVisibleSurface() {
+          return Response(ok: true, data: DataPayload(message: "Screen locked", state: "locked"))
+        }
+        guard shouldContinue() else { break }
+        wait()
       }
-      return Response(ok: true, data: DataPayload(message: "screenLock", state: "locked"))
+      return Response(
+        ok: false,
+        error: ErrorPayload(
+          code: "COMMAND_FAILED",
+          message: "SpringBoard reported a locked state, but the Lock Screen surface was not visible"
+        )
+      )
     }
 
     private func dispatchScreenLock() -> Response? {

@@ -8,6 +8,7 @@ import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/syste
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import {
   hasAppleActionButton,
+  isHandheldAppleSimulator,
   isTvOsDevice,
   resolveDeviceAppleOs,
   type DeviceInfo,
@@ -159,8 +160,7 @@ const screenLockOsUnavailable = Object.freeze({
 } as const);
 function appleScreenLockFact(device: DeviceInfo): RuntimeOperationFact {
   if (device.kind !== 'simulator') return screenLockKindUnavailable;
-  const os = resolveDeviceAppleOs(device);
-  return os === 'ios' || os === 'ipados' ? available : screenLockOsUnavailable;
+  return isHandheldAppleSimulator(device) ? available : screenLockOsUnavailable;
 }
 /**
  * The leaf reading is {@link hasAppleActionButton}, the same rule a provider owner reads; what this

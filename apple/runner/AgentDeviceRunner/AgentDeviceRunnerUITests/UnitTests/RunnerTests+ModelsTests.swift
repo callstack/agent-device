@@ -271,7 +271,7 @@ extension RunnerTests {
       ),
       (
         .screenLock,
-        expectation(interaction: false, retry: false, launch: .presentedSurface, converts: true)
+        expectation(interaction: false, retry: false, launch: .noApp, converts: true)
       ),
       (.keyboardDismiss, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),
       (.keyboardReturn, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),

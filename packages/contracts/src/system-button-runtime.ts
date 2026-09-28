@@ -5,7 +5,8 @@ import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
 /**
  * The system buttons: one press each, no arguments, nothing returned. `home` and `appSwitcher`
- * reach a springboard or recents surface; `actionButton` presses iPhone/iPad hardware. What
+ * reach a springboard or recents surface; `actionButton` presses iPhone/iPad hardware; `screenLock`
+ * transitions a supported simulator to its verified Lock Screen. What
  * varies between them is which owners carry the control, and that is the fact table's job, not
  * a per-button module's: a button joins this list and its owners state a cell.
  */

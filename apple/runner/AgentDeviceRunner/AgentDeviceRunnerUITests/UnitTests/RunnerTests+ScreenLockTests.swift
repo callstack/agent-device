@@ -73,6 +73,23 @@ extension RunnerTests {
     XCTAssertTrue(response.error?.message.contains("not visible") == true)
   }
 
+  func testScreenLockWaitsForVisibleSurfaceAfterLockStateChanges() {
+    var visible = false
+    var waits = 0
+    let response = executeScreenLockTransition(
+      readState: { .success(true) },
+      dispatch: { nil },
+      verifyVisibleSurface: {
+        visible = waits > 0
+        return visible
+      },
+      shouldContinue: { waits < 1 },
+      wait: { waits += 1 }
+    )
+    XCTAssertTrue(response.ok)
+    XCTAssertEqual(waits, 1)
+  }
+
   func testScreenLockTimesOutWhileSimulatorIsStillBooting() {
     var dispatches = 0
     let response = executeScreenLockTransition(
@@ -88,6 +105,38 @@ extension RunnerTests {
     XCTAssertFalse(response.ok)
     XCTAssertEqual(response.error?.code, "COMMAND_FAILED")
     XCTAssertEqual(dispatches, 1)
+  }
+
+  func testScreenLockPerformsFinalReadAfterDeadline() {
+    var reads = 0
+    let response = executeScreenLockTransition(
+      readState: {
+        reads += 1
+        return .success(reads == 3)
+      },
+      dispatch: { nil },
+      verifyVisibleSurface: { true },
+      shouldContinue: { reads < 2 },
+      wait: {}
+    )
+    XCTAssertTrue(response.ok)
+    XCTAssertEqual(reads, 3)
+  }
+
+  func testScreenLockPropagatesLockStateReadFailure() {
+    let failure = Response(
+      ok: false,
+      error: ErrorPayload(code: "COMMAND_FAILED", message: "notify failure")
+    )
+    let response = executeScreenLockTransition(
+      readState: { .failure(failure) },
+      dispatch: { nil },
+      verifyVisibleSurface: { true },
+      shouldContinue: { true },
+      wait: {}
+    )
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.message, "notify failure")
   }
 }
 #endif

@@ -150,6 +150,12 @@ fileprivate extension CommandTraits {
   /// The runner's own lifecycle: no session app is brought forward, and no mutation is proven.
   static let runnerLifecycle = CommandTraits(launchPolicy: .noApp)
 
+  /// A verified system-state mutation must not activate the session app before dispatch.
+  static let systemStateMutation = CommandTraits(
+    launchPolicy: .noApp,
+    convertsRecordedFailure: true
+  )
+
   /// Commands hosted by the surface that already has focus, which no activation may cancel. A
   /// hardware press belongs to the system rather than to the session app, and an alert answers from
   /// the modal where it sits; both mutate.
@@ -254,8 +260,12 @@ extension Command {
     case .recordStop, .uptime, .terminate, .targetReset, .shutdown:
       return .runnerLifecycle
 
-    case .actionButton, .screenLock:
+    case .actionButton:
       return .presentedSurfaceMutation
+
+    case .screenLock:
+      // Unsupported platform leaves must fail before bringing the session app forward.
+      return .systemStateMutation
 
     case .querySelector:
       return .selectorResolution
