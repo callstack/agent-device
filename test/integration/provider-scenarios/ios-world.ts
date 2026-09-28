@@ -46,6 +46,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       platform: 'apple',
       request: {
         command: 'readText',
+        inspectPoint: true,
         x: 196,
         y: 122,
         appBundleId: 'com.apple.Preferences',
@@ -58,7 +59,6 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
             label: 'General',
             identifier: 'General',
             type: 'Button',
-            role: 'button',
             value: 'General',
             frame: { x: 146, y: 102, width: 100, height: 40 },
             hittable: true,

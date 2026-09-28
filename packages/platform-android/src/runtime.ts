@@ -366,7 +366,13 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         ...elementTextRuntimeOperationFacts({
           readTextAtPoint: device.kind === 'simulator' ? elementTextKindUnavailable : available,
         }),
-        ...pointInspectionRuntimeOperationFacts({ inspectPoint: elementTextKindUnavailable }),
+        ...pointInspectionRuntimeOperationFacts({
+          inspectPoint: Object.freeze({
+            available: false,
+            reason: 'unsupported-platform-leaf',
+            hint: 'inspect-point is currently supported on iOS Simulator targets only.',
+          } as const),
+        }),
         ...backRuntimeOperationFacts({ back: androidTouchFact(device) }),
         // `home` and `app-switcher` are one `input keyevent` each, admitted wherever the retired
         // `ANDROID_ALL` bucket admitted them.

@@ -422,11 +422,23 @@ extension RunnerTests {
       guard let x = command.x, let y = command.y else {
         return Response(ok: false, error: ErrorPayload(message: "readText requires x and y"))
       }
-      let inspection = readPointAt(app: activeApp, x: x, y: y)
-      return Response(
-        ok: true,
-        data: DataPayload(text: inspection.text, elements: inspection.elements)
-      )
+      if command.inspectPoint == true {
+        let inspection = readPointAt(app: activeApp, x: x, y: y)
+        guard inspection.complete else {
+          return Response(
+            ok: false,
+            error: ErrorPayload(
+              code: "COMMAND_FAILED",
+              message: "Point inspection could not prove a miss because its accessibility capture was truncated"
+            )
+          )
+        }
+        return Response(ok: true, data: DataPayload(text: inspection.text, elements: inspection.elements))
+      }
+      guard let text = readTextAt(app: activeApp, x: x, y: y) else {
+        return Response(ok: false, error: ErrorPayload(message: "readText did not resolve text"))
+      }
+      return Response(ok: true, data: DataPayload(text: text))
     case .screenshot:
 #if os(macOS)
       // macOS keeps the app-targeted capture behavior for window-level screenshots.

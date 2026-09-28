@@ -128,6 +128,65 @@ test('provider-backed interactor routes runner-command methods through the injec
   }
 });
 
+test('inspectPoint uses its explicit runner mode without changing readTextAtPoint wire requests', async () => {
+  const calls: RecordedRunnerCall[] = [];
+  const interactor = createAppleInteractor(
+    IOS_SIMULATOR,
+    { appBundleId: 'com.example.app' },
+    recordingRunnerProvider(calls),
+  );
+
+  await interactor.readTextAtPoint!({ x: 10, y: 20 });
+  assert.equal(calls[0]!.command.inspectPoint, undefined);
+
+  calls.length = 0;
+  await interactor.inspectPoint!({ x: 10, y: 20 });
+  assert.equal(calls[0]!.command.inspectPoint, true);
+});
+
+test('inspectPoint rejects a malformed runner payload instead of reporting an honest miss', async () => {
+  const interactor = createAppleInteractor(
+    IOS_SIMULATOR,
+    {},
+    recordingRunnerProvider([], { readText: { text: 'ignored' } }),
+  );
+  await assert.rejects(
+    interactor.inspectPoint!({ x: 10, y: 20 }),
+    (error: unknown) => error instanceof AppError && error.code === 'COMMAND_FAILED',
+  );
+});
+
+test('inspectPoint rejects non-finite accessibility frames', async () => {
+  const interactor = createAppleInteractor(
+    IOS_SIMULATOR,
+    {},
+    recordingRunnerProvider([], {
+      readText: {
+        elements: [{ label: 'Bad frame', frame: { x: Number.NaN, y: 0, width: 10, height: 10 } }],
+      },
+    }),
+  );
+  await assert.rejects(
+    interactor.inspectPoint!({ x: 10, y: 20 }),
+    (error: unknown) => error instanceof AppError && error.code === 'COMMAND_FAILED',
+  );
+});
+
+test('inspectPoint returns valid runner descriptors in their reported order', async () => {
+  const elements = [
+    { label: 'Smallest', frame: { x: 10, y: 10, width: 10, height: 10 } },
+    { label: 'Containing', frame: { x: 0, y: 0, width: 40, height: 40 } },
+  ];
+  const interactor = createAppleInteractor(
+    IOS_SIMULATOR,
+    {},
+    recordingRunnerProvider([], { readText: { elements } }),
+  );
+
+  const result = await interactor.inspectPoint!({ x: 12, y: 12 });
+  assert.deepEqual(result.elements, elements);
+});
+
 test('provider-backed interactor rejects local Apple tooling methods with a clear error', async () => {
   const interactor = createAppleInteractor(IOS_SIMULATOR, {}, recordingRunnerProvider([]));
   for (const [method, invoke] of Object.entries(LOCAL_TOOL_METHODS)) {

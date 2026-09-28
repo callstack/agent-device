@@ -1395,8 +1395,8 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     iosSimulator: iosSimulator.contract(
       'packages/platform-apple/src/__tests__/interactor-runner-provider.test.ts',
-      'inspectPoint',
-      'the Apple runner returns ordered accessibility descriptors for a screen coordinate',
+      'inspectPoint returns valid runner descriptors in their reported order',
+      'the Apple interactor preserves valid ordered point-inspection descriptors returned by the runner',
     ),
     macos: macos.contract(
       'packages/platform-apple/src/runtime.test.ts',

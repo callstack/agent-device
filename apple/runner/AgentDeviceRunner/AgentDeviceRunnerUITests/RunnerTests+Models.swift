@@ -184,6 +184,7 @@ extension Command {
 
 struct Command: Codable {
   let command: CommandType
+  let inspectPoint: Bool?
   let commandId: String?
   let statusCommandId: String?
   let appBundleId: String?

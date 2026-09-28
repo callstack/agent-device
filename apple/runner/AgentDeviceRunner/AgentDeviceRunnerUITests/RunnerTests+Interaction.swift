@@ -318,18 +318,32 @@ extension RunnerTests {
   }
 
   func readTextAt(app: XCUIApplication, x: Double, y: Double) -> String? {
-    readPointAt(app: app, x: x, y: y).text
+    let point = CGPoint(x: x, y: y)
+    let textInputCandidates = textInputCandidatesAt(app: app, point: point)
+    for element in textInputCandidates where prefersExpandedTextRead(element) {
+      if let text = readableText(for: element) { return text }
+    }
+    let candidates = app.descendants(matching: .any).allElementsBoundByIndex
+      .filter { $0.exists && !$0.frame.isEmpty && $0.frame.contains(point) }
+      .sorted(by: smallestElementFirst)
+    for element in candidates where prefersExpandedTextRead(element) {
+      if let text = readableText(for: element) { return text }
+    }
+    for element in candidates {
+      if let text = readableText(for: element) { return text }
+    }
+    return nil
   }
 
   func readPointAt(
     app: XCUIApplication,
     x: Double,
     y: Double
-  ) -> (text: String?, elements: [PointInspectionElementPayload]) {
+  ) -> (text: String?, elements: [PointInspectionElementPayload], complete: Bool) {
 #if os(iOS) && targetEnvironment(simulator)
     // System-owned sheets can make XCTest's unbounded descendants query hold
     // the main thread past the command watchdog. The Simulator-only private AX
-    // bridge already provides a deadline-bounded tree for snapshot recovery;
+    // bridge supplies the bounded accessibility tree used by snapshot recovery;
     // filter that tree at the requested point before touching the XCTest query.
     if let inspection = privateAXPointInspection(app: app, x: x, y: y) {
       return inspection
@@ -353,7 +367,6 @@ extension RunnerTests {
         label: label.isEmpty ? nil : label,
         identifier: identifier.isEmpty ? nil : identifier,
         type: elementTypeName(element.elementType),
-        role: elementTypeName(element.elementType),
         value: value.isEmpty ? nil : value,
         frame: SnapshotRect(element.frame),
         hittable: element.isHittable
@@ -362,21 +375,21 @@ extension RunnerTests {
 
     for element in textInputCandidates where prefersExpandedTextRead(element) {
       if let text = readableText(for: element) {
-        return (text, elements)
+        return (text, elements, true)
       }
     }
 
     for element in candidates where prefersExpandedTextRead(element) {
       if let text = readableText(for: element) {
-        return (text, elements)
+        return (text, elements, true)
       }
     }
     for element in candidates {
       if let text = readableText(for: element) {
-        return (text, elements)
+        return (text, elements, true)
       }
     }
-    return (nil, elements)
+    return (nil, elements, true)
   }
 
 #if os(iOS) && targetEnvironment(simulator)
@@ -384,7 +397,7 @@ extension RunnerTests {
     app: XCUIApplication,
     x: Double,
     y: Double
-  ) -> (text: String?, elements: [PointInspectionElementPayload])? {
+  ) -> (text: String?, elements: [PointInspectionElementPayload], complete: Bool)? {
     let response = RunnerAXSnapshotBridge.snapshotTree(
       for: app,
       maxDepth: 56,
@@ -398,13 +411,19 @@ extension RunnerTests {
     else {
       return nil
     }
-    return privateAXPointInspection(root: root, point: CGPoint(x: x, y: y))
+    return privateAXPointInspection(
+      root: root,
+      point: CGPoint(x: x, y: y),
+      truncated: (response["truncated"] as? NSNumber)?.boolValue == true
+    )
   }
 
   func privateAXPointInspection(
     root: [String: Any],
-    point: CGPoint
-  ) -> (text: String?, elements: [PointInspectionElementPayload]) {
+    point: CGPoint,
+    truncated: Bool = false
+  ) -> (text: String?, elements: [PointInspectionElementPayload], complete: Bool) {
+    guard !truncated else { return (nil, [], false) }
     var candidates: [(payload: PointInspectionElementPayload, area: CGFloat)] = []
 
     func visit(_ raw: [String: Any]) {
@@ -436,7 +455,6 @@ extension RunnerTests {
             label: label,
             identifier: identifier,
             type: type,
-            role: type,
             value: value,
             frame: SnapshotRect(frame),
             hittable: nil
@@ -463,7 +481,7 @@ extension RunnerTests {
       }
       .prefix(24)
       .map(\.payload)
-    return (elements.compactMap(\.text).first, elements)
+    return (elements.compactMap(\.text).first, elements, true)
   }
 
   private func pointInspectionText(_ value: Any?) -> String? {

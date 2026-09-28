@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { alertCliReader, alertDaemonWriter } from './alert.ts';
 import { diffCliReader } from './diff.ts';
-import { inspectPointCliReader, inspectPointDaemonWriter } from './inspect-point.ts';
+import { captureCommandFamily } from './index.ts';
 import { snapshotCliOutput } from './output.ts';
 import { screenshotCliReader, screenshotDaemonWriter } from './screenshot.ts';
 import { snapshotCliReader } from './snapshot.ts';
@@ -23,16 +23,22 @@ function expectInvalidArgs(fn: () => unknown, messageFragment: string) {
 
 describe('capture command interface', () => {
   test('reads inspect-point coordinate flags and writes its daemon request', () => {
-    const input = inspectPointCliReader([], flags({ pointX: 14.5, pointY: 29 }));
+    const input = captureCommandFamily.cliReaders['inspect-point'](
+      [],
+      flags({ pointX: 14.5, pointY: 29 }),
+    );
     expect(input).toMatchObject({ point: { x: 14.5, y: 29 } });
-    expect(inspectPointDaemonWriter(input)).toMatchObject({
+    expect(captureCommandFamily.daemonWriters?.['inspect-point']?.(input)).toMatchObject({
       command: 'inspect-point',
       positionals: ['14.5', '29'],
     });
   });
 
   test('rejects inspect-point when either coordinate is missing', () => {
-    expectInvalidArgs(() => inspectPointCliReader([], flags({ pointX: 1 })), '--x and --y');
+    expectInvalidArgs(
+      () => captureCommandFamily.cliReaders['inspect-point']([], flags({ pointX: 1 })),
+      '--x and --y',
+    );
   });
 
   test('reads snapshot flags', () => {

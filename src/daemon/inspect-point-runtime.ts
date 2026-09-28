@@ -38,9 +38,10 @@ export async function resolveBoundInspectPointRuntime(
         ...(context.appBundleId ? { options: { appBundleId: context.appBundleId } } : {}),
         execution: runtimeExecutionFromContext(context),
       });
-      return result.elements.length === 0
+      const [first, ...rest] = result.elements;
+      return first === undefined
         ? { status: 'no-element-at-point', point, elements: [] }
-        : { status: 'inspected', point, elements: result.elements };
+        : { status: 'inspected', point, elements: [first, ...rest] };
     },
   );
 }

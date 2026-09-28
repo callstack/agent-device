@@ -111,7 +111,7 @@ export type PointInspectionResult =
   | Readonly<{
       status: 'inspected';
       point: Readonly<{ x: number; y: number }>;
-      elements: readonly PointInspectionElement[];
+      elements: readonly [PointInspectionElement, ...PointInspectionElement[]];
     }>
   | Readonly<{
       status: 'no-element-at-point';

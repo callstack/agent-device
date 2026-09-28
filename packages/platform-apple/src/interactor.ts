@@ -467,15 +467,31 @@ async function inspectRunnerPoint(
 ): Promise<PointInspectionRead> {
   const result = await runAppleRunnerCommand(
     device,
-    { command: 'readText', x: point.x, y: point.y, appBundleId: options?.appBundleId },
+    {
+      command: 'readText',
+      inspectPoint: true,
+      x: point.x,
+      y: point.y,
+      appBundleId: options?.appBundleId,
+    },
     options?.signal ? { ...runnerOpts, signal: options.signal } : runnerOpts,
   );
-  const elements = Array.isArray(result.elements)
-    ? result.elements.flatMap((value) => {
-        const element = readPointInspectionElement(value);
-        return element ? [element] : [];
-      })
-    : [];
+  if (!Array.isArray(result.elements)) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'iOS runner returned an invalid point-inspection payload: missing elements',
+    );
+  }
+  const elements = result.elements.map((value) => {
+    const element = readPointInspectionElement(value);
+    if (!element) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        'iOS runner returned an invalid point-inspection element',
+      );
+    }
+    return element;
+  });
   return {
     ...(typeof result.text === 'string' ? { text: result.text } : {}),
     elements,
@@ -498,7 +514,8 @@ function readPointInspectionFrame(value: unknown): PointInspectionElement['frame
   if (typeof value !== 'object' || value === null) return undefined;
   const frame = value as Record<string, unknown>;
   const dimensions = [frame.x, frame.y, frame.width, frame.height];
-  if (!dimensions.every((dimension) => typeof dimension === 'number')) return undefined;
+  if (!dimensions.every((dimension) => typeof dimension === 'number' && Number.isFinite(dimension)))
+    return undefined;
   const [x, y, width, height] = dimensions as [number, number, number, number];
   return { x, y, width, height };
 }

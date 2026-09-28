@@ -308,7 +308,7 @@ function parseFlagValue(
     return { value, consumeNext: inlineValue === undefined };
   }
   const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
+  if (value.trim().length === 0 || !Number.isFinite(parsed)) {
     throw new AppError('INVALID_ARGS', `Invalid ${labelForFlag(token)}: ${value}`);
   }
   if (typeof definition.min === 'number' && parsed < definition.min) {

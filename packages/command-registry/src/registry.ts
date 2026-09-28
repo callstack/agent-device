@@ -1089,7 +1089,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'extended',
     recordsSessionAction: false,
     daemon: { route: 'generic', refFrameEffect: 'preserve' },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
     platformExecution: { kind: 'device-runtime', uses: [inspectPointRuntimeUse] },
   },

@@ -375,7 +375,7 @@ export type Interactor = {
   ): Promise<string | undefined>;
   inspectPoint?(
     point: Point,
-    options?: { appBundleId?: string; surface?: SessionSurface; signal?: AbortSignal },
+    options?: { appBundleId?: string; signal?: AbortSignal },
   ): Promise<PointInspectionRead>;
   /**
    * Native text-presence reading, when the backend has one that does not require a tree capture.

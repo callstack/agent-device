@@ -24,7 +24,9 @@ export function recordingRunnerProvider(
   };
 }
 
-export function runnerResultFor(sent: Pick<RunnerCommand, 'command' | 'orientation'>) {
+export function runnerResultFor(
+  sent: Pick<RunnerCommand, 'command' | 'orientation' | 'inspectPoint'>,
+) {
   switch (sent.command) {
     case 'snapshot':
       return {
@@ -44,6 +46,8 @@ export function runnerResultFor(sent: Pick<RunnerCommand, 'command' | 'orientati
       return { x: 0, y: 0, x2: 390, y2: 844 };
     case 'rotate':
       return { orientation: sent.orientation };
+    case 'readText':
+      return sent.inspectPoint === true ? { elements: [] } : {};
     case 'scroll':
     case 'desktopScroll':
       return { referenceWidth: 390, referenceHeight: 844 };

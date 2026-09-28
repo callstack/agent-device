@@ -68,6 +68,27 @@ extension RunnerTests {
     XCTAssertTrue(inspection.elements.isEmpty)
   }
 
+  func testPrivateAXPointInspectionDoesNotReportMissForTruncatedCapture() {
+    let root: [String: Any] = [
+      "type": NSNumber(value: XCUIElement.ElementType.window.rawValue),
+      "label": "Root",
+      "identifier": "root",
+      "value": "",
+      "frame": ["x": 0, "y": 0, "width": 100, "height": 100],
+      "children": [],
+    ]
+
+    let inspection = privateAXPointInspection(
+      root: root,
+      point: CGPoint(x: 200, y: 200),
+      truncated: true
+    )
+
+    XCTAssertFalse(inspection.complete)
+    XCTAssertNil(inspection.text)
+    XCTAssertTrue(inspection.elements.isEmpty)
+  }
+
   func testPrivateAXPointInspectionOmitsOwningApplicationLabel() {
     let root: [String: Any] = [
       "type": NSNumber(value: XCUIElement.ElementType.application.rawValue),

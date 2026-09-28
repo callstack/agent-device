@@ -74,6 +74,7 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
   [PUBLIC_COMMANDS.boot]: () => one(),
   [PUBLIC_COMMANDS.prepare]: () => one(['ios-runner']),
   [PUBLIC_COMMANDS.snapshot]: () => one([], { snapshotInteractiveOnly: true }),
+  [PUBLIC_COMMANDS['inspect-point']]: () => one(['10', '10']),
   [PUBLIC_COMMANDS.perf]: () => [{ positionals: [] }, { positionals: ['frames'] }],
   [PUBLIC_COMMANDS.record]: ({ world, tmpDir }) =>
     world === 'ios'
@@ -146,10 +147,7 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
 // undriveable command has a home and the partition test keeps a new command from escaping the
 // guard silently.
 // ---------------------------------------------------------------------------
-const SKIPPED_COMMANDS: Record<string, string> = {
-  [PUBLIC_COMMANDS['inspect-point']]:
-    'requires a local iOS Simulator XCTest runner; provider worlds do not expose that runtime',
-};
+const SKIPPED_COMMANDS: Record<string, string> = {};
 
 // Commands driven last so the priority commands run against a live session.
 const DRIVE_LAST = new Set<string>([PUBLIC_COMMANDS.shutdown, PUBLIC_COMMANDS.close]);
@@ -249,6 +247,8 @@ function permissiveRunner(): AppleRunnerProvider {
           return { found: true, nodes: [richNodes()[2]] };
         case 'findText':
           return { found: true };
+        case 'readText':
+          return command.inspectPoint === true ? { elements: [] } : { done: true };
         default:
           return { done: true };
       }
