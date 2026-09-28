@@ -19,7 +19,7 @@ import {
   type ReplayTestSuiteRequest,
 } from '@agent-device/replay-test';
 import { runReplayCommand } from './native-command.ts';
-import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
+import { collectReplayActionArtifactPaths } from '@agent-device/replay-port/session-replay-runtime-artifacts';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import {
   emitRequestProgress,
@@ -37,13 +37,16 @@ import {
   buildReplayTestShardTargetResolver,
   readReplayTestShardSelection,
 } from './session-test-shard-devices.ts';
-import { toReplayTestAttemptOutcome, toReplayTestFinalizeFailure } from './session-test-outcome.ts';
+import {
+  toReplayTestAttemptOutcome,
+  toReplayTestFinalizeFailure,
+} from '@agent-device/replay-port/session-test-outcome';
 import {
   buildReplayTestVideoOpenLifecycle,
   finalizeReplayTestVideoRecording,
   startReplayTestVideoRecordingIfReady,
 } from './session-replay-video-recording.ts';
-import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from './session-replay-test-policy.ts';
+import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from '@agent-device/replay-port/session-replay-test-policy';
 import {
   errorResponse,
   type DaemonResponse,

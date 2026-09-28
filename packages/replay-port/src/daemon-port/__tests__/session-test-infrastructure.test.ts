@@ -1,8 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { isReplayInfrastructureFailure } from '../session-test-infrastructure.ts';
-import { ALLOCATOR_CLAIM_MISSING } from '../../../device/device-claim-conflict.ts';
-import type { DaemonResponse } from '../../../daemon-request.ts';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { ReplaySuiteTestResult } from '@agent-device/contracts/replay';
 
 test('isReplayInfrastructureFailure accepts shared boot diagnostic reasons', () => {
@@ -132,7 +131,7 @@ test('isReplayInfrastructureFailure does not retry a missing allocator-held clai
       code: 'COMMAND_FAILED',
       message:
         'android device emulator-5554 is a managed identity with no allocator-held execution claim for this installation.',
-      details: { reason: ALLOCATOR_CLAIM_MISSING, retriable: false },
+      details: { reason: 'allocator-claim-missing', retriable: false },
     },
   };
 

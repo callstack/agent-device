@@ -9,6 +9,7 @@
     "@agent-device/ad-script": "workspace:*",
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*",
     "@agent-device/maestro": "workspace:*",
     "@agent-device/replay-test": "workspace:*",
@@ -35,9 +36,37 @@
       "types": "./src/daemon-port/session-replay-maestro-request.ts",
       "default": "./src/daemon-port/session-replay-maestro-request.ts"
     },
+    "./session-replay-report-action": {
+      "types": "./src/daemon-port/session-replay-report-action.ts",
+      "default": "./src/daemon-port/session-replay-report-action.ts"
+    },
+    "./session-replay-runtime-artifacts": {
+      "types": "./src/daemon-port/session-replay-runtime-artifacts.ts",
+      "default": "./src/daemon-port/session-replay-runtime-artifacts.ts"
+    },
+    "./session-replay-suggestion-ranking": {
+      "types": "./src/daemon-port/session-replay-suggestion-ranking.ts",
+      "default": "./src/daemon-port/session-replay-suggestion-ranking.ts"
+    },
+    "./session-replay-test-policy": {
+      "types": "./src/daemon-port/session-replay-test-policy.ts",
+      "default": "./src/daemon-port/session-replay-test-policy.ts"
+    },
+    "./session-replay-trace": {
+      "types": "./src/daemon-port/session-replay-trace.ts",
+      "default": "./src/daemon-port/session-replay-trace.ts"
+    },
     "./session-replay-vars": {
       "types": "./src/session-replay-vars.ts",
       "default": "./src/session-replay-vars.ts"
+    },
+    "./session-test-infrastructure": {
+      "types": "./src/daemon-port/session-test-infrastructure.ts",
+      "default": "./src/daemon-port/session-test-infrastructure.ts"
+    },
+    "./session-test-outcome": {
+      "types": "./src/daemon-port/session-test-outcome.ts",
+      "default": "./src/daemon-port/session-test-outcome.ts"
     },
     "./target-classification": {
       "types": "./src/daemon-port/target-classification.ts",

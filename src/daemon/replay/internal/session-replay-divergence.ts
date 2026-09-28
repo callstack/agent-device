@@ -25,8 +25,8 @@ import type {
 
 import type { ReplayObservationEvidence } from '@agent-device/contracts/replay';
 import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';
-import type { ReplayReportAction } from './session-replay-report-action.ts';
-import { rankAndDedupeReplaySuggestions } from './session-replay-suggestion-ranking.ts';
+import type { ReplayReportAction } from '@agent-device/replay-port/session-replay-report-action';
+import { rankAndDedupeReplaySuggestions } from '@agent-device/replay-port/session-replay-suggestion-ranking';
 
 import {
   type ReplayDivergence,

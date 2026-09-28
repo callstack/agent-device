@@ -19,7 +19,7 @@ import {
   splitReplayCommandRequest,
 } from '@agent-device/replay-port/replay-dispatch-envelope';
 import type { ReplayTestCommand } from '@agent-device/replay-port/command-types';
-import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from '../session-replay-test-policy.ts';
+import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from '@agent-device/replay-port/session-replay-test-policy';
 import { replayCommandFamily } from '../../../../commands/replay/index.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon-request.ts';

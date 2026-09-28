@@ -19,7 +19,7 @@ import { withReplayFailureDiagnostics } from './session-replay-runtime-failure.t
 
 import { invokeReplayAction } from './session-replay-action-runtime.ts';
 import type { AdReplayStepFailure, AdReplayStepRuntime } from '@agent-device/ad-replay';
-import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
+import { collectReplayActionArtifactPaths } from '@agent-device/replay-port/session-replay-runtime-artifacts';
 import {
   applyReplayDispatchGuard,
   classifyReplayDispatchFailure,

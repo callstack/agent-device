@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { toReplayTestAttemptOutcome } from '../session-test-outcome.ts';
-import type { DaemonResponse } from '../../../daemon-request.ts';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 
 test('failed attempt outcome carries warnings from the error details (#2560)', () => {
   const response: DaemonResponse = {

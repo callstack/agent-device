@@ -4,7 +4,7 @@ import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
 
-import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
+import { collectReplayActionArtifactPaths } from '@agent-device/replay-port/session-replay-runtime-artifacts';
 import type {
   ReplayRecordVideoRequest,
   ReplaySessionStore,

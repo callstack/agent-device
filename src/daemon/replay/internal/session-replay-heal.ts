@@ -2,7 +2,7 @@ import path from 'node:path';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import { readSelectorExpression } from '@agent-device/selectors';
 import { isTouchTargetCommand } from '@agent-device/ad-script';
-import type { ReplayReportAction } from './session-replay-report-action.ts';
+import type { ReplayReportAction } from '@agent-device/replay-port/session-replay-report-action';
 
 /**
  * ADR 0012 decision 1 / migration step 6: `--update` retired as an actor —

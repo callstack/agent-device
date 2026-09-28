@@ -12,7 +12,7 @@ import {
   swipePayloadFromPositionals,
 } from '@agent-device/contracts/gesture-normalization';
 import { buildDisplayPositionals } from '@agent-device/session-journal/session-event-action';
-import { appendReplayTraceEvent } from './session-replay-trace.ts';
+import { appendReplayTraceEvent } from '@agent-device/replay-port/session-replay-trace';
 import { inferFillText, readRecordedInputVariableName } from '@agent-device/ad-script';
 import { type DaemonResponse } from '@agent-device/kernel/contracts';
 
