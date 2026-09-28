@@ -4,9 +4,18 @@ import type { WaitCommandOptions } from '@agent-device/contracts/client';
 import { parseWaitPositionals } from '@agent-device/command-registry/wait-positionals';
 import type { WaitParsed } from '@agent-device/command-registry/wait-positionals';
 import { SELECTOR_SNAPSHOT_FLAGS } from '@agent-device/command-registry/flag-groups';
+import type { CommandResultMap } from '@agent-device/command-registry/command-result';
 import { AppError } from '@agent-device/kernel/errors';
 import { isValidSelectorExpression } from '@agent-device/selectors';
-import { booleanField, enumField, integerField, stringField } from '../command-input.ts';
+import {
+  booleanField,
+  enumField,
+  integerField,
+  numberSchema,
+  objectSchema,
+  stringField,
+  stringSchema,
+} from '../command-input.ts';
 import { optionalEnum } from '../input-readers.ts';
 import {
   direct,
@@ -15,6 +24,7 @@ import {
   selectorSnapshotOptionsFromFlags,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
+import type { JsonSchema } from '../command-contract.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { messageOutput } from '../output-common.ts';
@@ -23,6 +33,34 @@ import { absenceCaptureOptionRefusal } from '@agent-device/selectors/absence-obs
 import { absenceCaptureOptionError } from '@agent-device/selectors/absence-observation-errors';
 
 const WAIT_COMMAND_NAME = 'wait';
+
+function constSchema(value: string): JsonSchema {
+  return { type: 'string', const: value };
+}
+
+/**
+ * This family's advertised MCP `outputSchema`, keyed by daemon command name and projected into
+ * the command map by `src/mcp/command-output-schemas.ts`. Non-strict like every other entry: no
+ * `additionalProperties: false`, so additive response fields keep validating. `wait` does not
+ * carry the post-action observation trait (#1652): its descriptor declares no post-action
+ * observation, so no settle-graft copy applies here.
+ */
+export const WAIT_COMMAND_OUTPUT_SCHEMAS = {
+  // packages/contracts/src/wait.ts — compact public daemon projection.
+  wait: objectSchema(
+    {
+      waitedMs: numberSchema(),
+      kind: constSchema('selector'),
+      text: stringSchema(),
+      selector: stringSchema(),
+      captures: numberSchema(),
+      nodeCount: numberSchema(),
+      hint: stringSchema(),
+      warning: stringSchema(),
+    },
+    ['waitedMs'],
+  ),
+} satisfies Pick<Record<keyof CommandResultMap, JsonSchema>, 'wait'>;
 
 const waitCommandDescription =
   'Wait for a duration, text, snapshot ref, selector to appear, selector to be strictly absent, or stable UI. Use the strict absence target when zero selector matches are required; stable waits until the UI stays quiet for the requested window.';

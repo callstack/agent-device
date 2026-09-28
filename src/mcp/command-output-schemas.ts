@@ -11,6 +11,7 @@ import {
   stringArraySchema,
   stringSchema,
 } from '../commands/command-input.ts';
+import { WAIT_COMMAND_OUTPUT_SCHEMAS } from '../commands/capture/wait.ts';
 import { DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/device.ts';
 import { PUSH_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/push.ts';
 import { VIEWPORT_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/viewport.ts';
@@ -154,21 +155,6 @@ function deriveSettleObservationSchemas(
 }
 
 const BASE_COMMAND_OUTPUT_SCHEMAS = {
-  // packages/contracts/src/wait.ts — compact public daemon projection.
-  wait: objectSchema(
-    {
-      waitedMs: numberSchema(),
-      kind: constSchema('selector'),
-      text: stringSchema(),
-      selector: stringSchema(),
-      captures: numberSchema(),
-      nodeCount: numberSchema(),
-      hint: stringSchema(),
-      warning: stringSchema(),
-    },
-    ['waitedMs'],
-  ),
-
   // packages/contracts/src/scroll-command.ts — ScrollCommandResult. The
   // settle-capable generic-route pair must both be typed so the trait
   // derivation grafts the observation onto each (#1652); platform leaves add
@@ -317,6 +303,7 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
   // command surface and projects it here. This spread stays last: a hand-written entry for
   // a projected command then fails as TS2783 instead of quietly overriding the family's,
   // and this map's `satisfies` still refuses a missing `CommandResultMap` key.
+  ...WAIT_COMMAND_OUTPUT_SCHEMAS,
   ...DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS,
   ...PUSH_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS,
   ...VIEWPORT_COMMAND_OUTPUT_SCHEMAS,
