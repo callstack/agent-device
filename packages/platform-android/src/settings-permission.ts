@@ -142,7 +142,8 @@ export async function setAndroidPermission(
   const states = revoked.map((permission) => grants?.get(permission) ?? 'unknown');
   const { priorGrantState, warnings } = summarizeRevokedPermissions(appPackage, revoked, states);
   return {
-    permission: revoked.join(','),
+    permission: target.kind,
+    permissions: revoked,
     priorGrantState,
     ...(warnings.length > 0 ? { warnings } : {}),
   };
@@ -189,7 +190,7 @@ async function setAllAndroidPermissions(
   }
   return {
     permission: 'all',
-    applied,
+    permissions: applied,
     ...(warnings.length > 0 ? { warnings } : {}),
   };
 }
@@ -486,7 +487,11 @@ function parseAndroidPermissionTarget(
   permissionTarget: string | undefined,
   permissionMode: string | undefined,
 ):
-  | { kind: 'pm'; values: readonly string[] }
+  | {
+      kind: 'pm';
+      name: Exclude<AndroidPermissionName, 'all' | 'photos' | 'notifications'>;
+      values: readonly string[];
+    }
   | { kind: 'photos' }
   | { kind: 'notifications'; appOps: string; permission: string }
   | { kind: 'all' } {
@@ -510,7 +515,8 @@ function parseAndroidPermissionTarget(
     normalized in ANDROID_PERMISSION_TABLE
       ? ANDROID_PERMISSION_TABLE[normalized as keyof typeof ANDROID_PERMISSION_TABLE]
       : undefined;
-  if (values) return { kind: 'pm', values };
+  if (values)
+    return { kind: 'pm', name: normalized as keyof typeof ANDROID_PERMISSION_TABLE, values };
   throw new AppError(
     'INVALID_ARGS',
     `Unsupported permission target on Android: ${permissionTarget}. Use ${ANDROID_PERMISSION_TARGETS.join('|')}.`,
@@ -550,7 +556,7 @@ function filterNamedPmIds(
     throw new AppError(
       'COMMAND_FAILED',
       `Package ${appPackage} has not requested permission ${values.join(', ')}, so no permission was changed.`,
-      { appPackage, permission: values.join(',') },
+      { appPackage, permissions: values },
     );
   }
   return declared;
@@ -561,7 +567,11 @@ async function revokeNamedPmTarget(
   device: DeviceInfo,
   appPackage: string,
   action: 'deny' | 'reset',
-  target: { kind: 'pm'; values: readonly string[] },
+  target: {
+    kind: 'pm';
+    name: Exclude<AndroidPermissionName, 'all' | 'photos' | 'notifications'>;
+    values: readonly string[];
+  },
   userId: number,
   userArgs: AndroidUserArgs,
 ): Promise<Record<string, unknown>> {
@@ -571,7 +581,8 @@ async function revokeNamedPmTarget(
   const states = values.map((permission) => grants?.get(permission) ?? 'unknown');
   const { priorGrantState, warnings } = summarizeRevokedPermissions(appPackage, values, states);
   return {
-    permission: [...values].join(','),
+    permission: target.name,
+    permissions: [...values],
     priorGrantState,
     ...(warnings.length > 0 ? { warnings } : {}),
   };

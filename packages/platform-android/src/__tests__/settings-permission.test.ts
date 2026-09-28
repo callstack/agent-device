@@ -199,7 +199,8 @@ test.each([
         priorGrantState,
       );
       assert.deepEqual(result, {
-        permission: MICROPHONE,
+        permission: 'microphone',
+        permissions: [MICROPHONE],
         priorGrantState,
         ...(warning ? { warnings: [warning] } : {}),
       });
@@ -422,6 +423,32 @@ test('setAndroidSetting permission grant location applies the declared subset', 
   );
 });
 
+// #2701: a multi-id target reports every id it actually changed under `permissions`,
+// while `permission` keeps naming the requested target.
+test('setAndroidSetting permission deny location reports both location ids in permissions', async () => {
+  const requested = dumpsysWithRequestedIds([
+    'android.permission.ACCESS_FINE_LOCATION',
+    'android.permission.ACCESS_COARSE_LOCATION',
+  ]);
+  await withFakeAdb(
+    fakeAdb((flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) return requested;
+      return undefined;
+    }),
+    async ({ device }) => {
+      const result = (await setAndroidSetting(device, 'permission', 'deny', 'com.example.app', {
+        permissionTarget: 'location',
+      })) as Record<string, unknown>;
+      assert.equal(result.permission, 'location');
+      assert.deepEqual(result.permissions, [
+        'android.permission.ACCESS_FINE_LOCATION',
+        'android.permission.ACCESS_COARSE_LOCATION',
+      ]);
+    },
+  );
+});
+
 // An explicit target declaring none of its ids fails loudly with no pm call.
 test('setAndroidSetting permission grant contacts fails when none of its ids are declared', async () => {
   const requested = dumpsysWithRequestedIds(['android.permission.CAMERA']);
@@ -471,7 +498,8 @@ test.each(['deny', 'reset'] as const)(
         const result = (await setAndroidSetting(device, 'permission', action, 'com.example.app', {
           permissionTarget: 'contacts',
         })) as Record<string, unknown>;
-        assert.equal(result.permission, 'android.permission.READ_CONTACTS');
+        assert.equal(result.permission, 'contacts');
+        assert.deepEqual(result.permissions, ['android.permission.READ_CONTACTS']);
         const flat = calls.map((args) => args.join(' '));
         assert.ok(
           flat.includes(
@@ -545,7 +573,7 @@ test('setAndroidSetting permission grant all applies the declared changeable ids
       );
       assert.deepEqual(result, {
         permission: 'all',
-        applied: ['android.permission.RECORD_AUDIO'],
+        permissions: ['android.permission.RECORD_AUDIO'],
         warnings: [
           "Skipped android.permission.INTERNET for com.example.app: Exception occurred while executing 'grant': java.lang.SecurityException: INTERNET is not a changeable permission type",
           'Skipped com.example.app.CUSTOM_PERMISSION for com.example.app: SecurityException: Package com.example.app has not requested permission com.example.app.CUSTOM_PERMISSION',
@@ -589,7 +617,7 @@ test('setAndroidSetting permission all skips a role-managed id', async () => {
       });
       assert.deepEqual(result, {
         permission: 'all',
-        applied: ['android.permission.RECORD_AUDIO'],
+        permissions: ['android.permission.RECORD_AUDIO'],
         warnings: [
           "Skipped android.permission.WRITE_SETTINGS for com.example.app: Exception occurred while executing 'grant': java.lang.SecurityException: Permission android.permission.WRITE_SETTINGS is managed by role",
         ],
@@ -633,7 +661,7 @@ test.each([
         const result = (await setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
           permissionTarget: 'all',
         })) as Record<string, unknown>;
-        assert.deepEqual(result.applied, ['android.permission.RECORD_AUDIO']);
+        assert.deepEqual(result.permissions, ['android.permission.RECORD_AUDIO']);
         assert.deepEqual(result.warnings, [
           `Skipped android.permission.CUSTOM for com.example.app: ${stderrText}`,
         ]);
@@ -707,7 +735,7 @@ test('setAndroidSetting permission revoke all warns for the held runtime id', as
       })) as Record<string, unknown>;
       assert.deepEqual(result.permission, 'all');
       assert.ok(
-        (result.applied as string[]).includes('android.permission.RECORD_AUDIO'),
+        (result.permissions as string[]).includes('android.permission.RECORD_AUDIO'),
         JSON.stringify(result),
       );
       const warnings = (result.warnings as string[]).join('\n');
