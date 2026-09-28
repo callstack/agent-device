@@ -28,6 +28,25 @@ const { mockReadProcessStartTime, mockReadProcessCommand } = vi.hoisted(() => ({
   mockReadProcessCommand: vi.fn<(pid: number) => string | null | undefined>(),
 }));
 
+// Every probe's answer, in order; a test can also make the next one miss.
+const { probeAnswers, mockMissNextProbe } = vi.hoisted(() => ({
+  probeAnswers: [] as boolean[],
+  mockMissNextProbe: { value: false },
+}));
+
+vi.mock('../daemon-client-transport.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../daemon-client-transport.ts')>();
+  return {
+    ...actual,
+    canConnect: async (...args: Parameters<typeof actual.canConnect>) => {
+      const reachable = mockMissNextProbe.value ? false : await actual.canConnect(...args);
+      mockMissNextProbe.value = false;
+      probeAnswers.push(reachable);
+      return reachable;
+    },
+  };
+});
+
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
   return {
@@ -77,12 +96,20 @@ function stallAfterFirstProbeArms(): { stalled: () => boolean; restore: () => vo
   };
 }
 
-test('sendToDaemon keeps a live socket daemon whose probe the client stalled past', async (t) => {
+type LiveStandIn = { stateDir: string; pid: number };
+
+/**
+ * Runs `body` against a daemon.json naming a live process that reads as an agent-device daemon
+ * and a loopback socket that answers every request, as a running daemon does.
+ */
+async function withLiveStandIn(
+  t: { skip: (reason: string) => void },
+  body: (standIn: LiveStandIn) => Promise<void>,
+): Promise<void> {
   if (!(await supportsLoopbackBind())) {
     t.skip('loopback listeners are not permitted in this environment');
     return;
   }
-
   const stateDir = mkdtempForTestSync('agent-device-stalled-probe-');
   const root = mkdtempForTestSync('agent-device-stalled-probe-daemon-');
   const daemonDir = path.join(root, 'agent-device', 'dist', 'src', 'internal');
@@ -106,7 +133,6 @@ test('sendToDaemon keeps a live socket daemon whose probe the client stalled pas
       socket.end(`${JSON.stringify({ ok: true, data: { via: 'live-daemon' } })}\n`);
     });
   });
-  let stall: ReturnType<typeof stallAfterFirstProbeArms> | undefined;
 
   try {
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -138,21 +164,10 @@ test('sendToDaemon keeps a live socket daemon whose probe the client stalled pas
       })}\n`,
       'utf8',
     );
-    stall = stallAfterFirstProbeArms();
-
-    const response = await sendToDaemon({
-      session: 'default',
-      command: 'stalled-probe-smoke',
-      positionals: [],
-      flags: { stateDir, daemonTransport: 'socket' },
-      meta: { requestId: 'req-stalled-probe' },
-    });
-
-    assert.equal(stall.stalled(), true);
-    assert.deepEqual(response, { ok: true, data: { via: 'live-daemon' } });
-    assert.equal(isProcessAlive(pid), true);
+    probeAnswers.length = 0;
+    await body({ stateDir, pid });
   } finally {
-    stall?.restore();
+    mockMissNextProbe.value = false;
     mockReadProcessStartTime.mockReset();
     mockReadProcessCommand.mockReset();
     await closeLoopbackServer(server);
@@ -163,4 +178,44 @@ test('sendToDaemon keeps a live socket daemon whose probe the client stalled pas
     fs.rmSync(stateDir, { recursive: true, force: true });
     fs.rmSync(root, { recursive: true, force: true });
   }
+}
+
+function sendSmoke(stateDir: string) {
+  return sendToDaemon({
+    session: 'default',
+    command: 'stalled-probe-smoke',
+    positionals: [],
+    flags: { stateDir, daemonTransport: 'socket' },
+    meta: { requestId: 'req-stalled-probe' },
+  });
+}
+
+test('sendToDaemon keeps a live daemon whose first probe missed', async (t) => {
+  await withLiveStandIn(t, async ({ stateDir, pid }) => {
+    mockMissNextProbe.value = true;
+
+    const response = await sendSmoke(stateDir);
+
+    assert.deepEqual(probeAnswers.slice(0, 2), [false, true]);
+    assert.deepEqual(response, { ok: true, data: { via: 'live-daemon' } });
+    assert.equal(isProcessAlive(pid), true);
+  });
+});
+
+test('sendToDaemon keeps a live socket daemon whose probe the client stalled past', async (t) => {
+  await withLiveStandIn(t, async ({ stateDir, pid }) => {
+    const stall = stallAfterFirstProbeArms();
+    try {
+      const response = await sendSmoke(stateDir);
+      if (probeAnswers[0] !== false) {
+        t.skip('this host completed the connect before the stalled timer fired');
+        return;
+      }
+      assert.equal(stall.stalled(), true);
+      assert.deepEqual(response, { ok: true, data: { via: 'live-daemon' } });
+      assert.equal(isProcessAlive(pid), true);
+    } finally {
+      stall.restore();
+    }
+  });
 });
