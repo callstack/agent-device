@@ -62,6 +62,8 @@ test('--platform ios excludes a booted watchOS simulator from phone selection', 
     booted: true,
   };
   assert.equal((await resolveDevice([APPLE, watch], { platform: 'ios' })).id, APPLE.id);
+  assert.equal((await resolveDevice([APPLE, watch], {})).id, APPLE.id);
+  assert.equal((await resolveDevice([APPLE, watch], { platform: 'apple' })).id, APPLE.id);
   assert.equal((await resolveError([watch], { platform: 'ios' })).code, 'DEVICE_NOT_FOUND');
 });
 

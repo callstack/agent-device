@@ -1,6 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { pairAndroidWearable } from './wearable-pairing.ts';
 
 const phone: DeviceInfo = {
@@ -68,7 +69,45 @@ test('automatic selection recognizes a booted Wear target without a Wear label',
   expect(result.wearable.name).toBe('Fossil Gen 6');
   expect(runAdb).toHaveBeenCalledWith(
     unnamedWearable,
-    ['shell', 'pm', 'list', 'features'],
+    deviceShellArgv('adb', 'shell', ['pm', 'list', 'features']),
+    expect.anything(),
+    expect.anything(),
+  );
+});
+
+test('automatic selection skips an unresponsive candidate and keeps scanning for Wear features', async () => {
+  const unresponsive = { ...watch, id: 'emulator-5558', name: 'Android Device' };
+  const unnamedWearable = { ...watch, name: 'Fossil Gen 6' };
+  const runAdb = vi.fn(async (device: DeviceInfo, args: readonly string[]) => {
+    if (args[0] === 'get-state') return { stdout: 'device\n', stderr: '', exitCode: 0 };
+    if (args.includes('getprop')) return { stdout: 'watch\n', stderr: '', exitCode: 0 };
+    if (device.id === unresponsive.id) {
+      return { stdout: '', stderr: 'device offline', exitCode: 1 };
+    }
+    return {
+      stdout: 'feature:android.hardware.type.watch\n',
+      stderr: '',
+      exitCode: 0,
+    };
+  });
+
+  const result = await pairAndroidWearable(
+    host({ discover: async () => [phone, unresponsive, unnamedWearable], runAdb }),
+    phone,
+    { boot: false },
+    signal(),
+  );
+
+  expect(result.wearable.id).toBe(unnamedWearable.id);
+  expect(runAdb).toHaveBeenCalledWith(
+    unresponsive,
+    deviceShellArgv('adb', 'shell', ['pm', 'list', 'features']),
+    expect.anything(),
+    expect.anything(),
+  );
+  expect(runAdb).toHaveBeenCalledWith(
+    unnamedWearable,
+    ['get-state'],
     expect.anything(),
     expect.anything(),
   );
@@ -167,6 +206,49 @@ test('boots a stopped Wear emulator, rediscovers it, then proves its ADB identit
     expect.anything(),
     expect.anything(),
   );
+});
+
+test('Wear boot polling cannot replace the launched emulator with a same-named physical watch', async () => {
+  const stopped = { ...watch, id: 'Wear_OS_Large_Round', booted: false };
+  const physicalWatch = { ...stopped, id: 'physical-watch', kind: 'device' as const, booted: true };
+  const bootedEmulator = { ...stopped, booted: true };
+  let discoveries = 0;
+  const runAdb = vi.fn(async (_device: DeviceInfo, args: readonly string[]) => ({
+    stdout:
+      args[0] === 'get-state'
+        ? 'device\n'
+        : args.includes('getprop')
+          ? 'watch\n'
+          : 'feature:android.hardware.type.watch\n',
+    stderr: '',
+    exitCode: 0,
+  }));
+  const terminate = vi.fn(async () => {});
+
+  const result = await pairAndroidWearable(
+    host({
+      discover: async () => {
+        discoveries += 1;
+        return discoveries === 1 ? [phone, stopped] : [phone, physicalWatch, bootedEmulator];
+      },
+      runAdb,
+      launch: () => 42,
+      terminate,
+    }),
+    phone,
+    { wearable: { deviceId: stopped.id }, boot: true },
+    signal(),
+  );
+
+  expect(result.wearable).toMatchObject({ id: stopped.id, kind: 'emulator', booted: true });
+  expect(runAdb).toHaveBeenCalledWith(
+    bootedEmulator,
+    ['get-state'],
+    expect.anything(),
+    expect.anything(),
+  );
+  expect(runAdb.mock.calls.some(([device]) => device.id === physicalWatch.id)).toBe(false);
+  expect(terminate).not.toHaveBeenCalled();
 });
 
 function host(overrides: {

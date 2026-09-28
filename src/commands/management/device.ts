@@ -55,8 +55,8 @@ const pairWearableCommandMetadata = defineFieldCommandMetadata(
       type: 'object',
       description: 'Optional wearable selector by deviceId, name, or both.',
       properties: {
-        deviceId: { type: 'string' },
-        name: { type: 'string' },
+        deviceId: { type: 'string', minLength: 1 },
+        name: { type: 'string', minLength: 1 },
       },
       oneOf: [
         { required: ['deviceId'], not: { required: ['name'] } },
