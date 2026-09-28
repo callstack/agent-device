@@ -7,7 +7,7 @@ import { test, expect, vi } from 'vitest';
 // device runner, so without a mock those calls fall through to the real
 // (slow/hanging) runner dispatch path. Reject fast so failure-path tests keep
 // exercising `divergence.screen: unavailable` deterministically.
-vi.mock('../../../snapshot-interactor-capture.ts', () => ({
+vi.mock('../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(async () => {
     throw new Error('no device runner available in this test');
   }),
@@ -19,8 +19,8 @@ import path from 'node:path';
 import {
   handleSessionCommands,
   mockInspectDeviceRuntimeFacts,
-} from '../../../handlers/__tests__/session-command-harness.ts';
-import type { DaemonRequest } from '../../../daemon-request.ts';
+} from '../../handlers/__tests__/session-command-harness.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 import { expectOkData, makeSessionStore } from './session-test-suite.fixtures.ts';
 import {
   withRequestProgressSink,
@@ -30,13 +30,13 @@ import {
   registerRequestAbort,
 } from '@agent-device/host-kit/request';
 
-import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '../../../../__tests__/test-utils/device-inventory-gateways.ts';
+import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   makeAndroidSession,
   makeMacOsSession,
-} from '../../../../__tests__/test-utils/session-factories.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+} from '../../../__tests__/test-utils/session-factories.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 const ANDROID_ONE: DeviceInfo = {
   platform: 'android',

@@ -18,7 +18,7 @@
  *   completely unchanged.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   resolveRunnerAppBundleId: vi.fn(),
@@ -32,9 +32,9 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return { ...actual, runCmd: vi.fn() };
 });
-vi.mock('../../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
+vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../../platform-runtime-runtime-hints.ts')>();
+    await importOriginal<typeof import('../../../platform-runtime-runtime-hints.ts')>();
   return { ...actual, clearRuntimeHintValues: vi.fn(async () => {}) };
 });
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
@@ -42,35 +42,35 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
     await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
   return { ...actual, resolveTargetDevice: vi.fn() };
 });
-vi.mock('../../../snapshot-interactor-capture.ts', () => ({
+vi.mock('../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 import fs from 'node:fs';
 import path from 'node:path';
-import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
-import { handleSessionCloseCommands as handleProductionCloseCommand } from '../../../session-lifecycle/index.ts';
-import { SessionStore } from '../../../session-store.ts';
-import { LeaseRegistry } from '../../../lease-registry.ts';
-import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
+import { runReplayForTest } from '../../replay/__tests__/replay-command-fixture.ts';
+import { handleSessionCloseCommands as handleProductionCloseCommand } from '../../session-lifecycle/index.ts';
+import { SessionStore } from '../../session-store.ts';
+import { LeaseRegistry } from '../../lease-registry.ts';
+import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
 import {
   makeIosSession,
   authoringPublication,
-} from '../../../../__tests__/test-utils/session-factories.ts';
+} from '../../../__tests__/test-utils/session-factories.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
-} from '../../__tests__/session-replay-runtime.fixtures.ts';
+} from '../../replay/__tests__/session-replay-runtime.fixtures.ts';
 import { freshEvidence, makeRecordingReplayInvoke } from './session-replay-repair.fixtures.ts';
 import {
   bindLifecycleRuntime,
   inspectLifecycleRuntimeFacts,
-} from '../../../__tests__/application-lifecycle-runtime-harness.ts';
-import { platformResourceCleanup } from '../../../../platform-runtime-resource-cleanup.ts';
+} from '../application-lifecycle-runtime-harness.ts';
+import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import {
   captureSnapshotThroughLegacyDispatchFixture,
   legacyDispatchCapture,
-} from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
+} from '../legacy-snapshot-capture-fixture.ts';
 
 const mockDispatchCommand = legacyDispatchCapture;
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);

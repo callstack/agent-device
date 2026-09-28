@@ -8,21 +8,21 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
-import { SessionStore } from '../../../session-store.ts';
+import { SessionStore } from '../../session-store.ts';
 import {
   createReplaySession,
   replayDaemonDependencies,
-} from '../../../handlers/session-replay-command.ts';
-import { runReplayTestCommand } from '../../index.ts';
+} from '../../handlers/session-replay-command.ts';
+import { runReplayTestCommand } from '../../replay/index.ts';
 import {
   replayInvokeOverDispatch,
   splitReplayCommandRequest,
 } from '@agent-device/replay-port/replay-dispatch-envelope';
 import type { ReplayTestCommand } from '@agent-device/replay-port/command-types';
 import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from '@agent-device/replay-port/session-replay-test-policy';
-import { replayCommandFamily } from '../../../../commands/replay/index.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
-import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon-request.ts';
+import { replayCommandFamily } from '../../../commands/replay/index.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '../../daemon-request.ts';
 
 // --- ADR 0012 decision 4 / migration step 5: `--from` is replay-only ---
 

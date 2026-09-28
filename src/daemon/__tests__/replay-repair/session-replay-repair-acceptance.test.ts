@@ -6,35 +6,35 @@
  * the original recorded, so the fresh replay needs no hand-fixing.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
-import { markRepairTransactionComplete } from '../../../session-replay-transaction.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { markRepairTransactionComplete } from '../../session-replay-transaction.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
   return { ...actual, resolveTargetDevice: vi.fn() };
 });
-vi.mock('../../../snapshot-interactor-capture.ts', () => ({
+vi.mock('../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
-import { SessionStore } from '../../../session-store.ts';
-import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
-import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import type { DaemonRequest } from '../../../daemon-request.ts';
+import { runReplayForTest } from '../../replay/__tests__/replay-command-fixture.ts';
+import { SessionStore } from '../../session-store.ts';
+import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
+import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
-} from '../../__tests__/session-replay-runtime.fixtures.ts';
+} from '../../replay/__tests__/session-replay-runtime.fixtures.ts';
 import { freshEvidence, makeRecordingReplayInvoke } from './session-replay-repair.fixtures.ts';
 import {
   captureSnapshotThroughLegacyDispatchFixture,
   legacyDispatchCapture,
-} from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
+} from '../legacy-snapshot-capture-fixture.ts';
 
 const mockDispatchCommand = legacyDispatchCapture;
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);

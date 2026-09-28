@@ -2,12 +2,12 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildReplayTestSourceDiscovery } from '../session-test-source-discovery.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { buildReplayTestSourceDiscovery } from '../../replay/internal/session-test-source-discovery.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import {
   maestroScriptSourceBundleFor,
   replayScriptSourceBundleFor,
-} from '../../../../__tests__/test-utils/replay-script-source.ts';
+} from '../../../__tests__/test-utils/replay-script-source.ts';
 
 // #1478 P3b: the daemon adapter's inspection capability. #1802 moved expansion and file reading
 // to the caller, so what is left here is exactly format routing plus per-engine manifest

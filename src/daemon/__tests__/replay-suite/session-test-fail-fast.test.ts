@@ -2,10 +2,10 @@ import fs from 'node:fs';
 
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
-import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
+import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { handleSessionCommands } from '../../handlers/__tests__/session-command-harness.ts';
 
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 test('test --fail-fast continues after passing scripts', async () => {
   const root = mkdtempForTestSync('agent-device-test-fail-fast-pass-');

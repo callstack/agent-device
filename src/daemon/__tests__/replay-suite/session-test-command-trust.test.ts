@@ -5,20 +5,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { SessionStore } from '../../../session-store.ts';
+import { SessionStore } from '../../session-store.ts';
 import {
   createReplaySession,
   replayDaemonDependencies,
-} from '../../../handlers/session-replay-command.ts';
-import { runReplayTestCommand } from '../../index.ts';
+} from '../../handlers/session-replay-command.ts';
+import { runReplayTestCommand } from '../../replay/index.ts';
 import type { ReplayCommand, ReplayTestCommand } from '@agent-device/replay-port/command-types';
-import { replayScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
-import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon-request.ts';
+import { replayScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '../../daemon-request.ts';
 
 const capturedCommands: ReplayCommand[] = [];
 
-vi.mock('../native-command.ts', () => ({
+vi.mock('../../replay/internal/native-command.ts', () => ({
   runReplayCommand: async (command: ReplayCommand) => {
     capturedCommands.push(command);
     return { ok: true as const, data: { replayed: 1 } };

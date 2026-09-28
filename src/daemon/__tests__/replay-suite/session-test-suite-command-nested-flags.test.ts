@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { buildNestedReplayFlags } from '../test-command.ts';
+import { buildNestedReplayFlags } from '../../replay/internal/test-command.ts';
 
 test('buildNestedReplayFlags returns parent flags untouched when neither override is set', () => {
   const parent = { platform: 'android' as const, timeoutMs: 5000 };

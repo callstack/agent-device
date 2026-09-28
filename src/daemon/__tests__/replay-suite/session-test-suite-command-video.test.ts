@@ -3,36 +3,36 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
-import { SessionStore } from '../../../session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
-import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import { runReplayTestCommand } from '../../index.ts';
+import { SessionStore } from '../../session-store.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { runReplayTestCommand } from '../../replay/index.ts';
 import {
   replayInvokeOverDispatch,
   splitReplayCommandRequest,
 } from '@agent-device/replay-port/replay-dispatch-envelope';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
-import { replayScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { replayScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
 import {
   unavailableBindDevice,
   unavailableBindExactDevice,
-} from '../../../__tests__/test-device-runtime-gateway.ts';
+} from '../test-device-runtime-gateway.ts';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
-import type { RecordRuntimeHandlerParams } from '../../../handlers/record-runtime.ts';
+import type { RecordRuntimeHandlerParams } from '../../handlers/record-runtime.ts';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
-import { createReplayTestVideoOwner } from '../../../handlers/session-replay-video-owner.ts';
+import { createReplayTestVideoOwner } from '../../handlers/session-replay-video-owner.ts';
 import {
   createReplaySession,
   replayDaemonDependencies,
-} from '../../../handlers/session-replay-command.ts';
+} from '../../handlers/session-replay-command.ts';
 
 const recordRuntimeMocks = vi.hoisted(() => ({
   handleRecordCommand: vi.fn(),
 }));
 
-vi.mock('../../../handlers/record-runtime.ts', () => ({
+vi.mock('../../handlers/record-runtime.ts', () => ({
   handleRecordCommand: recordRuntimeMocks.handleRecordCommand,
 }));
 

@@ -1,18 +1,18 @@
 import path from 'node:path';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
-import { SessionStore } from '../../../session-store.ts';
-import { LeaseRegistry } from '../../../lease-registry.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { SessionStore } from '../../session-store.ts';
+import { LeaseRegistry } from '../../lease-registry.ts';
 import {
   makeIosSession,
   makeRepairCompleteSession,
   repairPublication,
-} from '../../../../__tests__/test-utils/session-factories.ts';
-import { handleSessionCloseCommands as handleProductionCloseCommand } from '../../../session-lifecycle/index.ts';
+} from '../../../__tests__/test-utils/session-factories.ts';
+import { handleSessionCloseCommands as handleProductionCloseCommand } from '../../session-lifecycle/index.ts';
 import {
   bindLifecycleRuntime,
   inspectLifecycleRuntimeFacts,
-} from '../../../__tests__/application-lifecycle-runtime-harness.ts';
-import { platformResourceCleanup } from '../../../../platform-runtime-resource-cleanup.ts';
+} from '../application-lifecycle-runtime-harness.ts';
+import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import { freshEvidence } from './session-replay-repair.fixtures.ts';
 
 /**

@@ -23,45 +23,45 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return { ...actual, runCmd: vi.fn() };
 });
-vi.mock('../../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
+vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../../platform-runtime-runtime-hints.ts')>();
+    await importOriginal<typeof import('../../../platform-runtime-runtime-hints.ts')>();
   return { ...actual, clearRuntimeHintValues: vi.fn(async () => {}) };
 });
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return { ...actual, resolveTargetDevice: vi.fn() };
 });
-vi.mock('../../../snapshot-interactor-capture.ts', () => ({
+vi.mock('../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 import fs from 'node:fs';
 import path from 'node:path';
-import { runReplayForTest } from '../../__tests__/replay-command-fixture.ts';
-import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
+import { runReplayForTest } from '../../replay/__tests__/replay-command-fixture.ts';
+import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
 import {
   legacyDispatchCapture,
   resetLegacySnapshotCapture,
-} from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
-import { dispatchApplicationLifecycleEffect } from '../../../__tests__/application-lifecycle-runtime-fixture.ts';
-import { repairPublication } from '../../../../__tests__/test-utils/session-factories.ts';
-import { HEAL_COMPLETE_SENTINEL } from '../../../session-script-writer.ts';
+} from '../legacy-snapshot-capture-fixture.ts';
+import { dispatchApplicationLifecycleEffect } from '../application-lifecycle-runtime-fixture.ts';
+import { repairPublication } from '../../../__tests__/test-utils/session-factories.ts';
+import { HEAL_COMPLETE_SENTINEL } from '../../session-script-writer.ts';
 import {
   repairSessionBoundary,
   markRepairTransactionComplete,
-} from '../../../session-replay-transaction.ts';
+} from '../../session-replay-transaction.ts';
 import {
   NO_SCRIPT_PUBLICATION,
   scriptTargetPath,
   scriptTargetForce,
-} from '../../../session-script-publication-state.ts';
+} from '../../session-script-publication-state.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
-import type { DaemonRequest } from '../../../daemon-request.ts';
-import type { SessionState } from '../../../session-state.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
-} from '../../__tests__/session-replay-runtime.fixtures.ts';
+} from '../../replay/__tests__/session-replay-runtime.fixtures.ts';
 import { freshEvidence, makeRecordingReplayInvoke } from './session-replay-repair.fixtures.ts';
 import {
   handleCloseCommand,

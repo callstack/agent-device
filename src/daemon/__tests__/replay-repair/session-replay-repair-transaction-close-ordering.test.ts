@@ -25,30 +25,30 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return { ...actual, runCmd: vi.fn() };
 });
-vi.mock('../../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
+vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../../../platform-runtime-runtime-hints.ts')>();
+    await importOriginal<typeof import('../../../platform-runtime-runtime-hints.ts')>();
   return { ...actual, clearRuntimeHintValues: vi.fn(async () => {}) };
 });
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return { ...actual, resolveTargetDevice: vi.fn() };
 });
-vi.mock('../../../snapshot-interactor-capture.ts', () => ({
+vi.mock('../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 import fs from 'node:fs';
 import path from 'node:path';
-import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
+import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
 import {
   legacyDispatchCapture,
   resetLegacySnapshotCapture,
-} from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
-import { dispatchApplicationLifecycleEffect } from '../../../__tests__/application-lifecycle-runtime-fixture.ts';
+} from '../legacy-snapshot-capture-fixture.ts';
+import { dispatchApplicationLifecycleEffect } from '../application-lifecycle-runtime-fixture.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { HEAL_COMPLETE_SENTINEL } from '../../../session-script-writer.ts';
+import { HEAL_COMPLETE_SENTINEL } from '../../session-script-writer.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
-import type { SessionState } from '../../../session-state.ts';
+import type { SessionState } from '../../session-state.ts';
 import { freshEvidence } from './session-replay-repair.fixtures.ts';
 import {
   handleCloseCommand,

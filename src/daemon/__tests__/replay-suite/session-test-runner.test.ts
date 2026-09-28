@@ -8,11 +8,11 @@ import {
   makeSession,
   noopInvoke,
   assertInvalidArgsMessage,
-} from '../../../handlers/__tests__/session-test-harness.ts';
-import type { DaemonRequest } from '../../../daemon-request.ts';
-import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
+} from '../../handlers/__tests__/session-test-harness.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
+import { handleSessionCommands } from '../../handlers/__tests__/session-command-harness.ts';
 
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 // Opening a Simulator schedules a best-effort runner prewarm that outlives the request; a real one
 // would spawn xcodebuild after this file finished and land in whichever file the worker runs next.
