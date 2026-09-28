@@ -17,7 +17,7 @@ import {
   selector,
 } from '../../../../commands/interaction/runtime/selector-read-utils.ts';
 import { createInteractionDevice } from '../../../../commands/interaction/runtime/__tests__/test-utils/index.ts';
-import { classifyReplayTarget } from '../session-replay-target-classification.ts';
+import { classifyReplayTarget } from '@agent-device/replay-port/target-classification';
 /** The verified-member guard denotation the replay loop mints (identity + structural position). */
 function guardFor(node: SnapshotNode, nodes: SnapshotNode[]): ReplayTargetGuardDenotation {
   return {

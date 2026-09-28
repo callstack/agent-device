@@ -52,7 +52,7 @@ import {
 } from '@agent-device/replay-port/repair-hint';
 import { buildReplayDivergenceFailureResponse } from './session-replay-runtime-failure-response.ts';
 import { buildAndPersistReplayDivergenceResume } from './session-replay-resume.ts';
-import { classifyReplayTarget } from './session-replay-target-classification.ts';
+import { classifyReplayTarget } from '@agent-device/replay-port/target-classification';
 import { extractReplayTargetToken, readRefLabel } from '@agent-device/replay-port/target-token';
 
 // ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@
  * prefix matching over versioned `.ad` target-binding evidence, plus the
  * bounded diagnostic diffs built on top of it. Both the writer (over
  * `SnapshotNode`-derived values, `@agent-device/selectors/target-evidence`) and
- * replay-time verification (`src/daemon/replay/internal/session-replay-target-classification.ts` and
+ * replay-time verification (`packages/replay-port/src/daemon-port/target-classification.ts` and
  * `src/commands/interaction/runtime/selector-wait.ts`) share this verbatim so both
  * sides compute the SAME identity/ancestry match by construction (#1478 P5
  * review, "genuinely shared recording vocabulary" relocated to its owner).
@@ -199,7 +199,7 @@ export function matchesAncestryPrefix(
 // Diagnostic diffs (decision 3): bounded, best-effort mismatch descriptions
 // shared by the record-time classification core and replay-time verification
 // (#1478 P5 stage C2a) — moved here verbatim from
-// `src/daemon/replay/internal/session-replay-target-classification.ts` so both
+// `packages/replay-port/src/daemon-port/target-classification.ts` so both
 // callers depend on one definition instead of two copies.
 // ---------------------------------------------------------------------------
 

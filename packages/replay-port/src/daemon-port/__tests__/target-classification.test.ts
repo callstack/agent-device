@@ -5,7 +5,7 @@ import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { computeTargetEvidence } from '@agent-device/selectors/target-evidence';
 import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';
 import { resolvePressRecordingTarget } from '@agent-device/selectors/press-retarget';
-import { classifyReplayTarget } from '../session-replay-target-classification.ts';
+import { classifyReplayTarget } from '../target-classification.ts';
 import { resolveUnverifiedWrapperControl } from '@agent-device/selectors/interaction-targeting';
 import {
   ELEMENT14_DISTINCT_SUBTREE_NODES,
@@ -15,7 +15,7 @@ import {
   bottomTabsRealCaptureFixture,
   recordArticleEvidence,
   toSnapshotNodes,
-} from './session-replay-target-classification-fixtures.ts';
+} from '@agent-device/replay-port/target-classification-fixtures';
 
 /** Verified outcomes carry the verified member + matchCount (for the post-resolution guard). */
 function assertVerified(

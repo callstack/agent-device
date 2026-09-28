@@ -45,7 +45,7 @@ import {
 import {
   bottomTabsRealCaptureFixture,
   recordArticleEvidence,
-} from './session-replay-target-classification-fixtures.ts';
+} from '@agent-device/replay-port/target-classification-fixtures';
 import {
   captureSnapshotThroughLegacyDispatchFixture,
   legacyDispatchCapture,

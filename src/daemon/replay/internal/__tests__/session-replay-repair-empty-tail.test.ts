@@ -55,7 +55,7 @@ import {
   bottomTabsRealCaptureFixture,
   recordArticleEvidence,
   toSnapshotNodes,
-} from './session-replay-target-classification-fixtures.ts';
+} from '@agent-device/replay-port/target-classification-fixtures';
 
 /** Repair-transaction status, or `undefined` outside a repair publication. */
 function sessionRepairStatus(session: SessionState | undefined) {

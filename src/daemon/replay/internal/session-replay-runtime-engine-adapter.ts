@@ -431,7 +431,7 @@ function describeReplayStepValue(action: SessionAction): string | undefined {
 // daemon-side: it re-inspects the already-projected `DaemonResponse` wire
 // shape to decide whether the wire-level diagnostics-augmentation step
 // applies, which is daemon/wire authority, not target-binding classification
-// itself (that already happened, in `session-replay-target-classification.ts`'s
+// itself (that already happened, in `@agent-device/replay-port/target-classification`'s
 // `classifyReplayTarget`, called from `classifyPreDispatchTarget`).
 function isCompleteTargetBindingDivergenceResponse(response: DaemonResponse): boolean {
   if (response.ok || response.error.code !== 'REPLAY_DIVERGENCE') return false;
