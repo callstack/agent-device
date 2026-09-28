@@ -49,7 +49,11 @@ const WORLDS: Record<World, { leaf: PublicLeaf; open: DriveStep }> = {
   macos: { leaf: 'macos', open: { positionals: ['settings'], flags: { platform: 'macos' } } },
 };
 
-type DriveStep = { positionals?: string[]; flags?: Record<string, unknown> };
+type DriveStep = {
+  positionals?: string[];
+  flags?: Record<string, unknown>;
+  input?: import('../../../src/daemon/daemon-request.ts').DaemonRequest['input'];
+};
 type DriveContext = { world: World; leaf: PublicLeaf; tmpDir: string; appPath: string };
 type DriveSpec = (ctx: DriveContext) => DriveStep[];
 
@@ -74,8 +78,20 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
   [PUBLIC_COMMANDS.doctor]: () => one(),
   [PUBLIC_COMMANDS.boot]: () => one(),
   [PUBLIC_COMMANDS.pairWearable]: () => [
-    ...one(['sim-1', 'watch-1'], { platform: 'ios', boot: false }),
-    ...one(['sim-1', 'watch-1'], { platform: 'ios', boot: true }),
+    {
+      input: {
+        phone: { platform: 'ios', deviceId: 'sim-1' },
+        wearable: { deviceId: 'watch-1' },
+        boot: false,
+      },
+    },
+    {
+      input: {
+        phone: { platform: 'ios', deviceId: 'sim-1' },
+        wearable: { deviceId: 'watch-1' },
+        boot: true,
+      },
+    },
   ],
   [PUBLIC_COMMANDS.prepare]: () => one(['ios-runner']),
   [PUBLIC_COMMANDS.snapshot]: () => one([], { snapshotInteractiveOnly: true }),
@@ -418,7 +434,9 @@ async function runWorldGuard(world: World): Promise<void> {
       for (const step of DRIVEN_COMMANDS[command]!(ctx)) {
         await ensureSession(daemon, world);
         const response = await withCommandTimeout(
-          daemon.callCommand(command, step.positionals ?? [], step.flags ?? {}),
+          daemon.callCommand(command, step.positionals ?? [], step.flags ?? {}, {
+            ...(step.input === undefined ? {} : { input: step.input }),
+          }),
           command,
         );
         const out = {
