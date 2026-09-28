@@ -403,14 +403,14 @@ extension RunnerTests {
     XCTAssertEqual(pinned.xCTestChannelState, .deferredToIndependentBackend)
   }
 
-  func testEffectiveSnapshotCapturePlanDefersXCTestBackedTiersOnlyWhenPenalizedRegularPlan() {
+  func testEffectiveSnapshotCapturePlanPutsXCTestBackedTiersBehindPrivateAXOnlyWhenPenalizedRegularPlan() {
     let regular = Self.effectiveSnapshotCapturePlan(
       Self.regularVisiblePlan,
       xCTestChannelPenalized: true
     )
-    XCTAssertEqual(regular.plan, [.privateAX])
+    XCTAssertEqual(regular.plan, [.privateAX, .recursiveTree, .querySweep])
     XCTAssertEqual(regular.xCTestChannelState, .deferredToIndependentBackend)
-    XCTAssertNil(regular.treeCaptureSliceBudgetOverride)
+    XCTAssertEqual(regular.treeCaptureSliceBudgetOverride, Self.penalizedXCTestProbeTreeSliceBudget)
 
     let unpenalized = Self.effectiveSnapshotCapturePlan(
       Self.regularVisiblePlan,

@@ -250,17 +250,13 @@ extension RunnerTests {
     }
     let availablePlan = plan.filter { availableBackends.contains($0) }
     let recoveryPlan = availablePlan.filter { !$0.usesXCTestAccessibilityChannel }
-    if !recoveryPlan.isEmpty {
-      return EffectiveSnapshotCapturePlan(
-        plan: recoveryPlan,
-        xCTestChannelState: .deferredToIndependentBackend,
-        treeCaptureSliceBudgetOverride: nil,
-        preferredBackend: nil
-      )
-    }
+    let boundedProbePlan = availablePlan.filter(\.usesXCTestAccessibilityChannel)
+    // The independent backend reads only the app it can match as the active AX application, so
+    // an out-of-process surface over the app (the Save Password sheet) leaves it empty for the
+    // whole penalty. The bounded XCTest probe stays behind it as the last tier.
     return EffectiveSnapshotCapturePlan(
-      plan: availablePlan.filter(\.usesXCTestAccessibilityChannel),
-      xCTestChannelState: .boundedXCTestProbe,
+      plan: recoveryPlan + boundedProbePlan,
+      xCTestChannelState: recoveryPlan.isEmpty ? .boundedXCTestProbe : .deferredToIndependentBackend,
       treeCaptureSliceBudgetOverride: Self.penalizedXCTestProbeTreeSliceBudget,
       preferredBackend: nil
     )
