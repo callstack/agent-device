@@ -15,6 +15,7 @@ import {
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import type { JsonSchema } from '../command-contract.ts';
 import {
+  constSchema,
   jsonSchemaField,
   looseObjectField,
   looseObjectSchema,
@@ -27,10 +28,6 @@ import {
 } from '../command-input.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
-
-function constSchema(value: string): JsonSchema {
-  return { type: 'string', const: value };
-}
 
 /**
  * This family's advertised MCP `outputSchema`s, keyed by daemon command name and projected into
