@@ -14,7 +14,7 @@ import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
  * `src/daemon/replay/internal/native-command.ts` (`runReplayCommand`) does. The equivalent
  * daemon-level assertions (full `SessionStore`/`runReplayCommand` round
  * trip, including the `--keep-session` live-session postcondition) live in
- * `src/daemon/replay/internal/__tests__/session-replay-runtime-keep-session.test.ts`
+ * `src/daemon/__tests__/replay-runtime/session-replay-runtime-keep-session.test.ts`
  * (renamed from `session-replay-terminal-lifecycle.test.ts` by the #1555
  * structural-quality review — see that file's own header for the rationale);
  * this file covers the SAME suppression decision at the cheaper,
