@@ -159,7 +159,10 @@ extension RunnerTests {
 
     private func verifyLockScreenSurface() -> Bool {
       let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-      return springboard.exists && !springboard.frame.isEmpty
+      let dateView = springboard.descendants(matching: .any)
+        .matching(identifier: "lockscreen-date-view")
+        .firstMatch
+      return springboard.exists && dateView.exists && !dateView.frame.isEmpty
     }
 
     private func currentScreenLockState() -> ScreenLockStateRead {

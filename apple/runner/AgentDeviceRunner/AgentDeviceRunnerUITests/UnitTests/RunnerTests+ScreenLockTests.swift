@@ -2,6 +2,18 @@ import XCTest
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS) && targetEnvironment(simulator)
 extension RunnerTests {
+  func testScreenLockReportsSuccessOnlyForLockScreenSpecificSurface() {
+    let response = executeScreenLockCommand()
+
+    XCTAssertTrue(response.ok, response.error?.message ?? "Expected verified screen lock")
+    XCTAssertEqual(response.data?.state, "locked")
+    let dateView = springboard.descendants(matching: .any)
+      .matching(identifier: "lockscreen-date-view")
+      .firstMatch
+    XCTAssertTrue(dateView.exists)
+    XCTAssertFalse(dateView.frame.isEmpty)
+  }
+
   func testScreenLockIsIdempotentWhenAlreadyLocked() {
     var dispatches = 0
     let response = executeScreenLockTransition(

@@ -83,7 +83,7 @@ const clipboardCommandDescription =
 const actionButtonCommandDescription =
   'Press the iPhone or iPad Action Button once. The press is dispatched without activating the session app and nothing is re-observed afterwards, so the app keeps the state the press found. What the system does with the press is not observed by this command: Simulators run no Shortcuts or App Intents, so delivery to an assigned Shortcut is verifiable only on a physical iPhone.';
 const screenLockCommandDescription =
-  'Transition an iPhone or iPad Simulator to its Lock Screen. The command is idempotent and returns only after SpringBoard reports the screen locked. This controls simulated screen state; it is unrelated to process mutexes, device claims, or runner leases.';
+  'Transition an iPhone or iPad Simulator to its Lock Screen. The command is idempotent and returns only after SpringBoard reports the screen locked and exposes its Lock Screen date surface. This controls simulated screen state; it is unrelated to process mutexes, device claims, or runner leases.';
 const tvRemoteCommandDescription =
   'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields. The aliases ok, center, and enter all map to select.';
 
@@ -389,7 +389,8 @@ const screenLockCommandFacet = defineParameterlessCommandFacet({
   description: screenLockCommandDescription,
   text: {
     summary: 'Lock the iPhone or iPad Simulator screen',
-    cliDetail: 'Simulator-only. Success means SpringBoard reported the Lock Screen state.',
+    cliDetail:
+      'Simulator-only. Success requires SpringBoard lock state and the Lock Screen date surface.',
   },
   run: (client, input) => client.command.screenLock(input),
   cliOutputFormatter: systemCliOutputFormatters['screen-lock'],

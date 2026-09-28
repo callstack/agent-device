@@ -82,7 +82,7 @@ export type ActionButtonCommandResult = {
   message: string;
 };
 
-/** `screen-lock` succeeds only after the selected Simulator reports its Lock Screen state. */
+/** `screen-lock` succeeds only after the selected Simulator reports a locked state and Lock Screen date surface. */
 export type ScreenLockCommandResult = {
   action: 'screen-lock';
   state: 'locked';
