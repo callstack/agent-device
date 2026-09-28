@@ -127,8 +127,8 @@ export async function setAndroidPermission(
     return await setAllAndroidPermissions(device, appPackage, action, userId, userArgs);
   }
   if (action === 'grant') {
-    await grantAndroidPermission(device, appPackage, target, userId, userArgs);
-    return;
+    const granted = await grantAndroidPermission(device, appPackage, target, userId, userArgs);
+    return androidPermissionResponse(androidPermissionName(target), granted);
   }
   // Named `pm` targets resolve their ids and prior grants from one `dumpsys`
   // read before mutating, so a READ-only contacts app revokes only READ.
@@ -141,11 +141,28 @@ export async function setAndroidPermission(
   const revoked = await revokeAndroidPermission(device, appPackage, action, target, userArgs);
   const states = revoked.map((permission) => grants?.get(permission) ?? 'unknown');
   const { priorGrantState, warnings } = summarizeRevokedPermissions(appPackage, revoked, states);
+  return androidPermissionResponse(target.kind, revoked, { priorGrantState, warnings });
+}
+
+function androidPermissionName(target: AndroidPermissionTarget): string {
+  return target.kind === 'pm' ? target.name : target.kind;
+}
+
+/** The one response shape for a named permission change: the requested target and the ids it changed. */
+function androidPermissionResponse(
+  permission: string,
+  permissions: readonly string[],
+  revoke?: { priorGrantState: AndroidPriorGrantState; warnings: readonly string[] },
+): Record<string, unknown> {
   return {
-    permission: target.kind,
-    permissions: revoked,
-    priorGrantState,
-    ...(warnings.length > 0 ? { warnings } : {}),
+    permission,
+    permissions: [...permissions],
+    ...(revoke
+      ? {
+          priorGrantState: revoke.priorGrantState,
+          ...(revoke.warnings.length > 0 ? { warnings: revoke.warnings } : {}),
+        }
+      : {}),
   };
 }
 
@@ -437,15 +454,18 @@ async function grantAndroidPermission(
   target: AndroidPermissionTarget,
   userId: number,
   userArgs: AndroidUserArgs,
-): Promise<void> {
+): Promise<string[]> {
   if (target.kind === 'notifications') {
     await setAndroidNotificationPermission(device, appPackage, 'grant', target, userArgs);
+    return [target.permission];
   } else if (target.kind === 'photos') {
-    await setAndroidPhotoPermission(device, appPackage, 'grant', userArgs);
+    return [await setAndroidPhotoPermission(device, appPackage, 'grant', userArgs)];
   } else if (target.kind === 'pm') {
-    for (const value of await resolveNamedPmIds(device, appPackage, target.values, userId)) {
+    const granted = [...(await resolveNamedPmIds(device, appPackage, target.values, userId))];
+    for (const value of granted) {
       await runAndroidShell(device, ['pm', 'grant', ...userArgs, appPackage, value]);
     }
+    return granted;
   } else if (target.kind === 'all') {
     throw new Error('Unhandled Android permission target: all is resolved by the caller.');
   } else {
@@ -580,12 +600,7 @@ async function revokeNamedPmTarget(
   await applyPmRevoke(device, appPackage, values, action, userArgs);
   const states = values.map((permission) => grants?.get(permission) ?? 'unknown');
   const { priorGrantState, warnings } = summarizeRevokedPermissions(appPackage, values, states);
-  return {
-    permission: target.name,
-    permissions: [...values],
-    priorGrantState,
-    ...(warnings.length > 0 ? { warnings } : {}),
-  };
+  return androidPermissionResponse(target.name, values, { priorGrantState, warnings });
 }
 
 /** The `pm revoke` (plus flag-clearing for `reset`) half of a named-target revoke. */

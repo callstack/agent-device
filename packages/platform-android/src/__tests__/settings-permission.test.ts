@@ -403,9 +403,11 @@ test('setAndroidSetting permission grant location applies the declared subset', 
       return undefined;
     }),
     async ({ calls, device }) => {
-      await setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+      const result = (await setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
         permissionTarget: 'location',
-      });
+      })) as Record<string, unknown>;
+      assert.equal(result.permission, 'location');
+      assert.deepEqual(result.permissions, ['android.permission.ACCESS_COARSE_LOCATION']);
       const flat = calls.map((args) => args.join(' '));
       assert.ok(
         flat.includes(
@@ -436,7 +438,7 @@ test('setAndroidSetting permission deny location reports both location ids in pe
       if (flat === DUMPSYS) return requested;
       return undefined;
     }),
-    async ({ device }) => {
+    async ({ calls, device }) => {
       const result = (await setAndroidSetting(device, 'permission', 'deny', 'com.example.app', {
         permissionTarget: 'location',
       })) as Record<string, unknown>;
@@ -444,6 +446,13 @@ test('setAndroidSetting permission deny location reports both location ids in pe
       assert.deepEqual(result.permissions, [
         'android.permission.ACCESS_FINE_LOCATION',
         'android.permission.ACCESS_COARSE_LOCATION',
+      ]);
+      const revokes = calls
+        .map((args) => args.join(' '))
+        .filter((call) => call.startsWith('shell pm revoke'));
+      assert.deepEqual(revokes, [
+        'shell pm revoke --user 0 com.example.app android.permission.ACCESS_FINE_LOCATION',
+        'shell pm revoke --user 0 com.example.app android.permission.ACCESS_COARSE_LOCATION',
       ]);
     },
   );
