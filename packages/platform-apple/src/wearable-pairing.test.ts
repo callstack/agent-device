@@ -89,6 +89,64 @@ test('rolls back only a pair created by the failed request', async () => {
   expect(calls.some((args) => args.includes('unpair') && args.includes('pair-1'))).toBe(true);
 });
 
+test('boots a stopped watch, pairs it, and rolls back only request-owned resources on failure', async () => {
+  const calls: string[][] = [];
+  let pairListCount = 0;
+  const stoppedInventory = JSON.stringify({
+    devices: {
+      'com.apple.CoreSimulator.SimRuntime.watchOS-11-0': [
+        { name: 'Apple Watch Series 10', udid: 'watch-1', state: 'Shutdown', isAvailable: true },
+      ],
+    },
+  });
+  const run = vi.fn(async ({ args }: { args: readonly string[] }) => {
+    const argv = [...args];
+    calls.push(argv);
+    if (argv.includes('devices')) return result(stoppedInventory);
+    if (argv.includes('pairs')) {
+      pairListCount += 1;
+      const pairs: Record<string, unknown> = {
+        'existing-pair': {
+          phone: { udid: 'other-phone' },
+          watch: { udid: 'other-watch' },
+          state: 'active, connected',
+        },
+      };
+      if (pairListCount > 1) {
+        pairs['pair-1'] = {
+          phone: { udid: phone.id },
+          watch: { udid: 'watch-1' },
+          state: 'paired',
+        };
+      }
+      return result(JSON.stringify({ pairs }));
+    }
+    if (argv.includes('pair_activate')) return result('', 1, 'activation failed');
+    if (argv.includes('pair')) return result('pair-1');
+    return result('');
+  });
+
+  await expect(
+    pairAppleWearable(
+      host(run),
+      phone,
+      { wearable: { deviceId: 'watch-1' }, boot: true },
+      signal(),
+    ),
+  ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+
+  const bootIndex = calls.findIndex((args) => args.includes('boot') && args.includes('watch-1'));
+  const bootStatusIndex = calls.findIndex((args) => args.includes('bootstatus'));
+  const pairIndex = calls.findIndex((args) => args.includes('pair') && args.includes('watch-1'));
+  expect(bootIndex).toBeGreaterThanOrEqual(0);
+  expect(bootStatusIndex).toBeGreaterThan(bootIndex);
+  expect(pairIndex).toBeGreaterThan(bootStatusIndex);
+  expect(calls.filter((args) => args.includes('unpair'))).toHaveLength(1);
+  expect(calls.find((args) => args.includes('unpair'))).toContain('pair-1');
+  expect(calls.find((args) => args.includes('unpair'))).not.toContain('existing-pair');
+  expect(calls.some((args) => args.includes('shutdown') && args.includes('watch-1'))).toBe(true);
+});
+
 test('does not treat inactive or disconnected pair states as active', async () => {
   const calls: string[][] = [];
   const run = vi.fn(async ({ args }: { args: readonly string[] }) => {

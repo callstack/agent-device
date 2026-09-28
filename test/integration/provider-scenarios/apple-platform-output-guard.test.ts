@@ -6,6 +6,7 @@ import { test } from 'vitest';
 import type { AppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import type { AppleSimulatorScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { AppError } from '@agent-device/kernel/errors';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR, PROVIDER_SCENARIO_MACOS } from './fixtures.ts';
 import {
   createProviderIosSimulatorRecordingProcess,
@@ -72,7 +73,10 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
   [PUBLIC_COMMANDS.devices]: () => one(),
   [PUBLIC_COMMANDS.doctor]: () => one(),
   [PUBLIC_COMMANDS.boot]: () => one(),
-  [PUBLIC_COMMANDS.pairWearable]: () => one(['sim-1', 'watch-1'], { platform: 'ios', boot: false }),
+  [PUBLIC_COMMANDS.pairWearable]: () => [
+    ...one(['sim-1', 'watch-1'], { platform: 'ios', boot: false }),
+    ...one(['sim-1', 'watch-1'], { platform: 'ios', boot: true }),
+  ],
   [PUBLIC_COMMANDS.prepare]: () => one(['ios-runner']),
   [PUBLIC_COMMANDS.snapshot]: () => one([], { snapshotInteractiveOnly: true }),
   [PUBLIC_COMMANDS.perf]: () => [{ positionals: [] }, { positionals: ['frames'] }],
@@ -480,7 +484,7 @@ test('wearable pairing reaches the provider-backed Apple runtime boundary', asyn
         wearable: { deviceId: 'watch-1' },
         boot: false,
       }),
-      (error: unknown) => error instanceof Error && /watchOS simulator/i.test(error.message),
+      (error: unknown) => error instanceof AppError && error.code === 'DEVICE_NOT_FOUND',
     );
   } finally {
     await daemon.close();

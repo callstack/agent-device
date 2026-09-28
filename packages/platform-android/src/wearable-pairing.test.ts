@@ -22,11 +22,12 @@ const watch: DeviceInfo = {
 
 test('reports a human step after proving the Wear identity and ADB transport', async () => {
   const runAdb = vi.fn(async (_device, args: string[]) => ({
-    stdout: args[0] === 'get-state'
-      ? 'device\n'
-      : args.includes('getprop')
-        ? 'watch\n'
-        : 'feature:android.hardware.type.watch\n',
+    stdout:
+      args[0] === 'get-state'
+        ? 'device\n'
+        : args.includes('getprop')
+          ? 'watch\n'
+          : 'feature:android.hardware.type.watch\n',
     stderr: '',
     exitCode: 0,
   }));
@@ -49,11 +50,12 @@ test('reports a human step after proving the Wear identity and ADB transport', a
 test('automatic selection recognizes a booted Wear target without a Wear label', async () => {
   const unnamedWearable = { ...watch, name: 'Fossil Gen 6' };
   const runAdb = vi.fn(async (_device, args: string[]) => ({
-    stdout: args[0] === 'get-state'
-      ? 'device\n'
-      : args.includes('getprop')
-        ? 'watch\n'
-        : 'feature:android.hardware.type.watch\n',
+    stdout:
+      args[0] === 'get-state'
+        ? 'device\n'
+        : args.includes('getprop')
+          ? 'watch\n'
+          : 'feature:android.hardware.type.watch\n',
     stderr: '',
     exitCode: 0,
   }));
@@ -122,6 +124,49 @@ test('terminates a wearable emulator launched by a request that does not become 
     ),
   ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
   expect(terminate).toHaveBeenCalledWith(42);
+});
+
+test('boots a stopped Wear emulator, rediscovers it, then proves its ADB identity', async () => {
+  const stopped = { ...watch, id: 'Wear_OS_Large_Round', booted: false };
+  const launched: number[] = [];
+  let discoveries = 0;
+  const runAdb = vi.fn(async (_device, args: string[]) => ({
+    stdout:
+      args[0] === 'get-state'
+        ? 'device\n'
+        : args.includes('getprop')
+          ? 'watch\n'
+          : 'feature:android.hardware.type.watch\n',
+    stderr: '',
+    exitCode: 0,
+  }));
+  const result = await pairAndroidWearable(
+    host({
+      discover: async () => {
+        discoveries += 1;
+        return [phone, discoveries === 1 ? stopped : { ...stopped, booted: true }];
+      },
+      runAdb,
+      launch: (_name) => {
+        launched.push(42);
+        return 42;
+      },
+    }),
+    phone,
+    { wearable: { deviceId: stopped.id }, boot: true },
+    signal(),
+  );
+
+  expect(launched).toEqual([42]);
+  expect(discoveries).toBe(2);
+  expect(result.wearable.booted).toBe(true);
+  expect(result.status).toBe('human-step-required');
+  expect(runAdb).toHaveBeenCalledWith(
+    { ...stopped, booted: true },
+    ['get-state'],
+    expect.anything(),
+    expect.anything(),
+  );
 });
 
 function host(overrides: {

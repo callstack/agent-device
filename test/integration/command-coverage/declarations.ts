@@ -208,23 +208,23 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     macos: macos.contract(
       'src/daemon/handlers/__tests__/session-state.test.ts',
-      'pair-wearable rejects unsupported platform leaves before dispatch',
+      'pair-wearable rejects unsupported Apple phone OS leaves',
       'macOS pairing is refused by runtime admission',
     ),
     tvos: tvos.contract(
       'src/daemon/handlers/__tests__/session-state.test.ts',
-      'pair-wearable rejects unsupported platform leaves before dispatch',
+      'pair-wearable rejects unsupported Apple phone OS leaves',
       'tvOS cannot be selected as the phone endpoint',
     ),
     web: web.contract(
       'src/daemon/handlers/__tests__/session-state.test.ts',
-      'pair-wearable rejects unsupported platform leaves before dispatch',
-      'web pairing is refused by runtime admission',
+      'pair-wearable rejects non-Apple phone platforms at input validation',
+      'web is rejected by the endpoint contract before device resolution',
     ),
     linux: linux.contract(
       'src/daemon/handlers/__tests__/session-state.test.ts',
-      'pair-wearable rejects unsupported platform leaves before dispatch',
-      'Linux pairing is refused by runtime admission',
+      'pair-wearable rejects non-Apple phone platforms at input validation',
+      'Linux is rejected by the endpoint contract before device resolution',
     ),
   },
   [C.shutdown]: {
