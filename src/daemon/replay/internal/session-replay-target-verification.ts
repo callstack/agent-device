@@ -50,8 +50,8 @@ import {
   computeReplayRepairHint,
   type ReplayRepairHintCapture,
 } from '@agent-device/replay-port/repair-hint';
-import { buildReplayDivergenceFailureResponse } from './session-replay-runtime-failure-response.ts';
-import { buildAndPersistReplayDivergenceResume } from './session-replay-resume.ts';
+import { buildReplayDivergenceFailureResponse } from '@agent-device/replay-port/session-replay-runtime-failure-response';
+import { buildAndPersistReplayDivergenceResume } from '@agent-device/replay-port/session-replay-resume';
 import { classifyReplayTarget } from '@agent-device/replay-port/target-classification';
 import { extractReplayTargetToken, readRefLabel } from '@agent-device/replay-port/target-token';
 

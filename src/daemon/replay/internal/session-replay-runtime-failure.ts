@@ -10,7 +10,7 @@ import { buildReplayFailureDivergence } from './session-replay-divergence.ts';
 import {
   buildReplayDivergenceFailureResponse,
   hoistReplayFailureCauseDiagnosticMeta,
-} from './session-replay-runtime-failure-response.ts';
+} from '@agent-device/replay-port/session-replay-runtime-failure-response';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import type {
   ReplayResumeStamper,

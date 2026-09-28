@@ -10,7 +10,7 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { collectReplaySelectorCandidates } from '@agent-device/replay-port/session-replay-heal';
 import { buildSelectorCandidates, resolveReplaySuggestionCandidate } from '@agent-device/selectors';
 import { collectSettleChromeRefs } from '@agent-device/capture-kit/snapshot-chrome';
-import { buildAndPersistReplayDivergenceResume } from './session-replay-resume.ts';
+import { buildAndPersistReplayDivergenceResume } from '@agent-device/replay-port/session-replay-resume';
 import { formatDivergenceActionLabel, isTouchTargetCommand } from '@agent-device/ad-script';
 import {
   computeReplayRepairHint,

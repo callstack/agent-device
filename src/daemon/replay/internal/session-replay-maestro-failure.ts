@@ -30,7 +30,7 @@ import { computeReplayRepairHint } from '@agent-device/replay-port/repair-hint';
 import {
   buildReplayDivergenceFailureResponseFromDescriptor,
   hoistReplayFailureCauseDiagnosticMeta,
-} from './session-replay-runtime-failure-response.ts';
+} from '@agent-device/replay-port/session-replay-runtime-failure-response';
 import { type DaemonResponse } from '@agent-device/kernel/contracts';
 
 export type MaestroFailureReportAction = Pick<
