@@ -3,7 +3,30 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import os from 'node:os';
 import path from 'node:path';
-import { buildIntegrationProgressModel } from './integration-progress-model.ts';
+import {
+  buildIntegrationProgressModel,
+  countInspectPointCoordinateReferences,
+} from './integration-progress-model.ts';
+
+test('integration progress scopes point coordinates to each inspect-point step object', () => {
+  const source = `
+    const steps = [
+      {
+        flags: { label: 'unrelated object with braces', nested: { positionals: ['wrong'] } },
+        command: 'inspect-point',
+        assert: (response) => response.json,
+        positionals: ['196', '122'],
+      },
+      { command: 'tap', positionals: ['900', '901'] },
+      { command: 'inspect-point', positionals: ['196'] },
+      { command: 'inspect-point', positionals: [] },
+    ];
+    // { command: 'inspect-point', positionals: ['unrelated', 'literal'] }
+  `;
+
+  assert.equal(countInspectPointCoordinateReferences(source, 0), 2);
+  assert.equal(countInspectPointCoordinateReferences(source, 1), 1);
+});
 
 test('integration progress counts explicit generic Apple host-tool usage only', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'agent-device-progress-'));

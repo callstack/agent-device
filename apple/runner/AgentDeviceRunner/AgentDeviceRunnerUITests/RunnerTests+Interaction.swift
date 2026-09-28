@@ -320,16 +320,18 @@ extension RunnerTests {
   func readTextAt(app: XCUIApplication, x: Double, y: Double) -> String? {
     let point = CGPoint(x: x, y: y)
     let textInputCandidates = textInputCandidatesAt(app: app, point: point)
-    for element in textInputCandidates where prefersExpandedTextRead(element) {
-      if let text = readableText(for: element) { return text }
-    }
     let candidates = app.descendants(matching: .any).allElementsBoundByIndex
       .filter { $0.exists && !$0.frame.isEmpty && $0.frame.contains(point) }
       .sorted(by: smallestElementFirst)
-    for element in candidates where prefersExpandedTextRead(element) {
-      if let text = readableText(for: element) { return text }
-    }
-    for element in candidates {
+    return firstReadableText(in: textInputCandidates, preferredOnly: true)
+      ?? firstReadableText(in: candidates, preferredOnly: true)
+      ?? firstReadableText(in: candidates, preferredOnly: false)
+  }
+
+  /// Keep live point text resolution identical for legacy `get text` and point inspection.
+  func firstReadableText(in elements: [XCUIElement], preferredOnly: Bool) -> String? {
+    for element in elements {
+      if preferredOnly && !prefersExpandedTextRead(element) { continue }
       if let text = readableText(for: element) { return text }
     }
     return nil
@@ -357,16 +359,7 @@ extension RunnerTests {
       }
       .sorted(by: smallestElementFirst)
 
-    // Resolve the legacy text field before building optional point-inspection
-    // descriptors. The descriptor pass is still needed by inspect-point, but
-    // must not delay the primary text result with hittability AX reads.
-    func firstReadableText(in elements: [XCUIElement], preferredOnly: Bool) -> String? {
-      for element in elements {
-        if preferredOnly && !prefersExpandedTextRead(element) { continue }
-        if let text = readableText(for: element) { return text }
-      }
-      return nil
-    }
+    // Resolve the legacy text semantics before materializing inspection payloads.
     let text = firstReadableText(in: textInputCandidates, preferredOnly: true)
       ?? firstReadableText(in: candidates, preferredOnly: true)
       ?? firstReadableText(in: candidates, preferredOnly: false)
@@ -409,19 +402,36 @@ extension RunnerTests {
     else {
       return nil
     }
+    let deepExtension = response[RunnerAXSnapshotDeepExtensionKey] as? [String: Any]
+    let completeDeepExtension: Bool
+    if let deepExtension {
+      if let pending = deepExtension[RunnerAXSnapshotDeepExtensionPendingKey] as? Int,
+        let missed = deepExtension[RunnerAXSnapshotDeepExtensionMissedKey] as? Int
+      {
+        completeDeepExtension = pending == 0 && missed == 0
+      } else {
+        completeDeepExtension = false
+      }
+    } else {
+      // The bridge omits this field only when the initial tree had no capped
+      // frontiers to extend.
+      completeDeepExtension = true
+    }
     return privateAXPointInspection(
       root: root,
       point: CGPoint(x: x, y: y),
-      truncated: (response["truncated"] as? NSNumber)?.boolValue == true
+      truncated: (response["truncated"] as? NSNumber)?.boolValue == true,
+      completeDeepExtension: completeDeepExtension
     )
   }
 
   func privateAXPointInspection(
     root: [String: Any],
     point: CGPoint,
-    truncated: Bool = false
+    truncated: Bool = false,
+    completeDeepExtension: Bool = true
   ) -> (text: String?, elements: [PointInspectionElementPayload], complete: Bool) {
-    guard !truncated else { return (nil, [], false) }
+    guard !truncated && completeDeepExtension else { return (nil, [], false) }
     var candidates: [(payload: PointInspectionElementPayload, area: CGFloat)] = []
 
     func visit(_ raw: [String: Any]) {
