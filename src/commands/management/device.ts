@@ -7,6 +7,7 @@ import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { managementCliOutputFormatters } from './output.ts';
+import type { WearableSelector } from '@agent-device/contracts/wearable-pairing-runtime';
 
 const devicesCommandMetadata = defineFieldCommandMetadata(
   'devices',
@@ -50,13 +51,18 @@ const pairWearableCommandMetadata = defineFieldCommandMetadata(
         additionalProperties: false,
       }),
     ),
-    wearable: jsonSchemaField<{ deviceId?: string; name?: string }>({
+    wearable: jsonSchemaField<WearableSelector>({
       type: 'object',
       description: 'Optional wearable selector by deviceId, name, or both.',
       properties: {
         deviceId: { type: 'string' },
         name: { type: 'string' },
       },
+      oneOf: [
+        { required: ['deviceId'], not: { required: ['name'] } },
+        { required: ['name'], not: { required: ['deviceId'] } },
+        { required: ['deviceId', 'name'] },
+      ],
       additionalProperties: false,
     }),
     boot: requiredField(booleanField('Boot the selected wearable before pairing.')),

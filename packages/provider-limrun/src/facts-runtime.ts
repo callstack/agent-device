@@ -53,6 +53,11 @@ const headlessUnavailable = Object.freeze({
   reason: 'unsupported-provider-mode',
   hint: 'Headless boot is unavailable for provider-owned devices.',
 } as const);
+const wearablePairingUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+  hint: 'Limrun does not expose wearable pairing; use the local simulator runtime.',
+} as const);
 /** Also read outside this module's own facts assembly: the owner's `inspectFacts` reports this
  * for every operation when the request names a device with no matching live session at all. */
 export const liveSessionUnavailable = Object.freeze({
@@ -164,7 +169,7 @@ export function limrunAppLogFacts(
       providerMode: 'provider-runtime',
     },
     operations: {
-      pairWearable: liveSessionUnavailable,
+      pairWearable: wearablePairingUnavailable,
       appLogInspect: available,
       appLogDoctor: available,
       appLogStart: available,

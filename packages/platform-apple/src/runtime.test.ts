@@ -123,6 +123,13 @@ test.each([
   expect(facts.device.providerMode).toBe('local');
   expectAppStateFact(device, binding);
   expect(facts.operations.networkDump).toEqual({ available: true });
+  expect(facts.operations.pairWearable).toEqual(
+    device.appleOs === 'ios' || device.appleOs === 'ipados'
+      ? device.kind === 'simulator'
+        ? { available: true }
+        : expect.objectContaining({ available: false, reason: 'unsupported-device-kind' })
+      : expect.objectContaining({ available: false, reason: 'unsupported-platform-leaf' }),
+  );
   expect(facts.operations.listApps.available).toBe(
     device.appleOs !== 'watchos' && device.iosPhysicalDeviceBackend !== 'xctest',
   );

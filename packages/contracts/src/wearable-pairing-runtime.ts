@@ -5,10 +5,10 @@ export type WearablePairingEndpoint = Readonly<{
   deviceId: string;
 }>;
 
-export type WearableSelector = Readonly<{
-  deviceId?: string;
-  name?: string;
-}>;
+export type WearableSelector = Readonly<
+  | { deviceId: string; name?: string }
+  | { deviceId?: string; name: string }
+>;
 
 export type PairWearableInput = Readonly<{
   wearable?: WearableSelector;

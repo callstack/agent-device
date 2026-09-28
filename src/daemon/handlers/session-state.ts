@@ -33,6 +33,7 @@ import {
 } from '../runtime-admission.ts';
 import type { RuntimeCommandHandlerParams } from '../session-runtime-admission.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
+import type { WearableSelector } from '@agent-device/contracts/wearable-pairing-runtime';
 
 const IOS_APPSTATE_SESSION_REQUIRED_MESSAGE =
   'iOS appstate requires an active session on the target device. Run open first (for example: open --session sim --platform ios --device "<name>" <app>).';
@@ -459,7 +460,7 @@ export async function handleSessionStateCommands(params: {
 
 function readPairWearableInput(value: unknown): {
   phone: { platform: 'ios' | 'android'; deviceId: string };
-  wearable?: { deviceId?: string; name?: string };
+  wearable?: WearableSelector;
   boot: boolean;
 } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -486,18 +487,25 @@ function readPairWearableInput(value: unknown): {
   return { phone: { platform, deviceId }, ...(wearable ? { wearable } : {}), boot: record.boot };
 }
 
-function readWearableSelector(value: unknown): { deviceId?: string; name?: string } | undefined {
+function readWearableSelector(value: unknown): WearableSelector | undefined {
   if (value === undefined) return undefined;
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new AppError('INVALID_ARGS', 'wearable must be an object with deviceId or name.');
   }
   const record = value as Record<string, unknown>;
+  if ('deviceId' in record && typeof record.deviceId !== 'string') {
+    throw new AppError('INVALID_ARGS', 'wearable.deviceId must be a string when provided.');
+  }
+  if ('name' in record && typeof record.name !== 'string') {
+    throw new AppError('INVALID_ARGS', 'wearable.name must be a string when provided.');
+  }
   const deviceId = typeof record.deviceId === 'string' ? record.deviceId.trim() : undefined;
   const name = typeof record.name === 'string' ? record.name.trim() : undefined;
   if (!deviceId && !name) {
     throw new AppError('INVALID_ARGS', 'wearable must include a non-empty deviceId or name.');
   }
-  return { ...(deviceId ? { deviceId } : {}), ...(name ? { name } : {}) };
+  if (deviceId) return { deviceId, ...(name ? { name } : {}) };
+  return { name: name! };
 }
 
 function serializePairingDevice(device: DeviceInfo) {

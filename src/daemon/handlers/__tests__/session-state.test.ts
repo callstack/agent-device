@@ -521,6 +521,26 @@ test('pair-wearable returns both devices and the exact pairing status', async ()
   });
 });
 
+test('pair-wearable rejects malformed wearable selector fields instead of dropping them', async () => {
+  await expect(
+    handleSessionStateCommands({
+      req: {
+        token: 't',
+        session: 'default',
+        command: 'pair-wearable',
+        positionals: [],
+        input: {
+          phone: { platform: 'android', deviceId: 'phone-1' },
+          wearable: { deviceId: 42, name: 'Wear OS emulator' },
+          boot: false,
+        },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-session-state-'),
+    }),
+  ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+});
+
 test('pair-wearable rejects a watchOS simulator as an iOS phone before dispatch', async () => {
   const watch: DeviceInfo = {
     platform: 'apple',

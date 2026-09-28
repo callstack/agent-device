@@ -20,8 +20,16 @@ const watch: DeviceInfo = {
   booted: true,
 };
 
-test('reports a human step after proving the Wear ADB transport', async () => {
-  const runAdb = vi.fn(async () => ({ stdout: 'device\n', stderr: '', exitCode: 0 }));
+test('reports a human step after proving the Wear identity and ADB transport', async () => {
+  const runAdb = vi.fn(async (_device, args: string[]) => ({
+    stdout: args[0] === 'get-state'
+      ? 'device\n'
+      : args.includes('getprop')
+        ? 'watch\n'
+        : 'feature:android.hardware.type.watch\n',
+    stderr: '',
+    exitCode: 0,
+  }));
   const result = await pairAndroidWearable(
     host({ discover: async () => [phone, watch], runAdb }),
     phone,
@@ -36,6 +44,33 @@ test('reports a human step after proving the Wear ADB transport', async () => {
   });
   expect(result.remainingHumanStep).toContain('companion pairing');
   expect(runAdb).toHaveBeenCalledWith(watch, ['get-state'], expect.anything(), expect.anything());
+});
+
+test('an explicit wearable selector cannot make a phone pass Wear identity verification', async () => {
+  const runAdb = vi.fn(async (_device, args: string[]) => ({
+    stdout: args[0] === 'get-state' ? 'device\n' : 'phone\n',
+    stderr: '',
+    exitCode: 0,
+  }));
+  await expect(
+    pairAndroidWearable(
+      host({ discover: async () => [phone, watch], runAdb }),
+      phone,
+      { wearable: { deviceId: watch.id }, boot: false },
+      signal(),
+    ),
+  ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
+});
+
+test('physical Wear targets fail closed instead of reporting an automated pairing result', async () => {
+  await expect(
+    pairAndroidWearable(
+      host({ discover: async () => [phone, { ...watch, kind: 'device' }] }),
+      phone,
+      { wearable: { deviceId: watch.id }, boot: false },
+      signal(),
+    ),
+  ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
 });
 
 test('rejects an explicitly selected phone as the wearable', async () => {

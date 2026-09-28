@@ -20,6 +20,13 @@ export async function pairAndroidWearable(
   let wearable = selectWearable(devices, phone, input);
   let launchedPid: number | undefined;
   try {
+    if (wearable.kind !== 'emulator') {
+      throw new AppError(
+        'UNSUPPORTED_OPERATION',
+        'Pairing is supported only with Android Wear emulators; physical Wear pairing is not automated.',
+        { hint: 'Use an Android Wear emulator and complete the phone-side companion setup as the reported human step.' },
+      );
+    }
     if (input.boot && wearable.booted !== true) {
       if (wearable.kind !== 'emulator') {
         throw new AppError(
@@ -55,6 +62,48 @@ export async function pairAndroidWearable(
       if (state.exitCode !== 0 || state.stdout.trim() !== 'device') {
         throw new AppError('COMMAND_FAILED', 'ADB transport to the Wear device is not ready.');
       }
+      const [characteristics, features] = await Promise.all([
+        host.androidTools.runAdb(
+          wearable,
+          ['shell', 'getprop', 'ro.build.characteristics'],
+          { allowFailure: true, timeoutMs: 10_000 },
+          signal,
+        ),
+        host.androidTools.runAdb(
+          wearable,
+          ['shell', 'pm', 'list', 'features'],
+          { allowFailure: true, timeoutMs: 10_000 },
+          signal,
+        ),
+      ]);
+      const hasWatchCharacteristic = characteristics.stdout
+        .split(/[\s,]+/)
+        .some((value) => value.toLowerCase() === 'watch');
+      const hasWatchFeature = /^feature:android\.hardware\.type\.watch\s*$/im.test(
+        features.stdout,
+      );
+      if (
+        characteristics.exitCode !== 0 &&
+        features.exitCode !== 0
+      ) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          'Unable to verify the selected Android target is a Wear device.',
+        );
+      }
+      if (!hasWatchCharacteristic && !hasWatchFeature) {
+        throw new AppError(
+          'UNSUPPORTED_OPERATION',
+          'The selected Android target does not identify itself as a Wear device.',
+          { hint: 'Select a Wear OS target with the watch build characteristic or hardware feature.' },
+        );
+      }
+    } else {
+      throw new AppError(
+        'UNSUPPORTED_OPERATION',
+        'A stopped Wear target cannot be verified without booting it.',
+        { hint: 'Pass --boot to start the Wear emulator and verify its device characteristics.' },
+      );
     }
 
     return {

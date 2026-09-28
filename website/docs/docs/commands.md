@@ -232,8 +232,8 @@ agent-device pair-wearable <phone-device-id> [wearable-device-id] --platform ios
 - Use `--ios-simulator-device-set` and `--android-device-allowlist` when you need tenant- or lab-scoped discovery.
 - `capabilities` reports the command names supported by the selected session device or an explicit `--platform`/`--device`/`--udid`/`--serial` target.
 - In JSON output, `capabilities` returns `{ device, availableCommands }`. Use `availableCommands` for dynamic integrations instead of maintaining a separate platform support table.
-- `pair-wearable` pairs an iPhone Simulator with a watchOS Simulator, or prepares the Android phone and Wear OS transports and reports the remaining human pairing step. Select the phone with the first positional and the wearable with the optional second positional; add `--boot` to start a stopped wearable.
-- On Apple simulators, the command creates or activates the CoreSimulator pair and returns `paired` or `connected`. On Android, ADB reachability alone is not treated as proof of companion pairing, so the command returns `human-step-required` with the exact remaining setup step.
+- `pair-wearable` pairs an iOS or iPadOS Simulator with a watchOS Simulator, or prepares a mobile Android phone and Wear OS emulator and reports the remaining human pairing step. Physical Wear targets are not automated. Select the phone with the first positional and the wearable with the optional second positional; `--boot` starts a stopped wearable simulator/emulator.
+- On Apple simulators, the command creates or activates the CoreSimulator pair and returns `paired` or `connected`. On Android, only booted Wear emulators with a verified watch characteristic or hardware feature are accepted; ADB reachability alone is not treated as proof of companion pairing, so the command returns `human-step-required` with the exact remaining setup step.
 
 ### HarmonyOS command boundary
 

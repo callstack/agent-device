@@ -83,6 +83,11 @@ const unavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
 } as const);
+const wearableDeviceKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'Apple wearable pairing is supported only from an iOS or iPadOS Simulator.',
+} as const);
 const viewportUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
@@ -341,9 +346,10 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         bootTarget: boot,
         bootTargetHeadless: headlessUnavailable,
         pairWearable:
-          device.kind === 'simulator' &&
-          (resolveDeviceAppleOs(device) === 'ios' || resolveDeviceAppleOs(device) === 'ipados')
-            ? available
+          resolveDeviceAppleOs(device) === 'ios' || resolveDeviceAppleOs(device) === 'ipados'
+            ? device.kind === 'simulator'
+              ? available
+              : wearableDeviceKindUnavailable
             : unavailable,
         listApps: apps,
         ...appleApplicationLifecycleFacts(device),

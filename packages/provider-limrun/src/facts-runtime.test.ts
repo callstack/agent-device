@@ -11,6 +11,10 @@ import {
 
 test('limrunAppLogFacts admits the live-session app-log cells', () => {
   const facts = limrunAppLogFacts(limrunOwnerOptions(), device);
+  expect(facts.operations.pairWearable).toMatchObject({
+    available: false,
+    reason: 'unsupported-provider-mode',
+  });
   expect(facts.operations.appLogInspect).toEqual({ available: true });
   expect(facts.operations.appLogStart).toEqual({ available: true });
   expect(facts.operations.networkDump).toEqual({ available: true });
