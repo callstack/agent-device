@@ -5,6 +5,7 @@
 #import <dlfcn.h>
 #import <mach/mach_time.h>
 #import <unistd.h>
+#import <math.h>
 
 // Isolated host-side CoreSimulator input helper. The helper loads only the active Xcode's private
 // frameworks, resolves every symbol dynamically, and exits after one verified transport send.

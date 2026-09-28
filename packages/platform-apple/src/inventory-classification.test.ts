@@ -31,6 +31,16 @@ test('devicectl classification resolves tvOS, iPadOS, and visionOS vocabulary', 
   );
   assert.equal(resolveAppleOs('mobile', ['iPad16,3']), 'ipados');
   assert.equal(resolveAppleOs('mobile', ['visionOS 2.0']), 'visionos');
+  assert.equal(resolveAppleOs('mobile', ['iOS-26-0', 'Watch']), 'ios');
+  assert.equal(
+    resolveAppleOs('mobile', [
+      'iOS-26-0',
+      'com.apple.CoreSimulator.SimDeviceType.Apple-Watch-46mm',
+    ]),
+    'watchos',
+  );
+  assert.equal(resolveAppleOs('mobile', ['Watch6,4']), 'watchos');
+  assert.equal(isAppleProductType('Watch6,4'), true);
 });
 
 test('devicectl records map to normalized physical Apple devices', () => {

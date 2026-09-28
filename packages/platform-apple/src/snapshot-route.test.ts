@@ -69,6 +69,33 @@ test('eligible simulator capture publishes bridge acquisition without touching X
   expect(fallback).not.toHaveBeenCalled();
 });
 
+test('watchOS bridge failures preserve their failure code instead of claiming unsupported fallback', async () => {
+  const watch = { ...ios, appleOs: 'watchos', id: 'watch-1', name: 'Apple Watch' } as const;
+  const watchTarget = {
+    ...target,
+    simulator: simulatorAddressFor(watch),
+    targetId: `${watch.id}:com.example.app`,
+  };
+  const source = sourceReturning({
+    stage: 'failed',
+    failure: { kind: 'transport-failure', code: 'bridge-disconnected' },
+  });
+  const fallback = vi.fn(async () => runnerResult());
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source,
+    resolveTarget: vi.fn(async () => watchTarget),
+  });
+
+  await expect(route.capture(watch, input, signal(), fallback)).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: {
+      reason: 'watchos-ax-bridge-failed',
+      bridgeFailureCode: 'bridge-disconnected',
+    },
+  });
+  expect(fallback).not.toHaveBeenCalled();
+});
+
 test.for([presentSurface, 'unknown'] as const)(
   'an unabsent system surface routes the capture to the runner and never touches the bridge',
   async (presence) => {

@@ -145,6 +145,9 @@ export function createAppleSnapshotRoute(
       } catch (error) {
         rethrowIfResolutionCancelled(signal, error);
         emitRouteDiagnostic('target-resolution-failed', device, undefined, error);
+        if (device.appleOs === 'watchos') {
+          throw watchSnapshotBridgeFailure(device, 'target-resolution-failed', undefined, error);
+        }
         return await runFallback(
           device.id,
           input,
@@ -157,6 +160,9 @@ export function createAppleSnapshotRoute(
       }
       if (isBridgeDisabled(target)) {
         emitRouteDiagnostic('circuit-disabled', device, target.generation);
+        if (device.appleOs === 'watchos') {
+          throw watchSnapshotBridgeFailure(device, 'circuit-disabled');
+        }
         return await runFallback(
           device.id,
           input,
@@ -180,6 +186,9 @@ export function createAppleSnapshotRoute(
             reason: outcome.failure.code,
             ...outcome.failure.details,
           });
+        }
+        if (device.appleOs === 'watchos') {
+          throw watchSnapshotBridgeFailure(device, outcome.failure.code, outcome.failure.details);
         }
         const fallbackIdentity = await resolveFailureFallbackIdentity(
           outcome.failure,
@@ -210,6 +219,9 @@ export function createAppleSnapshotRoute(
           { producer: 'simulator-ax-bridge' },
         );
       } catch (error) {
+        if (device.appleOs === 'watchos') {
+          throw watchSnapshotBridgeFailure(device, 'presentation-failed', undefined, error);
+        }
         return await fallbackAfterFailure(
           input,
           fallback,
@@ -223,6 +235,25 @@ export function createAppleSnapshotRoute(
       }
     },
   });
+}
+
+function watchSnapshotBridgeFailure(
+  device: DeviceInfo,
+  bridgeFailureCode: string,
+  details?: Readonly<Record<string, unknown>>,
+  cause?: unknown,
+): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    'watchOS Simulator accessibility bridge failed; no XCTest fallback is available.',
+    {
+      reason: 'watchos-ax-bridge-failed',
+      deviceId: device.id,
+      bridgeFailureCode,
+      ...(details ?? {}),
+    },
+    cause,
+  );
 }
 
 /**

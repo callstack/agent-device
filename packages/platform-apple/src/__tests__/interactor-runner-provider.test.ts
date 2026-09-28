@@ -109,6 +109,21 @@ test('the runner/local partition covers the full provider-backed interactor surf
   assert.deepEqual(Object.keys(interactor).sort(), classified);
 });
 
+test('watchOS local HID routing fails closed when a runner provider is injected', () => {
+  assert.throws(
+    () =>
+      createAppleInteractor(
+        { ...IOS_SIMULATOR, id: 'watch-1', name: 'Apple Watch', appleOs: 'watchos' },
+        {},
+        recordingRunnerProvider([]),
+      ),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'UNSUPPORTED_OPERATION' &&
+      error.message.includes('unavailable through runner providers'),
+  );
+});
+
 test('provider-backed interactor routes runner-command methods through the injected transport', async () => {
   const calls: RecordedRunnerCall[] = [];
   const interactor = createAppleInteractor(

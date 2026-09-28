@@ -152,6 +152,23 @@ test('watchOS runtime compiles the bridge against watchsimulator', () => {
   ]);
 });
 
+test('the named iOS-simulator preparation profile compiles against iphonesimulator', () => {
+  const argv = buildSnapshotBridgeCompileArgv({
+    architecture: 'arm64',
+    runtime: 'ios-simulator',
+    sourceRoot: '/source',
+    outputPath: '/output',
+  });
+  assert.deepEqual(argv.slice(0, 6), [
+    '--sdk',
+    'iphonesimulator',
+    'clang',
+    '-arch',
+    'arm64',
+    '-mios-simulator-version-min=15.0',
+  ]);
+});
+
 test('snapshot bridge runtime selection rejects non-iOS and non-watchOS simulator runtimes', () => {
   for (const runtime of [
     'com.apple.CoreSimulator.SimRuntime.tvOS-27-0',

@@ -71,6 +71,8 @@ import { appleSystemFacts, createAppleSystemOperations } from './system/runtime.
 import { appleFoldableFacts, createAppleFoldableOperations } from './foldable/runtime.ts';
 import { bindAppleFindTextRuntime, bindAppleSnapshotRuntime } from './runtime-snapshot.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
+import { scopeSimctlArgsForDevice } from './core/simctl.ts';
+import { hasWatchSimulatorHidDisplay } from './watch/hid.ts';
 
 const owner = localRuntimeOwner('apple');
 const available = Object.freeze({ available: true } as const);
@@ -257,9 +259,11 @@ function appInventoryFacts(device: DeviceInfo) {
   return available;
 }
 
-function appleFocusFact(device: DeviceInfo): RuntimeOperationFact {
+function appleFocusFact(device: DeviceInfo, watchHidAvailable = false): RuntimeOperationFact {
   if (device.appleOs === 'watchos') {
-    return device.kind === 'simulator' ? available : focusKindUnavailable;
+    return device.kind === 'simulator' && !device.simulatorSetPath && watchHidAvailable
+      ? available
+      : focusKindUnavailable;
   }
   return device.kind === 'simulator' || device.kind === 'device' ? available : focusKindUnavailable;
 }
@@ -269,6 +273,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
   const snapshotRoute = createAppleSnapshotRoute(host);
   const inspectFacts = async (device: DeviceInfo) => {
     const logs = await appLogs.inspectFacts(device);
+    const watchHidAvailable = await inspectWatchHidAvailability(host, device);
     const deployment = appleAppDeploymentFacts(device);
     const leafRecordingFacts = appleScreenRecordingFacts(device);
     const hostAvailability = leafRecordingFacts.available
@@ -282,8 +287,19 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             hint: hostAvailability.hint,
           })
         : leafRecordingFacts;
-    const readiness = available;
-    const boot = isMacOs(device) ? unavailable : available;
+    const physicalWatchUnavailable = Object.freeze({
+      available: false,
+      reason: 'unsupported-device-kind' as const,
+      hint: 'watchOS lifecycle is supported on Simulator targets only.',
+    });
+    const readiness =
+      device.appleOs === 'watchos' && device.kind !== 'simulator'
+        ? physicalWatchUnavailable
+        : available;
+    const boot =
+      isMacOs(device) || (device.appleOs === 'watchos' && device.kind !== 'simulator')
+        ? physicalWatchUnavailable
+        : available;
     const apps = appInventoryFacts(device);
     return Object.freeze({
       device: logs.device,
@@ -301,24 +317,26 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
           findText: appleSnapshotFact(device),
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
-        ...focusRuntimeOperationFacts({ focus: appleFocusFact(device) }),
-        ...appleGestureAndScrollFacts(device),
+        ...focusRuntimeOperationFacts({ focus: appleFocusFact(device, watchHidAvailable) }),
+        ...appleGestureAndScrollFacts(device, watchHidAvailable),
         // Text entry rides the same interactor authority the point focus does, so it shares the
         // exact kind cell (parity with the retired `type` bucket, `{ simulator, device }`).
         ...typeTextRuntimeOperationFacts({
-          type: device.appleOs === 'watchos' ? unavailable : appleFocusFact(device),
+          type:
+            device.appleOs === 'watchos' ? unavailable : appleFocusFact(device, watchHidAvailable),
         }),
         ...touchRuntimeOperationFacts({
           unsupported: unavailable,
-          tap: appleFocusFact(device),
-          longPress: appleFocusFact(device),
-          fill: device.appleOs === 'watchos' ? unavailable : appleFocusFact(device),
+          tap: appleFocusFact(device, watchHidAvailable),
+          longPress: appleFocusFact(device, watchHidAvailable),
+          fill:
+            device.appleOs === 'watchos' ? unavailable : appleFocusFact(device, watchHidAvailable),
           ...(isIosFamily(device) && device.appleOs !== 'watchos'
-            ? { tapElementSelector: appleFocusFact(device) }
+            ? { tapElementSelector: appleFocusFact(device, watchHidAvailable) }
             : {}),
         }),
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: appleElementTextFact(device) }),
-        ...appleNavigationFacts(device),
+        ...appleNavigationFacts(device, watchHidAvailable),
         ...appleFoldableFacts(device),
         ...appleSystemFacts(device),
         ...audioProbeRuntimeOperationFacts({
@@ -456,6 +474,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
           host,
           device: request.device,
           signal: request.scope.signal,
+          watchHidAvailable: facts.operations.tapPoint.available,
         }),
         ...createAppleSystemOperations({
           host,
@@ -510,6 +529,26 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
       await Promise.all([appLogs.shutdown(), snapshotRoute.shutdown()]);
     },
   });
+}
+
+async function inspectWatchHidAvailability(
+  host: PlatformRuntimeHost,
+  device: DeviceInfo,
+): Promise<boolean> {
+  if (device.appleOs !== 'watchos' || device.kind !== 'simulator' || device.simulatorSetPath) {
+    return false;
+  }
+  try {
+    const result = await host.appleTools.run({
+      tool: 'simctl',
+      args: scopeSimctlArgsForDevice(device, ['io', device.id, 'enumerate']),
+      allowFailure: true,
+      timeoutMs: 1_500,
+    });
+    return hasWatchSimulatorHidDisplay(result);
+  } catch {
+    return false;
+  }
 }
 
 function applePerfFacts(device: DeviceInfo): Readonly<{

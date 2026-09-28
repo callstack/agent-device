@@ -26,10 +26,14 @@ const backOsUnavailable = Object.freeze({
 } as const);
 /** No apple-family closure ever gated `back` beyond device kind: every other Apple OS, tvOS
  * included (the interactor drives the remote's Menu button there), supports it. */
-function appleBackFact(device: DeviceInfo): RuntimeOperationFact {
+function appleBackFact(device: DeviceInfo, watchHidAvailable: boolean): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return backKindUnavailable;
   const os = resolveDeviceAppleOs(device);
-  if (os === 'watchos') return device.kind === 'simulator' ? available : backOsUnavailable;
+  if (os === 'watchos') {
+    return device.kind === 'simulator' && !device.simulatorSetPath && watchHidAvailable
+      ? available
+      : backOsUnavailable;
+  }
   return available;
 }
 
@@ -59,16 +63,24 @@ const appSwitcherKindUnavailable = Object.freeze({
 function appleSpringboardFact(
   device: DeviceInfo,
   kindUnavailable: RuntimeOperationFact,
+  watchHidAvailable: boolean,
 ): RuntimeOperationFact {
   if (device.kind !== 'simulator' && device.kind !== 'device') return kindUnavailable;
   const os = resolveDeviceAppleOs(device);
-  if (os === 'watchos') return device.kind === 'simulator' ? available : homeLifecycleUnavailable;
+  if (os === 'watchos') {
+    return device.kind === 'simulator' && !device.simulatorSetPath && watchHidAvailable
+      ? available
+      : homeLifecycleUnavailable;
+  }
   return os === 'macos' ? homeLifecycleUnavailable : available;
 }
 
 function appleAppSwitcherFact(device: DeviceInfo): RuntimeOperationFact {
+  if (device.kind !== 'simulator' && device.kind !== 'device') {
+    return appSwitcherKindUnavailable;
+  }
   if (resolveDeviceAppleOs(device) === 'watchos') return homeLifecycleUnavailable;
-  return appleSpringboardFact(device, appSwitcherKindUnavailable);
+  return appleSpringboardFact(device, appSwitcherKindUnavailable, false);
 }
 
 /**
@@ -167,12 +179,12 @@ function appleActionButtonFact(device: DeviceInfo): RuntimeOperationFact {
  * The navigation cells: back, home, app-switcher, action-button, orientation, tv-remote, and
  * keyboard status/dismiss/enter.
  */
-export function appleNavigationFacts(device: DeviceInfo) {
+export function appleNavigationFacts(device: DeviceInfo, watchHidAvailable = false) {
   return Object.freeze({
-    ...backRuntimeOperationFacts({ back: appleBackFact(device) }),
+    ...backRuntimeOperationFacts({ back: appleBackFact(device, watchHidAvailable) }),
     ...systemButtonRuntimeOperationFacts({
       unsupported: systemButtonUnavailable,
-      home: appleSpringboardFact(device, homeKindUnavailable),
+      home: appleSpringboardFact(device, homeKindUnavailable, watchHidAvailable),
       appSwitcher: appleAppSwitcherFact(device),
       actionButton: appleActionButtonFact(device),
     }),
@@ -192,12 +204,13 @@ export function createAppleNavigationOperations(params: {
   host: Pick<PlatformRuntimeHost, 'localInteractors'>;
   device: DeviceInfo;
   signal: AbortSignal;
+  watchHidAvailable?: boolean;
 }) {
-  const { host, device, signal } = params;
+  const { host, device, signal, watchHidAvailable = false } = params;
   return bindAdmittedLocalInteractorOperations({
     device,
     signal,
     resolveInteractor: host.localInteractors.resolve,
-    facts: appleNavigationFacts(device),
+    facts: appleNavigationFacts(device, watchHidAvailable),
   });
 }

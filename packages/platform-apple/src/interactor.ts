@@ -45,6 +45,12 @@ export function createAppleInteractor(
   runnerProvider?: AppleRunnerProvider | AppleRunnerCommandExecutor,
 ): Interactor {
   if (device.appleOs === 'watchos') {
+    if (runnerProvider !== undefined) {
+      throw new AppError(
+        'UNSUPPORTED_OPERATION',
+        'watchOS interaction uses local Simulator tooling and is unavailable through runner providers.',
+      );
+    }
     return createWatchOsInteractor(device, runnerContext);
   }
   const { overrides, runnerOpts } = iosRunnerOverrides(device, runnerContext);

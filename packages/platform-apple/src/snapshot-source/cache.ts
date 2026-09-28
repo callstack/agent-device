@@ -120,12 +120,11 @@ export function buildSnapshotBridgeCompileArgv(
 ): readonly string[] {
   const runtime = input.runtime?.toLowerCase();
   const watch = /^com\.apple\.coresimulator\.simruntime\.watchos-/i.test(runtime ?? '');
-  if (
-    runtime !== undefined &&
-    !watch &&
-    !/^com\.apple\.coresimulator\.simruntime\.ios-/i.test(runtime) &&
-    !/^ios\s/i.test(runtime)
-  ) {
+  const ios =
+    /^com\.apple\.coresimulator\.simruntime\.ios-/i.test(runtime ?? '') ||
+    /^ios\s/i.test(runtime ?? '') ||
+    runtime === 'ios-simulator';
+  if (runtime !== undefined && !watch && !ios) {
     throw snapshotSourceError('unsupported', 'unsupported-simulator-runtime', {
       runtime: input.runtime,
     });

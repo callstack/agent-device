@@ -4,36 +4,31 @@ import path from 'node:path';
 import { beforeAll, describe, test } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
 import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
-import { createSnapshotSourceHost } from '../snapshot-source/host.ts';
-import type { SnapshotSourceHost } from '../snapshot-source/types.ts';
+import { createNativeBuildHost, type NativeBuildHost } from '../native-build/host.ts';
 import {
   buildWatchHelperCompileArgv,
   ensureWatchHelperBinary,
   WATCH_HELPER_BUILD_TIMEOUT_MS,
 } from './watch-helper-cache.ts';
 
-function fakeHost(onBuild: () => string): SnapshotSourceHost {
-  const real = createSnapshotSourceHost();
-  return {
-    ...real,
-    run: async (command, args) => {
-      if (command === 'xcrun' && args.includes('clang')) {
-        await writeFile(args.at(-1)!, onBuild());
-        return { stdout: '', stderr: '', exitCode: 0 };
-      }
-      const stdout =
-        command === 'xcodebuild'
-          ? 'Xcode 27.0\nBuild version 17A1'
-          : command === 'sw_vers'
-            ? args.includes('-buildVersion')
-              ? '25A1'
-              : '26.0'
-            : command === 'uname'
-              ? 'arm64'
-              : '';
-      return { stdout, stderr: '', exitCode: 0 };
-    },
-  };
+function fakeHost(onBuild: () => string): NativeBuildHost {
+  return createNativeBuildHost(async (command, args) => {
+    if (command === 'xcrun' && args.includes('clang')) {
+      await writeFile(args.at(-1)!, onBuild());
+      return { stdout: '', stderr: '', exitCode: 0 };
+    }
+    const stdout =
+      command === 'xcodebuild'
+        ? 'Xcode 27.0\nBuild version 17A1'
+        : command === 'sw_vers'
+          ? args.includes('-buildVersion')
+            ? '25A1'
+            : '26.0'
+          : command === 'uname'
+            ? 'arm64'
+            : '';
+    return { stdout, stderr: '', exitCode: 0 };
+  });
 }
 
 test('watch helper cache builds once and reuses the content-addressed binary', async () => {

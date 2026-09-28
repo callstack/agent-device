@@ -16,6 +16,7 @@ import {
 } from '@agent-device/contracts/session';
 import { HOVER_UNAVAILABLE_HINT } from '@agent-device/contracts/touch-runtime';
 import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
+import { resolveApplePlatformName } from '@agent-device/kernel/device';
 import { createApplePlatformRuntime } from './runtime.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
 
@@ -221,7 +222,7 @@ function expectAppleSnapshotAvailability(
 }
 
 test.each(Object.entries(leaves))(
-  'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
+  'classifies back/home/app-switcher/orientation/tv-remote/keyboard/screen-lock facts for the %s leaf',
   async (_name, device) => {
     const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
       device,
@@ -235,6 +236,28 @@ test.each(Object.entries(leaves))(
     expectNavigationAndKeyboardFacts(binding, device);
   },
 );
+
+test('physical watchOS refuses lifecycle and touch facts before dispatch', async () => {
+  const facts = await createApplePlatformRuntime(platformRuntimeHostFixture()).inspectFacts(
+    appleDevice({ appleOs: 'watchos', kind: 'device' }),
+  );
+  expect(facts.operations.ensureReady).toMatchObject({
+    available: false,
+    reason: 'unsupported-device-kind',
+  });
+  expect(facts.operations.bootTarget).toMatchObject({
+    available: false,
+    reason: 'unsupported-device-kind',
+  });
+  expect(facts.operations.back).toMatchObject({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
+});
+
+test('watchOS never resolves to an XCTest iOS runner profile', () => {
+  expect(() => resolveApplePlatformName('mobile', 'watchos')).toThrow('no XCTest runner platform');
+});
 
 test('hover has no Apple interactor route on macOS, iOS, or tvOS; the touch family reports its typed denial', async () => {
   for (const device of [leaves.macos, leaves.ios, leaves.tvos]) {
@@ -360,7 +383,11 @@ function expectNavigationAndKeyboardFacts(
   binding: DeviceBinding<PlatformRuntimeOperations>,
   device: DeviceInfo,
 ): void {
-  expectOperationAvailability(binding, 'back', true);
+  expectOperationAvailability(
+    binding,
+    'back',
+    device.appleOs !== 'watchos' || (device.kind === 'simulator' && !device.simulatorSetPath),
+  );
 
   // home and app-switcher share one springboard reading (R56): both are unavailable on macOS,
   // which drives an already-running app with no springboard, and on watchOS. That is parity, not

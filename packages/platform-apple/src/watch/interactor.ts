@@ -4,6 +4,7 @@ import { ensureBootedSimulator } from '../core/simulator.ts';
 import { runAppleToolCommand } from '../core/tool-provider.ts';
 import { runSimctlForDevice } from '../core/simctl.ts';
 import { ensureWatchHelperBinary } from './watch-helper-cache.ts';
+import { hasWatchSimulatorHidDisplay } from './hid.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
@@ -18,10 +19,10 @@ const watchViewportCache = new Map<
 >();
 
 export function createWatchOsInteractor(device: DeviceInfo, context: RunnerContext): Interactor {
-  if (device.kind !== 'simulator') {
+  if (device.kind !== 'simulator' || device.simulatorSetPath) {
     throw new AppError(
       'UNSUPPORTED_PLATFORM',
-      'watchOS interaction supports Simulator targets only.',
+      'watchOS interaction supports only the default Simulator device set.',
     );
   }
   return {
@@ -69,7 +70,13 @@ export function createWatchOsInteractor(device: DeviceInfo, context: RunnerConte
     type: async () => unsupported('Text entry is not supported by the watchOS HID backend.'),
     fill: async () => unsupported('Text entry is not supported by the watchOS HID backend.'),
     scroll: async (direction, options) => await scrollWatch(device, context, direction, options),
-    screenshot: async (outPath) => {
+    screenshot: async (outPath, options) => {
+      if (options?.pixelDensity !== undefined) {
+        throw new AppError(
+          'UNSUPPORTED_OPERATION',
+          'watchOS Simulator screenshots do not support pixel-density normalization.',
+        );
+      }
       await ensureBootedSimulator(device);
       await captureSimulatorScreenshotWithRetry(device, outPath);
     },
@@ -106,8 +113,20 @@ async function scrollWatch(
   direction: ScrollDirection,
   options?: ScrollExecutionOptions,
 ): Promise<Record<string, unknown>> {
+  if (direction === 'left' || direction === 'right') {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      'watchOS Digital Crown scrolling is vertical only.',
+    );
+  }
+  if (options?.pixels !== undefined || options?.durationMs !== undefined) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      'watchOS Digital Crown scrolling supports amount only; pixels and duration are not mapped.',
+    );
+  }
   const amount = options?.amount ?? 0.5;
-  const delta = (direction === 'down' || direction === 'right' ? 1 : -1) * amount * 360;
+  const delta = (direction === 'down' ? 1 : -1) * amount * 360;
   return await runWatchHelper(device, context, ['crown-scroll', String(delta)]);
 }
 
@@ -154,6 +173,7 @@ async function watchViewport(
   device: DeviceInfo,
   context: RunnerContext,
 ): Promise<Readonly<{ x: 0; y: 0; width: number; height: number }>> {
+  await ensureBootedSimulator(device);
   const cached = watchViewportCache.get(device.id);
   if (cached) return cached;
   const result = await runSimctlForDevice(device, ['io', device.id, 'enumerate'], {
@@ -161,21 +181,7 @@ async function watchViewport(
     allowFailure: true,
     timeoutMs: 10_000,
   });
-  const output = `${result.stdout}\n${result.stderr}`;
-  const width = Number(/Default width:\s*(\d+)/.exec(output)?.[1]);
-  const height = Number(/Default height:\s*(\d+)/.exec(output)?.[1]);
-  const scale = Number(/Preferred UI Scale:\s*([\d.]+)/.exec(output)?.[1]);
-  const hasLegacyHid = output.includes('com.apple.CoreSimulator.HID.LegacyHID');
-  if (
-    result.exitCode !== 0 ||
-    !hasLegacyHid ||
-    !Number.isFinite(width) ||
-    !Number.isFinite(height) ||
-    !Number.isFinite(scale) ||
-    width <= 0 ||
-    height <= 0 ||
-    scale <= 0
-  ) {
+  if (!hasWatchSimulatorHidDisplay(result)) {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       'The selected Xcode/watchOS runtime does not expose a compatible Simulator HID display.',
@@ -186,6 +192,10 @@ async function watchViewport(
       },
     );
   }
+  const output = `${result.stdout}\n${result.stderr}`;
+  const width = Number(/Default width:\s*(\d+)/.exec(output)?.[1]);
+  const height = Number(/Default height:\s*(\d+)/.exec(output)?.[1]);
+  const scale = Number(/Preferred UI Scale:\s*([\d.]+)/.exec(output)?.[1]);
   const viewport = Object.freeze({
     x: 0 as const,
     y: 0 as const,

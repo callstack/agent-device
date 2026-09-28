@@ -296,9 +296,12 @@ function resolveRunnerPlatformNameForAppleOs(
       return 'macOS';
     case 'visionos':
       return 'visionOS';
-    // iOS and iPadOS share the single iOS runner profile/SDK. watchOS uses the
-    // isolated host backend and never asks for this runner platform; the default
-    // remains a valid legacy projection for persisted records.
+    case 'watchos':
+      throw new AppError(
+        'UNSUPPORTED_PLATFORM',
+        'watchOS uses its isolated Simulator backend and has no XCTest runner platform.',
+      );
+    // iOS and iPadOS share the single iOS runner profile/SDK.
     default:
       return 'iOS';
   }

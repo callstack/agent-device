@@ -46,6 +46,26 @@ test.each([
   ['macOS host', leaves.macos, true, true, false, false, true, true],
   ['visionOS simulator', leaves.visionos, false, false, false, false, true, true],
   ['watchOS simulator', leaves.watchos, true, true, false, false, true, true],
+  [
+    'physical watchOS',
+    appleDevice({ appleOs: 'watchos', kind: 'device' }),
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+  ],
+  [
+    'watchOS custom simulator set',
+    appleDevice({ appleOs: 'watchos', simulatorSetPath: '/tmp/watch-set' }),
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+  ],
 ])(
   'declares the %s gesture and scroll cells',
   async (_name, device, plan, directionalFling, multiTouch, drag, viewport, scroll) => {
@@ -82,6 +102,33 @@ test('carries the retired multi-touch hints verbatim on every Apple leaf that re
   const watchos = await runtime.inspectFacts(leaves.watchos);
   expect(watchos.operations.performGesturePlan).toEqual({ available: true });
   expect(watchos.operations.performMultiTouchGesturePlan).toEqual({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
+});
+
+test('watchOS interaction facts fail closed when the selected runtime lacks the HID display probe', async () => {
+  const base = platformRuntimeHostFixture();
+  const host = {
+    ...base,
+    appleTools: {
+      ...base.appleTools,
+      run: async (request: Parameters<typeof base.appleTools.run>[0]) =>
+        request.tool === 'simctl' && request.args.includes('enumerate')
+          ? { stdout: '', stderr: 'LegacyHID unavailable', exitCode: 1 }
+          : await base.appleTools.run(request),
+    },
+  } as typeof base;
+  const facts = await createApplePlatformRuntime(host).inspectFacts(leaves.watchos);
+  expect(facts.operations.tapPoint).toMatchObject({
+    available: false,
+    reason: 'unsupported-device-kind',
+  });
+  expect(facts.operations.scrollDirection).toMatchObject({
+    available: false,
+    reason: 'unsupported-device-kind',
+  });
+  expect(facts.operations.back).toMatchObject({
     available: false,
     reason: 'unsupported-platform-leaf',
   });

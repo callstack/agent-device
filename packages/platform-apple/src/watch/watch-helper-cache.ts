@@ -1,21 +1,19 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
+import { hostHomeDirectory } from '@agent-device/host-kit/host-file';
+import { findProjectRoot } from '@agent-device/host-kit/version';
 import { runAppleToolCommand } from '../core/tool-provider.ts';
 import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../runner/apple-runner-platform.ts';
-import { readHostToolchainIdentity } from '../snapshot-source/cache-identity.ts';
-import {
-  createSnapshotSourceDeadline,
-  type SnapshotSourceDeadline,
-} from '../snapshot-source/deadline.ts';
-import { SnapshotSourceError } from '../snapshot-source/errors.ts';
-import { createSnapshotSourceHost } from '../snapshot-source/host.ts';
+import { createNativeBuildDeadline, type NativeBuildDeadline } from '../native-build/deadline.ts';
+import { NativeBuildError } from '../native-build/errors.ts';
+import { createNativeBuildHost, type NativeBuildHost } from '../native-build/host.ts';
+import { readHostToolchainIdentity } from '../native-build/toolchain-identity.ts';
 import {
   ensureNativeBuildCacheEntry,
   execNativeBuildClang,
   fingerprintNativeBuildSource,
-} from '../snapshot-source/native-build-cache.ts';
-import type { SnapshotSourceHost } from '../snapshot-source/types.ts';
+} from '../native-build/cache.ts';
 
 const SOURCE_FILENAME = 'WatchControl.m';
 const BINARY_FILENAME = 'watch-control';
@@ -29,13 +27,13 @@ const PREPARATION_DEADLINE_MS = COLD_TOOLCHAIN_PROBE_TIMEOUT_MS + WATCH_HELPER_B
 export async function ensureWatchHelperBinary(
   input: Readonly<{
     signal?: AbortSignal;
-    host?: SnapshotSourceHost;
+    host?: NativeBuildHost;
     cacheRoot?: string;
     sourceRoot?: string;
   }> = {},
 ): Promise<Readonly<{ path: string }>> {
   const host = input.host ?? createWatchHelperCacheHost();
-  const deadline = createSnapshotSourceDeadline(PREPARATION_DEADLINE_MS, input.signal);
+  const deadline = createNativeBuildDeadline(PREPARATION_DEADLINE_MS, input.signal);
   try {
     const sourceRoot = input.sourceRoot ?? resolveWatchHelperSourceRoot(host);
     const sourceHash = await fingerprintNativeBuildSource(
@@ -46,7 +44,7 @@ export async function ensureWatchHelperBinary(
     );
     const toolchain = await readHostToolchainIdentity(host, deadline);
     const cacheRoot =
-      input.cacheRoot ?? path.join(host.homeDirectory(), '.agent-device', 'watch-helper');
+      input.cacheRoot ?? path.join(hostHomeDirectory(), '.agent-device', 'watch-helper');
     return await ensureNativeBuildCacheEntry({
       host,
       deadline,
@@ -62,19 +60,18 @@ export async function ensureWatchHelperBinary(
       build: (outputPath) => compileWatchHelper(host, deadline, sourceRoot, outputPath),
     });
   } catch (error) {
-    if (!(error instanceof SnapshotSourceError) || error.failureKind === 'cancelled') throw error;
-    const { bridgeFailure: _kind, bridgeFailureCode: cause, ...details } = error.details ?? {};
-    throw watchHelperBuildFailed({ ...details, cause }, error);
+    throw asWatchHelperCacheError(error);
   }
 }
 
-function createWatchHelperCacheHost(): SnapshotSourceHost {
-  const real = createSnapshotSourceHost();
-  return { ...real, run: (command, args, options) => runAppleToolCommand(command, args, options) };
+function createWatchHelperCacheHost(): NativeBuildHost {
+  return createNativeBuildHost((command, args, options) =>
+    runAppleToolCommand(command, args, options),
+  );
 }
 
-function resolveWatchHelperSourceRoot(host: SnapshotSourceHost): string {
-  const projectRoot = host.projectRoot();
+function resolveWatchHelperSourceRoot(host: NativeBuildHost): string {
+  const projectRoot = findProjectRoot();
   const checkoutRoot = path.join(projectRoot, 'apple', 'watch-helper');
   if (host.exists(path.join(checkoutRoot, SOURCE_FILENAME))) return checkoutRoot;
   const packagedRoot = path.join(projectRoot, 'dist', 'apple', 'watch-helper');
@@ -104,8 +101,8 @@ export function buildWatchHelperCompileArgv(
 }
 
 async function compileWatchHelper(
-  host: SnapshotSourceHost,
-  deadline: SnapshotSourceDeadline,
+  host: NativeBuildHost,
+  deadline: NativeBuildDeadline,
   sourceRoot: string,
   outputPath: string,
 ): Promise<void> {
@@ -119,6 +116,11 @@ async function compileWatchHelper(
   if (result.exitCode !== 0 || !host.exists(outputPath)) {
     throw watchHelperBuildFailed(execFailureDetails(result));
   }
+}
+
+function asWatchHelperCacheError(error: unknown): unknown {
+  if (!(error instanceof NativeBuildError) || error.buildFailureKind === 'cancelled') return error;
+  return watchHelperBuildFailed({ ...error.buildDetails, cause: error.buildFailureCode }, error);
 }
 
 function watchHelperBuildFailed(details: Readonly<Record<string, unknown>>, cause?: unknown) {
