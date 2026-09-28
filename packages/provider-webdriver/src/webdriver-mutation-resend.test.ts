@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import { createCloudWebDriverCapabilities } from './capabilities.ts';
 import { WebDriverClient } from './webdriver-client.ts';
 import { createWebDriverInteractor } from './webdriver-interactor.ts';
@@ -69,35 +70,60 @@ async function connectedWebDriverInteractor(hangOnPathSuffix: string) {
   return { interactor, callsFor };
 }
 
-// A tap whose `POST .../actions` request times out is RESENT today: the
-// transport's default retry policy (timeout is retriable, one retry) applies
-// to every WebDriver route alike, so a mutation gets the same second attempt
-// as a safe read. That second attempt can double the touch the driver is
-// still processing from the first.
-test('a timed-out tap resends POST .../actions today', async () => {
+// A tap whose `POST .../actions` request times out gets exactly one attempt:
+// a resend cannot tell whether the touch the driver is still processing from
+// the first attempt already landed, so a second attempt risks a doubled
+// gesture instead of a safe no-op. The thrown error still discloses that the
+// outcome is unresolved via `details.dispatched`.
+test('a timed-out tap is never resent', async () => {
   const { interactor, callsFor } = await connectedWebDriverInteractor('/actions');
 
-  await assert.rejects(interactor.tap(10, 20), () => true);
+  await assert.rejects(interactor.tap(10, 20), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.dispatched, 'unknown');
+    return true;
+  });
 
-  assert.equal(callsFor('/actions'), 2);
+  assert.equal(callsFor('/actions'), 1);
 });
 
-// Same shape for text entry: a hung `POST .../keys` is resent, risking a
-// doubled key stream if the first attempt's keys were already delivered.
-test('timed-out keys resend POST .../keys today', async () => {
+// Same shape for text entry: a hung `POST .../keys` must not be resent, or a
+// doubled key stream could reach the field the first attempt already typed
+// into.
+test('timed-out keys are never resent', async () => {
   const { interactor, callsFor } = await connectedWebDriverInteractor('/keys');
 
-  await assert.rejects(interactor.type('hello'), () => true);
+  await assert.rejects(interactor.type('hello'), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.dispatched, 'unknown');
+    return true;
+  });
 
-  assert.equal(callsFor('/keys'), 2);
+  assert.equal(callsFor('/keys'), 1);
 });
 
-// A third mutating route, distinct from the gesture/text-entry paths: a
-// hung `POST .../back` is resent too, risking a doubled back navigation.
-test('a timed-out back resends POST .../back today', async () => {
+// A third mutating route, distinct from the gesture/text-entry paths: a hung
+// `POST .../back` must not be resent, or a doubled back navigation could
+// leave the app a screen further back than the caller asked for.
+test('a timed-out back is never resent', async () => {
   const { interactor, callsFor } = await connectedWebDriverInteractor('/back');
 
-  await assert.rejects(interactor.back(), () => true);
+  await assert.rejects(interactor.back(), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.dispatched, 'unknown');
+    return true;
+  });
 
-  assert.equal(callsFor('/back'), 2);
+  assert.equal(callsFor('/back'), 1);
+});
+
+// The mutation policy is narrowly scoped: a read route (page source) keeps
+// the transport's default retry budget, so a timeout there still resends
+// once, exactly as it did before this change.
+test('a timed-out read is still retried once', async () => {
+  const { interactor, callsFor } = await connectedWebDriverInteractor('/source');
+
+  await assert.rejects(interactor.snapshot(), () => true);
+
+  assert.equal(callsFor('/source'), 2);
 });

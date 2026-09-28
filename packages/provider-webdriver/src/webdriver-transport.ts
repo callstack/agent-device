@@ -29,6 +29,14 @@ export function isWebDriverRequestTimeout(error: unknown): error is AppError {
   return error instanceof AppError && error.details?.reason === WEBDRIVER_REQUEST_TIMEOUT_REASON;
 }
 
+/** Machine-readable `details.reason` of a request that never left the client. */
+const WEBDRIVER_CONNECT_REFUSED_REASON = 'webdriver_connect_refused';
+
+/** A request that failed before any bytes reached the driver (refused/unreachable host). */
+export function isWebDriverConnectRefused(error: unknown): error is AppError {
+  return error instanceof AppError && error.details?.reason === WEBDRIVER_CONNECT_REFUSED_REASON;
+}
+
 export type WebDriverRequestOverrides = {
   retryAttempts?: number;
   /**
@@ -40,6 +48,21 @@ export type WebDriverRequestOverrides = {
   /** Request-bound cancellation supplied by a runtime binding. */
   signal?: AbortSignal;
 };
+
+/**
+ * Every mutating WebDriver route gets exactly one attempt. A resend after an
+ * ambiguous outcome (the request timed out, or the driver answered 5xx after
+ * receiving it) cannot tell whether the first attempt's side effect — a tap, a
+ * key send, a navigation — already landed, so retrying risks a doubled action
+ * rather than a safe no-op. Reads keep the transport's default retry budget.
+ *
+ * `'no'` and `'unknown'` are the two values this transport can attach to a
+ * failed request's `details.dispatched`; `feat/dispatch-disclosure` formalizes
+ * that vocabulary as `DispatchDisclosure` (`'no' | 'yes' | 'unknown'`) in
+ * `@agent-device/contracts`. This policy is why a mutation never gets the
+ * chance to resend regardless of which value it carries.
+ */
+export const MUTATION_REQUEST_POLICY: WebDriverRequestOverrides = { retryAttempts: 0 };
 
 export type WebDriverTransportOptions = {
   clientVersion: string;
@@ -174,6 +197,12 @@ export class WebDriverTransport {
       if (timeoutSignal.aborted && !requestSignal?.aborted) {
         throw webdriverTimeoutError(method, path, timeoutMs, error);
       }
+      // Fetch rejects with a bare TypeError for a network failure — refused
+      // connection, unresolved host, failed handshake — that never put a byte
+      // on the wire. A caller-driven abort keeps its own reason instead.
+      if (!requestSignal?.aborted && error instanceof TypeError) {
+        throw webdriverConnectRefusedError(method, path, error);
+      }
       throw error;
     }
   }
@@ -214,7 +243,13 @@ function webdriverError(status: number, payload: unknown): AppError {
     typeof (value as { message?: unknown }).message === 'string'
       ? (value as { message: string }).message
       : `WebDriver request failed with HTTP ${status}.`;
-  return new AppError('COMMAND_FAILED', message, { status, response: payload });
+  return new AppError('COMMAND_FAILED', message, {
+    status,
+    response: payload,
+    // A 5xx means the driver received and processed the request, but not
+    // whether the mutation it described completed before it failed.
+    ...(status >= 500 ? { dispatched: 'unknown' as const } : {}),
+  });
 }
 
 function webdriverTimeoutError(
@@ -226,16 +261,39 @@ function webdriverTimeoutError(
   return new AppError(
     'COMMAND_FAILED',
     `WebDriver ${method} ${path} timed out after ${timeoutMs}ms.`,
-    { reason: WEBDRIVER_REQUEST_TIMEOUT_REASON, method, path, timeoutMs },
+    {
+      reason: WEBDRIVER_REQUEST_TIMEOUT_REASON,
+      method,
+      path,
+      timeoutMs,
+      // The transport stopped waiting; the driver may still be mid-request.
+      dispatched: 'unknown' as const,
+    },
     cause instanceof Error ? cause : undefined,
+  );
+}
+
+function webdriverConnectRefusedError(method: string, path: string, cause: TypeError): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `WebDriver ${method} ${path} could not reach the driver.`,
+    {
+      reason: WEBDRIVER_CONNECT_REFUSED_REASON,
+      method,
+      path,
+      // The connection itself failed, so no bytes of this request were sent.
+      dispatched: 'no' as const,
+    },
+    cause,
   );
 }
 
 function isRetriableWebDriverError(error: unknown): boolean {
   if (isWebDriverRequestTimeout(error)) return true;
+  if (isWebDriverConnectRefused(error)) return true;
   if (error instanceof AppError) {
     const status = error.details?.status;
     return typeof status === 'number' && status >= 500;
   }
-  return error instanceof TypeError;
+  return false;
 }

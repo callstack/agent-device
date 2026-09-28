@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { WebDriverTransport, isWebDriverRequestTimeout } from './webdriver-transport.ts';
+import {
+  MUTATION_REQUEST_POLICY,
+  WebDriverTransport,
+  isWebDriverConnectRefused,
+  isWebDriverRequestTimeout,
+} from './webdriver-transport.ts';
 
 const realFetch = globalThis.fetch;
 
@@ -93,4 +98,74 @@ test('cancels a retry delay when the request binding aborts', async () => {
 
   await assert.rejects(pending, /abort|cancel/i);
   assert.equal(calls, 1);
+});
+
+// Fetch's own network-error shape (refused connection, unresolved host) is a
+// bare TypeError with no HTTP status. It must still classify as retriable —
+// preserving today's behavior for a read — and disclose that no bytes of the
+// request ever reached the driver.
+test('a connection refusal classifies as unreached and is still retried by default', async () => {
+  const transport = new WebDriverTransport({
+    clientVersion: '0.0.0-test',
+    endpoint: 'http://cloud-webdriver.test/wd/hub/',
+    requestPolicy: { timeoutMs: 30_000, retryDelayMs: 1 },
+  });
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    throw new TypeError('fetch failed');
+  };
+
+  await assert.rejects(transport.requestValue('GET', '/session/wd-1/source'), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.ok(isWebDriverConnectRefused(error));
+    assert.equal(error.details?.dispatched, 'no');
+    return true;
+  });
+  assert.equal(calls, 2);
+});
+
+// The one attempt `MUTATION_REQUEST_POLICY` grants must hold regardless of
+// which ambiguous failure the request hit — connect refusal included, not
+// only a timeout or a 5xx.
+test('a connection refusal is not resent under the mutation policy', async () => {
+  const transport = new WebDriverTransport({
+    clientVersion: '0.0.0-test',
+    endpoint: 'http://cloud-webdriver.test/wd/hub/',
+    requestPolicy: { timeoutMs: 30_000, retryDelayMs: 1 },
+  });
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    throw new TypeError('fetch failed');
+  };
+
+  await assert.rejects(
+    transport.requestValue('POST', '/session/wd-1/actions', {}, MUTATION_REQUEST_POLICY),
+  );
+  assert.equal(calls, 1);
+});
+
+// A 5xx means the driver answered — it received and processed the request —
+// but not whether the mutation it described completed before it failed.
+test('a 5xx response discloses an unresolved outcome', async () => {
+  const transport = new WebDriverTransport({
+    clientVersion: '0.0.0-test',
+    endpoint: 'http://cloud-webdriver.test/wd/hub/',
+    requestPolicy: { timeoutMs: 30_000, retryAttempts: 0 },
+  });
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ value: { message: 'grid unavailable' } }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+  await assert.rejects(
+    transport.requestValue('POST', '/session/wd-1/actions', {}),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.dispatched, 'unknown');
+      return true;
+    },
+  );
 });
