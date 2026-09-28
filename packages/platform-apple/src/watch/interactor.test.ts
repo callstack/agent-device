@@ -52,6 +52,45 @@ test('watchOS HID interactor rejects a non-default simulator set before host dis
   ).toThrow('default Simulator device set');
 });
 
+test('watchOS HID interactor rejects physical devices before host dispatch', () => {
+  expect(() => createWatchOsInteractor(watch({ kind: 'device' }), context)).toThrow(
+    'default Simulator device set',
+  );
+  expect(runSimctlForDevice).not.toHaveBeenCalled();
+  expect(runAppleToolCommand).not.toHaveBeenCalled();
+});
+
+test('watchOS HID interactor refuses a runtime without LegacyHID with a typed reason', async () => {
+  vi.mocked(runSimctlForDevice).mockResolvedValueOnce({
+    stdout: 'Default width: 396\nDefault height: 484\nPreferred UI Scale: 2',
+    stderr: '',
+    exitCode: 0,
+  });
+  const interactor = createWatchOsInteractor(watch({ id: 'watch-no-hid' }), context);
+
+  await expect(interactor.tap(99, 121)).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    details: {
+      reason: 'watchos-simulator-hid-unavailable',
+      deviceId: 'watch-no-hid',
+      exitCode: 0,
+    },
+  });
+  expect(runAppleToolCommand).not.toHaveBeenCalled();
+});
+
+test('watchOS HID tap converts logical display points to normalized LegacyHID coordinates', async () => {
+  const interactor = createWatchOsInteractor(watch({ id: 'watch-scaled' }), context);
+
+  await interactor.tap(99, 121);
+
+  expect(runAppleToolCommand).toHaveBeenCalledWith(
+    '/tmp/watch-control',
+    ['watch-scaled', 'tap', '0.5', '0.5'],
+    expect.objectContaining({ allowFailure: true }),
+  );
+});
+
 test('watchOS Crown scroll refuses horizontal, pixel, and duration inputs instead of misreporting them', async () => {
   const interactor = createWatchOsInteractor(watch(), context);
 
