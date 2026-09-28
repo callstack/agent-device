@@ -19,7 +19,13 @@ const watchViewportCache = new Map<
 >();
 
 export function createWatchOsInteractor(device: DeviceInfo, context: RunnerContext): Interactor {
-  if (device.kind !== 'simulator' || device.simulatorSetPath) {
+  if (device.kind !== 'simulator') {
+    throw new AppError(
+      'UNSUPPORTED_PLATFORM',
+      'watchOS interaction is supported only on Simulator targets.',
+    );
+  }
+  if (device.simulatorSetPath) {
     throw new AppError(
       'UNSUPPORTED_PLATFORM',
       'watchOS interaction supports only the default Simulator device set.',

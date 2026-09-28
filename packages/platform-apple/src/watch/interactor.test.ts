@@ -54,7 +54,7 @@ test('watchOS HID interactor rejects a non-default simulator set before host dis
 
 test('watchOS HID interactor rejects physical devices before host dispatch', () => {
   expect(() => createWatchOsInteractor(watch({ kind: 'device' }), context)).toThrow(
-    'default Simulator device set',
+    'Simulator targets',
   );
   expect(runSimctlForDevice).not.toHaveBeenCalled();
   expect(runAppleToolCommand).not.toHaveBeenCalled();

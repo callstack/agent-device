@@ -394,17 +394,21 @@ function expectNavigationAndKeyboardFacts(
   binding: DeviceBinding<PlatformRuntimeOperations>,
   device: DeviceInfo,
 ): void {
+  const watchHidAvailable = binding.facts.operations.tapPoint.available;
   expectOperationAvailability(
     binding,
     'back',
-    device.appleOs !== 'watchos' || (device.kind === 'simulator' && !device.simulatorSetPath),
+    device.appleOs !== 'watchos' ||
+      (device.kind === 'simulator' && !device.simulatorSetPath && watchHidAvailable),
   );
 
   // home and app-switcher share one springboard reading (R56): both are unavailable on macOS,
   // which drives an already-running app with no springboard, and on watchOS. That is parity, not
   // convenience — the retired `supportsAppAndDeviceLifecycle` closure gated both off the same row.
   const home =
-    device.appleOs !== 'macos' && (device.appleOs !== 'watchos' || device.kind === 'simulator');
+    device.appleOs !== 'macos' &&
+    (device.appleOs !== 'watchos' ||
+      (device.kind === 'simulator' && !device.simulatorSetPath && watchHidAvailable));
   const appSwitcher = device.appleOs !== 'macos' && device.appleOs !== 'watchos';
   expectOperationAvailability(binding, 'home', home);
   expectOperationAvailability(binding, 'appSwitcher', appSwitcher);

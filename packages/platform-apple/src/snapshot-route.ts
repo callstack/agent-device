@@ -189,6 +189,13 @@ export function createAppleSnapshotRoute(
         }
         if (device.appleOs === 'watchos') {
           if (outcome.failure.kind === 'preparing') {
+            emitRouteDiagnostic(
+              outcome.failure.code,
+              device,
+              undefined,
+              undefined,
+              outcome.failure.details,
+            );
             throw new AppError(
               'COMMAND_FAILED',
               'watchOS Simulator accessibility bridge preparation is still running; retry the snapshot shortly.',
