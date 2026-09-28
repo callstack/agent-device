@@ -1,7 +1,11 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { Deadline, emitDiagnostic, withDiagnosticTimer } from './host.ts';
-import { waitForRunner, RUNNER_STARTUP_TIMEOUT_MS } from './runner-startup-transport.ts';
+import {
+  waitForRunner,
+  RUNNER_STARTUP_TIMEOUT_MS,
+  type RunnerConnectionSession,
+} from './runner-startup-transport.ts';
 import { sendRunnerCommandOnce } from './runner-transport.ts';
 import {
   buildRunnerResponseError,
@@ -28,6 +32,12 @@ import {
   type RunnerLogAttempt,
 } from './runner-failure-diagnostics.ts';
 import { advanceRunnerSessionState, type RunnerSession } from './runner-session-types.ts';
+
+type RunnerExchangeSession = RunnerConnectionSession &
+  Pick<
+    RunnerSession,
+    'port' | 'commandCharges' | 'lastHealthyMutation' | 'runnerMainThreadBusy' | 'launchDeadline'
+  >;
 
 const RUNNER_READY_PREFLIGHT_TIMEOUT_MS = 1_000;
 const RUNNER_PREFLIGHT_SKIP_FRESHNESS_MS = 5_000;
@@ -63,7 +73,7 @@ type RunnerReadinessPreflightDecision =
  */
 export async function executeRunnerExchange(
   device: DeviceInfo,
-  session: RunnerSession,
+  session: RunnerExchangeSession,
   command: RunnerCommand,
   logPath: string | undefined,
   timeoutMs: number,
@@ -137,7 +147,7 @@ export async function executeRunnerExchange(
  * runner's occupancy report, and applies what the payload says about the session.
  */
 async function settleRunnerAnsweredExchange(
-  session: RunnerSession,
+  session: RunnerExchangeSession,
   runnerCommand: RunnerCommand,
   data: Record<string, unknown>,
   invalidateFatalSession: (reason: string) => Promise<void>,
@@ -169,7 +179,7 @@ async function settleRunnerAnsweredExchange(
  * runner answered it.
  */
 function recordUnansweredRunnerExchange(
-  session: RunnerSession,
+  session: RunnerExchangeSession,
   runnerCommand: RunnerCommand,
   error: unknown,
 ): boolean {
@@ -199,7 +209,7 @@ function readRunnerMainThreadBusy(data: Record<string, unknown>): boolean | unde
 
 function markSkippedPreflightTransportError(
   error: unknown,
-  session: RunnerSession,
+  session: RunnerExchangeSession,
   preflightDecision: RunnerReadinessPreflightDecision,
 ): unknown {
   if (
@@ -218,7 +228,7 @@ function markSkippedPreflightTransportError(
 
 async function sendRunnerCommandAfterPreflight(params: {
   device: DeviceInfo;
-  session: RunnerSession;
+  session: RunnerExchangeSession;
   runnerCommand: RunnerCommand;
   logPath: string | undefined;
   deadline: Deadline;
@@ -282,7 +292,7 @@ async function sendRunnerCommandAfterPreflight(params: {
 
 async function runRunnerReadinessPreflight(params: {
   device: DeviceInfo;
-  session: RunnerSession;
+  session: RunnerExchangeSession;
   runnerCommand: RunnerCommand;
   logAttempt: RunnerLogAttempt | undefined;
   deadline: Deadline;
@@ -325,7 +335,7 @@ async function runRunnerReadinessPreflight(params: {
 
 function emitRunnerReadinessPreflightSkipped(
   runnerCommand: RunnerCommand,
-  session: RunnerSession,
+  session: RunnerExchangeSession,
   decision: Extract<RunnerReadinessPreflightDecision, { action: 'skip' }>,
 ): void {
   emitDiagnostic({
@@ -392,7 +402,7 @@ function resolveRunnerFatalReason(data: Record<string, unknown>): string | undef
 }
 
 function resolveRunnerReadinessPreflightDecision(
-  session: RunnerSession,
+  session: RunnerExchangeSession,
   command: RunnerCommand,
 ): RunnerReadinessPreflightDecision {
   const readOnlyCommand = isReadOnlyRunnerCommand(command);
