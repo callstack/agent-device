@@ -57,29 +57,130 @@ test('the exchange preflights a mutation and settles only its answer', async () 
   assert.deepEqual(invalidations, []);
 });
 
+test('the readiness probe preserves its main-thread busy report when the command omits it', async () => {
+  server = await startFakeRunnerServer({
+    uptime: [{ kind: 'ok', data: { runnerMainThreadBusy: true } }],
+    tap: [{ kind: 'ok', data: { tapped: true } }],
+  });
+  const session = sessionFor(server.port);
+
+  await executeRunnerExchange(
+    IOS_SIMULATOR,
+    session,
+    { command: 'tap', x: 10, y: 10, appBundleId: 'com.example.app' },
+    undefined,
+    10_000,
+    async () => {},
+  );
+
+  assert.equal(session.runnerMainThreadBusy, true);
+});
+
+test('a preflight-exempt command still waits for a starting runner', async () => {
+  server = await startFakeRunnerServer({
+    uptime: [{ kind: 'ok', data: { uptimeMs: 5 } }],
+    terminate: [{ kind: 'ok', data: { terminated: true } }],
+  });
+  const session = sessionFor(server.port);
+  session.state = 'starting';
+
+  await executeRunnerExchange(
+    IOS_SIMULATOR,
+    session,
+    { command: 'terminate', appBundleId: 'com.example.app' },
+    undefined,
+    10_000,
+    async () => {},
+  );
+
+  assert.deepEqual(
+    server.requests.map(({ command }) => command),
+    ['uptime', 'terminate'],
+  );
+});
+
 test('the exchange awaits owner invalidation before returning a fatal answer', async () => {
   server = await startFakeRunnerServer({
     snapshot: [{ kind: 'ok', data: { runnerFatal: true, runnerFatalReason: 'ax_failed' } }],
   });
   const session = sessionFor(server.port);
   session.lastHealthyMutation = { atMs: Date.now(), appBundleId: 'com.example.app' };
-  const order: string[] = [];
+  let signalInvalidationStarted!: () => void;
+  const invalidationStarted = new Promise<void>((resolve) => {
+    signalInvalidationStarted = resolve;
+  });
+  let releaseInvalidation!: () => void;
+  const invalidationGate = new Promise<void>((resolve) => {
+    releaseInvalidation = resolve;
+  });
+  let settled = false;
 
-  const result = await executeRunnerExchange(
+  const exchange = executeRunnerExchange(
     IOS_SIMULATOR,
     session,
     { command: 'snapshot', appBundleId: 'com.example.app' },
     undefined,
     10_000,
     async (reason) => {
-      await Promise.resolve();
-      order.push(reason);
+      assert.equal(reason, 'ax_failed');
+      signalInvalidationStarted();
+      await invalidationGate;
     },
-  );
-  order.push('returned');
+  ).finally(() => {
+    settled = true;
+  });
+
+  try {
+    await invalidationStarted;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(settled, false);
+  } finally {
+    releaseInvalidation();
+  }
+  const result = await exchange;
 
   assert.equal(result.runnerFatal, true);
-  assert.deepEqual(order, ['ax_failed', 'returned']);
   assert.equal(session.lastHealthyMutation, undefined);
   assert.equal(session.commandCharges.hasOutstandingCharges, false);
+});
+
+test('the exchange awaits owner invalidation before throwing a fatal runner error', async () => {
+  server = await startFakeRunnerServer({
+    snapshot: [{ kind: 'runnerError', code: 'RUNNER_WEDGED', message: 'runner wedged' }],
+  });
+  const session = sessionFor(server.port);
+  let signalInvalidationStarted!: () => void;
+  const invalidationStarted = new Promise<void>((resolve) => {
+    signalInvalidationStarted = resolve;
+  });
+  let releaseInvalidation!: () => void;
+  const invalidationGate = new Promise<void>((resolve) => {
+    releaseInvalidation = resolve;
+  });
+  let settled = false;
+
+  const exchange = executeRunnerExchange(
+    IOS_SIMULATOR,
+    session,
+    { command: 'snapshot', appBundleId: 'com.example.app' },
+    undefined,
+    10_000,
+    async (reason) => {
+      assert.equal(reason, 'runner_main_thread_wedged');
+      signalInvalidationStarted();
+      await invalidationGate;
+    },
+  ).finally(() => {
+    settled = true;
+  });
+  void exchange.catch(() => {});
+
+  try {
+    await invalidationStarted;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(settled, false);
+  } finally {
+    releaseInvalidation();
+  }
+  await assert.rejects(exchange);
 });

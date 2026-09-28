@@ -327,7 +327,11 @@ async function runRunnerReadinessPreflight(params: {
         timeoutMs: readinessTimeoutMs,
       },
     );
-    await parseRunnerResponse(readinessResponse, session, logAttempt);
+    const readinessData = await parseRunnerResponse(readinessResponse, session, logAttempt);
+    const stampedMainThreadBusy = readRunnerMainThreadBusy(readinessData);
+    if (stampedMainThreadBusy !== undefined) {
+      session.runnerMainThreadBusy = stampedMainThreadBusy;
+    }
   } catch (error) {
     throw markRunnerReadinessPreflightError(error);
   }
@@ -406,7 +410,7 @@ function resolveRunnerReadinessPreflightDecision(
   command: RunnerCommand,
 ): RunnerReadinessPreflightDecision {
   const readOnlyCommand = isReadOnlyRunnerCommand(command);
-  if (isRunnerReadinessPreflightExempt(command)) {
+  if (canSkipReadySessionPreflightForExemptCommand(session, command)) {
     return { action: 'skip', reason: 'preflight_exempt_command' };
   }
   if (session.state !== 'ready') {
@@ -462,6 +466,13 @@ function resolveRunnerReadinessPreflightDecision(
     reason: 'recent_healthy_mutation',
     lastHealthyMutationAgeMs,
   };
+}
+
+function canSkipReadySessionPreflightForExemptCommand(
+  session: RunnerExchangeSession,
+  command: RunnerCommand,
+): boolean {
+  return session.state === 'ready' && isRunnerReadinessPreflightExempt(command);
 }
 
 function markRunnerReadinessPreflightError(error: unknown): AppError {
