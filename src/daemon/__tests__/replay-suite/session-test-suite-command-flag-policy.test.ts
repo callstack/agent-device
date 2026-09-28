@@ -13,7 +13,7 @@ import {
   createReplaySession,
   replayDaemonDependencies,
 } from '../../handlers/session-replay-command.ts';
-import { runReplayTestCommand } from '../../replay/index.ts';
+import { runReplayTestCommand } from '@agent-device/replay-port/test-command';
 import {
   replayInvokeOverDispatch,
   splitReplayCommandRequest,

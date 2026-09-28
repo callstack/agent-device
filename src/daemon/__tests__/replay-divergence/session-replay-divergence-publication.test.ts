@@ -14,8 +14,8 @@ import type { ReplayDivergence } from '@agent-device/contracts/divergence';
 import { expireRefFrame, refFrameScope, refFrameState, refFrameTree } from '../../ref-frame.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from '../../session-snapshot.ts';
 import { SessionStore } from '../../session-store.ts';
-import { captureDivergenceObservation } from '../../replay/internal/session-replay-divergence.ts';
-import { boundReplayDivergenceForSession } from '../../replay/internal/session-replay-divergence-publication.ts';
+import { captureDivergenceObservation } from '@agent-device/replay-port/session-replay-divergence';
+import { boundReplayDivergenceForSession } from '@agent-device/replay-port/session-replay-divergence-publication';
 import { replaySessionForTest } from './replay-session-fixture.ts';
 import {
   captureSnapshotThroughLegacyDispatchFixture,

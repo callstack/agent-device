@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildReplayTestSourceDiscovery } from '../../replay/internal/session-test-source-discovery.ts';
+import { buildReplayTestSourceDiscovery } from '@agent-device/replay-port/session-test-source-discovery';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import {
   maestroScriptSourceBundleFor,

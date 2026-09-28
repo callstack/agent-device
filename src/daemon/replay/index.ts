@@ -1,3 +1,0 @@
-/** Public replay application seam for daemon handlers and their admitted owner capabilities. */
-export { runReplayCommand } from './internal/native-command.ts';
-export { runReplayTestCommand } from './internal/test-command.ts';

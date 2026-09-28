@@ -23,7 +23,7 @@ import {
 import {
   buildTypedMaestroFailureReportProjection,
   buildTypedMaestroFailureResponse,
-} from '../../replay/internal/session-replay-maestro-failure.ts';
+} from '@agent-device/replay-port/session-replay-maestro-failure';
 import { runReplayForTest } from '../replay-runtime/replay-command-fixture.ts';
 import { SessionStore } from '../../session-store.ts';
 import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';

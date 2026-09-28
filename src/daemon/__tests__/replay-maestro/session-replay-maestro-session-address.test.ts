@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { stringify } from 'yaml';
-import { runTypedMaestroReplay } from '../../replay/internal/session-replay-maestro-runtime.ts';
+import { runTypedMaestroReplay } from '@agent-device/replay-port/session-replay-maestro-runtime';
 import { SessionStore } from '../../session-store.ts';
 import { replayCommandForTest } from '../replay-runtime/replay-command-fixture.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';

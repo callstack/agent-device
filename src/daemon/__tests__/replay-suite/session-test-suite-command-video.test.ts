@@ -6,7 +6,7 @@ import { beforeEach, test, vi } from 'vitest';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
-import { runReplayTestCommand } from '../../replay/index.ts';
+import { runReplayTestCommand } from '@agent-device/replay-port/test-command';
 import {
   replayInvokeOverDispatch,
   splitReplayCommandRequest,

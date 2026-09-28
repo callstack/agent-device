@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { recordActionEntry } from '../../session-action-recorder.ts';
 import type { DaemonRequest } from '../../daemon-request.ts';
-import { invokeReplayAction } from '../../replay/internal/session-replay-action-runtime.ts';
+import { invokeReplayAction } from '@agent-device/replay-port/session-replay-action-runtime';
 import { replayDaemonDependencies } from '../../handlers/session-replay-command.ts';
 import { resolveReplayAction } from '@agent-device/ad-script';
 

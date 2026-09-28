@@ -10,7 +10,7 @@ import {
   walkNonRawAndroidFixture,
 } from '../../../__tests__/test-utils/android-ui-hierarchy-fixtures.ts';
 import { SessionStore } from '../../session-store.ts';
-import { buildReplayFailureDivergence } from '../../replay/internal/session-replay-divergence.ts';
+import { buildReplayFailureDivergence } from '@agent-device/replay-port/session-replay-divergence';
 import { replayDivergenceForTest } from './replay-session-fixture.ts';
 import {
   legacyDispatchCapture,

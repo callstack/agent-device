@@ -10,7 +10,7 @@ import {
   createReplaySession,
   replayDaemonDependencies,
 } from '../../handlers/session-replay-command.ts';
-import { runReplayTestCommand } from '../../replay/index.ts';
+import { runReplayTestCommand } from '@agent-device/replay-port/test-command';
 import type { ReplayCommand, ReplayTestCommand } from '@agent-device/replay-port/command-types';
 import { replayScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
@@ -18,7 +18,7 @@ import type { DaemonInvokeFn, DaemonRequest } from '../../daemon-request.ts';
 
 const capturedCommands: ReplayCommand[] = [];
 
-vi.mock('../../replay/internal/native-command.ts', () => ({
+vi.mock('@agent-device/replay-port/native-command', () => ({
   runReplayCommand: async (command: ReplayCommand) => {
     capturedCommands.push(command);
     return { ok: true as const, data: { replayed: 1 } };

@@ -18,7 +18,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import type { DaemonRequest } from '../../daemon-request.ts';
-import { attachRemoteReplayTestArtifacts } from '../../replay/internal/test-command.ts';
+import { attachRemoteReplayTestArtifacts } from '@agent-device/replay-port/test-command';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 const SUITE_INVOCATION_ID = 'cd5f9c01feec8d70';

@@ -5,7 +5,7 @@ import {
   createReplaySession,
   replayDaemonDependencies,
 } from '../../handlers/session-replay-command.ts';
-import { runReplayCommand } from '../../replay/index.ts';
+import { runReplayCommand } from '@agent-device/replay-port/native-command';
 import {
   replayInvokeOverDispatch,
   splitReplayCommandRequest,

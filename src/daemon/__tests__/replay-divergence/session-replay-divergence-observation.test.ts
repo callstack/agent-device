@@ -4,7 +4,7 @@ import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { SessionStore } from '../../session-store.ts';
-import { captureDivergenceObservation } from '../../replay/internal/session-replay-divergence.ts';
+import { captureDivergenceObservation } from '@agent-device/replay-port/session-replay-divergence';
 import { replayDivergenceForTest } from './replay-session-fixture.ts';
 import {
   legacyDispatchCapture,

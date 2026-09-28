@@ -13,7 +13,7 @@ import {
   captureSnapshotThroughLegacyDispatchFixture,
   legacyDispatchCapture,
 } from '../legacy-snapshot-capture-fixture.ts';
-import { buildReplayFailureDivergence } from '../../replay/internal/session-replay-divergence.ts';
+import { buildReplayFailureDivergence } from '@agent-device/replay-port/session-replay-divergence';
 import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
