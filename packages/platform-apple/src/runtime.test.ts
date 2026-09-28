@@ -555,13 +555,19 @@ test('bootTarget forwards a --timeout budget as the Simulator boot deadline (#30
     },
   });
 
-  await binding.operations.bootTarget?.({ timeoutMs: 45_000 });
+  const deadlineAtMs = Date.now() + 45_000;
+  await binding.operations.bootTarget?.({ deadlineAtMs });
 
-  // The startup budget reaches the boot wait, same as open/prepare (#2325): the
-  // envelope's --timeout is the deadline the simctl calls run under, not a fixed default.
+  // The startup budget reaches the boot wait, same as open/prepare (#2325): every simctl call the
+  // wait issues runs under the caller's --timeout budget until the absolute deadline, not a fixed
+  // default. Both `boot` and `bootstatus` derive their timeout from the same deadline, so both
+  // must sit within a tight window of the 45s budget - a fixed default like 10s or 30s would fail.
   const bootCall = calls.find((call) => call.args.includes('boot'));
+  const bootstatusCall = calls.find((call) => call.args.includes('bootstatus'));
+  expect(bootCall?.timeoutMs).toBeGreaterThan(44_900);
   expect(bootCall?.timeoutMs).toBeLessThanOrEqual(45_000);
-  expect(bootCall?.timeoutMs).toBeGreaterThan(0);
+  expect(bootstatusCall?.timeoutMs).toBeGreaterThan(44_900);
+  expect(bootstatusCall?.timeoutMs).toBeLessThanOrEqual(45_000);
 });
 
 test('macOS readiness is a no-op while boot remains unavailable', async () => {

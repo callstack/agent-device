@@ -95,6 +95,70 @@ test('boot prefers explicit device selector over active session device', async (
   }
 });
 
+test('boot --timeout forwards a startup deadline to bootTarget (#3004)', async () => {
+  const sessionStore = makeSessionStore();
+  const selectedDevice: SessionState['device'] = {
+    platform: 'apple',
+    id: 'sim-timeout',
+    name: 'iPhone 17 Pro',
+    kind: 'simulator',
+    booted: false,
+  };
+  mockResolveTargetDevice.mockResolvedValue(selectedDevice);
+
+  const beforeMs = Date.now();
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'boot',
+      positionals: [],
+      flags: { platform: 'ios', device: 'iPhone 17 Pro', timeoutMs: 300_000 },
+    },
+    sessionName: 'default',
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+  const afterMs = Date.now();
+
+  expect(response?.ok, JSON.stringify(response)).toBe(true);
+  expect(mockEnsureReadyRuntime).toHaveBeenCalledOnce();
+  const deadlineAtMs = mockEnsureReadyRuntime.mock.calls[0]?.[0]?.deadlineAtMs;
+  expect(deadlineAtMs).toBeGreaterThanOrEqual(beforeMs + 300_000);
+  expect(deadlineAtMs).toBeLessThanOrEqual(afterMs + 300_000);
+});
+
+test('boot without --timeout leaves the startup deadline unset', async () => {
+  const sessionStore = makeSessionStore();
+  const selectedDevice: SessionState['device'] = {
+    platform: 'apple',
+    id: 'sim-no-timeout',
+    name: 'iPhone 17 Pro',
+    kind: 'simulator',
+    booted: false,
+  };
+  mockResolveTargetDevice.mockResolvedValue(selectedDevice);
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'boot',
+      positionals: [],
+      flags: { platform: 'ios', device: 'iPhone 17 Pro' },
+    },
+    sessionName: 'default',
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok, JSON.stringify(response)).toBe(true);
+  expect(mockEnsureReadyRuntime).toHaveBeenCalledOnce();
+  expect(mockEnsureReadyRuntime.mock.calls[0]?.[0]?.deadlineAtMs).toBeUndefined();
+});
+
 test('boot --headless admits a stopped Android emulator through facts and binds once', async () => {
   const sessionStore = makeSessionStore();
   const placeholder: SessionState['device'] = {

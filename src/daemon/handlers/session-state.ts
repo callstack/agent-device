@@ -15,6 +15,7 @@ import {
 } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { SessionStore } from '../session-store.ts';
+import { startupDeadlineAtMs } from '../startup-deadline.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { AppleApplicationState } from '@agent-device/kernel/snapshot';
 import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
@@ -302,7 +303,11 @@ export async function handleSessionStateCommands(params: {
     });
     if (admitted.type === 'response') return admitted.response;
 
-    const input = { serial: flags.serial, androidSerialAllowlist, timeoutMs: flags.timeoutMs };
+    const input = {
+      serial: flags.serial,
+      androidSerialAllowlist,
+      deadlineAtMs: startupDeadlineAtMs(flags.timeoutMs),
+    };
     if (plan.kind === 'boot-target-headless') {
       device = await (await admitted.bind(device, plan.use)).operations.bootTargetHeadless(input);
     } else {

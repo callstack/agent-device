@@ -478,8 +478,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         ...whenAdmitted(facts.operations.bootTarget, () => ({
           bootTarget: async (input: EnsureReadyInput) =>
             await ensureAppleReady(host, request.device, request.scope.signal, {
-              deadlineAtMs:
-                typeof input.timeoutMs === 'number' ? Date.now() + input.timeoutMs : undefined,
+              deadlineAtMs: input.deadlineAtMs,
             }),
         })),
         ...whenAdmitted(facts.operations.listApps, () => ({

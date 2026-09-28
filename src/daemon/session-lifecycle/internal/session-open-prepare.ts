@@ -4,6 +4,7 @@ import { openApplicationRuntimeUse } from '@agent-device/contracts/application-l
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
+import { startupDeadlineAtMs } from '../../startup-deadline.ts';
 import type { SessionRuntimeHints, SessionState } from '../../session-state.ts';
 import { SessionStore } from '../../session-store.ts';
 import {
@@ -229,8 +230,5 @@ async function resolvePreparedOpenIdentity(params: {
 
 /** `open --timeout` is a startup budget; it becomes the absolute deadline the boot wait honors. */
 function openStartupDeadlineAtMs(req: DaemonRequest): number | undefined {
-  const timeoutMs = req.flags?.timeoutMs;
-  return typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
-    ? Date.now() + timeoutMs
-    : undefined;
+  return startupDeadlineAtMs(req.flags?.timeoutMs);
 }
