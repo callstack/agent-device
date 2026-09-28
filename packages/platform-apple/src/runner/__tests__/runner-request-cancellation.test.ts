@@ -73,11 +73,8 @@ import {
   createRequestCanceledError,
   isRequestCanceledError,
 } from '@agent-device/kernel/errors';
-import {
-  abortAllIosRunnerSessions,
-  DEFAULT_RUNNER_START_BUDGET_MS,
-  readRunnerSessionLiveness,
-} from '../runner-session.ts';
+import { abortAllIosRunnerSessions, readRunnerSessionLiveness } from '../runner-session.ts';
+import { DEFAULT_RUNNER_START_BUDGET_MS } from '../runner-start-budget.ts';
 import { RUNNER_STARTUP_TIMEOUT_MS } from '../runner-startup-transport.ts';
 import type { RunnerLease } from '../runner-lease.ts';
 import { executeRunnerCommand, prepareLocalIosRunner } from '../runner-lifecycle.ts';
