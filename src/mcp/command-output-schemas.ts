@@ -3,6 +3,7 @@ import type { CommandResultMap } from '@agent-device/command-registry/command-re
 import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import {
   booleanSchema,
+  constSchema,
   enumSchema,
   looseObjectSchema,
   numberSchema,
@@ -46,10 +47,6 @@ import { DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
  */
 
 export const DEVICE_KINDS = ['simulator', 'emulator', 'device'] as const;
-
-function constSchema(value: string): JsonSchema {
-  return { type: 'string', const: value };
-}
 
 function nullableStringSchema(description?: string): JsonSchema {
   return { type: ['string', 'null'], ...(description ? { description } : {}) };

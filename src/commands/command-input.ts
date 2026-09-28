@@ -106,6 +106,11 @@ export function enumSchema(values: readonly string[], description?: string): Jso
   return { type: 'string', enum: values, ...(description ? { description } : {}) };
 }
 
+/** A single-valued string schema, for a discriminant field an output shape always fixes. */
+export function constSchema(value: string): JsonSchema {
+  return { type: 'string', const: value };
+}
+
 export function stringSchema(description?: string): JsonSchema {
   return { type: 'string', ...(description ? { description } : {}) };
 }

@@ -3,6 +3,7 @@ import type { CommandResultMap } from '@agent-device/command-registry/command-re
 import type { ClipboardCommandOptions } from '@agent-device/contracts/client';
 import {
   type FoldKeyframe,
+  FOLD_SCREEN_COORDINATE_SPACE,
   MAX_FOLD_DURATION_MS,
   MAX_FOLD_KEYFRAMES,
   parseFoldInput,
@@ -12,7 +13,6 @@ import {
   FOLD_POSE_USAGE,
   parseDeviceRotation,
 } from '@agent-device/contracts/device';
-import { FOLD_SCREEN_COORDINATE_SPACE } from '@agent-device/contracts/fold-runtime';
 import { type BackMode, BACK_MODES } from '@agent-device/contracts/back-mode';
 import {
   TV_REMOTE_BUTTONS,
@@ -41,6 +41,7 @@ import {
   jsonSchemaField,
   readFieldInput,
   booleanSchema,
+  constSchema,
   enumSchema,
   numberSchema,
   objectSchema,
@@ -73,10 +74,6 @@ const TV_REMOTE_LONGPRESS_PRESET_MS = 500;
 
 const CLIPBOARD_ACTION_VALUES = ['read', 'write'] as const;
 const KEYBOARD_METADATA_ACTION_VALUES = ['status', 'dismiss', 'enter', 'return'] as const;
-
-function constSchema(value: string): JsonSchema {
-  return { type: 'string', const: value };
-}
 
 /**
  * This family's advertised MCP `outputSchema`s, keyed by daemon command name and projected into

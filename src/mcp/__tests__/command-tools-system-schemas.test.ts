@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { ownerFilesForCommand } from '@agent-device/command-registry/owner-files';
+import {
+  COMMAND_OWNER_FILES,
+  ownerFilesForCommand,
+} from '@agent-device/command-registry/owner-files';
 import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import { SYSTEM_COMMAND_OUTPUT_SCHEMAS } from '../../commands/system/index.ts';
 import { COMMAND_OUTPUT_SCHEMAS } from '../command-output-schemas.ts';
@@ -39,13 +42,25 @@ test('a settle-derived system entry still grafts onto the module object, not a f
   );
 });
 
-test('the projected family map declares exactly the commands its module owns', () => {
+test('every system-owned command claims this module, and the module claims nothing else', () => {
   for (const command of SYSTEM_COMMANDS) {
     assert.ok(
       ownerFilesForCommand(command).includes('src/commands/system/index.ts'),
       `${command} projects its output schema from this module but does not name it as its owner`,
     );
   }
+
+  const commandsOwnedByThisModule = (
+    Object.entries(COMMAND_OWNER_FILES) as Array<[string, readonly string[]]>
+  )
+    .filter(([, ownerFiles]) => ownerFiles.includes('src/commands/system/index.ts'))
+    .map(([command]) => command)
+    .sort();
+  assert.deepEqual(
+    commandsOwnedByThisModule,
+    [...SYSTEM_COMMANDS].sort(),
+    'a command the registry attributes to this module is missing from SYSTEM_COMMAND_OUTPUT_SCHEMAS (or vice versa)',
+  );
 });
 
 // `appstate` on iOS answers from the session record, and from a live runner when one can read the
