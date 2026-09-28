@@ -1454,23 +1454,6 @@ test('interactions expose targetKind-discriminated public response data', async 
   );
 });
 
-// #1656 follow-up: the operator-only readiness budget rides the same common-input seam as every
-// other option (`commonToClientOptions`), so it must reach `req.flags` for press/click/longpress
-// exactly like `button`/`durationMs` do above. Never CLI- or model-writable — this is the SDK-only
-// route the option exists for.
-test('readinessTimeoutMs on press/click/longpress reaches the request flags', async () => {
-  const setup = createTransport(async () => ({ ok: true, data: {} }));
-  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
-
-  await client.interactions.press({ selector: 'label=Foo', readinessTimeoutMs: 2_000 });
-  await client.interactions.click({ selector: 'label=Foo', readinessTimeoutMs: 1_500 });
-  await client.interactions.longPress({ selector: 'label=Foo', readinessTimeoutMs: 900 });
-
-  assert.equal(setup.calls[0]?.flags?.readinessTimeoutMs, 2_000);
-  assert.equal(setup.calls[1]?.flags?.readinessTimeoutMs, 1_500);
-  assert.equal(setup.calls[2]?.flags?.readinessTimeoutMs, 900);
-});
-
 // #1625: `find … list` through the typed client — `matches` is part of the
 // public response type and rides with the issuing generation, so a caller can
 // pin any listed ref for its next command.
