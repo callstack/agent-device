@@ -319,8 +319,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...focusRuntimeOperationFacts({ focus: appleFocusFact(device, watchHidAvailable) }),
         ...appleGestureAndScrollFacts(device, watchHidAvailable),
-        // Text entry rides the same interactor authority the point focus does, so it shares the
-        // exact kind cell (parity with the retired `type` bucket, `{ simulator, device }`).
+        // The watchOS host HID backend has no text-entry route, so this remains unavailable there.
         ...typeTextRuntimeOperationFacts({
           type:
             device.appleOs === 'watchos' ? unavailable : appleFocusFact(device, watchHidAvailable),

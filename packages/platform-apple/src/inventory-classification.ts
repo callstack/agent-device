@@ -1,10 +1,10 @@
 import type { AppleOS, DeviceInfo, DeviceTarget } from '@agent-device/kernel/device';
 
-const APPLE_PRODUCT_TYPE_PATTERN = /^(iphone|ipad|ipod|appletv|watch\d+,\d+|realitydevice)/i;
+const APPLE_PRODUCT_TYPE_PATTERN = /^(iphone|ipad|ipod|appletv|realitydevice)/i;
 const APPLE_IPAD_PATTERN = /ipad/i;
 const APPLE_VISION_PATTERN = /\b(apple vision|vision pro|xros|visionos|realitydevice)\b/i;
 // OS identity must come from Xcode/CoreDevice identifiers, never a user-editable device label.
-const APPLE_WATCH_PATTERN = /(?:\bwatchos\b|simdevicetype\.apple-watch|^watch\d+,\d+$)/i;
+const APPLE_WATCH_PATTERN = /(?:\bwatchos\b|simdevicetype\.apple-watch)/i;
 const APPLE_MOBILE_LABEL_PATTERN = /\b(iphone|ipad|ipod)\b/i;
 const APPLE_TV_PRODUCT_TYPE_PATTERN = /^appletv/i;
 const APPLE_TV_LABEL_HINTS = ['apple tv', 'appletv', 'tvos'] as const;
@@ -97,6 +97,11 @@ export function resolveAppleTargetFromDevicectlDevice(device: DevicectlAppleDevi
 
 export function isSupportedAppleDevicectlDevice(device: DevicectlAppleDevice): boolean {
   const platform = normalizeAppleDescriptor(device.hardwareProperties?.platform);
+  // A paired physical Watch is not an interactive target in this runtime. Do not surface it as
+  // selectable Apple inventory; pairing owns its discovery separately.
+  if (/^watch\d+,\d+$/i.test(devicectlProductType(device)) || platform.includes('watchos')) {
+    return false;
+  }
   if (platform.includes('ios') || isAppleTvPlatform(platform) || isAppleVisionPlatform(platform)) {
     return true;
   }
