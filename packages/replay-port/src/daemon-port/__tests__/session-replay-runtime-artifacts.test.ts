@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { test } from 'vitest';
 import { collectReplayActionArtifactPaths } from '../session-replay-runtime-artifacts.ts';
-const mkdtempForTestSync = (prefix: string) => fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
 
 test('collectReplayActionArtifactPaths includes existing failed action artifacts', () => {
   const root = mkdtempForTestSync('agent-device-replay-artifacts-');
