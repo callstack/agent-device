@@ -4,6 +4,7 @@ import type {
   JsonObject,
 } from '@agent-device/contracts/client';
 import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
+import type { CommandResultMap } from '@agent-device/command-registry/command-result';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   commonInputFromFlags,
@@ -12,10 +13,13 @@ import {
   requiredString,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
+import type { JsonSchema } from '../command-contract.ts';
 import {
   jsonSchemaField,
   looseObjectField,
   looseObjectSchema,
+  numberSchema,
+  objectSchema,
   requiredField,
   stringField,
   stringSchema,
@@ -23,6 +27,51 @@ import {
 } from '../command-input.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
+
+function constSchema(value: string): JsonSchema {
+  return { type: 'string', const: value };
+}
+
+/**
+ * This family's advertised MCP `outputSchema`s, keyed by daemon command name and projected into
+ * the command map by `src/mcp/command-output-schemas.ts`. Non-strict like every other entry: no
+ * `additionalProperties: false`, so additive response fields such as `cost` keep validating.
+ * Neither command carries the post-action observation trait (#1652): both fire-and-report a push
+ * delivery or an app event, not an interaction, so no settle graft applies here.
+ */
+export const PUSH_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS = {
+  // packages/contracts/src/push.ts — discriminated union on public platform.
+  push: {
+    type: 'object',
+    oneOf: [
+      objectSchema(
+        { platform: constSchema('ios'), bundleId: stringSchema(), message: stringSchema() },
+        ['platform', 'bundleId', 'message'],
+      ),
+      objectSchema(
+        {
+          platform: constSchema('android'),
+          package: stringSchema(),
+          action: stringSchema(),
+          extrasCount: numberSchema(),
+          message: stringSchema(),
+        },
+        ['platform', 'package', 'action', 'extrasCount', 'message'],
+      ),
+    ],
+  },
+
+  // packages/contracts/src/app-events.ts
+  'trigger-app-event': objectSchema(
+    {
+      event: stringSchema(),
+      eventUrl: stringSchema(),
+      transport: constSchema('deep-link'),
+      message: stringSchema(),
+    },
+    ['event', 'eventUrl', 'transport', 'message'],
+  ),
+} satisfies Pick<Record<keyof CommandResultMap, JsonSchema>, 'push' | 'trigger-app-event'>;
 
 const pushCommandMetadata = defineFieldCommandMetadata(
   'push',

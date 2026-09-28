@@ -12,6 +12,7 @@ import {
   stringSchema,
 } from '../commands/command-input.ts';
 import { DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/device.ts';
+import { PUSH_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS } from '../commands/management/push.ts';
 import {
   INTERACTION_COMMAND_OUTPUT_SCHEMAS,
   postActionSurfaceChangeSchema,
@@ -272,38 +273,6 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
     ],
   ),
 
-  // packages/contracts/src/push.ts — discriminated union on public platform.
-  push: {
-    type: 'object',
-    oneOf: [
-      objectSchema(
-        { platform: constSchema('ios'), bundleId: stringSchema(), message: stringSchema() },
-        ['platform', 'bundleId', 'message'],
-      ),
-      objectSchema(
-        {
-          platform: constSchema('android'),
-          package: stringSchema(),
-          action: stringSchema(),
-          extrasCount: numberSchema(),
-          message: stringSchema(),
-        },
-        ['platform', 'package', 'action', 'extrasCount', 'message'],
-      ),
-    ],
-  },
-
-  // packages/contracts/src/app-events.ts
-  'trigger-app-event': objectSchema(
-    {
-      event: stringSchema(),
-      eventUrl: stringSchema(),
-      transport: constSchema('deep-link'),
-      message: stringSchema(),
-    },
-    ['event', 'eventUrl', 'transport', 'message'],
-  ),
-
   // packages/contracts/src/doctor.ts
   doctor: objectSchema(
     {
@@ -430,6 +399,7 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
   // a projected command then fails as TS2783 instead of quietly overriding the family's,
   // and this map's `satisfies` still refuses a missing `CommandResultMap` key.
   ...DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS,
+  ...PUSH_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS,
   ...INTERACTION_COMMAND_OUTPUT_SCHEMAS,
   ...REPLAY_COMMAND_OUTPUT_SCHEMAS,
   ...SYSTEM_COMMAND_OUTPUT_SCHEMAS,
