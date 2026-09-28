@@ -434,6 +434,7 @@ test('a renamed entry is followed to its path at the base, not treated as first-
     cwd: repo,
   });
   const withOutsideRename = renamedSince(repo, 'HEAD');
+  expect(withOutsideRename.get('packages/demo/src/standalone.ts')).toBe('scripts/standalone.ts');
   expect(
     baseProductionPathOf(repo, 'packages/demo/src/standalone.ts', baseTree, withOutsideRename),
   ).toBe(null);
