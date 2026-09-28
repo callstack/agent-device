@@ -20,12 +20,21 @@ import type {
   TypeTextOptions,
 } from '@agent-device/contracts/client';
 import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
+import type { CommandResultMap } from '@agent-device/command-registry/command-result';
 import {
   REPEATED_TOUCH_FLAGS,
   SELECTOR_SNAPSHOT_FLAGS,
 } from '@agent-device/command-registry/flag-groups';
 import { postActionObservationCliFlags } from '../post-action-observation-grammar.ts';
+import type { JsonSchema } from '../command-contract.ts';
 import {
+  booleanSchema,
+  enumSchema,
+  looseObjectSchema,
+  numberSchema,
+  objectSchema,
+  stringArraySchema,
+  stringSchema,
   toClientElementTarget,
   toClientInteractionTarget,
   toRepeatedOptions,
@@ -53,6 +62,288 @@ import {
 } from './metadata.ts';
 import { interactionCliOutputFormatters } from './output.ts';
 import { selectorCliReaders, selectorDaemonWriters } from './selectors.ts';
+
+function constSchema(value: string): JsonSchema {
+  return { type: 'string', const: value };
+}
+
+function nullableStringSchema(description?: string): JsonSchema {
+  return { type: ['string', 'null'], ...(description ? { description } : {}) };
+}
+
+// PostActionSurfaceChange (packages/contracts/src/interaction.ts) — the post-action capture
+// describes a different surface than the pre-action baseline (#2438), so no same-surface
+// comparison is presented across it. Mirrored in src/mcp/command-output-schemas.ts for the
+// generic `--settle` observation, which every family (not only this one) can carry.
+const postActionSurfaceChangeSchema: JsonSchema = objectSchema(
+  {
+    from: stringSchema('Surface the pre-action baseline described: a host bundle id, or app.'),
+    to: stringSchema('Surface the post-action capture describes: a host bundle id, or app.'),
+    disclosure: stringSchema('Agent-facing sentence explaining the surface transition.'),
+  },
+  ['from', 'to', 'disclosure'],
+  'Present when an in-place system surface (web sign-in or Apple Pay sheet) was presented over the app, or left it.',
+);
+
+// InteractionEvidence (packages/contracts/src/interaction.ts) — opt-in `--verify` cheap
+// post-condition evidence (#1047).
+const interactionEvidenceSchema: JsonSchema = objectSchema(
+  {
+    foregroundApp: stringSchema('Foreground app bundle id or name, when the capture carries it.'),
+    nodeCount: numberSchema('Node count in the post-action interactive-only capture.'),
+    interactiveNodeCount: numberSchema('Subset of nodeCount the platform reports as hittable.'),
+    digest: stringSchema('Order-independent digest of the post-action node multiset.'),
+    changedFromBefore: booleanSchema(
+      'Whether the post-action digest differs from the pre-action capture digest. false is evidence, not failure. With surfaceChange present, no digest comparison is made: it reports that surface transition.',
+    ),
+    surfaceChange: postActionSurfaceChangeSchema,
+  },
+  ['nodeCount', 'interactiveNodeCount', 'digest', 'changedFromBefore'],
+);
+
+const responseCostSchema: JsonSchema = objectSchema(
+  {
+    wallClockMs: numberSchema('Total wall-clock time for the request in milliseconds.'),
+    runnerRoundTrips: numberSchema(
+      'Number of real runner round-trips made while serving the request.',
+    ),
+    nodeCount: numberSchema(
+      'Number of nodes in the original node tree when the response carries one.',
+    ),
+  },
+  ['wallClockMs', 'runnerRoundTrips'],
+);
+
+// ResolutionDiagnosticEntry (packages/contracts/src/interaction.ts) — a disambiguation
+// winner or losing alternative. Never a snapshot ref.
+const resolutionDiagnosticEntrySchema: JsonSchema = objectSchema(
+  {
+    diagnosticRef: stringSchema(
+      'Opaque non-@ diagnostic token. Never a snapshot ref: not issued via refsGeneration and cannot be pinned or reused as an @ref target. UTF-8 truncated to 256 bytes.',
+    ),
+    role: stringSchema('UTF-8 truncated to 256 bytes.'),
+    label: stringSchema('UTF-8 truncated to 256 bytes.'),
+  },
+  ['diagnosticRef'],
+);
+
+// ResolutionDisclosure (packages/contracts/src/interaction.ts) — never ref-issuing;
+// absent on paths where the guarantee is inapplicable (ADR 0012 decision 2).
+// `alternatives` rides default/full levels only; the digest view omits it.
+const resolutionDisclosureSchema: JsonSchema = {
+  type: 'object',
+  description:
+    'Pre-action disclosure of how the acting path resolved its target. Absent when resolutionDisclosure is inapplicable for the path.',
+  oneOf: [
+    objectSchema(
+      {
+        source: constSchema('runtime'),
+        phase: constSchema('pre-action'),
+        kind: constSchema('unique'),
+      },
+      ['source', 'phase', 'kind'],
+    ),
+    objectSchema(
+      {
+        source: constSchema('runtime'),
+        phase: constSchema('pre-action'),
+        kind: constSchema('disambiguated'),
+        matchCount: numberSchema('Total matches resolveSelectorChain found before disambiguation.'),
+        winnerDiagnostic: resolutionDiagnosticEntrySchema,
+        tiebreak: enumSchema(
+          ['visible', 'deepest', 'smallest-area', 'structural-equivalence'],
+          'The comparison that decided the winner.',
+        ),
+        alternatives: {
+          type: 'array',
+          description:
+            'At most 5 losing candidates, document order. Present at default/full response levels and omitted in digest. The winner is never included.',
+          items: resolutionDiagnosticEntrySchema,
+        },
+      },
+      ['source', 'phase', 'kind', 'matchCount', 'winnerDiagnostic', 'tiebreak'],
+    ),
+    objectSchema(
+      { source: constSchema('ref'), phase: constSchema('pre-action'), kind: constSchema('exact') },
+      ['source', 'phase', 'kind'],
+    ),
+    objectSchema(
+      {
+        source: constSchema('ref'),
+        phase: constSchema('pre-action'),
+        kind: constSchema('label-fallback'),
+      },
+      ['source', 'phase', 'kind'],
+    ),
+    objectSchema({ source: constSchema('direct-ios'), kind: constSchema('not-observed') }, [
+      'source',
+      'kind',
+    ]),
+  ],
+};
+
+type InteractionExtra = {
+  properties?: Record<string, JsonSchema>;
+  required?: readonly string[];
+};
+
+/**
+ * Canonical interaction response data built by buildInteractionResponseData:
+ * shared target/coordinate/evidence fields plus per-command extras. The runtime
+ * result still has richer internal node/backend data; this schema documents the
+ * JSON payload returned to clients.
+ */
+function interactionResponseDataSchema(extra: InteractionExtra = {}): JsonSchema {
+  const extraProperties = extra.properties ?? {};
+  const extraRequired = extra.required ?? [];
+  return objectSchema(
+    {
+      targetKind: enumSchema(['point', 'ref', 'selector'], 'Resolved interaction target kind.'),
+      x: numberSchema('Resolved interaction x coordinate when available.'),
+      y: numberSchema('Resolved interaction y coordinate when available.'),
+      referenceWidth: numberSchema('Reference frame width for visualizing the interaction point.'),
+      referenceHeight: numberSchema(
+        'Reference frame height for visualizing the interaction point.',
+      ),
+      ref: stringSchema('Snapshot ref without the @ prefix when the target was an @ref.'),
+      selector: stringSchema('Selector expression when the target was a selector.'),
+      selectorChain: stringArraySchema(),
+      refLabel: stringSchema(),
+      targetHittable: booleanSchema(),
+      hint: stringSchema(),
+      warning: stringSchema(),
+      message: stringSchema(),
+      evidence: interactionEvidenceSchema,
+      resolution: resolutionDisclosureSchema,
+      cost: responseCostSchema,
+      maestroNonHittableCoordinateFallbackAllowed: booleanSchema(
+        'Whether the direct iOS Maestro coordinate fallback was allowed for this selector.',
+      ),
+      maestroNonHittableCoordinateFallbackUsed: booleanSchema(
+        'Whether the direct iOS Maestro coordinate fallback was actually used.',
+      ),
+      maestroFallbackReason: constSchema('non-hittable-coordinate'),
+      ...extraProperties,
+    },
+    ['targetKind', ...extraRequired],
+  );
+}
+
+const tapInteractionResponseDataSchema = interactionResponseDataSchema({
+  properties: {
+    evidence: interactionEvidenceSchema,
+    button: enumSchema(['secondary', 'middle']),
+    count: numberSchema('Number of press/click repetitions.'),
+    intervalMs: numberSchema('Delay between repeated press/click actions.'),
+    holdMs: numberSchema('Hold duration for each action.'),
+    jitterPx: numberSchema('Randomization radius in pixels.'),
+    doubleTap: booleanSchema('Whether the command requested a double-tap action.'),
+  },
+});
+
+const fillResponseProperties = {
+  text: stringSchema('Text submitted to the field.'),
+  delayMs: numberSchema('Delay between typed characters in milliseconds.'),
+  evidence: interactionEvidenceSchema,
+};
+
+const fillVerificationTargetSchema = objectSchema(
+  {
+    resourceId: nullableStringSchema('Android resource id of the exact field that changed.'),
+    className: nullableStringSchema('Android class name of the exact field that changed.'),
+    packageName: nullableStringSchema('Android package name that owns the exact field.'),
+    rect: objectSchema(
+      {
+        x: numberSchema(),
+        y: numberSchema(),
+        width: numberSchema(),
+        height: numberSchema(),
+      },
+      ['x', 'y', 'width', 'height'],
+      'Screen-space rectangle of the exact field that changed.',
+    ),
+  },
+  ['resourceId', 'className', 'packageName', 'rect'],
+  'Target identity captured before fill and matched after fill.',
+);
+
+const confirmedFillResponseSchema: JsonSchema = {
+  ...interactionResponseDataSchema({
+    properties: fillResponseProperties,
+    required: ['text'],
+  }),
+  // The public result contract omits verification evidence on an ordinary
+  // confirmed fill. Keep this branch disjoint from the unconfirmed branch
+  // without making the response strict to unrelated additive fields.
+  not: objectSchema({}, ['verification']),
+};
+
+const unconfirmedFillResponseSchema = interactionResponseDataSchema({
+  properties: {
+    ...fillResponseProperties,
+    verification: constSchema('unconfirmed'),
+    requested: stringSchema('Literal text requested by the fill command.'),
+    before: nullableStringSchema('Raw target text captured before the fill.'),
+    after: nullableStringSchema('Raw target text captured after the fill.'),
+    target: fillVerificationTargetSchema,
+  },
+  required: ['text', 'verification', 'requested', 'before', 'after', 'target'],
+});
+
+/**
+ * This family's advertised MCP `outputSchema`s, keyed by daemon command name and projected into
+ * the command map by `src/mcp/command-output-schemas.ts`. Non-strict like every other entry: no
+ * `additionalProperties: false`, so additive response fields such as `settle`/`cost` keep
+ * validating. #1652: the opt-in `settle` observation is NOT listed here — the trait derivation
+ * pass in that file grafts it onto settle-capable entries.
+ */
+export const INTERACTION_COMMAND_OUTPUT_SCHEMAS = {
+  press: tapInteractionResponseDataSchema,
+  click: tapInteractionResponseDataSchema,
+  fill: {
+    type: 'object',
+    description:
+      'Fill response. Android may return target-bound unconfirmed evidence when the exact app-owned field changed but formatting prevented raw equality.',
+    oneOf: [confirmedFillResponseSchema, unconfirmedFillResponseSchema],
+  },
+  longpress: interactionResponseDataSchema({
+    properties: {
+      durationMs: numberSchema(),
+      gesture: constSchema('longpress'),
+    },
+  }),
+  hover: interactionResponseDataSchema({
+    properties: {
+      gesture: constSchema('hover'),
+    },
+  }),
+  find: objectSchema(
+    {
+      ref: stringSchema('Snapshot ref without the @ prefix when the find action returns one.'),
+      refsGeneration: numberSchema('ADR 0014 ref frame epoch for read-only find actions.'),
+      found: booleanSchema('Whether a wait/exists/read-only find satisfied its condition.'),
+      waitedMs: numberSchema('Milliseconds waited for a read-only find condition.'),
+      text: stringSchema('Text value returned by find get_text.'),
+      node: looseObjectSchema('Snapshot node for find get_attrs/get_text.'),
+      matches: {
+        type: 'array',
+        description: 'Every match for the read-only find list action (#1625): { ref, node } each.',
+        items: looseObjectSchema('One listed match with its snapshot ref and node.'),
+      },
+      locator: stringSchema('Locator kind used for the find action.'),
+      query: stringSchema('Query argument used for the find action.'),
+      x: numberSchema('Resolved x coordinate for mutating find actions.'),
+      y: numberSchema('Resolved y coordinate for mutating find actions.'),
+      message: stringSchema('Diagnostic message for mutating find actions.'),
+      cost: responseCostSchema,
+    },
+    [],
+    'Daemon response data for the find command.',
+  ),
+} satisfies Pick<
+  Record<keyof CommandResultMap, JsonSchema>,
+  'press' | 'click' | 'fill' | 'longpress' | 'hover' | 'find'
+>;
 
 const interactionCliSchemas = {
   get: {
