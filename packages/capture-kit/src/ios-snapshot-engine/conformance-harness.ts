@@ -212,6 +212,17 @@ function runnerPresentationAgrees(
   if (swift.outcome !== acquired.outcome) return false;
   if (swift.outcome === 'failure')
     return JSON.stringify(swift.error) === JSON.stringify(acquired.error);
+  const { presented, published } = runRunnerComposition(testCase, swift);
+  return runnerOutputAgrees(testCase, swift, acquired, presented, published);
+}
+
+function runRunnerComposition(
+  testCase: DifferentialCase,
+  swift: DifferentialOutcome,
+): Readonly<{
+  presented: ReturnType<typeof presentIosSnapshot>;
+  published: readonly CanonicalNode[];
+}> {
   const request = createIosSnapshotRequest(testCase);
   const input = {
     stage: 'presented' as const,
@@ -235,45 +246,106 @@ function runnerPresentationAgrees(
   const published = canonicalNodes(
     publishIosSnapshot(input, request, { foldPolicy: testCase.foldPolicy }).payload.nodes,
   );
-  if (
-    testCase.scope !== null &&
-    JSON.stringify(semanticMembership(canonicalNodes(presented.qualityNodes ?? []))) !==
-      JSON.stringify(semanticMembership(acquired.canonicalQualityNodes ?? []))
-  )
+  return { presented, published };
+}
+
+function runnerOutputAgrees(
+  testCase: DifferentialCase,
+  swift: DifferentialOutcome,
+  acquired: DifferentialOutcome,
+  presented: ReturnType<typeof presentIosSnapshot>,
+  published: readonly CanonicalNode[],
+): boolean {
+  return (
+    qualityMembershipAgrees(testCase, presented.qualityNodes, acquired.canonicalQualityNodes) &&
+    representativesAreValid(swift.rawNodes ?? [], presented) &&
+    capturedMembershipAgrees(testCase, swift.rawNodes ?? [], presented, published) &&
+    semanticMembershipAgrees(published, acquired.nodes)
+  );
+}
+
+function capturedMembershipAgrees(
+  testCase: DifferentialCase,
+  sources: readonly RawSnapshotNode[],
+  presented: ReturnType<typeof presentIosSnapshot>,
+  published: readonly CanonicalNode[],
+): boolean {
+  return (
+    requiredLabelsHaveRepresentatives(
+      testCase.requiredLabels ?? [],
+      sources,
+      presented,
+      published,
+    ) &&
+    (testCase.absentLabels ?? []).every(
+      (label) => !published.some((node) => node.label === label),
+    ) &&
+    clippedLabelAgrees(testCase.clippedLabel, published)
+  );
+}
+
+function semanticMembershipAgrees(
+  left: readonly CanonicalNode[],
+  right: readonly CanonicalNode[],
+): boolean {
+  return JSON.stringify(semanticMembership(left)) === JSON.stringify(semanticMembership(right));
+}
+
+function qualityMembershipAgrees(
+  testCase: DifferentialCase,
+  actual: readonly RawSnapshotNode[] | undefined,
+  expected: readonly CanonicalNode[] | undefined,
+): boolean {
+  return (
+    testCase.scope === null ||
+    JSON.stringify(semanticMembership(canonicalNodes(actual ?? []))) ===
+      JSON.stringify(semanticMembership(expected ?? []))
+  );
+}
+
+function representativesAreValid(
+  sources: readonly RawSnapshotNode[],
+  presentation: ReturnType<typeof presentIosSnapshot>,
+): boolean {
+  const outputIndexes = new Set(presentation.nodes.map((node) => node.index));
+  if (sources.some((node) => !presentation.presentedIndexesBySourceIndex.has(node.index)))
     return false;
-  const outputIndexes = new Set(presented.nodes.map((node) => node.index));
-  if (
-    (swift.rawNodes ?? []).some((node) => !presented.presentedIndexesBySourceIndex.has(node.index))
-  )
-    return false;
-  for (const indexes of presented.presentedIndexesBySourceIndex.values()) {
-    if (indexes.some((index) => !outputIndexes.has(index))) return false;
-  }
-  for (const label of testCase.requiredLabels ?? []) {
-    const sources = swift.rawNodes?.filter((node) => node.label === label) ?? [];
+  return [...presentation.presentedIndexesBySourceIndex.values()].every((indexes) =>
+    indexes.every((index) => outputIndexes.has(index)),
+  );
+}
+
+function requiredLabelsHaveRepresentatives(
+  requiredLabels: readonly string[],
+  sources: readonly RawSnapshotNode[],
+  presentation: ReturnType<typeof presentIosSnapshot>,
+  published: readonly CanonicalNode[],
+): boolean {
+  for (const label of requiredLabels) {
+    const matchingSources = sources.filter((node) => node.label === label);
     if (
-      sources.length === 0 ||
-      !sources.some(
-        (source) => (presented.presentedIndexesBySourceIndex.get(source.index) ?? []).length > 0,
+      matchingSources.length === 0 ||
+      !matchingSources.some(
+        (source) => (presentation.presentedIndexesBySourceIndex.get(source.index) ?? []).length > 0,
       )
     )
       return false;
     if (!published.some((node) => node.label === label)) return false;
   }
-  if ((testCase.absentLabels ?? []).some((label) => published.some((node) => node.label === label)))
-    return false;
-  if (
-    testCase.clippedLabel &&
-    !published.some(
-      (node) =>
-        node.label === testCase.clippedLabel!.label &&
-        JSON.stringify(node.rect) === JSON.stringify(testCase.clippedLabel!.rect),
-    )
-  )
-    return false;
+  return true;
+}
+
+function clippedLabelAgrees(
+  expected: DifferentialCase['clippedLabel'],
+  published: readonly CanonicalNode[],
+): boolean {
   return (
-    JSON.stringify(semanticMembership(published)) ===
-    JSON.stringify(semanticMembership(acquired.nodes))
+    !expected ||
+    published.some(
+      (node) =>
+        node.label === expected.label &&
+        JSON.stringify(node.rect) === JSON.stringify(expected.rect),
+    )
   );
 }
 
