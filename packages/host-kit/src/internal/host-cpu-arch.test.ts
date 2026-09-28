@@ -1,7 +1,18 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { beforeEach, test, vi } from 'vitest';
 import { type CommandExecutorOverride, withCommandExecutorOverride } from './exec.ts';
-import { resolveHostCpuArch } from './host-cpu-arch.ts';
+import { readHostCpuArch, readHostCpuArchSync, resolveHostCpuArch } from './host-cpu-arch.ts';
+
+const { mockRunCmdSync } = vi.hoisted(() => ({ mockRunCmdSync: vi.fn() }));
+
+vi.mock('./exec.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./exec.ts')>()),
+  runCmdSync: mockRunCmdSync,
+}));
+
+beforeEach(() => {
+  mockRunCmdSync.mockReset();
+});
 
 function sysctlAnswering(result: { stdout?: string; exitCode?: number } | Error) {
   const calls: string[][] = [];
@@ -44,4 +55,51 @@ test('other platforms report the Node arch without running sysctl', async () => 
     assert.equal(await resolveHostCpuArch('linux', 'ppc64'), 'ppc64');
   });
   assert.deepEqual(sysctl.calls, []);
+});
+
+async function asDarwinX64Process(run: () => Promise<void>): Promise<void> {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  const arch = Object.getOwnPropertyDescriptor(process, 'arch')!;
+  Object.defineProperty(process, 'platform', { ...platform, value: 'darwin' });
+  Object.defineProperty(process, 'arch', { ...arch, value: 'x64' });
+  try {
+    await run();
+  } finally {
+    Object.defineProperty(process, 'platform', platform);
+    Object.defineProperty(process, 'arch', arch);
+  }
+}
+
+test('the per-process value a Rosetta-translated process resolves is the one sync callers read', async () => {
+  await asDarwinX64Process(async () => {
+    const sysctl = sysctlAnswering({ stdout: '1\n' });
+    const resolved = await withCommandExecutorOverride(sysctl.override, () => readHostCpuArch());
+    assert.equal(resolved, 'arm64');
+    assert.equal(readHostCpuArchSync(), 'arm64');
+    assert.equal(sysctl.calls.length, 1);
+    assert.equal(mockRunCmdSync.mock.calls.length, 0);
+  });
+});
+
+test('a Rosetta-translated process resolves arm64 through the sync path first, and async callers share it', async () => {
+  await asDarwinX64Process(async () => {
+    mockRunCmdSync.mockReturnValue({ stdout: '1\n', stderr: '', exitCode: 0 });
+    assert.equal(readHostCpuArchSync(), 'arm64');
+    assert.deepEqual(
+      mockRunCmdSync.mock.calls.map(([command, args]) => [command, ...args]),
+      [['/usr/sbin/sysctl', '-n', 'hw.optional.arm64']],
+    );
+
+    const sysctl = sysctlAnswering({ stdout: '0\n' });
+    const resolved = await withCommandExecutorOverride(sysctl.override, () => readHostCpuArch());
+    assert.equal(resolved, 'arm64');
+    assert.deepEqual(sysctl.calls, []);
+  });
+});
+
+test('a sync read on an Intel Mac reports x86_64', async () => {
+  await asDarwinX64Process(async () => {
+    mockRunCmdSync.mockReturnValue({ stdout: '', stderr: '', exitCode: 1 });
+    assert.equal(readHostCpuArchSync(), 'x86_64');
+  });
 });

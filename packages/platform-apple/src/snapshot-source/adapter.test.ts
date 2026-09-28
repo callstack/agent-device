@@ -60,8 +60,8 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
       ['/tmp/scoped-set'],
     );
     assert.equal(fixture.builds, 1);
-    // Four identity probes and one clang build: the identity read execs one Xcode-owned binary.
-    assert.equal(fixture.runs, 5);
+    // Three identity probes and one clang build: the identity read execs one Xcode-owned binary.
+    assert.equal(fixture.runs, 4);
     assert.equal(result.stage, 'acquired');
     assert.equal(result.acquisition.producer, 'simulator-ax-bridge');
     assert.equal(result.acquisition.intent, 'full');
@@ -120,7 +120,7 @@ test('the Simulator AX source returns raw acquisition facts and discloses unsupp
     });
     assert.equal(outcome.stage, 'failed');
     if (outcome.stage === 'failed') assert.equal(outcome.failure.kind, 'stale-target');
-    assert.equal(fixture.runs, 5);
+    assert.equal(fixture.runs, 4);
   } finally {
     await source.close();
     await rm(root, { recursive: true, force: true });
@@ -513,6 +513,7 @@ function createAdapterHost(buildDelayMs = 0): AdapterFixture {
   };
   const host: SnapshotSourceHost = {
     ...realHost,
+    cpuArch: async () => 'arm64',
     emitDiagnostic: (event) => {
       if (event.phase === 'ios_snapshot_source_recovery')
         fixture.diagnostics.push(event.data ?? {});
@@ -531,9 +532,7 @@ function createAdapterHost(buildDelayMs = 0): AdapterFixture {
             ? 'Xcode 16.4\nBuild version 16F6'
             : command === 'sw_vers'
               ? '15.6'
-              : command === 'uname'
-                ? 'arm64'
-                : '26.2',
+              : '26.2',
         stderr: '',
         exitCode: 0,
       };
