@@ -191,21 +191,41 @@ export class WebDriverTransport {
       });
       return { ok: response.ok, status: response.status, text: await response.text() };
     } catch (error) {
-      // The caller's own cancellation keeps its reason; only the transport's
-      // deadline becomes a typed timeout, so callers key on `details.reason`
-      // instead of sniffing fetch's DOMException name.
-      if (timeoutSignal.aborted && !requestSignal?.aborted) {
-        throw webdriverTimeoutError(method, path, timeoutMs, error);
-      }
-      // Fetch rejects with a bare TypeError for a network failure — refused
-      // connection, unresolved host, failed handshake — that never put a byte
-      // on the wire. A caller-driven abort keeps its own reason instead.
-      if (!requestSignal?.aborted && error instanceof TypeError) {
-        throw webdriverConnectRefusedError(method, path, error);
-      }
-      throw error;
+      throw classifyWebDriverFetchFailure(error, {
+        method,
+        path,
+        timeoutMs,
+        timeoutSignal,
+        requestSignal,
+      });
     }
   }
+}
+
+/**
+ * A caller's own cancellation keeps its reason as-is. Only a failure the
+ * transport itself can explain — its deadline, or a network failure fetch
+ * reports as a bare TypeError — becomes a typed error, so callers key on
+ * `details.reason` instead of sniffing fetch's DOMException name.
+ */
+function classifyWebDriverFetchFailure(
+  error: unknown,
+  context: {
+    method: string;
+    path: string;
+    timeoutMs: number;
+    timeoutSignal: AbortSignal;
+    requestSignal: AbortSignal | undefined;
+  },
+): unknown {
+  const { method, path, timeoutMs, timeoutSignal, requestSignal } = context;
+  if (requestSignal?.aborted) return error;
+  if (timeoutSignal.aborted) return webdriverTimeoutError(method, path, timeoutMs, error);
+  // Fetch rejects with a bare TypeError for a network failure — refused
+  // connection, unresolved host, failed handshake — that never put a byte on
+  // the wire.
+  if (error instanceof TypeError) return webdriverConnectRefusedError(method, path, error);
+  return error;
 }
 
 function shouldRetryWebDriverRequest(
