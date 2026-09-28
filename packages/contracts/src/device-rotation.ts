@@ -1,5 +1,9 @@
 import { AppError } from '@agent-device/kernel/errors';
 
+/** Single source of truth for the discriminator the Apple owner sets and the MCP schema advertises. */
+export const FOLD_SCREEN_COORDINATE_SPACE = 'native-panel' as const;
+export type FoldScreenCoordinateSpace = typeof FOLD_SCREEN_COORDINATE_SPACE;
+
 export const DEVICE_ROTATIONS = [
   'portrait',
   'portrait-upside-down',

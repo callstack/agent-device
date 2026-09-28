@@ -1,13 +1,10 @@
 import {
   type SetFoldPoseInput,
   foldPoseForHingeAngle,
+  FOLD_SCREEN_COORDINATE_SPACE,
   type FoldPose,
 } from '@agent-device/contracts/device';
-import {
-  FOLD_SCREEN_COORDINATE_SPACE,
-  type FoldScreenReport,
-  type SetFoldPoseResult,
-} from '@agent-device/contracts/fold-runtime';
+import type { FoldScreenReport, SetFoldPoseResult } from '@agent-device/contracts/fold-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
