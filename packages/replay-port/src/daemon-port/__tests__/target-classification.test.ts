@@ -30,8 +30,8 @@ function assertVerified(
 
 const PLATFORM = 'ios' as const;
 
-test('classifyReplayTarget: real-capture fixture verifies by @ref when the tree is unchanged', () => {
-  const recorded = recordArticleEvidence();
+test('classifyReplayTarget: real-capture fixture verifies by @ref when the tree is unchanged', async () => {
+  const recorded = await recordArticleEvidence();
   const replayNodes = bottomTabsRealCaptureFixture();
   const winner = replayNodes.find((node) => node.label === 'Article, unselected');
   assert.ok(winner);
@@ -47,8 +47,8 @@ test('classifyReplayTarget: real-capture fixture verifies by @ref when the tree 
   assertVerified(result, { winnerRef: winner.ref, matchCount: 1 });
 });
 
-test('classifyReplayTarget: real-capture fixture — a relabeled node is identity-mismatch (path 3)', () => {
-  const recorded = recordArticleEvidence();
+test('classifyReplayTarget: real-capture fixture — a relabeled node is identity-mismatch (path 3)', async () => {
+  const recorded = await recordArticleEvidence();
   const replayNodes = bottomTabsRealCaptureFixture();
   const winner = replayNodes.find((node) => node.label === 'Article, unselected');
   assert.ok(winner);

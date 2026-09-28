@@ -86,7 +86,7 @@ test('a record-and-heal divergence on the LAST step resumes with an empty tail a
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
-  const evidence = recordArticleEvidence();
+  const evidence = await recordArticleEvidence();
   const filePath = writeReplayFile(root, [
     'open "Demo" --relaunch',
     `# agent-device:target-v1 ${JSON.stringify(evidence)}`,
@@ -545,7 +545,7 @@ test('an unauthorized --from one past the plan end is rejected on an ARMED sessi
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
-  const evidence = recordArticleEvidence();
+  const evidence = await recordArticleEvidence();
   const filePath = writeReplayFile(root, [
     'open "Demo" --relaunch',
     `# agent-device:target-v1 ${JSON.stringify(evidence)}`,
@@ -628,7 +628,7 @@ test('a stale --plan-digest on an empty-tail resume is rejected WITHOUT consumin
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
-  const evidence = recordArticleEvidence();
+  const evidence = await recordArticleEvidence();
   const filePath = writeReplayFile(root, [
     'open "Demo" --relaunch',
     `# agent-device:target-v1 ${JSON.stringify(evidence)}`,
