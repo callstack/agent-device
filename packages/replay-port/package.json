@@ -7,15 +7,12 @@
   "description": "Daemon-side replay port: the adapter over the ad-replay, ad-script and replay-test engines.",
   "dependencies": {
     "@agent-device/ad-script": "workspace:*",
+    "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/kernel": "workspace:*",
     "@agent-device/selectors": "workspace:*"
   },
   "exports": {
-    "./target-token": {
-      "types": "./src/daemon-port/target-token.ts",
-      "default": "./src/daemon-port/target-token.ts"
-    },
     "./repair-hint": {
       "types": "./src/daemon-port/repair-hint.ts",
       "default": "./src/daemon-port/repair-hint.ts"
@@ -27,6 +24,18 @@
     "./session-replay-vars": {
       "types": "./src/session-replay-vars.ts",
       "default": "./src/session-replay-vars.ts"
+    },
+    "./target-classification": {
+      "types": "./src/daemon-port/target-classification.ts",
+      "default": "./src/daemon-port/target-classification.ts"
+    },
+    "./target-classification-fixtures": {
+      "types": "./src/target-classification-fixtures.ts",
+      "default": "./src/target-classification-fixtures.ts"
+    },
+    "./target-token": {
+      "types": "./src/daemon-port/target-token.ts",
+      "default": "./src/daemon-port/target-token.ts"
     }
   }
 }
