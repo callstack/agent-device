@@ -1,4 +1,5 @@
 import type { RequestProgressSink } from '@agent-device/contracts/progress';
+import type http from 'node:http';
 import net from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
 import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
@@ -94,11 +95,20 @@ function canConnectHttp(info: DaemonInfo): Promise<boolean> {
   return readDaemonHttpHealth(info).then((health) => health.reachable);
 }
 
+type HealthProbeResult = {
+  health: RemoteDaemonHealth;
+  /** The probe's own budget timer ended it, not a refusal, reset, abort or 5xx. */
+  timedOut: boolean;
+};
+
 export async function readRemoteDaemonHealth(
   info: DaemonInfo,
   probeTimeoutMs?: number,
+  onProbeTimedOut?: () => void,
 ): Promise<RemoteDaemonHealth> {
-  const health = await readDaemonHttpHealth(info, probeTimeoutMs);
+  const probe = await probeDaemonHttpHealth(info, probeTimeoutMs);
+  const health = probe.health;
+  if (probe.timedOut) onProbeTimedOut?.();
   if (!info.baseUrl || !health.reachable) return health;
   // Every link a command RPC crosses has to speak the client's protocol: a proxy that reports a
   // skewed daemon behind it fails here, before the RPC, exactly like a skewed proxy does.
@@ -125,21 +135,30 @@ async function readDaemonHttpHealth(
   info: DaemonInfo,
   probeTimeoutMs?: number,
 ): Promise<RemoteDaemonHealth> {
+  return (await probeDaemonHttpHealth(info, probeTimeoutMs)).health;
+}
+
+async function probeDaemonHttpHealth(
+  info: DaemonInfo,
+  probeTimeoutMs?: number,
+): Promise<HealthProbeResult> {
+  const unreachable: HealthProbeResult = { health: { reachable: false }, timedOut: false };
   const endpoint = info.baseUrl
     ? buildDaemonHttpUrl(info.baseUrl, 'health')
     : info.httpPort
       ? `http://127.0.0.1:${info.httpPort}/health`
       : null;
-  if (!endpoint) return { reachable: false };
+  if (!endpoint) return unreachable;
   const url = new URL(endpoint);
   const transport = await loadNodeHttpRequester(url.protocol);
   const timeoutMs = Math.min(
     info.baseUrl ? REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS : LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS,
     probeTimeoutMs ?? Number.POSITIVE_INFINITY,
   );
-  if (timeoutMs <= 0) return { reachable: false };
+  if (timeoutMs <= 0) return unreachable;
   return await new Promise((resolve) => {
     const headers = info.baseUrl ? buildDaemonHttpAuthHeaders(info.token) : {};
+    const signal = AbortSignal.timeout(Math.ceil(timeoutMs));
     const req = transport.request(
       {
         protocol: url.protocol,
@@ -148,36 +167,42 @@ async function readDaemonHttpHealth(
         path: url.pathname + url.search,
         method: 'GET',
         timeout: timeoutMs,
-        signal: AbortSignal.timeout(Math.ceil(timeoutMs)),
+        signal,
         headers,
       },
-      (res) => {
-        let body = '';
-        res.setEncoding('utf8');
-        res.on('data', (chunk) => {
-          body += chunk;
-        });
-        res.on('end', () => {
-          const statusCode = res.statusCode ?? 500;
-          resolve({
-            reachable: statusCode < 500,
-            statusCode,
-            ...readHealthPayload(body),
-          });
-        });
-        res.on('error', () => resolve({ reachable: false }));
-        res.on('aborted', () => resolve({ reachable: false }));
-      },
+      (res) => collectHealthResponse(res, signal, resolve),
     );
     req.on('timeout', () => {
       req.destroy();
-      resolve({ reachable: false });
+      resolve({ ...unreachable, timedOut: true });
     });
     req.on('error', () => {
-      resolve({ reachable: false });
+      resolve({ ...unreachable, timedOut: signal.aborted });
     });
     req.end();
   });
+}
+
+function collectHealthResponse(
+  res: http.IncomingMessage,
+  signal: AbortSignal,
+  resolve: (result: HealthProbeResult) => void,
+): void {
+  const unreachable: HealthProbeResult = { health: { reachable: false }, timedOut: false };
+  let body = '';
+  res.setEncoding('utf8');
+  res.on('data', (chunk) => {
+    body += chunk;
+  });
+  res.on('end', () => {
+    const statusCode = res.statusCode ?? 500;
+    resolve({
+      health: { reachable: statusCode < 500, statusCode, ...readHealthPayload(body) },
+      timedOut: false,
+    });
+  });
+  res.on('error', () => resolve({ ...unreachable, timedOut: signal.aborted }));
+  res.on('aborted', () => resolve({ ...unreachable, timedOut: signal.aborted }));
 }
 
 function readHealthPayload(body: string): Omit<RemoteDaemonHealth, 'reachable' | 'statusCode'> {
@@ -254,14 +279,12 @@ async function retryAfterRemoteInstanceMismatch(
     timeoutMs,
     deadline,
   );
-  const probeStartedAt = performance.now();
-  const health = await readRemoteDaemonHealth(info, probeTimeoutMs);
-  if (!health.reachable && probeRanToCallerDeadline(probeStartedAt, probeTimeoutMs)) {
-    throw handleRequestTimeout({
-      info,
-      statePaths,
-      ...timeoutRequestContext(req, true, timeoutMs ?? 0),
-    });
+  let probeTimedOut = false;
+  const health = await readRemoteDaemonHealth(info, probeTimeoutMs, () => {
+    probeTimedOut = true;
+  });
+  if (probeTimedOut && timeoutMs !== undefined && isCallerDeadlineProbeBudget(probeTimeoutMs)) {
+    throw requestTimeoutError(info, req, statePaths, timeoutMs);
   }
   const remainingMs = remainingRemoteRequestTimeoutMs(info, req, statePaths, timeoutMs, deadline);
   if (!health.reachable) {
@@ -280,17 +303,8 @@ async function retryAfterRemoteInstanceMismatch(
   }
 }
 
-// Node timers may fire a few ms before performance.now() reaches the same instant.
-const PROBE_TIMER_SLOP_MS = 5;
-
-function probeRanToCallerDeadline(
-  probeStartedAt: number,
-  probeTimeoutMs: number | undefined,
-): boolean {
-  if (probeTimeoutMs === undefined || probeTimeoutMs > REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS) {
-    return false;
-  }
-  return performance.now() - probeStartedAt >= probeTimeoutMs - PROBE_TIMER_SLOP_MS;
+function isCallerDeadlineProbeBudget(probeTimeoutMs: number | undefined): boolean {
+  return probeTimeoutMs !== undefined && probeTimeoutMs <= REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS;
 }
 
 function remainingRemoteRequestTimeoutMs(
@@ -303,7 +317,16 @@ function remainingRemoteRequestTimeoutMs(
   if (deadline === undefined || timeoutMs === undefined) return undefined;
   const remainingMs = deadline - performance.now();
   if (remainingMs > 0) return remainingMs;
-  throw handleRequestTimeout({
+  throw requestTimeoutError(info, req, statePaths, timeoutMs);
+}
+
+function requestTimeoutError(
+  info: DaemonInfo,
+  req: DaemonRequest,
+  statePaths: DaemonPaths,
+  timeoutMs: number,
+): AppError {
+  return handleRequestTimeout({
     info,
     statePaths,
     ...timeoutRequestContext(req, true, timeoutMs),

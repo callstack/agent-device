@@ -237,7 +237,7 @@ test('a restart health probe that times out just before the RPC deadline still r
   });
   const clock = vi
     .spyOn(performance, 'now')
-    .mockImplementation(() => realNow() - (probing ? 2 : 0));
+    .mockImplementation(() => realNow() - (probing ? 50 : 0));
   try {
     const port = await listenOnLoopback(server);
     await assert.rejects(
@@ -245,8 +245,39 @@ test('a restart health probe that times out just before the RPC deadline still r
       (error: unknown) =>
         error instanceof AppError && error.details?.reason === 'daemon_transport_timeout',
     );
+    assert.equal(probing, true);
   } finally {
     clock.mockRestore();
+    await closeLoopbackServer(server);
+  }
+});
+
+test('a restart health probe refused near the RPC deadline reports the daemon as unavailable', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let probed = false;
+  const server = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      probed = true;
+      res.statusCode = 503;
+      res.end();
+      return;
+    }
+    res.statusCode = 409;
+    res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
+    res.end();
+  });
+  try {
+    const port = await listenOnLoopback(server);
+    await assert.rejects(
+      sendWithStaleInstance(port, 150),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.message === 'Remote daemon is unavailable' &&
+        error.details?.reason !== 'daemon_transport_timeout' &&
+        error.details?.daemonBaseUrl === `http://127.0.0.1:${port}`,
+    );
+    assert.equal(probed, true);
+  } finally {
     await closeLoopbackServer(server);
   }
 });
