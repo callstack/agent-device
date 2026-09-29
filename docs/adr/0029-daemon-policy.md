@@ -71,7 +71,9 @@ host capability it constrains. The HTTP auth hook keeps authentication and tenan
 Remote-origin requests carry `internal.publicNetworkOnly`, but `replay` and `test` copy it to child
 requests by hand. A rule keyed on origin inherits that propagation risk: a child request that loses
 the marker would escape the policy. A daemon-wide rule has nothing to propagate. A host operator who
-needs unrestricted access runs `simctl`/`adb` directly or a daemon with another `--state-dir`.
+needs unrestricted access runs `simctl`/`adb` directly, or starts a daemon with another `--state-dir`
+and without `AGENT_DEVICE_DAEMON_POLICY` set; a separate state dir alone still loads the policy the
+environment names.
 
 ### Why three enforcement points
 
@@ -95,6 +97,13 @@ means a running daemon has exactly one policy, and its digest identifies it.
   rule and a do-not-retry hint.
 - Lease allocation for a device outside the scope is not refused at allocation time; the device
   scope refuses the first request that binds it.
+- Startup and shutdown recovery of the daemon's own durable resources (app-log processes, device
+  claims, session teardown) is not request work and is not device-scoped: refusing it would leak
+  the processes and claims it exists to release. It acts only on records in the daemon's own state
+  dir. The capability gate still applies, so recovery cannot shut a device down.
+- An invalid policy's startup error names the policy path on the daemon's stderr. That output
+  reaches only the host process that started the daemon, and the operator needs the path to fix
+  the file; request-time denials never name it.
 - A local caller on the host that triggers daemon takeover (for example by asking for a transport
   the running daemon does not serve) starts the replacement with its own environment. A caller that
   names no policy therefore gets a daemon without one. Remote clients reach the daemon only over

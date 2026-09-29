@@ -69,8 +69,16 @@ test('a shutdown guard refuses every shutdown path before the owner runtime load
 
   await expect(host.apple.shutdownTarget(device, signal())).rejects.toBe(denied);
   await expect(host.close?.shutdownTarget(device)).rejects.toBe(denied);
+  await expect(
+    host.android.shutdownTarget(
+      { platform: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator', booted: true },
+      signal(),
+    ),
+  ).rejects.toBe(denied);
   expect(shutdownLoaders.apple).not.toHaveBeenCalled();
+  expect(shutdownLoaders.android).not.toHaveBeenCalled();
   expect(appleShutdown).not.toHaveBeenCalled();
+  expect(androidShutdown).not.toHaveBeenCalled();
 });
 
 function shutdownHost(guard?: DeviceShutdownGuard) {

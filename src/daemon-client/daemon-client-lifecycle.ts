@@ -224,7 +224,7 @@ async function assertReusableDaemonPolicy(existing: DaemonInfo, stateDir: string
       reason: 'DAEMON_POLICY_MISMATCH',
       expectedPolicyDigest: expected,
       daemonPolicyDigest: existing.policyDigest ?? null,
-      hint: `Stop the running daemon (agent-device daemon stop --state-dir ${stateDir}), then retry so a daemon starts with this policy.`,
+      hint: `Stop the running daemon (agent-device daemon stop --state-dir ${shellQuoteIfNeeded(stateDir)}), then retry so a daemon starts with this policy.`,
     },
   );
 }

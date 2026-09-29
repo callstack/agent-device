@@ -40,19 +40,20 @@ function makeHandler(
   const sessionStore = makeSessionStore('agent-device-daemon-policy-');
   sessionStore.set('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
   const bind = vi.fn(lifecycleDeviceRuntimeGateway.bind);
+  const inspectFacts = vi.fn(lifecycleDeviceRuntimeGateway.inspectFacts);
   const handler = createRequestHandler({
     logPath: path.join(mkdtempForTestSync('daemon-policy'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
-    deviceRuntimeGateway: { ...lifecycleDeviceRuntimeGateway, bind },
+    deviceRuntimeGateway: { ...lifecycleDeviceRuntimeGateway, bind, inspectFacts },
     deviceInventoryGateways: createTestDeviceInventoryGateways({
       local: async () => options.inventory ?? [],
     }),
     trackDownloadableArtifact: () => 'artifact-id',
     daemonPolicy,
   });
-  return { handler, bind };
+  return { handler, bind, inspectFacts };
 }
 
 function request(command: string, extra: Partial<DaemonRequest> = {}): DaemonRequest {
@@ -135,12 +136,15 @@ test('an explicit device outside the policy is refused', async () => {
   expectPolicyDenied(response, 'device');
 });
 
-test('a session bound to a device outside the policy cannot bind it', async () => {
-  const { handler, bind } = makeHandler(policy({ devices: { allow: [{ udid: 'sim-pinned' }] } }));
+test('a session bound to a device outside the policy cannot inspect or bind it', async () => {
+  const { handler, bind, inspectFacts } = makeHandler(
+    policy({ devices: { allow: [{ udid: 'sim-pinned' }] } }),
+  );
 
   const response = await handler(request('app-switcher'));
 
   expectPolicyDenied(response, 'device');
+  expect(inspectFacts).not.toHaveBeenCalled();
   expect(bind).not.toHaveBeenCalled();
   expect(systemRuntimeSpies.appSwitcher).not.toHaveBeenCalled();
 });

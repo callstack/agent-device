@@ -45,6 +45,30 @@ test('a caller naming a policy refuses a running daemon without that policy', as
   }
 });
 
+test('a caller naming a policy refuses a running daemon that enforces a different policy', async (t) => {
+  if (!(await supportsLoopbackBind())) {
+    t.skip('loopback listeners are not permitted in this environment');
+    return;
+  }
+  const otherDigest = 'a'.repeat(64);
+  const fixture = await startReusableDaemon({ policyDigest: otherDigest });
+  try {
+    await assert.rejects(
+      () => sendSmoke(fixture.stateDir),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.details?.reason, 'DAEMON_POLICY_MISMATCH');
+        assert.equal(error.details?.daemonPolicyDigest, otherDigest);
+        assert.equal(error.details?.expectedPolicyDigest, loadDaemonPolicy()?.digest);
+        return true;
+      },
+    );
+    assert.deepEqual(fixture.seenPaths, ['GET /health'], 'no command reaches the daemon');
+  } finally {
+    await fixture.close();
+  }
+});
+
 test('a caller naming a policy reuses a daemon that enforces the same policy', async (t) => {
   if (!(await supportsLoopbackBind())) {
     t.skip('loopback listeners are not permitted in this environment');
@@ -69,7 +93,7 @@ async function sendSmoke(stateDir: string) {
   });
 }
 
-async function startReusableDaemon(options: { policyDigest: 'matching' | undefined }) {
+async function startReusableDaemon(options: { policyDigest: string | undefined }) {
   const stateDir = mkdtempForTestSync('agent-device-policy-reuse-');
   const policyPath = path.join(stateDir, 'policy.json');
   fs.writeFileSync(
@@ -109,7 +133,8 @@ async function startReusableDaemon(options: { policyDigest: 'matching' | undefin
       version: readVersion(),
       codeSignature: currentDaemonCodeSignature(),
       processStartTime: readProcessStartTime(process.pid) ?? undefined,
-      policyDigest: options.policyDigest === 'matching' ? loadDaemonPolicy()?.digest : undefined,
+      policyDigest:
+        options.policyDigest === 'matching' ? loadDaemonPolicy()?.digest : options.policyDigest,
     })}\n`,
   );
   return {

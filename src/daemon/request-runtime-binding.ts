@@ -120,7 +120,7 @@ export function createRequestRuntimeBindings(params: {
     owner: RuntimeOwnerRef,
     intent: DeviceBindingIntent,
   ) => Promise<void>;
-  /** ADR 0029 daemon-policy device scope, checked before the gateway binds the device. */
+  /** ADR 0029 daemon-policy device scope, checked before the gateway inspects or binds a device. */
   admitDevice?: (device: DeviceInfo) => void;
 }): RequestRuntimeBindings {
   const cleanups = new AsyncCleanupStack();
@@ -181,7 +181,10 @@ export function createRequestRuntimeBindings(params: {
   };
 
   return {
-    inspectFacts: async (device) => await params.gateway.inspectFacts(device),
+    inspectFacts: async (device) => {
+      params.admitDevice?.(device);
+      return await params.gateway.inspectFacts(device);
+    },
     bindDevice,
     bindExactDevice,
     [Symbol.asyncDispose]: async () => {
