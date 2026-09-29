@@ -2,14 +2,6 @@ import type { FoldPose, FoldScreenCoordinateSpace, SetFoldPoseInput } from './de
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 
 /**
- * Mirrors `device-rotation.ts`'s `FOLD_SCREEN_COORDINATE_SPACE` (the single source of truth) as a
- * literal rather than a re-export, so importing this published subpath does not also eagerly load
- * `device-rotation.ts`. The `FoldScreenCoordinateSpace` type import above still makes any drift
- * between the two a compile error.
- */
-export const FOLD_SCREEN_COORDINATE_SPACE: FoldScreenCoordinateSpace = 'native-panel';
-
-/**
  * The panel the device lights after the pose settled, in that panel's own native points: its pixel
  * size divided by its point scale, never rotated. `coordinateSpace` is always
  * {@link FoldScreenCoordinateSpace}, and these numbers are NOT snapshot coordinates — the active
