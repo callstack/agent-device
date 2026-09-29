@@ -18,13 +18,18 @@ import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live
 const C = PUBLIC_COMMANDS;
 const ALERT_WAIT_TIMEOUT = String(DEFAULT_ALERT_TIMEOUT_MS);
 const FIXTURE_HOME_TITLE = 'Agent Device Tester';
+// The first wait may pay the runner's 45 s startup budget before its first capture.
+const COLD_RUNNER_WAIT_TIMEOUT_MS = 60_000;
 /** The Automation lab's own first landmark; see `acceptDeepLinkConfirmationIfPresent`. */
 const AUTOMATION_LAB_LANDMARK = ['text', 'Automation lab'] as const;
 const AUTOMATION_DEEP_LINK =
   'agent-device-test-app:///automation?event=cold.start&payload=%7B%22source%22%3A%22deep-link%22%7D';
 
 async function observeFixtureHome(context: LiveContext) {
-  await assertWaitText(context, FIXTURE_HOME_TITLE, { debug: true });
+  await assertWaitText(context, FIXTURE_HOME_TITLE, {
+    debug: true,
+    timeoutMs: COLD_RUNNER_WAIT_TIMEOUT_MS,
+  });
   const snapshot = await runStep(context, 'capture fixture home', [
     'snapshot',
     '-i',

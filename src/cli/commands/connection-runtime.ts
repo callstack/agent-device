@@ -9,18 +9,20 @@ import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 import { readRemoteConfigFile } from '../../remote/remote-config-core.ts';
 import {
   deviceFieldsFromPublicPlatform,
-  isIosFamily,
-  publicPlatformString,
   resolveDevice,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
+import { isInactiveLeaseError } from '@agent-device/contracts/lease-scope';
 import {
+  narrowConnectionPlatform,
+  buildConnectionDeviceKey,
   buildRemoteConnectionDaemonState,
   buildRemoteConnectionRequestMetadata,
   hashRemoteConfigFile,
   mergeRemoteConnectionRequestMetadata,
   readRemoteConnectionState,
+  resolveConnectionDeviceScope,
   writeRemoteConnectionState,
   type RemoteConnectionState,
   type RemoteConnectionRequestMetadata,
@@ -30,6 +32,7 @@ import type { BatchStep } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   isSessionRuntimePlatform,
+  leaseBackendForPlatform,
   type LeaseBackend,
   type SessionRuntimeHints,
 } from '@agent-device/kernel/contracts';
@@ -141,6 +144,27 @@ export async function materializeRemoteConnectionForCommand(options: {
     changed = changed || materializedLease.changed;
     acquiredLeaseForCleanup = materializedLease.acquiredLeaseForCleanup;
   }
+
+  // A command that allocates no lease still returns flags and a record on the platform axis, and the
+  // record can carry an alias the request asked to narrow. Same rule as the binding path above, so a
+  // connection whose backend rents one leaf cannot serve another leaf simply because this command
+  // never reached the allocator.
+  const carriedPlatform = narrowConnectionPlatform({
+    leaseBackend: nextState.leaseBackend,
+    recordedPlatform: nextState.platform,
+    requestedPlatform: nextFlags.platform,
+  });
+  if (!carriedPlatform.ok) {
+    throw connectionPlatformConflict({
+      session: state.session,
+      leaseBackend: nextState.leaseBackend,
+      boundPlatform: carriedPlatform.boundPlatform,
+      requestedPlatform: carriedPlatform.requestedPlatform,
+      detail: 'bound-connection',
+    });
+  }
+  nextState = { ...nextState, platform: carriedPlatform.platform };
+  nextFlags.platform = carriedPlatform.platform;
 
   const runtimePreparation = await prepareRuntimeForCommand({
     command,
@@ -318,7 +342,29 @@ async function materializeLeaseForCommand(options: {
     nextState.leaseBackend ??
     preliminaryLeaseBackend ??
     requireRequestedLeaseBackend(nextFlags, command);
-  assertRequestedConnectionScope(state, nextFlags, leaseBackend);
+  assertRequestedConnectionBackend(state, leaseBackend);
+  // One decision for one axis. Whichever of the backend, the record, and the request names the
+  // narrowest platform, that is what this command records, sends, allocates, and returns; two that
+  // cannot name the same device are refused here rather than resolved later by whoever read first.
+  const platform = narrowConnectionPlatform({
+    leaseBackend,
+    recordedPlatform: nextState.platform,
+    requestedPlatform: nextFlags.platform,
+  });
+  if (!platform.ok) {
+    throw connectionPlatformConflict({
+      session: state.session,
+      leaseBackend,
+      boundPlatform: platform.boundPlatform,
+      requestedPlatform: platform.requestedPlatform,
+      detail: 'bound-connection',
+    });
+  }
+  // Read after the platform is settled: a request that asks for another Apple leaf also asks for a
+  // different target, and the platform is the reason it is being refused.
+  assertRequestedConnectionTarget(state, nextFlags);
+  nextState = { ...nextState, platform: platform.platform };
+  nextFlags.platform = platform.platform;
   const materializedLease = await allocateOrReuseLease(
     client,
     nextState,
@@ -330,7 +376,6 @@ async function materializeLeaseForCommand(options: {
   const lease = materializedLease.lease;
   nextFlags.leaseId = lease.leaseId;
   nextFlags.leaseBackend = leaseBackend;
-  nextFlags.platform = nextState.platform ?? nextFlags.platform;
   nextFlags.target = nextState.target ?? nextFlags.target;
   if (leaseStateMatches(nextState, lease, leaseBackend)) {
     return {
@@ -690,11 +735,7 @@ async function releaseAcquiredLeaseOnWriteFailure(
 }
 
 export function resolveRequestedLeaseBackend(flags: CliFlags): LeaseBackend | undefined {
-  if (flags.leaseBackend) return flags.leaseBackend;
-  if (flags.platform === 'android') return 'android-instance';
-  if (flags.platform === 'ios') return 'ios-instance';
-  if (flags.platform === 'harmonyos') return 'harmonyos-instance';
-  return undefined;
+  return flags.leaseBackend ?? leaseBackendForPlatform(flags.platform);
 }
 
 function requireRequestedLeaseBackend(flags: CliFlags, command: string): LeaseBackend {
@@ -870,15 +911,14 @@ async function resolveProxyLeaseState(options: {
     );
   }
   const device = await resolveSelectedDevice(options.client, options.flags);
-  const deviceKey = buildProxyDeviceKey(device);
+  const scope = resolveConnectionDeviceScope(device);
   return {
     state: {
       ...options.state,
-      deviceKey,
-      leaseBackend:
-        options.state.leaseBackend ?? options.leaseBackend ?? leaseBackendForDevice(device),
-      platform: options.state.platform ?? device.platform,
-      target: options.state.target ?? device.target,
+      deviceKey: buildConnectionDeviceKey(scope),
+      leaseBackend: options.state.leaseBackend ?? options.leaseBackend ?? scope.leaseBackend,
+      platform: scope.platform,
+      target: options.state.target ?? scope.target,
       updatedAt: new Date().toISOString(),
     },
     device,
@@ -886,15 +926,11 @@ async function resolveProxyLeaseState(options: {
 }
 
 function applyResolvedDeviceSelector(flags: CliFlags, device: DeviceInfo): void {
-  flags.platform = device.platform;
-  flags.target = device.target ?? flags.target;
-  if (isIosFamily(device)) {
-    flags.udid = device.id;
-    return;
-  }
-  if (device.platform === 'android' || device.platform === 'harmonyos') {
-    flags.serial = device.id;
-  }
+  const scope = resolveConnectionDeviceScope(device);
+  flags.platform = scope.platform;
+  flags.target = scope.target ?? flags.target;
+  if (scope.identityFlag === 'udid') flags.udid = scope.id;
+  if (scope.identityFlag === 'serial') flags.serial = scope.id;
 }
 
 async function resolveSelectedDevice(
@@ -929,20 +965,38 @@ async function resolveSelectedDevice(
   );
 }
 
-function buildProxyDeviceKey(device: DeviceInfo): string {
-  return `${publicPlatformString(device)}:${device.target ?? 'mobile'}:${device.id}`;
+/**
+ * The refusal raised when the platform axis cannot be decided: two of the backend, the record, and
+ * the request name devices that are not the same device. `detail` says which of the three disagreed,
+ * because the advice differs — a bound connection is replaced with `--force`, and a request that
+ * contradicts itself has no `--force` to reach.
+ */
+export function connectionPlatformConflict(
+  options: Readonly<{
+    session: string;
+    leaseBackend: LeaseBackend | undefined;
+    boundPlatform?: CliFlags['platform'];
+    requestedPlatform?: CliFlags['platform'];
+    detail: 'bound-connection' | 'requested-backend';
+  }>,
+): AppError {
+  return new AppError(
+    'INVALID_ARGS',
+    options.detail === 'bound-connection'
+      ? 'Active remote connection is already bound to a different platform. Re-run connect --force to replace it.'
+      : 'The requested platform does not match the device this lease backend rents.',
+    {
+      session: options.session,
+      leaseBackend: options.leaseBackend,
+      platform: options.boundPlatform,
+      requestedPlatform: options.requestedPlatform,
+      reason: 'CONNECTION_PLATFORM_CONFLICT',
+    },
+  );
 }
 
-function leaseBackendForDevice(device: DeviceInfo): LeaseBackend | undefined {
-  if (isIosFamily(device)) return 'ios-instance';
-  if (device.platform === 'android') return 'android-instance';
-  if (device.platform === 'harmonyos') return 'harmonyos-instance';
-  return undefined;
-}
-
-function assertRequestedConnectionScope(
+function assertRequestedConnectionBackend(
   state: RemoteConnectionState,
-  flags: CliFlags,
   requestedLeaseBackend: LeaseBackend,
 ): void {
   if (state.leaseBackend && state.leaseBackend !== requestedLeaseBackend) {
@@ -952,13 +1006,9 @@ function assertRequestedConnectionScope(
       { session: state.session, leaseBackend: state.leaseBackend },
     );
   }
-  if (state.platform && flags.platform && state.platform !== flags.platform) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Active remote connection is already bound to a different platform. Re-run connect --force to replace it.',
-      { session: state.session, platform: state.platform },
-    );
-  }
+}
+
+function assertRequestedConnectionTarget(state: RemoteConnectionState, flags: CliFlags): void {
   if (state.target && flags.target && state.target !== flags.target) {
     throw new AppError(
       'INVALID_ARGS',
@@ -990,13 +1040,4 @@ async function heartbeatOrAllocateLease(
     if (isInactiveLeaseError(error)) return undefined;
     throw error;
   }
-}
-
-function isInactiveLeaseError(error: unknown): boolean {
-  if (!(error instanceof AppError) || error.code !== 'UNAUTHORIZED') return false;
-  return (
-    error.details?.reason === 'LEASE_NOT_FOUND' ||
-    error.details?.reason === 'LEASE_EXPIRED' ||
-    error.details?.reason === 'LEASE_REVOKED'
-  );
 }

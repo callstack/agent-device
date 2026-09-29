@@ -4,6 +4,7 @@ import {
   isPlatform,
   isTvOsDevice,
   matchesPlatformSelector,
+  platformSelectorsConflict,
   PLATFORMS,
   resolveApplePlatformName,
   resolveAppleSimulatorSetPathForSelector,
@@ -48,6 +49,25 @@ test('matchesPlatformSelector resolves apple selector across Apple platforms', (
   assert.equal(matchesPlatformSelector({ platform: 'android' }, 'apple'), false);
   assert.equal(matchesPlatformSelector({ platform: 'vega' }, 'vega'), true);
   assert.equal(matchesPlatformSelector({ platform: 'vega' }, 'android'), false);
+});
+
+// #2962: a connection bound to `ios` was compared with the internal `apple` by string inequality,
+// so every iOS remote install was refused. Selectors name a platform on two axes, and deciding
+// "different platform" has to account for both.
+test('platformSelectorsConflict reads selectors on both the family and leaf axes', () => {
+  assert.equal(platformSelectorsConflict('ios', 'apple'), false);
+  assert.equal(platformSelectorsConflict('apple', 'ios'), false);
+  assert.equal(platformSelectorsConflict('macos', 'apple'), false);
+  assert.equal(platformSelectorsConflict('ios', 'ios'), false);
+  assert.equal(platformSelectorsConflict('apple', 'apple'), false);
+  assert.equal(platformSelectorsConflict('ios', 'macos'), true);
+  assert.equal(platformSelectorsConflict('apple', 'android'), true);
+  assert.equal(platformSelectorsConflict('android', 'apple'), true);
+  assert.equal(platformSelectorsConflict('android', 'ios'), true);
+  assert.equal(platformSelectorsConflict('harmonyos', 'harmonyos'), false);
+  // A missing selector binds nothing, so it cannot conflict with anything.
+  assert.equal(platformSelectorsConflict(undefined, 'ios'), false);
+  assert.equal(platformSelectorsConflict('ios', undefined), false);
 });
 
 test('isPlatform accepts exactly the canonical PLATFORMS tuple', () => {

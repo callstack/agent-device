@@ -201,9 +201,9 @@ test('trigger-app-event supports iOS device path and prefers iOS template', asyn
       'launch',
       '--device',
       'ios-device-1',
-      'com.example.app',
       '--payload-url',
       expectedUrl,
+      'com.example.app',
     ]);
   } finally {
     process.env.PATH = previousPath;

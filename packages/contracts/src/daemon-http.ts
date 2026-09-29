@@ -38,24 +38,38 @@ export function buildDaemonHttpTenantHeaders(tenantId: string | undefined): Reco
 // an acknowledged-compatible entry (#1432).
 export const DAEMON_RPC_PROTOCOL_VERSION = 2;
 
+export const DAEMON_HTTP_INSTANCE_HEADER = 'x-agent-device-instance';
+export const DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER = 'x-agent-device-upstream-instance';
+export const DAEMON_HTTP_INSTANCE_MISMATCH_HEADER = 'x-agent-device-instance-mismatch';
+
+export function buildDaemonInstanceMismatchRpcResponse<Id>(
+  id: Id,
+  message: string,
+  data: Record<string, unknown>,
+) {
+  return { jsonrpc: '2.0' as const, id, error: { code: -32001, message, data } };
+}
+
 export type DaemonHealthPayload = {
   ok: true;
   service: 'agent-device-daemon' | 'agent-device-proxy';
   version: string;
   rpcProtocolVersion: number;
+  instanceId?: string;
   upstream?: unknown;
 };
 
 export function buildDaemonHealthPayload(
   service: DaemonHealthPayload['service'],
   version: string,
-  options: { upstream?: unknown } = {},
+  options: { upstream?: unknown; instanceId?: string } = {},
 ): DaemonHealthPayload {
   return {
     ok: true,
     service,
     version,
     rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
+    ...(options.instanceId !== undefined ? { instanceId: options.instanceId } : {}),
     ...(options.upstream !== undefined ? { upstream: options.upstream } : {}),
   };
 }

@@ -16,12 +16,12 @@ import {
   scriptTargetPath,
   type SessionScriptPublicationState,
 } from './session-script-publication-state.ts';
-import {
-  healedScriptSiblingPath,
-  type ReplayCoordinator,
-  type ReplayResumeStamper,
-  type ReplaySessionView,
-} from './replay/index.ts';
+import { healedScriptSiblingPath } from '@agent-device/replay-port/session-replay-heal';
+import type {
+  ReplayCoordinator,
+  ReplayResumeStamper,
+  ReplaySessionView,
+} from '@agent-device/replay-port/command-types';
 
 /**
  * `ReplayCoordinator` (#1478 P4b): the single daemon-owned gateway a native `.ad` replay request

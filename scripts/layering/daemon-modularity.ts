@@ -38,7 +38,7 @@ const DAEMON_TYPE_MODULES: readonly string[] = [
 const ENGINE_FILE_PREFIXES = [
   'packages/ad-replay/src/',
   'packages/maestro/src/',
-  'src/daemon/replay/internal/',
+  'packages/replay-port/src/daemon-port/',
   'packages/replay-test/src/',
 ] as const;
 

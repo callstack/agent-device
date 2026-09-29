@@ -50,6 +50,27 @@ type WireMutation = {
 
 const MUTATIONS: readonly WireMutation[] = [
   {
+    breakClass: 'instance refusal: the daemon drops the mismatch response header',
+    file: 'src/daemon/server/http-instance-precondition.ts',
+    name: 'refuseStaleDaemonInstance',
+    from: "res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');",
+    to: '',
+  },
+  {
+    breakClass: 'instance refusal: the proxy drops the mismatch response header',
+    file: 'src/remote/daemon-proxy.ts',
+    name: 'sendInstanceMismatch',
+    from: "res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');",
+    to: '',
+  },
+  {
+    breakClass: 'instance refusal: the shared RPC error code changes',
+    file: 'packages/contracts/src/daemon-http.ts',
+    name: 'buildDaemonInstanceMismatchRpcResponse',
+    from: 'code: -32001',
+    to: 'code: -32002',
+  },
+  {
     breakClass: 'method naming: a released client keeps sending the old method name',
     file: 'src/daemon/server/http-server.ts',
     name: 'COMMAND_RPC_METHODS',

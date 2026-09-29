@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { eagerClosureGraphOf } from '../../src/__tests__/eager-import-closure.fixtures.ts';
 import {
+  baseProductionPathOf,
   createCommittedSourceTree,
   headCommit,
   mergeBaseWithMain,
@@ -378,6 +379,8 @@ function mkGitFixtureRepo(prefix: string): string {
   fs.writeFileSync(path.join(pkgDir, 'src/facades/top.ts'), 'export const b = 2;\n');
   fs.writeFileSync(path.join(pkgDir, 'src/facades/nested/deep.ts'), 'export const c = 3;\n');
   fs.writeFileSync(path.join(pkgDir, 'src/facades/skip.test.ts'), 'export const d = 4;\n');
+  fs.mkdirSync(path.join(repo, 'scripts'));
+  fs.writeFileSync(path.join(repo, 'scripts/standalone.ts'), 'export const outside = 1;\n');
   execFileSync('git', ['init', '-q'], { cwd: repo });
   execFileSync('git', ['add', '.'], { cwd: repo });
   execFileSync(
@@ -409,9 +412,32 @@ test('a renamed entry is followed to its path at the base, not treated as first-
   execFileSync('git', ['mv', 'packages/demo/src/entry.ts', 'packages/demo/src/moved.ts'], {
     cwd: repo,
   });
-  expect(renamedSince(repo, 'HEAD').get('packages/demo/src/moved.ts')).toBe(
+  const renamed = renamedSince(repo, 'HEAD');
+  const baseTree = createCommittedSourceTree(repo, 'HEAD');
+  expect(renamed.get('packages/demo/src/moved.ts')).toBe('packages/demo/src/entry.ts');
+  expect(baseProductionPathOf(repo, 'packages/demo/src/moved.ts', baseTree, renamed)).toBe(
     'packages/demo/src/entry.ts',
   );
+  execFileSync(
+    'git',
+    ['mv', 'packages/demo/src/facades/skip.test.ts', 'packages/demo/src/fixture.ts'],
+    { cwd: repo },
+  );
+  const withFixtureRename = renamedSince(repo, 'HEAD');
+  expect(withFixtureRename.get('packages/demo/src/fixture.ts')).toBe(
+    'packages/demo/src/facades/skip.test.ts',
+  );
+  expect(
+    baseProductionPathOf(repo, 'packages/demo/src/fixture.ts', baseTree, withFixtureRename),
+  ).toBe(null);
+  execFileSync('git', ['mv', 'scripts/standalone.ts', 'packages/demo/src/standalone.ts'], {
+    cwd: repo,
+  });
+  const withOutsideRename = renamedSince(repo, 'HEAD');
+  expect(withOutsideRename.get('packages/demo/src/standalone.ts')).toBe('scripts/standalone.ts');
+  expect(
+    baseProductionPathOf(repo, 'packages/demo/src/standalone.ts', baseTree, withOutsideRename),
+  ).toBe(null);
 });
 
 test('discovery is recursive and reads TRACKED files only', () => {
@@ -520,10 +546,9 @@ const baseTree = createCommittedSourceTree(repoRoot, mergeBase);
 const renamedFrom = renamedSince(repoRoot, mergeBase);
 const entries = eagerClosureEntries(repoRoot);
 
-/** The entry's path in the merge-base tree (renames followed), or null when it was not there. */
+/** The entry's readable source path in the merge-base tree, if it had one. */
 function basePathOf(entryFile: string): string | null {
-  const file = renamedFrom.get(entryFile) ?? entryFile;
-  return baseTree.isFile(absolute(file)) ? file : null;
+  return baseProductionPathOf(repoRoot, entryFile, baseTree, renamedFrom);
 }
 
 const baseGraphs = new Map<string, ReadonlyMap<string, string | null>>();

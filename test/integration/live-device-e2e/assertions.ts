@@ -24,13 +24,13 @@ export function createLiveDeviceAssertions<
   async function assertWaitText(
     context: Context,
     expected: string,
-    options: { debug?: boolean } = {},
+    options: { debug?: boolean; timeoutMs?: number } = {},
   ): Promise<void> {
     const result = await runStep(context, `wait for ${expected}`, [
       'wait',
       'text',
       expected,
-      '10000',
+      String(options.timeoutMs ?? 10_000),
       ...(options.debug ? ['--debug'] : []),
     ]);
     assertJsonContains(result, expected, `wait should observe ${expected}`);
