@@ -1,8 +1,6 @@
-import fs from 'node:fs';
 import http from 'node:http';
-import path from 'node:path';
 import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
-import { findProjectRoot } from '@agent-device/host-kit/version';
+import { resolveDaemonLaunchSpec } from '../../daemon-client/daemon-launch-spec.ts';
 import { listenOnLoopback } from './loopback.ts';
 
 // A loopback stand-in for a running daemon: answers `GET /health`, echoes `responseData` as the
@@ -61,16 +59,13 @@ export async function startHttpDaemonFixture(
   return { server, port, seenPaths, rpcRequests };
 }
 
-/** The code signature a daemon started from this checkout records, so a fixture daemon is reused. */
+/**
+ * The code signature a daemon started from this checkout records, read through the same launch
+ * spec the client uses to launch and sign its daemon, so a fixture daemon is reused.
+ */
 export function currentDaemonCodeSignature(): string {
-  const root = findProjectRoot();
-  const distPath = path.join(root, 'dist', 'src', 'internal', 'daemon.js');
-  const sourcePath = path.join(root, 'src', 'daemon.ts');
-  const entryPath =
-    process.execArgv.includes('--experimental-strip-types') || !fs.existsSync(distPath)
-      ? sourcePath
-      : distPath;
-  return computeDaemonCodeSignature(entryPath, root);
+  const spec = resolveDaemonLaunchSpec();
+  return computeDaemonCodeSignature(spec.useSrc ? spec.srcPath : spec.distPath, spec.root);
 }
 
 /** Swaps `process.stderr.write` for a buffer until `restore`, so a test can read what was printed. */

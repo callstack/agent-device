@@ -29,7 +29,7 @@ const DESCRIPTORS = commandDescriptors as readonly CommandDescriptor[];
 
 /**
  * Derived from the registry (catalog group plus platform execution). Internal daemon commands with
- * no platform execution — leases, takeover, session bookkeeping — are protocol plumbing that no
+ * no platform execution — leases, `human_control`, session bookkeeping — are protocol plumbing that no
  * command rule decides. Every other command a request names is decided by command rules, including
  * a name the registry does not know, so an allow list fails closed.
  */
@@ -43,7 +43,7 @@ const PROTOCOL_COMMANDS: ReadonlySet<string> = new Set(
 );
 
 /**
- * The names a policy may use: public commands, and internal commands that execute on a device,
+ * The names a policy may use: public commands, and internal commands with platform execution,
  * each by the public command it serves (`install_source` as `install-from-source`) or else by its
  * own name (`runtime`).
  */

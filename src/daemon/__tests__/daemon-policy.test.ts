@@ -228,33 +228,41 @@ test('a provider answering with only out-of-scope devices does not hide allowed 
 
 test('an allow list denies the internal runtime command unless it names runtime', async () => {
   const { handler, bind } = makeHandler(policy({ commands: { allow: ['snapshot'] } }));
+  const runtimeClear = request('runtime', { positionals: ['clear'] });
 
-  const response = await handler(request('runtime', { positionals: ['clear'] }));
+  const response = await handler(runtimeClear);
 
   expectPolicyDenied(response, 'command');
   expect(response).toMatchObject({ error: { details: { command: 'runtime' } } });
   expect(bind).not.toHaveBeenCalled();
+  expect(deniedCommand(policy({ commands: { allow: ['runtime'] } }), runtimeClear)).toBeUndefined();
 });
 
 test('command rules name internal device commands the registry way', () => {
   const denyRuntime = policy({ commands: { deny: ['runtime', 'install-from-source'] } });
   const allowSnapshot = policy({ commands: { allow: ['snapshot'] } });
 
-  expect(() => assertDaemonPolicyAdmitsRequest(denyRuntime, request('runtime'))).toThrow(
-    /denies the runtime command/,
-  );
-  expect(() => assertDaemonPolicyAdmitsRequest(denyRuntime, request('install_source'))).toThrow(
-    /denies the install-from-source command/,
-  );
+  expect(deniedCommand(denyRuntime, request('runtime'))).toBe('runtime');
+  expect(deniedCommand(denyRuntime, request('install_source'))).toBe('install-from-source');
   // Protocol plumbing (leases, session bookkeeping) is never decided by command rules.
-  expect(() =>
-    assertDaemonPolicyAdmitsRequest(allowSnapshot, request('lease_heartbeat')),
-  ).not.toThrow();
+  expect(deniedCommand(allowSnapshot, request('lease_heartbeat'))).toBeUndefined();
   // A name the registry does not know fails closed under an allow list.
-  expect(() => assertDaemonPolicyAdmitsRequest(allowSnapshot, request('not-a-command'))).toThrow(
-    /denies the not-a-command command/,
-  );
+  expect(deniedCommand(allowSnapshot, request('not-a-command'))).toBe('not-a-command');
 });
+
+/** The command a policy denial names, or undefined when the policy admits the request. */
+function deniedCommand(daemonPolicy: ReturnType<typeof policy>, req: DaemonRequest) {
+  try {
+    assertDaemonPolicyAdmitsRequest(daemonPolicy, req);
+    return undefined;
+  } catch (error) {
+    expect(error).toMatchObject({
+      code: 'UNAUTHORIZED',
+      details: { reason: 'DAEMON_POLICY_DENIED', rule: 'command' },
+    });
+    return (error as { details: { command: string } }).details.command;
+  }
+}
 
 test('doctor counts only the devices the policy allows', async () => {
   const { handler } = makeHandler(policy({ devices: { allow: [{ udid: IOS_SIMULATOR.id }] } }), {

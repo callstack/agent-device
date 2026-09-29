@@ -44,10 +44,10 @@ Accepted (2026-09-29).
 - `commands` — exactly one of `allow` or `deny`. Which daemon commands a rule decides, and by what
   name, is derived from the command registry, never from a hand list:
   - public commands, by their own name;
-  - internal commands that execute on a device, by the public command their
+  - internal commands with platform execution, by the public command their
     `catalog.servesPublicCommand` names (`install_source` as `install-from-source`), or else by
     their own name (`runtime`, which `react-devtools` and Maestro flows send);
-  - internal commands with no platform execution (leases, takeover, session bookkeeping) are
+  - internal commands with no platform execution (leases, `human_control`, session bookkeeping) are
     protocol plumbing that no rule decides;
   - any other name is decided by the rules, so an allow list fails closed for it.
 
