@@ -23,7 +23,7 @@ import {
 import { RECORDING_COMMAND_OUTPUT_SCHEMAS } from '../commands/recording/output-schemas.ts';
 import { REPLAY_COMMAND_OUTPUT_SCHEMAS } from '../commands/replay/index.ts';
 import { SYSTEM_COMMAND_OUTPUT_SCHEMAS } from '../commands/system/index.ts';
-import { DEVICE_KINDS, DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
+import { DEVICE_TARGETS } from '@agent-device/kernel/device';
 
 /**
  * Registry of per-command MCP `outputSchema`s, keyed by the daemon command
