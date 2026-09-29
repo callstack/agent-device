@@ -112,12 +112,29 @@ test('target discovery exhaustion still answers a deep-link confirmation', async
   ]);
 });
 
-test('runner startup exhaustion returns without probing for a deep-link confirmation', async () => {
-  const { device, log } = simulator([RUNNER_START_TIMEOUT]);
+test('runner startup exhaustion waits once more, then answers the confirmation the runner sees', async () => {
+  const { device, log } = simulator([RUNNER_START_TIMEOUT, LAUNCH_PENDING, LANDED]);
 
   await answerDeepLinkConfirmation(device);
 
-  assert.deepEqual(log, ['wait for the deep-link destination (1/5)']);
+  assert.deepEqual(log, [
+    'wait for the deep-link destination (1/5)',
+    'wait for the deep-link destination (2/5)',
+    'alert get',
+    'alert accept',
+    'wait for the deep-link destination (3/5)',
+  ]);
+});
+
+test('a second runner startup exhaustion returns without probing for a deep-link confirmation', async () => {
+  const { device, log } = simulator([RUNNER_START_TIMEOUT, RUNNER_START_TIMEOUT]);
+
+  await answerDeepLinkConfirmation(device);
+
+  assert.deepEqual(log, [
+    'wait for the deep-link destination (1/5)',
+    'wait for the deep-link destination (2/5)',
+  ]);
 });
 
 test('a readable no-match that answers Open waits for the released launch', async () => {
