@@ -492,7 +492,7 @@ extension RunnerTests {
           return (sweep.acquisition, sweep.outcome)
         case .privateAX:
           return (
-            self.privateAXSnapshotAcquisition(
+            try self.privateAXSnapshotAcquisition(
               target: target,
               hint: hint,
               deadline: deadline

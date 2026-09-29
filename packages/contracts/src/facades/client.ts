@@ -23,6 +23,8 @@ export type {
   CaptureScreenshotResult,
   CaptureSnapshotOptions,
   CaptureSnapshotResult,
+  InspectPointOptions,
+  PointInspectionResult,
   FindSnapshotCommandOptions,
   SelectorSnapshotCommandOptions,
 } from '../client-capture.ts';

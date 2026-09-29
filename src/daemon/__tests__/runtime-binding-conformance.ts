@@ -18,6 +18,7 @@ import { resolveBoundBackRuntime } from '../back-runtime.ts';
 import { resolveBoundFocusRuntime } from '../focus-runtime.ts';
 import { resolveBoundFoldRuntime } from '../fold-runtime.ts';
 import { resolveBoundGestureRuntime } from '../gesture-runtime.ts';
+import { resolveBoundInspectPointRuntime } from '../inspect-point-runtime.ts';
 import { resolveBoundOrientationRuntime } from '../orientation-runtime.ts';
 import type { ResolvedGenericExecution } from '../request-generic-dispatch.ts';
 import type {
@@ -108,6 +109,16 @@ export const conformedRuntimeBindings = {
   focus: {
     resolve: async (device, bindings) =>
       refusable(await resolveBoundFocusRuntime({ device, positionals: ['40', '90'], ...bindings })),
+  },
+  'inspect-point': {
+    resolve: async (device, bindings) =>
+      refusable(
+        await resolveBoundInspectPointRuntime({
+          device,
+          positionals: ['40', '90'],
+          ...bindings,
+        }),
+      ),
   },
   viewport: {
     resolve: async (device, bindings) =>

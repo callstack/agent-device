@@ -78,6 +78,11 @@ test.each([
   expect(facts.operations.captureSnapshot).toEqual({ available: true });
   // uiautomator reads text at a point over the same adb transport the capture uses.
   expect(facts.operations.readTextAtPoint).toEqual({ available: true });
+  expect(facts.operations.inspectPoint).toEqual({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+    hint: 'inspect-point is currently supported on iOS Simulator targets only.',
+  });
   expect(facts.operations.captureSnapshotWithCustomActions.available).toBe(false);
   expect(facts.operations.captureSnapshotWithoutActiveApp).toEqual({ available: true });
   expect(facts.operations.setViewport).toMatchObject({ available: false });

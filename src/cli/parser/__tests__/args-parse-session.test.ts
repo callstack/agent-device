@@ -252,6 +252,17 @@ test('parseArgs recognizes command-specific flag combinations', async () => {
   }
 });
 
+test('parseArgs rejects empty inline numeric values', () => {
+  assert.throws(
+    () => parseArgs(['inspect-point', '--x=', '--y=12'], { strictFlags: true }),
+    (error: unknown) => error instanceof Error && /Invalid x/.test(error.message),
+  );
+  assert.throws(
+    () => parseArgs(['inspect-point', '--x=12', '--y='], { strictFlags: true }),
+    (error: unknown) => error instanceof Error && /Invalid y/.test(error.message),
+  );
+});
+
 test('parseArgs recognizes device isolation flags', () => {
   const parsed = parseArgs(
     [

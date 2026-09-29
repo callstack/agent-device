@@ -446,6 +446,7 @@ function sourceRuntimeFacts(
       ...gestureRuntimeOperationFacts({ unsupported: unavailable }),
       ...scrollRuntimeOperationFacts({ scroll: unavailable }),
       readTextAtPoint: unavailable,
+      inspectPoint: unavailable,
       back: unavailable,
       setOrientation: unavailable,
       tvRemote: unavailable,

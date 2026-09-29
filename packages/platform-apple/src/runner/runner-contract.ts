@@ -40,6 +40,7 @@ export const MAIN_THREAD_TIMEOUT_RUNNER_CODE = 'MAIN_THREAD_TIMEOUT';
 const APP_NOT_RUNNING_RUNNER_CODE = 'APP_NOT_RUNNING';
 
 export type RunnerCommand = {
+  inspectPoint?: boolean;
   command:
     | 'tap'
     | 'mouseClick'

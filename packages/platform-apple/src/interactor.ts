@@ -24,6 +24,8 @@ import { withMethodScope } from '@agent-device/kernel/scoped-provider';
 import type { Point, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import type {
   Interactor,
+  PointInspectionElement,
+  PointInspectionRead,
   RunnerCallOptions,
   RunnerContext,
   ScreenshotOptions,
@@ -76,6 +78,8 @@ export function createAppleInteractor(
         ? await readMacOsSurfaceTextAtPoint(point, helper, options?.appBundleId)
         : await readRunnerTextAtPoint(device, point, options, runnerOpts);
     },
+    inspectPoint: async (point, options) =>
+      await inspectRunnerPoint(device, point, options, runnerOpts),
     // The XCTest runner's own text reading: it observes the live accessibility hierarchy
     // directly, so it answers without the cost — and without the pruning — of a tree capture.
     // Only a positive answer is authoritative; see `FindTextResult`.
@@ -453,4 +457,76 @@ async function readRunnerTextAtPoint(
   if (typeof result.text === 'string') return result.text;
   // The runner answers `message` when it reached the element but rendered no readable text.
   return typeof result.message === 'string' ? result.message : undefined;
+}
+
+async function inspectRunnerPoint(
+  device: DeviceInfo,
+  point: Point,
+  options: { appBundleId?: string; signal?: AbortSignal } | undefined,
+  runnerOpts: RunnerCallOptions,
+): Promise<PointInspectionRead> {
+  const result = await runAppleRunnerCommand(
+    device,
+    {
+      command: 'readText',
+      inspectPoint: true,
+      x: point.x,
+      y: point.y,
+      appBundleId: options?.appBundleId,
+    },
+    options?.signal ? { ...runnerOpts, signal: options.signal } : runnerOpts,
+  );
+  if (!Array.isArray(result.elements)) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'iOS runner returned an invalid point-inspection payload: missing elements',
+    );
+  }
+  const elements = result.elements.map((value) => {
+    const element = readPointInspectionElement(value);
+    if (!element) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        'iOS runner returned an invalid point-inspection element',
+      );
+    }
+    return element;
+  });
+  return {
+    ...(typeof result.text === 'string' ? { text: result.text } : {}),
+    elements,
+  };
+}
+
+function readPointInspectionElement(value: unknown): PointInspectionElement | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const record = value as Record<string, unknown>;
+  const frame = readPointInspectionFrame(record.frame);
+  if (!frame) return undefined;
+  return {
+    ...readPointInspectionStrings(record),
+    frame,
+    ...(typeof record.hittable === 'boolean' ? { hittable: record.hittable } : {}),
+  };
+}
+
+function readPointInspectionFrame(value: unknown): PointInspectionElement['frame'] | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const frame = value as Record<string, unknown>;
+  const dimensions = [frame.x, frame.y, frame.width, frame.height];
+  if (!dimensions.every((dimension) => typeof dimension === 'number' && Number.isFinite(dimension)))
+    return undefined;
+  const [x, y, width, height] = dimensions as [number, number, number, number];
+  return { x, y, width, height };
+}
+
+function readPointInspectionStrings(
+  record: Record<string, unknown>,
+): Partial<Omit<PointInspectionElement, 'frame' | 'hittable'>> {
+  const strings: Record<string, string> = {};
+  for (const key of ['text', 'label', 'identifier', 'type', 'role', 'value'] as const) {
+    const value = record[key];
+    if (typeof value === 'string' && value !== '') strings[key] = value;
+  }
+  return strings;
 }

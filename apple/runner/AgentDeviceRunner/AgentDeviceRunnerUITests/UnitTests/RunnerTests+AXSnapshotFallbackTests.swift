@@ -5,6 +5,15 @@ import AgentDeviceSnapshotPresentation
 // MARK: - In-bundle unit tests
 
 extension RunnerTests {
+  func testPrivateAXContainmentFailureIsTypedAndNotADepthLimit() {
+    XCTAssertNil(Self.privateAXContainmentFailure(blockedFrontiers: nil))
+    XCTAssertNil(Self.privateAXContainmentFailure(blockedFrontiers: 0))
+    XCTAssertEqual(
+      Self.privateAXContainmentFailure(blockedFrontiers: 1)?.code,
+      "IOS_SNAPSHOT_AX_CONTAINMENT_FAILED"
+    )
+  }
+
   func testPrivateAXAttemptDepthsAppliesRememberedDepth() {
     XCTAssertEqual(
       Self.privateAXAttemptDepths(requestedDepth: 64, rememberedDepth: nil),
@@ -24,12 +33,10 @@ extension RunnerTests {
     XCTAssertEqual(Self.privateAXAttemptDepths(requestedDepth: 24, rememberedDepth: 56), [24, 12])
   }
 
-  /// Executed producer contract for the #1627 review blocker: a frontier whose
-  /// live element vanished, and one whose re-rooted request fails, must BOTH
-  /// count as missed — an all-miss extension reporting itself drained would
-  /// present a capped capture as complete. Goes red if either miss-path
-  /// increment in extendSnapshotFrontiers is removed.
-  func testDeepExtensionCountsMissedFrontiers() {
+  /// A vanished element is a missed frontier; a contained request failure is
+  /// a blocked frontier and must fail the backend instead of degrading to a
+  /// benign depth-limit verdict.
+  func testDeepExtensionSeparatesMissedAndBlockedFrontiers() {
     // Element vanished (list churn between serialization and extension): the
     // fabricated snapshot answers nil for accessibilityElement — missed, and
     // no request call is consumed. (An explicit nil property: bare NSObject
@@ -38,7 +45,7 @@ extension RunnerTests {
     orphan.snapshot = FrontierSnapshotWithoutElementForTesting()
     orphan.node = NSMutableDictionary()
     // Re-rooted request fails: the element resolves but the client cannot
-    // serve requestSnapshotForElement — one consumed call AND a miss.
+    // serve requestSnapshotForElement — one consumed call AND a blocked read.
     let unreachable = RunnerAXSnapshotFrontier()
     unreachable.snapshot = FrontierSnapshotWithElementForTesting()
     unreachable.node = NSMutableDictionary()
@@ -58,15 +65,13 @@ extension RunnerTests {
       deadline: nil
     )
 
-    XCTAssertEqual(outcome?[RunnerAXSnapshotDeepExtensionMissedKey] as? Int, 2)
+    XCTAssertEqual(outcome?[RunnerAXSnapshotDeepExtensionMissedKey] as? Int, 1)
+    XCTAssertEqual(outcome?[RunnerAXSnapshotDeepExtensionBlockedKey] as? Int, 1)
     XCTAssertEqual(outcome?[RunnerAXSnapshotDeepExtensionCallsKey] as? Int, 1)
-    XCTAssertEqual(outcome?[RunnerAXSnapshotDeepExtensionPendingKey] as? Int, 0)
+    XCTAssertEqual(outcome?[RunnerAXSnapshotDeepExtensionPendingKey] as? Int, 1)
     XCTAssertEqual(outcome?[RunnerAXSnapshotDeepExtensionNodesAddedKey] as? Int, 0)
-    XCTAssertFalse(truncated.boolValue)
-    // And the consumer verdict over exactly this outcome: still depth-limited.
-    XCTAssertTrue(
-      Self.privateAXDepthLimited(
-        effectiveDepth: 56, requestedDepth: 64, pendingFrontiers: 0, missedFrontiers: 2))
+    XCTAssertTrue(truncated.boolValue)
+    XCTAssertNotNil(Self.privateAXContainmentFailure(blockedFrontiers: 1))
   }
 
   func testPrivateAXDepthLimitedRequiresEveryFrontierResolved() {
@@ -291,6 +296,65 @@ extension RunnerTests {
       RunnerAXSnapshotBridge.customActionReadDispatchCount(), dispatchesBefore + 2)
   }
 
+  func testHungInitialSnapshotRequestIsContainedAndRecovers() {
+    let client = HungSnapshotAXClientForTesting()
+    let dispatchesBefore = RunnerAXSnapshotBridge.snapshotReadDispatchCount()
+    let blockedBefore = RunnerAXSnapshotBridge.snapshotReadBlockedCount()
+    defer { client.release() }
+
+    let firstStarted = Date()
+    let first = RunnerAXSnapshotBridge.snapshotTree(
+      withClient: client,
+      target: NSObject(),
+      maxDepth: 4,
+      maxNodes: 16,
+      deepExtensionCallLimit: 0,
+      customActionLimit: 0,
+      deadline: Date().addingTimeInterval(0.25)
+    )
+    XCTAssertEqual(first["ok"] as? Bool, false)
+    XCTAssertGreaterThanOrEqual(-firstStarted.timeIntervalSinceNow, 0.2)
+    XCTAssertEqual(RunnerAXSnapshotBridge.snapshotReadsInFlight(), 1)
+    XCTAssertEqual(RunnerAXSnapshotBridge.snapshotReadDispatchCount(), dispatchesBefore + 1)
+
+    // Repeated captures fail closed without adding work behind the wedged XPC call.
+    for _ in 0..<4 {
+      let repeated = RunnerAXSnapshotBridge.snapshotTree(
+        withClient: client,
+        target: NSObject(),
+        maxDepth: 4,
+        maxNodes: 16,
+        deepExtensionCallLimit: 0,
+        customActionLimit: 0,
+        deadline: Date().addingTimeInterval(1)
+      )
+      XCTAssertEqual(repeated["ok"] as? Bool, false)
+    }
+    XCTAssertEqual(RunnerAXSnapshotBridge.snapshotReadDispatchCount(), dispatchesBefore + 1)
+    XCTAssertEqual(RunnerAXSnapshotBridge.snapshotReadBlockedCount(), blockedBefore + 4)
+
+    client.release()
+    let drained = expectation(description: "wedged initial request drains")
+    DispatchQueue.global().async {
+      while RunnerAXSnapshotBridge.snapshotReadsInFlight() > 0 {
+        usleep(20_000)
+      }
+      drained.fulfill()
+    }
+    wait(for: [drained], timeout: 5)
+
+    _ = RunnerAXSnapshotBridge.snapshotTree(
+      withClient: client,
+      target: NSObject(),
+      maxDepth: 4,
+      maxNodes: 16,
+      deepExtensionCallLimit: 0,
+      customActionLimit: 0,
+      deadline: Date().addingTimeInterval(1)
+    )
+    XCTAssertEqual(RunnerAXSnapshotBridge.snapshotReadDispatchCount(), dispatchesBefore + 2)
+  }
+
   /// The element budget bounds how many elements we read; these caps bound what
   /// any ONE element can put in the response. Clipping must be reported, since
   /// a clipped list looks exactly like a complete one.
@@ -481,6 +545,38 @@ extension RunnerTests {
       ["Blue Sky", "Callstack", "Welcome back", "Email", "Password", "Sign in", "Forgot password?"]
     )
     XCTAssertFalse(labels.contains("Admin settings"))
+  }
+}
+
+/// Stands in for a snapshot AX client whose request never returns. `release()`
+/// lets the contained request finish so timeout recovery is observable.
+private final class HungSnapshotAXClientForTesting: NSObject {
+  private let gate = DispatchSemaphore(value: 0)
+  private let lock = NSLock()
+  private var released = false
+
+  @objc(requestSnapshotForElement:attributes:parameters:error:)
+  func requestSnapshot(
+    forElement element: Any,
+    attributes: Any,
+    parameters: Any,
+    error: NSErrorPointer
+  ) -> Any? {
+    lock.lock()
+    let alreadyReleased = released
+    lock.unlock()
+    if !alreadyReleased {
+      gate.wait()
+    }
+    return nil
+  }
+
+  func release() {
+    lock.lock()
+    defer { lock.unlock() }
+    guard !released else { return }
+    released = true
+    gate.signal()
   }
 }
 

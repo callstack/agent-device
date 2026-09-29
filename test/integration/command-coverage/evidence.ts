@@ -29,7 +29,7 @@ export const ANDROID_APPLICATION_LIFECYCLE_CONTRACT_EVIDENCE: AndroidContractEvi
 export const ANDROID_HOVER_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
   defineAndroidContractEvidence(
     'packages/platform-android/src/runtime.test.ts',
-    [C.hover],
+    [C.hover, C['inspect-point']],
     'classifies the Android %s runtime denominator',
   );
 export const ANDROID_TV_REMOTE_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =

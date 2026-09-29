@@ -51,77 +51,92 @@ export function parseArgs(argv: string[], options?: FinalizeArgsOptions): Parsed
 }
 
 export function parseRawArgs(argv: string[]): RawParsedArgs {
-  const flags: CliFlags = { json: false, help: false, version: false };
-  let command: string | null = null;
-  let rawCommand: string | null = null;
-  const positionals: string[] = [];
-  const warnings: string[] = [];
-  const providedFlags: ParsedFlagRecord[] = [];
-  let parseFlags = true;
-
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i]!;
-    if (parseFlags && arg === '--') {
-      parseFlags = false;
-      continue;
-    }
-    if (!parseFlags) {
-      if (!command) {
-        rawCommand = arg;
-        command = normalizeCommandAlias(arg);
-      } else positionals.push(arg);
-      continue;
-    }
-    if (shouldPreservePostCommandArgs(command)) {
-      positionals.push(arg);
-      continue;
-    }
-    const isLongFlag = arg.startsWith('--');
-    const isShortFlag = arg.startsWith('-') && arg.length > 1;
-    if (!isLongFlag && !isShortFlag) {
-      if (!command) {
-        rawCommand = arg;
-        command = normalizeCommandAlias(arg);
-      } else positionals.push(arg);
-      continue;
-    }
-
-    const [token, inlineValue] = isLongFlag ? splitLongFlag(arg) : [arg, undefined];
-    if (isLegacyIgnoredSnapshotShortFlag(command, token)) {
-      continue;
-    }
-    const definition = resolveFlagDefinition(token, command);
-    if (shouldPassThroughLocalToolFlag(command, definition)) {
-      positionals.push(arg);
-      continue;
-    }
-    if (!definition) {
-      if (shouldTreatUnknownDashTokenAsPositional(command, positionals, arg)) {
-        if (!command) command = arg;
-        else positionals.push(arg);
-        continue;
-      }
-      throw new AppError('INVALID_ARGS', formatUnknownFlagMessage(token, command));
-    }
-
-    const parsed = parseFlagValue(definition, token, inlineValue, argv[i + 1]);
-    if (parsed.consumeNext) i += 1;
-    const existingValue = (flags as Record<string, unknown>)[definition.key];
-    if (definition.multiple) {
-      const values = Array.isArray(existingValue)
-        ? [...existingValue, parsed.value]
-        : existingValue === undefined
-          ? [parsed.value]
-          : [existingValue, parsed.value];
-      (flags as Record<string, unknown>)[definition.key] = values;
-    } else {
-      (flags as Record<string, unknown>)[definition.key] = parsed.value;
-    }
-    providedFlags.push({ key: definition.key, token });
+  const state: RawParseState = {
+    command: null,
+    flags: { json: false, help: false, version: false },
+    parseFlags: true,
+    positionals: [],
+    providedFlags: [],
+    rawCommand: null,
+    warnings: [],
+  };
+  for (let index = 0; index < argv.length; index += parseRawArgument(state, argv, index) + 1) {
+    // parseRawArgument returns one extra consumed argument when a value follows its flag.
   }
+  applyAliasImpliedFlags(state.rawCommand, state.flags);
+  return state;
+}
 
-  applyAliasImpliedFlags(rawCommand, flags);
-  return { command, positionals, flags, warnings, providedFlags };
+type RawParseState = RawParsedArgs & { rawCommand: string | null; parseFlags: boolean };
+
+function parseRawArgument(state: RawParseState, argv: string[], index: number): number {
+  const arg = argv[index]!;
+  if (arg === '--' && state.parseFlags) {
+    state.parseFlags = false;
+    return 0;
+  }
+  if (appendRawPositional(state, arg)) return 0;
+  return parseRawFlag(state, arg, argv[index + 1]);
+}
+
+function appendRawPositional(state: RawParseState, arg: string): boolean {
+  if (!state.parseFlags || shouldPreservePostCommandArgs(state.command) || !isFlagToken(arg)) {
+    if (!state.command) {
+      state.rawCommand = arg;
+      state.command = normalizeCommandAlias(arg);
+    } else {
+      state.positionals.push(arg);
+    }
+    return true;
+  }
+  return false;
+}
+
+function isFlagToken(arg: string): boolean {
+  return arg.startsWith('--') || (arg.startsWith('-') && arg.length > 1);
+}
+
+function parseRawFlag(state: RawParseState, arg: string, nextArg: string | undefined): number {
+  const [token, inlineValue] = arg.startsWith('--') ? splitLongFlag(arg) : [arg, undefined];
+  if (isLegacyIgnoredSnapshotShortFlag(state.command, token)) return 0;
+  const definition = resolveFlagDefinition(token, state.command);
+  if (shouldPassThroughLocalToolFlag(state.command, definition)) {
+    state.positionals.push(arg);
+    return 0;
+  }
+  if (!definition) return parseUnknownRawFlag(state, token, arg);
+  const parsed = parseFlagValue(definition, token, inlineValue, nextArg);
+  appendParsedFlag(state, definition, token, parsed.value);
+  return Number(parsed.consumeNext);
+}
+
+function parseUnknownRawFlag(state: RawParseState, token: string, arg: string): number {
+  if (shouldTreatUnknownDashTokenAsPositional(state.command, state.positionals, arg)) {
+    if (!state.command) state.command = arg;
+    else state.positionals.push(arg);
+    return 0;
+  }
+  throw new AppError('INVALID_ARGS', formatUnknownFlagMessage(token, state.command));
+}
+
+function appendParsedFlag(
+  state: RawParseState,
+  definition: FlagDefinition,
+  token: string,
+  value: unknown,
+): void {
+  const flags = state.flags as Record<string, unknown>;
+  const existingValue = flags[definition.key];
+  flags[definition.key] = definition.multiple
+    ? appendMultipleFlagValue(existingValue, value)
+    : value;
+  state.providedFlags.push({ key: definition.key, token });
+}
+
+function appendMultipleFlagValue(existingValue: unknown, value: unknown): unknown[] {
+  if (Array.isArray(existingValue)) return [...existingValue, value];
+  if (existingValue === undefined) return [value];
+  return [existingValue, value];
 }
 
 function applyAliasImpliedFlags(rawCommand: string | null, flags: CliFlags): void {
@@ -259,68 +274,131 @@ function parseFlagValue(
   inlineValue: string | undefined,
   nextArg: string | undefined,
 ): { value: unknown; consumeNext: boolean } {
-  if (definition.setValue !== undefined) {
-    if (inlineValue !== undefined) {
-      throw new AppError('INVALID_ARGS', `Flag ${token} does not take a value.`);
-    }
-    return { value: definition.setValue, consumeNext: false };
-  }
-  if (definition.type === 'boolean') {
-    if (inlineValue !== undefined) {
-      throw new AppError('INVALID_ARGS', `Flag ${token} does not take a value.`);
-    }
-    return { value: true, consumeNext: false };
-  }
+  if (definition.setValue !== undefined) return parseSetValue(definition, token, inlineValue);
+  if (definition.type === 'boolean') return parseBooleanValue(token, inlineValue);
   if (definition.type === 'booleanOrString') {
-    if (inlineValue !== undefined) {
-      if (inlineValue.trim().length === 0) {
-        throw new AppError(
-          'INVALID_ARGS',
-          `Flag ${token} requires a non-empty value when provided.`,
-        );
-      }
-      return { value: inlineValue, consumeNext: false };
-    }
-    if (nextArg === undefined || looksLikeFlagToken(nextArg)) {
-      return { value: true, consumeNext: false };
-    }
-    if (shouldConsumeOptionalPathValue(nextArg)) {
-      return { value: nextArg, consumeNext: true };
-    }
+    return parseBooleanOrStringValue(token, inlineValue, nextArg);
+  }
+  return parseRequiredFlagValue(definition, token, inlineValue, nextArg);
+}
+
+function parseSetValue(
+  definition: FlagDefinition,
+  token: string,
+  inlineValue: string | undefined,
+): { value: unknown; consumeNext: boolean } {
+  assertNoInlineValue(token, inlineValue);
+  return { value: definition.setValue, consumeNext: false };
+}
+
+function parseBooleanValue(
+  token: string,
+  inlineValue: string | undefined,
+): { value: unknown; consumeNext: boolean } {
+  assertNoInlineValue(token, inlineValue);
+  return { value: true, consumeNext: false };
+}
+
+function assertNoInlineValue(token: string, inlineValue: string | undefined): void {
+  if (inlineValue !== undefined) {
+    throw new AppError('INVALID_ARGS', `Flag ${token} does not take a value.`);
+  }
+}
+
+function parseBooleanOrStringValue(
+  token: string,
+  inlineValue: string | undefined,
+  nextArg: string | undefined,
+): { value: unknown; consumeNext: boolean } {
+  if (inlineValue !== undefined) return parseInlineBooleanOrString(token, inlineValue);
+  if (nextArg === undefined || looksLikeFlagToken(nextArg)) {
     return { value: true, consumeNext: false };
   }
+  return shouldConsumeOptionalPathValue(nextArg)
+    ? { value: nextArg, consumeNext: true }
+    : { value: true, consumeNext: false };
+}
 
+function parseInlineBooleanOrString(
+  token: string,
+  value: string,
+): { value: unknown; consumeNext: boolean } {
+  if (value.trim().length === 0) {
+    throw new AppError('INVALID_ARGS', `Flag ${token} requires a non-empty value when provided.`);
+  }
+  return { value, consumeNext: false };
+}
+
+function parseRequiredFlagValue(
+  definition: FlagDefinition,
+  token: string,
+  inlineValue: string | undefined,
+  nextArg: string | undefined,
+): { value: unknown; consumeNext: boolean } {
   const value = inlineValue ?? nextArg;
-  if (value === undefined) {
-    throw new AppError('INVALID_ARGS', `Flag ${token} requires a value.`);
-  }
-  if (inlineValue === undefined && looksLikeFlagToken(value)) {
-    throw new AppError('INVALID_ARGS', `Flag ${token} requires a value.`);
-  }
-
-  if (definition.type === 'string') {
-    return { value, consumeNext: inlineValue === undefined };
-  }
+  assertRequiredFlagValue(token, value, inlineValue);
+  if (definition.type === 'string') return { value, consumeNext: inlineValue === undefined };
   if (definition.type === 'enum') {
-    if (!definition.enumValues?.includes(value)) {
-      throw new AppError('INVALID_ARGS', `Invalid ${labelForFlag(token)}: ${value}`);
-    }
-    return { value, consumeNext: inlineValue === undefined };
+    return parseEnumFlagValue(definition, token, value, inlineValue === undefined);
   }
+  return parseNumericFlagValue(definition, token, value, inlineValue === undefined);
+}
+
+function assertRequiredFlagValue(
+  token: string,
+  value: string | undefined,
+  inlineValue: string | undefined,
+): asserts value is string {
+  if (value === undefined || (inlineValue === undefined && looksLikeFlagToken(value))) {
+    throw new AppError('INVALID_ARGS', `Flag ${token} requires a value.`);
+  }
+}
+
+function parseEnumFlagValue(
+  definition: FlagDefinition,
+  token: string,
+  value: string,
+  consumeNext: boolean,
+): { value: unknown; consumeNext: boolean } {
+  if (!definition.enumValues?.includes(value)) {
+    throw new AppError('INVALID_ARGS', `Invalid ${labelForFlag(token)}: ${value}`);
+  }
+  return { value, consumeNext };
+}
+
+function parseNumericFlagValue(
+  definition: FlagDefinition,
+  token: string,
+  value: string,
+  consumeNext: boolean,
+): { value: unknown; consumeNext: boolean } {
   const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    throw new AppError('INVALID_ARGS', `Invalid ${labelForFlag(token)}: ${value}`);
+  if (value.trim().length === 0 || !Number.isFinite(parsed)) {
+    return invalidNumericFlagValue(token, value);
   }
-  if (typeof definition.min === 'number' && parsed < definition.min) {
-    throw new AppError('INVALID_ARGS', `Invalid ${labelForFlag(token)}: ${value}`);
-  }
-  if (typeof definition.max === 'number' && parsed > definition.max) {
-    throw new AppError('INVALID_ARGS', `Invalid ${labelForFlag(token)}: ${value}`);
-  }
+  assertNumericBounds(definition, token, value, parsed);
   return {
     value: definition.type === 'int' ? Math.floor(parsed) : parsed,
-    consumeNext: inlineValue === undefined,
+    consumeNext,
   };
+}
+
+function invalidNumericFlagValue(token: string, value: string): never {
+  throw new AppError('INVALID_ARGS', `Invalid ${labelForFlag(token)}: ${value}`);
+}
+
+function assertNumericBounds(
+  definition: FlagDefinition,
+  token: string,
+  value: string,
+  parsed: number,
+): void {
+  if (typeof definition.min === 'number' && parsed < definition.min) {
+    invalidNumericFlagValue(token, value);
+  }
+  if (typeof definition.max === 'number' && parsed > definition.max) {
+    invalidNumericFlagValue(token, value);
+  }
 }
 
 function labelForFlag(token: string): string {

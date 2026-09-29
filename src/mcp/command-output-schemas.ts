@@ -864,6 +864,50 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
       ),
     ],
   },
+  'inspect-point': {
+    type: 'object',
+    oneOf: [
+      objectSchema(
+        {
+          status: constSchema('inspected'),
+          point: objectSchema({ x: numberSchema(), y: numberSchema() }, ['x', 'y']),
+          elements: {
+            type: 'array',
+            items: objectSchema(
+              {
+                text: stringSchema(),
+                label: stringSchema(),
+                identifier: stringSchema(),
+                type: stringSchema(),
+                role: stringSchema(),
+                value: stringSchema(),
+                frame: objectSchema(
+                  {
+                    x: numberSchema(),
+                    y: numberSchema(),
+                    width: numberSchema(),
+                    height: numberSchema(),
+                  },
+                  ['x', 'y', 'width', 'height'],
+                ),
+                hittable: booleanSchema(),
+              },
+              ['frame'],
+            ),
+          },
+        },
+        ['status', 'point', 'elements'],
+      ),
+      objectSchema(
+        {
+          status: constSchema('no-element-at-point'),
+          point: objectSchema({ x: numberSchema(), y: numberSchema() }, ['x', 'y']),
+          elements: { type: 'array', maxItems: 0 },
+        },
+        ['status', 'point', 'elements'],
+      ),
+    ],
+  },
 
   // A family that owns its commands authors their advertised response shape beside the
   // command surface and projects it here. This spread stays last: a hand-written entry for

@@ -13,6 +13,7 @@ import { resolveBoundOrientationRuntime } from './orientation-runtime.ts';
 import { resolveBoundFoldRuntime } from './fold-runtime.ts';
 import { resolveBoundTvRemoteRuntime } from './tv-remote-runtime.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
+import { resolveBoundInspectPointRuntime } from './inspect-point-runtime.ts';
 
 /**
  * The generic route's runtime-owned leaves (ADR 0019). Each one admits its own exact owner facts
@@ -41,6 +42,13 @@ export async function resolveGenericRuntimeExecution(
     });
   }
   switch (params.req.command) {
+    case 'inspect-point':
+      return await resolveBoundInspectPointRuntime({
+        device: params.session.device,
+        positionals: params.req.positionals ?? [],
+        inspectFacts: params.inspectFacts,
+        bindDevice: params.bindDevice,
+      });
     case 'screenshot':
       return await resolveScreenshotGenericExecution(params);
     case 'focus':

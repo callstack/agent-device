@@ -11,6 +11,7 @@ import type {
   SnapshotVisibility,
 } from '@agent-device/kernel/snapshot';
 import type { ScreenshotResultData } from './snapshot-types.ts';
+import type { PointInspectionElement } from './interactor-types.ts';
 import type {
   AgentDeviceIdentifiers,
   AgentDeviceRequestOverrides,
@@ -101,6 +102,22 @@ export type CaptureScreenshotResult = ScreenshotResultData & {
   path: string;
   identifiers: AgentDeviceIdentifiers;
 };
+
+export type InspectPointOptions = DeviceCommandBaseOptions & {
+  point: Readonly<{ x: number; y: number }>;
+};
+
+export type PointInspectionResult =
+  | Readonly<{
+      status: 'inspected';
+      point: Readonly<{ x: number; y: number }>;
+      elements: readonly [PointInspectionElement, ...PointInspectionElement[]];
+    }>
+  | Readonly<{
+      status: 'no-element-at-point';
+      point: Readonly<{ x: number; y: number }>;
+      elements: readonly [];
+    }>;
 
 export type CaptureDiffOptions = DeviceCommandBaseOptions &
   Pick<CaptureSnapshotOptions, 'interactiveOnly' | 'depth' | 'scope' | 'raw'> & {

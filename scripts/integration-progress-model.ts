@@ -148,6 +148,8 @@ function summarizeProviderScenarioFlagCoverage(files) {
     ['retainPaths', 'retained install-source materialization'],
     ['retentionMs', 'install-source materialization TTL'],
     ['count', 'repeated press/click/swipe input'],
+    ['pointX', 'point inspection horizontal coordinate'],
+    ['pointY', 'point inspection vertical coordinate'],
     ['pointerCount', 'one- vs two-pointer pan gesture topology'],
     ['fps', 'recording frame-rate request'],
     ['quality', 'recording quality scaling'],
@@ -200,12 +202,216 @@ function summarizeProviderScenarioFlagCoverage(files) {
   ];
   const sources = files.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
   return flagTargets.map(([key, reason, aliases = []]) => {
-    const references = [key, ...aliases].reduce(
-      (count, candidate) => count + countFlagReferences(sources, candidate),
-      0,
-    );
+    // inspect-point takes x/y as positional arguments, unlike the named
+    // workflow flags counted below. Attribute those coordinates only to an
+    // inspect-point provider scenario so an unrelated geometry literal cannot
+    // satisfy this coverage row.
+    const positionalCoordinate = key === 'pointX' ? 0 : key === 'pointY' ? 1 : null;
+    const references =
+      positionalCoordinate === null
+        ? [key, ...aliases].reduce(
+            (count, candidate) => count + countFlagReferences(sources, candidate),
+            0,
+          )
+        : countInspectPointCoordinateReferences(sources, positionalCoordinate);
     return { key, reason, references };
   });
+}
+
+export function countInspectPointCoordinateReferences(text, coordinateIndex) {
+  const code = maskScenarioStringsAndComments(text);
+  let count = 0;
+  const commandPattern = /\bcommand\s*:\s*(['"])inspect-point\1/g;
+  for (const match of text.matchAll(commandPattern)) {
+    const commandCodePrefix = match[0].slice(0, match[0].indexOf(match[1]));
+    if (code.slice(match.index, match.index + commandCodePrefix.length) !== commandCodePrefix) {
+      continue;
+    }
+
+    const openBrace = findEnclosingBrace(code, match.index);
+    if (openBrace < 0) continue;
+    const closeBrace = findMatchingDelimiter(code, openBrace, '{', '}');
+    if (closeBrace < 0) continue;
+    const positionals = findDirectArrayProperty(text, code, openBrace, closeBrace, 'positionals');
+    if (positionals !== undefined && countArrayTokens(text, code, positionals) > coordinateIndex) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function maskScenarioStringsAndComments(text) {
+  const chars = text.split('');
+  let index = 0;
+  while (index < chars.length) {
+    const end =
+      maskComment(chars, index) ?? maskRegex(chars, index) ?? maskQuotedText(chars, index);
+    if (end === null) {
+      index += 1;
+    } else {
+      index = end;
+    }
+  }
+  return chars.join('');
+}
+
+function maskComment(chars, index) {
+  if (chars[index] !== '/') return null;
+  if (chars[index + 1] === '/') return maskLineComment(chars, index);
+  if (chars[index + 1] === '*') return maskBlockComment(chars, index);
+  return null;
+}
+
+function maskLineComment(chars, index) {
+  while (index < chars.length && chars[index] !== '\n') chars[index++] = ' ';
+  return index;
+}
+
+function maskBlockComment(chars, index) {
+  chars[index++] = ' ';
+  chars[index++] = ' ';
+  while (index < chars.length && !(chars[index] === '*' && chars[index + 1] === '/')) {
+    if (chars[index] !== '\n') chars[index] = ' ';
+    index += 1;
+  }
+  return index < chars.length ? maskCommentEnd(chars, index) : index;
+}
+
+function maskCommentEnd(chars, index) {
+  chars[index++] = ' ';
+  chars[index++] = ' ';
+  return index;
+}
+
+function maskRegex(chars, index) {
+  if (chars[index] !== '/' || !beginsRegexLiteral(chars, index)) return null;
+  chars[index++] = ' ';
+  return scanRegexBody(chars, index);
+}
+
+function scanRegexBody(chars, index) {
+  let inCharacterClass = false;
+  while (index < chars.length && chars[index] !== '\n') {
+    const current = chars[index];
+    if (current === '\\') {
+      index = maskEscapedCharacter(chars, index);
+      continue;
+    }
+    inCharacterClass = updateCharacterClass(current, inCharacterClass);
+    if (current === '/' && !inCharacterClass) return maskRegexEnd(chars, index);
+    chars[index++] = ' ';
+  }
+  return index;
+}
+
+function updateCharacterClass(character, inCharacterClass) {
+  if (character === '[') return true;
+  if (character === ']') return false;
+  return inCharacterClass;
+}
+
+function maskEscapedCharacter(chars, index) {
+  chars[index++] = ' ';
+  if (index < chars.length && chars[index] !== '\n') chars[index++] = ' ';
+  return index;
+}
+
+function maskRegexEnd(chars, index) {
+  chars[index++] = ' ';
+  while (index < chars.length && /[a-z]/i.test(chars[index])) chars[index++] = ' ';
+  return index;
+}
+
+function maskQuotedText(chars, index) {
+  const quote = chars[index];
+  if (quote !== '"' && quote !== "'" && quote !== '`') return null;
+  chars[index++] = ' ';
+  while (index < chars.length && chars[index] !== quote) {
+    if (chars[index] === '\\') {
+      index = maskEscapedCharacter(chars, index);
+    } else {
+      if (chars[index] !== '\n') chars[index] = ' ';
+      index += 1;
+    }
+  }
+  return index < chars.length ? index + maskQuoteEnd(chars, index) : index;
+}
+
+function maskQuoteEnd(chars, index) {
+  chars[index] = ' ';
+  return 1;
+}
+
+function beginsRegexLiteral(chars, index) {
+  let previous = index - 1;
+  while (previous >= 0 && /\s/.test(chars[previous])) previous -= 1;
+  return previous < 0 || /[(:,=!?&|;{[>]/.test(chars[previous]);
+}
+
+function findEnclosingBrace(code, position) {
+  const stack = [];
+  for (let index = 0; index < position; index += 1) {
+    if (code[index] === '{') stack.push(index);
+    else if (code[index] === '}') stack.pop();
+  }
+  return stack.at(-1) ?? -1;
+}
+
+function findMatchingDelimiter(code, openIndex, open, close) {
+  let depth = 0;
+  for (let index = openIndex; index < code.length; index += 1) {
+    if (code[index] === open) depth += 1;
+    else if (code[index] === close && --depth === 0) return index;
+  }
+  return -1;
+}
+
+function findDirectArrayProperty(text, code, openBrace, closeBrace, name) {
+  const propertyPattern = new RegExp(`\\b${name}\\s*:\\s*\\[`, 'g');
+  const body = code.slice(openBrace + 1, closeBrace);
+  for (const match of body.matchAll(propertyPattern)) {
+    const position = openBrace + 1 + match.index;
+    if (!isTopLevelObjectPosition(code, openBrace, position)) continue;
+    const openBracket = position + match[0].lastIndexOf('[');
+    const closeBracket = findMatchingDelimiter(code, openBracket, '[', ']');
+    if (closeBracket >= 0 && closeBracket < closeBrace) return [openBracket, closeBracket];
+  }
+  return undefined;
+}
+
+function isTopLevelObjectPosition(code, openBrace, position) {
+  let depth = 0;
+  for (let index = openBrace + 1; index < position; index += 1) {
+    if (code[index] === '{' || code[index] === '[' || code[index] === '(') depth += 1;
+    else if (code[index] === '}' || code[index] === ']' || code[index] === ')') depth -= 1;
+  }
+  return depth === 0;
+}
+
+function countArrayTokens(text, code, [openBracket, closeBracket]) {
+  const tokens = [];
+  let start = openBracket + 1;
+  let depth = 0;
+  for (let index = start; index < closeBracket; index += 1) {
+    depth = updateDelimiterDepth(code[index], depth);
+    if (code[index] === ',' && depth === 0) {
+      tokens.push(text.slice(start, index));
+      start = index + 1;
+    }
+  }
+  tokens.push(text.slice(start, closeBracket));
+  return tokens.filter(isPresentArrayToken).length;
+}
+
+function updateDelimiterDepth(character, depth) {
+  if (character === '{' || character === '[' || character === '(') return depth + 1;
+  if (character === '}' || character === ']' || character === ')') return depth - 1;
+  return depth;
+}
+
+function isPresentArrayToken(token) {
+  const trimmed = token.trim();
+  return trimmed.length > 0 && trimmed !== "''" && trimmed !== '""';
 }
 
 function countFlagReferences(text, key) {

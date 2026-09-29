@@ -11,7 +11,10 @@ import type { ScreenRecordingRuntimeHost } from './screen-recording-runtime-host
 import type { ScreenRecordingRuntimeOperations } from './screen-recording-runtime.ts';
 import type { ScreenshotRuntimeOperations } from './screenshot-runtime.ts';
 import type { SnapshotRuntimeHost, SnapshotRuntimeOperations } from './snapshot-runtime.ts';
-import type { SelectorObservationRuntimeOperations } from './selector-observation-runtime.ts';
+import type {
+  PointInspectionRuntimeOperations,
+  SelectorObservationRuntimeOperations,
+} from './selector-observation-runtime.ts';
 import type { ViewportRuntimeOperations } from './viewport-runtime.ts';
 import type { FocusRuntimeOperations } from './focus-runtime.ts';
 import type { GestureCommandInput, GestureSemanticInput } from './gesture-plan-types.ts';
@@ -74,6 +77,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   ScrollRuntimeOperations &
   TypeTextRuntimeOperations &
   ElementTextRuntimeOperations &
+  PointInspectionRuntimeOperations &
   BackRuntimeOperations &
   OrientationRuntimeOperations &
   FoldRuntimeOperations &
@@ -108,6 +112,7 @@ export const captureSnapshotUse = defineUse({ required: ['captureSnapshot'] });
 export const viewportRuntimeUse = defineUse({ required: ['setViewport'] });
 export const focusRuntimeUse = defineUse({ required: ['focusPoint'] });
 export const typeTextRuntimeUse = defineUse({ required: ['typeText'] });
+export const inspectPointRuntimeUse = defineUse({ required: ['inspectPoint'] });
 export const backRuntimeUse = defineUse({ required: ['back'] });
 export const homeRuntimeUse = defineUse({ required: ['home'] });
 export const orientationRuntimeUse = defineUse({ required: ['setOrientation'] });

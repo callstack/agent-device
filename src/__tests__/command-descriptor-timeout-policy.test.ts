@@ -61,6 +61,8 @@ test('daemon-preserving timeout commands are a bounded, reviewed set', () => {
   // Interaction commands joined in #1105: their target resolution runs the
   // same capture as snapshot, and resetting the daemon on a wedged capture
   // destroyed healthy app sessions.
+  // inspect-point joins because its XCTest accessibility read has the same
+  // blocked-bridge failure mode and must not reset unrelated sessions.
   // scroll/back joined in #1638: `--settle` gives them the same post-action
   // capture loop, so a wedged bridge is now their dominant hang mode too.
   // The lease route joined in #1774: those commands act on BILLED provider
@@ -77,6 +79,7 @@ test('daemon-preserving timeout commands are a bounded, reviewed set', () => {
     'find',
     'get',
     'hover',
+    'inspect-point',
     'is',
     'lease_allocate',
     'lease_heartbeat',

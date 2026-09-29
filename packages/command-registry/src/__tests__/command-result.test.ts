@@ -143,6 +143,7 @@ test('CommandResultMap is seeded only from already-existing contract result type
     | 'test'
     | 'record'
     | 'trace'
+    | 'inspect-point'
   > = true;
   void keys;
 });

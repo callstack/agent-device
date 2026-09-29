@@ -320,46 +320,212 @@ extension RunnerTests {
   func readTextAt(app: XCUIApplication, x: Double, y: Double) -> String? {
     let point = CGPoint(x: x, y: y)
     let textInputCandidates = textInputCandidatesAt(app: app, point: point)
-    for element in textInputCandidates where prefersExpandedTextRead(element) {
-      if let text = readableText(for: element) {
-        return text
-      }
-    }
+    let candidates = app.descendants(matching: .any).allElementsBoundByIndex
+      .filter { $0.exists && !$0.frame.isEmpty && $0.frame.contains(point) }
+      .sorted(by: smallestElementFirst)
+    return firstReadableText(in: textInputCandidates, preferredOnly: true)
+      ?? firstReadableText(in: candidates, preferredOnly: true)
+      ?? firstReadableText(in: candidates, preferredOnly: false)
+  }
 
+  /// Keep live point text resolution identical for legacy `get text` and point inspection.
+  func firstReadableText(in elements: [XCUIElement], preferredOnly: Bool) -> String? {
+    for element in elements {
+      if preferredOnly && !prefersExpandedTextRead(element) { continue }
+      if let text = readableText(for: element) { return text }
+    }
+    return nil
+  }
+
+  func readPointAt(
+    app: XCUIApplication,
+    x: Double,
+    y: Double
+  ) -> (text: String?, elements: [PointInspectionElementPayload], complete: Bool) {
+#if os(iOS) && targetEnvironment(simulator)
+    // System-owned sheets can make XCTest's unbounded descendants query hold
+    // the main thread past the command watchdog. The Simulator-only private AX
+    // bridge supplies the bounded accessibility tree used by snapshot recovery;
+    // filter that tree at the requested point before touching the XCTest query.
+    if let inspection = privateAXPointInspection(app: app, x: x, y: y) {
+      return inspection
+    }
+#endif
+    let point = CGPoint(x: x, y: y)
+    let textInputCandidates = textInputCandidatesAt(app: app, point: point)
     let candidates = app.descendants(matching: .any).allElementsBoundByIndex
       .filter { element in
         element.exists && !element.frame.isEmpty && element.frame.contains(point)
       }
       .sorted(by: smallestElementFirst)
 
-    for element in candidates where prefersExpandedTextRead(element) {
-      if let text = readableText(for: element) {
-        return text
-      }
+    // Resolve the legacy text semantics before materializing inspection payloads.
+    let text = firstReadableText(in: textInputCandidates, preferredOnly: true)
+      ?? firstReadableText(in: candidates, preferredOnly: true)
+      ?? firstReadableText(in: candidates, preferredOnly: false)
+
+    let elements = Array(candidates.prefix(24)).map { element in
+      let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
+      let identifier = element.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+      let value = String(describing: element.value ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      return PointInspectionElementPayload(
+        text: readableText(for: element),
+        label: label.isEmpty ? nil : label,
+        identifier: identifier.isEmpty ? nil : identifier,
+        type: elementTypeName(element.elementType),
+        role: nil,
+        value: value.isEmpty ? nil : value,
+        frame: SnapshotRect(element.frame),
+        hittable: nil
+      )
     }
-    for element in candidates {
-      if let text = readableText(for: element) {
-        return text
-      }
-    }
-    return nil
+    return (text, elements, true)
   }
+
+#if os(iOS) && targetEnvironment(simulator)
+  func privateAXPointInspection(
+    app: XCUIApplication,
+    x: Double,
+    y: Double
+  ) -> (text: String?, elements: [PointInspectionElementPayload], complete: Bool)? {
+    let response = RunnerAXSnapshotBridge.snapshotTree(
+      for: app,
+      maxDepth: 56,
+      maxNodes: 5_000,
+      deepExtensionCallLimit: 4,
+      customActionLimit: 0,
+      deadline: Date().addingTimeInterval(8)
+    )
+    guard (response["ok"] as? NSNumber)?.boolValue == true,
+      let root = response["root"] as? [String: Any]
+    else {
+      return nil
+    }
+    let deepExtension = response[RunnerAXSnapshotDeepExtensionKey] as? [String: Any]
+    let completeDeepExtension: Bool
+    if let deepExtension {
+      if let pending = deepExtension[RunnerAXSnapshotDeepExtensionPendingKey] as? Int,
+        let missed = deepExtension[RunnerAXSnapshotDeepExtensionMissedKey] as? Int
+      {
+        let blocked = deepExtension[RunnerAXSnapshotDeepExtensionBlockedKey] as? Int ?? 0
+        completeDeepExtension = pending == 0 && missed == 0 && blocked == 0
+      } else {
+        completeDeepExtension = false
+      }
+    } else {
+      // The bridge omits this field only when the initial tree had no capped
+      // frontiers to extend.
+      completeDeepExtension = true
+    }
+    return privateAXPointInspection(
+      root: root,
+      point: CGPoint(x: x, y: y),
+      truncated: (response["truncated"] as? NSNumber)?.boolValue == true,
+      completeDeepExtension: completeDeepExtension
+    )
+  }
+
+  func privateAXPointInspection(
+    root: [String: Any],
+    point: CGPoint,
+    truncated: Bool = false,
+    completeDeepExtension: Bool = true
+  ) -> (text: String?, elements: [PointInspectionElementPayload], complete: Bool) {
+    guard !truncated && completeDeepExtension else { return (nil, [], false) }
+    var candidates: [(payload: PointInspectionElementPayload, area: CGFloat)] = []
+
+    func visit(_ raw: [String: Any]) {
+      let frame = privateAXRect(raw["frame"])
+      if !frame.isEmpty && frame.contains(point) {
+        let fields = privateAXFields(raw)
+        let rawType = fields.rawType
+        // The private tree includes the owning application at the full screen
+        // frame. Its label is the app name, not a control under the point, so
+        // returning it can make point-based system-UI probes tap a false match.
+        if rawType == XCUIElement.ElementType.application.rawValue {
+          for child in raw["children"] as? [[String: Any]] ?? [] {
+            visit(child)
+          }
+          return
+        }
+        let type = fields.elementType.map(elementTypeName) ?? "Element(\(rawType))"
+        let label = fields.label.isEmpty ? nil : fields.label
+        let identifier = fields.identifier.isEmpty ? nil : fields.identifier
+        let value = fields.value.isEmpty ? nil : fields.value
+        let text = pointReadableText(
+          type: type,
+          label: label,
+          identifier: identifier,
+          value: value
+        )
+        candidates.append((
+          PointInspectionElementPayload(
+            text: text,
+            label: label,
+            identifier: identifier,
+            type: type,
+            role: nil,
+            value: value,
+            frame: SnapshotRect(frame),
+            hittable: nil
+          ),
+          max(1, frame.width * frame.height)
+        ))
+      }
+      for child in raw["children"] as? [[String: Any]] ?? [] {
+        visit(child)
+      }
+    }
+
+    visit(root)
+    let orderedCandidates = candidates
+      .sorted { left, right in
+        if left.area != right.area { return left.area < right.area }
+        if left.payload.frame.y != right.payload.frame.y {
+          return left.payload.frame.y < right.payload.frame.y
+        }
+        if left.payload.frame.x != right.payload.frame.x {
+          return left.payload.frame.x < right.payload.frame.x
+        }
+        return (left.payload.type ?? "") < (right.payload.type ?? "")
+      }
+    let textInputTypes: Set<String> = ["TextField", "SecureTextField", "SearchField", "TextView"]
+    // Keep text resolution independent of the bounded descriptor response.
+    // A large accessibility surface can have more than 24 smaller controls at
+    // one point while the underlying text input still owns the correct value.
+    let text = orderedCandidates.first(where: {
+      textInputTypes.contains($0.payload.type ?? "") && $0.payload.text != nil
+    })?.payload.text
+      ?? orderedCandidates.compactMap { $0.payload.text }.first
+    let elements = orderedCandidates.prefix(24).map(\.payload)
+    return (text, elements, true)
+  }
+
+  func pointReadableText(
+    type: String,
+    label: String?,
+    identifier: String?,
+    value: String?
+  ) -> String? {
+    if ["TextField", "SecureTextField", "SearchField", "TextView"].contains(type) {
+      return value ?? label ?? identifier
+    }
+    return label ?? value ?? identifier
+  }
+#endif
 
   private func readableText(for element: XCUIElement) -> String? {
     let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
     let identifier = element.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
     let valueText = String(describing: element.value ?? "")
       .trimmingCharacters(in: .whitespacesAndNewlines)
-    switch element.elementType {
-    case .textField, .secureTextField, .searchField, .textView:
-      if !valueText.isEmpty { return valueText }
-      if !label.isEmpty { return label }
-      return identifier.isEmpty ? nil : identifier
-    default:
-      if !label.isEmpty { return label }
-      if !valueText.isEmpty { return valueText }
-      return identifier.isEmpty ? nil : identifier
-    }
+    return pointReadableText(
+      type: elementTypeName(element.elementType),
+      label: label.isEmpty ? nil : label,
+      identifier: identifier.isEmpty ? nil : identifier,
+      value: valueText.isEmpty ? nil : valueText
+    )
   }
 
   private func prefersExpandedTextRead(_ element: XCUIElement) -> Bool {

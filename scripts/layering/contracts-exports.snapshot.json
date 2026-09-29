@@ -85,6 +85,7 @@
   "@agent-device/contracts/platform-runtime-host",
   "@agent-device/contracts/platform-runtime-operations",
   "@agent-device/contracts/platform-runtime-unavailable",
+  "@agent-device/contracts/point-inspection-runtime",
   "@agent-device/contracts/progress",
   "@agent-device/contracts/react-native-overlay",
   "@agent-device/contracts/record-runtime-execution",

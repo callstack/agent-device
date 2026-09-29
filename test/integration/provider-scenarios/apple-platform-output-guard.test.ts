@@ -74,6 +74,7 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
   [PUBLIC_COMMANDS.boot]: () => one(),
   [PUBLIC_COMMANDS.prepare]: () => one(['ios-runner']),
   [PUBLIC_COMMANDS.snapshot]: () => one([], { snapshotInteractiveOnly: true }),
+  [PUBLIC_COMMANDS['inspect-point']]: () => one(['10', '10']),
   [PUBLIC_COMMANDS.perf]: () => [{ positionals: [] }, { positionals: ['frames'] }],
   [PUBLIC_COMMANDS.record]: ({ world, tmpDir }) =>
     world === 'ios'
@@ -142,11 +143,9 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
 
 // ---------------------------------------------------------------------------
 // SKIPPED_COMMANDS — catalog commands that genuinely cannot be driven against the
-// fake-provider harness, each with a reason. Intentionally EMPTY: every public
-// command is driveable here (an orchestrator with no real workload simply returns a
-// fast, still-scanned error response). Kept as an explicit, enforced set so a future
-// undriveable command has a home and the partition test keeps a new command from
-// escaping the guard silently.
+// fake-provider harness, each with a reason. Kept as an explicit, enforced set so a future
+// undriveable command has a home and the partition test keeps a new command from escaping the
+// guard silently.
 // ---------------------------------------------------------------------------
 const SKIPPED_COMMANDS: Record<string, string> = {};
 
@@ -248,6 +247,8 @@ function permissiveRunner(): AppleRunnerProvider {
           return { found: true, nodes: [richNodes()[2]] };
         case 'findText':
           return { found: true };
+        case 'readText':
+          return command.inspectPoint === true ? { elements: [] } : { done: true };
         default:
           return { done: true };
       }

@@ -2,6 +2,7 @@ import type {
   DiffSnapshotCommandResult,
   ViewportCommandResult,
 } from '@agent-device/contracts/capture';
+import type { PointInspectionResult } from '@agent-device/contracts/client';
 import type { PrepareCommandResult, PushCommandResult } from '@agent-device/contracts/command';
 import type {
   AppStateCommandResult,
@@ -72,6 +73,7 @@ export interface CommandResultMap {
   fold: FoldCommandResult;
   home: HomeCommandResult;
   hover: HoverCommandResponseData;
+  'inspect-point': PointInspectionResult;
   keyboard: KeyboardCommandResult;
   longpress: LongPressCommandResponseData;
   orientation: OrientationCommandResult;

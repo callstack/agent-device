@@ -371,9 +371,15 @@ agent-device close
 ```bash
 agent-device snapshot [--diff] [-i] [--depth, -d <depth>] [--scope, -s <scope>] [--raw] [--actions] [--force-full] [--timeout <ms>]
 agent-device diff snapshot [-i] [-d <depth>] [-s <scope>] [--raw]
+agent-device inspect-point --x <x> --y <y>
 agent-device get text @e1
 agent-device get attrs @e1
 ```
+
+- `inspect-point` is available on iOS Simulator sessions. It returns a bounded list of the
+  accessibility elements containing the coordinate, ordered from the smallest frame to the largest.
+  An honest miss returns `no-element-at-point`; transport and runner failures still fail the command.
+  Inspection identifies a candidate target but is not itself a behavioral assertion.
 
 - iOS snapshots use XCTest on simulators and physical devices. iOS `--raw` is the acquired tree on
   whichever backend serves the capture: it keeps offscreen nodes, decorations, and structural

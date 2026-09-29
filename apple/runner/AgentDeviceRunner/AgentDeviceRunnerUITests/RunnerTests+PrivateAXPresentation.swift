@@ -46,7 +46,7 @@ extension RunnerTests {
     }
   }
 
-  private func privateAXFields(_ raw: [String: Any]) -> PrivateAXFields {
+  func privateAXFields(_ raw: [String: Any]) -> PrivateAXFields {
     let rawType = privateAXPresentationInt(raw["type"]) ?? 0
     return PrivateAXFields(
       rect: privateAXRect(raw["frame"]),
@@ -80,7 +80,7 @@ extension RunnerTests {
       actions: fields.actions)
   }
 
-  private func privateAXPresentationString(_ value: Any?) -> String {
+  func privateAXPresentationString(_ value: Any?) -> String {
     guard let value else { return "" }
     return (value as? String ?? String(describing: value))
       .trimmingCharacters(in: .whitespacesAndNewlines)

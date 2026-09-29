@@ -69,6 +69,7 @@ export const RUNTIME_OPERATION_NAMES = [
   'readClipboard',
   'readSetting',
   'readTextAtPoint',
+  'inspectPoint',
   'resolveOpenTarget',
   'screenRecordingCleanup',
   'screenRecordingReattach',

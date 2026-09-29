@@ -23,5 +23,207 @@ extension RunnerTests {
     XCTAssertEqual(events.count, 1)
     XCTAssertEqual(events.first?.vertical, -200)
   }
+
+#if os(iOS) && targetEnvironment(simulator)
+  func testPrivateAXPointInspectionReturnsContainingElementsSmallestFirst() {
+    let root: [String: Any] = [
+      "type": NSNumber(value: XCUIElement.ElementType.window.rawValue),
+      "label": "",
+      "identifier": "root",
+      "value": "",
+      "frame": ["x": 0, "y": 0, "width": 400, "height": 800],
+      "children": [[
+        "type": NSNumber(value: XCUIElement.ElementType.button.rawValue),
+        "label": "Native Action",
+        "identifier": "native-action",
+        "value": "",
+        "frame": ["x": 100, "y": 500, "width": 200, "height": 48],
+        "children": [],
+      ]],
+    ]
+
+    let inspection = privateAXPointInspection(root: root, point: CGPoint(x: 200, y: 520))
+
+    XCTAssertEqual(inspection.text, "Native Action")
+    XCTAssertEqual(inspection.elements.count, 2)
+    XCTAssertEqual(inspection.elements.first?.identifier, "native-action")
+    XCTAssertEqual(inspection.elements.last?.identifier, "root")
+    XCTAssertEqual(inspection.elements.first?.frame, SnapshotRect(x: 100, y: 500, width: 200, height: 48))
+    XCTAssertNil(inspection.elements.first?.hittable)
+  }
+
+  func testPrivateAXPointInspectionPrefersTextInputValueAndDescribesNumericValues() {
+    let root: [String: Any] = [
+      "type": NSNumber(value: XCUIElement.ElementType.window.rawValue),
+      "label": "",
+      "identifier": "root",
+      "value": "",
+      "frame": ["x": 0, "y": 0, "width": 400, "height": 800],
+      "children": [[
+        "type": NSNumber(value: XCUIElement.ElementType.textField.rawValue),
+        "label": "Search",
+        "identifier": "search-field",
+        "value": "long live field value",
+        "frame": ["x": 100, "y": 500, "width": 200, "height": 48],
+        "children": [[
+          "type": NSNumber(value: XCUIElement.ElementType.button.rawValue),
+          "label": "Clear",
+          "identifier": "clear-button",
+          "value": "",
+          "frame": ["x": 250, "y": 510, "width": 24, "height": 24],
+          "children": [],
+        ]],
+      ], [
+        "type": NSNumber(value: XCUIElement.ElementType.switch.rawValue),
+        "label": "Enabled",
+        "identifier": "enabled-switch",
+        "value": NSNumber(value: 1),
+        "frame": ["x": 255, "y": 515, "width": 10, "height": 10],
+        "children": [],
+      ]],
+    ]
+
+    let inspection = privateAXPointInspection(root: root, point: CGPoint(x: 260, y: 520))
+
+    XCTAssertEqual(inspection.text, "long live field value")
+    XCTAssertEqual(inspection.elements.first?.identifier, "enabled-switch")
+    XCTAssertTrue(inspection.elements.contains { $0.identifier == "clear-button" })
+    XCTAssertEqual(inspection.elements.last(where: { $0.identifier == "enabled-switch" })?.value, "1")
+  }
+
+  func testPrivateAXPointTextResolutionIsNotLimitedByDescriptorCap() {
+    let smallerControls: [[String: Any]] = (0..<30).map { index in
+      [
+        "type": NSNumber(value: XCUIElement.ElementType.button.rawValue),
+        "label": "Control \(index)",
+        "identifier": "control-\(index)",
+        "value": "",
+        "frame": ["x": 200, "y": 200, "width": 10, "height": 10],
+        "children": [],
+      ]
+    }
+    let field: [String: Any] = [
+      "type": NSNumber(value: XCUIElement.ElementType.textField.rawValue),
+      "label": "Full name",
+      "identifier": "full-name",
+      "value": "Alexandria Alexandra",
+      "frame": ["x": 100, "y": 180, "width": 200, "height": 40],
+      "children": [],
+    ]
+    let root: [String: Any] = [
+      "type": NSNumber(value: XCUIElement.ElementType.window.rawValue),
+      "label": "",
+      "identifier": "root",
+      "value": "",
+      "frame": ["x": 0, "y": 0, "width": 400, "height": 800],
+      "children": smallerControls + [field],
+    ]
+
+    let inspection = privateAXPointInspection(root: root, point: CGPoint(x: 205, y: 205))
+
+    XCTAssertTrue(inspection.complete)
+    XCTAssertEqual(inspection.elements.count, 24)
+    XCTAssertFalse(inspection.elements.contains { $0.identifier == "full-name" })
+    XCTAssertEqual(inspection.text, "Alexandria Alexandra")
+  }
+
+  func testPointTextPolicyIsSharedAcrossXCTestAndPrivateAXDescriptors() {
+    let cases: [(String, String?, String?, String?, String?)] = [
+      ("TextField", "Name", "name-field", "Alexandra", "Alexandra"),
+      ("SecureTextField", "Password", "password-field", "secret", "secret"),
+      ("Button", "Continue", "continue-button", "enabled", "Continue"),
+      ("Switch", nil, "enabled-switch", "1", "1"),
+    ]
+
+    for (type, label, identifier, value, expected) in cases {
+      XCTAssertEqual(
+        pointReadableText(type: type, label: label, identifier: identifier, value: value),
+        expected,
+        "Expected shared text policy for \(type)"
+      )
+    }
+  }
+
+  func testPrivateAXPointInspectionReturnsNoElementForHonestMiss() {
+    let root: [String: Any] = [
+      "type": NSNumber(value: XCUIElement.ElementType.window.rawValue),
+      "label": "Root",
+      "identifier": "root",
+      "value": "",
+      "frame": ["x": 0, "y": 0, "width": 100, "height": 100],
+      "children": [],
+    ]
+
+    let inspection = privateAXPointInspection(root: root, point: CGPoint(x: 200, y: 200))
+
+    XCTAssertNil(inspection.text)
+    XCTAssertTrue(inspection.elements.isEmpty)
+  }
+
+  func testPrivateAXPointInspectionDoesNotReportMissForTruncatedCapture() {
+    let root: [String: Any] = [
+      "type": NSNumber(value: XCUIElement.ElementType.window.rawValue),
+      "label": "Root",
+      "identifier": "root",
+      "value": "",
+      "frame": ["x": 0, "y": 0, "width": 100, "height": 100],
+      "children": [],
+    ]
+
+    let inspection = privateAXPointInspection(
+      root: root,
+      point: CGPoint(x: 200, y: 200),
+      truncated: true
+    )
+
+    XCTAssertFalse(inspection.complete)
+    XCTAssertNil(inspection.text)
+    XCTAssertTrue(inspection.elements.isEmpty)
+  }
+
+  func testPrivateAXPointInspectionDoesNotReportMissForIncompleteDeepExtension() {
+    let root: [String: Any] = [
+      "type": NSNumber(value: XCUIElement.ElementType.window.rawValue),
+      "label": "Root",
+      "identifier": "root",
+      "value": "",
+      "frame": ["x": 0, "y": 0, "width": 100, "height": 100],
+      "children": [],
+    ]
+
+    let inspection = privateAXPointInspection(
+      root: root,
+      point: CGPoint(x: 200, y: 200),
+      completeDeepExtension: false
+    )
+
+    XCTAssertFalse(inspection.complete)
+    XCTAssertNil(inspection.text)
+    XCTAssertTrue(inspection.elements.isEmpty)
+  }
+
+  func testPrivateAXPointInspectionOmitsOwningApplicationLabel() {
+    let root: [String: Any] = [
+      "type": NSNumber(value: XCUIElement.ElementType.application.rawValue),
+      "label": "ET N Action",
+      "identifier": "com.expotargets.example.native.action",
+      "value": "",
+      "frame": ["x": 0, "y": 0, "width": 400, "height": 800],
+      "children": [[
+        "type": NSNumber(value: XCUIElement.ElementType.window.rawValue),
+        "label": "Share Sheet",
+        "identifier": "share-sheet",
+        "value": "",
+        "frame": ["x": 0, "y": 400, "width": 400, "height": 400],
+        "children": [],
+      ]],
+    ]
+
+    let inspection = privateAXPointInspection(root: root, point: CGPoint(x: 200, y: 520))
+
+    XCTAssertEqual(inspection.text, "Share Sheet")
+    XCTAssertFalse(inspection.elements.contains { $0.label == "ET N Action" })
+  }
+#endif
 }
 #endif

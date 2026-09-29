@@ -1167,12 +1167,7 @@ function createStubClient(params: {
   const command = createThrowingMethodGroup<AgentDeviceClient['command']>();
   return {
     command,
-    devices: {
-      list: async () => [],
-      capabilities: unexpectedCommandCall,
-      boot: unexpectedCommandCall,
-      shutdown: unexpectedCommandCall,
-    },
+    devices: createThrowingMethodGroup<AgentDeviceClient['devices']>({ list: async () => [] }),
     sessions: {
       list: async () => [],
       stateDir: async () => '/tmp/agent-device-state',
@@ -1250,7 +1245,7 @@ function createStubClient(params: {
           transport: 'http' as const,
         })),
     },
-    capture: {
+    capture: createThrowingMethodGroup<AgentDeviceClient['capture']>({
       snapshot: async () => ({
         nodes: [],
         truncated: false,
@@ -1262,15 +1257,13 @@ function createStubClient(params: {
           path: '/tmp/screenshot.png',
           identifiers: { session: 'default' },
         })),
-      diff: unexpectedCommandCall,
-    },
+    }),
     interactions: createThrowingMethodGroup<AgentDeviceClient['interactions']>(),
     replay: createThrowingMethodGroup<AgentDeviceClient['replay']>(),
     batch: createThrowingMethodGroup<AgentDeviceClient['batch']>(),
-    observability: {
-      ...createThrowingMethodGroup<AgentDeviceClient['observability']>(),
+    observability: createThrowingMethodGroup<AgentDeviceClient['observability']>({
       events: params.events ?? unexpectedCommandCall,
-    },
+    }),
     debug: createThrowingMethodGroup<AgentDeviceClient['debug']>(),
     recording: createThrowingMethodGroup<AgentDeviceClient['recording']>(),
     settings: {
@@ -1279,11 +1272,11 @@ function createStubClient(params: {
   };
 }
 
-function createThrowingMethodGroup<T extends object>(): T {
+function createThrowingMethodGroup<T extends object>(methods: Partial<T> = {}): T {
   const unexpectedCommandCall = async (): Promise<never> => {
     throw new Error('unexpected command call');
   };
-  return new Proxy({} as Partial<T>, {
+  return new Proxy(methods, {
     get: (target, property) => target[property as keyof T] ?? unexpectedCommandCall,
   }) as T;
 }

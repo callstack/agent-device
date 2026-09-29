@@ -188,6 +188,10 @@
       "types": "./src/element-text-runtime.ts",
       "default": "./src/element-text-runtime.ts"
     },
+    "./point-inspection-runtime": {
+      "types": "./src/point-inspection-runtime.ts",
+      "default": "./src/point-inspection-runtime.ts"
+    },
     "./fill-evidence": {
       "types": "./src/fill-evidence.ts",
       "default": "./src/fill-evidence.ts"
