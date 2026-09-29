@@ -293,6 +293,8 @@ async function assertRestartProbeFailureReportsUnavailable(
       return true;
     });
     assert.equal(rpcCount, 1);
+    // A closed listener cannot count the probe; its attempt is proven by elimination: a skipped
+    // probe would exhaust the budget and report daemon_transport_timeout, which the error check rejects.
     if (failure !== 'refused-connection') assert.equal(healthProbes, 1);
   } finally {
     await closeLoopbackServer(server);
