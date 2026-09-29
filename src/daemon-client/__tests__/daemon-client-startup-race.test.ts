@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import path from 'node:path';
-import { afterEach, test, vi } from 'vitest';
+import { afterEach, beforeAll, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
@@ -33,8 +32,8 @@ import { resolveDaemonPaths, type DaemonPaths } from '../../daemon-resolution.ts
 import { sendToDaemon } from '../daemon-client.ts';
 import { runCmdDetachedMonitored, type ExecDetachedExit } from '@agent-device/host-kit/command';
 import { sleep } from '@agent-device/host-kit/retry';
-import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
-import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
+import { readVersion } from '@agent-device/host-kit/version';
+import { resolveLocalDaemonCodeIdentity } from '../daemon-launch-spec.ts';
 import {
   startHttpDaemonFixture,
   type HttpDaemonFixture,
@@ -58,16 +57,13 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-/** The code signature this client expects of a daemon it may reuse. */
-function currentDaemonCodeSignature(): string {
-  const root = findProjectRoot();
-  const distPath = path.join(root, 'dist', 'src', 'internal', 'daemon.js');
-  const entryPath =
-    process.execArgv.includes('--experimental-strip-types') || !fs.existsSync(distPath)
-      ? path.join(root, 'src', 'daemon.ts')
-      : distPath;
-  return computeDaemonCodeSignature(entryPath, root);
-}
+/** The code signature this client stamps on, and expects of, a daemon it may reuse. */
+let codeSignature: string | undefined;
+
+beforeAll(async () => {
+  const identity = await resolveLocalDaemonCodeIdentity();
+  codeSignature = identity.origin === 'installed' ? undefined : identity.codeSignature;
+});
 
 /** Records the winning daemon the way it would: the startup lock, then its reachable metadata. */
 function writeWinner(
@@ -88,7 +84,7 @@ function writeWinner(
       token: 'winner-secret',
       pid: WINNER_PID,
       version,
-      codeSignature: currentDaemonCodeSignature(),
+      codeSignature,
       processStartTime: 'winner',
       httpPort: fixture.port,
       transport: 'http',
