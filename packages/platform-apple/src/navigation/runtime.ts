@@ -8,6 +8,7 @@ import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/syste
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import {
   hasAppleActionButton,
+  isHandheldAppleSimulator,
   isTvOsDevice,
   resolveDeviceAppleOs,
   type DeviceInfo,
@@ -147,6 +148,20 @@ const actionButtonOsUnavailable = Object.freeze({
   reason: 'unsupported-platform-leaf',
   hint: 'The Action Button is iPhone and iPad hardware; tvOS, macOS, watchOS and visionOS have no such control.',
 } as const);
+const screenLockKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'screen-lock is supported only on iPhone and iPad Simulators.',
+} as const);
+const screenLockOsUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'screen-lock is an iPhone and iPad Simulator operation; physical devices, tvOS, macOS, watchOS and visionOS are unsupported.',
+} as const);
+function appleScreenLockFact(device: DeviceInfo): RuntimeOperationFact {
+  if (device.kind !== 'simulator') return screenLockKindUnavailable;
+  return isHandheldAppleSimulator(device) ? available : screenLockOsUnavailable;
+}
 /**
  * The leaf reading is {@link hasAppleActionButton}, the same rule a provider owner reads; what this
  * owner adds is its kind gate. The leaf is the whole claim: which model inside it carries the button
@@ -171,6 +186,7 @@ export function appleNavigationFacts(device: DeviceInfo) {
       home: appleSpringboardFact(device, homeKindUnavailable),
       appSwitcher: appleSpringboardFact(device, appSwitcherKindUnavailable),
       actionButton: appleActionButtonFact(device),
+      screenLock: appleScreenLockFact(device),
     }),
     ...orientationRuntimeOperationFacts({ orientation: appleOrientationFact(device) }),
     ...tvRemoteRuntimeOperationFacts({ tvRemote: appleTvRemoteFact(device) }),

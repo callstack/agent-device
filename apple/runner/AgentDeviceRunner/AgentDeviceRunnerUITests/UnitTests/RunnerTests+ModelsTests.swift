@@ -199,7 +199,7 @@ extension RunnerTests {
 
   /// Commands that did not exist at the merge-base, so no classification of its is compared with
   /// theirs. `appState` arrived with #2929.
-  private static let commandsNewerThanTheMergeBase: Set<CommandType> = [.appState]
+  private static let commandsNewerThanTheMergeBase: Set<CommandType> = [.appState, .screenLock]
 
   /// The commands production never runs through the prepared path's body: `executeOnMain` answers
   /// these before `executeOnMainPrepared` runs, and `executeDispatched` answers `snapshot` earlier
@@ -268,6 +268,10 @@ extension RunnerTests {
       (
         .actionButton,
         expectation(interaction: false, retry: false, launch: .presentedSurface, converts: true)
+      ),
+      (
+        .screenLock,
+        expectation(interaction: false, retry: false, launch: .noApp, converts: true)
       ),
       (.keyboardDismiss, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),
       (.keyboardReturn, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),

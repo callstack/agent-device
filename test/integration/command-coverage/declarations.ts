@@ -18,6 +18,7 @@ import {
   ANDROID_APPLICATION_LIFECYCLE_CONTRACT_EVIDENCE,
   ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_HOVER_RUNTIME_CONTRACT_EVIDENCE,
+  ANDROID_SCREEN_LOCK_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_TV_REMOTE_RUNTIME_CONTRACT_EVIDENCE,
   ANDROID_VIEWPORT_RUNTIME_CONTRACT_EVIDENCE,
   APPLE_ACTION_BUTTON_FACT_EVIDENCE,
@@ -1102,6 +1103,37 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       LINUX_PROVIDER_EVIDENCE.path,
       LINUX_PROVIDER_EVIDENCE.test,
       'Linux provider scenario dispatches Super+D through the semantic input provider',
+    ),
+  },
+  [C.screenLock]: {
+    androidEmulator: androidEmulator.contract(
+      ANDROID_SCREEN_LOCK_RUNTIME_CONTRACT_EVIDENCE,
+      'the Android runtime refuses screen-lock before dispatch on every target kind',
+    ),
+    iosSimulator: iosSimulator.contract(
+      APPLE_NAVIGATION_FACTS_EVIDENCE.path,
+      APPLE_NAVIGATION_FACTS_EVIDENCE.test,
+      'the exact-owner runtime fact admits screen-lock only on the iOS/iPadOS simulator leaf',
+    ),
+    macos: macos.contract(
+      APPLE_NAVIGATION_FACTS_EVIDENCE.path,
+      APPLE_NAVIGATION_FACTS_EVIDENCE.test,
+      'the exact-owner runtime fact refuses screen-lock on macOS',
+    ),
+    tvos: tvos.contract(
+      APPLE_NAVIGATION_FACTS_EVIDENCE.path,
+      APPLE_NAVIGATION_FACTS_EVIDENCE.test,
+      'the exact-owner runtime fact refuses screen-lock on tvOS',
+    ),
+    web: web.contract(
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.path,
+      WEB_SYSTEM_SURFACE_DENIAL_EVIDENCE.test,
+      'the exact-owner runtime fact refuses screen-lock on web targets',
+    ),
+    linux: linux.contract(
+      LINUX_RUNTIME_EVIDENCE.path,
+      LINUX_RUNTIME_EVIDENCE.test,
+      'the exact-owner runtime fact refuses screen-lock on Linux targets',
     ),
   },
   [C.tvRemote]: {

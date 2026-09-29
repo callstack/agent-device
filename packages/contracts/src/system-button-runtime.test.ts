@@ -22,11 +22,13 @@ test('an omitted button reports the family denial, a named one its own cell', ()
     home: available,
     appSwitcher: unsupported,
     actionButton: unsupported,
+    screenLock: unsupported,
   });
   expect(systemButtonRuntimeOperationFacts({ unsupported })).toEqual({
     home: unsupported,
     appSwitcher: unsupported,
     actionButton: unsupported,
+    screenLock: unsupported,
   });
 });
 

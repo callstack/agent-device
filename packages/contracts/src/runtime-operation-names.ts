@@ -8,6 +8,7 @@
 export const RUNTIME_OPERATION_NAMES = [
   'acceptAlert',
   'actionButton',
+  'screenLock',
   'appLogCleanup',
   'appLogDoctor',
   'appLogInspect',

@@ -149,6 +149,8 @@ export function createAgentDeviceClient(
         await executeCommand<CommandResult<'app-switcher'>>('app-switcher', options),
       actionButton: async (options = {}) =>
         await executeCommand<CommandResult<'action-button'>>('action-button', options),
+      screenLock: async (options = {}) =>
+        await executeCommand<CommandResult<'screen-lock'>>('screen-lock', options),
       keyboard: async (options = {}) =>
         await executeCommand<CommandResult<'keyboard'>>('keyboard', options),
       clipboard: async (options) =>

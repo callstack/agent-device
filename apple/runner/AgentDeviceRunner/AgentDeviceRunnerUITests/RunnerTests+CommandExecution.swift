@@ -530,6 +530,8 @@ extension RunnerTests {
         )
       }
       return Response(ok: true, data: DataPayload(message: "actionButton"))
+    case .screenLock:
+      return executeScreenLockCommand()
     case .keyboardDismiss:
       let result = dismissKeyboard(app: activeApp)
       if result.wasVisible && !result.dismissed {

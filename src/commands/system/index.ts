@@ -56,6 +56,7 @@ const ORIENTATION_COMMAND_NAME = 'orientation';
 const FOLD_COMMAND_NAME = 'fold';
 const APP_SWITCHER_COMMAND_NAME = 'app-switcher';
 const ACTION_BUTTON_COMMAND_NAME = 'action-button';
+const SCREEN_LOCK_COMMAND_NAME = 'screen-lock';
 const KEYBOARD_COMMAND_NAME = 'keyboard';
 const CLIPBOARD_COMMAND_NAME = 'clipboard';
 const TV_REMOTE_COMMAND_NAME = 'tv-remote';
@@ -81,6 +82,8 @@ const clipboardCommandDescription =
   'Read the current device clipboard text, or replace its contents with the given text. Android runs both through the clipboard service shell command, and a build that implements none (Android 16 does not) refuses with UNSUPPORTED_OPERATION rather than reporting an empty clipboard.';
 const actionButtonCommandDescription =
   'Press the iPhone or iPad Action Button once. The press is dispatched without activating the session app and nothing is re-observed afterwards, so the app keeps the state the press found. What the system does with the press is not observed by this command: Simulators run no Shortcuts or App Intents, so delivery to an assigned Shortcut is verifiable only on a physical iPhone.';
+const screenLockCommandDescription =
+  'Transition an iPhone or iPad Simulator to its Lock Screen. The command is idempotent and returns only after SpringBoard reports the screen locked and exposes its Lock Screen date surface. This controls simulated screen state; it is unrelated to process mutexes, device claims, or runner leases.';
 const tvRemoteCommandDescription =
   'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields. The aliases ok, center, and enter all map to select.';
 
@@ -381,6 +384,18 @@ const actionButtonCommandFacet = defineParameterlessCommandFacet({
   cliOutputFormatter: systemCliOutputFormatters['action-button'],
 });
 
+const screenLockCommandFacet = defineParameterlessCommandFacet({
+  name: SCREEN_LOCK_COMMAND_NAME,
+  description: screenLockCommandDescription,
+  text: {
+    summary: 'Lock the iPhone or iPad Simulator screen',
+    cliDetail:
+      'Simulator-only. Success requires SpringBoard lock state and the Lock Screen date surface.',
+  },
+  run: (client, input) => client.command.screenLock(input),
+  cliOutputFormatter: systemCliOutputFormatters['screen-lock'],
+});
+
 const tvRemoteCommandFacet = defineCommandFacet({
   name: TV_REMOTE_COMMAND_NAME,
   text: {
@@ -405,6 +420,7 @@ export const systemCommandFamily = defineCommandFamilyFromFacets({
     foldCommandFacet,
     appSwitcherCommandFacet,
     actionButtonCommandFacet,
+    screenLockCommandFacet,
     keyboardCommandFacet,
     clipboardCommandFacet,
     tvRemoteCommandFacet,

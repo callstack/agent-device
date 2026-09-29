@@ -222,7 +222,7 @@ function expectAppleSnapshotAvailability(
 }
 
 test.each(Object.entries(leaves))(
-  'classifies back/home/app-switcher/orientation/tv-remote/keyboard facts for the %s leaf',
+  'classifies back/home/app-switcher/screen-lock/orientation/tv-remote/keyboard facts for the %s leaf',
   async (_name, device) => {
     const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
       device,
@@ -373,6 +373,18 @@ function expectNavigationAndKeyboardFacts(
   const springboard = device.appleOs !== 'macos' && device.appleOs !== 'watchos';
   expectOperationAvailability(binding, 'home', springboard);
   expectOperationAvailability(binding, 'appSwitcher', springboard);
+
+  // Screen locking is a simulator-only host transition on iPhone and iPad. Physical devices and
+  // every other Apple platform leaf must refuse it before runner dispatch.
+  const screenLock =
+    device.kind === 'simulator' && (device.appleOs === 'ios' || device.appleOs === 'ipados');
+  expectOperationAvailability(binding, 'screenLock', screenLock);
+  if (!screenLock) {
+    expect(binding.facts.operations.screenLock).toHaveProperty(
+      'reason',
+      device.kind === 'simulator' ? 'unsupported-platform-leaf' : 'unsupported-device-kind',
+    );
+  }
 
   // orientation and keyboard dismiss/enter share mobile-input eligibility: unavailable on tvOS
   // (focus-only XCUIRemote navigation), macOS (an AppKit desktop host), and watchOS.

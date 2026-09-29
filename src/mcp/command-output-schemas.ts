@@ -531,6 +531,14 @@ const BASE_COMMAND_OUTPUT_SCHEMAS = {
     'action',
     'message',
   ]),
+  'screen-lock': objectSchema(
+    {
+      action: constSchema('screen-lock'),
+      state: constSchema('locked'),
+      message: stringSchema(),
+    },
+    ['action', 'state', 'message'],
+  ),
   'tv-remote': objectSchema(
     {
       action: constSchema('tv-remote'),

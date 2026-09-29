@@ -398,6 +398,12 @@ export type Interactor = {
    * absent member as a successful no-op.
    */
   actionButton?(): Promise<void>;
+  /**
+   * Optional: transitions an iPhone/iPad Simulator to its Lock Screen and returns only after the
+   * runner observes SpringBoard's lock state. This is screen state, never a process or device
+   * ownership lock.
+   */
+  screenLock?(): Promise<void>;
   /** Optional: only Android implements a live status read (see {@link KeyboardStatusResult}). */
   keyboardStatus?(): Promise<KeyboardStatusResult>;
   /** Optional: platforms with no keyboard-dismiss concept leave it undefined. */

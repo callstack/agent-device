@@ -5,11 +5,12 @@ import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
 /**
  * The system buttons: one press each, no arguments, nothing returned. `home` and `appSwitcher`
- * reach a springboard or recents surface; `actionButton` presses iPhone/iPad hardware. What
+ * reach a springboard or recents surface; `actionButton` presses iPhone/iPad hardware; `screenLock`
+ * transitions a supported simulator to its verified Lock Screen. What
  * varies between them is which owners carry the control, and that is the fact table's job, not
  * a per-button module's: a button joins this list and its owners state a cell.
  */
-export const SYSTEM_BUTTONS = ['home', 'appSwitcher', 'actionButton'] as const;
+export const SYSTEM_BUTTONS = ['home', 'appSwitcher', 'actionButton', 'screenLock'] as const;
 
 export type SystemButton = (typeof SYSTEM_BUTTONS)[number];
 
@@ -18,6 +19,7 @@ export const SYSTEM_BUTTON_LABELS = {
   home: 'home',
   appSwitcher: 'app-switcher',
   actionButton: 'action-button',
+  screenLock: 'screen-lock',
 } as const satisfies Record<SystemButton, string>;
 
 /** Neutral intent for one press: no arguments, so only runner metadata travels. */
