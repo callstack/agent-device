@@ -44,6 +44,7 @@ private struct ConformanceOutput: Encodable {
   let name: String
   let outcome: String
   let nodes: [PresentedNode]
+  let qualityNodes: [PresentedNode]?
   let error: ConformanceError?
 }
 
@@ -93,25 +94,26 @@ private func present(_ input: ConformanceInput) -> ConformanceOutput {
   do {
     let inputAcquisition = acquisition(for: input)
     let inputOptions = options(for: input)
-    let nodes: [PresentedNode]
+    let result: SnapshotPresentationResult
     if input.projection == CaptureHint.Projection.raw.rawValue {
-      nodes = SnapshotPresentation.presentRaw(inputAcquisition, options: inputOptions).nodes
+      result = SnapshotPresentation.presentRaw(inputAcquisition, options: inputOptions)
     } else {
       let policy: SnapshotVisibilityFold.Policy = input.foldPolicy == "plain-viewport"
         ? .plainViewport
         : .cursorProjected
-      nodes = try SnapshotPresentation.presentRegular(
+      result = try SnapshotPresentation.presentRegular(
         inputAcquisition,
         options: inputOptions,
         policy: policy
-      ).nodes
+      )
     }
-    return ConformanceOutput(name: input.name, outcome: "success", nodes: nodes, error: nil)
+    return ConformanceOutput(name: input.name, outcome: "success", nodes: result.nodes, qualityNodes: result.qualityNodes, error: nil)
   } catch let failure as SnapshotPresentationFailure {
     return ConformanceOutput(
       name: input.name,
       outcome: "failure",
       nodes: [],
+      qualityNodes: nil,
       error: ConformanceError(
         code: failure.code,
         reason: reason(for: failure),
@@ -123,6 +125,7 @@ private func present(_ input: ConformanceInput) -> ConformanceOutput {
       name: input.name,
       outcome: "failure",
       nodes: [],
+      qualityNodes: nil,
       error: ConformanceError(
         code: "IOS_SNAPSHOT_PRESENTATION_FAILED",
         reason: "unexpected",

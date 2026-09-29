@@ -21,10 +21,13 @@ export async function launchCoreDeviceApp(
   bundleId: string,
   options: { payloadUrl?: string; launchArgs?: string[] } = {},
 ): Promise<void> {
-  const args = ['device', 'process', 'launch', '--device', device.id, bundleId];
+  const args = ['device', 'process', 'launch', '--device', device.id];
   if (options.payloadUrl) {
+    // `devicectl` treats everything after the bundle ID as app argv, so
+    // `--payload-url` must precede it to be honored as a launch option.
     args.push('--payload-url', options.payloadUrl);
   }
+  args.push(bundleId);
   if (options.launchArgs && options.launchArgs.length > 0) {
     // `devicectl` uses Swift ArgumentParser; preserve app-owned leading dashes.
     args.push('--', ...options.launchArgs);

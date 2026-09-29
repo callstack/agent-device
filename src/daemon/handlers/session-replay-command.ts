@@ -6,15 +6,17 @@ import { bindInternalObservationAuthority } from '../internal-observation.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { PlatformResourceCleanup } from '../platform-resource-cleanup.ts';
+import { runReplayCommand } from '@agent-device/replay-port/native-command';
+import { runReplayTestCommand } from '@agent-device/replay-port/test-command';
+import { bindReplaySession } from '@agent-device/replay-port/replay-session-binding';
 import {
-  bindReplaySession,
   replayInvokeOverDispatch,
-  runReplayCommand,
-  runReplayTestCommand,
   splitReplayCommandRequest,
-  type ReplayDaemonDependencies,
-  type ReplaySession,
-} from '../replay/index.ts';
+} from '@agent-device/replay-port/replay-dispatch-envelope';
+import type {
+  ReplayDaemonDependencies,
+  ReplaySession,
+} from '@agent-device/replay-port/command-types';
 import { createReplayCoordinator } from '../session-replay-coordinator.ts';
 import { assertSessionSelectorMatches } from '../session-selector.ts';
 import { resolveSessionScope } from '../session-routing.ts';

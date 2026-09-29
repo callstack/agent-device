@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type { DeviceLease } from '@agent-device/contracts/device';
+import { MIN_LEASE_WINDOW_MS } from '@agent-device/contracts/lease-scope';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { normalizeTenantId } from './config.ts';
@@ -84,7 +85,6 @@ export type NormalizedAllocateLeaseRequest = {
 };
 
 const DEFAULT_LEASE_TTL_MS = 60_000;
-const MIN_LEASE_TTL_MS = 5_000;
 const MAX_LEASE_TTL_MS = 10 * 60_000;
 const DEFAULT_LEASE_PROVIDER = 'default';
 
@@ -94,7 +94,7 @@ export function createLeaseTtlResolver(options: LeaseRegistryOptions) {
     : DEFAULT_LEASE_TTL_MS;
   const minTtl = Number.isInteger(options.minLeaseTtlMs)
     ? Math.max(1, Number(options.minLeaseTtlMs))
-    : MIN_LEASE_TTL_MS;
+    : MIN_LEASE_WINDOW_MS;
   const maxTtl = Number.isInteger(options.maxLeaseTtlMs)
     ? Math.max(minTtl, Number(options.maxLeaseTtlMs))
     : MAX_LEASE_TTL_MS;
@@ -326,6 +326,18 @@ export function createDeviceLease(
     heartbeatAt: now,
     expiresAt: now + leaseTtlMs,
   };
+}
+
+/**
+ * The inactivity window a lease is currently living on: whatever TTL it was last renewed for.
+ *
+ * Every renewal that is not asked to change the window uses this, so a renewal never quietly
+ * re-decides it. Reading the registry default instead would shorten a lease allocated with a longer
+ * one — and a caller that heartbeats without repeating the allocation's TTL is not asking for the
+ * default, it is asking for the same lease to keep going.
+ */
+export function leaseOwnTtlMs(lease: Pick<DeviceLease, 'expiresAt' | 'heartbeatAt'>): number {
+  return lease.expiresAt - lease.heartbeatAt;
 }
 
 export function deviceLeaseBusyError(activeLease: DeviceLease): AppError {

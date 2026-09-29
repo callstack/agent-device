@@ -98,6 +98,7 @@ export function handleRequestTimeout(
   return new AppError('COMMAND_FAILED', 'Daemon request timed out', {
     timeoutMs,
     requestId,
+    reason: 'daemon_transport_timeout',
     hint: resolveRequestTimeoutHint({
       remote,
       resetDaemon,

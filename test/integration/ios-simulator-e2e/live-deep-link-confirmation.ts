@@ -54,7 +54,7 @@ export function acceptDeepLinkConfirmationIfPresent(
 
 /**
  * A readable destination timeout can still leave the launch behind a system confirmation. Probe
- * once per miss until it is answered; a truncated or stalled capture then gets another bounded
+ * once per miss until it is answered; interrupted readiness or capture then gets another bounded
  * wait, while a readable wrong-route miss without a prompt goes to the caller's assertion.
  */
 export async function answerDeepLinkConfirmation(
@@ -71,9 +71,12 @@ export async function answerDeepLinkConfirmation(
     const reason = details?.reason;
     const readableMiss =
       reason === WAIT_REASONS.targetAbsent || reason === WAIT_REASONS.deadlineExceeded;
-    const interruptedCapture =
-      reason === WAIT_REASONS.captureStalled || reason === WAIT_REASONS.runnerRestartExhausted;
-    if (!launchPending && !readableMiss && !interruptedCapture) return;
+    const interruptedObservation =
+      reason === WAIT_REASONS.captureStalled ||
+      (reason === WAIT_REASONS.readinessExhausted &&
+        details?.readinessPhase === 'target-discovery') ||
+      reason === WAIT_REASONS.runnerRestartExhausted;
+    if (!launchPending && !readableMiss && !interruptedObservation) return;
     if (!answered) answered = await acceptOpenConfirmation(device);
     if (!answered && reason === WAIT_REASONS.targetAbsent) return;
   }

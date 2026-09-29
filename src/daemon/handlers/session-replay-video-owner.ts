@@ -4,7 +4,7 @@ import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/s
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DaemonRequest } from '../daemon-request.ts';
 import type { SessionStore } from '../session-store.ts';
-import type { ReplayTestVideoOwner } from '../replay/index.ts';
+import type { ReplayTestVideoOwner } from '@agent-device/replay-port/command-types';
 
 type ReplayRecordVideoRequest = Parameters<ReplayTestVideoOwner['record']>[0];
 

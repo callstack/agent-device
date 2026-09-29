@@ -6,13 +6,147 @@
   "type": "module",
   "description": "Daemon-side replay port: the adapter over the ad-replay, ad-script and replay-test engines.",
   "dependencies": {
+    "@agent-device/ad-replay": "workspace:*",
     "@agent-device/ad-script": "workspace:*",
-    "@agent-device/contracts": "workspace:*"
+    "@agent-device/capture-kit": "workspace:*",
+    "@agent-device/command-registry": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/device-selection": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/maestro": "workspace:*",
+    "@agent-device/replay-test": "workspace:*",
+    "@agent-device/selectors": "workspace:*",
+    "@agent-device/session-journal": "workspace:*"
   },
   "exports": {
+    "./command-types": {
+      "types": "./src/daemon-port/command-types.ts",
+      "default": "./src/daemon-port/command-types.ts"
+    },
+    "./native-command": {
+      "types": "./src/daemon-port/native-command.ts",
+      "default": "./src/daemon-port/native-command.ts"
+    },
+    "./repair-hint": {
+      "types": "./src/daemon-port/repair-hint.ts",
+      "default": "./src/daemon-port/repair-hint.ts"
+    },
+    "./replay-dispatch-envelope": {
+      "types": "./src/daemon-port/replay-dispatch-envelope.ts",
+      "default": "./src/daemon-port/replay-dispatch-envelope.ts"
+    },
+    "./replay-script-selection": {
+      "types": "./src/daemon-port/replay-script-selection.ts",
+      "default": "./src/daemon-port/replay-script-selection.ts"
+    },
+    "./replay-session-binding": {
+      "types": "./src/daemon-port/replay-session-binding.ts",
+      "default": "./src/daemon-port/replay-session-binding.ts"
+    },
+    "./script-source": {
+      "types": "./src/daemon-port/script-source.ts",
+      "default": "./src/daemon-port/script-source.ts"
+    },
+    "./session-replay-action-runtime": {
+      "types": "./src/daemon-port/session-replay-action-runtime.ts",
+      "default": "./src/daemon-port/session-replay-action-runtime.ts"
+    },
+    "./session-replay-divergence": {
+      "types": "./src/daemon-port/session-replay-divergence.ts",
+      "default": "./src/daemon-port/session-replay-divergence.ts"
+    },
+    "./session-replay-divergence-publication": {
+      "types": "./src/daemon-port/session-replay-divergence-publication.ts",
+      "default": "./src/daemon-port/session-replay-divergence-publication.ts"
+    },
+    "./session-replay-heal": {
+      "types": "./src/daemon-port/session-replay-heal.ts",
+      "default": "./src/daemon-port/session-replay-heal.ts"
+    },
+    "./session-replay-maestro-failure": {
+      "types": "./src/daemon-port/session-replay-maestro-failure.ts",
+      "default": "./src/daemon-port/session-replay-maestro-failure.ts"
+    },
+    "./session-replay-maestro-observer": {
+      "types": "./src/daemon-port/session-replay-maestro-observer.ts",
+      "default": "./src/daemon-port/session-replay-maestro-observer.ts"
+    },
+    "./session-replay-maestro-request": {
+      "types": "./src/daemon-port/session-replay-maestro-request.ts",
+      "default": "./src/daemon-port/session-replay-maestro-request.ts"
+    },
+    "./session-replay-maestro-runtime": {
+      "types": "./src/daemon-port/session-replay-maestro-runtime.ts",
+      "default": "./src/daemon-port/session-replay-maestro-runtime.ts"
+    },
+    "./session-replay-report-action": {
+      "types": "./src/daemon-port/session-replay-report-action.ts",
+      "default": "./src/daemon-port/session-replay-report-action.ts"
+    },
+    "./session-replay-resume": {
+      "types": "./src/daemon-port/session-replay-resume.ts",
+      "default": "./src/daemon-port/session-replay-resume.ts"
+    },
+    "./session-replay-runtime-artifacts": {
+      "types": "./src/daemon-port/session-replay-runtime-artifacts.ts",
+      "default": "./src/daemon-port/session-replay-runtime-artifacts.ts"
+    },
+    "./session-replay-runtime-failure-response": {
+      "types": "./src/daemon-port/session-replay-runtime-failure-response.ts",
+      "default": "./src/daemon-port/session-replay-runtime-failure-response.ts"
+    },
+    "./session-replay-suggestion-ranking": {
+      "types": "./src/daemon-port/session-replay-suggestion-ranking.ts",
+      "default": "./src/daemon-port/session-replay-suggestion-ranking.ts"
+    },
+    "./session-replay-test-policy": {
+      "types": "./src/daemon-port/session-replay-test-policy.ts",
+      "default": "./src/daemon-port/session-replay-test-policy.ts"
+    },
+    "./session-replay-trace": {
+      "types": "./src/daemon-port/session-replay-trace.ts",
+      "default": "./src/daemon-port/session-replay-trace.ts"
+    },
     "./session-replay-vars": {
       "types": "./src/session-replay-vars.ts",
       "default": "./src/session-replay-vars.ts"
+    },
+    "./session-replay-video-recording": {
+      "types": "./src/daemon-port/session-replay-video-recording.ts",
+      "default": "./src/daemon-port/session-replay-video-recording.ts"
+    },
+    "./session-test-infrastructure": {
+      "types": "./src/daemon-port/session-test-infrastructure.ts",
+      "default": "./src/daemon-port/session-test-infrastructure.ts"
+    },
+    "./session-test-outcome": {
+      "types": "./src/daemon-port/session-test-outcome.ts",
+      "default": "./src/daemon-port/session-test-outcome.ts"
+    },
+    "./session-test-shard-devices": {
+      "types": "./src/daemon-port/session-test-shard-devices.ts",
+      "default": "./src/daemon-port/session-test-shard-devices.ts"
+    },
+    "./session-test-source-discovery": {
+      "types": "./src/daemon-port/session-test-source-discovery.ts",
+      "default": "./src/daemon-port/session-test-source-discovery.ts"
+    },
+    "./target-classification": {
+      "types": "./src/daemon-port/target-classification.ts",
+      "default": "./src/daemon-port/target-classification.ts"
+    },
+    "./target-classification-fixtures": {
+      "types": "./src/target-classification-fixtures.ts",
+      "default": "./src/target-classification-fixtures.ts"
+    },
+    "./target-token": {
+      "types": "./src/daemon-port/target-token.ts",
+      "default": "./src/daemon-port/target-token.ts"
+    },
+    "./test-command": {
+      "types": "./src/daemon-port/test-command.ts",
+      "default": "./src/daemon-port/test-command.ts"
     }
   }
 }

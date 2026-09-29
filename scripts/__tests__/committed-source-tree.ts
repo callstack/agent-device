@@ -54,6 +54,21 @@ export function renamedSince(repoRoot: string, base: string): ReadonlyMap<string
   return renamed;
 }
 
+/** A carried entry must have been a source the base closure walker could actually read. */
+export function baseProductionPathOf(
+  repoRoot: string,
+  entryFile: string,
+  baseTree: SourceTreeReader,
+  renamedFrom: ReadonlyMap<string, string>,
+): string | null {
+  const baseFile = renamedFrom.get(entryFile) ?? entryFile;
+  return WALKED_SOURCE.test(baseFile) &&
+    isProductionSourceFile(baseFile) &&
+    baseTree.isFile(path.resolve(repoRoot, baseFile))
+    ? baseFile
+    : null;
+}
+
 /** Every path tracked at `treeish`, repo-root-relative, from ONE `git ls-tree`. */
 function listCommittedTree(repoRoot: string, treeish: string): string[] {
   const listing = git(repoRoot, ['ls-tree', '-r', '--name-only', '-z', treeish]).toString('utf8');

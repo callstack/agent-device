@@ -7,6 +7,7 @@ import { formatCliOutput } from '../cli-output.ts';
 import { settingsCliReader, settingsCommandFacet, settingsDaemonWriter } from './settings.ts';
 
 const MOBILE_TARGETS = [
+  'all',
   'camera',
   'microphone',
   'photos',

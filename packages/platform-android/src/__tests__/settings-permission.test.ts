@@ -598,6 +598,101 @@ test('setAndroidSetting permission all skips a role-managed id', async () => {
   );
 });
 
+// Every skip reason the pm boundary classifies keeps rendering the same operator-facing
+// warning text it did before typed reasons existed. A mutation that drops a branch from the
+// classification table (or narrows its pattern) turns the matching id into an operational
+// abort instead, which fails this test.
+test.each([
+  ['not a changeable permission type', 'not-changeable'],
+  ['is not a runtime permission', 'not-runtime-permission'],
+  ['Unknown permission android.permission.CUSTOM specified', 'unknown-permission'],
+] as const)(
+  'setAndroidSetting permission all skips stderr matching "%s"',
+  async (stderrText, _reason) => {
+    const requested = [
+      'Packages:',
+      '  Package [com.example.app] (abc):',
+      '    requested permissions:',
+      '      android.permission.CUSTOM',
+      '      android.permission.RECORD_AUDIO',
+      '    User 0: ceDataInode=0 installed=true',
+      '      runtime permissions:',
+      '        android.permission.RECORD_AUDIO: granted=false',
+      'Queries:',
+    ].join('\n');
+    await withFakeAdb(
+      fakeAdb((flat) => {
+        if (flat === CURRENT_USER) return '0';
+        if (flat === DUMPSYS) return requested;
+        if (flat === 'shell pm grant --user 0 com.example.app android.permission.CUSTOM') {
+          return { stderr: stderrText, exitCode: 1 };
+        }
+        return undefined;
+      }),
+      async ({ device }) => {
+        const result = (await setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+          permissionTarget: 'all',
+        })) as Record<string, unknown>;
+        assert.deepEqual(result.applied, ['android.permission.RECORD_AUDIO']);
+        assert.deepEqual(result.warnings, [
+          `Skipped android.permission.CUSTOM for com.example.app: ${stderrText}`,
+        ]);
+      },
+    );
+  },
+);
+
+// The abort side, named per the sequence it stops: an operational failure on the second
+// declared id leaves the first id applied (its pm call already landed) and never attempts the
+// third — proving the abort halts the fan-out rather than skipping past it. A mutation that
+// treats an unrecognized stderr as skippable (rather than aborting) makes the third id's pm
+// call appear in `calls`, failing the assertion below.
+test('setAndroidSetting permission grant all stops after an operational failure, keeping the earlier applied id', async () => {
+  const requested = [
+    'Packages:',
+    '  Package [com.example.app] (abc):',
+    '    requested permissions:',
+    '      android.permission.RECORD_AUDIO',
+    '      android.permission.CAMERA',
+    '      android.permission.READ_CONTACTS',
+    '    User 0: ceDataInode=0 installed=true',
+    '      runtime permissions:',
+    '        android.permission.RECORD_AUDIO: granted=false',
+    '        android.permission.CAMERA: granted=false',
+    '        android.permission.READ_CONTACTS: granted=false',
+    'Queries:',
+  ].join('\n');
+  await withFakeAdb(
+    fakeAdb((flat) => {
+      if (flat === CURRENT_USER) return '0';
+      if (flat === DUMPSYS) return requested;
+      if (flat === 'shell pm grant --user 0 com.example.app android.permission.CAMERA') {
+        return { stderr: 'device offline', exitCode: 1 };
+      }
+      return undefined;
+    }),
+    async ({ calls, device }) => {
+      await assertRejectsAppError(
+        () =>
+          setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+            permissionTarget: 'all',
+          }),
+        { code: 'COMMAND_FAILED', message: /Failed to grant Android permission.*CAMERA/ },
+      );
+      const flat = calls.map((args) => args.join(' '));
+      assert.ok(
+        flat.includes('shell pm grant --user 0 com.example.app android.permission.RECORD_AUDIO'),
+        flat.join('; '),
+      );
+      assert.ok(
+        flat.includes('shell pm grant --user 0 com.example.app android.permission.CAMERA'),
+        flat.join('; '),
+      );
+      assert.ok(!flat.some((call) => call.includes('READ_CONTACTS')), flat.join('; '));
+    },
+  );
+});
+
 // Revoke under `all` warns per held permission, like the single path.
 test('setAndroidSetting permission revoke all warns for the held runtime id', async () => {
   await withFakeAdb(
