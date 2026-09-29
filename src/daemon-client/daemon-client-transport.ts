@@ -254,7 +254,15 @@ async function retryAfterRemoteInstanceMismatch(
     timeoutMs,
     deadline,
   );
+  const probeStartedAt = performance.now();
   const health = await readRemoteDaemonHealth(info, probeTimeoutMs);
+  if (!health.reachable && probeRanToCallerDeadline(probeStartedAt, probeTimeoutMs)) {
+    throw handleRequestTimeout({
+      info,
+      statePaths,
+      ...timeoutRequestContext(req, true, timeoutMs ?? 0),
+    });
+  }
   const remainingMs = remainingRemoteRequestTimeoutMs(info, req, statePaths, timeoutMs, deadline);
   if (!health.reachable) {
     throw new AppError('COMMAND_FAILED', 'Remote daemon is unavailable', {
@@ -270,6 +278,19 @@ async function retryAfterRemoteInstanceMismatch(
     if (isRemoteTransportFailure(error)) invalidateRemoteDaemonHealth(info);
     throw error;
   }
+}
+
+// Node timers may fire a few ms before performance.now() reaches the same instant.
+const PROBE_TIMER_SLOP_MS = 5;
+
+function probeRanToCallerDeadline(
+  probeStartedAt: number,
+  probeTimeoutMs: number | undefined,
+): boolean {
+  if (probeTimeoutMs === undefined || probeTimeoutMs > REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS) {
+    return false;
+  }
+  return performance.now() - probeStartedAt >= probeTimeoutMs - PROBE_TIMER_SLOP_MS;
 }
 
 function remainingRemoteRequestTimeoutMs(

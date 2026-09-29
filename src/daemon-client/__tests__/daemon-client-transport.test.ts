@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   DAEMON_HTTP_INSTANCE_HEADER,
@@ -218,6 +218,35 @@ test('a delayed restart health probe stops at the RPC deadline without retrying'
     assert.equal(healthResponded, false);
     assert.equal(rpcCount, 1);
   } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
+test('a restart health probe that times out just before the RPC deadline still reports the deadline', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let probing = false;
+  const realNow = performance.now.bind(performance);
+  const server = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      probing = true;
+      return;
+    }
+    res.statusCode = 409;
+    res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
+    res.end();
+  });
+  const clock = vi
+    .spyOn(performance, 'now')
+    .mockImplementation(() => realNow() - (probing ? 2 : 0));
+  try {
+    const port = await listenOnLoopback(server);
+    await assert.rejects(
+      sendWithStaleInstance(port, 150),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'daemon_transport_timeout',
+    );
+  } finally {
+    clock.mockRestore();
     await closeLoopbackServer(server);
   }
 });
