@@ -495,16 +495,17 @@ test('the local adb executor attaches classified hints to thrown command failure
   assert.equal(Object.hasOwn(error.details ?? {}, 'retriable'), false);
 });
 
-test('the local adb executor flags transient transport failures retriable', async () => {
+test('the local adb executor flags a device that stays offline retriable', async () => {
   mockRunCmd.mockClear();
-  mockRunCmd.mockRejectedValueOnce(
-    new AppError('COMMAND_FAILED', 'adb exited with code 1', {
-      exitCode: 1,
-      stdout: '',
-      stderr: 'adb: device offline',
-      processExitError: true,
-    }),
-  );
+  const offline = new AppError('COMMAND_FAILED', 'adb exited with code 1', {
+    exitCode: 1,
+    stdout: '',
+    stderr: 'adb: device offline',
+    processExitError: true,
+  });
+  mockRunCmd.mockRejectedValueOnce(offline);
+  mockRunCmd.mockResolvedValueOnce({ stdout: '', stderr: '', exitCode: 0 });
+  mockRunCmd.mockRejectedValueOnce(offline);
   const adb = createDeviceAdbExecutor({
     platform: 'android',
     id: 'emulator-5554',
@@ -521,6 +522,8 @@ test('the local adb executor flags transient transport failures retriable', asyn
   assert.ok(error instanceof AppError);
   assert.equal(error.details?.adbFailure, 'device_offline');
   assert.equal(error.details?.retriable, true);
+  assert.equal(mockRunCmd.mock.calls.length, 3);
+  assert.ok(mockRunCmd.mock.calls[1]?.[1].includes('wait-for-device'));
 });
 
 test('the local adb executor classifies exec-layer timeouts as a wedged adb server', async () => {

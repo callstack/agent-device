@@ -182,6 +182,19 @@ export function attachAndroidHelperInstallTimeoutHint<T>(error: T): T {
   return classified;
 }
 
+/** True when adb refused a command because the device was offline, as a result or as the thrown error. */
+export function isAndroidAdbDeviceOffline(outcome: unknown): boolean {
+  if (outcome instanceof AppError) {
+    return (
+      outcome.code === 'COMMAND_FAILED' &&
+      classifyAdbCommandError(outcome)?.reason === 'device_offline'
+    );
+  }
+  const result = outcome as Partial<Pick<AndroidAdbExecutorResult, 'stderr' | 'stdout'>>;
+  if (typeof result?.stderr !== 'string') return false;
+  return classifyAndroidAdbFailure(result.stderr, result.stdout ?? '')?.reason === 'device_offline';
+}
+
 // Timeout wins over text matchers: the exec layer deliberately builds timeout
 // errors around "timed out after Nms" because partial output from the killed
 // process is untrustworthy — classifying that partial stderr (e.g. flagging a
