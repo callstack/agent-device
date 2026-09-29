@@ -7,117 +7,22 @@ import {
   RECORDING_EXPORT_QUALITIES,
   RECORDING_SCOPE_VALUES,
 } from '@agent-device/contracts/recording';
-import { NATIVE_PATH_DISPOSITION_VALUES } from '@agent-device/contracts/recording-native-path';
-import { RECORDER_OBSERVATION_VALUES } from '@agent-device/contracts/recording-stop-observation';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
-import type { CommandResultMap } from '@agent-device/command-registry/command-result';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import { commonInputFromFlags, direct, optionalString } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
-import type { JsonSchema } from '../command-contract.ts';
 import {
   booleanField,
-  booleanSchema,
-  constSchema,
   enumField,
-  enumSchema,
   integerField,
-  numberSchema,
-  objectSchema,
-  looseObjectSchema,
   requiredField,
   retiredField,
   stringField,
-  stringSchema,
 } from '../command-input.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { recordingCliOutputFormatters } from './output.ts';
-
-const artifactSchema = objectSchema(
-  {
-    field: stringSchema(),
-    artifactType: stringSchema(),
-    path: stringSchema(),
-    localPath: stringSchema(),
-    fileName: stringSchema(),
-  },
-  ['field'],
-);
-
-/**
- * This family's advertised MCP `outputSchema`s, keyed by daemon command name and projected into
- * the command map by `src/mcp/command-output-schemas.ts`. Non-strict like every other entry: no
- * `additionalProperties: false`, so additive response fields keep validating. Neither command
- * carries the post-action observation trait (#1652): both fire-and-report a recording or trace
- * lifecycle change, not an interaction, so no settle-graft copy applies here.
- */
-export const RECORDING_COMMAND_OUTPUT_SCHEMAS = {
-  // packages/contracts/src/recording.ts
-  record: {
-    type: 'object',
-    oneOf: [
-      objectSchema(
-        {
-          recording: constSchema('started'),
-          outPath: stringSchema(),
-          sessionStateDir: stringSchema(),
-          recordingBackend: stringSchema(),
-          recordingScope: stringSchema(),
-          recordOnlySession: booleanSchema(),
-          activeSessionApp: looseObjectSchema(),
-          showTouches: booleanSchema(),
-        },
-        ['recording', 'outPath', 'sessionStateDir', 'showTouches'],
-      ),
-      objectSchema(
-        {
-          recording: constSchema('stopped'),
-          outPath: stringSchema(),
-          telemetryPath: stringSchema(),
-          artifacts: { type: 'array', items: artifactSchema },
-          recordingBackend: stringSchema(),
-          recordingScope: stringSchema(),
-          recordOnlySession: booleanSchema(),
-          activeSessionApp: looseObjectSchema(),
-          durationMs: numberSchema(),
-          capturedDurationMs: numberSchema(),
-          recorder: enumSchema(
-            RECORDER_OBSERVATION_VALUES,
-            'What the recorder was observed doing when the recording was stopped: confirmed, or lost when the session holding it died. ADR 0024 reserves unconfirmed for the step that gains the probe.',
-          ),
-          nativePathDisposition: enumSchema(
-            NATIVE_PATH_DISPOSITION_VALUES,
-            'What became of the artifact path the recorder writes to: retirable while it still owes a removal, retired once that removal was verified. ADR 0024 reserves pending.',
-          ),
-          showTouches: booleanSchema(),
-          warning: stringSchema(),
-          overlayWarning: stringSchema(),
-          chunks: { type: 'array', items: looseObjectSchema() },
-        },
-        ['recording', 'outPath', 'artifacts', 'durationMs', 'showTouches'],
-      ),
-    ],
-  },
-  trace: {
-    type: 'object',
-    oneOf: [
-      objectSchema({ trace: constSchema('started'), outPath: stringSchema() }, [
-        'trace',
-        'outPath',
-      ]),
-      objectSchema(
-        {
-          trace: constSchema('stopped'),
-          outPath: stringSchema(),
-          artifacts: { type: 'array', items: artifactSchema },
-        },
-        ['trace', 'outPath', 'artifacts'],
-      ),
-    ],
-  },
-} satisfies Pick<Record<keyof CommandResultMap, JsonSchema>, 'record' | 'trace'>;
 
 const RECORD_COMMAND_NAME = 'record';
 const TRACE_COMMAND_NAME = 'trace';

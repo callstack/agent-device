@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { ownerFilesForCommand } from '@agent-device/command-registry/owner-files';
-import { RECORDING_COMMAND_OUTPUT_SCHEMAS } from '../../commands/recording/index.ts';
+import { RECORDING_COMMAND_OUTPUT_SCHEMAS } from '../../commands/recording/output-schemas.ts';
 import { COMMAND_OUTPUT_SCHEMAS } from '../command-output-schemas.ts';
 import { validateAgainstSchema } from './output-schema-validator.ts';
 
@@ -25,7 +25,7 @@ test('MCP recording family output schemas are the family module entries, not cop
 test('the projected family map declares exactly the commands its module owns', () => {
   for (const command of RECORDING_COMMANDS) {
     assert.ok(
-      ownerFilesForCommand(command).includes('src/commands/recording/index.ts'),
+      ownerFilesForCommand(command).includes('src/commands/recording/output-schemas.ts'),
       `${command} projects its output schema from this module but does not name it as its owner`,
     );
   }

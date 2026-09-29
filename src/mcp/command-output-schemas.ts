@@ -17,7 +17,7 @@ import {
   INTERACTION_COMMAND_OUTPUT_SCHEMAS,
   postActionSurfaceChangeSchema,
 } from '../commands/interaction/index.ts';
-import { RECORDING_COMMAND_OUTPUT_SCHEMAS } from '../commands/recording/index.ts';
+import { RECORDING_COMMAND_OUTPUT_SCHEMAS } from '../commands/recording/output-schemas.ts';
 import { REPLAY_COMMAND_OUTPUT_SCHEMAS } from '../commands/replay/index.ts';
 import { SYSTEM_COMMAND_OUTPUT_SCHEMAS } from '../commands/system/index.ts';
 import { DEVICE_KINDS, DEVICE_TARGETS, PUBLIC_PLATFORMS } from '@agent-device/kernel/device';

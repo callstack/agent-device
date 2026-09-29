@@ -6,7 +6,7 @@ import { commandSupportsSettleObservation } from '@agent-device/command-registry
 import { DEVICE_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS } from '../../commands/management/device.ts';
 import { PUSH_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS } from '../../commands/management/push.ts';
 import { INTERACTION_COMMAND_OUTPUT_SCHEMAS } from '../../commands/interaction/index.ts';
-import { RECORDING_COMMAND_OUTPUT_SCHEMAS } from '../../commands/recording/index.ts';
+import { RECORDING_COMMAND_OUTPUT_SCHEMAS } from '../../commands/recording/output-schemas.ts';
 import { REPLAY_COMMAND_OUTPUT_SCHEMAS } from '../../commands/replay/index.ts';
 import { SYSTEM_COMMAND_OUTPUT_SCHEMAS } from '../../commands/system/index.ts';
 import { COMMAND_OUTPUT_SCHEMAS } from '../command-output-schemas.ts';

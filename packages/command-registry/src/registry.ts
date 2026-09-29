@@ -1209,7 +1209,14 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'record',
     deviceClaimPolicy: 'require-owner',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/recording/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? {
+          ownerFiles: [
+            'src/commands/recording/index.ts',
+            'src/commands/recording/output-schemas.ts',
+          ] as const,
+        }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: true,
@@ -1227,7 +1234,14 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'trace',
     deviceClaimPolicy: 'require-owner',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/recording/index.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? {
+          ownerFiles: [
+            'src/commands/recording/index.ts',
+            'src/commands/recording/output-schemas.ts',
+          ] as const,
+        }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: true,
