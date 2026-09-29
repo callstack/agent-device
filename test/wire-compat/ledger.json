@@ -63,9 +63,9 @@
     "src/daemon-client/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:83b0312fe88bc3b3497de799e23d8d14455f665b7cf880f4617cd62b181351cd",
     "src/daemon-client/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:296f9d376ce67c8cb20209bdf1c59c2423ffcfa35b5565a99e70271263149048",
     "src/daemon-client/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
-    "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:df6b92e343a451a03b194e1e4aacac0c89b48a632723af24e087b377e73e05e3",
+    "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:a3380ef1b8d85808111eb0a00533430cf64ea76d9d0c35596080077795380475",
     "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealthLink": "sha256:464809c9bb14b44d098781722e9e9e2ff044c45464e3c7c4cb5690886e857fdf",
-    "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:6b64ae9b8e461a4b7dc1afb88465fcbaef908c31cc0be24499b2f440616e1cb5",
+    "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:eef0e153eb6f0bc02175e464dd6d98559b500b65ea8c74ba2203cfef09ec09a0",
     "src/daemon-client/daemon-client-transport.ts#readHealthLink": "sha256:d7a84687d1c9b089460151a0532870e92a932d45f9567d248cea7accf8908593",
     "src/daemon-client/daemon-client-transport.ts#readHealthPayload": "sha256:4e85ffc3e35e02379c393e9312344757e003cf1f0ad9eb8d1f77d90c81c861f1",
     "src/daemon-client/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:bcefa89fbb7fcbd6fee1b5ecb217955b9eee8d6fd2ad175fb653011edbd199d9",
@@ -268,11 +268,6 @@
       "rationale": "#2198 slice B teaches the client to read the `upstream` link a proxy's /health already nests. The field is optional and additive: a daemon or proxy that does not send it parses exactly as before, and no request shape changes. readHealthPayload reads the same top-level fields through readHealthLink and additionally the nested `upstream` object when present; a payload without it yields the previous shape."
     },
     {
-      "declaration": "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth",
-      "digest": "sha256:6b64ae9b8e461a4b7dc1afb88465fcbaef908c31cc0be24499b2f440616e1cb5",
-      "rationale": "#2650 gives every HTTP health probe a total-time cap (3s remote or 500ms local), including response-body reads. A restart retry also uses the RPC's remaining deadline. The health request and accepted payload fields are unchanged; stalled probes now end sooner."
-    },
-    {
       "declaration": "src/daemon-client/daemon-client-transport.ts#readRemoteDaemonHealth",
       "digest": "sha256:bcefa89fbb7fcbd6fee1b5ecb217955b9eee8d6fd2ad175fb653011edbd199d9",
       "rationale": "#2198 checks every link a command RPC crosses for protocol skew. #2650 caps a retry health probe at the request's remaining deadline. Health payload parsing and protocol mismatch refusal are unchanged; released peers still receive the same RPCs."
@@ -358,11 +353,6 @@
       "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present. Older peers ignore the added field, and new clients keep probing legacy peers without an instance ID; existing fields and RPC envelopes are unchanged."
     },
     {
-      "declaration": "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealth",
-      "digest": "sha256:df6b92e343a451a03b194e1e4aacac0c89b48a632723af24e087b377e73e05e3",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present. Older peers ignore the added field, and new clients keep probing legacy peers without an instance ID; existing fields and RPC envelopes are unchanged."
-    },
-    {
       "declaration": "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealthLink",
       "digest": "sha256:464809c9bb14b44d098781722e9e9e2ff044c45464e3c7c4cb5690886e857fdf",
       "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present. Older peers ignore the added field, and new clients keep probing legacy peers without an instance ID; existing fields and RPC envelopes are unchanged."
@@ -426,6 +416,16 @@
       "declaration": "src/daemon-client/daemon-client-transport.ts#isRemoteInstanceMismatch",
       "digest": "sha256:6d4cfdd36bd44686d2a48990491faf63ba9117fb760f982fd72922c99be8daee",
       "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before."
+    },
+    {
+      "declaration": "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealth",
+      "digest": "sha256:a3380ef1b8d85808111eb0a00533430cf64ea76d9d0c35596080077795380475",
+      "rationale": "A restart retry must tell a probe that ran out of time from one that failed, so the client can report the RPC deadline instead of 'Remote daemon is unavailable'. `timedOut` is client-local: the prober sets it on its own timeout and abort paths and never reads it from a /health payload. The health request and the accepted payload fields are unchanged, so a released daemon or proxy is probed and parsed exactly as before."
+    },
+    {
+      "declaration": "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth",
+      "digest": "sha256:eef0e153eb6f0bc02175e464dd6d98559b500b65ea8c74ba2203cfef09ec09a0",
+      "rationale": "A restart retry must tell a probe that ran out of time from one that failed, so the client can report the RPC deadline instead of 'Remote daemon is unavailable'. `timedOut` is client-local: the prober sets it on its own timeout and abort paths and never reads it from a /health payload. The health request and the accepted payload fields are unchanged, so a released daemon or proxy is probed and parsed exactly as before."
     }
   ]
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   DAEMON_HTTP_INSTANCE_HEADER,
@@ -218,6 +218,34 @@ test('a delayed restart health probe stops at the RPC deadline without retrying'
     assert.equal(healthResponded, false);
     assert.equal(rpcCount, 1);
   } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
+test('a restart health probe cut short by the RPC deadline reports the deadline on a lagging clock', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const server = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      const delayedResponse = setTimeout(() => res.end('{}'), 1000);
+      res.on('close', () => clearTimeout(delayedResponse));
+      return;
+    }
+    res.statusCode = 409;
+    res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
+    res.end();
+  });
+  // Timers start from the event loop's cached clock, so the probe's timer can fire while
+  // performance.now() is still short of the deadline. A frozen clock makes that gap certain.
+  const now = vi.spyOn(performance, 'now').mockReturnValue(performance.now());
+  try {
+    const port = await listenOnLoopback(server);
+    await assert.rejects(
+      sendWithStaleInstance(port, 150),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'daemon_transport_timeout',
+    );
+  } finally {
+    now.mockRestore();
     await closeLoopbackServer(server);
   }
 });

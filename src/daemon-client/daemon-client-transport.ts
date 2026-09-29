@@ -42,6 +42,8 @@ export type RemoteDaemonHealth = {
   instanceId?: string;
   /** The daemon behind a proxy, as the proxy's health reported it. */
   upstream?: RemoteDaemonHealthLink;
+  /** The probe ran out of its time budget before an answer, rather than failing outright. */
+  timedOut?: true;
 };
 
 type RemoteDaemonHealthLink = Pick<
@@ -137,9 +139,12 @@ async function readDaemonHttpHealth(
     info.baseUrl ? REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS : LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS,
     probeTimeoutMs ?? Number.POSITIVE_INFINITY,
   );
-  if (timeoutMs <= 0) return { reachable: false };
+  if (timeoutMs <= 0) return { reachable: false, timedOut: true };
+  const signal = AbortSignal.timeout(Math.ceil(timeoutMs));
   return await new Promise((resolve) => {
     const headers = info.baseUrl ? buildDaemonHttpAuthHeaders(info.token) : {};
+    const unreachable = (): RemoteDaemonHealth =>
+      signal.aborted ? { reachable: false, timedOut: true } : { reachable: false };
     const req = transport.request(
       {
         protocol: url.protocol,
@@ -148,7 +153,7 @@ async function readDaemonHttpHealth(
         path: url.pathname + url.search,
         method: 'GET',
         timeout: timeoutMs,
-        signal: AbortSignal.timeout(Math.ceil(timeoutMs)),
+        signal,
         headers,
       },
       (res) => {
@@ -165,16 +170,16 @@ async function readDaemonHttpHealth(
             ...readHealthPayload(body),
           });
         });
-        res.on('error', () => resolve({ reachable: false }));
-        res.on('aborted', () => resolve({ reachable: false }));
+        res.on('error', () => resolve(unreachable()));
+        res.on('aborted', () => resolve(unreachable()));
       },
     );
     req.on('timeout', () => {
       req.destroy();
-      resolve({ reachable: false });
+      resolve({ reachable: false, timedOut: true });
     });
     req.on('error', () => {
-      resolve({ reachable: false });
+      resolve(unreachable());
     });
     req.end();
   });
@@ -255,6 +260,21 @@ async function retryAfterRemoteInstanceMismatch(
     deadline,
   );
   const health = await readRemoteDaemonHealth(info, probeTimeoutMs);
+  // The probe's timer starts from the event loop's cached clock, so it can expire while
+  // performance.now() is still short of the deadline: a probe the RPC deadline capped that ran out
+  // of time is the RPC timing out.
+  if (
+    health.timedOut &&
+    timeoutMs !== undefined &&
+    probeTimeoutMs !== undefined &&
+    probeTimeoutMs <= REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS
+  ) {
+    throw handleRequestTimeout({
+      info,
+      statePaths,
+      ...timeoutRequestContext(req, true, timeoutMs),
+    });
+  }
   const remainingMs = remainingRemoteRequestTimeoutMs(info, req, statePaths, timeoutMs, deadline);
   if (!health.reachable) {
     throw new AppError('COMMAND_FAILED', 'Remote daemon is unavailable', {
