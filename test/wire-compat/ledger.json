@@ -65,10 +65,10 @@
     "src/daemon-client/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
     "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:df6b92e343a451a03b194e1e4aacac0c89b48a632723af24e087b377e73e05e3",
     "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealthLink": "sha256:464809c9bb14b44d098781722e9e9e2ff044c45464e3c7c4cb5690886e857fdf",
-    "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:6b64ae9b8e461a4b7dc1afb88465fcbaef908c31cc0be24499b2f440616e1cb5",
+    "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:4df0625b53e82e0d08225139a24d2dc234a9e18ce108b03d933d303d518e3731",
     "src/daemon-client/daemon-client-transport.ts#readHealthLink": "sha256:d7a84687d1c9b089460151a0532870e92a932d45f9567d248cea7accf8908593",
     "src/daemon-client/daemon-client-transport.ts#readHealthPayload": "sha256:4e85ffc3e35e02379c393e9312344757e003cf1f0ad9eb8d1f77d90c81c861f1",
-    "src/daemon-client/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:bcefa89fbb7fcbd6fee1b5ecb217955b9eee8d6fd2ad175fb653011edbd199d9",
+    "src/daemon-client/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:80bcf6b5987053e245b8e73cb21a687d158edc859a26605546746cdf0d64f443",
     "src/daemon/downloadable-artifact-http.ts#DownloadableArtifactHttpAuthorizer": "sha256:1b2702a929ca9170db2ca97c08e3ab67e17edb3ee75325a576c4c1b9cdbebb44",
     "src/daemon/downloadable-artifact-http.ts#DownloadableArtifactHttpRoute": "sha256:e63c4581ccde668913914149c9092d16ecf8a5cbd7ab33c6eb8617e77fc1015e",
     "src/daemon/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:7f96d17b7c605230fb3cc21ceaa5b2e515d7445653ff95b2b0f6f15fa6214d4e",
@@ -269,13 +269,13 @@
     },
     {
       "declaration": "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth",
-      "digest": "sha256:6b64ae9b8e461a4b7dc1afb88465fcbaef908c31cc0be24499b2f440616e1cb5",
-      "rationale": "#2650 gives every HTTP health probe a total-time cap (3s remote or 500ms local), including response-body reads. A restart retry also uses the RPC's remaining deadline. The health request and accepted payload fields are unchanged; stalled probes now end sooner."
+      "digest": "sha256:4df0625b53e82e0d08225139a24d2dc234a9e18ce108b03d933d303d518e3731",
+      "rationale": "#2650 gives every HTTP health probe a total-time cap (3s remote or 500ms local), including response-body reads. A restart retry also uses the RPC's remaining deadline. The health request and accepted payload fields are unchanged; stalled probes now end sooner. The health request and accepted payload do not change; only the internal probe outcome now records whether its own timer fired."
     },
     {
       "declaration": "src/daemon-client/daemon-client-transport.ts#readRemoteDaemonHealth",
-      "digest": "sha256:bcefa89fbb7fcbd6fee1b5ecb217955b9eee8d6fd2ad175fb653011edbd199d9",
-      "rationale": "#2198 checks every link a command RPC crosses for protocol skew. #2650 caps a retry health probe at the request's remaining deadline. Health payload parsing and protocol mismatch refusal are unchanged; released peers still receive the same RPCs."
+      "digest": "sha256:80bcf6b5987053e245b8e73cb21a687d158edc859a26605546746cdf0d64f443",
+      "rationale": "#2198 checks every link a command RPC crosses for protocol skew. #2650 caps a retry health probe at the request's remaining deadline. Health payload parsing and protocol mismatch refusal are unchanged; released peers still receive the same RPCs. The health request and accepted payload do not change; only the internal probe outcome now records whether its own timer fired."
     },
     {
       "declaration": "src/daemon/server/http-server.ts#authorizeAuxiliaryHttpRequest",
