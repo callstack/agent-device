@@ -218,9 +218,6 @@ test('sendToDaemon replaces a daemon whose process is gone after a single probe'
   await gone.wait.catch(() => {});
   const deadPid = gone.child.pid;
   assert.ok(deadPid, 'spawned child should have a pid');
-  const unused = net.createServer();
-  const deadPort = await listenOnLoopback(unused);
-  await closeLoopbackServer(unused);
   const fresh = net.createServer((socket) => {
     socket.setEncoding('utf8');
     socket.on('data', () => {
@@ -246,7 +243,12 @@ test('sendToDaemon replaces a daemon whose process is gone after a single probe'
   };
 
   try {
+    // Bound before the dead port is picked, so the port the dead daemon recorded cannot be
+    // handed back to the fresh one.
     const freshPort = await listenOnLoopback(fresh);
+    const unused = net.createServer();
+    const deadPort = await listenOnLoopback(unused);
+    await closeLoopbackServer(unused);
     writeInfo(deadPort, deadPid);
     mockSpawnDaemon.mockImplementation(() => {
       writeInfo(freshPort, process.pid);
@@ -255,15 +257,17 @@ test('sendToDaemon replaces a daemon whose process is gone after a single probe'
     probeAnswers.length = 0;
     probedPorts.length = 0;
     mockEmitDiagnostic.mockClear();
+    if (isProcessAlive(deadPid)) {
+      t.skip('the host recycled the exited stand-in pid before the probe');
+      return;
+    }
 
     const response = await sendSmoke(stateDir);
 
     assert.deepEqual(response, { ok: true, data: { via: 'fresh-daemon' } });
-    assert.equal(
-      probedPorts.filter((port) => port === deadPort).length,
-      1,
-      'a daemon whose pid is gone gets no patient retry',
-    );
+    assert.equal(mockSpawnDaemon.mock.calls.length, 1, 'the dead daemon was replaced');
+    const deadProbes = probeAnswers.filter((_, index) => probedPorts[index] === deadPort);
+    assert.deepEqual(deadProbes, [false], 'a daemon whose pid is gone gets no patient retry');
     assert.equal(
       mockEmitDiagnostic.mock.calls.some(([event]) => event.phase === 'daemon_probe_recovered'),
       false,
