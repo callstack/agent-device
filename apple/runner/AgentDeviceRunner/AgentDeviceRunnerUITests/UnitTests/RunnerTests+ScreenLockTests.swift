@@ -210,10 +210,21 @@ extension RunnerTests {
     let end = springboard.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1))
     start.press(forDuration: 0.1, thenDragTo: end)
 
-    let deadline = Date().addingTimeInterval(5)
+    let deadline = Date().addingTimeInterval(Self.screenLockVerificationTimeout)
     while Date() < deadline {
       if case .success(false) = currentScreenLockState() { return }
-      RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+      if springboard.buttons["Emergency"].exists
+        || springboard.staticTexts["Enter Passcode"].exists
+      {
+        XCTFail(
+          "The screen-lock integration test left a passcode-protected Lock Screen; "
+            + "unlock the Simulator manually before rerunning"
+        )
+        return
+      }
+      RunLoop.current.run(
+        until: Date().addingTimeInterval(Self.screenLockPollInterval)
+      )
     }
     XCTFail("The screen-lock integration test could not restore the Simulator to unlocked state")
   }

@@ -3,8 +3,8 @@ import XCTest
 
 extension RunnerTests {
   private static let screenLockStateNotification = "com.apple.springboard.lockstate"
-  private static let screenLockVerificationTimeout: TimeInterval = 5
-  private static let screenLockPollInterval: TimeInterval = 0.05
+  static let screenLockVerificationTimeout: TimeInterval = 5
+  static let screenLockPollInterval: TimeInterval = 0.05
 
   /// Mirrors WebDriverAgent's audited simulator route: XCTest dispatches the private lock-button
   /// primitive and SpringBoard's Darwin notification state independently verifies the transition.
