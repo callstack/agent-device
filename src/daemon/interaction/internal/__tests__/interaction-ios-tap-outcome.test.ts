@@ -14,7 +14,7 @@ import {
 } from '../../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { SessionScriptWriter } from '../../../session-script-writer.ts';
-import { runReplayForTest } from '../../../replay/__tests__/replay-command-fixture.ts';
+import { runReplayForTest } from '../../../__tests__/replay-runtime/replay-command-fixture.ts';
 import { replayScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';
 import {
   imageViewerNodes,

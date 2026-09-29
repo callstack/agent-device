@@ -161,21 +161,21 @@ test('logical modules reject forbidden imports', () => {
   assert.match(violations[0]!.message, /replay-test must not import/);
 });
 
-test('replay-test rejects request-global and engine-internal imports', () => {
+test('replay-test rejects request-global and replay-port imports', () => {
   const edges = resolveImportEdges(
     new Map([
       [
         'packages/replay-test/src/internal/scheduler.ts',
         [
           "import { emitRequestProgress } from '../../../../src/request/progress.ts';",
-          "import { readReplayScriptMetadata } from '../../../../src/daemon/replay/internal/native-command.ts';",
+          "import { runReplayCommand } from '../../../replay-port/src/daemon-port/native-command.ts';",
           "import { parseMaestroProgram } from '../../../../src/compat/maestro/program-ir-parser.ts';",
         ].join('\n'),
       ],
       ['src/request/progress.ts', 'export function emitRequestProgress() {}'],
       [
-        'src/daemon/replay/internal/native-command.ts',
-        'export function readReplayScriptMetadata() {}',
+        'packages/replay-port/src/daemon-port/native-command.ts',
+        'export function runReplayCommand() {}',
       ],
       ['src/compat/maestro/program-ir-parser.ts', 'export function parseMaestroProgram() {}'],
     ]),
@@ -190,7 +190,7 @@ test('replay-test rejects request-global and engine-internal imports', () => {
     violations.map(({ message }) => message.replace(/;.*/, '')),
     [
       'replay-test must not import src/request/progress.ts',
-      "packages/replay-test/src/internal/scheduler.ts must not import daemon-replay's internal tree (src/daemon/replay/internal/native-command.ts)",
+      'replay-test must not import packages/replay-port/src/daemon-port/native-command.ts',
       'replay-test must not import src/compat/maestro/program-ir-parser.ts',
     ],
   );
@@ -230,33 +230,20 @@ test('internal trees reject deep imports globally, including from daemon', () =>
   assert.match(violations[0]!.message, /must not import maestro's internal tree/);
 });
 
-test('daemon replay rejects handler, owner, session-store, and engine deep edges', () => {
+test('replay-port rejects daemon source imports and engine back edges', () => {
   const edges = resolveImportEdges(
     new Map([
       [
-        'src/daemon/handlers/session.ts',
-        "import { runReplayCommand } from '../replay/internal/native-command.ts';",
+        'packages/replay-port/src/daemon-port/test-command.ts',
+        "import { handleSessionCloseCommands } from '../../../../src/daemon/session-lifecycle/index.ts';",
       ],
       [
-        'src/daemon/replay/internal/test-command.ts',
-        "import { handleSessionCloseCommands } from '../../session-lifecycle/internal/session-close.ts';",
-      ],
-      [
-        'src/daemon/replay/internal/close-command.ts',
-        "import { handleSessionCloseCommands } from '../../session-lifecycle/index.ts';",
-      ],
-      [
-        'src/daemon/replay/internal/command-types.ts',
-        "import { SessionStore } from '../../session-store.ts';",
+        'packages/replay-port/src/daemon-port/native-command.ts',
+        "import { SessionStore } from '../../../../src/daemon/session-store.ts';",
       ],
       [
         'packages/ad-replay/src/internal/step-loop.ts',
-        "import { runReplayCommand } from '../../../../src/daemon/replay/internal/native-command.ts';",
-      ],
-      ['src/daemon/replay/internal/native-command.ts', 'export function runReplayCommand() {}'],
-      [
-        'src/daemon/session-lifecycle/internal/session-close.ts',
-        'export function handleSessionCloseCommands() {}',
+        "import { runReplayCommand } from '../../../replay-port/src/daemon-port/native-command.ts';",
       ],
       ['src/daemon/session-lifecycle/index.ts', 'export function handleSessionCloseCommands() {}'],
       ['src/daemon/session-store.ts', 'export class SessionStore {}'],
@@ -269,39 +256,19 @@ test('daemon replay rejects handler, owner, session-store, and engine deep edges
     REFERENCE,
   );
   assert.deepEqual(
-    violations.map(({ file, line, message }) => ({
-      file,
-      line,
-      message: message.replace(/;.*/, ''),
-    })),
+    violations.map(({ file, message }) => ({ file, message: message.replace(/;.*/, '') })),
     [
       {
-        file: 'src/daemon/handlers/session.ts',
-        line: 1,
-        message:
-          "src/daemon/handlers/session.ts must not import daemon-replay's internal tree (src/daemon/replay/internal/native-command.ts)",
+        file: 'packages/replay-port/src/daemon-port/test-command.ts',
+        message: 'replay-port must not import src/daemon/session-lifecycle/index.ts',
       },
       {
-        file: 'src/daemon/replay/internal/test-command.ts',
-        line: 1,
-        message:
-          "src/daemon/replay/internal/test-command.ts must not import daemon-session-lifecycle's internal tree (src/daemon/session-lifecycle/internal/session-close.ts)",
-      },
-      {
-        file: 'src/daemon/replay/internal/close-command.ts',
-        line: 1,
-        message: 'daemon-replay must not import src/daemon/session-lifecycle/index.ts',
-      },
-      {
-        file: 'src/daemon/replay/internal/command-types.ts',
-        line: 1,
-        message: 'daemon-replay must not import src/daemon/session-store.ts',
+        file: 'packages/replay-port/src/daemon-port/native-command.ts',
+        message: 'replay-port must not import src/daemon/session-store.ts',
       },
       {
         file: 'packages/ad-replay/src/internal/step-loop.ts',
-        line: 1,
-        message:
-          "packages/ad-replay/src/internal/step-loop.ts must not import daemon-replay's internal tree (src/daemon/replay/internal/native-command.ts)",
+        message: 'ad-replay must not import packages/replay-port/src/daemon-port/native-command.ts',
       },
     ],
   );

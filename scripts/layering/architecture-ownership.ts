@@ -11,28 +11,6 @@ export type LogicalModulePolicy = Readonly<{
   facade?: FacadeDeclaration;
 }>;
 
-const DAEMON_REPLAY_FACADE = {
-  root: 'src/daemon/replay/index.ts',
-  exports: [
-    'ReplayCoordinator',
-    'ReplayDaemonDependencies',
-    'ReplayResumeStamper',
-    'ReplaySession',
-    'ReplaySessionView',
-    'ReplayTestVideoOwner',
-    'appTargetResolutionOptions',
-    'bindReplaySession',
-    'buildMaestroReplayTargetDeviceResolutionOptions',
-    'buildReplayScriptPlatformFlags',
-    'healedScriptSiblingPath',
-    'readScriptReplaySelection',
-    'replayInvokeOverDispatch',
-    'runReplayCommand',
-    'runReplayTestCommand',
-    'splitReplayCommandRequest',
-  ],
-} as const;
-
 const DAEMON_SESSION_LIFECYCLE_FACADE = {
   root: 'src/daemon/session-lifecycle/index.ts',
   exports: [
@@ -123,12 +101,23 @@ export const LOGICAL_MODULE_POLICIES = [
   {
     name: 'ad-replay',
     roots: ['packages/ad-replay/src/'],
-    forbiddenTargetRoots: ['src/daemon/', 'src/providers/', 'src/compat/', 'packages/maestro/'],
+    forbiddenTargetRoots: [
+      'src/daemon/',
+      'src/providers/',
+      'src/compat/',
+      'packages/maestro/',
+      'packages/replay-port/',
+    ],
   },
   {
     name: 'maestro',
     roots: ['packages/maestro/src/'],
-    forbiddenTargetRoots: ['src/daemon/', 'src/providers/', 'packages/ad-replay/'],
+    forbiddenTargetRoots: [
+      'src/daemon/',
+      'src/providers/',
+      'packages/ad-replay/',
+      'packages/replay-port/',
+    ],
   },
   {
     name: 'replay-test',
@@ -140,22 +129,13 @@ export const LOGICAL_MODULE_POLICIES = [
       'src/compat/',
       'packages/maestro/',
       'packages/ad-replay/',
+      'packages/replay-port/',
     ],
   },
   {
     name: 'replay-port',
     roots: ['packages/replay-port/src/'],
     forbiddenTargetRoots: ['src/daemon/', 'src/providers/', 'src/compat/'],
-  },
-  {
-    name: 'daemon-replay',
-    roots: ['src/daemon/replay/'],
-    forbiddenTargetRoots: [
-      'src/daemon/handlers/record-runtime.ts',
-      'src/daemon/session-store.ts',
-      'src/daemon/session-lifecycle/',
-    ],
-    facade: DAEMON_REPLAY_FACADE,
   },
   {
     name: 'daemon-session-lifecycle',

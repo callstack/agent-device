@@ -24,6 +24,17 @@ Package `version` is diagnostic only and must not be used as a compatibility gat
 `rpcProtocolVersion` is treated as a legacy remote daemon and is allowed unless a later security or
 protocol decision explicitly retires legacy compatibility.
 
+A persistent client may cache a successful probe when `/health` advertises an instance ID for
+both the daemon endpoint and, if proxied, its upstream daemon. It sends those IDs as conditional
+headers on every cached RPC. A daemon refuses a stale instance with a typed HTTP 409 response
+before dispatch, and a proxy refuses its own stale instance before forwarding. The proxy passes
+the expected upstream instance to the daemon, which makes the same pre-dispatch check. On a
+mismatch the client clears the cache, probes `/health` again, and retries the refused RPC once
+only when the new peer's protocol is compatible. Peers without complete instance IDs retain
+per-command probes. A peer that advertises an instance ID must continue honoring the conditional
+RPC headers in future versions: older clients may hold a cached identity across a restart, and
+must receive a pre-dispatch refusal before retrying a mutating command.
+
 `rpcProtocolVersion` changes only when an older client and newer daemon, or newer client and older
 daemon, cannot safely communicate over the HTTP RPC boundary for existing commands. Bump it for
 breaking changes to:

@@ -10,7 +10,7 @@ import { SnapshotSourceError } from './errors.ts';
 import { createSnapshotSourceDeadline } from './deadline.ts';
 import { DEFAULT_SNAPSHOT_SOURCE_LIMITS } from './limits.ts';
 import type { SnapshotSourceHost } from './types.ts';
-import { execKillTimeoutError } from './__tests__/exec-timeout-fixture.ts';
+import { execKillTimeoutError } from '../native-build/__tests__/exec-timeout-fixture.ts';
 import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
 
 test('snapshot bridge preparation is cold-once, atomic, and invalidates corrupt or stale entries', async () => {

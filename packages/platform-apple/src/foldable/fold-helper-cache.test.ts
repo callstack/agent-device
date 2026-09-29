@@ -3,8 +3,9 @@ import { readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { beforeAll, describe, test } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
+import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { mkdtempForTest } from '../__tests__/tmp-dir.ts';
-import { execKillTimeoutError } from '../snapshot-source/__tests__/exec-timeout-fixture.ts';
+import { execKillTimeoutError } from '../native-build/__tests__/exec-timeout-fixture.ts';
 import { createSnapshotSourceHost } from '../snapshot-source/host.ts';
 import type { SnapshotSourceHost } from '../snapshot-source/types.ts';
 import {
@@ -151,6 +152,64 @@ test('a compile exec killed at its budget reports the fold-helper build, not the
         return true;
       },
     );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('an abort while a second caller waits on the fold-helper lock reports a canceled request', async () => {
+  const root = await mkdtempForTest('agent-device-fold-helper-cache-lock-wait-');
+  const sourceRoot = path.join(root, 'source');
+  const cacheRoot = path.join(root, 'cache');
+  await (await import('@agent-device/host-kit/host-file')).ensureHostDirectory(sourceRoot);
+  await writeFile(path.join(sourceRoot, 'Fold.m'), 'fold source');
+
+  let releaseClang!: () => void;
+  const clangGate = new Promise<void>((resolve) => {
+    releaseClang = resolve;
+  });
+  let clangStarted!: () => void;
+  const clangStartedSignal = new Promise<void>((resolve) => {
+    clangStarted = resolve;
+  });
+  const host = fakeFoldHelperHost(() => 'binary');
+  const holdingHost: SnapshotSourceHost = {
+    ...host,
+    run: async (command, args, options) => {
+      if (command === 'xcrun' && args.includes('clang')) {
+        clangStarted();
+        await clangGate;
+        return await host.run(command, args, options);
+      }
+      return await host.run(command, args, options);
+    },
+  };
+
+  try {
+    // The first call acquires the fold-helper lock and holds it in its build step (gated on
+    // `clangGate`) until this test releases it, so the second call below is guaranteed to find
+    // the lock already held rather than racing for it.
+    const holder = ensureFoldHelperBinary({ host: holdingHost, sourceRoot, cacheRoot });
+    await clangStartedSignal;
+
+    const controller = new AbortController();
+    const waiter = ensureFoldHelperBinary({
+      host,
+      sourceRoot,
+      cacheRoot,
+      signal: controller.signal,
+    });
+    // Give the waiter time to reach the lock's poll loop before aborting it.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    controller.abort();
+
+    await assert.rejects(waiter, (error: unknown) => {
+      assert.ok(isRequestCanceledError(error), 'expected a canceled-request error');
+      return true;
+    });
+
+    releaseClang();
+    await holder;
   } finally {
     await rm(root, { recursive: true, force: true });
   }

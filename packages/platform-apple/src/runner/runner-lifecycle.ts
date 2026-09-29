@@ -15,12 +15,12 @@ import {
   ensureRunnerSession,
   invalidateRunnerSession,
   executeRunnerCommandWithSession,
-  readRunnerStartupTimeoutMs,
   markRunnerSessionServed,
   readRunnerSessionLiveness,
 } from './runner-session.ts';
 import {
   assertRunnerRequestActive,
+  callerDeadlineExpired,
   resolveRunnerRequestSignal,
   withRunnerCommandId,
   type RunnerCommand,
@@ -294,8 +294,11 @@ export async function executeRunnerCommand(
       commitRunnerRecycle(recycleKey);
     }
     markRunnerRequestTouchedSession(recycleKey);
-    const timeoutMs =
-      session.state === 'ready' ? RUNNER_COMMAND_TIMEOUT_MS : readRunnerStartupTimeoutMs(session);
+    let timeoutMs = RUNNER_COMMAND_TIMEOUT_MS;
+    if (session.state !== 'ready') {
+      const { readRunnerStartupTimeoutMs } = await import('./runner-exchange.ts');
+      timeoutMs = readRunnerStartupTimeoutMs(session);
+    }
     return await executeRunnerCommandWithSession(
       device,
       session,
@@ -311,7 +314,11 @@ export async function executeRunnerCommand(
       ? session.state === 'starting'
       : livenessAtEntry !== 'ready';
     if (runnerNeverAnswered && isRequestCanceledError(appErr)) {
-      if (session) {
+      // A cancelled request leaves no half-started runner behind. A caller whose own deadline ran
+      // out mid-start leaves it running: the session's launch budget bounds it, the next request
+      // joins it instead of paying it again, and the reuse check retires it once that budget is
+      // spent (#2894).
+      if (session && !callerDeadlineExpired(options)) {
         await invalidateRunnerSessionBestEffort(session, 'runner_startup_request_canceled');
       }
       throw createRequestCanceledError(

@@ -2,18 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { compareDifferentialCases } from './conformance-harness.ts';
-import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
-
-type DifferentialCase = Readonly<{
-  name: string;
-  projection: 'regular' | 'raw';
-  interactiveOnly: false;
-  depth: number | null;
-  scope: string | null;
-  foldPolicy: 'cursor-projected' | 'plain-viewport';
-  viewport: Rect;
-  nodes: readonly RawSnapshotNode[];
-}>;
+type DifferentialCase = Parameters<typeof compareDifferentialCases>[0][number];
 
 const casePath = process.argv[2];
 if (!casePath) {

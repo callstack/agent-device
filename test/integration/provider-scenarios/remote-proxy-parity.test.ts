@@ -4,7 +4,6 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
-import { DEFAULT_PROXY_LEASE_TTL_MS } from '@agent-device/contracts/lease-scope';
 import { sendToDaemon } from '../../../src/daemon-client/daemon-client.ts';
 import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
 import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
@@ -488,14 +487,12 @@ test(
       });
       assert.equal(response.ok, true);
 
-      // The WHOLE wire conversation, not just the RPC, so any new call of any kind breaks
-      // this. `GET /health` is the client's own ADR 0006 protocol-compatibility probe on the
-      // remote path (`ensureRemoteDaemon`); it is not the bridge, and it predates the bridge.
-      // The bridge itself contributes nothing: no helper, admin or acquisition route appears.
+      // The open above established the daemon identity. A persistent client should now
+      // forward only the snapshot RPC, with no additional health or helper request.
       assert.deepEqual(
         forwarded.map((entry) => `${entry.method} ${entry.route}`),
-        ['GET /health', 'POST /rpc'],
-        'a proxied snapshot must cross the wire only as the compat probe and the RPC',
+        ['POST /rpc'],
+        'a proxied snapshot must cross the wire as one RPC',
       );
 
       // What crossed, read rather than sized, at every level of the payload. Comparing the
@@ -549,7 +546,7 @@ test(
       async ({ world, proxied }) => {
         const session = 'leased';
         const flags = { platform: 'ios', udid: SIM.id } as const;
-        const allocate = async (): Promise<string> => {
+        const allocate = async (): Promise<{ leaseId: string; expiresAt: number }> => {
           const response = await proxied({
             session,
             command: 'lease_allocate',
@@ -558,9 +555,13 @@ test(
             meta: LEASE_SCOPE,
           });
           assert.equal(response.ok, true, JSON.stringify(response));
-          const leaseId = (response.ok ? response.data : {})?.lease as { leaseId?: string };
-          assert.equal(typeof leaseId?.leaseId, 'string');
-          return leaseId.leaseId!;
+          const lease = (response.ok ? response.data : {})?.lease as {
+            leaseId?: string;
+            expiresAt?: number;
+          };
+          assert.equal(typeof lease?.leaseId, 'string');
+          assert.equal(typeof lease?.expiresAt, 'number');
+          return { leaseId: lease.leaseId!, expiresAt: lease.expiresAt! };
         };
         const run = async (
           command: string,
@@ -577,22 +578,24 @@ test(
           });
 
         const firstLease = await allocate();
-        assert.equal((await run('open', [APP], firstLease)).ok, true);
+        assert.equal((await run('open', [APP], firstLease.leaseId)).ok, true);
         assert.equal(
-          (await run('snapshot', [], firstLease, { snapshotInteractiveOnly: true })).ok,
+          (await run('snapshot', [], firstLease.leaseId, { snapshotInteractiveOnly: true })).ok,
           true,
         );
         assert.equal(
           baselineInitialized(
-            await run('diff', ['snapshot'], firstLease, { snapshotInteractiveOnly: true }),
+            await run('diff', ['snapshot'], firstLease.leaseId, { snapshotInteractiveOnly: true }),
           ),
           false,
           'the leased session holds comparison state before it expires',
         );
 
         // The lease lapses without a heartbeat; the next request through the proxy finds it expired.
-        now += DEFAULT_PROXY_LEASE_TTL_MS + 1;
-        const expired = await run('diff', ['snapshot'], firstLease, {
+        // The jump is the window the lease itself was allocated with — a client that names no ttl
+        // gets the registry default, which is the only window the daemon promises it.
+        now = firstLease.expiresAt + 1;
+        const expired = await run('diff', ['snapshot'], firstLease.leaseId, {
           snapshotInteractiveOnly: true,
         });
         assert.equal(expired.ok, false);
@@ -603,16 +606,16 @@ test(
         assert.equal(world.daemon.session(session), undefined, 'expiry tears the session down');
 
         const secondLease = await allocate();
-        assert.notEqual(secondLease, firstLease);
-        assert.equal((await run('open', [APP], secondLease)).ok, true);
+        assert.notEqual(secondLease.leaseId, firstLease.leaseId);
+        assert.equal((await run('open', [APP], secondLease.leaseId)).ok, true);
         assert.equal(
           baselineInitialized(
-            await run('diff', ['snapshot'], secondLease, { snapshotInteractiveOnly: true }),
+            await run('diff', ['snapshot'], secondLease.leaseId, { snapshotInteractiveOnly: true }),
           ),
           true,
           'a reacquired lease must not compare against the expired session tree',
         );
-        assert.equal((await run('close', [], secondLease, {})).ok, true);
+        assert.equal((await run('close', [], secondLease.leaseId, {})).ok, true);
       },
       { leaseRegistry },
     );

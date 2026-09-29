@@ -63,14 +63,19 @@ function makeCase(seeds: ReadonlyArray<NodeSeed>): Omit<DifferentialCase, 'name'
   for (const [index, seed] of seeds.entries()) nodes.push(makeNode(seed, index, nodes));
 
   return {
+    route: seedRoute(seeds[0]!),
     projection: projectionFor(seeds[0]!),
-    interactiveOnly: false,
+    interactiveOnly: seeds[0]!.enabled,
     depth: depthFor(seeds[0]!),
     scope: scopeFor(seeds[0]!),
     foldPolicy: foldPolicyFor(seeds[0]!),
     viewport: VIEWPORT,
     nodes,
   };
+}
+
+function seedRoute(seed: NodeSeed): 'acquired' | 'runner-presented' {
+  return seed.y % 2 === 0 ? 'runner-presented' : 'acquired';
 }
 
 function makeNode(

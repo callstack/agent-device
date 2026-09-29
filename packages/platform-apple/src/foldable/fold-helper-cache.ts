@@ -1,21 +1,19 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
+import { hostHomeDirectory } from '@agent-device/host-kit/host-file';
+import { findProjectRoot } from '@agent-device/host-kit/version';
 import { runAppleToolCommand } from '../core/tool-provider.ts';
 import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../runner/apple-runner-platform.ts';
-import { readHostToolchainIdentity } from '../snapshot-source/cache-identity.ts';
-import {
-  createSnapshotSourceDeadline,
-  type SnapshotSourceDeadline,
-} from '../snapshot-source/deadline.ts';
-import { SnapshotSourceError } from '../snapshot-source/errors.ts';
-import { createSnapshotSourceHost } from '../snapshot-source/host.ts';
+import { createNativeBuildDeadline, type NativeBuildDeadline } from '../native-build/deadline.ts';
+import { NativeBuildError } from '../native-build/errors.ts';
+import { createNativeBuildHost, type NativeBuildHost } from '../native-build/host.ts';
+import { readHostToolchainIdentity } from '../native-build/toolchain-identity.ts';
 import {
   ensureNativeBuildCacheEntry,
   execNativeBuildClang,
   fingerprintNativeBuildSource,
-} from '../snapshot-source/native-build-cache.ts';
-import type { SnapshotSourceHost } from '../snapshot-source/types.ts';
+} from '../native-build/cache.ts';
 
 const FOLD_HELPER_SOURCE_FILENAME = 'Fold.m';
 const FOLD_HELPER_BINARY_FILENAME = 'fold-helper';
@@ -33,9 +31,9 @@ const FOLD_HELPER_PREPARATION_DEADLINE_MS =
 
 /**
  * The fold helper binary for the host's active toolchain, building and caching it if needed. Shares
- * the snapshot bridge's content+toolchain-keyed build cache (`native-build-cache.ts`), so a fold
+ * the snapshot bridge's content+toolchain-keyed build cache (`native-build/cache.ts`), so a fold
  * call after the first serves a cached binary instead of recompiling `Fold.m`, and a `DEVELOPER_DIR`
- * switch busts the cache instead of serving a binary built against a different SDK (#2796).
+ * switch busts the cache instead of serving a binary built against a different SDK (#2796, #2970).
  *
  * Build and cache failures surface as `AppError('COMMAND_FAILED', ..., {reason:
  * 'fold-helper-build-failed'})`, the error shape `sendSimulatorFoldPose` reported before this cache
@@ -44,15 +42,15 @@ const FOLD_HELPER_PREPARATION_DEADLINE_MS =
 export async function ensureFoldHelperBinary(
   input: Readonly<{
     signal?: AbortSignal;
-    host?: SnapshotSourceHost;
+    host?: NativeBuildHost;
     cacheRoot?: string;
     sourceRoot?: string;
   }> = {},
 ): Promise<Readonly<{ path: string }>> {
   const host = input.host ?? createFoldHelperCacheHost();
-  const deadline = createSnapshotSourceDeadline(FOLD_HELPER_PREPARATION_DEADLINE_MS, input.signal);
+  const deadline = createNativeBuildDeadline(FOLD_HELPER_PREPARATION_DEADLINE_MS, input.signal);
   try {
-    const sourceRoot = input.sourceRoot ?? path.join(host.projectRoot(), 'apple', 'fold-helper');
+    const sourceRoot = input.sourceRoot ?? path.join(findProjectRoot(), 'apple', 'fold-helper');
     const sourceHash = await fingerprintNativeBuildSource(
       host,
       sourceRoot,
@@ -61,7 +59,7 @@ export async function ensureFoldHelperBinary(
     );
     const toolchain = await readHostToolchainIdentity(host, deadline);
     const cacheRoot =
-      input.cacheRoot ?? path.join(host.homeDirectory(), '.agent-device', 'fold-helper');
+      input.cacheRoot ?? path.join(hostHomeDirectory(), '.agent-device', 'fold-helper');
     return await ensureNativeBuildCacheEntry({
       host,
       deadline,
@@ -82,14 +80,12 @@ export async function ensureFoldHelperBinary(
   }
 }
 
-function createFoldHelperCacheHost(): SnapshotSourceHost {
-  const real = createSnapshotSourceHost();
-  return {
-    ...real,
-    // Routed through the Apple tool-provider scope, not `run`'s default `runCmd`, so a fold test
-    // can fake every exec this cache makes the same way it fakes the simctl dispatch (#2796).
-    run: (command, args, options) => runAppleToolCommand(command, args, options),
-  };
+function createFoldHelperCacheHost(): NativeBuildHost {
+  // Routed through the Apple tool-provider scope, not `run`'s default `runCmd`, so a fold test can
+  // fake every exec this cache makes the same way it fakes the simctl dispatch (#2796). A narrow
+  // build host, not the full snapshot-bridge host: compilation needs no bridge socket and no
+  // target-process inspection (#2970).
+  return createNativeBuildHost(runAppleToolCommand);
 }
 
 /**
@@ -119,8 +115,8 @@ export function buildFoldHelperCompileArgv(
 }
 
 async function compileFoldHelper(
-  host: SnapshotSourceHost,
-  deadline: SnapshotSourceDeadline,
+  host: NativeBuildHost,
+  deadline: NativeBuildDeadline,
   sourceRoot: string,
   outputPath: string,
 ): Promise<void> {
@@ -137,13 +133,13 @@ async function compileFoldHelper(
 }
 
 /**
- * Rewraps a cache failure as the fold helper's build error, keeping its hint and typed details; a
- * cancellation, and any error that is not a snapshot-source failure, passes through unchanged.
+ * Rewraps a native-build cache failure as the fold helper's build error, keeping its hint and typed
+ * details; a cancellation, and any error that is not a native-build failure (including the fold
+ * helper's own `foldHelperBuildFailed`, already in its public shape), passes through unchanged.
  */
 function asFoldHelperCacheError(error: unknown): unknown {
-  if (!(error instanceof SnapshotSourceError) || error.failureKind === 'cancelled') return error;
-  const { bridgeFailure: _kind, bridgeFailureCode: cause, ...details } = error.details ?? {};
-  return foldHelperBuildFailed({ ...details, cause }, error);
+  if (!(error instanceof NativeBuildError) || error.buildFailureKind === 'cancelled') return error;
+  return foldHelperBuildFailed({ ...error.buildDetails, cause: error.buildFailureCode }, error);
 }
 
 function foldHelperBuildFailed(details: Readonly<Record<string, unknown>>, cause?: unknown) {

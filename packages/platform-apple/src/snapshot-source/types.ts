@@ -1,12 +1,12 @@
-import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
+import type { ExecResult } from '@agent-device/host-kit/command';
 import type {
   CaptureHint,
   IosSnapshotAcquisition,
   IosViewportEvidence,
 } from '@agent-device/contracts/ios-snapshot';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { NativeBuildHost } from '../native-build/host.ts';
 import type { SimulatorAddress } from '../core/simctl.ts';
-import type { SnapshotSourceDeadline } from './deadline.ts';
 
 export type SnapshotSourceLimits = Readonly<{
   maxRequestBytes: number;
@@ -78,52 +78,40 @@ export type SnapshotSourceSocket = Readonly<{
   destroy(error?: Error): void;
 }>;
 
-export type SnapshotSourceHost = Readonly<{
-  projectRoot(): string;
-  homeDirectory(): string;
-  run(command: string, args: string[], options?: ExecOptions): Promise<ExecResult>;
-  start(
-    simulator: SimulatorAddress,
-    bridgePath: string,
-    socketPath: string,
-    options?: { signal?: AbortSignal },
-  ): SnapshotSourceProcess;
-  connect(
-    socketPath: string,
-    options: { signal?: AbortSignal; timeoutMs: number },
-  ): Promise<SnapshotSourceSocket>;
-  readText(path: string): Promise<string>;
-  readBinary(path: string): Promise<Buffer>;
-  writeText(path: string, contents: string): Promise<void>;
-  ensureDirectory(path: string): Promise<void>;
-  chmod(path: string, mode: number): Promise<void>;
-  exists(path: string): boolean;
-  rename(sourcePath: string, destinationPath: string): Promise<void>;
-  remove(path: string): Promise<void>;
-  acquireLock(
-    path: string,
-    /** `description` names the contended resource in a stall's diagnostic, e.g. "iOS Simulator
-     * snapshot bridge cache"; every lock holder states its own, since this host is shared by every
-     * runtime clang build in the package. */
-    options: { deadline: SnapshotSourceDeadline; description: string },
-  ): Promise<() => Promise<void>>;
-  emitDiagnostic(event: {
-    level?: 'debug' | 'info' | 'warn' | 'error';
-    phase: string;
-    durationMs?: number;
-    data?: Record<string, unknown>;
-  }): void;
-  withDiagnosticTimer<T>(
-    phase: string,
-    action: () => Promise<T> | T,
-    data?: Record<string, unknown>,
-  ): Promise<T>;
-  processId(): number;
-  readTargetProcessStartTime(
-    pid: number,
-    options: { signal?: AbortSignal; timeoutMs: number },
-  ): Promise<string | null>;
-}>;
+/**
+ * The shared native-build host (file access, exec, lock, process identity) plus what a bridge
+ * session needs beyond a build: socket start/connect, diagnostics, and target inspection (#2970).
+ */
+export type SnapshotSourceHost = NativeBuildHost &
+  Readonly<{
+    projectRoot(): string;
+    homeDirectory(): string;
+    start(
+      simulator: SimulatorAddress,
+      bridgePath: string,
+      socketPath: string,
+      options?: { signal?: AbortSignal },
+    ): SnapshotSourceProcess;
+    connect(
+      socketPath: string,
+      options: { signal?: AbortSignal; timeoutMs: number },
+    ): Promise<SnapshotSourceSocket>;
+    emitDiagnostic(event: {
+      level?: 'debug' | 'info' | 'warn' | 'error';
+      phase: string;
+      durationMs?: number;
+      data?: Record<string, unknown>;
+    }): void;
+    withDiagnosticTimer<T>(
+      phase: string,
+      action: () => Promise<T> | T,
+      data?: Record<string, unknown>,
+    ): Promise<T>;
+    readTargetProcessStartTime(
+      pid: number,
+      options: { signal?: AbortSignal; timeoutMs: number },
+    ): Promise<string | null>;
+  }>;
 
 export type SnapshotSourceBridgeBinary = Readonly<{
   path: string;

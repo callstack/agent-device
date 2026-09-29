@@ -4,7 +4,11 @@ import type {
 } from '@agent-device/contracts/app-deployment-runtime';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { readyMaterializeAndDeployAppUse } from '@agent-device/contracts/app-deployment-runtime-plan';
-import { isIosFamily } from '@agent-device/kernel/device';
+import {
+  isIosFamily,
+  matchesPlatformSelector,
+  publicPlatformString,
+} from '@agent-device/kernel/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   cleanupRetainedMaterializedPaths,
@@ -127,10 +131,10 @@ async function resolveInstallDevice(
   flags: DaemonRequest['flags'] | undefined,
 ): Promise<SessionState['device']> {
   const requestedPlatform = normalizePlatform(flags?.platform);
-  if (session && requestedPlatform && session.device.platform !== requestedPlatform) {
+  if (session && requestedPlatform && !matchesPlatformSelector(session.device, requestedPlatform)) {
     throw new AppError(
       'INVALID_ARGS',
-      `install_from_source requested platform ${requestedPlatform}, but session is bound to ${session.device.platform}`,
+      `install_from_source requested platform ${requestedPlatform}, but session is bound to ${publicPlatformString(session.device)}`,
     );
   }
   if (!session && !requestedPlatform) {

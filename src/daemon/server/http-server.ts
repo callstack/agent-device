@@ -1,5 +1,6 @@
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import http, { type IncomingHttpHeaders } from 'node:http';
+import { randomUUID } from 'node:crypto';
 import {
   AppError,
   normalizeError,
@@ -46,6 +47,7 @@ import { tryHandleUploadHttpRoute } from '../upload-http.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../downloadable-artifact-http.ts';
 import { tryHandleRequestDiagnosticsHttpRoute } from '../request-diagnostics-http.ts';
 import { resolveTrustedTenant, tenantTrustRejectionError } from './tenant-trust.ts';
+import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
 import type { TenantSessionNamespace } from '../session-tenant-scope.ts';
 import { tryHandleHumanControlHttpRoute } from '../human-control-http.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
@@ -174,7 +176,7 @@ function writeProgressEnvelope(
   res: http.ServerResponse<http.IncomingMessage>,
   event: RequestProgressEvent,
 ): void {
-  if (res.destroyed) return;
+  if (res.destroyed || res.writableEnded) return;
   res.write(serializeDaemonProgressEnvelope(event));
 }
 
@@ -571,6 +573,7 @@ export async function createDaemonHttpServer(options: {
    */
   resolveRequestDiagnosticsPath?: (ref: DiagnosticsRecordRef) => string;
 }): Promise<http.Server> {
+  const instanceId = randomUUID();
   const environment = options.env ?? process.env;
   const authHook = await loadHttpAuthHook(environment);
   const { handleRequest, token, retainArtifacts = false, resolveRequestDiagnosticsPath } = options;
@@ -578,7 +581,11 @@ export async function createDaemonHttpServer(options: {
     if (req.method === 'GET' && req.url === '/health') {
       res.statusCode = 200;
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify(buildDaemonHealthPayload('agent-device-daemon', readVersion())));
+      res.end(
+        JSON.stringify(
+          buildDaemonHealthPayload('agent-device-daemon', readVersion(), { instanceId }),
+        ),
+      );
       return;
     }
 
@@ -749,6 +756,16 @@ export async function createDaemonHttpServer(options: {
           );
           return;
         }
+        const tokenError = enforceDaemonToken(daemonRequest.token, token);
+        if (tokenError) {
+          sendJson(
+            res,
+            createRpcError(rpcRequest.id ?? null, -32000, tokenError.message, tokenError),
+            401,
+          );
+          return;
+        }
+        if (refuseStaleDaemonInstance(req, res, rpcRequest.id ?? null, instanceId)) return;
         daemonRequest.meta = {
           ...daemonRequest.meta,
           tenantId: tenantTrust.tenantId,
