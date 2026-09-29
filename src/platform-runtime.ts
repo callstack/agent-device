@@ -54,6 +54,7 @@ import {
   type PlatformRuntimeProviderRegistration,
 } from './platform-runtime-gateway.ts';
 import { createComposedDeviceInventoryGateways } from './platform-runtime-device-inventory.ts';
+import type { DeviceShutdownGuard } from './platform-runtime-device-shutdown-host.ts';
 import { createAndroidObservationHost } from './platform-runtime-android-observation-host.ts';
 import type { RequestPlatformProviderOptions } from './platform-runtime/request-providers.ts';
 
@@ -143,6 +144,7 @@ export function createPlatformRuntimeGateway(
     resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
     sessionsDir: string;
     ownedProcesses?: OwnedProcessRecordWriter;
+    shutdownGuard?: DeviceShutdownGuard;
   }>,
 ): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   return createComposedPlatformRuntimeGateway({
@@ -154,6 +156,7 @@ export function createPlatformRuntimeGateway(
         sessionsDir: options.sessionsDir,
         resolveSessionArtifacts: options.resolveSessionArtifacts,
         shutdownLoaders,
+        shutdownGuard: options.shutdownGuard,
         snapshot: createSnapshotRuntimeHost({
           linux: captureLinuxSurfaceSnapshot,
           macos: loadMacOsSurfaceSnapshot,

@@ -112,6 +112,36 @@ Holds do not survive daemon restart, matching lease state. Reconnect and re-esta
 before continuing human interaction. Local takeover without a device-scoped remote lease is
 deferred; this does not provide a host-global fence across local daemons.
 
+## Restricting What Clients Can Do
+
+Start the proxy with a daemon policy to confine every client to named devices and commands. The
+daemon enforces it for every request, including `batch` steps and `replay` actions:
+
+```json
+{
+  "version": 1,
+  "devices": { "allow": [{ "udid": "<simulator-udid>" }] },
+  "commands": { "deny": ["boot", "shutdown"] },
+  "capabilities": { "deny": ["device-shutdown"] }
+}
+```
+
+```bash
+AGENT_DEVICE_DAEMON_POLICY=./policy.json agent-device proxy
+```
+
+- `devices.allow` lists the only devices clients can see (`devices`) or use. Use `udid` for Apple
+  devices and `serial` for Android.
+- `commands` takes either `allow` or `deny`, not both. With `allow`, commands a later release adds
+  stay denied.
+- `capabilities.deny: ["device-shutdown"]` blocks `shutdown`, `close --shutdown`, and any other path
+  that would shut the device down.
+
+The daemon reads the file once at start and refuses to start if it is invalid. If a daemon is
+already running for the state directory with a different policy, the proxy refuses to reuse it;
+stop that daemon first. A denied request fails with `UNAUTHORIZED` and
+`details.reason: "DAEMON_POLICY_DENIED"`.
+
 ## What Is Exposed
 
 The proxy allows only the daemon HTTP contract: `/health`, `/rpc`, `/upload` plus resumable `/upload/*` routes, and `/artifacts/*`, with the same routes also available under `/agent-device/*`. Health checks are unauthenticated; command, upload, and artifact routes require the bearer token.

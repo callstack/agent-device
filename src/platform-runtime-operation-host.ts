@@ -26,7 +26,10 @@ import { createPerfRuntimeHost } from './platform-runtime-perf-host.ts';
 import { createApplePhysicalReadinessHost } from './platform-runtime-apple-physical-readiness.ts';
 import { createAppleAutomationKeepHotHost } from './platform-runtime-apple-automation-keep-hot.ts';
 import { createAndroidEmulatorHost } from './platform-runtime-android-emulator-host.ts';
-import { createDeviceShutdownRuntimeHost } from './platform-runtime-device-shutdown-host.ts';
+import {
+  createDeviceShutdownRuntimeHost,
+  type DeviceShutdownGuard,
+} from './platform-runtime-device-shutdown-host.ts';
 import { createAppleAppDeploymentExecutor } from './platform-runtime-apple-deployment-executor.ts';
 import { createAndroidAppDeploymentExecutor } from './platform-runtime-android-deployment-executor.ts';
 import { createTemporaryTextFile } from './platform-runtime-host.ts';
@@ -54,6 +57,7 @@ export function createPlatformRuntimeHost(options: {
   sessionsDir: string;
   resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
   shutdownLoaders: DeviceShutdownRuntimeLoaders;
+  shutdownGuard?: DeviceShutdownGuard;
   snapshot: SnapshotRuntimeHost;
   ownedProcesses?: OwnedProcessRecordWriter;
 }): PlatformRuntimeHost {
@@ -124,6 +128,7 @@ export function createPlatformRuntimeHost(options: {
     deviceShutdown: createDeviceShutdownRuntimeHost(
       { appleTools, commands },
       options.shutdownLoaders,
+      options.shutdownGuard,
     ),
     screenRecording: createScreenRecordingRuntimeHost({ ownedProcesses: options.ownedProcesses }),
     audioProbe: createAudioProbeRuntimeHost({ ownedProcesses: options.ownedProcesses }),

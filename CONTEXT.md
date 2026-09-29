@@ -107,6 +107,11 @@ _Avoid_: Request generation
 **Human-control hold**:
 A device-scoped pause on agent mutations during human operation.
 
+**Daemon policy**:
+Operator rules one daemon enforces for every admitted request: allowed devices, allowed or denied
+commands, and denied capabilities such as device shutdown.
+_Avoid_: Command policy (the runtime path policy), auth hook policy
+
 ### Commands and routing
 
 **Command surface**:

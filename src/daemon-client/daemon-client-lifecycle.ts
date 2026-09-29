@@ -194,7 +194,10 @@ async function readReusableLocalDaemon(settings: DaemonClientSettings): Promise<
     onAnyAdvertisedTransport: async () =>
       viaClientTransport || (await canConnectReusableDaemon(existing, 'auto')),
   });
-  if (decision.kind === 'reuse') return existing;
+  if (decision.kind === 'reuse') {
+    await assertReusableDaemonPolicy(existing, settings.paths.baseDir);
+    return existing;
+  }
   if (decision.kind === 'refuseNewer') {
     throw newerDaemonRefusedError(existing, decision, settings.paths.baseDir);
   }
@@ -203,6 +206,27 @@ async function readReusableLocalDaemon(settings: DaemonClientSettings): Promise<
   await stopDaemonProcessForTakeover(existing);
   removeDaemonInfo(settings.paths.infoPath);
   return null;
+}
+
+/**
+ * ADR 0029: a caller that names a daemon policy must not silently reuse a daemon that enforces a
+ * different one (or none). A caller that names no policy reuses whatever the daemon enforces.
+ */
+async function assertReusableDaemonPolicy(existing: DaemonInfo, stateDir: string): Promise<void> {
+  if (!process.env.AGENT_DEVICE_DAEMON_POLICY?.trim()) return;
+  const { loadDaemonPolicy } = await import('../daemon/daemon-policy.ts');
+  const expected = loadDaemonPolicy(process.env)?.digest;
+  if (expected === existing.policyDigest) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    'The running daemon does not enforce the daemon policy named by AGENT_DEVICE_DAEMON_POLICY.',
+    {
+      reason: 'DAEMON_POLICY_MISMATCH',
+      expectedPolicyDigest: expected,
+      daemonPolicyDigest: existing.policyDigest ?? null,
+      hint: `Stop the running daemon (agent-device daemon stop --state-dir ${stateDir}), then retry so a daemon starts with this policy.`,
+    },
+  );
 }
 
 async function canConnectReusableDaemon(

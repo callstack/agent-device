@@ -6,6 +6,11 @@ import type {
   DeviceShutdownRuntimeLoaders,
 } from '@agent-device/contracts/device-shutdown-runtime';
 
+/** ADR 0029: the daemon policy's last line against a device shutdown, whichever command asks. */
+export type DeviceShutdownGuard = Readonly<{
+  assertShutdownAllowed?: () => void;
+}>;
+
 /**
  * Neutral composition seam shared by canonical shutdown and legacy close.
  * Family mechanics stay in the owning private platform packages and load only when called.
@@ -13,6 +18,7 @@ import type {
 export function createDeviceShutdownRuntimeHost(
   dependencies: DeviceShutdownRuntimeDependencies,
   loaders: DeviceShutdownRuntimeLoaders,
+  guard: DeviceShutdownGuard = {},
 ): DeviceShutdownRuntimeHost {
   let appleRuntime: ReturnType<DeviceShutdownRuntimeLoaders['apple']> | undefined;
   let androidRuntime: ReturnType<DeviceShutdownRuntimeLoaders['android']> | undefined;
@@ -27,16 +33,23 @@ export function createDeviceShutdownRuntimeHost(
   };
 
   const apple = Object.freeze({
-    shutdownTarget: async (device: DeviceInfo, signal: AbortSignal) =>
-      await (await loadApple()).shutdownTarget(device, signal),
+    shutdownTarget: async (device: DeviceInfo, signal: AbortSignal) => {
+      guard.assertShutdownAllowed?.();
+      return await (await loadApple()).shutdownTarget(device, signal);
+    },
   });
   const android = Object.freeze({
-    shutdownTarget: async (device: DeviceInfo, signal: AbortSignal) =>
-      await (await loadAndroid()).shutdownTarget(device, signal),
+    shutdownTarget: async (device: DeviceInfo, signal: AbortSignal) => {
+      guard.assertShutdownAllowed?.();
+      return await (await loadAndroid()).shutdownTarget(device, signal);
+    },
   });
   const close: DeviceShutdownCloseCapability = Object.freeze({
     canShutdownTarget: async (device) => await canShutdownTarget(device, loadApple, loadAndroid),
-    shutdownTarget: async (device) => await shutdownTargetForClose(device, loadApple, loadAndroid),
+    shutdownTarget: async (device) => {
+      guard.assertShutdownAllowed?.();
+      return await shutdownTargetForClose(device, loadApple, loadAndroid);
+    },
   });
 
   return Object.freeze({ apple, android, close });

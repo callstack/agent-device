@@ -81,6 +81,7 @@ import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
 import { resolveGenericRuntimeExecution } from './generic-runtime-execution.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
+import { restrictDeviceInventoryToDaemonPolicy, type DaemonPolicy } from './daemon-policy.ts';
 
 // ---------------------------------------------------------------------------
 // Request handler API
@@ -107,6 +108,8 @@ export type RequestRouterDeps = {
   androidObservation?: AndroidObservationAdapter;
   platformResourceCleanup?: PlatformResourceCleanup;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
+  /** ADR 0029: the daemon policy every admitted request, including nested steps, obeys. */
+  daemonPolicy?: DaemonPolicy;
   trackDownloadableArtifact: (opts: {
     artifactPath: string;
     tenantId?: string;
@@ -153,7 +156,6 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     logPath,
     token,
     requestPlatformProviders = EMPTY_REQUEST_PLATFORM_PROVIDERS,
-    deviceInventoryGateways,
     deviceRuntimeGateway,
     appLogAdmissionLedger = createAppLogAdmissionLedger(),
     audioProbeAdmissionLedger = createAudioProbeAdmissionLedger(),
@@ -169,8 +171,12 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     platformResourceCleanup = unavailablePlatformResourceCleanup,
     providerDeviceRuntimeScope,
     trackDownloadableArtifact,
+    daemonPolicy,
   } = deps;
   const { sessionStore, leaseRegistry } = deps;
+  const deviceInventoryGateways = daemonPolicy
+    ? restrictDeviceInventoryToDaemonPolicy(deps.deviceInventoryGateways, daemonPolicy)
+    : deps.deviceInventoryGateways;
 
   async function handleRequest(req: DaemonRequest): Promise<DaemonResponse> {
     const start = Date.now();
@@ -237,6 +243,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
               platformRequestScope,
               platformResourceCleanup,
               providerAppCatalog,
+              daemonPolicy,
             });
             return await executeRequestScope(scope);
           }),
@@ -361,6 +368,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           platformRequestScope: createPlatformRequestScope(scopedReq),
           platformResourceCleanup,
           providerAppCatalog,
+          daemonPolicy,
         });
         // The outer replay keeps its stable session lock plus the device lock
         // from the first device binding through response projection and ref

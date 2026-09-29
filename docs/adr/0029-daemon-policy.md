@@ -1,0 +1,109 @@
+# ADR 0029: Daemon Policy — Operator Rules Every Admitted Request Obeys
+
+## Status
+
+Accepted (2026-09-29).
+
+## Rules at a glance
+
+1. A **daemon policy** is one declarative JSON file named by `AGENT_DEVICE_DAEMON_POLICY`. The
+   daemon loads it once at start and never reloads it. A policy that cannot be read or validated
+   stops the daemon from starting.
+2. The policy applies to **every request the daemon admits**, whatever transport it came from. It is
+   a property of the daemon instance, not of a request's origin.
+3. It is enforced at three points, each below the one before:
+   - **Request gate** — `createRequestExecutionScope` refuses denied commands, a `batch` that names
+     a denied step, `close --shutdown` when `device-shutdown` is denied, and an explicit
+     `--udid`/`--serial` outside the device scope. `batch` steps and `replay` actions re-enter this
+     function, so they are gated too.
+   - **Device scope** — request runtime bindings refuse a resolved device outside the scope before
+     the gateway binds it, and device inventory (therefore `devices` and device selection) lists
+     only allowed devices.
+   - **Capability gate** — the device-shutdown host capability refuses every shutdown, whichever
+     command asks for it.
+4. A denial is `UNAUTHORIZED` with `details.reason: 'DAEMON_POLICY_DENIED'`, the `rule`
+   (`command`, `device`, or `capability`), the policy digest, `retriable: false`, and a hint. It
+   never names the policy's host path.
+5. The daemon publishes the policy digest in `daemon.json`. A client that names a policy refuses to
+   reuse a daemon that enforces a different one, or none. A client that names no policy reuses
+   whatever the daemon enforces.
+
+## Policy shape
+
+```json
+{
+  "version": 1,
+  "devices": { "allow": [{ "udid": "8F1C…" }, { "serial": "emulator-5554" }] },
+  "commands": { "deny": ["boot", "shutdown"] },
+  "capabilities": { "deny": ["device-shutdown"] }
+}
+```
+
+- `devices.allow` — device ids the daemon may bind. Absent: every device.
+- `commands` — exactly one of `allow` or `deny`, naming public commands. Names are checked against
+  the command catalog at load. With `allow`, commands added by a later upgrade are denied by
+  default. The internal `install_source` command is matched as `install-from-source`; other internal
+  protocol commands (leases, takeover, session bookkeeping) are not matched by command rules.
+- `capabilities.deny` — operations denied whichever command reaches them. `device-shutdown` is the
+  only capability today.
+
+Unknown keys are errors, so a misspelled rule cannot silently become no rule.
+
+## Context
+
+`agent-device proxy` and hook-authenticated HTTP daemons expose one host's devices to remote
+agents. Operators need to confine a remote agent to one simulator and stop it from shutting that
+simulator down. The HTTP auth hook (`AGENT_DEVICE_HTTP_AUTH_HOOK`) sees every top-level RPC, so it
+could refuse commands, but it is the wrong owner for this:
+
+- `batch` steps and `replay` actions run inside the daemon and never pass the HTTP edge again, and
+  `shutdown` is batchable.
+- A device name (`--device "iPhone 16"`) is resolved inside the daemon; the edge only sees the name.
+- `close --shutdown` and lifecycle close reach the same shutdown capability as `shutdown`.
+
+## Decision
+
+Authorization of operations lives in the daemon, next to the request admission, device binding, and
+host capability it constrains. The HTTP auth hook keeps authentication and tenant attestation.
+
+### Why the policy ignores request origin
+
+Remote-origin requests carry `internal.publicNetworkOnly`, but `replay` and `test` copy it to child
+requests by hand. A rule keyed on origin inherits that propagation risk: a child request that loses
+the marker would escape the policy. A daemon-wide rule has nothing to propagate. A host operator who
+needs unrestricted access runs `simctl`/`adb` directly or a daemon with another `--state-dir`.
+
+### Why three enforcement points
+
+The request gate gives an early, specific error before any lock or device resolution. It cannot see
+the device a name resolves to, and it cannot anticipate every future command that shuts a device
+down. The device scope sees the resolved device on every binding; the capability gate sees every
+shutdown. Each later point is the backstop for the earlier one, so a new command or flag cannot
+bypass the policy by reaching the operation another way.
+
+### Why fail closed and never reload
+
+A daemon that started without its operator's policy, or that swapped policies mid-session, would
+make every earlier admission decision stale. Loading once and refusing to start on an invalid file
+means a running daemon has exactly one policy, and its digest identifies it.
+
+## Consequences
+
+- An operator can pin a remote daemon to one simulator and deny shutdown with a five-line file.
+- Sessions, leases, and claims keep their existing semantics; the policy only removes options.
+- The policy cannot yet be inspected over RPC. Agents learn it from denial errors, which carry the
+  rule and a do-not-retry hint.
+- Lease allocation for a device outside the scope is not refused at allocation time; the device
+  scope refuses the first request that binds it.
+- A local caller on the host that triggers daemon takeover (for example by asking for a transport
+  the running daemon does not serve) starts the replacement with its own environment. A caller that
+  names no policy therefore gets a daemon without one. Remote clients reach the daemon only over
+  HTTP and cannot trigger takeover; local callers are the operator's own processes.
+
+## Rejected alternatives
+
+- **Policy in the HTTP auth hook or the proxy.** Both see only top-level RPCs; see Context.
+- **Per-request or per-tenant policy.** Needs authenticated identity first; ADR 0021 Host can layer
+  per-user rules on top of this per-daemon floor.
+- **A programmatic policy module.** Deferred. If added, it must decide at the same three points, not
+  at the HTTP edge.
