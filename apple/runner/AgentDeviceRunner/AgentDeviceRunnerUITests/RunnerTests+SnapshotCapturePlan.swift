@@ -205,6 +205,20 @@ extension RunnerTests {
     }
   }
 
+  /// The reason a capture's verdict carries. An XCTest-backed tier that recovered a deferred plan
+  /// ran on the bounded probe's short slice, so it reports that constraint ('budget') rather than
+  /// the pre-selection ('deferred') the plan was seeded with.
+  static func recoveredVerdictReason(
+    backend: SnapshotBackendKind,
+    state: SnapshotXCTestChannelPlanState,
+    firstFailure: (reason: String, code: String)?
+  ) -> (reason: String, code: String)? {
+    guard backend.usesXCTestAccessibilityChannel, state == .deferredToIndependentBackend else {
+      return firstFailure
+    }
+    return xcTestChannelStateFirstFailure(.boundedXCTestProbe)
+  }
+
   /// Pure gate: a capture is planned as penalized when the channel penalty is
   /// active OR the daemon pinned the private-AX backend (same-backend evidence
   /// probe) — both mean "do not enter XCTest tree work first, and stamp the
@@ -250,13 +264,21 @@ extension RunnerTests {
     }
     let availablePlan = plan.filter { availableBackends.contains($0) }
     let recoveryPlan = availablePlan.filter { !$0.usesXCTestAccessibilityChannel }
-    let boundedProbePlan = availablePlan.filter(\.usesXCTestAccessibilityChannel)
-    // The independent backend reads only the app it can match as the active AX application, so
-    // an out-of-process surface over the app (the Save Password sheet) leaves it empty for the
-    // whole penalty. The bounded XCTest probe stays behind it as the last tier.
+    if !recoveryPlan.isEmpty {
+      // The independent backend reads only the app it can match as the active AX application, so
+      // an out-of-process surface over the app (the Save Password sheet) leaves it empty for the
+      // whole penalty. The tree, on the bounded probe's short slice, stays behind it; the query
+      // sweep does not, since its grind is what the penalty keeps off the main thread.
+      return EffectiveSnapshotCapturePlan(
+        plan: recoveryPlan + availablePlan.filter { $0 == .recursiveTree },
+        xCTestChannelState: .deferredToIndependentBackend,
+        treeCaptureSliceBudgetOverride: Self.penalizedXCTestProbeTreeSliceBudget,
+        preferredBackend: nil
+      )
+    }
     return EffectiveSnapshotCapturePlan(
-      plan: recoveryPlan + boundedProbePlan,
-      xCTestChannelState: recoveryPlan.isEmpty ? .boundedXCTestProbe : .deferredToIndependentBackend,
+      plan: availablePlan.filter(\.usesXCTestAccessibilityChannel),
+      xCTestChannelState: .boundedXCTestProbe,
       treeCaptureSliceBudgetOverride: Self.penalizedXCTestProbeTreeSliceBudget,
       preferredBackend: nil
     )
@@ -387,6 +409,11 @@ extension RunnerTests {
       }
 
       let recovered = kind != effectivePlan.first || effective.xCTestChannelState != .normal
+      let verdictReason = Self.recoveredVerdictReason(
+        backend: kind,
+        state: effective.xCTestChannelState,
+        firstFailure: firstFailure
+      )
       if recovered {
         NSLog(
           "AGENT_DEVICE_RUNNER_SNAPSHOT_RECOVERED backend=%@ reason=%@",
@@ -398,7 +425,7 @@ extension RunnerTests {
         capture,
         backend: kind,
         state: recovered ? .recovered : .healthy,
-        reason: recovered || firstFailure?.code == "requested-backend" ? firstFailure : nil
+        reason: recovered || firstFailure?.code == "requested-backend" ? verdictReason : nil
       )
     }
 

@@ -408,7 +408,7 @@ extension RunnerTests {
       Self.regularVisiblePlan,
       xCTestChannelPenalized: true
     )
-    XCTAssertEqual(regular.plan, [.privateAX, .recursiveTree, .querySweep])
+    XCTAssertEqual(regular.plan, [.privateAX, .recursiveTree])
     XCTAssertEqual(regular.xCTestChannelState, .deferredToIndependentBackend)
     XCTAssertEqual(regular.treeCaptureSliceBudgetOverride, Self.penalizedXCTestProbeTreeSliceBudget)
 
@@ -428,6 +428,25 @@ extension RunnerTests {
     XCTAssertEqual(raw.plan, Self.rawDiagnosticPlan)
     XCTAssertEqual(raw.xCTestChannelState, .normal)
     XCTAssertNil(raw.treeCaptureSliceBudgetOverride)
+  }
+
+  func testRecoveredVerdictReasonNamesTheBoundedProbeForAnXCTestTierBehindPrivateAX() {
+    let deferred = Self.xcTestChannelStateFirstFailure(.deferredToIndependentBackend)
+    XCTAssertEqual(
+      Self.recoveredVerdictReason(
+        backend: .recursiveTree, state: .deferredToIndependentBackend, firstFailure: deferred
+      )?.code,
+      "budget"
+    )
+    XCTAssertEqual(
+      Self.recoveredVerdictReason(
+        backend: .privateAX, state: .deferredToIndependentBackend, firstFailure: deferred
+      )?.code,
+      "deferred"
+    )
+    XCTAssertNil(
+      Self.recoveredVerdictReason(backend: .recursiveTree, state: .normal, firstFailure: nil)
+    )
   }
 
   func testEffectiveSnapshotCapturePlanUsesBoundedXCTestProbeWhenNoIndependentBackendRuns() {
