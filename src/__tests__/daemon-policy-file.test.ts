@@ -52,8 +52,16 @@ test('the digest names the rules, not their order or source path', () => {
     },
     '/elsewhere/policy.json',
   );
-  const different = parseDaemonPolicy({ version: 1, commands: { deny: ['boot'] } }, SOURCE);
+  const base = { version: 1, devices: { allow: [{ udid: 'a' }] }, commands: { deny: ['boot'] } };
+  const baseDigest = parseDaemonPolicy(base, SOURCE).digest;
+  const variants = [
+    { ...base, commands: { deny: ['boot', 'shutdown'] } },
+    { ...base, devices: { allow: [{ udid: 'b' }] } },
+    { ...base, capabilities: { deny: ['device-shutdown'] } },
+  ];
 
   expect(reordered.digest).toBe(first.digest);
-  expect(different.digest).not.toBe(first.digest);
+  for (const variant of variants) {
+    expect(parseDaemonPolicy(variant, SOURCE).digest).not.toBe(baseDigest);
+  }
 });

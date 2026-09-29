@@ -26,21 +26,33 @@ const PUBLIC_COMMAND_NAMES: ReadonlySet<string> = new Set(Object.values(PUBLIC_C
 
 /** Refuses a request the policy denies before it resolves a device or takes a lock. */
 export function assertDaemonPolicyAdmitsRequest(policy: DaemonPolicy, req: DaemonRequest): void {
-  assertCommandAdmitted(policy, req.command);
-  if (req.command === 'batch') {
-    for (const step of req.flags?.batchSteps ?? []) {
-      assertCommandAdmitted(policy, normalizeBatchCommandName(step.command));
-    }
+  assertInvocationAdmitted(policy, req.command, req.flags ?? {});
+  if (req.command !== 'batch') return;
+  // Refuse the whole batch before any step runs; each step is admitted again when it runs.
+  for (const step of req.flags?.batchSteps ?? []) {
+    assertInvocationAdmitted(policy, normalizeBatchCommandName(step.command), {
+      ...step.input,
+      ...step.flags,
+    });
   }
-  if (req.command === 'close' && req.flags?.shutdown === true) {
+}
+
+function assertInvocationAdmitted(
+  policy: DaemonPolicy,
+  command: string,
+  fields: Readonly<Record<string, unknown>>,
+): void {
+  assertCommandAdmitted(policy, command);
+  if (command === 'close' && fields.shutdown === true) {
     assertDaemonPolicyAllowsCapability(policy, 'device-shutdown');
   }
-  for (const id of [req.flags?.udid, req.flags?.serial]) {
-    if (id !== undefined && policy.deviceIds && !policy.deviceIds.has(id.trim())) {
-      throw policyDenied(policy, 'device', `Device ${id} is outside this daemon's policy.`, {
-        deviceId: id,
-      });
-    }
+  if (!policy.deviceIds) return;
+  for (const value of [fields.udid, fields.serial]) {
+    const id = typeof value === 'string' ? value.trim() : '';
+    if (!id || policy.deviceIds.has(id)) continue;
+    throw policyDenied(policy, 'device', `Device ${id} is outside this daemon's policy.`, {
+      deviceId: id,
+    });
   }
 }
 
@@ -77,13 +89,19 @@ export function restrictDeviceInventoryToDaemonPolicy(
   const localOnly: DeviceInventoryGateway = Object.freeze({
     discover: async (request, scope) => allowed(await gateways.localOnly.discover(request, scope)),
   });
+  // A provider that answers with only out-of-scope devices must not hide allowed local devices.
+  const discoverWithSource: ProviderAwareDeviceInventoryGateway['discoverWithSource'] = async (
+    request,
+    scope,
+  ) => {
+    const discovery = await gateways.providerFirst.discoverWithSource(request, scope);
+    const devices = allowed(discovery.devices);
+    if (devices.length > 0 || discovery.source === 'local') return { ...discovery, devices };
+    return { devices: await localOnly.discover(request, scope), source: 'local' };
+  };
   const providerFirst: ProviderAwareDeviceInventoryGateway = Object.freeze({
-    discover: async (request, scope) =>
-      allowed(await gateways.providerFirst.discover(request, scope)),
-    discoverWithSource: async (request, scope) => {
-      const discovery = await gateways.providerFirst.discoverWithSource(request, scope);
-      return { ...discovery, devices: allowed(discovery.devices) };
-    },
+    discover: async (request, scope) => (await discoverWithSource(request, scope)).devices,
+    discoverWithSource,
   });
   return Object.freeze({ ...gateways, localOnly, providerFirst });
 }

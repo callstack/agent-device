@@ -101,6 +101,10 @@ means a running daemon has exactly one policy, and its digest identifies it.
   claims, session teardown) is not request work and is not device-scoped: refusing it would leak
   the processes and claims it exists to release. It acts only on records in the daemon's own state
   dir. The capability gate still applies, so recovery cannot shut a device down.
+- `AGENT_DEVICE_DAEMON_POLICY` configures a daemon started on this host. A client connected to a
+  remote daemon (`AGENT_DEVICE_DAEMON_BASE_URL`, `connect proxy`) neither sends nor verifies it;
+  the remote host's operator owns that daemon's policy. Publishing the digest over `/health` so a
+  remote client can check it is a follow-up that needs a daemon wire change.
 - An invalid policy's startup error names the policy path on the daemon's stderr. That output
   reaches only the host process that started the daemon, and the operator needs the path to fix
   the file; request-time denials never name it.

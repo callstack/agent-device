@@ -12,6 +12,7 @@ import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts'
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { parseDaemonPolicy } from '../../daemon-policy-file.ts';
+import { assertDaemonPolicyAdmitsRequest } from '../daemon-policy.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import {
@@ -35,7 +36,7 @@ function policy(raw: Record<string, unknown>) {
 
 function makeHandler(
   daemonPolicy: ReturnType<typeof policy>,
-  options: { inventory?: readonly DeviceInfo[] } = {},
+  options: { inventory?: readonly DeviceInfo[]; providerInventory?: readonly DeviceInfo[] } = {},
 ) {
   const sessionStore = makeSessionStore('agent-device-daemon-policy-');
   sessionStore.set('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
@@ -49,6 +50,14 @@ function makeHandler(
     deviceRuntimeGateway: { ...lifecycleDeviceRuntimeGateway, bind, inspectFacts },
     deviceInventoryGateways: createTestDeviceInventoryGateways({
       local: async () => options.inventory ?? [],
+      provider: options.providerInventory
+        ? {
+            discover: async () => ({
+              kind: 'inventory',
+              devices: [...(options.providerInventory ?? [])],
+            }),
+          }
+        : undefined,
     }),
     trackDownloadableArtifact: () => 'artifact-id',
     daemonPolicy,
@@ -152,6 +161,59 @@ test('a session bound to a device outside the policy cannot inspect or bind it',
 test('device inventory lists only the devices the policy allows', async () => {
   const { handler } = makeHandler(policy({ devices: { allow: [{ udid: IOS_SIMULATOR.id }] } }), {
     inventory: [IOS_SIMULATOR, OTHER_SIMULATOR, ANDROID_EMULATOR],
+  });
+
+  const response = await handler(request('devices', { session: undefined }));
+
+  expect(response).toMatchObject({
+    ok: true,
+    data: { devices: [expect.objectContaining({ id: IOS_SIMULATOR.id })] },
+  });
+});
+
+test('a batch step that shuts down or names a foreign device is refused before any step runs', async () => {
+  const { handler } = makeHandler(
+    policy({
+      devices: { allow: [{ udid: IOS_SIMULATOR.id }] },
+      capabilities: { deny: ['device-shutdown'] },
+    }),
+  );
+
+  const shutdownStep = await handler(
+    request('batch', {
+      flags: {
+        batchSteps: [{ command: 'app-switcher' }, { command: 'close', flags: { shutdown: true } }],
+      },
+    }),
+  );
+  const foreignStep = await handler(
+    request('batch', {
+      flags: {
+        batchSteps: [
+          { command: 'app-switcher' },
+          { command: 'open', flags: { udid: OTHER_SIMULATOR.id } },
+        ],
+      },
+    }),
+  );
+
+  expectPolicyDenied(shutdownStep, 'capability');
+  expectPolicyDenied(foreignStep, 'device');
+  expect(systemRuntimeSpies.appSwitcher).not.toHaveBeenCalled();
+});
+
+test('an empty device selector names no device and is not a policy denial', () => {
+  const pinned = policy({ devices: { allow: [{ udid: IOS_SIMULATOR.id }] } });
+
+  expect(() =>
+    assertDaemonPolicyAdmitsRequest(pinned, request('open', { flags: { udid: '', serial: ' ' } })),
+  ).not.toThrow();
+});
+
+test('a provider answering with only out-of-scope devices does not hide allowed local ones', async () => {
+  const { handler } = makeHandler(policy({ devices: { allow: [{ udid: IOS_SIMULATOR.id }] } }), {
+    inventory: [IOS_SIMULATOR],
+    providerInventory: [OTHER_SIMULATOR],
   });
 
   const response = await handler(request('devices', { session: undefined }));
