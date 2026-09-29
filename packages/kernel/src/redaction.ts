@@ -35,20 +35,32 @@ function redactValue(value: unknown, seen: WeakSet<object>, keyHint?: string): u
   if (seen.has(value as object)) return '[Circular]';
   seen.add(value as object);
 
-  if (Array.isArray(value)) {
-    return value.map((entry, index) => {
-      if (keyHint === 'argv' && typeof entry === 'string') {
-        if (entry.startsWith('--launch-env=')) {
-          return `--launch-env=${redactLaunchEnvironmentEntry(entry.slice('--launch-env='.length))}`;
-        }
-        if (value[index - 1] === '--launch-env') return redactLaunchEnvironmentEntry(entry);
-      }
-      return redactValue(entry, seen);
-    });
-  }
+  if (Array.isArray(value)) return redactArray(value, seen, keyHint);
+  return redactRecord(value as Record<string, unknown>, seen);
+}
 
+function redactArray(
+  value: readonly unknown[],
+  seen: WeakSet<object>,
+  keyHint?: string,
+): unknown[] {
+  return value.map((entry, index) => {
+    if (keyHint === 'argv' && typeof entry === 'string') {
+      if (entry.startsWith('--launch-env=')) {
+        return `--launch-env=${redactLaunchEnvironmentEntry(entry.slice('--launch-env='.length))}`;
+      }
+      if (value[index - 1] === '--launch-env') return redactLaunchEnvironmentEntry(entry);
+    }
+    return redactValue(entry, seen);
+  });
+}
+
+function redactRecord(
+  value: Record<string, unknown>,
+  seen: WeakSet<object>,
+): Record<string, unknown> {
   const output: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+  for (const [key, entry] of Object.entries(value)) {
     if (key === 'launchEnvironment') {
       output[key] = redactLaunchEnvironmentMap(entry, seen);
       continue;

@@ -62,7 +62,7 @@ test('web shutdown cleanup reaps the exact daemon that survived graceful shutdow
   const daemonPid = child.pid ?? 0;
   assert.ok(daemonPid > 0, 'expected the fake daemon to have a pid');
   t.after(() => {
-    if (isProcessAlive(daemonPid)) process.kill(daemonPid, 'SIGKILL');
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
     rmSync(root, { recursive: true, force: true });
   });
 
@@ -101,8 +101,26 @@ test('web shutdown cleanup reaps the exact daemon that survived graceful shutdow
     true,
     'expected cleanup to escalate after the child ignored SIGTERM',
   );
+  await waitForChildExit(child, 1_000);
   assert.equal(isProcessAlive(daemonPid), false);
 });
+
+async function waitForChildExit(child: ReturnType<typeof spawn>, timeoutMs: number): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      child.off('exit', onExit);
+      reject(
+        new Error(`child process ${child.pid ?? '<unknown>'} did not exit within ${timeoutMs}ms`),
+      );
+    }, timeoutMs);
+    const onExit = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+    child.once('exit', onExit);
+  });
+}
 
 type StepRecord = {
   step: string;
