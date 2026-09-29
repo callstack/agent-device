@@ -27,6 +27,7 @@ import {
 import {
   clearAndroidImeHelperText,
   isAndroidImeHelperPackage,
+  rebindAndroidImeHelper,
   selectAndroidImeHelperArtifact,
   sendAndroidImeHelperText,
 } from './ime-helper.ts';
@@ -250,9 +251,20 @@ async function fillAndroidImeHelper(
   const adb = resolveAndroidAdbExecutor(device);
   let lastVerification: AndroidFillVerification | null = null;
   // The caller focused the target while resolving the channel; the retry re-focuses because it
-  // covers the rare not-yet-bound InputConnection right after focus.
+  // covers the rare not-yet-bound InputConnection right after focus. A commit that left the field
+  // empty went to a stale input session, which only a rebind of the IME replaces.
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    if (attempt > 0) await focusAndroid(device, x, y);
+    if (attempt > 0) {
+      if (lastVerification?.actualInput?.hintShowing === true) {
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'android_test_ime_rebind',
+          data: { device: device.id },
+        });
+        await rebindAndroidImeHelper(adb);
+      }
+      await focusAndroid(device, x, y);
+    }
     await clearAndroidImeHelperText(adb, packageName);
     if (text) await sendAndroidImeHelperText(adb, packageName, text);
     const verification = await verifyAndroidFilledText(device, x, y, text, helper);

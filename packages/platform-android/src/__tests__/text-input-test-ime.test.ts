@@ -258,6 +258,11 @@ test('fillAndroid re-focuses the target when the first helper attempt fails veri
 
   assert.equal(currentText, 'filed the expense');
   assert.equal(
+    calls.filter((args) => args[1] === 'ime').length,
+    0,
+    'a landed commit is no stale session',
+  );
+  assert.equal(
     calls.filter((args) => args[1] === 'input' && args[2] === 'tap').length,
     2,
     'the retry attempt must re-focus the target before its clear-and-commit round',
@@ -268,6 +273,47 @@ test('fillAndroid re-focuses the target when the first helper attempt fails veri
     2,
     'each helper attempt clears before it commits',
   );
+});
+
+test('fillAndroid rebinds the helper IME before retrying a commit that left the field on its hint', async () => {
+  setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
+  let rebound = false;
+  let currentText = '';
+  const calls: (readonly string[])[] = [];
+  const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
+    exec: async (args) => {
+      calls.push(args);
+      if (args[1] === 'ime' && args[2] === 'set') rebound = true;
+      if (args[1] === 'am' && args[2] === 'broadcast') {
+        const action = args[args.indexOf('-a') + 1];
+        // A stale input session: the app drops every commit until the IME is rebound.
+        if (rebound && action === 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64') {
+          currentText += decodeBroadcastText(args);
+        }
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+    captureXml: () =>
+      currentText
+        ? androidInputXml({ text: currentText })
+        : `<?xml version="1.0" encoding="UTF-8"?><hierarchy><node package="com.example" class="android.widget.EditText" text="e.g. Jane" hint="e.g. Jane" hint-showing="true" focused="true" bounds="[0,0][200,100]"/></hierarchy>`,
+  });
+
+  await withAndroidAdbProvider(
+    { exec: adb, snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      await fillAndroid(ANDROID_EMULATOR, 10, 10, 'Jane');
+    },
+  );
+
+  assert.equal(currentText, 'Jane');
+  const imeVerbs = calls.filter((args) => args[1] === 'ime').map((args) => args[2]);
+  assert.deepEqual(imeVerbs, ['disable', 'enable', 'set']);
+  const commands = calls.map((args) => `${args[1]} ${args[2]}`);
+  const lastImeCall = commands.lastIndexOf('ime set');
+  const retryTap = commands.lastIndexOf('input tap');
+  assert.ok(lastImeCall < retryTap, 'the rebind comes before the retry re-focuses the field');
 });
 
 // Unicode is only beyond the *shell* path. Refusing it before reading which IME is active denied
