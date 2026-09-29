@@ -1167,12 +1167,7 @@ function createStubClient(params: {
   const command = createThrowingMethodGroup<AgentDeviceClient['command']>();
   return {
     command,
-    devices: {
-      list: async () => [],
-      capabilities: unexpectedCommandCall,
-      boot: unexpectedCommandCall,
-      shutdown: unexpectedCommandCall,
-    },
+    devices: createThrowingMethodGroup<AgentDeviceClient['devices']>({ list: async () => [] }),
     sessions: {
       list: async () => [],
       stateDir: async () => '/tmp/agent-device-state',
@@ -1279,11 +1274,11 @@ function createStubClient(params: {
   };
 }
 
-function createThrowingMethodGroup<T extends object>(): T {
+function createThrowingMethodGroup<T extends object>(initial: Partial<T> = {}): T {
   const unexpectedCommandCall = async (): Promise<never> => {
     throw new Error('unexpected command call');
   };
-  return new Proxy({} as Partial<T>, {
+  return new Proxy(initial, {
     get: (target, property) => target[property as keyof T] ?? unexpectedCommandCall,
   }) as T;
 }

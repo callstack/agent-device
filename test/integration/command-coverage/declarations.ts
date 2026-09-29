@@ -1,6 +1,7 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { ANDROID_AUDIO_CONTRACT_EVIDENCE } from '../../../src/daemon/session-observability/__tests__/session-audio.coverage.ts';
 import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from '../../../src/__tests__/install-source.coverage.ts';
+import { ANDROID_WEARABLE_PAIRING_CONTRACT_EVIDENCE } from '../../../src/__tests__/wearable-pairing.coverage.ts';
 import { ANDROID_LIFECYCLE_CONTRACT_EVIDENCE } from '../provider-scenarios/android-lifecycle.coverage.ts';
 import {
   androidEmulator,
@@ -193,6 +194,37 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       LINUX_RUNTIME_EVIDENCE.path,
       LINUX_RUNTIME_EVIDENCE.test,
       'Linux runtime facts explicitly report boot unavailable for the desktop owner',
+    ),
+  },
+  [C.pairWearable]: {
+    androidEmulator: androidEmulator.contract(
+      ANDROID_WEARABLE_PAIRING_CONTRACT_EVIDENCE,
+      'Wear transport readiness is proved and incomplete companion setup is explicit',
+    ),
+    iosSimulator: iosSimulator.contract(
+      'packages/platform-apple/src/wearable-pairing.test.ts',
+      'pairs and activates a selected watchOS simulator',
+      'CoreSimulator pairing is selected, activated, and returned as typed evidence',
+    ),
+    macos: macos.contract(
+      'src/daemon/handlers/__tests__/session-state.test.ts',
+      'pair-wearable rejects unsupported Apple phone OS leaves',
+      'macOS pairing is refused by runtime admission',
+    ),
+    tvos: tvos.contract(
+      'src/daemon/handlers/__tests__/session-state.test.ts',
+      'pair-wearable rejects unsupported Apple phone OS leaves',
+      'tvOS cannot be selected as the phone endpoint',
+    ),
+    web: web.contract(
+      'src/daemon/handlers/__tests__/session-state.test.ts',
+      'pair-wearable rejects non-Apple phone platforms at input validation',
+      'web is rejected by the endpoint contract before device resolution',
+    ),
+    linux: linux.contract(
+      'src/daemon/handlers/__tests__/session-state.test.ts',
+      'pair-wearable rejects non-Apple phone platforms at input validation',
+      'Linux is rejected by the endpoint contract before device resolution',
     ),
   },
   [C.shutdown]: {

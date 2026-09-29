@@ -29,6 +29,7 @@ const APPLE_SIMULATOR_OPERATION_HOSTS: Readonly<
   bootTarget: 'simulator',
   bootTargetHeadless: 'simulator',
   shutdownTarget: 'simulator',
+  pairWearable: 'simulator',
   // App inventory, deployment, state, logs, network, audio: simctl and host tooling.
   listApps: 'simulator',
   deployApp: 'simulator',

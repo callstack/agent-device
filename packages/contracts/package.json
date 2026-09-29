@@ -348,6 +348,10 @@
       "types": "./src/platform-runtime-operations.ts",
       "default": "./src/platform-runtime-operations.ts"
     },
+    "./wearable-pairing-runtime": {
+      "types": "./src/wearable-pairing-runtime.ts",
+      "default": "./src/wearable-pairing-runtime.ts"
+    },
     "./platform-runtime-unavailable": {
       "types": "./src/platform-runtime-unavailable.ts",
       "default": "./src/platform-runtime-unavailable.ts"

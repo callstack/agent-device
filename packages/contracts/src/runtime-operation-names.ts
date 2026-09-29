@@ -52,6 +52,7 @@ export const RUNTIME_OPERATION_NAMES = [
   'materializeAppSource',
   'networkDump',
   'openApplication',
+  'pairWearable',
   'perfFrames',
   'perfMemorySample',
   'perfMemorySnapshot',

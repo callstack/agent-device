@@ -121,5 +121,6 @@
   "@agent-device/contracts/type-text-runtime",
   "@agent-device/contracts/viewport-runtime",
   "@agent-device/contracts/wait",
-  "@agent-device/contracts/wait-runtime-plan"
+  "@agent-device/contracts/wait-runtime-plan",
+  "@agent-device/contracts/wearable-pairing-runtime"
 ]

@@ -51,6 +51,22 @@ test('matching selector/platform pairs still resolve', async () => {
   assert.equal((await resolveDevice([APPLE], { platform: 'ios', udid: 'SIM-001' })).id, 'SIM-001');
 });
 
+test('--platform ios excludes a booted watchOS simulator from phone selection', async () => {
+  const watch: DeviceInfo = {
+    platform: 'apple',
+    target: 'mobile',
+    appleOs: 'watchos',
+    id: 'WATCH-001',
+    name: 'Apple Watch Series 10',
+    kind: 'simulator',
+    booted: true,
+  };
+  assert.equal((await resolveDevice([APPLE, watch], { platform: 'ios' })).id, APPLE.id);
+  assert.equal((await resolveDevice([APPLE, watch], {})).id, APPLE.id);
+  assert.equal((await resolveDevice([APPLE, watch], { platform: 'apple' })).id, APPLE.id);
+  assert.equal((await resolveError([watch], { platform: 'ios' })).code, 'DEVICE_NOT_FOUND');
+});
+
 test('an unspecified platform keeps the existing device-not-found behavior', async () => {
   const error = await resolveError([ANDROID], { udid: 'emulator-5580' });
   assert.equal(error.code, 'DEVICE_NOT_FOUND');

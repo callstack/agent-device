@@ -71,12 +71,22 @@ import { appleSystemFacts, createAppleSystemOperations } from './system/runtime.
 import { appleFoldableFacts, createAppleFoldableOperations } from './foldable/runtime.ts';
 import { bindAppleFindTextRuntime, bindAppleSnapshotRuntime } from './runtime-snapshot.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
+import { pairAppleWearable } from './wearable-pairing.ts';
+import type {
+  PairWearableInput,
+  WearablePairingRuntimeOperations,
+} from '@agent-device/contracts/wearable-pairing-runtime';
 
 const owner = localRuntimeOwner('apple');
 const available = Object.freeze({ available: true } as const);
 const unavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
+} as const);
+const wearableDeviceKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'Apple wearable pairing is supported only from an iOS or iPadOS Simulator.',
 } as const);
 const viewportUnavailable = Object.freeze({
   available: false,
@@ -275,6 +285,8 @@ function appleFocusFact(device: DeviceInfo): RuntimeOperationFact {
 export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   const appLogs = createAppleAppLogRuntime(host);
   const snapshotRoute = createAppleSnapshotRoute(host);
+  // This is the single exhaustive fact table for every Apple runtime operation.
+  // fallow-ignore-next-line complexity
   const inspectFacts = async (device: DeviceInfo) => {
     const logs = await appLogs.inspectFacts(device);
     const deployment = appleAppDeploymentFacts(device);
@@ -333,6 +345,12 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         ensureReady: readiness,
         bootTarget: boot,
         bootTargetHeadless: headlessUnavailable,
+        pairWearable:
+          resolveDeviceAppleOs(device) === 'ios' || resolveDeviceAppleOs(device) === 'ipados'
+            ? device.kind === 'simulator'
+              ? available
+              : wearableDeviceKindUnavailable
+            : unavailable,
         listApps: apps,
         ...appleApplicationLifecycleFacts(device),
         shutdownTarget: shutdownFact(device),
@@ -357,8 +375,16 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             resolveInteractor: host.localInteractors.resolve,
           }),
       );
+      const wearablePairingOperations: Partial<WearablePairingRuntimeOperations> = whenAdmitted(
+        facts.operations.pairWearable,
+        () => ({
+          pairWearable: async (input: PairWearableInput) =>
+            await pairAppleWearable(host, request.device, input, request.scope.signal),
+        }),
+      );
       const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = {
         ...appStateOperations,
+        ...wearablePairingOperations,
         ...logs.operations,
         ...createAppleAppDeploymentOperations({
           host,

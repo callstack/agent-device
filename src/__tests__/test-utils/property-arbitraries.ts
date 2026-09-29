@@ -307,6 +307,7 @@ const REPLAY_SCRIPT_LINE_PLANS = {
   logs: GENERIC_REPLAY_LINE,
   network: GENERIC_REPLAY_LINE,
   orientation: GENERIC_REPLAY_LINE,
+  'pair-wearable': { waived: 'wearable pairing is a sessionless host setup command' },
   perf: GENERIC_REPLAY_LINE,
   prepare: GENERIC_REPLAY_LINE,
   push: GENERIC_REPLAY_LINE,

@@ -81,6 +81,15 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
+    key: 'boot',
+    names: ['--boot'],
+    type: 'boolean',
+    usageLabel: '--boot',
+    usageDescription: 'Pair wearable: boot the selected watch or Wear emulator first',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'targetApp',
     names: ['--app', '--target-app'],
     type: 'string',

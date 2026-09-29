@@ -291,6 +291,28 @@ test('resolveDevice prefers simulator over physical device when no explicit devi
   assert.equal(result.kind, 'simulator');
 });
 
+test('implicit Apple resolution skips watchOS mobile-target simulators but explicit selection can name one', async () => {
+  const phone = { ...IOS_SIMULATOR, id: 'phone-sim', appleOs: 'ios' as const };
+  const watch: DeviceInfo = {
+    platform: 'apple',
+    id: 'watch-sim',
+    name: 'Apple Watch',
+    kind: 'simulator',
+    target: 'mobile',
+    appleOs: 'watchos',
+    booted: true,
+  };
+
+  assert.equal((await resolveDevice([phone, watch], { platform: 'apple' })).id, phone.id);
+  await assert.rejects(resolveDevice([watch], { platform: 'apple' }), {
+    code: 'DEVICE_NOT_FOUND',
+  });
+  assert.equal(
+    (await resolveDevice([watch], { platform: 'apple', deviceName: watch.name })).id,
+    watch.id,
+  );
+});
+
 test('resolveDevice prefers booted simulator over physical device', async () => {
   const physical: DeviceInfo = {
     platform: 'apple',

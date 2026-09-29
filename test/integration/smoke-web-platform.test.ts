@@ -101,8 +101,24 @@ test('web shutdown cleanup reaps the exact daemon that survived graceful shutdow
     true,
     'expected cleanup to escalate after the child ignored SIGTERM',
   );
+  await waitForChildExit(child, 1_000);
   assert.equal(isProcessAlive(daemonPid), false);
 });
+
+async function waitForChildExit(child: ReturnType<typeof spawn>, timeoutMs: number): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise<void>((resolve, reject) => {
+    const onExit = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+    const timeout = setTimeout(() => {
+      child.off('exit', onExit);
+      reject(new Error(`Child process did not exit within ${timeoutMs}ms.`));
+    }, timeoutMs);
+    child.once('exit', onExit);
+  });
+}
 
 type StepRecord = {
   step: string;

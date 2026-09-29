@@ -419,6 +419,7 @@ function sourceRuntimeFacts(
       providerMode: options.providerMode ?? 'local',
     },
     operations: {
+      pairWearable: unavailable,
       ...unavailableApplicationLifecycleOperationFacts,
       appLogInspect: unavailable,
       appLogDoctor: unavailable,

@@ -6,6 +6,7 @@ import { test } from 'vitest';
 import type { AppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import type { AppleSimulatorScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { AppError } from '@agent-device/kernel/errors';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR, PROVIDER_SCENARIO_MACOS } from './fixtures.ts';
 import {
   createProviderIosSimulatorRecordingProcess,
@@ -48,7 +49,11 @@ const WORLDS: Record<World, { leaf: PublicLeaf; open: DriveStep }> = {
   macos: { leaf: 'macos', open: { positionals: ['settings'], flags: { platform: 'macos' } } },
 };
 
-type DriveStep = { positionals?: string[]; flags?: Record<string, unknown> };
+type DriveStep = {
+  positionals?: string[];
+  flags?: Record<string, unknown>;
+  input?: import('../../../src/daemon/daemon-request.ts').DaemonRequest['input'];
+};
 type DriveContext = { world: World; leaf: PublicLeaf; tmpDir: string; appPath: string };
 type DriveSpec = (ctx: DriveContext) => DriveStep[];
 
@@ -72,6 +77,22 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
   [PUBLIC_COMMANDS.devices]: () => one(),
   [PUBLIC_COMMANDS.doctor]: () => one(),
   [PUBLIC_COMMANDS.boot]: () => one(),
+  [PUBLIC_COMMANDS.pairWearable]: () => [
+    {
+      input: {
+        phone: { platform: 'ios', deviceId: 'sim-1' },
+        wearable: { deviceId: 'watch-1' },
+        boot: false,
+      },
+    },
+    {
+      input: {
+        phone: { platform: 'ios', deviceId: 'sim-1' },
+        wearable: { deviceId: 'watch-1' },
+        boot: true,
+      },
+    },
+  ],
   [PUBLIC_COMMANDS.prepare]: () => one(['ios-runner']),
   [PUBLIC_COMMANDS.snapshot]: () => one([], { snapshotInteractiveOnly: true }),
   [PUBLIC_COMMANDS.perf]: () => [{ positionals: [] }, { positionals: ['frames'] }],
@@ -412,8 +433,9 @@ async function runWorldGuard(world: World): Promise<void> {
     for (const command of driveOrder()) {
       for (const step of DRIVEN_COMMANDS[command]!(ctx)) {
         await ensureSession(daemon, world);
+        const options = step.input === undefined ? {} : { input: step.input };
         const response = await withCommandTimeout(
-          daemon.callCommand(command, step.positionals ?? [], step.flags ?? {}),
+          daemon.callCommand(command, step.positionals ?? [], step.flags ?? {}, options),
           command,
         );
         const out = {
@@ -467,6 +489,22 @@ test('every public command is driven or explicitly skipped (no silent escape)', 
   }
   for (const command of [...driven, ...skipped]) {
     assert.ok(known.has(command), `Guard references "${command}", which is not a public command.`);
+  }
+});
+
+test('wearable pairing reaches the provider-backed Apple runtime boundary', async () => {
+  const daemon = await createWorldDaemon('ios');
+  try {
+    await assert.rejects(
+      daemon.client().devices.pairWearable({
+        phone: { platform: 'ios', deviceId: 'sim-1' },
+        wearable: { deviceId: 'watch-1' },
+        boot: false,
+      }),
+      (error: unknown) => error instanceof AppError && error.code === 'DEVICE_NOT_FOUND',
+    );
+  } finally {
+    await daemon.close();
   }
 });
 

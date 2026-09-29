@@ -3,6 +3,7 @@ import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import {
   appStateUse,
+  pairWearableUse,
   resolveDeviceReadinessRuntimePlan,
   shutdownTargetUse,
 } from '@agent-device/contracts/platform-runtime-operations';
@@ -32,6 +33,7 @@ import {
 } from '../runtime-admission.ts';
 import type { RuntimeCommandHandlerParams } from '../session-runtime-admission.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
+import type { WearableSelector } from '@agent-device/contracts/wearable-pairing-runtime';
 
 const IOS_APPSTATE_SESSION_REQUIRED_MESSAGE =
   'iOS appstate requires an active session on the target device. Run open first (for example: open --session sim --platform ios --device "<name>" <app>).';
@@ -120,6 +122,8 @@ async function readAppleSessionAppState(
   }
 }
 
+// App-state supports both live sessions and explicit device selection in one compatibility path.
+// fallow-ignore-next-line complexity
 async function handleAppStateCommand(params: RuntimeCommandHandlerParams): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
   const session = sessionStore.get(sessionName);
@@ -240,6 +244,8 @@ async function handleAppStateCommand(params: RuntimeCommandHandlerParams): Promi
   };
 }
 
+// This dispatcher is the sole daemon owner for the session-state command family.
+// fallow-ignore-next-line complexity
 export async function handleSessionStateCommands(params: {
   req: DaemonRequest;
   sessionName: string;
@@ -248,6 +254,57 @@ export async function handleSessionStateCommands(params: {
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse | null> {
   const { req, sessionName, sessionStore } = params;
+
+  if (req.command === 'pair-wearable') {
+    const input = readPairWearableInput(req.input);
+    const phoneFlags =
+      input.phone.platform === 'ios'
+        ? { ...req.flags, platform: 'apple' as const, udid: input.phone.deviceId }
+        : { ...req.flags, platform: 'android' as const, serial: input.phone.deviceId };
+    const device = await resolveCommandDevice({
+      session: undefined,
+      // Preserve isolation flags from the admitted request while forcing the explicit phone
+      // identity. The Apple family selector lets a watchOS UDID reach capability refusal.
+      flags: phoneFlags,
+      androidAvdSelection: 'include-stopped',
+    });
+    const admitted = await admitRuntimeUse({
+      command: 'pair-wearable',
+      device,
+      use: pairWearableUse,
+      inspectFacts: params.inspectFacts,
+      bindDevice: params.bindDevice,
+      unavailableResponse: (unavailable) =>
+        errorResponse(
+          'UNSUPPORTED_OPERATION',
+          'wearable pairing is supported only for iPhone/iPad Simulators and Android phone targets.',
+          undefined,
+          unavailable.hint ? { hint: unavailable.hint } : undefined,
+        ),
+    });
+    if (admitted.type === 'response') return admitted.response;
+    const result = await admitted.runtime.operations.pairWearable({
+      wearable: input.wearable,
+      boot: input.boot,
+      ...(input.phone.platform === 'android'
+        ? {
+            androidSerialAllowlist: resolveAndroidSerialAllowlistForAppState(
+              req.flags?.androidDeviceAllowlist,
+            ),
+          }
+        : {}),
+    });
+    return {
+      ok: true,
+      data: {
+        pairId: result.pairId,
+        phone: serializePairingDevice(result.phone),
+        wearable: serializePairingDevice(result.wearable),
+        status: result.status,
+        ...(result.remainingHumanStep ? { remainingHumanStep: result.remainingHumanStep } : {}),
+      },
+    };
+  }
 
   if (req.command === 'boot') {
     const session = sessionStore.get(sessionName);
@@ -409,6 +466,68 @@ export async function handleSessionStateCommands(params: {
   }
 
   return null;
+}
+
+function readPairWearableInput(value: unknown): {
+  phone: { platform: 'ios' | 'android'; deviceId: string };
+  wearable?: WearableSelector;
+  boot: boolean;
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new AppError('INVALID_ARGS', 'pair-wearable requires an input object.');
+  }
+  const record = value as Record<string, unknown>;
+  const phone = record.phone;
+  if (!phone || typeof phone !== 'object' || Array.isArray(phone)) {
+    throw new AppError('INVALID_ARGS', 'pair-wearable requires phone.platform and phone.deviceId.');
+  }
+  const phoneRecord = phone as Record<string, unknown>;
+  const platform = phoneRecord.platform;
+  const deviceId = typeof phoneRecord.deviceId === 'string' ? phoneRecord.deviceId.trim() : '';
+  if ((platform !== 'ios' && platform !== 'android') || deviceId.length === 0) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'phone.platform must be ios or android and phone.deviceId must be non-empty.',
+    );
+  }
+  const wearable = readWearableSelector(record.wearable);
+  if (typeof record.boot !== 'boolean') {
+    throw new AppError('INVALID_ARGS', 'pair-wearable requires boolean boot.');
+  }
+  return { phone: { platform, deviceId }, ...(wearable ? { wearable } : {}), boot: record.boot };
+}
+
+function readWearableSelector(value: unknown): WearableSelector | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new AppError('INVALID_ARGS', 'wearable must be an object with deviceId or name.');
+  }
+  const record = value as Record<string, unknown>;
+  if ('deviceId' in record && typeof record.deviceId !== 'string') {
+    throw new AppError('INVALID_ARGS', 'wearable.deviceId must be a string when provided.');
+  }
+  if ('name' in record && typeof record.name !== 'string') {
+    throw new AppError('INVALID_ARGS', 'wearable.name must be a string when provided.');
+  }
+  const deviceId = typeof record.deviceId === 'string' ? record.deviceId.trim() : undefined;
+  const name = typeof record.name === 'string' ? record.name.trim() : undefined;
+  if (!deviceId && !name) {
+    throw new AppError('INVALID_ARGS', 'wearable must include a non-empty deviceId or name.');
+  }
+  if (deviceId) return { deviceId, ...(name ? { name } : {}) };
+  return { name: name! };
+}
+
+function serializePairingDevice(device: DeviceInfo) {
+  return {
+    platform: publicPlatformString(device),
+    ...(device.appleOs ? { appleOs: device.appleOs } : {}),
+    id: device.id,
+    name: device.name,
+    kind: device.kind,
+    target: device.target ?? 'mobile',
+    ...(typeof device.booted === 'boolean' ? { booted: device.booted } : {}),
+  };
 }
 
 function resolveAndroidSerialAllowlistForAppState(value: string | undefined): string[] | undefined {

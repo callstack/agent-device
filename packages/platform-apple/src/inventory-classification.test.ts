@@ -12,6 +12,7 @@ test('devicectl classification recognizes Apple families without relying on a de
   assert.equal(isAppleProductType('iPhone16,2'), true);
   assert.equal(isAppleProductType('AppleTV11,1'), true);
   assert.equal(isAppleProductType('RealityDevice14,1'), true);
+  assert.equal(isAppleProductType('Watch6,4'), true);
   assert.equal(isAppleProductType('Pixel 9'), false);
   assert.equal(
     isSupportedAppleDevicectlDevice({
@@ -22,7 +23,7 @@ test('devicectl classification recognizes Apple families without relying on a de
   );
 });
 
-test('devicectl classification resolves tvOS, iPadOS, and visionOS vocabulary', () => {
+test('devicectl classification resolves tvOS, iPadOS, watchOS, and visionOS vocabulary', () => {
   assert.equal(
     resolveAppleTargetFromDevicectlDevice({
       hardwareProperties: { platform: 'tvOS' },
@@ -30,6 +31,9 @@ test('devicectl classification resolves tvOS, iPadOS, and visionOS vocabulary', 
     'tv',
   );
   assert.equal(resolveAppleOs('mobile', ['iPad16,3']), 'ipados');
+  assert.equal(resolveAppleOs('mobile', ['Watch6,4']), 'watchos');
+  assert.equal(resolveAppleOs('mobile', ['iPhone16,2', 'Watch']), 'ios');
+  assert.equal(resolveAppleOs('mobile', ['Watch Series 10']), 'ios');
   assert.equal(resolveAppleOs('mobile', ['visionOS 2.0']), 'visionos');
 });
 

@@ -184,6 +184,25 @@ export function createAgentDeviceClient(
       boot: async (options = {}) => await executeCommand<CommandResult<'boot'>>('boot', options),
       shutdown: async (options = {}) =>
         await executeCommand<CommandResult<'shutdown'>>('shutdown', options),
+      pairWearable: async (options) => {
+        const data = await executeCommand<Record<string, unknown>>('pair-wearable', options);
+        const status = data.status;
+        if (status !== 'connected' && status !== 'paired' && status !== 'human-step-required') {
+          throw new AppError(
+            'COMMAND_FAILED',
+            'Daemon returned an invalid wearable pairing status.',
+          );
+        }
+        return {
+          pairId: readRequiredString(data, 'pairId'),
+          phone: normalizeDevice(data.phone),
+          wearable: normalizeDevice(data.wearable),
+          status,
+          ...(typeof data.remainingHumanStep === 'string'
+            ? { remainingHumanStep: data.remainingHumanStep }
+            : {}),
+        };
+      },
     },
     sessions: {
       list: async (options = {}) => await listSessions(options),
