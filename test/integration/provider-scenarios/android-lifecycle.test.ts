@@ -542,12 +542,8 @@ async function runAndroidAppControlAndObservabilityWorkflow(
   const finalTracePath = path.join(world.tempRoot, 'android-provider-final.adtrace');
   const traceStart = await daemon.callCommand('trace', ['start', tracePath], selection);
   assert.equal(traceStart.json?.result?.data?.trace, 'started');
-  const cameraGrant = await client.settings.update({
-    setting: 'permission',
-    state: 'grant',
-    permission: 'camera',
-    ...selection,
-  });
+  const grantCamera = { setting: 'permission', state: 'grant', permission: 'camera' } as const;
+  const cameraGrant = await client.settings.update({ ...grantCamera, ...selection });
   assert.equal(cameraGrant.permission, 'camera');
   assert.deepEqual(cameraGrant.permissions, ['android.permission.CAMERA']);
 
