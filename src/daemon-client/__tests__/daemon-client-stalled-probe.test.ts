@@ -28,11 +28,31 @@ const { mockReadProcessStartTime, mockReadProcessCommand } = vi.hoisted(() => ({
   mockReadProcessCommand: vi.fn<(pid: number) => string | null | undefined>(),
 }));
 
-// Every probe's answer, in order; a test can also make the next one miss.
-const { probeAnswers, mockMissNextProbe } = vi.hoisted(() => ({
-  probeAnswers: [] as boolean[],
-  mockMissNextProbe: { value: false },
-}));
+// Every probe's answer, in order, with the port it asked; a test can also make the next one miss.
+const { probeAnswers, probedPorts, mockMissNextProbe, mockEmitDiagnostic, mockSpawnDaemon } =
+  vi.hoisted(() => ({
+    probeAnswers: [] as boolean[],
+    probedPorts: [] as (number | undefined)[],
+    mockMissNextProbe: { value: false },
+    mockEmitDiagnostic: vi.fn(),
+    mockSpawnDaemon: vi.fn(),
+  }));
+
+vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
+  return {
+    ...actual,
+    emitDiagnostic: (...args: Parameters<typeof actual.emitDiagnostic>) => {
+      mockEmitDiagnostic(...args);
+      actual.emitDiagnostic(...args);
+    },
+  };
+});
+
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
+  return { ...actual, runCmdDetachedMonitored: mockSpawnDaemon };
+});
 
 vi.mock('../daemon-client-transport.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../daemon-client-transport.ts')>();
@@ -42,6 +62,7 @@ vi.mock('../daemon-client-transport.ts', async (importOriginal) => {
       const reachable = mockMissNextProbe.value ? false : await actual.canConnect(...args);
       mockMissNextProbe.value = false;
       probeAnswers.push(reachable);
+      probedPorts.push(args[0].port);
       return reachable;
     },
   };
@@ -67,33 +88,6 @@ function resolveCurrentDaemonCodeSignature(): string {
       ? sourcePath
       : distPath;
   return computeDaemonCodeSignature(entryPath, root);
-}
-
-/** Blocks the event loop right after the first socket arms its timeout, as a loaded client does. */
-function stallAfterFirstProbeArms(): { stalled: () => boolean; restore: () => void } {
-  const originalCreateConnection = net.createConnection;
-  let stalled = false;
-  (net as unknown as { createConnection: typeof net.createConnection }).createConnection = ((
-    ...args: Parameters<typeof net.createConnection>
-  ) => {
-    const socket = originalCreateConnection(...args);
-    if (stalled) return socket;
-    stalled = true;
-    const armTimeout = socket.setTimeout.bind(socket);
-    socket.setTimeout = ((timeoutMs: number) => {
-      armTimeout(timeoutMs);
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 700);
-      return socket;
-    }) as typeof socket.setTimeout;
-    return socket;
-  }) as typeof net.createConnection;
-  return {
-    stalled: () => stalled,
-    restore: () => {
-      (net as unknown as { createConnection: typeof net.createConnection }).createConnection =
-        originalCreateConnection;
-    },
-  };
 }
 
 type LiveStandIn = { stateDir: string; pid: number };
@@ -165,6 +159,8 @@ async function withLiveStandIn(
       'utf8',
     );
     probeAnswers.length = 0;
+    probedPorts.length = 0;
+    mockEmitDiagnostic.mockClear();
     await body({ stateDir, pid });
   } finally {
     mockMissNextProbe.value = false;
@@ -199,23 +195,82 @@ test('sendToDaemon keeps a live daemon whose first probe missed', async (t) => {
     assert.deepEqual(probeAnswers.slice(0, 2), [false, true]);
     assert.deepEqual(response, { ok: true, data: { via: 'live-daemon' } });
     assert.equal(isProcessAlive(pid), true);
+    assert.ok(
+      mockEmitDiagnostic.mock.calls.some(
+        ([event]) => event.phase === 'daemon_probe_recovered' && event.data?.pid === pid,
+      ),
+      'a recovered probe names the daemon it kept',
+    );
   });
 });
 
-test('sendToDaemon keeps a live socket daemon whose probe the client stalled past', async (t) => {
-  await withLiveStandIn(t, async ({ stateDir, pid }) => {
-    const stall = stallAfterFirstProbeArms();
-    try {
-      const response = await sendSmoke(stateDir);
-      if (probeAnswers[0] !== false) {
-        t.skip('this host completed the connect before the stalled timer fired');
-        return;
-      }
-      assert.equal(stall.stalled(), true);
-      assert.deepEqual(response, { ok: true, data: { via: 'live-daemon' } });
-      assert.equal(isProcessAlive(pid), true);
-    } finally {
-      stall.restore();
-    }
+test('sendToDaemon replaces a daemon whose process is gone after a single probe', async (t) => {
+  if (!(await supportsLoopbackBind())) {
+    t.skip('loopback listeners are not permitted in this environment');
+    return;
+  }
+  const stateDir = mkdtempForTestSync('agent-device-dead-probe-');
+  const gone = runCmdBackground(process.execPath, ['-e', ''], {
+    stdio: 'ignore',
+    allowFailure: true,
+    captureOutput: false,
   });
+  await gone.wait.catch(() => {});
+  const deadPid = gone.child.pid;
+  assert.ok(deadPid, 'spawned child should have a pid');
+  const unused = net.createServer();
+  const deadPort = await listenOnLoopback(unused);
+  await closeLoopbackServer(unused);
+  const fresh = net.createServer((socket) => {
+    socket.setEncoding('utf8');
+    socket.on('data', () => {
+      socket.end(`${JSON.stringify({ ok: true, data: { via: 'fresh-daemon' } })}\n`);
+    });
+  });
+  const writeInfo = (port: number, pid: number) => {
+    const paths = resolveDaemonPaths(stateDir);
+    fs.mkdirSync(paths.baseDir, { recursive: true });
+    fs.writeFileSync(
+      paths.infoPath,
+      `${JSON.stringify({
+        port,
+        transport: 'socket',
+        token: 'local-secret',
+        pid,
+        version: readVersion(),
+        codeSignature: resolveCurrentDaemonCodeSignature(),
+        processStartTime: readProcessStartTime(process.pid) ?? undefined,
+      })}\n`,
+      'utf8',
+    );
+  };
+
+  try {
+    const freshPort = await listenOnLoopback(fresh);
+    writeInfo(deadPort, deadPid);
+    mockSpawnDaemon.mockImplementation(() => {
+      writeInfo(freshPort, process.pid);
+      return { pid: process.pid, exited: new Promise(() => {}) };
+    });
+    probeAnswers.length = 0;
+    probedPorts.length = 0;
+    mockEmitDiagnostic.mockClear();
+
+    const response = await sendSmoke(stateDir);
+
+    assert.deepEqual(response, { ok: true, data: { via: 'fresh-daemon' } });
+    assert.equal(
+      probedPorts.filter((port) => port === deadPort).length,
+      1,
+      'a daemon whose pid is gone gets no patient retry',
+    );
+    assert.equal(
+      mockEmitDiagnostic.mock.calls.some(([event]) => event.phase === 'daemon_probe_recovered'),
+      false,
+    );
+  } finally {
+    mockSpawnDaemon.mockReset();
+    await closeLoopbackServer(fresh);
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
 });

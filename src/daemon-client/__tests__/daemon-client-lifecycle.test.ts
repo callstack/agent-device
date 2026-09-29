@@ -501,7 +501,7 @@ test('sendToDaemon does not reuse reachable daemon metadata with mismatched vers
 
       assert.deepEqual(response, { ok: true, data: { via: 'fresh-daemon' } });
       assert.equal(mockRunCmdDetached.mock.calls.length, 1);
-      assert.deepEqual(staleDaemon.seenPaths, ['GET /health']);
+      assert.deepEqual(staleDaemon.seenPaths, []);
       assert.deepEqual(freshDaemon.seenPaths, ['GET /health', 'POST /rpc']);
       const staleVersion = fixture.version ?? readVersion();
       assert.equal(
