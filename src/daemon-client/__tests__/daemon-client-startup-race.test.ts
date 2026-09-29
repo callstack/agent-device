@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
@@ -11,13 +12,19 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/retry')>()),
   sleep: vi.fn(async () => {}),
 }));
+const winner = vi.hoisted(() => ({ pid: 43_300, alive: true }));
 vi.mock('../../daemon-process.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../daemon-process.ts')>();
   return {
     ...actual,
-    isAgentDeviceDaemonProcess: vi.fn(
-      (pid: number, startTime: string | undefined) =>
-        pid === WINNER_PID || actual.isAgentDeviceDaemonProcess(pid, startTime),
+    isAgentDeviceDaemonProcess: vi.fn((pid: number, startTime: string | undefined) =>
+      pid === winner.pid ? winner.alive : actual.isAgentDeviceDaemonProcess(pid, startTime),
+    ),
+    stopProcessForTakeover: vi.fn(
+      async (pid: number, options: Parameters<typeof actual.stopProcessForTakeover>[1]) => {
+        if (pid !== winner.pid) return await actual.stopProcessForTakeover(pid, options);
+        winner.alive = false;
+      },
     ),
   };
 });
@@ -26,7 +33,8 @@ import { resolveDaemonPaths, type DaemonPaths } from '../../daemon-resolution.ts
 import { sendToDaemon } from '../daemon-client.ts';
 import { runCmdDetachedMonitored, type ExecDetachedExit } from '@agent-device/host-kit/command';
 import { sleep } from '@agent-device/host-kit/retry';
-import { readVersion } from '@agent-device/host-kit/version';
+import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
+import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
 import {
   startHttpDaemonFixture,
   type HttpDaemonFixture,
@@ -36,21 +44,38 @@ import { closeLoopbackServer, supportsLoopbackBind } from '../../__tests__/test-
 // Two clients that find no daemon both launch one; the daemon that loses the startup lock exits
 // cleanly. These pin that the losing client adopts the winner instead of tearing it down.
 
-const WINNER_PID = 43_300;
+const WINNER_PID = winner.pid;
 const LOSER_PID = 43_301;
 
 const mockRunCmdDetached = vi.mocked(runCmdDetachedMonitored);
 const mockSleep = vi.mocked(sleep);
 
 afterEach(() => {
+  winner.alive = true;
   mockRunCmdDetached.mockReset();
   mockSleep.mockReset();
   mockSleep.mockImplementation(async () => {});
   vi.unstubAllEnvs();
 });
 
+/** The code signature this client expects of a daemon it may reuse. */
+function currentDaemonCodeSignature(): string {
+  const root = findProjectRoot();
+  const distPath = path.join(root, 'dist', 'src', 'internal', 'daemon.js');
+  const entryPath =
+    process.execArgv.includes('--experimental-strip-types') || !fs.existsSync(distPath)
+      ? path.join(root, 'src', 'daemon.ts')
+      : distPath;
+  return computeDaemonCodeSignature(entryPath, root);
+}
+
 /** Records the winning daemon the way it would: the startup lock, then its reachable metadata. */
-function writeWinner(paths: DaemonPaths, fixture: HttpDaemonFixture, parts: 'lock' | 'all'): void {
+function writeWinner(
+  paths: DaemonPaths,
+  fixture: HttpDaemonFixture,
+  parts: 'lock' | 'all',
+  version = readVersion(),
+): void {
   fs.mkdirSync(paths.baseDir, { recursive: true });
   fs.writeFileSync(
     paths.lockPath,
@@ -62,7 +87,8 @@ function writeWinner(paths: DaemonPaths, fixture: HttpDaemonFixture, parts: 'loc
     JSON.stringify({
       token: 'winner-secret',
       pid: WINNER_PID,
-      version: readVersion(),
+      version,
+      codeSignature: currentDaemonCodeSignature(),
       processStartTime: 'winner',
       httpPort: fixture.port,
       transport: 'http',
@@ -136,6 +162,47 @@ test('a one-shot test run leaves a daemon another client started running', async
     assert.equal(response.ok, true);
     assert.equal(fs.existsSync(paths.infoPath), true);
   } finally {
+    await closeLoopbackServer(fixture.server);
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('a start race won by an older daemon replaces it instead of adopting it', async (t) => {
+  if (!(await supportsLoopbackBind())) {
+    t.skip('loopback listeners are not permitted in this environment');
+    return;
+  }
+  const stateDir = mkdtempForTestSync('agent-device-daemon-start-race-older-');
+  const paths = resolveDaemonPaths(stateDir);
+  vi.stubEnv('AGENT_DEVICE_STATE_DIR', stateDir);
+  const fixture = await startHttpDaemonFixture({ devices: [] });
+  let launches = 0;
+  mockRunCmdDetached.mockImplementation(() => {
+    launches += 1;
+    if (launches === 1) writeWinner(paths, fixture, 'all', '0.0.1');
+    const exit: ExecDetachedExit = { pid: LOSER_PID, exitCode: 0 };
+    return { pid: LOSER_PID, exited: Promise.resolve(exit) };
+  });
+  const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+  try {
+    await assert.rejects(
+      sendToDaemon({
+        session: 'default',
+        command: 'devices',
+        positionals: [],
+        flags: { stateDir },
+        meta: { requestId: 'req-start-race-older' },
+      }),
+    );
+    assert.equal(fixture.rpcRequests.length, 0);
+    assert.equal(launches, 2);
+    assert.match(
+      String(stderr.mock.calls.flat().join('')),
+      /Replacing daemon \(pid 43300, v0\.0\.1\)/,
+    );
+  } finally {
+    stderr.mockRestore();
     await closeLoopbackServer(fixture.server);
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

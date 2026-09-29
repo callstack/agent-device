@@ -8,6 +8,7 @@ import type { DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts'
 import { runCmdDetachedMonitored, type ExecDetachedExit } from '@agent-device/host-kit/command';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 
 import { findUnrecoveredRepairCommitFailure } from '../session-repair-tombstone.ts';
@@ -64,11 +65,13 @@ export type EnsuredDaemon = {
 
 type DaemonStartupLaunch = {
   pid: number;
+  /** The launched process's start time, so a reused pid is never taken for it. */
+  startTime?: string;
   exited: Promise<ExecDetachedExit>;
 };
 
 type DaemonStartupWaitResult =
-  | { kind: 'ready'; info: DaemonInfo; startedByClient: boolean }
+  | { kind: 'ready'; daemon: EnsuredDaemon }
   | { kind: 'early_exit'; exit: ExecDetachedExit }
   | { kind: 'timeout' };
 
@@ -275,9 +278,7 @@ async function startLocalDaemon(settings: DaemonClientSettings): Promise<Ensured
     }
 
     const startup = await waitForDaemonStartup(DAEMON_STARTUP_TIMEOUT_MS, settings, launch);
-    if (startup.kind === 'ready') {
-      return { info: startup.info, startedByClient: startup.startedByClient };
-    }
+    if (startup.kind === 'ready') return startup.daemon;
     if (startup.kind === 'early_exit') {
       daemonProcess = startup.exit;
       startError = describeDaemonEarlyExit(startup.exit);
@@ -302,9 +303,7 @@ async function startLocalDaemon(settings: DaemonClientSettings): Promise<Ensured
     cleanupResults.push(cleanup);
     if (cleanup.retainedInfoProcess || cleanup.retainedLockProcess) {
       const extended = await waitForDaemonStartup(DAEMON_STARTUP_TIMEOUT_MS, settings, launch);
-      if (extended.kind === 'ready') {
-        return { info: extended.info, startedByClient: extended.startedByClient };
-      }
+      if (extended.kind === 'ready') return extended.daemon;
       if (extended.kind === 'early_exit') {
         daemonProcess = extended.exit;
         startError = describeDaemonEarlyExit(extended.exit);
@@ -596,8 +595,13 @@ async function waitForDaemonStartup(
   while (Date.now() - start < timeoutMs) {
     const info = readDaemonInfo(settings.paths.infoPath);
     if (info && (await canConnect(info, settings.transportPreference))) {
-      // Another client's daemon may have won the start; only the launched one is this client's.
-      return { kind: 'ready', info, startedByClient: info.pid === launch.pid };
+      if (isLaunchedDaemon(info, launch)) {
+        return { kind: 'ready', daemon: { info, startedByClient: true } };
+      }
+      // Another client's daemon won the start: adopt it only as a reusable daemon would be. An
+      // incompatible one is replaced, and this wait then sees its own daemon's early exit.
+      const winner = await readReusableLocalDaemon(settings);
+      if (winner) return { kind: 'ready', daemon: { info: winner, startedByClient: false } };
     }
     // A daemon that lost the startup lock exits cleanly; the daemon that won it is still starting.
     if (earlyExit && !isDaemonLockHeldByAnotherDaemon(settings.paths, earlyExit.pid)) {
@@ -606,6 +610,15 @@ async function waitForDaemonStartup(
     await sleep(100);
   }
   return { kind: 'timeout' };
+}
+
+/** Whether `info` names the daemon process this client launched: same pid and start time. */
+function isLaunchedDaemon(info: DaemonInfo, launch: DaemonStartupLaunch): boolean {
+  return (
+    info.pid === launch.pid &&
+    launch.startTime !== undefined &&
+    info.processStartTime === launch.startTime
+  );
 }
 
 function startDaemon(settings: DaemonClientSettings): DaemonStartupLaunch {
@@ -623,10 +636,11 @@ function startDaemon(settings: DaemonClientSettings): DaemonStartupLaunch {
   const stdoutFd = fs.openSync(settings.paths.logPath, 'a');
   const stderrFd = fs.openSync(settings.paths.logPath, 'a');
   try {
-    return runCmdDetachedMonitored(process.execPath, args, {
+    const launched = runCmdDetachedMonitored(process.execPath, args, {
       env,
       stdio: ['ignore', stdoutFd, stderrFd],
     });
+    return { ...launched, startTime: readProcessStartTime(launched.pid) ?? undefined };
   } finally {
     fs.closeSync(stdoutFd);
     fs.closeSync(stderrFd);
