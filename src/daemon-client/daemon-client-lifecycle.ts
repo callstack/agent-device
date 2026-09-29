@@ -8,10 +8,9 @@ import type { DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts'
 import { runCmdDetachedMonitored, type ExecDetachedExit } from '@agent-device/host-kit/command';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { readProcessStartTime } from '@agent-device/host-kit/process';
+import { isProcessAlive, readProcessStartTime } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 
-import { isAgentDeviceDaemonProcess } from '../daemon-process.ts';
 import { findUnrecoveredRepairCommitFailure } from '../session-repair-tombstone.ts';
 import {
   resolveDaemonPaths,
@@ -213,10 +212,12 @@ async function readReusableLocalDaemon(settings: DaemonClientSettings): Promise<
 }
 
 /**
- * A daemon whose process is still the one its metadata recorded is probed again before it can be
- * judged unreachable. A probe's budget is wall-clock time on this client's event loop, so a client
- * that stalls past it (a large synchronous parse, a GC pause on a loaded host) reads a listening
- * daemon as unreachable, and replacing it ends every session the daemon holds.
+ * A daemon whose pid is still alive is probed again before it can be judged unreachable. A probe's
+ * budget is wall-clock time on this client's event loop, so a client that stalls past it (a large
+ * synchronous parse, a GC pause on a loaded host) reads a listening daemon as unreachable, and
+ * replacing it ends every session the daemon holds. Liveness is the signal-0 check, not the `ps`
+ * identity read: under the load that stalls the probe, `ps` misses its deadline too, and the
+ * takeover still proves identity before it signals anything.
  */
 async function canReachReusableDaemon(
   info: DaemonInfo,
@@ -224,7 +225,7 @@ async function canReachReusableDaemon(
 ): Promise<boolean> {
   if (await canConnectReusableDaemon(info, preference)) return true;
   for (let retry = 1; retry <= LIVE_DAEMON_PROBE_RETRIES; retry += 1) {
-    if (!isAgentDeviceDaemonProcess(info.pid, info.processStartTime)) return false;
+    if (!isProcessAlive(info.pid)) return false;
     await sleep(LIVE_DAEMON_PROBE_RETRY_DELAY_MS);
     if (await canConnectReusableDaemon(info, preference)) {
       emitDiagnostic({
