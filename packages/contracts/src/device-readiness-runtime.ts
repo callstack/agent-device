@@ -1,6 +1,9 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DeviceInventoryRequest } from './device-inventory.ts';
 
+/** Typed `details.reason` every platform reports when the boot deadline expires. */
+export const BOOT_TIMEOUT_REASON = 'boot_timeout';
+
 export type EnsureReadyInput = Readonly<{
   serial?: string;
   androidSerialAllowlist?: readonly string[];

@@ -1,4 +1,7 @@
-import type { EnsureReadyInput } from '@agent-device/contracts/device-readiness-runtime';
+import {
+  BOOT_TIMEOUT_REASON,
+  type EnsureReadyInput,
+} from '@agent-device/contracts/device-readiness-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 
 /** Readiness reads exactly these host ports; the lifecycle binding composes the same subset. */
@@ -13,7 +16,6 @@ import { delegateManagedDeviceReadiness } from '@agent-device/provision-kit/mana
 
 const BOOT_TIMEOUT_MS = 120_000;
 const POLL_MS = 1_000;
-const BOOT_TIMEOUT_REASON = 'boot_timeout';
 
 export async function ensureAndroidReady(
   host: AndroidReadinessHost,
@@ -104,11 +106,7 @@ async function waitForDiscovery(
     if (device && isRunningEmulator(device)) return device;
     await host.clock.sleep(POLL_MS, signal);
   }
-  throw new AppError('COMMAND_FAILED', 'Android emulator did not appear in time', {
-    avdName,
-    serial,
-    reason: BOOT_TIMEOUT_REASON,
-  });
+  throw bootTimeoutError('Android emulator did not appear in time', { avdName, serial });
 }
 
 async function waitForBoot(
@@ -130,8 +128,12 @@ async function waitForBoot(
     if (result.stdout.trim() === '1') return;
     await host.clock.sleep(POLL_MS, signal);
   }
-  throw new AppError('COMMAND_FAILED', 'Android device failed to finish booting', {
-    serial,
+  throw bootTimeoutError('Android device failed to finish booting', { serial });
+}
+
+function bootTimeoutError(message: string, details: Record<string, unknown>): AppError {
+  return new AppError('COMMAND_FAILED', message, {
+    ...details,
     reason: BOOT_TIMEOUT_REASON,
     hint: 'The emulator keeps booting in the background. Retry once it is up, or pass a larger --timeout.',
   });

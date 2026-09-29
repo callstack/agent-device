@@ -93,7 +93,10 @@ test('a startup deadline bounds the emulator boot wait and expiry reports boot_t
 });
 
 test('a startup deadline also bounds waiting for a launched emulator to appear', async () => {
-  const { host, elapsed } = timedHost({ bootCompleted: '1', discover: () => [stoppedAvd()] });
+  const { host, elapsed, terminate } = timedHost({
+    bootCompleted: '1',
+    discover: () => [stoppedAvd()],
+  });
 
   await expect(
     ensureAndroidReady(
@@ -104,6 +107,25 @@ test('a startup deadline also bounds waiting for a launched emulator to appear',
     ),
   ).rejects.toMatchObject({ details: { reason: 'boot_timeout' } });
   expect(elapsed()).toBeLessThan(5_000);
+  expect(terminate).not.toHaveBeenCalled();
+});
+
+test('expiry of a launched emulator that never reports boot_completed leaves it running', async () => {
+  let discoveries = 0;
+  const { host, terminate } = timedHost({
+    bootCompleted: '0',
+    discover: () => (++discoveries === 1 ? [stoppedAvd()] : [runningEmulator()]),
+  });
+
+  await expect(
+    ensureAndroidReady(
+      host,
+      stoppedAvd(),
+      { headless: true, deadlineAtMs: 3_000 },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({ details: { reason: 'boot_timeout', serial: 'emulator-5554' } });
+  expect(terminate).not.toHaveBeenCalled();
 });
 
 test('without a deadline the default 120s boot wait applies', async () => {
