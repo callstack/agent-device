@@ -9,6 +9,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { isValidSelectorExpression } from '@agent-device/selectors';
 import {
   booleanField,
+  constSchema,
   enumField,
   integerField,
   numberSchema,
@@ -33,10 +34,6 @@ import { absenceCaptureOptionRefusal } from '@agent-device/selectors/absence-obs
 import { absenceCaptureOptionError } from '@agent-device/selectors/absence-observation-errors';
 
 const WAIT_COMMAND_NAME = 'wait';
-
-function constSchema(value: string): JsonSchema {
-  return { type: 'string', const: value };
-}
 
 /**
  * This family's advertised MCP `outputSchema`, keyed by daemon command name and projected into
