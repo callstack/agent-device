@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { DAEMON_POLICY_ENV, loadDaemonPolicy, parseDaemonPolicy } from '../daemon-policy.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { DAEMON_POLICY_ENV, loadDaemonPolicy, parseDaemonPolicy } from '../daemon-policy-file.ts';
 
 const SOURCE = '/etc/agent-device/policy.json';
 

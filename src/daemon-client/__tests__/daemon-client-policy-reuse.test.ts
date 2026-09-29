@@ -13,7 +13,7 @@ import {
   supportsLoopbackBind,
 } from '../../__tests__/test-utils/loopback.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { loadDaemonPolicy } from '../../daemon/daemon-policy.ts';
+import { loadDaemonPolicy } from '../../daemon-policy-file.ts';
 import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { sendToDaemon } from '../daemon-client.ts';
 

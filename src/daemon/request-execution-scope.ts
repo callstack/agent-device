@@ -72,8 +72,8 @@ import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import {
   assertDaemonPolicyAdmitsDevice,
   assertDaemonPolicyAdmitsRequest,
-  type DaemonPolicy,
 } from './daemon-policy.ts';
+import type { DaemonPolicy } from '../daemon-policy-file.ts';
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps
 // test and embedded routers isolated without changing process-level serialization there.

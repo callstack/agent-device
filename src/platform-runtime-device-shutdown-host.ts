@@ -1,15 +1,11 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type {
   DeviceShutdownCloseCapability,
+  DeviceShutdownGuard,
   DeviceShutdownRuntimeDependencies,
   DeviceShutdownRuntimeHost,
   DeviceShutdownRuntimeLoaders,
 } from '@agent-device/contracts/device-shutdown-runtime';
-
-/** ADR 0029: the daemon policy's last line against a device shutdown, whichever command asks. */
-export type DeviceShutdownGuard = Readonly<{
-  assertShutdownAllowed?: () => void;
-}>;
 
 /**
  * Neutral composition seam shared by canonical shutdown and legacy close.

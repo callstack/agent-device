@@ -1,9 +1,7 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  createDeviceShutdownRuntimeHost,
-  type DeviceShutdownGuard,
-} from './platform-runtime-device-shutdown-host.ts';
+import type { DeviceShutdownGuard } from '@agent-device/contracts/device-shutdown-runtime';
+import { createDeviceShutdownRuntimeHost } from './platform-runtime-device-shutdown-host.ts';
 
 const appleShutdown = vi.fn(async () => success());
 const androidShutdown = vi.fn(async () => success());

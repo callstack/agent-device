@@ -23,6 +23,11 @@ export type DeviceShutdownFamilyRuntime = Readonly<{
   shutdownTarget(device: DeviceInfo, signal: AbortSignal): Promise<TargetShutdownResult>;
 }>;
 
+/** ADR 0029: the daemon policy's last line against a device shutdown, whichever command asks. */
+export type DeviceShutdownGuard = Readonly<{
+  assertShutdownAllowed?: () => void;
+}>;
+
 export type DeviceShutdownRuntimeLoaders = Readonly<{
   apple: (
     dependencies: Pick<DeviceShutdownRuntimeDependencies, 'appleTools'>,

@@ -214,7 +214,7 @@ async function readReusableLocalDaemon(settings: DaemonClientSettings): Promise<
  */
 async function assertReusableDaemonPolicy(existing: DaemonInfo, stateDir: string): Promise<void> {
   if (!process.env.AGENT_DEVICE_DAEMON_POLICY?.trim()) return;
-  const { loadDaemonPolicy } = await import('../daemon/daemon-policy.ts');
+  const { loadDaemonPolicy } = await import('../daemon-policy-file.ts');
   const expected = loadDaemonPolicy(process.env)?.digest;
   if (expected === existing.policyDigest) return;
   throw new AppError(

@@ -11,7 +11,7 @@ import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/de
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { parseDaemonPolicy } from '../daemon-policy.ts';
+import { parseDaemonPolicy } from '../../daemon-policy-file.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import {

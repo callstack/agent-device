@@ -81,7 +81,8 @@ import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
 import { resolveGenericRuntimeExecution } from './generic-runtime-execution.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
-import { restrictDeviceInventoryToDaemonPolicy, type DaemonPolicy } from './daemon-policy.ts';
+import { restrictDeviceInventoryToDaemonPolicy } from './daemon-policy.ts';
+import type { DaemonPolicy } from '../daemon-policy-file.ts';
 
 // ---------------------------------------------------------------------------
 // Request handler API

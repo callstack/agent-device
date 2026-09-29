@@ -5,7 +5,10 @@ import type {
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
 import type { OwnedProcessRecordWriter } from '@agent-device/contracts/platform-runtime-host';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
-import type { DeviceShutdownRuntimeDependencies } from '@agent-device/contracts/device-shutdown-runtime';
+import type {
+  DeviceShutdownGuard,
+  DeviceShutdownRuntimeDependencies,
+} from '@agent-device/contracts/device-shutdown-runtime';
 import {
   type ComposedDeviceInventoryGateways,
   createPlatformModuleRegistry,
@@ -54,7 +57,6 @@ import {
   type PlatformRuntimeProviderRegistration,
 } from './platform-runtime-gateway.ts';
 import { createComposedDeviceInventoryGateways } from './platform-runtime-device-inventory.ts';
-import type { DeviceShutdownGuard } from './platform-runtime-device-shutdown-host.ts';
 import { createAndroidObservationHost } from './platform-runtime-android-observation-host.ts';
 import type { RequestPlatformProviderOptions } from './platform-runtime/request-providers.ts';
 

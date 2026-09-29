@@ -10,11 +10,8 @@ import {
   isActiveProviderDevice,
 } from '../../provider-device-runtime.ts';
 import { installProviderDeviceAdmission } from '../provider-device-admission.ts';
-import {
-  assertDaemonPolicyAllowsCapability,
-  loadDaemonPolicy,
-  type DaemonPolicy,
-} from '../daemon-policy.ts';
+import { assertDaemonPolicyAllowsCapability } from '../daemon-policy.ts';
+import { loadDaemonPolicy, type DaemonPolicy } from '../../daemon-policy-file.ts';
 import { getInteractor } from '../../core/interactors.ts';
 import { installInteractorResolution } from '../interactor-resolution.ts';
 import {
