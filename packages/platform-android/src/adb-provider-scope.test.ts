@@ -212,10 +212,66 @@ test('a caller that aborts during the wait gets no retry', async () => {
   expect(commands).toEqual(['install', 'wait-for-device']);
 });
 
+test('device output that mentions device offline is not retried', async () => {
+  const commands: string[] = [];
+  const outputs = [
+    { exitCode: 1, stdout: 'partial', stderr: 'adb: device offline' },
+    { exitCode: 1, stdout: '', stderr: 'flash: device offline, giving up' },
+  ];
+  bindAndroidAdbHostStub({
+    execAdb: async (invocation) => {
+      commands.push(isWaitForDevice(invocation) ? 'wait-for-device' : 'install');
+      return outputs[commands.length - 1] ?? ok();
+    },
+  });
+  const adb = createDeviceAdbExecutor(DEVICE);
+
+  await adb(['install', 'helper.apk'], { allowFailure: true });
+  await adb(['install', 'helper.apk'], { allowFailure: true });
+  expect(commands).toEqual(['install', 'install']);
+});
+
+test('a refusal with no budget left for a wait stands', async () => {
+  const commands: string[] = [];
+  bindAndroidAdbHostStub({
+    execAdb: async (invocation) => {
+      commands.push(isWaitForDevice(invocation) ? 'wait-for-device' : 'install');
+      return { exitCode: 1, stdout: '', stderr: 'adb: device offline' };
+    },
+  });
+
+  const result = await createDeviceAdbExecutor(DEVICE)(['install', 'helper.apk'], {
+    allowFailure: true,
+    timeoutMs: 1,
+  });
+  expect(result.exitCode).toBe(1);
+  expect(commands).toEqual(['install']);
+});
+
+test('the wait asks the same adb server and environment as the refused command', async () => {
+  const calls: Array<{ wait: boolean; server: unknown; env: unknown }> = [];
+  bindAndroidAdbHostStub({
+    execAdb: async (invocation, options) => {
+      const wait = isWaitForDevice(invocation);
+      calls.push({ wait, server: invocation.target.server, env: options?.env });
+      return calls.length === 1 ? { exitCode: 1, stdout: '', stderr: 'adb: device offline' } : ok();
+    },
+  });
+
+  await createDeviceAdbExecutor(DEVICE)(['install', 'helper.apk'], {
+    serverPort: 15_037,
+    env: { ANDROID_SERIAL: 'emulator-5554' },
+  });
+  expect(calls.map((call) => call.wait)).toEqual([false, true, false]);
+  expect(calls[1]?.server).toEqual(calls[0]?.server);
+  expect(calls[1]?.env).toEqual({ ANDROID_SERIAL: 'emulator-5554' });
+});
+
 test('only a device-offline refusal is retried, and a device that stays offline stops waiting', async () => {
   const stuck: DeviceInfo = { ...DEVICE, id: 'emulator-5562' };
   const commands: string[] = [];
   let answers = false;
+  let timesOut = false;
   bindAndroidAdbHostStub({
     execAdb: async (invocation) => {
       if (isWaitForDevice(invocation)) {
@@ -223,6 +279,14 @@ test('only a device-offline refusal is retried, and a device that stays offline 
         return ok();
       }
       commands.push(invocation.command[0] ?? '');
+      if (timesOut) {
+        throw new AppError('COMMAND_FAILED', 'adb timed out after 10ms', {
+          exitCode: -1,
+          stdout: '',
+          stderr: '',
+          timeoutMs: 10,
+        });
+      }
       if (invocation.command[0] === 'uninstall') {
         return { exitCode: 1, stdout: 'Failure [DELETE_FAILED_INTERNAL_ERROR]', stderr: '' };
       }
@@ -239,6 +303,13 @@ test('only a device-offline refusal is retried, and a device that stays offline 
   expect(stillOffline.exitCode).toBe(1);
   expect(commands).toEqual(['install', 'wait-for-device', 'install']);
 
+  commands.length = 0;
+  await adb(['install', 'helper.apk'], { allowFailure: true });
+  expect(commands).toEqual(['install']);
+
+  timesOut = true;
+  await expect(adb(['install', 'helper.apk'])).rejects.toThrow();
+  timesOut = false;
   commands.length = 0;
   await adb(['install', 'helper.apk'], { allowFailure: true });
   expect(commands).toEqual(['install']);

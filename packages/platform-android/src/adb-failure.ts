@@ -182,17 +182,28 @@ export function attachAndroidHelperInstallTimeoutHint<T>(error: T): T {
   return classified;
 }
 
-/** True when adb refused a command because the device was offline, as a result or as the thrown error. */
-export function isAndroidAdbDeviceOffline(outcome: unknown): boolean {
+/** The entire stderr of a command the host adb refused because the device was offline. */
+const ADB_DEVICE_OFFLINE_REFUSAL = /^(?:adb|error): device (?:'[^']*' )?offline$/;
+
+/**
+ * True when the host adb refused a command because the device was offline, as a result or as the
+ * thrown error. Only the bare refusal counts, so output of a command that ran on the device never
+ * matches, and neither does a timeout's partial output.
+ */
+export function isAndroidAdbDeviceOfflineRefusal(outcome: unknown): boolean {
   if (outcome instanceof AppError) {
-    return (
-      outcome.code === 'COMMAND_FAILED' &&
-      classifyAdbCommandError(outcome)?.reason === 'device_offline'
-    );
+    if (outcome.code !== 'COMMAND_FAILED' || outcome.details?.timeoutMs !== undefined) return false;
+    return isBareDeviceOfflineRefusal(outcome.details?.stdout, outcome.details?.stderr);
   }
-  const result = outcome as Partial<Pick<AndroidAdbExecutorResult, 'stderr' | 'stdout'>>;
-  if (typeof result?.stderr !== 'string') return false;
-  return classifyAndroidAdbFailure(result.stderr, result.stdout ?? '')?.reason === 'device_offline';
+  if (!outcome || typeof outcome !== 'object') return false;
+  const { stdout, stderr } = outcome as Partial<AndroidAdbExecutorResult>;
+  return isBareDeviceOfflineRefusal(stdout, stderr);
+}
+
+/** Whether the streams hold nothing but the host adb's device-offline refusal. */
+function isBareDeviceOfflineRefusal(stdout: unknown, stderr: unknown): boolean {
+  if (stdout !== undefined && stdout !== '') return false;
+  return typeof stderr === 'string' && ADB_DEVICE_OFFLINE_REFUSAL.test(stderr.trim());
 }
 
 // Timeout wins over text matchers: the exec layer deliberately builds timeout
