@@ -419,7 +419,7 @@ extension RunnerTests {
         NSLog(
           "AGENT_DEVICE_RUNNER_SNAPSHOT_RECOVERED backend=%@ reason=%@",
           kind.rawValue,
-          firstFailure?.reason ?? "sparse tree"
+          verdictReason?.reason ?? "sparse tree"
         )
       }
       return stampedSnapshotPayload(
