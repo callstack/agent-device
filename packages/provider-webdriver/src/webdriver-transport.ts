@@ -269,7 +269,38 @@ function webdriverError(status: number, payload: unknown): AppError {
     // A 5xx means the driver received and processed the request, but not
     // whether the mutation it described completed before it failed.
     ...(status >= 500 ? { dispatched: 'unknown' as const } : {}),
+    ...(isUnsupportedRouteAnswer(status, payload) ? { dispatched: 'no' as const } : {}),
   });
+}
+
+/** W3C `error` codes a driver answers with when it does not implement the route at all. */
+const UNSUPPORTED_ROUTE_ERROR_CODES: ReadonlySet<string> = new Set([
+  'unknown command',
+  'unknown method',
+]);
+
+function isUnsupportedRouteAnswer(status: number, payload: unknown): boolean {
+  if (status === 404 || status === 405) return true;
+  const value =
+    payload && typeof payload === 'object' && 'value' in payload
+      ? (payload as { value?: unknown }).value
+      : undefined;
+  const code =
+    value && typeof value === 'object' ? (value as { error?: unknown }).error : undefined;
+  return typeof code === 'string' && UNSUPPORTED_ROUTE_ERROR_CODES.has(code);
+}
+
+/**
+ * The driver answered that it does not implement the route, so nothing was dispatched and a
+ * sibling route for the same action may be tried. A timeout or 5xx is not this answer: the first
+ * route may already have acted.
+ */
+export function isWebDriverRouteUnsupported(error: unknown): error is AppError {
+  return (
+    error instanceof AppError &&
+    error.details?.dispatched === 'no' &&
+    typeof error.details.status === 'number'
+  );
 }
 
 function webdriverTimeoutError(

@@ -19,7 +19,10 @@ afterEach(() => {
  * driver received the request and is still working it, not a connection
  * failure.
  */
-function hangingWebDriverFetch(hangOnPathSuffix: string): {
+function hangingWebDriverFetch(
+  hangOnPathSuffix: string,
+  unsupportedPathSuffix?: string,
+): {
   fetch: typeof globalThis.fetch;
   callsFor: (pathSuffix: string) => number;
 } {
@@ -32,6 +35,12 @@ function hangingWebDriverFetch(hangOnPathSuffix: string): {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
+    }
+    if (unsupportedPathSuffix && url.pathname.endsWith(unsupportedPathSuffix)) {
+      return new Response(
+        JSON.stringify({ value: { error: 'unknown command', message: 'no such route' } }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } },
+      );
     }
     if (url.pathname.endsWith(hangOnPathSuffix)) {
       return await new Promise<Response>((_resolve, reject) => {
@@ -53,8 +62,11 @@ function hangingWebDriverFetch(hangOnPathSuffix: string): {
  * abort listener race deterministically; `retryDelayMs` is cut to keep a
  * retried attempt's sleep out of the test budget.
  */
-async function connectedWebDriverInteractor(hangOnPathSuffix: string) {
-  const { fetch, callsFor } = hangingWebDriverFetch(hangOnPathSuffix);
+async function connectedWebDriverInteractor(
+  hangOnPathSuffix: string,
+  unsupportedPathSuffix?: string,
+) {
+  const { fetch, callsFor } = hangingWebDriverFetch(hangOnPathSuffix, unsupportedPathSuffix);
   globalThis.fetch = fetch;
   const client = new WebDriverClient({
     clientVersion: '0.0.0-test',
@@ -67,7 +79,7 @@ async function connectedWebDriverInteractor(hangOnPathSuffix: string) {
     backend: 'android',
     capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'android' }),
   });
-  return { interactor, callsFor };
+  return { client, interactor, callsFor };
 }
 
 // A tap whose `POST .../actions` request times out gets exactly one attempt:
@@ -126,4 +138,34 @@ test('a timed-out read is still retried once', async () => {
   await assert.rejects(interactor.snapshot(), () => true);
 
   assert.equal(callsFor('/source'), 2);
+});
+
+// App activation has a sibling route (`mobile: activateApp`) for drivers without the Appium one.
+// A timeout on the first route is not "unsupported": the driver may already be activating the app,
+// so switching routes would send the mutation twice.
+test('a timed-out app activation does not fall back to the sibling route', async () => {
+  const { client, callsFor } = await connectedWebDriverInteractor('/appium/device/activate_app');
+
+  await assert.rejects(client.activateApp('com.example.app'), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.dispatched, 'unknown');
+    return true;
+  });
+
+  assert.equal(callsFor('/appium/device/activate_app'), 1);
+  assert.equal(callsFor('/execute/sync'), 0);
+});
+
+// A driver that answers the first route with "unknown command" never ran it, so the sibling route
+// is the one attempt that reaches the device.
+test('an unsupported app-termination route falls back to the sibling route once', async () => {
+  const { client, callsFor } = await connectedWebDriverInteractor(
+    '/never-hangs',
+    '/appium/device/terminate_app',
+  );
+
+  await client.terminateApp('com.example.app');
+
+  assert.equal(callsFor('/appium/device/terminate_app'), 1);
+  assert.equal(callsFor('/execute/sync'), 1);
 });

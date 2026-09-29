@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  isWebDriverRouteUnsupported,
   MUTATION_REQUEST_POLICY,
   WebDriverTransport,
   type WebDriverAuth,
@@ -130,7 +131,8 @@ export class WebDriverClient {
         { appId },
         MUTATION_REQUEST_POLICY,
       );
-    } catch {
+    } catch (error) {
+      if (!isWebDriverRouteUnsupported(error)) throw error;
       await this.executeScript(
         'mobile: activateApp',
         [{ appId, bundleId: appId }],
@@ -147,7 +149,8 @@ export class WebDriverClient {
         { appId },
         MUTATION_REQUEST_POLICY,
       );
-    } catch {
+    } catch (error) {
+      if (!isWebDriverRouteUnsupported(error)) throw error;
       await this.executeScript(
         'mobile: terminateApp',
         [{ appId, bundleId: appId }],
