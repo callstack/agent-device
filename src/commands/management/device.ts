@@ -79,7 +79,7 @@ const bootCommandMetadata = defineFieldCommandMetadata(
   {
     headless: booleanField('Boot without showing simulator UI when supported.'),
     timeoutMs: integerField(
-      'Startup budget in milliseconds. Bounds the Simulator boot wait, so a never-booted Simulator can finish its first-boot migration; omit for the default startup behavior.',
+      'Startup budget in milliseconds. Bounds the boot wait, so a never-booted Simulator can finish its first-boot migration or a cold emulator its boot; omit for the default startup behavior.',
       { min: 1 },
     ),
   },

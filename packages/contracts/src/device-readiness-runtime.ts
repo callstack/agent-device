@@ -6,7 +6,8 @@ export type EnsureReadyInput = Readonly<{
   androidSerialAllowlist?: readonly string[];
   /**
    * Absolute deadline (epoch ms), from `boot --timeout`, already validated finite and positive.
-   * Bounds a cold Simulator boot wait; the Apple runtime is the only current consumer.
+   * Bounds a cold boot wait; the Apple and Android runtimes honor it. HarmonyOS, Vega, and Linux
+   * have no boot wait to bound.
    */
   deadlineAtMs?: number;
 }>;

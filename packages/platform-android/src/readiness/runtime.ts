@@ -13,6 +13,7 @@ import { delegateManagedDeviceReadiness } from '@agent-device/provision-kit/mana
 
 const BOOT_TIMEOUT_MS = 120_000;
 const POLL_MS = 1_000;
+const BOOT_TIMEOUT_REASON = 'boot_timeout';
 
 export async function ensureAndroidReady(
   host: AndroidReadinessHost,
@@ -25,7 +26,9 @@ export async function ensureAndroidReady(
   if (device.kind === 'emulator' && (device.booted !== true || !isRunningEmulator(device))) {
     return await ensureEmulatorReady(host, device, input, signal);
   }
-  if (device.booted !== true) await waitForBoot(host, device.id, BOOT_TIMEOUT_MS, signal);
+  if (device.booted !== true) {
+    await waitForBoot(host, device.id, bootDeadlineAtMs(host, input), signal);
+  }
   return { ...device, booted: true };
 }
 
@@ -37,6 +40,7 @@ async function ensureEmulatorReady(
 ): Promise<DeviceInfo> {
   await prepareAndroidEmulatorToolchain(host);
   const request = inventoryRequest(input);
+  const deadlineAtMs = bootDeadlineAtMs(host, input);
   const available = await host.deviceReadiness.androidEmulator.discover(request, signal);
   const selected = requireAvailableAvd(available, device.name, input.serial);
 
@@ -46,8 +50,9 @@ async function ensureEmulatorReady(
     : host.deviceReadiness.androidEmulator.launch(selected.name, input.headless);
   try {
     const discovered =
-      existing ?? (await waitForDiscovery(host, selected.name, request, input.serial, signal));
-    await waitForBoot(host, discovered.id, BOOT_TIMEOUT_MS, signal);
+      existing ??
+      (await waitForDiscovery(host, selected.name, request, input.serial, deadlineAtMs, signal));
+    await waitForBoot(host, discovered.id, deadlineAtMs, signal);
     const refreshed = (await host.deviceReadiness.androidEmulator.discover(request, signal)).find(
       (candidate) => candidate.id === discovered.id,
     );
@@ -90,9 +95,9 @@ async function waitForDiscovery(
   avdName: string,
   request: ReturnType<typeof inventoryRequest>,
   serial: string | undefined,
+  deadline: number,
   signal: AbortSignal,
 ): Promise<DeviceInfo> {
-  const deadline = host.clock.now() + BOOT_TIMEOUT_MS;
   while (host.clock.now() < deadline) {
     const devices = await host.deviceReadiness.androidEmulator.discover(request, signal);
     const device = findByAvdName(devices, avdName, serial);
@@ -102,17 +107,16 @@ async function waitForDiscovery(
   throw new AppError('COMMAND_FAILED', 'Android emulator did not appear in time', {
     avdName,
     serial,
-    timeoutMs: BOOT_TIMEOUT_MS,
+    reason: BOOT_TIMEOUT_REASON,
   });
 }
 
 async function waitForBoot(
   host: AndroidReadinessHost,
   serial: string,
-  timeoutMs: number,
+  deadline: number,
   signal: AbortSignal,
 ): Promise<void> {
-  const deadline = host.clock.now() + timeoutMs;
   while (host.clock.now() < deadline) {
     const result = await host.commands.run(
       {
@@ -128,9 +132,14 @@ async function waitForBoot(
   }
   throw new AppError('COMMAND_FAILED', 'Android device failed to finish booting', {
     serial,
-    timeoutMs,
-    reason: 'ANDROID_BOOT_TIMEOUT',
+    reason: BOOT_TIMEOUT_REASON,
+    hint: 'The emulator keeps booting in the background. Retry once it is up, or pass a larger --timeout.',
   });
+}
+
+/** The caller's `--timeout` deadline when stated, else the default boot wait from now. */
+function bootDeadlineAtMs(host: AndroidReadinessHost, input: EnsureReadyInput): number {
+  return input.deadlineAtMs ?? host.clock.now() + BOOT_TIMEOUT_MS;
 }
 
 function inventoryRequest(input: EnsureReadyInput) {
