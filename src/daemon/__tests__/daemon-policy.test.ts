@@ -15,6 +15,7 @@ import { parseDaemonPolicy } from '../../daemon-policy-file.ts';
 import { assertDaemonPolicyAdmitsRequest } from '../daemon-policy.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
+import { createHostDiagnostics } from '../../platform-runtime-host-diagnostics.ts';
 import {
   createRequestHandler,
   lifecycleDeviceRuntimeGateway,
@@ -60,6 +61,7 @@ function makeHandler(
         : undefined,
     }),
     trackDownloadableArtifact: () => 'artifact-id',
+    hostDiagnostics: createHostDiagnostics(),
     daemonPolicy,
   });
   return { handler, bind, inspectFacts };
@@ -221,5 +223,57 @@ test('a provider answering with only out-of-scope devices does not hide allowed 
   expect(response).toMatchObject({
     ok: true,
     data: { devices: [expect.objectContaining({ id: IOS_SIMULATOR.id })] },
+  });
+});
+
+test('an allow list denies the internal runtime command unless it names runtime', async () => {
+  const { handler, bind } = makeHandler(policy({ commands: { allow: ['snapshot'] } }));
+
+  const response = await handler(request('runtime', { positionals: ['clear'] }));
+
+  expectPolicyDenied(response, 'command');
+  expect(response).toMatchObject({ error: { details: { command: 'runtime' } } });
+  expect(bind).not.toHaveBeenCalled();
+});
+
+test('command rules name internal device commands the registry way', () => {
+  const denyRuntime = policy({ commands: { deny: ['runtime', 'install-from-source'] } });
+  const allowSnapshot = policy({ commands: { allow: ['snapshot'] } });
+
+  expect(() => assertDaemonPolicyAdmitsRequest(denyRuntime, request('runtime'))).toThrow(
+    /denies the runtime command/,
+  );
+  expect(() => assertDaemonPolicyAdmitsRequest(denyRuntime, request('install_source'))).toThrow(
+    /denies the install-from-source command/,
+  );
+  // Protocol plumbing (leases, session bookkeeping) is never decided by command rules.
+  expect(() =>
+    assertDaemonPolicyAdmitsRequest(allowSnapshot, request('lease_heartbeat')),
+  ).not.toThrow();
+  // A name the registry does not know fails closed under an allow list.
+  expect(() => assertDaemonPolicyAdmitsRequest(allowSnapshot, request('not-a-command'))).toThrow(
+    /denies the not-a-command command/,
+  );
+});
+
+test('doctor counts only the devices the policy allows', async () => {
+  const { handler } = makeHandler(policy({ devices: { allow: [{ udid: IOS_SIMULATOR.id }] } }), {
+    inventory: [IOS_SIMULATOR, OTHER_SIMULATOR],
+  });
+
+  const response = await handler(
+    request('doctor', { session: undefined, flags: { platform: 'ios' } }),
+  );
+
+  expect(response).toMatchObject({
+    ok: true,
+    data: {
+      checks: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'device',
+          evidence: expect.objectContaining({ available: 1 }),
+        }),
+      ]),
+    },
   });
 });

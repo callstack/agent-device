@@ -1,6 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DeviceShutdownGuard } from '@agent-device/contracts/device-shutdown-runtime';
 import { createDeviceShutdownRuntimeHost } from './platform-runtime-device-shutdown-host.ts';
 
 const appleShutdown = vi.fn(async () => success());
@@ -60,10 +59,8 @@ test('Android shutdown uses the owning package capability', async () => {
 
 test('a shutdown guard refuses every shutdown path before the owner runtime loads', async () => {
   const denied = new Error('policy denies device-shutdown');
-  const host = shutdownHost({
-    assertShutdownAllowed: () => {
-      throw denied;
-    },
+  const host = shutdownHost(() => {
+    throw denied;
   });
   const device = appleDevice();
 
@@ -81,7 +78,7 @@ test('a shutdown guard refuses every shutdown path before the owner runtime load
   expect(androidShutdown).not.toHaveBeenCalled();
 });
 
-function shutdownHost(guard?: DeviceShutdownGuard) {
+function shutdownHost(assertShutdownAllowed?: () => void) {
   return createDeviceShutdownRuntimeHost(
     {
       appleTools: {
@@ -94,7 +91,7 @@ function shutdownHost(guard?: DeviceShutdownGuard) {
       },
     },
     shutdownLoaders,
-    guard,
+    assertShutdownAllowed,
   );
 }
 

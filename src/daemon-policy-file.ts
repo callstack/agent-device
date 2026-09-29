@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { commandDescriptors } from '@agent-device/command-registry/registry';
+import type { CommandDescriptor } from '@agent-device/command-registry/types';
 import { AppError } from '@agent-device/kernel/errors';
 
 /**
@@ -24,7 +25,49 @@ export type DaemonPolicy = Readonly<{
   deniedCapabilities: ReadonlySet<DaemonPolicyCapability>;
 }>;
 
-const PUBLIC_COMMAND_NAMES: ReadonlySet<string> = new Set(Object.values(PUBLIC_COMMANDS));
+const DESCRIPTORS = commandDescriptors as readonly CommandDescriptor[];
+
+/**
+ * Derived from the registry (catalog group plus platform execution). Internal daemon commands with
+ * no platform execution — leases, takeover, session bookkeeping — are protocol plumbing that no
+ * command rule decides. Every other command a request names is decided by command rules, including
+ * a name the registry does not know, so an allow list fails closed.
+ */
+const PROTOCOL_COMMANDS: ReadonlySet<string> = new Set(
+  DESCRIPTORS.filter(
+    (descriptor) =>
+      descriptor.catalog.group === 'internal' &&
+      descriptor.daemon !== undefined &&
+      descriptor.platformExecution.kind === 'none',
+  ).map((descriptor) => descriptor.name),
+);
+
+/**
+ * The names a policy may use: public commands, and internal commands that execute on a device,
+ * each by the public command it serves (`install_source` as `install-from-source`) or else by its
+ * own name (`runtime`).
+ */
+const POLICY_COMMAND_NAMES: ReadonlyMap<string, string> = new Map(
+  DESCRIPTORS.flatMap((descriptor) => {
+    const { group, servesPublicCommand } = descriptor.catalog;
+    if (group === 'public') return [[descriptor.name, descriptor.name] as const];
+    if (group !== 'internal' || PROTOCOL_COMMANDS.has(descriptor.name)) return [];
+    return [[descriptor.name, servesPublicCommand ?? descriptor.name] as const];
+  }),
+);
+const POLICY_COMMAND_VOCABULARY: ReadonlySet<string> = new Set(POLICY_COMMAND_NAMES.values());
+const LOCAL_CLI_COMMAND_NAMES: ReadonlySet<string> = new Set(
+  DESCRIPTORS.filter((descriptor) => descriptor.catalog.group === 'local-cli').map(
+    (descriptor) => descriptor.name,
+  ),
+);
+
+/** The name command rules decide `command` by, or undefined for protocol plumbing. */
+export function resolveDaemonPolicyCommandName(command: string): string | undefined {
+  if (PROTOCOL_COMMANDS.has(command)) return undefined;
+  return POLICY_COMMAND_NAMES.get(command) ?? command;
+}
+
 const POLICY_KEYS = new Set(['version', 'devices', 'commands', 'capabilities']);
 
 export function loadDaemonPolicy(env: NodeJS.ProcessEnv = process.env): DaemonPolicy | undefined {
@@ -95,7 +138,13 @@ function parseCommands(value: unknown, sourcePath: string): NonNullable<DaemonPo
   const mode = commands.allow === undefined ? 'deny' : 'allow';
   const label = `commands.${mode}`;
   const names = readArray(commands[mode], label, sourcePath).map((name) => {
-    if (typeof name !== 'string' || !PUBLIC_COMMAND_NAMES.has(name)) {
+    if (typeof name === 'string' && LOCAL_CLI_COMMAND_NAMES.has(name)) {
+      throw invalidPolicy(
+        sourcePath,
+        `"${label}" names ${JSON.stringify(name)}, which runs in the client; name the daemon command it sends, such as "runtime"`,
+      );
+    }
+    if (typeof name !== 'string' || !POLICY_COMMAND_VOCABULARY.has(name)) {
       throw invalidPolicy(sourcePath, `"${label}" names unknown command ${JSON.stringify(name)}`);
     }
     return name;

@@ -1,8 +1,5 @@
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
-import type {
-  DeviceShutdownGuard,
-  DeviceShutdownRuntimeLoaders,
-} from '@agent-device/contracts/device-shutdown-runtime';
+import type { DeviceShutdownRuntimeLoaders } from '@agent-device/contracts/device-shutdown-runtime';
 import type {
   HostCommandRequest,
   OwnedProcessRecordWriter,
@@ -57,7 +54,7 @@ export function createPlatformRuntimeHost(options: {
   sessionsDir: string;
   resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
   shutdownLoaders: DeviceShutdownRuntimeLoaders;
-  shutdownGuard?: DeviceShutdownGuard;
+  assertShutdownAllowed?: () => void;
   snapshot: SnapshotRuntimeHost;
   ownedProcesses?: OwnedProcessRecordWriter;
 }): PlatformRuntimeHost {
@@ -128,7 +125,7 @@ export function createPlatformRuntimeHost(options: {
     deviceShutdown: createDeviceShutdownRuntimeHost(
       { appleTools, commands },
       options.shutdownLoaders,
-      options.shutdownGuard,
+      options.assertShutdownAllowed,
     ),
     screenRecording: createScreenRecordingRuntimeHost({ ownedProcesses: options.ownedProcesses }),
     audioProbe: createAudioProbeRuntimeHost({ ownedProcesses: options.ownedProcesses }),

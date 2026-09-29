@@ -953,7 +953,11 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled
       ? { ownerFiles: ['src/daemon/handlers/session-app-source-deployment.ts'] as const }
       : {}),
-    catalog: { group: 'internal', key: 'installSource' },
+    catalog: {
+      group: 'internal',
+      key: 'installSource',
+      servesPublicCommand: 'install-from-source',
+    },
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: { route: 'session', refFrameEffect: 'may-invalidate' },

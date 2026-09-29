@@ -279,11 +279,8 @@ export async function startDaemonRuntime(
   const providerComposition = await createDefaultProviderRuntimeComposition(env);
   const providerDeviceRuntimes = [...providerComposition.runtimes];
   const deviceRuntimeGateway = createPlatformRuntimeGateway({
-    shutdownGuard: daemonPolicy
-      ? {
-          assertShutdownAllowed: () =>
-            assertDaemonPolicyAllowsCapability(daemonPolicy, 'device-shutdown'),
-        }
+    assertShutdownAllowed: daemonPolicy
+      ? () => assertDaemonPolicyAllowsCapability(daemonPolicy, 'device-shutdown')
       : undefined,
     providerRuntimes: providerDeviceRuntimes,
     providerModules: providerComposition.platformModules,

@@ -138,6 +138,12 @@ export type CommandCatalogFacet = {
    * `longPress` for the command name `longpress`.
    */
   key?: string;
+  /**
+   * Internal commands only: the public command this one carries to the daemon, so ADR 0029
+   * daemon-policy command rules name the public command (`install_source` serves
+   * `install-from-source`). An internal device-executing command without it is named by itself.
+   */
+  servesPublicCommand?: string;
 };
 
 /**

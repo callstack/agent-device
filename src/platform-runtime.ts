@@ -5,10 +5,7 @@ import type {
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
 import type { OwnedProcessRecordWriter } from '@agent-device/contracts/platform-runtime-host';
 import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
-import type {
-  DeviceShutdownGuard,
-  DeviceShutdownRuntimeDependencies,
-} from '@agent-device/contracts/device-shutdown-runtime';
+import type { DeviceShutdownRuntimeDependencies } from '@agent-device/contracts/device-shutdown-runtime';
 import {
   type ComposedDeviceInventoryGateways,
   createPlatformModuleRegistry,
@@ -146,7 +143,7 @@ export function createPlatformRuntimeGateway(
     resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
     sessionsDir: string;
     ownedProcesses?: OwnedProcessRecordWriter;
-    shutdownGuard?: DeviceShutdownGuard;
+    assertShutdownAllowed?: () => void;
   }>,
 ): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   return createComposedPlatformRuntimeGateway({
@@ -158,7 +155,7 @@ export function createPlatformRuntimeGateway(
         sessionsDir: options.sessionsDir,
         resolveSessionArtifacts: options.resolveSessionArtifacts,
         shutdownLoaders,
-        shutdownGuard: options.shutdownGuard,
+        assertShutdownAllowed: options.assertShutdownAllowed,
         snapshot: createSnapshotRuntimeHost({
           linux: captureLinuxSurfaceSnapshot,
           macos: loadMacOsSurfaceSnapshot,

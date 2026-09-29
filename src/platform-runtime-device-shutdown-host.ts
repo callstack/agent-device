@@ -1,7 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type {
   DeviceShutdownCloseCapability,
-  DeviceShutdownGuard,
   DeviceShutdownRuntimeDependencies,
   DeviceShutdownRuntimeHost,
   DeviceShutdownRuntimeLoaders,
@@ -14,7 +13,8 @@ import type {
 export function createDeviceShutdownRuntimeHost(
   dependencies: DeviceShutdownRuntimeDependencies,
   loaders: DeviceShutdownRuntimeLoaders,
-  guard: DeviceShutdownGuard = {},
+  /** ADR 0029: the daemon policy's last line against a shutdown, whichever command asks. */
+  assertShutdownAllowed: () => void = () => {},
 ): DeviceShutdownRuntimeHost {
   let appleRuntime: ReturnType<DeviceShutdownRuntimeLoaders['apple']> | undefined;
   let androidRuntime: ReturnType<DeviceShutdownRuntimeLoaders['android']> | undefined;
@@ -30,20 +30,20 @@ export function createDeviceShutdownRuntimeHost(
 
   const apple = Object.freeze({
     shutdownTarget: async (device: DeviceInfo, signal: AbortSignal) => {
-      guard.assertShutdownAllowed?.();
+      assertShutdownAllowed();
       return await (await loadApple()).shutdownTarget(device, signal);
     },
   });
   const android = Object.freeze({
     shutdownTarget: async (device: DeviceInfo, signal: AbortSignal) => {
-      guard.assertShutdownAllowed?.();
+      assertShutdownAllowed();
       return await (await loadAndroid()).shutdownTarget(device, signal);
     },
   });
   const close: DeviceShutdownCloseCapability = Object.freeze({
     canShutdownTarget: async (device) => await canShutdownTarget(device, loadApple, loadAndroid),
     shutdownTarget: async (device) => {
-      guard.assertShutdownAllowed?.();
+      assertShutdownAllowed();
       return await shutdownTargetForClose(device, loadApple, loadAndroid);
     },
   });

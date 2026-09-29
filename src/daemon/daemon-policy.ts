@@ -1,4 +1,3 @@
-import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { normalizeBatchCommandName } from '@agent-device/command-registry/batch-policy';
 import type {
   ComposedDeviceInventoryGateways,
@@ -7,7 +6,11 @@ import type {
 } from '@agent-device/contracts/platform-module';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { DaemonPolicy, DaemonPolicyCapability } from '../daemon-policy-file.ts';
+import {
+  resolveDaemonPolicyCommandName,
+  type DaemonPolicy,
+  type DaemonPolicyCapability,
+} from '../daemon-policy-file.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 
 /**
@@ -15,14 +18,6 @@ import type { DaemonRequest } from './daemon-request.ts';
  * actions, which re-enter request admission rather than the HTTP edge. The policy file itself is
  * loaded and validated by `src/daemon-policy-file.ts`.
  */
-
-// Internal protocol commands a public command reaches the daemon through. Every other internal
-// command (leases, takeover, session bookkeeping) is protocol plumbing no rule names.
-const PUBLIC_COMMAND_FOR_INTERNAL: Readonly<Record<string, string>> = {
-  install_source: 'install-from-source',
-};
-
-const PUBLIC_COMMAND_NAMES: ReadonlySet<string> = new Set(Object.values(PUBLIC_COMMANDS));
 
 /** Refuses a request the policy denies before it resolves a device or takes a lock. */
 export function assertDaemonPolicyAdmitsRequest(policy: DaemonPolicy, req: DaemonRequest): void {
@@ -109,8 +104,8 @@ export function restrictDeviceInventoryToDaemonPolicy(
 function assertCommandAdmitted(policy: DaemonPolicy, command: string): void {
   const rules = policy.commands;
   if (!rules) return;
-  const name = PUBLIC_COMMAND_FOR_INTERNAL[command] ?? command;
-  if (!PUBLIC_COMMAND_NAMES.has(name)) return;
+  const name = resolveDaemonPolicyCommandName(command);
+  if (name === undefined) return;
   const listed = rules.names.has(name);
   if (rules.mode === 'allow' ? listed : !listed) return;
   throw policyDenied(policy, 'command', `This daemon's policy denies the ${name} command.`, {

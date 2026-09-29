@@ -133,7 +133,8 @@ AGENT_DEVICE_DAEMON_POLICY=./policy.json agent-device proxy
 - `devices.allow` lists the only devices clients can see (`devices`) or use. Use `udid` for Apple
   devices and `serial` for Android.
 - `commands` takes either `allow` or `deny`, not both. With `allow`, commands a later release adds
-  stay denied.
+  stay denied. Client-side tools reach the daemon through internal commands: allow `runtime` for
+  `react-devtools` and Maestro flows, and `install-from-source` for remote installs.
 - `capabilities.deny: ["device-shutdown"]` blocks `shutdown`, `close --shutdown`, and any other path
   that would shut the device down.
 

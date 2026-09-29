@@ -1,17 +1,15 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import http from 'node:http';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
-import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
+import { readVersion } from '@agent-device/host-kit/version';
 import { AppError } from '@agent-device/kernel/errors';
 import {
-  closeLoopbackServer,
-  listenOnLoopback,
-  supportsLoopbackBind,
-} from '../../__tests__/test-utils/loopback.ts';
+  currentDaemonCodeSignature,
+  startHttpDaemonFixture,
+} from '../../__tests__/test-utils/daemon-http-fixture.ts';
+import { closeLoopbackServer, supportsLoopbackBind } from '../../__tests__/test-utils/loopback.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { loadDaemonPolicy } from '../../daemon-policy-file.ts';
 import { resolveDaemonPaths } from '../../daemon-resolution.ts';
@@ -101,32 +99,13 @@ async function startReusableDaemon(options: { policyDigest: string | undefined }
     JSON.stringify({ version: 1, capabilities: { deny: ['device-shutdown'] } }),
   );
   vi.stubEnv('AGENT_DEVICE_DAEMON_POLICY', policyPath);
-  const seenPaths: string[] = [];
-  const server = http.createServer((req, res) => {
-    const url = new URL(req.url || '/', 'http://127.0.0.1');
-    seenPaths.push(`${req.method ?? 'GET'} ${url.pathname}`);
-    if (req.method === 'GET' && url.pathname === '/health') {
-      res.writeHead(200);
-      res.end('ok');
-      return;
-    }
-    const chunks: Buffer[] = [];
-    req.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-    req.on('end', () => {
-      const rpc = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { id: string };
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(
-        JSON.stringify({ jsonrpc: '2.0', id: rpc.id, result: { ok: true, data: { via: 'http' } } }),
-      );
-    });
-  });
-  const httpPort = await listenOnLoopback(server);
+  const daemon = await startHttpDaemonFixture({ via: 'http' });
   const paths = resolveDaemonPaths(stateDir);
   fs.mkdirSync(paths.baseDir, { recursive: true });
   fs.writeFileSync(
     paths.infoPath,
     `${JSON.stringify({
-      httpPort,
+      httpPort: daemon.port,
       transport: 'http',
       token: 'local-secret',
       pid: process.pid,
@@ -139,21 +118,10 @@ async function startReusableDaemon(options: { policyDigest: string | undefined }
   );
   return {
     stateDir,
-    seenPaths,
+    seenPaths: daemon.seenPaths,
     close: async () => {
-      await closeLoopbackServer(server);
+      await closeLoopbackServer(daemon.server);
       fs.rmSync(stateDir, { recursive: true, force: true });
     },
   };
-}
-
-function currentDaemonCodeSignature(): string {
-  const root = findProjectRoot();
-  const distPath = path.join(root, 'dist', 'src', 'internal', 'daemon.js');
-  const sourcePath = path.join(root, 'src', 'daemon.ts');
-  const entryPath =
-    process.execArgv.includes('--experimental-strip-types') || !fs.existsSync(distPath)
-      ? sourcePath
-      : distPath;
-  return computeDaemonCodeSignature(entryPath, root);
 }

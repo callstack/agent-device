@@ -19,6 +19,7 @@ import {
   waitForProcessExit,
 } from '@agent-device/host-kit/process';
 import { sendToDaemon } from '../daemon-client.ts';
+import { currentDaemonCodeSignature } from '../../__tests__/test-utils/daemon-http-fixture.ts';
 import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
 import { downloadRemoteArtifact } from '../../remote/daemon-artifacts.ts';
 import {
@@ -28,7 +29,7 @@ import {
 import { canConnectSocket } from '../daemon-client-transport.ts';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
 import { resolveDaemonPaths } from '../../daemon-resolution.ts';
-import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
+import { readVersion } from '@agent-device/host-kit/version';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 // readProcessStartTime/readProcessCommand shell out to `ps` with a 1s
@@ -158,17 +159,6 @@ function respondToHealthcheck(options: Record<string, any>, res: MockHttpRespons
   return true;
 }
 
-function resolveCurrentDaemonCodeSignature(): string {
-  const root = findProjectRoot();
-  const distPath = path.join(root, 'dist', 'src', 'internal', 'daemon.js');
-  const sourcePath = path.join(root, 'src', 'daemon.ts');
-  const entryPath =
-    process.execArgv.includes('--experimental-strip-types') || !fs.existsSync(distPath)
-      ? sourcePath
-      : distPath;
-  return computeDaemonCodeSignature(entryPath, root);
-}
-
 function writeCurrentDaemonInfo(
   stateDir: string,
   info: { port?: number; httpPort?: number; transport: 'socket' | 'http' | 'dual' },
@@ -182,7 +172,7 @@ function writeCurrentDaemonInfo(
       token: 'local-secret',
       pid: process.pid,
       version: readVersion(),
-      codeSignature: resolveCurrentDaemonCodeSignature(),
+      codeSignature: currentDaemonCodeSignature(),
       processStartTime: readProcessStartTime(process.pid) ?? undefined,
     })}\n`,
     'utf8',

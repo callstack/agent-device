@@ -20,7 +20,8 @@ Accepted (2026-09-29).
      the gateway binds it, and device inventory (therefore `devices` and device selection) lists
      only allowed devices.
    - **Capability gate** — the device-shutdown host capability refuses every shutdown, whichever
-     command asks for it.
+     command asks for it. The one exception is Apple readiness rolling back a Simulator boot that
+     the same request started and then canceled: the Simulator was not running before.
 4. A denial is `UNAUTHORIZED` with `details.reason: 'DAEMON_POLICY_DENIED'`, the `rule`
    (`command`, `device`, or `capability`), the policy digest, `retriable: false`, and a hint. It
    never names the policy's host path.
@@ -40,10 +41,19 @@ Accepted (2026-09-29).
 ```
 
 - `devices.allow` — device ids the daemon may bind. Absent: every device.
-- `commands` — exactly one of `allow` or `deny`, naming public commands. Names are checked against
-  the command catalog at load. With `allow`, commands added by a later upgrade are denied by
-  default. The internal `install_source` command is matched as `install-from-source`; other internal
-  protocol commands (leases, takeover, session bookkeeping) are not matched by command rules.
+- `commands` — exactly one of `allow` or `deny`. Which daemon commands a rule decides, and by what
+  name, is derived from the command registry, never from a hand list:
+  - public commands, by their own name;
+  - internal commands that execute on a device, by the public command their
+    `catalog.servesPublicCommand` names (`install_source` as `install-from-source`), or else by
+    their own name (`runtime`, which `react-devtools` and Maestro flows send);
+  - internal commands with no platform execution (leases, takeover, session bookkeeping) are
+    protocol plumbing that no rule decides;
+  - any other name is decided by the rules, so an allow list fails closed for it.
+
+  Names are checked against that vocabulary at load; a local-cli name such as `react-devtools` is
+  refused with a pointer to the daemon command it sends. With `allow`, commands added by a later
+  upgrade are denied by default.
 - `capabilities.deny` — operations denied whichever command reaches them. `device-shutdown` is the
   only capability today.
 
