@@ -118,6 +118,19 @@ function readDaemonLockInfo(lockPath: string): DaemonLockInfo | null {
   };
 }
 
+/**
+ * Whether a live daemon other than `pid` holds the startup lock: another client's daemon won the
+ * start, and the daemon at `pid` exited because it lost the lock.
+ */
+export function isDaemonLockHeldByAnotherDaemon(paths: DaemonPaths, pid: number): boolean {
+  const lockInfo = readDaemonLockInfo(paths.lockPath);
+  return (
+    lockInfo !== null &&
+    lockInfo.pid !== pid &&
+    isAgentDeviceDaemonProcess(lockInfo.pid, lockInfo.processStartTime)
+  );
+}
+
 export function removeDaemonInfo(infoPath: string): void {
   removeFileIfExists(infoPath);
 }

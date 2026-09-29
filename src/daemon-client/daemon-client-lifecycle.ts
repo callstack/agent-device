@@ -30,6 +30,7 @@ import {
   cleanupFailedDaemonStartupMetadata,
   cleanupStaleDaemonLockIfSafe,
   getDaemonMetadataState,
+  isDaemonLockHeldByAnotherDaemon,
   isRemoteDaemon,
   readDaemonInfo,
   recoverDaemonLockHolder,
@@ -67,7 +68,7 @@ type DaemonStartupLaunch = {
 };
 
 type DaemonStartupWaitResult =
-  | { kind: 'ready'; info: DaemonInfo }
+  | { kind: 'ready'; info: DaemonInfo; startedByClient: boolean }
   | { kind: 'early_exit'; exit: ExecDetachedExit }
   | { kind: 'timeout' };
 
@@ -274,7 +275,9 @@ async function startLocalDaemon(settings: DaemonClientSettings): Promise<Ensured
     }
 
     const startup = await waitForDaemonStartup(DAEMON_STARTUP_TIMEOUT_MS, settings, launch);
-    if (startup.kind === 'ready') return { info: startup.info, startedByClient: true };
+    if (startup.kind === 'ready') {
+      return { info: startup.info, startedByClient: startup.startedByClient };
+    }
     if (startup.kind === 'early_exit') {
       daemonProcess = startup.exit;
       startError = describeDaemonEarlyExit(startup.exit);
@@ -299,7 +302,9 @@ async function startLocalDaemon(settings: DaemonClientSettings): Promise<Ensured
     cleanupResults.push(cleanup);
     if (cleanup.retainedInfoProcess || cleanup.retainedLockProcess) {
       const extended = await waitForDaemonStartup(DAEMON_STARTUP_TIMEOUT_MS, settings, launch);
-      if (extended.kind === 'ready') return { info: extended.info, startedByClient: true };
+      if (extended.kind === 'ready') {
+        return { info: extended.info, startedByClient: extended.startedByClient };
+      }
       if (extended.kind === 'early_exit') {
         daemonProcess = extended.exit;
         startError = describeDaemonEarlyExit(extended.exit);
@@ -589,12 +594,15 @@ async function waitForDaemonStartup(
   });
 
   while (Date.now() - start < timeoutMs) {
-    if (earlyExit) return { kind: 'early_exit', exit: earlyExit };
     const info = readDaemonInfo(settings.paths.infoPath);
     if (info && (await canConnect(info, settings.transportPreference))) {
-      return { kind: 'ready', info };
+      // Another client's daemon may have won the start; only the launched one is this client's.
+      return { kind: 'ready', info, startedByClient: info.pid === launch.pid };
     }
-    if (earlyExit) return { kind: 'early_exit', exit: earlyExit };
+    // A daemon that lost the startup lock exits cleanly; the daemon that won it is still starting.
+    if (earlyExit && !isDaemonLockHeldByAnotherDaemon(settings.paths, earlyExit.pid)) {
+      return { kind: 'early_exit', exit: earlyExit };
+    }
     await sleep(100);
   }
   return { kind: 'timeout' };
