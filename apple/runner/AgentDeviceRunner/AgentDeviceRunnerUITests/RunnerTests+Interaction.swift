@@ -318,19 +318,6 @@ extension RunnerTests {
   }
 
   func readTextAt(app: XCUIApplication, x: Double, y: Double) -> String? {
-#if os(iOS) && targetEnvironment(simulator)
-    // Prefer the contained Simulator AX read when it can prove a value. Besides
-    // avoiding the unbounded XCTest descendant queries below for populated
-    // text fields, this uses the same text-input-first policy as that fallback.
-    // An incomplete capture never answers the request; it falls through to the
-    // legacy XCTest path so a capped tree cannot turn a real value into a miss.
-    if let inspection = privateAXPointInspection(app: app, x: x, y: y), inspection.complete {
-      // A complete miss is authoritative too. Falling through would repeat a
-      // full XCTest descendant walk after the bounded AX capture already
-      // established that no readable element contains the point.
-      return inspection.text
-    }
-#endif
     let point = CGPoint(x: x, y: y)
     let textInputCandidates = textInputCandidatesAt(app: app, point: point)
     let candidates = app.descendants(matching: .any).allElementsBoundByIndex
