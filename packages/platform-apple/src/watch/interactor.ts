@@ -119,21 +119,28 @@ async function scrollWatch(
   direction: ScrollDirection,
   options?: ScrollExecutionOptions,
 ): Promise<Record<string, unknown>> {
-  if (direction === 'left' || direction === 'right') {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      'watchOS Digital Crown scrolling is vertical only.',
-    );
-  }
-  if (options?.pixels !== undefined || options?.durationMs !== undefined) {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      'watchOS Digital Crown scrolling supports amount only; pixels and duration are not mapped.',
-    );
-  }
-  const amount = options?.amount ?? 0.5;
-  const delta = (direction === 'down' ? 1 : -1) * amount * 360;
+  assertCrownScrollDirection(direction);
+  assertCrownScrollOptions(options);
+  const delta = crownScrollDelta(direction, options?.amount);
   return await runWatchHelper(device, context, ['crown-scroll', String(delta)]);
+}
+
+function assertCrownScrollDirection(direction: ScrollDirection): void {
+  if (direction === 'up' || direction === 'down') return;
+  throw new AppError('UNSUPPORTED_OPERATION', 'watchOS Digital Crown scrolling is vertical only.');
+}
+
+function assertCrownScrollOptions(options?: ScrollExecutionOptions): void {
+  if (options?.pixels === undefined && options?.durationMs === undefined) return;
+  throw new AppError(
+    'UNSUPPORTED_OPERATION',
+    'watchOS Digital Crown scrolling supports amount only; pixels and duration are not mapped.',
+  );
+}
+
+function crownScrollDelta(direction: ScrollDirection, requestedAmount?: number): number {
+  const amount = requestedAmount ?? 0.5;
+  return (direction === 'down' ? 1 : -1) * amount * 360;
 }
 
 async function runWatchSwipe(

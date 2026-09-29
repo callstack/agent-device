@@ -21,6 +21,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   createSimulatorSnapshotSource,
   type SimulatorSnapshotSource,
+  type SnapshotSourceOutcome,
   type SnapshotSourceFailure,
 } from './snapshot-source-facade.ts';
 import {
@@ -111,66 +112,27 @@ export function createAppleSnapshotRoute(
     shutdown: async () => await source.close(),
     capture: async (device, input, signal, fallback) => {
       if (!isEligible(device, input)) return await captureOffRoute(device, input, fallback);
-      // A system surface (e.g. the web sign-in sheet) presented over the app is invisible to the
-      // host AX bridge — the app is still the AX primaryApp, so the bridge would serve the occluded
-      // app tree as if healthy (#2438). The XCTest runner can see and drive the surface, so route
-      // this capture to it. The runner serves the surface only while it is genuinely foreground and
-      // otherwise serves the app, so this is correct even while a dismissed host lingers. Anything
-      // but a proven `absent` takes the runner: an unproven probe must not fall through to a bridge
-      // capture that would answer confidently from the occluded app tree.
-      const surfacePresence =
-        device.appleOs === 'watchos'
-          ? ('absent' as const)
-          : await systemSurfacePresent(device, signal);
-      if (surfacePresence === 'unknown') {
-        // The probe could not answer. Take the runner rather than a bridge capture that would
-        // answer confidently from the occluded app tree — but say so: silently losing the bridge
-        // fast path, with no warning and a comparable identity, would be its own defect.
-        return await runFallback(
-          device.id,
-          input,
-          fallback,
-          appLineage(device.id, input),
-          requestFor(input),
-          'system-surface-probe-unavailable',
-          [unknownGenerationResidue()],
-        );
-      }
-      if (surfacePresence !== 'absent') {
-        return await runSurfaceFallback(device, input, fallback, surfacePresence.host.bundleId);
-      }
-      let target: SimulatorSnapshotTarget;
-      try {
-        target = await resolveTargetForObservation(host, resolveTarget, device, input, signal);
-      } catch (error) {
-        rethrowIfResolutionCancelled(signal, error);
-        emitRouteDiagnostic('target-resolution-failed', device, undefined, error);
-        if (device.appleOs === 'watchos') {
-          throw watchSnapshotBridgeFailure(device, 'target-resolution-failed', undefined, error);
-        }
-        return await runFallback(
-          device.id,
-          input,
-          fallback,
-          appLineage(device.id, input),
-          requestFor(input),
-          'target-resolution-failed',
-          [unknownGenerationResidue()],
-        );
-      }
+      const surfaceResult = await routeSystemSurface(
+        systemSurfacePresent,
+        device,
+        input,
+        signal,
+        fallback,
+      );
+      if (surfaceResult) return surfaceResult;
+
+      const resolution = await resolveTargetOrFallback(
+        host,
+        resolveTarget,
+        device,
+        input,
+        signal,
+        fallback,
+      );
+      if ('result' in resolution) return resolution.result;
+      const { target } = resolution;
       if (isBridgeDisabled(target)) {
-        emitRouteDiagnostic('circuit-disabled', device, target.generation);
-        if (device.appleOs === 'watchos') {
-          throw watchSnapshotBridgeFailure(device, 'circuit-disabled');
-        }
-        return await runFallback(
-          device.id,
-          input,
-          fallback,
-          target,
-          requestFor(input),
-          'circuit-disabled',
-        );
+        return await captureWithDisabledBridge(device, target, input, fallback);
       }
 
       const request = requestFor(input);
@@ -180,79 +142,29 @@ export function createAppleSnapshotRoute(
         signal,
       });
       if (outcome.stage === 'failed') {
-        if (outcome.failure.kind === 'cancelled') {
-          signal.throwIfAborted();
-          throw new AppError('COMMAND_FAILED', 'Simulator AX snapshot acquisition was cancelled.', {
-            reason: outcome.failure.code,
-            ...outcome.failure.details,
-          });
-        }
-        if (device.appleOs === 'watchos') {
-          if (outcome.failure.kind === 'preparing') {
-            emitRouteDiagnostic(
-              outcome.failure.code,
-              device,
-              undefined,
-              undefined,
-              outcome.failure.details,
-            );
-            throw new AppError(
-              'COMMAND_FAILED',
-              'watchOS Simulator accessibility bridge preparation is still running; retry the snapshot shortly.',
-              {
-                ...(outcome.failure.details ?? {}),
-                reason: 'watchos-ax-bridge-preparing',
-                deviceId: device.id,
-                bridgeFailureCode: outcome.failure.code,
-                retryable: true,
-              },
-            );
-          }
-          throw watchSnapshotBridgeFailure(device, outcome.failure.code, outcome.failure.details);
-        }
-        const fallbackIdentity = await resolveFailureFallbackIdentity(
-          outcome.failure,
-          target,
-          device,
-          input.options!.appBundleId!,
-          signal,
+        return await captureAfterSourceFailure({
+          host,
           resolveTarget,
-        );
-        return await fallbackAfterFailure(
+          disabledGenerations,
+          device,
           input,
+          signal,
           fallback,
           target,
-          fallbackIdentity,
           request,
-          outcome.failure,
-          disabledGenerations,
-        );
+          failure: outcome.failure,
+        });
       }
-      try {
-        return await withDiagnosticTimer(
-          'ios.snapshot-source.present',
-          async () =>
-            await host.snapshot.presentIosAcquisition(
-              outcome as SnapshotRuntimeAcquiredResult,
-              input.options,
-            ),
-          { producer: 'simulator-ax-bridge' },
-        );
-      } catch (error) {
-        if (device.appleOs === 'watchos') {
-          throw watchSnapshotBridgeFailure(device, 'presentation-failed', undefined, error);
-        }
-        return await fallbackAfterFailure(
-          input,
-          fallback,
-          target,
-          { lineage: target, residue: [] },
-          request,
-          { kind: 'malformed-tree', code: 'presentation-invariant' },
-          disabledGenerations,
-          error,
-        );
-      }
+      return await presentSourceAcquisition(
+        host,
+        disabledGenerations,
+        device,
+        input,
+        fallback,
+        target,
+        request,
+        outcome,
+      );
     },
   });
 }
@@ -274,6 +186,185 @@ function watchSnapshotBridgeFailure(
     },
     cause,
   );
+}
+
+type CaptureTargetResolution =
+  | Readonly<{ target: SimulatorSnapshotTarget }>
+  | Readonly<{ result: SnapshotResult }>;
+
+async function routeSystemSurface(
+  systemSurfacePresent: SystemSurfacePresenceProbe,
+  device: DeviceInfo,
+  input: CaptureSnapshotInput,
+  signal: AbortSignal,
+  fallback: SnapshotFallback,
+): Promise<SnapshotResult | undefined> {
+  // The watch bridge observes its own Simulator surface; the iOS host probe is not applicable.
+  const presence =
+    device.appleOs === 'watchos' ? ('absent' as const) : await systemSurfacePresent(device, signal);
+  if (presence === 'unknown') {
+    return await runFallback(
+      device.id,
+      input,
+      fallback,
+      appLineage(device.id, input),
+      requestFor(input),
+      'system-surface-probe-unavailable',
+      [unknownGenerationResidue()],
+    );
+  }
+  if (presence !== 'absent') {
+    return await runSurfaceFallback(device, input, fallback, presence.host.bundleId);
+  }
+  return undefined;
+}
+
+async function resolveTargetOrFallback(
+  host: PlatformRuntimeHost,
+  resolveTarget: SimulatorSnapshotTargetResolver,
+  device: DeviceInfo,
+  input: CaptureSnapshotInput,
+  signal: AbortSignal,
+  fallback: SnapshotFallback,
+): Promise<CaptureTargetResolution> {
+  try {
+    return {
+      target: await resolveTargetForObservation(host, resolveTarget, device, input, signal),
+    };
+  } catch (error) {
+    rethrowIfResolutionCancelled(signal, error);
+    emitRouteDiagnostic('target-resolution-failed', device, undefined, error);
+    if (device.appleOs === 'watchos') {
+      throw watchSnapshotBridgeFailure(device, 'target-resolution-failed', undefined, error);
+    }
+    return {
+      result: await runFallback(
+        device.id,
+        input,
+        fallback,
+        appLineage(device.id, input),
+        requestFor(input),
+        'target-resolution-failed',
+        [unknownGenerationResidue()],
+      ),
+    };
+  }
+}
+
+async function captureWithDisabledBridge(
+  device: DeviceInfo,
+  target: SimulatorSnapshotTarget,
+  input: CaptureSnapshotInput,
+  fallback: SnapshotFallback,
+): Promise<SnapshotResult> {
+  emitRouteDiagnostic('circuit-disabled', device, target.generation);
+  if (device.appleOs === 'watchos') throw watchSnapshotBridgeFailure(device, 'circuit-disabled');
+  return await runFallback(
+    device.id,
+    input,
+    fallback,
+    target,
+    requestFor(input),
+    'circuit-disabled',
+  );
+}
+
+async function captureAfterSourceFailure(
+  options: Readonly<{
+    host: PlatformRuntimeHost;
+    resolveTarget: SimulatorSnapshotTargetResolver;
+    disabledGenerations: Set<string>;
+    device: DeviceInfo;
+    input: CaptureSnapshotInput;
+    signal: AbortSignal;
+    fallback: SnapshotFallback;
+    target: SimulatorSnapshotTarget;
+    request: ReturnType<typeof createIosSnapshotRequest>;
+    failure: SnapshotSourceFailure;
+  }>,
+): Promise<SnapshotResult> {
+  const { failure, signal, device, target, input, fallback, request, disabledGenerations } =
+    options;
+  if (failure.kind === 'cancelled') {
+    signal.throwIfAborted();
+    throw new AppError('COMMAND_FAILED', 'Simulator AX snapshot acquisition was cancelled.', {
+      reason: failure.code,
+      ...failure.details,
+    });
+  }
+  if (device.appleOs === 'watchos') throw watchAcquisitionFailure(device, failure);
+  const identity = await resolveFailureFallbackIdentity(
+    failure,
+    target,
+    device,
+    input.options!.appBundleId!,
+    signal,
+    options.resolveTarget,
+  );
+  return await fallbackAfterFailure(
+    input,
+    fallback,
+    target,
+    identity,
+    request,
+    failure,
+    disabledGenerations,
+  );
+}
+
+function watchAcquisitionFailure(device: DeviceInfo, failure: SnapshotSourceFailure): AppError {
+  if (failure.kind !== 'preparing') {
+    return watchSnapshotBridgeFailure(device, failure.code, failure.details);
+  }
+  emitRouteDiagnostic(failure.code, device, undefined, undefined, failure.details);
+  return new AppError(
+    'COMMAND_FAILED',
+    'watchOS Simulator accessibility bridge preparation is still running; retry the snapshot shortly.',
+    {
+      ...(failure.details ?? {}),
+      reason: 'watchos-ax-bridge-preparing',
+      deviceId: device.id,
+      bridgeFailureCode: failure.code,
+      retryable: true,
+    },
+  );
+}
+
+async function presentSourceAcquisition(
+  host: PlatformRuntimeHost,
+  disabledGenerations: Set<string>,
+  device: DeviceInfo,
+  input: CaptureSnapshotInput,
+  fallback: SnapshotFallback,
+  target: SimulatorSnapshotTarget,
+  request: ReturnType<typeof createIosSnapshotRequest>,
+  outcome: SnapshotSourceOutcome,
+): Promise<SnapshotResult> {
+  try {
+    return await withDiagnosticTimer(
+      'ios.snapshot-source.present',
+      async () =>
+        await host.snapshot.presentIosAcquisition(
+          outcome as SnapshotRuntimeAcquiredResult,
+          input.options,
+        ),
+      { producer: 'simulator-ax-bridge' },
+    );
+  } catch (error) {
+    if (device.appleOs === 'watchos') {
+      throw watchSnapshotBridgeFailure(device, 'presentation-failed', undefined, error);
+    }
+    return await fallbackAfterFailure(
+      input,
+      fallback,
+      target,
+      { lineage: target, residue: [] },
+      request,
+      { kind: 'malformed-tree', code: 'presentation-invariant' },
+      disabledGenerations,
+      error,
+    );
+  }
 }
 
 /**
@@ -312,13 +403,27 @@ function rethrowIfResolutionCancelled(signal: AbortSignal, error: unknown): void
 
 function isEligible(device: DeviceInfo, input: CaptureSnapshotInput): boolean {
   return (
-    device.platform === 'apple' &&
-    (device.appleOs === 'ios' || device.appleOs === 'watchos') &&
-    device.kind === 'simulator' &&
-    Boolean(input.options?.appBundleId) &&
-    input.options?.customActions !== true &&
-    input.options?.preferredBackend === undefined
+    isAppleSimulator(device) &&
+    supportsSimulatorSnapshot(device) &&
+    hasAppTarget(input) &&
+    usesDefaultCapture(input)
   );
+}
+
+function isAppleSimulator(device: DeviceInfo): boolean {
+  return device.platform === 'apple' && device.kind === 'simulator';
+}
+
+function supportsSimulatorSnapshot(device: DeviceInfo): boolean {
+  return device.appleOs === 'ios' || device.appleOs === 'watchos';
+}
+
+function hasAppTarget(input: CaptureSnapshotInput): boolean {
+  return Boolean(input.options?.appBundleId);
+}
+
+function usesDefaultCapture(input: CaptureSnapshotInput): boolean {
+  return input.options?.customActions !== true && input.options?.preferredBackend === undefined;
 }
 
 async function fallbackAfterFailure(

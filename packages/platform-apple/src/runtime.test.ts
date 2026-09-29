@@ -394,35 +394,56 @@ function expectNavigationAndKeyboardFacts(
   binding: DeviceBinding<PlatformRuntimeOperations>,
   device: DeviceInfo,
 ): void {
-  const watchHidAvailable = binding.facts.operations.tapPoint.available;
-  expectOperationAvailability(
-    binding,
-    'back',
-    device.appleOs !== 'watchos' ||
-      (device.kind === 'simulator' && !device.simulatorSetPath && watchHidAvailable),
-  );
+  expectOperationAvailability(binding, 'back', supportsBackNavigation(binding, device));
 
   // home and app-switcher share one springboard reading (R56): both are unavailable on macOS,
   // which drives an already-running app with no springboard, and on watchOS. That is parity, not
   // convenience — the retired `supportsAppAndDeviceLifecycle` closure gated both off the same row.
-  const home =
-    device.appleOs !== 'macos' &&
-    (device.appleOs !== 'watchos' ||
-      (device.kind === 'simulator' && !device.simulatorSetPath && watchHidAvailable));
-  const appSwitcher = device.appleOs !== 'macos' && device.appleOs !== 'watchos';
-  expectOperationAvailability(binding, 'home', home);
-  expectOperationAvailability(binding, 'appSwitcher', appSwitcher);
+  expectOperationAvailability(binding, 'home', supportsHomeNavigation(binding, device));
+  expectOperationAvailability(binding, 'appSwitcher', supportsAppSwitcher(device));
 
   // orientation and keyboard dismiss/enter share mobile-input eligibility: unavailable on tvOS
   // (focus-only XCUIRemote navigation), macOS (an AppKit desktop host), and watchOS.
-  const mobileInputEligible =
-    device.appleOs !== 'tvos' && device.appleOs !== 'macos' && device.appleOs !== 'watchos';
+  const mobileInputEligible = supportsAppleMobileInput(device);
   expectOperationAvailability(binding, 'setOrientation', mobileInputEligible);
   expectOperationAvailability(binding, 'keyboardDismiss', mobileInputEligible);
   expectOperationAvailability(binding, 'keyboardEnter', mobileInputEligible);
 
   expectKeyboardStatusFact(binding, mobileInputEligible);
   expectTvRemoteFact(binding, device);
+}
+
+function supportsBackNavigation(
+  binding: DeviceBinding<PlatformRuntimeOperations>,
+  device: DeviceInfo,
+): boolean {
+  return device.appleOs !== 'watchos' || supportsWatchCrownNavigation(binding, device);
+}
+
+function supportsHomeNavigation(
+  binding: DeviceBinding<PlatformRuntimeOperations>,
+  device: DeviceInfo,
+): boolean {
+  return device.appleOs !== 'macos' && supportsBackNavigation(binding, device);
+}
+
+function supportsWatchCrownNavigation(
+  binding: DeviceBinding<PlatformRuntimeOperations>,
+  device: DeviceInfo,
+): boolean {
+  return (
+    device.kind === 'simulator' &&
+    !device.simulatorSetPath &&
+    binding.facts.operations.tapPoint.available
+  );
+}
+
+function supportsAppSwitcher(device: DeviceInfo): boolean {
+  return device.appleOs !== 'macos' && device.appleOs !== 'watchos';
+}
+
+function supportsAppleMobileInput(device: DeviceInfo): boolean {
+  return device.appleOs !== 'tvos' && device.appleOs !== 'macos' && device.appleOs !== 'watchos';
 }
 
 /** Apple never had a live keyboard status read: every eligible leaf still refuses status/get with

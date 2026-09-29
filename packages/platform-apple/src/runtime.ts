@@ -275,32 +275,8 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
     const logs = await appLogs.inspectFacts(device);
     const watchHidAvailable = await inspectWatchHidAvailability(host, device);
     const deployment = appleAppDeploymentFacts(device);
-    const leafRecordingFacts = appleScreenRecordingFacts(device);
-    const hostAvailability = leafRecordingFacts.available
-      ? await host.screenRecording.apple.availability(device)
-      : undefined;
-    const recordingFacts =
-      leafRecordingFacts.available && hostAvailability?.available === false
-        ? Object.freeze({
-            available: false,
-            reason: 'unsupported-provider-mode' as const,
-            hint: hostAvailability.hint,
-          })
-        : leafRecordingFacts;
-    const physicalWatchUnavailable = Object.freeze({
-      available: false,
-      reason: 'unsupported-device-kind' as const,
-      hint: 'watchOS lifecycle is supported on Simulator targets only.',
-    });
-    const readiness =
-      device.appleOs === 'watchos' && device.kind !== 'simulator'
-        ? physicalWatchUnavailable
-        : available;
-    const boot = isMacOs(device)
-      ? unavailable
-      : device.appleOs === 'watchos' && device.kind !== 'simulator'
-        ? physicalWatchUnavailable
-        : available;
+    const recordingFacts = await resolvedScreenRecordingFacts(host, device);
+    const { readiness, boot } = appleLifecycleReadinessFacts(device);
     const apps = appInventoryFacts(device);
     return Object.freeze({
       device: logs.device,
@@ -529,6 +505,41 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
       await Promise.all([appLogs.shutdown(), snapshotRoute.shutdown()]);
     },
   });
+}
+
+async function resolvedScreenRecordingFacts(
+  host: PlatformRuntimeHost,
+  device: DeviceInfo,
+): Promise<RuntimeOperationFact> {
+  const leafFact = appleScreenRecordingFacts(device);
+  if (!leafFact.available) return leafFact;
+  const hostFact = await host.screenRecording.apple.availability(device);
+  if (hostFact?.available !== false) return leafFact;
+  return Object.freeze({
+    available: false,
+    reason: 'unsupported-provider-mode' as const,
+    hint: hostFact.hint,
+  });
+}
+
+function appleLifecycleReadinessFacts(device: DeviceInfo): Readonly<{
+  readiness: RuntimeOperationFact;
+  boot: RuntimeOperationFact;
+}> {
+  const physicalWatchUnavailable = Object.freeze({
+    available: false,
+    reason: 'unsupported-device-kind' as const,
+    hint: 'watchOS lifecycle is supported on Simulator targets only.',
+  });
+  const watchNeedsSimulator = device.appleOs === 'watchos' && device.kind !== 'simulator';
+  return {
+    readiness: watchNeedsSimulator ? physicalWatchUnavailable : available,
+    boot: isMacOs(device)
+      ? unavailable
+      : watchNeedsSimulator
+        ? physicalWatchUnavailable
+        : available,
+  };
 }
 
 async function inspectWatchHidAvailability(
