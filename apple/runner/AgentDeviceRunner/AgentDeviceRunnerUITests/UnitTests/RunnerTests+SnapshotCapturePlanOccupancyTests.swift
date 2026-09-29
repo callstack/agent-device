@@ -380,5 +380,124 @@ extension RunnerTests {
     )
     XCTAssertFalse(hasAbandonedMainThreadWork())
   }
+
+  /// The Save Password sheet shape: the channel is penalized and private AX cannot match the app
+  /// behind the out-of-process sheet. The deferred plan recovers through the bounded tree and
+  /// reports the bounded slice as its reason. That the sweep stays off the plan is the plan's own
+  /// contract (`effectiveSnapshotCapturePlan`).
+  func testPenalizedPlanRecoversThroughTheBoundedTreeWhenPrivateAXReadsNothing() throws {
+    let captureTarget = try launchPenalizedPrivateAXBlindTarget(
+      bundleId: "com.callstack.agentdevice.runner.penalized-tree-recovery-test"
+    )
+    defer { tearDownPenalizedPrivateAXBlindTarget() }
+
+    let payload = try runDeferredPlanOffMain(target: captureTarget)
+
+    let quality = try XCTUnwrap(payload.snapshotQuality)
+    XCTAssertEqual(quality.state, .recovered)
+    XCTAssertEqual(quality.backend, SnapshotBackendKind.recursiveTree.rawValue)
+    XCTAssertEqual(quality.reasonCode, "budget")
+    XCTAssertGreaterThan(payload.nodes?.count ?? 0, 1, "the bounded tree answers with a real tree")
+  }
+
+  /// When the bounded tree also grinds past its slice, the plan ends sparse, and the verdict still
+  /// names the bounded slice the capture ran on rather than the seeded pre-selection.
+  func testPenalizedPlanThatEndsSparseAfterTheBoundedTreeReportsTheBudget() throws {
+    guard
+      let snapshotMethod = class_getInstanceMethod(
+        XCUIApplication.self,
+        #selector(XCUIElement.snapshot)
+      ),
+      let stubMethod = class_getInstanceMethod(
+        RunnerBlockingSnapshotStub.self,
+        #selector(RunnerBlockingSnapshotStub.snapshot)
+      )
+    else {
+      XCTFail("unable to install the blocking snapshot stub")
+      return
+    }
+    let captureTarget = try launchPenalizedPrivateAXBlindTarget(
+      bundleId: "com.callstack.agentdevice.runner.penalized-tree-timeout-test"
+    )
+    RunnerBlockingSnapshotGate.release = DispatchSemaphore(value: 0)
+    RunnerBlockingSnapshotGate.entered = DispatchSemaphore(value: 0)
+    let originalImplementation = method_getImplementation(snapshotMethod)
+    method_setImplementation(snapshotMethod, method_getImplementation(stubMethod))
+    defer {
+      RunnerBlockingSnapshotGate.release.signal()
+      method_setImplementation(snapshotMethod, originalImplementation)
+      let drainDeadline = Date().addingTimeInterval(3)
+      while hasAbandonedMainThreadWork(), Date() < drainDeadline {
+        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+      }
+      tearDownPenalizedPrivateAXBlindTarget()
+    }
+
+    let payload = try runDeferredPlanOffMain(target: captureTarget) {
+      RunnerBlockingSnapshotGate.release.signal()
+    }
+
+    let quality = try XCTUnwrap(payload.snapshotQuality)
+    XCTAssertEqual(quality.state, .sparse)
+    XCTAssertEqual(quality.reasonCode, "budget")
+  }
+
+  private func launchPenalizedPrivateAXBlindTarget(bundleId: String) throws -> SnapshotCaptureTarget {
+    app.launchArguments = ["--agent-device-selector-read-regression"]
+    app.launch()
+    XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+    XCTAssertFalse(app.frame.isEmpty)
+    MainActor.assumeIsolated {
+      mainOwned.app = app
+      mainOwned.bundleId = bundleId
+    }
+    snapshotXCTestPenaltyWarmupExemption.isPending = false
+    let captureTarget = MainActor.assumeIsolated { takeSnapshotCaptureTarget(app: app) }
+    penalizeSnapshotXCTestChannel(bundleId: captureTarget.bundleId, reason: "test-setup")
+    privateAXAcquisitionOverrideForTesting = { nil }
+    return captureTarget
+  }
+
+  private func tearDownPenalizedPrivateAXBlindTarget() {
+    privateAXAcquisitionOverrideForTesting = nil
+    clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
+    clearPrivateAXAcceptedDepth(reason: "test-cleanup")
+    MainActor.assumeIsolated {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+    }
+    app.terminate()
+  }
+
+  /// Runs the regular plan for `target` off the main thread, as the command queue does, and
+  /// returns its payload; `afterPlan` runs on that queue once the plan has answered.
+  private func runDeferredPlanOffMain(
+    target: SnapshotCaptureTarget,
+    afterPlan: @escaping () -> Void = {}
+  ) throws -> DataPayload {
+    final class ResultBox {
+      var payload: DataPayload?
+      var error: Error?
+    }
+    let box = ResultBox()
+    let planned = expectation(description: "deferred plan answered")
+    DispatchQueue(label: "agent-device.runner.tests.deferred-plan").async {
+      do {
+        box.payload = try self.runSnapshotCapturePlan(
+          Self.regularVisiblePlan,
+          target: target,
+          options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+          terminal: .sparseWithFatalOnAXFailure,
+          deadline: Date().addingTimeInterval(20)
+        )
+      } catch {
+        box.error = error
+      }
+      afterPlan()
+      planned.fulfill()
+    }
+    wait(for: [planned], timeout: 60)
+    if let error = box.error { throw error }
+    return try XCTUnwrap(box.payload)
+  }
 }
 #endif

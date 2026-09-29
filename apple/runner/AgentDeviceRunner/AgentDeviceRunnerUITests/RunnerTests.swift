@@ -5,6 +5,7 @@
 //  Created by Michał Pierzchała on 30/01/2026.
 //
 
+import AgentDeviceSnapshotPresentation
 import XCTest
 import Network
 #if canImport(UIKit)
@@ -199,6 +200,9 @@ final class RunnerTests: XCTestCase {
   // live SpringBoard alert. Production never compiles this property. Stored here (rather than in
   // the extension that reads it) because Swift extensions cannot hold stored properties.
   var systemModalProbeOverrideForTesting: (@MainActor (Date) -> DataPayload?)?
+  /// Stands in for the private AX tier's acquisition in unit-test builds, so a plan can meet the
+  /// out-of-process sheet the tier cannot read. Production builds compile none of this.
+  var privateAXAcquisitionOverrideForTesting: (() -> SnapshotAcquisition?)?
   var blockingSystemModalPresenceOverrideForTesting: Bool?
   var alertResolutionOverrideForTesting: (@MainActor (Date) -> RunnerAlert?)?
   var alertButtonHittabilityProbeOverrideForTesting: (@MainActor (Date) -> Bool)?

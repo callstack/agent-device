@@ -205,17 +205,16 @@ extension RunnerTests {
     }
   }
 
-  /// The reason a capture's verdict carries. An XCTest-backed tier that recovered a deferred plan
-  /// ran on the bounded probe's short slice, so it reports that constraint ('budget') rather than
-  /// the pre-selection ('deferred') the plan was seeded with.
-  static func recoveredVerdictReason(
-    backend: SnapshotBackendKind,
+  /// The reason a capture's verdict carries. Once an XCTest-backed tier ran behind a deferred plan,
+  /// it ran on the bounded probe's short slice, so the capture reports that constraint ('budget')
+  /// whether the tier recovered it or the plan ended sparse, rather than the pre-selection
+  /// ('deferred') the plan was seeded with.
+  static func planVerdictReason(
+    xCTestTierRan: Bool,
     state: SnapshotXCTestChannelPlanState,
     firstFailure: (reason: String, code: String)?
   ) -> (reason: String, code: String)? {
-    guard backend.usesXCTestAccessibilityChannel, state == .deferredToIndependentBackend else {
-      return firstFailure
-    }
+    guard xCTestTierRan, state == .deferredToIndependentBackend else { return firstFailure }
     return xcTestChannelStateFirstFailure(.boundedXCTestProbe)
   }
 
@@ -303,6 +302,7 @@ extension RunnerTests {
     // A caller may share the pre-plan system-modal probe's deadline; otherwise own the full budget (#1244).
     let deadline = deadline ?? Date().addingTimeInterval(Self.snapshotPlanBudget)
     let suppressXCTestPenalty = snapshotXCTestPenaltyWarmupExemption.consume()
+    var xCTestTierRan = false
 
     // Reorder is iOS-only because hostile screens can make XCTest tree/query work grind while
     // the app remains visually responsive. Simulators can avoid that channel through private AX;
@@ -362,6 +362,7 @@ extension RunnerTests {
         }
         continue
       }
+      if kind.usesXCTestAccessibilityChannel { xCTestTierRan = true }
       let attempt = try captureWithBackend(
         kind,
         target: target,
@@ -409,8 +410,8 @@ extension RunnerTests {
       }
 
       let recovered = kind != effectivePlan.first || effective.xCTestChannelState != .normal
-      let verdictReason = Self.recoveredVerdictReason(
-        backend: kind,
+      let verdictReason = Self.planVerdictReason(
+        xCTestTierRan: kind.usesXCTestAccessibilityChannel,
         state: effective.xCTestChannelState,
         firstFailure: firstFailure
       )
@@ -448,13 +449,18 @@ extension RunnerTests {
       }
     }
 
+    let terminalReason = Self.planVerdictReason(
+      xCTestTierRan: xCTestTierRan,
+      state: effective.xCTestChannelState,
+      firstFailure: firstFailure
+    )
     let fallbackPayload =
-      best.map { stampedSnapshotPayload($0.capture, backend: $0.kind, state: .sparse, reason: firstFailure) }
+      best.map { stampedSnapshotPayload($0.capture, backend: $0.kind, state: .sparse, reason: terminalReason) }
       ?? stampedSnapshotPayload(
         SnapshotBackendCapture(payload: sparseTruncatedSnapshotPayload(), effectiveDepth: nil),
         backend: effectivePlan.last ?? plan.last ?? .recursiveTree,
         state: .sparse,
-        reason: firstFailure
+        reason: terminalReason
       )
     return fallbackPayload
   }
@@ -514,6 +520,11 @@ extension RunnerTests {
           }
           return (sweep.acquisition, sweep.outcome)
         case .privateAX:
+          #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+          if let override = self.privateAXAcquisitionOverrideForTesting {
+            return (override(), .completed)
+          }
+          #endif
           return (
             self.privateAXSnapshotAcquisition(
               target: target,
