@@ -2,12 +2,13 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import type { CommandResultMap } from '@agent-device/command-registry/command-result';
 import { DEVICE_TARGETS } from '@agent-device/kernel/device';
-import * as commandInput from '../command-input.ts';
 import {
+  booleanField,
   enumSchema,
   looseObjectSchema,
   numberSchema,
   objectSchema,
+  stringField,
   stringSchema,
 } from '../command-input.ts';
 import { commonInputFromFlags, direct } from '../cli-grammar/common.ts';
@@ -55,12 +56,10 @@ const doctorCommandMetadata = defineFieldCommandMetadata(
   'doctor',
   'Diagnose device, app, development-server, and React Native or Expo readiness issues. Returns compact evidence for local inventory, sessions, optional app discovery, toolchains, and server reachability.',
   {
-    targetApp: commandInput.stringField(
+    targetApp: stringField(
       'Installed app package/bundle id or app name to verify without opening a session.',
     ),
-    remote: commandInput.booleanField(
-      'Check remote connection setup instead of local device inventory.',
-    ),
+    remote: booleanField('Check remote connection setup instead of local device inventory.'),
   },
 );
 
