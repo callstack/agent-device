@@ -8,5 +8,5 @@
     "declarationDir": "./dist-types",
     "rootDir": "./src"
   },
-  "include": ["src"]
+  "include": ["src", "../command-registry/src/global.d.ts"]
 }

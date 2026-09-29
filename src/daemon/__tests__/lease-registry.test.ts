@@ -646,6 +646,59 @@ test('releasing a lease drops the work claims recorded against it', () => {
   assert.equal(registry.listActiveLeases().length, 0, 'a released lease must not come back');
 });
 
+// #2946: a caller that heartbeats without repeating its allocation TTL is asking for the same lease
+// to keep going, not for the registry default. Resolving an absent `ttlMs` to that default silently
+// shortened every lease allocated above it, which is how an upload expired the lease paying for the
+// device it was uploading to.
+test('a heartbeat with no ttlMs renews the lease for the window it already carries', () => {
+  let now = 1_000;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 10_000 });
+  const lease = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1', ttlMs: 60_000 });
+
+  now = 2_000;
+  const renewed = registry.heartbeatLease({ leaseId: lease.leaseId });
+  assert.equal(renewed.heartbeatAt, 2_000);
+  assert.equal(renewed.expiresAt, 62_000, 'the allocated 60s window, not the 10s default');
+});
+
+test('a heartbeat with no ttlMs keeps a long-TTL lease outliving the default TTL', () => {
+  let now = 0;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 60_000 });
+  const lease = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'proxy',
+    deviceKey: 'android:mobile:emulator-5554',
+    ttlMs: 5 * 60_000,
+  });
+
+  // The 1m47s upload from the issue, beaten every 20s by the client and admitted after it lands.
+  for (const elapsed of [20_000, 40_000, 60_000, 80_000, 100_000, 107_000]) {
+    now = elapsed;
+    registry.heartbeatLease({
+      leaseId: lease.leaseId,
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      leaseProvider: 'proxy',
+      deviceKey: 'android:mobile:emulator-5554',
+    });
+  }
+
+  const active = registry.listActiveLeases().find((entry) => entry.leaseId === lease.leaseId);
+  assert.ok(active, 'the lease is still active at the end of the upload');
+  assert.equal(active.expiresAt - active.heartbeatAt, 5 * 60_000);
+});
+
+test('a heartbeat with an explicit ttlMs still sets that window', () => {
+  let now = 1_000;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 10_000 });
+  const lease = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1', ttlMs: 60_000 });
+
+  now = 2_000;
+  const renewed = registry.heartbeatLease({ leaseId: lease.leaseId, ttlMs: 5_000 });
+  assert.equal(renewed.expiresAt, 7_000, 'an explicit window is the caller asking to change it');
+});
+
 function inFlightClaimKeys(registry: LeaseRegistry): string[] {
   const work = (
     registry as unknown as {

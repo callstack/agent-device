@@ -45,6 +45,7 @@ const REQUEST_PROGRESS = 'packages/contracts/src/request-progress.ts';
 const DAEMON_HTTP = 'packages/contracts/src/daemon-http.ts';
 const HTTP_ERRORS = 'src/daemon/http-errors.ts';
 const HTTP_SERVER = 'src/daemon/server/http-server.ts';
+const HTTP_INSTANCE_PRECONDITION = 'src/daemon/server/http-instance-precondition.ts';
 const UPLOAD_HTTP = 'src/daemon/upload-http.ts';
 const ARTIFACT_HTTP = 'src/daemon/downloadable-artifact-http.ts';
 const REQUEST_DIAGNOSTICS_HTTP = 'src/daemon/request-diagnostics-http.ts';
@@ -55,6 +56,7 @@ const PROGRESS_PROTOCOL = 'src/request-progress-protocol.ts';
 const CLIENT_RPC = 'src/daemon-client/daemon-client-rpc.ts';
 const CLIENT_PROGRESS = 'src/daemon-client/daemon-client-progress.ts';
 const CLIENT_TRANSPORT = 'src/daemon-client/daemon-client-transport.ts';
+const DAEMON_PROXY = 'src/remote/daemon-proxy.ts';
 const UPLOAD_CLIENT = 'src/remote/upload-client.ts';
 const REMOTE_ARTIFACTS = 'src/remote/daemon-artifacts.ts';
 const ARTIFACT_DOWNLOAD = 'src/remote/artifact-download.ts';
@@ -68,8 +70,34 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
   {
     adrBullet: 'HTTP route requirements for /health, /rpc, /upload, or /artifacts/*.',
     declarations: [
-      ...from(DAEMON_HTTP, 'DAEMON_HTTP_BASE_PATH', 'buildDaemonHttpUrl', 'buildDaemonHttpBaseUrl'),
-      ...from(DAEMON_HTTP, 'DaemonHealthPayload', 'buildDaemonHealthPayload'),
+      ...from(
+        DAEMON_HTTP,
+        'DAEMON_HTTP_BASE_PATH',
+        'DAEMON_HTTP_INSTANCE_HEADER',
+        'DAEMON_HTTP_INSTANCE_MISMATCH_HEADER',
+        'DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER',
+        'buildDaemonHttpUrl',
+        'buildDaemonHttpBaseUrl',
+      ),
+      ...from(
+        DAEMON_HTTP,
+        'DaemonHealthPayload',
+        'buildDaemonHealthPayload',
+        'buildDaemonInstanceMismatchRpcResponse',
+      ),
+      ...from(HTTP_INSTANCE_PRECONDITION, 'refuseStaleDaemonInstance'),
+      ...from(
+        DAEMON_PROXY,
+        'refuseStaleProxyInstance',
+        'sendInstanceMismatch',
+        'buildUpstreamInstancePreconditionHeaders',
+      ),
+      ...from(
+        CLIENT_TRANSPORT,
+        'buildRemoteInstancePreconditionHeaders',
+        'isRemoteInstanceMismatchResponse',
+        'isRemoteInstanceMismatch',
+      ),
       // A shrunk body limit rejects payloads a released client still sends, so
       // it is a route requirement rather than an implementation detail.
       ...from(HTTP_SERVER, 'MAX_HTTP_RPC_BODY_BYTES'),

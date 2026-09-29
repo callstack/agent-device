@@ -506,12 +506,42 @@ importers:
 
   packages/replay-port:
     dependencies:
+      '@agent-device/ad-replay':
+        specifier: workspace:*
+        version: link:../ad-replay
       '@agent-device/ad-script':
         specifier: workspace:*
         version: link:../ad-script
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
+      '@agent-device/command-registry':
+        specifier: workspace:*
+        version: link:../command-registry
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@agent-device/device-selection':
+        specifier: workspace:*
+        version: link:../device-selection
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@agent-device/maestro':
+        specifier: workspace:*
+        version: link:../maestro
+      '@agent-device/replay-test':
+        specifier: workspace:*
+        version: link:../replay-test
+      '@agent-device/selectors':
+        specifier: workspace:*
+        version: link:../selectors
+      '@agent-device/session-journal':
+        specifier: workspace:*
+        version: link:../session-journal
 
   packages/replay-test:
     dependencies:
