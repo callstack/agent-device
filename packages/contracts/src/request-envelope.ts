@@ -18,6 +18,7 @@ import type { SnapshotCommandOptionFields } from '@agent-device/kernel/snapshot'
 import type { DaemonBatchStep } from './batch-step.ts';
 import type { ReplayRequestFields } from './replay-request-fields.ts';
 import type { AgentDeviceClientConfig, AgentDeviceSelectionOptions } from './client-connection.ts';
+import type { LaunchEnvironment } from './launch-environment.ts';
 
 export type CommandExecutionOptions = Partial<ScreenshotRequestFlags> &
   ReplayRequestFields &
@@ -68,6 +69,7 @@ export type InternalRequestOptions = AgentDeviceClientConfig &
     activity?: string;
     launchConsole?: string;
     launchArgs?: string[];
+    launchEnvironment?: LaunchEnvironment;
     relaunch?: boolean;
     shutdown?: boolean;
     saveScript?: boolean | string;

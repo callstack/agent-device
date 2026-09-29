@@ -25,13 +25,14 @@ export type MaestroRuntimeFlags = {
   screenshotCaptureBackend?: 'runner';
 };
 
-export type CommandFlags = Omit<CliFlags, DaemonExcludedCliFlag> & {
+export type CommandFlags = Omit<CliFlags, DaemonExcludedCliFlag | 'launchEnvironmentEntries'> & {
   batchSteps?: DaemonBatchStep[];
   clearAppState?: boolean;
   interactionOutcome?: {
     retryOnNoChange?: boolean;
   };
   launchArgs?: string[];
+  launchEnvironment?: Readonly<Record<string, string>>;
   kind?: string;
   maestro?: MaestroRuntimeFlags;
   postGestureStabilization?: boolean;

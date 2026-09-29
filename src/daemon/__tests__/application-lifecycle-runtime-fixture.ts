@@ -241,6 +241,7 @@ export function applicationLifecycleFixtureInteractor(
           clearAppState,
           launchArgs: options?.launchArgs,
           launchConsole: options?.launchConsole,
+          launchEnvironment: options?.launchEnvironment,
           terminateRunningApp: options?.terminateRunningApp,
         }),
       );
@@ -278,6 +279,7 @@ function lifecycleEffectContext(
     clearAppState?: boolean;
     launchArgs?: readonly string[];
     launchConsole?: string;
+    launchEnvironment?: Readonly<Record<string, string>>;
     terminateRunningApp?: boolean;
   }>,
 ): LifecycleEffectContext {
@@ -290,6 +292,7 @@ function lifecycleEffectContext(
     clearAppState: input.clearAppState,
     launchArgs: input.launchArgs,
     launchConsole: input.launchConsole,
+    launchEnvironment: input.launchEnvironment,
     iosXctestrunFile: runner.iosXctestrunFile,
     iosXctestDerivedDataPath: runner.iosXctestDerivedDataPath,
     iosXctestEnvDir: runner.iosXctestEnvDir,

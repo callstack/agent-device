@@ -17,6 +17,7 @@ export function applicationLifecycleExecutionFromRequest(
     activity: req.flags?.activity,
     launchConsole: req.flags?.launchConsole,
     launchArgs: req.flags?.launchArgs,
+    launchEnvironment: req.flags?.launchEnvironment,
     clearAppState: req.flags?.clearAppState,
     iosXctestrunFile: req.flags?.iosXctestrunFile,
     iosXctestDerivedDataPath: req.flags?.iosXctestDerivedDataPath,

@@ -18,7 +18,14 @@ import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from './test-timeouts.ts';
 test('Provider-backed integration iOS Settings flow uses scripted simctl and runner providers', async () => {
   await withProviderScenarioResource(
     createIosSettingsWorld,
-    async ({ appPath, appleTool, daemon, inventoryRequests, runnerTranscript }) => {
+    async ({
+      appPath,
+      appleTool,
+      daemon,
+      inventoryRequests,
+      launchEnvironments,
+      runnerTranscript,
+    }) => {
       const scopedDevices = await daemon.client().devices.list({
         platform: 'ios',
         iosSimulatorDeviceSet: '/tmp/provider-scenario-simulators',
@@ -47,6 +54,24 @@ test('Provider-backed integration iOS Settings flow uses scripted simctl and run
             source: 'session',
             device_udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
             ios_simulator_device_set: null,
+          },
+        },
+        {
+          name: 'relaunch app with App Clip environment and launch arguments',
+          command: 'open',
+          positionals: ['com.apple.Preferences'],
+          flags: {
+            launchArgs: ['-FixtureMode', 'app-clip'],
+            launchEnvironment: {
+              _XCAppClipURL: 'https://example.com/clip?id=42',
+              MODE: 'provider-test',
+            },
+          },
+          expectData: { appBundleId: 'com.apple.Preferences' },
+          assert: (response) => {
+            const serialized = JSON.stringify(response.json);
+            assert.equal(serialized.includes('https://example.com/clip?id=42'), false);
+            assert.equal(serialized.includes('provider-test'), false);
           },
         },
         {
@@ -277,6 +302,20 @@ test('Provider-backed integration iOS Settings flow uses scripted simctl and run
 
       runnerTranscript.assertComplete();
       assertFlatToolCall(appleTool.calls, ['simctl', 'launch', 'sim-1', 'com.apple.Preferences']);
+      assertFlatToolCall(appleTool.calls, [
+        'simctl',
+        'launch',
+        'sim-1',
+        'com.apple.Preferences',
+        '-FixtureMode',
+        'app-clip',
+      ]);
+      assert.deepEqual(launchEnvironments, [
+        {
+          SIMCTL_CHILD__XCAppClipURL: 'https://example.com/clip?id=42',
+          SIMCTL_CHILD_MODE: 'provider-test',
+        },
+      ]);
       assertFlatToolCall(appleTool.calls, [
         'simctl',
         'launch',

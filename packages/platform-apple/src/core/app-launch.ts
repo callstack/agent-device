@@ -1,5 +1,10 @@
 import path from 'node:path';
-import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  isHandheldAppleSimulator,
+  isIosFamily,
+  isMacOs,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -33,8 +38,8 @@ import { resolveIosApp } from './app-resolution.ts';
 import { buildSimctlArgsForDevice, runSimctlForDevice } from './simctl.ts';
 
 const IOS_SIMULATOR_CONSOLE_CAPTURE_MS = 25_000;
-const IOS_SIMULATOR_LAUNCH_ARGS_WITH_URL_MESSAGE =
-  '--launch-args is not supported with iOS simulator URL opens (simctl openurl ignores launch args). Launch the app first with --launch-args, then issue the URL open in a separate call.';
+const IOS_SIMULATOR_LAUNCH_CONFIGURATION_WITH_URL_MESSAGE =
+  'Launch arguments and environment are not supported with bare iOS simulator URL opens (simctl openurl cannot configure the app process). Launch the app first, then issue the URL open in a separate call.';
 
 // fallow-ignore-next-line complexity
 export async function openIosApp(
@@ -44,6 +49,7 @@ export async function openIosApp(
     appBundleId?: string;
     launchConsole?: string;
     launchArgs?: string[];
+    launchEnvironment?: Readonly<Record<string, string>>;
     terminateRunningApp?: boolean;
     url?: string;
     runnerOptions?: AppleRunnerCommandOptions;
@@ -51,6 +57,13 @@ export async function openIosApp(
 ): Promise<void> {
   const launchConsole = options?.launchConsole?.trim();
   const launchArgs = options?.launchArgs;
+  const launchEnvironment = options?.launchEnvironment;
+  if (launchEnvironment !== undefined && !isHandheldAppleSimulator(device)) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      '--launch-env is supported only for iOS Simulator app launches.',
+    );
+  }
   if (launchConsole && (!isIosFamily(device) || device.kind !== 'simulator')) {
     throw new AppError('UNSUPPORTED_OPERATION', LAUNCH_CONSOLE_IOS_SIMULATOR_ONLY_MESSAGE);
   }
@@ -73,12 +86,14 @@ export async function openIosApp(
       throw new AppError('INVALID_ARGS', 'open <app> <url> requires a valid URL target');
     }
     if (device.kind === 'simulator') {
-      const shouldLaunchAppBeforeUrl = Boolean(launchArgs) || isWebUrl(explicitUrl);
+      const shouldLaunchAppBeforeUrl =
+        Boolean(launchArgs) || launchEnvironment !== undefined || isWebUrl(explicitUrl);
       if (options?.terminateRunningApp || shouldLaunchAppBeforeUrl) {
         const bundleId = options?.appBundleId ?? (await resolveIosApp(device, app));
         if (shouldLaunchAppBeforeUrl) {
           await launchIosSimulatorApp(device, bundleId, {
             ...(launchArgs ? { launchArgs } : {}),
+            ...(launchEnvironment ? { launchEnvironment } : {}),
             ...(options?.terminateRunningApp ? { terminateRunningApp: true } : {}),
           });
         } else {
@@ -110,7 +125,7 @@ export async function openIosApp(
       throw new AppError('INVALID_ARGS', LAUNCH_CONSOLE_DIRECT_APP_ONLY_MESSAGE);
     }
     if (device.kind === 'simulator') {
-      await openIosSimulatorUrl(device, deepLinkTarget, launchArgs);
+      await openIosSimulatorUrl(device, deepLinkTarget, launchArgs, launchEnvironment);
       return;
     }
     const bundleId = resolveIosDeviceDeepLinkBundleId(options?.appBundleId, deepLinkTarget);
@@ -133,6 +148,7 @@ export async function openIosApp(
     await launchIosSimulatorApp(device, bundleId, {
       ...(launchConsole ? { launchConsole } : {}),
       ...(launchArgs ? { launchArgs } : {}),
+      ...(launchEnvironment ? { launchEnvironment } : {}),
       ...(options?.terminateRunningApp ? { terminateRunningApp: true } : {}),
     });
     return;
@@ -148,9 +164,10 @@ async function openIosSimulatorUrl(
   device: DeviceInfo,
   url: string,
   launchArgs: string[] | undefined,
+  launchEnvironment?: Readonly<Record<string, string>>,
 ): Promise<void> {
-  if (launchArgs && launchArgs.length > 0) {
-    throw new AppError('INVALID_ARGS', IOS_SIMULATOR_LAUNCH_ARGS_WITH_URL_MESSAGE);
+  if ((launchArgs && launchArgs.length > 0) || launchEnvironment !== undefined) {
+    throw new AppError('INVALID_ARGS', IOS_SIMULATOR_LAUNCH_CONFIGURATION_WITH_URL_MESSAGE);
   }
   await ensureBootedSimulator(device);
   await runSimctlForDevice(device, ['openurl', device.id, url]);
@@ -226,7 +243,12 @@ async function terminateIosSimulatorApp(device: DeviceInfo, bundleId: string): P
 async function launchIosSimulatorApp(
   device: DeviceInfo,
   bundleId: string,
-  options?: { launchConsole?: string; launchArgs?: string[]; terminateRunningApp?: boolean },
+  options?: {
+    launchConsole?: string;
+    launchArgs?: string[];
+    launchEnvironment?: Readonly<Record<string, string>>;
+    terminateRunningApp?: boolean;
+  },
 ): Promise<void> {
   await assertNotSystemSurfaceHost(bundleId);
   await ensureBootedSimulator(device);
@@ -248,10 +270,18 @@ async function launchIosSimulatorApp(
           device,
           buildIosSimulatorLaunchArgs(device.id, bundleId, options),
         );
+        const launchEnvironmentPatch = iosSimulatorLaunchEnvironmentPatch(
+          options?.launchEnvironment,
+        );
         const result = options?.launchConsole
-          ? await runIosSimulatorConsoleLaunch(launchArgs, options.launchConsole)
+          ? await runIosSimulatorConsoleLaunch(
+              launchArgs,
+              options.launchConsole,
+              launchEnvironmentPatch,
+            )
           : await runXcrun(launchArgs, {
               allowFailure: true,
+              ...(launchEnvironmentPatch ? { envPatch: launchEnvironmentPatch } : {}),
             });
         if (result.exitCode === 0) return;
 
@@ -288,7 +318,12 @@ async function launchIosSimulatorApp(
 function buildIosSimulatorLaunchArgs(
   deviceId: string,
   bundleId: string,
-  options?: { launchConsole?: string; launchArgs?: string[]; terminateRunningApp?: boolean },
+  options?: {
+    launchConsole?: string;
+    launchArgs?: string[];
+    launchEnvironment?: Readonly<Record<string, string>>;
+    terminateRunningApp?: boolean;
+  },
 ): string[] {
   const args = ['launch'];
   // `--console-pty` is the console mode this path needs: simctl writes the app's bytes to its own
@@ -304,15 +339,26 @@ function buildIosSimulatorLaunchArgs(
   return args;
 }
 
+function iosSimulatorLaunchEnvironmentPatch(
+  launchEnvironment: Readonly<Record<string, string>> | undefined,
+): Readonly<Record<string, string>> | undefined {
+  if (launchEnvironment === undefined) return undefined;
+  return Object.fromEntries(
+    Object.entries(launchEnvironment).map(([key, value]) => [`SIMCTL_CHILD_${key}`, value]),
+  );
+}
+
 async function runIosSimulatorConsoleLaunch(
   launchArgs: ScopedSimctlCommand,
   logPath: string,
+  envPatch?: Readonly<Record<string, string>>,
 ): Promise<Awaited<ReturnType<typeof runXcrun>>> {
   await ensureHostDirectory(path.dirname(logPath));
   try {
     const result = await runXcrun(launchArgs, {
       allowFailure: true,
       timeoutMs: IOS_SIMULATOR_CONSOLE_CAPTURE_MS,
+      ...(envPatch ? { envPatch } : {}),
     });
     await writeIosSimulatorConsoleLog(logPath, result.stdout, result.stderr);
     return result;

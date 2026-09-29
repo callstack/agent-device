@@ -302,6 +302,7 @@ function summarizeProviderScenarioFlagExclusions() {
       keys: [
         'kind',
         'launchArgs',
+        'launchEnvironmentEntries',
         'perfTemplate',
         'iosXctestrunFile',
         'iosXctestDerivedDataPath',

@@ -101,6 +101,19 @@ test('runCmd writes stdin through pipeline', async () => {
   assert.equal(result.stdout, String(stdin.length));
 });
 
+test('runCmd envPatch inherits the host environment and applies child overrides', async () => {
+  const result = await runCmd(
+    process.execPath,
+    [
+      '-e',
+      'process.stdout.write(JSON.stringify({ path: Boolean(process.env.PATH), mode: process.env.AGENT_DEVICE_TEST_MODE }))',
+    ],
+    { envPatch: { AGENT_DEVICE_TEST_MODE: 'app-clip' } },
+  );
+
+  assert.deepEqual(JSON.parse(result.stdout), { path: true, mode: 'app-clip' });
+});
+
 test.sequential('runCmdBackground emits bounded exec_command diagnostics when AGENT_DEVICE_EXEC_TRACE is enabled', async () => {
   const diagnosticsPath = await withExecTraceEnv(
     async () =>

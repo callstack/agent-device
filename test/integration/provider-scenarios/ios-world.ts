@@ -22,6 +22,7 @@ type IosSettingsWorld = {
   appleTool: { calls: FlatToolCall[] };
   runnerTranscript: ProviderScenarioTranscript;
   inventoryRequests: DeviceInventoryRequest[];
+  launchEnvironments: Array<Readonly<Record<string, string>>>;
   appPath: string;
   close: () => Promise<void>;
 };
@@ -179,6 +180,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
     'ios.runner',
   );
   let clipboardText = '';
+  const launchEnvironments: Array<Readonly<Record<string, string>>> = [];
   const appleTool = createRecordingAppleToolProvider({
     plist: {
       readJson: async (plistPath) => {
@@ -193,6 +195,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       },
     },
     simctl: async (args, options) => {
+      recordLaunchEnvironment(args, options, launchEnvironments);
       if (args.join(' ') === 'pbcopy sim-1') {
         clipboardText = String(options?.stdin ?? '');
         return { stdout: '', stderr: '', exitCode: 0 };
@@ -235,6 +238,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
     appleTool,
     runnerTranscript,
     inventoryRequests,
+    launchEnvironments,
     appPath,
     close: async () => {
       if (closed) return;
@@ -243,6 +247,15 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       await daemon.close();
     },
   };
+}
+
+function recordLaunchEnvironment(
+  args: readonly string[],
+  options: Readonly<{ envPatch?: Readonly<Record<string, string>> }> | undefined,
+  launchEnvironments: Array<Readonly<Record<string, string>>>,
+): void {
+  if (args[0] !== 'launch' || !options?.envPatch) return;
+  launchEnvironments.push({ ...options.envPatch });
 }
 
 type IosPhysicalReinstallWorld = {

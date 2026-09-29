@@ -4,7 +4,7 @@ import {
   LAUNCH_CONSOLE_IOS_SIMULATOR_ONLY_MESSAGE,
 } from './launch-console.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { isIosFamily } from '@agent-device/kernel/device';
+import { isHandheldAppleSimulator } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type {
@@ -25,6 +25,7 @@ import type {
  */
 export type ApplicationLifecycleInteractorBinding = Readonly<{
   device: DeviceInfo;
+  providerOwned: boolean;
   signal: AbortSignal;
   resolveInteractor(
     execution: ApplicationLifecycleExecution,
@@ -83,6 +84,7 @@ function bindApplicationLifecycleInteractor(
   const { device, signal, ownership } = params;
   return Object.freeze({
     device,
+    providerOwned: ownership !== 'local',
     signal,
     resolveInteractor: async (execution, appBundleId) => {
       const runner = applicationLifecycleRunnerContext(execution, appBundleId, signal);
@@ -181,6 +183,9 @@ async function invokeDeviceOpen(params: DirectOpenParameters): Promise<void> {
   if (params.execution.launchArgs && params.execution.launchArgs.length > 0) {
     throw new AppError('INVALID_ARGS', '--launch-args requires an app target');
   }
+  if (params.execution.launchEnvironment !== undefined) {
+    throw new AppError('INVALID_ARGS', '--launch-env requires an app target');
+  }
   await params.interactor.openDevice();
 }
 
@@ -188,11 +193,24 @@ function assertOpenDeviceSupport(
   device: DeviceInfo,
   execution: ApplicationLifecycleExecution,
 ): void {
-  if (execution.launchConsole && (!isIosFamily(device) || device.kind !== 'simulator')) {
+  if (execution.launchConsole && !isHandheldAppleSimulator(device)) {
     throw new AppError('UNSUPPORTED_OPERATION', LAUNCH_CONSOLE_IOS_SIMULATOR_ONLY_MESSAGE);
   }
   if (device.platform === 'linux' && execution.launchArgs && execution.launchArgs.length > 0) {
     throw new AppError('UNSUPPORTED_OPERATION', '--launch-args is not supported on Linux.');
+  }
+  assertLaunchEnvironmentSupport(device, execution.launchEnvironment);
+}
+
+function assertLaunchEnvironmentSupport(
+  device: DeviceInfo,
+  launchEnvironment: ApplicationLifecycleExecution['launchEnvironment'],
+): void {
+  if (launchEnvironment !== undefined && !isHandheldAppleSimulator(device)) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      '--launch-env is supported only for iOS Simulator app launches.',
+    );
   }
 }
 
@@ -217,6 +235,7 @@ async function invokeApplicationUrlOpen(
     activity: params.execution.activity,
     appBundleId: params.appBundleId,
     launchArgs: params.execution.launchArgs ? [...params.execution.launchArgs] : undefined,
+    launchEnvironment: params.execution.launchEnvironment,
     terminateRunningApp: params.terminateRunningApp,
     url,
   });
@@ -244,6 +263,7 @@ async function invokeApplicationTargetOpen(
     appBundleId: params.appBundleId,
     launchConsole: execution.launchConsole,
     launchArgs: execution.launchArgs ? [...execution.launchArgs] : undefined,
+    launchEnvironment: execution.launchEnvironment,
     terminateRunningApp: params.terminateRunningApp,
   });
 }
@@ -305,6 +325,13 @@ async function openDirectApplication(
   input: OpenApplicationInput,
 ): Promise<OpenApplicationOutcome> {
   const { binding } = params;
+  if (binding.providerOwned && input.execution.launchEnvironment !== undefined) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      `Launch environment is not supported by the ${params.owner} application provider.`,
+      { reason: 'unsupported-provider-mode' },
+    );
+  }
   const interactor = await binding.resolveInteractor(input.execution, input.appBundleId);
   if (params.closeBeforeRelaunch && input.relaunch && input.target !== undefined) {
     await invokeApplicationClose({
@@ -332,6 +359,7 @@ async function openDirectApplication(
         clearAppState: undefined,
         launchConsole: undefined,
         launchArgs: undefined,
+        launchEnvironment: undefined,
       },
     });
   }

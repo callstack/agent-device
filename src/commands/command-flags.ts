@@ -60,6 +60,7 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
     activity: options.activity,
     launchConsole: options.launchConsole,
     launchArgs: options.launchArgs,
+    launchEnvironment: options.launchEnvironment,
     relaunch: options.relaunch,
     shutdown: options.shutdown,
     saveScript: options.saveScript,

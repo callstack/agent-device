@@ -19,6 +19,8 @@ export type ExecResult = {
 export type ExecOptions = {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
+  /** Inherit the selected environment and apply these entries without acquiring host state upstream. */
+  envPatch?: Readonly<Record<string, string>>;
   allowFailure?: boolean;
   binaryStdout?: boolean;
   stdin?: string | Buffer;
@@ -91,6 +93,11 @@ export type CommandExecutorOverride = (
 
 const commandExecutorOverrideScope = new AsyncLocalStorage<CommandExecutorOverride | undefined>();
 
+function resolveExecEnvironment(options: ExecOptions): NodeJS.ProcessEnv | undefined {
+  if (options.envPatch === undefined) return options.env;
+  return { ...(options.env ?? process.env), ...options.envPatch };
+}
+
 export async function withCommandExecutorOverride<T>(
   override: CommandExecutorOverride | undefined,
   fn: () => Promise<T>,
@@ -154,7 +161,7 @@ function runSpawnedCommand(
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, {
       cwd: options.cwd,
-      env: options.env,
+      env: resolveExecEnvironment(options),
       stdio: ['pipe', 'pipe', 'pipe'],
       detached: options.detached,
       windowsHide: true,
@@ -324,7 +331,7 @@ export function runCmdSync(
   const executable = normalizeExecutableCommand(cmd);
   const result = spawnSync(executable, args, {
     cwd: options.cwd,
-    env: options.env,
+    env: resolveExecEnvironment(options),
     stdio: ['pipe', 'pipe', 'pipe'],
     encoding: options.binaryStdout ? undefined : 'utf8',
     input: options.stdin,
@@ -391,7 +398,7 @@ export function runCmdDetachedMonitored(
   const executable = normalizeExecutableCommand(cmd);
   const child = spawn(executable, args, {
     cwd: options.cwd,
-    env: options.env,
+    env: resolveExecEnvironment(options),
     stdio: options.stdio ?? 'ignore',
     detached: true,
     windowsHide: true,
@@ -423,7 +430,7 @@ export function runCmdBackground(
   const execTrace = createExecTraceContext();
   const child = spawn(executable, args, {
     cwd: options.cwd,
-    env: options.env,
+    env: resolveExecEnvironment(options),
     stdio: options.stdio ?? ['ignore', 'pipe', 'pipe'],
     detached: options.detached,
     windowsHide: true,

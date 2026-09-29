@@ -2,6 +2,7 @@
 
 import type { AppsFilter } from './app-inventory.ts';
 import type { JsonObject } from './json.ts';
+import type { LaunchEnvironment } from './launch-environment.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { TargetShutdownResult } from './target-shutdown-contract.ts';
 import type { DaemonInstallSource, SessionRuntimeHints } from '@agent-device/kernel/contracts';
@@ -65,6 +66,7 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
     activity?: string;
     launchConsole?: string;
     launchArgs?: string[];
+    launchEnvironment?: LaunchEnvironment;
     relaunch?: boolean;
     /** Startup budget in milliseconds: bounds the Simulator boot wait on a cold device. */
     timeoutMs?: number;
