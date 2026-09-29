@@ -16,6 +16,7 @@ import {
   type AndroidTextInputAction,
 } from './adb-executor.ts';
 import { runAndroidShell, sleep } from './adb.ts';
+import type { AndroidAdbExecutor } from './adb-transport.ts';
 import { getAndroidKeyboardState, type AndroidKeyboardState } from './device-input-state.ts';
 import {
   buildAndroidFillUnconfirmedVerification,
@@ -25,13 +26,17 @@ import {
   type AndroidFillVerification,
 } from './fill-verification.ts';
 import {
+  ANDROID_IME_HELPER_SERVICE_COMPONENT,
   clearAndroidImeHelperText,
+  getAndroidImeHelperDeviceKey,
   isAndroidImeHelperPackage,
   rebindAndroidImeHelper,
   selectAndroidImeHelperArtifact,
   sendAndroidImeHelperText,
 } from './ime-helper.ts';
 import { isAndroidTestImeActive } from './ime-lifecycle.ts';
+import { readAndroidDefaultInputMethod } from './ime-settings-record.ts';
+import { activeTestImeDevices } from './ime-state.ts';
 import { focusAndroid } from './input-actions.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
@@ -251,17 +256,12 @@ async function fillAndroidImeHelper(
   const adb = resolveAndroidAdbExecutor(device);
   let lastVerification: AndroidFillVerification | null = null;
   // The caller focused the target while resolving the channel; the retry re-focuses because it
-  // covers the rare not-yet-bound InputConnection right after focus. A commit that left the field
-  // empty went to a stale input session, which only a rebind of the IME replaces.
+  // covers the rare not-yet-bound InputConnection right after focus. A commit none of which reached
+  // the field may also have gone to a stale input session, which only a rebind of the IME replaces.
   for (let attempt = 0; attempt < 2; attempt += 1) {
     if (attempt > 0) {
-      if (lastVerification?.actualInput?.hintShowing === true) {
-        emitDiagnostic({
-          level: 'warn',
-          phase: 'android_test_ime_rebind',
-          data: { device: device.id },
-        });
-        await rebindAndroidImeHelper(adb);
+      if (lastVerification && isAndroidImeCommitDropped(lastVerification, beforeTarget)) {
+        if (!(await rebindAndroidImeHelperChecked(device, adb))) break;
       }
       await focusAndroid(device, x, y);
     }
@@ -274,6 +274,37 @@ async function fillAndroidImeHelper(
   }
   emitAndroidTextDiagnostic('fill', 'test-ime', text);
   return lastVerification as AndroidFillVerification;
+}
+
+/** Whether none of a helper commit reached the field: it shows its hint, or the value it held before. */
+function isAndroidImeCommitDropped(
+  verification: AndroidFillVerification,
+  beforeTarget: AndroidFillVerification['targetInput'],
+): boolean {
+  if (verification.actualInput?.hintShowing === true) return true;
+  return beforeTarget?.text != null && verification.actual === beforeTarget.text;
+}
+
+/**
+ * Rebinds the test IME and confirms it is still the selected IME. A rebind that left another IME
+ * selected takes the device off the helper route, so the next text entry activates the helper again
+ * through the checked activation path instead of broadcasting to an IME that holds no session.
+ */
+async function rebindAndroidImeHelperChecked(
+  device: DeviceInfo,
+  adb: AndroidAdbExecutor,
+): Promise<boolean> {
+  emitDiagnostic({ level: 'warn', phase: 'android_test_ime_rebind', data: { device: device.id } });
+  await rebindAndroidImeHelper(adb);
+  if ((await readAndroidDefaultInputMethod(adb)) === ANDROID_IME_HELPER_SERVICE_COMPONENT)
+    return true;
+  activeTestImeDevices.delete(getAndroidImeHelperDeviceKey(device));
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'android_test_ime_rebind_failed',
+    data: { device: device.id },
+  });
+  return false;
 }
 
 async function typeAndroidShell(

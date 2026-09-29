@@ -161,6 +161,8 @@ export function buildAndroidFillUnconfirmedVerification(
     // and the soft-success would also skip the second, bigger delete burst.
     requested.length === 0 ||
     verification.reason === 'ime_capture' ||
+    // A field back on its hint holds none of the requested text; no formatting empties a field.
+    verification.actualInput?.hintShowing === true ||
     !beforeTarget ||
     !afterTarget ||
     !actualInput ||

@@ -44,6 +44,7 @@ import {
 import { fillAndroid, typeAndroid } from '../text-input.ts';
 import { withAndroidAdbProvider, type AndroidAdbExecutor } from '../adb-executor.ts';
 import {
+  isAndroidTestImeActive,
   resetAndroidTestImeActivationCacheForTests,
   setAndroidTestImeActiveForTests,
 } from '../ime-lifecycle.ts';
@@ -230,6 +231,7 @@ test('fillAndroid re-focuses the target when the first helper attempt fails veri
   const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
     exec: async (args) => {
       calls.push(args);
+      if (args[1] === 'settings' && args[2] === 'get') return helperSelected();
       if (args[1] === 'am' && args[2] === 'broadcast') {
         const action = args[args.indexOf('-a') + 1];
         if (action === 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT') {
@@ -257,10 +259,10 @@ test('fillAndroid re-focuses the target when the first helper attempt fails veri
   );
 
   assert.equal(currentText, 'filed the expense');
-  assert.equal(
-    calls.filter((args) => args[1] === 'ime').length,
-    0,
-    'a landed commit is no stale session',
+  assert.deepEqual(
+    calls.filter((args) => args[1] === 'ime').map((args) => args[2]),
+    ['disable', 'enable', 'set'],
+    'a commit that left the field on its old value may have gone to a stale session',
   );
   assert.equal(
     calls.filter((args) => args[1] === 'input' && args[2] === 'tap').length,
@@ -283,6 +285,7 @@ test('fillAndroid rebinds the helper IME before retrying a commit that left the 
   const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
     exec: async (args) => {
       calls.push(args);
+      if (args[1] === 'settings' && args[2] === 'get') return helperSelected();
       if (args[1] === 'ime' && args[2] === 'set') rebound = true;
       if (args[1] === 'am' && args[2] === 'broadcast') {
         const action = args[args.indexOf('-a') + 1];
@@ -314,6 +317,65 @@ test('fillAndroid rebinds the helper IME before retrying a commit that left the 
   const lastImeCall = commands.lastIndexOf('ime set');
   const retryTap = commands.lastIndexOf('input tap');
   assert.ok(lastImeCall < retryTap, 'the rebind comes before the retry re-focuses the field');
+});
+
+test('fillAndroid does not take a pre-filled field left on its hint for app formatting', async () => {
+  setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
+  let rebound = false;
+  let currentText = 'old name';
+  const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
+    exec: async (args) => {
+      if (args[1] === 'settings' && args[2] === 'get') return helperSelected();
+      if (args[1] === 'ime' && args[2] === 'set') rebound = true;
+      const action = args[args.indexOf('-a') + 1];
+      // The clear lands, then the session goes stale and drops the commit until the rebind.
+      if (action === 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT') currentText = '';
+      if (rebound && action === 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64') {
+        currentText += decodeBroadcastText(args);
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+    captureXml: () =>
+      currentText
+        ? androidInputXml({ text: currentText })
+        : `<?xml version="1.0" encoding="UTF-8"?><hierarchy><node package="com.example" class="android.widget.EditText" text="e.g. Jane" hint="e.g. Jane" hint-showing="true" focused="true" bounds="[0,0][200,100]"/></hierarchy>`,
+  });
+
+  const result = await withAndroidAdbProvider(
+    { exec: adb, snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
+    { serial: ANDROID_EMULATOR.id },
+    async () => await fillAndroid(ANDROID_EMULATOR, 10, 10, 'Jane'),
+  );
+
+  assert.equal(result, undefined, 'a verified fill, not unconfirmed evidence');
+  assert.equal(currentText, 'Jane');
+});
+
+test('fillAndroid stops on a rebind that leaves another IME selected and takes the helper route down', async () => {
+  setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
+  let commits = 0;
+  const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
+    exec: async (args) => {
+      if (args[1] === 'settings' && args[2] === 'get') {
+        return { exitCode: 0, stdout: 'com.android.inputmethod.latin/.LatinIME\n', stderr: '' };
+      }
+      if (args.includes('com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64')) commits += 1;
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+    captureXml: () =>
+      `<?xml version="1.0" encoding="UTF-8"?><hierarchy><node package="com.example" class="android.widget.EditText" text="e.g. Jane" hint="e.g. Jane" hint-showing="true" focused="true" bounds="[0,0][200,100]"/></hierarchy>`,
+  });
+
+  await withAndroidAdbProvider(
+    { exec: adb, snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      await assert.rejects(fillAndroid(ANDROID_EMULATOR, 10, 10, 'Jane'));
+    },
+  );
+
+  assert.equal(commits, 1, 'no commit goes to an IME the rebind could not select');
+  assert.equal(isAndroidTestImeActive(ANDROID_EMULATOR), false);
 });
 
 // Unicode is only beyond the *shell* path. Refusing it before reading which IME is active denied
@@ -463,4 +525,13 @@ function helperImeInputMethodDump(): string {
 
 function androidInputXml(options: { text: string }): string {
   return `<?xml version="1.0" encoding="UTF-8"?><hierarchy><node package="com.example" class="android.widget.EditText" text="${options.text}" focused="true" bounds="[0,0][200,100]"/></hierarchy>`;
+}
+
+/** The IME read-back after a rebind: the helper is still the selected IME. */
+function helperSelected() {
+  return {
+    exitCode: 0,
+    stdout: 'com.callstack.agentdevice.imehelper/.TestInputMethodService\n',
+    stderr: '',
+  };
 }
