@@ -300,6 +300,46 @@
       "declaration": "packages/kernel/src/contracts.ts#daemonRuntimeSchema",
       "digest": "sha256:3b99926ce9deb5d66186a55b1168011dc1ae4d010ada5ac5d79c4c7225a1f80f",
       "rationale": "#2266 broadens runtime-hint validation to accept the additive HarmonyOS platform value; existing protocol-2 runtime hints remain valid and unchanged."
+    },
+    {
+      "declaration": "src/daemon/server/http-server.ts#writeProgressEnvelope",
+      "digest": "sha256:ca661f6dd2de6e517c520dbd1e20b59b24b58d925157ed06123149ed2bc0fa3b",
+      "rationale": "The post-v0.21.16 change adjusts only when the local HTTP response writer skips a progress event (`writableEnded` is no longer an early-return condition). Emitted events still use the same `serializeDaemonProgressEnvelope` bytes and framing; no protocol-2 payload field or interpretation changes."
+    },
+    {
+      "declaration": "src/remote/upload-client.ts#finalizeDirectUpload",
+      "digest": "sha256:5e32c87214f9f6140535b48d05de8565cb121370fdc334c05f7f0ad476b73a07",
+      "rationale": "The post-v0.21.16 change removes caller cancellation plumbing from this local upload client. It still sends the same POST to `upload/finalize` with `{ uploadId }` and parses the same response; a protocol-2 daemon sees the identical request and response contract."
+    },
+    {
+      "declaration": "src/remote/upload-client.ts#requestUploadPreflight",
+      "digest": "sha256:df42c0eaef3a54f4388c99d74bf6030885239780c2ddc78117151dbd391afedd",
+      "rationale": "The post-v0.21.16 change removes caller cancellation plumbing from this local upload client. The preflight URL, method, headers, JSON body, response parser, and fallback to legacy upload are unchanged, so protocol-2 peers exchange the same bytes."
+    },
+    {
+      "declaration": "src/remote/upload-client.ts#tryDirectUploadWithResume",
+      "digest": "sha256:0f57cf9bb1eefa3b988e5d723b2eebf2c4a622c3f7c808f35eae070771acafa6",
+      "rationale": "The post-v0.21.16 change removes caller cancellation plumbing from the local retry orchestration. Attempt IDs, preflight/finalize requests, resume behavior, and legacy fallback retain their existing protocol-2 shapes; the daemon contract is unchanged."
+    },
+    {
+      "declaration": "src/remote/upload-client.ts#uploadDirectArtifact",
+      "digest": "sha256:5f26f8f7b6ada2fe2089a214fb8350e3a9f65725212952c17f6787b3ca8fe232",
+      "rationale": "The post-v0.21.16 change removes only the caller-provided AbortSignal from this local direct-upload request. The ticket URL, PUT method, headers, streamed bytes, and server response contract are unchanged for protocol-2 peers."
+    },
+    {
+      "declaration": "src/remote/upload-client.ts#uploadLegacyArtifact",
+      "digest": "sha256:f3ccab9c5ba18fc2f2000ea8e2a4bbb3cc97f7b50f6111192e513013f635cdd7",
+      "rationale": "The post-v0.21.16 change removes only the caller-provided AbortSignal from this local fallback request. The legacy upload URL, method, headers, multipart body, and response parser remain unchanged for protocol-2 peers."
+    },
+    {
+      "declaration": "src/remote/upload-stream.ts#streamFileToHttpRequest",
+      "digest": "sha256:eaf2ea49957034f6a7e17d34092dc6cb1998812bddfd68381a0ac34d8a2de58c",
+      "rationale": "The post-v0.21.16 change removes optional cancellation wiring from the local HTTP upload helper; it does not alter URL construction, request method, headers, body bytes, redirect handling, or response interpretation. The upload wire remains protocol-2 compatible."
+    },
+    {
+      "declaration": "src/remote/upload-stream.ts#streamFileToHttpRequestAttempt",
+      "digest": "sha256:da39a79fa7c1f81e55caf613eedc347c0f3a9a9711b265a4db185677532d9552",
+      "rationale": "The post-v0.21.16 change stops attaching the caller AbortSignal to the local Node HTTP request and removes its cancellation-specific error branch. The serialized upload request and daemon response handling are otherwise unchanged, so a protocol-2 peer parses the same contract."
     }
   ]
 }

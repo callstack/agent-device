@@ -244,68 +244,102 @@ function maskScenarioStringsAndComments(text) {
   const chars = text.split('');
   let index = 0;
   while (index < chars.length) {
-    const char = chars[index];
-    const next = chars[index + 1];
-    if (char === '/' && next === '/') {
-      while (index < chars.length && chars[index] !== '\n') chars[index++] = ' ';
-      continue;
+    const end =
+      maskComment(chars, index) ?? maskRegex(chars, index) ?? maskQuotedText(chars, index);
+    if (end === null) {
+      index += 1;
+    } else {
+      index = end;
     }
-    if (char === '/' && next === '*') {
-      chars[index++] = ' ';
-      chars[index++] = ' ';
-      while (index < chars.length && !(chars[index] === '*' && chars[index + 1] === '/')) {
-        if (chars[index] !== '\n') chars[index] = ' ';
-        index += 1;
-      }
-      if (index < chars.length) {
-        chars[index++] = ' ';
-        chars[index++] = ' ';
-      }
-      continue;
-    }
-    if (char === '/' && beginsRegexLiteral(chars, index)) {
-      chars[index++] = ' ';
-      let inCharacterClass = false;
-      while (index < chars.length && chars[index] !== '\n') {
-        const current = chars[index];
-        if (current === '\\') {
-          chars[index++] = ' ';
-          if (index < chars.length && chars[index] !== '\n') chars[index++] = ' ';
-          continue;
-        }
-        if (current === '[') inCharacterClass = true;
-        if (current === ']') inCharacterClass = false;
-        if (current === '/' && !inCharacterClass) {
-          chars[index++] = ' ';
-          while (index < chars.length && /[a-z]/i.test(chars[index])) chars[index++] = ' ';
-          break;
-        }
-        chars[index++] = ' ';
-      }
-      continue;
-    }
-    if (char === '"' || char === "'" || char === '`') {
-      const quote = char;
-      chars[index++] = ' ';
-      while (index < chars.length) {
-        const current = chars[index];
-        if (current === '\\') {
-          if (chars[index] !== '\n') chars[index] = ' ';
-          index += 2;
-          continue;
-        }
-        if (current === quote) {
-          chars[index++] = ' ';
-          break;
-        }
-        if (current !== '\n') chars[index] = ' ';
-        index += 1;
-      }
-      continue;
-    }
-    index += 1;
   }
   return chars.join('');
+}
+
+function maskComment(chars, index) {
+  if (chars[index] !== '/') return null;
+  if (chars[index + 1] === '/') return maskLineComment(chars, index);
+  if (chars[index + 1] === '*') return maskBlockComment(chars, index);
+  return null;
+}
+
+function maskLineComment(chars, index) {
+  while (index < chars.length && chars[index] !== '\n') chars[index++] = ' ';
+  return index;
+}
+
+function maskBlockComment(chars, index) {
+  chars[index++] = ' ';
+  chars[index++] = ' ';
+  while (index < chars.length && !(chars[index] === '*' && chars[index + 1] === '/')) {
+    if (chars[index] !== '\n') chars[index] = ' ';
+    index += 1;
+  }
+  return index < chars.length ? maskCommentEnd(chars, index) : index;
+}
+
+function maskCommentEnd(chars, index) {
+  chars[index++] = ' ';
+  chars[index++] = ' ';
+  return index;
+}
+
+function maskRegex(chars, index) {
+  if (chars[index] !== '/' || !beginsRegexLiteral(chars, index)) return null;
+  chars[index++] = ' ';
+  return scanRegexBody(chars, index);
+}
+
+function scanRegexBody(chars, index) {
+  let inCharacterClass = false;
+  while (index < chars.length && chars[index] !== '\n') {
+    const current = chars[index];
+    if (current === '\\') {
+      index = maskEscapedCharacter(chars, index);
+      continue;
+    }
+    inCharacterClass = updateCharacterClass(current, inCharacterClass);
+    if (current === '/' && !inCharacterClass) return maskRegexEnd(chars, index);
+    chars[index++] = ' ';
+  }
+  return index;
+}
+
+function updateCharacterClass(character, inCharacterClass) {
+  if (character === '[') return true;
+  if (character === ']') return false;
+  return inCharacterClass;
+}
+
+function maskEscapedCharacter(chars, index) {
+  chars[index++] = ' ';
+  if (index < chars.length && chars[index] !== '\n') chars[index++] = ' ';
+  return index;
+}
+
+function maskRegexEnd(chars, index) {
+  chars[index++] = ' ';
+  while (index < chars.length && /[a-z]/i.test(chars[index])) chars[index++] = ' ';
+  return index;
+}
+
+function maskQuotedText(chars, index) {
+  const quote = chars[index];
+  if (quote !== '"' && quote !== "'" && quote !== '`') return null;
+  chars[index++] = ' ';
+  while (index < chars.length && chars[index] !== quote) {
+    if (chars[index] === '\\') {
+      index = maskEscapedCharacter(chars, index);
+    } else {
+      if (chars[index] !== '\n') chars[index] = ' ';
+      index += 1;
+    }
+  }
+  return index < chars.length ? index + maskQuoteEnd(chars, index) : index;
+}
+
+function maskQuoteEnd(chars, index) {
+  chars[index] = ' ';
+  return 1;
 }
 
 function beginsRegexLiteral(chars, index) {
@@ -359,16 +393,25 @@ function countArrayTokens(text, code, [openBracket, closeBracket]) {
   let start = openBracket + 1;
   let depth = 0;
   for (let index = start; index < closeBracket; index += 1) {
-    if (code[index] === '{' || code[index] === '[' || code[index] === '(') depth += 1;
-    else if (code[index] === '}' || code[index] === ']' || code[index] === ')') depth -= 1;
-    else if (code[index] === ',' && depth === 0) {
+    depth = updateDelimiterDepth(code[index], depth);
+    if (code[index] === ',' && depth === 0) {
       tokens.push(text.slice(start, index));
       start = index + 1;
     }
   }
   tokens.push(text.slice(start, closeBracket));
-  return tokens.filter((token) => token.trim() !== "''" && token.trim() !== '""' && token.trim())
-    .length;
+  return tokens.filter(isPresentArrayToken).length;
+}
+
+function updateDelimiterDepth(character, depth) {
+  if (character === '{' || character === '[' || character === '(') return depth + 1;
+  if (character === '}' || character === ']' || character === ')') return depth - 1;
+  return depth;
+}
+
+function isPresentArrayToken(token) {
+  const trimmed = token.trim();
+  return trimmed.length > 0 && trimmed !== "''" && trimmed !== '""';
 }
 
 function countFlagReferences(text, key) {
