@@ -224,12 +224,16 @@ test('a delayed restart health probe stops at the RPC deadline without retrying'
 
 test('a restart health probe cut short by the RPC deadline reports the deadline on a lagging clock', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
+  let rpcCount = 0;
+  let healthProbes = 0;
   const server = http.createServer((req, res) => {
     if (req.url === '/health') {
+      healthProbes += 1;
       const delayedResponse = setTimeout(() => res.end('{}'), 1000);
       res.on('close', () => clearTimeout(delayedResponse));
       return;
     }
+    rpcCount += 1;
     res.statusCode = 409;
     res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
     res.end();
@@ -244,6 +248,8 @@ test('a restart health probe cut short by the RPC deadline reports the deadline 
       (error: unknown) =>
         error instanceof AppError && error.details?.reason === 'daemon_transport_timeout',
     );
+    assert.equal(rpcCount, 1);
+    assert.equal(healthProbes, 1);
   } finally {
     now.mockRestore();
     await closeLoopbackServer(server);
