@@ -279,15 +279,20 @@ const UNSUPPORTED_ROUTE_ERROR_CODES: ReadonlySet<string> = new Set([
   'unknown method',
 ]);
 
+/**
+ * A W3C `unknown command`/`unknown method` code, or a bare 404/405 that carries no W3C error code
+ * (a server that does not know the path). A 404 that names another W3C code, such as
+ * `invalid session id` or `no such element`, is a different answer and never counts.
+ */
 function isUnsupportedRouteAnswer(status: number, payload: unknown): boolean {
-  if (status === 404 || status === 405) return true;
   const value =
     payload && typeof payload === 'object' && 'value' in payload
       ? (payload as { value?: unknown }).value
       : undefined;
   const code =
     value && typeof value === 'object' ? (value as { error?: unknown }).error : undefined;
-  return typeof code === 'string' && UNSUPPORTED_ROUTE_ERROR_CODES.has(code);
+  if (typeof code === 'string') return UNSUPPORTED_ROUTE_ERROR_CODES.has(code);
+  return status === 404 || status === 405;
 }
 
 /**

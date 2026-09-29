@@ -22,6 +22,7 @@ afterEach(() => {
 function hangingWebDriverFetch(
   hangOnPathSuffix: string,
   unsupportedPathSuffix?: string,
+  unsupportedErrorCode = 'unknown command',
 ): {
   fetch: typeof globalThis.fetch;
   callsFor: (pathSuffix: string) => number;
@@ -38,7 +39,7 @@ function hangingWebDriverFetch(
     }
     if (unsupportedPathSuffix && url.pathname.endsWith(unsupportedPathSuffix)) {
       return new Response(
-        JSON.stringify({ value: { error: 'unknown command', message: 'no such route' } }),
+        JSON.stringify({ value: { error: unsupportedErrorCode, message: 'refused' } }),
         { status: 404, headers: { 'Content-Type': 'application/json' } },
       );
     }
@@ -65,8 +66,13 @@ function hangingWebDriverFetch(
 async function connectedWebDriverInteractor(
   hangOnPathSuffix: string,
   unsupportedPathSuffix?: string,
+  unsupportedErrorCode?: string,
 ) {
-  const { fetch, callsFor } = hangingWebDriverFetch(hangOnPathSuffix, unsupportedPathSuffix);
+  const { fetch, callsFor } = hangingWebDriverFetch(
+    hangOnPathSuffix,
+    unsupportedPathSuffix,
+    unsupportedErrorCode,
+  );
   globalThis.fetch = fetch;
   const client = new WebDriverClient({
     clientVersion: '0.0.0-test',
@@ -168,4 +174,23 @@ test('an unsupported app-termination route falls back to the sibling route once'
 
   assert.equal(callsFor('/appium/device/terminate_app'), 1);
   assert.equal(callsFor('/execute/sync'), 1);
+});
+
+// W3C also answers 404 for a session that no longer exists. That is not an unsupported route, so
+// the sibling route is not tried and the failure is not classified as never dispatched here.
+test('a 404 naming another W3C error does not fall back to the sibling route', async () => {
+  const { client, callsFor } = await connectedWebDriverInteractor(
+    '/never-hangs',
+    '/appium/device/terminate_app',
+    'invalid session id',
+  );
+
+  await assert.rejects(client.terminateApp('com.example.app'), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.dispatched, undefined);
+    return true;
+  });
+
+  assert.equal(callsFor('/appium/device/terminate_app'), 1);
+  assert.equal(callsFor('/execute/sync'), 0);
 });
