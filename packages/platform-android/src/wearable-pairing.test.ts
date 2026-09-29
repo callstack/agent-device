@@ -48,6 +48,37 @@ test('reports a human step after proving the Wear identity and ADB transport', a
   expect(runAdb).toHaveBeenCalledWith(watch, ['get-state'], expect.anything(), expect.anything());
 });
 
+test('keeps Wear discovery inside the daemon-provided Android device boundary', async () => {
+  const androidSerialAllowlist = ['emulator-5556'];
+  const discover = vi.fn(async (_input?: unknown) => [phone, watch]);
+  const runAdb = vi.fn(async (_device, args: string[]) => ({
+    stdout:
+      args[0] === 'get-state'
+        ? 'device\n'
+        : args.includes('getprop')
+          ? 'watch\n'
+          : 'feature:android.hardware.type.watch\n',
+    stderr: '',
+    exitCode: 0,
+  }));
+
+  await pairAndroidWearable(
+    host({ discover, runAdb }),
+    phone,
+    { boot: false, androidSerialAllowlist },
+    signal(),
+  );
+
+  expect(discover).toHaveBeenCalledWith(
+    {
+      platform: 'android',
+      androidAvdSelection: 'include-stopped',
+      androidSerialAllowlist,
+    },
+    expect.anything(),
+  );
+});
+
 test('automatic selection recognizes a booted Wear target without a Wear label', async () => {
   const unnamedWearable = { ...watch, name: 'Fossil Gen 6' };
   const runAdb = vi.fn(async (_device, args: string[]) => ({
@@ -252,7 +283,7 @@ test('Wear boot polling cannot replace the launched emulator with a same-named p
 });
 
 function host(overrides: {
-  discover: () => Promise<readonly DeviceInfo[]>;
+  discover: PlatformRuntimeHost['deviceReadiness']['androidEmulator']['discover'];
   runAdb?: PlatformRuntimeHost['androidTools']['runAdb'];
   launch?: (name: string, headless: boolean) => number;
   terminate?: (pid: number) => Promise<void>;

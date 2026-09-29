@@ -14,6 +14,8 @@ type ListedPair = {
   state: string;
 };
 
+type WatchDeviceInfo = DeviceInfo & { simulatorState: string };
+
 export async function pairAppleWearable(
   host: PlatformRuntimeHost,
   phone: DeviceInfo,
@@ -29,10 +31,14 @@ export async function pairAppleWearable(
     parseWatchDevices(devicesResult.stdout, phone.simulatorSetPath),
     input,
   );
-  const bootedHere = input.boot && wearable.booted !== true;
-  let createdPairId: string | undefined;
+  const preRequestPairs = await listPairs(host, phone, signal);
+  const preRequestPairIds = new Set(preRequestPairs.map((pair) => pair.pairId));
+  const preRequestActivePairs = preRequestPairs.filter((pair) => isPairActive(pair.state));
+  const initialWatchState = wearable.simulatorState;
+  let bootedHere = false;
   try {
-    if (bootedHere) {
+    if (input.boot && initialWatchState === 'Shutdown') {
+      bootedHere = true;
       await runRequired(
         host,
         phone,
@@ -48,9 +54,23 @@ export async function pairAppleWearable(
         'watchOS simulator did not finish booting.',
       );
       wearable.booted = true;
+    } else if (input.boot && initialWatchState === 'Booting') {
+      await runRequired(
+        host,
+        phone,
+        ['bootstatus', wearable.id, '-b'],
+        signal,
+        'watchOS simulator did not finish booting.',
+      );
+      wearable.booted = true;
+    } else if (initialWatchState !== 'Booted' && initialWatchState !== 'Shutdown') {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `Cannot pair a watchOS simulator while it is in state ${initialWatchState}.`,
+      );
     }
 
-    let pair = findPair(await listPairs(host, phone, signal), phone.id, wearable.id);
+    let pair = findPair(preRequestPairs, phone.id, wearable.id);
     if (!pair) {
       await runRequired(
         host,
@@ -60,7 +80,6 @@ export async function pairAppleWearable(
         'CoreSimulator could not pair the selected phone and watch.',
       );
       pair = findPair(await listPairs(host, phone, signal), phone.id, wearable.id);
-      createdPairId = pair?.pairId;
     }
     if (!pair) {
       throw new AppError(
@@ -69,7 +88,7 @@ export async function pairAppleWearable(
       );
     }
 
-    if (!hasPairState(pair.state, 'active') && !hasPairState(pair.state, 'connected')) {
+    if (!isPairActive(pair.state)) {
       await runRequired(
         host,
         phone,
@@ -86,18 +105,7 @@ export async function pairAppleWearable(
       status: hasPairState(pair.state, 'connected') ? 'connected' : 'paired',
     };
   } catch (error) {
-    if (createdPairId) {
-      await host.appleTools
-        .run(
-          {
-            tool: 'simctl',
-            args: scopeSimctlArgsForDevice(phone, ['unpair', createdPairId]),
-            allowFailure: true,
-          },
-          undefined,
-        )
-        .catch(() => undefined);
-    }
+    await rollbackNewPairs(host, phone, preRequestPairIds, preRequestActivePairs);
     if (bootedHere) {
       await host.appleTools
         .run(
@@ -114,6 +122,44 @@ export async function pairAppleWearable(
   }
 }
 
+function isPairActive(state: string): boolean {
+  return hasPairState(state, 'active') || hasPairState(state, 'connected');
+}
+
+async function rollbackNewPairs(
+  host: PlatformRuntimeHost,
+  phone: DeviceInfo,
+  preRequestPairIds: ReadonlySet<string>,
+  preRequestActivePairs: readonly ListedPair[],
+): Promise<void> {
+  const currentPairs = await listPairs(host, phone).catch(() => []);
+  for (const pair of currentPairs) {
+    if (preRequestPairIds.has(pair.pairId)) continue;
+    await host.appleTools
+      .run(
+        {
+          tool: 'simctl',
+          args: scopeSimctlArgsForDevice(phone, ['unpair', pair.pairId]),
+          allowFailure: true,
+        },
+        undefined,
+      )
+      .catch(() => undefined);
+  }
+  for (const pair of preRequestActivePairs) {
+    await host.appleTools
+      .run(
+        {
+          tool: 'simctl',
+          args: scopeSimctlArgsForDevice(phone, ['pair_activate', pair.pairId]),
+          allowFailure: true,
+        },
+        undefined,
+      )
+      .catch(() => undefined);
+  }
+}
+
 function hasPairState(state: string, expected: 'active' | 'connected'): boolean {
   return state
     .toLowerCase()
@@ -123,7 +169,7 @@ function hasPairState(state: string, expected: 'active' | 'connected'): boolean 
 
 // CoreSimulator's nested inventory is normalized here so selection never depends on raw JSON.
 // fallow-ignore-next-line complexity
-function parseWatchDevices(stdout: string, simulatorSetPath?: string): DeviceInfo[] {
+function parseWatchDevices(stdout: string, simulatorSetPath?: string): WatchDeviceInfo[] {
   let payload: {
     devices?: Record<
       string,
@@ -140,7 +186,7 @@ function parseWatchDevices(stdout: string, simulatorSetPath?: string): DeviceInf
       error,
     );
   }
-  const devices: DeviceInfo[] = [];
+  const devices: WatchDeviceInfo[] = [];
   for (const [runtime, entries] of Object.entries(payload.devices ?? {})) {
     if (!runtime.toLowerCase().includes('watchos')) continue;
     for (const entry of entries) {
@@ -153,6 +199,7 @@ function parseWatchDevices(stdout: string, simulatorSetPath?: string): DeviceInf
         target: 'mobile',
         appleOs: 'watchos',
         booted: entry.state === 'Booted',
+        simulatorState: entry.state ?? 'Unknown',
         ...(simulatorSetPath ? { simulatorSetPath } : {}),
       });
     }
@@ -160,7 +207,7 @@ function parseWatchDevices(stdout: string, simulatorSetPath?: string): DeviceInf
   return devices;
 }
 
-function selectWatch(devices: DeviceInfo[], input: PairWearableInput): DeviceInfo {
+function selectWatch(devices: WatchDeviceInfo[], input: PairWearableInput): WatchDeviceInfo {
   const requested = input.wearable;
   const matches = devices.filter(
     (device) =>
@@ -183,7 +230,7 @@ function selectWatch(devices: DeviceInfo[], input: PairWearableInput): DeviceInf
 async function listPairs(
   host: PlatformRuntimeHost,
   phone: DeviceInfo,
-  signal: AbortSignal,
+  signal?: AbortSignal,
 ): Promise<ListedPair[]> {
   const result = await host.appleTools.run(
     { tool: 'simctl', args: scopeSimctlArgsForDevice(phone, ['list', 'pairs', '-j']) },

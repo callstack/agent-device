@@ -4,5 +4,5 @@ import { defineAndroidContractEvidence } from '../../test/integration/android-em
 export const ANDROID_WEARABLE_PAIRING_CONTRACT_EVIDENCE = defineAndroidContractEvidence(
   'packages/platform-android/src/wearable-pairing.test.ts',
   [PUBLIC_COMMANDS.pairWearable],
-  'reports a human step after proving the Wear ADB transport',
+  'reports a human step after proving the Wear identity and ADB transport',
 );

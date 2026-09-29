@@ -257,14 +257,15 @@ export async function handleSessionStateCommands(params: {
 
   if (req.command === 'pair-wearable') {
     const input = readPairWearableInput(req.input);
+    const phoneFlags =
+      input.phone.platform === 'ios'
+        ? { ...req.flags, platform: 'apple' as const, udid: input.phone.deviceId }
+        : { ...req.flags, platform: 'android' as const, serial: input.phone.deviceId };
     const device = await resolveCommandDevice({
       session: undefined,
-      flags:
-        input.phone.platform === 'ios'
-          // Resolve the exact Apple identity in the family namespace so a watchOS
-          // simulator can be reported as an unsupported phone target, not as missing.
-          ? { platform: 'apple', udid: input.phone.deviceId }
-          : { platform: 'android', serial: input.phone.deviceId },
+      // Preserve isolation flags from the admitted request while forcing the explicit phone
+      // identity. The Apple family selector lets a watchOS UDID reach capability refusal.
+      flags: phoneFlags,
       androidAvdSelection: 'include-stopped',
     });
     const admitted = await admitRuntimeUse({
@@ -285,6 +286,13 @@ export async function handleSessionStateCommands(params: {
     const result = await admitted.runtime.operations.pairWearable({
       wearable: input.wearable,
       boot: input.boot,
+      ...(input.phone.platform === 'android'
+        ? {
+            androidSerialAllowlist: resolveAndroidSerialAllowlistForAppState(
+              req.flags?.androidDeviceAllowlist,
+            ),
+          }
+        : {}),
     });
     return {
       ok: true,

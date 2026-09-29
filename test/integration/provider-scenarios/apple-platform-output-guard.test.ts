@@ -433,10 +433,9 @@ async function runWorldGuard(world: World): Promise<void> {
     for (const command of driveOrder()) {
       for (const step of DRIVEN_COMMANDS[command]!(ctx)) {
         await ensureSession(daemon, world);
+        const options = step.input === undefined ? {} : { input: step.input };
         const response = await withCommandTimeout(
-          daemon.callCommand(command, step.positionals ?? [], step.flags ?? {}, {
-            ...(step.input === undefined ? {} : { input: step.input }),
-          }),
+          daemon.callCommand(command, step.positionals ?? [], step.flags ?? {}, options),
           command,
         );
         const out = {

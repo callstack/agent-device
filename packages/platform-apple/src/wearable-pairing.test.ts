@@ -172,6 +172,110 @@ test('does not treat inactive or disconnected pair states as active', async () =
   expect(calls.some((args) => args.includes('pair_activate'))).toBe(true);
 });
 
+test('reports an active but disconnected CoreSimulator pair as paired, not connected', async () => {
+  const run = vi.fn(async ({ args }: { args: readonly string[] }) => {
+    if (args.includes('devices')) return result(watchInventory);
+    if (args.includes('pairs')) {
+      return result(
+        JSON.stringify({
+          pairs: {
+            'pair-1': {
+              phone: { udid: phone.id },
+              watch: { udid: 'watch-1' },
+              state: '(active, disconnected)',
+            },
+          },
+        }),
+      );
+    }
+    return result('');
+  });
+
+  const paired = await pairAppleWearable(host(run), phone, { boot: false }, signal());
+
+  expect(paired.status).toBe('paired');
+});
+
+test('waits for an already-booting watch without claiming or shutting it down', async () => {
+  const calls: string[][] = [];
+  const bootingInventory = JSON.stringify({
+    devices: {
+      'com.apple.CoreSimulator.SimRuntime.watchOS-11-0': [
+        { name: 'Apple Watch Series 10', udid: 'watch-1', state: 'Booting', isAvailable: true },
+      ],
+    },
+  });
+  const run = vi.fn(async ({ args }: { args: readonly string[] }) => {
+    const argv = [...args];
+    calls.push(argv);
+    if (argv.includes('devices')) return result(bootingInventory);
+    if (argv.includes('pairs')) return result(JSON.stringify({ pairs: {} }));
+    if (argv.includes('pair_activate')) return result('', 1, 'activation failed');
+    if (argv.includes('pair')) return result('pair-1');
+    return result('');
+  });
+
+  await expect(pairAppleWearable(host(run), phone, { boot: true }, signal())).rejects.toMatchObject(
+    { code: 'COMMAND_FAILED' },
+  );
+
+  expect(calls.some((args) => args.includes('boot') && args.includes('watch-1'))).toBe(false);
+  expect(calls.some((args) => args.includes('bootstatus') && args.includes('watch-1'))).toBe(true);
+  expect(calls.some((args) => args.includes('shutdown') && args.includes('watch-1'))).toBe(false);
+});
+
+test('cancellation after simctl pair removes every request-created pair and preserves prior pairs', async () => {
+  const controller = new AbortController();
+  const calls: string[][] = [];
+  let pairCreated = false;
+  const pairsJson = () =>
+    JSON.stringify({
+      pairs: {
+        'unrelated-active-pair': {
+          phone: { udid: 'other-phone' },
+          watch: { udid: 'other-watch' },
+          state: '(active, connected)',
+        },
+        ...(pairCreated
+          ? {
+              'new-pair': {
+                phone: { udid: phone.id },
+                watch: { udid: 'watch-1' },
+                state: 'paired',
+              },
+            }
+          : {}),
+      },
+    });
+  const run = vi.fn(async ({ args }: { args: readonly string[] }, requestSignal?: AbortSignal) => {
+    const argv = [...args];
+    calls.push(argv);
+    if (argv.includes('devices')) return result(watchInventory);
+    if (argv.includes('pairs')) {
+      if (requestSignal?.aborted) throw requestSignal.reason;
+      return result(pairsJson());
+    }
+    if (argv.includes('pair') && argv.includes('watch-1')) {
+      pairCreated = true;
+      controller.abort(new Error('cancelled during simctl pair'));
+      return result('');
+    }
+    return result('');
+  });
+
+  await expect(
+    pairAppleWearable(host(run), phone, { boot: false }, controller.signal),
+  ).rejects.toThrow('cancelled during simctl pair');
+
+  expect(calls.some((args) => args.includes('unpair') && args.includes('new-pair'))).toBe(true);
+  expect(
+    calls.some((args) => args.includes('unpair') && args.includes('unrelated-active-pair')),
+  ).toBe(false);
+  expect(
+    calls.some((args) => args.includes('pair_activate') && args.includes('unrelated-active-pair')),
+  ).toBe(true);
+});
+
 function host(run: ReturnType<typeof vi.fn>): PlatformRuntimeHost {
   return { appleTools: { run } } as unknown as PlatformRuntimeHost;
 }
