@@ -91,6 +91,59 @@ extension RunnerTests {
     XCTAssertEqual(inspection.elements.last(where: { $0.identifier == "enabled-switch" })?.value, "1")
   }
 
+  func testPrivateAXPointTextResolutionIsNotLimitedByDescriptorCap() {
+    let smallerControls: [[String: Any]] = (0..<30).map { index in
+      [
+        "type": NSNumber(value: XCUIElement.ElementType.button.rawValue),
+        "label": "Control \(index)",
+        "identifier": "control-\(index)",
+        "value": "",
+        "frame": ["x": 200, "y": 200, "width": 10, "height": 10],
+        "children": [],
+      ]
+    }
+    let field: [String: Any] = [
+      "type": NSNumber(value: XCUIElement.ElementType.textField.rawValue),
+      "label": "Full name",
+      "identifier": "full-name",
+      "value": "Alexandria Alexandra",
+      "frame": ["x": 100, "y": 180, "width": 200, "height": 40],
+      "children": [],
+    ]
+    let root: [String: Any] = [
+      "type": NSNumber(value: XCUIElement.ElementType.window.rawValue),
+      "label": "",
+      "identifier": "root",
+      "value": "",
+      "frame": ["x": 0, "y": 0, "width": 400, "height": 800],
+      "children": smallerControls + [field],
+    ]
+
+    let inspection = privateAXPointInspection(root: root, point: CGPoint(x: 205, y: 205))
+
+    XCTAssertTrue(inspection.complete)
+    XCTAssertEqual(inspection.elements.count, 24)
+    XCTAssertFalse(inspection.elements.contains { $0.identifier == "full-name" })
+    XCTAssertEqual(inspection.text, "Alexandria Alexandra")
+  }
+
+  func testPointTextPolicyIsSharedAcrossXCTestAndPrivateAXDescriptors() {
+    let cases: [(String, String?, String?, String?, String?)] = [
+      ("TextField", "Name", "name-field", "Alexandra", "Alexandra"),
+      ("SecureTextField", "Password", "password-field", "secret", "secret"),
+      ("Button", "Continue", "continue-button", "enabled", "Continue"),
+      ("Switch", nil, "enabled-switch", "1", "1"),
+    ]
+
+    for (type, label, identifier, value, expected) in cases {
+      XCTAssertEqual(
+        pointReadableText(type: type, label: label, identifier: identifier, value: value),
+        expected,
+        "Expected shared text policy for \(type)"
+      )
+    }
+  }
+
   func testPrivateAXPointInspectionReturnsNoElementForHonestMiss() {
     let root: [String: Any] = [
       "type": NSNumber(value: XCUIElement.ElementType.window.rawValue),

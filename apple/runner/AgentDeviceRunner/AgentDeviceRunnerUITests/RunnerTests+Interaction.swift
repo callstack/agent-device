@@ -324,11 +324,11 @@ extension RunnerTests {
     // text fields, this uses the same text-input-first policy as that fallback.
     // An incomplete capture never answers the request; it falls through to the
     // legacy XCTest path so a capped tree cannot turn a real value into a miss.
-    if let inspection = privateAXPointInspection(app: app, x: x, y: y),
-      inspection.complete,
-      let text = inspection.text
-    {
-      return text
+    if let inspection = privateAXPointInspection(app: app, x: x, y: y), inspection.complete {
+      // A complete miss is authoritative too. Falling through would repeat a
+      // full XCTest descendant walk after the bounded AX capture already
+      // established that no readable element contains the point.
+      return inspection.text
     }
 #endif
     let point = CGPoint(x: x, y: y)
@@ -466,7 +466,7 @@ extension RunnerTests {
         let label = fields.label.isEmpty ? nil : fields.label
         let identifier = fields.identifier.isEmpty ? nil : fields.identifier
         let value = fields.value.isEmpty ? nil : fields.value
-        let text = pointInspectionReadableText(
+        let text = pointReadableText(
           type: type,
           label: label,
           identifier: identifier,
@@ -492,7 +492,7 @@ extension RunnerTests {
     }
 
     visit(root)
-    let elements = candidates
+    let orderedCandidates = candidates
       .sorted { left, right in
         if left.area != right.area { return left.area < right.area }
         if left.payload.frame.y != right.payload.frame.y {
@@ -503,15 +503,19 @@ extension RunnerTests {
         }
         return (left.payload.type ?? "") < (right.payload.type ?? "")
       }
-      .prefix(24)
-      .map(\.payload)
     let textInputTypes: Set<String> = ["TextField", "SecureTextField", "SearchField", "TextView"]
-    let text = elements.first(where: { textInputTypes.contains($0.type ?? "") && $0.text != nil })?.text
-      ?? elements.compactMap(\.text).first
+    // Keep text resolution independent of the bounded descriptor response.
+    // A large accessibility surface can have more than 24 smaller controls at
+    // one point while the underlying text input still owns the correct value.
+    let text = orderedCandidates.first(where: {
+      textInputTypes.contains($0.payload.type ?? "") && $0.payload.text != nil
+    })?.payload.text
+      ?? orderedCandidates.compactMap { $0.payload.text }.first
+    let elements = orderedCandidates.prefix(24).map(\.payload)
     return (text, elements, true)
   }
 
-  private func pointInspectionReadableText(
+  func pointReadableText(
     type: String,
     label: String?,
     identifier: String?,
@@ -529,16 +533,12 @@ extension RunnerTests {
     let identifier = element.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
     let valueText = String(describing: element.value ?? "")
       .trimmingCharacters(in: .whitespacesAndNewlines)
-    switch element.elementType {
-    case .textField, .secureTextField, .searchField, .textView:
-      if !valueText.isEmpty { return valueText }
-      if !label.isEmpty { return label }
-      return identifier.isEmpty ? nil : identifier
-    default:
-      if !label.isEmpty { return label }
-      if !valueText.isEmpty { return valueText }
-      return identifier.isEmpty ? nil : identifier
-    }
+    return pointReadableText(
+      type: elementTypeName(element.elementType),
+      label: label.isEmpty ? nil : label,
+      identifier: identifier.isEmpty ? nil : identifier,
+      value: valueText.isEmpty ? nil : valueText
+    )
   }
 
   private func prefersExpandedTextRead(_ element: XCUIElement) -> Bool {
