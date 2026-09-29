@@ -259,11 +259,11 @@ async function fillAndroidImeHelper(
   // covers the rare not-yet-bound InputConnection right after focus. A commit none of which reached
   // the field may also have gone to a stale input session, which only a rebind of the IME replaces.
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    if (attempt > 0) {
-      if (lastVerification && isAndroidImeCommitDropped(lastVerification, beforeTarget)) {
-        if (!(await rebindAndroidImeHelperChecked(device, adb))) break;
-      }
-      await focusAndroid(device, x, y);
+    if (
+      lastVerification &&
+      !(await prepareAndroidImeHelperRetry(device, adb, x, y, lastVerification, beforeTarget))
+    ) {
+      break;
     }
     await clearAndroidImeHelperText(adb, packageName);
     if (text) await sendAndroidImeHelperText(adb, packageName, text);
@@ -274,6 +274,26 @@ async function fillAndroidImeHelper(
   }
   emitAndroidTextDiagnostic('fill', 'test-ime', text);
   return lastVerification as AndroidFillVerification;
+}
+
+/**
+ * Readies the field for the helper's retry: rebinds the IME when none of the last commit reached the
+ * field, then re-focuses it. Answers `false` when the rebind left another IME selected, since a retry
+ * would broadcast to an IME that holds no session.
+ */
+async function prepareAndroidImeHelperRetry(
+  device: DeviceInfo,
+  adb: AndroidAdbExecutor,
+  x: number,
+  y: number,
+  lastVerification: AndroidFillVerification,
+  beforeTarget: AndroidFillVerification['targetInput'],
+): Promise<boolean> {
+  if (isAndroidImeCommitDropped(lastVerification, beforeTarget)) {
+    if (!(await rebindAndroidImeHelperChecked(device, adb))) return false;
+  }
+  await focusAndroid(device, x, y);
+  return true;
 }
 
 /** Whether none of a helper commit reached the field: it shows its hint, or the value it held before. */
