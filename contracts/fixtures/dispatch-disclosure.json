@@ -62,6 +62,12 @@
     "dispatched": "unknown"
   },
   {
+    "id": "ios-runner.reply.INVALID_ARGS",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code INVALID_ARGS: request decoding or argument validation refused before any gesture",
+    "dispatched": "no"
+  },
+  {
     "id": "ios-runner.reply.RUNNER_BUSY",
     "producer": "ios-runner",
     "trigger": "structured runner reply with code RUNNER_BUSY: a refusal that ran nothing",
@@ -131,6 +137,12 @@
     "id": "ios-runner.reply.MAIN_THREAD_TIMEOUT",
     "producer": "ios-runner",
     "trigger": "structured runner reply with code MAIN_THREAD_TIMEOUT: abandoned work may still land",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.reply.UNSUPPORTED_OPERATION",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code UNSUPPORTED_OPERATION, which a synthesized gesture or an element tap also reports after it ran",
     "dispatched": "unknown"
   },
   {

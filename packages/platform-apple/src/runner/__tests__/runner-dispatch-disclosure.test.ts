@@ -128,6 +128,8 @@ function statusReply(data: Record<string, unknown>): FakeRunnerResponse[] {
 }
 
 const DRIVERS: Record<string, () => Promise<unknown>> = {
+  'ios-runner.reply.INVALID_ARGS': () => replyFailure('INVALID_ARGS'),
+  'ios-runner.reply.UNSUPPORTED_OPERATION': () => replyFailure('UNSUPPORTED_OPERATION'),
   'ios-runner.reply.RUNNER_BUSY': () => replyFailure('RUNNER_BUSY'),
   'ios-runner.reply.RUNNER_WEDGED': () => replyFailure('RUNNER_WEDGED'),
   'ios-runner.reply.APP_NOT_RUNNING': () => replyFailure('APP_NOT_RUNNING'),
