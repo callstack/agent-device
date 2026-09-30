@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
+import type { SimulatorSnapshotSource } from '../../../packages/platform-apple/src/snapshot-source-facade.ts';
 import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
@@ -11,6 +12,23 @@ import {
   simctlDeviceLifecycleHandler,
 } from './providers.ts';
 import { createProviderTranscript, type ProviderScenarioProviderEntry } from './transcript.ts';
+
+// The Simulator AX bridge runs on the host toolchain, outside every provider this scenario scripts:
+// on a host with Xcode it builds, spawns, and connects for real before failing, which costs each
+// test seconds of wall time. Here it reports unavailable at once, so every capture takes the
+// scripted runner, as it does on a host without Xcode.
+vi.mock(
+  '../../../packages/platform-apple/src/snapshot-source-facade.ts',
+  (): { createSimulatorSnapshotSource: () => SimulatorSnapshotSource } => ({
+    createSimulatorSnapshotSource: () => ({
+      acquire: async () => ({
+        stage: 'failed',
+        failure: { kind: 'unsupported', code: 'provider-scenario-no-bridge' },
+      }),
+      close: async () => {},
+    }),
+  }),
+);
 
 const APP = 'com.example.app';
 const DEVICE_ID = PROVIDER_SCENARIO_IOS_SIMULATOR.id;
