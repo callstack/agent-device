@@ -60,7 +60,7 @@
  * and the classification/guard/binding-evidence/verification-routing shapes
  * `verifyAndDispatchStep` exchanges with the daemon's `AdReplayStepRuntime`
  * implementation (`AdReplayVerificationEntry`, `AdReplayTargetClassification`,
- * `AdReplayTargetBindingEvidence`, `AdReplayDispatchGuard`,
+ * `AdReplayTargetObservation`, `AdReplayTargetBindingEvidence`, `AdReplayDispatchGuard`,
  * `AdReplayDispatchOutcome`) ARE named here: the
  * daemon builds/reads real values of these shapes directly now (routing in
  * `session-replay-target-verification.ts`, wire-narrowing in
@@ -93,6 +93,7 @@ export type {
   AdReplayStepRuntime,
   AdReplayTargetBindingEvidence,
   AdReplayTargetClassification,
+  AdReplayTargetObservation,
   AdReplayVarSources,
   AdReplayVerificationEntry,
 } from './internal/runtime-port-types.ts';

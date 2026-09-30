@@ -7,6 +7,7 @@ import type {
 } from '@agent-device/replay-port/command-types';
 import { mergeParentFlags } from '@agent-device/command-registry/batch';
 import { commandAcceptsReadinessBudget } from '@agent-device/command-registry/registry';
+import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   gesturePayloadFromPositionals,
@@ -221,6 +222,21 @@ function readResponseTiming(data: unknown): Record<string, unknown> | undefined 
  * so a step recorded against a loading screen can land.
  */
 const REPLAY_DEFAULT_READINESS_TIMEOUT_MS = 2_000;
+
+/**
+ * The readiness schedule a replayed step's dispatch polls its target under, or undefined when the
+ * step's command does not wait for its target. The pre-dispatch target gate polls under the same
+ * schedule, so neither refuses a target the other would still wait for.
+ */
+export function replayStepReadinessSchedule(
+  parentFlags: CommandFlags | undefined,
+  action: SessionAction,
+): { intervalMs: number; budgetMs: number } | undefined {
+  const { readinessTimeoutMs } = buildReplayActionFlags(parentFlags, action.flags, action.command);
+  if (readinessTimeoutMs === undefined || readinessTimeoutMs <= 0) return undefined;
+  const poll = SELECTOR_PIPELINE_POLICIES.promotedTarget.poll;
+  return { intervalMs: poll.intervalMs, budgetMs: Math.min(readinessTimeoutMs, poll.maxTimeoutMs) };
+}
 
 function buildReplayActionFlags(
   parentFlags: CommandFlags | undefined,

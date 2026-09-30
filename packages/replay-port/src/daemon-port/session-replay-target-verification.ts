@@ -73,7 +73,7 @@ import { extractReplayTargetToken, readRefLabel } from '@agent-device/replay-por
 //
 //  - `resolveTargetVerificationEntry` — routing (registry lookup, session
 //    read, wait-form parse, token extraction) for `beginTargetVerification`.
-//  - `classifyPreDispatchTarget` — tree matching for `classifyTarget`.
+//  - `classifyPreDispatchTarget` — tree matching for `observeTarget`.
 //  - `buildRecordedUnverifiableFailureResponse` /
 //    `buildTargetBindingFailureResponse` /
 //    `buildPostDispatchTargetBindingFailureResponse` — capture + wire-shaping
@@ -409,7 +409,7 @@ export function resolveTargetVerificationEntry(params: {
 }
 
 // ---------------------------------------------------------------------------
-// `classifyTarget`: resolves the recorded target against an already-captured
+// `observeTarget`'s classification: resolves the recorded target against an already-captured
 // tree using the SAME lookup/matching a real dispatch would.
 //
 // #1555 structural-quality review ("unify on the engine's types"): returns

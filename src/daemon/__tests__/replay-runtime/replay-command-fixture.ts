@@ -11,6 +11,7 @@ import {
   splitReplayCommandRequest,
 } from '@agent-device/replay-port/replay-dispatch-envelope';
 import type { ReplayCommand } from '@agent-device/replay-port/command-types';
+import type { ObservationClock } from '@agent-device/capture-kit/observe-until';
 
 export type ReplayCommandTestInput = Readonly<{
   req: DaemonRequest;
@@ -33,7 +34,7 @@ export function replayCommandForTest(params: ReplayCommandTestInput): ReplayComm
     ...splitReplayCommandRequest(req),
     session: createReplaySession(sessionName, logPath, sessionStore),
     invoke: replayInvokeOverDispatch(invoke, req),
-    dependencies: replayDaemonDependencies,
+    dependencies: { ...replayDaemonDependencies, clock: instantReplayClock() },
     ...(tracePath === undefined ? {} : { tracePath }),
     ...(onStep === undefined ? {} : { onStep }),
   };
@@ -41,4 +42,15 @@ export function replayCommandForTest(params: ReplayCommandTestInput): ReplayComm
 
 export function runReplayForTest(params: ReplayCommandTestInput): Promise<DaemonResponse> {
   return runReplayCommand(replayCommandForTest(params));
+}
+
+/** Target-readiness waits advance this clock instead of sleeping, so a unit replay spends no wall time. */
+function instantReplayClock(): ObservationClock {
+  let nowMs = Date.now();
+  return {
+    now: () => nowMs,
+    sleep: async (ms) => {
+      nowMs += ms;
+    },
+  };
 }

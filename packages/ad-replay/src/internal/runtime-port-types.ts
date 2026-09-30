@@ -97,9 +97,9 @@ export type AdReplayVerifiedTargetGuard = Readonly<{
   matchCount: number;
 }>;
 
-/** `captureObservation`'s neutral result: nodes for classification, or why a capture was not available. */
-export type AdReplayObservation = Readonly<
-  | { readonly state: 'available'; readonly nodes: readonly SnapshotNode[] }
+/** `observeTarget`'s neutral result: the recorded target's classification, or why no capture was available. */
+export type AdReplayTargetObservation = Readonly<
+  | { readonly state: 'classified'; readonly classification: AdReplayTargetClassification }
   | { readonly state: 'unavailable'; readonly reason: string; readonly hint?: string }
 >;
 
@@ -120,7 +120,7 @@ export type AdReplayVerificationEntry = Readonly<
     }
 >;
 
-/** `classifyTarget`'s result: a verified guard, or the divergence evidence a target-binding failure reports. */
+/** The recorded target's classification: a verified guard, or the divergence evidence a target-binding failure reports. */
 export type AdReplayTargetClassification = Readonly<
   | { readonly verified: true; readonly guard: AdReplayVerifiedTargetGuard }
   | Readonly<{
@@ -220,26 +220,20 @@ export type AdReplayStepRuntime = Readonly<{
     targetRole?: 'source' | 'destination',
   ): AdReplayVerificationEntry;
   /**
-   * Captures a fresh snapshot for classification or for a divergence's
-   * `screen` — daemon authority (`SessionStore`, the capture pipeline, the
-   * #1385 launch-race retry).
+   * Captures a fresh snapshot (with the #1385 launch-race retry) and resolves
+   * the recorded target against it using the SAME lookup/matching a real
+   * dispatch would — daemon authority (`SessionStore`, the capture pipeline,
+   * tree helpers and the selectors package engine). A step whose dispatch
+   * would wait for its target under a readiness budget re-captures while the
+   * target does not match yet, under that same budget, so this gate never
+   * refuses a target the dispatch itself would have waited for. The last
+   * capture is the divergence's `screen`.
    */
-  captureObservation(
-    action: SessionAction,
-    index: number,
-    options: { retryLaunchRace: boolean },
-  ): Promise<AdReplayObservation>;
-  /**
-   * Resolves the recorded target against `nodes` using the SAME
-   * lookup/matching a real dispatch would — daemon authority (tree helpers and
-   * the selectors package engine).
-   */
-  classifyTarget(params: {
+  observeTarget(params: {
     action: SessionAction;
     index: number;
     token: string;
-    nodes: readonly SnapshotNode[];
-  }): AdReplayTargetClassification;
+  }): Promise<AdReplayTargetObservation>;
   /**
    * Dispatches the action, optionally carrying a pre-action identity guard,
    * and detects the guard-mismatch / wait-landmark-mismatch post-resolution
@@ -279,7 +273,7 @@ export type AdReplayStepRuntime = Readonly<{
   ): Promise<AdReplayStepFailure>;
   /**
    * Builds a target-binding divergence from `evidence`, reusing the LAST
-   * `captureObservation` result for its `screen` (the pre-dispatch capture
+   * `observeTarget` capture for its `screen` (the pre-dispatch capture
    * and classification/capture-failure evidence share one capture) —
    * daemon authority. `artifactPaths` is the pre-step snapshot, as above;
    * `scrubVars` as above.

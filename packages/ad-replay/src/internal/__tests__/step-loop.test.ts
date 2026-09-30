@@ -63,11 +63,8 @@ function createFakeRuntime(params: { isRepairArmed?: () => boolean } = {}): {
   let armCount = 0;
   const runtime: AdReplayStepRuntime = {
     beginTargetVerification: () => ({ kind: 'inactive' }),
-    captureObservation: async () => {
-      throw new Error('captureObservation: not used by this fixture (no targetEvidence)');
-    },
-    classifyTarget: () => {
-      throw new Error('classifyTarget: not used by this fixture (no targetEvidence)');
+    observeTarget: async () => {
+      throw new Error('observeTarget: not used by this fixture (no targetEvidence)');
     },
     async dispatchStep(dispatchedAction, _resolvedAction, _index, artifactPaths) {
       dispatched.push(dispatchedAction.command);
@@ -175,13 +172,8 @@ test("a post-dispatch target-binding mismatch reports the pre-step artifact snap
     // called for it — routed to the #1349 deferred-landmark path, which
     // dispatches with a guard WITHOUT any capture/classify round trip.
     beginTargetVerification: () => ({ kind: 'post-resolution', isSelectorWait: true }),
-    captureObservation: async () => {
-      throw new Error(
-        'captureObservation: not used — deferred-landmark skips straight to dispatch',
-      );
-    },
-    classifyTarget: () => {
-      throw new Error('classifyTarget: not used — deferred-landmark skips straight to dispatch');
+    observeTarget: async () => {
+      throw new Error('observeTarget: not used — deferred-landmark skips straight to dispatch');
     },
     async dispatchStep(dispatchedAction, _resolvedAction, _index, artifactPaths, _guard) {
       if (dispatchedAction.command === 'open') {

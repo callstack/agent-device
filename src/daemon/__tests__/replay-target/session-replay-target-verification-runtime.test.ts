@@ -177,6 +177,43 @@ test('a selector-miss divergence blocks dispatch and never sends the action', as
   expect(targetBinding.matchCount).toBe(0);
   expect(targetBinding.observed).toBeUndefined();
   expect(targetBinding.recorded).toEqual({ id: 'save', role: 'button', label: 'Save' });
+  // click waits for its target, so the gate re-captured before refusing.
+  expect(mockDispatchCommand.mock.calls.length).toBeGreaterThan(1);
+});
+
+test('an annotated click whose target renders on the second capture waits for it and dispatches', async () => {
+  const scene = replayScriptScene('agent-device-replay-target-verify-late-render-', [
+    SAVE_ANNOTATION,
+    'click id="save"',
+  ]);
+
+  mockDispatchCommand.mockResolvedValueOnce(emptyCapture()).mockResolvedValue(saveButtonCapture());
+
+  const response = await scene.replay();
+
+  expect(response.ok).toBe(true);
+  expect(scene.invoked.map((req) => req.command)).toEqual(['click']);
+  expect(scene.invoked[0]?.internal?.replayTargetGuard).toMatchObject({
+    identity: { id: 'save', role: 'button', label: 'Save' },
+  });
+  expect(mockDispatchCommand).toHaveBeenCalledTimes(2);
+});
+
+test('an annotated step whose command does not wait for its target refuses a selector miss on one capture', async () => {
+  const scene = replayScriptScene('agent-device-replay-target-verify-no-wait-', [
+    SAVE_ANNOTATION,
+    'fill id="save" "hello"',
+  ]);
+
+  mockDispatchCommand.mockResolvedValueOnce(emptyCapture()).mockResolvedValue(saveButtonCapture());
+
+  const response = await scene.replay();
+
+  expect(scene.invoked.length).toBe(0);
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  const divergence = response.error.details?.divergence as Record<string, unknown>;
+  expect(divergence.kind).toBe('selector-miss');
 });
 
 test('an identity-mismatch divergence reports matchCount and an observed identity', async () => {
