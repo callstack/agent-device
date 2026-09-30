@@ -191,7 +191,6 @@ const HOST_REFUSAL_STDERR: Record<string, string> = {
   'multiple-devices': 'error: more than one device/emulator',
   'no-devices': 'adb: no devices/emulators found',
   'device-not-found': "error: device 'emulator-5554' not found",
-  'server-version-mismatch': "adb server version (40) doesn't match this client (41); killing...",
 };
 
 const DRIVERS: Record<string, { drive: () => Promise<unknown>; dispatchedSteps?: number }> = {
@@ -200,6 +199,13 @@ const DRIVERS: Record<string, { drive: () => Promise<unknown>; dispatchedSteps?:
   },
   'android-adb.input-tap.failed': {
     drive: () => tapWithAdbAnswer({ exitCode: 1, stderr: 'Killed' }),
+  },
+  'android-adb.input-tap.refusal-text-beside-other-output': {
+    drive: () =>
+      tapWithAdbAnswer({
+        exitCode: 137,
+        stderr: "adb server version (40) doesn't match this client (41); killing...\nKilled",
+      }),
   },
   ...Object.fromEntries(
     Object.entries(HOST_REFUSAL_STDERR).map(([name, stderr]) => [

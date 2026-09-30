@@ -61,7 +61,6 @@ const HOST_REFUSALS = [
   ['multiple_devices', 'error: more than one device/emulator'],
   ['no_devices', 'adb: no devices/emulators found'],
   ['device_not_found', "error: device 'emulator-5554' not found"],
-  ['server_version_mismatch', "adb server version (40) doesn't match this client (41); killing..."],
 ] as const;
 
 const DEVICE_SIDE_FAILURES = [
@@ -82,6 +81,29 @@ test('every host-refusal reason is classified hostRefusal and stamped as adbHost
     assert.equal(error.details?.adbFailure, reason);
     assert.equal(error.details?.adbHostRefusal, true, reason);
   }
+});
+
+test('refusal text never proves a refusal unless it is the entire adb output', () => {
+  for (const [reason, refusal] of HOST_REFUSALS) {
+    for (const [stderr, stdout] of [
+      [refusal, 'partial'],
+      [`${refusal}\nKilled`, ''],
+      [`adb server version (40) doesn't match this client (41); killing...\n${refusal}`, ''],
+      [`${refusal}, giving up`, ''],
+    ] as const) {
+      const failure = classifyAndroidAdbFailure(stderr, stdout);
+      assert.equal(failure?.hostRefusal, undefined, `${reason}: ${stderr} | ${stdout}`);
+      const error = attachAdbFailureHint(
+        new AppError('COMMAND_FAILED', 'adb exited with code 1', { stderr, stdout }),
+      );
+      assert.equal(Object.hasOwn(error.details ?? {}, 'adbHostRefusal'), false, reason);
+    }
+  }
+  const mismatch = classifyAndroidAdbFailure(
+    "adb server version (40) doesn't match this client (41); killing...",
+  );
+  assert.equal(mismatch?.reason, 'server_version_mismatch');
+  assert.equal(mismatch?.hostRefusal, undefined);
 });
 
 test('reasons a device-side command can produce are never classified hostRefusal', () => {
