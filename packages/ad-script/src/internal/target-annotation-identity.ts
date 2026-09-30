@@ -52,7 +52,7 @@ type IdentityTreeNode = Pick<RawSnapshotNode, 'type' | 'identifier' | 'label'>;
  * (`@agent-device/selectors/target-evidence`), replay-time verification
  * (`packages/replay-port/src/daemon-port/session-replay-target-verification.ts`), and the
  * dispatch-side post-resolution guard
- * (`src/commands/interaction/runtime/resolution.ts`), so all three compute
+ * (`src/commands/interaction/runtime/replay-target-guard.ts`), so all three compute
  * a node's identity with byte-identical semantics.
  */
 export function readNodeLocalIdentity(

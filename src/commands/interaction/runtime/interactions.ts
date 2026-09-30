@@ -19,12 +19,9 @@ import {
   planPostActionObservation,
   type PostActionObservationOptions,
 } from './post-action-observation.ts';
-import {
-  dispatchNativeRefInteraction,
-  resolveInteractionTarget,
-  type ExpectedResolvedTarget,
-  type InteractionTarget,
-} from './resolution.ts';
+import { resolveInteractionTarget, type InteractionTarget } from './resolution.ts';
+import { dispatchNativeRefInteraction } from './native-ref-interaction.ts';
+import type { ExpectedResolvedTarget } from './interaction-resolution-request.ts';
 
 export { focusCommand, hoverCommand, longPressCommand } from './gestures.ts';
 export type {

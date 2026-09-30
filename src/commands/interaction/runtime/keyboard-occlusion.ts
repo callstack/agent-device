@@ -13,7 +13,7 @@ import {
   type KeyboardSurface,
 } from '@agent-device/contracts/tap-keyboard-occlusion';
 import { interactionVerb } from './interaction-verb.ts';
-import type { InteractionAction } from './resolution.ts';
+import type { InteractionAction } from './interaction-resolution-request.ts';
 
 /**
  * The keyboard guard every acting path runs against the tree it already holds.

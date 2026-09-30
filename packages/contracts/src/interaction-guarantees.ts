@@ -240,7 +240,7 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   // them is undetected.
   offscreen: {
     kind: 'runtime',
-    via: 'src/commands/interaction/runtime/resolution.ts#throwIfOffscreenInteractionTarget',
+    via: 'src/commands/interaction/runtime/target-visibility-stages.ts#throwIfOffscreenInteractionTarget',
   },
   // Promotion runs only for rows that declare it (#1656); the retarget itself
   // is still resolveActionableTouchResolution.
@@ -316,7 +316,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       // provenance before it can claim exact.
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/resolution.ts#buildRefResolution',
+        via: 'src/commands/interaction/runtime/resolution-disclosure.ts#buildRefResolution',
       },
       targetReadiness: {
         kind: 'inapplicable',
@@ -349,7 +349,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       offscreen: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/resolution.ts#throwIfOffscreenInteractionTarget',
+        via: 'src/commands/interaction/runtime/target-visibility-stages.ts#throwIfOffscreenInteractionTarget',
       },
       nonHittable: {
         kind: 'inapplicable',
@@ -433,14 +433,14 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       // practice, but the code path is identical.
       offscreen: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/resolution.ts#throwIfOffscreenInteractionTarget',
+        via: 'src/commands/interaction/runtime/target-visibility-stages.ts#throwIfOffscreenInteractionTarget',
       },
       // Annotation only (targetHittable/hint on the result): promotion to a
       // hittable ancestor stays a runtime-path behavior — the preflight never
       // changes which element the backend acts on.
       nonHittable: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/resolution.ts#preflightNativeRefInteraction',
+        via: 'src/commands/interaction/runtime/native-ref-interaction.ts#preflightNativeRefInteraction',
       },
       responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
       responseIdentity: {
@@ -464,7 +464,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       // An @ref names exactly one node by construction (same cell as runtime-ref).
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/resolution.ts#EXACT_REF_RESOLUTION',
+        via: 'src/commands/interaction/runtime/resolution-disclosure.ts#EXACT_REF_RESOLUTION',
       },
       targetReadiness: {
         kind: 'waived',

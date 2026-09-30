@@ -38,7 +38,7 @@ export type SelectorOcclusionStage = 'exclude-and-refuse' | 'refuse' | 'ignore';
 
 /**
  * Consumed by `throwIfOffscreenInteractionTarget`
- * (commands/interaction/runtime/resolution.ts), the end-to-end enforcement
+ * (commands/interaction/runtime/target-visibility-stages.ts), the end-to-end enforcement
  * point including the iOS live-rect rescue probe (#1542).
  *
  * - `refuse` — a target whose tap point lies outside the viewport refuses

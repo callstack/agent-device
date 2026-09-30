@@ -17,9 +17,12 @@ import {
   captureInteractionSnapshot,
   type InteractionSnapshot,
 } from './interaction-snapshot-capture.ts';
-import { buildCoveredInteractionError } from './covered-interaction-error.ts';
+import { buildCoveredInteractionError } from './target-visibility-stages.ts';
 import { resolveActionSelector } from './selector-action-resolution.ts';
-import type { InteractionAction, ResolveInteractionTargetParams } from './resolution.ts';
+import type {
+  InteractionAction,
+  ResolveInteractionTargetParams,
+} from './interaction-resolution-request.ts';
 
 /**
  * `promotedTarget`'s readiness poll: the one-attempt capture-and-resolve, the covered-target
@@ -257,11 +260,9 @@ async function readinessExhaustedFailure(
  * whose first capture already matches pays the one-or-two-capture cost of a single attempt. Only a poll
  * that follows a miss (poll 2+) forces a fresh capture, mirroring how `wait` bypasses the cache.
  *
- * Exported as an ADR 0011 registry anchor: interaction-guarantees.ts cites this as the
- * runtime-selector `targetReadiness` `via` symbol, and the gate test imports it dynamically, which
- * fallow cannot trace statically.
+ * ADR 0011 registry anchor: interaction-guarantees.ts cites this as the runtime-selector
+ * `targetReadiness` `via` symbol.
  */
-// fallow-ignore-next-line unused-export
 export async function pollForSelectorReadiness(
   runtime: AgentDeviceRuntime,
   options: CommandContext,

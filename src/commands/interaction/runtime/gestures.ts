@@ -27,12 +27,12 @@ import {
 } from './post-action-observation.ts';
 import {
   assertSupportedInteractionSurface,
-  dispatchNativeRefInteraction,
   resolveInteractionTarget,
-  type ExpectedResolvedTarget,
   type InteractionTarget,
   type ResolvedInteractionTarget,
 } from './resolution.ts';
+import { dispatchNativeRefInteraction } from './native-ref-interaction.ts';
+import type { ExpectedResolvedTarget } from './interaction-resolution-request.ts';
 import { captureInteractionSnapshot } from './interaction-snapshot-capture.ts';
 import { resolveVisibleSnapshotViewport } from './viewport.ts';
 

@@ -30,7 +30,7 @@ export type ReplayTargetGuardDenotation = {
 /**
  * `details.reason` marker on the pre-action refusal thrown by dispatch's
  * post-resolution guard (`assertExpectedResolvedTarget`,
- * `src/commands/interaction/runtime/resolution.ts`), detected by the replay
+ * `src/commands/interaction/runtime/replay-target-guard.ts`), detected by the replay
  * step loop to convert the refusal into an identity-mismatch target-binding
  * divergence.
  */
