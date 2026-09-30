@@ -1,29 +1,21 @@
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { sleep } from '@agent-device/host-kit/retry';
 import type { PostGestureAction, PostGestureOutcome } from '@agent-device/kernel/snapshot';
-import { observeUntil, type ObservationSchedule } from './observe-until.ts';
 
 /**
- * Pure post-gesture stability mechanics: the quiet-window verdict over the shared
- * `observeUntil` engine, plus the baseline-distrust decision, parameterized over
- * the capture value and the signature comparators. Deliberately a leaf — it
- * imports no cycle owners and no `SessionState`, so it stays outside the R9
- * type cycle while the deferred-interaction-outcome owner (which holds the
- * pending record and the session mutation) stays the one seam callers see. The
- * owner supplies the comparators from interaction-outcome-policy; their
- * semantics (subset tolerance, identity keying, discriminating entries) are
- * documented there.
+ * Pure post-gesture stability mechanics: the quiet-window polling loop and the
+ * baseline-distrust verdict, parameterized over the capture value and the
+ * signature comparators. Deliberately a leaf — it imports no cycle owners and
+ * no `SessionState`, so it stays outside the R9 type cycle while the
+ * deferred-interaction-outcome owner (which holds the pending record and the
+ * session mutation) stays the one seam callers see. The owner supplies the
+ * comparators from interaction-outcome-policy; their semantics (subset
+ * tolerance, identity keying, discriminating entries) are documented there.
  */
 
-/**
- * Cadence and budget for the quiet-window loop: poll every 200ms, allow 1.5s
- * before an unsettled surface times out, and always complete two observations
- * (an `initial` counts) so a quiet pair can form even under a tight budget.
- */
-const POST_GESTURE_STABILITY_SCHEDULE: ObservationSchedule = {
-  intervalMs: 200,
-  budgetMs: 1_500,
-  minPolls: 2,
-};
+const STABILIZATION_DEADLINE_MS = 1_500;
+const STABILIZATION_INTERVAL_MS = 200;
+const STABILIZATION_MIN_ATTEMPTS = 2;
 
 /**
  * Defect 2 (#1542): a bounded extra budget used ONLY when a quiet signature
@@ -38,7 +30,7 @@ const POST_GESTURE_STABILITY_SCHEDULE: ObservationSchedule = {
  * settle-zero-margin-flake, a week-long contention-flake root cause), so this
  * cap is sized to never come close to that trap.
  */
-const STABILIZATION_DISTRUST_DEADLINE_MS = POST_GESTURE_STABILITY_SCHEDULE.budgetMs + 2_000;
+const STABILIZATION_DISTRUST_DEADLINE_MS = STABILIZATION_DEADLINE_MS + 2_000;
 
 export type BaselineSurfaceEvidence = 'changed' | 'unchanged' | 'ambiguous';
 
@@ -124,11 +116,10 @@ export function decidePostGestureStabilityVerdict<S extends readonly unknown[]>(
 }
 
 /**
- * The quiet-window stability verdict over the shared observation engine: keep
- * polling until two consecutive captures agree and the decision accepts the
- * agreement, or the (possibly distrust-extended) budget expires. Session
- * state never enters here — the caller owns the pending record's lifecycle
- * and clears it when this returns.
+ * The quiet-window stability loop: poll until two consecutive captures agree
+ * and the verdict accepts the agreement, or the (possibly distrust-extended)
+ * deadline expires. Session state never enters here — the caller owns the
+ * pending record's lifecycle and clears it when this returns.
  */
 export async function runPostGestureStabilityLoop<T, S extends readonly unknown[]>(params: {
   pending: PostGestureStabilityPending<S>;
@@ -138,34 +129,24 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
 }): Promise<PostGestureStabilityOutcome<T>> {
   const { pending, needsBaselineDistrust, hooks } = params;
   const startedAt = Date.now();
-  let attempts = 0;
+  let attempts = 1;
+  let previous = await captureSurface(hooks, params.initial);
   let baselineSignature = pending.baselineSignature;
   let baselineBackend = pending.baselineBackend;
   let baselineRebased = false;
+  // Extended past STABILIZATION_DEADLINE_MS only when the distrust verdict
+  // fires below; the ordinary (non-distrust) timeout path is unaffected.
+  let effectiveDeadlineMs = STABILIZATION_DEADLINE_MS;
   // A rebase or a distrust verdict keeps polling on a pair that DID agree, so
-  // the budget can expire on a surface that is already at rest.
+  // the deadline can expire on a surface that is already at rest.
   let lastPairAgreed = false;
-  let surfaceCache: CapturedSurface<T, S> | undefined;
 
-  const surfaceOf = (value: T): CapturedSurface<T, S> => {
-    if (surfaceCache?.value === value) return surfaceCache;
-    surfaceCache = { value, ...hooks.readSurface(value) };
-    return surfaceCache;
-  };
-
-  const observed = await observeUntil<T, PostGestureStabilityOutcome<T>>({
-    ...(params.initial !== undefined ? { initial: params.initial } : {}),
-    capture: () => hooks.capture(),
-    schedule: POST_GESTURE_STABILITY_SCHEDULE,
-    verdict: (latest, previousValue) => {
-      attempts += 1;
-      const current = surfaceOf(latest);
-      if (previousValue === undefined) return { kind: 'continue' };
-
-      const previous = surfaceOf(previousValue);
-      lastPairAgreed = hooks.signaturesStable(previous.signature, current.signature);
-      if (!lastPairAgreed) return { kind: 'continue' };
-
+  while (attempts < STABILIZATION_MIN_ATTEMPTS || Date.now() - startedAt < effectiveDeadlineMs) {
+    await sleep(STABILIZATION_INTERVAL_MS);
+    attempts += 1;
+    const current = await captureSurface(hooks);
+    lastPairAgreed = hooks.signaturesStable(previous.signature, current.signature);
+    if (lastPairAgreed) {
       const elapsedMs = Date.now() - startedAt;
       // A capture plan may fall back or be pre-empted by the XCTest-channel
       // penalty at any time, so the backend can change mid-poll. Backends do
@@ -181,7 +162,8 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
         baselineSignature = current.signature;
         baselineBackend = current.backend;
         baselineRebased = true;
-        return { kind: 'continue' };
+        previous = current;
+        continue;
       }
       const verdict = decidePostGestureStabilityVerdict({
         needsBaselineDistrust,
@@ -192,18 +174,15 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
         classifyBaselineEvidence: hooks.classifyBaselineEvidence,
       });
       if (verdict === 'distrust') {
-        return { kind: 'continue', budgetMs: STABILIZATION_DISTRUST_DEADLINE_MS };
+        effectiveDeadlineMs = STABILIZATION_DISTRUST_DEADLINE_MS;
+        previous = current;
+        continue;
       }
       emitSettleDiagnostic(verdict, pending.action, attempts, elapsedMs);
-      return {
-        kind: 'done',
-        result: buildAcceptedOutcome(verdict, pending, current, hooks, baselineRebased),
-      };
-    },
-  });
-
-  if (observed.kind === 'done') return observed.result;
-  if (observed.kind === 'stalled' || observed.kind === 'failed') throw observed.error;
+      return buildAcceptedOutcome(verdict, pending, current, hooks, baselineRebased);
+    }
+    previous = current;
+  }
 
   emitDiagnostic({
     level: 'warn',
@@ -211,14 +190,12 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
     data: {
       action: pending.action,
       attempts,
-      durationMs: observed.waitedMs,
+      durationMs: Date.now() - startedAt,
       lastPairAgreed,
     },
   });
-  // minPolls guarantees at least one judged value before an `expired` end can fire.
-  const value = observed.last as T;
-  if (lastPairAgreed) return { value };
-  return { value, postGestureOutcome: postGestureOutcome('unsettled', pending) };
+  if (lastPairAgreed) return { value: previous.value };
+  return { value: previous.value, postGestureOutcome: postGestureOutcome('unsettled', pending) };
 }
 
 type CapturedSurface<T, S> = {
@@ -226,6 +203,14 @@ type CapturedSurface<T, S> = {
   signature: S;
   backend: string | undefined;
 };
+
+async function captureSurface<T, S extends readonly unknown[]>(
+  hooks: PostGestureStabilityHooks<T, S>,
+  initial?: T,
+): Promise<CapturedSurface<T, S>> {
+  const value = initial ?? (await hooks.capture());
+  return { value, ...hooks.readSurface(value) };
+}
 
 function emitSettleDiagnostic(
   verdict: 'trust' | 'accept-stale',

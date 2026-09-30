@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { isRideOutCaptureError } from '@agent-device/contracts/observation';
+import { isUnreadableCaptureContentError } from '@agent-device/contracts/android-snapshot-quality';
 import { observeUntil, type ObservationClock } from './observe-until.ts';
 
 /** A clock that advances only when the loop sleeps or a capture declares its own cost. */
@@ -22,6 +22,13 @@ function fakeClock(): ObservationClock & { advance(ms: number): void; slept: num
 }
 
 const SCHEDULE = { intervalMs: 200, budgetMs: 1_000 };
+
+/** The Android helper's content verdict: the capture ran but held no readable app content. */
+function unreadableContent(): AppError {
+  return new AppError('COMMAND_FAILED', 'no readable content', {
+    androidSnapshotHelperFailureReason: 'system-window-only',
+  });
+}
 
 describe('observeUntil', () => {
   test('answers done on the poll whose verdict accepts, with the timeline', async () => {
@@ -69,12 +76,12 @@ describe('observeUntil', () => {
     const observed = await observeUntil({
       capture: async () => {
         captures += 1;
-        if (captures === 1) throw new AppError('COMMAND_FAILED', 'busy', { retriable: true });
+        if (captures === 1) throw unreadableContent();
         return captures;
       },
       verdict: (latest) => ({ kind: 'done', result: latest }),
       schedule: SCHEDULE,
-      rideOut: isRideOutCaptureError,
+      rideOut: isUnreadableCaptureContentError,
       clock,
     });
     assert.equal(observed.kind, 'done');
@@ -93,7 +100,7 @@ describe('observeUntil', () => {
       },
       verdict: () => ({ kind: 'continue' }),
       schedule: SCHEDULE,
-      rideOut: isRideOutCaptureError,
+      rideOut: isUnreadableCaptureContentError,
       clock,
     });
     assert.equal(observed.kind, 'failed');

@@ -14,7 +14,7 @@ import { containsPoint } from '@agent-device/kernel/rect';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Point, Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { observeUntil, type ObservationSchedule } from '@agent-device/capture-kit/observe-until';
+import { sleep } from '@agent-device/host-kit/retry';
 import {
   areInteractionSurfaceSignaturesStable,
   buildInteractionSurfaceSignature,
@@ -62,10 +62,8 @@ import type { SessionState } from './session-state.ts';
  */
 
 /** How long a scroll keeps asking whether an untouched surface is really untouched (#1542's window). */
-const SCROLL_MOVEMENT_SCHEDULE: ObservationSchedule = {
-  intervalMs: 200,
-  budgetMs: 1_500,
-};
+const MOVEMENT_VERDICT_BUDGET_MS = 1_500;
+const MOVEMENT_POLL_MS = 200;
 
 /** The pre-gesture surface, already in hand: no capture is spent to produce it. */
 export type ScrollSurfaceBaseline = Readonly<{
@@ -219,12 +217,6 @@ type SurfaceVerdict =
       startedAt: number;
     }>;
 
-/** What one capture's verdict decides, before the loop's own timing is stitched back on. */
-type SurfaceJudgement =
-  | Readonly<{ kind: 'blind'; reason: SurfaceBlindReason }>
-  | Readonly<{ kind: 'moved'; observed: ObservedSurface }>
-  | Readonly<{ kind: 'settled'; observed: ObservedSurface; evidence: InteractionSurfaceChange }>;
-
 /** Why this capture cannot be compared against the pre-gesture tree at all, movement included. */
 type SurfaceBlindReason = 'capture-unreadable' | 'surface-unsettled' | ScrollSurfacePairDrift;
 
@@ -265,32 +257,30 @@ async function pollForSurfaceVerdict(
     swipe: ScrollSwipeEvidence;
   },
 ): Promise<SurfaceVerdict> {
-  // The edge question is asked only of the pre-gesture (baseline) tree, so it never depends on a
-  // poll's outcome and can be answered once, before the loop starts, rather than lazily on the
-  // first `changed` reading.
-  const changeNeedsRest = await baselineEndsInDirection(baseline, params.direction, params.swipe);
+  const startedAt = Date.now();
+  const deadline = startedAt + (params.budgetMs ?? MOVEMENT_VERDICT_BUDGET_MS);
   let previous: InteractionSurfaceSignature | undefined;
-  const observed = await observeUntil<CaptureReading, SurfaceJudgement>({
-    capture: () => readOneCapture(baseline, params.capture),
-    schedule: {
-      intervalMs: params.pollMs ?? SCROLL_MOVEMENT_SCHEDULE.intervalMs,
-      budgetMs: params.budgetMs ?? SCROLL_MOVEMENT_SCHEDULE.budgetMs,
-    },
-    verdict: (latest) => {
-      if (latest.kind === 'blind')
-        return { kind: 'done', result: { kind: 'blind', reason: latest.reason } };
-      const judged = settledVerdict(latest, { previous, changeNeedsRest });
-      previous = latest.observed.signature;
-      return judged ? { kind: 'done', result: judged } : { kind: 'continue' };
-    },
-  });
+  let attempts = 0;
+  let changeNeedsRest: boolean | undefined;
 
-  const attempts = observed.polls.length;
-  const startedAt = Date.now() - observed.waitedMs;
-  if (observed.kind !== 'done') return budgetExpiredVerdict(params, attempts, startedAt);
-  return observed.result.kind === 'blind'
-    ? observed.result
-    : { ...observed.result, attempts, startedAt };
+  while (true) {
+    const reading = await readOneCapture(baseline, params.capture);
+    attempts += 1;
+    if (reading.kind === 'blind') return { kind: 'blind', reason: reading.reason };
+    if (reading.kind === 'changed') {
+      changeNeedsRest ??= await baselineEndsInDirection(baseline, params.direction, params.swipe);
+    }
+    const verdict = settledVerdict(reading, {
+      previous,
+      changeNeedsRest: changeNeedsRest === true,
+      attempts,
+      startedAt,
+    });
+    if (verdict) return verdict;
+    if (Date.now() >= deadline) return budgetExpiredVerdict(params, attempts, startedAt);
+    previous = reading.observed.signature;
+    await sleep(params.pollMs ?? MOVEMENT_POLL_MS);
+  }
 }
 
 /**
@@ -303,17 +293,26 @@ function settledVerdict(
   poll: {
     previous: InteractionSurfaceSignature | undefined;
     changeNeedsRest: boolean;
+    attempts: number;
+    startedAt: number;
   },
-): SurfaceJudgement | undefined {
+): SurfaceVerdict | undefined {
   const atRest = surfaceIsAtRest(poll.previous, reading.observed.signature);
+  const { attempts, startedAt } = poll;
   if (reading.kind === 'changed') {
     if (!poll.changeNeedsRest || atRest) {
-      return { kind: 'moved', observed: reading.observed };
+      return { kind: 'moved', observed: reading.observed, attempts, startedAt };
     }
     return undefined;
   }
   if (!atRest) return undefined;
-  return { kind: 'settled', observed: reading.observed, evidence: reading.evidence };
+  return {
+    kind: 'settled',
+    observed: reading.observed,
+    evidence: reading.evidence,
+    attempts,
+    startedAt,
+  };
 }
 
 /**

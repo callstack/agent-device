@@ -1,5 +1,4 @@
 import { createRequestCanceledError } from '@agent-device/kernel/errors';
-import type { ObservationEnd } from '@agent-device/contracts/observation';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
 /**
@@ -9,6 +8,17 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
  * observed: the verdict is the caller's, and so is the equality rule behind it (digest, signature,
  * pixel).
  */
+
+/**
+ * How an observation loop ended.
+ *
+ * - `done` — the verdict accepted a capture.
+ * - `expired` — the budget ran out while the verdict still said continue.
+ * - `stalled` — a capture was still in flight at its deadline; it was cancelled and joined, so no
+ *   late result can mutate state after the loop returned.
+ * - `failed` — a capture error the loop does not ride out.
+ */
+export type ObservationEnd = 'done' | 'expired' | 'stalled' | 'failed';
 
 export type ObservationSchedule = Readonly<{
   /** Delay between polls, clamped to the remaining budget. */
