@@ -24,6 +24,7 @@ import type { PlatformRequestScope } from '@agent-device/contracts/platform-runt
 import type { RequestPlatformProviderScope } from '@agent-device/contracts/platform-providers';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
+import type { RequestDispatchLedger } from './request-dispatch-disclosure.ts';
 
 type RequestHandlerChainParams = {
   req: DaemonRequest;
@@ -57,6 +58,7 @@ type RequestHandlerChainParams = {
   screenRecordingAdmissionLedger: ScreenRecordingAdmissionLedger;
   hostDiagnostics?: HostDiagnostics;
   requestScope: PlatformRequestScope;
+  dispatchLedger?: RequestDispatchLedger;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   throwIfCanceled(): void;
   contextFromFlags: (
@@ -289,6 +291,7 @@ async function runInteractionHandler(
       inspectFacts: params.inspectFacts,
       bindDevice: params.bindDevice,
       androidObservation: params.androidObservation,
+      dispatchLedger: params.dispatchLedger,
     }),
   );
 }

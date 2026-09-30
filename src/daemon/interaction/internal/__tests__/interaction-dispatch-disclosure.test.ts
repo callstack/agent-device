@@ -24,13 +24,14 @@ import {
 } from '../../../request-dispatch-disclosure.ts';
 import { clearAndroidObservationFixture } from '../../../__tests__/android-observation-fixture.ts';
 import { handleInteractionCommands } from '../../index.ts';
+import type { InteractionRouteInput } from '../types.ts';
 import { assertAndroidPressStayedInApp } from '../interaction-android-escape.ts';
 import { gestureRuntimeBindingsFixture } from './gesture-runtime-bindings.fixtures.ts';
 import { contextFromFlags, makeSession } from './interaction-touch-fixtures.ts';
 
 // contracts/fixtures/dispatch-disclosure.json, daemon and post-action guard rows: the daemon rows
-// drive a real `press` through the daemon interaction handler with only the device touch mocked;
-// the guard row drives the guard itself.
+// drive a real `press` through the daemon interaction handler, inside the router's dispatch seam,
+// with only the device touch mocked; the guard row drives the guard itself.
 
 vi.mock('../../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
@@ -39,6 +40,16 @@ vi.mock('../../../snapshot-interactor-capture.ts', () => ({
 beforeEach(() => {
   resetGetRuntimeFixture();
 });
+
+/** The interaction route as the request router runs it: inside the request's dispatch seam. */
+async function routeInteraction(params: InteractionRouteInput) {
+  const dispatchLedger = createRequestDispatchLedger();
+  return await discloseRequestDispatch(
+    params.req,
+    dispatchLedger,
+    async () => await handleInteractionCommands({ ...params, dispatchLedger }),
+  );
+}
 
 type PressScenario = {
   command?: 'press' | 'get' | 'fill';
@@ -63,7 +74,7 @@ async function press({ command = 'press', positionals }: PressScenario): Promise
     backend: 'xctest',
   };
   sessionStore.set(session.name, session);
-  const response = await handleInteractionCommands({
+  const response = await routeInteraction({
     req: { token: 't', session: session.name, command, positionals, flags: {} },
     sessionName: session.name,
     sessionStore,
@@ -128,7 +139,7 @@ async function swipeRefusedOnSecondRepetition(): Promise<unknown> {
   const sessionStore = makeSessionStore();
   const session = makeSession('dispatch-disclosure-swipe');
   sessionStore.set(session.name, session);
-  const response = await handleInteractionCommands({
+  const response = await routeInteraction({
     req: {
       token: 't',
       session: session.name,
@@ -168,7 +179,7 @@ async function pressThenForegroundReadRefused(): Promise<unknown> {
       return { package: 'com.example.app' };
     },
   };
-  const response = await handleInteractionCommands({
+  const response = await routeInteraction({
     req: { token: 't', session: session.name, command: 'press', positionals: ['50', '40'] },
     sessionName: session.name,
     sessionStore,
@@ -273,7 +284,7 @@ test('a plain Error a backend throws reaches the wire with dispatched unknown', 
     throw new Error('socket hang up');
   }) as unknown as typeof bindings.bindDevice;
   await assert.rejects(
-    handleInteractionCommands({
+    routeInteraction({
       req: { token: 't', session: session.name, command: 'press', positionals: ['@e1'], flags: {} },
       sessionName: session.name,
       sessionStore,

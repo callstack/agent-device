@@ -79,6 +79,13 @@ import {
 } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
 import { resolveGenericRuntimeExecution } from './generic-runtime-execution.ts';
+import {
+  createRequestDispatchLedger,
+  discloseRequestDispatch,
+  refusedBeforeDispatch,
+  sendRecordedMutation,
+  type RequestDispatchLedger,
+} from './request-dispatch-disclosure.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import { restrictDeviceInventoryToDaemonPolicy } from './daemon-policy.ts';
@@ -303,6 +310,27 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     allowReplayActions: boolean;
   }): Promise<DaemonResponse> {
     const { lockedScope, providerScope, allowReplayActions } = params;
+    const dispatchLedger = createRequestDispatchLedger();
+    return await discloseRequestDispatch(
+      lockedScope.req,
+      dispatchLedger,
+      async () =>
+        await routeLockedRequest({
+          lockedScope,
+          providerScope,
+          allowReplayActions,
+          dispatchLedger,
+        }),
+    );
+  }
+
+  async function routeLockedRequest(params: {
+    lockedScope: LockedRequestScope;
+    providerScope: RequestPlatformProviderScope;
+    allowReplayActions: boolean;
+    dispatchLedger: RequestDispatchLedger;
+  }): Promise<DaemonResponse> {
+    const { lockedScope, providerScope, allowReplayActions, dispatchLedger } = params;
     const requestScope = createPlatformRequestScope(lockedScope.req);
     const handlerResponse = await runRequestHandlerChain({
       req: lockedScope.req,
@@ -332,6 +360,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       screenRecordingAdmissionLedger,
       hostDiagnostics,
       requestScope,
+      dispatchLedger,
       retainDeviceExecutionLock: lockedScope.retainDeviceExecutionLock,
       throwIfCanceled: lockedScope.throwIfCanceled,
       contextFromFlags: lockedScope.handlerContextFromFlags,
@@ -343,6 +372,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       logPath: lockedScope.logPath,
       sessionStore,
       androidObservation,
+      dispatchLedger,
     });
   }
 
@@ -468,8 +498,9 @@ async function dispatchGenericForLockedScope(params: {
   logPath: string;
   sessionStore: SessionStore;
   androidObservation: AndroidObservationAdapter;
+  dispatchLedger: RequestDispatchLedger;
 }): Promise<DaemonResponse> {
-  const { lockedScope, logPath, sessionStore, androidObservation } = params;
+  const { lockedScope, logPath, sessionStore, androidObservation, dispatchLedger } = params;
   const session = sessionStore.get(lockedScope.sessionName);
   if (!session) {
     return noActiveSessionError();
@@ -488,7 +519,8 @@ async function dispatchGenericForLockedScope(params: {
     inspectFacts: lockedScope.inspectFacts,
     bindDevice: lockedScope.bindDevice,
   });
-  if (!runtimeExecution.ok) return runtimeExecution.response;
+  if (!runtimeExecution.ok) return refusedBeforeDispatch(runtimeExecution.response);
+  const execute = runtimeExecution.execute;
 
   const { dispatchGenericCommand } = await loadGenericRequestHandlerModule();
   const dispatchResponse = await dispatchGenericCommand({
@@ -498,7 +530,8 @@ async function dispatchGenericForLockedScope(params: {
     logPath,
     sessionStore,
     contextFromFlags: lockedScope.contextFromFlags,
-    executePlatformCommand: runtimeExecution.execute,
+    executePlatformCommand: async (execution) =>
+      await sendRecordedMutation(dispatchLedger, async () => await execute(execution)),
     androidObservation,
     ...(runtimeExecution.recorded ? { recordedRequest: runtimeExecution.recorded } : {}),
   });

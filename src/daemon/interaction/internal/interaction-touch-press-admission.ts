@@ -11,7 +11,7 @@ import { readRefMutationFrame } from '../../ref-frame.ts';
 import type { DaemonResponse } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
 import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
-import { refusedBeforeDispatch } from './interaction-dispatch-disclosure.ts';
+import { refusedBeforeDispatch } from '../../request-dispatch-disclosure.ts';
 import { settleFlagGuardResponse } from './interaction-flags.ts';
 import type {
   CaptureSnapshotForSession,

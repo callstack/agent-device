@@ -42,6 +42,7 @@ export const DISPATCH_DISCLOSURE_TABLE_PATH = path.join(
 export const DISPATCH_DISCLOSURE_DRIVER_OWNERS: Readonly<Record<string, string>> = {
   'daemon.': 'src/daemon/interaction/internal/__tests__/interaction-dispatch-disclosure.test.ts',
   'daemon.scroll-no-progress': 'src/daemon/__tests__/scroll-movement.test.ts',
+  'daemon.route.': 'src/daemon/__tests__/request-dispatch-disclosure.test.ts',
   'post-action-guard.':
     'src/daemon/interaction/internal/__tests__/interaction-dispatch-disclosure.test.ts',
   'ios-runner.': 'packages/platform-apple/src/runner/__tests__/runner-dispatch-disclosure.test.ts',

@@ -7,7 +7,7 @@ import {
 } from '../../touch-runtime.ts';
 import type { InteractionRouteInput } from './types.ts';
 import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
-import { refusedBeforeDispatch } from './interaction-dispatch-disclosure.ts';
+import { refusedBeforeDispatch } from '../../request-dispatch-disclosure.ts';
 
 export type PreparedTouchDispatch =
   | Readonly<{ ok: false; response: DaemonFailureResponse }>

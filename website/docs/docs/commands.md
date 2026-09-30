@@ -494,7 +494,7 @@ When an interaction fails, read `error.details.dispatched` before you retry:
 - `no`: the action never reached the device. Retry it as it is.
 - `unknown`: the action may have landed. Take a snapshot before you retry; a blind retry can tap, type, or navigate twice.
 
-An interaction on a read-only command such as `get` reports `no`: it changes nothing, so a retry is safe.
+A read-only command such as `get`, `snapshot`, or `wait` reports `no`: it changes nothing, so a retry is safe.
 A failure without `dispatched` gives no such guarantee. Treat it as `unknown`.
 `type` accepts text only. Do not pass `@ref` to `type`; use `fill @ref "text"` to target a field directly, or `press @ref` then `type "text"` to append in the focused field.
 If `type` reports `TEXT_INPUT_NOT_FOCUSED`, focus a visible text input and retry; when accessibility does not expose the input, use a coordinate focus command before typing.
