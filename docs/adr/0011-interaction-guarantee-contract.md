@@ -158,7 +158,9 @@ dispatch (target resolution, admission, a runner pre-send refusal) may say
 `unknown` once, around interaction dispatch, for a failure no producer
 classified, and never overwrites a producer's value: a wrong `no` makes a
 consumer resend an action that already ran, while a wrong `unknown` only costs
-an observation. Each row names its driver
+an observation. The one exception is a read-only command (registry
+`recordingEffect: 'observes-app'`): the daemon sets `no` over any producer
+value, because a read has no side effect and is always safe to resend. Each row names its driver
 file by id prefix, that file drives the real producer, and a row marked
 `implementedBy` waits for the branch that ships it.
 

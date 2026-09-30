@@ -26,7 +26,7 @@
   {
     "id": "daemon.read-only-command",
     "producer": "daemon",
-    "trigger": "an unclassified failure of a command the registry declares read-only (recordingEffect observes-app), e.g. get",
+    "trigger": "any failure of a command the registry declares read-only (recordingEffect observes-app), e.g. get, even one a producer classified unknown or yes: a read has no side effect",
     "dispatched": "no"
   },
   {

@@ -1,39 +1,34 @@
 import {
   AppError,
-  type DispatchDisclosure,
+  discloseDispatch,
   discloseUnclassifiedDispatch,
 } from '@agent-device/kernel/errors';
 import { resolveCommandRecordingEffect } from '@agent-device/command-registry/registry';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 
 /**
- * The verdict for an interaction failure no producer classified. A request the registry declares
- * read-only (`recordingEffect: 'observes-app'`) never dispatches a mutation, so it is `no`.
- * Otherwise `unknown`: only a producer that refuses before dispatch may say `no`, and only one that
- * proved execution may say `yes`, and this layer cannot tell either from where the failure surfaced.
- * A producer's own verdict is always kept.
+ * The daemon's verdict around interaction dispatch. A request the registry declares read-only
+ * (`recordingEffect: 'observes-app'`) is `no` over any producer verdict: a read has no side effect,
+ * so it is always safe to resend. Otherwise `unknown` fills only a failure no producer classified.
  */
-export async function discloseUnclassifiedInteractionDispatch(
+export async function discloseInteractionDispatch(
   req: DaemonRequest,
   dispatch: () => Promise<DaemonResponse | null>,
 ): Promise<DaemonResponse | null> {
-  const verdict: DispatchDisclosure =
-    resolveCommandRecordingEffect(req) === 'observes-app' ? 'no' : 'unknown';
+  const readOnly = resolveCommandRecordingEffect(req) === 'observes-app';
   try {
     const response = await dispatch();
-    if (!response || response.ok || response.error.details?.dispatched !== undefined) {
-      return response;
-    }
+    if (!response || response.ok) return response;
+    const producerVerdict = response.error.details?.dispatched;
+    const dispatched = readOnly ? 'no' : (producerVerdict ?? 'unknown');
+    if (dispatched === producerVerdict) return response;
     return {
       ok: false,
-      error: {
-        ...response.error,
-        details: { ...response.error.details, dispatched: verdict },
-      },
+      error: { ...response.error, details: { ...response.error.details, dispatched } },
     };
   } catch (error) {
-    if (error instanceof AppError) throw discloseUnclassifiedDispatch(error, verdict);
-    throw error;
+    if (!(error instanceof AppError)) throw error;
+    throw readOnly ? discloseDispatch(error, 'no') : discloseUnclassifiedDispatch(error, 'unknown');
   }
 }
 
