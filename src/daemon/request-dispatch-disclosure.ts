@@ -1,4 +1,5 @@
 import {
+  type AppError,
   asAppError,
   detailsAfterDispatchedSteps,
   discloseDispatch,
@@ -36,18 +37,18 @@ export async function sendRecordedMutation<Result>(
  * failure is `unknown` with the sent count in `details.dispatchedSteps`; `unknown` fills a failure
  * no producer classified. A command without a declared effect passes through.
  */
-export async function discloseRequestDispatch(
+export async function discloseRequestDispatch<Response extends DaemonResponse | null>(
   req: DaemonRequest,
   ledger: RequestDispatchLedger,
-  dispatch: () => Promise<DaemonResponse | null>,
-): Promise<DaemonResponse | null> {
+  dispatch: () => Promise<Response>,
+): Promise<Response> {
   const effect = resolveCommandRecordingEffect(req);
   try {
     const response = await dispatch();
     if (!response || response.ok || effect === undefined) return response;
     const details = disclosedDetails(effect, response.error.details, ledger);
     if (details === response.error.details) return response;
-    return { ok: false, error: { ...response.error, details } };
+    return { ...response, error: { ...response.error, details } };
   } catch (error) {
     if (effect === undefined) throw error;
     const failure = asAppError(error);
@@ -68,4 +69,20 @@ function disclosedDetails(
   const afterSteps = detailsAfterDispatchedSteps(details, ledger.dispatchedSteps);
   if (afterSteps?.dispatched !== undefined) return afterSteps;
   return { ...afterSteps, dispatched: 'unknown' };
+}
+
+/** A failure response built before any dispatch: the requested operation never reached the device. */
+export function refusedBeforeDispatch<Response extends DaemonResponse>(
+  response: Response,
+): Response {
+  if (response.ok) return response;
+  return {
+    ...response,
+    error: { ...response.error, details: { ...response.error.details, dispatched: 'no' } },
+  };
+}
+
+/** A failure thrown before any dispatch: the requested operation never reached the device. */
+export function thrownBeforeDispatch(error: unknown): AppError {
+  return discloseDispatch(asAppError(error), 'no');
 }

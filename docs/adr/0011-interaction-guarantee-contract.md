@@ -157,19 +157,19 @@ operation provably never reached the device, so a resend is safe) and
 `unknown` (it may have landed, so observe before resending). Only a producer
 that refuses before dispatch (target resolution, admission, a runner pre-send
 refusal) may say `no`; no producer can prove execution on its failure path, so
-there is no third value. The daemon fills
-`unknown` once, around interaction dispatch, for a failure no producer
-classified. It keeps a producer's value until a mutation of the same request was
-sent: after that, a later failure (a post-action read, a settle capture, a later
-sub-step) is `unknown` with the sent count in `details.dispatchedSteps`, because a
-wrong `no` makes a consumer resend an action that already ran, while a wrong
-`unknown` only costs an observation. The Maestro port applies the same rule per
-Maestro command. The one exception is a read-only command (registry
-`recordingEffect: 'observes-app'`): the daemon sets `no` over any producer
-value, because a read has no side effect and is always safe to resend. Each row
-without `implementedBy` names its driver file by id prefix, and that file drives
-the real producer; a row marked `implementedBy` waits for the branch that ships
-it.
+there is no third value. The daemon's request router fills `unknown` once,
+around every routed command the registry declares `recordingEffect: 'mutates-
+app'`, for a failure no producer classified. It keeps a producer's value until
+a mutation of the same request was sent: after that, a later failure (a post-
+action read, a settle capture, a later sub-step) is `unknown` with the sent
+count in `details.dispatchedSteps`, because a wrong `no` makes a consumer
+resend an action that already ran, while a wrong `unknown` only costs an
+observation. The Maestro port applies the same rule per Maestro command. The
+one exception is a read-only command (registry `recordingEffect: 'observes-
+app'`): the daemon sets `no` over any producer value, because a read has no
+side effect and is always safe to resend. Each row without `implementedBy`
+names its driver file by id prefix, and that file drives the real producer; a
+row marked `implementedBy` waits for the branch that ships it.
 
 For `responseFields`, one `buildInteractionResponseData(...)` becomes the only
 construction site for interaction response payloads (this deletes the class of

@@ -8,11 +8,7 @@ import { finalizeTouchInteraction } from './interaction-runtime.ts';
 import { refSnapshotFlagGuardResponse } from '../../ref-snapshot-flag-policy.ts';
 import { dispatchGetViaRuntime, dispatchIsViaRuntime } from '../../selector-runtime.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
-import {
-  createRequestDispatchLedger,
-  discloseRequestDispatch,
-  sendRecordedMutation,
-} from '../../request-dispatch-disclosure.ts';
+import { sendRecordedMutation } from '../../request-dispatch-disclosure.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { normalizeError } from '@agent-device/kernel/errors';
 import {
@@ -30,13 +26,8 @@ export async function handleInteractionCommands(
   params: InteractionRouteInput & { captureSnapshotForSession: CaptureSnapshotForSession },
 ): Promise<DaemonResponse | null> {
   const captureProof: RequestCaptureProof = {};
-  const dispatchLedger = params.dispatchLedger ?? createRequestDispatchLedger();
-  const routed = { ...params, refSnapshotFlagGuardResponse, captureProof, dispatchLedger };
-  const response = await discloseRequestDispatch(
-    params.req,
-    dispatchLedger,
-    async () => await dispatchInteractionCommand(routed),
-  );
+  const routed = { ...params, refSnapshotFlagGuardResponse, captureProof };
+  const response = await dispatchInteractionCommand(routed);
   return response
     ? withCaptureDisclosures({ response, consumedTree: captureProof, captureProof })
     : response;

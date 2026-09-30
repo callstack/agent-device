@@ -25,7 +25,7 @@ import {
 import { dispatchRuntimeInteraction } from './interaction-touch-runtime.ts';
 import { parseFillTarget } from './interaction-touch-targets.ts';
 import { prepareTouchDispatch } from './interaction-touch-prepare.ts';
-import { refusedBeforeDispatch, thrownBeforeDispatch } from './interaction-dispatch-disclosure.ts';
+import { refusedBeforeDispatch, thrownBeforeDispatch } from '../../request-dispatch-disclosure.ts';
 import type { BoundTouchExecutor } from '../../touch-runtime.ts';
 import { noActiveSessionError } from '@agent-device/kernel/contracts';
 
