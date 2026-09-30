@@ -160,3 +160,14 @@ for (const row of ROWS) {
     });
   });
 }
+
+test('a plain Error before the exchange is normalized and discloses no', async () => {
+  mockEnsureRunnerSession.mockRejectedValueOnce(new Error('spawn EACCES'));
+  await assert.rejects(tap(), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.message, 'spawn EACCES');
+    assert.equal(error.details?.dispatched, 'no');
+    return true;
+  });
+  assert.equal(mockExecuteRunnerCommandWithSession.mock.calls.length, 0);
+});

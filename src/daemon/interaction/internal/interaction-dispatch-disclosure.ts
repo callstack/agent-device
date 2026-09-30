@@ -1,5 +1,5 @@
 import {
-  AppError,
+  asAppError,
   discloseDispatch,
   discloseUnclassifiedDispatch,
 } from '@agent-device/kernel/errors';
@@ -27,8 +27,10 @@ export async function discloseInteractionDispatch(
       error: { ...response.error, details: { ...response.error.details, dispatched } },
     };
   } catch (error) {
-    if (!(error instanceof AppError)) throw error;
-    throw readOnly ? discloseDispatch(error, 'no') : discloseUnclassifiedDispatch(error, 'unknown');
+    const failure = asAppError(error);
+    throw readOnly
+      ? discloseDispatch(failure, 'no')
+      : discloseUnclassifiedDispatch(failure, 'unknown');
   }
 }
 
