@@ -129,7 +129,7 @@ only by its named composition module per ADR Decision §1).
 `src/daemon/interaction/internal/interaction-common.ts`,
 `src/daemon/interaction-outcome-policy.ts`, `src/daemon/request-finalization.ts`,
 `src/daemon/session-event-log.ts`, `src/daemon/session-snapshot.ts`,
-`src/daemon/recording-gestures.ts`, `src/daemon/deferred-interaction-outcome.ts`.
+`src/daemon/recording-gestures.ts`, `src/daemon/post-gesture-stabilization.ts`.
 
 **Forks not followed**: `request-platform-provider-context.ts` (the call is guarded by the
 router's early return for a bare local daemon — zero runtimes + non-web),
@@ -168,7 +168,7 @@ on iOS) — run on this prefix as siblings of the continuation and are not count
 | 10 | `src/daemon/handlers/snapshot.ts` | `handleSnapshotCommands` routes the plain arm | policy | KEEP — snapshot command routing |
 | 11 | `src/daemon/snapshot-runtime.ts` | `dispatchSnapshotViaRuntime` → `params.execute` | pass-through | KEEP — snapshot execute seam (route tests pin it) |
 | 12 | `src/daemon/snapshot-command-runtime.ts` | resolves the bound capture; wires session/backend; runs the op | orchestration | KEEP — capture wiring + recording |
-| 13 | `src/daemon/deferred-interaction-outcome.ts` | `resolveDeferredInteractionOutcome` before a fresh capture | policy | KEEP — pending-outcome settlement (may short-circuit) |
+| 13 | `src/daemon/post-gesture-stabilization.ts` | `resolveDeferredInteractionOutcome` before a fresh capture | policy | KEEP — post-gesture stabilization and Android freshness settlement (may short-circuit) |
 | 14 | `src/daemon/snapshot-capture.ts` | `resolveSnapshotScope` + the capture attempt | orchestration | KEEP — capture attempt + scope resolution |
 | 15 | `src/daemon/snapshot-session.ts` | `resolveSessionDevice` for the capture | translation | KEEP — snapshot session/device resolution |
 | 16 | `src/daemon/snapshot-runtime-binding.ts` | `resolveBoundSnapshotCaptureRuntime`: admit-then-bind | policy | KEEP — ADR 0019 §9 admit-then-bind seam |

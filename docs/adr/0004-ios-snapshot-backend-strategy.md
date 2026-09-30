@@ -154,7 +154,7 @@ are selector derivation and ADR 0011 delegation-on-error. The latter two are pur
 daemon-independent, but their owner would be the selector pipeline governed by R19, not this
 facet; moving them under ADR 0004 would widen it to a boundary it does not decide. The
 observation and interaction consumers — `selector-capture-runtime.ts`,
-`deferred-interaction-outcome.ts`, `snapshot-capture.ts` and
+`post-gesture-stabilization.ts`, `snapshot-capture.ts` and
 `interaction-touch-android-freshness.ts` — now reach freshness only through the facet or its
 session binding.
 
