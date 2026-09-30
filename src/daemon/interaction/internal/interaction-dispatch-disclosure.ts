@@ -1,15 +1,24 @@
-import { AppError, discloseUnclassifiedDispatch } from '@agent-device/kernel/errors';
-import type { DaemonResponse } from '../../daemon-request.ts';
+import {
+  AppError,
+  type DispatchDisclosure,
+  discloseUnclassifiedDispatch,
+} from '@agent-device/kernel/errors';
+import { resolveCommandRecordingEffect } from '@agent-device/command-registry/registry';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 
 /**
- * The verdict for an interaction failure no producer classified: `unknown`. Only a producer that
- * refuses before dispatch may say `no`, and only one that proved execution may say `yes`; this
- * layer cannot tell either from where the failure surfaced, so it keeps any producer's verdict and
- * otherwise claims nothing.
+ * The verdict for an interaction failure no producer classified. A request the registry declares
+ * read-only (`recordingEffect: 'observes-app'`) never dispatches a mutation, so it is `no`.
+ * Otherwise `unknown`: only a producer that refuses before dispatch may say `no`, and only one that
+ * proved execution may say `yes`, and this layer cannot tell either from where the failure surfaced.
+ * A producer's own verdict is always kept.
  */
 export async function discloseUnclassifiedInteractionDispatch(
+  req: DaemonRequest,
   dispatch: () => Promise<DaemonResponse | null>,
 ): Promise<DaemonResponse | null> {
+  const verdict: DispatchDisclosure =
+    resolveCommandRecordingEffect(req) === 'observes-app' ? 'no' : 'unknown';
   try {
     const response = await dispatch();
     if (!response || response.ok || response.error.details?.dispatched !== undefined) {
@@ -19,11 +28,11 @@ export async function discloseUnclassifiedInteractionDispatch(
       ok: false,
       error: {
         ...response.error,
-        details: { ...response.error.details, dispatched: 'unknown' },
+        details: { ...response.error.details, dispatched: verdict },
       },
     };
   } catch (error) {
-    if (error instanceof AppError) throw discloseUnclassifiedDispatch(error, 'unknown');
+    if (error instanceof AppError) throw discloseUnclassifiedDispatch(error, verdict);
     throw error;
   }
 }

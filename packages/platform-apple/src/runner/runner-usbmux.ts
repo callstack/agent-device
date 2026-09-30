@@ -4,6 +4,7 @@ import { type Socket } from 'node:net';
 import { Deadline } from './host.ts';
 import type { RunnerCommand } from './runner-contract.ts';
 import { openUsbmuxRunnerSocket } from './runner-usbmux-protocol.ts';
+import { markRunnerCommandUnwritten } from './runner-error-classification.ts';
 
 const USBMUXD_SOCKET_PATH = '/var/run/usbmuxd';
 const RUNNER_HTTP_MAX_BODY_BYTES = 64 * 1024 * 1024;
@@ -28,7 +29,9 @@ export function createUsbmuxRunnerTransport(socketPath: string): UsbmuxRunnerTra
         port,
         deadline.remainingMs(),
         signal,
-      );
+      ).catch((error: unknown) => {
+        throw markRunnerCommandUnwritten(error);
+      });
       try {
         return await postRunnerHttpCommand(socket, command, deadline.remainingMs(), signal);
       } catch (error) {

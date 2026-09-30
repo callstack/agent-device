@@ -22,7 +22,9 @@ import {
 import {
   classifyRunnerStartupFailure,
   enrichRunnerStartupFailureWithDeviceStates,
+  isRunnerCommandProvablyUnwritten,
   isUsbmuxDeviceUnattachedError,
+  markRunnerCommandUnwritten,
   RUNNER_CACHE_RECOVERY_HINT,
   runnerConnectFailureDetails,
   shouldRetryRunnerConnectError,
@@ -72,6 +74,9 @@ export async function waitForRunner(
   const { resolveRoute, markUsbmuxUnattached } = createRunnerCommandRouteResolver(device, port);
   let route = await resolveRoute(deadline.remainingMs());
   let lastError: unknown = null;
+  // Every attempt posts the command itself, so the loop gives up "before send" only when no
+  // attempt could have written it.
+  let commandMayHaveBeenWritten = false;
   const maxAttempts = Math.max(1, Math.ceil(timeoutMs / RUNNER_CONNECT_ATTEMPT_INTERVAL_MS));
   try {
     return await retryWithPolicy(
@@ -93,6 +98,7 @@ export async function waitForRunner(
           },
           setLastError: (err) => {
             lastError = err;
+            if (!isRunnerCommandProvablyUnwritten(err)) commandMayHaveBeenWritten = true;
           },
         });
         if (response) return response;
@@ -134,22 +140,51 @@ export async function waitForRunner(
   if (device.kind === 'simulator') {
     const remainingMs = deadline.remainingMs();
     if (remainingMs <= 0) {
-      throw buildRunnerConnectError({ port, endpoints: route.endpoints, logPath, lastError });
+      throw withRunnerWriteEvidence(
+        buildRunnerConnectError({ port, endpoints: route.endpoints, logPath, lastError }),
+        commandMayHaveBeenWritten,
+      );
     }
-    const simResponse = await postCommandViaSimulator(device, port, command, remainingMs, signal);
+    const simResponse = await postCommandViaSimulator(
+      device,
+      port,
+      command,
+      remainingMs,
+      signal,
+    ).catch((error: unknown) => {
+      throw withRunnerWriteEvidence(error, commandMayHaveBeenWritten);
+    });
     return new Response(simResponse.body, { status: simResponse.status });
   }
 
   if (session?.child.exitCode !== null && session?.child.exitCode !== undefined) {
     throw await buildRunnerEarlyExitError({ session, port, logPath });
   }
-  throw buildRunnerConnectError({
-    port,
-    endpoints: route.endpoints,
-    logPath,
-    lastError,
-    deviceStates: session?.startupDeviceStates,
-  });
+  throw withRunnerWriteEvidence(
+    buildRunnerConnectError({
+      port,
+      endpoints: route.endpoints,
+      logPath,
+      lastError,
+      deviceStates: session?.startupDeviceStates,
+    }),
+    commandMayHaveBeenWritten,
+  );
+}
+
+/**
+ * A connect failure is unwritten only when no attempt of the loop could have written the command
+ * and the failure itself carries no write of its own.
+ */
+function withRunnerWriteEvidence(error: unknown, commandMayHaveBeenWritten: boolean): unknown {
+  if (!(error instanceof AppError)) return error;
+  if (commandMayHaveBeenWritten) {
+    error.details = { ...error.details, runnerCommandUnwritten: false };
+    return error;
+  }
+  return error.details?.runnerCommandUnwritten === false
+    ? error
+    : markRunnerCommandUnwritten(error);
 }
 
 type RunnerRouteResolver = ReturnType<typeof createRunnerCommandRouteResolver>['resolveRoute'];
@@ -338,10 +373,12 @@ async function tryRunnerRoute(
   try {
     const remainingMs = params.attemptDeadline?.remainingMs() ?? params.timeoutMs;
     if (remainingMs <= 0) {
-      throw new AppError('COMMAND_FAILED', 'Runner connection deadline exceeded', {
-        port: params.port,
-        timeoutMs: params.timeoutMs,
-      });
+      throw markRunnerCommandUnwritten(
+        new AppError('COMMAND_FAILED', 'Runner connection deadline exceeded', {
+          port: params.port,
+          timeoutMs: params.timeoutMs,
+        }),
+      );
     }
     return await usbmuxRunnerTransport.postCommand(
       device.id,
@@ -385,10 +422,12 @@ async function tryRunnerEndpoints(
     try {
       const remainingMs = attemptDeadline?.remainingMs() ?? timeoutMs;
       if (remainingMs <= 0) {
-        throw new AppError('COMMAND_FAILED', 'Runner connection deadline exceeded', {
-          port,
-          timeoutMs,
-        });
+        throw markRunnerCommandUnwritten(
+          new AppError('COMMAND_FAILED', 'Runner connection deadline exceeded', {
+            port,
+            timeoutMs,
+          }),
+        );
       }
       return await fetchWithTimeout(
         endpoint,
@@ -435,6 +474,8 @@ async function tryRunnerSimulatorEndpoint(
   }
 }
 
+const CURL_COULD_NOT_CONNECT_EXIT_CODE = 7;
+
 async function postCommandViaSimulator(
   device: DeviceInfo,
   port: number,
@@ -471,6 +512,8 @@ async function postCommandViaSimulator(
         reason,
         hint: bootFailureHint(reason),
         ...runnerConnectFailureDetails('runner_connect_refused'),
+        // curl exit 7: it could not connect, so it sent nothing. Any other exit may follow the POST.
+        runnerCommandUnwritten: result.exitCode === CURL_COULD_NOT_CONNECT_EXIT_CODE,
       };
     },
   );

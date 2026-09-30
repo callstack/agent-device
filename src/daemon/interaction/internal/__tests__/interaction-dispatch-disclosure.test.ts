@@ -33,12 +33,17 @@ beforeEach(() => {
 });
 
 type PressScenario = {
+  command?: 'press' | 'get';
   positionals: string[];
   /** Runs inside the device touch, before it fails. */
   duringTouch?: (store: ReturnType<typeof makeSessionStore>, sessionName: string) => void;
 };
 
-async function press({ positionals, duringTouch }: PressScenario): Promise<unknown> {
+async function press({
+  command = 'press',
+  positionals,
+  duringTouch,
+}: PressScenario): Promise<unknown> {
   const sessionStore = makeSessionStore();
   const session = makeSession('dispatch-disclosure');
   session.snapshot = {
@@ -63,13 +68,13 @@ async function press({ positionals, duringTouch }: PressScenario): Promise<unkno
     });
   }
   const response = await handleInteractionCommands({
-    req: { token: 't', session: session.name, command: 'press', positionals, flags: {} },
+    req: { token: 't', session: session.name, command, positionals, flags: {} },
     sessionName: session.name,
     sessionStore,
     contextFromFlags,
     ...getRuntimeBindings(),
   });
-  assert.ok(response && !response.ok, 'expected the press to fail');
+  assert.ok(response && !response.ok, `expected the ${command} to fail`);
   throw new AppError(response.error.code, response.error.message, response.error.details);
 }
 
@@ -112,6 +117,8 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
         store.set(name, { ...current });
       },
     }),
+  'daemon.read-only-command': () =>
+    press({ command: 'get', positionals: ['text', 'label="Missing"'] }),
   'post-action-guard.android-press-left-app': pressThatLeftTheApp,
 };
 
