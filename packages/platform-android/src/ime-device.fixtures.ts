@@ -6,8 +6,8 @@ import type { AndroidAdbExecutor, AndroidAdbExecutorResult } from './adb-transpo
 export type FakeImeDeviceState = {
   settings: Map<string, string>;
   imeSetFails?: boolean;
-  /** `settings get` fails, as it does when it times out under load. */
-  settingsReadsFail?: boolean;
+  /** Reading the selected IME fails, as `settings get` does when it times out under load. */
+  inputMethodReadFails?: boolean;
   /** The IME Android selects when `ime disable` removes the selected one. */
   imeDisableFallback?: string;
   settingsWritesFail?: boolean;
@@ -28,7 +28,7 @@ function handleSettingsCall(
   args: readonly string[],
 ): AndroidAdbExecutorResult {
   const [, , action, , key = '', value = ''] = args;
-  if (action === 'get' && state.settingsReadsFail) {
+  if (action === 'get' && key === 'default_input_method' && state.inputMethodReadFails) {
     return { exitCode: 1, stdout: '', stderr: 'timed out' };
   }
   if (action === 'get') return ok(state.settings.get(key) ?? 'null');

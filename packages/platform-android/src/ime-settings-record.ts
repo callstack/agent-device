@@ -7,11 +7,15 @@ import type { AndroidAdbExecutor } from './adb-transport.ts';
 // not in a host-side file — so any daemon/state-dir can recover it.
 
 const SETTINGS_KEY_PREVIOUS_IME = 'agent_device_ime_helper_previous_ime';
+// Set before a rebind disables the helper and cleared once the helper reads back selected: while it
+// is set, the current IME may be Android's fallback rather than the user's choice.
+const SETTINGS_KEY_REBIND_DISPLACED = 'agent_device_ime_helper_rebind_displaced';
 const SETTINGS_NAMESPACE = 'secure';
 const DEFAULT_INPUT_METHOD_KEY = 'default_input_method';
 
 export const ANDROID_TEST_IME_SETTINGS_KEYS = {
   previousIme: SETTINGS_KEY_PREVIOUS_IME,
+  rebindDisplaced: SETTINGS_KEY_REBIND_DISPLACED,
   defaultInputMethod: DEFAULT_INPUT_METHOD_KEY,
 };
 
@@ -56,6 +60,37 @@ export async function clearPersistedPreviousIme(adb: AndroidAdbExecutor): Promis
     allowFailure: true,
     timeoutMs: 5_000,
   });
+}
+
+export async function readPersistedRebindDisplacement(adb: AndroidAdbExecutor): Promise<boolean> {
+  const result = await runAdbShell(
+    adb,
+    ['settings', 'get', SETTINGS_NAMESPACE, SETTINGS_KEY_REBIND_DISPLACED],
+    { allowFailure: true, timeoutMs: 5_000 },
+  );
+  return result.exitCode === 0 && normalizeSettingsValue(result.stdout) === '1';
+}
+
+/** Answers true only when the write succeeded and reads back. */
+export async function writePersistedRebindDisplacement(adb: AndroidAdbExecutor): Promise<boolean> {
+  const result = await runAdbShell(
+    adb,
+    ['settings', 'put', SETTINGS_NAMESPACE, SETTINGS_KEY_REBIND_DISPLACED, '1'],
+    { allowFailure: true, timeoutMs: 5_000 },
+  );
+  if (result.exitCode !== 0) return false;
+  return await readPersistedRebindDisplacement(adb);
+}
+
+export async function clearPersistedRebindDisplacement(adb: AndroidAdbExecutor): Promise<void> {
+  await runAdbShell(
+    adb,
+    ['settings', 'delete', SETTINGS_NAMESPACE, SETTINGS_KEY_REBIND_DISPLACED],
+    {
+      allowFailure: true,
+      timeoutMs: 5_000,
+    },
+  );
 }
 
 /** Restores the device record changed by a failed pre-switch transaction; never touches markers. */

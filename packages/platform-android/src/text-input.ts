@@ -31,7 +31,7 @@ import {
   selectAndroidImeHelperArtifact,
   sendAndroidImeHelperText,
 } from './ime-helper.ts';
-import { isAndroidTestImeActive } from './ime-lifecycle.ts';
+import { getAndroidTestImeOwnership } from './ime-state.ts';
 import { focusAndroid } from './input-actions.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
@@ -202,7 +202,9 @@ async function admitAndroidTextChannel(
   action: AndroidTextInputAction,
   text: string,
 ): Promise<{ backend: 'test-ime'; packageName: string } | { backend: 'adb-shell' }> {
-  if (isAndroidTestImeActive(device)) {
+  const ownership = getAndroidTestImeOwnership(device);
+  if (ownership) {
+    if (ownership.rebindUnconfirmed) await confirmAndroidTestImeRebound(device);
     const artifact = await selectAndroidImeHelperArtifact(resolveAndroidAdbProvider(device));
     return { backend: 'test-ime', packageName: artifact.manifest.packageName };
   }
@@ -214,6 +216,20 @@ async function admitAndroidTextChannel(
   assertAndroidShellTextSupported(text);
   assertAndroidShellInputIsAppOwned(inputState, action);
   return { backend: 'adb-shell' };
+}
+
+/** A helper whose last rebind went unconfirmed holds no input session until a rebind confirms it. */
+async function confirmAndroidTestImeRebound(device: DeviceInfo): Promise<void> {
+  if (await rebindAndroidTestIme(device)) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Android test IME is not the selected input method on ${device.name ?? device.id}.`,
+    {
+      reason: 'android_test_ime_rebind_unconfirmed',
+      deviceId: device.id,
+      hint: 'Close and reopen the session to restore the keyboard and reactivate the test IME.',
+    },
+  );
 }
 
 async function typeAndroidImeHelper(

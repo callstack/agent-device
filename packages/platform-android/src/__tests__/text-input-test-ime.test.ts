@@ -50,6 +50,7 @@ import {
   setAndroidTestImeActiveForTests,
 } from '../ime-lifecycle.ts';
 import { fakeImeDeviceAdb, type FakeImeDeviceState } from '../ime-device.fixtures.ts';
+import { getAndroidTestImeOwnership } from '../ime-state.ts';
 import {
   readAndroidTestImeRecoveryMarkers,
   writeAndroidTestImeRecoveryMarker,
@@ -237,7 +238,7 @@ test('fillAndroid re-focuses the target when the first helper attempt fails veri
   const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
     exec: async (args) => {
       calls.push(args);
-      if (args[1] === 'settings' && args[2] === 'get') return helperSelected();
+      if (args[1] === 'settings' && args[2] === 'get') return helperSelected(args);
       if (args[1] === 'am' && args[2] === 'broadcast') {
         const action = args[args.indexOf('-a') + 1];
         if (action === 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT') {
@@ -291,7 +292,7 @@ test('fillAndroid rebinds the helper IME before retrying a commit that left the 
   const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
     exec: async (args) => {
       calls.push(args);
-      if (args[1] === 'settings' && args[2] === 'get') return helperSelected();
+      if (args[1] === 'settings' && args[2] === 'get') return helperSelected(args);
       if (args[1] === 'ime' && args[2] === 'set') rebound = true;
       if (args[1] === 'am' && args[2] === 'broadcast') {
         const action = args[args.indexOf('-a') + 1];
@@ -331,7 +332,7 @@ test('fillAndroid does not take a pre-filled field left on its hint for app form
   let currentText = 'old name';
   const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
     exec: async (args) => {
-      if (args[1] === 'settings' && args[2] === 'get') return helperSelected();
+      if (args[1] === 'settings' && args[2] === 'get') return helperSelected(args);
       if (args[1] === 'ime' && args[2] === 'set') rebound = true;
       const action = args[args.indexOf('-a') + 1];
       // The clear lands, then the session goes stale and drops the commit until the rebind.
@@ -358,8 +359,8 @@ test('fillAndroid does not take a pre-filled field left on its hint for app form
 });
 
 test('fillAndroid stops on an unconfirmed rebind and leaves the helper for close-time restore', async () => {
-  setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
   const stateDir = await mkdtempForTest('agent-device-ime-rebind-');
+  setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true, stateDir);
   await writeAndroidTestImeRecoveryMarker(stateDir, ANDROID_EMULATOR.id);
   const device: FakeImeDeviceState = {
     settings: new Map([
@@ -367,7 +368,7 @@ test('fillAndroid stops on an unconfirmed rebind and leaves the helper for close
       ['agent_device_ime_helper_previous_ime', 'com.samsung/.Keyboard'],
     ]),
     // `settings get` timing out under load: the rebind cannot read back which IME is selected.
-    settingsReadsFail: true,
+    inputMethodReadFails: true,
   };
   const deviceAdb = fakeImeDeviceAdb(device);
   let commits = 0;
@@ -399,7 +400,7 @@ test('fillAndroid stops on an unconfirmed rebind and leaves the helper for close
     'the rebind leaves the durable restore record alone',
   );
 
-  device.settingsReadsFail = false;
+  device.inputMethodReadFails = false;
   const restored = await withAndroidAdbProvider(
     { exec: adb, snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
     { serial: ANDROID_EMULATOR.id },
@@ -409,6 +410,69 @@ test('fillAndroid stops on an unconfirmed rebind and leaves the helper for close
   assert.equal(restored.reason, 'ok');
   assert.equal(device.settings.get('default_input_method'), 'com.samsung/.Keyboard');
   assert.deepEqual(await readAndroidTestImeRecoveryMarkers(stateDir), []);
+});
+
+test('typeAndroid never broadcasts into a helper whose rebind went unconfirmed', async () => {
+  setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
+  const ownership = getAndroidTestImeOwnership(ANDROID_EMULATOR);
+  assert.ok(ownership);
+  ownership.rebindUnconfirmed = true;
+  const device: FakeImeDeviceState = {
+    settings: new Map([['default_input_method', 'com.android.inputmethod.latin/.LatinIME']]),
+    imeSetFails: true,
+  };
+  const deviceAdb = fakeImeDeviceAdb(device);
+  const broadcasts: (readonly string[])[] = [];
+
+  await withAndroidAdbProvider(
+    async (args) => {
+      if (args[1] === 'am') {
+        broadcasts.push(args);
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }
+      return await deviceAdb(args);
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      await assert.rejects(
+        typeAndroid(ANDROID_EMULATOR, 'Jane'),
+        (error: { code?: string; details?: { reason?: string } }) =>
+          error.code === 'COMMAND_FAILED' &&
+          error.details?.reason === 'android_test_ime_rebind_unconfirmed',
+      );
+    },
+  );
+
+  assert.deepEqual(broadcasts, []);
+  assert.equal(device.settings.get('agent_device_ime_helper_rebind_displaced'), '1');
+});
+
+test('typeAndroid rebinds an unconfirmed helper before it broadcasts', async () => {
+  setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
+  const ownership = getAndroidTestImeOwnership(ANDROID_EMULATOR);
+  assert.ok(ownership);
+  ownership.rebindUnconfirmed = true;
+  const device: FakeImeDeviceState = {
+    settings: new Map([['default_input_method', 'com.android.inputmethod.latin/.LatinIME']]),
+  };
+  const deviceAdb = fakeImeDeviceAdb(device);
+  const calls: string[] = [];
+
+  await withAndroidAdbProvider(
+    async (args) => {
+      calls.push(`${args[1]} ${args[2]}`);
+      if (args[1] === 'am') return { exitCode: 0, stdout: '', stderr: '' };
+      return await deviceAdb(args);
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      await typeAndroid(ANDROID_EMULATOR, 'Jane');
+    },
+  );
+
+  assert.ok(calls.lastIndexOf('ime set') < calls.indexOf('am broadcast'));
+  assert.equal(ownership.rebindUnconfirmed, false);
+  assert.equal(device.settings.has('agent_device_ime_helper_rebind_displaced'), false);
 });
 
 // Unicode is only beyond the *shell* path. Refusing it before reading which IME is active denied
@@ -560,11 +624,11 @@ function androidInputXml(options: { text: string }): string {
   return `<?xml version="1.0" encoding="UTF-8"?><hierarchy><node package="com.example" class="android.widget.EditText" text="${options.text}" focused="true" bounds="[0,0][200,100]"/></hierarchy>`;
 }
 
-/** The IME read-back after a rebind: the helper is still the selected IME. */
-function helperSelected() {
-  return {
-    exitCode: 0,
-    stdout: 'com.callstack.agentdevice.imehelper/.TestInputMethodService\n',
-    stderr: '',
-  };
+/** Settings reads after a rebind: its device record reads back, and the helper is still selected. */
+function helperSelected(args: readonly string[]) {
+  const stdout =
+    args[4] === 'agent_device_ime_helper_rebind_displaced'
+      ? '1\n'
+      : 'com.callstack.agentdevice.imehelper/.TestInputMethodService\n';
+  return { exitCode: 0, stdout, stderr: '' };
 }
