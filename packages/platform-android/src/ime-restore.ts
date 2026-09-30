@@ -85,7 +85,7 @@ async function restoreAndroidTestImeFor(
   const currentIme = await readAndroidDefaultInputMethod(adb);
   if (
     currentIme !== ANDROID_IME_HELPER_SERVICE_COMPONENT &&
-    !(await readPersistedRebindDisplacement(adb))
+    (await readPersistedRebindDisplacement(adb)) !== true
   ) {
     // Helper is not active — the user switched away, or the helper was never really set. Do not
     // overwrite the current IME, and do not clear the device record (a concurrent activation could

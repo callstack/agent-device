@@ -223,7 +223,7 @@ async function confirmAndroidTestImeRebound(device: DeviceInfo): Promise<void> {
   if (await rebindAndroidTestIme(device)) return;
   throw new AppError(
     'COMMAND_FAILED',
-    `Android test IME is not the selected input method on ${device.name ?? device.id}.`,
+    `Could not confirm the Android test IME rebind on ${device.name ?? device.id}.`,
     {
       reason: 'android_test_ime_rebind_unconfirmed',
       deviceId: device.id,

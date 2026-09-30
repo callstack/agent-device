@@ -163,5 +163,6 @@ test("startup recovery undoes a crashed daemon's unconfirmed rebind", async () =
 
   expect(state.settings.get('default_input_method')).toBe('com.samsung/.Keyboard');
   expect(state.settings.has('agent_device_ime_helper_rebind_displaced')).toBe(false);
+  expect(state.settings.has('agent_device_ime_helper_previous_ime')).toBe(false);
   expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([]);
 });

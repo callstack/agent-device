@@ -62,13 +62,17 @@ export async function clearPersistedPreviousIme(adb: AndroidAdbExecutor): Promis
   });
 }
 
-export async function readPersistedRebindDisplacement(adb: AndroidAdbExecutor): Promise<boolean> {
+/** Whether the device record marks an unconfirmed rebind, or `undefined` when it cannot be read. */
+export async function readPersistedRebindDisplacement(
+  adb: AndroidAdbExecutor,
+): Promise<boolean | undefined> {
   const result = await runAdbShell(
     adb,
     ['settings', 'get', SETTINGS_NAMESPACE, SETTINGS_KEY_REBIND_DISPLACED],
     { allowFailure: true, timeoutMs: 5_000 },
   );
-  return result.exitCode === 0 && normalizeSettingsValue(result.stdout) === '1';
+  if (result.exitCode !== 0) return undefined;
+  return normalizeSettingsValue(result.stdout) === '1';
 }
 
 /** Answers true only when the write succeeded and reads back. */
@@ -79,10 +83,11 @@ export async function writePersistedRebindDisplacement(adb: AndroidAdbExecutor):
     { allowFailure: true, timeoutMs: 5_000 },
   );
   if (result.exitCode !== 0) return false;
-  return await readPersistedRebindDisplacement(adb);
+  return (await readPersistedRebindDisplacement(adb)) === true;
 }
 
-export async function clearPersistedRebindDisplacement(adb: AndroidAdbExecutor): Promise<void> {
+/** Answers true only when the record reads back as cleared. */
+export async function clearPersistedRebindDisplacement(adb: AndroidAdbExecutor): Promise<boolean> {
   await runAdbShell(
     adb,
     ['settings', 'delete', SETTINGS_NAMESPACE, SETTINGS_KEY_REBIND_DISPLACED],
@@ -91,6 +96,7 @@ export async function clearPersistedRebindDisplacement(adb: AndroidAdbExecutor):
       timeoutMs: 5_000,
     },
   );
+  return (await readPersistedRebindDisplacement(adb)) === false;
 }
 
 /** Restores the device record changed by a failed pre-switch transaction; never touches markers. */
