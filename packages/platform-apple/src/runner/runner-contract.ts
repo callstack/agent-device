@@ -277,10 +277,12 @@ const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlyMap<
 /**
  * Runner codes whose reply proves the command never reached the device. The refusals answer before
  * the command runs, the selector refusals included: the runner resolves the element and refuses
- * before any gesture. Every other code, and a reply without one, is `unknown`: a failure after the
- * command started cannot prove whether its gesture landed.
+ * before any gesture. `INVALID_ARGS` comes only from request decoding and argument validation,
+ * each ahead of any gesture. Every other code, and a reply without one, is `unknown`:
+ * `UNSUPPORTED_OPERATION` is also what a synthesized gesture or element tap reports after it ran.
  */
 const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new Map([
+  ['INVALID_ARGS', 'no'],
   ['ELEMENT_NOT_FOUND', 'no'],
   ['ELEMENT_OFFSCREEN', 'no'],
   ['AMBIGUOUS_MATCH', 'no'],
