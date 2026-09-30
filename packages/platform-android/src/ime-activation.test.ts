@@ -1,5 +1,9 @@
 import { beforeEach, expect, test } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  isRequestCanceledError,
+} from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidImeHelperArtifact } from './helper-artifacts.ts';
 import { bindAndroidAdbHostStub, type AndroidAdbHostStub } from './adb-host.fixtures.ts';
@@ -210,6 +214,31 @@ test('a rebind whose read-back throws is recorded as unconfirmed, not rejected',
   );
 
   expect(rebound).toBe(false);
+  expect(state.settings.get('agent_device_ime_helper_rebind_displaced')).toBe('1');
+  expect(isAndroidTestImeActive(DEVICE)).toBe(true);
+});
+
+test('a request canceled mid-rebind rejects as canceled and keeps the device record', async () => {
+  activationHost();
+  const state: FakeImeDeviceState = {
+    settings: new Map([['default_input_method', 'com.samsung/.Keyboard']]),
+  };
+  await activateWith(state);
+  const deviceAdb = fakeImeDeviceAdb(state);
+
+  const rebind = withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        if (args[2] === 'disable') throw createRequestCanceledError();
+        return await deviceAdb(args);
+      },
+      imeHelperArtifact: ARTIFACT,
+    },
+    { serial: DEVICE.id },
+    async () => await rebindAndroidTestIme(DEVICE),
+  );
+
+  await expect(rebind).rejects.toSatisfy(isRequestCanceledError);
   expect(state.settings.get('agent_device_ime_helper_rebind_displaced')).toBe('1');
   expect(isAndroidTestImeActive(DEVICE)).toBe(true);
 });

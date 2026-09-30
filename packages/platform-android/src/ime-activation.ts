@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { asAppError, normalizeError } from '@agent-device/kernel/errors';
+import { asAppError, isRequestCanceledError, normalizeError } from '@agent-device/kernel/errors';
 import { waitForStartupRecoveryFence } from '@agent-device/contracts/startup-recovery-fence';
 import { emitAndroidAdbDiagnostic, requireAndroidAdbHost } from './adb-host.ts';
 import { resolveAndroidAdbExecutor, resolveAndroidAdbProvider } from './adb-provider-scope.ts';
@@ -280,12 +280,16 @@ export async function rebindAndroidTestIme(device: DeviceInfo): Promise<boolean>
   });
 }
 
-/** The IME selected after the rebind, or `undefined` when the rebind or its read-back failed. */
+/**
+ * The IME selected after the rebind, or `undefined` when the rebind or its read-back failed. A
+ * canceled request rejects instead; the device record stays set for restore either way.
+ */
 async function rebindAndReadSelectedIme(adb: AndroidAdbExecutor): Promise<string | undefined> {
   try {
     await rebindAndroidImeHelper(adb);
     return await readAndroidDefaultInputMethod(adb);
-  } catch {
+  } catch (error) {
+    if (isRequestCanceledError(error)) throw error;
     return undefined;
   }
 }
