@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from 'node:timers/promises';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 import { agentDeviceRequestHeaders } from './request-headers.ts';
 import { basicAuthHeader, trimLeadingSlash, withTrailingSlash } from './webdriver-utils.ts';
@@ -200,8 +201,12 @@ export class WebDriverTransport {
       requestSignal,
     );
     const payload = text ? parseJsonResponse(text) : {};
-    if (!ok) throw webdriverError(status, payload);
-    return readWebDriverValue(payload);
+    if (ok) return readWebDriverValue(payload);
+    const error = webdriverError(status, payload);
+    if (isWebDriverRouteUnsupported(error)) {
+      emitDiagnostic({ phase: WEBDRIVER_ROUTE_UNSUPPORTED_REASON, data: { method, path, status } });
+    }
+    throw error;
   }
 
   private async fetchWebDriver(

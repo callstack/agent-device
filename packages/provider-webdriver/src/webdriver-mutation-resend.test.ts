@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test } from 'vitest';
+import {
+  countDiagnosticEventsByPhase,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 import { createCloudWebDriverCapabilities } from './capabilities.ts';
 import { WebDriverClient } from './webdriver-client.ts';
@@ -246,7 +250,10 @@ test('an unsupported app-termination route falls back to the sibling route once'
     unsupportedRoute: 'POST /session/:id/appium/device/terminate_app',
   });
 
-  await client.terminateApp('com.example.app');
+  await withDiagnosticsScope({ command: 'close' }, async () => {
+    await client.terminateApp('com.example.app');
+    assert.equal(countDiagnosticEventsByPhase(['webdriver_route_unsupported']), 1);
+  });
 
   assert.equal(sendsTo('POST /session/:id/appium/device/terminate_app'), 1);
   assert.equal(sendsTo('mobile: terminateApp'), 1);

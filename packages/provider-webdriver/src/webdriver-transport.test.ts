@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import net, { type AddressInfo } from 'node:net';
 import { afterEach, test } from 'vitest';
+import {
+  countDiagnosticEventsByPhase,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   WebDriverTransport,
@@ -285,10 +289,19 @@ for (const { status, body, unsupported } of ROUTE_ANSWERS) {
     });
     globalThis.fetch = async () => Response.json(body, { status });
 
-    await assert.rejects(transport.requestValue('POST', '/session/wd-1/back'), (error: unknown) => {
-      assert.equal(isWebDriverRouteUnsupported(error), unsupported);
-      if (unsupported) assert.equal((error as AppError).details?.dispatched, 'no');
-      return true;
+    await withDiagnosticsScope({ command: 'back' }, async () => {
+      await assert.rejects(
+        transport.requestValue('POST', '/session/wd-1/back'),
+        (error: unknown) => {
+          assert.equal(isWebDriverRouteUnsupported(error), unsupported);
+          if (unsupported) assert.equal((error as AppError).details?.dispatched, 'no');
+          return true;
+        },
+      );
+      assert.equal(
+        countDiagnosticEventsByPhase(['webdriver_route_unsupported']),
+        unsupported ? 1 : 0,
+      );
     });
   });
 }
