@@ -27,7 +27,7 @@ import {
   type InteractionSurfaceSignature,
 } from './interaction-outcome-policy.ts';
 import { refFrameState } from './ref-frame.ts';
-import { isPostGestureStabilizationPending } from './deferred-interaction-outcome.ts';
+import { isPostGestureStabilizationPending } from './post-gesture-stabilization.ts';
 import type { SessionState } from './session-state.ts';
 
 /**

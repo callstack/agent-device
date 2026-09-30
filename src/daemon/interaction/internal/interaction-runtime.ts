@@ -23,7 +23,7 @@ import type {
   InteractionRuntimeInput,
 } from './types.ts';
 import { finalizeTouchInteraction as finalizeInteraction } from './interaction-common.ts';
-import { markDeferredInteractionOutcome } from '../../deferred-interaction-outcome.ts';
+import { markDeferredInteractionOutcome } from '../../post-gesture-stabilization.ts';
 import { isSessionRecording } from '../../session-script-publication-capability.ts';
 import { recordTouchVisualizationEvent } from '../../recording-gestures.ts';
 import type { SessionStore } from '../../session-store.ts';

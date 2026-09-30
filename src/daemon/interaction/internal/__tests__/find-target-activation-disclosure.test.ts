@@ -7,7 +7,7 @@ import type { DaemonResponse } from '../../../daemon-request.ts';
 import { legacyDispatchCapture } from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { getRuntimeBindings } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { handleFindCommands } from '../../index.ts';
-import { markDeferredInteractionOutcome } from '../../../deferred-interaction-outcome.ts';
+import { markDeferredInteractionOutcome } from '../../../post-gesture-stabilization.ts';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 
 vi.mock('../../../snapshot-interactor-capture.ts', async () => {

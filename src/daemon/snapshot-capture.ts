@@ -24,7 +24,7 @@ import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { clearAndroidSnapshotFreshness } from './session-snapshot-freshness.ts';
 import type { SnapshotFreshnessMode } from '@agent-device/capture-kit/snapshot-freshness';
 import { contextFromFlags } from './context.ts';
-import { resolveDeferredInteractionOutcome } from './deferred-interaction-outcome.ts';
+import { resolveDeferredInteractionOutcome } from './post-gesture-stabilization.ts';
 import type { SessionState } from './session-state.ts';
 import { type DaemonFailureResponse, errorResponse } from '@agent-device/kernel/contracts';
 

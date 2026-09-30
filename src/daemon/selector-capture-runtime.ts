@@ -15,7 +15,7 @@ import type { RequestCaptureProof } from './capture-disclosure.ts';
 import { captureSnapshot } from './snapshot-capture.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
 import { getActiveAndroidSnapshotFreshness } from './session-snapshot-freshness.ts';
-import { isPostGestureStabilizationPending } from './deferred-interaction-outcome.ts';
+import { isPostGestureStabilizationPending } from './post-gesture-stabilization.ts';
 import { isOutdatedObservation } from './ref-frame.ts';
 import type { BoundSelectorCapture } from './selector-capture-binding.ts';
 import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
