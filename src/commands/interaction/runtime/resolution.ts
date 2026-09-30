@@ -5,6 +5,7 @@ import { readinessScheduleFor } from '@agent-device/selectors/selector-pipeline-
 import {
   attemptSelectorResolution,
   pollForSelectorReadiness,
+  type SelectorReadinessWait,
   selectorInteractionFailure,
 } from './selector-readiness.ts';
 import {
@@ -138,6 +139,7 @@ async function resolveSelectorInteractionTarget(
   const selectorExpression = target.selector;
   let capture: InteractionSnapshot;
   let resolved: SelectorResolution | null;
+  let readiness: SelectorReadinessWait | undefined;
   const readinessSchedule = readinessScheduleFor(params.pipeline.poll, params.readinessTimeoutMs);
   if (!readinessSchedule) {
     const attempt = await attemptSelectorResolution(runtime, options, selectorExpression, params);
@@ -162,6 +164,7 @@ async function resolveSelectorInteractionTarget(
     );
     capture = ready.capture;
     resolved = ready.resolved;
+    readiness = ready.readiness;
   }
   // #1542: see the ref-target twin in ref-target-resolution.ts.
   const selected = resolved;
@@ -188,6 +191,7 @@ async function resolveSelectorInteractionTarget(
     kind: 'selector',
     point,
     target: { kind: 'selector', selector: resolved.selector },
+    ...(readiness ? { readiness } : {}),
     ...describeResolvedInteractionNode(
       runtime,
       visibleNode,

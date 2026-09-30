@@ -44,7 +44,12 @@ export type SelectorResolutionAttempt = {
 export type ResolvedSelectorAttempt = {
   capture: InteractionSnapshot;
   resolved: SelectorResolution;
+  /** The wait that preceded the hit; absent when the first capture resolved. */
+  readiness?: SelectorReadinessWait;
 };
+
+/** What a successful readiness wait reports: present only when more than one capture was needed. */
+export type SelectorReadinessWait = Pick<SelectorReadinessDetails, 'polls' | 'waitedMs'>;
 
 /** The readiness poll's evidence, attached to a target-not-found failure only (never to a refusal). */
 export type SelectorReadinessDetails = {
@@ -272,7 +277,14 @@ export async function pollForSelectorReadiness(
     ...(runtime.clock ? { clock: runtime.clock } : {}),
     phase: 'interaction_target_readiness',
   });
-  if (observed.kind === 'done') return observed.result;
+  if (observed.kind === 'done') {
+    return observed.polls.length > 1
+      ? {
+          ...observed.result,
+          readiness: { polls: observed.polls.length, waitedMs: observed.waitedMs },
+        }
+      : observed.result;
+  }
   if (observed.kind === 'failed') throw withSparseReadiness(observed.error, observed);
   throw await readinessExhaustedFailure(runtime, selectorExpression, params, observed);
 }

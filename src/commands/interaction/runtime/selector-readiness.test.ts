@@ -60,10 +60,26 @@ test('runtime press with readinessTimeoutMs polls until the target appears', asy
 
   assert.equal(result.kind, 'selector');
   assert.equal(result.node?.label, 'Continue');
+  assert.ok(result.kind === 'selector' && result.readiness && result.readiness.polls > 1);
   assert.ok(
     captures >= 4,
     `expected at least 4 captures before the target appeared, got ${captures}`,
   );
+});
+
+test('runtime press that resolves on the first capture reports no readiness despite a budget', async () => {
+  const device = createInteractionDevice(makeSnapshotState([CONTINUE_BUTTON]), {
+    clock: createFakeClock(),
+    tap: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+    readinessTimeoutMs: 2_000,
+  });
+
+  assert.equal(result.kind, 'selector');
+  assert.equal('readiness' in result, false);
 });
 
 test('runtime press caps a readinessTimeoutMs larger than the row maxTimeoutMs at 2_000ms', async () => {

@@ -1,6 +1,7 @@
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { ReadinessWaitEvidence } from './interaction.ts';
 import type { GestureExecutionProfile } from './gesture-plan-types.ts';
 import type { SessionScope } from './session-scope.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
@@ -260,6 +261,12 @@ export type ReplayDispatchOptions = Readonly<{
    * (pre-action) when its winner differs in local identity OR structural position.
    */
   replayTargetGuard?: ReplayTargetGuardDenotation;
+  /**
+   * The wait the replay step's pre-dispatch target gate already spent, set ONLY by the replay step
+   * loop when it polled more than once. The interaction response builder adds it to the dispatch's
+   * own wait so a successful step reports one `readiness` for the whole step.
+   */
+  replayReadinessWait?: ReadinessWaitEvidence;
   /** Dual-endpoint counterpart of `replayTargetGuard` for target-authored drag. */
   replayTargetGuards?: Readonly<{
     source: ReplayTargetGuardDenotation;

@@ -142,6 +142,41 @@ test('press waits for a selector missing on the first two captures, then taps on
   );
 });
 
+test('press whose target appears on the third poll reports readiness with polls 3 on the success response', async () => {
+  await withPressReadinessDaemon(
+    [
+      snapshotEntry(APPLICATION_ONLY_NODES),
+      snapshotEntry(APPLICATION_ONLY_NODES),
+      snapshotEntry(APPLICATION_ONLY_NODES),
+      snapshotEntry(APPLICATION_ONLY_NODES),
+      repeatSnapshotEntry(CONTINUE_BUTTON_NODES),
+      tapEntry(200, 322),
+    ],
+    async (daemon) => {
+      const press = await daemon.callCommand('press', ['label=Continue'], {
+        readinessTimeoutMs: 2_000,
+      });
+      const data = assertRpcOk(press);
+      const readiness = data.readiness as { polls: number; waitedMs: number } | undefined;
+      assert.equal(readiness?.polls, 3);
+      assert.equal(typeof readiness?.waitedMs, 'number');
+    },
+  );
+});
+
+test('press whose first capture hits carries no readiness field even with a readiness budget', async () => {
+  await withPressReadinessDaemon(
+    [snapshotEntry(CONTINUE_BUTTON_NODES), tapEntry(200, 322)],
+    async (daemon) => {
+      const press = await daemon.callCommand('press', ['label=Continue'], {
+        readinessTimeoutMs: 2_000,
+      });
+      const data = assertRpcOk(press);
+      assert.equal('readiness' in data, false);
+    },
+  );
+});
+
 test('press fails with the standard no-match error, carrying readiness evidence, when the target never appears', async () => {
   await withPressReadinessDaemon([repeatSnapshotEntry(APPLICATION_ONLY_NODES)], async (daemon) => {
     // No fake clock is wired into this daemon-composed runtime path (AgentDeviceRuntime.clock is

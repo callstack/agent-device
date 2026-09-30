@@ -181,7 +181,17 @@ export type ResolvedInteractionTarget =
       resolution?: ResolutionDisclosure;
       recordingTarget?: RecordingTargetOverride;
       preAction?: SurfaceScopedNodes;
+      readiness?: ReadinessWaitEvidence;
     };
+
+/**
+ * The wait a successful press/click/longpress spent before its target appeared. Reported only when
+ * more than one capture was needed, so its presence means the step would have failed without the wait.
+ */
+export type ReadinessWaitEvidence = {
+  polls: number;
+  waitedMs: number;
+};
 
 /**
  * A post-action capture that describes a DIFFERENT surface than the pre-action baseline (#2438): an
@@ -354,6 +364,7 @@ type TouchResponseDataBase = {
   evidence?: InteractionEvidence;
   settle?: SettleObservation;
   resolution?: ResolutionDisclosure;
+  readiness?: ReadinessWaitEvidence;
   cost?: ResponseCost;
   /** Direct iOS Maestro coordinate-fallback signals. */
   maestroNonHittableCoordinateFallbackAllowed?: boolean;

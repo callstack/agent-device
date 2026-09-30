@@ -8,6 +8,7 @@ import type {
 } from '@agent-device/ad-replay';
 import type { LocalIdentity } from '@agent-device/ad-script';
 import type { TargetAncestryEntry } from '@agent-device/contracts/replay';
+import type { ReadinessWaitEvidence } from '@agent-device/contracts/interaction';
 import {
   isReplayTargetGuardMismatchResponse,
   isWaitLandmarkMismatchResponse,
@@ -59,6 +60,16 @@ export function applyReplayDispatchGuard(
           : undefined;
   return guardDispatch
     ? { ...replayReq, dispatch: { ...replayReq.dispatch, ...guardDispatch } }
+    : replayReq;
+}
+
+/** Carries the wait the pre-dispatch gate spent into the dispatch, so its success response reports it. */
+export function applyReplayReadinessWait(
+  replayReq: ReplayDispatchRequest,
+  wait: ReadinessWaitEvidence | undefined,
+): ReplayDispatchRequest {
+  return wait
+    ? { ...replayReq, dispatch: { ...replayReq.dispatch, replayReadinessWait: wait } }
     : replayReq;
 }
 

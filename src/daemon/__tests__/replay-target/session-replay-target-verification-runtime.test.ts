@@ -225,6 +225,34 @@ test('an annotated click whose target renders on the second capture waits for it
   ]);
 });
 
+test('a step that waited in the gate hands its wait to the dispatch for the success response', async () => {
+  const scene = replayScriptScene('agent-device-replay-target-verify-wait-evidence-', [
+    SAVE_ANNOTATION,
+    'click id="save"',
+  ]);
+
+  mockDispatchCommand.mockResolvedValueOnce(emptyCapture()).mockResolvedValue(saveButtonCapture());
+
+  const response = await scene.replay();
+
+  expect(response.ok).toBe(true);
+  expect(scene.invoked[0]?.internal?.replayReadinessWait).toEqual({ polls: 2, waitedMs: 200 });
+});
+
+test('a step whose gate hit on the first capture hands no wait to the dispatch', async () => {
+  const scene = replayScriptScene('agent-device-replay-target-verify-no-wait-evidence-', [
+    SAVE_ANNOTATION,
+    'click id="save"',
+  ]);
+
+  mockDispatchCommand.mockResolvedValue(saveButtonCapture());
+
+  const response = await scene.replay();
+
+  expect(response.ok).toBe(true);
+  expect(scene.invoked[0]?.internal?.replayReadinessWait).toBeUndefined();
+});
+
 test('the dispatch gets only the readiness budget the gate left', async () => {
   const scene = replayScriptScene('agent-device-replay-target-verify-shared-budget-', [
     SAVE_ANNOTATION,

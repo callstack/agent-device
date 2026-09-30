@@ -31,6 +31,7 @@ import type { ObservationEvidence } from '@agent-device/capture-kit/observe-unti
 import { collectReplayActionArtifactPaths } from '@agent-device/replay-port/session-replay-runtime-artifacts';
 import {
   applyReplayDispatchGuard,
+  applyReplayReadinessWait,
   classifyReplayDispatchFailure,
   toAdReplayStepFailure,
 } from './session-replay-dispatch-narrowing.ts';
@@ -270,7 +271,10 @@ export function createAdReplayStepRuntime(params: {
               readinessTimeoutMs: gateWait.remainingBudgetMs,
             }
           : {}),
-        req: applyReplayDispatchGuard(ctx.replayReq, guard),
+        req: applyReplayReadinessWait(
+          applyReplayDispatchGuard(ctx.replayReq, guard),
+          gateWait && { polls: gateWait.readiness.polls, waitedMs: gateWait.readiness.waitedMs },
+        ),
         sessionName: ctx.sessionName,
         action,
         resolved: resolvedAction,
