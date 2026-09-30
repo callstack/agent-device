@@ -2,12 +2,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import {
-  countDiagnosticEventsByPhase,
-  withDiagnosticsScope,
-} from '@agent-device/host-kit/diagnostics';
+import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 import { createCloudWebDriverCapabilities } from './capabilities.ts';
+import { mkdtempForTest } from './tmp-dir.fixtures.ts';
 import { WebDriverClient } from './webdriver-client.ts';
 import { createWebDriverInteractor } from './webdriver-interactor.ts';
 
@@ -159,29 +157,39 @@ const MUTATING_ROUTES: Record<string, MutatingRouteRow> = {
 };
 
 /**
- * Every mutating route the provider sends, read from its source: each non-GET client request, and
- * each `mobile:` script passed to `executeScript`. `POST .../execute/sync` itself is the carrier
+ * Every mutating route the provider sends, read from its source: each non-GET client request, each
+ * Appium app route and its `mobile:` sibling, and each `mobile:` script passed to `executeScript`. `POST .../execute/sync` itself is the carrier
  * of the `mobile:` scripts, which are enumerated by name.
  */
 function mutatingRoutesInSource(): string[] {
   const sourceDir = path.dirname(new URL(import.meta.url).pathname);
-  const routes = new Set<string>();
-  for (const file of fs.readdirSync(sourceDir)) {
-    if (!file.endsWith('.ts') || file.endsWith('.test.ts')) continue;
-    const source = fs.readFileSync(path.join(sourceDir, file), 'utf8');
-    for (const match of source.matchAll(
+  const sources = fs
+    .readdirSync(sourceDir)
+    .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts'))
+    .map((file) => fs.readFileSync(path.join(sourceDir, file), 'utf8'));
+  const routes = sources.flatMap((source) => [
+    ...requestRoutesIn(source),
+    ...appRoutesWithSiblingIn(source),
+    ...[...source.matchAll(/\.executeScript\(\s*'(mobile: \w+)'/g)].map((match) => match[1]!),
+  ]);
+  return [...new Set(routes)].filter((route) => route !== 'POST /session/:id/execute/sync').sort();
+}
+
+function requestRoutesIn(source: string): string[] {
+  return [
+    ...source.matchAll(
       /(sessionRequest|requestValue)\(\s*'(POST|PUT|PATCH|DELETE)',\s*[`']([^`']+)[`']/g,
-    )) {
-      const [, helper, method, routePath] = match;
-      const absolute = helper === 'sessionRequest' ? `/session/:id${routePath}` : routePath;
-      const route = `${method} ${absolute!.replace('${sessionId}', ':id')}`;
-      if (route !== 'POST /session/:id/execute/sync') routes.add(route);
-    }
-    for (const match of source.matchAll(/\.executeScript\(\s*'(mobile: \w+)'/g)) {
-      routes.add(match[1]!);
-    }
-  }
-  return [...routes].sort();
+    ),
+  ].map(([, helper, method, routePath]) => {
+    const absolute = helper === 'sessionRequest' ? `/session/:id${routePath}` : routePath!;
+    return `${method} ${absolute.replace('${sessionId}', ':id')}`;
+  });
+}
+
+function appRoutesWithSiblingIn(source: string): string[] {
+  return [...source.matchAll(/appRouteWithSibling\(\s*'([^']+)',\s*'(mobile: \w+)'/g)].flatMap(
+    ([, route, script]) => [`POST /session/:id${route}`, script!],
+  );
 }
 
 test('the mutating-route table covers every mutating route the provider sends', () => {
@@ -242,24 +250,68 @@ test('a timed-out app activation does not fall back to the sibling route', async
   assert.equal(sendsTo('mobile: activateApp'), 0);
 });
 
+/** The `--debug` diagnostics log a request writes, one parsed event per line. */
+async function debugEvents(
+  run: () => Promise<void>,
+): Promise<{ phase: string; level: string; data?: Record<string, unknown> }[]> {
+  const logPath = path.join(await mkdtempForTest('webdriver-fallback-'), 'request.ndjson');
+  const read = () =>
+    fs.existsSync(logPath)
+      ? fs
+          .readFileSync(logPath, 'utf8')
+          .trim()
+          .split('\n')
+          .map(
+            (line) =>
+              JSON.parse(line) as { phase: string; level: string; data?: Record<string, unknown> },
+          )
+      : [];
+  await withDiagnosticsScope({ command: 'open', debug: true, logPath }, async () => {
+    await run();
+    await vi.waitFor(() => assert.equal(read().length, 2));
+  });
+  return read();
+}
+
 // A driver that answers the first route with "unknown command" never ran it, so the sibling route
-// is the one attempt that reaches the device.
-test('an unsupported app-termination route falls back to the sibling route once', async () => {
-  const { client, sendsTo } = await connectedWebDriverInteractor({
-    hangRoute: 'none',
-    unsupportedRoute: 'POST /session/:id/appium/device/terminate_app',
-  });
+// is the one attempt that reaches the device. The debug log shows the refused route with its W3C
+// code, then the sibling route that ran.
+for (const { action, route, script } of [
+  { action: 'activateApp', route: '/appium/device/activate_app', script: 'mobile: activateApp' },
+  { action: 'terminateApp', route: '/appium/device/terminate_app', script: 'mobile: terminateApp' },
+] as const) {
+  test(`an unsupported ${action} route falls back to the sibling route once`, async () => {
+    const { client, sendsTo } = await connectedWebDriverInteractor({
+      hangRoute: 'none',
+      unsupportedRoute: `POST /session/:id${route}`,
+    });
 
-  await withDiagnosticsScope({ command: 'close' }, async () => {
-    await client.terminateApp('com.example.app');
-    await vi.waitFor(() =>
-      assert.equal(countDiagnosticEventsByPhase(['webdriver_route_unsupported']), 1),
+    const events = await debugEvents(() => client[action]('com.example.app'));
+
+    assert.deepEqual(
+      events.map(({ phase, level, data }) => ({ phase, level, data })),
+      [
+        {
+          phase: 'webdriver_route_unsupported',
+          level: 'debug',
+          data: {
+            method: 'POST',
+            path: `/session/wd-1${route}`,
+            status: 404,
+            code: 'unknown command',
+          },
+        },
+        {
+          phase: 'webdriver_route_fallback',
+          level: 'debug',
+          data: { from: route, to: script, status: 200 },
+        },
+      ],
     );
+    assert.equal(sendsTo(`POST /session/:id${route}`), 1);
+    assert.equal(sendsTo(script), 1);
   });
-
-  assert.equal(sendsTo('POST /session/:id/appium/device/terminate_app'), 1);
-  assert.equal(sendsTo('mobile: terminateApp'), 1);
-});
+}
 
 // W3C also answers 404 for a session that no longer exists. That is not an unsupported route, so
 // the sibling route is not tried and the failure is not classified as never dispatched here.

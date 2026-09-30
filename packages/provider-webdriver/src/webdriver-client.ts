@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  emitWebDriverDiagnostic,
   isWebDriverRouteUnsupported,
   WebDriverTransport,
   type WebDriverAuth,
@@ -111,20 +112,36 @@ export class WebDriverClient {
   }
 
   async activateApp(appId: string): Promise<void> {
-    try {
-      await this.sessionRequest('POST', '/appium/device/activate_app', { appId });
-    } catch (error) {
-      if (!isWebDriverRouteUnsupported(error)) throw error;
-      await this.executeScript('mobile: activateApp', [{ appId, bundleId: appId }]);
-    }
+    await this.appRouteWithSibling('/appium/device/activate_app', 'mobile: activateApp', appId);
   }
 
   async terminateApp(appId: string): Promise<void> {
+    await this.appRouteWithSibling('/appium/device/terminate_app', 'mobile: terminateApp', appId);
+  }
+
+  /**
+   * Sends the Appium app route, and the `mobile:` sibling script only when the driver answered
+   * that it does not implement the first route.
+   */
+  private async appRouteWithSibling(
+    route: string,
+    siblingScript: string,
+    appId: string,
+  ): Promise<void> {
     try {
-      await this.sessionRequest('POST', '/appium/device/terminate_app', { appId });
+      await this.sessionRequest('POST', route, { appId });
     } catch (error) {
       if (!isWebDriverRouteUnsupported(error)) throw error;
-      await this.executeScript('mobile: terminateApp', [{ appId, bundleId: appId }]);
+      const { status } = await this.transport.request(
+        'POST',
+        `/session/${this.requireSessionId()}/execute/sync`,
+        { script: siblingScript, args: [{ appId, bundleId: appId }] },
+      );
+      emitWebDriverDiagnostic('webdriver_route_fallback', {
+        from: route,
+        to: siblingScript,
+        status,
+      });
     }
   }
 

@@ -121,6 +121,9 @@ type ResolvedWebDriverRequestPolicy = Required<
  */
 const IDEMPOTENT_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD']);
 
+/** A successful WebDriver answer: its HTTP status and the unwrapped W3C `value`. */
+export type WebDriverAnswer = { status: number; value: unknown };
+
 /** Focused HTTP/retry policy for one WebDriver endpoint; session semantics stay in WebDriverClient. */
 export class WebDriverTransport {
   private readonly endpoint: URL;
@@ -147,8 +150,18 @@ export class WebDriverTransport {
     body?: unknown,
     overrides?: WebDriverRequestOverrides,
   ): Promise<unknown> {
+    return (await this.request(method, path, body, overrides)).value;
+  }
+
+  /** The request's answer with the HTTP status it arrived with. */
+  async request(
+    method: string,
+    path: string,
+    body?: unknown,
+    overrides?: WebDriverRequestOverrides,
+  ): Promise<WebDriverAnswer> {
     const idempotent = overrides?.idempotent ?? IDEMPOTENT_METHODS.has(method);
-    return await this.requestValueWithRetries(method, path, body, {
+    return await this.requestWithRetries(method, path, body, {
       retryAttempts:
         overrides?.retryAttempts ?? (idempotent ? this.requestPolicy.retryAttempts : 0),
       timeoutMs: overrides?.timeoutMs ?? this.requestPolicy.timeoutMs,
@@ -156,22 +169,16 @@ export class WebDriverTransport {
     });
   }
 
-  private async requestValueWithRetries(
+  private async requestWithRetries(
     method: string,
     path: string,
     body: unknown,
     overrides: ResolvedWebDriverRequestOverrides,
-  ): Promise<unknown> {
+  ): Promise<WebDriverAnswer> {
     let lastError: unknown;
     for (let attempt = 0; attempt <= overrides.retryAttempts; attempt += 1) {
       try {
-        return await this.requestValueOnce(
-          method,
-          path,
-          body,
-          overrides.timeoutMs,
-          overrides.signal,
-        );
+        return await this.requestOnce(method, path, body, overrides.timeoutMs, overrides.signal);
       } catch (error) {
         lastError = error;
         if (
@@ -185,13 +192,13 @@ export class WebDriverTransport {
     throw lastError;
   }
 
-  private async requestValueOnce(
+  private async requestOnce(
     method: string,
     path: string,
     body: unknown,
     timeoutMs: number,
     requestSignal?: AbortSignal,
-  ): Promise<unknown> {
+  ): Promise<WebDriverAnswer> {
     const { ok, status, text } = await this.fetchWebDriver(
       method,
       path,
@@ -200,9 +207,16 @@ export class WebDriverTransport {
       requestSignal,
     );
     const payload = text ? parseJsonResponse(text) : {};
-    if (ok) return readWebDriverValue(payload);
+    if (ok) return { status, value: readWebDriverValue(payload) };
     const error = webdriverError(status, payload);
-    if (isWebDriverRouteUnsupported(error)) reportRouteUnsupported({ method, path, status });
+    if (isWebDriverRouteUnsupported(error)) {
+      emitWebDriverDiagnostic(WEBDRIVER_ROUTE_UNSUPPORTED_REASON, {
+        method,
+        path,
+        status,
+        code: w3cErrorCode(payload) ?? null,
+      });
+    }
     throw error;
   }
 
@@ -358,25 +372,29 @@ const UNSUPPORTED_ROUTE_STATUSES: ReadonlySet<number> = new Set([404, 405, 501])
  * means the route is not implemented by this driver.
  */
 function isUnsupportedRouteAnswer(status: number, payload: unknown): boolean {
+  const code = w3cErrorCode(payload);
+  if (code !== undefined) return UNSUPPORTED_ROUTE_ERROR_CODES.has(code.toLowerCase());
+  return UNSUPPORTED_ROUTE_STATUSES.has(status);
+}
+
+/** The W3C `value.error` string of a response body, if it carries one. */
+function w3cErrorCode(payload: unknown): string | undefined {
   const value =
     payload && typeof payload === 'object' && 'value' in payload
       ? (payload as { value?: unknown }).value
       : undefined;
   const code =
     value && typeof value === 'object' ? (value as { error?: unknown }).error : undefined;
-  if (typeof code === 'string') return UNSUPPORTED_ROUTE_ERROR_CODES.has(code.toLowerCase());
-  return UNSUPPORTED_ROUTE_STATUSES.has(status);
+  return typeof code === 'string' ? code : undefined;
 }
 
 /**
- * Records the answer in the request diagnostics. The emitter loads on demand because this path is
- * rare and the transport sits in the provider's eager import closure.
+ * Records a debug event in the request diagnostics. The emitter loads on demand because the
+ * events are rare and the transport sits in the provider's eager import closure.
  */
-function reportRouteUnsupported(data: { method: string; path: string; status: number }): void {
+export function emitWebDriverDiagnostic(phase: string, data: Record<string, unknown>): void {
   void import('@agent-device/host-kit/diagnostics')
-    .then(({ emitDiagnostic }) =>
-      emitDiagnostic({ phase: WEBDRIVER_ROUTE_UNSUPPORTED_REASON, data }),
-    )
+    .then(({ emitDiagnostic }) => emitDiagnostic({ level: 'debug', phase, data }))
     .catch(() => undefined);
 }
 
