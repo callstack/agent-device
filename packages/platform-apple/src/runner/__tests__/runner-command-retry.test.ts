@@ -51,6 +51,10 @@ import { prepareIosRunner, runAppleRunnerCommand } from '../runner-client.ts';
 import { resetRunnerRecycleLedgerForTests } from '../runner-recycle-ledger.ts';
 import type { RunnerXctestrunArtifact } from '../runner-xctestrun.ts';
 
+/** Every connect attempt was refused before a byte was written, so a restart may resend the command. */
+const unwrittenConnectRefusal = (): AppError =>
+  runnerConnectFailure('runner_connect_refused', undefined, { dispatched: 'no' });
+
 const requestCancellation = createTestRequestCancellation();
 const { markRequestCanceled, clearRequestCanceled, isRequestCanceled } = requestCancellation;
 
@@ -306,7 +310,7 @@ test('mutating commands restart stale ready sessions when the preflight probe ne
 
   mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
+    .mockRejectedValueOnce(unwrittenConnectRefusal())
     .mockResolvedValueOnce({ message: 'tapped' });
 
   const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
@@ -329,7 +333,7 @@ test('mutating commands retry startup sessions with stale bundle cleanup', async
 
   mockEnsureRunnerSession.mockResolvedValueOnce(startupSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
+    .mockRejectedValueOnce(unwrittenConnectRefusal())
     .mockResolvedValueOnce({ message: 'tapped' });
 
   const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
@@ -814,7 +818,7 @@ test('mutating commands invalidate the retry session without replaying again', a
 
   mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
+    .mockRejectedValueOnce(unwrittenConnectRefusal())
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
     .mockResolvedValueOnce({ lifecycleState: 'notAccepted' });
 
@@ -1192,7 +1196,7 @@ test('a later command in the same request cannot pay for a second recycle boot',
 
   mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
+    .mockRejectedValueOnce(unwrittenConnectRefusal())
     .mockResolvedValueOnce({ message: 'tapped' });
 
   // First command consumes the request's only recycle via restart-and-replay.

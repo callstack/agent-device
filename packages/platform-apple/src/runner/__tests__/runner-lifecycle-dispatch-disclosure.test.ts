@@ -39,6 +39,8 @@ vi.mock('../runner-session.ts', async () => {
 });
 
 import { runAppleRunnerCommand } from '../runner-client.ts';
+import { RUNNER_REPLY_LOST_REASON } from '../runner-command-recovery.ts';
+import type { RunnerCommand } from '../runner-contract.ts';
 import { resetRunnerRecycleLedgerForTests } from '../runner-recycle-ledger.ts';
 import { waitForRunner } from '../runner-startup-transport.ts';
 
@@ -72,12 +74,9 @@ const readinessPreflightFailure = (): AppError =>
 
 /**
  * The first attempt runs the real connect loop against a simulator whose every fetch fails the
- * same way and whose simctl curl fallback exits with `curlExitCode`; the restart it earns fails.
+ * same way and whose simctl curl fallback exits with `curlExitCode`.
  */
-async function connectLoopThenFailedRestart(transport: {
-  fetchFailure: () => Error;
-  curlExitCode: number;
-}): Promise<unknown> {
+function stubConnectLoopFailure(transport: { fetchFailure: () => Error; curlExitCode: number }) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => {
@@ -91,13 +90,21 @@ async function connectLoopThenFailedRestart(transport: {
       stderr: `curl exited ${transport.curlExitCode}`,
     })),
   });
-  mockEnsureRunnerSession
-    .mockResolvedValueOnce(makeRunnerSession())
-    .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'runner restart failed'));
   mockExecuteRunnerCommandWithSession.mockImplementationOnce(
     async (device, session, command) =>
       await waitForRunner(device, session.port, command, undefined, 400),
   );
+}
+
+/** A connect loop that fails as `transport` says, then a restart that fails. */
+async function connectLoopThenFailedRestart(transport: {
+  fetchFailure: () => Error;
+  curlExitCode: number;
+}): Promise<unknown> {
+  stubConnectLoopFailure(transport);
+  mockEnsureRunnerSession
+    .mockResolvedValueOnce(makeRunnerSession())
+    .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'runner restart failed'));
   try {
     return await tap();
   } catch (error) {
@@ -105,6 +112,38 @@ async function connectLoopThenFailedRestart(transport: {
     assert.equal(error.details?.runnerRestartReason, 'runner_connect_failed_before_command_send');
     throw error;
   }
+}
+
+/** A fetch deadline, then a simctl curl that timed out after its POST: the command may have run. */
+const writtenThenLost = {
+  fetchFailure: () => new AppError('COMMAND_FAILED', 'Runner command deadline exceeded'),
+  curlExitCode: 28,
+};
+
+/**
+ * `command` is written and its reply lost on the first runner, the runner restarts, and the
+ * restarted runner answers every command with `restartedAnswer`.
+ */
+async function writtenThenLostThenRestarted(
+  command: RunnerCommand,
+  restartedAnswer: () => Promise<Record<string, unknown>>,
+): Promise<Record<string, unknown>> {
+  stubConnectLoopFailure(writtenThenLost);
+  mockEnsureRunnerSession
+    .mockResolvedValueOnce(makeRunnerSession())
+    .mockResolvedValueOnce(makeRunnerSession({ port: 8101 }));
+  mockExecuteRunnerCommandWithSession.mockImplementation(restartedAnswer);
+  try {
+    return await runAppleRunnerCommand(IOS_SIMULATOR, command);
+  } finally {
+    assert.equal(mockEnsureRunnerSession.mock.calls.length, 2, 'the runner is restarted');
+  }
+}
+
+function sendsOnRestartedRunner(): number {
+  return mockExecuteRunnerCommandWithSession.mock.calls.filter(
+    ([, session]) => session.port === 8101,
+  ).length;
 }
 
 const DRIVERS: Record<string, () => Promise<unknown>> = {
@@ -124,11 +163,29 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
         }),
       curlExitCode: 7,
     }),
-  'ios-runner.transport.written-then-lost': () =>
-    connectLoopThenFailedRestart({
-      fetchFailure: () => new AppError('COMMAND_FAILED', 'Runner command deadline exceeded'),
-      curlExitCode: 28,
-    }),
+  'ios-runner.transport.written-then-lost': async () => {
+    try {
+      return await writtenThenLostThenRestarted(
+        { command: 'tap', x: 120, y: 240 },
+        async () => ({}),
+      );
+    } catch (error) {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+      assert.equal(error.details?.runnerRestarted, true);
+      assert.equal(sendsOnRestartedRunner(), 0, 'the tap is not sent again');
+      throw error;
+    }
+  },
+  'ios-runner.transport.read-only-written-then-lost': async () => {
+    try {
+      return await writtenThenLostThenRestarted({ command: 'snapshot' }, async () => {
+        throw new AppError('COMMAND_FAILED', 'runner resend failed', { dispatched: 'unknown' });
+      });
+    } finally {
+      assert.equal(sendsOnRestartedRunner(), 1, 'the read is sent again');
+    }
+  },
   'ios-runner.pre-send.readiness-preflight-after-restart': async () => {
     mockEnsureRunnerSession
       .mockResolvedValueOnce(makeRunnerSession())

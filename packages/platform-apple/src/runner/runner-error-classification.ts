@@ -115,7 +115,10 @@ type RunnerErrorVerdicts = {
   connectRetry?: boolean;
   /** Session-fatal classification: invalidate the cached runner session with this reason. */
   sessionFatalReason?: string;
-  /** Connect-shaped failure before the command was sent: restart the session and replay. */
+  /**
+   * Connect-shaped failure: restart the session. The command is resent only when the attempt
+   * provably wrote nothing or the command is read-only.
+   */
   restartBeforeSend?: boolean;
   /** Readiness preflight gave up before the command was written: restart the session and replay. */
   restartAfterReadinessPreflight?: boolean;
@@ -610,9 +613,9 @@ export function resolveRunnerFatalErrorReason(error: unknown): string | undefine
 }
 
 /**
- * A connect-shaped failure that surfaced before the command was sent: restart
- * the runner session and replay the command, rather than probing a runner
- * that never accepted the connection.
+ * A connect-shaped failure: restart the runner session rather than probing a runner that never
+ * accepted the connection. Whether the command is resent on the restarted runner is decided by
+ * what proves the first attempt could not have run it.
  */
 export function shouldRestartRunnerBeforeCommandSend(error: unknown): boolean {
   return runnerErrorVerdict(error, 'restartBeforeSend') ?? false;

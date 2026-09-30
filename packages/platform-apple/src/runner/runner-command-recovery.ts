@@ -53,6 +53,31 @@ const RUNNER_STATUS_RECOVERY_TIMEOUT_MS = 3_000;
  */
 export const RUNNER_REPLY_LOST_REASON = 'runner_reply_lost';
 
+/**
+ * The command was written and its reply lost, and the runner was restarted without resending it:
+ * a restarted runner's journal cannot say whether the first send ran.
+ */
+export function buildRunnerRestartedWithoutResendError(
+  command: RunnerCommand,
+  transportError: AppError,
+  options: AppleRunnerCommandOptions,
+): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `Runner command "${command.command}" may have run before its reply was lost, so agent-device restarted the runner without sending it again.`,
+    {
+      command: command.command,
+      commandId: command.commandId,
+      reason: RUNNER_REPLY_LOST_REASON,
+      recovery: 'runner_restarted_without_resend',
+      hint: `Run snapshot -i to inspect the current UI and check whether "${command.command}" took effect before you retry it.`,
+      logPath: options.logPath,
+      transportError: transportError.message,
+    },
+    transportError,
+  );
+}
+
 export async function handleRunnerTransportErrorAfterCommandSend(params: {
   device: DeviceInfo;
   session: RunnerSession;

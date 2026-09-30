@@ -256,8 +256,14 @@
   {
     "id": "ios-runner.transport.written-then-lost",
     "producer": "ios-runner",
-    "trigger": "a connect attempt posted the command and then timed out (fetch deadline, simctl curl exit 28); the failure keeps the runner_connect_refused restart verdict, and the restart that replays it failed",
+    "trigger": "a connect attempt posted a mutating command and then timed out (fetch deadline, simctl curl exit 28); the runner is restarted, and the command is not sent again because nothing proves the first send did not run",
     "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.transport.read-only-written-then-lost",
+    "producer": "ios-runner",
+    "trigger": "a connect attempt posted a read-only command and then timed out (fetch deadline, simctl curl exit 28); the runner is restarted and the read is sent again, a read has no side effect, and the resend failed",
+    "dispatched": "no"
   },
   {
     "id": "ios-runner.pre-send.readiness-preflight-after-restart",
