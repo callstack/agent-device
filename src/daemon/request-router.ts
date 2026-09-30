@@ -331,7 +331,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       providerRuntimeRequiredIds,
       cloudArtifactProvider,
       providerAppCatalog,
-      invoke: handleRequest,
+      invoke: recordNestedRequests(handleRequest, dispatchLedger),
       invokeReplayAction: allowReplayActions
         ? recordNestedRequests(
             createReplayScopedActionInvoker(lockedScope, providerScope),

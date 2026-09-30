@@ -90,6 +90,18 @@
     "dispatched": "unknown"
   },
   {
+    "id": "daemon.route.batch-mutation-then-refused-step",
+    "producer": "daemon",
+    "trigger": "batch [press lands, press refused before send]: the failing step reports no, but an executed step mutated; the batch reports unknown with details.dispatchedSteps 1",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon.route.batch-read-then-refused-step",
+    "producer": "daemon",
+    "trigger": "batch [get, press refused before send]: no executed step mutated, so the failing step's no stands",
+    "dispatched": "no"
+  },
+  {
     "id": "maestro-direct.fallback.pre-send-refusal",
     "producer": "daemon",
     "trigger": "the direct iOS selector tap failed with a runner refusal disclosed no (connect refused before send); the tree path taps instead",
