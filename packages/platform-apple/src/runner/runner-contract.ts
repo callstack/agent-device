@@ -262,9 +262,12 @@ export const RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES: ReadonlySet<string> = n
  * the scroll keyboard refusal for a surface the runner declined to swipe under the keys, and the
  * retriable `APP_NOT_RUNNING` for a read the runner refused rather than launch the session app.
  */
-const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlyMap<string, { retriable?: true }> = new Map([
-  [RUNNER_BUSY_RUNNER_CODE, { retriable: true }],
-  [MAIN_THREAD_TIMEOUT_RUNNER_CODE, {}],
+const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlyMap<
+  string,
+  { retriable?: true; reason?: RunnerReportedErrorReason }
+> = new Map([
+  [RUNNER_BUSY_RUNNER_CODE, { retriable: true, reason: 'runner_busy' }],
+  [MAIN_THREAD_TIMEOUT_RUNNER_CODE, { reason: 'runner_main_thread_timeout' }],
   [APP_NOT_RUNNING_RUNNER_CODE, { retriable: true }],
   [ALERT_NOT_FOUND_RUNNER_CODE, {}],
   [SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE, {}],
@@ -286,12 +289,19 @@ const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new 
   [MAIN_THREAD_TIMEOUT_RUNNER_CODE, 'unknown'],
 ]);
 
+/**
+ * `details.reason` for the runner codes a consumer acts on, so it reads one field instead of
+ * `details.runnerErrorCode`, which stays for the runner's own vocabulary.
+ */
+type RunnerReportedErrorReason = 'runner_busy' | 'runner_main_thread_timeout';
+
 /** Wire code plus the details every path must publish for one runner-reported error code. */
 export type RunnerReportedErrorClass = Readonly<{
   code: AppError['code'];
   details: Readonly<{
     runnerErrorCode?: string;
     retriable?: true;
+    reason?: RunnerReportedErrorReason;
     dispatched: DispatchDisclosure;
   }>;
 }>;

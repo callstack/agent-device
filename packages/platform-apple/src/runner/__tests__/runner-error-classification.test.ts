@@ -71,6 +71,18 @@ test('only the runner busy refusal earns a resend; a retriable flag alone does n
   assert.equal(isRetryableRunnerError(commandFailed('boom', { retriable: true })), false);
 });
 
+test('the main-thread runner codes publish details.reason beside details.runnerErrorCode', () => {
+  const busy = classifyRunnerReportedError('RUNNER_BUSY');
+  assert.equal(busy.code, 'COMMAND_FAILED');
+  assert.equal(busy.details.runnerErrorCode, 'RUNNER_BUSY');
+  assert.equal(busy.details.reason, 'runner_busy');
+  const timeout = classifyRunnerReportedError('MAIN_THREAD_TIMEOUT');
+  assert.equal(timeout.code, 'COMMAND_FAILED');
+  assert.equal(timeout.details.runnerErrorCode, 'MAIN_THREAD_TIMEOUT');
+  assert.equal(timeout.details.reason, 'runner_main_thread_timeout');
+  assert.equal(classifyRunnerReportedError('APP_NOT_RUNNING').details.reason, undefined);
+});
+
 test('retryable requires an AppError with COMMAND_FAILED', () => {
   assert.equal(isRetryableRunnerError(new Error('fetch failed')), false);
   assert.equal(isRetryableRunnerError(new AppError('DEVICE_NOT_FOUND', 'fetch failed')), false);
