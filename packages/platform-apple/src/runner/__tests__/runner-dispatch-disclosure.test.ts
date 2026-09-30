@@ -71,17 +71,18 @@ async function replyFailure(code: string): Promise<unknown> {
 /**
  * The runner hangs up on the command, then answers the status probe with `status`. A read goes
  * through the connect loop, which posts again on each attempt, so the runner hangs up on every
- * attempt and the loop's simctl curl fallback times out after its POST.
+ * attempt until the loop gives up, and the loop's simctl curl fallback times out after its POST.
+ * The read's short timeout only bounds how long the loop runs.
  */
 async function lostResponse(
   status: FakeRunnerResponse[],
   command: RunnerCommand = TAP,
 ): Promise<unknown> {
   const readOnly = isReadOnlyRunnerCommand(command);
-  const hangUps: FakeRunnerResponse[] = Array.from({ length: readOnly ? 20 : 1 }, () => ({
-    kind: 'hangUp',
-  }));
-  server = await startFakeRunnerServer({ [command.command]: hangUps, status });
+  server = await startFakeRunnerServer({
+    [command.command]: [{ kind: readOnly ? 'hangUpAlways' : 'hangUp' }],
+    status,
+  });
   if (readOnly) {
     appleRunnerTestHost.update({
       runXcrun: vi.fn(async () => ({ exitCode: 28, stdout: '', stderr: 'curl exited 28' })),
