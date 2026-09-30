@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type DispatchDisclosure } from '@agent-device/kernel/errors';
 import { agentDeviceRequestHeaders } from './request-headers.ts';
 import { basicAuthHeader, trimLeadingSlash, withTrailingSlash } from './webdriver-utils.ts';
 
@@ -34,11 +34,7 @@ export function isWebDriverRequestTimeout(error: unknown): error is AppError {
  * that a request executed, so a failure is either `no` (the request never reached the driver) or
  * `unknown`.
  */
-type WebDriverDispatchDisclosure = 'no' | 'unknown';
-
-function dispatchDisclosure(dispatched: WebDriverDispatchDisclosure): {
-  dispatched: WebDriverDispatchDisclosure;
-} {
+function dispatchDisclosure(dispatched: DispatchDisclosure): { dispatched: DispatchDisclosure } {
   return { dispatched };
 }
 
