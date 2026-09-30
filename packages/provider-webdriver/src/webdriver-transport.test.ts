@@ -307,3 +307,52 @@ for (const { status, body, unsupported } of ROUTE_ANSWERS) {
     });
   });
 }
+
+/** The shape undici rejects with: `TypeError('fetch failed')` whose `cause` holds the socket error. */
+function fetchFailedWith(cause: unknown): TypeError {
+  return new TypeError('fetch failed', { cause });
+}
+
+function socketError(code: string): Error {
+  return Object.assign(new Error(code), { code });
+}
+
+/** `socketError(code)` wrapped in `layers` code-less errors, so the code sits `layers + 1` causes down. */
+function nestedCause(code: string, layers: number): Error {
+  let error = socketError(code);
+  for (let layer = 0; layer < layers; layer += 1) error = new Error('wrapped', { cause: error });
+  return error;
+}
+
+async function dispatchedAfter(failure: TypeError): Promise<unknown> {
+  const transport = new WebDriverTransport({
+    clientVersion: '0.0.0-test',
+    endpoint: 'http://cloud-webdriver.test/wd/hub/',
+  });
+  globalThis.fetch = async () => {
+    throw failure;
+  };
+  try {
+    await transport.requestValue('POST', '/session/wd-1/actions', {});
+  } catch (error) {
+    return (error as AppError).details?.dispatched;
+  }
+  throw new Error('the request did not fail');
+}
+
+// Happy-eyeballs connects surface as an AggregateError over every address tried. One address that
+// connected and then reset means the request may have reached the driver.
+test('an AggregateError discloses no only when every member failed before connecting', async () => {
+  const allRefused = new AggregateError([socketError('ECONNREFUSED'), socketError('ECONNREFUSED')]);
+  const oneReset = new AggregateError([socketError('ECONNREFUSED'), socketError('ECONNRESET')]);
+
+  assert.equal(await dispatchedAfter(fetchFailedWith(allRefused)), 'no');
+  assert.equal(await dispatchedAfter(fetchFailedWith(oneReset)), 'unknown');
+});
+
+// The cause chain is read to depth 4 below the thrown error. A code further down is not read, and
+// a failure with no readable code never proves the request stayed off the wire.
+test('a pre-connect code is read to the depth cap and not beyond', async () => {
+  assert.equal(await dispatchedAfter(fetchFailedWith(nestedCause('ECONNREFUSED', 3))), 'no');
+  assert.equal(await dispatchedAfter(fetchFailedWith(nestedCause('ECONNREFUSED', 4))), 'unknown');
+});
