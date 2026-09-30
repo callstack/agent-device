@@ -8,14 +8,22 @@ import {
   DISPATCH_DISCLOSURE_TABLE_PATH,
   dispatchDisclosureRowsOwnedBy,
 } from '@agent-device/contracts/dispatch-disclosure-fixtures';
-import { withAndroidAdbProvider, type AndroidAdbExecutor } from '../adb-executor.ts';
+import {
+  androidAdbResultError,
+  withAndroidAdbProvider,
+  type AndroidAdbExecutor,
+} from '../adb-executor.ts';
 import { completeAndroidFillVerification } from '../fill-verification.ts';
 import { pressAndroid } from '../input-actions.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
-import { typeAndroid } from '../text-input.ts';
+import { fillAndroid, typeAndroid } from '../text-input.ts';
 import { executeAndroidTouchHelperPlan } from '../touch-helper.ts';
 import { lowerAndroidTouchPlan } from '../touch-plan-lowering.ts';
-import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from './test-utils/android-snapshot-helper.ts';
+import {
+  ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+  createAndroidSnapshotHelperExecutor,
+} from './test-utils/android-snapshot-helper.ts';
+import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import { withFakeAdb } from './test-utils/fake-adb.ts';
 import {
   ANDROID_TOUCH_HELPER_MANIFEST as manifest,
@@ -49,7 +57,7 @@ afterEach(async () => {
   await resetAndroidSnapshotHelperSessions();
 });
 
-function isShellInput(args: readonly string[], subcommand: 'tap' | 'text'): boolean {
+function isShellInput(args: readonly string[], subcommand: 'tap' | 'text' | 'keyevent'): boolean {
   return args[0] === 'shell' && args[1] === 'input' && args[2] === subcommand;
 }
 
@@ -70,6 +78,63 @@ async function typeFailingOnSecondChunk(): Promise<void> {
     },
     async ({ device }) => await typeAndroid(device, 'filed the expense'),
   );
+}
+
+async function typeLeadingNewlineWithoutAdb(): Promise<void> {
+  await withFakeAdb(
+    (args) =>
+      isShellInput(args, 'text') || isShellInput(args, 'keyevent')
+        ? new AppError('TOOL_MISSING', 'adb not found in PATH')
+        : undefined,
+    async ({ device }) => await typeAndroid(device, '\nfiled'),
+  );
+}
+
+const FILL_MISMATCH_XML =
+  '<?xml version="1.0" encoding="UTF-8"?><hierarchy><node package="com.example" class="android.widget.EditText" text="zzz" focused="true" bounds="[0,0][200,100]"/></hierarchy>';
+
+/**
+ * The first clear-and-retype pass types and reads back other text; the second pass's `input text`
+ * then fails. Each capture advances the clock past the verification deadline, so the first pass
+ * gives up after one sample instead of waiting the real deadline out.
+ */
+async function fillFailingInSecondPass(): Promise<void> {
+  let offsetMs = 0;
+  const realNow = Date.now.bind(Date);
+  const now = vi.spyOn(Date, 'now').mockImplementation(() => realNow() + offsetMs);
+  let textInputs = 0;
+  const exec: AndroidAdbExecutor = async (args) => {
+    const result = { exitCode: 0, stdout: '', stderr: '' };
+    if (!isShellInput(args, 'text')) return result;
+    textInputs += 1;
+    if (textInputs < 2) return result;
+    throw androidAdbResultError(`adb ${args.join(' ')} exited with code 1`, {
+      exitCode: 1,
+      stdout: '',
+      stderr: 'error: device offline',
+    });
+  };
+  try {
+    await withAndroidAdbProvider(
+      {
+        exec: createAndroidSnapshotHelperExecutor({
+          exec,
+          captureXml: () => {
+            offsetMs += 2_000;
+            return FILL_MISMATCH_XML;
+          },
+        }),
+        snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+      },
+      { serial: ANDROID_EMULATOR.id },
+      async () => {
+        await fillAndroid(ANDROID_EMULATOR, 10, 10, 'filed');
+      },
+    );
+  } finally {
+    now.mockRestore();
+    assert.equal(textInputs, 2);
+  }
 }
 
 async function oneShotGesture(instrument: AndroidAdbExecutor): Promise<void> {
@@ -98,6 +163,13 @@ const DRIVERS: Record<string, { drive: () => Promise<unknown>; dispatchedSteps?:
   'android-adb.input-text.failed-after-chunk': {
     drive: typeFailingOnSecondChunk,
     dispatchedSteps: 1,
+  },
+  'android-adb.input-text.tool-missing-before-first-input': {
+    drive: typeLeadingNewlineWithoutAdb,
+  },
+  'android-adb.fill.second-pass-input-failed': {
+    drive: fillFailingInSecondPass,
+    dispatchedSteps: 2,
   },
   'android-adb.fill.unverified': {
     drive: async () =>

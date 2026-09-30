@@ -300,8 +300,10 @@ async function typeAndroidShell(
     for (const [partIndex, part] of parts.entries()) {
       const chunks = chunkAndroidInputText(part, options.chunkSize);
       for (const [chunkIndex, chunk] of chunks.entries()) {
-        await typeAndroidShellChunk(device, chunk);
-        dispatchedSteps += 1;
+        if (chunk) {
+          await typeAndroidShellChunk(device, chunk);
+          dispatchedSteps += 1;
+        }
         if (
           options.delayMs > 0 &&
           (chunkIndex + 1 < chunks.length || partIndex + 1 < parts.length)
@@ -321,7 +323,6 @@ async function typeAndroidShell(
 }
 
 async function typeAndroidShellChunk(device: DeviceInfo, text: string): Promise<void> {
-  if (!text) return;
   try {
     await runAndroidShell(device, ['input', 'text', encodeAndroidInputText(text)]);
   } catch (error) {

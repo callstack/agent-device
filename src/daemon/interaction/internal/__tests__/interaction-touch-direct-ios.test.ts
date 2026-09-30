@@ -39,7 +39,10 @@ vi.mock('../../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
-beforeEach(() => resetGetRuntimeFixture());
+beforeEach(() => {
+  resetGetRuntimeFixture();
+  vi.mocked(captureSnapshotWithInteractor).mockReset();
+});
 
 test.each([
   ['ELEMENT_NOT_FOUND', 'element not found'],

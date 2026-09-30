@@ -35,7 +35,8 @@ export const DISPATCH_DISCLOSURE_TABLE_PATH = path.join(
 /**
  * The test file that drives each row through its real producer, keyed by row-id prefix; the
  * longest matching prefix owns the row. A row naming `implementedBy` has no owner until that branch
- * lands.
+ * lands. Each driver file runs one test per owned row with the loop `for (const row of <ROWS>) {`
+ * followed by `test(\`${row.id}`, which {@link DISPATCH_DISCLOSURE_ROW_LOOP} matches.
  */
 export const DISPATCH_DISCLOSURE_DRIVER_OWNERS: Readonly<Record<string, string>> = {
   'daemon.': 'src/daemon/interaction/internal/__tests__/interaction-dispatch-disclosure.test.ts',
@@ -55,6 +56,10 @@ export const DISPATCH_DISCLOSURE_DRIVER_OWNERS: Readonly<Record<string, string>>
     'src/daemon/interaction/internal/__tests__/interaction-touch-direct-ios.test.ts',
 };
 
+/** The per-row driving loop every driver file carries. */
+export const DISPATCH_DISCLOSURE_ROW_LOOP =
+  /for \(const row of [A-Z_]+\) \{\s*test\(`\$\{row\.id\}/;
+
 export function dispatchDisclosureDriverOwner(rowId: string): string | undefined {
   const prefix = Object.keys(DISPATCH_DISCLOSURE_DRIVER_OWNERS)
     .filter((candidate) => rowId.startsWith(candidate))
@@ -72,7 +77,10 @@ export function dispatchDisclosureRowsOwnedBy(
   driverFileUrl: string,
   tableText: string,
 ): DispatchDisclosureRow[] {
-  const driverFile = path.relative(REPO_ROOT, fileURLToPath(driverFileUrl));
+  const driverFile = path
+    .relative(REPO_ROOT, fileURLToPath(driverFileUrl))
+    .split(path.sep)
+    .join('/');
   return parseDispatchDisclosureTable(tableText).filter(
     (row) =>
       row.implementedBy === undefined && dispatchDisclosureDriverOwner(row.id) === driverFile,

@@ -12,15 +12,15 @@
     "dispatched": "no"
   },
   {
-    "id": "daemon.unclassified",
+    "id": "daemon.refusal.fill-admission",
     "producer": "daemon",
-    "trigger": "an interaction failure no producer classified; the fallback is unknown whatever the session runtime revision did",
-    "dispatched": "unknown"
+    "trigger": "fill admission (admitFill) refused the request before any backend call, e.g. a target with no text",
+    "dispatched": "no"
   },
   {
-    "id": "daemon.unclassified.session-replaced",
+    "id": "daemon.unclassified",
     "producer": "daemon",
-    "trigger": "an unclassified failure after the session object was replaced mid-request",
+    "trigger": "an interaction failure no producer classified; the seam reads only the failure, never session state",
     "dispatched": "unknown"
   },
   {
@@ -248,9 +248,21 @@
     "dispatched": "unknown"
   },
   {
+    "id": "android-adb.input-text.tool-missing-before-first-input",
+    "producer": "android-adb",
+    "trigger": "type \"\\nfiled\": adb is missing, so the leading ENTER keyevent, the first input sent, fails with TOOL_MISSING; the empty text before the newline sends nothing and is not a dispatched step",
+    "dispatched": "no"
+  },
+  {
     "id": "android-adb.fill.unverified",
     "producer": "android-adb",
-    "trigger": "fill sent the text and its verification still failed after the last clear-and-retype pass. A throw from inside the second pass keeps that pass's adb input verdict (unknown with dispatchedSteps), though the first pass already typed",
+    "trigger": "fill sent the text and its verification still failed after the last clear-and-retype pass",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-adb.fill.second-pass-input-failed",
+    "producer": "android-adb",
+    "trigger": "fill's first clear-and-retype pass typed and failed verification; the second pass's adb input text then failed, so the fill reports unknown with details.dispatchedSteps counting the steps both passes sent",
     "dispatched": "unknown"
   },
   {

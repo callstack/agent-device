@@ -22,6 +22,14 @@ function makeSession(
   };
 }
 
+/** The message texts the fallback once sniffed; the disclosure alone must decide now. */
+const LEGACY_FALLBACK_MESSAGES = [
+  'fetch failed',
+  'Runner command deadline exceeded: timed out',
+  'Runner did not accept connection',
+  'Invalid runner response',
+];
+
 function refusal(code: AppError['code'], message: string): AppError {
   return new AppError(code, message, { dispatched: 'no' });
 }
@@ -55,16 +63,15 @@ test('a pre-send COMMAND_FAILED falls back; the message text never decides', () 
     ),
     true,
   );
-  for (const message of [
-    'fetch failed',
-    'Runner command deadline exceeded: timed out',
-    'Runner did not accept connection',
-    'Invalid runner response',
-  ]) {
+  for (const message of LEGACY_FALLBACK_MESSAGES) {
     assert.equal(
       isDirectIosSelectorFallbackError(new AppError('COMMAND_FAILED', message), options),
       false,
       message,
+    );
+    assert.equal(
+      isDirectIosSelectorFallbackError(refusal('COMMAND_FAILED', message), options),
+      true,
     );
   }
 });
