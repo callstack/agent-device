@@ -71,7 +71,6 @@ export async function captureSnapshot(
   const deferred = await resolveDeferredInteractionOutcome({
     session: params.session,
     device: params.device,
-    logPath: params.logPath,
     interactiveOnly: params.flags?.snapshotInteractiveOnly === true,
     androidFreshnessMode: params.androidFreshnessMode,
     capture: () => captureSnapshotAttempt(params),

@@ -131,7 +131,6 @@ export type DeferredOutcomeSnapshotAttempt = {
 type DeferredOutcomeCaptureParams = {
   session: SessionState | undefined;
   device: SessionState['device'];
-  logPath: string;
   /** Whether the capture the verdict rides on was interactive-only filtered. */
   interactiveOnly: boolean;
   androidFreshnessMode?: SnapshotFreshnessMode;

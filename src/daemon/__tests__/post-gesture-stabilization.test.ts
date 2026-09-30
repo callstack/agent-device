@@ -710,7 +710,6 @@ function resolveParams(
   return {
     session,
     device: session.device,
-    logPath: '/tmp/agent-device-test.log',
     interactiveOnly: false,
     capture,
   };
