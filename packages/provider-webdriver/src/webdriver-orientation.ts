@@ -5,6 +5,7 @@ import {
 } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { WebDriverClient } from './webdriver-client.ts';
+import { isWebDriverRouteUnsupported } from './webdriver-transport.ts';
 
 export type WebDriverOrientationBackend = 'android' | 'xctest';
 
@@ -48,7 +49,7 @@ export async function setWebDriverOrientation(
       // Only a driver saying "I do not implement this endpoint" justifies trying the next one.
       // A timeout, an auth rejection, a dead session or a 5xx is a real failure, and swallowing it
       // here would report it as an orientation-support problem and hide the actual cause.
-      if (!isUnsupportedEndpointError(error)) throw error;
+      if (!isWebDriverRouteUnsupported(error)) throw error;
       attempts.push({ transport, error: error instanceof Error ? error.message : String(error) });
     }
   }
@@ -62,39 +63,6 @@ export async function setWebDriverOrientation(
       attempts,
     },
   );
-}
-
-/**
- * W3C error codes a driver returns for an endpoint it does not implement. Keyed structurally rather
- * than by message text, so a driver rewording its prose cannot turn a real failure into a fallback.
- */
-const UNSUPPORTED_ENDPOINT_W3C_ERRORS: ReadonlySet<string> = new Set([
-  'unknown command',
-  'unknown method',
-]);
-
-/** HTTP statuses that mean "this route does not exist here", as opposed to "it failed". */
-const UNSUPPORTED_ENDPOINT_STATUSES: ReadonlySet<number> = new Set([404, 405]);
-
-function isUnsupportedEndpointError(error: unknown): boolean {
-  if (!(error instanceof AppError)) return false;
-  // A session that never opened, or died, is not an unsupported endpoint.
-  if (error.code === 'SESSION_NOT_FOUND') return false;
-  // The W3C code wins whenever the driver sent one: several real failures share the statuses
-  // below, most importantly a 404 carrying `invalid session id`, which is a dead session rather
-  // than a missing route. Bare status is only consulted when no code was returned at all.
-  const code = readW3CErrorCode(error.details?.response);
-  if (code) return UNSUPPORTED_ENDPOINT_W3C_ERRORS.has(code);
-  const status = error.details?.status;
-  return typeof status === 'number' && UNSUPPORTED_ENDPOINT_STATUSES.has(status);
-}
-
-function readW3CErrorCode(response: unknown): string {
-  if (!response || typeof response !== 'object') return '';
-  const value = (response as { value?: unknown }).value;
-  if (!value || typeof value !== 'object') return '';
-  const code = (value as { error?: unknown }).error;
-  return typeof code === 'string' ? code : '';
 }
 
 async function applyTransport(

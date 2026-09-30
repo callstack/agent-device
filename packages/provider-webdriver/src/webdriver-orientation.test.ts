@@ -1,21 +1,49 @@
-import { test } from 'vitest';
+import { afterEach, test } from 'vitest';
 import assert from 'node:assert/strict';
 
 import { AppError } from '@agent-device/kernel/errors';
 import type { WebDriverClient } from './webdriver-client.ts';
 import { setWebDriverOrientation } from './webdriver-orientation.ts';
+import { WebDriverTransport } from './webdriver-transport.ts';
 
 type Call = { method: string; args: unknown[] };
 
-/** A driver answering "I do not implement this route" — the only case that earns a fallback. */
-function unsupportedEndpointError(): AppError {
-  return new AppError('COMMAND_FAILED', 'Unknown command', {
-    status: 404,
-    response: { value: { error: 'unknown command' } },
+const realFetch = globalThis.fetch;
+
+afterEach(() => {
+  globalThis.fetch = realFetch;
+});
+
+/** The error the real transport raises for this driver answer. */
+async function driverAnswerError(driver: typeof globalThis.fetch): Promise<unknown> {
+  const transport = new WebDriverTransport({
+    clientVersion: '0.0.0-test',
+    endpoint: 'http://cloud-webdriver.test/wd/hub/',
+    requestPolicy: { timeoutMs: 20 },
   });
+  globalThis.fetch = driver;
+  try {
+    await transport.requestValue('POST', '/session/wd-1/rotation', {});
+  } catch (error) {
+    return error;
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  throw new Error('the driver answer did not fail');
 }
 
-function makeClient(options: { reject?: readonly string[]; rejectWith?: () => unknown } = {}): {
+function answer(status: number, body: unknown): () => Promise<unknown> {
+  return () => driverAnswerError(async () => Response.json(body, { status }));
+}
+
+/** A driver answering "I do not implement this route" — the only case that earns a fallback. */
+const unsupportedEndpointError = answer(404, {
+  value: { error: 'unknown command', message: 'Unknown command' },
+});
+
+function makeClient(
+  options: { reject?: readonly string[]; rejectWith?: () => Promise<unknown> } = {},
+): {
   client: WebDriverClient;
   calls: Call[];
 } {
@@ -25,7 +53,7 @@ function makeClient(options: { reject?: readonly string[]; rejectWith?: () => un
   const record = (method: string) => {
     return async (...args: unknown[]): Promise<void> => {
       calls.push({ method, args });
-      if (reject.has(method)) throw rejectWith();
+      if (reject.has(method)) throw await rejectWith();
     };
   };
   return {
@@ -84,40 +112,44 @@ test('a driver rejecting /rotation degrades to the two-way endpoint', async () =
 // A transport that fails for any reason other than "not implemented" must surface as itself. The
 // earlier implementation caught everything, so a timeout or an expired session was reported as an
 // orientation-support problem with the real cause discarded.
-const NON_FALLBACK_FAILURES: readonly { name: string; error: () => unknown }[] = [
+const NON_FALLBACK_FAILURES: readonly { name: string; error: () => Promise<unknown> }[] = [
   {
     name: 'a request timeout',
-    error: () => Object.assign(new Error('The operation timed out'), { name: 'TimeoutError' }),
+    error: () =>
+      driverAnswerError(
+        async (_input, init) =>
+          await new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => reject(init.signal?.reason as Error));
+          }),
+      ),
   },
   {
     name: 'an auth rejection',
-    error: () => new AppError('COMMAND_FAILED', 'Forbidden', { status: 403 }),
+    error: answer(403, { value: { error: 'unable to set cookie', message: 'Forbidden' } }),
   },
   {
     name: 'a provider 5xx',
-    error: () => new AppError('COMMAND_FAILED', 'Bad gateway', { status: 502 }),
+    error: answer(502, { value: { error: 'unknown error', message: 'Bad gateway' } }),
   },
   {
     name: 'a dead session',
-    error: () => new AppError('SESSION_NOT_FOUND', 'WebDriver session has not been created yet.'),
+    error: async () =>
+      new AppError('SESSION_NOT_FOUND', 'WebDriver session has not been created yet.'),
   },
   {
     // The status alone says "not found", but the W3C code says the session died. Reading the code
     // first is what keeps this from being misread as a missing route.
     name: 'a 404 carrying invalid session id',
-    error: () =>
-      new AppError('COMMAND_FAILED', 'A session is either terminated or not started', {
-        status: 404,
-        response: { value: { error: 'invalid session id' } },
-      }),
+    error: answer(404, {
+      value: {
+        error: 'invalid session id',
+        message: 'A session is either terminated or not started',
+      },
+    }),
   },
   {
     name: 'a 405 carrying a non-routing error code',
-    error: () =>
-      new AppError('COMMAND_FAILED', 'Session timed out', {
-        status: 405,
-        response: { value: { error: 'timeout' } },
-      }),
+    error: answer(405, { value: { error: 'timeout', message: 'Session timed out' } }),
   },
 ];
 

@@ -165,7 +165,7 @@ export class WebDriverClient {
         ...(timeoutMs === undefined ? {} : { timeoutMs }),
       });
     } catch (error) {
-      if (isUnimplementedWebDriverRoute(error)) return 'unsupported';
+      if (isWebDriverRouteUnsupported(error)) return 'unsupported';
       throw error;
     }
     return typeof value === 'boolean' ? value : 'unsupported';
@@ -205,7 +205,7 @@ export class WebDriverClient {
         await this.sessionRequest('GET', '/element/active', undefined, requestBudget(deadline)),
       );
     } catch (error) {
-      if (isUnimplementedWebDriverRoute(error)) return 'unsupported';
+      if (isWebDriverRouteUnsupported(error)) return 'unsupported';
       if (isNoSuchElementError(error)) return 'none';
       throw error;
     }
@@ -219,7 +219,7 @@ export class WebDriverClient {
       );
       return { id: elementId, rect: readWindowRect(value) };
     } catch (error) {
-      if (isUnimplementedWebDriverRoute(error)) return 'unsupported';
+      if (isWebDriverRouteUnsupported(error)) return 'unsupported';
       // The focused element went away between the two calls — a stale answer,
       // not a broken driver. Report it as "nothing focused" so the caller polls
       // again rather than failing on a race it can simply retry out of.
@@ -372,18 +372,6 @@ function readSession(value: unknown): WebDriverSession {
 }
 
 /**
- * A route this driver does not implement, as opposed to one that failed.
- *
- * Classified from the W3C error code, NOT from the HTTP status: `unknown
- * command` and `invalid session id` are both 404, so a status test would read a
- * dead session as a missing feature — exactly the confusion that turns a broken
- * session into a blind text entry. Only 405/501 are unambiguous enough to stand
- * on their own. A 5xx, an auth rejection, or a timeout is a real failure.
- */
-const UNIMPLEMENTED_WEBDRIVER_STATUSES = new Set([405, 501]);
-const UNIMPLEMENTED_WEBDRIVER_ERRORS = new Set(['unknown command', 'unknown method']);
-
-/**
  * The W3C element identifier, whose key is the spec's fixed UUID rather than a
  * readable name. Appium also echoes the legacy `ELEMENT` key; accept either so
  * the caller works across grid versions.
@@ -421,13 +409,6 @@ function remainingMs(deadline: number): number {
 function isNoSuchElementError(error: unknown): boolean {
   if (!(error instanceof AppError)) return false;
   return readWebDriverErrorCode(error).toLowerCase() === 'no such element';
-}
-
-function isUnimplementedWebDriverRoute(error: unknown): boolean {
-  if (!(error instanceof AppError)) return false;
-  const status = error.details?.status;
-  if (typeof status === 'number' && UNIMPLEMENTED_WEBDRIVER_STATUSES.has(status)) return true;
-  return UNIMPLEMENTED_WEBDRIVER_ERRORS.has(readWebDriverErrorCode(error).toLowerCase());
 }
 
 function readWebDriverErrorCode(error: AppError): string {

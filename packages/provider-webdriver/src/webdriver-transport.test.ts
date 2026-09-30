@@ -7,6 +7,7 @@ import {
   WebDriverTransport,
   isWebDriverConnectRefused,
   isWebDriverRequestTimeout,
+  isWebDriverRouteUnsupported,
 } from './webdriver-transport.ts';
 
 const realFetch = globalThis.fetch;
@@ -256,3 +257,38 @@ test('a 5xx response to a POST discloses an unresolved outcome and is not resent
   );
   assert.equal(calls, 1);
 });
+
+const ROUTE_ANSWERS: readonly { status: number; body: unknown; unsupported: boolean }[] = [
+  { status: 404, body: { value: { error: 'unknown command', message: 'x' } }, unsupported: true },
+  { status: 405, body: { value: { error: 'unknown method', message: 'x' } }, unsupported: true },
+  { status: 404, body: {}, unsupported: true },
+  { status: 405, body: {}, unsupported: true },
+  { status: 501, body: {}, unsupported: true },
+  {
+    status: 404,
+    body: { value: { error: 'invalid session id', message: 'x' } },
+    unsupported: false,
+  },
+  { status: 405, body: { value: { error: 'timeout', message: 'x' } }, unsupported: false },
+  { status: 501, body: { value: { error: 'unknown error', message: 'x' } }, unsupported: false },
+  { status: 500, body: {}, unsupported: false },
+  { status: 403, body: {}, unsupported: false },
+];
+
+// A W3C error code decides when present; without one, a bare 404, 405, or 501 is the driver
+// saying it does not implement the route.
+for (const { status, body, unsupported } of ROUTE_ANSWERS) {
+  test(`HTTP ${status} ${JSON.stringify(body)} is ${unsupported ? '' : 'not '}an unsupported route`, async () => {
+    const transport = new WebDriverTransport({
+      clientVersion: '0.0.0-test',
+      endpoint: 'http://cloud-webdriver.test/wd/hub/',
+    });
+    globalThis.fetch = async () => Response.json(body, { status });
+
+    await assert.rejects(transport.requestValue('POST', '/session/wd-1/back'), (error: unknown) => {
+      assert.equal(isWebDriverRouteUnsupported(error), unsupported);
+      if (unsupported) assert.equal((error as AppError).details?.dispatched, 'no');
+      return true;
+    });
+  });
+}

@@ -320,26 +320,40 @@ function webdriverError(status: number, payload: unknown): AppError {
     typeof (value as { message?: unknown }).message === 'string'
       ? (value as { message: string }).message
       : `WebDriver request failed with HTTP ${status}.`;
+  if (isUnsupportedRouteAnswer(status, payload)) {
+    return new AppError('COMMAND_FAILED', message, {
+      reason: WEBDRIVER_ROUTE_UNSUPPORTED_REASON,
+      status,
+      response: payload,
+      ...dispatchDisclosure('no'),
+    });
+  }
   return new AppError('COMMAND_FAILED', message, {
     status,
     response: payload,
     // A 5xx means the driver received and processed the request, but not
     // whether the mutation it described completed before it failed.
     ...(status >= 500 ? dispatchDisclosure('unknown') : {}),
-    ...(isUnsupportedRouteAnswer(status, payload) ? dispatchDisclosure('no') : {}),
   });
 }
 
-/** W3C `error` codes a driver answers with when it does not implement the route at all. */
+/** Machine-readable `details.reason` of a driver answer that it does not implement the route. */
+const WEBDRIVER_ROUTE_UNSUPPORTED_REASON = 'webdriver_route_unsupported';
+
+/** W3C `error` codes a driver answers with when it does not implement the route. */
 const UNSUPPORTED_ROUTE_ERROR_CODES: ReadonlySet<string> = new Set([
   'unknown command',
   'unknown method',
 ]);
 
+/** HTTP statuses that, without a W3C error code, mean the route is not implemented here. */
+const UNSUPPORTED_ROUTE_STATUSES: ReadonlySet<number> = new Set([404, 405, 501]);
+
 /**
- * A W3C `unknown command`/`unknown method` code, or a bare 404/405 that carries no W3C error code
- * (a server that does not know the path). A 404 that names another W3C code, such as
- * `invalid session id` or `no such element`, is a different answer and never counts.
+ * A W3C error code decides when the driver sent one, because other failures share these statuses
+ * (a 404 `invalid session id` is a dead session); with no code, a bare 404 (no such route), 405
+ * (the route exists but not for this method), or 501 (the driver declares it not implemented)
+ * means the route is not implemented by this driver.
  */
 function isUnsupportedRouteAnswer(status: number, payload: unknown): boolean {
   const value =
@@ -348,8 +362,8 @@ function isUnsupportedRouteAnswer(status: number, payload: unknown): boolean {
       : undefined;
   const code =
     value && typeof value === 'object' ? (value as { error?: unknown }).error : undefined;
-  if (typeof code === 'string') return UNSUPPORTED_ROUTE_ERROR_CODES.has(code);
-  return status === 404 || status === 405;
+  if (typeof code === 'string') return UNSUPPORTED_ROUTE_ERROR_CODES.has(code.toLowerCase());
+  return UNSUPPORTED_ROUTE_STATUSES.has(status);
 }
 
 /**
@@ -358,11 +372,7 @@ function isUnsupportedRouteAnswer(status: number, payload: unknown): boolean {
  * route may already have acted.
  */
 export function isWebDriverRouteUnsupported(error: unknown): error is AppError {
-  return (
-    error instanceof AppError &&
-    error.details?.dispatched === 'no' &&
-    typeof error.details.status === 'number'
-  );
+  return error instanceof AppError && error.details?.reason === WEBDRIVER_ROUTE_UNSUPPORTED_REASON;
 }
 
 function webdriverTimeoutError(
