@@ -370,8 +370,3 @@ export function maestroFallbackDisclosure(
     },
   };
 }
-
-/** The coordinate a lazy outcome retry re-dispatches against (`finalizeTouchInteraction`). */
-export function pointPositionals(point: { x: number; y: number }): string[] {
-  return [String(point.x), String(point.y)];
-}

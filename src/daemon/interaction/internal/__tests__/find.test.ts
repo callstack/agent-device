@@ -519,12 +519,12 @@ test('handleFindCommands focus rejects covered matches before dispatching coordi
   expect(mockDispatch.mock.calls.filter((call) => call[1] === 'focus')).toEqual([]);
 });
 
-test('handleFindCommands forwards internal interaction outcome flags only to delegated click', async () => {
+test('handleFindCommands forwards internal interaction flags only to delegated click', async () => {
   const { response, invokeCalls, session } = await runFindClickScenario({
     positionals: ['Continue', 'click'],
     flags: {
       findFirst: true,
-      interactionOutcome: { retryOnNoChange: true },
+      postGestureStabilization: true,
     },
     nodes: [
       {
@@ -545,7 +545,7 @@ test('handleFindCommands forwards internal interaction outcome flags only to del
   });
 
   expect(response.ok).toBe(true);
-  expect(invokeCalls[0]!.flags?.interactionOutcome).toEqual({ retryOnNoChange: true });
+  expect(invokeCalls[0]!.flags?.postGestureStabilization).toBe(true);
   expect(session.actions.at(-1)?.flags).toEqual({});
 });
 

@@ -621,7 +621,7 @@ test('runtime-resolved taps use the same corroboration boundary', async () => {
   expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
 });
 
-test('a corroborated runtime coordinate tap does not schedule a no-change retry', async () => {
+test('a corroborated runtime coordinate tap is not re-sent by the next snapshot', async () => {
   const sessionName = 'ios-runtime-coordinate-corroboration';
   const sessionStore = makeSessionStore();
   sessionStore.set(
@@ -649,7 +649,6 @@ test('a corroborated runtime coordinate tap does not schedule a no-change retry'
 
   const clickResponse = await runClick(sessionStore, sessionName, {
     positionals: ['104', '222'],
-    flags: { interactionOutcome: { retryOnNoChange: true } },
   });
   expect(clickResponse?.ok).toBe(true);
   if (clickResponse?.ok) {
@@ -672,7 +671,49 @@ test('a corroborated runtime coordinate tap does not schedule a no-change retry'
 
   expect(snapshotResponse?.ok).toBe(true);
   expect(pressCount).toBe(1);
-  expect(sessionStore.get(sessionName)?.pendingInteractionOutcome).toBeUndefined();
+});
+
+test('a coordinate click the next snapshot finds unchanged is not re-sent', async () => {
+  const sessionName = 'ios-unchanged-click-no-resend';
+  const sessionStore = makeSessionStore();
+  sessionStore.set(
+    sessionName,
+    makeIosSession(sessionName, {
+      appBundleId: 'com.example.app',
+      snapshot: snapshot(profileNodes),
+    }),
+  );
+  let pressCount = 0;
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
+    if (command === 'press') {
+      pressCount += 1;
+      return {};
+    }
+    if (command === 'snapshot') return snapshotPayload(profileNodes);
+    return {};
+  });
+
+  const clickResponse = await runClick(sessionStore, sessionName, {
+    positionals: ['104', '222'],
+  });
+  expect(clickResponse?.ok).toBe(true);
+
+  const snapshotResponse = await handleSnapshotCommands({
+    req: {
+      token: 'test',
+      session: sessionName,
+      command: 'snapshot',
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+    ...getRuntimeBindings(),
+  });
+
+  expect(snapshotResponse?.ok).toBe(true);
+  expect(pressCount).toBe(1);
 });
 
 test('corroborated runtime taps retain target evidence through save and replay', async () => {

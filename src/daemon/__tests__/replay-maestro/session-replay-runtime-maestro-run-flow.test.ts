@@ -95,10 +95,6 @@ test('runReplayCommand runs Maestro runFlow.when.visible commands when present',
     ],
   );
   assert.equal(
-    calls.find((call) => call.command === 'click')?.flags?.interactionOutcome,
-    undefined,
-  );
-  assert.equal(
     calls.find((call) => call.command === 'click')?.flags?.postGestureStabilization,
     undefined,
   );

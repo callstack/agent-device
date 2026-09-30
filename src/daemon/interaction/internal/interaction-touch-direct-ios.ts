@@ -16,7 +16,6 @@ import {
   buildCorroboratedTapResponseData,
   buildInteractionResponseData,
   maestroFallbackDisclosure,
-  pointPositionals,
   readInteractionResponseDataTransformCommand,
   transformTouchResponseData,
 } from './interaction-touch-response.ts';
@@ -77,7 +76,6 @@ export async function dispatchDirectIosSelectorTap(
       sessionStore: handlerParams.sessionStore,
       command: handlerParams.req.command,
       positionals: handlerParams.req.positionals ?? [],
-      retryPositionals: pointPositionals(point),
       flags: handlerParams.req.flags,
       result,
       responseData,
@@ -152,7 +150,6 @@ async function buildDirectIosCorroboratedResponse(params: {
     flags: handlerParams.req.flags,
     result,
     responseData,
-    scheduleInteractionOutcomeRetry: false,
     actionStartedAt,
     actionFinishedAt: Date.now(),
   });

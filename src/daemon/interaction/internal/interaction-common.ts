@@ -16,13 +16,11 @@ export function finalizeTouchInteraction(params: {
   command: string;
   positionals: string[];
   actionCommand?: string;
-  retryPositionals?: string[];
   flags: CommandFlags | undefined;
   result: Record<string, unknown>;
   responseData: Record<string, unknown>;
   recordedTarget?: RecordedTargetCapture;
   recordedTargets?: { source: RecordedTargetCapture; destination: RecordedTargetCapture };
-  scheduleInteractionOutcomeRetry?: boolean;
   actionStartedAt: number;
   actionFinishedAt: number;
   androidFreshnessBaseline?: SnapshotState | undefined;
@@ -32,13 +30,11 @@ export function finalizeTouchInteraction(params: {
     command,
     positionals,
     actionCommand = command,
-    retryPositionals,
     flags,
     result,
     responseData,
     recordedTarget,
     recordedTargets,
-    scheduleInteractionOutcomeRetry = true,
     actionStartedAt,
     actionFinishedAt,
     androidFreshnessBaseline,
@@ -70,9 +66,8 @@ export function finalizeTouchInteraction(params: {
   operations.markDeferredOutcome({
     command,
     action: actionCommand,
-    positionals: retryPositionals ?? positionals,
+    positionals,
     flags,
-    scheduleOutcomeRetry: scheduleInteractionOutcomeRetry,
     androidFreshnessBaseline,
   });
   operations.recordGestureVisualization(

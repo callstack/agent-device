@@ -1,4 +1,3 @@
-import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SnapshotDiagnosticsState } from '@agent-device/contracts/capture';
 import type { AppLogFailure, AppLogLiveHandle } from '@agent-device/contracts/app-log-runtime';
 import type { AudioProbeLiveHandle } from '@agent-device/contracts/audio-probe-runtime';
@@ -100,16 +99,6 @@ export type PostGestureStabilization = {
   baselineBackend?: string;
 };
 
-export type PendingInteractionOutcome = {
-  action: string;
-  command: string;
-  positionals: string[];
-  flags?: CommandFlags;
-  markedAt: number;
-  attemptsRemaining: number;
-  preSignature: InteractionSurfaceEntry[];
-};
-
 /**
  * A session together with the store key that addresses it: `address` is the exact string
  * `--session` must carry to reach `session`, and it is NOT always `session.name`. An implicitly
@@ -197,7 +186,6 @@ export type SessionState = {
   lastComparisonSafeSnapshot?: SnapshotState;
   androidSnapshotFreshness?: SnapshotFreshnessWindow;
   postGestureStabilization?: PostGestureStabilization;
-  pendingInteractionOutcome?: PendingInteractionOutcome;
   snapshotDiagnostics?: SnapshotDiagnosticsState;
   trace?: {
     outPath: string;
