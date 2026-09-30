@@ -206,6 +206,12 @@
     "dispatched": "unknown"
   },
   {
+    "id": "ios-runner.series.invalid-step-before-send",
+    "producer": "ios-runner",
+    "trigger": "press --count 2 at a non-finite point: sequence validation refuses the steps before any sequence request is sent (reason runner_sequence_invalid)",
+    "dispatched": "no"
+  },
+  {
     "id": "ios-runner.pre-send.session-start-failed",
     "producer": "ios-runner",
     "trigger": "the runner session could not start, so the command never reached the exchange",
@@ -228,6 +234,12 @@
     "producer": "ios-runner",
     "trigger": "the readiness preflight gave up before the command was written, again after the restart",
     "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.transport.replay-failed-after-unwritten-first-attempt",
+    "producer": "ios-runner",
+    "trigger": "the first attempt was refused before the write (readiness preflight), the restart replayed the command, and the replay failed with no producer verdict; the replay may have landed",
+    "dispatched": "unknown"
   },
   {
     "id": "ios-runner.status.failed",

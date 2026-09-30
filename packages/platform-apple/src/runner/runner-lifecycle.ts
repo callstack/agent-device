@@ -505,7 +505,8 @@ function markRunnerRestartError(
 
 /**
  * A restart that never replayed says what the first attempt did; a replay after a first attempt
- * that may have written the command cannot claim `no` for the two sends together.
+ * that may have written the command cannot claim `no` for the two sends together. After an unwritten
+ * first attempt the replay's own verdict stands; without one, only a pre-send refusal is `no`.
  */
 function discloseRestartDispatch(
   error: AppError,
@@ -513,7 +514,8 @@ function discloseRestartDispatch(
   restartedSession: RunnerSession | undefined,
 ): AppError {
   if (!restartedSession) return discloseDispatch(error, firstAttemptUnwritten ? 'no' : 'unknown');
-  return firstAttemptUnwritten ? error : discloseDispatch(error, 'unknown');
+  if (!firstAttemptUnwritten) return discloseDispatch(error, 'unknown');
+  return discloseUnclassifiedDispatch(error, isRunnerPreSendRefusal(error) ? 'no' : 'unknown');
 }
 
 async function runPrepareHealthCheck(

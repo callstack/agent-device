@@ -138,6 +138,19 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
       .mockRejectedValueOnce(readinessPreflightFailure());
     return await tap();
   },
+  'ios-runner.transport.replay-failed-after-unwritten-first-attempt': async () => {
+    mockEnsureRunnerSession
+      .mockResolvedValueOnce(makeRunnerSession())
+      .mockResolvedValueOnce(makeRunnerSession({ port: 8101 }));
+    mockExecuteRunnerCommandWithSession
+      .mockRejectedValueOnce(readinessPreflightFailure())
+      .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'runner replay failed'));
+    try {
+      return await tap();
+    } finally {
+      assert.equal(mockExecuteRunnerCommandWithSession.mock.calls.length, 2);
+    }
+  },
 };
 
 const ROWS = dispatchDisclosureRowsOwnedBy(
