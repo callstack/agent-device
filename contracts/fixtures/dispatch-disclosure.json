@@ -388,22 +388,19 @@
   {
     "id": "webdriver.connect-refused",
     "producer": "webdriver",
-    "trigger": "connect-refused",
-    "dispatched": "no",
-    "implementedBy": "fix/webdriver-no-mutation-resend"
+    "trigger": "a mutating POST to a port nothing listens on: the connection was refused before any byte of the request was sent",
+    "dispatched": "no"
   },
   {
     "id": "webdriver.timeout-after-send",
     "producer": "webdriver",
-    "trigger": "timeout-after-send",
-    "dispatched": "unknown",
-    "implementedBy": "fix/webdriver-no-mutation-resend"
+    "trigger": "a mutating POST whose body the driver read and never answered: the transport deadline aborted it after send",
+    "dispatched": "unknown"
   },
   {
     "id": "webdriver.http-5xx-after-send",
     "producer": "webdriver",
-    "trigger": "http-5xx-after-send",
-    "dispatched": "unknown",
-    "implementedBy": "fix/webdriver-no-mutation-resend"
+    "trigger": "a mutating POST the driver answered 503: it received the request, but not whether the mutation completed",
+    "dispatched": "unknown"
   }
 ]
