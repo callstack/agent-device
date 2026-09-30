@@ -36,9 +36,14 @@ export async function writeIosClipboardText(
   }
   requireSimulatorDevice(device, 'clipboard');
   if (isTvOsDevice(device)) {
-    await ensureBootedSimulator(device);
+    const signal = runnerOptions?.signal;
+    await ensureBootedSimulator(device, { signal });
     requireExecSuccess(
-      await runSimctlForDevice(device, ['pbcopy', device.id], { allowFailure: true, stdin: text }),
+      await runSimctlForDevice(device, ['pbcopy', device.id], {
+        allowFailure: true,
+        stdin: text,
+        signal,
+      }),
       'Failed to write tvOS simulator clipboard',
     );
     return;

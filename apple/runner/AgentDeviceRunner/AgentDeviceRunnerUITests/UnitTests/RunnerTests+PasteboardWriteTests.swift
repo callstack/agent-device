@@ -13,6 +13,7 @@ extension RunnerTests {
   @MainActor
   func testPasteboardWriteLeavesTheTextOnTheGeneralPasteboard() throws {
     let text = "one-time code \(UUID().uuidString)"
+    defer { UIPasteboard.general.items = [] }
     let request = #"{"command":"pasteboardWrite","text":"\#(text)"}"#
     let response = executePasteboardWrite(command: try runnerCommandFixture(request))
     XCTAssertTrue(response.ok)

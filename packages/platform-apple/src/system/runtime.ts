@@ -85,9 +85,9 @@ function appleHostOrSimulatorFact(
 }
 
 /**
- * Read and write share one cell: both routes (the simulator's `simctl pbpaste` read and runner
- * write, and the macOS host pasteboard) expose the pair or neither, so splitting them here would
- * invent a cell no Apple owner can actually be in.
+ * Read and write share one cell: both routes (the simulator's `simctl pbpaste` read with its
+ * runner write, or `simctl pbcopy` on tvOS, and the macOS host pasteboard) expose the pair or
+ * neither, so splitting them here would invent a cell no Apple owner can actually be in.
  */
 function appleClipboardFact(device: DeviceInfo): RuntimeOperationFact {
   return appleHostOrSimulatorFact(device, clipboardKindUnavailable, clipboardLeafUnavailable);

@@ -14,18 +14,22 @@ vi.mock('../simulator.ts', async (importOriginal) => ({
   ensureBootedSimulator: async () => {},
 }));
 
-async function writeThroughBothRoutes(device: typeof IOS_SIMULATOR, text: string) {
+async function writeThroughBothRoutes(
+  device: typeof IOS_SIMULATOR,
+  text: string,
+  signal = new AbortController().signal,
+) {
   const runnerCalls: RecordedRunnerCall[] = [];
-  const toolCalls: Array<{ args: string[]; stdin: unknown }> = [];
+  const toolCalls: Array<{ args: string[]; stdin: unknown; signal: unknown }> = [];
   const tools = createLocalAppleToolProvider({
     runCommand: async (_cmd, args, options) => {
-      toolCalls.push({ args, stdin: options?.stdin });
+      toolCalls.push({ args, stdin: options?.stdin, signal: options?.signal });
       return { exitCode: 0, stdout: '', stderr: '' };
     },
   });
   await withAppleToolProvider(tools, () =>
     withAppleRunnerProvider(recordingRunnerProvider(runnerCalls), { deviceId: device.id }, () =>
-      writeIosClipboardText(device, text),
+      writeIosClipboardText(device, text, { signal }),
     ),
   );
   return { runnerCommands: runnerCalls.map(({ command }) => command), toolCalls };
@@ -40,9 +44,15 @@ test('an iOS simulator clipboard write is the runner setting the pasteboard, not
 });
 
 test('a tvOS simulator, whose runner has no pasteboard, writes through simctl pbcopy', async () => {
-  const { runnerCommands, toolCalls } = await writeThroughBothRoutes(TVOS_SIMULATOR, 'code 246810');
+  const signal = new AbortController().signal;
+  const { runnerCommands, toolCalls } = await writeThroughBothRoutes(
+    TVOS_SIMULATOR,
+    'code 246810',
+    signal,
+  );
   assert.deepEqual(runnerCommands, []);
   assert.equal(toolCalls.length, 1);
   assert.deepEqual(toolCalls[0]?.args.slice(-2), ['pbcopy', TVOS_SIMULATOR.id]);
   assert.equal(toolCalls[0]?.stdin, 'code 246810');
+  assert.equal(toolCalls[0]?.signal, signal);
 });
