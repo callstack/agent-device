@@ -43,7 +43,7 @@
     "packages/kernel/src/device.ts#PlatformSelector": "sha256:61de3f003507ea2f53b396b0146c17670bf674a2db2132e19c462ca6c10cc8fd",
     "packages/kernel/src/errors.ts#DaemonError": "sha256:d6cb31f516102d147bd4e4058ea4ace1d48584280f5b49205234c6dd5ada6e1c",
     "packages/kernel/src/errors.ts#DiagnosticsRecordRef": "sha256:c5ef4185d01814fbfddcdcf797ce892f6ebfe1fd3c3fa73c7560ce2d3b6fce60",
-    "packages/kernel/src/errors.ts#DispatchDisclosure": "sha256:c1ec9dcec06b23bb3b001fd03d6211d432b9635049d9ca2369a825c5a2898e8e",
+    "packages/kernel/src/errors.ts#DispatchDisclosure": "sha256:60ec96fe63fb8756d7936187bef6226df1ed56d48ff03f254581b3685e3aa4ce",
     "packages/kernel/src/errors.ts#ErrorCause": "sha256:2f38679b0e9ec997fe8d94b5d5025404fd6ebb21f2c91ed2ab5d4133e578dfc4",
     "packages/kernel/src/errors.ts#ErrorWireDetails": "sha256:79169f66b0935b8140c0e8329a8cdfd1db368fdadf34deeed404ea5ae7b6afe0",
     "packages/kernel/src/errors.ts#NormalizeErrorContext": "sha256:98567378fc456335c8751474152edcf989e676ad0d9f4b54afdd8e6a96b03ae2",
@@ -227,12 +227,12 @@
     {
       "declaration": "packages/kernel/src/errors.ts#DaemonError",
       "digest": "sha256:d6cb31f516102d147bd4e4058ea4ace1d48584280f5b49205234c6dd5ada6e1c",
-      "rationale": "details.dispatched is a new OPTIONAL field inside details, which was already an open record: an older peer ignores the key and every existing field keeps its shape. It carries no | yes | unknown for whether a failed interaction reached the device (the dispatch-disclosure golden table)."
+      "rationale": "details.dispatched is a new OPTIONAL field inside details, which was already an open record: an older peer ignores the key and every existing field keeps its shape. It carries no | unknown for whether a failed interaction reached the device (the dispatch-disclosure golden table)."
     },
     {
       "declaration": "packages/kernel/src/errors.ts#NormalizedError",
       "digest": "sha256:99d880cce96cf364c4937045c704f2e34a870fef37af35c2115df33f8e8355af",
-      "rationale": "details.dispatched is a new OPTIONAL field inside details, which was already an open record: an older peer ignores the key and every existing field keeps its shape. It carries no | yes | unknown for whether a failed interaction reached the device (the dispatch-disclosure golden table)."
+      "rationale": "details.dispatched is a new OPTIONAL field inside details, which was already an open record: an older peer ignores the key and every existing field keeps its shape. It carries no | unknown for whether a failed interaction reached the device (the dispatch-disclosure golden table)."
     },
     {
       "declaration": "src/daemon-client/daemon-client-rpc.ts#handleDaemonHttpResponseBody",
