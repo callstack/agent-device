@@ -4,7 +4,6 @@ import type {
   HoverCommandResult,
   LongPressCommandResult,
   PressCommandResult,
-  ReadinessWaitEvidence,
   RecordingTargetOverride,
   ResolutionDisclosure,
   SettleObservation,
@@ -173,8 +172,6 @@ export function buildInteractionResponseData(params: {
    * Only attached when the settle observation actually carries a diff.
    */
   settleRefsGeneration?: number;
-  /** A wait the request already spent before this dispatch (the replay step's pre-dispatch gate). */
-  carriedReadiness?: ReadinessWaitEvidence;
 }): InteractionResponsePayloads {
   const { source, referenceFrame, extra } = params;
   if (source.kind === 'runner-payload' || source.kind === 'corroborated-tap') {
@@ -237,23 +234,8 @@ export function buildInteractionResponseData(params: {
     visualization.warning = warning;
     responseData.warning = warning;
   }
-  const readiness = combineReadinessWaits(
-    'readiness' in result ? result.readiness : undefined,
-    params.carriedReadiness,
-  );
-  if (readiness) responseData.readiness = readiness;
+  if ('readiness' in result && result.readiness) responseData.readiness = result.readiness;
   return { result: visualization, responseData, ...recordedTargetCapture(result) };
-}
-
-function combineReadinessWaits(
-  ...waits: Array<ReadinessWaitEvidence | undefined>
-): ReadinessWaitEvidence | undefined {
-  const spent = waits.filter((wait): wait is ReadinessWaitEvidence => wait !== undefined);
-  if (spent.length === 0) return undefined;
-  return {
-    polls: spent.reduce((total, wait) => total + wait.polls, 0),
-    waitedMs: spent.reduce((total, wait) => total + wait.waitedMs, 0),
-  };
 }
 
 function recordedTargetCapture(
@@ -330,7 +312,6 @@ export async function buildTargetedTouchResponsePayloads(params: {
     extra,
     staleRefsWarning: params.staleRefsWarning,
     settleRefsGeneration: issueSettleRefs(session, result.settle),
-    carriedReadiness: handlerParams.req.internal?.replayReadinessWait,
   });
 }
 

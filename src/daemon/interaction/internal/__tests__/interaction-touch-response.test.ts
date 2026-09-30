@@ -112,26 +112,6 @@ test('the response builder reports the resolved wait and keeps the prior warning
   expect(result.readiness).toBeUndefined();
 });
 
-test('the response builder adds the wait the request carried to the dispatch wait', () => {
-  const { responseData } = buildInteractionResponseData({
-    source: { kind: 'runtime', result: WAITED_SELECTOR_RESULT },
-    referenceFrame: undefined,
-    carriedReadiness: { polls: 2, waitedMs: 200 },
-  });
-
-  expect(responseData.readiness).toEqual({ polls: 5, waitedMs: 600 });
-});
-
-test('the response builder reports the carried wait when the dispatch resolved on its first capture', () => {
-  const { responseData } = buildInteractionResponseData({
-    source: { kind: 'runtime', result: selectorResult() },
-    referenceFrame: undefined,
-    carriedReadiness: { polls: 2, waitedMs: 200 },
-  });
-
-  expect(responseData.readiness).toEqual({ polls: 2, waitedMs: 200 });
-});
-
 test('the response builder omits readiness when nothing waited', () => {
   const { responseData } = buildInteractionResponseData({
     source: { kind: 'runtime', result: selectorResult() },
