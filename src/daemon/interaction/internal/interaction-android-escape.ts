@@ -24,7 +24,7 @@ export async function assertAndroidPressStayedInApp(
   throw new AppError(
     'COMMAND_FAILED',
     `press ${targetLabel} left ${session.appBundleId} and foregrounded ${surface.foregroundPackage}. The tap likely escaped the app.`,
-    { ...surface, dispatched: 'yes' },
+    surface,
   );
 }
 

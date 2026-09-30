@@ -57,12 +57,12 @@ export type DiagnosticsRecordRef = {
 };
 
 /**
- * Whether the operation a failed request asked for reached the device: `no` when it provably did
- * not, `yes` when a producer proved it executed, `unknown` when neither can be proven. A failure
- * without the field was classified by no producer. The producer rows live in
+ * Whether the operation a failed request asked for reached the device. `no`: it provably never
+ * did, so resending it is safe. `unknown`: it may have landed, so observe the device before
+ * resending. A failure without the field was classified by no producer. The producer rows live in
  * `contracts/fixtures/dispatch-disclosure.json`.
  */
-export type DispatchDisclosure = 'no' | 'yes' | 'unknown';
+export type DispatchDisclosure = 'no' | 'unknown';
 
 /** The error details bag as it crosses the wire: free-form, with the typed keys a reader may rely on. */
 export type ErrorWireDetails = Record<string, unknown> & { dispatched?: DispatchDisclosure };

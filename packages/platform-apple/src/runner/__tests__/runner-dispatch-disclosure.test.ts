@@ -115,7 +115,7 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
   'ios-runner.reply.ELEMENT_OFFSCREEN': () => replyFailure('ELEMENT_OFFSCREEN'),
   'ios-runner.reply.AMBIGUOUS_MATCH': () => replyFailure('AMBIGUOUS_MATCH'),
   'ios-runner.reply.MAIN_THREAD_TIMEOUT': () => replyFailure('MAIN_THREAD_TIMEOUT'),
-  'ios-runner.reply.executed-failure': () => replyFailure('XCTEST_RECORDED_FAILURE'),
+  'ios-runner.reply.unlisted-code': () => replyFailure('XCTEST_RECORDED_FAILURE'),
   'ios-runner.status.failed': () =>
     lostResponse(statusReply({ lifecycleState: 'failed', lifecycleErrorMessage: 'tap failed' })),
   'ios-runner.status.failed-RUNNER_BUSY': () =>

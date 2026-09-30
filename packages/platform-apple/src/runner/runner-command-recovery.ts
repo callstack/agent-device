@@ -314,7 +314,7 @@ function handleCompletedRunnerStatus(
     return {
       type: 'skipInvalidation',
       error: transportError,
-      dispatched: 'yes',
+      dispatched: 'unknown',
       reason: 'read_only_completed_without_retained_response',
       lifecycleState: 'completed',
     };
@@ -324,7 +324,7 @@ function handleCompletedRunnerStatus(
     type: 'skipInvalidation',
     reason: 'completed_without_retained_response',
     lifecycleState: 'completed',
-    dispatched: 'yes',
+    dispatched: 'unknown',
     error: new AppError(
       'COMMAND_FAILED',
       `Runner command "${command.command}" completed after the transport response was lost, but no recoverable response was retained.`,

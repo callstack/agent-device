@@ -513,8 +513,7 @@ function discloseRestartDispatch(
   restartedSession: RunnerSession | undefined,
 ): AppError {
   if (!restartedSession) return discloseDispatch(error, firstAttemptUnwritten ? 'no' : 'unknown');
-  if (firstAttemptUnwritten || error.details?.dispatched === 'yes') return error;
-  return discloseDispatch(error, 'unknown');
+  return firstAttemptUnwritten ? error : discloseDispatch(error, 'unknown');
 }
 
 async function runPrepareHealthCheck(

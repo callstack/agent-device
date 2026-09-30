@@ -89,8 +89,8 @@ const RUNNER_SELECTOR_REFUSAL_CODES: ReadonlySet<string> = new Set([
 /**
  * Whether a failed direct iOS selector tap may delegate to the tree path, which taps again. Only a
  * failure disclosed `dispatched: no` may: a connect refusal, a pre-send restart or readiness
- * verdict, `RUNNER_BUSY`, or a runner selector refusal. A failure that is `unknown` or `yes` may
- * already have tapped. Selector refusals delegate only when `delegateSemanticFailures` is set;
+ * verdict, `RUNNER_BUSY`, or a runner selector refusal. An `unknown` failure may already have
+ * tapped. Selector refusals delegate only when `delegateSemanticFailures` is set;
  * Maestro replay keeps their runner-native shapes.
  */
 export function isDirectIosSelectorFallbackError(

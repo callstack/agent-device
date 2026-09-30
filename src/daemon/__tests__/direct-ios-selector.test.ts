@@ -70,16 +70,14 @@ test('a pre-send COMMAND_FAILED falls back; the message text never decides', () 
 });
 
 test('a failure that may have tapped never falls back', () => {
-  for (const dispatched of ['unknown', 'yes'] as const) {
-    for (const code of ['COMMAND_FAILED', 'ELEMENT_NOT_FOUND'] as const) {
-      assert.equal(
-        isDirectIosSelectorFallbackError(new AppError(code, 'failed', { dispatched }), {
-          delegateSemanticFailures: true,
-        }),
-        false,
-        `${code} ${dispatched}`,
-      );
-    }
+  for (const code of ['COMMAND_FAILED', 'ELEMENT_NOT_FOUND'] as const) {
+    assert.equal(
+      isDirectIosSelectorFallbackError(new AppError(code, 'failed', { dispatched: 'unknown' }), {
+        delegateSemanticFailures: true,
+      }),
+      false,
+      code,
+    );
   }
 });
 
