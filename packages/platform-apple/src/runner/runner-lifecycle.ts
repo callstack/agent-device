@@ -423,7 +423,7 @@ async function restartSessionAndRunCommand(params: {
   if (!tryBeginRunnerRecycle(recycleKey)) {
     throw discloseDispatch(
       buildRunnerRecycleBudgetExhaustedError(command, options),
-      canResendAfterRestart(params) ? 'no' : 'unknown',
+      params.firstAttemptUnwritten ? 'no' : 'unknown',
     );
   }
   await invalidateRunnerSession(params.session, restartReason);
@@ -529,17 +529,17 @@ function markRunnerRestartError(
 }
 
 /**
- * A read-only command has no side effect to repeat, so its failure is `no` however many sends it
- * took. A mutating command whose first attempt may have written it is `unknown`: it is never resent.
- * After an unwritten first attempt, a restart that never replayed is `no`, and a replay's own verdict
- * stands; without one, only a pre-send refusal is `no`.
+ * The transport fact, for reads and mutations alike: a first attempt that may have written the
+ * command is `unknown`, whether or not a read was resent. After an unwritten first attempt, a
+ * restart that never replayed is `no`, and a replay's own verdict stands; without one, only a
+ * pre-send refusal is `no`. That a read repeats no app-visible action is the daemon router's rule
+ * over the registry's `recordingEffect`, not this producer's.
  */
 function discloseRestartDispatch(
   error: AppError,
   evidence: RunnerRestartResendEvidence,
   restartedSession: RunnerSession | undefined,
 ): AppError {
-  if (isReadOnlyRunnerCommand(evidence.command)) return discloseDispatch(error, 'no');
   if (!evidence.firstAttemptUnwritten) return discloseDispatch(error, 'unknown');
   if (!restartedSession) return discloseDispatch(error, 'no');
   return discloseUnclassifiedDispatch(error, isRunnerPreSendRefusal(error) ? 'no' : 'unknown');

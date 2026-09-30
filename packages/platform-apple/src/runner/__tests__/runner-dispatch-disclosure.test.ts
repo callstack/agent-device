@@ -10,6 +10,7 @@ import {
 } from '@agent-device/contracts/dispatch-disclosure-fixtures';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { handleRunnerTransportErrorAfterCommandSend } from '../runner-command-recovery.ts';
+import { isReadOnlyRunnerCommand } from '../runner-command-traits.ts';
 import type { RunnerCommand } from '../runner-contract.ts';
 import {
   isRetryableRunnerError,
@@ -18,6 +19,7 @@ import {
 import { runApplePressSeries } from '../runner-sequence.ts';
 import { executeRunnerCommandWithSession, type RunnerSession } from '../runner-session.ts';
 import { RunnerCommandAccounting } from '../runner-session-types.ts';
+import { appleRunnerTestHost } from '../test-host.ts';
 import {
   startFakeRunnerServer,
   type FakeRunnerCommandScript,
@@ -66,19 +68,32 @@ async function replyFailure(code: string): Promise<unknown> {
   );
 }
 
-/** The runner hangs up on the command, then answers the status probe with `status`. */
+/**
+ * The runner hangs up on the command, then answers the status probe with `status`. A read goes
+ * through the connect loop, which posts again on each attempt, so the runner hangs up on every
+ * attempt and the loop's simctl curl fallback times out after its POST.
+ */
 async function lostResponse(
   status: FakeRunnerResponse[],
   command: RunnerCommand = TAP,
 ): Promise<unknown> {
-  server = await startFakeRunnerServer({ tap: [{ kind: 'hangUp' }], status });
+  const readOnly = isReadOnlyRunnerCommand(command);
+  const hangUps: FakeRunnerResponse[] = Array.from({ length: readOnly ? 20 : 1 }, () => ({
+    kind: 'hangUp',
+  }));
+  server = await startFakeRunnerServer({ [command.command]: hangUps, status });
+  if (readOnly) {
+    appleRunnerTestHost.update({
+      runXcrun: vi.fn(async () => ({ exitCode: 28, stdout: '', stderr: 'curl exited 28' })),
+    });
+  }
   const session = runnerSession(server.port);
   const transportError = await executeRunnerCommandWithSession(
     IOS_SIMULATOR,
     session,
     command,
     undefined,
-    5_000,
+    readOnly ? 400 : 5_000,
   ).then(
     () => assert.fail('the fake runner hangs up on the command'),
     (error: unknown) => asAppError(error, 'COMMAND_FAILED'),
@@ -175,6 +190,11 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
     lostResponse(statusReply({ lifecycleState: 'failed', lifecycleErrorCode: 'RUNNER_BUSY' })),
   'ios-runner.status.completed-without-retained-reply': () =>
     lostResponse(statusReply({ lifecycleState: 'completed' })),
+  'ios-runner.status.read-only-completed-without-retained-reply': () =>
+    lostResponse(statusReply({ lifecycleState: 'completed' }), {
+      command: 'snapshot',
+      commandId: 'cmd-1',
+    }),
   'ios-runner.status.accepted': () => lostResponse(statusReply({ lifecycleState: 'accepted' })),
   'ios-runner.status.started': () => lostResponse(statusReply({ lifecycleState: 'started' })),
   'ios-runner.status.notAccepted': () =>
