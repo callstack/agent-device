@@ -39,3 +39,43 @@ test('public batch entrypoint exports daemon-compatible orchestration helpers', 
     assert.equal(response.data.results[0]?.command, 'open');
   }
 });
+
+async function runBatchFailingAtSecondStep(firstCommand: string, firstPositionals: string[]) {
+  const req: Omit<DaemonRequest, 'token'> = {
+    command: 'batch',
+    positionals: [],
+    flags: {
+      batchSteps: [
+        { command: firstCommand, positionals: firstPositionals },
+        { command: 'press', positionals: ['label=Missing'] },
+      ],
+    },
+  };
+  return await runBatch(req, 'session', async (stepReq) =>
+    stepReq.positionals?.[0] === 'label=Missing'
+      ? {
+          ok: false,
+          error: {
+            code: 'ELEMENT_NOT_FOUND',
+            message: 'No element matches label=Missing',
+            details: { dispatched: 'no' },
+          },
+        }
+      : { ok: true, data: {} },
+  );
+}
+
+test('batch reports unknown when a mutating step executed before the refused step', async () => {
+  const response = await runBatchFailingAtSecondStep('press', ['label=A']);
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.equal(response.error.details?.dispatched, 'unknown');
+    assert.equal(response.error.details?.executed, 1);
+  }
+});
+
+test('batch keeps the refused step verdict when only reads executed before it', async () => {
+  const response = await runBatchFailingAtSecondStep('get', ['text', 'label=A']);
+  assert.equal(response.ok, false);
+  if (!response.ok) assert.equal(response.error.details?.dispatched, 'no');
+});

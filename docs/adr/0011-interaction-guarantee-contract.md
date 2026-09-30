@@ -163,7 +163,10 @@ Each request owns one dispatch ledger. Every bound runtime operation declares
 its effect once, in `RUNTIME_OPERATION_EFFECTS`, a record over the runtime
 operation keys, so an operation cannot bind without one. The request binding
 records each `mutates` operation in the request's ledger when its send
-returns, so no route sends a mutation outside the ledger. A nested request (a
+returns, so no bound runtime operation sends a mutation outside the ledger.
+Android ANR and blocking-dialog recovery is outside the ledger: its
+`AndroidObservationAdapter.tap` and `openApp` calls reach the device without a
+record. A nested request (a
 batch step, a replay action, a delegated `find` click or fill) records into a
 ledger of its own and moves its sends into its parent's.
 
@@ -192,9 +195,11 @@ producer.
 Remaining gaps: a failure before the router's locked scope (session
 resolution, lock acquisition, lease and daemon-policy admission) never reaches
 the disclosure and carries no `dispatched`. It sends nothing, but a consumer
-must read the absent field as `unknown`. The public `agent-device/batch`
-`runBatch` has no ledger when a caller supplies its own `invoke`, so a batch run
-outside the daemon keeps the failing step's value.
+must read the absent field as `unknown`.
+
+`runBatch` reports `no` only when none of its executed steps is a
+`'mutates-app'` command; after one, the batch failure is `unknown` for every
+caller, including one that supplies its own `invoke`.
 
 For `responseFields`, one `buildInteractionResponseData(...)` becomes the only
 construction site for interaction response payloads (this deletes the class of
