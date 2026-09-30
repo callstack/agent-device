@@ -632,20 +632,12 @@ export function isRunnerPreSendRefusal(error: unknown): boolean {
 }
 
 /**
- * Marks a transport failure the transport raised before it wrote any request bytes: the
- * connection never opened. A failure without the mark may have written the command.
- */
-export function markRunnerCommandUnwritten<Failure>(error: Failure): Failure {
-  if (error instanceof AppError) error.details = { ...error.details, runnerCommandUnwritten: true };
-  return error;
-}
-
-/**
- * Whether a connect attempt provably wrote nothing: its transport marked it, or the connection
- * was refused (`ECONNREFUSED` on every address), which happens before a request byte leaves.
+ * Whether a connect attempt provably wrote nothing: its transport disclosed `dispatched: no`, or
+ * the connection was refused (`ECONNREFUSED` on every address), which happens before a request
+ * byte leaves.
  */
 export function isRunnerCommandProvablyUnwritten(error: unknown): boolean {
-  if (error instanceof AppError && error.details?.runnerCommandUnwritten === true) return true;
+  if (error instanceof AppError && error.details?.dispatched === 'no') return true;
   return isConnectionRefused(error, 0);
 }
 
