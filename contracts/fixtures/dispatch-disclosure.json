@@ -266,6 +266,12 @@
     "dispatched": "unknown"
   },
   {
+    "id": "android-adb.input-tap.double-tap-second-refused",
+    "producer": "android-adb",
+    "trigger": "press --double: the first input tap ran and the second could not start (TOOL_MISSING, no); the double tap reports unknown with details.dispatchedSteps 1",
+    "dispatched": "unknown"
+  },
+  {
     "id": "android-adb.input-text.failed-after-chunk",
     "producer": "android-adb",
     "trigger": "adb input text failed after at least one chunk was typed (details.dispatchedSteps)",
@@ -305,6 +311,18 @@
     "id": "android-helper.gesture.no-parseable-output",
     "producer": "android-helper",
     "trigger": "one-shot helper gesture failed before returning parseable output",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-helper.ime.broadcast-tool-missing",
+    "producer": "android-helper",
+    "trigger": "type through the helper IME: adb is missing, so the first text broadcast never started (TOOL_MISSING)",
+    "dispatched": "no"
+  },
+  {
+    "id": "android-helper.ime.broadcast-failed",
+    "producer": "android-helper",
+    "trigger": "type through the helper IME: the text broadcast started and exited non-zero; the IME may have received it",
     "dispatched": "unknown"
   },
   {

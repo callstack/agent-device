@@ -17,10 +17,11 @@ import {
 } from '@agent-device/contracts/scroll-gesture';
 import { type TvRemoteButton, toAndroidTvRemoteKeyevent } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { sleep } from '@agent-device/host-kit/retry';
 import { runAndroidShell } from './adb.ts';
+import { discloseAdbInputDispatch } from './adb-failure.ts';
 import { executeAndroidTouchPlan, readAndroidGestureViewportReading } from './touch-executor.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
@@ -32,10 +33,14 @@ export async function pressAndroid(device: DeviceInfo, x: number, y: number): Pr
   }
 }
 
-/** One `adb shell input` failure: adb that never started delivered nothing; otherwise it may have. */
-export function discloseAdbInputDispatch(error: unknown): unknown {
-  if (!(error instanceof AppError)) return error;
-  return discloseDispatch(error, error.code === 'TOOL_MISSING' ? 'no' : 'unknown');
+/** Two `input tap` sends; a failure of the second follows a tap that already landed. */
+export async function doubleTapAndroid(device: DeviceInfo, x: number, y: number): Promise<void> {
+  await pressAndroid(device, x, y);
+  try {
+    await pressAndroid(device, x, y);
+  } catch (error) {
+    throw discloseDispatchAfterSteps(error, 1);
+  }
 }
 
 export async function pressAndroidTvRemote(

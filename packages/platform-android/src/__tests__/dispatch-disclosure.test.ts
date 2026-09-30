@@ -14,7 +14,7 @@ import {
   type AndroidAdbExecutor,
 } from '../adb-executor.ts';
 import { completeAndroidFillVerification } from '../fill-verification.ts';
-import { pressAndroid } from '../input-actions.ts';
+import { doubleTapAndroid, pressAndroid } from '../input-actions.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import { fillAndroid, typeAndroid } from '../text-input.ts';
 import { executeAndroidTouchHelperPlan } from '../touch-helper.ts';
@@ -66,6 +66,36 @@ async function tapWithAdbAnswer(answer: Error | { exitCode: number; stderr: stri
     (args) => (isShellInput(args, 'tap') ? answer : undefined),
     async ({ device }) => await pressAndroid(device, 10, 20),
   );
+}
+
+async function doubleTapWithSecondTapRefused(): Promise<void> {
+  let taps = 0;
+  await withFakeAdb(
+    (args) => {
+      if (!isShellInput(args, 'tap')) return undefined;
+      taps += 1;
+      return taps === 2 ? new AppError('TOOL_MISSING', 'adb not found in PATH') : undefined;
+    },
+    async ({ device }) => await doubleTapAndroid(device, 10, 20),
+  );
+  assert.equal(taps, 2);
+}
+
+const HELPER_IME_ACTIVE = 'mInputShown=true mCurMethodId=com.callstack.agentdevice.imehelper/.Ime';
+
+/** `type` on a device whose active input method is the helper IME, with the broadcast scripted. */
+async function typeThroughHelperIme(broadcast: Error | { exitCode: number; stderr: string }) {
+  let broadcasts = 0;
+  await withFakeAdb(
+    (args) => {
+      if (args.includes('dumpsys') && args.includes('input_method')) return HELPER_IME_ACTIVE;
+      if (!(args.includes('am') && args.includes('broadcast'))) return undefined;
+      broadcasts += 1;
+      return broadcast;
+    },
+    async ({ device }) => await typeAndroid(device, 'filed'),
+  );
+  assert.equal(broadcasts, 1);
 }
 
 async function typeFailingOnSecondChunk(): Promise<void> {
@@ -159,6 +189,16 @@ const DRIVERS: Record<string, { drive: () => Promise<unknown>; dispatchedSteps?:
   },
   'android-adb.input-tap.failed': {
     drive: () => tapWithAdbAnswer({ exitCode: 1, stderr: 'error: device offline' }),
+  },
+  'android-adb.input-tap.double-tap-second-refused': {
+    drive: doubleTapWithSecondTapRefused,
+    dispatchedSteps: 1,
+  },
+  'android-helper.ime.broadcast-tool-missing': {
+    drive: () => typeThroughHelperIme(new AppError('TOOL_MISSING', 'adb not found in PATH')),
+  },
+  'android-helper.ime.broadcast-failed': {
+    drive: () => typeThroughHelperIme({ exitCode: 1, stderr: 'Broadcast failed' }),
   },
   'android-adb.input-text.failed-after-chunk': {
     drive: typeFailingOnSecondChunk,

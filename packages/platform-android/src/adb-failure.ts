@@ -146,7 +146,7 @@ export function classifyAndroidAdbFailure(
   return undefined;
 }
 
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
 import type { AndroidAdbExecutorResult } from './adb-transport.ts';
@@ -280,4 +280,10 @@ export function attachAndroidDiscoveryTimeout<T>(error: T): T {
         }),
   };
   return error;
+}
+
+/** One adb input send's failure: adb that never started delivered nothing; otherwise it may have. */
+export function discloseAdbInputDispatch(error: unknown): unknown {
+  if (!(error instanceof AppError)) return error;
+  return discloseDispatch(error, error.code === 'TOOL_MISSING' ? 'no' : 'unknown');
 }
