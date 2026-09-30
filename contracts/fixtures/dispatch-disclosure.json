@@ -214,7 +214,7 @@
   {
     "id": "ios-runner.series.later-chunk-refused",
     "producer": "ios-runner",
-    "trigger": "press --count 25 splits into two sequence chunks; the first ran and the second was refused with RUNNER_BUSY; the series reports unknown with details.dispatchedSteps 1",
+    "trigger": "press --count 25 splits into two sequence chunks; the first completed its 20 taps and the second was refused with RUNNER_BUSY; the series reports unknown with details.dispatchedSteps 20, one per completed tap",
     "dispatched": "unknown"
   },
   {

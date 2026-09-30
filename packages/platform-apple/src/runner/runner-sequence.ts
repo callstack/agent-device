@@ -168,15 +168,13 @@ export async function runApplePressSeries(
   let completedSteps = 0;
   const sequenceResults: unknown[] = [];
   let stepOffset = 0;
-  let dispatchedChunks = 0;
   for (const command of commands) {
     let result: Record<string, unknown>;
     try {
       result = await runCommand(command);
     } catch (error) {
-      throw discloseDispatchAfterSteps(error, dispatchedChunks);
+      throw discloseDispatchAfterSteps(error, completedSteps);
     }
-    dispatchedChunks += 1;
     first ??= result;
     last = result;
     let parsed;
@@ -186,7 +184,7 @@ export async function runApplePressSeries(
       // The runner reports an index local to its chunk; callers need the global series index.
       throw discloseDispatchAfterSteps(
         remapSequenceErrorStepIndex(error, stepOffset),
-        dispatchedChunks,
+        completedSteps + chunkCompletedSteps(error),
       );
     }
     completedSteps += parsed.completedSteps;
@@ -252,6 +250,12 @@ function buildPressSteps(
         : {}),
     };
   });
+}
+
+/** The inputs a failed chunk completed before its failing step, as the runner reported them. */
+function chunkCompletedSteps(error: unknown): number {
+  const completed = error instanceof AppError ? error.details?.completedSteps : undefined;
+  return typeof completed === 'number' ? completed : 0;
 }
 
 function remapSequenceErrorStepIndex(error: unknown, stepOffset: number): unknown {

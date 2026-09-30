@@ -27,7 +27,8 @@ import {
 
 // contracts/fixtures/dispatch-disclosure.json, ios-runner rows: each row drives the real send stack
 // (executeRunnerCommandWithSession → transport fetch) or the real lost-response recovery against a
-// scripted fake runner, and asserts the `details.dispatched` the failure leaves with.
+// scripted fake runner, or the pre-send validation that refuses before anything is sent, and
+// asserts the `details.dispatched` the failure leaves with.
 
 let server: FakeRunnerServer | undefined;
 
@@ -117,7 +118,7 @@ async function pressSeriesRefusedOnSecondChunk(): Promise<unknown> {
     );
   } catch (error) {
     assert.ok(error instanceof AppError);
-    assert.equal(error.details?.dispatchedSteps, 1);
+    assert.equal(error.details?.dispatchedSteps, 20);
     assert.equal(server.requests.filter((request) => request.command === 'sequence').length, 2);
     throw error;
   }
