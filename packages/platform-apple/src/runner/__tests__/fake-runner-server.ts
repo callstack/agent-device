@@ -57,11 +57,12 @@ export async function startFakeRunnerServer(
     req.on('end', () => {
       const body = parseBody(raw);
       requests.push({ command: String(body.command ?? ''), body });
-      const queue = byCommand ? byCommand[String(body.command ?? '')] : remaining;
-      const next =
-        queue?.[0]?.kind === 'hangUpAlways'
-          ? queue[0]
-          : (queue?.shift() ?? (byCommand ? { kind: 'ok' as const, data: {} } : undefined));
+      const next = byCommand
+        ? (takeScriptedResponse(byCommand[String(body.command ?? '')]) ?? {
+            kind: 'ok' as const,
+            data: {},
+          })
+        : takeScriptedResponse(remaining);
       if (next?.kind === 'exit') {
         res.destroy();
         stopped ??= new Promise<void>((resolve) => server.close(() => resolve()));
@@ -82,6 +83,13 @@ export async function startFakeRunnerServer(
         server.close((error) => (error ? reject(error) : resolve())),
       ),
   };
+}
+
+/** The next scripted reply; a `hangUpAlways` entry stays at the head of its queue. */
+function takeScriptedResponse(
+  queue: FakeRunnerResponse[] | undefined,
+): FakeRunnerResponse | undefined {
+  return queue?.[0]?.kind === 'hangUpAlways' ? queue[0] : queue?.shift();
 }
 
 function writeFakeRunnerResponse(
