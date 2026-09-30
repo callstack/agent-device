@@ -149,6 +149,7 @@ export async function observeUntil<T, R>(
     if (params.signal?.aborted) throw createRequestCanceledError();
     const expired = await waitBeforePoll(loop);
     if (expired) return expired;
+    if (params.signal?.aborted) throw createRequestCanceledError();
     const ended = await pollOnce(loop);
     if (ended) return ended;
   }

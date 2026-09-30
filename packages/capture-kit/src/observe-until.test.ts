@@ -210,6 +210,34 @@ describe('observeUntil', () => {
   });
 });
 
+describe('observeUntil cancellation', () => {
+  test('a signal aborted during the sleep ends the loop canceled before another capture', async () => {
+    const clock = fakeClock();
+    const controller = new AbortController();
+    let captures = 0;
+    await assert.rejects(
+      observeUntil({
+        capture: async () => {
+          captures += 1;
+          return captures;
+        },
+        verdict: () => ({ kind: 'continue' }),
+        schedule: UNBOUNDED_SCHEDULE,
+        signal: controller.signal,
+        clock: {
+          now: clock.now,
+          sleep: async (ms) => {
+            await clock.sleep(ms);
+            controller.abort();
+          },
+        },
+      }),
+      (error) => error instanceof AppError && error.details?.reason === 'request_canceled',
+    );
+    assert.equal(captures, 1);
+  });
+});
+
 describe('observeUntil budgetFrom first-capture', () => {
   test('never bounds the first capture and spends the budget only on retries', async () => {
     const clock = fakeClock();
