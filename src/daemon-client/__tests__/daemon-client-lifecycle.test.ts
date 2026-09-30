@@ -20,10 +20,7 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
 
 import { resolveDaemonPaths, type DaemonPaths } from '../../daemon-resolution.ts';
 import { sendToDaemon, type DaemonRequest, type DaemonResponse } from '../daemon-client.ts';
-import {
-  attachActiveSessionAddressHint,
-  isDaemonTransportUnavailableError,
-} from '../daemon-client-lifecycle.ts';
+import { attachActiveSessionAddressHint } from '../daemon-client-lifecycle.ts';
 import { sendRequest } from '../daemon-client-transport.ts';
 import {
   closeLoopbackServer,
@@ -1333,15 +1330,4 @@ test('sendToDaemon still tears down a `test` command owned ephemeral daemon even
     await closeLoopbackServer(daemon.server);
     if (ownedStateDir) fs.rmSync(ownedStateDir, { recursive: true, force: true });
   }
-});
-
-test('endpoint-unavailable classification keys on the typed reason, not message text', () => {
-  const typed = new AppError('COMMAND_FAILED', 'reworded message', {
-    reason: 'daemon_endpoint_unavailable',
-    transport: 'http',
-  });
-  assert.equal(isDaemonTransportUnavailableError(typed), true);
-
-  const sameTextUntyped = new AppError('COMMAND_FAILED', 'Daemon HTTP endpoint is unavailable');
-  assert.equal(isDaemonTransportUnavailableError(sameTextUntyped), false);
 });

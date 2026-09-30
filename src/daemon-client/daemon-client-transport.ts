@@ -30,7 +30,15 @@ type SendRequestOptions = {
 
 const LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS = 500;
 const REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS = 3000;
-export const DAEMON_ENDPOINT_UNAVAILABLE_REASON = 'daemon_endpoint_unavailable';
+const DAEMON_ENDPOINT_UNAVAILABLE_REASON = 'daemon_endpoint_unavailable';
+
+export function isDaemonTransportUnavailableError(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    error.code === 'COMMAND_FAILED' &&
+    error.details?.reason === DAEMON_ENDPOINT_UNAVAILABLE_REASON
+  );
+}
 
 function daemonEndpointUnavailableError(transport: ResolvedDaemonTransport): AppError {
   return new AppError(

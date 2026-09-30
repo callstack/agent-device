@@ -45,7 +45,7 @@ import {
 import {
   canConnect,
   cachedRemoteDaemonHealth,
-  DAEMON_ENDPOINT_UNAVAILABLE_REASON,
+  isDaemonTransportUnavailableError,
 } from './daemon-client-transport.ts';
 
 export type DaemonClientSettings = {
@@ -246,14 +246,6 @@ async function canConnectReusableDaemon(
     if (isDaemonTransportUnavailableError(error)) return false;
     throw error;
   }
-}
-
-export function isDaemonTransportUnavailableError(error: unknown): boolean {
-  return (
-    error instanceof AppError &&
-    error.code === 'COMMAND_FAILED' &&
-    error.details?.reason === DAEMON_ENDPOINT_UNAVAILABLE_REASON
-  );
 }
 
 function newerDaemonRefusedError(

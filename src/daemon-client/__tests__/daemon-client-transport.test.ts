@@ -8,7 +8,11 @@ import {
   DAEMON_RPC_PROTOCOL_VERSION,
 } from '@agent-device/contracts/daemon-http';
 import { sendToDaemon } from '../daemon-client.ts';
-import { sendRequest } from '../daemon-client-transport.ts';
+import {
+  canConnect,
+  isDaemonTransportUnavailableError,
+  sendRequest,
+} from '../daemon-client-transport.ts';
 import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { createDaemonProxyServer } from '../../remote/daemon-proxy.ts';
 import {
@@ -380,4 +384,31 @@ test('proxy forwards cached upstream identity and rejects a restarted upstream b
     await closeLoopbackServer(proxy);
     await closeLoopbackServer(upstream);
   }
+});
+
+test('an endpoint missing for the requested transport rejects with a typed reason the classifier accepts', async () => {
+  const socketOnly = { port: 1, token: 't', pid: 1 };
+  const error = await canConnect(socketOnly, 'http').then(
+    () => undefined,
+    (err: unknown) => err,
+  );
+  assert.ok(error instanceof AppError);
+  assert.equal(error.details?.reason, 'daemon_endpoint_unavailable');
+  assert.equal(error.details?.transport, 'http');
+  assert.equal(isDaemonTransportUnavailableError(error), true);
+});
+
+test('the classifier ignores message text', () => {
+  assert.equal(
+    isDaemonTransportUnavailableError(
+      new AppError('COMMAND_FAILED', 'Daemon HTTP endpoint is unavailable'),
+    ),
+    false,
+  );
+  assert.equal(
+    isDaemonTransportUnavailableError(
+      new AppError('COMMAND_FAILED', 'reworded', { reason: 'daemon_endpoint_unavailable' }),
+    ),
+    true,
+  );
 });
