@@ -4,11 +4,15 @@ import { type RequestCaptureProof, withCaptureDisclosures } from '../../capture-
 import type { CaptureSnapshotForSession, InteractionRouteInput } from './types.ts';
 import { dispatchFillViaRuntime } from './interaction-touch-fill.ts';
 import { dispatchTargetedTouchViaRuntime } from './interaction-touch-press.ts';
-import { discloseInteractionDispatch } from './interaction-dispatch-disclosure.ts';
 import { finalizeTouchInteraction } from './interaction-runtime.ts';
 import { refSnapshotFlagGuardResponse } from '../../ref-snapshot-flag-policy.ts';
 import { dispatchGetViaRuntime, dispatchIsViaRuntime } from '../../selector-runtime.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
+import {
+  createRequestDispatchLedger,
+  discloseRequestDispatch,
+  sendRecordedMutation,
+} from '../../request-dispatch-disclosure.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { normalizeError } from '@agent-device/kernel/errors';
 import {
@@ -26,9 +30,11 @@ export async function handleInteractionCommands(
   params: InteractionRouteInput & { captureSnapshotForSession: CaptureSnapshotForSession },
 ): Promise<DaemonResponse | null> {
   const captureProof: RequestCaptureProof = {};
-  const routed = { ...params, refSnapshotFlagGuardResponse, captureProof };
-  const response = await discloseInteractionDispatch(
+  const dispatchLedger = params.dispatchLedger ?? createRequestDispatchLedger();
+  const routed = { ...params, refSnapshotFlagGuardResponse, captureProof, dispatchLedger };
+  const response = await discloseRequestDispatch(
     params.req,
+    dispatchLedger,
     async () => await dispatchInteractionCommand(routed),
   );
   return response
@@ -154,9 +160,13 @@ async function runTypeTextViaRuntime(
     // executing so a later step cannot reuse it. R41: the bound executor already validates and
     // composes the retired leaf's exact result, so nothing here re-validates or re-formats it.
     expireRefFrame(session);
-    const result = await boundTypeText(
-      req.positionals ?? [],
-      params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
+    const result = await sendRecordedMutation(
+      params.dispatchLedger,
+      async () =>
+        await boundTypeText(
+          req.positionals ?? [],
+          params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
+        ),
     );
     await ensureAndroidBlockingSystemDialogReady({
       session,

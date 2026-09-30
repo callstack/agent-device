@@ -574,10 +574,33 @@ export function discloseDispatch<Failure extends AppError>(
  */
 export function discloseDispatchAfterSteps(error: unknown, dispatchedSteps: number): unknown {
   if (dispatchedSteps === 0 || !(error instanceof AppError)) return error;
-  const innerSteps = error.details?.dispatchedSteps;
   return discloseDispatch(error, 'unknown', {
-    dispatchedSteps: dispatchedSteps + (typeof innerSteps === 'number' ? innerSteps : 0),
+    dispatchedSteps: stepsIncludingFailingStep(error.details, dispatchedSteps),
   });
+}
+
+/**
+ * {@link discloseDispatchAfterSteps} for a failure already on the wire: the details a failed
+ * response carries after `dispatchedSteps` device-reaching steps of its request returned.
+ */
+export function detailsAfterDispatchedSteps(
+  details: ErrorWireDetails | undefined,
+  dispatchedSteps: number,
+): ErrorWireDetails | undefined {
+  if (dispatchedSteps === 0) return details;
+  return {
+    ...details,
+    dispatchedSteps: stepsIncludingFailingStep(details, dispatchedSteps),
+    dispatched: 'unknown',
+  };
+}
+
+function stepsIncludingFailingStep(
+  details: Record<string, unknown> | undefined,
+  dispatchedSteps: number,
+): number {
+  const innerSteps = details?.dispatchedSteps;
+  return dispatchedSteps + (typeof innerSteps === 'number' ? innerSteps : 0);
 }
 
 /** The side-effect seam's verdict, recorded only when no producer classified the failure. */

@@ -18,7 +18,11 @@ import {
   resetGetRuntimeFixture,
 } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
-import { discloseInteractionDispatch } from '../interaction-dispatch-disclosure.ts';
+import {
+  createRequestDispatchLedger,
+  discloseRequestDispatch,
+} from '../../../request-dispatch-disclosure.ts';
+import { clearAndroidObservationFixture } from '../../../__tests__/android-observation-fixture.ts';
 import { handleInteractionCommands } from '../../index.ts';
 import { assertAndroidPressStayedInApp } from '../interaction-android-escape.ts';
 import { gestureRuntimeBindingsFixture } from './gesture-runtime-bindings.fixtures.ts';
@@ -101,8 +105,9 @@ async function pressThatLeftTheApp(): Promise<unknown> {
     readAppState: async () => ({ package: 'com.android.settings' }),
     isPermissionPackage: async () => false,
   } as unknown as AndroidObservationAdapter;
-  return await discloseInteractionDispatch(
+  return await discloseRequestDispatch(
     { token: 't', session: session.name, command: 'press', positionals: ['@e1'] },
+    createRequestDispatchLedger(),
     async () => {
       await assertAndroidPressStayedInApp(session, '@e1', observation);
       return null;
@@ -148,12 +153,43 @@ async function swipeRefusedOnSecondRepetition(): Promise<unknown> {
   throw new AppError(response.error.code, response.error.message, response.error.details);
 }
 
+/** An Android press whose tap returns and whose post-press foreground read is refused with `no`. */
+async function pressThenForegroundReadRefused(): Promise<unknown> {
+  const session = makeAndroidSession('dispatch-disclosure-post-dispatch', {
+    appBundleId: 'com.example.app',
+  });
+  const sessionStore = makeSessionStore();
+  sessionStore.set(session.name, session);
+  const readRefusal = new AppError('COMMAND_FAILED', 'adb device offline', { dispatched: 'no' });
+  const androidObservation: AndroidObservationAdapter = {
+    ...clearAndroidObservationFixture,
+    readAppState: async () => {
+      if (mockTapPoint.mock.calls.length > 0) throw readRefusal;
+      return { package: 'com.example.app' };
+    },
+  };
+  const response = await handleInteractionCommands({
+    req: { token: 't', session: session.name, command: 'press', positionals: ['50', '40'] },
+    sessionName: session.name,
+    sessionStore,
+    contextFromFlags,
+    ...getRuntimeBindings(),
+    androidObservation,
+  });
+  assert.equal(mockTapPoint.mock.calls.length, 1);
+  assert.ok(response && !response.ok, 'expected the press to fail after its tap');
+  assert.equal(response.error.message, 'adb device offline');
+  assert.equal(response.error.details?.dispatchedSteps, 1);
+  throw new AppError(response.error.code, response.error.message, response.error.details);
+}
+
 const DRIVERS: Record<string, () => Promise<unknown>> = {
   'daemon.refusal.ref-not-found': () => refusedPress(['@e9']),
   'daemon.refusal.admission': () => refusedPress([]),
   'daemon.refusal.fill-admission': () => refusedFill(['@e1']),
   'daemon.unclassified': () => pressAfterUnclassifiedTouchFailure(),
   'daemon.series.swipe-later-repetition-refused': swipeRefusedOnSecondRepetition,
+  'daemon.post-dispatch.press-then-foreground-read-refused': pressThenForegroundReadRefused,
   'daemon.read-only-command': () =>
     press({ command: 'get', positionals: ['text', 'label="Missing"'] }),
   'post-action-guard.android-press-left-app': pressThatLeftTheApp,
@@ -213,8 +249,9 @@ test('a read-only command discloses no over a producer verdict it throws', async
     dispatched: 'unknown',
   });
   await assert.rejects(
-    discloseInteractionDispatch(
+    discloseRequestDispatch(
       { token: 't', session: 's', command: 'get', positionals: ['text', 'label="Missing"'] },
+      createRequestDispatchLedger(),
       async () => {
         throw producerFailure;
       },

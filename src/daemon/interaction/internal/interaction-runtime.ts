@@ -17,6 +17,7 @@ import { confirmIosOffscreenTargetVisible } from '../../offscreen-target-probe.t
 import { createDaemonRuntimeSessionStore } from '../../runtime-session.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
 import { setSessionSnapshot } from '../../session-snapshot.ts';
+import { sendRecordedMutation } from '../../request-dispatch-disclosure.ts';
 import type {
   CaptureSnapshotForSession,
   InteractionRouteInput,
@@ -90,6 +91,7 @@ export function createInteractionRuntimeForRoute(
     pairedGestureViewport: params.pairedGestureViewport,
     touchExecutor: params.touchExecutor,
     gestures: params.gestures,
+    dispatchLedger: params.dispatchLedger,
   });
 }
 
@@ -145,7 +147,7 @@ function createInteractionBackend(params: InteractionRuntimeInput): AgentDeviceB
             await params.confirmOffscreenTargetVisible!(node, rootViewport),
         }
       : {}),
-    ...touchBackendMembers(params.touchExecutor, params.expireRefFrame, flags),
+    ...touchBackendMembers(params, flags),
   };
 }
 
@@ -165,21 +167,28 @@ function gestureBackendMembers(
       pairedGestureViewport ?? (await gestures.gestureViewport?.(gestureContext())),
     performGesture: async (_context, plan): Promise<BackendActionResult> => {
       params.expireRefFrame();
-      return toBackendActionResult(await gestures.performPlan(plan, gestureContext()));
+      return toBackendActionResult(
+        await sendRecordedMutation(
+          params.dispatchLedger,
+          async () => await gestures.performPlan(plan, gestureContext()),
+        ),
+      );
     },
   };
 }
 
 function touchBackendMembers(
-  executor: InteractionRuntimeInput['touchExecutor'],
-  expireRefFrame: () => void,
+  params: InteractionRuntimeInput,
   flags: InteractionRuntimeInput['flags'],
 ): Partial<AgentDeviceBackend> {
+  const executor = params.touchExecutor;
   if (!executor) return {};
   const { tapPoint, tapRef, fillPoint, fillRef, longPressPoint, hoverPoint, hoverRef } = executor;
   const run = async (action: () => unknown): Promise<BackendActionResult> => {
-    expireRefFrame();
-    return toBackendActionResult(await action());
+    params.expireRefFrame();
+    return toBackendActionResult(
+      await sendRecordedMutation(params.dispatchLedger, async () => await action()),
+    );
   };
   return {
     tap: tapPoint ? (_context, point) => run(() => tapPoint(point, flags)) : undefined,

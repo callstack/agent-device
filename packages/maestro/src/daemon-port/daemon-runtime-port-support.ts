@@ -13,6 +13,7 @@ import type { Rect } from '@agent-device/kernel/snapshot';
 import type { DaemonMaestroRuntimeDependencies } from './daemon-runtime-port-observation.ts';
 import { stripUndefined } from '@agent-device/kernel/record';
 import {
+  isMaestroMutationOperation,
   projectMaestroPublicOperation,
   type MaestroDaemonOperationRequest,
   type MaestroPublicOperation,
@@ -36,6 +37,9 @@ export type CreateDaemonMaestroRuntimeOperationsOptions = {
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
 };
 
+/** Mutating operations whose daemon request returned ok, counted across one port. */
+export type MaestroMutationLedger = { sent: number };
+
 type MaestroPublicOperationResult<Operation extends MaestroPublicOperation> = Operation extends {
   kind: 'gestureViewport';
 }
@@ -43,7 +47,9 @@ type MaestroPublicOperationResult<Operation extends MaestroPublicOperation> = Op
   : DaemonResponseData | undefined;
 
 export async function invokeMaestroPublicOperation<Operation extends MaestroPublicOperation>(
-  options: CreateDaemonMaestroRuntimeOperationsOptions,
+  options: CreateDaemonMaestroRuntimeOperationsOptions & {
+    readonly mutationLedger?: MaestroMutationLedger;
+  },
   operation: Operation,
 ): Promise<MaestroPublicOperationResult<Operation>> {
   const projected = projectMaestroPublicOperation(operation);
@@ -51,6 +57,9 @@ export async function invokeMaestroPublicOperation<Operation extends MaestroPubl
     stripUndefined({ ...projected, flags: flagsWith(options.flags, projected.flags ?? {}) }),
   );
   if (!response.ok) throw daemonResponseError(response);
+  if (options.mutationLedger && isMaestroMutationOperation(operation)) {
+    options.mutationLedger.sent += 1;
+  }
   if (operation.kind === 'gestureViewport') {
     const viewport = response.data?.viewport;
     if (

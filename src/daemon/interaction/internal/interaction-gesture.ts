@@ -17,7 +17,7 @@ import {
   SWIPE_REPETITION_MAX,
   SWIPE_SERIES_MAX_SCHEDULED_DURATION_MS,
 } from '@agent-device/contracts/scroll-gesture';
-import { AppError, discloseDispatchAfterSteps, normalizeError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   REF_GRAMMAR_HINT,
   splitRefGenerationSuffix,
@@ -374,20 +374,14 @@ async function runSwipeRepetitions(
   pattern: 'one-way' | 'ping-pong',
 ) {
   let result: Awaited<ReturnType<typeof runtime.interactions.gesture>> | undefined;
-  let dispatchedSwipes = 0;
-  try {
-    for (let index = 0; index < count; index += 1) {
-      const normalized = normalizePublicSwipeMotion(swipeMotionAtIndex(input, pattern, index));
-      result = await runtime.interactions.gesture({
-        session: params.sessionName,
-        requestId: params.req.meta?.requestId,
-        gesture: normalized.gesture,
-      });
-      dispatchedSwipes += 1;
-      if (pauseMs > 0 && index + 1 < count) await sleep(pauseMs);
-    }
-  } catch (error) {
-    throw discloseDispatchAfterSteps(error, dispatchedSwipes);
+  for (let index = 0; index < count; index += 1) {
+    const normalized = normalizePublicSwipeMotion(swipeMotionAtIndex(input, pattern, index));
+    result = await runtime.interactions.gesture({
+      session: params.sessionName,
+      requestId: params.req.meta?.requestId,
+      gesture: normalized.gesture,
+    });
+    if (pauseMs > 0 && index + 1 < count) await sleep(pauseMs);
   }
   if (!result) throw new Error('Swipe orchestration did not execute a gesture.');
   return result;
