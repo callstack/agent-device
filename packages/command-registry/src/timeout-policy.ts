@@ -83,14 +83,18 @@ export function resolveCommandRequestTimeoutMs(
     resolvePositionalBudgetTimeoutMs(boundedPolicy, input.positionals ?? []) ??
     resolveFlagBudgetTimeoutMs(boundedPolicy, input.flags) ??
     boundedPolicy.envelopeMs;
-  return envelopeMs + readinessBudgetMs(input.flags);
+  return envelopeMs + readinessBudgetMs(policy, input.flags);
 }
 
 /**
  * A readiness budget is target-poll time spent before the action itself, so it extends whatever
  * envelope the command otherwise has; the daemon's own poll must never outlive the client's clock.
  */
-function readinessBudgetMs(flags: RequestTimeoutInput['flags']): number {
+function readinessBudgetMs(
+  policy: CommandTimeoutPolicy,
+  flags: RequestTimeoutInput['flags'],
+): number {
+  if (policy.targetReadiness !== 'budgeted') return 0;
   const budgetMs = flags?.readinessTimeoutMs;
   return typeof budgetMs === 'number' && Number.isFinite(budgetMs) && budgetMs > 0 ? budgetMs : 0;
 }

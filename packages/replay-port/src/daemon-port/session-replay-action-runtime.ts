@@ -6,6 +6,7 @@ import type {
   ReplayInvoke,
 } from '@agent-device/replay-port/command-types';
 import { mergeParentFlags } from '@agent-device/command-registry/batch';
+import { commandAcceptsReadinessBudget } from '@agent-device/command-registry/registry';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   gesturePayloadFromPositionals,
@@ -216,15 +217,10 @@ function readResponseTiming(data: unknown): Record<string, unknown> | undefined 
 }
 
 /**
- * A replayed press/click/longpress step carries no readiness budget of its own; replay supplies one
+ * A replayed step of a readiness-budgeted command carries no budget of its own; replay supplies one
  * so a step recorded against a loading screen can land.
  */
 const REPLAY_DEFAULT_READINESS_TIMEOUT_MS = 2_000;
-const READINESS_BUDGETED_REPLAY_COMMANDS: ReadonlySet<string> = new Set([
-  'press',
-  'click',
-  'longpress',
-]);
 
 function buildReplayActionFlags(
   parentFlags: CommandFlags | undefined,
@@ -232,7 +228,7 @@ function buildReplayActionFlags(
   command: string,
 ): CommandFlags {
   const flags = mergeParentFlags(parentFlags, { ...(actionFlags ?? {}) });
-  if (READINESS_BUDGETED_REPLAY_COMMANDS.has(command) && flags.readinessTimeoutMs === undefined) {
+  if (commandAcceptsReadinessBudget(command) && flags.readinessTimeoutMs === undefined) {
     flags.readinessTimeoutMs = REPLAY_DEFAULT_READINESS_TIMEOUT_MS;
   }
   return flags;

@@ -2,10 +2,12 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
+  commandAcceptsReadinessBudget,
   commandDescriptors,
   resolveCommandPostActionObservationSupport,
   resolveCommandTimeoutPolicy,
 } from '@agent-device/command-registry/registry';
+import { INTERACTION_DISPATCH_PATHS } from '@agent-device/contracts/interaction-guarantees';
 import {
   DEFAULT_TIMEOUT_POLICY,
   resolveCommandRequestTimeoutMs,
@@ -423,4 +425,26 @@ test('a readiness budget widens the request envelope on top of the settle envelo
     212_000,
   );
   assert.equal(resolveCommandRequestTimeoutMs(press, { flags: { readinessTimeoutMs: 0 } }), 90_000);
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('fill'), {
+      flags: { readinessTimeoutMs: 2_000 },
+    }),
+    90_000,
+  );
+});
+
+test('the readiness-budgeted commands are the ones a runtime targetReadiness cell enforces', () => {
+  const declared = commandDescriptors
+    .map((descriptor) => descriptor.name)
+    .filter((command) => commandAcceptsReadinessBudget(command))
+    .sort();
+  const enforced = [
+    ...new Set(
+      Object.values(INTERACTION_DISPATCH_PATHS).flatMap((path) => {
+        const cell = path.guarantees.targetReadiness;
+        return cell.kind === 'runtime' ? (cell.appliesTo ?? path.commands) : [];
+      }),
+    ),
+  ].sort();
+  assert.deepEqual(declared, enforced);
 });

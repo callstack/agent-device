@@ -6,6 +6,10 @@ import type { DaemonRequest } from '../../daemon-request.ts';
 import { invokeReplayAction } from '@agent-device/replay-port/session-replay-action-runtime';
 import { replayDaemonDependencies } from '../../handlers/session-replay-command.ts';
 import { resolveReplayAction } from '@agent-device/ad-script';
+import {
+  commandAcceptsReadinessBudget,
+  commandDescriptors,
+} from '@agent-device/command-registry/registry';
 
 const REPLAY_REQUEST: DaemonRequest = {
   token: 'token',
@@ -58,9 +62,13 @@ test.each(['', '   '])(
   },
 );
 
+const READINESS_BUDGETED_COMMANDS = commandDescriptors
+  .map((descriptor) => descriptor.name)
+  .filter((command) => commandAcceptsReadinessBudget(command));
+
 // A replay step has no CLI flag to carry a readiness budget, so `buildReplayActionFlags` defaults
-// one in for press/click/longpress.
-test.each(['press', 'click', 'longpress'])(
+// one in for every readiness-budgeted command.
+test.each(READINESS_BUDGETED_COMMANDS)(
   'replay defaults readinessTimeoutMs onto a dispatched %s step',
   async (command) => {
     const action: SessionAction = { ts: 0, command, positionals: ['label="Continue"'], flags: {} };

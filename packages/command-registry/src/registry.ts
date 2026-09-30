@@ -1301,6 +1301,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     },
     timeoutPolicy: postActionObservationTimeoutPolicy('click', PRESERVE_DAEMON_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('click'),
+    targetReadiness: 'budgeted',
     responseDataTransform: TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
     platformExecution: { kind: 'device-runtime', uses: clickRuntimeUses },
@@ -1330,6 +1331,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       envelopeMs: 210_000,
     },
     postActionObservation: postActionObservation('longpress'),
+    targetReadiness: 'budgeted',
     batchable: true,
     platformExecution: { kind: 'device-runtime', uses: longPressRuntimeUses },
   },
@@ -1358,6 +1360,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'core',
     timeoutPolicy: postActionObservationTimeoutPolicy('press', PRESERVE_DAEMON_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('press'),
+    targetReadiness: 'budgeted',
     responseDataTransform: TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
     platformExecution: { kind: 'device-runtime', uses: pressRuntimeUses },
@@ -1972,7 +1975,12 @@ function readCatalogKey(descriptor: {
 }
 
 const TIMEOUT_POLICY_BY_COMMAND: ReadonlyMap<string, CommandTimeoutPolicy> = new Map(
-  commandDescriptors.map((descriptor) => [descriptor.name, descriptor.timeoutPolicy]),
+  Array.from(COMMAND_DESCRIPTOR_BY_NAME.values(), (descriptor) => [
+    descriptor.name,
+    descriptor.targetReadiness
+      ? { ...descriptor.timeoutPolicy, targetReadiness: descriptor.targetReadiness }
+      : descriptor.timeoutPolicy,
+  ]),
 );
 
 const DEVICE_CLAIM_POLICY_BY_COMMAND: ReadonlyMap<string, DeviceClaimPolicy> = new Map(
@@ -1997,6 +2005,11 @@ export function resolveCommandPostActionObservationSupport(
 
 export function commandSupportsSettleObservation(command: string | undefined): boolean {
   return resolveCommandPostActionObservationSupport(command) !== undefined;
+}
+
+export function commandAcceptsReadinessBudget(command: string | undefined): boolean {
+  if (command === undefined) return false;
+  return COMMAND_DESCRIPTOR_BY_NAME.get(command)?.targetReadiness === 'budgeted';
 }
 
 export function commandSupportsVerifyEvidence(command: string | undefined): boolean {
