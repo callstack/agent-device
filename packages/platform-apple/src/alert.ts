@@ -142,7 +142,7 @@ function withAlertFallbackHint(error: unknown): unknown {
  * `details.runnerErrorCode` (it stays `COMMAND_FAILED` on the wire, like `RUNNER_BUSY`); the macOS
  * helper's arrives as `details.reason`, forwarded verbatim from its JSON error envelope.
  */
-function isAlertNotFoundError(error: unknown): boolean {
+export function isAlertNotFoundError(error: unknown): boolean {
   if (!(error instanceof AppError)) return false;
   const details = error.details ?? {};
   return (

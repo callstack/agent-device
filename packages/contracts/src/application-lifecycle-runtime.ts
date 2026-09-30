@@ -159,9 +159,17 @@ export type PostOpenObservationFailure = Readonly<{
   reason?: string;
 }>;
 
+/**
+ * A system confirmation the launch itself raised and the open answered. `accepted`: iOS held a
+ * launch URL behind `Open in "<App>"?` naming the session app, and the open accepted it.
+ */
+export type LaunchConfirmation = 'accepted';
+
 export type OpenApplicationOutcome = Readonly<{
   appBundleId?: string;
   timing: OpenApplicationTiming;
+  /** Present only when the open answered a launch confirmation. */
+  launchConfirmation?: LaunchConfirmation;
 }>;
 
 /** Applies or clears a platform's native representation of neutral runtime hints. */
