@@ -625,10 +625,37 @@ export function shouldRestartRunnerBeforeCommandSend(error: unknown): boolean {
  */
 export function isRunnerPreSendRefusal(error: unknown): boolean {
   return (
-    shouldRestartRunnerBeforeCommandSend(error) ||
+    (shouldRestartRunnerBeforeCommandSend(error) && isRunnerCommandProvablyUnwritten(error)) ||
     shouldRestartRunnerAfterReadinessPreflight(error) ||
     isRunnerBusyError(error)
   );
+}
+
+/**
+ * Marks a transport failure the transport raised before it wrote any request bytes: the
+ * connection never opened. A failure without the mark may have written the command.
+ */
+export function markRunnerCommandUnwritten<Failure>(error: Failure): Failure {
+  if (error instanceof AppError) error.details = { ...error.details, runnerCommandUnwritten: true };
+  return error;
+}
+
+/**
+ * Whether a connect attempt provably wrote nothing: its transport marked it, or the connection
+ * was refused (`ECONNREFUSED` on every address), which happens before a request byte leaves.
+ */
+export function isRunnerCommandProvablyUnwritten(error: unknown): boolean {
+  if (error instanceof AppError && error.details?.runnerCommandUnwritten === true) return true;
+  return isConnectionRefused(error, 0);
+}
+
+function isConnectionRefused(error: unknown, depth: number): boolean {
+  if (depth > 4 || typeof error !== 'object' || error === null) return false;
+  if ((error as { code?: unknown }).code === 'ECONNREFUSED') return true;
+  if (error instanceof AggregateError && error.errors.length > 0) {
+    return error.errors.every((inner) => isConnectionRefused(inner, depth + 1));
+  }
+  return isConnectionRefused((error as { cause?: unknown }).cause, depth + 1);
 }
 
 /**

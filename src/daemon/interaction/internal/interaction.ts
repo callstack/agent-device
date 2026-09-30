@@ -28,6 +28,7 @@ export async function handleInteractionCommands(
   const captureProof: RequestCaptureProof = {};
   const routed = { ...params, refSnapshotFlagGuardResponse, captureProof };
   const response = await discloseUnclassifiedInteractionDispatch(
+    params.req,
     async () => await dispatchInteractionCommand(routed),
   );
   return response

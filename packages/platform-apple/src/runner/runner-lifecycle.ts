@@ -360,6 +360,7 @@ async function executeRunnerCommandAttempt(
         options,
         signal,
         restartReason: 'runner_connect_failed_before_command_send',
+        firstAttemptUnwritten: isRunnerPreSendRefusal(appErr),
       });
     }
     if (session && shouldRestartRunnerAfterReadinessPreflight(appErr)) {
@@ -372,6 +373,7 @@ async function executeRunnerCommandAttempt(
         signal,
         restartReason: 'runner_readiness_preflight_failed_before_command_send',
         recoveredDiagnosticPhase: 'ios_runner_readiness_preflight_recovered',
+        firstAttemptUnwritten: true,
       });
     }
     // Status recovery answers "did the command I lost the response to run?". A structured reply
@@ -403,6 +405,11 @@ async function restartSessionAndRunCommand(params: {
     | 'runner_connect_failed_before_command_send'
     | 'runner_readiness_preflight_failed_before_command_send';
   recoveredDiagnosticPhase?: string;
+  /**
+   * The failed first attempt provably never wrote the command. When it may have, the replay can
+   * double-send, and no failure of this restart may claim `no`.
+   */
+  firstAttemptUnwritten: boolean;
 }): Promise<Record<string, unknown>> {
   const { device, command, options, signal, restartReason } = params;
   // At most one recycle per request: when the budget is spent, fail fast and KEEP the current
@@ -410,15 +417,17 @@ async function restartSessionAndRunCommand(params: {
   // cheaply, and a dead process is detected and cleaned by the next ensureRunnerSession (#1105).
   const recycleKey = runnerRecycleLedgerKey(options, command);
   if (!tryBeginRunnerRecycle(recycleKey)) {
-    throw buildRunnerRecycleBudgetExhaustedError(command, options);
+    throw discloseDispatch(
+      buildRunnerRecycleBudgetExhaustedError(command, options),
+      params.firstAttemptUnwritten ? 'no' : 'unknown',
+    );
   }
   await invalidateRunnerSession(params.session, restartReason);
   const restartedSession = await ensureRunnerSession(device, {
     ...options,
     cleanStaleBundles: true,
   }).catch((error: unknown) => {
-    const restartError = markRunnerRestartError(error, params);
-    throw restartError instanceof AppError ? discloseDispatch(restartError, 'no') : restartError;
+    throw markRunnerRestartError(error, params);
   });
   commitRunnerRecycle(recycleKey);
   try {
@@ -469,12 +478,12 @@ function markRunnerRestartError(
   error: unknown,
   params: Pick<
     Parameters<typeof restartSessionAndRunCommand>[0],
-    'session' | 'command' | 'options' | 'restartReason'
+    'session' | 'command' | 'options' | 'restartReason' | 'firstAttemptUnwritten'
   >,
   restartedSession?: RunnerSession,
 ): unknown {
   if (!(error instanceof AppError)) return error;
-  return new AppError(
+  const marked = new AppError(
     error.code,
     error.message,
     {
@@ -491,6 +500,21 @@ function markRunnerRestartError(
     },
     error.cause ?? error,
   );
+  return discloseRestartDispatch(marked, params.firstAttemptUnwritten, restartedSession);
+}
+
+/**
+ * A restart that never replayed says what the first attempt did; a replay after a first attempt
+ * that may have written the command cannot claim `no` for the two sends together.
+ */
+function discloseRestartDispatch(
+  error: AppError,
+  firstAttemptUnwritten: boolean,
+  restartedSession: RunnerSession | undefined,
+): AppError {
+  if (!restartedSession) return discloseDispatch(error, firstAttemptUnwritten ? 'no' : 'unknown');
+  if (firstAttemptUnwritten || error.details?.dispatched === 'yes') return error;
+  return discloseDispatch(error, 'unknown');
 }
 
 async function runPrepareHealthCheck(

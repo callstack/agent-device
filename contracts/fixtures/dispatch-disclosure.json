@@ -28,6 +28,13 @@
     "dispatched": "unknown"
   },
   {
+    "id": "daemon.read-only-command",
+    "phase": "after-seam",
+    "producer": "daemon",
+    "trigger": "an unclassified failure of a command the registry declares read-only (recordingEffect observes-app), e.g. get",
+    "dispatched": "no"
+  },
+  {
     "id": "daemon.scroll-no-progress",
     "phase": "after-seam",
     "producer": "daemon",
@@ -156,11 +163,18 @@
     "dispatched": "no"
   },
   {
-    "id": "ios-runner.pre-send.connect-refused-restart-failed",
+    "id": "ios-runner.pre-send.connect-refused-before-write",
     "phase": "before-seam",
     "producer": "ios-runner",
-    "trigger": "the runner refused the connection before the command was sent, and the restart that would replay it failed",
+    "trigger": "every connect attempt was refused before a byte was written (ECONNREFUSED, simctl curl exit 7), and the restart that would replay the command failed",
     "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.transport.written-then-lost",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "a connect attempt posted the command and then timed out (fetch deadline, simctl curl exit 28); the failure keeps the runner_connect_refused restart verdict, and the restart that replays it failed",
+    "dispatched": "unknown"
   },
   {
     "id": "ios-runner.pre-send.readiness-preflight-after-restart",
