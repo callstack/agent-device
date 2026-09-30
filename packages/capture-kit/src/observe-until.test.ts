@@ -21,7 +21,9 @@ function fakeClock(): ObservationClock & { advance(ms: number): void; slept: num
   };
 }
 
-const SCHEDULE = { intervalMs: 200, budgetMs: 1_000, captureDeadline: 'cancel' } as const;
+/** No per-capture deadline: the engine default. */
+const UNBOUNDED_SCHEDULE = { intervalMs: 200, budgetMs: 1_000 } as const;
+const SCHEDULE = { ...UNBOUNDED_SCHEDULE, captureDeadline: 'cancel' } as const;
 
 /** The Android helper's content verdict: the capture ran but held no readable app content. */
 function unreadableContent(): AppError {
@@ -165,7 +167,7 @@ describe('observeUntil', () => {
         previous !== undefined
           ? { kind: 'done', result: [previous, latest] }
           : { kind: 'continue' },
-      schedule: { intervalMs: 200, budgetMs: 1_000, minPolls: 2, captureDeadline: 'none' },
+      schedule: { ...UNBOUNDED_SCHEDULE, minPolls: 2 },
       clock,
     });
     assert.equal(observed.kind, 'done');
@@ -262,12 +264,12 @@ describe('observeUntil captureDeadline', () => {
     };
   }
 
-  test("'none' judges a capture that finishes past the budget and can end done", async () => {
+  test('by default judges a capture that finishes past the budget and can end done', async () => {
     const clock = fakeClock();
     const observed = await observeUntil({
       capture: lateSecondCapture(clock),
       verdict: (latest) => (latest === 2 ? { kind: 'done', result: latest } : { kind: 'continue' }),
-      schedule: { ...SCHEDULE, captureDeadline: 'none' },
+      schedule: UNBOUNDED_SCHEDULE,
       clock,
     });
     assert.equal(observed.kind, 'done');
@@ -277,12 +279,12 @@ describe('observeUntil captureDeadline', () => {
     );
   });
 
-  test("'none' ends expired, never stalled, when the late capture's verdict continues", async () => {
+  test("by default ends expired, never stalled, when the late capture's verdict continues", async () => {
     const clock = fakeClock();
     const observed = await observeUntil({
       capture: lateSecondCapture(clock),
       verdict: () => ({ kind: 'continue' }),
-      schedule: { ...SCHEDULE, captureDeadline: 'none' },
+      schedule: UNBOUNDED_SCHEDULE,
       clock,
     });
     assert.equal(observed.kind, 'expired');

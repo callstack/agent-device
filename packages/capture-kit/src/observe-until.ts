@@ -43,9 +43,10 @@ export type ObservationSchedule = Readonly<{
    * remaining budget (at least one interval) as an abort signal, and a capture that ends at or past
    * that deadline ends the loop `stalled`: declare it only when the capture honors the signal.
    * `'none'` hands the capture no deadline; a capture that finishes past the budget is still judged,
-   * so the loop ends `done` on an accepting verdict and `expired` otherwise.
+   * so the loop ends `done` on an accepting verdict and `expired` otherwise. Default `'none'`, so a
+   * capture that ignores the signal cannot end the loop `stalled` by omission.
    */
-  captureDeadline: 'cancel' | 'none';
+  captureDeadline?: 'cancel' | 'none';
 }>;
 
 export type ObservationClock = Readonly<{

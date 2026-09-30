@@ -235,9 +235,7 @@ export function createAdReplayStepRuntime(params: {
         capture: observeOnce,
         verdict: (latest) =>
           isTargetNotRenderedYet(latest) ? { kind: 'continue' } : { kind: 'done', result: latest },
-        // The divergence capture takes no per-capture signal, so a late
-        // capture is judged rather than cancelled.
-        schedule: { ...readiness, captureDeadline: 'none' },
+        schedule: readiness,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
         ...(ctx.dependencies.clock ? { clock: ctx.dependencies.clock } : {}),
       });
