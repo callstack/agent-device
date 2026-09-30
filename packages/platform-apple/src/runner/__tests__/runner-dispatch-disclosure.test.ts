@@ -123,6 +123,26 @@ async function pressSeriesRefusedOnSecondChunk(): Promise<unknown> {
   }
 }
 
+/** `press --count 2` at a non-finite point: validation refuses before any sequence is sent. */
+async function pressSeriesWithInvalidStep(): Promise<unknown> {
+  const runCommand = vi.fn(async () => ({}));
+  try {
+    return await runApplePressSeries(
+      IOS_SIMULATOR,
+      { x: Number.NaN, y: 20 },
+      { button: 'primary', count: 2, intervalMs: 0, holdMs: 0, jitterPx: 0, doubleTap: false },
+      undefined,
+      runCommand,
+    );
+  } catch (error) {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, 'runner_sequence_invalid');
+    throw error;
+  } finally {
+    assert.equal(runCommand.mock.calls.length, 0);
+  }
+}
+
 function statusReply(data: Record<string, unknown>): FakeRunnerResponse[] {
   return [{ kind: 'ok', data }];
 }
@@ -147,6 +167,7 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
   'ios-runner.reply.MAIN_THREAD_TIMEOUT': () => replyFailure('MAIN_THREAD_TIMEOUT'),
   'ios-runner.reply.unlisted-code': () => replyFailure('XCTEST_RECORDED_FAILURE'),
   'ios-runner.series.later-chunk-refused': pressSeriesRefusedOnSecondChunk,
+  'ios-runner.series.invalid-step-before-send': pressSeriesWithInvalidStep,
   'ios-runner.status.failed': () =>
     lostResponse(statusReply({ lifecycleState: 'failed', lifecycleErrorMessage: 'tap failed' })),
   'ios-runner.status.failed-RUNNER_BUSY': () =>
