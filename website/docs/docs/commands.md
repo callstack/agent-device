@@ -454,6 +454,7 @@ agent-device alert dismiss
 - Use `alert get` for an immediate cheap check. Use `alert wait <short-ms>` only when a prompt may appear after async work.
 - Within an iOS XCTest execution, `accept` and `dismiss` activate the selected button once, then only observe until the alert disappears, its presentation changes, or the deadline expires. A shared button label never triggers a second coordinate tap. A changed presentation can be an updated original alert or a replacement; it does not prove a permission was granted. Verify the application outcome separately.
 - An unreadable or ambiguous post-action capture fails with `error.details.runnerErrorCode: ALERT_CONFIRMATION_UNAVAILABLE`; an expired runner deadline uses `ALERT_DEADLINE_EXCEEDED` (the outer command watchdog can also report a timeout). Neither proves absence or that no action occurred. Identical-looking alerts remain unconfirmed. Inspect the current alert before deciding whether to act again.
+- iOS runner refusals carry `error.details.reason`: `runner_busy` means the runner was still finishing an earlier command and ran nothing (`dispatched: no`); `runner_main_thread_timeout` means the runner gave up waiting on the app, and the action may still land (`dispatched: unknown`).
 - Android support is snapshot-derived. If `alert` reports no alert but a sheet is visible, treat it as app-owned UI and use `snapshot -i` plus `press` by visible label/ref.
 - If an iOS permission sheet is visible in `snapshot` or `screenshot` but `alert accept` reports no alert, fall back to a scoped `snapshot -i -s "<visible label>"` plus `press @ref`; not every simulator permission surface is exposed as a native XCTest alert.
 
@@ -488,7 +489,13 @@ agent-device gesture transform 200 420 80 -40 2 35 700 # combined pan, zoom, and
 ```
 
 `fill` clears then types. `type` does not clear.
-A failed interaction carries `error.details.dispatched` when its producer could classify it: `no` means the action provably never reached the device, `yes` means it executed and failed, and `unknown` means it may have landed, so observe the screen before retrying; a failure without the field was not classified.
+When an interaction fails, read `error.details.dispatched` before you retry:
+
+- `no`: the action never reached the device. Retry it as it is.
+- `yes`: the action ran on the device and failed after that. Take a snapshot and decide from what you see.
+- `unknown`: the action may have landed. Take a snapshot before you retry; a blind retry can tap, type, or navigate twice.
+
+A failure without `dispatched` gives no such guarantee. Treat it as `unknown`.
 `type` accepts text only. Do not pass `@ref` to `type`; use `fill @ref "text"` to target a field directly, or `press @ref` then `type "text"` to append in the focused field.
 If `type` reports `TEXT_INPUT_NOT_FOCUSED`, focus a visible text input and retry; when accessibility does not expose the input, use a coordinate focus command before typing.
 On iOS, if `type "\n"` reports `TEXT_INPUT_SYNTHESIS_UNAVAILABLE` after tapping a field while the software keyboard is hidden, show the software keyboard, then retry. The runner reports this error instead of risking input through an unreliable text-entry path.
