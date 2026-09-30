@@ -202,13 +202,13 @@ test(scenario('targetReadiness'), async () => {
   const taps: Point[] = [];
   let captures = 0;
   const device = createContractDevice(viewportOnlySnapshot(), {
-    captureSnapshot: async (_context, options) => {
+    captureSnapshot: async () => {
       captures += 1;
       return {
-        // Polls after the first bypass the selector capture cache (forceFresh); the button appears
-        // only once that bypass is in effect, so a resolution the loop never actually polled for
-        // would leave `captures` at 1 and the tap unsent.
-        snapshot: options?.forceFresh ? continueButtonSnapshot() : viewportOnlySnapshot(),
+        // The first poll's interactive capture and its full-capture fallback both miss; the button
+        // appears only from the second poll on, so a loop that never polled again leaves the tap
+        // unsent.
+        snapshot: captures >= 3 ? continueButtonSnapshot() : viewportOnlySnapshot(),
       };
     },
     tap: async (_context, point) => {

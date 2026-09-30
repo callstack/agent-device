@@ -1,10 +1,7 @@
 import { snapshotFlagsFromOptions } from '@agent-device/kernel/snapshot';
 import type { BackendSnapshotOptions } from './backend.ts';
 
-type RoutedSnapshotOption = keyof Omit<
-  BackendSnapshotOptions,
-  'includeRects' | 'outPath' | 'forceFresh'
->;
+type RoutedSnapshotOption = keyof Omit<BackendSnapshotOptions, 'includeRects' | 'outPath'>;
 
 /**
  * Which backend snapshot options route as request flags. Still pinned to

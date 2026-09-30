@@ -188,7 +188,10 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
         const includeRects = options?.includeRects === true;
         const snapshotScope = options?.scope ?? req.flags?.snapshotScope;
         const needsFreshSnapshot =
-          options?.forceFresh === true || requestNeedsFreshSnapshot(req, device, includeRects);
+          req.command === 'wait' ||
+          req.command === 'find' ||
+          isAbsentPredicateRequest(req) ||
+          (includeRects && device.platform === 'web');
         return await captureRuntime.capture({
           flags,
           signal: context.signal,
@@ -237,18 +240,4 @@ function isAbsentPredicateRequest(req: DaemonRequest): boolean {
   if (req.command !== 'is') return false;
   const checked = checkIsArgs(req.positionals ?? []);
   return checked.ok && checked.predicate === 'absent';
-}
-
-/** The requests whose read must not be served from the short-lived selector capture cache. */
-function requestNeedsFreshSnapshot(
-  req: Parameters<typeof isAbsentPredicateRequest>[0],
-  device: { platform: string },
-  includeRects: boolean,
-): boolean {
-  return (
-    req.command === 'wait' ||
-    req.command === 'find' ||
-    isAbsentPredicateRequest(req) ||
-    (includeRects && device.platform === 'web')
-  );
 }

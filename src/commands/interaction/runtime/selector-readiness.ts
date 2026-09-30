@@ -74,14 +74,8 @@ export async function attemptSelectorResolution(
   options: CommandContext,
   selectorExpression: string,
   params: ResolveInteractionTargetParams,
-  forceFresh: boolean,
 ): Promise<SelectorResolutionAttempt> {
-  let capture = await captureInteractionSnapshot(
-    runtime,
-    options,
-    params.requireInteractive,
-    forceFresh,
-  );
+  let capture = await captureInteractionSnapshot(runtime, options, params.requireInteractive);
   let resolved = resolveActionSelector(
     capture.snapshot.nodes,
     selectorExpression,
@@ -90,7 +84,7 @@ export async function attemptSelectorResolution(
   );
   if ((!resolved || !resolved.node.rect) && params.requireInteractive) {
     const interactive = capture.snapshot;
-    capture = await captureInteractionSnapshot(runtime, options, false, forceFresh);
+    capture = await captureInteractionSnapshot(runtime, options, false);
     inheritPostGestureOutcome(interactive, capture.snapshot);
     resolved = resolveActionSelector(
       capture.snapshot.nodes,
@@ -179,13 +173,7 @@ async function pollSelectorReadinessOnce(
   params: ResolveInteractionTargetParams,
   previousPoll: InteractionSnapshot | undefined,
 ): Promise<SelectorResolutionAttempt> {
-  const attempt = await attemptSelectorResolution(
-    runtime,
-    options,
-    selectorExpression,
-    params,
-    previousPoll !== undefined,
-  );
+  const attempt = await attemptSelectorResolution(runtime, options, selectorExpression, params);
   if (previousPoll) inheritPostGestureOutcome(previousPoll.snapshot, attempt.capture.snapshot);
   if (attempt.resolved?.node.rect) return attempt;
   const quality = attempt.capture.snapshot.snapshotQuality;
@@ -250,9 +238,8 @@ async function readinessExhaustedFailure(
  * off-screen, non-hittable, and keyboard refusals are not judged here: they run once, after this
  * loop returns a rect-bearing resolution, as `runInteractionPipelineStages` does.
  *
- * The first poll is unbounded and reuses the snapshot cache (`forceFresh: false`), so a caller
- * whose first capture already matches pays the one-or-two-capture cost of a single attempt. Only a poll
- * that follows a miss (poll 2+) forces a fresh capture, mirroring how `wait` bypasses the cache.
+ * The first poll is unbounded, so a caller whose first capture already matches pays the
+ * one-or-two-capture cost of a single attempt.
  *
  * ADR 0011 registry anchor: interaction-guarantees.ts cites this as the runtime-selector
  * `targetReadiness` `via` symbol.

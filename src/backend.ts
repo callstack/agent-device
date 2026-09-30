@@ -64,12 +64,6 @@ export type BackendSnapshotOptions = SnapshotOptions & {
   includeRects?: boolean;
   includeHiddenContentHints?: boolean;
   outPath?: string;
-  /**
-   * Bypass a cache-serving backend's short-lived stored capture, the way `wait`/`find` already force
-   * one (`src/daemon/selector-runtime-backend.ts`). A backend without such a cache has nothing to
-   * bypass and may ignore this.
-   */
-  forceFresh?: boolean;
 };
 
 export type BackendReadTextResult = {

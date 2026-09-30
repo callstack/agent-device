@@ -19,12 +19,6 @@ export async function captureInteractionSnapshot(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
   interactiveOnly: boolean,
-  /**
-   * Bypasses the daemon's short-lived selector capture cache, the way `wait`'s capture already does
-   * (`src/daemon/selector-runtime-backend.ts`). Defaults to false: every caller before the readiness
-   * poll relied on the cache, and the poll itself only sets this from its second capture on.
-   */
-  forceFresh?: boolean,
 ): Promise<InteractionSnapshot> {
   if (!runtime.backend.captureSnapshot) {
     throw new AppError('UNSUPPORTED_OPERATION', 'snapshot is not supported by this backend');
@@ -35,7 +29,6 @@ export async function captureInteractionSnapshot(
   const result = await runtime.backend.captureSnapshot(toBackendContext(runtime, options), {
     interactiveOnly,
     includeRects: true,
-    ...(forceFresh ? { forceFresh: true } : {}),
   });
   const snapshot =
     result.snapshot ??

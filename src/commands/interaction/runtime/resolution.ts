@@ -160,13 +160,7 @@ async function resolveSelectorInteractionTarget(
   let resolved: SelectorResolution | null;
   const readinessSchedule = readinessScheduleFor(params.pipeline.poll, params.readinessTimeoutMs);
   if (!readinessSchedule) {
-    const attempt = await attemptSelectorResolution(
-      runtime,
-      options,
-      selectorExpression,
-      params,
-      false,
-    );
+    const attempt = await attemptSelectorResolution(runtime, options, selectorExpression, params);
     capture = attempt.capture;
     resolved = attempt.resolved;
     if (!resolved || !resolved.node.rect) {
