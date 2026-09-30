@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import http from 'node:http';
 import net, { type AddressInfo } from 'node:net';
 import { afterEach, test, vi } from 'vitest';
@@ -7,6 +8,11 @@ import {
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
+import {
+  assertDispatchDisclosureDriversMatchRows,
+  DISPATCH_DISCLOSURE_TABLE_PATH,
+  dispatchDisclosureRowsOwnedBy,
+} from '@agent-device/contracts/dispatch-disclosure-fixtures';
 import {
   WebDriverTransport,
   isWebDriverConnectRefused,
@@ -356,3 +362,72 @@ test('a pre-connect code is read to the depth cap and not beyond', async () => {
   assert.equal(await dispatchedAfter(fetchFailedWith(nestedCause('ECONNREFUSED', 3))), 'no');
   assert.equal(await dispatchedAfter(fetchFailedWith(nestedCause('ECONNREFUSED', 4))), 'unknown');
 });
+
+// contracts/fixtures/dispatch-disclosure.json, webdriver rows: each sends a mutating POST through the
+// real transport and fetch to a local socket, and asserts the `details.dispatched` it fails with.
+
+async function postActions(endpoint: string, timeoutMs = 5_000): Promise<unknown> {
+  const transport = new WebDriverTransport({
+    clientVersion: '0.0.0-test',
+    endpoint,
+    requestPolicy: { timeoutMs, retryDelayMs: 1 },
+  });
+  return await transport.requestValue('POST', '/session/wd-1/actions', { actions: [] });
+}
+
+async function postToRefusedPort(): Promise<unknown> {
+  return await postActions(`http://127.0.0.1:${await refusedPort()}/wd/hub/`);
+}
+
+async function postThatTimesOutAfterSend(): Promise<unknown> {
+  const driver = await localDriver((request) => request.resume());
+  try {
+    return await postActions(driver.endpoint, 50);
+  } finally {
+    assert.equal(driver.requests(), 1);
+    await driver.close();
+  }
+}
+
+async function postAnswered5xx(): Promise<unknown> {
+  const driver = await localDriver((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      response.writeHead(503, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ value: { error: 'unknown error', message: 'grid down' } }));
+    });
+  });
+  try {
+    return await postActions(driver.endpoint);
+  } finally {
+    assert.equal(driver.requests(), 1);
+    await driver.close();
+  }
+}
+
+const DRIVERS: Record<string, () => Promise<unknown>> = {
+  'webdriver.connect-refused': postToRefusedPort,
+  'webdriver.timeout-after-send': postThatTimesOutAfterSend,
+  'webdriver.http-5xx-after-send': postAnswered5xx,
+};
+
+const ROWS = dispatchDisclosureRowsOwnedBy(
+  import.meta.url,
+  fs.readFileSync(DISPATCH_DISCLOSURE_TABLE_PATH, 'utf8'),
+);
+
+test('every webdriver dispatch-disclosure row has exactly one driver', () => {
+  assertDispatchDisclosureDriversMatchRows(ROWS, Object.keys(DRIVERS));
+});
+
+for (const row of ROWS) {
+  test(`${row.id}: ${row.trigger} → dispatched ${row.dispatched}`, async () => {
+    const drive = DRIVERS[row.id];
+    assert.ok(drive, `no driver for ${row.id}`);
+    await assert.rejects(drive(), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.dispatched, row.dispatched);
+      return true;
+    });
+  });
+}
