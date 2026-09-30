@@ -13,6 +13,8 @@ export {
   isProcessGroupAlive,
   isProcessZombie,
   listHostProcesses,
+  readHostCpuArch,
+  readHostCpuArchSync,
   readHostEnvironmentVariable,
   readHostProcessIdentityObservations,
   readProcessCommand,
@@ -25,7 +27,6 @@ export {
   writeHostStderr,
 } from './internal/host-process.ts';
 export { signalProcessGroupBestEffort } from './internal/exec.ts';
-export { readHostCpuArch, readHostCpuArchSync } from './internal/host-cpu-arch.ts';
 export { reapOwnedProcessRecordsAtStartup } from './internal/owned-process-reaper.ts';
 export {
   createOwnedProcessRecordStore,

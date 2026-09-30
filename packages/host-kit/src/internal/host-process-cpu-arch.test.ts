@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
-import { type CommandExecutorOverride, withCommandExecutorOverride } from './exec.ts';
-import { readHostCpuArch, readHostCpuArchSync, resolveHostCpuArch } from './host-cpu-arch.ts';
+import type { CommandExecutorOverride } from './exec.ts';
 
 const { mockRunCmdSync } = vi.hoisted(() => ({ mockRunCmdSync: vi.fn() }));
 
@@ -10,8 +9,18 @@ vi.mock('./exec.ts', async (importOriginal) => ({
   runCmdSync: mockRunCmdSync,
 }));
 
-beforeEach(() => {
+let withCommandExecutorOverride: typeof import('./exec.ts').withCommandExecutorOverride;
+let readHostCpuArch: typeof import('./host-process.ts').readHostCpuArch;
+let readHostCpuArchSync: typeof import('./host-process.ts').readHostCpuArchSync;
+let resolveHostCpuArch: typeof import('./host-process.ts').resolveHostCpuArch;
+
+// The host CPU arch is resolved once per module instance, so each test gets a fresh one.
+beforeEach(async () => {
   mockRunCmdSync.mockReset();
+  vi.resetModules();
+  ({ withCommandExecutorOverride } = await import('./exec.ts'));
+  ({ readHostCpuArch, readHostCpuArchSync, resolveHostCpuArch } =
+    await import('./host-process.ts'));
 });
 
 function sysctlAnswering(result: { stdout?: string; exitCode?: number } | Error) {
