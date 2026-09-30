@@ -29,10 +29,45 @@ export function isWebDriverRequestTimeout(error: unknown): error is AppError {
   return error instanceof AppError && error.details?.reason === WEBDRIVER_REQUEST_TIMEOUT_REASON;
 }
 
-/** Machine-readable `details.reason` of a request that never left the client. */
+/**
+ * What a failed request discloses about whether the driver acted on it. WebDriver never proves
+ * that a request executed, so a failure is either `no` (the request never reached the driver) or
+ * `unknown`.
+ */
+type WebDriverDispatchDisclosure = 'no' | 'unknown';
+
+function dispatchDisclosure(dispatched: WebDriverDispatchDisclosure): {
+  dispatched: WebDriverDispatchDisclosure;
+} {
+  return { dispatched };
+}
+
+/** Machine-readable `details.reason` of a request that never reached the driver. */
 const WEBDRIVER_CONNECT_REFUSED_REASON = 'webdriver_connect_refused';
 
-/** A request that failed before any bytes reached the driver (refused/unreachable host). */
+/**
+ * Machine-readable `details.reason` of a request whose connection failed after it may have
+ * reached the driver: a socket reset, or a response body cut off after the status line.
+ */
+const WEBDRIVER_REQUEST_INTERRUPTED_REASON = 'webdriver_request_interrupted';
+
+/**
+ * Socket error codes that prove the connection was never established, so no byte of the request
+ * reached the driver.
+ */
+const PRE_CONNECT_ERROR_CODES: ReadonlySet<string> = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'UND_ERR_CONNECT_TIMEOUT',
+]);
+
+/** How deep the `cause` and `AggregateError` chain is read for socket error codes. */
+const ERROR_CAUSE_DEPTH_LIMIT = 4;
+
+/** A request whose connection failed before it was established (refused or unreachable host). */
 export function isWebDriverConnectRefused(error: unknown): error is AppError {
   return error instanceof AppError && error.details?.reason === WEBDRIVER_CONNECT_REFUSED_REASON;
 }
@@ -176,10 +211,13 @@ export class WebDriverTransport {
     timeoutMs: number,
     requestSignal?: AbortSignal,
   ): Promise<Pick<Response, 'ok' | 'status'> & { text: string }> {
+    const url = new URL(trimLeadingSlash(path), this.endpoint);
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
     const signal = requestSignal ? AbortSignal.any([requestSignal, timeoutSignal]) : timeoutSignal;
+    const failure = { method, path, timeoutMs, timeoutSignal, requestSignal };
+    let response: Response;
     try {
-      const response = await fetch(new URL(trimLeadingSlash(path), this.endpoint), {
+      response = await fetch(url, {
         method,
         headers: {
           Accept: 'application/json',
@@ -189,24 +227,23 @@ export class WebDriverTransport {
         body: body === undefined ? undefined : JSON.stringify(body),
         signal,
       });
+    } catch (error) {
+      throw classifyWebDriverFetchFailure(error, failure, 'request');
+    }
+    try {
       return { ok: response.ok, status: response.status, text: await response.text() };
     } catch (error) {
-      throw classifyWebDriverFetchFailure(error, {
-        method,
-        path,
-        timeoutMs,
-        timeoutSignal,
-        requestSignal,
-      });
+      throw classifyWebDriverFetchFailure(error, failure, 'response');
     }
   }
 }
 
 /**
- * A caller's own cancellation keeps its reason as-is. Only a failure the
- * transport itself can explain — its deadline, or a network failure fetch
- * reports as a bare TypeError — becomes a typed error, so callers key on
- * `details.reason` instead of sniffing fetch's DOMException name.
+ * A caller's own cancellation keeps its reason as-is. Only a failure the transport itself can
+ * explain — its deadline, or a network failure fetch reports as a TypeError — becomes a typed
+ * error, so callers key on `details.reason` instead of sniffing fetch's error names. A failure
+ * discloses `no` only when a socket error code proves the connection was never established;
+ * any other network failure, and every failure after the response headers arrived, is `unknown`.
  */
 function classifyWebDriverFetchFailure(
   error: unknown,
@@ -217,15 +254,35 @@ function classifyWebDriverFetchFailure(
     timeoutSignal: AbortSignal;
     requestSignal: AbortSignal | undefined;
   },
+  stage: 'request' | 'response',
 ): unknown {
   const { method, path, timeoutMs, timeoutSignal, requestSignal } = context;
   if (requestSignal?.aborted) return error;
   if (timeoutSignal.aborted) return webdriverTimeoutError(method, path, timeoutMs, error);
-  // Fetch rejects with a bare TypeError for a network failure — refused
-  // connection, unresolved host, failed handshake — that never put a byte on
-  // the wire.
-  if (error instanceof TypeError) return webdriverConnectRefusedError(method, path, error);
+  if (stage === 'request' && failedBeforeConnect(error)) {
+    return webdriverConnectRefusedError(method, path, error);
+  }
+  if (stage === 'response' || error instanceof TypeError) {
+    return webdriverRequestInterruptedError(method, path, error);
+  }
   return error;
+}
+
+function failedBeforeConnect(error: unknown): boolean {
+  const codes = socketErrorCodes(error, 0);
+  return codes.length > 0 && codes.every((code) => PRE_CONNECT_ERROR_CODES.has(code));
+}
+
+/** Every `code` on the error, its `cause` chain, and each `AggregateError` member. */
+function socketErrorCodes(error: unknown, depth: number): string[] {
+  if (depth > ERROR_CAUSE_DEPTH_LIMIT || !error || typeof error !== 'object') return [];
+  const { code, cause } = error as { code?: unknown; cause?: unknown };
+  const members: unknown[] = error instanceof AggregateError ? error.errors : [];
+  return [
+    ...(typeof code === 'string' ? [code] : []),
+    ...socketErrorCodes(cause, depth + 1),
+    ...members.flatMap((member) => socketErrorCodes(member, depth + 1)),
+  ];
 }
 
 function shouldRetryWebDriverRequest(
@@ -268,8 +325,8 @@ function webdriverError(status: number, payload: unknown): AppError {
     response: payload,
     // A 5xx means the driver received and processed the request, but not
     // whether the mutation it described completed before it failed.
-    ...(status >= 500 ? { dispatched: 'unknown' as const } : {}),
-    ...(isUnsupportedRouteAnswer(status, payload) ? { dispatched: 'no' as const } : {}),
+    ...(status >= 500 ? dispatchDisclosure('unknown') : {}),
+    ...(isUnsupportedRouteAnswer(status, payload) ? dispatchDisclosure('no') : {}),
   });
 }
 
@@ -323,13 +380,13 @@ function webdriverTimeoutError(
       path,
       timeoutMs,
       // The transport stopped waiting; the driver may still be mid-request.
-      dispatched: 'unknown' as const,
+      ...dispatchDisclosure('unknown'),
     },
     cause instanceof Error ? cause : undefined,
   );
 }
 
-function webdriverConnectRefusedError(method: string, path: string, cause: TypeError): AppError {
+function webdriverConnectRefusedError(method: string, path: string, cause: unknown): AppError {
   return new AppError(
     'COMMAND_FAILED',
     `WebDriver ${method} ${path} could not reach the driver.`,
@@ -337,16 +394,32 @@ function webdriverConnectRefusedError(method: string, path: string, cause: TypeE
       reason: WEBDRIVER_CONNECT_REFUSED_REASON,
       method,
       path,
-      // The connection itself failed, so no bytes of this request were sent.
-      dispatched: 'no' as const,
+      ...dispatchDisclosure('no'),
     },
-    cause,
+    cause instanceof Error ? cause : undefined,
+  );
+}
+
+function webdriverRequestInterruptedError(method: string, path: string, cause: unknown): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `WebDriver ${method} ${path} lost its connection to the driver.`,
+    {
+      reason: WEBDRIVER_REQUEST_INTERRUPTED_REASON,
+      method,
+      path,
+      ...dispatchDisclosure('unknown'),
+    },
+    cause instanceof Error ? cause : undefined,
   );
 }
 
 function isRetriableWebDriverError(error: unknown): boolean {
   if (isWebDriverRequestTimeout(error)) return true;
   if (isWebDriverConnectRefused(error)) return true;
+  if (error instanceof AppError && error.details?.reason === WEBDRIVER_REQUEST_INTERRUPTED_REASON) {
+    return true;
+  }
   if (error instanceof AppError) {
     const status = error.details?.status;
     return typeof status === 'number' && status >= 500;

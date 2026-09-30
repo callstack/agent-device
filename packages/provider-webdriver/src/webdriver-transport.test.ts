@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import http from 'node:http';
+import net, { type AddressInfo } from 'node:net';
 import { afterEach, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -99,46 +101,132 @@ test('cancels a retry delay when the request binding aborts', async () => {
   assert.equal(calls, 1);
 });
 
-// Fetch's own network-error shape (refused connection, unresolved host) is a
-// bare TypeError with no HTTP status. It must still classify as retriable —
-// preserving today's behavior for a read — and disclose that no bytes of the
-// request ever reached the driver.
-test('a connection refusal classifies as unreached and is still retried by default', async () => {
+/** A 127.0.0.1 port nothing listens on: bound, then released. */
+async function refusedPort(): Promise<number> {
+  const server = net.createServer();
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  return port;
+}
+
+/** A local driver whose every request runs `handle`; `requests` counts what reached it. */
+async function localDriver(
+  handle: (request: http.IncomingMessage, response: http.ServerResponse) => void,
+): Promise<{ endpoint: string; requests: () => number; close: () => Promise<void> }> {
+  let requests = 0;
+  const server = http.createServer((request, response) => {
+    requests += 1;
+    handle(request, response);
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    endpoint: `http://127.0.0.1:${port}/wd/hub/`,
+    requests: () => requests,
+    close: async () => {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
+
+/** Counts fetch calls while the real fetch still produces the real network failure. */
+function countFetchCalls(): () => number {
+  let calls = 0;
+  globalThis.fetch = async (input, init) => {
+    calls += 1;
+    return await realFetch(input, init);
+  };
+  return () => calls;
+}
+
+// A refused connection was never established, so no byte of the request reached the driver. A
+// GET read keeps its retry.
+test('a refused connection discloses the request never reached the driver', async () => {
   const transport = new WebDriverTransport({
     clientVersion: '0.0.0-test',
-    endpoint: 'http://cloud-webdriver.test/wd/hub/',
-    requestPolicy: { timeoutMs: 30_000, retryDelayMs: 1 },
+    endpoint: `http://127.0.0.1:${await refusedPort()}/wd/hub/`,
+    requestPolicy: { timeoutMs: 5_000, retryDelayMs: 1 },
   });
-  let calls = 0;
-  globalThis.fetch = async () => {
-    calls += 1;
-    throw new TypeError('fetch failed');
-  };
+  const calls = countFetchCalls();
 
   await assert.rejects(transport.requestValue('GET', '/session/wd-1/source'), (error: unknown) => {
-    assert.ok(error instanceof AppError);
     assert.ok(isWebDriverConnectRefused(error));
     assert.equal(error.details?.dispatched, 'no');
     return true;
   });
-  assert.equal(calls, 2);
+  assert.equal(calls(), 2);
 });
 
 // A POST may change device state, so it gets one attempt whichever failure it hit.
-test('a connection refusal on a POST is not resent', async () => {
+test('a refused POST is not resent', async () => {
   const transport = new WebDriverTransport({
     clientVersion: '0.0.0-test',
-    endpoint: 'http://cloud-webdriver.test/wd/hub/',
-    requestPolicy: { timeoutMs: 30_000, retryDelayMs: 1 },
+    endpoint: `http://127.0.0.1:${await refusedPort()}/wd/hub/`,
+    requestPolicy: { timeoutMs: 5_000, retryDelayMs: 1 },
   });
-  let calls = 0;
-  globalThis.fetch = async () => {
-    calls += 1;
-    throw new TypeError('fetch failed');
-  };
+  const calls = countFetchCalls();
 
   await assert.rejects(transport.requestValue('POST', '/session/wd-1/actions', {}));
-  assert.equal(calls, 1);
+  assert.equal(calls(), 1);
+});
+
+// The driver read the whole body before the socket reset, so it may have acted on it.
+test('a socket reset after the driver read the body discloses an unresolved outcome', async () => {
+  const driver = await localDriver((request) => {
+    request.resume();
+    request.on('end', () => request.socket.destroy());
+  });
+  const transport = new WebDriverTransport({
+    clientVersion: '0.0.0-test',
+    endpoint: driver.endpoint,
+    requestPolicy: { timeoutMs: 5_000, retryDelayMs: 1 },
+  });
+
+  try {
+    await assert.rejects(
+      transport.requestValue('POST', '/session/wd-1/actions', { actions: [] }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(isWebDriverConnectRefused(error), false);
+        assert.equal(error.details?.dispatched, 'unknown');
+        return true;
+      },
+    );
+    assert.equal(driver.requests(), 1);
+  } finally {
+    await driver.close();
+  }
+});
+
+// The status line arrived, so the driver received the request before the body was cut off.
+test('a response body cut off after the headers discloses an unresolved outcome', async () => {
+  const driver = await localDriver((request, response) => {
+    request.resume();
+    response.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': '100' });
+    response.write('{"value":', () => request.socket.destroy());
+  });
+  const transport = new WebDriverTransport({
+    clientVersion: '0.0.0-test',
+    endpoint: driver.endpoint,
+    requestPolicy: { timeoutMs: 5_000, retryDelayMs: 1 },
+  });
+
+  try {
+    await assert.rejects(
+      transport.requestValue('POST', '/session/wd-1/keys', { value: ['a'] }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(isWebDriverConnectRefused(error), false);
+        assert.equal(error.details?.dispatched, 'unknown');
+        return true;
+      },
+    );
+    assert.equal(driver.requests(), 1);
+  } finally {
+    await driver.close();
+  }
 });
 
 // A 5xx means the driver answered — it received and processed the request —
