@@ -66,6 +66,7 @@ const EMAIL_FIELD = {
 
 /** The operations the lifecycle gateway lacks that these rows drive, one spy each. */
 const routeOperationSpies = {
+  tapPoint: vi.fn(async () => undefined),
   focusPoint: vi.fn(async () => undefined),
   typeText: vi.fn(async () => undefined),
   back: vi.fn(async () => undefined),
@@ -239,10 +240,46 @@ async function maestroDeferredSettleCaptureRefused(): Promise<unknown> {
   throw failure;
 }
 
+async function batchOf(
+  steps: readonly { command: string; positionals: string[] }[],
+): Promise<AppError> {
+  captureNodes([CONTINUE_BUTTON]);
+  const failure = await route(makeIosAppSession(SESSION), {
+    command: 'batch',
+    positionals: [],
+    flags: { batchSteps: steps.map((step) => ({ ...step, flags: {} })) },
+  }).catch((error: unknown) => error);
+  assert.ok(failure instanceof AppError);
+  assert.equal(failure.details?.executed, 1);
+  return failure;
+}
+
+async function batchMutationThenRefusedStep(): Promise<unknown> {
+  const failure = await batchOf([
+    { command: 'press', positionals: ['50', '40'] },
+    { command: 'press', positionals: ['label="Missing"'] },
+  ]);
+  assert.equal(routeOperationSpies.tapPoint.mock.calls.length, 1);
+  assert.equal(failure.details?.dispatchedSteps, 1);
+  throw failure;
+}
+
+async function batchReadThenRefusedStep(): Promise<unknown> {
+  const failure = await batchOf([
+    { command: 'get', positionals: ['text', 'label="Continue"'] },
+    { command: 'press', positionals: ['label="Missing"'] },
+  ]);
+  assert.equal(routeOperationSpies.tapPoint.mock.calls.length, 0);
+  assert.equal(failure.details?.dispatchedSteps, undefined);
+  throw failure;
+}
+
 const DRIVERS: Record<string, () => Promise<unknown>> = {
   'daemon.route.find-type-refused-after-focus': findTypeRefusedAfterFocus,
   'daemon.route.session-close-then-finalize-refused': closeThenFinalizeRefused,
   'daemon.route.maestro-deferred-settle-capture-refused': maestroDeferredSettleCaptureRefused,
+  'daemon.route.batch-mutation-then-refused-step': batchMutationThenRefusedStep,
+  'daemon.route.batch-read-then-refused-step': batchReadThenRefusedStep,
   'daemon.route.scroll-transport-failure': scrollWhoseGestureSendFailed,
   'daemon.route.scroll-until-before-first-gesture': scrollUntilRefusedBeforeFirstGesture,
   'daemon.route.scroll-then-dialog-read-refused': androidScrollThenDialogReadRefused,
