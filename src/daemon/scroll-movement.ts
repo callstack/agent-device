@@ -11,7 +11,7 @@ import {
   type ScrollEdge,
 } from '@agent-device/capture-kit/scroll-edge-state';
 import { containsPoint } from '@agent-device/kernel/rect';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import type { Point, Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
@@ -576,7 +576,7 @@ function scrollNoProgressError(
   swipe: ScrollSwipeEvidence,
   containerRect: Rect,
 ): AppError {
-  return new AppError(
+  const error = new AppError(
     'COMMAND_FAILED',
     `scroll ${direction} moved nothing: the container still reports hidden content ${
       edge === 'bottom' ? 'below' : 'above'
@@ -593,6 +593,7 @@ function scrollNoProgressError(
       }),
     },
   );
+  return discloseDispatch(error, 'yes');
 }
 
 /**

@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { test, vi } from 'vitest';
+import {
+  assertDispatchDisclosureDriversMatchRows,
+  DISPATCH_DISCLOSURE_TABLE_PATH,
+  dispatchDisclosureRowsOwnedBy,
+} from '@agent-device/contracts/dispatch-disclosure-fixtures';
 import type { SnapshotResult } from '@agent-device/contracts/interactor-types';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { AppError } from '@agent-device/kernel/errors';
@@ -345,6 +351,37 @@ test('a surface that never shifted while the container still hides content refus
   // Refusing needs the surface at rest, which needs the second read.
   assert.equal(spy.calls(), 2);
 });
+
+// contracts/fixtures/dispatch-disclosure.json, the scroll-no-progress row: the gesture ran, so the
+// refusal is not a pre-dispatch one.
+const DISPATCH_DISCLOSURE_ROWS = dispatchDisclosureRowsOwnedBy(
+  import.meta.url,
+  fs.readFileSync(DISPATCH_DISCLOSURE_TABLE_PATH, 'utf8'),
+);
+const DISPATCH_DISCLOSURE_DRIVERS: Record<string, () => Promise<unknown>> = {
+  'daemon.scroll-no-progress': async () =>
+    await observe({ baseline: baselineOf(screen(0)), screens: [screen(0), screen(0)] }).observation,
+};
+
+test('every scroll-movement dispatch-disclosure row has exactly one driver', () => {
+  assertDispatchDisclosureDriversMatchRows(
+    DISPATCH_DISCLOSURE_ROWS,
+    Object.keys(DISPATCH_DISCLOSURE_DRIVERS),
+  );
+});
+
+for (const row of DISPATCH_DISCLOSURE_ROWS) {
+  test(`${row.id}: ${row.trigger} → dispatched ${row.dispatched}`, async () => {
+    const drive = DISPATCH_DISCLOSURE_DRIVERS[row.id];
+    assert.ok(drive, `no driver for ${row.id}`);
+    await assert.rejects(drive(), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'scroll_no_progress');
+      assert.equal(error.details?.dispatched, row.dispatched);
+      return true;
+    });
+  });
+}
 
 /**
  * The refusal above names a raw drag because it knows where the swipe ran. An owner that reports no
