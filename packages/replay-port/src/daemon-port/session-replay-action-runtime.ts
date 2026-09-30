@@ -216,11 +216,8 @@ function readResponseTiming(data: unknown): Record<string, unknown> | undefined 
 }
 
 /**
- * A press/click/longpress step replays against a UI that may still be a render or two behind where
- * it was recorded — the same render race #1656's operator-only readiness budget absorbs live. A
- * replayed step carries no recorded budget of its own (there is no CLI flag for it), so every such
- * step defaults to one here unless the merged flags already name one — future-proofing against a
- * flag source this PR does not add, rather than a live possibility today.
+ * A replayed press/click/longpress step carries no readiness budget of its own; replay supplies one
+ * so a step recorded against a loading screen can land.
  */
 const REPLAY_DEFAULT_READINESS_TIMEOUT_MS = 2_000;
 const READINESS_BUDGETED_REPLAY_COMMANDS: ReadonlySet<string> = new Set([

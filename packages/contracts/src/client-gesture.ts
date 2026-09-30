@@ -36,10 +36,8 @@ export type SettleCommandOptions = {
 };
 
 /**
- * Operator-only readiness budget (#1656 promotedTarget row): how long a tap-shaped interaction may
- * poll for a target that does not exist yet, capped at the row's maxTimeoutMs. Never model- or
- * CLI-writable; omitted means the one-attempt resolution path unchanged from before this option
- * existed.
+ * How long a tap-shaped interaction may poll for a target that does not exist yet, capped at the
+ * promotedTarget row's maxTimeoutMs. Never model- or CLI-writable; omitted means one attempt.
  */
 export type ReadinessBudgetOptions = {
   readinessTimeoutMs?: number;

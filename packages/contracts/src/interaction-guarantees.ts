@@ -175,10 +175,7 @@ const TAP_OUTCOME_NOT_OBSERVED_GAP: GuaranteeEnforcement = {
 // dispatch ONE fused XCTest runner request (`command: 'tap'` with a selectorKey/selectorValue) built
 // in packages/platform-apple/src/interactions.ts#tapElementSelector — not the separate
 // packages/maestro/ flow-script engine, which drives standalone `.yaml` Maestro flows and never
-// participates in an ordinary daemon click. Verified by reading the dispatch call graph
-// (interaction-touch-direct-ios.ts -> BoundTouchExecutor.tapElementSelector ->
-// platform-apple/src/interactions.ts) before writing this cell (AGENTS.md: verify each claim
-// against the native implementation).
+// participates in an ordinary daemon click.
 const DIRECT_IOS_SINGLE_QUERY_READINESS: GuaranteeEnforcement = {
   kind: 'waived',
   reason:
@@ -288,9 +285,8 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         via: 'src/commands/interaction/runtime/selector-action-resolution.ts#resolveActionSelector',
       },
       // press/click/longpress poll the promotedTarget row's readiness budget only when the caller
-      // (operator-only readinessTimeoutMs, never model- or CLI-writable) supplies one, capped at the
-      // row's maxTimeoutMs; fill/hover resolve against the resolvedTarget row, which declares no
-      // poll budget at all (#1656).
+      // supplies readinessTimeoutMs (never model- or CLI-writable), capped at the row's
+      // maxTimeoutMs; fill/hover resolve against the resolvedTarget row, which declares no poll budget.
       targetReadiness: {
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/selector-readiness.ts#pollForSelectorReadiness',
@@ -388,7 +384,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       targetReadiness: {
         kind: 'inapplicable',
         reason:
-          'Both endpoints resolve through the resolvedTarget row (#1656), which declares no poll budget; the readiness budget this feature adds is scoped to the promotedTarget row only.',
+          'Both endpoints resolve through the resolvedTarget row, which declares no poll budget; only the promotedTarget row carries a readiness budget.',
       },
       outcomeObservation: {
         kind: 'waived',

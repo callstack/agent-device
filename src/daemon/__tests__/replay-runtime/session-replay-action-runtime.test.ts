@@ -58,10 +58,8 @@ test.each(['', '   '])(
   },
 );
 
-// #1656 follow-up: a replayed press/click/longpress step races the same render gap the operator-
-// only readiness budget exists for, but a replay step has no CLI flag to carry one — so the one
-// place replay builds a step's dispatched flags (`invokeResolvedReplayAction`'s
-// `buildReplayActionFlags`) defaults it in for those three commands.
+// A replay step has no CLI flag to carry a readiness budget, so `buildReplayActionFlags` defaults
+// one in for press/click/longpress.
 test.each(['press', 'click', 'longpress'])(
   'replay defaults readinessTimeoutMs onto a dispatched %s step',
   async (command) => {

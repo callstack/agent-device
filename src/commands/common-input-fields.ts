@@ -32,8 +32,8 @@ export type CommonCommandInput = Pick<
   /** `--no-record`: common to every recordable command (see `commonInputFromFlags`). */
   noRecord?: boolean;
   /**
-   * Operator-only readiness budget for a tap-shaped interaction (press/click/longpress), capped at
-   * the promotedTarget row's maxTimeoutMs. No `flagIn`/`flagKey`: it never rides a CLI flag or the
+   * Readiness budget for a tap-shaped interaction (press/click/longpress), capped at the
+   * promotedTarget row's maxTimeoutMs. No `flagIn`/`flagKey`: it never rides a CLI flag or the
    * client "selection" projection, only the CLI/Node structured-input and SDK client option seams.
    */
   readinessTimeoutMs?: number;
@@ -227,9 +227,8 @@ const COMMON_INPUT_FIELDS = {
         "Operator-only: how long press/click/longpress may poll for a target that does not exist yet, in milliseconds. Capped at the promotedTarget row's maxTimeoutMs; omitted takes the one-attempt resolution path.",
     },
     read: (record) => readOptionalInteger(record, 'readinessTimeoutMs', { min: 1 }),
-    // Not accepted as a tool argument, and no CLI flag exists for it (deliberately: agents mostly
-    // miss on a wrong selector, where fast feedback matters more than absorbing a render race) — an
-    // operator supplies it directly through the CLI/Node structured input or the SDK client option.
+    // No CLI flag: agents mostly miss on a wrong selector, where fast feedback beats absorbing a
+    // render race.
     audience: operatorAudience({
       operatorPath:
         'Pass readinessTimeoutMs directly as CLI/Node.js command input; it is not exposed to model-facing tools.',

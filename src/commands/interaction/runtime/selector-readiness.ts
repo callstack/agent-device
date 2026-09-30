@@ -22,11 +22,10 @@ import { resolveActionSelector } from './selector-action-resolution.ts';
 import type { InteractionAction, ResolveInteractionTargetParams } from './resolution.ts';
 
 /**
- * `promotedTarget`'s readiness poll (#1656 / operator-only `readinessTimeoutMs`): the one-attempt
- * capture-and-resolve, the covered-target diagnosis it shares with the exhausted-budget failure, and
- * the `observeUntil`-driven loop itself. Split out of `resolution.ts` (#1656 follow-up) once it grew
- * past 1,300 lines; `resolution.ts#resolveSelectorInteractionTarget` is this module's one caller,
- * deciding whether a call polls at all and, if so, under what capped budget.
+ * `promotedTarget`'s readiness poll: the one-attempt capture-and-resolve, the covered-target
+ * diagnosis it shares with the exhausted-budget failure, and the `observeUntil`-driven loop itself.
+ * `resolution.ts#resolveSelectorInteractionTarget` is this module's one caller, deciding whether a
+ * call polls at all and under what capped budget.
  */
 
 /** One poll's outcome: the capture it read the tree from, and what it resolved (if anything). */
@@ -106,7 +105,7 @@ export async function attemptSelectorResolution(
  * covered node is a different failure with a different recovery, and the
  * acting row — rect-required, candidates rejected — cannot tell the caller
  * that. Both probes name a policy row, so the two contracts stay visible side
- * by side instead of as two sets of engine knobs (#1630).
+ * by side instead of as two sets of engine knobs.
  *
  * The diagnosis row keeps covered nodes as candidates precisely so its occlusion stage can report
  * them: "matched but covered" is a different failure than "did not match", produced by re-probing
@@ -164,7 +163,7 @@ export async function selectorInteractionFailure(params: {
 }
 
 /**
- * One readiness poll: today's capture-and-resolve attempt, the previous poll's post-gesture outcome
+ * One readiness poll: a capture-and-resolve attempt, the previous poll's post-gesture outcome
  * carried forward, and the covered-target probe on a miss. A covered candidate is excluded by
  * promotedTarget's own occlusion stage before it reaches `resolved`, so it looks identical to
  * "not found yet"; detecting it here ends the loop on this poll instead of spending the budget on a
@@ -252,10 +251,10 @@ async function readinessExhaustedFailure(
  * would produce it — an ambiguity throw from `resolveActionSelector`, or a capture error the loop
  * does not ride out, ends the loop on this same poll, and is rethrown unchanged. Occlusion,
  * off-screen, non-hittable, and keyboard refusals are not judged here: they run once, after this
- * loop returns a rect-bearing resolution, exactly as `runInteractionPipelineStages` always has.
+ * loop returns a rect-bearing resolution, as `runInteractionPipelineStages` does.
  *
- * The first poll is unbounded and reuses today's snapshot cache (`forceFresh: false`), so a caller
- * whose first capture already matches pays the same one-or-two-capture cost as before. Only a poll
+ * The first poll is unbounded and reuses the snapshot cache (`forceFresh: false`), so a caller
+ * whose first capture already matches pays the one-or-two-capture cost of a single attempt. Only a poll
  * that follows a miss (poll 2+) forces a fresh capture, mirroring how `wait` bypasses the cache.
  *
  * Exported as an ADR 0011 registry anchor: interaction-guarantees.ts cites this as the

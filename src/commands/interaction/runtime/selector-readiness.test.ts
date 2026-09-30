@@ -5,9 +5,8 @@ import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fix
 import { selector } from './selector-read-utils.ts';
 import { createFakeClock, createInteractionDevice } from './__tests__/test-utils/index.ts';
 
-// #1656 follow-up: promotedTarget's readiness poll now runs only when the caller supplies an
-// operator-only `readinessTimeoutMs`, capped at the row's `maxTimeoutMs` (2_000). These pin the
-// gating/capping decision at the runtime layer; the end-to-end poll mechanics (interactive/fresh
+// promotedTarget's readiness poll runs only when the caller supplies `readinessTimeoutMs`, capped
+// at the row's `maxTimeoutMs` (2_000). These pin the gating/capping decision at the runtime layer; the end-to-end poll mechanics (interactive/fresh
 // capture sequencing, covered-target diagnosis, ridden-out capture errors) are unit-tested at the
 // daemon level in test/integration/provider-scenarios/press-target-readiness.test.ts.
 
@@ -37,8 +36,8 @@ test('runtime press without readinessTimeoutMs takes the one-attempt path and re
       return true;
     },
   );
-  // The pre-existing interactive-capture-then-full-capture-fallback pair (unchanged from before
-  // this budget existed) — not the readiness loop's repeated polling.
+  // The interactive-capture-then-full-capture-fallback pair, not the readiness loop's repeated
+  // polling.
   assert.equal(captures, 2);
 });
 

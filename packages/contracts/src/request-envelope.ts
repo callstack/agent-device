@@ -39,9 +39,9 @@ export type CommandExecutionOptions = Partial<ScreenshotRequestFlags> &
     holdMs?: number;
     jitterPx?: number;
     /**
-     * Operator-only: the readiness budget a tap-shaped interaction (press/click/longpress) may
-     * spend polling for a target that does not exist yet, capped at the promotedTarget row's
-     * maxTimeoutMs. Never model- or CLI-writable; absent means the one-attempt resolution path.
+     * The readiness budget a tap-shaped interaction (press/click/longpress) may spend polling for a
+     * target that does not exist yet, capped at the promotedTarget row's maxTimeoutMs. Never model-
+     * or CLI-writable; absent means one attempt.
      */
     readinessTimeoutMs?: number;
     pixels?: number;

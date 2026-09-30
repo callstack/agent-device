@@ -96,8 +96,8 @@ export type LongPressCommandOptions = CommandContext & {
   target: InteractionTarget;
   durationMs?: number;
   /**
-   * Operator-only readiness budget (#1656 promotedTarget row): polls for the target to exist and
-   * become actionable, capped at the row's maxTimeoutMs. Absent takes the one-attempt path.
+   * Polls for the target to exist and become actionable, capped at the promotedTarget row's
+   * maxTimeoutMs. Absent takes one attempt.
    */
   readinessTimeoutMs?: number;
   /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */

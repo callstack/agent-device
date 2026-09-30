@@ -15,7 +15,7 @@ import { createProviderTranscript, type ProviderScenarioProviderEntry } from './
 const APP = 'com.example.app';
 const DEVICE_ID = PROVIDER_SCENARIO_IOS_SIMULATOR.id;
 
-// #2714 directional-scroll observation, ported onto `observeUntil` (packages/capture-kit/src/observe-until.ts):
+// Directional-scroll observation on `observeUntil` (packages/capture-kit/src/observe-until.ts):
 // `scroll down` gates its own `movement` claim on the tree it held before the gesture against one
 // (or more, while the surface still looks untouched) post-gesture capture. The unit-level coverage
 // in src/daemon/__tests__/scroll-movement.test.ts pins the verdict against a scripted capture
@@ -116,7 +116,7 @@ function iosSimulatorTool(): { provider: AppleToolProvider } {
     args: string[],
     options?: ExecOptions,
   ): Promise<ExecResult> => {
-    // #2438's system-surface presence probe runs before target resolution: report every
+    // The system-surface presence probe runs before target resolution: report every
     // registered host absent so the route proceeds to resolve the (scripted) app target below,
     // instead of reading the probe as 'unknown' and falling back with a fresh random identity.
     if (cmd === 'pgrep') return { stdout: '', stderr: '', exitCode: 1 };

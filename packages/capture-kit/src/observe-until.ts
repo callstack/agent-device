@@ -4,10 +4,10 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
 /**
  * The one observation loop: capture until a verdict accepts, on a schedule, under a budget that is
- * enforced by cancellation. Owns exactly what every loop in this codebase used to re-implement —
- * cadence, the deadline, abort-and-join of an in-flight capture, which capture errors are ridden
- * out, and the per-poll timeline. Owns nothing about WHAT is observed: the verdict is the caller's,
- * and so is the equality rule behind it (digest, signature, pixel).
+ * enforced by cancellation. Owns cadence, the deadline, abort-and-join of an in-flight capture,
+ * which capture errors are ridden out, and the per-poll timeline. Owns nothing about WHAT is
+ * observed: the verdict is the caller's, and so is the equality rule behind it (digest, signature,
+ * pixel).
  */
 
 export type ObservationSchedule = Readonly<{
@@ -23,8 +23,8 @@ export type ObservationSchedule = Readonly<{
   minPolls?: number;
   /**
    * `'start'` (default) bounds every capture, the first included. `'first-capture'` leaves the first
-   * capture unbounded and spends the budget only on retries, so a caller whose first attempt is the
-   * pre-existing one-shot behaviour pays nothing on its success path.
+   * capture unbounded and spends the budget only on retries, so a caller whose first attempt is a
+   * one-shot pays nothing on its success path.
    */
   budgetFrom?: 'start' | 'first-capture';
 }>;

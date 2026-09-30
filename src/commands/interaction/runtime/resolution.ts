@@ -166,11 +166,9 @@ export type ResolveInteractionTargetParams = {
    */
   pipeline: ActingPipelinePolicy;
   /**
-   * Operator-only readiness budget (never model- or CLI-writable): how long a `promotedTarget` row
-   * may poll for a target that does not exist yet, before `resolveSelectorInteractionTarget` caps it
-   * at the row's `maxTimeoutMs`. Anything other than a positive integer — including `resolvedTarget`
-   * rows, which declare no poll budget at all — takes the one-attempt path unchanged from before
-   * this budget existed.
+   * How long a `promotedTarget` row may poll for a target that does not exist yet (never model- or
+   * CLI-writable); `resolveSelectorInteractionTarget` caps it at the row's `maxTimeoutMs`. Anything
+   * other than a positive integer, and every `resolvedTarget` row, takes one attempt.
    */
   readinessTimeoutMs?: number;
   /**
@@ -392,9 +390,8 @@ function isPositiveInteger(value: number | undefined): value is number {
 /**
  * The schedule THIS call may poll `promotedTarget` under: `undefined` when the row resolves
  * against one capture (`resolvedTarget`'s `poll: 'none'`), or when the caller supplied no
- * `readinessTimeoutMs` — both take the one-attempt path exactly as before this budget existed
- * (MCP and CLI never supply one, so neither surface changes). Otherwise the row's own cadence, and
- * a budget capped at the row's `maxTimeoutMs` so an operator-supplied value can shrink the wait but
+ * `readinessTimeoutMs` — both take the one-attempt path. Otherwise the row's own cadence, and a
+ * budget capped at the row's `maxTimeoutMs`, so a caller-supplied value can shrink the wait but
  * never stretch past what the row allows.
  */
 function readinessScheduleFor(

@@ -78,7 +78,7 @@ export type WaitPollBudget = {
 /**
  * `promotedTarget`: the row states only a ceiling and a cadence, never a default — a miss with no
  * caller-supplied budget takes the one-attempt path instead of polling (`resolveSelectorInteractionTarget`).
- * When the caller does supply one (an operator-only `readinessTimeoutMs`, never model- or
+ * When the caller does supply one (`readinessTimeoutMs`, never model- or
  * CLI-writable), it is capped at `maxTimeoutMs` before it bounds the readiness loop.
  */
 export type ReadinessPollBudget = {
@@ -132,12 +132,11 @@ const WAIT_POLL_BUDGET: WaitPollBudget = { defaultTimeoutMs: 10_000, intervalMs:
 export const SELECTOR_PIPELINE_POLICIES = {
   /**
    * `click`/`press`/`longpress`: the tap lands on the actionable owner of the
-   * match. When the caller supplies an operator-only readiness budget, polls for the target to
+   * match. When the caller supplies a readiness budget, polls for the target to
    * appear and become resolvable (a rect), capped at this row's `maxTimeoutMs`, before refusing —
    * resolution only; occlusion, off-screen, and promotion still run once, against the winning
-   * capture, after the loop ends (#1656). A miss with no caller-supplied budget takes the
-   * one-attempt path instead (`resolveSelectorInteractionTarget`), unchanged from before this
-   * budget existed.
+   * capture, after the loop ends. A miss with no caller-supplied budget takes the one-attempt path
+   * (`resolveSelectorInteractionTarget`).
    */
   promotedTarget: {
     resolution: SELECTOR_RESOLUTION_POLICIES.act,

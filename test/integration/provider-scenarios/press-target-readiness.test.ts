@@ -111,8 +111,7 @@ test('press waits for a selector missing on the first two captures, then taps on
       tapEntry(200, 322),
     ],
     async (daemon, transcript) => {
-      // Operator-only readiness budget: never CLI- or model-writable, so this scenario supplies it
-      // directly as a request flag, the one route it reaches a call through in this PR.
+      // Never CLI- or model-writable, so the scenario supplies it directly as a request flag.
       const press = await daemon.callCommand('press', ['label=Continue'], {
         readinessTimeoutMs: 2_000,
       });
@@ -176,12 +175,10 @@ test('press resolving on the first capture costs exactly one snapshot call (zero
   );
 });
 
-// (d) #1656 follow-up: reviewers found the row-wide 2s wait wrong for agents, whose misses are
-// usually a wrong selector — fast feedback matters more than absorbing a render race. Without an
-// explicit readinessTimeoutMs (never CLI- or model-writable, so MCP and CLI never supply one), a
-// miss takes the one-attempt path: exactly one capture-and-resolve attempt (the pre-existing
-// interactive-then-full-capture fallback, unchanged from main — not the readiness loop's repeated
-// polling), and no readiness evidence to attach.
+// (d) Agent misses are usually a wrong selector, so fast feedback beats absorbing a render race.
+// Without an explicit readinessTimeoutMs (never CLI- or model-writable), a miss takes the
+// one-attempt path: exactly one capture-and-resolve attempt (the interactive-then-full-capture
+// fallback, not the readiness loop's repeated polling), and no readiness evidence to attach.
 test('press without a readinessTimeoutMs flag fails on the first capture attempt, with no readiness poll', async () => {
   await withPressReadinessDaemon(
     // Interactive capture, then the interactive->full fallback — both miss, exactly like poll 1 of

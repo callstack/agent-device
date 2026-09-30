@@ -218,8 +218,7 @@ test(scenario('targetReadiness'), async () => {
 
   const result = await device.interactions.press(selector('label=Continue'), {
     session: 'default',
-    // Operator-only readiness budget (#1656): never CLI- or model-writable, so this contract
-    // scenario supplies it directly, the one route it reaches a call through in this PR.
+    // Never CLI- or model-writable, so the scenario supplies it directly.
     readinessTimeoutMs: 2_000,
   });
 
