@@ -714,7 +714,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       sessionKind: 'state',
     },
     platformExecution: { kind: 'device-runtime', uses: deviceBootRuntimeUses },
-    // --timeout is a startup budget: it reaches the Simulator boot wait, same as open/prepare
+    // --timeout is a startup budget: it reaches the device boot wait, same as open/prepare
     // (#2325). A first boot can outlast the fixed 90s envelope (#3004).
     timeoutPolicy: { ...DEFAULT_TIMEOUT_POLICY, budget: { source: 'flag', envelope: 'margin' } },
     batchable: true,
@@ -953,7 +953,11 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled
       ? { ownerFiles: ['src/daemon/handlers/session-app-source-deployment.ts'] as const }
       : {}),
-    catalog: { group: 'internal', key: 'installSource' },
+    catalog: {
+      group: 'internal',
+      key: 'installSource',
+      servesPublicCommand: 'install-from-source',
+    },
     recordsSessionAction: true,
     recordingEffect: 'mutates-app',
     daemon: { route: 'session', refFrameEffect: 'may-invalidate' },

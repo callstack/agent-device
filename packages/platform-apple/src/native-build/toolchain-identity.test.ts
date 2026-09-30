@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   isCommandTimeoutError,
+  withCommandExecutorOverride,
   type ExecOptions,
   type ExecResult,
 } from '@agent-device/host-kit/command';
@@ -18,6 +19,65 @@ import { execKillTimeoutError } from './__tests__/exec-timeout-fixture.ts';
 // bounds it, without waiting on a real cold-start stall: the fake clock only moves when a probe
 // actually blocks for the timeout it was handed, so a case that claims the budget was spent had to
 // spend it.
+
+test('a Rosetta-translated process builds for the arm64 simulator the Mac runs', async () => {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  const arch = Object.getOwnPropertyDescriptor(process, 'arch')!;
+  Object.defineProperty(process, 'platform', { ...platform, value: 'darwin' });
+  Object.defineProperty(process, 'arch', { ...arch, value: 'x64' });
+  try {
+    const host = createNativeBuildHost(async (command, args) => toolchainAnswer(command, args));
+    const identity = await withCommandExecutorOverride(
+      async (command, args) => {
+        assert.deepEqual([command, ...args], ['/usr/sbin/sysctl', '-n', 'hw.optional.arm64']);
+        return { stdout: '1\n', stderr: '', exitCode: 0 };
+      },
+      () => readHostToolchainIdentity(host, fakeClockDeadline(40_000, { nowMs: 0 })),
+    );
+    assert.equal(identity.architecture, 'arm64');
+  } finally {
+    Object.defineProperty(process, 'platform', platform);
+    Object.defineProperty(process, 'arch', arch);
+  }
+});
+
+test('a request cancelled while the host arch is still resolving stops waiting for it', async () => {
+  const request = new AbortController();
+  const host: NativeBuildHost = {
+    ...createNativeBuildHost(async (command, args) => toolchainAnswer(command, args)),
+    cpuArch: () => {
+      request.abort();
+      return new Promise<string>(() => {});
+    },
+  };
+
+  await assert.rejects(
+    readHostToolchainIdentity(host, createNativeBuildDeadline(40_000, request.signal)),
+    (error: unknown) =>
+      error instanceof NativeBuildError &&
+      error.buildFailureKind === 'cancelled' &&
+      error.buildFailureCode === 'abort-signal',
+  );
+});
+
+test('a host arch that outlives the request budget reports the deadline', async () => {
+  const clock = { nowMs: 0 };
+  const host: NativeBuildHost = {
+    ...createNativeBuildHost(async (command, args) => {
+      if (command === 'sw_vers' && args.includes('-buildVersion')) clock.nowMs = 39_990;
+      return toolchainAnswer(command, args);
+    }),
+    cpuArch: () => new Promise<string>(() => {}),
+  };
+
+  await assert.rejects(
+    readHostToolchainIdentity(host, fakeClockDeadline(40_000, clock)),
+    (error: unknown) =>
+      error instanceof NativeBuildError &&
+      error.buildFailureKind === 'timeout' &&
+      error.buildFailureCode === 'host-arch-deadline',
+  );
+});
 
 test('a cold-start toolchain probe recovers on retry, and the retry gets only what the stall left', async () => {
   const clock = { nowMs: 0 };
@@ -39,9 +99,9 @@ test('a cold-start toolchain probe recovers on retry, and the retry gets only wh
   // retry runs on the 10 s the shared deadline has left, not a second 30 s.
   assert.deepEqual(timeouts.slice(0, 2), [30_000, 10_000]);
   assert.equal(clock.nowMs, 30_000);
-  // 4 baseline probes (xcodebuild, sw_vers x2, uname) plus the one
+  // 3 baseline probes (xcodebuild, sw_vers x2) plus the one
   // retry that recovered the first, timed-out call.
-  assert.equal(calls, 5);
+  assert.equal(calls, 4);
 });
 
 // The identity read is allowed to exec one Xcode-owned binary. The Simulator SDK a second
@@ -58,7 +118,7 @@ test('the toolchain identity execs one Xcode-owned binary, and no xcrun', async 
 
   await readHostToolchainIdentity(host, fakeClockDeadline(120_000, clock));
 
-  assert.deepEqual(probed, ['xcodebuild', 'sw_vers', 'sw_vers', 'uname']);
+  assert.deepEqual(probed, ['xcodebuild', 'sw_vers', 'sw_vers']);
 });
 
 test('a toolchain host that never returns reports the stalled probe after one retry', async () => {
@@ -301,12 +361,14 @@ function toolchainAnswer(command: string, args: string[]): ExecResult {
   if (command === 'sw_vers') {
     return { stdout: args.includes('-buildVersion') ? '24G90' : '15.6', stderr: '', exitCode: 0 };
   }
-  if (command === 'uname') return { stdout: 'arm64', stderr: '', exitCode: 0 };
   throw new Error(`the identity read execed ${command} ${args.join(' ')}`);
 }
 
 function fakeToolchainHost(
   run: (command: string, args: string[], options: ExecOptions) => ExecResult | Promise<ExecResult>,
 ): NativeBuildHost {
-  return createNativeBuildHost(async (command, args, options) => run(command, args, options ?? {}));
+  return {
+    ...createNativeBuildHost(async (command, args, options) => run(command, args, options ?? {})),
+    cpuArch: async () => 'arm64',
+  };
 }

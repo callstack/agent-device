@@ -37,9 +37,7 @@ test('managed iOS delegates deployment and system operations without local readi
           stderr: '',
           exitCode: 0,
         };
-      expect(['install', 'uninstall', 'pbpaste', 'pbcopy', 'ui', 'spawn', 'push']).toContain(
-        command,
-      );
+      expect(['install', 'uninstall', 'pbpaste', 'ui', 'spawn', 'push']).toContain(command);
       if (command === 'spawn') {
         biometricPosts += 1;
         expect(args.slice(3)).toEqual([
@@ -78,7 +76,12 @@ test('managed iOS delegates deployment and system operations without local readi
       }
       await ops.sendPushNotification!({ appId: AUTOMATION_APP_ID, payload: {} });
       expect(await ops.readClipboard!({})).toBe('managed clipboard');
-      await ops.writeClipboard!({ text: 'managed' });
+      // The runner writes an iOS simulator's pasteboard, so managed iOS withholds the write.
+      expect(binding.facts.operations.writeClipboard).toMatchObject({
+        available: false,
+        reason: 'owner-capability-missing',
+      });
+      expect(ops.writeClipboard).toBeUndefined();
       await ops.setSetting!({ setting: 'appearance', state: 'dark' });
       await ops.setSetting!({ setting: 'faceid', state: 'match' });
       expect(biometricPosts).toBe(1);

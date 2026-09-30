@@ -1,5 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { readHostCpuArch } from '@agent-device/host-kit/process';
 import { createDaemonHttpServer } from './http-server.ts';
 import {
   DAEMON_HTTP_INSTANCE_HEADER,
@@ -26,7 +27,11 @@ test('a stale RPC instance is refused after authentication and before command di
   try {
     const port = await listenOnLoopback(server);
     const endpoint = `http://127.0.0.1:${port}`;
-    const health = (await (await fetch(`${endpoint}/health`)).json()) as { instanceId: string };
+    const health = (await (await fetch(`${endpoint}/health`)).json()) as {
+      instanceId: string;
+      hostArch: string;
+    };
+    assert.equal(health.hostArch, await readHostCpuArch());
     const rpc = (expectedInstance: string, authToken = 'daemon-secret') =>
       fetch(`${endpoint}/rpc`, {
         method: 'POST',

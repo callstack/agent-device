@@ -29,6 +29,7 @@ export function writeInfo(
     codeOrigin: DaemonCodeOrigin;
     codeSignature: string;
     processStartTime: string | undefined;
+    policyDigest?: string;
   },
 ): void {
   if (!fs.existsSync(baseDir)) fs.mkdirSync(baseDir, { recursive: true });
@@ -47,6 +48,7 @@ export function writeInfo(
         codeOrigin: opts.codeOrigin,
         codeSignature: opts.codeSignature,
         processStartTime: opts.processStartTime,
+        policyDigest: opts.policyDigest,
         stateDir: baseDir,
       },
       null,

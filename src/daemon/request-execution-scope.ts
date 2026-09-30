@@ -69,6 +69,11 @@ import {
   resolveCommandDeviceClaimPolicy,
 } from '@agent-device/command-registry/registry';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
+import {
+  assertDaemonPolicyAdmitsDevice,
+  assertDaemonPolicyAdmitsRequest,
+} from './daemon-policy.ts';
+import type { DaemonPolicy } from '../daemon-policy-file.ts';
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps
 // test and embedded routers isolated without changing process-level serialization there.
@@ -128,6 +133,7 @@ export async function createRequestExecutionScope(params: {
   platformRequestScope?: PlatformRequestScope;
   platformResourceCleanup?: PlatformResourceCleanup;
   providerAppCatalog?: ProviderAppCatalog;
+  daemonPolicy?: DaemonPolicy;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
   let scopedReq = applyRequestCommandDefaults(scopeRequestSession(params.req));
@@ -182,6 +188,7 @@ export async function createRequestExecutionScope(params: {
     );
   }
   try {
+    if (params.daemonPolicy) assertDaemonPolicyAdmitsRequest(params.daemonPolicy, scopedReq);
     assertLockedLeaseAdmissionPreflight(scopedReq);
     // Parse the budget once, before resolving the target device or taking any lock. The lock plan
     // still supplies the device to wait for, but an out-of-range budget is refused before either.
@@ -212,6 +219,7 @@ export async function createRequestExecutionScope(params: {
       stateDir: sessionStore.resolveDaemonStateDir(),
       deviceRuntimeGateway: params.deviceRuntimeGateway,
       platformRequestScope: params.platformRequestScope,
+      daemonPolicy: params.daemonPolicy,
     });
 
     const scope: RequestExecutionScope = {
@@ -363,11 +371,12 @@ function createRequestDeviceAccess(params: {
   stateDir: string;
   deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> | undefined;
   platformRequestScope: PlatformRequestScope | undefined;
+  daemonPolicy: DaemonPolicy | undefined;
 }): {
   claimAdmission: DeviceClaimAdmission | undefined;
   runtimeBindings: RequestRuntimeBindings | undefined;
 } {
-  const { deviceRuntimeGateway, platformRequestScope } = params;
+  const { deviceRuntimeGateway, platformRequestScope, daemonPolicy } = params;
   if (!deviceRuntimeGateway || !platformRequestScope) {
     return { claimAdmission: undefined, runtimeBindings: undefined };
   }
@@ -384,6 +393,9 @@ function createRequestDeviceAccess(params: {
       gateway: deviceRuntimeGateway,
       scope: platformRequestScope,
       admitDeviceClaim: claimAdmission.admit,
+      admitDevice: daemonPolicy
+        ? (device) => assertDaemonPolicyAdmitsDevice(daemonPolicy, device)
+        : undefined,
     }),
   };
 }

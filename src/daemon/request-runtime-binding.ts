@@ -120,6 +120,8 @@ export function createRequestRuntimeBindings(params: {
     owner: RuntimeOwnerRef,
     intent: DeviceBindingIntent,
   ) => Promise<void>;
+  /** ADR 0029 daemon-policy device scope, checked before the gateway inspects or binds a device. */
+  admitDevice?: (device: DeviceInfo) => void;
 }): RequestRuntimeBindings {
   const cleanups = new AsyncCleanupStack();
   const managedLifetime = new AbortController();
@@ -134,6 +136,7 @@ export function createRequestRuntimeBindings(params: {
   };
 
   const bindDevice: BindDeviceRuntime = async (device, use) => {
+    params.admitDevice?.(device);
     const key = deviceIdentityKey(deviceIdentity(device));
     let bindingPromise = bindings.get(key);
     if (!bindingPromise) {
@@ -151,6 +154,7 @@ export function createRequestRuntimeBindings(params: {
   };
 
   const bindExactDevice: BindExactDeviceRuntime = async (device, owner, fence, use, scope) => {
+    params.admitDevice?.(device);
     const intent: DeviceBindingIntent = { kind: 'exact-owner', owner, fence };
     let managed: ManagedRequestAdmission | undefined;
     if (owner.kind === 'managed-local') {
@@ -177,7 +181,10 @@ export function createRequestRuntimeBindings(params: {
   };
 
   return {
-    inspectFacts: async (device) => await params.gateway.inspectFacts(device),
+    inspectFacts: async (device) => {
+      params.admitDevice?.(device);
+      return await params.gateway.inspectFacts(device);
+    },
     bindDevice,
     bindExactDevice,
     [Symbol.asyncDispose]: async () => {

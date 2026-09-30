@@ -1,12 +1,16 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DeviceInventoryRequest } from './device-inventory.ts';
 
+/** Typed `details.reason` every platform reports when the boot deadline expires. */
+export const BOOT_TIMEOUT_REASON = 'boot_timeout';
+
 export type EnsureReadyInput = Readonly<{
   serial?: string;
   androidSerialAllowlist?: readonly string[];
   /**
    * Absolute deadline (epoch ms), from `boot --timeout`, already validated finite and positive.
-   * Bounds a cold Simulator boot wait; the Apple runtime is the only current consumer.
+   * Bounds a cold boot wait; the Apple and Android runtimes honor it. HarmonyOS, Vega, and Linux
+   * have no boot wait to bound.
    */
   deadlineAtMs?: number;
 }>;

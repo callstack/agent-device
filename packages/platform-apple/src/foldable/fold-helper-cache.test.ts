@@ -21,6 +21,7 @@ function fakeFoldHelperHost(
   const real = createSnapshotSourceHost();
   return {
     ...real,
+    cpuArch: async () => 'arm64',
     run: async (command, args) => {
       if (command === 'xcrun' && args.includes('clang')) {
         const outputPath = args.at(-1)!;
@@ -34,9 +35,7 @@ function fakeFoldHelperHost(
             ? args.includes('-buildVersion')
               ? '24G90'
               : '15.6'
-            : command === 'uname'
-              ? 'arm64'
-              : '';
+            : '';
       return { stdout, stderr: '', exitCode: 0 };
     },
   };

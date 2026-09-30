@@ -1,3 +1,4 @@
+import { BOOT_TIMEOUT_REASON } from '@agent-device/contracts/device-readiness-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -170,7 +171,7 @@ function bootDeadlineError(device: DeviceInfo, cause?: unknown): AppError {
     'COMMAND_FAILED',
     'Simulator did not finish booting within the startup budget',
     {
-      reason: 'boot_timeout',
+      reason: BOOT_TIMEOUT_REASON,
       deviceId: device.id,
       hint: 'The Simulator keeps booting in the background; a first boot can take several minutes. Retry once it is up, or pass a larger --timeout.',
     },

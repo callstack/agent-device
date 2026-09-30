@@ -49,7 +49,7 @@ function writeDisplayInventoryFixture(jsonOutputPath: string): void {
 }
 
 /**
- * Answers the host-toolchain probe (`xcodebuild -version`, `sw_vers`, `uname -m`) the fold-helper
+ * Answers the host-toolchain probe (`xcodebuild -version`, `sw_vers`) the fold-helper
  * build cache (`fold-helper-cache.ts`) reads before it builds or reuses a cached binary. Both fold
  * fakes below route these calls through the same `runCommand`.
  */
@@ -63,7 +63,6 @@ function toolchainProbeAnswer(cmd: string, args: readonly string[]): ExecResult 
       exitCode: 0,
     };
   }
-  if (cmd === 'uname') return { stdout: 'arm64', stderr: '', exitCode: 0 };
   return undefined;
 }
 
