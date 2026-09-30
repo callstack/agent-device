@@ -30,8 +30,17 @@ type SendRequestOptions = {
 
 const LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS = 500;
 const REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS = 3000;
-export const DAEMON_HTTP_ENDPOINT_UNAVAILABLE_MESSAGE = 'Daemon HTTP endpoint is unavailable';
-export const DAEMON_SOCKET_ENDPOINT_UNAVAILABLE_MESSAGE = 'Daemon socket endpoint is unavailable';
+export const DAEMON_ENDPOINT_UNAVAILABLE_REASON = 'daemon_endpoint_unavailable';
+
+function daemonEndpointUnavailableError(transport: ResolvedDaemonTransport): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    transport === 'http'
+      ? 'Daemon HTTP endpoint is unavailable'
+      : 'Daemon socket endpoint is unavailable',
+    { reason: DAEMON_ENDPOINT_UNAVAILABLE_REASON, transport },
+  );
+}
 
 export type RemoteDaemonHealth = {
   reachable: boolean;
@@ -394,12 +403,7 @@ function requireDaemonTransport(
   transport: ResolvedDaemonTransport,
 ): ResolvedDaemonTransport {
   if (hasDaemonTransport(info, transport)) return transport;
-  throw new AppError(
-    'COMMAND_FAILED',
-    transport === 'http'
-      ? DAEMON_HTTP_ENDPOINT_UNAVAILABLE_MESSAGE
-      : DAEMON_SOCKET_ENDPOINT_UNAVAILABLE_MESSAGE,
-  );
+  throw daemonEndpointUnavailableError(transport);
 }
 
 function handleTransportError(
@@ -439,7 +443,7 @@ async function sendSocketRequest(
   options: SendRequestOptions,
 ): Promise<DaemonResponse> {
   const port = info.port;
-  if (!port) throw new AppError('COMMAND_FAILED', DAEMON_SOCKET_ENDPOINT_UNAVAILABLE_MESSAGE);
+  if (!port) throw daemonEndpointUnavailableError('socket');
   return new Promise((resolve, reject) => {
     let requestWritten = false;
     const socket = net.createConnection({ host: '127.0.0.1', port }, () => {
@@ -540,7 +544,7 @@ async function sendHttpRequest(
     : info.httpPort
       ? new URL(`http://127.0.0.1:${info.httpPort}/rpc`)
       : null;
-  if (!rpcUrl) throw new AppError('COMMAND_FAILED', DAEMON_HTTP_ENDPOINT_UNAVAILABLE_MESSAGE);
+  if (!rpcUrl) throw daemonEndpointUnavailableError('http');
   const rpcPayload = JSON.stringify(buildHttpRpcPayload(req, { includeTokenParam: !info.baseUrl }));
   const headers: Record<string, string | number> = {
     'content-type': 'application/json',
