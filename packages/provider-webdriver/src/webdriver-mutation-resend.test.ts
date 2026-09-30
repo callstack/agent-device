@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { afterEach, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { createCloudWebDriverCapabilities } from './capabilities.ts';
@@ -12,178 +14,252 @@ afterEach(() => {
 });
 
 /**
- * A grid that answers `POST /session` immediately, then never answers the one
- * configured mutating route until the transport's own request timeout aborts
- * it. Every other route answers immediately with an empty value. This is the
- * shape a hung `POST .../actions` or `.../keys` takes on a real provider: the
- * driver received the request and is still working it, not a connection
- * failure.
+ * The route a request addresses: the `mobile:` script name for `POST .../execute/sync`, otherwise
+ * the method and path with the session id replaced by `:id`.
+ */
+function routeOf(input: Parameters<typeof fetch>[0], init?: RequestInit): string {
+  const url = new URL(input instanceof Request ? input.url : String(input));
+  const method = init?.method ?? 'GET';
+  const pathname = url.pathname
+    .replace(/^\/wd\/hub/, '')
+    .replace(/^\/session\/wd-1/, '/session/:id');
+  if (pathname.endsWith('/execute/sync') && typeof init?.body === 'string') {
+    return (JSON.parse(init.body) as { script: string }).script;
+  }
+  return `${method} ${pathname}`;
+}
+
+/**
+ * A grid that never answers `hangRoute` until the transport's own timeout aborts it, answers
+ * `unsupportedRoute` with a W3C 404, and answers every other route immediately. A hung request is
+ * the shape a slow driver takes on a real provider: it received the request and is still working
+ * on it.
  */
 function hangingWebDriverFetch(
-  hangOnPathSuffix: string,
-  unsupportedPathSuffix?: string,
+  hangRoute: string,
+  unsupportedRoute?: string,
   unsupportedErrorCode = 'unknown command',
-): {
-  fetch: typeof globalThis.fetch;
-  callsFor: (pathSuffix: string) => number;
-} {
-  const paths: string[] = [];
+): { fetch: typeof globalThis.fetch; sendsTo: (route: string) => number } {
+  const routes: string[] = [];
   const fetch: typeof globalThis.fetch = async (input, init) => {
-    const url = new URL(input instanceof Request ? input.url : String(input));
-    paths.push(url.pathname);
-    if (url.pathname.endsWith('/session')) {
-      return new Response(JSON.stringify({ value: { sessionId: 'wd-1', capabilities: {} } }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-    if (unsupportedPathSuffix && url.pathname.endsWith(unsupportedPathSuffix)) {
-      return new Response(
-        JSON.stringify({ value: { error: unsupportedErrorCode, message: 'refused' } }),
-        { status: 404, headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-    if (url.pathname.endsWith(hangOnPathSuffix)) {
+    const route = routeOf(input, init);
+    routes.push(route);
+    if (route === hangRoute) {
       return await new Promise<Response>((_resolve, reject) => {
         init?.signal?.addEventListener('abort', () => reject(init.signal?.reason as Error));
       });
     }
-    return new Response(JSON.stringify({ value: null }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    if (route === 'POST /session') {
+      return Response.json({ value: { sessionId: 'wd-1', capabilities: {} } });
+    }
+    if (route === unsupportedRoute) {
+      return Response.json(
+        { value: { error: unsupportedErrorCode, message: 'refused' } },
+        { status: 404 },
+      );
+    }
+    return Response.json({ value: null });
   };
-  return { fetch, callsFor: (pathSuffix) => paths.filter((p) => p.endsWith(pathSuffix)).length };
+  return { fetch, sendsTo: (route) => routes.filter((sent) => sent === route).length };
 }
 
 /**
- * A real `WebDriverClient` and `createWebDriverInteractor`, connected through
- * a driver that hangs on `hangOnPathSuffix`. `timeoutMs` is the smallest the
- * transport accepts that still lets `AbortSignal.timeout` and the fetch stub's
- * abort listener race deterministically; `retryDelayMs` is cut to keep a
- * retried attempt's sleep out of the test budget.
+ * A real `WebDriverClient` and `createWebDriverInteractor` over the hanging grid. The default
+ * transport policy retries once, so a request that is resent shows two sends.
  */
-async function connectedWebDriverInteractor(
-  hangOnPathSuffix: string,
-  unsupportedPathSuffix?: string,
-  unsupportedErrorCode?: string,
-) {
-  const { fetch, callsFor } = hangingWebDriverFetch(
-    hangOnPathSuffix,
-    unsupportedPathSuffix,
-    unsupportedErrorCode,
+async function connectedWebDriverInteractor(options: {
+  hangRoute: string;
+  unsupportedRoute?: string;
+  unsupportedErrorCode?: string;
+  createSession?: boolean;
+}) {
+  const { fetch, sendsTo } = hangingWebDriverFetch(
+    options.hangRoute,
+    options.unsupportedRoute,
+    options.unsupportedErrorCode,
   );
   globalThis.fetch = fetch;
   const client = new WebDriverClient({
     clientVersion: '0.0.0-test',
     endpoint: 'http://cloud-webdriver.test/wd/hub/',
-    requestPolicy: { timeoutMs: 20, retryDelayMs: 5 },
+    requestPolicy: { timeoutMs: 20, retryDelayMs: 5, sessionCreateTimeoutMs: 20 },
   });
-  await client.createSession({ platformName: 'Android' });
+  if (options.createSession !== false) await client.createSession({ platformName: 'Android' });
   const interactor = createWebDriverInteractor({
     client,
     backend: 'android',
-    capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'android' }),
+    capabilities: createCloudWebDriverCapabilities({
+      provider: 'test',
+      platform: 'android',
+      overrides: {
+        home: 'supported',
+        'clipboard.read': 'supported',
+        'clipboard.write': 'supported',
+      },
+    }),
   });
-  return { client, interactor, callsFor };
+  return { client, interactor, sendsTo };
 }
 
-// A tap whose `POST .../actions` request times out gets exactly one attempt:
-// a resend cannot tell whether the touch the driver is still processing from
-// the first attempt already landed, so a second attempt risks a doubled
-// gesture instead of a safe no-op. The thrown error still discloses that the
-// outcome is unresolved via `details.dispatched`.
-test('a timed-out tap is never resent', async () => {
-  const { interactor, callsFor } = await connectedWebDriverInteractor('/actions');
+type Connected = Awaited<ReturnType<typeof connectedWebDriverInteractor>>;
 
-  await assert.rejects(interactor.tap(10, 20), (error: unknown) => {
-    assert.ok(error instanceof AppError);
-    assert.equal(error.details?.dispatched, 'unknown');
-    return true;
-  });
+type MutatingRouteRow = {
+  act: (connected: Connected) => Promise<unknown>;
+  /** A route the grid answers as unsupported so `act` reaches the hung sibling route. */
+  unsupportedRoute?: string;
+  createSession?: false;
+};
 
-  assert.equal(callsFor('/actions'), 1);
+const MUTATING_ROUTES: Record<string, MutatingRouteRow> = {
+  'POST /session': {
+    act: ({ client }) => client.createSession({ platformName: 'Android' }),
+    createSession: false,
+  },
+  'DELETE /session/:id': { act: ({ client }) => client.deleteSession() },
+  'POST /session/:id/appium/device/install_app': {
+    act: ({ client }) => client.installApp('/tmp/app.apk'),
+  },
+  'POST /session/:id/appium/device/activate_app': {
+    act: ({ client }) => client.activateApp('com.example.app'),
+  },
+  'POST /session/:id/appium/device/terminate_app': {
+    act: ({ client }) => client.terminateApp('com.example.app'),
+  },
+  'POST /session/:id/appium/device/hide_keyboard': { act: ({ client }) => client.hideKeyboard() },
+  'POST /session/:id/actions': { act: ({ interactor }) => interactor.tap(10, 20) },
+  'DELETE /session/:id/actions': { act: ({ client }) => client.releaseActions() },
+  'POST /session/:id/keys': { act: ({ client }) => client.sendKeys('hello') },
+  'POST /session/:id/back': { act: ({ interactor }) => interactor.back() },
+  'POST /session/:id/rotation': { act: ({ client }) => client.setRotation(90) },
+  'POST /session/:id/orientation': { act: ({ client }) => client.setOrientation('LANDSCAPE') },
+  'mobile: deepLink': {
+    act: ({ interactor }) => interactor.open('com.example.app', { url: 'example://home' }),
+  },
+  'mobile: activateApp': { act: ({ interactor }) => interactor.openDevice() },
+  'mobile: terminateApp': {
+    act: ({ client }) => client.terminateApp('com.example.app'),
+    unsupportedRoute: 'POST /session/:id/appium/device/terminate_app',
+  },
+  'mobile: pressButton': {
+    act: async ({ interactor }) => {
+      assert.ok(interactor.home);
+      await interactor.home();
+    },
+  },
+  'mobile: setClipboard': {
+    act: async ({ interactor }) => {
+      assert.ok(interactor.writeClipboard);
+      await interactor.writeClipboard('copied');
+    },
+  },
+};
+
+/**
+ * Every mutating route the provider sends, read from its source: each non-GET client request, and
+ * each `mobile:` script passed to `executeScript`. `POST .../execute/sync` itself is the carrier
+ * of the `mobile:` scripts, which are enumerated by name.
+ */
+function mutatingRoutesInSource(): string[] {
+  const sourceDir = path.dirname(new URL(import.meta.url).pathname);
+  const routes = new Set<string>();
+  for (const file of fs.readdirSync(sourceDir)) {
+    if (!file.endsWith('.ts') || file.endsWith('.test.ts')) continue;
+    const source = fs.readFileSync(path.join(sourceDir, file), 'utf8');
+    for (const match of source.matchAll(
+      /(sessionRequest|requestValue)\(\s*'(POST|PUT|PATCH|DELETE)',\s*[`']([^`']+)[`']/g,
+    )) {
+      const [, helper, method, routePath] = match;
+      const absolute = helper === 'sessionRequest' ? `/session/:id${routePath}` : routePath;
+      const route = `${method} ${absolute!.replace('${sessionId}', ':id')}`;
+      if (route !== 'POST /session/:id/execute/sync') routes.add(route);
+    }
+    for (const match of source.matchAll(/\.executeScript\(\s*'(mobile: \w+)'/g)) {
+      routes.add(match[1]!);
+    }
+  }
+  return [...routes].sort();
+}
+
+test('the mutating-route table covers every mutating route the provider sends', () => {
+  assert.deepEqual(Object.keys(MUTATING_ROUTES).sort(), mutatingRoutesInSource());
 });
 
-// Same shape for text entry: a hung `POST .../keys` must not be resent, or a
-// doubled key stream could reach the field the first attempt already typed
-// into.
-test('timed-out keys are never resent', async () => {
-  const { interactor, callsFor } = await connectedWebDriverInteractor('/keys');
+// A resend after a timeout cannot tell whether the first attempt's side effect already landed, so
+// every mutating route gets one send and discloses that its outcome is unresolved.
+for (const [route, row] of Object.entries(MUTATING_ROUTES)) {
+  test(`a timed-out ${route} is sent once`, async () => {
+    const connected = await connectedWebDriverInteractor({
+      hangRoute: route,
+      unsupportedRoute: row.unsupportedRoute,
+      createSession: row.createSession,
+    });
 
-  await assert.rejects(interactor.type('hello'), (error: unknown) => {
-    assert.ok(error instanceof AppError);
-    assert.equal(error.details?.dispatched, 'unknown');
-    return true;
+    await assert.rejects(row.act(connected), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.dispatched, 'unknown');
+      return true;
+    });
+
+    assert.equal(connected.sendsTo(route), 1);
   });
+}
 
-  assert.equal(callsFor('/keys'), 1);
-});
-
-// A third mutating route, distinct from the gesture/text-entry paths: a hung
-// `POST .../back` must not be resent, or a doubled back navigation could
-// leave the app a screen further back than the caller asked for.
-test('a timed-out back is never resent', async () => {
-  const { interactor, callsFor } = await connectedWebDriverInteractor('/back');
-
-  await assert.rejects(interactor.back(), (error: unknown) => {
-    assert.ok(error instanceof AppError);
-    assert.equal(error.details?.dispatched, 'unknown');
-    return true;
+test('a timed-out GET read is resent once', async () => {
+  const { interactor, sendsTo } = await connectedWebDriverInteractor({
+    hangRoute: 'GET /session/:id/source',
   });
-
-  assert.equal(callsFor('/back'), 1);
-});
-
-// The mutation policy is narrowly scoped: a read route (page source) keeps
-// the transport's default retry budget, so a timeout there still resends
-// once, exactly as it did before this change.
-test('a timed-out read is still retried once', async () => {
-  const { interactor, callsFor } = await connectedWebDriverInteractor('/source');
 
   await assert.rejects(interactor.snapshot(), () => true);
 
-  assert.equal(callsFor('/source'), 2);
+  assert.equal(sendsTo('GET /session/:id/source'), 2);
+});
+
+test('a timed-out mobile: getClipboard read is resent once', async () => {
+  const { interactor, sendsTo } = await connectedWebDriverInteractor({
+    hangRoute: 'mobile: getClipboard',
+  });
+
+  assert.ok(interactor.readClipboard);
+  await assert.rejects(interactor.readClipboard(), () => true);
+
+  assert.equal(sendsTo('mobile: getClipboard'), 2);
 });
 
 // App activation has a sibling route (`mobile: activateApp`) for drivers without the Appium one.
 // A timeout on the first route is not "unsupported": the driver may already be activating the app,
 // so switching routes would send the mutation twice.
 test('a timed-out app activation does not fall back to the sibling route', async () => {
-  const { client, callsFor } = await connectedWebDriverInteractor('/appium/device/activate_app');
-
-  await assert.rejects(client.activateApp('com.example.app'), (error: unknown) => {
-    assert.ok(error instanceof AppError);
-    assert.equal(error.details?.dispatched, 'unknown');
-    return true;
+  const { client, sendsTo } = await connectedWebDriverInteractor({
+    hangRoute: 'POST /session/:id/appium/device/activate_app',
   });
 
-  assert.equal(callsFor('/appium/device/activate_app'), 1);
-  assert.equal(callsFor('/execute/sync'), 0);
+  await assert.rejects(client.activateApp('com.example.app'), () => true);
+
+  assert.equal(sendsTo('mobile: activateApp'), 0);
 });
 
 // A driver that answers the first route with "unknown command" never ran it, so the sibling route
 // is the one attempt that reaches the device.
 test('an unsupported app-termination route falls back to the sibling route once', async () => {
-  const { client, callsFor } = await connectedWebDriverInteractor(
-    '/never-hangs',
-    '/appium/device/terminate_app',
-  );
+  const { client, sendsTo } = await connectedWebDriverInteractor({
+    hangRoute: 'none',
+    unsupportedRoute: 'POST /session/:id/appium/device/terminate_app',
+  });
 
   await client.terminateApp('com.example.app');
 
-  assert.equal(callsFor('/appium/device/terminate_app'), 1);
-  assert.equal(callsFor('/execute/sync'), 1);
+  assert.equal(sendsTo('POST /session/:id/appium/device/terminate_app'), 1);
+  assert.equal(sendsTo('mobile: terminateApp'), 1);
 });
 
 // W3C also answers 404 for a session that no longer exists. That is not an unsupported route, so
 // the sibling route is not tried and the failure is not classified as never dispatched here.
 test('a 404 naming another W3C error does not fall back to the sibling route', async () => {
-  const { client, callsFor } = await connectedWebDriverInteractor(
-    '/never-hangs',
-    '/appium/device/terminate_app',
-    'invalid session id',
-  );
+  const { client, sendsTo } = await connectedWebDriverInteractor({
+    hangRoute: 'none',
+    unsupportedRoute: 'POST /session/:id/appium/device/terminate_app',
+    unsupportedErrorCode: 'invalid session id',
+  });
 
   await assert.rejects(client.terminateApp('com.example.app'), (error: unknown) => {
     assert.ok(error instanceof AppError);
@@ -191,6 +267,6 @@ test('a 404 naming another W3C error does not fall back to the sibling route', a
     return true;
   });
 
-  assert.equal(callsFor('/appium/device/terminate_app'), 1);
-  assert.equal(callsFor('/execute/sync'), 0);
+  assert.equal(sendsTo('POST /session/:id/appium/device/terminate_app'), 1);
+  assert.equal(sendsTo('mobile: terminateApp'), 0);
 });

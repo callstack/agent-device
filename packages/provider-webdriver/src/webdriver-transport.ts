@@ -40,6 +40,12 @@ export function isWebDriverConnectRefused(error: unknown): error is AppError {
 export type WebDriverRequestOverrides = {
   retryAttempts?: number;
   /**
+   * The request reads and changes nothing, so a resend after an ambiguous failure is safe. GET
+   * requests are idempotent by method; this marks a read the protocol sends as a POST, such as a
+   * `mobile:` read script.
+   */
+  idempotent?: boolean;
+  /**
    * Per-request transport bound, for callers whose own budget is far shorter
    * than the client's default. Without it a caller waiting 2s on a poll can be
    * held for the full default timeout by one hung request.
@@ -48,21 +54,6 @@ export type WebDriverRequestOverrides = {
   /** Request-bound cancellation supplied by a runtime binding. */
   signal?: AbortSignal;
 };
-
-/**
- * Every mutating WebDriver route gets exactly one attempt. A resend after an
- * ambiguous outcome (the request timed out, or the driver answered 5xx after
- * receiving it) cannot tell whether the first attempt's side effect — a tap, a
- * key send, a navigation — already landed, so retrying risks a doubled action
- * rather than a safe no-op. Reads keep the transport's default retry budget.
- *
- * `'no'` and `'unknown'` are the two values this transport can attach to a
- * failed request's `details.dispatched`; `feat/dispatch-disclosure` formalizes
- * that vocabulary as `DispatchDisclosure` (`'no' | 'yes' | 'unknown'`) in
- * `@agent-device/contracts`. This policy is why a mutation never gets the
- * chance to resend regardless of which value it carries.
- */
-export const MUTATION_REQUEST_POLICY: WebDriverRequestOverrides = { retryAttempts: 0 };
 
 export type WebDriverTransportOptions = {
   clientVersion: string;
@@ -87,6 +78,13 @@ type ResolvedWebDriverRequestOverrides = {
 type ResolvedWebDriverRequestPolicy = Required<
   NonNullable<WebDriverTransportOptions['requestPolicy']>
 >;
+
+/**
+ * Only a request that changes nothing gets the policy's retry budget. A resend after an ambiguous
+ * outcome (a timeout, or a 5xx after the driver received the request) cannot tell whether the first
+ * attempt's side effect already landed, so every other request gets exactly one attempt.
+ */
+const IDEMPOTENT_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD']);
 
 /** Focused HTTP/retry policy for one WebDriver endpoint; session semantics stay in WebDriverClient. */
 export class WebDriverTransport {
@@ -114,8 +112,10 @@ export class WebDriverTransport {
     body?: unknown,
     overrides?: WebDriverRequestOverrides,
   ): Promise<unknown> {
+    const idempotent = overrides?.idempotent ?? IDEMPOTENT_METHODS.has(method);
     return await this.requestValueWithRetries(method, path, body, {
-      retryAttempts: overrides?.retryAttempts ?? this.requestPolicy.retryAttempts,
+      retryAttempts:
+        overrides?.retryAttempts ?? (idempotent ? this.requestPolicy.retryAttempts : 0),
       timeoutMs: overrides?.timeoutMs ?? this.requestPolicy.timeoutMs,
       signal: overrides?.signal,
     });

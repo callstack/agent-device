@@ -22,7 +22,7 @@ import {
   type CloudWebDriverProviderCapabilities,
 } from './capabilities.ts';
 import type { W3CPointerAction, WebDriverClient, WebDriverWindowRect } from './webdriver-client.ts';
-import { isWebDriverRequestTimeout, MUTATION_REQUEST_POLICY } from './webdriver-transport.ts';
+import { isWebDriverRequestTimeout } from './webdriver-transport.ts';
 import { touchPointer } from './webdriver-gestures.ts';
 import {
   scrollFrameFromAndroidWebDriverSource,
@@ -143,11 +143,7 @@ class WebDriverInteractor implements Interactor {
     },
   ): Promise<void> {
     if (options?.url) {
-      await this.client.executeScript(
-        'mobile: deepLink',
-        [{ url: options.url, package: app }],
-        MUTATION_REQUEST_POLICY,
-      );
+      await this.client.executeScript('mobile: deepLink', [{ url: options.url, package: app }]);
       return;
     }
     const appId = options?.appBundleId ?? app;
@@ -156,7 +152,7 @@ class WebDriverInteractor implements Interactor {
   }
 
   async openDevice(): Promise<void> {
-    await this.client.executeScript('mobile: activateApp', [{}], MUTATION_REQUEST_POLICY);
+    await this.client.executeScript('mobile: activateApp', [{}]);
   }
 
   async close(app: string): Promise<void> {
@@ -348,11 +344,7 @@ class WebDriverInteractor implements Interactor {
 
   async home(): Promise<void> {
     this.requireSupport('home');
-    await this.client.executeScript(
-      'mobile: pressButton',
-      [{ name: 'home' }],
-      MUTATION_REQUEST_POLICY,
-    );
+    await this.client.executeScript('mobile: pressButton', [{ name: 'home' }]);
   }
 
   async setOrientation(orientation: DeviceRotation): Promise<void> {
@@ -362,11 +354,7 @@ class WebDriverInteractor implements Interactor {
 
   async appSwitcher(): Promise<void> {
     this.requireSupport('appSwitcher');
-    await this.client.executeScript(
-      'mobile: pressButton',
-      [{ name: 'appSwitch' }],
-      MUTATION_REQUEST_POLICY,
-    );
+    await this.client.executeScript('mobile: pressButton', [{ name: 'appSwitch' }]);
   }
 
   async tvRemote(_button: TvRemoteButton, _durationMs?: number): Promise<void> {
@@ -375,17 +363,13 @@ class WebDriverInteractor implements Interactor {
 
   async readClipboard(): Promise<string> {
     this.requireSupport('clipboard.read');
-    const value = await this.client.executeScript('mobile: getClipboard', [{}]);
+    const value = await this.client.executeReadScript('mobile: getClipboard', [{}]);
     return typeof value === 'string' ? value : '';
   }
 
   async writeClipboard(text: string): Promise<void> {
     this.requireSupport('clipboard.write');
-    await this.client.executeScript(
-      'mobile: setClipboard',
-      [{ content: text }],
-      MUTATION_REQUEST_POLICY,
-    );
+    await this.client.executeScript('mobile: setClipboard', [{ content: text }]);
   }
 
   async setSetting(

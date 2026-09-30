@@ -2,7 +2,6 @@ import fs from 'node:fs/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   isWebDriverRouteUnsupported,
-  MUTATION_REQUEST_POLICY,
   WebDriverTransport,
   type WebDriverAuth,
   type WebDriverRequestOverrides,
@@ -94,10 +93,7 @@ export class WebDriverClient {
       'POST',
       '/session',
       { capabilities: normalizeCapabilities(capabilities) },
-      {
-        retryAttempts: 0,
-        timeoutMs: budgetWithin(this.sessionCreateTimeoutMs, options?.deadline),
-      },
+      { timeoutMs: budgetWithin(this.sessionCreateTimeoutMs, options?.deadline) },
     );
     const session = readSession(value);
     this.sessionId = session.sessionId;
@@ -107,82 +103,46 @@ export class WebDriverClient {
   // fallow-ignore-next-line unused-class-member
   async deleteSession(): Promise<void> {
     const sessionId = this.requireSessionId();
-    await this.requestValue('DELETE', `/session/${sessionId}`, undefined, MUTATION_REQUEST_POLICY);
+    await this.requestValue('DELETE', `/session/${sessionId}`);
     this.sessionId = undefined;
   }
 
   async installApp(appPath: string, signal?: AbortSignal): Promise<void> {
-    await this.sessionRequest(
-      'POST',
-      '/appium/device/install_app',
-      { appPath },
-      {
-        ...MUTATION_REQUEST_POLICY,
-        signal,
-      },
-    );
+    await this.sessionRequest('POST', '/appium/device/install_app', { appPath }, { signal });
   }
 
   async activateApp(appId: string): Promise<void> {
     try {
-      await this.sessionRequest(
-        'POST',
-        '/appium/device/activate_app',
-        { appId },
-        MUTATION_REQUEST_POLICY,
-      );
+      await this.sessionRequest('POST', '/appium/device/activate_app', { appId });
     } catch (error) {
       if (!isWebDriverRouteUnsupported(error)) throw error;
-      await this.executeScript(
-        'mobile: activateApp',
-        [{ appId, bundleId: appId }],
-        MUTATION_REQUEST_POLICY,
-      );
+      await this.executeScript('mobile: activateApp', [{ appId, bundleId: appId }]);
     }
   }
 
   async terminateApp(appId: string): Promise<void> {
     try {
-      await this.sessionRequest(
-        'POST',
-        '/appium/device/terminate_app',
-        { appId },
-        MUTATION_REQUEST_POLICY,
-      );
+      await this.sessionRequest('POST', '/appium/device/terminate_app', { appId });
     } catch (error) {
       if (!isWebDriverRouteUnsupported(error)) throw error;
-      await this.executeScript(
-        'mobile: terminateApp',
-        [{ appId, bundleId: appId }],
-        MUTATION_REQUEST_POLICY,
-      );
+      await this.executeScript('mobile: terminateApp', [{ appId, bundleId: appId }]);
     }
   }
 
   async performActions(actions: W3CActionSequence[]): Promise<void> {
-    await this.sessionRequest('POST', '/actions', { actions }, MUTATION_REQUEST_POLICY);
+    await this.sessionRequest('POST', '/actions', { actions });
   }
 
   async releaseActions(): Promise<void> {
-    await this.sessionRequest('DELETE', '/actions', undefined, MUTATION_REQUEST_POLICY);
+    await this.sessionRequest('DELETE', '/actions');
   }
 
   async sendKeys(text: string): Promise<void> {
-    await this.sessionRequest(
-      'POST',
-      '/keys',
-      { value: Array.from(text) },
-      MUTATION_REQUEST_POLICY,
-    );
+    await this.sessionRequest('POST', '/keys', { value: Array.from(text) });
   }
 
   async hideKeyboard(): Promise<void> {
-    await this.sessionRequest(
-      'POST',
-      '/appium/device/hide_keyboard',
-      undefined,
-      MUTATION_REQUEST_POLICY,
-    );
+    await this.sessionRequest('POST', '/appium/device/hide_keyboard');
   }
 
   /**
@@ -269,22 +229,17 @@ export class WebDriverClient {
   }
 
   async back(): Promise<void> {
-    await this.sessionRequest('POST', '/back', undefined, MUTATION_REQUEST_POLICY);
+    await this.sessionRequest('POST', '/back');
   }
 
   /** Exact four-way display rotation. `z` is degrees: 0, 90, 180, or 270. */
   async setRotation(degrees: number): Promise<void> {
-    await this.sessionRequest(
-      'POST',
-      '/rotation',
-      { x: 0, y: 0, z: degrees },
-      MUTATION_REQUEST_POLICY,
-    );
+    await this.sessionRequest('POST', '/rotation', { x: 0, y: 0, z: degrees });
   }
 
   /** Two-way orientation. Values are uppercase per the WebDriver protocol. */
   async setOrientation(orientation: 'PORTRAIT' | 'LANDSCAPE'): Promise<void> {
-    await this.sessionRequest('POST', '/orientation', { orientation }, MUTATION_REQUEST_POLICY);
+    await this.sessionRequest('POST', '/orientation', { orientation });
   }
 
   /**
@@ -317,19 +272,19 @@ export class WebDriverClient {
     return readWindowRect(await this.sessionRequest('GET', '/window/rect'));
   }
 
-  /**
-   * `mobile:` scripts cover both reads (`getClipboard`) and mutations
-   * (`activateApp`, `deepLink`, `pressButton`, `setClipboard`, …) behind one
-   * generic route, so the caller — which knows what the script does — states
-   * the retry policy; omitting `overrides` keeps the transport default for a
-   * read.
-   */
-  async executeScript(
-    script: string,
-    args: unknown[] = [],
-    overrides?: WebDriverRequestOverrides,
-  ): Promise<unknown> {
-    return await this.sessionRequest('POST', '/execute/sync', { script, args }, overrides);
+  /** A script that may change device state; it is sent once. */
+  async executeScript(script: string, args: unknown[] = []): Promise<unknown> {
+    return await this.sessionRequest('POST', '/execute/sync', { script, args });
+  }
+
+  /** A script that only reads, so it may be resent after an ambiguous failure. */
+  async executeReadScript(script: string, args: unknown[] = []): Promise<unknown> {
+    return await this.sessionRequest(
+      'POST',
+      '/execute/sync',
+      { script, args },
+      { idempotent: true },
+    );
   }
 
   private async sessionRequest(

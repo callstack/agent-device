@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { afterEach, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
-  MUTATION_REQUEST_POLICY,
   WebDriverTransport,
   isWebDriverConnectRefused,
   isWebDriverRequestTimeout,
@@ -125,10 +124,8 @@ test('a connection refusal classifies as unreached and is still retried by defau
   assert.equal(calls, 2);
 });
 
-// The one attempt `MUTATION_REQUEST_POLICY` grants must hold regardless of
-// which ambiguous failure the request hit — connect refusal included, not
-// only a timeout or a 5xx.
-test('a connection refusal is not resent under the mutation policy', async () => {
+// A POST may change device state, so it gets one attempt whichever failure it hit.
+test('a connection refusal on a POST is not resent', async () => {
   const transport = new WebDriverTransport({
     clientVersion: '0.0.0-test',
     endpoint: 'http://cloud-webdriver.test/wd/hub/',
@@ -140,25 +137,26 @@ test('a connection refusal is not resent under the mutation policy', async () =>
     throw new TypeError('fetch failed');
   };
 
-  await assert.rejects(
-    transport.requestValue('POST', '/session/wd-1/actions', {}, MUTATION_REQUEST_POLICY),
-  );
+  await assert.rejects(transport.requestValue('POST', '/session/wd-1/actions', {}));
   assert.equal(calls, 1);
 });
 
 // A 5xx means the driver answered — it received and processed the request —
 // but not whether the mutation it described completed before it failed.
-test('a 5xx response discloses an unresolved outcome', async () => {
+test('a 5xx response to a POST discloses an unresolved outcome and is not resent', async () => {
   const transport = new WebDriverTransport({
     clientVersion: '0.0.0-test',
     endpoint: 'http://cloud-webdriver.test/wd/hub/',
-    requestPolicy: { timeoutMs: 30_000, retryAttempts: 0 },
+    requestPolicy: { timeoutMs: 30_000, retryAttempts: 1, retryDelayMs: 1 },
   });
-  globalThis.fetch = async () =>
-    new Response(JSON.stringify({ value: { message: 'grid unavailable' } }), {
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response(JSON.stringify({ value: { message: 'grid unavailable' } }), {
       status: 503,
       headers: { 'Content-Type': 'application/json' },
     });
+  };
 
   await assert.rejects(
     transport.requestValue('POST', '/session/wd-1/actions', {}),
@@ -168,4 +166,5 @@ test('a 5xx response discloses an unresolved outcome', async () => {
       return true;
     },
   );
+  assert.equal(calls, 1);
 });
