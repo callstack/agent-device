@@ -26,7 +26,6 @@ import type {
   AdReplayStepRuntime,
   AdReplayTargetObservation,
 } from '@agent-device/ad-replay';
-import { observeUntil } from '@agent-device/capture-kit/observe-until';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { collectReplayActionArtifactPaths } from '@agent-device/replay-port/session-replay-runtime-artifacts';
 import {
@@ -228,8 +227,9 @@ export function createAdReplayStepRuntime(params: {
       // command resolving a selector (a `@ref` resolves without a wait).
       const readiness = token.startsWith('@')
         ? undefined
-        : replayStepReadinessSchedule(ctx.replayReq.flags, action);
+        : await replayStepReadinessSchedule(ctx.replayReq.flags, action);
       if (!readiness) return await observeOnce();
+      const { observeUntil } = await import('@agent-device/capture-kit/observe-until');
       const observed = await observeUntil<AdReplayTargetObservation, AdReplayTargetObservation>({
         capture: observeOnce,
         verdict: (latest) =>

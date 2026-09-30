@@ -34,7 +34,7 @@ export type CommonCommandInput = Pick<
 
 export type CommonInputReadOptions = {
   readTargetAlias?: boolean;
-  /** The command's own fields declare `readinessTimeoutMs` (`target-readiness-grammar.ts`). */
+  /** The command's own fields declare `readinessTimeoutMs` (`interaction/metadata.ts`). */
   readinessBudgetDeclared?: boolean;
 };
 

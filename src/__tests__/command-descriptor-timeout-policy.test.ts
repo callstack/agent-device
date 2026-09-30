@@ -11,6 +11,7 @@ import { INTERACTION_DISPATCH_PATHS } from '@agent-device/contracts/interaction-
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import {
   DEFAULT_TIMEOUT_POLICY,
+  READINESS_BUDGET_MAX_MS,
   resolveCommandRequestTimeoutMs,
 } from '@agent-device/command-registry/timeout-policy';
 import { DEFAULT_STABLE_TIMEOUT_MS } from '../commands/interaction/runtime/stable-capture.ts';
@@ -428,9 +429,15 @@ test('a readiness budget widens the request envelope on top of the settle envelo
   assert.equal(resolveCommandRequestTimeoutMs(press, { flags: { readinessTimeoutMs: 0 } }), 90_000);
   assert.equal(
     resolveCommandRequestTimeoutMs(press, { flags: { readinessTimeoutMs: 999_000 } }),
-    90_000 + SELECTOR_PIPELINE_POLICIES.promotedTarget.poll.maxTimeoutMs,
+    90_000 + 2_000,
   );
-  assert.equal(SELECTOR_PIPELINE_POLICIES.promotedTarget.poll.maxTimeoutMs, 2_000);
+});
+
+test('the envelope readiness cap is the promotedTarget row poll ceiling', () => {
+  assert.equal(
+    READINESS_BUDGET_MAX_MS,
+    SELECTOR_PIPELINE_POLICIES.promotedTarget.poll.maxTimeoutMs,
+  );
   assert.equal(
     resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('fill'), {
       flags: { readinessTimeoutMs: 2_000 },

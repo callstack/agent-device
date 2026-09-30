@@ -85,8 +85,8 @@ export type CommandTimeoutPolicy = {
 
 /**
  * `budgeted`: the command's target resolution may poll for a target that does not exist yet, under
- * a caller-supplied `readinessTimeoutMs`. Must match the commands the `targetReadiness` interaction
- * guarantee cells mark `runtime`.
+ * a caller-supplied `readinessTimeoutMs`, capped at `READINESS_BUDGET_MAX_MS` (`timeout-policy.ts`).
+ * Must match the commands the `targetReadiness` interaction guarantee cells mark `runtime`.
  */
 export type CommandTargetReadiness = 'budgeted';
 

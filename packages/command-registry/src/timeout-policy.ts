@@ -1,4 +1,3 @@
-import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { CommandTimeoutBudget, CommandTimeoutPolicy } from './types.ts';
 
 // Request-envelope constants, relocated from src/daemon/request-timeouts.ts when
@@ -88,6 +87,12 @@ export function resolveCommandRequestTimeoutMs(
 }
 
 /**
+ * The ceiling of a `targetReadiness: 'budgeted'` command's readiness budget: the promotedTarget
+ * selector row's poll ceiling, pinned to it by test.
+ */
+export const READINESS_BUDGET_MAX_MS = 2_000;
+
+/**
  * A readiness budget is target-poll time spent before the action itself, so it extends whatever
  * envelope the command otherwise has; the daemon's own poll must never outlive the client's clock.
  * The poll never runs past the promotedTarget row's ceiling, so neither does the widening.
@@ -99,7 +104,7 @@ function readinessBudgetMs(
   if (policy.targetReadiness !== 'budgeted') return 0;
   const budgetMs = flags?.readinessTimeoutMs;
   if (typeof budgetMs !== 'number' || !Number.isInteger(budgetMs) || budgetMs <= 0) return 0;
-  return Math.min(budgetMs, SELECTOR_PIPELINE_POLICIES.promotedTarget.poll.maxTimeoutMs);
+  return Math.min(budgetMs, READINESS_BUDGET_MAX_MS);
 }
 
 function resolvePositionalBudgetTimeoutMs(

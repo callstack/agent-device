@@ -7,7 +7,6 @@ import type {
 } from '@agent-device/replay-port/command-types';
 import { mergeParentFlags } from '@agent-device/command-registry/batch';
 import { commandAcceptsReadinessBudget } from '@agent-device/command-registry/registry';
-import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   gesturePayloadFromPositionals,
@@ -236,12 +235,15 @@ const REPLAY_DEFAULT_READINESS_TIMEOUT_MS = 2_000;
  * step's command does not wait for its target. The pre-dispatch target gate polls under the same
  * schedule, so neither refuses a target the other would still wait for.
  */
-export function replayStepReadinessSchedule(
+export async function replayStepReadinessSchedule(
   parentFlags: CommandFlags | undefined,
   action: SessionAction,
-): { intervalMs: number; budgetMs: number } | undefined {
+): Promise<{ intervalMs: number; budgetMs: number } | undefined> {
   const { readinessTimeoutMs } = buildReplayActionFlags(parentFlags, action.flags, action.command);
   if (readinessTimeoutMs === undefined || readinessTimeoutMs <= 0) return undefined;
+  // Loaded only by a step that waits, so the replay entry does not evaluate the selector policy.
+  const { SELECTOR_PIPELINE_POLICIES } =
+    await import('@agent-device/selectors/selector-pipeline-policy');
   const poll = SELECTOR_PIPELINE_POLICIES.promotedTarget.poll;
   return { intervalMs: poll.intervalMs, budgetMs: Math.min(readinessTimeoutMs, poll.maxTimeoutMs) };
 }
