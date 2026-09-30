@@ -256,9 +256,10 @@ async function dispatchAppleLaunchUrl(
 
 /**
  * One alert read, spent only when the launch handed SpringBoard a URL it may hold behind a
- * confirmation and the host AX bridge then could not observe the launched app, the state a system
- * surface over the app leaves. An observed app is not covered, so its open never reaches the
- * runner. The read runs within what is left of the launch budget.
+ * confirmation and the host AX bridge then read the launched app as unobservable, the state a
+ * system surface over the app leaves. An observed app, or a bridge that could not observe at all,
+ * is not covered, so its open never reaches the runner. The read runs within what is left of the
+ * launch budget, and the runner it needs is recorded as the open's demand.
  */
 async function answerAppleLaunchConfirmation(
   binding: BoundAppleInteractor,
@@ -271,6 +272,7 @@ async function answerAppleLaunchConfirmation(
   if (timing.postOpenObservation !== 'unobservable') return undefined;
   const budgetMs = IOS_APP_LAUNCH_TIMEOUT_MS - (Date.now() - launchStartedAtMs);
   if (budgetMs <= 0) return undefined;
+  timing.runnerDemand = 'required';
   const { answerLaunchConfirmation, createLaunchConfirmationPort } = await loadLaunchConfirmation();
   const interactor = await binding.resolveInteractor(input.execution, input.appBundleId);
   return await answerLaunchConfirmation(

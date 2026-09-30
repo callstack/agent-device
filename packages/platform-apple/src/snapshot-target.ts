@@ -23,6 +23,8 @@ const TARGET_DISCOVERY_WAIT_MS = 1_500;
 const TARGET_DISCOVERY_TIMEOUT_MS = 15_000;
 /** A caller's wait slice ran out while the discovery it joined is still running. */
 const TARGET_DISCOVERY_PENDING = 'simulator-target-discovery-pending';
+/** The discovery answered: the app has no running process on the Simulator. */
+const TARGET_NOT_RUNNING = 'simulator-target-unavailable';
 
 export type SimulatorSnapshotTarget = Readonly<{
   simulator: SimulatorAddress;
@@ -96,6 +98,11 @@ export function isSimulatorTargetDiscoveryPending(error: unknown): boolean {
   return error instanceof AppError && error.details?.reason === TARGET_DISCOVERY_PENDING;
 }
 
+/** Whether a resolver failure says the app has no running process, not that discovery failed. */
+export function isSimulatorTargetNotRunning(error: unknown): boolean {
+  return error instanceof AppError && error.details?.reason === TARGET_NOT_RUNNING;
+}
+
 async function resolveSimulatorSnapshotTarget(
   device: DeviceInfo,
   appBundleId: string,
@@ -121,7 +128,7 @@ async function resolveSimulatorSnapshotTarget(
   }
   const job = readApplicationJob(jobs.stdout, appBundleId);
   if (!job) {
-    throw targetError('simulator-target-unavailable', device, appBundleId);
+    throw targetError(TARGET_NOT_RUNNING, device, appBundleId);
   }
   const processStartTime = await readSnapshotTargetProcessStartTime(job.pid, {
     timeoutMs: Math.min(TARGET_IDENTITY_TIMEOUT_MS, remainingMs(deadline)),

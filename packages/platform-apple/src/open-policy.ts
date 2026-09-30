@@ -84,11 +84,15 @@ export async function settleAppleOpen(
 ): Promise<void> {
   const startedAtMs = Date.now();
   if (localIosSimulator && hasSimulatorBridge(binding.device) && observation && input.appBundleId) {
-    timing.postOpenObservation = await observation.awaitObservable(
+    const observed = await observation.awaitObservable(
       binding.device,
       input.appBundleId,
       binding.signal,
     );
+    timing.postOpenObservation = observed.observation;
+    if (observed.observation === 'probe-failed')
+      timing.postOpenObservationFailure = observed.failure;
+    else delete timing.postOpenObservationFailure;
   }
   if (localIosSimulator && timing.postOpenObservation !== 'observable') {
     await host.clock.sleep(POST_OPEN_SETTLE_MS, binding.signal);
