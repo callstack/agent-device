@@ -27,6 +27,7 @@ import type {
   AdReplayTargetObservation,
 } from '@agent-device/ad-replay';
 import { observeUntil } from '@agent-device/capture-kit/observe-until';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { collectReplayActionArtifactPaths } from '@agent-device/replay-port/session-replay-runtime-artifacts';
 import {
   applyReplayDispatchGuard,
@@ -123,6 +124,8 @@ export function createAdReplayStepRuntime(params: {
   const { ctx, req, artifactPaths, onStep, armSaveScript } = params;
   let lastResponse: DaemonResponse | undefined;
   let lastObservation: DivergenceObservation | undefined;
+  /** This step's pre-dispatch readiness wait, when the gate polled more than once. */
+  let gateWait: GateReadinessWait | undefined;
 
   /**
    * The `TargetBindingDivergenceContext` every wire-builder needs — built
@@ -236,8 +239,22 @@ export function createAdReplayStepRuntime(params: {
         schedule: { ...readiness, captureDeadline: 'none' },
         ...(ctx.signal ? { signal: ctx.signal } : {}),
         ...(ctx.dependencies.clock ? { clock: ctx.dependencies.clock } : {}),
-        phase: 'replay_target_readiness',
       });
+      if (observed.polls.length > 1) {
+        gateWait = {
+          budgetMs: readiness.budgetMs,
+          readiness: {
+            polls: observed.polls.length,
+            waitedMs: observed.waitedMs,
+            end: observed.kind,
+          },
+        };
+        emitDiagnostic({
+          level: 'debug',
+          phase: 'interaction_target_readiness',
+          data: { ...gateWait.readiness, command: action.command },
+        });
+      }
       if (observed.kind === 'done') return observed.result;
       if (observed.last !== undefined) return observed.last;
       throw observed.kind === 'expired' ? observed.lastError : observed.error;
@@ -249,6 +266,11 @@ export function createAdReplayStepRuntime(params: {
     async dispatchStep(action, resolvedAction, index, _stepArtifactPaths, guard) {
       const sourceLine = ctx.actionLines[index] ?? 1;
       const response = await invokeReplayAction({
+        ...(gateWait
+          ? {
+              readinessTimeoutMs: Math.max(0, gateWait.budgetMs - gateWait.readiness.waitedMs),
+            }
+          : {}),
         req: applyReplayDispatchGuard(ctx.replayReq, guard),
         sessionName: ctx.sessionName,
         action,
@@ -297,7 +319,11 @@ export function createAdReplayStepRuntime(params: {
         evidence,
         observation,
       );
-      return recordFailure(response);
+      return recordFailure(
+        evidence.kind === 'selector-miss' && gateWait
+          ? withReadinessDetail(response, gateWait.readiness)
+          : response,
+      );
     },
 
     async buildPostDispatchTargetBindingFailure(
@@ -350,6 +376,7 @@ export function createAdReplayStepRuntime(params: {
       // capabilities — the natural per-step boundary to clear the previous
       // step's capture (see this factory's own header).
       lastObservation = undefined;
+      gateWait = undefined;
       armSaveScript();
     },
     isRepairArmed: () => ctx.coordinator.view()?.repairBoundary !== undefined,
@@ -495,4 +522,22 @@ function isTargetNotRenderedYet(observation: AdReplayTargetObservation): boolean
     !observation.classification.verified &&
     observation.classification.kind === 'selector-miss'
   );
+}
+
+type GateReadinessWait = {
+  budgetMs: number;
+  /** The same evidence a dispatched readiness wait reports (`SelectorReadinessDetails`). */
+  readiness: { polls: number; waitedMs: number; end: string };
+};
+
+/** Carries the gate's wait where a dispatched step's target-not-found failure carries its own. */
+function withReadinessDetail(
+  response: DaemonResponse,
+  readiness: GateReadinessWait['readiness'],
+): DaemonResponse {
+  if (response.ok) return response;
+  return {
+    ...response,
+    error: { ...response.error, details: { ...response.error.details, readiness } },
+  };
 }

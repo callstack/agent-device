@@ -28,7 +28,13 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => {
   return { ...actual, sleep: vi.fn(async () => {}) };
 });
 
+vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
+  return { ...actual, emitDiagnostic: vi.fn(actual.emitDiagnostic) };
+});
+
 import { AppError } from '@agent-device/kernel/errors';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   legacyDispatchCapture,
   resetLegacySnapshotCapture,
@@ -51,7 +57,15 @@ const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteracto
 
 beforeEach(() => {
   resetLegacySnapshotCapture(mockCaptureSnapshotWithInteractor);
+  vi.mocked(emitDiagnostic).mockClear();
 });
+
+function readinessDiagnostics(): unknown[] {
+  return vi
+    .mocked(emitDiagnostic)
+    .mock.calls.filter(([event]) => event.phase === 'interaction_target_readiness')
+    .map(([event]) => event.data);
+}
 
 test('an unannotated action executes unchanged (old-script pass-through)', async () => {
   const scene = replayScriptScene('agent-device-replay-target-verify-passthrough-', [
@@ -80,6 +94,9 @@ test('a verified target proceeds to dispatch the action', async () => {
   expect(response.ok).toBe(true);
   expect(scene.invoked.map((req) => req.command)).toEqual(['click']);
   expect(scene.invoked[0]?.positionals).toEqual(['id="save"']);
+  // Present on the gate's first capture: the dispatch keeps the step's whole budget.
+  expect(scene.invoked[0]?.flags?.readinessTimeoutMs).toBe(2_000);
+  expect(readinessDiagnostics()).toEqual([]);
 });
 
 test('a verified drag guards both source and destination before dispatch', async () => {
@@ -179,6 +196,7 @@ test('a selector-miss divergence blocks dispatch and never sends the action', as
   expect(targetBinding.recorded).toEqual({ id: 'save', role: 'button', label: 'Save' });
   // click waits for its target, so the gate re-captured before refusing.
   expect(mockDispatchCommand.mock.calls.length).toBeGreaterThan(1);
+  expect(response.error.details?.readiness).toMatchObject({ waitedMs: 2_000, end: 'expired' });
 });
 
 test('an annotated click whose target renders on the second capture waits for it and dispatches', async () => {
@@ -197,6 +215,25 @@ test('an annotated click whose target renders on the second capture waits for it
     identity: { id: 'save', role: 'button', label: 'Save' },
   });
   expect(mockDispatchCommand).toHaveBeenCalledTimes(2);
+  expect(readinessDiagnostics()).toEqual([
+    { polls: 2, waitedMs: 200, end: 'done', command: 'click' },
+  ]);
+});
+
+test('the dispatch gets only the readiness budget the gate left', async () => {
+  const scene = replayScriptScene('agent-device-replay-target-verify-shared-budget-', [
+    SAVE_ANNOTATION,
+    'click id="save"',
+  ]);
+
+  // Eight misses, one interval apart, before the target renders 1.6 s into the 2 s budget.
+  for (let miss = 0; miss < 8; miss += 1) mockDispatchCommand.mockResolvedValueOnce(emptyCapture());
+  mockDispatchCommand.mockResolvedValue(saveButtonCapture());
+
+  const response = await scene.replay();
+
+  expect(response.ok).toBe(true);
+  expect(scene.invoked[0]?.flags?.readinessTimeoutMs).toBe(400);
 });
 
 test('an annotated step whose command does not wait for its target refuses a selector miss on one capture', async () => {

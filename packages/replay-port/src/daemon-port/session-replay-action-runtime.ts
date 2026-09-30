@@ -46,6 +46,11 @@ export async function invokeReplayAction(params: {
   /** The isolation scope the daemon already resolved for the request, when it did. */
   resolvedSessionScope: SessionScope | undefined;
   dependencies: ReplayDaemonDependencies;
+  /**
+   * What is left of the step's readiness budget after the pre-dispatch target gate waited; 0 makes
+   * the dispatch resolve its target once. Absent: the step's full budget.
+   */
+  readinessTimeoutMs?: number;
 }): Promise<DaemonResponse> {
   const {
     req,
@@ -87,6 +92,7 @@ export async function invokeReplayAction(params: {
       invoke,
       resolvedSessionScope,
       dependencies,
+      readinessTimeoutMs: params.readinessTimeoutMs,
     });
   } catch (error) {
     // Only an expected AppError dispatch failure (e.g. a selector-miss) gets
@@ -144,10 +150,12 @@ async function invokeResolvedReplayAction(params: {
   invoke: ReplayInvoke;
   resolvedSessionScope: SessionScope | undefined;
   dependencies: ReplayDaemonDependencies;
+  readinessTimeoutMs: number | undefined;
 }): Promise<DaemonResponse> {
   const { req, sessionName, resolved, sourceAction, invoke, resolvedSessionScope, dependencies } =
     params;
   const flags = buildReplayActionFlags(req.flags, resolved.flags, resolved.command);
+  if (params.readinessTimeoutMs !== undefined) flags.readinessTimeoutMs = params.readinessTimeoutMs;
   const recordedInputVariable =
     sourceAction.command === 'fill'
       ? readRecordedInputVariableName(inferFillText(sourceAction))

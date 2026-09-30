@@ -62,13 +62,13 @@ agent-device replay ~/.agent-device/sessions/e2e-2026-02-09T12-00-00-000Z.ad --s
   they fail. A step recorded against a screen that was still loading passes on replay once the
   target shows up. The wait covers only a target that is not on screen yet: a target that is
   covered, off-screen, or matched by more than one element fails at once, as it does live.
-- When the target never appears, replay stops with `REPLAY_DIVERGENCE`. For a step recorded with
-  a target annotation (the `# agent-device:target-v1` line above it), `error.details.divergence.kind`
-  is `selector-miss` and the step is never sent. For a step without an annotation,
-  `error.details.reason` is `selector_not_found`, as for a live command, and
+- When the target never appears, replay stops with `REPLAY_DIVERGENCE`, and
   `error.details.readiness` says how long the step waited and how many times it looked (`waitedMs`,
-  `polls`, `end`). If the app shows an empty accessibility tree during that wait,
-  `error.details.reason` is `capture_sparse` instead; take a snapshot to see where the app is.
+  `polls`, `end`). For a step recorded with a target annotation (the `# agent-device:target-v1`
+  line above it), `error.details.divergence.kind` is `selector-miss` and the step is never sent.
+  For a step without an annotation, `error.details.reason` is `selector_not_found`, as for a live
+  command. If the app shows an empty accessibility tree during that wait, `error.details.reason`
+  is `capture_sparse` instead; take a snapshot to see where the app is.
 
 ## Run Maestro compatibility flows
 
