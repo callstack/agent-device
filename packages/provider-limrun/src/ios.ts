@@ -7,7 +7,7 @@ import type {
 } from '@agent-device/contracts/device';
 import type { FillBackendResult, Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 import type Limrun from '@limrun/api';
 import {
   createInstanceClient as createIosInstanceClient,
@@ -286,9 +286,15 @@ class LimrunIosInteractor implements Interactor {
    */
   private async enterText(text: string, delayMs?: number): Promise<void> {
     if (delayMs && delayMs > 0) {
-      for (const char of Array.from(text)) {
-        await this.session.client.typeText(char, false, { requireFocus: false });
-        await sleep(delayMs);
+      let dispatchedChars = 0;
+      try {
+        for (const char of Array.from(text)) {
+          await this.session.client.typeText(char, false, { requireFocus: false });
+          dispatchedChars += 1;
+          await sleep(delayMs);
+        }
+      } catch (error) {
+        throw discloseDispatchAfterSteps(error, dispatchedChars);
       }
       return;
     }

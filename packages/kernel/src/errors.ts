@@ -565,6 +565,21 @@ export function discloseDispatch<Failure extends AppError>(
   return error;
 }
 
+/**
+ * The failure of a series that issues more than one device-reaching step, after `dispatchedSteps`
+ * of them reached the device. `no` describes the whole requested operation, so it holds only while
+ * no step was dispatched; after that the failure is `unknown`, and `details.dispatchedSteps` adds
+ * this series' count to any count the failing step already carries. A failure that is not an
+ * {@link AppError} passes through unchanged for the boundary that normalizes it.
+ */
+export function discloseDispatchAfterSteps(error: unknown, dispatchedSteps: number): unknown {
+  if (dispatchedSteps === 0 || !(error instanceof AppError)) return error;
+  const innerSteps = error.details?.dispatchedSteps;
+  return discloseDispatch(error, 'unknown', {
+    dispatchedSteps: dispatchedSteps + (typeof innerSteps === 'number' ? innerSteps : 0),
+  });
+}
+
 /** The side-effect seam's verdict, recorded only when no producer classified the failure. */
 export function discloseUnclassifiedDispatch<Failure extends AppError>(
   error: Failure,

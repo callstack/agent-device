@@ -20,6 +20,7 @@ import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capt
 import { discloseInteractionDispatch } from '../interaction-dispatch-disclosure.ts';
 import { handleInteractionCommands } from '../../index.ts';
 import { assertAndroidPressStayedInApp } from '../interaction-android-escape.ts';
+import { gestureRuntimeBindingsFixture } from './gesture-runtime-bindings.fixtures.ts';
 import { contextFromFlags, makeSession } from './interaction-touch-fixtures.ts';
 
 // contracts/fixtures/dispatch-disclosure.json, daemon and post-action guard rows: the daemon rows
@@ -112,6 +113,44 @@ async function pressThatLeftTheApp(): Promise<unknown> {
   );
 }
 
+/** `swipe --count 2` whose first repetition runs and whose second is refused before dispatch. */
+async function swipeRefusedOnSecondRepetition(): Promise<unknown> {
+  const gestures = gestureRuntimeBindingsFixture();
+  for (const plan of [gestures.performGesturePlan, gestures.performDirectionalFlingPlan]) {
+    plan
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(
+        new AppError('COMMAND_FAILED', 'runner busy', { reason: 'runner_busy', dispatched: 'no' }),
+      );
+  }
+  const sessionStore = makeSessionStore();
+  const session = makeSession('dispatch-disclosure-swipe');
+  sessionStore.set(session.name, session);
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: session.name,
+      command: 'swipe',
+      positionals: [],
+      flags: {},
+      input: { from: { x: 100, y: 600 }, to: { x: 100, y: 200 }, count: 2 },
+    },
+    sessionName: session.name,
+    sessionStore,
+    contextFromFlags,
+    inspectFacts: gestures.inspectFacts,
+    bindDevice: gestures.bindDevice,
+  });
+  assert.ok(response && !response.ok, 'expected the swipe series to fail');
+  assert.equal(
+    gestures.performGesturePlan.mock.calls.length +
+      gestures.performDirectionalFlingPlan.mock.calls.length,
+    2,
+  );
+  assert.equal(response.error.details?.dispatchedSteps, 1);
+  throw new AppError(response.error.code, response.error.message, response.error.details);
+}
+
 const DRIVERS: Record<string, () => Promise<unknown>> = {
   'daemon.refusal.ref-not-found': () => refusedPress(['@e9']),
   'daemon.refusal.admission': () => refusedPress([]),
@@ -125,6 +164,7 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
         store.set(name, { ...current });
       },
     }),
+  'daemon.series.swipe-later-repetition-refused': swipeRefusedOnSecondRepetition,
   'daemon.read-only-command': () =>
     press({ command: 'get', positionals: ['text', 'label="Missing"'] }),
   'post-action-guard.android-press-left-app': pressThatLeftTheApp,
