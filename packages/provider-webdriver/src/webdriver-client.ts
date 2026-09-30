@@ -100,7 +100,6 @@ export class WebDriverClient {
     return session;
   }
 
-  // fallow-ignore-next-line unused-class-member
   async deleteSession(): Promise<void> {
     const sessionId = this.requireSessionId();
     await this.requestValue('DELETE', `/session/${sessionId}`);
