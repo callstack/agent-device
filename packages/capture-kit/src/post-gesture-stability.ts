@@ -1,6 +1,6 @@
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { PostGestureAction, PostGestureOutcome } from '@agent-device/kernel/snapshot';
-import { observeUntil, type ObservationSchedule } from './observe-until.ts';
+import { observeUntil, type ObservationClock, type ObservationSchedule } from './observe-until.ts';
 
 /**
  * Pure post-gesture stability mechanics: the quiet-window verdict over the shared
@@ -18,12 +18,13 @@ import { observeUntil, type ObservationSchedule } from './observe-until.ts';
  * Cadence and budget for the quiet-window loop: poll every 200ms, allow 1.5s
  * before an unsettled surface times out, and always complete two observations
  * (an `initial` counts) so a quiet pair can form even under a tight budget.
+ * No per-capture deadline: `hooks.capture` takes no signal, so a late capture
+ * is judged when it returns.
  */
 const POST_GESTURE_STABILITY_SCHEDULE: ObservationSchedule = {
   intervalMs: 200,
   budgetMs: 1_500,
   minPolls: 2,
-  captureDeadline: 'cancel',
 };
 
 /**
@@ -136,9 +137,11 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
   needsBaselineDistrust: boolean;
   initial?: T;
   hooks: PostGestureStabilityHooks<T, S>;
+  clock?: ObservationClock;
 }): Promise<PostGestureStabilityOutcome<T>> {
-  const { pending, needsBaselineDistrust, hooks } = params;
-  const startedAt = Date.now();
+  const { pending, needsBaselineDistrust, hooks, clock } = params;
+  const now = () => clock?.now() ?? Date.now();
+  const startedAt = now();
   let attempts = 0;
   let baselineSignature = pending.baselineSignature;
   let baselineBackend = pending.baselineBackend;
@@ -158,6 +161,7 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
     ...(params.initial !== undefined ? { initial: params.initial } : {}),
     capture: () => hooks.capture(),
     schedule: POST_GESTURE_STABILITY_SCHEDULE,
+    ...(clock ? { clock } : {}),
     verdict: (latest, previousValue) => {
       attempts += 1;
       const current = surfaceOf(latest);
@@ -167,7 +171,7 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
       lastPairAgreed = hooks.signaturesStable(previous.signature, current.signature);
       if (!lastPairAgreed) return { kind: 'continue' };
 
-      const elapsedMs = Date.now() - startedAt;
+      const elapsedMs = now() - startedAt;
       // A capture plan may fall back or be pre-empted by the XCTest-channel
       // penalty at any time, so the backend can change mid-poll. Backends do
       // not agree on which nodes exist, so this pair says nothing about the
@@ -204,7 +208,7 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
   });
 
   if (observed.kind === 'done') return observed.result;
-  if (observed.kind === 'stalled' || observed.kind === 'failed') throw observed.error;
+  if (observed.kind === 'failed') throw observed.error;
 
   emitDiagnostic({
     level: 'warn',
