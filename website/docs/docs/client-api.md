@@ -288,6 +288,17 @@ await client.command.fold({
 
 `fold` accepts either `pose` or `keyframes`. Keyframes use linear interpolation at roughly 60 updates per second; repeat an angle to hold it. Timestamps must start at zero and increase strictly, with 2–64 frames and a final timestamp no greater than 60,000ms. Angles must be finite and between 0° and 180°. The final timestamp bounds motion, excluding helper preparation and final hinge verification. A custom final angle is verified within 0.5°; interior angles must also settle. Cancellation stops the motion at its current angle. Re-snapshot afterwards, including after interrupted motion.
 
+`press`, `click`, and `longpress` take `readinessTimeoutMs`. With it, the command waits up to that many milliseconds for a target that is not on screen yet, then taps it once. Without it, the command looks once and fails at once, which is the right choice for an agent that most often misses because the selector is wrong. Use it in scripted flows, where a step can land a render early:
+
+```ts
+await client.interactions.press({
+  selector: 'label="Continue"',
+  readinessTimeoutMs: 2_000,
+});
+```
+
+The wait is capped at 2 seconds. It covers only a target that has not appeared; a covered, off-screen, or ambiguous target fails at once. A failure after the wait carries `error.details.readiness` with `waitedMs`, `polls`, and `end` (`expired`, `stalled`, or `sparse`). `readinessTimeoutMs` is not an MCP tool argument and has no CLI flag.
+
 Vega OS client support is currently VVD-only and covers device discovery, app open/close, `back`, `home`, and `tvRemote`. Physical Fire TV, capture, selector, install, logging, and performance methods report unsupported for Vega targets.
 
 Supported command methods:
