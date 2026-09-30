@@ -201,3 +201,44 @@ test('press without a readinessTimeoutMs flag fails on the first capture attempt
     },
   );
 });
+
+test('press ends the wait at once on a sparse capture with capture_sparse, and never taps', async () => {
+  await withPressReadinessDaemon(
+    [
+      {
+        command: 'ios.runner.snapshot',
+        deviceId: DEVICE_ID,
+        platform: 'apple',
+        repeat: true,
+        result: {
+          nodes: APPLICATION_ONLY_NODES,
+          truncated: false,
+          snapshotQuality: {
+            state: 'sparse',
+            backend: 'tree',
+            reasonCode: 'sparse-tree',
+          },
+        },
+      },
+    ],
+    async (daemon, transcript) => {
+      const callsBeforePress = transcript.calls.length;
+      const startedAt = Date.now();
+      const press = await daemon.callCommand('press', ['label=Continue'], {
+        readinessTimeoutMs: 2_000,
+      });
+      const error = assertRpcError(press, 'COMMAND_FAILED', /sparse capture/);
+      const details = error.details as {
+        reason: unknown;
+        snapshotQuality: { state: string };
+        readiness: { polls: number; end: string };
+      };
+      assert.equal(details.reason, 'capture_sparse');
+      assert.equal(details.snapshotQuality.state, 'sparse');
+      assert.equal(details.readiness.end, 'sparse');
+      assert.ok(Date.now() - startedAt < 1_500, 'a sparse capture must not burn the budget');
+      const commands = transcript.calls.slice(callsBeforePress).map((call) => call.command);
+      assert.ok(!commands.includes('ios.runner.tap'), 'no tap on a sparse capture');
+    },
+  );
+});

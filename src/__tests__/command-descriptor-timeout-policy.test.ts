@@ -403,3 +403,24 @@ test('open and prepare startup budgets keep a client-envelope margin over the da
     90_000,
   );
 });
+
+test('a readiness budget widens the request envelope on top of the settle envelope', () => {
+  const press = resolveCommandTimeoutPolicy('press');
+  const withoutReadiness = resolveCommandRequestTimeoutMs(press, { flags: {} });
+  assert.equal(withoutReadiness, 90_000);
+  assert.equal(
+    resolveCommandRequestTimeoutMs(press, { flags: { readinessTimeoutMs: 2_000 } }),
+    92_000,
+  );
+  assert.equal(
+    resolveCommandRequestTimeoutMs(press, { flags: { settle: true, readinessTimeoutMs: 2_000 } }),
+    90_000 + 10_000 + 30_000 + 2_000,
+  );
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('longpress'), {
+      flags: { readinessTimeoutMs: 2_000 },
+    }),
+    212_000,
+  );
+  assert.equal(resolveCommandRequestTimeoutMs(press, { flags: { readinessTimeoutMs: 0 } }), 90_000);
+});

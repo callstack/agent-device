@@ -10,6 +10,7 @@ import { resolveSelectorPipeline } from '@agent-device/selectors/selector-pipeli
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import { observeUntil } from '@agent-device/capture-kit/observe-until';
+import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { isUnreadableCaptureContentError } from '@agent-device/contracts/android-snapshot-quality';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import {
@@ -44,7 +45,7 @@ export type ResolvedSelectorAttempt = {
 export type SelectorReadinessDetails = {
   polls: number;
   waitedMs: number;
-  end: 'expired' | 'stalled';
+  end: 'expired' | 'stalled' | 'sparse';
 };
 
 /**
@@ -185,6 +186,18 @@ async function pollSelectorReadinessOnce(
   );
   if (previousPoll) inheritPostGestureOutcome(previousPoll.snapshot, attempt.capture.snapshot);
   if (attempt.resolved?.node.rect) return attempt;
+  const quality = attempt.capture.snapshot.snapshotQuality;
+  if (isSparseSnapshotQualityVerdict(quality)) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Selector ${selectorExpression} was not found in a sparse capture; the tree cannot prove it absent`,
+      {
+        reason: INTERACTION_ERROR_REASONS.captureSparse,
+        snapshotQuality: quality,
+        hint: 'Re-run after the screen settles, or capture a snapshot to inspect the tree.',
+      },
+    );
+  }
   const covered = await detectCoveredSelectorTarget({
     runtime,
     nodes: attempt.capture.snapshot.nodes,
@@ -286,6 +299,25 @@ export async function pollForSelectorReadiness(
     phase: 'interaction_target_readiness',
   });
   if (observed.kind === 'done') return observed.result;
-  if (observed.kind === 'failed') throw observed.error;
+  if (observed.kind === 'failed') throw withSparseReadiness(observed.error, observed);
   throw await readinessExhaustedFailure(runtime, selectorExpression, params, observed);
+}
+
+function withSparseReadiness(
+  error: unknown,
+  observed: { polls: readonly unknown[]; waitedMs: number },
+): unknown {
+  if (
+    !(error instanceof AppError) ||
+    error.details?.reason !== INTERACTION_ERROR_REASONS.captureSparse
+  ) {
+    return error;
+  }
+  const readiness: SelectorReadinessDetails = {
+    polls: observed.polls.length,
+    waitedMs: observed.waitedMs,
+    end: 'sparse',
+  };
+  error.details = { ...error.details, readiness };
+  return error;
 }

@@ -64,7 +64,12 @@ type BoundedTimeoutPolicy = CommandTimeoutPolicy & { envelopeMs: number };
 type FlagTimeoutBudget = Extract<CommandTimeoutBudget, { source: 'flag' }>;
 type RequestTimeoutInput = Readonly<{
   positionals?: string[];
-  flags?: Readonly<{ timeoutMs?: number; settle?: boolean; waitMs?: number }>;
+  flags?: Readonly<{
+    timeoutMs?: number;
+    settle?: boolean;
+    waitMs?: number;
+    readinessTimeoutMs?: number;
+  }>;
 }>;
 
 /** Resolves the request envelope from its declared policy and user-supplied budget. */
@@ -74,11 +79,20 @@ export function resolveCommandRequestTimeoutMs(
 ): number | undefined {
   if (policy.envelopeMs === 'unbounded') return undefined;
   const boundedPolicy: BoundedTimeoutPolicy = { ...policy, envelopeMs: policy.envelopeMs };
-  return (
+  const envelopeMs =
     resolvePositionalBudgetTimeoutMs(boundedPolicy, input.positionals ?? []) ??
     resolveFlagBudgetTimeoutMs(boundedPolicy, input.flags) ??
-    boundedPolicy.envelopeMs
-  );
+    boundedPolicy.envelopeMs;
+  return envelopeMs + readinessBudgetMs(input.flags);
+}
+
+/**
+ * A readiness budget is target-poll time spent before the action itself, so it extends whatever
+ * envelope the command otherwise has; the daemon's own poll must never outlive the client's clock.
+ */
+function readinessBudgetMs(flags: RequestTimeoutInput['flags']): number {
+  const budgetMs = flags?.readinessTimeoutMs;
+  return typeof budgetMs === 'number' && Number.isFinite(budgetMs) && budgetMs > 0 ? budgetMs : 0;
 }
 
 function resolvePositionalBudgetTimeoutMs(
