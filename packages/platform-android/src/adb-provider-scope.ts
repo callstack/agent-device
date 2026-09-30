@@ -74,7 +74,7 @@ function createSerialAdbExecutor(serial: string, serverPort?: number): AndroidAd
       );
     };
     return await retryOnceAfterDeviceOffline(
-      `${options?.serverPort ?? serverPort ?? ''}/${serial}`,
+      `${serverPort ?? options?.serverPort ?? ''}/${serial}`,
       options,
       async (attemptOptions) => await exec(args, attemptOptions),
       async (timeoutMs) => {

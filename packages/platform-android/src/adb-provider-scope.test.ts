@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, onTestFinished, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv } from '@agent-device/kernel/device-shell';
@@ -167,12 +167,19 @@ test('a thrown device-offline refusal gets the same one retry', async () => {
 });
 
 test('the wait and the retry share the caller timeout', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
   const timeouts: Array<number | undefined> = [];
   let offline = true;
   bindAndroidAdbHostStub({
     execAdb: async (invocation, options) => {
       timeouts.push(options?.timeoutMs);
-      if (isWaitForDevice(invocation)) offline = false;
+      if (isWaitForDevice(invocation)) {
+        vi.setSystemTime(Date.now() + 1_500);
+        offline = false;
+      }
       return offline ? { exitCode: 1, stdout: '', stderr: 'adb: device offline' } : ok();
     },
   });
@@ -182,10 +189,7 @@ test('the wait and the retry share the caller timeout', async () => {
     timeoutMs: 4_000,
   });
 
-  expect(timeouts[0]).toBe(4_000);
-  expect(timeouts[1]).toBe(2_000);
-  expect(timeouts[2]).toBeGreaterThan(0);
-  expect(timeouts[2]).toBeLessThanOrEqual(4_000);
+  expect(timeouts).toEqual([4_000, 2_000, 2_500]);
 });
 
 test('a caller that aborts during the wait gets no retry', async () => {
@@ -208,7 +212,7 @@ test('a caller that aborts during the wait gets no retry', async () => {
       allowFailure: true,
       signal: controller.signal,
     }),
-  ).rejects.toThrow();
+  ).rejects.toMatchObject({ name: 'AbortError' });
   expect(commands).toEqual(['install', 'wait-for-device']);
 });
 
@@ -308,7 +312,9 @@ test('only a device-offline refusal is retried, and a device that stays offline 
   expect(commands).toEqual(['install']);
 
   timesOut = true;
-  await expect(adb(['install', 'helper.apk'])).rejects.toThrow();
+  await expect(adb(['install', 'helper.apk'])).rejects.toMatchObject({
+    details: { adbFailure: 'timeout' },
+  });
   timesOut = false;
   commands.length = 0;
   await adb(['install', 'helper.apk'], { allowFailure: true });
