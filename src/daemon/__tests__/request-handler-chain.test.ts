@@ -14,6 +14,7 @@ import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../interaction/index.ts';
 import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
 import { createRequestRuntimeBindings } from '../request-runtime-binding.ts';
+import { createRequestDispatchLedger } from '../request-dispatch-ledger.ts';
 import { createLocalLinuxToolProvider, withLinuxToolProvider } from '@agent-device/platform-linux';
 import {
   unavailableBindDevice,
@@ -290,6 +291,7 @@ test('duration-less public coordinate swipe retains Linux drag behavior', async 
   });
   let bindCount = 0;
   const bindings = createRequestRuntimeBindings({
+    dispatchLedger: createRequestDispatchLedger(),
     gateway: {
       ...gateway,
       bind: async (request) => {

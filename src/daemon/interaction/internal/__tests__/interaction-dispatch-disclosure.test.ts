@@ -18,10 +18,12 @@ import {
   resetGetRuntimeFixture,
 } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
+import { discloseRequestDispatch } from '../../../request-dispatch-disclosure.ts';
 import {
   createRequestDispatchLedger,
-  discloseRequestDispatch,
-} from '../../../request-dispatch-disclosure.ts';
+  recordBoundMutations,
+} from '../../../request-dispatch-ledger.ts';
+import type { BindDeviceRuntime } from '../../../request-runtime-binding.ts';
 import { clearAndroidObservationFixture } from '../../../__tests__/android-observation-fixture.ts';
 import { handleInteractionCommands } from '../../index.ts';
 import type { InteractionRouteInput } from '../types.ts';
@@ -41,13 +43,20 @@ beforeEach(() => {
   resetGetRuntimeFixture();
 });
 
-/** The interaction route as the request router runs it: inside the request's dispatch seam. */
+/**
+ * The interaction route as the request router runs it: inside the request's dispatch seam, with
+ * the bound operations recording their mutations in the request's ledger.
+ */
 async function routeInteraction(params: InteractionRouteInput) {
   const dispatchLedger = createRequestDispatchLedger();
+  const unrecorded = params.bindDevice;
+  const bindDevice: BindDeviceRuntime | undefined = unrecorded
+    ? async (device, use) => recordBoundMutations(await unrecorded(device, use), dispatchLedger)
+    : undefined;
   return await discloseRequestDispatch(
     params.req,
     dispatchLedger,
-    async () => await handleInteractionCommands({ ...params, dispatchLedger }),
+    async () => await handleInteractionCommands({ ...params, bindDevice }),
   );
 }
 

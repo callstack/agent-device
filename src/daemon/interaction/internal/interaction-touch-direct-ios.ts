@@ -6,7 +6,6 @@ import {
   type DirectIosSelectorTarget,
 } from '../../direct-ios-selector.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
-import { sendRecordedMutation } from '../../request-dispatch-disclosure.ts';
 import type { DaemonResponse } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
 import { finalizeTouchInteraction } from './interaction-runtime.ts';
@@ -44,11 +43,7 @@ export async function dispatchDirectIosSelectorTap(
   // not-found/timeout is post-seam and does not restore the frame.
   expireRefFrame(session);
   try {
-    const data =
-      (await sendRecordedMutation(
-        handlerParams.dispatchLedger,
-        async () => await tapElementSelector(selector),
-      )) ?? {};
+    const data = (await tapElementSelector(selector)) ?? {};
     const actionFinishedAt = Date.now();
     const point = readPointFromDirectSelectorTapResult(data);
     const publicData = transformTouchResponseData({

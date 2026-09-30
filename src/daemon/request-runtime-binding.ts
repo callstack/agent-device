@@ -16,6 +16,7 @@ import {
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { ensureDeviceReady } from './device/device-ready.ts';
+import { recordBoundMutations, type RequestDispatchLedger } from './request-dispatch-ledger.ts';
 import type {
   ManagedRequestAdmission,
   ResolveManagedRequestLease,
@@ -110,10 +111,15 @@ export type RequestRuntimeBindings = AsyncDisposable &
     bindExactDevice: BindExactDeviceRuntime;
   }>;
 
-/** Owns request runtime bindings while exposing only the requested operation projection. */
+/**
+ * Owns request runtime bindings while exposing only the requested operation projection. Every
+ * projection records its mutations in the request's `dispatchLedger`, so no route reaches the
+ * device without its mutations counting toward the request's disclosure.
+ */
 export function createRequestRuntimeBindings(params: {
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
+  dispatchLedger: RequestDispatchLedger;
   resolveManagedLease?: ResolveManagedRequestLease;
   admitDeviceClaim: (
     device: DeviceInfo,
@@ -150,7 +156,10 @@ export function createRequestRuntimeBindings(params: {
         if (bindings.get(key) === bindingPromise) bindings.delete(key);
       });
     }
-    return narrowDeviceBinding(await bindingPromise, use);
+    return recordBoundMutations(
+      narrowDeviceBinding(await bindingPromise, use),
+      params.dispatchLedger,
+    );
   };
 
   const bindExactDevice: BindExactDeviceRuntime = async (device, owner, fence, use, scope) => {
@@ -174,7 +183,7 @@ export function createRequestRuntimeBindings(params: {
       : await params.gateway.bind({ device, intent, scope });
     const adopted = await adoptExactBinding(cleanups, published, scope);
     const binding = managed ? adopted : await admitBinding(adopted, intent);
-    const bound = narrowDeviceBinding(binding, use);
+    const bound = recordBoundMutations(narrowDeviceBinding(binding, use), params.dispatchLedger);
     managed?.activate();
     if (managed) managedReadiness.set(bound, managed.ensureReady);
     return bound;

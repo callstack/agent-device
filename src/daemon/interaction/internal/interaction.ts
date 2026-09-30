@@ -8,7 +8,6 @@ import { finalizeTouchInteraction } from './interaction-runtime.ts';
 import { refSnapshotFlagGuardResponse } from '../../ref-snapshot-flag-policy.ts';
 import { dispatchGetViaRuntime, dispatchIsViaRuntime } from '../../selector-runtime.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
-import { sendRecordedMutation } from '../../request-dispatch-disclosure.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { normalizeError } from '@agent-device/kernel/errors';
 import {
@@ -151,13 +150,9 @@ async function runTypeTextViaRuntime(
     // executing so a later step cannot reuse it. R41: the bound executor already validates and
     // composes the retired leaf's exact result, so nothing here re-validates or re-formats it.
     expireRefFrame(session);
-    const result = await sendRecordedMutation(
-      params.dispatchLedger,
-      async () =>
-        await boundTypeText(
-          req.positionals ?? [],
-          params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
-        ),
+    const result = await boundTypeText(
+      req.positionals ?? [],
+      params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
     );
     await ensureAndroidBlockingSystemDialogReady({
       session,

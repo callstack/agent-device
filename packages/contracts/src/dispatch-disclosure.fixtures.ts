@@ -10,7 +10,6 @@ export const DISPATCH_DISCLOSURE_PRODUCERS = [
   'android-helper',
   'webdriver',
   'post-action-guard',
-  'maestro-port',
 ] as const;
 
 export type DispatchDisclosureProducer = (typeof DISPATCH_DISCLOSURE_PRODUCERS)[number];
@@ -56,7 +55,6 @@ export const DISPATCH_DISCLOSURE_DRIVER_OWNERS: Readonly<Record<string, string>>
     'packages/platform-android/src/__tests__/touch-helper-session.test.ts',
   'maestro-direct.':
     'src/daemon/interaction/internal/__tests__/interaction-touch-direct-ios.test.ts',
-  'maestro-port.': 'packages/maestro/src/daemon-port/__tests__/daemon-runtime-port.test.ts',
 };
 
 /** The per-row driving loop every driver file carries. */

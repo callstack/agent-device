@@ -16,6 +16,7 @@ import {
 import { createDeviceClaimAdmission } from '../../../src/daemon/device/device-claim-admission.ts';
 import { acquireAllocatorHeldDeviceClaim } from '../../../src/daemon/device/device-claim-allocator.ts';
 import { createRequestRuntimeBindings } from '../../../src/daemon/request-runtime-binding.ts';
+import { createRequestDispatchLedger } from '../../../src/daemon/request-dispatch-ledger.ts';
 import { managedCommandHorizon } from '../../../src/daemon/managed-device-allocation/command-horizon.ts';
 import type { ManagedLeaseAdmission } from '../../../src/daemon/managed-device-allocation/lease-admission.ts';
 import {
@@ -162,6 +163,7 @@ export async function setupRequest(
     signal: (options.controller ?? new AbortController()).signal,
   };
   const bindings = createRequestRuntimeBindings({
+    dispatchLedger: createRequestDispatchLedger(),
     gateway: bindingGateway,
     scope,
     admitDeviceClaim: claims.admit,

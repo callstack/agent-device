@@ -22,6 +22,7 @@ import { createLimrunRuntime } from '@agent-device/provider-limrun';
 import { describe, expect, test, vi } from 'vitest';
 import { handleSessionStateCommands } from './daemon/handlers/session-state.ts';
 import { createRequestRuntimeBindings } from './daemon/request-runtime-binding.ts';
+import { createRequestDispatchLedger } from './daemon/request-dispatch-ledger.ts';
 import { makeSessionStore } from './__tests__/test-utils/store-factory.ts';
 import { withTestDeviceInventory } from './__tests__/test-utils/device-inventory-gateways.ts';
 import { createComposedPlatformRuntimeGateway } from './platform-runtime-gateway.ts';
@@ -341,6 +342,7 @@ describe('composed platform runtime gateway', () => {
     });
 
     const bindings = createRequestRuntimeBindings({
+      dispatchLedger: createRequestDispatchLedger(),
       gateway: runtimeGateway,
       scope,
       admitDeviceClaim: async () => {},

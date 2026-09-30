@@ -76,28 +76,6 @@ export type MaestroDaemonOperationRequest = {
   dispatch?: MaestroDaemonDispatchOptions;
 };
 
-const MAESTRO_OPERATION_MUTATES: Readonly<Record<MaestroPublicOperation['kind'], boolean>> = {
-  launchApp: true,
-  stopApp: true,
-  clearState: true,
-  settingsPermission: true,
-  openLink: true,
-  typeText: true,
-  clickSelector: true,
-  clickPoint: true,
-  swipe: true,
-  scroll: true,
-  pressKey: true,
-  screenshot: false,
-  snapshot: false,
-  gestureViewport: false,
-};
-
-/** Whether the daemon request this operation projects to changes the device. */
-export function isMaestroMutationOperation(operation: MaestroPublicOperation): boolean {
-  return MAESTRO_OPERATION_MUTATES[operation.kind];
-}
-
 export function projectMaestroPublicOperation(
   operation: MaestroPublicOperation,
 ): MaestroDaemonOperationRequest {
