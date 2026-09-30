@@ -16,6 +16,8 @@ export type AndroidAdbFailureClassification = Readonly<{
   reason: AndroidAdbFailureReason;
   hint: string;
   retriable?: boolean;
+  /** The host adb refused the command before it reached the device, so it had no effect there. */
+  hostRefusal?: true;
 }>;
 
 type AndroidAdbFailureMatcher = readonly [
@@ -23,6 +25,20 @@ type AndroidAdbFailureMatcher = readonly [
   failure: AndroidAdbFailureClassification,
   matchStdout?: true,
 ];
+
+const ANDROID_ADB_DEVICE_OFFLINE_FAILURE = {
+  reason: 'device_offline',
+  hint: 'The device is connected but offline — wait for it to finish booting or run adb reconnect, then retry.',
+  retriable: true,
+} as const satisfies AndroidAdbFailureClassification;
+
+/** The entire stderr, lowercased, of a command the host adb refused because the device was offline. */
+const ADB_DEVICE_OFFLINE_HOST_REFUSAL = /^(?:adb|error): device (?:'[^']*' )?offline$/;
+
+const ANDROID_ADB_DEVICE_OFFLINE_HOST_REFUSAL: AndroidAdbFailureClassification = Object.freeze({
+  ...ANDROID_ADB_DEVICE_OFFLINE_FAILURE,
+  hostRefusal: true,
+});
 
 const ANDROID_ADB_FAILURE_MATCHERS = [
   [
@@ -32,14 +48,7 @@ const ANDROID_ADB_FAILURE_MATCHERS = [
       hint: 'USB debugging is not authorized — accept the authorization prompt on the device screen (re-plug the cable if none appears), then retry.',
     },
   ],
-  [
-    /device offline/,
-    {
-      reason: 'device_offline',
-      hint: 'The device is connected but offline — wait for it to finish booting or run adb reconnect, then retry.',
-      retriable: true,
-    },
-  ],
+  [/device offline/, ANDROID_ADB_DEVICE_OFFLINE_FAILURE],
   [
     /more than one (?:device\/emulator|device and emulator)/,
     {
@@ -126,6 +135,9 @@ export function classifyAndroidAdbFailure(
 ): AndroidAdbFailureClassification | undefined {
   const stderrText = stderr.toLowerCase();
   const stdoutText = stdout.toLowerCase();
+  if (stdoutText === '' && ADB_DEVICE_OFFLINE_HOST_REFUSAL.test(stderrText.trim())) {
+    return ANDROID_ADB_DEVICE_OFFLINE_HOST_REFUSAL;
+  }
   for (const [pattern, classification, matchStdout] of ANDROID_ADB_FAILURE_MATCHERS) {
     if (pattern.test(stderrText) || (matchStdout && pattern.test(stdoutText))) {
       return classification;
@@ -141,7 +153,8 @@ import type { AndroidAdbExecutorResult } from './adb-transport.ts';
 
 /**
  * Enriches a failed adb command error in place with the classified hint,
- * `retriable` flag, and machine-readable `adbFailure` family, so every adb call
+ * `retriable` flag, machine-readable `adbFailure` family, and `adbHostRefusal` when the host adb
+ * refused the command before it reached the device, so every adb call
  * site surfaces guidance without per-site classification. Exec-layer timeouts
  * classify as `timeout` even though they leave no stderr. No-op for errors that
  * are not adb command failures or that carry no recognized failure signal; an
@@ -154,6 +167,7 @@ export function attachAdbFailureHint<T>(error: T): T {
   error.details = {
     ...error.details,
     adbFailure: classification.reason,
+    ...(classification.hostRefusal ? { adbHostRefusal: true } : {}),
     ...(typeof error.details?.hint === 'string' ? {} : { hint: classification.hint }),
     ...(classification.retriable !== undefined && error.details?.retriable === undefined
       ? { retriable: classification.retriable }
@@ -180,30 +194,6 @@ export function attachAndroidHelperInstallTimeoutHint<T>(error: T): T {
   const classified = attachAdbFailureHint(error);
   classified.details = { ...classified.details, hint: ANDROID_HELPER_INSTALL_TIMEOUT_HINT };
   return classified;
-}
-
-/** The entire stderr of a command the host adb refused because the device was offline. */
-const ADB_DEVICE_OFFLINE_REFUSAL = /^(?:adb|error): device (?:'[^']*' )?offline$/;
-
-/**
- * True when the host adb refused a command because the device was offline, as a result or as the
- * thrown error. Only the bare refusal counts, so output of a command that ran on the device never
- * matches, and neither does a timeout's partial output.
- */
-export function isAndroidAdbDeviceOfflineRefusal(outcome: unknown): boolean {
-  if (outcome instanceof AppError) {
-    if (outcome.code !== 'COMMAND_FAILED' || outcome.details?.timeoutMs !== undefined) return false;
-    return isBareDeviceOfflineRefusal(outcome.details?.stdout, outcome.details?.stderr);
-  }
-  if (!outcome || typeof outcome !== 'object') return false;
-  const { stdout, stderr } = outcome as Partial<AndroidAdbExecutorResult>;
-  return isBareDeviceOfflineRefusal(stdout, stderr);
-}
-
-/** Whether the streams hold nothing but the host adb's device-offline refusal. */
-function isBareDeviceOfflineRefusal(stdout: unknown, stderr: unknown): boolean {
-  if (stdout !== undefined && stdout !== '') return false;
-  return typeof stderr === 'string' && ADB_DEVICE_OFFLINE_REFUSAL.test(stderr.trim());
 }
 
 // Timeout wins over text matchers: the exec layer deliberately builds timeout

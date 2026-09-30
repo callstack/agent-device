@@ -23,6 +23,38 @@ test('ADB failure classification keeps transport on stderr and install verdicts 
   );
 });
 
+test('only the bare host adb device-offline refusal is classified as a host refusal', () => {
+  for (const stderr of ['adb: device offline\n', "error: device 'emulator-5554' offline"]) {
+    assert.deepEqual(classifyAndroidAdbFailure(stderr), {
+      reason: 'device_offline',
+      hint: classifyAndroidAdbFailure('device offline')?.hint,
+      retriable: true,
+      hostRefusal: true,
+    });
+  }
+  for (const [stderr, stdout] of [
+    ['adb: device offline', 'partial'],
+    ['flash: device offline, giving up', ''],
+  ] as const) {
+    const failure = classifyAndroidAdbFailure(stderr, stdout);
+    assert.equal(failure?.reason, 'device_offline');
+    assert.equal(failure?.hostRefusal, undefined);
+  }
+
+  const refused = attachAdbFailureHint(
+    new AppError('COMMAND_FAILED', 'adb exited with code 1', { stderr: 'adb: device offline' }),
+  );
+  assert.equal(refused.details?.adbHostRefusal, true);
+  const timedOut = attachAdbFailureHint(
+    new AppError('COMMAND_FAILED', 'adb timed out after 10ms', {
+      stderr: 'adb: device offline',
+      timeoutMs: 10,
+    }),
+  );
+  assert.equal(timedOut.details?.adbFailure, 'timeout');
+  assert.equal(Object.hasOwn(timedOut.details ?? {}, 'adbHostRefusal'), false);
+});
+
 test('ADB discovery classifies transport failures from stderr without trusting stdout', () => {
   const stdoutOnly = androidDiscoveryCommandError(
     'adb devices failed',
