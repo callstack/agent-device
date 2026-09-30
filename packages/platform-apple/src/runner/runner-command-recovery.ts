@@ -204,7 +204,12 @@ async function tryRecoverRunnerCommandAfterTransportError(
         ...readinessPreflight,
       },
     });
-    return { type: 'retainInvalidation', reason: 'status_probe_failed', dispatched: 'unknown' };
+    return {
+      type: 'retainInvalidation',
+      reason: 'status_probe_failed',
+      dispatched: 'unknown',
+      error: buildStatusProbeFailedError(command, transportError, options),
+    };
   }
 
   const lifecycleState = typeof status.lifecycleState === 'string' ? status.lifecycleState : '';
@@ -503,6 +508,29 @@ function readReadinessPreflightRecoveryDetails(
   const ageMs = readNumberDetail(error, 'runnerReadinessPreflightSkippedAgeMs');
   if (ageMs !== undefined) details.readinessPreflightSkippedAgeMs = ageMs;
   return details;
+}
+
+/** The lost reply could not be placed because the status probe itself failed. */
+function buildStatusProbeFailedError(
+  command: RunnerCommand,
+  transportError: AppError,
+  options: AppleRunnerCommandOptions,
+): AppError {
+  return new AppError(
+    transportError.code,
+    transportError.message,
+    {
+      ...transportError.details,
+      command: command.command,
+      commandId: command.commandId,
+      reason: RUNNER_REPLY_LOST_REASON,
+      recovery: 'status_probe_failed',
+      hint: unknownLifecycleStateHint(command.command),
+      logPath: options.logPath ?? transportError.details?.logPath,
+      transportError: transportError.message,
+    },
+    transportError,
+  );
 }
 
 function unknownLifecycleStateHint(command: string): string {

@@ -251,6 +251,7 @@ test.each(Object.values(LOST_RESPONSE_MUTATION_ROWS))(
     await assert.rejects(runAppleRunnerCommand(IOS_SIMULATOR, { ...request }), (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.details?.dispatched, 'unknown');
+      assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
       return true;
     });
     assert.equal(invalidateRunnerSessionMock.mock.calls.length, 1, 'the dead runner is dropped');

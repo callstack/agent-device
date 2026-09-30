@@ -201,6 +201,12 @@ must read the absent field as `unknown`.
 `'mutates-app'` command; after one, the batch failure is `unknown` for every
 caller, including one that supplies its own `invoke`.
 
+The row `ios-runner.transport.written-then-lost` proves the Apple runner's rule
+that a mutating command whose first send may have run is not resent after a
+restart, not a production route: over the real transport that arm is
+unreachable, because mutations go through `sendRunnerCommandOnce` and only the
+connect loop raises the restart trigger.
+
 For `responseFields`, one `buildInteractionResponseData(...)` becomes the only
 construction site for interaction response payloads (this deletes the class of
 bug where `fill @ref` rebuilt its response by hand and dropped `evidence`). A

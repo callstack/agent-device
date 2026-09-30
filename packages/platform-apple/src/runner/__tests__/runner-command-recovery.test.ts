@@ -139,12 +139,20 @@ test('notAccepted from a restarted runner fails the lost command as unknown, nam
   assert.equal(invalidate.mock.calls.length, 1);
 });
 
-test('a failing status probe retains the invalidation and rethrows the transport error', async () => {
+test('a failing status probe retains the invalidation and names the lost reply', async () => {
   const { result, invalidate, transportError } = await runRecovery({
     script: [{ kind: 'runnerError', code: 'COMMAND_FAILED', message: 'status probe exploded' }],
   });
 
-  await assert.rejects(result, (error: unknown) => error === transportError);
+  await assert.rejects(result, (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.message, transportError.message);
+    assert.equal(error.cause, transportError);
+    assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+    assert.equal(error.details?.recovery, 'status_probe_failed');
+    assert.equal(error.details?.dispatched, 'unknown');
+    return true;
+  });
   assert.equal(invalidate.mock.calls.length, 1);
 });
 
