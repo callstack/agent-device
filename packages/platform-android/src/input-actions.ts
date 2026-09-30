@@ -32,18 +32,10 @@ export async function pressAndroid(device: DeviceInfo, x: number, y: number): Pr
   }
 }
 
-/**
- * An `adb shell input` failure after `dispatchedSteps` earlier inputs succeeded: adb that never
- * started delivered nothing; once any input ran, the event may have reached the device.
- */
-export function discloseAdbInputDispatch(error: unknown, dispatchedSteps = 0): unknown {
+/** One `adb shell input` failure: adb that never started delivered nothing; otherwise it may have. */
+export function discloseAdbInputDispatch(error: unknown): unknown {
   if (!(error instanceof AppError)) return error;
-  const neverStarted = error.code === 'TOOL_MISSING' && dispatchedSteps === 0;
-  return discloseDispatch(
-    error,
-    neverStarted ? 'no' : 'unknown',
-    dispatchedSteps > 0 ? { dispatchedSteps } : {},
-  );
+  return discloseDispatch(error, error.code === 'TOOL_MISSING' ? 'no' : 'unknown');
 }
 
 export async function pressAndroidTvRemote(

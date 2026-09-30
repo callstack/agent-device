@@ -15,6 +15,7 @@ import {
   isRetryableRunnerError,
   isStructuredRunnerFailure,
 } from '../runner-error-classification.ts';
+import { runApplePressSeries } from '../runner-sequence.ts';
 import { executeRunnerCommandWithSession, type RunnerSession } from '../runner-session.ts';
 import { RunnerCommandAccounting } from '../runner-session-types.ts';
 import {
@@ -95,6 +96,33 @@ async function lostResponse(
   });
 }
 
+/** `press --count 25` over the real send stack: chunk one (20 taps) runs, chunk two is refused. */
+async function pressSeriesRefusedOnSecondChunk(): Promise<unknown> {
+  const firstChunk = Array.from({ length: 20 }, () => ({ ok: true, kind: 'tap' }));
+  server = await startFakeRunnerServer({
+    sequence: [
+      { kind: 'ok', data: { completedSteps: 20, sequenceResults: firstChunk } },
+      { kind: 'runnerError', code: 'RUNNER_BUSY', message: 'runner busy' },
+    ],
+  });
+  const session = runnerSession(server.port);
+  try {
+    return await runApplePressSeries(
+      IOS_SIMULATOR,
+      { x: 10, y: 20 },
+      { button: 'primary', count: 25, intervalMs: 0, holdMs: 0, jitterPx: 0, doubleTap: false },
+      undefined,
+      async (command) =>
+        await executeRunnerCommandWithSession(IOS_SIMULATOR, session, command, undefined, 5_000),
+    );
+  } catch (error) {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.dispatchedSteps, 1);
+    assert.equal(server.requests.filter((request) => request.command === 'sequence').length, 2);
+    throw error;
+  }
+}
+
 function statusReply(data: Record<string, unknown>): FakeRunnerResponse[] {
   return [{ kind: 'ok', data }];
 }
@@ -116,6 +144,7 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
   'ios-runner.reply.AMBIGUOUS_MATCH': () => replyFailure('AMBIGUOUS_MATCH'),
   'ios-runner.reply.MAIN_THREAD_TIMEOUT': () => replyFailure('MAIN_THREAD_TIMEOUT'),
   'ios-runner.reply.unlisted-code': () => replyFailure('XCTEST_RECORDED_FAILURE'),
+  'ios-runner.series.later-chunk-refused': pressSeriesRefusedOnSecondChunk,
   'ios-runner.status.failed': () =>
     lostResponse(statusReply({ lifecycleState: 'failed', lifecycleErrorMessage: 'tap failed' })),
   'ios-runner.status.failed-RUNNER_BUSY': () =>

@@ -1,7 +1,7 @@
 import type { ShellWord } from '@agent-device/kernel/device-shell';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 
 import { sleep } from './adb.ts';
 import {
@@ -110,11 +110,15 @@ export async function dismissAndroidKeyboardWithAdb(
   let state = initialState;
   let attempts = 0;
 
-  while (state.visible && attempts < ANDROID_KEYBOARD_DISMISS_MAX_ATTEMPTS) {
-    await runAdbShell(adb, ['input', 'keyevent', ANDROID_KEYCODE_ESCAPE]);
-    attempts += 1;
-    await sleep(ANDROID_KEYBOARD_DISMISS_RETRY_DELAY_MS);
-    state = await getAndroidKeyboardStatusWithAdb(adb);
+  try {
+    while (state.visible && attempts < ANDROID_KEYBOARD_DISMISS_MAX_ATTEMPTS) {
+      await runAdbShell(adb, ['input', 'keyevent', ANDROID_KEYCODE_ESCAPE]);
+      attempts += 1;
+      await sleep(ANDROID_KEYBOARD_DISMISS_RETRY_DELAY_MS);
+      state = await getAndroidKeyboardStatusWithAdb(adb);
+    }
+  } catch (error) {
+    throw discloseDispatchAfterSteps(error, attempts);
   }
 
   if (initialState.visible && state.visible) {

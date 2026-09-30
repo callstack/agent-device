@@ -36,6 +36,12 @@
     "dispatched": "unknown"
   },
   {
+    "id": "daemon.series.swipe-later-repetition-refused",
+    "producer": "daemon",
+    "trigger": "swipe --count 2: the first repetition ran and the second failed with a producer verdict of no; the series reports unknown with details.dispatchedSteps 1",
+    "dispatched": "unknown"
+  },
+  {
     "id": "maestro-direct.fallback.pre-send-refusal",
     "producer": "daemon",
     "trigger": "the direct iOS selector tap failed with a runner refusal disclosed no (connect refused before send); the tree path taps instead",
@@ -131,6 +137,12 @@
     "id": "ios-runner.reply.unlisted-code",
     "producer": "ios-runner",
     "trigger": "structured runner reply with any other code, e.g. XCTEST_RECORDED_FAILURE, which the runner reports as \"the action may not have been performed\"",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.series.later-chunk-refused",
+    "producer": "ios-runner",
+    "trigger": "press --count 25 splits into two sequence chunks; the first ran and the second was refused with RUNNER_BUSY; the series reports unknown with details.dispatchedSteps 1",
     "dispatched": "unknown"
   },
   {

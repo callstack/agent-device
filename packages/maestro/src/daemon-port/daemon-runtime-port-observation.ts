@@ -1,4 +1,8 @@
-import { createRequestCanceledError, AppError } from '@agent-device/kernel/errors';
+import {
+  createRequestCanceledError,
+  AppError,
+  discloseDispatchAfterSteps,
+} from '@agent-device/kernel/errors';
 import { createHash } from 'node:crypto';
 import {
   literalFromMaestroRegex,
@@ -188,33 +192,39 @@ export async function scrollUntilTypedMaestroTarget(params: {
   const deadline = params.dependencies.now() + params.timeoutMs;
   let lastMatch: MaestroTargetMatch | undefined;
   let settledSnapshot: SnapshotState | undefined;
+  let dispatchedScrolls = 0;
 
-  while (true) {
+  try {
+    while (true) {
+      throwIfAborted(params.context.signal);
+      const snapshot = settledSnapshot ?? (await captureRetriableMaestroSnapshot(params, deadline));
+      settledSnapshot = undefined;
+      lastMatch = resolveTargetFromSnapshot({
+        query: { selector: params.selector },
+        context: params.context,
+        snapshot,
+        platform: params.platform,
+        mode: 'observe',
+      });
+      if (
+        lastMatch.visiblePercentage === MAESTRO_RUNTIME_ADAPTER_POLICY.scrollUntilVisiblePercentage
+      ) {
+        return lastMatch;
+      }
+      if (params.dependencies.now() >= deadline) break;
+
+      const remaining = deadline - params.dependencies.now();
+      if (remaining > 0) {
+        settledSnapshot = await params.scroll(remaining, snapshot);
+        dispatchedScrolls += 1;
+      }
+    }
+
     throwIfAborted(params.context.signal);
-    const snapshot = settledSnapshot ?? (await captureRetriableMaestroSnapshot(params, deadline));
-    settledSnapshot = undefined;
-    lastMatch = resolveTargetFromSnapshot({
-      query: { selector: params.selector },
-      context: params.context,
-      snapshot,
-      platform: params.platform,
-      mode: 'observe',
-    });
-    if (
-      lastMatch.visiblePercentage === MAESTRO_RUNTIME_ADAPTER_POLICY.scrollUntilVisiblePercentage
-    ) {
-      return lastMatch;
-    }
-    if (params.dependencies.now() >= deadline) break;
-
-    const remaining = deadline - params.dependencies.now();
-    if (remaining > 0) {
-      settledSnapshot = await params.scroll(remaining, snapshot);
-    }
+    return requireObservationResult(lastMatch);
+  } catch (error) {
+    throw discloseDispatchAfterSteps(error, dispatchedScrolls);
   }
-
-  throwIfAborted(params.context.signal);
-  return requireObservationResult(lastMatch);
 }
 
 export async function waitForTypedSnapshotStability(params: {

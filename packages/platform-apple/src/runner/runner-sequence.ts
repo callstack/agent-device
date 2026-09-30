@@ -1,7 +1,7 @@
 import type { PressPointOptions } from '@agent-device/contracts/interactor-types';
 import { pressJitter } from '@agent-device/contracts/touch-runtime';
 import { runnerSynthesizesTap, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatchAfterSteps, toAppErrorCode } from '@agent-device/kernel/errors';
 import type { RunnerCommand, RunnerSequenceStep } from './runner-contract.ts';
 
 export const SEQUENCEABLE_RUNNER_STEP_KINDS = ['tap', 'doubleTap', 'longPress'] as const;
@@ -156,8 +156,15 @@ export async function runApplePressSeries(
   let completedSteps = 0;
   const sequenceResults: unknown[] = [];
   let stepOffset = 0;
+  let dispatchedChunks = 0;
   for (const chunk of chunks) {
-    const result = await runCommand(buildRunnerSequenceCommand(chunk, appBundleId));
+    let result: Record<string, unknown>;
+    try {
+      result = await runCommand(buildRunnerSequenceCommand(chunk, appBundleId));
+    } catch (error) {
+      throw discloseDispatchAfterSteps(error, dispatchedChunks);
+    }
+    dispatchedChunks += 1;
     first ??= result;
     last = result;
     let parsed;
@@ -165,7 +172,10 @@ export async function runApplePressSeries(
       parsed = parseRunnerSequenceResult(result);
     } catch (error) {
       // The runner reports an index local to its chunk; callers need the global series index.
-      throw remapSequenceErrorStepIndex(error, stepOffset);
+      throw discloseDispatchAfterSteps(
+        remapSequenceErrorStepIndex(error, stepOffset),
+        dispatchedChunks,
+      );
     }
     completedSteps += parsed.completedSteps;
     sequenceResults.push(...parsed.results);
