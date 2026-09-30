@@ -3,8 +3,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { DispatchDisclosure } from '@agent-device/kernel/errors';
 
-export const DISPATCH_DISCLOSURE_PHASES = ['before-seam', 'after-seam'] as const;
-
 export const DISPATCH_DISCLOSURE_PRODUCERS = [
   'daemon',
   'ios-runner',
@@ -18,7 +16,6 @@ export type DispatchDisclosureProducer = (typeof DISPATCH_DISCLOSURE_PRODUCERS)[
 
 export type DispatchDisclosureRow = {
   id: string;
-  phase: (typeof DISPATCH_DISCLOSURE_PHASES)[number];
   producer: DispatchDisclosureProducer;
   trigger: string;
   dispatched: DispatchDisclosure;

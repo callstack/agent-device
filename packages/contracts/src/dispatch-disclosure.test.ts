@@ -10,7 +10,6 @@ import {
 } from '@agent-device/kernel/errors';
 import {
   DISPATCH_DISCLOSURE_DRIVER_OWNERS,
-  DISPATCH_DISCLOSURE_PHASES,
   DISPATCH_DISCLOSURE_PRODUCERS,
   dispatchDisclosureDriverOwner,
   DISPATCH_DISCLOSURE_TABLE_PATH,
@@ -37,7 +36,6 @@ test('dispatch-disclosure rows are unique and use the declared vocabulary', () =
   assert.ok(rows.length > 0);
   assert.equal(new Set(rows.map((row) => row.id)).size, rows.length, 'row ids must be unique');
   for (const row of rows) {
-    assert.ok((DISPATCH_DISCLOSURE_PHASES as readonly string[]).includes(row.phase), row.id);
     assert.ok((DISPATCH_DISCLOSURE_PRODUCERS as readonly string[]).includes(row.producer), row.id);
     assert.ok(DISPATCH_VALUES.includes(row.dispatched), row.id);
     assert.ok(row.trigger.trim().length > 0, row.id);
