@@ -390,7 +390,7 @@ test('an endpoint missing for the requested transport rejects with a typed reaso
   const socketOnly = { port: 1, token: 't', pid: 1 };
   const error = await canConnect(socketOnly, 'http').then(
     () => undefined,
-    (err: unknown) => err,
+    (error: unknown) => error,
   );
   assert.ok(error instanceof AppError);
   assert.equal(error.details?.reason, 'daemon_endpoint_unavailable');
