@@ -171,7 +171,7 @@ test.each(Object.values(LOST_RESPONSE_MUTATION_ROWS))(
 // #3074: `status` answers `notAccepted`, as a runner whose journal did not survive a restart between
 // the send and the probe would. That is no proof the first send did not run.
 test.each(Object.values(LOST_RESPONSE_MUTATION_ROWS))(
-  'a $acceptanceCommand whose reply is lost and whose status answers notAccepted is sent once',
+  'a $acceptanceCommand whose status answers notAccepted fails as runner_reply_lost, sent once',
   async ({ runnerCommand, request }) => {
     server = await startFakeRunnerServer({
       [runnerCommand]: [{ kind: 'hangUp' }],
@@ -242,7 +242,7 @@ function sendsOf(target: FakeRunnerServer, runnerCommand: string): number {
 }
 
 test.each(Object.values(LOST_RESPONSE_MUTATION_ROWS))(
-  'a $acceptanceCommand whose runner dies mid-command is not sent to the restarted runner',
+  'a $acceptanceCommand whose runner dies mid-command fails as runner_reply_lost, not resent',
   async ({ runnerCommand, request }) => {
     const restarted = await runnerDiesOnCommand(runnerCommand, {
       readText: [{ kind: 'ok', data: { text: 'after' } }],
