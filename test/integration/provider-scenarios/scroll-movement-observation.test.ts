@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
-import type { SimulatorSnapshotSource } from '../../../packages/platform-apple/src/snapshot-source-facade.ts';
+import type { SimulatorSnapshotSource } from '@agent-device/platform-apple/snapshot-source';
 import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
@@ -18,7 +18,7 @@ import { createProviderTranscript, type ProviderScenarioProviderEntry } from './
 // test seconds of wall time. Here it reports unavailable at once, so every capture takes the
 // scripted runner, as it does on a host without Xcode.
 vi.mock(
-  '../../../packages/platform-apple/src/snapshot-source-facade.ts',
+  '@agent-device/platform-apple/snapshot-source',
   (): { createSimulatorSnapshotSource: () => SimulatorSnapshotSource } => ({
     createSimulatorSnapshotSource: () => ({
       acquire: async () => ({
