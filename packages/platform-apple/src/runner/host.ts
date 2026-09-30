@@ -69,6 +69,7 @@ export type AppleRunnerHost = Pick<
     | 'signalPidsBestEffort'
     | 'signalProcessGroupBestEffort'
     | 'classifyOwnerLiveness'
+    | 'readHostCpuArchSync'
   > &
   Pick<typeof HostVersion, 'findProjectRoot' | 'readVersion'> &
   Pick<typeof HostFile, 'acquireProcessLock' | 'withProcessLock' | 'publishFileSync'> &
@@ -164,6 +165,7 @@ export const readProcessCommand = delegate('readProcessCommand');
 export const signalPidsBestEffort = delegate('signalPidsBestEffort');
 export const signalProcessGroupBestEffort = delegate('signalProcessGroupBestEffort');
 export const classifyOwnerLiveness = delegate('classifyOwnerLiveness');
+export const readHostCpuArchSync = delegate('readHostCpuArchSync');
 export const findProjectRoot = delegate('findProjectRoot');
 export const readVersion = delegate('readVersion');
 export const acquireProcessLock = delegate('acquireProcessLock');

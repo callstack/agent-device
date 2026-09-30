@@ -54,6 +54,7 @@ export function createPlatformRuntimeHost(options: {
   sessionsDir: string;
   resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
   shutdownLoaders: DeviceShutdownRuntimeLoaders;
+  assertShutdownAllowed?: () => void;
   snapshot: SnapshotRuntimeHost;
   ownedProcesses?: OwnedProcessRecordWriter;
 }): PlatformRuntimeHost {
@@ -124,6 +125,7 @@ export function createPlatformRuntimeHost(options: {
     deviceShutdown: createDeviceShutdownRuntimeHost(
       { appleTools, commands },
       options.shutdownLoaders,
+      options.assertShutdownAllowed,
     ),
     screenRecording: createScreenRecordingRuntimeHost({ ownedProcesses: options.ownedProcesses }),
     audioProbe: createAudioProbeRuntimeHost({ ownedProcesses: options.ownedProcesses }),

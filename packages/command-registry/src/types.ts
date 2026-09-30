@@ -127,18 +127,32 @@ export type CommandCatalogGroup = 'public' | 'internal' | 'local-cli';
  */
 export type CommandFrameworkTier = 'core' | 'extended';
 
-export type CommandCatalogFacet = {
-  /**
-   * The command catalog group. This is explicit on every descriptor so new
-   * descriptors cannot accidentally become public CLI/MCP commands by omission.
-   */
-  group: CommandCatalogGroup;
+type CommandCatalogFacetBase = {
   /**
    * Stable property name used by catalog object projections, e.g.
    * `longPress` for the command name `longpress`.
    */
   key?: string;
 };
+
+/**
+ * The command catalog group is explicit on every descriptor so new descriptors cannot
+ * accidentally become public CLI/MCP commands by omission.
+ */
+export type CommandCatalogFacet = CommandCatalogFacetBase &
+  (
+    | {
+        group: 'internal';
+        /**
+         * The public command this internal command carries to the daemon, so ADR 0029
+         * daemon-policy command rules name the public command (`install_source` serves
+         * `install-from-source`). An internal command with platform execution and no value is
+         * named by itself.
+         */
+        servesPublicCommand?: string;
+      }
+    | { group: Exclude<CommandCatalogGroup, 'internal'>; servesPublicCommand?: never }
+  );
 
 /**
  * ADR 0016: whether a recorded request changes app-visible state or only

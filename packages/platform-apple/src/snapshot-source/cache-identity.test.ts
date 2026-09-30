@@ -13,9 +13,14 @@ import type { SnapshotSourceHost } from './types.ts';
 
 function fakeToolchainHost(
   run: (command: string, args: string[], options: ExecOptions) => ExecResult,
+  cpuArch = 'arm64',
 ): SnapshotSourceHost {
   const real = createSnapshotSourceHost();
-  return { ...real, run: async (command, args, options) => run(command, args, options ?? {}) };
+  return {
+    ...real,
+    cpuArch: async () => cpuArch,
+    run: async (command, args, options) => run(command, args, options ?? {}),
+  };
 }
 
 function toolchainAnswer(command: string, args: string[]): ExecResult {
@@ -25,7 +30,6 @@ function toolchainAnswer(command: string, args: string[]): ExecResult {
   if (command === 'sw_vers') {
     return { stdout: args.includes('-buildVersion') ? '24G90' : '15.6', stderr: '', exitCode: 0 };
   }
-  if (command === 'uname') return { stdout: 'arm64', stderr: '', exitCode: 0 };
   throw new Error(`unexpected probe ${command}`);
 }
 
@@ -60,11 +64,7 @@ test('a blank simulator runtime is rejected only after the shared identity read 
 });
 
 test("an identity failure from the shared toolchain read surfaces as this bridge's own error type", async () => {
-  const unsupportedArch = fakeToolchainHost((command, args) =>
-    command === 'uname'
-      ? { stdout: 'i386', stderr: '', exitCode: 0 }
-      : toolchainAnswer(command, args),
-  );
+  const unsupportedArch = fakeToolchainHost(toolchainAnswer, 'i386');
   await assert.rejects(
     readSnapshotSourceToolchain(
       unsupportedArch,

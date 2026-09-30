@@ -18,6 +18,7 @@ import {
   signalPidsBestEffort,
   signalProcessGroupBestEffort,
   classifyOwnerLiveness,
+  readHostCpuArchSync,
 } from '@agent-device/host-kit/process';
 import { Deadline, isEnvTruthy, retryWithPolicy } from '@agent-device/host-kit/retry';
 
@@ -82,6 +83,7 @@ export const appleRunnerHost: AppleRunnerHost = {
   withKeyedLock,
   publishFileSync,
   classifyOwnerLiveness,
+  readHostCpuArchSync,
   createTtlMemo,
   parseBooleanLiteral,
   isRecord,

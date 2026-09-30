@@ -163,6 +163,13 @@ export async function ensureDaemon(settings: DaemonClientSettings): Promise<Ensu
     return await ensureRemoteDaemon(settings);
   }
 
+  const ensured = await ensureLocalDaemon(settings);
+  // Checked on both branches: a startup can resolve to a daemon another caller raced in.
+  await assertDaemonPolicyMatches(ensured.info, settings.paths.baseDir);
+  return ensured;
+}
+
+async function ensureLocalDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {
   const reusable = await readReusableLocalDaemon(settings);
   if (reusable) return { info: reusable, startedByClient: false };
 
@@ -235,6 +242,27 @@ async function canReachReusableDaemon(
     }
   }
   return false;
+}
+
+/**
+ * ADR 0029: a caller that names a daemon policy must not silently use a daemon that enforces a
+ * different one (or none). A caller that names no policy uses whatever the daemon enforces.
+ */
+async function assertDaemonPolicyMatches(existing: DaemonInfo, stateDir: string): Promise<void> {
+  if (!process.env.AGENT_DEVICE_DAEMON_POLICY?.trim()) return;
+  const { loadDaemonPolicy } = await import('../daemon-policy-file.ts');
+  const expected = loadDaemonPolicy(process.env)?.digest;
+  if (expected === existing.policyDigest) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    'The running daemon does not enforce the daemon policy named by AGENT_DEVICE_DAEMON_POLICY.',
+    {
+      reason: 'DAEMON_POLICY_MISMATCH',
+      expectedPolicyDigest: expected,
+      daemonPolicyDigest: existing.policyDigest ?? null,
+      hint: `Stop the running daemon (agent-device daemon stop --state-dir ${shellQuoteIfNeeded(stateDir)}), then retry so a daemon starts with this policy.`,
+    },
+  );
 }
 
 async function canConnectReusableDaemon(

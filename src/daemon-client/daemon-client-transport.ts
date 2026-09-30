@@ -40,6 +40,7 @@ export type RemoteDaemonHealth = {
   version?: string;
   rpcProtocolVersion?: number;
   instanceId?: string;
+  hostArch?: string;
   /** The daemon behind a proxy, as the proxy's health reported it. */
   upstream?: RemoteDaemonHealthLink;
   /** The probe ran out of its time budget before an answer, rather than failing outright. */
@@ -48,7 +49,7 @@ export type RemoteDaemonHealth = {
 
 type RemoteDaemonHealthLink = Pick<
   RemoteDaemonHealth,
-  'service' | 'version' | 'rpcProtocolVersion' | 'instanceId'
+  'service' | 'version' | 'rpcProtocolVersion' | 'instanceId' | 'hostArch'
 >;
 
 export async function canConnect(
@@ -208,6 +209,7 @@ function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink
     rpcProtocolVersion:
       typeof parsed.rpcProtocolVersion === 'number' ? parsed.rpcProtocolVersion : undefined,
     ...(typeof parsed.instanceId === 'string' ? { instanceId: parsed.instanceId } : {}),
+    ...(typeof parsed.hostArch === 'string' ? { hostArch: parsed.hostArch } : {}),
   };
 }
 

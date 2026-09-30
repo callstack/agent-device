@@ -131,7 +131,6 @@ describe('managed local runtime owner', () => {
       'setSetting',
       'readSetting',
       'readClipboard',
-      'writeClipboard',
     ];
     expect(Object.keys(binding.operations).sort()).toEqual(enabled.sort());
     for (const key of Object.keys(binding.facts.operations) as Array<

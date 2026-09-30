@@ -10,7 +10,11 @@ import {
   renameHostPath,
   writeHostTextFile,
 } from '@agent-device/host-kit/host-file';
-import { hostProcessId, readProcessStartTime } from '@agent-device/host-kit/process';
+import {
+  hostProcessId,
+  readHostCpuArch,
+  readProcessStartTime,
+} from '@agent-device/host-kit/process';
 import { NativeBuildError, nativeBuildError } from './errors.ts';
 import { remainingNativeBuildMs, type NativeBuildDeadline } from './deadline.ts';
 
@@ -35,6 +39,7 @@ export type NativeBuildHost = Readonly<{
     options: { deadline: NativeBuildDeadline; description: string },
   ): Promise<() => Promise<void>>;
   processId(): number;
+  cpuArch(): Promise<string>;
 }>;
 
 export function createNativeBuildHost(run: NativeBuildHost['run']): NativeBuildHost {
@@ -50,6 +55,7 @@ export function createNativeBuildHost(run: NativeBuildHost['run']): NativeBuildH
     remove: removeHostPath,
     acquireLock: acquireNativeBuildLock,
     processId: hostProcessId,
+    cpuArch: readHostCpuArch,
   };
 }
 

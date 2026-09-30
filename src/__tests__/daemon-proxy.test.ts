@@ -5,6 +5,7 @@ import http from 'node:http';
 import { createDaemonProxyServer } from '../remote/daemon-proxy.ts';
 import { createDaemonHttpServer } from '../daemon/server/http-server.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
+import { readHostCpuArch } from '@agent-device/host-kit/process';
 import { executeRunScriptHttpRequest } from '@agent-device/maestro/run-script-http';
 import {
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
@@ -458,6 +459,7 @@ test('daemon proxy leaves health endpoint unauthenticated', async (t) => {
     assert.equal(typeof payload.version, 'string');
     assert.equal(payload.rpcProtocolVersion, DAEMON_RPC_PROTOCOL_VERSION);
     assert.equal(typeof payload.instanceId, 'string');
+    assert.equal(payload.hostArch, await readHostCpuArch());
     assert.deepEqual(payload.upstream, { ok: true });
     assert.equal(upstreamAuth, 'Bearer daemon-secret');
     assert.equal(upstreamTokenHeader, 'daemon-secret');

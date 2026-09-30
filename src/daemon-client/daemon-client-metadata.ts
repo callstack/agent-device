@@ -21,6 +21,8 @@ export type DaemonInfo = {
   codeOrigin?: DaemonCodeOrigin;
   codeSignature?: string;
   processStartTime?: string;
+  /** ADR 0029: digest of the daemon policy the daemon enforces; absent when it has none. */
+  policyDigest?: string;
   baseUrl?: string;
   remoteInstanceId?: string;
   remoteUpstreamInstanceId?: string;
@@ -70,6 +72,7 @@ export function readDaemonInfo(infoPath: string): DaemonInfo | null {
     codeOrigin: readDaemonInfoCodeOrigin(parsed.codeOrigin),
     codeSignature: readOptionalString(parsed.codeSignature),
     processStartTime: readOptionalString(parsed.processStartTime),
+    policyDigest: readOptionalString(parsed.policyDigest),
   };
 }
 

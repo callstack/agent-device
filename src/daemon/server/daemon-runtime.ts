@@ -10,6 +10,8 @@ import {
   isActiveProviderDevice,
 } from '../../provider-device-runtime.ts';
 import { installProviderDeviceAdmission } from '../provider-device-admission.ts';
+import { assertDaemonPolicyAllowsCapability } from '../daemon-policy.ts';
+import { loadDaemonPolicy, type DaemonPolicy } from '../../daemon-policy-file.ts';
 import { getInteractor } from '../../core/interactors.ts';
 import { installInteractorResolution } from '../interactor-resolution.ts';
 import {
@@ -247,6 +249,16 @@ export async function startDaemonRuntime(
   const { baseDir, infoPath, lockPath, logPath, sessionsDir } = daemonPaths;
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
+  // ADR 0029: a policy that cannot be read or validated stops startup; the daemon never runs
+  // with a weaker policy than its operator named.
+  let daemonPolicy: DaemonPolicy | undefined;
+  try {
+    daemonPolicy = loadDaemonPolicy(env);
+  } catch (error) {
+    stderr.write(`Daemon error: ${asAppError(error).message}\n`);
+    exit(1);
+    return null;
+  }
 
   const sessionStore = new SessionStore(sessionsDir);
   const ownedProcessRecords = createOwnedProcessRecordStore({
@@ -267,6 +279,9 @@ export async function startDaemonRuntime(
   const providerComposition = await createDefaultProviderRuntimeComposition(env);
   const providerDeviceRuntimes = [...providerComposition.runtimes];
   const deviceRuntimeGateway = createPlatformRuntimeGateway({
+    assertShutdownAllowed: daemonPolicy
+      ? () => assertDaemonPolicyAllowsCapability(daemonPolicy, 'device-shutdown')
+      : undefined,
     providerRuntimes: providerDeviceRuntimes,
     providerModules: providerComposition.platformModules,
     sessionsDir,
@@ -345,6 +360,7 @@ export async function startDaemonRuntime(
     providerRuntimeRequiredIds: providerRuntimeProviders.providerRuntimeRequiredIds,
     providerDeviceRuntimeScope: providerRuntimeProviders.providerDeviceRuntimeScope,
     trackDownloadableArtifact,
+    daemonPolicy,
   });
 
   const emitFatalDiagnostic = async (error: unknown): Promise<void> => {
@@ -539,6 +555,7 @@ export async function startDaemonRuntime(
       codeOrigin: daemonCodeOrigin,
       codeSignature: daemonCodeSignature,
       processStartTime: daemonProcessStartTime,
+      policyDigest: daemonPolicy?.digest,
     });
     if (socketPort) stdout.write(`AGENT_DEVICE_DAEMON_PORT=${socketPort}\n`);
     if (httpPort) stdout.write(`AGENT_DEVICE_DAEMON_HTTP_PORT=${httpPort}\n`);

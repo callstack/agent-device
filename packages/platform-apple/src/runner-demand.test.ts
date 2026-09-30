@@ -24,6 +24,7 @@ test.each([
   ['custom actions', 'captureSnapshotWithCustomActions'],
   ['an alert', 'readAlert'],
   ['runner preparation', 'prepareAppleRunner'],
+  ['a clipboard write', 'writeClipboard'],
 ] as const)('a plan containing %s requires the runner', (_name, operation) => {
   expect(resolveAppleSimulatorRunnerDemand(['captureSnapshot', operation])).toBe('required');
 });

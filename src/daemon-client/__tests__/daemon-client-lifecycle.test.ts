@@ -21,7 +21,6 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
 import { resolveDaemonPaths, type DaemonPaths } from '../../daemon-resolution.ts';
 import { sendToDaemon, type DaemonRequest, type DaemonResponse } from '../daemon-client.ts';
 import { attachActiveSessionAddressHint } from '../daemon-client-lifecycle.ts';
-import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
 import { sendRequest } from '../daemon-client-transport.ts';
 import {
   closeLoopbackServer,
@@ -32,13 +31,14 @@ import {
   captureStderr,
   startHttpDaemonFixture,
   type HttpDaemonFixture,
+  currentDaemonCodeSignature,
 } from '../../__tests__/test-utils/daemon-http-fixture.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmdDetachedMonitored, runCmdSync } from '@agent-device/host-kit/command';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
-import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
+import { readVersion } from '@agent-device/host-kit/version';
 
 type DaemonInfoFixture = {
   port?: number;
@@ -66,17 +66,6 @@ function makeTempStateDir(prefix: string): string {
   return mkdtempForTestSync(prefix);
 }
 
-function resolveCurrentDaemonCodeSignature(): string {
-  const root = findProjectRoot();
-  const distPath = path.join(root, 'dist', 'src', 'internal', 'daemon.js');
-  const sourcePath = path.join(root, 'src', 'daemon.ts');
-  const entryPath =
-    process.execArgv.includes('--experimental-strip-types') || !fs.existsSync(distPath)
-      ? sourcePath
-      : distPath;
-  return computeDaemonCodeSignature(entryPath, root);
-}
-
 function writeDaemonInfo(paths: DaemonPaths, info: DaemonInfoFixture): void {
   fs.mkdirSync(paths.baseDir, { recursive: true });
   fs.writeFileSync(
@@ -85,7 +74,7 @@ function writeDaemonInfo(paths: DaemonPaths, info: DaemonInfoFixture): void {
       token: info.token ?? 'local-secret',
       pid: info.pid ?? process.pid,
       version: info.version ?? readVersion(),
-      codeSignature: info.codeSignature ?? resolveCurrentDaemonCodeSignature(),
+      codeSignature: info.codeSignature ?? currentDaemonCodeSignature(),
       processStartTime: info.processStartTime ?? readProcessStartTime(process.pid) ?? undefined,
       port: info.port,
       httpPort: info.httpPort,
