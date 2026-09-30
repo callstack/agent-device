@@ -46,6 +46,7 @@ const ANDROID_ADB_FAILURE_MATCHERS = [
     {
       reason: 'device_unauthorized',
       hint: 'USB debugging is not authorized — accept the authorization prompt on the device screen (re-plug the cable if none appears), then retry.',
+      hostRefusal: true,
     },
   ],
   [/device offline/, ANDROID_ADB_DEVICE_OFFLINE_FAILURE],
@@ -54,6 +55,7 @@ const ANDROID_ADB_FAILURE_MATCHERS = [
     {
       reason: 'multiple_devices',
       hint: 'Multiple Android devices are connected — pass --serial <serial> (see adb devices) to select one.',
+      hostRefusal: true,
     },
   ],
   [
@@ -61,6 +63,7 @@ const ANDROID_ADB_FAILURE_MATCHERS = [
     {
       reason: 'no_devices',
       hint: 'No Android devices detected — boot an emulator or connect a device and verify it appears in adb devices.',
+      hostRefusal: true,
     },
   ],
   [
@@ -68,6 +71,7 @@ const ANDROID_ADB_FAILURE_MATCHERS = [
     {
       reason: 'device_not_found',
       hint: 'The device disconnected or is restarting — verify it is listed in adb devices, then retry.',
+      hostRefusal: true,
       retriable: true,
     },
   ],
@@ -76,6 +80,7 @@ const ANDROID_ADB_FAILURE_MATCHERS = [
     {
       reason: 'server_version_mismatch',
       hint: 'Multiple adb installs conflict — adb restarts its server automatically, so retry; align PATH to a single adb to stop recurrences.',
+      hostRefusal: true,
       retriable: true,
     },
   ],
@@ -282,8 +287,16 @@ export function attachAndroidDiscoveryTimeout<T>(error: T): T {
   return error;
 }
 
-/** One adb input send's failure: adb that never started delivered nothing; otherwise it may have. */
+/** One adb input send's failure: adb that never started or a host adb refusal delivered nothing; otherwise it may have. */
 export function discloseAdbInputDispatch(error: unknown): unknown {
   if (!(error instanceof AppError)) return error;
-  return discloseDispatch(error, error.code === 'TOOL_MISSING' ? 'no' : 'unknown');
+  return discloseDispatch(
+    error,
+    error.code === 'TOOL_MISSING' || isAdbHostRefusal(error) ? 'no' : 'unknown',
+  );
+}
+
+/** Whether the host adb refused the command before it reached the device, so it had no effect there. */
+export function isAdbHostRefusal(error: AppError): boolean {
+  return error.details?.adbHostRefusal === true;
 }

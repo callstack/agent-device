@@ -55,6 +55,47 @@ test('only the bare host adb device-offline refusal is classified as a host refu
   assert.equal(Object.hasOwn(timedOut.details ?? {}, 'adbHostRefusal'), false);
 });
 
+const HOST_REFUSALS = [
+  ['device_unauthorized', 'error: device unauthorized.'],
+  ['device_offline', 'error: device offline'],
+  ['multiple_devices', 'error: more than one device/emulator'],
+  ['no_devices', 'adb: no devices/emulators found'],
+  ['device_not_found', "error: device 'emulator-5554' not found"],
+  ['server_version_mismatch', "adb server version (40) doesn't match this client (41); killing..."],
+] as const;
+
+const DEVICE_SIDE_FAILURES = [
+  ['connection_dropped', 'adb: error: protocol fault', ''],
+  ['install_insufficient_storage', '', 'Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]'],
+  ['install_update_incompatible', '', 'Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE]'],
+  ['install_version_downgrade', '', 'Failure [INSTALL_FAILED_VERSION_DOWNGRADE]'],
+  ['install_failed', '', 'Failure [INSTALL_FAILED_DEXOPT]'],
+] as const;
+
+test('every host-refusal reason is classified hostRefusal and stamped as adbHostRefusal', () => {
+  for (const [reason, stderr] of HOST_REFUSALS) {
+    assert.equal(classifyAndroidAdbFailure(stderr)?.reason, reason);
+    assert.equal(classifyAndroidAdbFailure(stderr)?.hostRefusal, true, reason);
+    const error = attachAdbFailureHint(
+      new AppError('COMMAND_FAILED', 'adb exited with code 1', { stderr }),
+    );
+    assert.equal(error.details?.adbFailure, reason);
+    assert.equal(error.details?.adbHostRefusal, true, reason);
+  }
+});
+
+test('reasons a device-side command can produce are never classified hostRefusal', () => {
+  for (const [reason, stderr, stdout] of DEVICE_SIDE_FAILURES) {
+    const failure = classifyAndroidAdbFailure(stderr, stdout);
+    assert.equal(failure?.reason, reason);
+    assert.equal(failure?.hostRefusal, undefined, reason);
+    const error = attachAdbFailureHint(
+      new AppError('COMMAND_FAILED', 'adb exited with code 1', { stderr, stdout }),
+    );
+    assert.equal(Object.hasOwn(error.details ?? {}, 'adbHostRefusal'), false, reason);
+  }
+});
+
 test('ADB discovery classifies transport failures from stderr without trusting stdout', () => {
   const stdoutOnly = androidDiscoveryCommandError(
     'adb devices failed',

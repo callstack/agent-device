@@ -4,6 +4,7 @@
  * `snapshot-helper-session-lifecycle.ts`, which this module acquires through.
  */
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
+import { isAdbHostRefusal } from './adb-failure.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { readAndroidCaptureFailureReason } from '@agent-device/contracts/android-snapshot-quality';
 import type {
@@ -93,16 +94,16 @@ export type AndroidTouchHelperAction = 'gesture' | 'viewport';
 
 /**
  * Only a gesture injects input, so only its failures say whether input reached the device. Its
- * failure is `unknown` on every path: an `ok=false` result carries the thrown `errorType` but no
- * count of events injected before the throw, so a parse refusal and a mid-injection failure read
- * alike.
+ * failure is `unknown` unless the host adb refused the launch: an `ok=false` result carries the
+ * thrown `errorType` but no count of events injected before the throw, so a parse refusal and a
+ * mid-injection failure read alike.
  */
 export function discloseHelperTouchDispatch(
   action: AndroidTouchHelperAction,
   error: unknown,
 ): unknown {
   if (action !== 'gesture' || !(error instanceof AppError)) return error;
-  return discloseDispatch(error, 'unknown');
+  return discloseDispatch(error, isAdbHostRefusal(error) ? 'no' : 'unknown');
 }
 
 export async function runAndroidSnapshotHelperSessionTouchCommand(params: {

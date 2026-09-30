@@ -340,8 +340,44 @@
   {
     "id": "android-adb.input-tap.failed",
     "producer": "android-adb",
-    "trigger": "adb input tap started and failed",
+    "trigger": "adb input tap started and failed with an exit the host adb did not refuse",
     "dispatched": "unknown"
+  },
+  {
+    "id": "android-adb.input-tap.host-refused.device-unauthorized",
+    "producer": "android-adb",
+    "trigger": "adb input tap refused by the host adb (device_unauthorized) before it reached the device; the classifier's hostRefusal verdict, stamped as details.adbHostRefusal, makes it no",
+    "dispatched": "no"
+  },
+  {
+    "id": "android-adb.input-tap.host-refused.device-offline",
+    "producer": "android-adb",
+    "trigger": "adb input tap refused by the host adb (device_offline) before it reached the device; the classifier's hostRefusal verdict, stamped as details.adbHostRefusal, makes it no",
+    "dispatched": "no"
+  },
+  {
+    "id": "android-adb.input-tap.host-refused.multiple-devices",
+    "producer": "android-adb",
+    "trigger": "adb input tap refused by the host adb (multiple_devices) before it reached the device; the classifier's hostRefusal verdict, stamped as details.adbHostRefusal, makes it no",
+    "dispatched": "no"
+  },
+  {
+    "id": "android-adb.input-tap.host-refused.no-devices",
+    "producer": "android-adb",
+    "trigger": "adb input tap refused by the host adb (no_devices) before it reached the device; the classifier's hostRefusal verdict, stamped as details.adbHostRefusal, makes it no",
+    "dispatched": "no"
+  },
+  {
+    "id": "android-adb.input-tap.host-refused.device-not-found",
+    "producer": "android-adb",
+    "trigger": "adb input tap refused by the host adb (device_not_found) before it reached the device; the classifier's hostRefusal verdict, stamped as details.adbHostRefusal, makes it no",
+    "dispatched": "no"
+  },
+  {
+    "id": "android-adb.input-tap.host-refused.server-version-mismatch",
+    "producer": "android-adb",
+    "trigger": "adb input tap refused by the host adb (server_version_mismatch) before it reached the device; the classifier's hostRefusal verdict, stamped as details.adbHostRefusal, makes it no",
+    "dispatched": "no"
   },
   {
     "id": "android-adb.input-tap.double-tap-second-refused",
@@ -390,6 +426,12 @@
     "producer": "android-helper",
     "trigger": "one-shot helper gesture failed before returning parseable output",
     "dispatched": "unknown"
+  },
+  {
+    "id": "android-helper.gesture.host-refused",
+    "producer": "android-helper",
+    "trigger": "one-shot helper gesture: the host adb refused the am instrument launch (device unauthorized) before it reached the device",
+    "dispatched": "no"
   },
   {
     "id": "android-helper.ime.broadcast-tool-missing",

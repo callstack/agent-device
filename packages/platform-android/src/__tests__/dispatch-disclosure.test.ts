@@ -183,13 +183,30 @@ const HELPER_REPORTED_FAILURE = resultRecord({
 });
 const HELPER_RESULT = resultRecord({ ok: 'true', kind: 'swipe', injectedEvents: '4' });
 
+/** The host adb's stderr for each refusal the classifier marks `hostRefusal`, keyed by row suffix. */
+const HOST_REFUSAL_STDERR: Record<string, string> = {
+  'device-unauthorized':
+    "error: device unauthorized.\nThis adb server's $ADB_VENDOR_KEYS is not set",
+  'device-offline': 'error: device offline',
+  'multiple-devices': 'error: more than one device/emulator',
+  'no-devices': 'adb: no devices/emulators found',
+  'device-not-found': "error: device 'emulator-5554' not found",
+  'server-version-mismatch': "adb server version (40) doesn't match this client (41); killing...",
+};
+
 const DRIVERS: Record<string, { drive: () => Promise<unknown>; dispatchedSteps?: number }> = {
   'android-adb.input-tap.tool-missing': {
     drive: () => tapWithAdbAnswer(new AppError('TOOL_MISSING', 'adb not found in PATH')),
   },
   'android-adb.input-tap.failed': {
-    drive: () => tapWithAdbAnswer({ exitCode: 1, stderr: 'error: device offline' }),
+    drive: () => tapWithAdbAnswer({ exitCode: 1, stderr: 'Killed' }),
   },
+  ...Object.fromEntries(
+    Object.entries(HOST_REFUSAL_STDERR).map(([name, stderr]) => [
+      `android-adb.input-tap.host-refused.${name}`,
+      { drive: () => tapWithAdbAnswer({ exitCode: 1, stderr }) },
+    ]),
+  ),
   'android-adb.input-tap.double-tap-second-refused': {
     drive: doubleTapWithSecondTapRefused,
     dispatchedSteps: 1,
@@ -227,6 +244,14 @@ const DRIVERS: Record<string, { drive: () => Promise<unknown>; dispatchedSteps?:
   },
   'android-helper.gesture.failed-after-result': {
     drive: () => oneShotGesture(async () => ({ exitCode: 1, stdout: HELPER_RESULT, stderr: '' })),
+  },
+  'android-helper.gesture.host-refused': {
+    drive: () =>
+      oneShotGesture(async () => ({
+        exitCode: 1,
+        stdout: '',
+        stderr: 'error: device unauthorized.',
+      })),
   },
   'android-helper.gesture.no-parseable-output': {
     drive: () => oneShotGesture(async () => ({ exitCode: 1, stdout: '', stderr: 'boom' })),
