@@ -152,11 +152,13 @@ without needing a simulator.
 
 `contracts/fixtures/dispatch-disclosure.json` is the table for
 `AppErrorDetails.dispatched` on interaction failures: one row per producer
-event, each with the value it must leave. The ADR 0014 side-effect seam is the
-anchor: a failure raised before this request advanced the session runtime
-revision is `no`, one raised after it is `unknown` unless a producer proved
-`yes` (or `no`) first; the daemon applies that rule once, around interaction
-dispatch, and never overwrites a producer's value. Each row names its driver
+event, each with the value it must leave. Only a producer that refuses before
+dispatch (target resolution, admission, a runner pre-send refusal) may say
+`no`, and only one that proved execution may say `yes`. The daemon fills
+`unknown` once, around interaction dispatch, for a failure no producer
+classified, and never overwrites a producer's value: a wrong `no` makes a
+consumer resend an action that already ran, while a wrong `unknown` only costs
+an observation. Each row names its driver
 file by id prefix, that file drives the real producer, and a row marked
 `implementedBy` waits for the branch that ships it.
 

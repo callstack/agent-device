@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import {
   localIdentitiesEqual,
@@ -36,17 +36,20 @@ export function assertExpectedResolvedTarget(
   ) {
     return;
   }
-  throw new AppError(
-    'COMMAND_FAILED',
-    `${action} resolved to a different element than replay verification isolated; the action was not sent`,
-    {
-      reason: REPLAY_TARGET_GUARD_MISMATCH_REASON,
-      observed: observedIdentity,
-      observedStructural,
-      expected: expected.identity,
-      expectedStructural: expected.structural,
-      ...(targetRole ? { targetRole } : {}),
-    },
+  throw discloseDispatch(
+    new AppError(
+      'COMMAND_FAILED',
+      `${action} resolved to a different element than replay verification isolated; the action was not sent`,
+      {
+        reason: REPLAY_TARGET_GUARD_MISMATCH_REASON,
+        observed: observedIdentity,
+        observedStructural,
+        expected: expected.identity,
+        expectedStructural: expected.structural,
+        ...(targetRole ? { targetRole } : {}),
+      },
+    ),
+    'no',
   );
 }
 

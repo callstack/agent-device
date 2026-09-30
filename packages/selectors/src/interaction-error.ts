@@ -18,4 +18,6 @@ export const INTERACTION_ERROR_REASONS = {
    * `details.snapshotQuality` carries the verdict.
    */
   captureSparse: 'capture_sparse',
+  /** The target resolved, but another visible element covers it. */
+  targetCovered: 'target_covered',
 } as const;

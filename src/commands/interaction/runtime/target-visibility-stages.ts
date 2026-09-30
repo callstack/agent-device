@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import type {
   Point,
   SnapshotKeyboardBandFact,
@@ -13,6 +13,7 @@ import {
 } from '@agent-device/selectors/selector-pipeline';
 import type { SelectorPipelinePolicy } from '@agent-device/selectors/selector-pipeline-policy';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import {
   classifyOffscreenScrollDirection,
   type OffscreenScrollDirection,
@@ -33,15 +34,19 @@ export function buildCoveredInteractionError(params: {
   action: InteractionAction;
   selector?: string;
 }): AppError {
-  return new AppError(
-    'COMMAND_FAILED',
-    `${params.label} is covered by another visible element and cannot ${interactionVerb(params.action)} safely`,
-    {
-      hint: 'Use a different visible target, scroll it clear of the overlay, or inspect with snapshot/screenshot before retrying.',
-      ...(params.selector ? { selector: params.selector } : {}),
-      ref: `@${params.node.ref}`,
-      interactionBlocked: params.node.interactionBlocked,
-    },
+  return discloseDispatch(
+    new AppError(
+      'COMMAND_FAILED',
+      `${params.label} is covered by another visible element and cannot ${interactionVerb(params.action)} safely`,
+      {
+        reason: INTERACTION_ERROR_REASONS.targetCovered,
+        hint: 'Use a different visible target, scroll it clear of the overlay, or inspect with snapshot/screenshot before retrying.',
+        ...(params.selector ? { selector: params.selector } : {}),
+        ref: `@${params.node.ref}`,
+        interactionBlocked: params.node.interactionBlocked,
+      },
+    ),
+    'no',
   );
 }
 
@@ -209,11 +214,14 @@ export async function throwIfOffscreenInteractionTarget(
   // boundary the rejection above used, so partial clips and off-screen
   // containers get a direction too, not just fully-scrolled-out items.
   const scrollDirection = classifyOffscreenScrollDirection(node, visibility);
-  throw new AppError('COMMAND_FAILED', failure.message, {
-    ...failure.details,
-    rect: node.rect,
-    viewport,
-    ...(scrollDirection ? { scrollDirection } : {}),
-    hint: failure.hint(scrollDirection),
-  });
+  throw discloseDispatch(
+    new AppError('COMMAND_FAILED', failure.message, {
+      ...failure.details,
+      rect: node.rect,
+      viewport,
+      ...(scrollDirection ? { scrollDirection } : {}),
+      hint: failure.hint(scrollDirection),
+    }),
+    'no',
+  );
 }

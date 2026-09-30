@@ -1,16 +1,30 @@
 [
   {
-    "id": "daemon.refusal-before-seam",
+    "id": "daemon.refusal.ref-not-found",
     "phase": "before-seam",
     "producer": "daemon",
-    "trigger": "interaction failure raised before expireRefFrame advanced the session runtime revision",
+    "trigger": "target resolution refused the @ref (refMissRefusal) before any backend call",
     "dispatched": "no"
   },
   {
-    "id": "daemon.unclassified-after-seam",
+    "id": "daemon.refusal.admission",
+    "phase": "before-seam",
+    "producer": "daemon",
+    "trigger": "targeted-touch admission refused the request (admitTargetedTouch) before any backend call",
+    "dispatched": "no"
+  },
+  {
+    "id": "daemon.unclassified",
     "phase": "after-seam",
     "producer": "daemon",
-    "trigger": "interaction failure raised after expireRefFrame with no producer verdict",
+    "trigger": "an interaction failure no producer classified; the fallback is unknown whatever the session runtime revision did",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon.unclassified.session-replaced",
+    "phase": "after-seam",
+    "producer": "daemon",
+    "trigger": "an unclassified failure after the session object was replaced mid-request",
     "dispatched": "unknown"
   },
   {
