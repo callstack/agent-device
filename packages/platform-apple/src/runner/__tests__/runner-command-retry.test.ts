@@ -5,6 +5,7 @@ import {
   createTestRequestCancellation,
   makeRunnerSession,
   runnerConnectFailure,
+  unwrittenConnectRefusal,
 } from './runner-session-fixtures.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { Deadline } from '../host.ts';
@@ -50,10 +51,6 @@ vi.mock('../runner-xctestrun.ts', async () => {
 import { prepareIosRunner, runAppleRunnerCommand } from '../runner-client.ts';
 import { resetRunnerRecycleLedgerForTests } from '../runner-recycle-ledger.ts';
 import type { RunnerXctestrunArtifact } from '../runner-xctestrun.ts';
-
-/** Every connect attempt was refused before a byte was written, so a restart may resend the command. */
-const unwrittenConnectRefusal = (): AppError =>
-  runnerConnectFailure('runner_connect_refused', undefined, { dispatched: 'no' });
 
 const requestCancellation = createTestRequestCancellation();
 const { markRequestCanceled, clearRequestCanceled, isRequestCanceled } = requestCancellation;
@@ -1193,7 +1190,6 @@ test('a later command in the same request cannot pay for a second recycle boot',
   const requestId = 'req-restart-cap';
   const staleSession = makeRunnerSession({ port: 8100, state: 'ready' });
   const freshSession = makeRunnerSession({ port: 8101, state: 'starting' });
-
   mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
     .mockRejectedValueOnce(unwrittenConnectRefusal())

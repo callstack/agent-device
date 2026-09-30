@@ -92,6 +92,10 @@ export function runnerConnectFailure(
   });
 }
 
+/** Every connect attempt was refused before a byte was written, so a restart may resend the command. */
+export const unwrittenConnectRefusal = (): AppError =>
+  runnerConnectFailure('runner_connect_refused', undefined, { dispatched: 'no' });
+
 // Records everything the runner package emits through host.emitDiagnostic /
 // host.withDiagnosticTimer during `callback` and renders it back as the same
 // newline-delimited-JSON shape a flushed diagnostics session file holds, so
