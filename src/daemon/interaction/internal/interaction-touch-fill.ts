@@ -107,15 +107,10 @@ async function admitFill(
 async function readFillAdmission(
   params: FillParams,
 ): Promise<{ response: DaemonResponse } | { admitted: AdmittedFill }> {
-  const { req, sessionName, sessionStore } = params;
-  const session = sessionStore.get(sessionName);
-  if (session) {
-    const unsupportedSurfaceResponse = unsupportedMacOsDesktopSurfaceInteraction(session, 'fill');
-    if (unsupportedSurfaceResponse) return { response: unsupportedSurfaceResponse };
-  }
-  if (!session) return { response: noActiveSessionError() };
-  const parsedTarget = parseFillTarget(req.positionals ?? []);
-  if (!parsedTarget.ok) return { response: parsedTarget.response };
+  const { req } = params;
+  const target = readFillTarget(params);
+  if ('response' in target) return target;
+  const { session, parsedTarget } = target;
   const prepared = await prepareTouchDispatch(
     params,
     session,
@@ -145,6 +140,18 @@ async function readFillAdmission(
       staleRefsWarning: refPreamble.staleRefsWarning,
     },
   };
+}
+
+function readFillTarget(
+  params: FillParams,
+): { response: DaemonResponse } | Pick<AdmittedFill, 'session' | 'parsedTarget'> {
+  const session = params.sessionStore.get(params.sessionName);
+  if (!session) return { response: noActiveSessionError() };
+  const unsupportedSurfaceResponse = unsupportedMacOsDesktopSurfaceInteraction(session, 'fill');
+  if (unsupportedSurfaceResponse) return { response: unsupportedSurfaceResponse };
+  const parsedTarget = parseFillTarget(params.req.positionals ?? []);
+  if (!parsedTarget.ok) return { response: parsedTarget.response };
+  return { session, parsedTarget };
 }
 
 // The fill @ref preamble shared with the press path's shape: read staleness

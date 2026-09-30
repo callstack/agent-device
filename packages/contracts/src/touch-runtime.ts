@@ -268,11 +268,7 @@ async function executeGenericPress(
   try {
     for (let index = 0; index < options.count; index += 1) {
       const [dx, dy] = pressJitter(index, options.jitterPx);
-      const result = doubleTap
-        ? await doubleTap.call(interactor, point.x + dx, point.y + dy)
-        : options.holdMs > 0
-          ? await interactor.longPress(point.x + dx, point.y + dy, options.holdMs)
-          : await interactor.tap(point.x + dx, point.y + dy);
+      const result = await pressOnce(interactor, doubleTap, point.x + dx, point.y + dy, options);
       dispatchedPresses += 1;
       first ??= result;
       if (index < options.count - 1 && options.intervalMs > 0) {
@@ -283,6 +279,18 @@ async function executeGenericPress(
     throw discloseDispatchAfterSteps(error, dispatchedPresses);
   }
   return first;
+}
+
+async function pressOnce(
+  interactor: Interactor,
+  doubleTap: NonNullable<Interactor['doubleTap']> | undefined,
+  x: number,
+  y: number,
+  options: PressPointOptions,
+): Promise<Record<string, unknown> | void> {
+  if (doubleTap) return await doubleTap.call(interactor, x, y);
+  if (options.holdMs > 0) return await interactor.longPress(x, y, options.holdMs);
+  return await interactor.tap(x, y);
 }
 
 const PRESS_JITTER = [

@@ -227,28 +227,14 @@ async function typeAndroidImeHelper(
   delayMs: number,
 ): Promise<void> {
   const adb = resolveAndroidAdbExecutor(device);
-  const parts = text.split('\n');
-  let dispatchedSteps = 0;
-  try {
-    for (const [partIndex, part] of parts.entries()) {
-      const chunks = delayMs > 0 ? chunkAndroidInputText(part, 1) : [part];
-      for (const [chunkIndex, chunk] of chunks.entries()) {
-        if (chunk) {
-          await sendAndroidImeHelperText(adb, packageName, chunk);
-          dispatchedSteps += 1;
-        }
-        if (delayMs > 0 && (chunkIndex + 1 < chunks.length || partIndex + 1 < parts.length)) {
-          await sleep(delayMs);
-        }
-      }
-      if (partIndex + 1 < parts.length) {
-        await runAndroidShell(device, ['input', 'keyevent', 'ENTER']);
-        dispatchedSteps += 1;
-      }
-    }
-  } catch (error) {
-    throw discloseDispatchAfterSteps(error, dispatchedSteps);
-  }
+  await sendAndroidTextSteps(
+    device,
+    planAndroidTextSteps(text, delayMs > 0 ? 1 : Infinity, delayMs),
+    {
+      delayMs,
+      sendChunk: async (chunk) => await sendAndroidImeHelperText(adb, packageName, chunk),
+    },
+  );
   emitAndroidTextDiagnostic('type', 'test-ime', text);
 }
 
@@ -294,32 +280,74 @@ async function typeAndroidShell(
   device: DeviceInfo,
   options: { action: AndroidTextInputAction; text: string; chunkSize: number; delayMs: number },
 ): Promise<void> {
-  const parts = options.text.split('\n');
+  await sendAndroidTextSteps(
+    device,
+    planAndroidTextSteps(options.text, options.chunkSize, options.delayMs),
+    {
+      delayMs: options.delayMs,
+      sendChunk: async (chunk) => {
+        try {
+          await typeAndroidShellChunk(device, chunk);
+        } catch (error) {
+          throw discloseAdbInputDispatch(error);
+        }
+      },
+    },
+  );
+  emitAndroidTextDiagnostic(options.action, 'adb-shell', options.text);
+}
+
+/**
+ * One step of multi-line text entry: a chunk of one line (empty for an empty line, which sends
+ * nothing), or the ENTER keyevent between lines. A chunk pauses after itself unless it ends the text.
+ */
+type AndroidTextStep = { kind: 'chunk'; text: string; pauseAfter: boolean } | { kind: 'enter' };
+
+function planAndroidTextSteps(text: string, chunkSize: number, delayMs: number): AndroidTextStep[] {
+  const parts = text.split('\n');
+  return parts.flatMap((part, partIndex) => {
+    const chunks = chunkAndroidInputText(part, chunkSize);
+    const lastPart = partIndex + 1 === parts.length;
+    const chunkSteps = chunks.map((chunk, chunkIndex): AndroidTextStep => ({
+      kind: 'chunk',
+      text: chunk,
+      pauseAfter: delayMs > 0 && !(lastPart && chunkIndex + 1 === chunks.length),
+    }));
+    return lastPart ? chunkSteps : [...chunkSteps, { kind: 'enter' }];
+  });
+}
+
+/** Each non-empty chunk and each ENTER is one dispatched step of the series. */
+async function sendAndroidTextSteps(
+  device: DeviceInfo,
+  steps: readonly AndroidTextStep[],
+  options: { delayMs: number; sendChunk: (chunk: string) => Promise<void> },
+): Promise<void> {
   let dispatchedSteps = 0;
   try {
-    for (const [partIndex, part] of parts.entries()) {
-      const chunks = chunkAndroidInputText(part, options.chunkSize);
-      for (const [chunkIndex, chunk] of chunks.entries()) {
-        if (chunk) {
-          await typeAndroidShellChunk(device, chunk);
-          dispatchedSteps += 1;
-        }
-        if (
-          options.delayMs > 0 &&
-          (chunkIndex + 1 < chunks.length || partIndex + 1 < parts.length)
-        ) {
-          await sleep(options.delayMs);
-        }
+    for (const step of steps) {
+      if (step.kind === 'enter') {
+        await pressAndroidEnterKey(device);
+        dispatchedSteps += 1;
+        continue;
       }
-      if (partIndex + 1 < parts.length) {
-        await runAndroidShell(device, ['input', 'keyevent', 'ENTER']);
+      if (step.text) {
+        await options.sendChunk(step.text);
         dispatchedSteps += 1;
       }
+      if (step.pauseAfter) await sleep(options.delayMs);
     }
   } catch (error) {
-    throw discloseDispatchAfterSteps(discloseAdbInputDispatch(error), dispatchedSteps);
+    throw discloseDispatchAfterSteps(error, dispatchedSteps);
   }
-  emitAndroidTextDiagnostic(options.action, 'adb-shell', options.text);
+}
+
+async function pressAndroidEnterKey(device: DeviceInfo): Promise<void> {
+  try {
+    await runAndroidShell(device, ['input', 'keyevent', 'ENTER']);
+  } catch (error) {
+    throw discloseAdbInputDispatch(error);
+  }
 }
 
 async function typeAndroidShellChunk(device: DeviceInfo, text: string): Promise<void> {
