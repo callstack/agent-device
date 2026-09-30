@@ -203,7 +203,7 @@ async function readReusableLocalDaemon(settings: DaemonClientSettings): Promise<
 
   const decision = await resolveDaemonTakeover(existing, {
     onClientTransport: () => canReachReusableDaemon(existing, settings.transportPreference),
-    onAnyAdvertisedTransport: () => canConnectReusableDaemon(existing, 'auto'),
+    onAnyAdvertisedTransport: () => canReachReusableDaemon(existing, 'auto'),
   });
   if (decision.kind === 'reuse') return existing;
   if (decision.kind === 'refuseNewer') {

@@ -20,6 +20,9 @@ import {
   supportsLoopbackBind,
 } from '../../__tests__/test-utils/loopback.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { AppError } from '@agent-device/kernel/errors';
+
+const NEWER_DAEMON_VERSION = '999.0.0';
 
 // The spawned stand-in's identity is read once and pinned: a second real `ps` can miss its
 // deadline under suite load and misclassify the live process as gone.
@@ -98,6 +101,7 @@ type LiveStandIn = { stateDir: string; pid: number };
  */
 async function withLiveStandIn(
   t: { skip: (reason: string) => void },
+  version: string,
   body: (standIn: LiveStandIn) => Promise<void>,
 ): Promise<void> {
   if (!(await supportsLoopbackBind())) {
@@ -152,7 +156,7 @@ async function withLiveStandIn(
         transport: 'socket',
         token: 'local-secret',
         pid,
-        version: readVersion(),
+        version,
         codeSignature: resolveCurrentDaemonCodeSignature(),
         processStartTime,
       })}\n`,
@@ -164,6 +168,7 @@ async function withLiveStandIn(
     await body({ stateDir, pid });
   } finally {
     mockMissNextProbe.value = false;
+    mockSpawnDaemon.mockReset();
     mockReadProcessStartTime.mockReset();
     mockReadProcessCommand.mockReset();
     await closeLoopbackServer(server);
@@ -187,7 +192,7 @@ function sendSmoke(stateDir: string) {
 }
 
 test('sendToDaemon keeps a live daemon whose first probe missed', async (t) => {
-  await withLiveStandIn(t, async ({ stateDir, pid }) => {
+  await withLiveStandIn(t, readVersion(), async ({ stateDir, pid }) => {
     mockMissNextProbe.value = true;
 
     const response = await sendSmoke(stateDir);
@@ -204,7 +209,29 @@ test('sendToDaemon keeps a live daemon whose first probe missed', async (t) => {
   });
 });
 
-test('sendToDaemon replaces a daemon whose process is gone after a single probe', async (t) => {
+test('sendToDaemon refuses a live newer daemon whose first probe missed', async (t) => {
+  await withLiveStandIn(t, NEWER_DAEMON_VERSION, async ({ stateDir, pid }) => {
+    mockMissNextProbe.value = true;
+
+    await assert.rejects(
+      () => sendSmoke(stateDir),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.details?.daemonVersion, NEWER_DAEMON_VERSION);
+        return true;
+      },
+    );
+
+    assert.deepEqual(probeAnswers.slice(0, 2), [false, true]);
+    assert.equal(isProcessAlive(pid), true);
+    assert.equal(mockSpawnDaemon.mock.calls.length, 0, 'no replacement daemon is spawned');
+  });
+});
+
+async function expectDeadDaemonReplaced(
+  t: { skip: (reason: string) => void },
+  deadVersion: string,
+): Promise<void> {
   if (!(await supportsLoopbackBind())) {
     t.skip('loopback listeners are not permitted in this environment');
     return;
@@ -224,7 +251,7 @@ test('sendToDaemon replaces a daemon whose process is gone after a single probe'
       socket.end(`${JSON.stringify({ ok: true, data: { via: 'fresh-daemon' } })}\n`);
     });
   });
-  const writeInfo = (port: number, pid: number) => {
+  const writeInfo = (port: number, pid: number, version: string) => {
     const paths = resolveDaemonPaths(stateDir);
     fs.mkdirSync(paths.baseDir, { recursive: true });
     fs.writeFileSync(
@@ -234,7 +261,7 @@ test('sendToDaemon replaces a daemon whose process is gone after a single probe'
         transport: 'socket',
         token: 'local-secret',
         pid,
-        version: readVersion(),
+        version,
         codeSignature: resolveCurrentDaemonCodeSignature(),
         processStartTime: readProcessStartTime(process.pid) ?? undefined,
       })}\n`,
@@ -249,9 +276,9 @@ test('sendToDaemon replaces a daemon whose process is gone after a single probe'
     const unused = net.createServer();
     const deadPort = await listenOnLoopback(unused);
     await closeLoopbackServer(unused);
-    writeInfo(deadPort, deadPid);
+    writeInfo(deadPort, deadPid, deadVersion);
     mockSpawnDaemon.mockImplementation(() => {
-      writeInfo(freshPort, process.pid);
+      writeInfo(freshPort, process.pid, readVersion());
       return { pid: process.pid, exited: new Promise(() => {}) };
     });
     probeAnswers.length = 0;
@@ -277,4 +304,12 @@ test('sendToDaemon replaces a daemon whose process is gone after a single probe'
     await closeLoopbackServer(fresh);
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
+}
+
+test('sendToDaemon replaces a daemon whose process is gone after a single probe', async (t) => {
+  await expectDeadDaemonReplaced(t, readVersion());
+});
+
+test('sendToDaemon replaces a newer daemon whose process is gone after a single probe', async (t) => {
+  await expectDeadDaemonReplaced(t, NEWER_DAEMON_VERSION);
 });
