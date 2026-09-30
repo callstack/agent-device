@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import {
   countDiagnosticEventsByPhase,
   withDiagnosticsScope,
@@ -252,7 +252,9 @@ test('an unsupported app-termination route falls back to the sibling route once'
 
   await withDiagnosticsScope({ command: 'close' }, async () => {
     await client.terminateApp('com.example.app');
-    assert.equal(countDiagnosticEventsByPhase(['webdriver_route_unsupported']), 1);
+    await vi.waitFor(() =>
+      assert.equal(countDiagnosticEventsByPhase(['webdriver_route_unsupported']), 1),
+    );
   });
 
   assert.equal(sendsTo('POST /session/:id/appium/device/terminate_app'), 1);

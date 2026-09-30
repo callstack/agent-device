@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import net, { type AddressInfo } from 'node:net';
-import { afterEach, test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import {
   countDiagnosticEventsByPhase,
   withDiagnosticsScope,
@@ -298,9 +298,11 @@ for (const { status, body, unsupported } of ROUTE_ANSWERS) {
           return true;
         },
       );
-      assert.equal(
-        countDiagnosticEventsByPhase(['webdriver_route_unsupported']),
-        unsupported ? 1 : 0,
+      await vi.waitFor(() =>
+        assert.equal(
+          countDiagnosticEventsByPhase(['webdriver_route_unsupported']),
+          unsupported ? 1 : 0,
+        ),
       );
     });
   });

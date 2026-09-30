@@ -1,5 +1,4 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 import { agentDeviceRequestHeaders } from './request-headers.ts';
 import { basicAuthHeader, trimLeadingSlash, withTrailingSlash } from './webdriver-utils.ts';
@@ -203,9 +202,7 @@ export class WebDriverTransport {
     const payload = text ? parseJsonResponse(text) : {};
     if (ok) return readWebDriverValue(payload);
     const error = webdriverError(status, payload);
-    if (isWebDriverRouteUnsupported(error)) {
-      emitDiagnostic({ phase: WEBDRIVER_ROUTE_UNSUPPORTED_REASON, data: { method, path, status } });
-    }
+    if (isWebDriverRouteUnsupported(error)) reportRouteUnsupported({ method, path, status });
     throw error;
   }
 
@@ -369,6 +366,18 @@ function isUnsupportedRouteAnswer(status: number, payload: unknown): boolean {
     value && typeof value === 'object' ? (value as { error?: unknown }).error : undefined;
   if (typeof code === 'string') return UNSUPPORTED_ROUTE_ERROR_CODES.has(code.toLowerCase());
   return UNSUPPORTED_ROUTE_STATUSES.has(status);
+}
+
+/**
+ * Records the answer in the request diagnostics. The emitter loads on demand because this path is
+ * rare and the transport sits in the provider's eager import closure.
+ */
+function reportRouteUnsupported(data: { method: string; path: string; status: number }): void {
+  void import('@agent-device/host-kit/diagnostics')
+    .then(({ emitDiagnostic }) =>
+      emitDiagnostic({ phase: WEBDRIVER_ROUTE_UNSUPPORTED_REASON, data }),
+    )
+    .catch(() => undefined);
 }
 
 /**
