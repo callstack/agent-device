@@ -31,7 +31,8 @@ import {
   sendAndroidImeHelperText,
 } from './ime-helper.ts';
 import { isAndroidTestImeActive } from './ime-lifecycle.ts';
-import { discloseAdbInputDispatch, focusAndroid } from './input-actions.ts';
+import { discloseAdbInputDispatch } from './adb-failure.ts';
+import { focusAndroid } from './input-actions.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
 /**

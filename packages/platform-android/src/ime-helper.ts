@@ -10,7 +10,7 @@ import {
   type AndroidImeHelperManifest,
 } from './helper-artifacts.ts';
 import type { ShellWord } from '@agent-device/kernel/device-shell';
-import { androidAdbResultError } from './adb-failure.ts';
+import { androidAdbResultError, discloseAdbInputDispatch } from './adb-failure.ts';
 import { runAdbShell } from './adb-executor.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from './adb-transport.ts';
 import { requireAndroidAdbHost } from './adb-host.ts';
@@ -174,14 +174,18 @@ async function sendAndroidImeHelperBroadcast(
   for (const [key, value] of Object.entries(extras)) {
     words.push('--es', key, value);
   }
-  const result = await runAdbShell(adb, words, {
-    allowFailure: true,
-    timeoutMs: ANDROID_IME_HELPER_BROADCAST_TIMEOUT_MS,
-  });
-  if (result.exitCode !== 0) {
-    throw androidAdbResultError('Android IME helper broadcast failed', result, {
-      action,
-      packageName,
+  try {
+    const result = await runAdbShell(adb, words, {
+      allowFailure: true,
+      timeoutMs: ANDROID_IME_HELPER_BROADCAST_TIMEOUT_MS,
     });
+    if (result.exitCode !== 0) {
+      throw androidAdbResultError('Android IME helper broadcast failed', result, {
+        action,
+        packageName,
+      });
+    }
+  } catch (error) {
+    throw discloseAdbInputDispatch(error);
   }
 }

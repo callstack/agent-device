@@ -179,6 +179,7 @@ export {
 export {
   appSwitcherAndroid,
   backAndroid,
+  doubleTapAndroid,
   focusAndroid,
   getAndroidScreenSize,
   homeAndroid,

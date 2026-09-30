@@ -14,6 +14,7 @@ import {
   longPressAndroid,
   openAndroidApp,
   openAndroidDevice,
+  doubleTapAndroid,
   pressAndroid,
   pressAndroidEnter,
   pressAndroidTvRemote,
@@ -70,10 +71,7 @@ export function createAndroidInteractor(
     openDevice: () => openAndroidDevice(device),
     close: (app) => closeAndroidApp(device, app),
     tap: (x, y) => pressAndroid(device, x, y),
-    doubleTap: async (x, y) => {
-      await pressAndroid(device, x, y);
-      await pressAndroid(device, x, y);
-    },
+    doubleTap: (x, y) => doubleTapAndroid(device, x, y),
     longPress: (x, y, durationMs) => longPressAndroid(device, x, y, durationMs),
     focus: (x, y) => focusAndroid(device, x, y),
     type: (text, delayMs) => typeAndroid(device, text, delayMs),
