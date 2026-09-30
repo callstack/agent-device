@@ -21,8 +21,6 @@ export type DispatchDisclosureRow = {
   dispatched: DispatchDisclosure;
   /** Direct iOS selector tap rows: whether the failure delegates to the tree path, which taps again. */
   fallsBack?: boolean;
-  /** A branch that ships this row's producer; the row is not owned here until it merges. */
-  implementedBy?: string;
 };
 
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
@@ -34,8 +32,7 @@ export const DISPATCH_DISCLOSURE_TABLE_PATH = path.join(
 
 /**
  * The test file that drives each row through its real producer, keyed by row-id prefix; the
- * longest matching prefix owns the row. A row naming `implementedBy` has no owner until that branch
- * lands. Each driver file runs one test per owned row with the loop `for (const row of <ROWS>) {`
+ * longest matching prefix owns the row. Each driver file runs one test per owned row with the loop `for (const row of <ROWS>) {`
  * followed by `test(\`${row.id}`, which {@link DISPATCH_DISCLOSURE_ROW_LOOP} matches.
  */
 export const DISPATCH_DISCLOSURE_DRIVER_OWNERS: Readonly<Record<string, string>> = {
@@ -74,7 +71,7 @@ export function parseDispatchDisclosureTable(tableText: string): DispatchDisclos
   return JSON.parse(tableText) as DispatchDisclosureRow[];
 }
 
-/** The rows the given driver file owns, less those another branch ships. */
+/** The rows the given driver file owns. */
 export function dispatchDisclosureRowsOwnedBy(
   driverFileUrl: string,
   tableText: string,
@@ -84,8 +81,7 @@ export function dispatchDisclosureRowsOwnedBy(
     .split(path.sep)
     .join('/');
   return parseDispatchDisclosureTable(tableText).filter(
-    (row) =>
-      row.implementedBy === undefined && dispatchDisclosureDriverOwner(row.id) === driverFile,
+    (row) => dispatchDisclosureDriverOwner(row.id) === driverFile,
   );
 }
 

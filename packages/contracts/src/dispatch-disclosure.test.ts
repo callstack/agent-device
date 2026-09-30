@@ -41,16 +41,14 @@ test('dispatch-disclosure rows are unique and use the declared vocabulary', () =
     assert.ok(DISPATCH_VALUES.includes(row.dispatched), row.id);
     assert.ok(row.trigger.trim().length > 0, row.id);
     assert.equal(row.fallsBack !== undefined, row.id.startsWith('maestro-direct.'), row.id);
-    if (row.implementedBy !== undefined) assert.ok(row.id.startsWith('webdriver.'), row.id);
   }
 });
 
-test('every row without implementedBy has a driver file, and every owner prefix owns a row', () => {
+test('every row has a driver file, and every owner prefix owns a row', () => {
   const rows = parseDispatchDisclosureTable(
     fs.readFileSync(DISPATCH_DISCLOSURE_TABLE_PATH, 'utf8'),
   );
   const unowned = rows
-    .filter((row) => row.implementedBy === undefined)
     .filter((row) => dispatchDisclosureDriverOwner(row.id) === undefined)
     .map((row) => row.id);
   assert.deepEqual(unowned, []);
