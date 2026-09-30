@@ -1,4 +1,4 @@
-import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import { isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { ensureBootedSimulator, requireSimulatorDevice } from './simulator.ts';
 import { readMacOsClipboardText, writeMacOsClipboardText } from '../os/macos/apps.ts';
@@ -20,9 +20,10 @@ export async function readIosClipboardText(device: DeviceInfo): Promise<string> 
 }
 
 /**
- * Writes the device's pasteboard: the macOS host's directly, a simulator's from the runner's own
- * process. `simctl pbcopy` hands the simulator only a promise of the data, owned by the `simctl`
- * process that exits before anything on the device reads it, so the pasteboard ends up empty.
+ * Writes the device's pasteboard: the macOS host's directly, and a simulator's from the runner's
+ * own process. `simctl pbcopy` hands the simulator only a promise of the data, owned by the `simctl`
+ * process that exits before anything on the device reads it, so the pasteboard ends up empty. tvOS
+ * has no `UIPasteboard` for its runner to write, so a tvOS simulator keeps `simctl pbcopy`.
  */
 export async function writeIosClipboardText(
   device: DeviceInfo,
@@ -34,5 +35,13 @@ export async function writeIosClipboardText(
     return;
   }
   requireSimulatorDevice(device, 'clipboard');
+  if (isTvOsDevice(device)) {
+    await ensureBootedSimulator(device);
+    requireExecSuccess(
+      await runSimctlForDevice(device, ['pbcopy', device.id], { allowFailure: true, stdin: text }),
+      'Failed to write tvOS simulator clipboard',
+    );
+    return;
+  }
   await runAppleRunnerCommand(device, { command: 'pasteboardWrite', text }, runnerOptions);
 }

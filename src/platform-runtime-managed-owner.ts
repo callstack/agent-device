@@ -38,7 +38,9 @@ const REVIEWED_MANAGED_OPERATIONS: Partial<Record<ManagedOperationKey, 'both' | 
   // local-tool path as the write (`simctl ui ... content_size`, `settings get system font_scale`).
   readSetting: 'both',
   readClipboard: 'both',
-  writeClipboard: 'both',
+  // An iOS simulator's pasteboard is written by the XCTest runner, which no managed-device
+  // automation path has been reviewed to start.
+  writeClipboard: 'android',
   captureScreenshot: 'android',
 };
 
