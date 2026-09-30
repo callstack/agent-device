@@ -5,7 +5,7 @@ import type {
   SnapshotNode,
   SnapshotState,
 } from '@agent-device/kernel/snapshot';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import {
   resolveKeyboardTapOcclusion,
@@ -110,14 +110,17 @@ function buildKeyboardOcclusionError(params: {
   targetRect: NonNullable<SnapshotNode['rect']>;
   surface: KeyboardSurface;
 }): AppError {
-  return new AppError(
-    'COMMAND_FAILED',
-    `${params.label} is behind the visible keyboard and cannot ${interactionVerb(params.action)} safely`,
-    {
-      ...TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS,
-      ref: `@${params.ref}`,
-      rect: params.targetRect,
-      keyboardFrame: params.surface.frame,
-    },
+  return discloseDispatch(
+    new AppError(
+      'COMMAND_FAILED',
+      `${params.label} is behind the visible keyboard and cannot ${interactionVerb(params.action)} safely`,
+      {
+        ...TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS,
+        ref: `@${params.ref}`,
+        rect: params.targetRect,
+        keyboardFrame: params.surface.frame,
+      },
+    ),
+    'no',
   );
 }

@@ -20,9 +20,9 @@ import { handleInteractionCommands } from '../../index.ts';
 import { assertAndroidPressStayedInApp } from '../interaction-android-escape.ts';
 import { contextFromFlags, makeSession } from './interaction-touch-fixtures.ts';
 
-// contracts/fixtures/dispatch-disclosure.json, daemon seam and post-action guard rows: the seam
-// rows drive a real `press` through the daemon interaction handler with only the device touch
-// mocked; the guard row drives the guard itself.
+// contracts/fixtures/dispatch-disclosure.json, daemon and post-action guard rows: the daemon rows
+// drive a real `press` through the daemon interaction handler with only the device touch mocked;
+// the guard row drives the guard itself.
 
 vi.mock('../../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(),
@@ -32,7 +32,13 @@ beforeEach(() => {
   resetGetRuntimeFixture();
 });
 
-async function pressRef(ref: string): Promise<unknown> {
+type PressScenario = {
+  positionals: string[];
+  /** Runs inside the device touch, before it fails. */
+  duringTouch?: (store: ReturnType<typeof makeSessionStore>, sessionName: string) => void;
+};
+
+async function press({ positionals, duringTouch }: PressScenario): Promise<unknown> {
   const sessionStore = makeSessionStore();
   const session = makeSession('dispatch-disclosure');
   session.snapshot = {
@@ -50,8 +56,14 @@ async function pressRef(ref: string): Promise<unknown> {
     backend: 'xctest',
   };
   sessionStore.set(session.name, session);
+  if (duringTouch) {
+    mockTapPoint.mockImplementationOnce(async () => {
+      duringTouch(sessionStore, session.name);
+      throw new AppError('COMMAND_FAILED', 'touch failed');
+    });
+  }
   const response = await handleInteractionCommands({
-    req: { token: 't', session: session.name, command: 'press', positionals: [ref], flags: {} },
+    req: { token: 't', session: session.name, command: 'press', positionals, flags: {} },
     sessionName: session.name,
     sessionStore,
     contextFromFlags,
@@ -61,11 +73,19 @@ async function pressRef(ref: string): Promise<unknown> {
   throw new AppError(response.error.code, response.error.message, response.error.details);
 }
 
+async function refusedPress(positionals: string[]): Promise<unknown> {
+  try {
+    return await press({ positionals });
+  } finally {
+    assert.equal(mockTapPoint.mock.calls.length, 0, 'a refusal must not reach the device');
+  }
+}
+
 async function pressAfterUnclassifiedTouchFailure(
   details?: Record<string, unknown>,
 ): Promise<unknown> {
   mockTapPoint.mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'touch failed', details));
-  return await pressRef('@e1');
+  return await press({ positionals: ['@e1'] });
 }
 
 async function pressThatLeftTheApp(): Promise<unknown> {
@@ -80,14 +100,18 @@ async function pressThatLeftTheApp(): Promise<unknown> {
 }
 
 const DRIVERS: Record<string, () => Promise<unknown>> = {
-  'daemon.refusal-before-seam': async () => {
-    try {
-      return await pressRef('@e9');
-    } finally {
-      assert.equal(mockTapPoint.mock.calls.length, 0, 'a refusal must not reach the device');
-    }
-  },
-  'daemon.unclassified-after-seam': () => pressAfterUnclassifiedTouchFailure(),
+  'daemon.refusal.ref-not-found': () => refusedPress(['@e9']),
+  'daemon.refusal.admission': () => refusedPress([]),
+  'daemon.unclassified': () => pressAfterUnclassifiedTouchFailure(),
+  'daemon.unclassified.session-replaced': () =>
+    press({
+      positionals: ['@e1'],
+      duringTouch: (store, name) => {
+        const current = store.get(name);
+        assert.ok(current);
+        store.set(name, { ...current });
+      },
+    }),
   'post-action-guard.android-press-left-app': pressThatLeftTheApp,
 };
 
@@ -112,7 +136,7 @@ for (const row of ROWS) {
   });
 }
 
-test('the seam keeps a producer verdict instead of inferring its own', async () => {
+test('the daemon keeps a producer verdict instead of inferring its own', async () => {
   for (const dispatched of ['no', 'yes'] satisfies DispatchDisclosure[]) {
     await assert.rejects(pressAfterUnclassifiedTouchFailure({ dispatched }), (error: unknown) => {
       assert.ok(error instanceof AppError);

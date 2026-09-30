@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import type { Point, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { normalizeRef } from '@agent-device/kernel/snapshot';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
@@ -22,21 +22,27 @@ export function resolveNodeTouchPoint(
   });
   if (resolution.kind === 'resolved') return resolution.point;
   if (resolution.kind === 'invalid') {
-    throw new AppError('COMMAND_FAILED', failure.invalidMessage, {
-      reason: INTERACTION_ERROR_REASONS.targetBoundsInvalid,
-      ...bareTargetDetails(failure.blockedTargetDetails),
-    });
+    throw discloseDispatch(
+      new AppError('COMMAND_FAILED', failure.invalidMessage, {
+        reason: INTERACTION_ERROR_REASONS.targetBoundsInvalid,
+        ...bareTargetDetails(failure.blockedTargetDetails),
+      }),
+      'no',
+    );
   }
-  throw new AppError(
-    'COMMAND_FAILED',
-    `${failure.blockedTargetLabel} has no parent-owned touch point outside its interactive descendants`,
-    {
-      reason: 'covered_by_interactive_descendants',
-      ...failure.blockedTargetDetails,
-      competitorRefs: resolution.competitorRefs.slice(0, 5).map((ref) => `@${ref}`),
-      competitorCount: resolution.competitorRefs.length,
-      hint: 'Tap the specific interactive child you intend, or use a more specific selector. Every safely tappable region of the parent belongs to one of its child controls.',
-    },
+  throw discloseDispatch(
+    new AppError(
+      'COMMAND_FAILED',
+      `${failure.blockedTargetLabel} has no parent-owned touch point outside its interactive descendants`,
+      {
+        reason: 'covered_by_interactive_descendants',
+        ...failure.blockedTargetDetails,
+        competitorRefs: resolution.competitorRefs.slice(0, 5).map((ref) => `@${ref}`),
+        competitorCount: resolution.competitorRefs.length,
+        hint: 'Tap the specific interactive child you intend, or use a more specific selector. Every safely tappable region of the parent belongs to one of its child controls.',
+      },
+    ),
+    'no',
   );
 }
 

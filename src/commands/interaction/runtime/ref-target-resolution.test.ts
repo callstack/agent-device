@@ -38,7 +38,7 @@ test('runtime ref interactions fail closed when the authorized ref has no usable
       assert.match((error as Error).message, /Ref @e1 has no usable bounds/);
       assert.deepEqual(
         (error as { details?: Record<string, unknown> }).details,
-        { reason: 'target_bounds_invalid', ref: 'e1', hint: STALE_REF_HINT },
+        { reason: 'target_bounds_invalid', ref: 'e1', hint: STALE_REF_HINT, dispatched: 'no' },
         'the frame lists @e1, so the refusal names the bounds, not a missing ref',
       );
       return true;
@@ -69,6 +69,7 @@ test('runtime ref interactions refuse a ref the authorized frame does not list w
         reason: 'ref_not_found',
         ref: 'e9',
         hint: STALE_REF_HINT,
+        dispatched: 'no',
       });
       return true;
     },

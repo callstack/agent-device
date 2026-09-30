@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import type {
   SnapshotKeyboardBandFact,
   SnapshotNode,
@@ -243,17 +243,19 @@ function refMissRefusal(
   refInput: string,
 ): AppError {
   const ref = normalizeRef(refInput) ?? refInput;
-  return miss.kind === 'unusable'
-    ? new AppError('COMMAND_FAILED', `Ref ${refInput} has no usable bounds`, {
-        reason: INTERACTION_ERROR_REASONS.targetBoundsInvalid,
-        ref,
-        hint: STALE_REF_HINT,
-      })
-    : new AppError('COMMAND_FAILED', `Ref ${refInput} not found`, {
-        reason: INTERACTION_ERROR_REASONS.refNotFound,
-        ref,
-        hint: STALE_REF_HINT,
-      });
+  const refusal =
+    miss.kind === 'unusable'
+      ? new AppError('COMMAND_FAILED', `Ref ${refInput} has no usable bounds`, {
+          reason: INTERACTION_ERROR_REASONS.targetBoundsInvalid,
+          ref,
+          hint: STALE_REF_HINT,
+        })
+      : new AppError('COMMAND_FAILED', `Ref ${refInput} not found`, {
+          reason: INTERACTION_ERROR_REASONS.refNotFound,
+          ref,
+          hint: STALE_REF_HINT,
+        });
+  return discloseDispatch(refusal, 'no');
 }
 
 function isUsableResolvedNode(node: SnapshotNode | null | undefined): node is SnapshotNode {
