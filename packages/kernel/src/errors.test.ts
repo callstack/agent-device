@@ -76,7 +76,7 @@ test('summarizeCommandAttemptFailures keeps every attempt in the order it ran', 
 });
 
 test('normalizeError keeps a producer dispatch disclosure in details and never invents one', () => {
-  for (const dispatched of ['no', 'yes', 'unknown'] as const) {
+  for (const dispatched of ['no', 'unknown'] as const) {
     const normalized = normalizeError(new AppError('COMMAND_FAILED', 'tap failed', { dispatched }));
     assert.equal(normalized.details?.dispatched, dispatched);
     assert.throws(

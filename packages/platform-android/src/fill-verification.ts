@@ -147,7 +147,7 @@ export function completeAndroidFillVerification(
       androidFillFailureMessage(verification),
       androidFillFailureDetails(expected, verification),
     ),
-    verification ? 'yes' : 'unknown',
+    'unknown',
   );
 }
 

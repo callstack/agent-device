@@ -290,7 +290,6 @@ async function runOneShotTouchHelper<Result>(options: {
         throw discloseHelperTouchDispatch(
           options.action,
           new AppError('COMMAND_FAILED', error.message, error.details, error),
-          'yes',
         );
       }
       if (error.code !== HELPER_NO_FINAL_RESULT) throw error;
@@ -305,7 +304,6 @@ async function runOneShotTouchHelper<Result>(options: {
         execFailureDetails(result),
         error,
       ),
-      'unknown',
     );
   }
   if (result.exitCode !== 0) {
@@ -316,7 +314,6 @@ async function runOneShotTouchHelper<Result>(options: {
         'Android automation helper failed',
         execFailureDetails(result, { helper: finalRecord }),
       ),
-      'yes',
     );
   }
   return options.readResult(finalRecord);

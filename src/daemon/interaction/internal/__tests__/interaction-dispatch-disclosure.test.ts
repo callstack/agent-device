@@ -103,7 +103,13 @@ async function pressThatLeftTheApp(): Promise<unknown> {
     readAppState: async () => ({ package: 'com.android.settings' }),
     isPermissionPackage: async () => false,
   } as unknown as AndroidObservationAdapter;
-  return await assertAndroidPressStayedInApp(session, '@e1', observation);
+  return await discloseInteractionDispatch(
+    { token: 't', session: session.name, command: 'press', positionals: ['@e1'] },
+    async () => {
+      await assertAndroidPressStayedInApp(session, '@e1', observation);
+      return null;
+    },
+  );
 }
 
 const DRIVERS: Record<string, () => Promise<unknown>> = {
@@ -146,7 +152,7 @@ for (const row of ROWS) {
 }
 
 test('the daemon keeps a producer verdict instead of inferring its own', async () => {
-  for (const dispatched of ['no', 'yes'] satisfies DispatchDisclosure[]) {
+  for (const dispatched of ['no', 'unknown'] satisfies DispatchDisclosure[]) {
     await assert.rejects(pressAfterUnclassifiedTouchFailure({ dispatched }), (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.details?.dispatched, dispatched);
@@ -158,21 +164,19 @@ test('the daemon keeps a producer verdict instead of inferring its own', async (
 test('a read-only command discloses no over a producer verdict', async () => {
   const capture = vi.mocked(captureSnapshotWithInteractor);
   capture.mockClear();
-  for (const dispatched of ['unknown', 'yes'] satisfies DispatchDisclosure[]) {
-    capture.mockRejectedValueOnce(
-      new AppError('COMMAND_FAILED', 'runner capture lost', { dispatched }),
-    );
-    await assert.rejects(
-      press({ command: 'get', positionals: ['text', 'label="Missing"'] }),
-      (error: unknown) => {
-        assert.ok(error instanceof AppError);
-        assert.equal(error.message, 'runner capture lost');
-        assert.equal(error.details?.dispatched, 'no');
-        return true;
-      },
-    );
-  }
-  assert.equal(capture.mock.calls.length, 2);
+  capture.mockRejectedValueOnce(
+    new AppError('COMMAND_FAILED', 'runner capture lost', { dispatched: 'unknown' }),
+  );
+  await assert.rejects(
+    press({ command: 'get', positionals: ['text', 'label="Missing"'] }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.message, 'runner capture lost');
+      assert.equal(error.details?.dispatched, 'no');
+      return true;
+    },
+  );
+  assert.equal(capture.mock.calls.length, 1);
 });
 
 test('a read-only command discloses no over a producer verdict it throws', async () => {

@@ -593,7 +593,7 @@ function scrollNoProgressError(
       }),
     },
   );
-  return discloseDispatch(error, 'yes');
+  return discloseDispatch(error, 'unknown');
 }
 
 /**

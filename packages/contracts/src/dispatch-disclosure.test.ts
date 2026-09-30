@@ -17,7 +17,7 @@ import {
 } from './dispatch-disclosure.fixtures.ts';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
-const DISPATCH_VALUES: readonly string[] = ['no', 'yes', 'unknown'];
+const DISPATCH_VALUES: readonly string[] = ['no', 'unknown'];
 
 test('a producer verdict overwrites; the seam verdict fills only an unclassified failure', () => {
   const error = new AppError('COMMAND_FAILED', 'tap failed', { hint: 'retry' });

@@ -152,17 +152,21 @@ without needing a simulator.
 
 `contracts/fixtures/dispatch-disclosure.json` is the table for
 `AppErrorDetails.dispatched` on interaction failures: one row per producer
-event, each with the value it must leave. Only a producer that refuses before
-dispatch (target resolution, admission, a runner pre-send refusal) may say
-`no`, and only one that proved execution may say `yes`. The daemon fills
+event, each with the value it must leave. The field has two values: `no` (the
+operation provably never reached the device, so a resend is safe) and
+`unknown` (it may have landed, so observe before resending). Only a producer
+that refuses before dispatch (target resolution, admission, a runner pre-send
+refusal) may say `no`; no producer can prove execution on its failure path, so
+there is no third value. The daemon fills
 `unknown` once, around interaction dispatch, for a failure no producer
 classified, and never overwrites a producer's value: a wrong `no` makes a
 consumer resend an action that already ran, while a wrong `unknown` only costs
 an observation. The one exception is a read-only command (registry
 `recordingEffect: 'observes-app'`): the daemon sets `no` over any producer
-value, because a read has no side effect and is always safe to resend. Each row names its driver
-file by id prefix, that file drives the real producer, and a row marked
-`implementedBy` waits for the branch that ships it.
+value, because a read has no side effect and is always safe to resend. Each row
+without `implementedBy` names its driver file by id prefix, and that file drives
+the real producer; a row marked `implementedBy` waits for the branch that ships
+it.
 
 For `responseFields`, one `buildInteractionResponseData(...)` becomes the only
 construction site for interaction response payloads (this deletes the class of

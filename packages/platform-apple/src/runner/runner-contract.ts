@@ -275,10 +275,10 @@ const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlyMap<
 ]);
 
 /**
- * Runner codes whose reply proves something other than "the command executed and failed". The
- * refusals answer before the command runs, the selector refusals included: the runner resolves the
- * element and refuses before any gesture. `MAIN_THREAD_TIMEOUT` abandons work that may still land.
- * Every other structured reply comes from a command the runner executed.
+ * Runner codes whose reply proves the command never reached the device. The refusals answer before
+ * the command runs, the selector refusals included: the runner resolves the element and refuses
+ * before any gesture. Every other code, and a reply without one, is `unknown`: a failure after the
+ * command started cannot prove whether its gesture landed.
  */
 const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new Map([
   ['ELEMENT_NOT_FOUND', 'no'],
@@ -290,7 +290,6 @@ const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new 
   [SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE, 'no'],
   [ALERT_NOT_FOUND_RUNNER_CODE, 'no'],
   ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, 'no'] as const),
-  [MAIN_THREAD_TIMEOUT_RUNNER_CODE, 'unknown'],
 ]);
 
 /**
@@ -331,7 +330,7 @@ export function classifyRunnerReportedError(
       dispatched:
         (runnerErrorCode === undefined
           ? undefined
-          : RUNNER_ERROR_CODE_DISPATCH.get(runnerErrorCode)) ?? 'yes',
+          : RUNNER_ERROR_CODE_DISPATCH.get(runnerErrorCode)) ?? 'unknown',
     }),
   });
 }

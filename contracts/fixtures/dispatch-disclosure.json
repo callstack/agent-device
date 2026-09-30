@@ -26,14 +26,14 @@
   {
     "id": "daemon.read-only-command",
     "producer": "daemon",
-    "trigger": "any failure of a command the registry declares read-only (recordingEffect observes-app), e.g. get, even one a producer classified unknown or yes: a read has no side effect",
+    "trigger": "any failure of a command the registry declares read-only (recordingEffect observes-app), e.g. get, even one a producer classified unknown: a read has no side effect",
     "dispatched": "no"
   },
   {
     "id": "daemon.scroll-no-progress",
     "producer": "daemon",
-    "trigger": "scroll_no_progress: the scroll gesture ran and the container, still hiding content, never shifted",
-    "dispatched": "yes"
+    "trigger": "scroll_no_progress: the scroll gesture was sent and the container, still hiding content, never shifted; nothing proves whether the gesture landed",
+    "dispatched": "unknown"
   },
   {
     "id": "maestro-direct.fallback.pre-send-refusal",
@@ -52,8 +52,8 @@
   {
     "id": "post-action-guard.android-press-left-app",
     "producer": "post-action-guard",
-    "trigger": "assertAndroidPressStayedInApp observed an escape surface in the foreground",
-    "dispatched": "yes"
+    "trigger": "assertAndroidPressStayedInApp observed an escape surface in the foreground after the press; the guard stamps nothing and the daemon seam fills unknown",
+    "dispatched": "unknown"
   },
   {
     "id": "ios-runner.reply.RUNNER_BUSY",
@@ -128,10 +128,10 @@
     "dispatched": "unknown"
   },
   {
-    "id": "ios-runner.reply.executed-failure",
+    "id": "ios-runner.reply.unlisted-code",
     "producer": "ios-runner",
-    "trigger": "structured runner reply with any other code, e.g. XCTEST_RECORDED_FAILURE",
-    "dispatched": "yes"
+    "trigger": "structured runner reply with any other code, e.g. XCTEST_RECORDED_FAILURE, which the runner reports as \"the action may not have been performed\"",
+    "dispatched": "unknown"
   },
   {
     "id": "ios-runner.pre-send.session-start-failed",
@@ -160,8 +160,8 @@
   {
     "id": "ios-runner.status.failed",
     "producer": "ios-runner",
-    "trigger": "transport lost; status probe reports lifecycleState failed",
-    "dispatched": "yes"
+    "trigger": "transport lost; status probe reports lifecycleState failed with no code the runner proves pre-gesture",
+    "dispatched": "unknown"
   },
   {
     "id": "ios-runner.status.failed-RUNNER_BUSY",
@@ -173,7 +173,7 @@
     "id": "ios-runner.status.completed-without-retained-reply",
     "producer": "ios-runner",
     "trigger": "transport lost; status probe reports lifecycleState completed without a readable retained reply",
-    "dispatched": "yes"
+    "dispatched": "unknown"
   },
   {
     "id": "ios-runner.status.accepted",
@@ -226,20 +226,20 @@
   {
     "id": "android-adb.fill.unverified",
     "producer": "android-adb",
-    "trigger": "fill typed the text and its verification still failed after the last clear-and-retype pass. A throw from inside the second pass keeps that pass's adb input verdict (unknown with dispatchedSteps), though the first pass already typed",
-    "dispatched": "yes"
+    "trigger": "fill sent the text and its verification still failed after the last clear-and-retype pass. A throw from inside the second pass keeps that pass's adb input verdict (unknown with dispatchedSteps), though the first pass already typed",
+    "dispatched": "unknown"
   },
   {
     "id": "android-helper.gesture.reported-failure",
     "producer": "android-helper",
-    "trigger": "one-shot helper gesture returned a parsed final result with ok=false",
-    "dispatched": "yes"
+    "trigger": "one-shot helper gesture returned a parsed final result with ok=false, which carries no count of events injected before the failure",
+    "dispatched": "unknown"
   },
   {
     "id": "android-helper.gesture.failed-after-result",
     "producer": "android-helper",
     "trigger": "one-shot helper gesture returned a parsed final result and exited non-zero",
-    "dispatched": "yes"
+    "dispatched": "unknown"
   },
   {
     "id": "android-helper.gesture.no-parseable-output",
@@ -250,8 +250,8 @@
   {
     "id": "android-helper.gesture-session.reported-failure",
     "producer": "android-helper",
-    "trigger": "persistent helper session answered the gesture with ok=false",
-    "dispatched": "yes"
+    "trigger": "persistent helper session answered the gesture with ok=false, which carries no count of events injected before the failure",
+    "dispatched": "unknown"
   },
   {
     "id": "android-helper.gesture-session.transport-failure",
