@@ -42,10 +42,7 @@ import type {
   AppleRunnerPrepareResult,
 } from './runner-provider.ts';
 import { markRunnerXctestrunArtifactBadForRun } from './runner-xctestrun.ts';
-import {
-  buildRunnerRestartedWithoutResendError,
-  handleRunnerTransportErrorAfterCommandSend,
-} from './runner-command-recovery.ts';
+import { handleRunnerTransportErrorAfterCommandSend } from './runner-command-recovery.ts';
 import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';
 import {
   buildRunnerRecycleBudgetExhaustedError,
@@ -355,7 +352,12 @@ async function executeRunnerCommandAttempt(
         appErr,
       );
     }
-    if (shouldRestartRunnerBeforeCommandSend(appErr) && session) {
+    const firstAttemptUnwritten = isRunnerPreSendRefusal(appErr);
+    if (
+      shouldRestartRunnerBeforeCommandSend(appErr) &&
+      session &&
+      (firstAttemptUnwritten || isReadOnlyRunnerCommand(command))
+    ) {
       assertRunnerRequestActive(options.requestId);
       return await restartSessionAndRunCommand({
         device,
@@ -364,8 +366,7 @@ async function executeRunnerCommandAttempt(
         options,
         signal,
         restartReason: 'runner_connect_failed_before_command_send',
-        firstAttemptError: appErr,
-        firstAttemptUnwritten: isRunnerPreSendRefusal(appErr),
+        firstAttemptUnwritten,
       });
     }
     if (session && shouldRestartRunnerAfterReadinessPreflight(appErr)) {
@@ -378,7 +379,6 @@ async function executeRunnerCommandAttempt(
         signal,
         restartReason: 'runner_readiness_preflight_failed_before_command_send',
         recoveredDiagnosticPhase: 'ios_runner_readiness_preflight_recovered',
-        firstAttemptError: appErr,
         firstAttemptUnwritten: true,
       });
     }
@@ -411,8 +411,10 @@ async function restartSessionAndRunCommand(params: {
     | 'runner_connect_failed_before_command_send'
     | 'runner_readiness_preflight_failed_before_command_send';
   recoveredDiagnosticPhase?: string;
-  firstAttemptError: AppError;
-  /** The failed first attempt provably never wrote the command. */
+  /**
+   * The failed first attempt provably never wrote the command. When it may have, the replay can
+   * double-send, and no failure of this restart may claim `no`.
+   */
   firstAttemptUnwritten: boolean;
 }): Promise<Record<string, unknown>> {
   const { device, command, options, signal, restartReason } = params;
@@ -434,13 +436,6 @@ async function restartSessionAndRunCommand(params: {
     throw markRunnerRestartError(error, params);
   });
   commitRunnerRecycle(recycleKey);
-  if (!canResendAfterRestart(params)) {
-    throw markRunnerRestartError(
-      buildRunnerRestartedWithoutResendError(command, params.firstAttemptError, options),
-      params,
-      restartedSession,
-    );
-  }
   try {
     const recovered = await executeRunnerCommandWithSession(
       device,
@@ -485,20 +480,6 @@ async function restartSessionAndRunCommand(params: {
   }
 }
 
-type RunnerRestartResendEvidence = Pick<
-  Parameters<typeof restartSessionAndRunCommand>[0],
-  'command' | 'firstAttemptUnwritten'
->;
-
-/**
- * Whether sending the command again on the restarted runner cannot run it twice: the first attempt
- * provably wrote nothing, or the command is read-only by its runner trait. A restarted runner's
- * journal is empty, so its `status` cannot prove the first send did not run.
- */
-function canResendAfterRestart(evidence: RunnerRestartResendEvidence): boolean {
-  return evidence.firstAttemptUnwritten || isReadOnlyRunnerCommand(evidence.command);
-}
-
 function markRunnerRestartError(
   error: unknown,
   params: Pick<
@@ -525,23 +506,21 @@ function markRunnerRestartError(
     },
     error.cause ?? error,
   );
-  return discloseRestartDispatch(marked, params, restartedSession);
+  return discloseRestartDispatch(marked, params.firstAttemptUnwritten, restartedSession);
 }
 
 /**
- * The transport fact, for reads and mutations alike: a first attempt that may have written the
- * command is `unknown`, whether or not a read was resent. After an unwritten first attempt, a
- * restart that never replayed is `no`, and a replay's own verdict stands; without one, only a
- * pre-send refusal is `no`. That a read repeats no app-visible action is the daemon router's rule
- * over the registry's `recordingEffect`, not this producer's.
+ * A restart that never replayed says what the first attempt did; a replay after a first attempt
+ * that may have written the command cannot claim `no` for the two sends together. After an unwritten
+ * first attempt the replay's own verdict stands; without one, only a pre-send refusal is `no`.
  */
 function discloseRestartDispatch(
   error: AppError,
-  evidence: RunnerRestartResendEvidence,
+  firstAttemptUnwritten: boolean,
   restartedSession: RunnerSession | undefined,
 ): AppError {
-  if (!evidence.firstAttemptUnwritten) return discloseDispatch(error, 'unknown');
-  if (!restartedSession) return discloseDispatch(error, 'no');
+  if (!restartedSession) return discloseDispatch(error, firstAttemptUnwritten ? 'no' : 'unknown');
+  if (!firstAttemptUnwritten) return discloseDispatch(error, 'unknown');
   return discloseUnclassifiedDispatch(error, isRunnerPreSendRefusal(error) ? 'no' : 'unknown');
 }
 

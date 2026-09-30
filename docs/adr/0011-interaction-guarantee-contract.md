@@ -192,6 +192,12 @@ repeat. A producer that runs several device inputs inside one bound operation
 Each row names its driver file by id prefix, and that file drives the real
 producer.
 
+The Apple runner does not resend a mutating command whose first send may have
+run: a restart resends only a command the first attempt provably did not write,
+or a read-only one. A mutation whose runner dies mid-command fails with
+`reason: runner_reply_lost` and `dispatched: unknown` (row
+`ios-runner.transport.written-then-lost`).
+
 Remaining gaps: a failure before the router's locked scope (session
 resolution, lock acquisition, lease and daemon-policy admission) never reaches
 the disclosure and carries no `dispatched`. It sends nothing, but a consumer
@@ -200,12 +206,6 @@ must read the absent field as `unknown`.
 `runBatch` reports `no` only when none of its executed steps is a
 `'mutates-app'` command; after one, the batch failure is `unknown` for every
 caller, including one that supplies its own `invoke`.
-
-The row `ios-runner.transport.written-then-lost` proves the Apple runner's rule
-that a mutating command whose first send may have run is not resent after a
-restart, not a production route: over the real transport that arm is
-unreachable, because mutations go through `sendRunnerCommandOnce` and only the
-connect loop raises the restart trigger.
 
 For `responseFields`, one `buildInteractionResponseData(...)` becomes the only
 construction site for interaction response payloads (this deletes the class of

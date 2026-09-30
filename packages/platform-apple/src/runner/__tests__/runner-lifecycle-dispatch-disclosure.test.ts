@@ -10,6 +10,7 @@ import {
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { createTestRequestCancellation, makeRunnerSession } from './runner-session-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
+import { startFakeRunnerServer, type FakeRunnerServer } from './fake-runner-server.ts';
 
 // contracts/fixtures/dispatch-disclosure.json, ios-runner pre-send and transport rows: each row
 // drives runAppleRunnerCommand through the real lifecycle and restart path with the session start
@@ -59,8 +60,12 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+let fakeRunner: FakeRunnerServer | undefined;
+
+afterEach(async () => {
   vi.unstubAllGlobals();
+  await fakeRunner?.close();
+  fakeRunner = undefined;
 });
 
 async function tap(): Promise<unknown> {
@@ -164,17 +169,35 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
       curlExitCode: 7,
     }),
   'ios-runner.transport.written-then-lost': async () => {
+    const runnerSession =
+      await vi.importActual<typeof import('../runner-session.ts')>('../runner-session.ts');
+    const runner = await startFakeRunnerServer({ tap: [{ kind: 'exit' }] });
+    fakeRunner = runner;
+    // The status probe finds no listener, over fetch or the simctl curl fallback.
+    const { retryWithPolicy } = appleRunnerTestHost.defaults();
+    appleRunnerTestHost.update({
+      runXcrun: vi.fn(async () => ({ exitCode: 7, stdout: '', stderr: 'curl exited 7' })),
+      retryWithPolicy: (task, policy, options) =>
+        retryWithPolicy(task, { ...policy, baseDelayMs: 1, maxDelayMs: 1, jitter: 0 }, options),
+    });
+    mockEnsureRunnerSession.mockResolvedValueOnce(makeRunnerSession({ port: runner.port }));
+    mockExecuteRunnerCommandWithSession.mockImplementation(
+      runnerSession.executeRunnerCommandWithSession,
+    );
     try {
-      return await writtenThenLostThenRestarted(
-        { command: 'tap', x: 120, y: 240 },
-        async () => ({}),
-      );
+      return await tap();
     } catch (error) {
       assert.ok(error instanceof AppError);
       assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
-      assert.equal(error.details?.runnerRestarted, true);
-      assert.equal(sendsOnRestartedRunner(), 0, 'the tap is not sent again');
+      assert.equal(error.details?.recovery, 'status_probe_failed');
+      assert.equal(error.details?.runnerRestarted, undefined, 'the runner is not restarted');
       throw error;
+    } finally {
+      assert.equal(runner.requests.filter((entry) => entry.command === 'tap').length, 1);
+      assert.deepEqual(
+        mockInvalidateRunnerSession.mock.calls[0]?.[1],
+        'transport_error_after_command_send',
+      );
     }
   },
   'ios-runner.transport.read-only-written-then-lost': async () => {
