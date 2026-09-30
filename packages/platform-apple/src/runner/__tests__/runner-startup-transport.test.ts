@@ -158,6 +158,23 @@ test('waitForRunner types a failed simulator fallback as a refused connection', 
   assert.equal(mockRunCmd.mock.calls.length, 1);
 });
 
+test('waitForRunner discloses unknown when an attempt may have written before a refused fallback', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockRejectedValue(new AppError('COMMAND_FAILED', 'Runner command deadline exceeded')),
+  );
+  mockRunCmd.mockResolvedValue({ exitCode: 7, stdout: '', stderr: 'curl: (7) Failed to connect' });
+
+  await assert.rejects(
+    () => waitForRunner(iosSimulator, 8100, { command: 'tap', x: 1, y: 1 }, undefined, 100),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.dispatched, 'unknown');
+      return true;
+    },
+  );
+});
+
 test('waitForRunner wakes a simulator startup retry when the listener reports ready', async () => {
   vi.useFakeTimers();
   const readiness = new AbortController();
