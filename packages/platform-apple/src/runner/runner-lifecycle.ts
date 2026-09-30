@@ -2,6 +2,8 @@ import {
   AppError,
   asAppError,
   createRequestCanceledError,
+  discloseDispatch,
+  discloseUnclassifiedDispatch,
   isRequestCanceledError,
 } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -27,6 +29,7 @@ import {
 } from './runner-contract.ts';
 import {
   isRetryableRunnerError,
+  isRunnerPreSendRefusal,
   isStructuredRunnerFailure,
   shouldRebuildCachedRunnerArtifact,
   shouldRestartRunnerAfterReadinessPreflight,
@@ -260,11 +263,32 @@ function shouldRetryPrepareRunnerHealthFailure(error: AppError): boolean {
   return isRetryableRunnerError(error) || shouldRetryRunnerConnectError(error);
 }
 
-// fallow-ignore-next-line complexity
+/**
+ * Runs one runner command and discloses `dispatched: no` on a failure raised before the command
+ * reached the exchange, or classified as a pre-send refusal by the recovery table.
+ */
 export async function executeRunnerCommand(
   device: DeviceInfo,
   command: RunnerCommand,
   options: AppleRunnerCommandOptions,
+): Promise<Record<string, unknown>> {
+  const exchange = { entered: false };
+  try {
+    return await executeRunnerCommandAttempt(device, command, options, exchange);
+  } catch (error) {
+    if (!(error instanceof AppError)) throw error;
+    if (!exchange.entered) throw discloseDispatch(error, 'no');
+    if (isRunnerPreSendRefusal(error)) throw discloseUnclassifiedDispatch(error, 'no');
+    throw error;
+  }
+}
+
+// fallow-ignore-next-line complexity
+async function executeRunnerCommandAttempt(
+  device: DeviceInfo,
+  command: RunnerCommand,
+  options: AppleRunnerCommandOptions,
+  exchange: { entered: boolean },
 ): Promise<Record<string, unknown>> {
   assertRunnerRequestActive(options.requestId);
   const signal = resolveRunnerRequestSignal(options);
@@ -299,6 +323,7 @@ export async function executeRunnerCommand(
       const { readRunnerStartupTimeoutMs } = await import('./runner-exchange.ts');
       timeoutMs = readRunnerStartupTimeoutMs(session);
     }
+    exchange.entered = true;
     return await executeRunnerCommandWithSession(
       device,
       session,
@@ -392,7 +417,8 @@ async function restartSessionAndRunCommand(params: {
     ...options,
     cleanStaleBundles: true,
   }).catch((error: unknown) => {
-    throw markRunnerRestartError(error, params);
+    const restartError = markRunnerRestartError(error, params);
+    throw restartError instanceof AppError ? discloseDispatch(restartError, 'no') : restartError;
   });
   commitRunnerRecycle(recycleKey);
   try {

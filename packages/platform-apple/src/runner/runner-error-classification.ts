@@ -619,6 +619,19 @@ export function shouldRestartRunnerBeforeCommandSend(error: unknown): boolean {
 }
 
 /**
+ * The recovery table places this failure before the runner received the command: a connect-shaped
+ * failure or readiness-preflight give-up (both replayed after a restart), or a `RUNNER_BUSY`
+ * refusal. The command never ran, so its failure discloses `dispatched: no`.
+ */
+export function isRunnerPreSendRefusal(error: unknown): boolean {
+  return (
+    shouldRestartRunnerBeforeCommandSend(error) ||
+    shouldRestartRunnerAfterReadinessPreflight(error) ||
+    isRunnerBusyError(error)
+  );
+}
+
+/**
  * The one classifier for "the runner did not reach the point of serving a command" (#2680). Every
  * path that stops the runner before it answers a request routes its failure through here, so the
  * reason a caller sees is produced by the same rows that produce the hint beside it — a reason is

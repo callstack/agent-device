@@ -276,10 +276,14 @@ const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlyMap<
 
 /**
  * Runner codes whose reply proves something other than "the command executed and failed". The
- * refusals answer before the command runs; `MAIN_THREAD_TIMEOUT` abandons work that may still land.
+ * refusals answer before the command runs, the selector refusals included: the runner resolves the
+ * element and refuses before any gesture. `MAIN_THREAD_TIMEOUT` abandons work that may still land.
  * Every other structured reply comes from a command the runner executed.
  */
 const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new Map([
+  ['ELEMENT_NOT_FOUND', 'no'],
+  ['ELEMENT_OFFSCREEN', 'no'],
+  ['AMBIGUOUS_MATCH', 'no'],
   [RUNNER_BUSY_RUNNER_CODE, 'no'],
   [RUNNER_WEDGED_RUNNER_CODE, 'no'],
   [APP_NOT_RUNNING_RUNNER_CODE, 'no'],

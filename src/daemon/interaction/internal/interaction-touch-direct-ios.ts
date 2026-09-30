@@ -94,9 +94,9 @@ export async function dispatchDirectIosSelectorTap(
       actionStartedAt,
     });
     if (corroboratedResponse) return corroboratedResponse;
-    // ADR 0011 delegation-on-error: semantic runner failures fall back to the
-    // tree-based runtime path — except for Maestro replay dispatches, whose
-    // runner-native error shapes must be preserved.
+    // ADR 0011 delegation-on-error: only a failure disclosed `dispatched: no`
+    // falls back to the tree path, which taps again; Maestro replay keeps the
+    // runner's selector refusal shapes.
     const fallback = isDirectIosSelectorFallbackError(error, {
       delegateSemanticFailures: selector.allowNonHittableCoordinateFallback !== true,
     });

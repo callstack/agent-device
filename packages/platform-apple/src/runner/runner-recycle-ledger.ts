@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from './host.ts';
 import type { RunnerCommand } from './runner-contract.ts';
 
@@ -85,19 +85,22 @@ export function buildRunnerRecycleBudgetExhaustedError(
       maxRecycles: MAX_RUNNER_RECYCLES_PER_REQUEST,
     },
   });
-  return new AppError(
-    'COMMAND_FAILED',
-    `iOS runner was already restarted during this request and "${command.command}" still failed, so agent-device stopped instead of paying for another runner boot.`,
-    {
-      command: command.command,
-      commandId: command.commandId,
-      recovery: 'runner_recycle_budget_exhausted',
-      // This path only knows that a restart was already spent, never why the
-      // runner failed. Naming the heavy-screen case as the cause sent people
-      // to change screens when the runner had in fact failed to install.
-      hint: 'Check the runner log for the underlying failure before retrying — a provisioning or code-signing error there means the runner cannot install on this device, and no retry will help. If the runner is healthy, the current screen is likely too heavy or animating for accessibility capture: the app session is preserved, so run `screenshot` for visual truth and interact by coordinates, or navigate to another screen.',
-      logPath: options.logPath,
-    },
+  return discloseDispatch(
+    new AppError(
+      'COMMAND_FAILED',
+      `iOS runner was already restarted during this request and "${command.command}" still failed, so agent-device stopped instead of paying for another runner boot.`,
+      {
+        command: command.command,
+        commandId: command.commandId,
+        recovery: 'runner_recycle_budget_exhausted',
+        // This path only knows that a restart was already spent, never why the
+        // runner failed. Naming the heavy-screen case as the cause sent people
+        // to change screens when the runner had in fact failed to install.
+        hint: 'Check the runner log for the underlying failure before retrying — a provisioning or code-signing error there means the runner cannot install on this device, and no retry will help. If the runner is healthy, the current screen is likely too heavy or animating for accessibility capture: the app session is preserved, so run `screenshot` for visual truth and interact by coordinates, or navigate to another screen.',
+        logPath: options.logPath,
+      },
+    ),
+    'no',
   );
 }
 

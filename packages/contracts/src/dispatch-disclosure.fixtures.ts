@@ -22,6 +22,8 @@ export type DispatchDisclosureRow = {
   producer: DispatchDisclosureProducer;
   trigger: string;
   dispatched: DispatchDisclosure;
+  /** Direct iOS selector tap rows: whether the failure delegates to the tree path, which taps again. */
+  fallsBack?: boolean;
   /** A branch that ships this row's producer; the row is not owned here until it merges. */
   implementedBy?: string;
 };
@@ -43,10 +45,14 @@ export const DISPATCH_DISCLOSURE_DRIVER_OWNERS: Readonly<Record<string, string>>
   'post-action-guard.':
     'src/daemon/interaction/internal/__tests__/interaction-dispatch-disclosure.test.ts',
   'ios-runner.': 'packages/platform-apple/src/runner/__tests__/runner-dispatch-disclosure.test.ts',
+  'ios-runner.pre-send.':
+    'packages/platform-apple/src/runner/__tests__/runner-lifecycle-dispatch-disclosure.test.ts',
   'android-adb.': 'packages/platform-android/src/__tests__/dispatch-disclosure.test.ts',
   'android-helper.': 'packages/platform-android/src/__tests__/dispatch-disclosure.test.ts',
   'android-helper.gesture-session.':
     'packages/platform-android/src/__tests__/touch-helper-session.test.ts',
+  'maestro-direct.':
+    'src/daemon/interaction/internal/__tests__/interaction-touch-direct-ios.test.ts',
 };
 
 export function dispatchDisclosureDriverOwner(rowId: string): string | undefined {
