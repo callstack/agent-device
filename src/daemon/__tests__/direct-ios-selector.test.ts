@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import type { SessionState } from '../session-state.ts';
 import {
@@ -22,65 +22,71 @@ function makeSession(
   };
 }
 
-test('runner ELEMENT_OFFSCREEN delegates normally but stays typed for Maestro replay', () => {
-  const error = new AppError('ELEMENT_OFFSCREEN', 'element resolved off-screen at (-161, 265)');
-  assert.equal(isDirectIosSelectorFallbackError(error), true);
-  assert.equal(isDirectIosSelectorFallbackError(error, { allowElementNotFound: false }), true);
-  assert.equal(isDirectIosSelectorFallbackError(error, { delegateSemanticFailures: true }), true);
-  assert.equal(isDirectIosSelectorFallbackError(error, { delegateSemanticFailures: false }), false);
+function refusal(code: AppError['code'], message: string): AppError {
+  return new AppError(code, message, { dispatched: 'no' });
+}
+
+test('runner selector refusals delegate for interaction dispatches (ADR 0011)', () => {
+  for (const code of ['ELEMENT_NOT_FOUND', 'ELEMENT_OFFSCREEN', 'AMBIGUOUS_MATCH'] as const) {
+    assert.equal(
+      isDirectIosSelectorFallbackError(refusal(code, code), { delegateSemanticFailures: true }),
+      true,
+      code,
+    );
+  }
 });
 
-test('runner ELEMENT_NOT_FOUND falls back for query callers that allow it', () => {
-  const error = new AppError('ELEMENT_NOT_FOUND', 'element not found');
-  assert.equal(isDirectIosSelectorFallbackError(error), false);
-  assert.equal(isDirectIosSelectorFallbackError(error, { allowElementNotFound: true }), true);
+test('maestro replay dispatches preserve the runner selector refusal shapes (no fallback)', () => {
+  for (const code of ['ELEMENT_NOT_FOUND', 'ELEMENT_OFFSCREEN', 'AMBIGUOUS_MATCH'] as const) {
+    assert.equal(
+      isDirectIosSelectorFallbackError(refusal(code, code), { delegateSemanticFailures: false }),
+      false,
+      code,
+    );
+  }
 });
 
-test('semantic failures delegate to the runtime path for interaction dispatches (ADR 0011)', () => {
-  const notFound = new AppError('ELEMENT_NOT_FOUND', 'element not found');
-  const ambiguous = new AppError('AMBIGUOUS_MATCH', 'multiple');
-  assert.equal(
-    isDirectIosSelectorFallbackError(notFound, { delegateSemanticFailures: true }),
-    true,
-  );
-  assert.equal(
-    isDirectIosSelectorFallbackError(ambiguous, { delegateSemanticFailures: true }),
-    true,
-  );
-});
-
-test('maestro replay dispatches preserve the runner semantic error shapes (no fallback)', () => {
-  const notFound = new AppError('ELEMENT_NOT_FOUND', 'element not found');
-  const ambiguous = new AppError('AMBIGUOUS_MATCH', 'multiple');
-  assert.equal(
-    isDirectIosSelectorFallbackError(notFound, { delegateSemanticFailures: false }),
-    false,
-  );
-  assert.equal(
-    isDirectIosSelectorFallbackError(ambiguous, { delegateSemanticFailures: false }),
-    false,
-  );
-});
-
-test('AMBIGUOUS_MATCH does not fall back on the query path (allowElementNotFound callers)', () => {
-  const ambiguous = new AppError('AMBIGUOUS_MATCH', 'multiple');
-  assert.equal(isDirectIosSelectorFallbackError(ambiguous), false);
-  assert.equal(isDirectIosSelectorFallbackError(ambiguous, { allowElementNotFound: true }), false);
-});
-
-test('transport-level COMMAND_FAILED errors fall back, semantic ones do not', () => {
-  assert.equal(
-    isDirectIosSelectorFallbackError(new AppError('COMMAND_FAILED', 'fetch failed')),
-    true,
-  );
+test('a pre-send COMMAND_FAILED falls back; the message text never decides', () => {
+  const options = { delegateSemanticFailures: false };
   assert.equal(
     isDirectIosSelectorFallbackError(
-      new AppError('COMMAND_FAILED', 'Runner command deadline exceeded: timed out'),
+      refusal('COMMAND_FAILED', 'element covered by overlay'),
+      options,
     ),
     true,
   );
+  for (const message of [
+    'fetch failed',
+    'Runner command deadline exceeded: timed out',
+    'Runner did not accept connection',
+    'Invalid runner response',
+  ]) {
+    assert.equal(
+      isDirectIosSelectorFallbackError(new AppError('COMMAND_FAILED', message), options),
+      false,
+      message,
+    );
+  }
+});
+
+test('a failure that may have tapped never falls back', () => {
+  for (const dispatched of ['unknown', 'yes'] as const) {
+    for (const code of ['COMMAND_FAILED', 'ELEMENT_NOT_FOUND'] as const) {
+      assert.equal(
+        isDirectIosSelectorFallbackError(new AppError(code, 'failed', { dispatched }), {
+          delegateSemanticFailures: true,
+        }),
+        false,
+        `${code} ${dispatched}`,
+      );
+    }
+  }
+});
+
+test('a canceled request never falls back', () => {
+  const canceled = createRequestCanceledError({ dispatched: 'no' });
   assert.equal(
-    isDirectIosSelectorFallbackError(new AppError('COMMAND_FAILED', 'element covered by overlay')),
+    isDirectIosSelectorFallbackError(canceled, { delegateSemanticFailures: true }),
     false,
   );
 });

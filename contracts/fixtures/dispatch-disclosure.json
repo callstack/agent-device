@@ -28,6 +28,22 @@
     "dispatched": "unknown"
   },
   {
+    "id": "maestro-direct.fallback.pre-send-refusal",
+    "phase": "after-seam",
+    "producer": "daemon",
+    "trigger": "the direct iOS selector tap failed with a runner refusal disclosed no (connect refused before send); the tree path taps instead",
+    "dispatched": "no",
+    "fallsBack": true
+  },
+  {
+    "id": "maestro-direct.fallback.lost-reply",
+    "phase": "after-seam",
+    "producer": "daemon",
+    "trigger": "the direct iOS selector tap lost its reply and the status probe failed (unknown); the tap may have landed, so the tree path must not tap again",
+    "dispatched": "unknown",
+    "fallsBack": false
+  },
+  {
     "id": "post-action-guard.android-press-left-app",
     "phase": "after-seam",
     "producer": "post-action-guard",
@@ -91,6 +107,27 @@
     "dispatched": "no"
   },
   {
+    "id": "ios-runner.reply.ELEMENT_NOT_FOUND",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code ELEMENT_NOT_FOUND: a selector refusal before any gesture",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.ELEMENT_OFFSCREEN",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code ELEMENT_OFFSCREEN: a selector refusal before any gesture",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.AMBIGUOUS_MATCH",
+    "phase": "after-seam",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code AMBIGUOUS_MATCH: a selector refusal before any gesture",
+    "dispatched": "no"
+  },
+  {
     "id": "ios-runner.reply.MAIN_THREAD_TIMEOUT",
     "phase": "after-seam",
     "producer": "ios-runner",
@@ -103,6 +140,27 @@
     "producer": "ios-runner",
     "trigger": "structured runner reply with any other code, e.g. XCTEST_RECORDED_FAILURE",
     "dispatched": "yes"
+  },
+  {
+    "id": "ios-runner.pre-send.session-start-failed",
+    "phase": "before-seam",
+    "producer": "ios-runner",
+    "trigger": "the runner session could not start, so the command never reached the exchange",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.pre-send.connect-refused-restart-failed",
+    "phase": "before-seam",
+    "producer": "ios-runner",
+    "trigger": "the runner refused the connection before the command was sent, and the restart that would replay it failed",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.pre-send.readiness-preflight-after-restart",
+    "phase": "before-seam",
+    "producer": "ios-runner",
+    "trigger": "the readiness preflight gave up before the command was written, again after the restart",
+    "dispatched": "no"
   },
   {
     "id": "ios-runner.status.failed",
