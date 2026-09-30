@@ -159,9 +159,12 @@ that refuses before dispatch (target resolution, admission, a runner pre-send
 refusal) may say `no`; no producer can prove execution on its failure path, so
 there is no third value. The daemon fills
 `unknown` once, around interaction dispatch, for a failure no producer
-classified, and never overwrites a producer's value: a wrong `no` makes a
-consumer resend an action that already ran, while a wrong `unknown` only costs
-an observation. The one exception is a read-only command (registry
+classified. It keeps a producer's value until a mutation of the same request was
+sent: after that, a later failure (a post-action read, a settle capture, a later
+sub-step) is `unknown` with the sent count in `details.dispatchedSteps`, because a
+wrong `no` makes a consumer resend an action that already ran, while a wrong
+`unknown` only costs an observation. The Maestro port applies the same rule per
+Maestro command. The one exception is a read-only command (registry
 `recordingEffect: 'observes-app'`): the daemon sets `no` over any producer
 value, because a read has no side effect and is always safe to resend. Each row
 without `implementedBy` names its driver file by id prefix, and that file drives
