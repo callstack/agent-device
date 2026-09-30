@@ -2,7 +2,6 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { Rect, SnapshotPreferredBackend, SnapshotState } from '@agent-device/kernel/snapshot';
 import type { RequestCaptureProof } from '../../capture-disclosure.ts';
-import type { RequestDispatchLedger } from '../../request-dispatch-disclosure.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { CommandSessionStore } from '../../../runtime-contract.ts';
 import type { DeferredInteractionOutcomeMark } from '../../deferred-interaction-outcome.ts';
@@ -37,8 +36,6 @@ export type InteractionRouteInput = {
    * press consumes no capture and must not be disclosed against an earlier request's tree (#2682).
    */
   captureProof?: RequestCaptureProof;
-  /** The request's sent mutations; a failure after one never keeps a producer's `no`. */
-  dispatchLedger?: RequestDispatchLedger;
 };
 
 export type FindRouteInput = {
@@ -99,7 +96,6 @@ export type InteractionRuntimeInput = {
   pairedGestureViewport?: Rect;
   touchExecutor?: BoundTouchExecutor;
   gestures?: BoundGestureExecutor;
-  dispatchLedger?: RequestDispatchLedger;
 };
 
 export type InteractionGestureVisualization = (

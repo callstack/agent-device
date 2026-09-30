@@ -9,7 +9,7 @@ import {
   type MaestroRuntimePort,
 } from '@agent-device/maestro';
 import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
-import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
 import { stripUndefined } from '@agent-device/kernel/record';
 import { executeRunScriptFile } from './run-script-execution.ts';
 import { waitForMaestroAnimationToEnd } from './wait-for-animation-to-end.ts';
@@ -29,7 +29,6 @@ import {
   resolveScriptPath,
   stringifyEnvironment,
   type CreateDaemonMaestroRuntimeOperationsOptions,
-  type MaestroMutationLedger,
 } from './daemon-runtime-port-support.ts';
 import {
   mapMaestroSetPermissions,
@@ -52,14 +51,12 @@ function describePermissionMutation(mutation: MaestroPermissionMutation): string
   return `${mutation.state} ${mutation.permission}${mutation.mode ? ` ${mutation.mode}` : ''}`;
 }
 
-function createDaemonMaestroRuntimeParts(envelope: CreateDaemonMaestroRuntimeOperationsOptions): {
+function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOperationsOptions): {
   operations: MaestroRuntimeOperations;
   snapshots: MaestroSnapshotSource;
   readMetrics: () => MaestroRuntimeMetrics;
   recordSettle: (stable: StableMaestroSnapshot) => void;
 } {
-  const mutationLedger: MaestroMutationLedger = { sent: 0 };
-  const options = { ...envelope, mutationLedger };
   const snapshots = createDaemonMaestroSnapshotSource(options);
   const metrics: Omit<MaestroRuntimeMetrics, 'hierarchyCaptures'> = {
     screenshotCaptures: 0,
@@ -358,35 +355,11 @@ function createDaemonMaestroRuntimeParts(envelope: CreateDaemonMaestroRuntimeOpe
     }),
   };
   return {
-    operations: discloseDispatchAfterMutations(operations, mutationLedger),
+    operations,
     snapshots,
     readMetrics: () => ({ ...snapshots.readMetrics(), ...metrics }),
     recordSettle,
   };
-}
-
-/**
- * Each operation is one Maestro command: once a mutation it sent returned, a later failure of that
- * command (a settle capture, a retry, a verification read) is `unknown`, never a producer's `no`.
- */
-function discloseDispatchAfterMutations(
-  operations: MaestroRuntimeOperations,
-  ledger: MaestroMutationLedger,
-): MaestroRuntimeOperations {
-  const disclosed: Record<string, unknown> = { ...operations };
-  for (const [name, operation] of Object.entries(operations)) {
-    if (typeof operation !== 'function') continue;
-    const run = operation as (...args: unknown[]) => Promise<unknown>;
-    disclosed[name] = async (...args: unknown[]) => {
-      const sentBefore = ledger.sent;
-      try {
-        return await run(...args);
-      } catch (error) {
-        throw discloseDispatchAfterSteps(error, ledger.sent - sentBefore);
-      }
-    };
-  }
-  return disclosed as MaestroRuntimeOperations;
 }
 
 export function createDaemonMaestroRuntimePort(

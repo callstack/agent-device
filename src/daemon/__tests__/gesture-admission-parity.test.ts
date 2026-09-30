@@ -10,6 +10,7 @@ import {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
 import { createRequestRuntimeBindings } from '../request-runtime-binding.ts';
+import { createRequestDispatchLedger } from '../request-dispatch-ledger.ts';
 import { resolveBoundGestureRuntime } from '../gesture-runtime.ts';
 
 /**
@@ -58,6 +59,7 @@ const device = (fields: Partial<DeviceInfo>): DeviceInfo => ({
 /** The production binding seam, so admission runs against the real inspect-then-bind path. */
 async function admit(input: GestureCommandInput, target: DeviceInfo) {
   const bindings = createRequestRuntimeBindings({
+    dispatchLedger: createRequestDispatchLedger(),
     gateway,
     scope: {
       signal: new AbortController().signal,

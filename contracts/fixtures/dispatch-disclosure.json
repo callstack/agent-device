@@ -72,6 +72,24 @@
     "dispatched": "no"
   },
   {
+    "id": "daemon.route.find-type-refused-after-focus",
+    "producer": "daemon",
+    "trigger": "find <q> type: the focus tap returned, then the typeText send was refused before send (no); the request reports unknown with details.dispatchedSteps 1",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon.route.session-close-then-finalize-refused",
+    "producer": "daemon",
+    "trigger": "close (session route): the app-close send returned, then the lifecycle finalize was refused before send (no); the cleanup failure reports unknown with details.dispatchedSteps 1",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon.route.maestro-deferred-settle-capture-refused",
+    "producer": "daemon",
+    "trigger": "a Maestro replay (session route): back (stability deferred) returned, then the deferred settle capture the next command takes was refused with RUNNER_BUSY (no); the replay reports unknown with details.dispatchedSteps 1",
+    "dispatched": "unknown"
+  },
+  {
     "id": "maestro-direct.fallback.pre-send-refusal",
     "producer": "daemon",
     "trigger": "the direct iOS selector tap failed with a runner refusal disclosed no (connect refused before send); the tree path taps instead",
@@ -84,24 +102,6 @@
     "trigger": "the direct iOS selector tap lost its reply and the status probe failed (unknown); the tap may have landed, so the tree path must not tap again",
     "dispatched": "unknown",
     "fallsBack": false
-  },
-  {
-    "id": "maestro-port.scroll-until.capture-after-scroll-refused",
-    "producer": "maestro-port",
-    "trigger": "scrollUntilVisible sent its scroll and the settle capture after it was refused with RUNNER_BUSY (no); the Maestro command reports unknown with details.dispatchedSteps 1",
-    "dispatched": "unknown"
-  },
-  {
-    "id": "maestro-port.input-text.settle-capture-refused",
-    "producer": "maestro-port",
-    "trigger": "inputText typed its text and the settle capture after it was refused with RUNNER_BUSY (no); the Maestro command reports unknown with details.dispatchedSteps 1",
-    "dispatched": "unknown"
-  },
-  {
-    "id": "maestro-port.scroll-until.first-capture-refused",
-    "producer": "maestro-port",
-    "trigger": "scrollUntilVisible's first capture, before any scroll, was refused with RUNNER_BUSY; nothing was sent, so the producer's no stands",
-    "dispatched": "no"
   },
   {
     "id": "post-action-guard.android-press-left-app",

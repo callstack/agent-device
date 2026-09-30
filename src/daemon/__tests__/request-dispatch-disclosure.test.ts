@@ -13,13 +13,19 @@ vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () 
 
 import { AppError } from '@agent-device/kernel/errors';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
+import type { DeviceRuntimeGateway, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import {
   assertDispatchDisclosureDriversMatchRows,
   DISPATCH_DISCLOSURE_TABLE_PATH,
   dispatchDisclosureRowsOwnedBy,
 } from '@agent-device/contracts/dispatch-disclosure-fixtures';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
-import { makeAndroidSession, makeSession } from '../../__tests__/test-utils/session-factories.ts';
+import {
+  makeAndroidSession,
+  makeIosAppSession,
+  makeSession,
+} from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
@@ -37,7 +43,65 @@ import {
 
 const SESSION = 'dispatch-route';
 
+const RUNNER_BUSY = () =>
+  new AppError('COMMAND_FAILED', 'runner busy', { reason: 'runner_busy', dispatched: 'no' });
+
+const CONTINUE_BUTTON = {
+  index: 0,
+  type: 'XCUIElementTypeButton',
+  label: 'Continue',
+  rect: { x: 10, y: 20, width: 100, height: 40 },
+  enabled: true,
+  hittable: true,
+};
+
+const EMAIL_FIELD = {
+  index: 1,
+  type: 'XCUIElementTypeTextField',
+  label: 'Email',
+  rect: { x: 10, y: 80, width: 200, height: 40 },
+  enabled: true,
+  hittable: true,
+};
+
+/** The operations the lifecycle gateway lacks that these rows drive, one spy each. */
+const routeOperationSpies = {
+  focusPoint: vi.fn(async () => undefined),
+  typeText: vi.fn(async () => undefined),
+  back: vi.fn(async () => undefined),
+  finalizeApplicationClose: vi.fn(async () => undefined as void),
+};
+
+const available = Object.freeze({ available: true as const });
+
+function withRouteOperationFacts(
+  facts: RuntimeFacts<PlatformRuntimeOperations>,
+): RuntimeFacts<PlatformRuntimeOperations> {
+  const operations = { ...facts.operations };
+  for (const name of Object.keys(routeOperationSpies) as (keyof typeof routeOperationSpies)[]) {
+    operations[name] = available;
+  }
+  return { ...facts, operations };
+}
+
+const routeDeviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
+  inspectFacts: async (device) =>
+    withRouteOperationFacts(await lifecycleDeviceRuntimeGateway.inspectFacts(device)),
+  bind: async (request) => {
+    const binding = await lifecycleDeviceRuntimeGateway.bind(request);
+    return {
+      ...binding,
+      facts: withRouteOperationFacts(binding.facts),
+      operations: { ...binding.operations, ...routeOperationSpies },
+    };
+  },
+  shutdown: async () => {},
+};
+
 beforeEach(() => {
+  for (const spy of Object.values(routeOperationSpies)) spy.mockClear();
+  routeOperationSpies.typeText.mockImplementation(async () => undefined);
+  routeOperationSpies.finalizeApplicationClose.mockImplementation(async () => undefined);
   gestureRuntimeSpies.scrollDirection.mockReset();
   gestureRuntimeSpies.scrollDirection.mockResolvedValue({});
   gestureRuntimeSpies.captureSnapshot.mockReset();
@@ -62,7 +126,7 @@ async function route(
     leaseRegistry: new LeaseRegistry(),
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
-    deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+    deviceRuntimeGateway: routeDeviceRuntimeGateway,
     androidObservation,
   });
   const response = await handler({ token: 'test-token', session: SESSION, flags: {}, ...req });
@@ -122,7 +186,63 @@ async function readOnlyGet(): Promise<unknown> {
   });
 }
 
+function captureNodes(nodes: readonly unknown[]): void {
+  gestureRuntimeSpies.captureSnapshot.mockResolvedValue({
+    backend: 'xctest',
+    producer: 'apple-runner',
+    nodes,
+  } as never);
+}
+
+async function findTypeRefusedAfterFocus(): Promise<unknown> {
+  captureNodes([CONTINUE_BUTTON, EMAIL_FIELD]);
+  routeOperationSpies.typeText.mockRejectedValueOnce(RUNNER_BUSY());
+  const failure = await route(makeIosAppSession(SESSION), {
+    command: 'find',
+    positionals: ['Email', 'type', 'hello'],
+  }).catch((error: unknown) => error);
+  assert.equal(routeOperationSpies.focusPoint.mock.calls.length, 1);
+  assert.equal(routeOperationSpies.typeText.mock.calls.length, 1);
+  assert.ok(failure instanceof AppError);
+  assert.equal(failure.details?.dispatchedSteps, 1);
+  throw failure;
+}
+
+async function closeThenFinalizeRefused(): Promise<unknown> {
+  routeOperationSpies.finalizeApplicationClose.mockRejectedValueOnce(RUNNER_BUSY());
+  const failure = await route(makeIosAppSession(SESSION), {
+    command: 'close',
+    positionals: ['com.example.app'],
+  }).catch((error: unknown) => error);
+  assert.equal(routeOperationSpies.finalizeApplicationClose.mock.calls.length, 1);
+  assert.ok(failure instanceof AppError);
+  assert.equal(failure.details?.dispatchedSteps, 1);
+  throw failure;
+}
+
+async function maestroDeferredSettleCaptureRefused(): Promise<unknown> {
+  captureNodes([CONTINUE_BUTTON]);
+  gestureRuntimeSpies.captureSnapshot.mockImplementation(async () => {
+    if (routeOperationSpies.back.mock.calls.length > 0) throw RUNNER_BUSY();
+    return { backend: 'xctest', producer: 'apple-runner', nodes: [CONTINUE_BUTTON] } as never;
+  });
+  const flowPath = path.join(mkdtempForTestSync('dispatch-route-maestro'), 'flow.yaml');
+  fs.writeFileSync(flowPath, 'appId: com.example.app\n---\n- back\n- assertVisible: "Continue"\n');
+  const failure = await route(makeIosAppSession(SESSION), {
+    command: 'replay',
+    positionals: [flowPath],
+    flags: { replayBackend: 'maestro', platform: 'ios' },
+  }).catch((error: unknown) => error);
+  assert.equal(routeOperationSpies.back.mock.calls.length, 1);
+  assert.ok(failure instanceof AppError);
+  assert.equal(failure.details?.dispatchedSteps, 1);
+  throw failure;
+}
+
 const DRIVERS: Record<string, () => Promise<unknown>> = {
+  'daemon.route.find-type-refused-after-focus': findTypeRefusedAfterFocus,
+  'daemon.route.session-close-then-finalize-refused': closeThenFinalizeRefused,
+  'daemon.route.maestro-deferred-settle-capture-refused': maestroDeferredSettleCaptureRefused,
   'daemon.route.scroll-transport-failure': scrollWhoseGestureSendFailed,
   'daemon.route.scroll-until-before-first-gesture': scrollUntilRefusedBeforeFirstGesture,
   'daemon.route.scroll-then-dialog-read-refused': androidScrollThenDialogReadRefused,
