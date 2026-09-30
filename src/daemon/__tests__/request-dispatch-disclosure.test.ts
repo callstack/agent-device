@@ -97,11 +97,11 @@ async function scrollUntilRefusedBeforeFirstGesture(): Promise<unknown> {
 async function androidScrollThenDialogReadRefused(): Promise<unknown> {
   const observation: AndroidObservationAdapter = {
     ...clearAndroidObservationFixture,
-    readBlockingDialog: async (device) => {
+    readBlockingDialog: async () => {
       if (gestureRuntimeSpies.scrollDirection.mock.calls.length > 0) {
         throw new AppError('COMMAND_FAILED', 'adb device offline', { dispatched: 'no' });
       }
-      return await clearAndroidObservationFixture.readBlockingDialog(device);
+      return { status: 'clear' };
     },
   };
   const failure = await route(
