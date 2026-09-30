@@ -104,7 +104,12 @@ test('web shutdown cleanup reaps the exact daemon that survived graceful shutdow
     'expected cleanup to escalate after the child ignored SIGTERM',
   );
   // The killed child stays a zombie, alive to kill(pid, 0), until this process reaps it on exit.
-  await Promise.race([exited, delay(5_000)]);
+  const bound = new AbortController();
+  await Promise.race([
+    exited,
+    delay(5_000, undefined, { signal: bound.signal }).catch(() => undefined),
+  ]);
+  bound.abort();
   assert.equal(isProcessAlive(daemonPid), false);
 });
 
