@@ -287,7 +287,6 @@ test('Provider-backed integration iOS Settings flow uses scripted simctl and run
       assertFlatToolCall(appleTool.calls, ['simctl', 'uninstall', 'sim-1', 'com.example.demo']);
       assertFlatToolCall(appleTool.calls, ['plist', 'readJson', path.join(appPath, 'Info.plist')]);
       assertFlatToolCall(appleTool.calls, ['simctl', 'install', 'sim-1', appPath]);
-      assertFlatToolCall(appleTool.calls, ['simctl', 'pbcopy', 'sim-1']);
       assertFlatToolCall(appleTool.calls, ['simctl', 'pbpaste', 'sim-1']);
       assert.ok(
         inventoryRequests.some(

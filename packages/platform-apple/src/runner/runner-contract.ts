@@ -79,6 +79,9 @@ export type RunnerCommand = {
     // The session app's XCUIApplication.state by name. A lifecycle read: it skips the activation
     // preflight, so it reports the state the app is in rather than the one a repair leaves.
     | 'appState'
+    // Sets the device's general pasteboard from the runner's own process: a simulator's
+    // `simctl pbcopy` only promises its data from a process that exits before anything reads it.
+    | 'pasteboardWrite'
     | 'activate'
     | 'terminate'
     | 'targetReset'

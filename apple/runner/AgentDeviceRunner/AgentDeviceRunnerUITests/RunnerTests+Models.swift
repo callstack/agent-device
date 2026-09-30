@@ -34,6 +34,7 @@ enum CommandType: String, Codable, CaseIterable {
   case status
   case uptime
   case appState
+  case pasteboardWrite
   case activate
   case terminate
   case targetReset
@@ -149,6 +150,11 @@ fileprivate extension CommandTraits {
   /// The runner's own lifecycle: no session app is brought forward, and no mutation is proven.
   static let runnerLifecycle = CommandTraits(launchPolicy: .noApp)
 
+  /// Device state the runner sets from its own process, such as the pasteboard: no app is brought
+  /// forward, since the state belongs to the device rather than to the session app, and no UI
+  /// mutation is proven.
+  static let deviceState = CommandTraits(launchPolicy: .noApp)
+
   /// Commands hosted by the surface that already has focus, which no activation may cancel. A
   /// hardware press belongs to the system rather than to the session app, and an alert answers from
   /// the modal where it sits; both mutate.
@@ -252,6 +258,9 @@ extension Command {
 
     case .recordStop, .uptime, .terminate, .targetReset, .shutdown:
       return .runnerLifecycle
+
+    case .pasteboardWrite:
+      return .deviceState
 
     case .actionButton:
       return .presentedSurfaceMutation

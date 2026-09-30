@@ -66,6 +66,35 @@ extension RunnerTests {
     return Response(ok: true, data: DataPayload(applicationState: Self.applicationStateName(state)))
   }
 
+  /// Sets the device's general pasteboard to `text` from the runner's own process. A simulator's
+  /// `simctl pbcopy` only promises the data from the short-lived `simctl` process, which exits before
+  /// anything on the device reads it, so the runner is the writer that leaves the text in place.
+  @MainActor
+  func executePasteboardWrite(command: Command) -> Response {
+    guard let text = command.text else {
+      return Response(
+        ok: false,
+        error: ErrorPayload(
+          code: "INVALID_ARGS",
+          message: "pasteboardWrite requires text",
+          hint: "Set text to the string the pasteboard should hold."
+        )
+      )
+    }
+#if os(iOS) || os(visionOS)
+    UIPasteboard.general.string = text
+    return Response(ok: true, data: DataPayload(message: "pasteboard written"))
+#else
+    return Response(
+      ok: false,
+      error: ErrorPayload(
+        code: "UNSUPPORTED_OPERATION",
+        message: "pasteboardWrite is supported on iOS and visionOS runners"
+      )
+    )
+#endif
+  }
+
   /// `XCUIApplication.State` by the names the TypeScript `AppleApplicationState` type declares, the
   /// same names the activation disclosure gives its prior state.
   static func applicationStateName(_ state: XCUIApplication.State) -> String {
@@ -423,6 +452,8 @@ extension RunnerTests {
       return executeUptime()
     case .appState:
       return executeAppState(command: command)
+    case .pasteboardWrite:
+      return executePasteboardWrite(command: command)
     case .activate:
       guard
         let bundleId = command.appBundleId?.trimmingCharacters(in: .whitespacesAndNewlines),

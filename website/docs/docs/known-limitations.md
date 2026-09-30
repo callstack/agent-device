@@ -14,10 +14,13 @@ This is an Apple platform constraint that affects all XCUITest-based automation 
 
 **Workarounds:**
 
-- **Pre-fill the pasteboard via simctl** — set clipboard content without triggering the dialog:
+- **Pre-fill the pasteboard** — set clipboard content without triggering the dialog:
   ```bash
-  echo "some text" | xcrun simctl pbcopy booted
+  agent-device clipboard write "some text"
   ```
+  On a simulator the runner writes the pasteboard from inside the device. Under Xcode 27,
+  `xcrun simctl pbcopy` exits 0 but leaves the pasteboard empty: it hands the simulator only a
+  promise of the data, owned by a `simctl` process that has exited by the time anything reads it.
 - **Test the dialog manually** — the "Allow Paste" UX cannot be exercised through XCUITest-based automation.
 
 ## Android: non-ASCII text on real devices without the test IME helper

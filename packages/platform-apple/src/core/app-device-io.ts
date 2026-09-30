@@ -3,6 +3,8 @@ import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { ensureBootedSimulator, requireSimulatorDevice } from './simulator.ts';
 import { readMacOsClipboardText, writeMacOsClipboardText } from '../os/macos/apps.ts';
 import { runSimctlForDevice } from './simctl.ts';
+import { runAppleRunnerCommand } from './runner-client.ts';
+import type { AppleRunnerCommandOptions } from '../runner/index.ts';
 
 export async function readIosClipboardText(device: DeviceInfo): Promise<string> {
   if (isMacOs(device)) {
@@ -17,18 +19,20 @@ export async function readIosClipboardText(device: DeviceInfo): Promise<string> 
   return result.stdout.replaceAll('\r\n', '\n').replace(/\n$/, '');
 }
 
-export async function writeIosClipboardText(device: DeviceInfo, text: string): Promise<void> {
+/**
+ * Writes the device's pasteboard: the macOS host's directly, a simulator's from the runner's own
+ * process. `simctl pbcopy` hands the simulator only a promise of the data, owned by the `simctl`
+ * process that exits before anything on the device reads it, so the pasteboard ends up empty.
+ */
+export async function writeIosClipboardText(
+  device: DeviceInfo,
+  text: string,
+  runnerOptions?: AppleRunnerCommandOptions,
+): Promise<void> {
   if (isMacOs(device)) {
     await writeMacOsClipboardText(text);
     return;
   }
   requireSimulatorDevice(device, 'clipboard');
-  await ensureBootedSimulator(device);
-  requireExecSuccess(
-    await runSimctlForDevice(device, ['pbcopy', device.id], {
-      allowFailure: true,
-      stdin: text,
-    }),
-    'Failed to write iOS simulator clipboard',
-  );
+  await runAppleRunnerCommand(device, { command: 'pasteboardWrite', text }, runnerOptions);
 }

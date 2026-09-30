@@ -192,7 +192,7 @@ export function createAppleInteractor(
       };
     },
     readClipboard: () => readIosClipboardText(device),
-    writeClipboard: (text) => writeIosClipboardText(device, text),
+    writeClipboard: (text) => writeIosClipboardText(device, text, runnerOpts),
     setSetting: (setting, state, appId, options) =>
       setIosSetting(device, setting, state, appId, options),
     readSetting: (setting) => readIosSetting(device, setting),
@@ -363,7 +363,6 @@ function withInjectedAppleRunnerTransport(
     close: async () => rejectLocalAppleToolMethod('close'),
     screenshot: async () => rejectLocalAppleToolMethod('screenshot'),
     readClipboard: async () => rejectLocalAppleToolMethod('readClipboard'),
-    writeClipboard: async () => rejectLocalAppleToolMethod('writeClipboard'),
     setSetting: async () => rejectLocalAppleToolMethod('setSetting'),
     readSetting: async () => rejectLocalAppleToolMethod('readSetting'),
   };

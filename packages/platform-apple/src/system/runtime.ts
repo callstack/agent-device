@@ -46,7 +46,8 @@ const settingsReadHostUnavailable = Object.freeze({
 } as const);
 /**
  * Parity with the retired `supportsHostOrSimulatorSurface` closure: the Apple pasteboard is
- * reachable through `simctl pbpaste`/`pbcopy` on any simulator, and directly on the macOS host;
+ * reachable on any simulator (read through `simctl pbpaste`, written by the runner), and directly on
+ * the macOS host;
  * a physical iOS/iPadOS/tvOS/visionOS device has neither route.
  */
 const clipboardLeafUnavailable = Object.freeze({
@@ -84,7 +85,7 @@ function appleHostOrSimulatorFact(
 }
 
 /**
- * Read and write share one cell: both routes (`simctl pbpaste`/`pbcopy`, and the macOS host
+ * Read and write share one cell: both routes (the simulator's `simctl pbpaste` and runner write, and the macOS host
  * pasteboard) expose the pair or neither, so splitting them here would invent a cell no Apple
  * owner can actually be in.
  */

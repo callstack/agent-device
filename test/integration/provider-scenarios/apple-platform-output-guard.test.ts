@@ -260,16 +260,12 @@ function permissiveTool(world: World) {
   let clipboard = '';
   let darkMode = false;
   return createRecordingAppleToolProvider({
-    simctl: async (args, options) => {
+    simctl: async (args) => {
       const joined = args.join(' ');
       const list = simctlListDevicesResult(args, 'com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
         { name: 'iPhone 15', udid: 'sim-1' },
       ]);
       if (list) return list;
-      if (joined === 'pbcopy sim-1') {
-        clipboard = String(options?.stdin ?? '');
-        return { stdout: '', stderr: '', exitCode: 0 };
-      }
       if (joined === 'pbpaste sim-1') return { stdout: `${clipboard}\n`, stderr: '', exitCode: 0 };
       if (joined === 'listapps sim-1') {
         return {
