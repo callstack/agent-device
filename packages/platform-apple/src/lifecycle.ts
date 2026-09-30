@@ -106,12 +106,7 @@ async function openAppleApplication(
   const localIosSimulator = isIosSimulator(binding.device);
   const launch = openLaunchPlan(binding.device, input, localIosSimulator);
   const runner = createRunnerPrewarm(host, binding, input, timing);
-  const policy = resolveRunnerPrewarmPolicy(
-    binding.device,
-    input,
-    localIosSimulator,
-    launch.confirmable,
-  );
+  const policy = resolveRunnerPrewarmPolicy(binding.device, input, localIosSimulator);
   if (policy.runnerDemand) timing.runnerDemand = policy.runnerDemand;
   releaseSpeculativeRunner(host, binding, input, policy);
   const { shouldPrewarmRunner } = policy;
@@ -150,6 +145,7 @@ async function openAppleApplication(
       input,
       launch,
       launchStartedAtMs,
+      timing,
     );
     if (!launchConfirmation) return { appBundleId: input.appBundleId, timing };
     await settleAppleOpen(host, binding, input, localIosSimulator, observation, timing);
@@ -259,21 +255,27 @@ async function dispatchAppleLaunchUrl(
 }
 
 /**
- * One alert read after the launch settled, spent only when the launch handed SpringBoard a URL it
- * may hold behind a confirmation, and only while the launch budget still runs.
+ * One alert read, spent only when the launch handed SpringBoard a URL it may hold behind a
+ * confirmation and the host AX bridge then could not observe the launched app, the state a system
+ * surface over the app leaves. An observed app is not covered, so its open never reaches the
+ * runner. The read runs within what is left of the launch budget.
  */
 async function answerAppleLaunchConfirmation(
   binding: BoundAppleInteractor,
   input: OpenApplicationInput,
   launch: AppleLaunchPlan,
   launchStartedAtMs: number,
+  timing: MutableOpenTiming,
 ): Promise<LaunchConfirmation | undefined> {
   if (!launch.confirmable || !input.appBundleId) return undefined;
-  if (Date.now() - launchStartedAtMs >= IOS_APP_LAUNCH_TIMEOUT_MS) return undefined;
+  if (timing.postOpenObservation !== 'unobservable') return undefined;
+  const budgetMs = IOS_APP_LAUNCH_TIMEOUT_MS - (Date.now() - launchStartedAtMs);
+  if (budgetMs <= 0) return undefined;
   const { answerLaunchConfirmation, createLaunchConfirmationPort } = await loadLaunchConfirmation();
   const interactor = await binding.resolveInteractor(input.execution, input.appBundleId);
   return await answerLaunchConfirmation(
     createLaunchConfirmationPort(binding.device, input.appBundleId, interactor),
+    budgetMs,
   );
 }
 

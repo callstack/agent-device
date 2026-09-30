@@ -24,23 +24,18 @@ export type RunnerPrewarmPolicy = Readonly<{
  * Only a local Simulator has a runner-free observation path (the host AX bridge), so only it
  * consults the plan and never waits for runner readiness after the open: bridge observation does
  * not need it, and the first runner-dependent command awaits the same startup under the runner
- * session lock. Physical devices keep their runner lifecycle unchanged. An open that may answer a
- * launch confirmation reads the alert through the runner itself, so it requires one whatever the
- * plan.
+ * session lock. Physical devices keep their runner lifecycle unchanged.
  */
 export function resolveRunnerPrewarmPolicy(
   device: DeviceInfo,
   input: OpenApplicationInput,
   localIosSimulator: boolean,
-  answersLaunchConfirmation: boolean,
 ): RunnerPrewarmPolicy {
   // Only a Simulator with the host AX bridge has a runner-free observation path, so only it
   // consults the plan and skips the relaunch wait; every other Apple target keeps its lifecycle.
   const bridge = localIosSimulator && hasSimulatorBridge(device);
   const runnerDemand = bridge
-    ? answersLaunchConfirmation
-      ? 'required'
-      : resolveAppleSimulatorRunnerDemand(input.execution.plannedOperations)
+    ? resolveAppleSimulatorRunnerDemand(input.execution.plannedOperations)
     : undefined;
   const shouldPrewarmRunner =
     isIosFamily(device) &&
