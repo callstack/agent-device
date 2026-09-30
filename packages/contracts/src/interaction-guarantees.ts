@@ -159,15 +159,13 @@ const SHARED_RESPONSE_CONSTRUCTION: GuaranteeEnforcement = {
   via: 'src/daemon/interaction/internal/interaction-touch-response.ts#buildInteractionResponseData',
 };
 
-// runtime-selector and runtime-ref share this waiver by construction: neither path observes the tap
-// outcome by default. The deferred/corroborated-failure outcome mark (a recorded XCTest failure
-// after a tap is an ambiguous outcome, per docs/agents/selector-capture.md) is scoped to
-// navigation-sensitive Android actions and target-authored gestures, not the tap-shaped runtime
-// paths; --settle/--verify are the opt-in ways to observe one.
+// runtime-selector, runtime-ref, and coordinate share this waiver: all three finalize through
+// finalizeTouchInteraction, which calls markDeferredInteractionOutcome with the tap point, and none
+// observes the outcome in its own response.
 const TAP_OUTCOME_NOT_OBSERVED_GAP: GuaranteeEnforcement = {
   kind: 'waived',
   reason:
-    'gap: neither path observes the tap outcome by default; only --settle/--verify capture post-action evidence, and the deferred/corroborated-failure outcome mark applies only to navigation-sensitive Android actions and target-authored gestures.',
+    'gap: the response reports the dispatch only; only opt-in --verify/--settle capture post-action evidence into it. The deferred marks set after dispatch (Android snapshot freshness after press/click, the no-change tap retry when the request sets interactionOutcome.retryOnNoChange, post-gesture stabilization when the request sets postGestureStabilization) are judged by the next capture, never in this response, and the iOS ambiguous-failure corroboration reconsiders only a thrown runner error.',
   trackingIssue: GAPS_UMBRELLA_ISSUE,
 };
 
@@ -539,11 +537,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         reason:
           'Coordinates name a point, not an element; there is no target existence to wait for.',
       },
-      outcomeObservation: {
-        kind: 'inapplicable',
-        reason:
-          'No element was resolved, so there is no target identity to corroborate a post-action outcome against beyond the backend result and opt-in --verify/--settle.',
-      },
+      outcomeObservation: TAP_OUTCOME_NOT_OBSERVED_GAP,
     },
   },
   'maestro-direct-selector': {
