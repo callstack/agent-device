@@ -34,9 +34,14 @@ export type ReplayScriptScene = ReplaySessionScene &
     /**
      * Runs the script through `runReplayCommand`. Each request is appended to
      * `invoked` before `invoke` answers it; without `invoke` every request succeeds
-     * with empty data. `clock` paces its target-readiness waits.
+     * with empty data. `clock` paces its target-readiness waits; `requestId` lets a test cancel the
+     * replay through the request registry.
      */
-    replay(options?: { invoke?: DaemonInvokeFn; clock?: ObservationClock }): Promise<DaemonResponse>;
+    replay(options?: {
+      invoke?: DaemonInvokeFn;
+      clock?: ObservationClock;
+      requestId?: string;
+    }): Promise<DaemonResponse>;
   }>;
 
 /** An iOS app session plus a written `.ad` script, ready to replay. */
@@ -48,9 +53,12 @@ export function replayScriptScene(prefix: string, lines: string[]): ReplayScript
     ...scene,
     filePath,
     invoked,
-    replay: ({ invoke, clock } = {}) =>
+    replay: ({ invoke, clock, requestId } = {}) =>
       runReplayForTest({
-        req: baseReplayRequest({ positionals: [filePath] }),
+        req: baseReplayRequest({
+          positionals: [filePath],
+          ...(requestId === undefined ? {} : { meta: { requestId } }),
+        }),
         ...(clock === undefined ? {} : { clock }),
         sessionName: scene.sessionName,
         logPath: scene.logPath,

@@ -34,6 +34,11 @@ vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
 });
 
 import { AppError } from '@agent-device/kernel/errors';
+import {
+  clearRequestCanceled,
+  markRequestCanceled,
+  registerRequestAbort,
+} from '@agent-device/host-kit/request';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   legacyDispatchCapture,
@@ -264,6 +269,32 @@ test('the budget the gate hands the dispatch counts from the end of its first ca
     { polls: 9, waitedMs: 2_100, end: 'done', command: 'click' },
   ]);
   expect(scene.invoked[0]?.flags?.readinessTimeoutMs).toBe(400);
+});
+
+test('cancelling the request during the gate wait ends it at the next poll with no dispatch', async () => {
+  const scene = replayScriptScene('agent-device-replay-target-verify-gate-cancel-', [
+    SAVE_ANNOTATION,
+    'click id="save"',
+  ]);
+  const requestId = 'replay-gate-cancel';
+  const registration = registerRequestAbort(requestId);
+  mockDispatchCommand.mockResolvedValueOnce(emptyCapture()).mockImplementationOnce(async () => {
+    markRequestCanceled(requestId);
+    return emptyCapture();
+  });
+  mockDispatchCommand.mockResolvedValue(saveButtonCapture());
+
+  try {
+    const response = await scene.replay({ requestId });
+
+    expect(response.ok).toBe(false);
+    if (response.ok) return;
+    expect(response.error.details?.reason).toBe('request_canceled');
+    expect(mockDispatchCommand).toHaveBeenCalledTimes(2);
+    expect(scene.invoked).toEqual([]);
+  } finally {
+    clearRequestCanceled(requestId, registration);
+  }
 });
 
 test('an annotated step whose command does not wait for its target refuses a selector miss on one capture', async () => {
