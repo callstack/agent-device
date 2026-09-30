@@ -9,6 +9,7 @@ import {
   dispatchDisclosureRowsOwnedBy,
 } from '@agent-device/contracts/dispatch-disclosure-fixtures';
 import { withAndroidAdbProvider, type AndroidAdbExecutor } from '../adb-executor.ts';
+import { completeAndroidFillVerification } from '../fill-verification.ts';
 import { pressAndroid } from '../input-actions.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import { typeAndroid } from '../text-input.ts';
@@ -97,6 +98,16 @@ const DRIVERS: Record<string, { drive: () => Promise<unknown>; dispatchedSteps?:
   'android-adb.input-text.failed-after-chunk': {
     drive: typeFailingOnSecondChunk,
     dispatchedSteps: 1,
+  },
+  'android-adb.fill.unverified': {
+    drive: async () =>
+      completeAndroidFillVerification('filed the expense', null, {
+        ok: false,
+        actual: 'filed the',
+        reason: 'text_mismatch',
+        targetInput: null,
+        actualInput: null,
+      }),
   },
   'android-helper.gesture.reported-failure': {
     drive: () =>

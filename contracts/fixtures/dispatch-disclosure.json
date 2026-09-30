@@ -28,6 +28,13 @@
     "dispatched": "unknown"
   },
   {
+    "id": "daemon.scroll-no-progress",
+    "phase": "after-seam",
+    "producer": "daemon",
+    "trigger": "scroll_no_progress: the scroll gesture ran and the container, still hiding content, never shifted",
+    "dispatched": "yes"
+  },
+  {
     "id": "maestro-direct.fallback.pre-send-refusal",
     "phase": "after-seam",
     "producer": "daemon",
@@ -238,6 +245,13 @@
     "producer": "android-adb",
     "trigger": "adb input text failed after at least one chunk was typed (details.dispatchedSteps)",
     "dispatched": "unknown"
+  },
+  {
+    "id": "android-adb.fill.unverified",
+    "phase": "after-seam",
+    "producer": "android-adb",
+    "trigger": "fill typed the text and its verification still failed after the last clear-and-retype pass. A throw from inside the second pass keeps that pass's adb input verdict (unknown with dispatchedSteps), though the first pass already typed",
+    "dispatched": "yes"
   },
   {
     "id": "android-helper.gesture.reported-failure",
