@@ -2,8 +2,8 @@ import { createRequestCanceledError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
 /**
- * The one observation loop: capture until a verdict accepts, on a schedule, under a budget that is
- * enforced by cancellation. Owns cadence, the deadline, abort-and-join of an in-flight capture,
+ * The one observation loop: capture until a verdict accepts, on a schedule, under a budget. Owns
+ * cadence, the deadline, abort-and-join of an in-flight capture under `captureDeadline: 'cancel'`,
  * which capture errors are ridden out, and the per-poll timeline. Owns nothing about WHAT is
  * observed: the verdict is the caller's, and so is the equality rule behind it (digest, signature,
  * pixel).
@@ -24,9 +24,10 @@ export type ObservationSchedule = Readonly<{
   /** Delay between polls, clamped to the remaining budget. */
   intervalMs: number;
   /**
-   * Wall-clock budget from the first capture. It bounds when a poll may start, and a capture that
-   * starts inside it may overrun it by at most one interval: the sample after the last sleep is
-   * always taken, so a verdict that reads elapsed time against a cap sees a poll at or past it.
+   * Wall-clock budget from the first capture. It bounds when a poll may start; under
+   * `captureDeadline: 'cancel'` a capture that starts inside it may overrun it by at most one
+   * interval. The sample after the last sleep is always taken, so a verdict that reads elapsed time
+   * against a cap sees a poll at or past it.
    */
   budgetMs: number;
   /** Observations (an `initial` counts) the loop always completes before the budget may end it. */
@@ -37,6 +38,14 @@ export type ObservationSchedule = Readonly<{
    * one-shot pays nothing on its success path.
    */
   budgetFrom?: 'start' | 'first-capture';
+  /**
+   * Whether a capture is bounded by its own deadline. `'cancel'` arms each capture with the
+   * remaining budget (at least one interval) as an abort signal, and a capture that ends at or past
+   * that deadline ends the loop `stalled`: declare it only when the capture honors the signal.
+   * `'none'` hands the capture no deadline; a capture that finishes past the budget is still judged,
+   * so the loop ends `done` on an accepting verdict and `expired` otherwise.
+   */
+  captureDeadline: 'cancel' | 'none';
 }>;
 
 export type ObservationClock = Readonly<{
@@ -49,7 +58,8 @@ export type ObservationVerdict<R> =
   /** Keep polling; `budgetMs` raises the budget measured from the first capture (never lowers it). */
   | Readonly<{ kind: 'continue'; budgetMs?: number }>;
 
-export type ObservationPollOutcome = 'observed' | 'rode-out' | 'stalled';
+/** `failed` is a capture error the loop does not ride out; it always ends the loop. */
+export type ObservationPollOutcome = 'observed' | 'rode-out' | 'stalled' | 'failed';
 
 export type ObservationPoll = Readonly<{
   startedMs: number;
@@ -65,7 +75,7 @@ export type ObservationEvidence = Readonly<{
 type ObservedEnd<T, R> =
   | Readonly<{ kind: 'done'; result: R; value: T }>
   | Readonly<{ kind: 'expired'; last: T | undefined; lastError: unknown }>
-  | Readonly<{ kind: 'stalled'; last: T | undefined; error: unknown }>
+  | Readonly<{ kind: 'stalled'; last: T | undefined; lastError: unknown; error: unknown }>
   | Readonly<{ kind: 'failed'; last: T | undefined; error: unknown }>;
 
 export type Observed<T, R> = ObservationEvidence & ObservedEnd<T, R>;
@@ -75,7 +85,10 @@ export type ObserveUntilParams<T, R> = Readonly<{
   /** Judges the latest capture; `previous` is the last observed value, for quiet-pair predicates. */
   verdict: (latest: T, previous: T | undefined, polls: number) => ObservationVerdict<R>;
   schedule: ObservationSchedule;
-  /** True keeps polling past this capture error. Default: no error is ridden out. */
+  /**
+   * True keeps polling past this capture error. Default: no error is ridden out. The last
+   * ridden-out error is reported as `lastError` when the loop expires or stalls.
+   */
   rideOut?: (error: unknown) => boolean;
   signal?: AbortSignal;
   clock?: ObservationClock;
@@ -164,10 +177,12 @@ async function pollOnce<T, R>(loop: Loop<T, R>): Promise<Observed<T, R> | undefi
   const { params, clock, state } = loop;
   const unbounded = params.schedule.budgetFrom === 'first-capture' && state.polls.length === 0;
   const pollStartedMs = clock.now();
+  const bounded = !unbounded && params.schedule.captureDeadline === 'cancel';
   const poll = await captureWithin(
-    unbounded ? undefined : Math.max(remainingMs(loop), params.schedule.intervalMs),
+    bounded ? Math.max(remainingMs(loop), params.schedule.intervalMs) : undefined,
     params.signal,
     params.capture,
+    clock,
   );
   state.observations += 1;
   if (unbounded) state.budgetStartedMs = clock.now();
@@ -178,8 +193,19 @@ async function pollOnce<T, R>(loop: Loop<T, R>): Promise<Observed<T, R> | undefi
     outcome,
   });
   if (poll.kind === 'observed') return judge(loop, poll.value);
-  if (outcome === 'rode-out') return undefined;
-  return finish(loop, { kind: poll.kind, last: state.last, error: poll.error });
+  if (outcome === 'rode-out') {
+    state.lastError = poll.error;
+    return undefined;
+  }
+  if (poll.kind === 'stalled') {
+    return finish(loop, {
+      kind: 'stalled',
+      last: state.last,
+      lastError: state.lastError,
+      error: poll.error,
+    });
+  }
+  return finish(loop, { kind: 'failed', last: state.last, error: poll.error });
 }
 
 function pollOutcome<T, R>(
@@ -187,7 +213,7 @@ function pollOutcome<T, R>(
   poll: CaptureWithinOutcome<T>,
 ): ObservationPollOutcome {
   if (poll.kind === 'stalled') return 'stalled';
-  if (poll.kind === 'failed') return loop.params.rideOut?.(poll.error) ? 'rode-out' : 'observed';
+  if (poll.kind === 'failed') return loop.params.rideOut?.(poll.error) ? 'rode-out' : 'failed';
   return 'observed';
 }
 
@@ -236,8 +262,9 @@ async function captureWithin<T>(
   remainingMs: number | undefined,
   parent: AbortSignal | undefined,
   capture: (signal: AbortSignal) => Promise<T>,
+  clock: ObservationClock,
 ): Promise<CaptureWithinOutcome<T>> {
-  const deadline = armDeadline(remainingMs);
+  const deadline = armDeadline(remainingMs, clock);
   const signal = parent ? AbortSignal.any([parent, deadline.signal]) : deadline.signal;
   try {
     const value = await capture(signal);
@@ -259,19 +286,24 @@ function endOfCapture<T>(
   return deadlineExpired ? { kind: 'stalled', error } : undefined;
 }
 
-function armDeadline(remainingMs: number | undefined): {
+/** The deadline has passed once its timer fired or the loop's clock reached it, whichever is first. */
+function armDeadline(
+  remainingMs: number | undefined,
+  clock: ObservationClock,
+): {
   signal: AbortSignal;
   expired: () => boolean;
   dispose: () => void;
 } {
   const controller = new AbortController();
-  let expired = false;
+  const deadlineAtMs = remainingMs === undefined ? undefined : clock.now() + remainingMs;
+  let fired = false;
   const timer =
     remainingMs === undefined
       ? undefined
       : setTimeout(
           () => {
-            expired = true;
+            fired = true;
             controller.abort(new DOMException('Observation deadline exceeded', 'TimeoutError'));
           },
           Math.max(0, remainingMs),
@@ -279,7 +311,7 @@ function armDeadline(remainingMs: number | undefined): {
   timer?.unref();
   return {
     signal: controller.signal,
-    expired: () => expired,
+    expired: () => fired || (deadlineAtMs !== undefined && clock.now() >= deadlineAtMs),
     dispose: () => {
       if (timer !== undefined) clearTimeout(timer);
     },

@@ -224,13 +224,7 @@ async function readinessExhaustedFailure(
     { kind: 'expired' | 'stalled' }
   >,
 ): Promise<AppError | unknown> {
-  if (
-    observed.last === undefined &&
-    observed.kind === 'expired' &&
-    observed.lastError !== undefined
-  ) {
-    return observed.lastError;
-  }
+  if (observed.last === undefined && observed.lastError !== undefined) return observed.lastError;
   const readiness: SelectorReadinessDetails = {
     polls: observed.polls.length,
     waitedMs: observed.waitedMs,
@@ -292,6 +286,9 @@ export async function pollForSelectorReadiness(
       intervalMs: schedule.intervalMs,
       budgetMs: schedule.budgetMs,
       budgetFrom: 'first-capture',
+      // The poll signal reaches the platform as CaptureSnapshotInput.signal, which the snapshot
+      // binding joins (captureSnapshotSignal): the same per-capture cancellation `wait` relies on.
+      captureDeadline: 'cancel',
     },
     rideOut: isUnreadableCaptureContentError,
     ...(signal ? { signal } : {}),

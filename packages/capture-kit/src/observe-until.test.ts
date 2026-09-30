@@ -21,7 +21,7 @@ function fakeClock(): ObservationClock & { advance(ms: number): void; slept: num
   };
 }
 
-const SCHEDULE = { intervalMs: 200, budgetMs: 1_000 };
+const SCHEDULE = { intervalMs: 200, budgetMs: 1_000, captureDeadline: 'cancel' } as const;
 
 /** The Android helper's content verdict: the capture ran but held no readable app content. */
 function unreadableContent(): AppError {
@@ -105,7 +105,30 @@ describe('observeUntil', () => {
     });
     assert.equal(observed.kind, 'failed');
     assert.equal(observed.kind === 'failed' && observed.error, failure);
-    assert.equal(observed.polls.length, 1);
+    assert.deepEqual(
+      observed.polls.map((poll) => poll.outcome),
+      ['failed'],
+    );
+  });
+
+  test('reports the last ridden-out error when every poll was ridden out', async () => {
+    const clock = fakeClock();
+    const failures: AppError[] = [];
+    const observed = await observeUntil<number, number>({
+      capture: async () => {
+        const failure = unreadableContent();
+        failures.push(failure);
+        throw failure;
+      },
+      verdict: (latest) => ({ kind: 'done', result: latest }),
+      schedule: SCHEDULE,
+      rideOut: isUnreadableCaptureContentError,
+      clock,
+    });
+    assert.equal(observed.kind, 'expired');
+    assert.equal(observed.kind === 'expired' && observed.last, undefined);
+    assert.equal(observed.kind === 'expired' && observed.lastError, failures.at(-1));
+    assert.ok(observed.polls.every((poll) => poll.outcome === 'rode-out'));
   });
 
   test('cancels and joins a capture still in flight at the deadline', async () => {
@@ -119,7 +142,7 @@ describe('observeUntil', () => {
           });
         }),
       verdict: () => ({ kind: 'done', result: true }),
-      schedule: { intervalMs: 5, budgetMs: 20 },
+      schedule: { intervalMs: 5, budgetMs: 20, captureDeadline: 'cancel' },
     });
     assert.equal(observed.kind, 'stalled');
     assert.equal(aborted, true);
@@ -135,14 +158,14 @@ describe('observeUntil', () => {
     const observed = await observeUntil({
       capture: async () => {
         captures += 1;
-        clock.advance(900);
+        clock.advance(1_000);
         return captures;
       },
       verdict: (latest, previous) =>
         previous !== undefined
           ? { kind: 'done', result: [previous, latest] }
           : { kind: 'continue' },
-      schedule: { intervalMs: 200, budgetMs: 1_000, minPolls: 2 },
+      schedule: { intervalMs: 200, budgetMs: 1_000, minPolls: 2, captureDeadline: 'none' },
       clock,
     });
     assert.equal(observed.kind, 'done');
@@ -196,7 +219,12 @@ describe('observeUntil budgetFrom first-capture', () => {
         return captures;
       },
       verdict: (latest) => (latest === 3 ? { kind: 'done', result: latest } : { kind: 'continue' }),
-      schedule: { intervalMs: 200, budgetMs: 1_000, budgetFrom: 'first-capture' },
+      schedule: {
+        intervalMs: 200,
+        budgetMs: 1_000,
+        budgetFrom: 'first-capture',
+        captureDeadline: 'cancel',
+      },
       clock,
     });
     assert.equal(observed.kind, 'done');
@@ -213,12 +241,68 @@ describe('observeUntil budgetFrom first-capture', () => {
         previous === undefined
           ? { kind: 'continue' }
           : { kind: 'done', result: [previous, latest] },
-      schedule: { intervalMs: 200, budgetMs: 1_000, minPolls: 2 },
+      schedule: { intervalMs: 200, budgetMs: 1_000, minPolls: 2, captureDeadline: 'cancel' },
       initial: 1,
       clock,
     });
     assert.deepEqual(observed.kind === 'done' && observed.result, [1, 2]);
     assert.deepEqual(clock.slept, [200]);
     assert.equal(observed.polls.length, 1);
+  });
+});
+
+describe('observeUntil captureDeadline', () => {
+  /** A second capture that returns only after the remaining budget is spent, ignoring its signal. */
+  function lateSecondCapture(clock: ReturnType<typeof fakeClock>) {
+    let captures = 0;
+    return async () => {
+      captures += 1;
+      clock.advance(captures === 1 ? 100 : 1_500);
+      return captures;
+    };
+  }
+
+  test("'none' judges a capture that finishes past the budget and can end done", async () => {
+    const clock = fakeClock();
+    const observed = await observeUntil({
+      capture: lateSecondCapture(clock),
+      verdict: (latest) => (latest === 2 ? { kind: 'done', result: latest } : { kind: 'continue' }),
+      schedule: { ...SCHEDULE, captureDeadline: 'none' },
+      clock,
+    });
+    assert.equal(observed.kind, 'done');
+    assert.deepEqual(
+      observed.polls.map((poll) => poll.outcome),
+      ['observed', 'observed'],
+    );
+  });
+
+  test("'none' ends expired, never stalled, when the late capture's verdict continues", async () => {
+    const clock = fakeClock();
+    const observed = await observeUntil({
+      capture: lateSecondCapture(clock),
+      verdict: () => ({ kind: 'continue' }),
+      schedule: { ...SCHEDULE, captureDeadline: 'none' },
+      clock,
+    });
+    assert.equal(observed.kind, 'expired');
+    assert.equal(observed.kind === 'expired' && observed.last, 2);
+    assert.equal(observed.polls.length, 2);
+  });
+
+  test("'cancel' ends stalled on a capture that finishes past its deadline", async () => {
+    const clock = fakeClock();
+    const observed = await observeUntil({
+      capture: lateSecondCapture(clock),
+      verdict: (latest) => (latest === 2 ? { kind: 'done', result: latest } : { kind: 'continue' }),
+      schedule: SCHEDULE,
+      clock,
+    });
+    assert.equal(observed.kind, 'stalled');
+    assert.equal(observed.kind === 'stalled' && observed.last, 1);
+    assert.deepEqual(
+      observed.polls.map((poll) => poll.outcome),
+      ['observed', 'stalled'],
+    );
   });
 });

@@ -93,3 +93,31 @@ test('runtime press caps a readinessTimeoutMs larger than the row maxTimeoutMs a
     },
   );
 });
+
+test('runtime press whose every capture is unreadable fails with the unreadable-content error, not a selector miss', async () => {
+  let captures = 0;
+  const device = createInteractionDevice(makeSnapshotState([]), {
+    clock: createFakeClock(),
+    captureSnapshot: async () => {
+      captures += 1;
+      throw new AppError('COMMAND_FAILED', 'Android snapshot has no readable app content', {
+        androidSnapshotHelperFailureReason: 'system-window-only',
+      });
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      device.interactions.press(selector('label=Continue'), {
+        session: 'default',
+        readinessTimeoutMs: 2_000,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.androidSnapshotHelperFailureReason, 'system-window-only');
+      assert.notEqual(error.details?.reason, 'selector_not_found');
+      return true;
+    },
+  );
+  assert.ok(captures >= 2, `expected the unreadable captures to be ridden out, got ${captures}`);
+});
