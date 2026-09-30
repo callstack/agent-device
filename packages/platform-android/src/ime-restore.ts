@@ -13,7 +13,11 @@ import {
   readAndroidDefaultInputMethod,
   readPersistedPreviousIme,
 } from './ime-settings-record.ts';
-import { activeTestImeDevices, withAndroidTestImeRecoveryLock } from './ime-state.ts';
+import {
+  activeTestImeDevices,
+  rebindDisplacedTestImeDevices,
+  withAndroidTestImeRecoveryLock,
+} from './ime-state.ts';
 
 // Restore and startup orphan recovery: undo the helper switch exactly when it is safe, keep
 // durable evidence until the device is observed clean.
@@ -45,8 +49,9 @@ export async function restoreAndroidTestIme(
     // Drop the owned-flag first so restoreAndroidTestImeFor's "owned by a live session" guard does
     // not skip this intentional close-time restore.
     activeTestImeDevices.delete(deviceKey);
+    const displacedByRebind = rebindDisplacedTestImeDevices.delete(deviceKey);
     const adb = resolveAndroidAdbExecutor(device);
-    const result = await restoreAndroidTestImeFor(adb, device);
+    const result = await restoreAndroidTestImeFor(adb, device, { displacedByRebind });
     if (isDeviceRecoveryComplete(result.reason)) {
       await requireAndroidAdbHost().imeRecoveryMarkers.clear(options.stateDir, device.id);
     }
@@ -63,13 +68,14 @@ function isDeviceRecoveryComplete(reason: AndroidTestImeRestoreReason): boolean 
 
 // Undo the helper switch on one device. Invariants the review requires:
 //  - Never restore a device a live session in this process owns (the fire-and-forget startup race).
-//  - Only touch the IME when the helper is STILL the active input method. If the user (or a
-//    concurrent session) already switched away, leave their choice alone.
+//  - Only touch the IME when the helper is STILL the active input method, or this process's own
+//    rebind displaced it. If the user (or a concurrent session) switched away, leave their choice.
 //  - Only clear the persisted recovery value AFTER confirming the previous IME is actually
 //    restored (read-back). A failed `ime set` keeps the value so recovery can retry.
 async function restoreAndroidTestImeFor(
   adb: AndroidAdbExecutor,
   device: DeviceInfo,
+  options: { displacedByRebind?: boolean } = {},
 ): Promise<AndroidTestImeRestoreResult> {
   const deviceLabel = device.id;
   if (activeTestImeDevices.has(getAndroidImeHelperDeviceKey(device))) {
@@ -81,7 +87,7 @@ async function restoreAndroidTestImeFor(
     return { restored: false, reason: 'no-record' };
   }
   const currentIme = await readAndroidDefaultInputMethod(adb);
-  if (currentIme !== ANDROID_IME_HELPER_SERVICE_COMPONENT) {
+  if (currentIme !== ANDROID_IME_HELPER_SERVICE_COMPONENT && !options.displacedByRebind) {
     // Helper is not active — the user switched away, or the helper was never really set. Do not
     // overwrite the current IME, and do not clear the device record (a concurrent activation could
     // have just written it).

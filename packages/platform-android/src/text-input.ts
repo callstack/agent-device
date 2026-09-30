@@ -16,7 +16,6 @@ import {
   type AndroidTextInputAction,
 } from './adb-executor.ts';
 import { runAndroidShell, sleep } from './adb.ts';
-import type { AndroidAdbExecutor } from './adb-transport.ts';
 import { getAndroidKeyboardState, type AndroidKeyboardState } from './device-input-state.ts';
 import {
   buildAndroidFillUnconfirmedVerification,
@@ -25,18 +24,14 @@ import {
   verifyAndroidFilledText,
   type AndroidFillVerification,
 } from './fill-verification.ts';
+import { rebindAndroidTestIme } from './ime-activation.ts';
 import {
-  ANDROID_IME_HELPER_SERVICE_COMPONENT,
   clearAndroidImeHelperText,
-  getAndroidImeHelperDeviceKey,
   isAndroidImeHelperPackage,
-  rebindAndroidImeHelper,
   selectAndroidImeHelperArtifact,
   sendAndroidImeHelperText,
 } from './ime-helper.ts';
 import { isAndroidTestImeActive } from './ime-lifecycle.ts';
-import { readAndroidDefaultInputMethod } from './ime-settings-record.ts';
-import { activeTestImeDevices } from './ime-state.ts';
 import { focusAndroid } from './input-actions.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
@@ -261,7 +256,7 @@ async function fillAndroidImeHelper(
   for (let attempt = 0; attempt < 2; attempt += 1) {
     if (
       lastVerification &&
-      !(await prepareAndroidImeHelperRetry(device, adb, x, y, lastVerification, beforeTarget))
+      !(await prepareAndroidImeHelperRetry(device, x, y, lastVerification, beforeTarget))
     ) {
       break;
     }
@@ -278,19 +273,18 @@ async function fillAndroidImeHelper(
 
 /**
  * Readies the field for the helper's retry: rebinds the IME when none of the last commit reached the
- * field, then re-focuses it. Answers `false` when the rebind left another IME selected, since a retry
- * would broadcast to an IME that holds no session.
+ * field, then re-focuses it. Answers `false` when the rebind could not confirm the helper selected,
+ * since a retry would broadcast to an IME that may hold no session.
  */
 async function prepareAndroidImeHelperRetry(
   device: DeviceInfo,
-  adb: AndroidAdbExecutor,
   x: number,
   y: number,
   lastVerification: AndroidFillVerification,
   beforeTarget: AndroidFillVerification['targetInput'],
 ): Promise<boolean> {
   if (isAndroidImeCommitDropped(lastVerification, beforeTarget)) {
-    if (!(await rebindAndroidImeHelperChecked(device, adb))) return false;
+    if (!(await rebindAndroidTestIme(device))) return false;
   }
   await focusAndroid(device, x, y);
   return true;
@@ -303,28 +297,6 @@ function isAndroidImeCommitDropped(
 ): boolean {
   if (verification.actualInput?.hintShowing === true) return true;
   return beforeTarget?.text != null && verification.actual === beforeTarget.text;
-}
-
-/**
- * Rebinds the test IME and confirms it is still the selected IME. A rebind that left another IME
- * selected takes the device off the helper route, so the next text entry activates the helper again
- * through the checked activation path instead of broadcasting to an IME that holds no session.
- */
-async function rebindAndroidImeHelperChecked(
-  device: DeviceInfo,
-  adb: AndroidAdbExecutor,
-): Promise<boolean> {
-  emitDiagnostic({ level: 'warn', phase: 'android_test_ime_rebind', data: { device: device.id } });
-  await rebindAndroidImeHelper(adb);
-  if ((await readAndroidDefaultInputMethod(adb)) === ANDROID_IME_HELPER_SERVICE_COMPONENT)
-    return true;
-  activeTestImeDevices.delete(getAndroidImeHelperDeviceKey(device));
-  emitDiagnostic({
-    level: 'warn',
-    phase: 'android_test_ime_rebind_failed',
-    data: { device: device.id },
-  });
-  return false;
 }
 
 async function typeAndroidShell(

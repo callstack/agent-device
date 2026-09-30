@@ -46,8 +46,14 @@ import { withAndroidAdbProvider, type AndroidAdbExecutor } from '../adb-executor
 import {
   isAndroidTestImeActive,
   resetAndroidTestImeActivationCacheForTests,
+  restoreAndroidTestIme,
   setAndroidTestImeActiveForTests,
 } from '../ime-lifecycle.ts';
+import { fakeImeDeviceAdb, type FakeImeDeviceState } from '../ime-device.fixtures.ts';
+import {
+  readAndroidTestImeRecoveryMarkers,
+  writeAndroidTestImeRecoveryMarker,
+} from '../ime-recovery-marker.ts';
 
 afterEach(() => {
   resetAndroidTestImeActivationCacheForTests();
@@ -351,14 +357,23 @@ test('fillAndroid does not take a pre-filled field left on its hint for app form
   assert.equal(currentText, 'Jane');
 });
 
-test('fillAndroid stops on a rebind that leaves another IME selected and takes the helper route down', async () => {
+test('fillAndroid stops on an unconfirmed rebind and leaves the helper for close-time restore', async () => {
   setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
+  const stateDir = await mkdtempForTest('agent-device-ime-rebind-');
+  await writeAndroidTestImeRecoveryMarker(stateDir, ANDROID_EMULATOR.id);
+  const device: FakeImeDeviceState = {
+    settings: new Map([
+      ['default_input_method', 'com.callstack.agentdevice.imehelper/.TestInputMethodService'],
+      ['agent_device_ime_helper_previous_ime', 'com.samsung/.Keyboard'],
+    ]),
+    // `settings get` timing out under load: the rebind cannot read back which IME is selected.
+    settingsReadsFail: true,
+  };
+  const deviceAdb = fakeImeDeviceAdb(device);
   let commits = 0;
   const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
     exec: async (args) => {
-      if (args[1] === 'settings' && args[2] === 'get') {
-        return { exitCode: 0, stdout: 'com.android.inputmethod.latin/.LatinIME\n', stderr: '' };
-      }
+      if (args[1] === 'settings' || args[1] === 'ime') return await deviceAdb(args);
       if (args.includes('com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64')) commits += 1;
       return { exitCode: 0, stdout: '', stderr: '' };
     },
@@ -370,12 +385,30 @@ test('fillAndroid stops on a rebind that leaves another IME selected and takes t
     { exec: adb, snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
     { serial: ANDROID_EMULATOR.id },
     async () => {
-      await assert.rejects(fillAndroid(ANDROID_EMULATOR, 10, 10, 'Jane'));
+      await assert.rejects(fillAndroid(ANDROID_EMULATOR, 10, 10, 'Jane'), {
+        code: 'COMMAND_FAILED',
+      });
     },
   );
 
-  assert.equal(commits, 1, 'no commit goes to an IME the rebind could not select');
-  assert.equal(isAndroidTestImeActive(ANDROID_EMULATOR), false);
+  assert.equal(commits, 1, 'no commit goes to an IME the rebind could not confirm');
+  assert.equal(isAndroidTestImeActive(ANDROID_EMULATOR), true, 'ownership stays with restore');
+  assert.equal(
+    device.settings.get('agent_device_ime_helper_previous_ime'),
+    'com.samsung/.Keyboard',
+    'the rebind leaves the durable restore record alone',
+  );
+
+  device.settingsReadsFail = false;
+  const restored = await withAndroidAdbProvider(
+    { exec: adb, snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
+    { serial: ANDROID_EMULATOR.id },
+    async () => await restoreAndroidTestIme(ANDROID_EMULATOR, { stateDir }),
+  );
+
+  assert.equal(restored.reason, 'ok');
+  assert.equal(device.settings.get('default_input_method'), 'com.samsung/.Keyboard');
+  assert.deepEqual(await readAndroidTestImeRecoveryMarkers(stateDir), []);
 });
 
 // Unicode is only beyond the *shell* path. Refusing it before reading which IME is active denied

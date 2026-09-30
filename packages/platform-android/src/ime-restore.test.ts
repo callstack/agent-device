@@ -7,9 +7,11 @@ import {
   restoreOrphanedAndroidTestImeOnDaemonStartup,
 } from './ime-restore.ts';
 import {
+  rebindDisplacedTestImeDevices,
   resetAndroidTestImeActivationCacheForTests,
   setAndroidTestImeActiveForTests,
 } from './ime-state.ts';
+import { getAndroidImeHelperDeviceKey } from './ime-helper.ts';
 import { fakeImeDeviceAdb, type FakeImeDeviceState } from './ime-device.fixtures.ts';
 
 const DEVICE: DeviceInfo = {
@@ -69,6 +71,29 @@ test('a failed restore keeps the record and the marker for a later retry', async
   expect(result).toMatchObject({ restored: false, reason: 'set-failed' });
   expect(state.settings.get('agent_device_ime_helper_previous_ime')).toBe('com.samsung/.Keyboard');
   expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
+});
+
+test("close-time restore undoes a rebind's fallback IME, but not the user's own switch", async () => {
+  const host = bindAndroidAdbHostStub();
+  await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
+  setAndroidTestImeActiveForTests(DEVICE, true);
+  rebindDisplacedTestImeDevices.add(getAndroidImeHelperDeviceKey(DEVICE));
+  const displaced = stuckDeviceState();
+  displaced.settings.set('default_input_method', 'com.android.inputmethod.latin/.LatinIME');
+
+  expect(await restoreWith(displaced)).toMatchObject({ restored: true, reason: 'ok' });
+  expect(displaced.settings.get('default_input_method')).toBe('com.samsung/.Keyboard');
+  expect(displaced.settings.has('agent_device_ime_helper_previous_ime')).toBe(false);
+  expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([]);
+
+  setAndroidTestImeActiveForTests(DEVICE, true);
+  const switched = stuckDeviceState();
+  switched.settings.set('default_input_method', 'com.android.inputmethod.latin/.LatinIME');
+
+  expect(await restoreWith(switched)).toMatchObject({ reason: 'helper-not-active' });
+  expect(switched.settings.get('default_input_method')).toBe(
+    'com.android.inputmethod.latin/.LatinIME',
+  );
 });
 
 test('devices this process never activated are left alone', async () => {

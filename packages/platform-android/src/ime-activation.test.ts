@@ -4,7 +4,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidImeHelperArtifact } from './helper-artifacts.ts';
 import { bindAndroidAdbHostStub, type AndroidAdbHostStub } from './adb-host.fixtures.ts';
 import { withAndroidAdbProvider } from './adb-provider-scope.ts';
-import { activateAndroidTestIme } from './ime-activation.ts';
+import { activateAndroidTestIme, rebindAndroidTestIme } from './ime-activation.ts';
 import { fakeImeDeviceAdb, type FakeImeDeviceState } from './ime-device.fixtures.ts';
 import { resetAndroidTestImeActivationCacheForTests, isAndroidTestImeActive } from './ime-state.ts';
 import { resetAndroidImeHelperInstallCache } from './ime-helper.ts';
@@ -136,4 +136,50 @@ test('an unobtainable helper is an outcome that mutates nothing', async () => {
   expect(result).not.toHaveProperty('hint');
   expect(state.settings.has('agent_device_ime_helper_previous_ime')).toBe(false);
   expect(host.markerStore.get(STATE_DIR)).toBeUndefined();
+});
+
+async function rebindWith(state: FakeImeDeviceState) {
+  return await withAndroidAdbProvider(
+    { exec: fakeImeDeviceAdb(state), imeHelperArtifact: ARTIFACT },
+    { serial: DEVICE.id },
+    async () => await rebindAndroidTestIme(DEVICE),
+  );
+}
+
+test('a rebind that leaves the helper selected confirms it and changes no records', async () => {
+  const host = activationHost();
+  const state: FakeImeDeviceState = {
+    settings: new Map([['default_input_method', 'com.samsung/.Keyboard']]),
+  };
+  await activateWith(state);
+
+  expect(await rebindWith(state)).toBe(true);
+  expect(state.settings.get('agent_device_ime_helper_previous_ime')).toBe('com.samsung/.Keyboard');
+  expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
+  expect(isAndroidTestImeActive(DEVICE)).toBe(true);
+});
+
+test("a rebind that displaces the helper keeps ownership and the user's IME as restore target", async () => {
+  const host = activationHost();
+  const state: FakeImeDeviceState = {
+    settings: new Map([['default_input_method', 'com.samsung/.Keyboard']]),
+  };
+  await activateWith(state);
+  state.imeDisableFallback = 'com.android.inputmethod.latin/.LatinIME';
+  state.imeSetFails = true;
+
+  expect(await rebindWith(state)).toBe(false);
+  expect(isAndroidTestImeActive(DEVICE)).toBe(true);
+  expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
+  expect(host.diagnostics).toContainEqual({
+    phase: 'android_test_ime_rebind_failed',
+    level: 'warn',
+  });
+
+  // The next open finds Android's fallback IME current; it must not become the restore target.
+  state.imeSetFails = false;
+  const result = await activateWith(state);
+
+  expect(result).toMatchObject({ activated: true, previousIme: 'com.samsung/.Keyboard' });
+  expect(state.settings.get('agent_device_ime_helper_previous_ime')).toBe('com.samsung/.Keyboard');
 });

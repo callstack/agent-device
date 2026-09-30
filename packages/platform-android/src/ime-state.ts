@@ -8,6 +8,10 @@ import { getAndroidImeHelperDeviceKey } from './ime-helper.ts';
 // route text entry through the broadcast channel.
 export const activeTestImeDevices = new Set<string>();
 
+// Owned devices whose helper a rebind disabled without confirming it selected again. The IME
+// Android fell back to is not the user's choice, so it must not become the restore target.
+export const rebindDisplacedTestImeDevices = new Set<string>();
+
 const androidTestImeRecoveryLocks = new Map<string, Promise<unknown>>();
 
 export function isAndroidTestImeActive(device: DeviceInfo): boolean {
@@ -27,6 +31,7 @@ export function withAndroidTestImeRecoveryLock<T>(
  */
 export function resetAndroidTestImeActivationCacheForTests(): void {
   activeTestImeDevices.clear();
+  rebindDisplacedTestImeDevices.clear();
 }
 
 /**
