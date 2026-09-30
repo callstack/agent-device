@@ -40,6 +40,7 @@ import { readCommonInput, type CommonCommandInput } from '../common-input-fields
 import { readInputRecord } from '../input-readers.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { postActionObservationFields } from '../post-action-observation-grammar.ts';
+import { targetReadinessFields } from '../target-readiness-grammar.ts';
 
 const FIND_ACTION_VALUES = [
   'click',
@@ -84,6 +85,7 @@ const clickFields = {
   ...selectorSnapshotFields(),
   ...repeatedFields(),
   ...postActionObservationFields('click'),
+  ...targetReadinessFields('click'),
 };
 
 const pressFields = {
@@ -91,6 +93,7 @@ const pressFields = {
   ...selectorSnapshotFields(),
   ...repeatedFields(),
   ...postActionObservationFields('press'),
+  ...targetReadinessFields('press'),
 };
 
 const fillFields = {
@@ -113,6 +116,7 @@ const longPressFields = {
   durationMs: integerField('Long press duration in milliseconds.', { min: 0 }),
   ...selectorSnapshotFields(),
   ...postActionObservationFields('longpress'),
+  ...targetReadinessFields('longpress'),
 };
 
 const hoverFields = {

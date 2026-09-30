@@ -12,8 +12,8 @@ import { createProviderTranscript, type ProviderScenarioProviderEntry } from './
 
 // promotedTarget readiness (press/click/longpress poll for the target to exist and become
 // actionable before refusing): end-to-end proof through the real daemon stack, not the plain
-// runtime harness — this is the only suite that exercises captureSnapshot's `forceFresh` threading
-// through the daemon's selector-runtime-backend cache decision.
+// runtime harness. The press route captures through the interaction backend, which keeps no
+// selector capture cache, so every poll reaches the runner transcript below.
 
 const APP = 'com.example.app';
 const DEVICE_ID = PROVIDER_SCENARIO_IOS_SIMULATOR.id;
@@ -102,11 +102,11 @@ async function withPressReadinessDaemon(
 test('press waits for a selector missing on the first two captures, then taps once it appears', async () => {
   await withPressReadinessDaemon(
     [
-      // Poll 1 (not yet forceFresh): interactive capture, then the interactive->full fallback —
-      // both miss because the button is not in the tree yet.
+      // Poll 1: interactive capture, then the interactive->full fallback — both miss because the
+      // button is not in the tree yet.
       snapshotEntry(APPLICATION_ONLY_NODES),
       snapshotEntry(APPLICATION_ONLY_NODES),
-      // Poll 2 onward (forceFresh: bypasses the selector capture cache): the button has appeared.
+      // Poll 2 onward: the button has appeared.
       repeatSnapshotEntry(CONTINUE_BUTTON_NODES),
       tapEntry(200, 322),
     ],

@@ -1,5 +1,4 @@
 import type { CliFlags } from '@agent-device/contracts/command';
-import { readOptionalInteger } from '@agent-device/contracts/command';
 import type {
   AgentDeviceRequestOverrides,
   AgentDeviceSelectionOptions,
@@ -31,15 +30,13 @@ export type CommonCommandInput = Pick<
   androidDeviceAllowlist?: string;
   /** `--no-record`: common to every recordable command (see `commonInputFromFlags`). */
   noRecord?: boolean;
-  /**
-   * Readiness budget for a tap-shaped interaction (press/click/longpress), capped at the
-   * promotedTarget row's maxTimeoutMs. No `flagIn`/`flagKey`: it never rides a CLI flag or the
-   * client "selection" projection, only the CLI/Node structured-input and SDK client option seams.
-   */
-  readinessTimeoutMs?: number;
 };
 
-export type CommonInputReadOptions = { readTargetAlias?: boolean };
+export type CommonInputReadOptions = {
+  readTargetAlias?: boolean;
+  /** The command's own fields declare `readinessTimeoutMs` (`target-readiness-grammar.ts`). */
+  readinessBudgetDeclared?: boolean;
+};
 
 /**
  * `cli-grammar/common.ts`'s two flag-derived projections a row can join:
@@ -220,19 +217,9 @@ const COMMON_INPUT_FIELDS = {
     flagIn: ['input', 'selection'],
   },
   readinessTimeoutMs: {
-    schema: {
-      type: 'integer',
-      minimum: 1,
-      description:
-        "Operator-only: how long press/click/longpress may poll for a target that does not exist yet, in milliseconds. Capped at the promotedTarget row's maxTimeoutMs; omitted takes the one-attempt resolution path.",
-    },
-    read: (record) => readOptionalInteger(record, 'readinessTimeoutMs', { min: 1 }),
-    // No CLI flag: agents mostly miss on a wrong selector, where fast feedback beats absorbing a
-    // render race.
-    audience: operatorAudience({
-      operatorPath:
-        'Pass readinessTimeoutMs directly as CLI/Node.js command input; it is not exposed to model-facing tools.',
-    }),
+    // No schema and no value: a command whose descriptor declares `targetReadiness: 'budgeted'`
+    // carries and reads the key through its own fields; every other command refuses it here.
+    read: refuseUndeclaredReadinessBudget,
   },
   daemonBaseUrl: {
     schema: { type: 'string', description: 'Remote daemon base URL.' },
@@ -268,7 +255,10 @@ const COMMON_INPUT_FIELDS = {
     schema: { type: 'boolean', description: 'Enable debug diagnostics.' },
     read: (record) => optionalBoolean(record, 'debug'),
   },
-} as const satisfies Record<keyof CommonCommandInput | 'target', CommonInputFieldSpec>;
+} as const satisfies Record<
+  keyof CommonCommandInput | 'target' | 'readinessTimeoutMs',
+  CommonInputFieldSpec
+>;
 
 const COMMON_INPUT_ROWS: ReadonlyArray<readonly [string, CommonInputFieldSpec]> =
   Object.entries(COMMON_INPUT_FIELDS);
@@ -345,4 +335,17 @@ function readDeviceTarget(
     );
   }
   return deviceTarget ?? targetAlias;
+}
+
+function refuseUndeclaredReadinessBudget(
+  record: Record<string, unknown>,
+  options: CommonInputReadOptions,
+): undefined {
+  if (options.readinessBudgetDeclared === true || !Object.hasOwn(record, 'readinessTimeoutMs')) {
+    return undefined;
+  }
+  throw new AppError(
+    'INVALID_ARGS',
+    'readinessTimeoutMs applies only to commands that wait for their target: press, click, and longpress.',
+  );
 }

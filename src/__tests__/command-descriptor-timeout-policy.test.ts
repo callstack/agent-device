@@ -8,6 +8,7 @@ import {
   resolveCommandTimeoutPolicy,
 } from '@agent-device/command-registry/registry';
 import { INTERACTION_DISPATCH_PATHS } from '@agent-device/contracts/interaction-guarantees';
+import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import {
   DEFAULT_TIMEOUT_POLICY,
   resolveCommandRequestTimeoutMs,
@@ -425,6 +426,11 @@ test('a readiness budget widens the request envelope on top of the settle envelo
     212_000,
   );
   assert.equal(resolveCommandRequestTimeoutMs(press, { flags: { readinessTimeoutMs: 0 } }), 90_000);
+  assert.equal(
+    resolveCommandRequestTimeoutMs(press, { flags: { readinessTimeoutMs: 999_000 } }),
+    90_000 + SELECTOR_PIPELINE_POLICIES.promotedTarget.poll.maxTimeoutMs,
+  );
+  assert.equal(SELECTOR_PIPELINE_POLICIES.promotedTarget.poll.maxTimeoutMs, 2_000);
   assert.equal(
     resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('fill'), {
       flags: { readinessTimeoutMs: 2_000 },
