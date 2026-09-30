@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 
 import {
+  assertLaunchConfirmationAnswered,
   assertWaitSelector,
   assertWaitText,
+  DEEP_LINK_DESTINATION_WAIT_MS,
   type LiveSnapshotNode as SnapshotNode,
   snapshotNodes,
 } from './live-assertions.ts';
-import { acceptDeepLinkConfirmationIfPresent } from './live-deep-link-confirmation.ts';
 import { type LiveContext, runStep, verifyBehavior } from './live-harness.ts';
 
 const VISIBLE_DEPTH_DEEP_LINK = 'agent-device-test-app:///snapshot-depth';
@@ -15,7 +16,7 @@ const MISSING_HITTABILITY_WARNING =
   'iOS snapshot acquisition does not provide hittability evidence; regular snapshots omit unverified hittability while raw snapshots preserve supplied facts.';
 
 export async function assertRegularVisibleDepthFrontier(context: LiveContext): Promise<void> {
-  await runStep(context, 'open regular visible-depth fixture', [
+  const opened = await runStep(context, 'open regular visible-depth fixture', [
     'open',
     context.appId,
     '--relaunch',
@@ -23,9 +24,12 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     VISIBLE_DEPTH_DEEP_LINK,
     '--debug',
   ]);
-  await acceptDeepLinkConfirmationIfPresent(context, [`id="${CHILD_ID}"`], { debug: true });
+  assertLaunchConfirmationAnswered(opened);
   // Wait for the target itself so the depth assertion is about the frontier, not route readiness.
-  await assertWaitSelector(context, `id="${CHILD_ID}"`, { debug: true });
+  await assertWaitSelector(context, `id="${CHILD_ID}"`, {
+    debug: true,
+    timeoutMs: DEEP_LINK_DESTINATION_WAIT_MS,
+  });
 
   const regular = await runStep(context, 'capture regular visible-depth frontier', [
     'snapshot',

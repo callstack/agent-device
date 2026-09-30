@@ -40,12 +40,12 @@ export function createLiveDeviceAssertions<
   async function assertWaitSelector(
     context: Context,
     selector: string,
-    options: { debug?: boolean } = {},
+    options: { debug?: boolean; timeoutMs?: number } = {},
   ): Promise<void> {
     await runStep(context, `wait for ${selector}`, [
       'wait',
       selector,
-      '10000',
+      String(options.timeoutMs ?? 10_000),
       ...(options.debug ? ['--debug'] : []),
     ]);
     verifyCommand(context, waitCommand, `wait observes durable selector: ${selector}`);

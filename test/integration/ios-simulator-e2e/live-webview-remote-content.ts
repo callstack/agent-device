@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 
-import { assertWaitText, snapshotNodes } from './live-assertions.ts';
-import { acceptDeepLinkConfirmationIfPresent } from './live-deep-link-confirmation.ts';
+import {
+  assertLaunchConfirmationAnswered,
+  assertWaitSelector,
+  assertWaitText,
+  DEEP_LINK_DESTINATION_WAIT_MS,
+  snapshotNodes,
+} from './live-assertions.ts';
 import { type LiveContext, runStep, verifyBehavior } from './live-harness.ts';
 
 const WEBVIEW_LAB_DEEP_LINK = 'agent-device-test-app:///webview';
@@ -28,14 +33,17 @@ const XCTEST_FALLBACK_WARNING =
  * vanish from every snapshot and no ref can reach them.
  */
 export async function assertWebViewRemoteContent(context: LiveContext): Promise<void> {
-  await runStep(context, 'open WebView accessibility lab', [
+  const opened = await runStep(context, 'open WebView accessibility lab', [
     'open',
     context.appId,
     '--relaunch',
     '--launch-url',
     WEBVIEW_LAB_DEEP_LINK,
   ]);
-  await acceptDeepLinkConfirmationIfPresent(context, [`id="${LAB_CHROME_ID}"`]);
+  assertLaunchConfirmationAnswered(opened);
+  await assertWaitSelector(context, `id="${LAB_CHROME_ID}"`, {
+    timeoutMs: DEEP_LINK_DESTINATION_WAIT_MS,
+  });
   // `wait` observes through the same route as `snapshot`: page content is reachable only once the
   // route has stopped publishing the bridge's page-less tree.
   await runStep(context, 'wait for the WebView page to expose its link', [

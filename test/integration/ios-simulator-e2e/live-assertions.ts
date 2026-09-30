@@ -21,6 +21,21 @@ export const { assertElementText, assertWaitSelector, assertWaitText, capturePng
     PUBLIC_COMMANDS.wait,
   );
 
+/**
+ * The first landmark wait after a deep-link `open`. The open answers the launch confirmation
+ * itself, but a loaded CI host has taken over 20 s to bring the released launch to the foreground.
+ */
+export const DEEP_LINK_DESTINATION_WAIT_MS = 30_000;
+
+/** Asserts a deep-link `open` either raised no launch confirmation or answered it. */
+export function assertLaunchConfirmationAnswered(opened: CliJsonResult): void {
+  const confirmation = opened.json?.data?.launchConfirmation;
+  assert.ok(
+    confirmation === undefined || confirmation === 'accepted',
+    `deep-link open should answer its own launch confirmation: ${JSON.stringify(opened.json)}`,
+  );
+}
+
 export type LiveSnapshotNode = {
   depth?: unknown;
   hittable?: unknown;
