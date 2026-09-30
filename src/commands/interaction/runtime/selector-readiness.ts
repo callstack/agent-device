@@ -7,7 +7,10 @@ import {
   type SelectorResolution,
 } from '@agent-device/selectors';
 import { resolveSelectorPipeline } from '@agent-device/selectors/selector-pipeline';
-import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
+import {
+  SELECTOR_PIPELINE_POLICIES,
+  type ReadinessSchedule,
+} from '@agent-device/selectors/selector-pipeline-policy';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import { observeUntil } from '@agent-device/capture-kit/observe-until';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
@@ -48,17 +51,6 @@ export type SelectorReadinessDetails = {
   polls: number;
   waitedMs: number;
   end: 'expired' | 'stalled' | 'sparse';
-};
-
-/**
- * The schedule one call may poll under: the row's own cadence, and a budget the caller
- * (`resolution.ts#resolveSelectorInteractionTarget`) has already capped at the row's own ceiling.
- * This module never reads the row or the caller-supplied `readinessTimeoutMs` directly — deciding
- * whether and how long to poll is the caller's job; this module only runs the loop.
- */
-export type ReadinessSchedule = {
-  intervalMs: number;
-  budgetMs: number;
 };
 
 /**
@@ -270,9 +262,7 @@ export async function pollForSelectorReadiness(
         ? { kind: 'done', result: { capture: latest.capture, resolved: latest.resolved } }
         : { kind: 'continue' },
     schedule: {
-      intervalMs: schedule.intervalMs,
-      budgetMs: schedule.budgetMs,
-      budgetFrom: 'first-capture',
+      ...schedule,
       // The poll signal reaches the platform as CaptureSnapshotInput.signal, which the snapshot
       // binding joins (captureSnapshotSignal): the same per-capture cancellation `wait` relies on.
       captureDeadline: 'cancel',

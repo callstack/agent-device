@@ -3,7 +3,14 @@ import { expect, test } from 'vitest';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { recordActionEntry } from '../../session-action-recorder.ts';
 import type { DaemonRequest } from '../../daemon-request.ts';
-import { invokeReplayAction } from '@agent-device/replay-port/session-replay-action-runtime';
+import {
+  invokeReplayAction,
+  replayStepReadinessSchedule,
+} from '@agent-device/replay-port/session-replay-action-runtime';
+import {
+  SELECTOR_PIPELINE_POLICIES,
+  readinessScheduleFor,
+} from '@agent-device/selectors/selector-pipeline-policy';
 import { replayDaemonDependencies } from '../../handlers/session-replay-command.ts';
 import { resolveReplayAction } from '@agent-device/ad-script';
 import {
@@ -93,6 +100,44 @@ test.each(READINESS_BUDGETED_COMMANDS)(
     expect(dispatchedFlags?.readinessTimeoutMs).toBe(2_000);
   },
 );
+
+// The dispatch resolves a press/click/longpress target under the promotedTarget row with the
+// readinessTimeoutMs it receives; the pre-dispatch gate must poll under that same schedule.
+test.each([
+  ...READINESS_BUDGETED_COMMANDS.map((command) => ({ command, flags: {} })),
+  { command: 'click', flags: { readinessTimeoutMs: 700 } },
+  { command: 'press', flags: { readinessTimeoutMs: 9_000 } },
+])('the replay gate and the dispatch poll a $command step under one schedule', async (step) => {
+  const action: SessionAction = {
+    ts: 0,
+    command: step.command,
+    positionals: ['label="Continue"'],
+    flags: step.flags,
+  };
+  let dispatchedFlags: Record<string, unknown> | undefined;
+  await invokeReplayAction({
+    req: REPLAY_REQUEST,
+    sessionName: 'default',
+    action,
+    resolved: action,
+    filePath: 'flow.ad',
+    line: 1,
+    step: 1,
+    resolvedSessionScope: undefined,
+    dependencies: replayDaemonDependencies,
+    invoke: async (request) => {
+      dispatchedFlags = request.flags;
+      return { ok: true, data: {} };
+    },
+  });
+
+  const dispatchSchedule = readinessScheduleFor(
+    SELECTOR_PIPELINE_POLICIES.promotedTarget.poll,
+    dispatchedFlags?.readinessTimeoutMs as number | undefined,
+  );
+  expect(dispatchSchedule).toBeDefined();
+  expect(await replayStepReadinessSchedule(REPLAY_REQUEST.flags, action)).toEqual(dispatchSchedule);
+});
 
 test('replay keeps a readinessTimeoutMs the step already carries instead of overwriting it', async () => {
   const action: SessionAction = {

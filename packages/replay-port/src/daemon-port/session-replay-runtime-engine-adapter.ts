@@ -27,6 +27,7 @@ import type {
   AdReplayTargetObservation,
 } from '@agent-device/ad-replay';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { ObservationEvidence } from '@agent-device/capture-kit/observe-until';
 import { collectReplayActionArtifactPaths } from '@agent-device/replay-port/session-replay-runtime-artifacts';
 import {
   applyReplayDispatchGuard,
@@ -242,7 +243,7 @@ export function createAdReplayStepRuntime(params: {
       });
       if (observed.polls.length > 1) {
         gateWait = {
-          budgetMs: readiness.budgetMs,
+          remainingBudgetMs: Math.max(0, readiness.budgetMs - budgetSpentMs(observed)),
           readiness: {
             polls: observed.polls.length,
             waitedMs: observed.waitedMs,
@@ -268,7 +269,7 @@ export function createAdReplayStepRuntime(params: {
       const response = await invokeReplayAction({
         ...(gateWait
           ? {
-              readinessTimeoutMs: Math.max(0, gateWait.budgetMs - gateWait.readiness.waitedMs),
+              readinessTimeoutMs: gateWait.remainingBudgetMs,
             }
           : {}),
         req: applyReplayDispatchGuard(ctx.replayReq, guard),
@@ -525,10 +526,17 @@ function isTargetNotRenderedYet(observation: AdReplayTargetObservation): boolean
 }
 
 type GateReadinessWait = {
-  budgetMs: number;
+  /** The step's readiness budget the gate left for the dispatch. */
+  remainingBudgetMs: number;
   /** The same evidence a dispatched readiness wait reports (`SelectorReadinessDetails`). */
   readiness: { polls: number; waitedMs: number; end: string };
 };
+
+/** The budget a `budgetFrom: 'first-capture'` wait spent: its time after the first capture ended. */
+function budgetSpentMs(observed: ObservationEvidence): number {
+  const first = observed.polls[0];
+  return first ? observed.waitedMs - (first.startedMs + first.durationMs) : 0;
+}
 
 /** Carries the gate's wait where a dispatched step's target-not-found failure carries its own. */
 function withReadinessDetail(

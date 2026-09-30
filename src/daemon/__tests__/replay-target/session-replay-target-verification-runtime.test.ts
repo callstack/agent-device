@@ -236,6 +236,36 @@ test('the dispatch gets only the readiness budget the gate left', async () => {
   expect(scene.invoked[0]?.flags?.readinessTimeoutMs).toBe(400);
 });
 
+test('the budget the gate hands the dispatch counts from the end of its first capture', async () => {
+  const scene = replayScriptScene('agent-device-replay-target-verify-budget-origin-', [
+    SAVE_ANNOTATION,
+    'click id="save"',
+  ]);
+  let nowMs = 0;
+  const clock = {
+    now: () => nowMs,
+    sleep: async (ms: number) => {
+      nowMs += ms;
+    },
+  };
+
+  // A 500 ms first capture, then seven more misses one interval apart: 1.4 s of the 2 s budget.
+  mockDispatchCommand.mockImplementationOnce(async () => {
+    nowMs += 500;
+    return emptyCapture();
+  });
+  for (let miss = 0; miss < 7; miss += 1) mockDispatchCommand.mockResolvedValueOnce(emptyCapture());
+  mockDispatchCommand.mockResolvedValue(saveButtonCapture());
+
+  const response = await scene.replay({ clock });
+
+  expect(response.ok).toBe(true);
+  expect(readinessDiagnostics()).toEqual([
+    { polls: 9, waitedMs: 2_100, end: 'done', command: 'click' },
+  ]);
+  expect(scene.invoked[0]?.flags?.readinessTimeoutMs).toBe(400);
+});
+
 test('an annotated step whose command does not wait for its target refuses a selector miss on one capture', async () => {
   const scene = replayScriptScene('agent-device-replay-target-verify-no-wait-', [
     SAVE_ANNOTATION,

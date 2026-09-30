@@ -21,6 +21,8 @@ export type ReplayCommandTestInput = Readonly<{
   invoke: DaemonInvokeFn;
   tracePath?: string;
   onStep?: ReplayTestAttemptStepSink;
+  /** Paces the target-readiness wait; default: `instantReplayClock`. */
+  clock?: ObservationClock;
 }>;
 
 /**
@@ -29,12 +31,12 @@ export type ReplayCommandTestInput = Readonly<{
  * test's `invoke` sees the same `DaemonRequest` the daemon would.
  */
 export function replayCommandForTest(params: ReplayCommandTestInput): ReplayCommand {
-  const { req, sessionName, logPath, sessionStore, invoke, tracePath, onStep } = params;
+  const { req, sessionName, logPath, sessionStore, invoke, tracePath, onStep, clock } = params;
   return {
     ...splitReplayCommandRequest(req),
     session: createReplaySession(sessionName, logPath, sessionStore),
     invoke: replayInvokeOverDispatch(invoke, req),
-    dependencies: { ...replayDaemonDependencies, clock: instantReplayClock() },
+    dependencies: { ...replayDaemonDependencies, clock: clock ?? instantReplayClock() },
     ...(tracePath === undefined ? {} : { tracePath }),
     ...(onStep === undefined ? {} : { onStep }),
   };

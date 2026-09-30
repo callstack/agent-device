@@ -2,6 +2,7 @@ import {
   SELECTOR_RESOLUTION_POLICIES,
   type SelectorResolutionPolicy,
 } from '@agent-device/selectors';
+import type { ObservationSchedule } from '@agent-device/capture-kit/observe-until';
 
 /**
  * The structural half of the per-caller selector policy (#1656), companion to
@@ -230,6 +231,34 @@ export const SELECTOR_PIPELINE_POLICIES = {
 } as const satisfies Record<string, SelectorPipelinePolicy | SelectorListPolicy>;
 
 export type SelectorPipelinePolicyName = keyof typeof SELECTOR_PIPELINE_POLICIES;
+
+/**
+ * The schedule a readiness wait polls its target under. The budget counts from the end of the
+ * first capture: that capture is the one-attempt lookup a step pays without any wait, so the
+ * replay target gate and the dispatch spend the budget only on retries.
+ */
+export type ReadinessSchedule = Readonly<
+  Pick<ObservationSchedule, 'intervalMs' | 'budgetMs'> & { budgetFrom: 'first-capture' }
+>;
+
+/**
+ * The one owner of a readiness schedule, for the replay target gate and the dispatch alike:
+ * `undefined` for a row that resolves against one capture or when no positive integer budget was
+ * supplied, otherwise the row's cadence and the supplied budget capped at the row's `maxTimeoutMs`.
+ */
+export function readinessScheduleFor(
+  poll: ReadinessPollBudget | 'none',
+  readinessTimeoutMs: number | undefined,
+): ReadinessSchedule | undefined {
+  if (poll === 'none') return undefined;
+  if (readinessTimeoutMs === undefined || !Number.isInteger(readinessTimeoutMs)) return undefined;
+  if (readinessTimeoutMs <= 0) return undefined;
+  return {
+    intervalMs: poll.intervalMs,
+    budgetMs: Math.min(readinessTimeoutMs, poll.maxTimeoutMs),
+    budgetFrom: 'first-capture',
+  };
+}
 
 /**
  * The two questions a row asks the engine, derived from its ambiguity contract

@@ -1,12 +1,11 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import type { SelectorResolution } from '@agent-device/selectors';
-import type { ActingPipelinePolicy } from '@agent-device/selectors/selector-pipeline-policy';
+import { readinessScheduleFor } from '@agent-device/selectors/selector-pipeline-policy';
 import {
   attemptSelectorResolution,
   pollForSelectorReadiness,
   selectorInteractionFailure,
-  type ReadinessSchedule,
 } from './selector-readiness.ts';
 import {
   captureInteractionSnapshot,
@@ -128,25 +127,6 @@ async function tryCaptureEvidenceBaseline(
     // changedFromBefore.
     return undefined;
   }
-}
-
-function isPositiveInteger(value: number | undefined): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value > 0;
-}
-
-/**
- * The schedule THIS call may poll `promotedTarget` under: `undefined` when the row resolves
- * against one capture (`resolvedTarget`'s `poll: 'none'`), or when the caller supplied no
- * `readinessTimeoutMs` — both take the one-attempt path. Otherwise the row's own cadence, and a
- * budget capped at the row's `maxTimeoutMs`, so a caller-supplied value can shrink the wait but
- * never stretch past what the row allows.
- */
-function readinessScheduleFor(
-  poll: ActingPipelinePolicy['poll'],
-  readinessTimeoutMs: number | undefined,
-): ReadinessSchedule | undefined {
-  if (poll === 'none' || !isPositiveInteger(readinessTimeoutMs)) return undefined;
-  return { intervalMs: poll.intervalMs, budgetMs: Math.min(readinessTimeoutMs, poll.maxTimeoutMs) };
 }
 
 async function resolveSelectorInteractionTarget(
