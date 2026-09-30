@@ -16,6 +16,8 @@ import {
   mockTapPoint,
   resetGetRuntimeFixture,
 } from '../../../__tests__/interaction-get-runtime-fixture.ts';
+import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
+import { discloseInteractionDispatch } from '../interaction-dispatch-disclosure.ts';
 import { handleInteractionCommands } from '../../index.ts';
 import { assertAndroidPressStayedInApp } from '../interaction-android-escape.ts';
 import { contextFromFlags, makeSession } from './interaction-touch-fixtures.ts';
@@ -151,4 +153,43 @@ test('the daemon keeps a producer verdict instead of inferring its own', async (
       return true;
     });
   }
+});
+
+test('a read-only command discloses no over a producer verdict', async () => {
+  const capture = vi.mocked(captureSnapshotWithInteractor);
+  capture.mockClear();
+  for (const dispatched of ['unknown', 'yes'] satisfies DispatchDisclosure[]) {
+    capture.mockRejectedValueOnce(
+      new AppError('COMMAND_FAILED', 'runner capture lost', { dispatched }),
+    );
+    await assert.rejects(
+      press({ command: 'get', positionals: ['text', 'label="Missing"'] }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.message, 'runner capture lost');
+        assert.equal(error.details?.dispatched, 'no');
+        return true;
+      },
+    );
+  }
+  assert.equal(capture.mock.calls.length, 2);
+});
+
+test('a read-only command discloses no over a producer verdict it throws', async () => {
+  const producerFailure = new AppError('COMMAND_FAILED', 'runner capture lost', {
+    dispatched: 'unknown',
+  });
+  await assert.rejects(
+    discloseInteractionDispatch(
+      { token: 't', session: 's', command: 'get', positionals: ['text', 'label="Missing"'] },
+      async () => {
+        throw producerFailure;
+      },
+    ),
+    (error: unknown) => {
+      assert.equal(error, producerFailure);
+      assert.equal(producerFailure.details?.dispatched, 'no');
+      return true;
+    },
+  );
 });

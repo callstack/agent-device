@@ -4,7 +4,7 @@ import { type RequestCaptureProof, withCaptureDisclosures } from '../../capture-
 import type { CaptureSnapshotForSession, InteractionRouteInput } from './types.ts';
 import { dispatchFillViaRuntime } from './interaction-touch-fill.ts';
 import { dispatchTargetedTouchViaRuntime } from './interaction-touch-press.ts';
-import { discloseUnclassifiedInteractionDispatch } from './interaction-dispatch-disclosure.ts';
+import { discloseInteractionDispatch } from './interaction-dispatch-disclosure.ts';
 import { finalizeTouchInteraction } from './interaction-runtime.ts';
 import { refSnapshotFlagGuardResponse } from '../../ref-snapshot-flag-policy.ts';
 import { dispatchGetViaRuntime, dispatchIsViaRuntime } from '../../selector-runtime.ts';
@@ -27,7 +27,7 @@ export async function handleInteractionCommands(
 ): Promise<DaemonResponse | null> {
   const captureProof: RequestCaptureProof = {};
   const routed = { ...params, refSnapshotFlagGuardResponse, captureProof };
-  const response = await discloseUnclassifiedInteractionDispatch(
+  const response = await discloseInteractionDispatch(
     params.req,
     async () => await dispatchInteractionCommand(routed),
   );
