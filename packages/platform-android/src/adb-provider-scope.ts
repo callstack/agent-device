@@ -152,15 +152,12 @@ async function attemptAdb(
 ): Promise<{ offline: boolean; outcome: () => AndroidAdbExecutorResult }> {
   try {
     const result = await run();
-    const failure =
-      result.exitCode === 0 ? undefined : classifyAndroidAdbFailure(result.stderr, result.stdout);
-    const offline = isDeviceOfflineHostRefusal(failure?.reason, failure?.hostRefusal);
+    const offline = isOfflineRefusalResult(result);
     if (!offline) devicesStayingOffline.forget(device);
     return { offline, outcome: () => result };
   } catch (error) {
     const classified = attachAdbFailureHint(error);
-    const details = classified instanceof AppError ? classified.details : undefined;
-    const offline = isDeviceOfflineHostRefusal(details?.adbFailure, details?.adbHostRefusal);
+    const offline = isOfflineRefusalError(classified);
     if (!offline && deviceAnswered(classified)) devicesStayingOffline.forget(device);
     return {
       offline,
@@ -169,6 +166,22 @@ async function attemptAdb(
       },
     };
   }
+}
+
+/** Whether the host adb refused the command for an offline device, as a result. */
+function isOfflineRefusalResult(result: AndroidAdbExecutorResult): boolean {
+  if (result.exitCode === 0) return false;
+  const failure = classifyAndroidAdbFailure(result.stderr, result.stdout);
+  return isDeviceOfflineHostRefusal(failure?.reason, failure?.hostRefusal);
+}
+
+/** Whether the host adb refused the command for an offline device, as a classified thrown error. */
+function isOfflineRefusalError(classified: unknown): boolean {
+  if (!(classified instanceof AppError)) return false;
+  return isDeviceOfflineHostRefusal(
+    classified.details?.adbFailure,
+    classified.details?.adbHostRefusal,
+  );
 }
 
 /** Whether a classified adb failure is the host adb refusing a command for an offline device. */
