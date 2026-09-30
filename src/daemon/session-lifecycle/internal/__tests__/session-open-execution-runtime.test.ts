@@ -1,6 +1,10 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 
 import path from 'node:path';
+import type {
+  ApplicationLifecycleRuntimeOperations,
+  OpenApplicationInput,
+} from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DaemonRequest } from '../../../daemon-request.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -392,4 +396,43 @@ test('a first open keeps both positionals so the deep link still reaches the app
       positionals: ['com.example.demo', 'demo://agent-device/automation?event=cold.start'],
     },
   ]);
+});
+
+test('open reports the launch confirmation its platform answered', async () => {
+  const sessionStore = makeSessionStore();
+  mockResolveTargetDevice.mockResolvedValue(makeAndroidEmulator());
+  mockResolveAndroidPackage.mockResolvedValue('com.example.demo');
+  const bindDefault = mockBindDeviceRuntime.getMockImplementation();
+  if (!bindDefault) throw new Error('the harness binds a default runtime');
+  mockBindDeviceRuntime.mockImplementationOnce(async (device, use) => {
+    const binding = await bindDefault(device, use);
+    const operations = binding.operations as ApplicationLifecycleRuntimeOperations;
+    return {
+      ...binding,
+      operations: {
+        ...binding.operations,
+        openApplication: async (input: OpenApplicationInput) => ({
+          ...(await operations.openApplication(input)),
+          launchConfirmation: 'accepted' as const,
+        }),
+      },
+    };
+  });
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: 'launch-confirmation-open',
+      command: 'open',
+      positionals: ['com.example.demo'],
+      flags: { platform: 'android' },
+    },
+    sessionName: 'launch-confirmation-open',
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok).toBe(true);
+  if (response?.ok) expect(response.data?.launchConfirmation).toBe('accepted');
 });

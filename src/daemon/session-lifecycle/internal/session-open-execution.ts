@@ -315,6 +315,7 @@ export async function completeOpenCommand(params: {
     runtimeHintCount: countConfiguredRuntimeHints,
     sessionReused: existingSession !== undefined,
     selection: preparedSelection,
+    launchConfirmation: outcome.launchConfirmation,
   });
   if (tookOverDeviceClaim) {
     appendResponseWarning(openResult, deviceClaimTakeoverWarning(tookOverDeviceClaim));

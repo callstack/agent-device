@@ -1,6 +1,7 @@
 // The public API vocabulary for app install, deploy, open, close and inventory.
 
 import type { AppsFilter } from './app-inventory.ts';
+import type { LaunchConfirmation } from './application-lifecycle-runtime.ts';
 import type { JsonObject } from './json.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { TargetShutdownResult } from './target-shutdown-contract.ts';
@@ -109,6 +110,11 @@ export type AppOpenResult = {
   runtime?: SessionRuntimeHints;
   selection?: DeviceSelectionMetadata;
   device?: AgentDeviceSessionDevice;
+  /**
+   * `accepted` when iOS held the launch URL behind an `Open in "<App>"?` confirmation naming the
+   * session app and the open answered it.
+   */
+  launchConfirmation?: LaunchConfirmation;
   /**
    * Initial interactive snapshot captured immediately after an open that
    * requested `foreground`, composed from the same snapshot-runtime dispatch

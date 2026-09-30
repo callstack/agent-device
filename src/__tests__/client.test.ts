@@ -233,6 +233,27 @@ test('apps.open resolves session device identifiers from open response', async (
   ]);
 });
 
+test('apps.open reports an answered launch confirmation only when the daemon answered one', async () => {
+  let launchConfirmation: unknown = 'accepted';
+  const setup = createTransport(async (req) => {
+    if (req.command === 'open') {
+      return {
+        ok: true,
+        data: { session: 'qa', appBundleId: 'com.example.app', launchConfirmation },
+      };
+    }
+    throw new Error(`Unexpected command: ${req.command}`);
+  });
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const answered = await client.apps.open({ app: 'com.example.app', platform: 'ios' });
+  launchConfirmation = undefined;
+  const unanswered = await client.apps.open({ app: 'com.example.app', platform: 'ios' });
+
+  assert.equal(answered.launchConfirmation, 'accepted');
+  assert.equal('launchConfirmation' in unanswered, false);
+});
+
 test('apps.open preserves the full initialSnapshotError shape through client normalization', async () => {
   // open --foreground: open succeeded, composed snapshot did not. The public
   // client result must carry the FULL daemon error — dropping the boundary
