@@ -376,7 +376,7 @@
   {
     "id": "android-adb.input-tap.refusal-text-beside-other-output",
     "producer": "android-adb",
-    "trigger": "adb input tap failed with refusal-like stderr that is not the whole output (server restart line, then a device-side exit); only a refusal that is the entire output makes it no",
+    "trigger": "adb input tap failed with a recognized refusal line followed by a non-trailer line (error: device offline, then Killed); only a refusal that is the entire output makes it no",
     "dispatched": "unknown"
   },
   {

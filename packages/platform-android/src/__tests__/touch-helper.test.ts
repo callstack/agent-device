@@ -376,6 +376,33 @@ test('unparseable output with a non-zero exit code reports a helper failure', as
   );
 });
 
+test('a parsed helper result with a non-zero exit keeps the recognized adb failure details', async () => {
+  const device = makeIsolatedDevice();
+  await assert.rejects(
+    withAndroidAdbProvider(
+      {
+        exec: currentVersionAdb(async () => ({
+          exitCode: 1,
+          stdout: [resultRecord({ ok: 'true', kind: 'swipe' }), 'INSTRUMENTATION_CODE: 0'].join(
+            '\n',
+          ),
+          stderr: 'adb: device offline',
+        })),
+      },
+      { serial: device.id },
+      async () => await executeAndroidTouchHelperPlan(device, lowerAndroidTouchPlan(flingPlan())),
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.message, 'Android automation helper failed');
+      assert.equal(error.details?.adbFailure, 'device_offline');
+      assert.equal(typeof error.details?.hint, 'string');
+      assert.equal(error.details?.retriable, true);
+      return true;
+    },
+  );
+});
+
 test('one-shot viewport instruments the snapshot-helper runner and validates bounds', async () => {
   const device = makeIsolatedDevice();
   let capturedArgs: readonly string[] | undefined;

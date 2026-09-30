@@ -27,7 +27,7 @@ test('only the bare host adb device-offline refusal is classified as a host refu
   for (const stderr of ['adb: device offline\n', "error: device 'emulator-5554' offline"]) {
     assert.deepEqual(classifyAndroidAdbFailure(stderr), {
       reason: 'device_offline',
-      hint: classifyAndroidAdbFailure('device offline')?.hint,
+      hint: 'The device is connected but offline — wait for it to finish booting or run adb reconnect, then retry.',
       retriable: true,
       hostRefusal: true,
     });

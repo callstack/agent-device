@@ -311,10 +311,12 @@ async function runOneShotTouchHelper<Result>(options: {
   if (result.exitCode !== 0) {
     throw discloseHelperTouchDispatch(
       options.action,
-      new AppError(
-        'COMMAND_FAILED',
-        'Android automation helper failed',
-        execFailureDetails(result, { helper: finalRecord }),
+      attachAdbFailureHint(
+        new AppError(
+          'COMMAND_FAILED',
+          'Android automation helper failed',
+          execFailureDetails(result, { helper: finalRecord }),
+        ),
       ),
     );
   }

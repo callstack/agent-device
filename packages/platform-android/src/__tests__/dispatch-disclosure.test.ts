@@ -203,8 +203,8 @@ const DRIVERS: Record<string, { drive: () => Promise<unknown>; dispatchedSteps?:
   'android-adb.input-tap.refusal-text-beside-other-output': {
     drive: () =>
       tapWithAdbAnswer({
-        exitCode: 137,
-        stderr: "adb server version (40) doesn't match this client (41); killing...\nKilled",
+        exitCode: 1,
+        stderr: 'error: device offline\nKilled',
       }),
   },
   ...Object.fromEntries(
