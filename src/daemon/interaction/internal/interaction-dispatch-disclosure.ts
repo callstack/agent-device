@@ -1,4 +1,5 @@
 import {
+  type AppError,
   asAppError,
   discloseDispatch,
   discloseUnclassifiedDispatch,
@@ -35,10 +36,17 @@ export async function discloseInteractionDispatch(
 }
 
 /** A failure response built before any dispatch: the requested operation never reached the device. */
-export function refusedBeforeDispatch(response: DaemonResponse): DaemonResponse {
+export function refusedBeforeDispatch<Response extends DaemonResponse>(
+  response: Response,
+): Response {
   if (response.ok) return response;
   return {
-    ok: false,
+    ...response,
     error: { ...response.error, details: { ...response.error.details, dispatched: 'no' } },
   };
+}
+
+/** A failure thrown before any dispatch: the requested operation never reached the device. */
+export function thrownBeforeDispatch(error: unknown): AppError {
+  return discloseDispatch(asAppError(error), 'no');
 }

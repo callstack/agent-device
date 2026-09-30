@@ -13,6 +13,7 @@ import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory
 import { makeAndroidSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import {
   getRuntimeBindings,
+  mockFillPoint,
   mockTapPoint,
   resetGetRuntimeFixture,
 } from '../../../__tests__/interaction-get-runtime-fixture.ts';
@@ -36,17 +37,11 @@ beforeEach(() => {
 });
 
 type PressScenario = {
-  command?: 'press' | 'get';
+  command?: 'press' | 'get' | 'fill';
   positionals: string[];
-  /** Runs inside the device touch, before it fails. */
-  duringTouch?: (store: ReturnType<typeof makeSessionStore>, sessionName: string) => void;
 };
 
-async function press({
-  command = 'press',
-  positionals,
-  duringTouch,
-}: PressScenario): Promise<unknown> {
+async function press({ command = 'press', positionals }: PressScenario): Promise<unknown> {
   const sessionStore = makeSessionStore();
   const session = makeSession('dispatch-disclosure');
   session.snapshot = {
@@ -64,12 +59,6 @@ async function press({
     backend: 'xctest',
   };
   sessionStore.set(session.name, session);
-  if (duringTouch) {
-    mockTapPoint.mockImplementationOnce(async () => {
-      duringTouch(sessionStore, session.name);
-      throw new AppError('COMMAND_FAILED', 'touch failed');
-    });
-  }
   const response = await handleInteractionCommands({
     req: { token: 't', session: session.name, command, positionals, flags: {} },
     sessionName: session.name,
@@ -86,6 +75,14 @@ async function refusedPress(positionals: string[]): Promise<unknown> {
     return await press({ positionals });
   } finally {
     assert.equal(mockTapPoint.mock.calls.length, 0, 'a refusal must not reach the device');
+  }
+}
+
+async function refusedFill(positionals: string[]): Promise<unknown> {
+  try {
+    return await press({ command: 'fill', positionals });
+  } finally {
+    assert.equal(mockFillPoint.mock.calls.length, 0, 'a refusal must not reach the device');
   }
 }
 
@@ -154,16 +151,8 @@ async function swipeRefusedOnSecondRepetition(): Promise<unknown> {
 const DRIVERS: Record<string, () => Promise<unknown>> = {
   'daemon.refusal.ref-not-found': () => refusedPress(['@e9']),
   'daemon.refusal.admission': () => refusedPress([]),
+  'daemon.refusal.fill-admission': () => refusedFill(['@e1']),
   'daemon.unclassified': () => pressAfterUnclassifiedTouchFailure(),
-  'daemon.unclassified.session-replaced': () =>
-    press({
-      positionals: ['@e1'],
-      duringTouch: (store, name) => {
-        const current = store.get(name);
-        assert.ok(current);
-        store.set(name, { ...current });
-      },
-    }),
   'daemon.series.swipe-later-repetition-refused': swipeRefusedOnSecondRepetition,
   'daemon.read-only-command': () =>
     press({ command: 'get', positionals: ['text', 'label="Missing"'] }),

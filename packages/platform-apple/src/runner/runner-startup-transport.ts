@@ -160,7 +160,10 @@ export async function waitForRunner(
   }
 
   if (session?.child.exitCode !== null && session?.child.exitCode !== undefined) {
-    throw await buildRunnerEarlyExitError({ session, port, logPath });
+    throw withRunnerWriteEvidence(
+      await buildRunnerEarlyExitError({ session, port, logPath }),
+      commandMayHaveBeenWritten,
+    );
   }
   throw withRunnerWriteEvidence(
     buildRunnerConnectError({
