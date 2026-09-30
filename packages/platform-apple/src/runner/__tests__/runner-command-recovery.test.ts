@@ -4,7 +4,10 @@ import { afterEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import type { ExecResult } from '@agent-device/host-kit/command';
-import { handleRunnerTransportErrorAfterCommandSend } from '../runner-command-recovery.ts';
+import {
+  handleRunnerTransportErrorAfterCommandSend,
+  RUNNER_REPLY_LOST_REASON,
+} from '../runner-command-recovery.ts';
 import type { RunnerCommand } from '../runner-contract.ts';
 import type { RunnerSession } from '../runner-session.ts';
 import {
@@ -120,6 +123,20 @@ test('an unknown lifecycle state invalidates the session and says so', async () 
   });
   assert.equal(invalidate.mock.calls.length, 1);
   assert.equal(invalidate.mock.calls[0]?.[1], 'transport_error_after_command_send');
+});
+
+test('notAccepted from a restarted runner fails the lost command as unknown, naming the lost reply', async () => {
+  const { result, invalidate } = await runRecovery({
+    script: [{ kind: 'ok', data: { lifecycleState: 'notAccepted' } }],
+  });
+
+  await assert.rejects(result, (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+    assert.equal(error.details?.dispatched, 'unknown');
+    return true;
+  });
+  assert.equal(invalidate.mock.calls.length, 1);
 });
 
 test('a failing status probe retains the invalidation and rethrows the transport error', async () => {

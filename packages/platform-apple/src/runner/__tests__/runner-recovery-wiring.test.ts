@@ -10,6 +10,7 @@ import type { RunnerSession } from '../runner-session.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { withAppleRunnerProvider } from '../runner-provider.ts';
 import { classifyRunnerReportedError, type RunnerCommand } from '../runner-contract.ts';
+import { RUNNER_REPLY_LOST_REASON } from '../runner-command-recovery.ts';
 import {
   createRunnerPhaseBudget,
   requireRunnerPhaseRemainingMs,
@@ -159,6 +160,57 @@ test.each(Object.values(LOST_RESPONSE_MUTATION_ROWS))(
     );
   },
 );
+
+// #3074: the runner restarted between the send and the status probe, so its journal is empty and
+// `status` answers `notAccepted`. That is no proof the first send did not run.
+test.each(Object.values(LOST_RESPONSE_MUTATION_ROWS))(
+  'a $acceptanceCommand whose reply is lost and whose restarted runner answers notAccepted is sent once',
+  async ({ runnerCommand, request }) => {
+    server = await startFakeRunnerServer({
+      [runnerCommand]: [{ kind: 'hangUp' }, { kind: 'ok', data: {} }],
+      status: [{ kind: 'ok', data: { lifecycleState: 'notAccepted' } }],
+      snapshot: [{ kind: 'ok', data: { nodes: [] } }],
+    });
+    const session = seedSession(server.port);
+
+    await assert.rejects(runAppleRunnerCommand(IOS_SIMULATOR, { ...request }), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.dispatched, 'unknown');
+      assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+      return true;
+    });
+    assert.equal(
+      server.requests.filter((entry) => entry.command === runnerCommand).length,
+      1,
+      `${runnerCommand} is dispatched once`,
+    );
+    assert.deepEqual(invalidateRunnerSessionMock.mock.calls, [
+      [session, 'transport_error_after_command_send'],
+    ]);
+
+    assert.deepEqual(await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'snapshot' }), {
+      nodes: [],
+    });
+    assert.equal(ensureRunnerSessionMock.mock.calls.length, 2, 'the next command gets a runner');
+  },
+);
+
+test('a read whose reply is lost is resent and succeeds', async () => {
+  server = await startFakeRunnerServer({
+    snapshot: [{ kind: 'hangUp' }, { kind: 'ok', data: { nodes: [] } }],
+    status: [{ kind: 'ok', data: { lifecycleState: 'notAccepted' } }],
+  });
+  seedSession(server.port);
+  // The simctl curl route of a ready simulator could not connect, so it sent nothing.
+  appleRunnerTestHost.update({
+    runXcrun: vi.fn(async () => ({ exitCode: 7, stdout: '', stderr: 'curl exited 7' })),
+  });
+
+  assert.deepEqual(await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'snapshot' }), {
+    nodes: [],
+  });
+  assert.equal(server.requests.filter((entry) => entry.command === 'snapshot').length, 2);
+});
 
 // #2965: an inline `status` probe answers while the command it probes may still be executing, so its
 // own reply must not clear the mutation's outstanding charge. The handoff verdict is asserted through

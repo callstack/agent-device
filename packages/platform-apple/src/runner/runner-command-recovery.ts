@@ -47,6 +47,12 @@ type RunnerReadinessPreflightRecoveryDetails = {
 
 const RUNNER_STATUS_RECOVERY_TIMEOUT_MS = 3_000;
 
+/**
+ * `details.reason` of a failure whose command was written, lost its reply, and has no proof it did
+ * not run. The command is not resent; the caller observes the screen before acting again.
+ */
+export const RUNNER_REPLY_LOST_REASON = 'runner_reply_lost';
+
 export async function handleRunnerTransportErrorAfterCommandSend(params: {
   device: DeviceInfo;
   session: RunnerSession;
@@ -285,6 +291,7 @@ function handleRunnerCommandStatusRecovery(
         command: command.command,
         commandId: command.commandId,
         lifecycleState,
+        reason: RUNNER_REPLY_LOST_REASON,
         recovery: 'lifecycle_state_not_recoverable',
         hint: unknownLifecycleStateHint(command.command),
         logPath: options.logPath,
