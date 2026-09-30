@@ -48,7 +48,8 @@ function hooksFor(
     },
     readSurface: (value) => ({ signature: value.signature, backend: 'xctest' }),
     signaturesStable: same,
-    classifyBaselineEvidence: (baseline, quiet) => (same(baseline, quiet) ? 'unchanged' : 'changed'),
+    classifyBaselineEvidence: (baseline, quiet) =>
+      same(baseline, quiet) ? 'unchanged' : 'changed',
     surfacesIdentical: same,
     summarizeDivergence: () => ({}),
   };

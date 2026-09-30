@@ -28,7 +28,8 @@ vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
 });
 
 vi.mock('@agent-device/capture-kit/scroll-edge-state', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/capture-kit/scroll-edge-state')>();
+  const actual =
+    await importOriginal<typeof import('@agent-device/capture-kit/scroll-edge-state')>();
   return { ...actual, readScrollEdgeState: vi.fn(actual.readScrollEdgeState) };
 });
 
