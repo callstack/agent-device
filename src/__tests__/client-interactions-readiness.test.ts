@@ -17,3 +17,17 @@ test('readinessTimeoutMs on press/click/longpress reaches the request flags', as
   assert.equal(setup.calls[1]?.flags?.readinessTimeoutMs, 1_500);
   assert.equal(setup.calls[2]?.flags?.readinessTimeoutMs, 900);
 });
+
+test('a press that waited returns the daemon data.readiness untouched', async () => {
+  const readiness = { polls: 2, waitedMs: 180 };
+  const setup = createTransport(async () => ({ ok: true, data: { ref: '@e1', readiness } }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const pressed = await client.interactions.press({ selector: 'label=Foo' });
+  const clicked = await client.interactions.click({ selector: 'label=Foo' });
+  const longPressed = await client.interactions.longPress({ selector: 'label=Foo' });
+
+  for (const result of [pressed, clicked, longPressed]) {
+    assert.deepEqual((result as { readiness?: unknown }).readiness, readiness);
+  }
+});

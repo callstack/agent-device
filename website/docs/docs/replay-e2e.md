@@ -62,7 +62,8 @@ agent-device replay ~/.agent-device/sessions/e2e-2026-02-09T12-00-00-000Z.ad --s
   they fail. A step recorded against a screen that was still loading passes on replay once the
   target shows up. The wait covers only a target that is not on screen yet: a target that is
   covered, off-screen, or matched by more than one element fails at once, as it does live.
-  Under `--debug`, each wait shows up as an `interaction_target_readiness` diagnostic.
+  A step that waited and then passed shows no trace of the wait in the replay output; run with
+  `--debug` to see it in the diagnostics.
 - When the target never appears, replay stops with `REPLAY_DIVERGENCE`, and
   `error.details.readiness` says how long the step waited and how many times it looked (`waitedMs`,
   `polls`, `end`). For a step recorded with a target annotation (the `# agent-device:target-v1`

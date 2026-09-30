@@ -60,7 +60,7 @@ test('runtime press with readinessTimeoutMs polls until the target appears', asy
 
   assert.equal(result.kind, 'selector');
   assert.equal(result.node?.label, 'Continue');
-  assert.ok(result.kind === 'selector' && result.readiness && result.readiness.polls > 1);
+  assert.equal(result.kind === 'selector' ? result.readiness?.polls : undefined, 2);
   assert.ok(
     captures >= 4,
     `expected at least 4 captures before the target appeared, got ${captures}`,
