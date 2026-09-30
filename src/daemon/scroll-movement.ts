@@ -14,7 +14,11 @@ import { containsPoint } from '@agent-device/kernel/rect';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Point, Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { observeUntil, type ObservationSchedule } from '@agent-device/capture-kit/observe-until';
+import {
+  observeUntil,
+  type ObservationClock,
+  type ObservationSchedule,
+} from '@agent-device/capture-kit/observe-until';
 import {
   areInteractionSurfaceSignaturesStable,
   buildInteractionSurfaceSignature,
@@ -61,11 +65,13 @@ import type { SessionState } from './session-state.ts';
  * lineages can never answer either way and the claim is withheld rather than re-based.
  */
 
-/** How long a scroll keeps asking whether an untouched surface is really untouched (#1542's window). */
+/**
+ * How long a scroll keeps asking whether an untouched surface is really untouched (#1542's window).
+ * No per-capture deadline: the scroll capture takes no signal, so a late capture is judged.
+ */
 const SCROLL_MOVEMENT_SCHEDULE: ObservationSchedule = {
   intervalMs: 200,
   budgetMs: 1_500,
-  captureDeadline: 'cancel',
 };
 
 /** The pre-gesture surface, already in hand: no capture is spent to produce it. */
@@ -190,6 +196,7 @@ export async function observeScrollMovement(params: {
   /** The same two overrides `pollForScrollRest` takes: how long to ask, and how often. */
   budgetMs?: number;
   pollMs?: number;
+  clock?: ObservationClock;
 }): Promise<ScrollMovementObservation> {
   const { direction, baseline, swipe } = params;
   const verdict = await pollForSurfaceVerdict(baseline, params);
@@ -264,32 +271,40 @@ async function pollForSurfaceVerdict(
     budgetMs?: number;
     pollMs?: number;
     swipe: ScrollSwipeEvidence;
+    clock?: ObservationClock;
   },
 ): Promise<SurfaceVerdict> {
-  // The edge question is asked only of the pre-gesture (baseline) tree, so it never depends on a
-  // poll's outcome and can be answered once, before the loop starts, rather than lazily on the
-  // first `changed` reading.
-  const changeNeedsRest = await baselineEndsInDirection(baseline, params.direction, params.swipe);
   let previous: InteractionSurfaceSignature | undefined;
+  let changeNeedsRest: boolean | undefined;
   const observed = await observeUntil<CaptureReading, SurfaceJudgement>({
-    capture: () => readOneCapture(baseline, params.capture),
+    capture: async () => {
+      const reading = await readOneCapture(baseline, params.capture);
+      if (reading.kind === 'changed') {
+        changeNeedsRest ??= await baselineEndsInDirection(baseline, params.direction, params.swipe);
+      }
+      return reading;
+    },
     schedule: {
       intervalMs: params.pollMs ?? SCROLL_MOVEMENT_SCHEDULE.intervalMs,
       budgetMs: params.budgetMs ?? SCROLL_MOVEMENT_SCHEDULE.budgetMs,
-      captureDeadline: SCROLL_MOVEMENT_SCHEDULE.captureDeadline,
     },
     verdict: (latest) => {
       if (latest.kind === 'blind')
         return { kind: 'done', result: { kind: 'blind', reason: latest.reason } };
-      const judged = settledVerdict(latest, { previous, changeNeedsRest });
+      const judged = settledVerdict(latest, {
+        previous,
+        changeNeedsRest: changeNeedsRest === true,
+      });
       previous = latest.observed.signature;
       return judged ? { kind: 'done', result: judged } : { kind: 'continue' };
     },
+    ...(params.clock ? { clock: params.clock } : {}),
   });
 
   const attempts = observed.polls.length;
+  if (observed.kind === 'failed') throw observed.error;
+  if (observed.kind !== 'done') return budgetExpiredVerdict(params, attempts, observed.waitedMs);
   const startedAt = Date.now() - observed.waitedMs;
-  if (observed.kind !== 'done') return budgetExpiredVerdict(params, attempts, startedAt);
   return observed.result.kind === 'blind'
     ? observed.result
     : { ...observed.result, attempts, startedAt };
@@ -382,7 +397,7 @@ function budgetExpiredVerdict(
     swipe: ScrollSwipeEvidence;
   },
   attempts: number,
-  startedAt: number,
+  durationMs: number,
 ): SurfaceVerdict {
   emitDiagnostic({
     level: 'warn',
@@ -390,7 +405,7 @@ function budgetExpiredVerdict(
     data: {
       direction: params.direction,
       attempts,
-      durationMs: Date.now() - startedAt,
+      durationMs,
       ...(params.swipe.pixels === undefined ? {} : { requestedPixels: params.swipe.pixels }),
     },
   });
