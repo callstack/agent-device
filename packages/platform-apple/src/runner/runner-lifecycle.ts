@@ -276,10 +276,10 @@ export async function executeRunnerCommand(
   try {
     return await executeRunnerCommandAttempt(device, command, options, exchange);
   } catch (error) {
-    if (!(error instanceof AppError)) throw error;
-    if (!exchange.entered) throw discloseDispatch(error, 'no');
-    if (isRunnerPreSendRefusal(error)) throw discloseUnclassifiedDispatch(error, 'no');
-    throw error;
+    const failure = asAppError(error);
+    if (!exchange.entered) throw discloseDispatch(failure, 'no');
+    if (isRunnerPreSendRefusal(failure)) throw discloseUnclassifiedDispatch(failure, 'no');
+    throw failure;
   }
 }
 

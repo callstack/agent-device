@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { beforeEach, test, vi } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { AppError, type DispatchDisclosure } from '@agent-device/kernel/errors';
+import { AppError, type DispatchDisclosure, normalizeError } from '@agent-device/kernel/errors';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import {
   assertDispatchDisclosureDriversMatchRows,
@@ -236,4 +236,31 @@ test('a read-only command discloses no over a producer verdict it throws', async
       return true;
     },
   );
+});
+
+test('a plain Error a backend throws reaches the wire with dispatched unknown', async () => {
+  const sessionStore = makeSessionStore();
+  const session = makeSession('dispatch-disclosure-plain-error');
+  sessionStore.set(session.name, session);
+  const bindings = getRuntimeBindings();
+  const bindDevice = vi.fn(async () => {
+    throw new Error('socket hang up');
+  }) as unknown as typeof bindings.bindDevice;
+  await assert.rejects(
+    handleInteractionCommands({
+      req: { token: 't', session: session.name, command: 'press', positionals: ['@e1'], flags: {} },
+      sessionName: session.name,
+      sessionStore,
+      contextFromFlags,
+      ...bindings,
+      bindDevice,
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.message, 'socket hang up');
+      assert.equal(normalizeError(error).details?.dispatched, 'unknown');
+      return true;
+    },
+  );
+  assert.equal(vi.mocked(bindDevice).mock.calls.length, 1);
 });
