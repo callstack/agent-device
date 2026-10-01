@@ -31,17 +31,18 @@ type RunnerRecoveryFailure =
   | { runnerAnswer: AppError; dispatched: DispatchDisclosure }
   | { lostReply: LostReply };
 
-/** What status recovery learned about a command whose reply stayed lost. */
+/**
+ * What status recovery learned about a command whose reply stayed lost. The message is never the
+ * transport error's: classification rows match foreign transport text, and a lost reply must not
+ * read as the retryable failure it wraps. `cause` completes the shared "lost its transport response
+ * and ..." sentence; `message` is for the outcomes that do not fit it.
+ */
 type LostReply = Readonly<{
   recovery: string;
   lifecycleState?: string;
-  /**
-   * Never the transport error's message: classification rows match foreign transport text, and a
-   * lost reply must not read as the retryable transport failure it wraps.
-   */
-  message: string;
   hint: string;
-}>;
+}> &
+  Readonly<{ cause: string } | { message: string }>;
 
 type RunnerTransportRecoveryContext = {
   command: RunnerCommand;
@@ -130,7 +131,7 @@ function buildLostReplyError(
   const transportHint = transportError.details?.hint;
   return new AppError(
     'COMMAND_FAILED',
-    lostReply.message,
+    'cause' in lostReply ? lostReplyMessage(command.command, lostReply.cause) : lostReply.message,
     {
       command: command.command,
       commandId: command.commandId,
@@ -211,7 +212,7 @@ async function tryRecoverRunnerCommandAfterTransportError(
       reason: 'status_recovery_unavailable',
       lostReply: {
         recovery: 'status_recovery_unavailable',
-        message: lostReplyWithoutStatusMessage(command.command, 'status recovery was unavailable'),
+        cause: 'status recovery was unavailable',
         hint: unknownLifecycleStateHint(command.command),
       },
     };
@@ -243,7 +244,7 @@ async function tryRecoverRunnerCommandAfterTransportError(
       reason: 'status_probe_failed',
       lostReply: {
         recovery: 'status_probe_failed',
-        message: lostReplyWithoutStatusMessage(command.command, 'the status probe failed'),
+        cause: 'the status probe failed',
         hint: unknownLifecycleStateHint(command.command),
       },
     };
@@ -367,7 +368,7 @@ function handleRunnerCommandStatusRecovery(
     lostReply: {
       recovery: 'lifecycle_state_not_recoverable',
       lifecycleState,
-      message: `Runner command "${command.command}" lost its transport response and lifecycle status was ${lifecycleState ? `"${lifecycleState}"` : 'missing'}, so agent-device invalidated the runner session instead of replaying the command.`,
+      cause: `lifecycle status was ${lifecycleState ? `"${lifecycleState}"` : 'missing'}`,
       hint: unknownLifecycleStateHint(command.command),
     },
   };
@@ -508,8 +509,8 @@ function readReadinessPreflightRecoveryDetails(
   return details;
 }
 
-function lostReplyWithoutStatusMessage(command: string, statusOutcome: string): string {
-  return `Runner command "${command}" lost its transport response and ${statusOutcome}, so agent-device invalidated the runner session instead of replaying the command.`;
+function lostReplyMessage(command: string, cause: string): string {
+  return `Runner command "${command}" lost its transport response and ${cause}, so agent-device invalidated the runner session instead of replaying the command.`;
 }
 
 function unknownLifecycleStateHint(command: string): string {
