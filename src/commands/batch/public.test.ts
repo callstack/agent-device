@@ -85,3 +85,9 @@ test('batch reports unknown when a step with no declared effect executed before 
   assert.equal(response.ok, false);
   if (!response.ok) assert.equal(response.error.details?.dispatched, 'unknown');
 });
+
+test('batch reports unknown when an undeclared read-only step executed before the refused step', async () => {
+  const response = await runBatchFailingAtSecondStep('devices', []);
+  assert.equal(response.ok, false);
+  if (!response.ok) assert.equal(response.error.details?.dispatched, 'unknown');
+});

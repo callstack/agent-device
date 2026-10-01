@@ -197,9 +197,10 @@ resolution, lock acquisition, lease and daemon-policy admission) never reaches
 the disclosure and carries no `dispatched`. It sends nothing, but a consumer
 must read the absent field as `unknown`.
 
-`runBatch` reports `no` only when none of its executed steps is a
-`'mutates-app'` command; after one, the batch failure is `unknown` for every
-caller, including one that supplies its own `invoke`.
+`runBatch` reports `no` only when every executed step is a command declared
+`observes-app` (a read); any other executed step, including one with no
+declared `recordingEffect`, makes the batch failure `unknown` for every caller,
+including one that supplies its own `invoke`.
 
 For `responseFields`, one `buildInteractionResponseData(...)` becomes the only
 construction site for interaction response payloads (this deletes the class of
