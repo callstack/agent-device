@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { resolveCommandRecordingEffect } from '@agent-device/command-registry/registry';
+import type { DispatchedCommand } from '@agent-device/contracts/command';
 import { fileURLToPath } from 'node:url';
 
 type RunnerName = string;
@@ -18,7 +19,8 @@ const { isReadOnlyRunnerCommand, RUNNER_COMMAND_TRAITS } = (await import(
   )
 )) as RunnerTraits;
 
-type RegistryRequest = Readonly<{ command: string; positionals?: readonly string[] }>;
+type RegistryRequest = Pick<DispatchedCommand, 'command'> &
+  Partial<Pick<DispatchedCommand, 'positionals'>>;
 
 // The runner owns no mapping to the registry, so this is the one declared place that pairs each
 // runner wire command with the registry request that issues it. A runner command with no counterpart
@@ -85,7 +87,7 @@ test('every runner command is paired with a registry request, internal, declared
 
 test('the runner read-only set equals the runner commands whose registry request observes the app', () => {
   for (const [name, request] of Object.entries(REGISTRY_COUNTERPART)) {
-    const effect = resolveCommandRecordingEffect({ ...request, flags: {} } as never);
+    const effect = resolveCommandRecordingEffect({ positionals: [], ...request, flags: {} });
     assert.equal(
       isReadOnlyRunnerCommand({ command: name }),
       effect === 'observes-app',
@@ -98,7 +100,7 @@ test('the runner read-only set equals the runner commands whose registry request
   for (const name of RUNNER_STRICTER_THAN_REGISTRY) {
     assert.equal(isReadOnlyRunnerCommand({ command: name }), false, name);
     assert.equal(
-      resolveCommandRecordingEffect({ command: 'record', flags: {} } as never),
+      resolveCommandRecordingEffect({ command: 'record', positionals: [], flags: {} }),
       'observes-app',
     );
   }
