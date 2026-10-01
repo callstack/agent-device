@@ -529,7 +529,11 @@ test('probeAndroidDisplayRotation hands its budget and abort signal to the adb s
 
 test('probeAndroidDisplayRotation reports none when the display read fails', async () => {
   await withFakeAdb(
-    (args) => (args[1] === 'dumpsys' ? { stdout: '', stderr: 'denied', exitCode: 1 } : undefined),
+    // A failed read that still printed an index must not be trusted.
+    (args) =>
+      args[1] === 'dumpsys'
+        ? { stdout: '  mCurrentOrientation=1\n', stderr: 'denied', exitCode: 1 }
+        : undefined,
     async ({ device }) => {
       const rotation = await probeAndroidDisplayRotation(device, {
         timeoutMs: 2_000,

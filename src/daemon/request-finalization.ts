@@ -99,7 +99,7 @@ function registerDownloadableArtifacts(
           tenantId: req.meta?.tenantId,
           artifactType: artifact.artifactType,
           fileName: artifact.fileName,
-          ...(artifact.displayRotation !== undefined
+          ...(isDeviceRotation(artifact.displayRotation)
             ? { displayRotation: artifact.displayRotation }
             : {}),
         }),

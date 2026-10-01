@@ -118,13 +118,8 @@ test('screenshotAndroid waits for transient UI to settle before capture', async 
     mockScreenshotEvents(events);
     await screenshotAndroid(device, outPath);
 
-    const relevantEvents = events.filter((event, index) => {
-      if (event !== 'enable') {
-        return true;
-      }
-      return index === 0;
-    });
-    assert.deepEqual(relevantEvents, ['enable', 'settle:1000', 'capture', 'disable']);
+    // Demo mode is one setting and two broadcasts, all before the settle.
+    assert.deepEqual(events, ['enable', 'enable', 'enable', 'settle:1000', 'capture', 'disable']);
   });
 });
 

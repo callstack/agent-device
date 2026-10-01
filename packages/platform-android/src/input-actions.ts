@@ -25,7 +25,7 @@ import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/error
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { sleep } from '@agent-device/host-kit/retry';
 import { runAndroidShell } from './adb.ts';
-import { discloseAdbInputDispatch } from './adb-failure.ts';
+import { androidAdbResultError, discloseAdbInputDispatch } from './adb-failure.ts';
 import { executeAndroidTouchPlan, readAndroidGestureViewportReading } from './touch-executor.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
@@ -148,7 +148,18 @@ async function readAndroidDisplayRotationIndices(
   device: DeviceInfo,
   options: { timeoutMs: number; signal?: AbortSignal },
 ): Promise<string[]> {
-  const result = await runAndroidShell(device, ['dumpsys', 'display'], options);
+  // An executor may hand back a failed result instead of throwing, so the exit code is checked
+  // here rather than trusted to the transport.
+  const result = await runAndroidShell(device, ['dumpsys', 'display'], {
+    ...options,
+    allowFailure: true,
+  });
+  if (result.exitCode !== 0) {
+    throw androidAdbResultError(
+      `adb shell dumpsys display exited with code ${result.exitCode}`,
+      result,
+    );
+  }
   return [...result.stdout.matchAll(/mCurrentOrientation=(\d)/g)].map((match) => match[1]!);
 }
 
