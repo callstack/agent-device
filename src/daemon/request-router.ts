@@ -12,12 +12,12 @@ import {
 } from '@agent-device/kernel/errors';
 import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import {
-  type DaemonArtifactType,
   type ResponseCost,
   errorResponse,
   noActiveSessionError,
 } from '@agent-device/kernel/contracts';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
+import type { TrackDownloadableArtifact } from './artifact-tracking.ts';
 import type {
   RequestPlatformProviderScope,
   RequestPlatformProviders,
@@ -113,12 +113,7 @@ export type RequestRouterDeps = {
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
   /** ADR 0029: the daemon policy every admitted request, including nested steps, obeys. */
   daemonPolicy?: DaemonPolicy;
-  trackDownloadableArtifact: (opts: {
-    artifactPath: string;
-    tenantId?: string;
-    artifactType: DaemonArtifactType | undefined;
-    fileName?: string;
-  }) => string;
+  trackDownloadableArtifact: TrackDownloadableArtifact;
 };
 
 const unavailableAndroidObservation = new Proxy({} as AndroidObservationAdapter, {

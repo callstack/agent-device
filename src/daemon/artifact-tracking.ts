@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
+import type { DeviceRotation } from '@agent-device/contracts/device';
+import type { DaemonArtifactInventoryEntry } from '@agent-device/contracts/observability';
 import { runCmd } from '@agent-device/host-kit/command';
 import {
   expiredTenantOwnedEntryError,
@@ -34,6 +36,7 @@ type ArtifactEntry = {
   tenantId?: string;
   artifactType: DaemonArtifactType | undefined;
   fileName?: string;
+  displayRotation?: DeviceRotation;
   deleteAfterDownload: boolean;
   createdAt: number;
   directoryArchive?: DirectoryArchive;
@@ -43,16 +46,16 @@ type ArtifactEntry = {
 
 const pendingArtifacts = new Map<string, ArtifactEntry>();
 
-export type DownloadableArtifactInventoryEntry = {
-  id: string;
-  // Optional on the wire (see DaemonArtifact.artifactType).
-  artifactType?: DaemonArtifactType;
-  filename: string;
-  mimeType: string;
-  sizeBytes: number;
-  createdAt: string;
-  expiresAt: string;
+/** What a finished request registers for each artifact it hands back to the client. */
+export type DownloadableArtifactRegistration = {
+  artifactPath: string;
+  tenantId?: string;
+  artifactType: DaemonArtifactType | undefined;
+  fileName?: string;
+  displayRotation?: DeviceRotation;
 };
+
+export type TrackDownloadableArtifact = (registration: DownloadableArtifactRegistration) => string;
 
 export type PreparedDownloadableArtifact = {
   artifactPath: string;
@@ -61,13 +64,9 @@ export type PreparedDownloadableArtifact = {
   sizeBytes: number;
 };
 
-export function trackDownloadableArtifact(params: {
-  artifactPath: string;
-  tenantId?: string;
-  artifactType: DaemonArtifactType | undefined;
-  fileName?: string;
-  deleteAfterDownload?: boolean;
-}): string {
+export function trackDownloadableArtifact(
+  params: DownloadableArtifactRegistration & { deleteAfterDownload?: boolean },
+): string {
   const artifactId = crypto.randomUUID();
   const createdAt = Date.now();
   const timer = setTimeout(() => {
@@ -79,6 +78,7 @@ export function trackDownloadableArtifact(params: {
     tenantId: params.tenantId,
     artifactType: params.artifactType,
     fileName: params.fileName,
+    ...(params.displayRotation !== undefined ? { displayRotation: params.displayRotation } : {}),
     deleteAfterDownload: params.deleteAfterDownload !== false,
     createdAt,
     timer,
@@ -103,8 +103,8 @@ export async function prepareDownloadableArtifact(
 
 export async function listDownloadableArtifacts(
   tenantId?: string,
-): Promise<DownloadableArtifactInventoryEntry[]> {
-  const artifacts: DownloadableArtifactInventoryEntry[] = [];
+): Promise<DaemonArtifactInventoryEntry[]> {
+  const artifacts: DaemonArtifactInventoryEntry[] = [];
   for (const [id, entry] of pendingArtifacts) {
     if (!canReadArtifact(entry, tenantId)) continue;
     let stat: fs.Stats;
@@ -124,6 +124,7 @@ export async function listDownloadableArtifacts(
       sizeBytes: payload.sizeBytes,
       createdAt: new Date(entry.createdAt).toISOString(),
       expiresAt: new Date(entry.createdAt + ARTIFACT_CLEANUP_TIMEOUT_MS).toISOString(),
+      ...(entry.displayRotation !== undefined ? { displayRotation: entry.displayRotation } : {}),
     });
   }
   return artifacts;

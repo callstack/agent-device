@@ -41,3 +41,19 @@ test('pickScreenshotResultData keeps warnings only when present and non-empty', 
     path: '/tmp/a.png',
   });
 });
+
+test('normalizeScreenshotCaptureResult surfaces the display rotation the daemon reported', () => {
+  const result = normalizeScreenshotCaptureResult(
+    { path: '/tmp/screenshot.png', displayRotation: 'landscape-left' },
+    'qa',
+  );
+  assert.equal(result.displayRotation, 'landscape-left');
+});
+
+test('normalizeScreenshotCaptureResult drops a display rotation outside the rotation vocabulary', () => {
+  const result = normalizeScreenshotCaptureResult(
+    { path: '/tmp/screenshot.png', displayRotation: 'sideways' },
+    'qa',
+  );
+  assert.ok(!('displayRotation' in result));
+});

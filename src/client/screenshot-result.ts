@@ -1,5 +1,6 @@
 import type { ScreenshotResultData } from '@agent-device/contracts/capture';
 import type { CaptureScreenshotResult } from '@agent-device/contracts/client';
+import { isDeviceRotation } from '@agent-device/contracts/device';
 import { isRecord, parsePoint, parseRect, readRequiredString } from '@agent-device/kernel/record';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
@@ -12,6 +13,7 @@ export function pickScreenshotResultData(value: ScreenshotResultData): Screensho
     ...(typeof value.logicalWidth === 'number' ? { logicalWidth: value.logicalWidth } : {}),
     ...(typeof value.logicalHeight === 'number' ? { logicalHeight: value.logicalHeight } : {}),
     ...(typeof value.pixelDensity === 'number' ? { pixelDensity: value.pixelDensity } : {}),
+    ...(isDeviceRotation(value.displayRotation) ? { displayRotation: value.displayRotation } : {}),
     ...(value.overlayRefs ? { overlayRefs: value.overlayRefs } : {}),
     ...(value.warnings && value.warnings.length > 0 ? { warnings: value.warnings } : {}),
   };
@@ -30,6 +32,7 @@ export function normalizeScreenshotCaptureResult(
     logicalWidth: screenshot?.logicalWidth,
     logicalHeight: screenshot?.logicalHeight,
     pixelDensity: screenshot?.pixelDensity,
+    ...(screenshot?.displayRotation ? { displayRotation: screenshot.displayRotation } : {}),
     overlayRefs: screenshot?.overlayRefs,
     ...(screenshot?.warnings ? { warnings: screenshot.warnings } : {}),
     identifiers: { session },
@@ -54,6 +57,7 @@ function readScreenshotResultData(value: unknown): ScreenshotResultData | undefi
     logicalWidth: readNumberField(value, 'logicalWidth'),
     logicalHeight: readNumberField(value, 'logicalHeight'),
     pixelDensity: readNumberField(value, 'pixelDensity'),
+    displayRotation: isDeviceRotation(value.displayRotation) ? value.displayRotation : undefined,
     overlayRefs: readScreenshotOverlayRefs(value.overlayRefs),
     ...(warnings !== undefined ? { warnings } : {}),
   });

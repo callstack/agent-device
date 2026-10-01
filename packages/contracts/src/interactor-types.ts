@@ -66,6 +66,13 @@ export type ScreenshotOptions = {
   captureBackend?: 'runner';
 };
 
+/**
+ * What the capture owner observed while writing the image. `displayRotation` is the rotation the display
+ * rendered the pixels in, so a landscape value pairs with a landscape image; it is absent when the
+ * owner has no rotation reading it can stand behind for this capture.
+ */
+export type ScreenshotCaptureFacts = Readonly<{ displayRotation?: DeviceRotation }>;
+
 export type ElementSelectorKey = 'id' | 'label' | 'text' | 'value';
 
 export type ElementSelectorTapOptions = {
@@ -342,7 +349,7 @@ export type Interactor = {
     direction: ScrollDirection,
     options?: ScrollExecutionOptions,
   ): Promise<Record<string, unknown> | void>;
-  screenshot(outPath: string, options?: ScreenshotOptions): Promise<void>;
+  screenshot(outPath: string, options?: ScreenshotOptions): Promise<ScreenshotCaptureFacts | void>;
   setViewport?(width: number, height: number): Promise<Record<string, unknown> | void>;
   snapshot(options?: SnapshotOptions): Promise<SnapshotRuntimeResult>;
   /**

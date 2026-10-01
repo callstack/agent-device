@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { parseDeviceRotation } from './device-rotation.ts';
+import {
+  DEVICE_ROTATIONS,
+  DEVICE_ROTATION_SURFACE_INDEX,
+  deviceRotationFromSurfaceIndex,
+  isDeviceRotation,
+  parseDeviceRotation,
+} from './device-rotation.ts';
 
 describe('parseDeviceRotation', () => {
   test('accepts the canonical orientation names', () => {
@@ -35,5 +41,28 @@ describe('parseDeviceRotation', () => {
         message: expect.stringContaining('Invalid rotation: sideways'),
       }),
     );
+  });
+});
+
+describe('deviceRotationFromSurfaceIndex', () => {
+  test('reads every rotation back from its own surface index', () => {
+    for (const rotation of DEVICE_ROTATIONS) {
+      expect(deviceRotationFromSurfaceIndex(DEVICE_ROTATION_SURFACE_INDEX[rotation])).toBe(
+        rotation,
+      );
+    }
+  });
+
+  test('has no rotation for an index outside the surface table', () => {
+    expect(deviceRotationFromSurfaceIndex(4)).toBeUndefined();
+  });
+});
+
+describe('isDeviceRotation', () => {
+  test('accepts the canonical names and rejects aliases and non-strings', () => {
+    for (const rotation of DEVICE_ROTATIONS) expect(isDeviceRotation(rotation)).toBe(true);
+    expect(isDeviceRotation('left')).toBe(false);
+    expect(isDeviceRotation(undefined)).toBe(false);
+    expect(isDeviceRotation(1)).toBe(false);
   });
 });

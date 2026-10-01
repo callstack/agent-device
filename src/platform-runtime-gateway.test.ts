@@ -98,7 +98,7 @@ describe('composed platform runtime gateway', () => {
         ...screenshotRuntimeOperationFacts({ capture: { available: true } }),
       },
     };
-    const captureScreenshot = vi.fn(async () => undefined);
+    const captureScreenshot = vi.fn(async () => ({}));
     const binding: DeviceBinding<PlatformRuntimeOperations> = {
       device: appleDevice,
       owner,

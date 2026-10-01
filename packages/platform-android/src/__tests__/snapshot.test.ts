@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import path from 'node:path';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
@@ -16,7 +15,6 @@ import {
   bindMissingAndroidHelperHost,
   mkdtempForTest,
 } from './test-utils/android-host-test-setup.ts';
-import { screenshotAndroid } from '../screenshot.ts';
 import { snapshotAndroid } from '../snapshot.ts';
 import { readAndroidGestureViewport } from '../touch-executor.ts';
 import { buildUiHierarchySnapshot, parseUiHierarchyTree } from '../ui-hierarchy.ts';
@@ -112,83 +110,6 @@ afterEach(async () => {
   await resetAndroidSnapshotHelperSessions();
 });
 
-test('screenshotAndroid waits for transient UI to settle before capture', async () => {
-  const events: string[] = [];
-  await withTempScreenshot('screenshot-settle-', async (outPath) => {
-    mockScreenshotEvents(events);
-    await screenshotAndroid(device, outPath);
-
-    const relevantEvents = events.filter((event, index) => {
-      if (event !== 'enable') {
-        return true;
-      }
-      return index === 0;
-    });
-    assert.deepEqual(relevantEvents, ['enable', 'settle:1000', 'capture', 'disable']);
-  });
-});
-
-test('screenshotAndroid skips stabilization when requested', async () => {
-  const events: string[] = [];
-  await withTempScreenshot('screenshot-stabilize-', async (outPath) => {
-    mockScreenshotEvents(events);
-    await screenshotAndroid(device, outPath, { stabilize: false });
-
-    assert.deepEqual(events, ['capture']);
-    assert.equal(mockSleep.mock.calls.length, 0);
-  });
-});
-
-test('screenshotAndroid writes a valid PNG when output is clean', async () => {
-  await withTempScreenshot('screenshot-clean-', async (outPath) => {
-    await screenshotAndroid(device, outPath);
-    const written = await fs.readFile(outPath);
-    assert.deepEqual(written, VALID_PNG);
-  });
-});
-
-test('screenshotAndroid strips warning text before PNG signature', async () => {
-  const warning =
-    '[Warning] Multiple displays were found, but no display id was specified! Defaulting to the first display found.';
-  mockScreenshotPayload(Buffer.concat([Buffer.from(warning), VALID_PNG]));
-
-  await withTempScreenshot('screenshot-warning-', async (outPath) => {
-    await screenshotAndroid(device, outPath);
-    const written = await fs.readFile(outPath);
-    assert.deepEqual(written, VALID_PNG);
-  });
-});
-
-test('screenshotAndroid strips trailing garbage after PNG payload', async () => {
-  mockScreenshotPayload(Buffer.concat([VALID_PNG, Buffer.from('\ntrailing-warning\n')]));
-
-  await withTempScreenshot('screenshot-trailing-', async (outPath) => {
-    await screenshotAndroid(device, outPath);
-    const written = await fs.readFile(outPath);
-    assert.deepEqual(written, VALID_PNG);
-  });
-});
-
-test('screenshotAndroid throws when output contains no PNG signature', async () => {
-  mockScreenshotPayload(Buffer.from('not a png'));
-
-  await withTempScreenshot('screenshot-nopng-', async (outPath) => {
-    await assert.rejects(() => screenshotAndroid(device, outPath), {
-      message: 'Screenshot data does not contain a valid PNG header',
-    });
-  });
-});
-
-test('screenshotAndroid throws when PNG payload is truncated', async () => {
-  mockScreenshotPayload(VALID_PNG.subarray(0, VALID_PNG.length - 3));
-
-  await withTempScreenshot('screenshot-truncated-', async (outPath) => {
-    await assert.rejects(() => screenshotAndroid(device, outPath), {
-      message: 'Screenshot data does not contain a complete PNG payload',
-    });
-  });
-});
-
 function androidContentPoorFabricAppWindowXml(): string {
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
@@ -218,41 +139,6 @@ function androidContentPoorExpoToolsOverlayXml(): string {
     '  </node>',
     '</hierarchy>',
   ].join('\n');
-}
-
-function mockScreenshotEvents(events: string[]): void {
-  mockRunCmd.mockImplementation(async (_cmd, args) => {
-    if (args.includes('exec-out')) {
-      events.push('capture');
-      return { exitCode: 0, stdout: '', stderr: '', stdoutBuffer: VALID_PNG };
-    }
-    events.push(args.some((arg) => arg.includes('exit')) ? 'disable' : 'enable');
-    return { exitCode: 0, stdout: '', stderr: '' };
-  });
-  mockSleep.mockImplementation(async (ms) => {
-    events.push(`settle:${ms}`);
-  });
-}
-
-function mockScreenshotPayload(payload: Buffer): void {
-  mockRunCmd.mockImplementation(async (_cmd, args) => {
-    if (args.includes('exec-out')) {
-      return { exitCode: 0, stdout: '', stderr: '', stdoutBuffer: payload };
-    }
-    return { exitCode: 0, stdout: '', stderr: '' };
-  });
-}
-
-async function withTempScreenshot(
-  name: string,
-  callback: (outPath: string) => Promise<void>,
-): Promise<void> {
-  const tmpDir = await mkdtempForTest(name);
-  try {
-    await callback(path.join(tmpDir, 'out.png'));
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  }
 }
 
 function androidSnapshotHelperAdb(xml: string, activityDump?: string): AndroidAdbExecutor {

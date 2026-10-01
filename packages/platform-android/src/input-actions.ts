@@ -22,6 +22,7 @@ import type { Rect } from '@agent-device/kernel/snapshot';
 import { sleep } from '@agent-device/host-kit/retry';
 import { runAndroidShell } from './adb.ts';
 import { discloseAdbInputDispatch } from './adb-failure.ts';
+import { parseAndroidDisplayRotationIndex } from './display-rotation.ts';
 import { executeAndroidTouchPlan, readAndroidGestureViewportReading } from './touch-executor.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
@@ -122,7 +123,7 @@ async function readAndroidDisplayRotation(
     const result = await runAndroidShell(device, ['dumpsys', 'display'], {
       timeoutMs: remainingMs(deadline),
     });
-    return /mCurrentOrientation=(\d)/.exec(result.stdout)?.[1];
+    return parseAndroidDisplayRotationIndex(result.stdout);
   } catch (error) {
     throw new AppError(
       'COMMAND_FAILED',

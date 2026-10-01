@@ -26,6 +26,7 @@ import type {
   Interactor,
   RunnerCallOptions,
   RunnerContext,
+  ScreenshotCaptureFacts,
   ScreenshotOptions,
   SnapshotOptions,
 } from '@agent-device/contracts/interactor-types';
@@ -387,7 +388,7 @@ async function runAppleScreenshot(
   outPath: string,
   options: ScreenshotOptions = {},
   runnerOpts: RunnerCallOptions,
-): Promise<void> {
+): Promise<ScreenshotCaptureFacts> {
   const helper = isMacOs(device) ? macOsHelperSurface(options.surface) : undefined;
   if (helper) {
     if (options.fullscreen) {
@@ -401,7 +402,7 @@ async function runAppleScreenshot(
       );
     }
     await runMacOsScreenshotAction(outPath, { surface: helper });
-    return;
+    return {};
   }
   if (options.captureBackend === 'runner') {
     // Runner capture returns the XCTest surface as-is; density and simulator
@@ -413,9 +414,9 @@ async function runAppleScreenshot(
       options.fullscreen,
       runnerOpts,
     );
-    return;
+    return {};
   }
-  await screenshotIos(device, outPath, {
+  return await screenshotIos(device, outPath, {
     appBundleId: options.appBundleId,
     pixelDensity: options.pixelDensity,
     fullscreen: options.fullscreen,

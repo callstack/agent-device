@@ -167,7 +167,7 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after retry ex
         normalizeDensity: async () => {},
         captureWithRunner: captureScreenshotViaRunner,
         shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
-        resolveCaptureDisplay: async () => undefined,
+        resolveCaptureTarget: async () => ({}),
       },
     });
     assert.equal(ensureBootedCalls, 1);
@@ -213,7 +213,7 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after simctl s
         normalizeDensity: async () => {},
         captureWithRunner: captureScreenshotViaRunner,
         shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
-        resolveCaptureDisplay: async () => undefined,
+        resolveCaptureTarget: async () => ({}),
       },
     });
     assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 1);
@@ -281,7 +281,7 @@ test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after
       normalizeDensity: async () => {},
       captureWithRunner,
       shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
-      resolveCaptureDisplay: async () => undefined,
+      resolveCaptureTarget: async () => ({}),
     },
   });
 
@@ -319,7 +319,7 @@ test('captureSimulatorScreenshotWithFallback keeps runner fallback after skipped
       normalizeDensity: async () => {},
       captureWithRunner,
       shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
-      resolveCaptureDisplay: async () => undefined,
+      resolveCaptureTarget: async () => ({}),
     },
   });
 
@@ -403,7 +403,7 @@ test('captureSimulatorScreenshotWithFallback emits fallback diagnostic before us
             normalizeDensity: async () => {},
             captureWithRunner: captureScreenshotViaRunner,
             shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
-            resolveCaptureDisplay: async () => undefined,
+            resolveCaptureTarget: async () => ({}),
           },
         });
       },
@@ -573,4 +573,36 @@ test('captureScreenshotViaRunner copies macOS runner screenshots from the host',
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
+});
+
+test('captureSimulatorScreenshotWithFallback reports the panel rotation for a simctl capture', async () => {
+  const facts = await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/s.png', {
+    skipIosSimulatorBootCheck: true,
+    deps: {
+      ensureBooted: async () => {},
+      normalizeDensity: async () => {},
+      captureWithRunner: async () => undefined,
+      shouldFallbackToRunner: () => true,
+      resolveCaptureTarget: async () => ({ displayRotation: 'landscape-left' }),
+      captureWithRetry: async () => {},
+    },
+  });
+  assert.deepEqual(facts, { displayRotation: 'landscape-left' });
+});
+
+test('captureSimulatorScreenshotWithFallback keeps the panel rotation for a runner fallback capture', async () => {
+  const facts = await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/s.png', {
+    skipIosSimulatorBootCheck: true,
+    deps: {
+      ensureBooted: async () => {},
+      normalizeDensity: async () => {},
+      captureWithRunner: async () => undefined,
+      shouldFallbackToRunner: () => true,
+      resolveCaptureTarget: async () => ({ displayRotation: 'landscape-right' }),
+      captureWithRetry: async () => {
+        throw new Error('simctl screenshot failed');
+      },
+    },
+  });
+  assert.deepEqual(facts, { displayRotation: 'landscape-right' });
 });

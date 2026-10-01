@@ -619,3 +619,11 @@ test('network digest tolerates a missing/empty entries list', () => {
   const emptyList: DaemonResponseData = { path: '/tmp/app.log', entries: [] };
   expect(networkView!(emptyList, 'digest')).toEqual({ path: '/tmp/app.log', entries: [] });
 });
+
+test('screenshot digest keeps the capture display rotation', () => {
+  const digest = screenshotView!(
+    { path: '/tmp/s.png', displayRotation: 'landscape-left' },
+    'digest',
+  );
+  expect(digest.displayRotation).toBe('landscape-left');
+});

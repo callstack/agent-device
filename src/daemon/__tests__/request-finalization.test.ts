@@ -3,6 +3,7 @@ import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { finalizeDaemonResponse } from '../request-finalization.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
+import type { DownloadableArtifactRegistration } from '../artifact-tracking.ts';
 
 test('finalizeDaemonResponse preserves handler error hints from details', () => {
   const req: DaemonRequest = {
@@ -272,4 +273,57 @@ test('finalizeDaemonResponse keeps screenshot path fallback as screenshot artifa
       fileName: 'screenshot.png',
     },
   ]);
+});
+
+test('finalizeDaemonResponse registers the screenshot display rotation with its artifact', () => {
+  const req: DaemonRequest = {
+    token: 'token',
+    session: 'default',
+    command: 'screenshot',
+    positionals: [],
+    meta: { tenantId: 'tenant-a', clientArtifactPaths: { path: '/client/shot.png' } },
+  };
+  const tracked: DownloadableArtifactRegistration[] = [];
+
+  finalizeDaemonResponse(
+    req,
+    { ok: true, data: { path: '/tmp/shot.png', displayRotation: 'landscape-left' } },
+    (registration) => {
+      tracked.push(registration);
+      return 'artifact-id';
+    },
+  );
+
+  expect(tracked).toEqual([
+    {
+      artifactPath: '/tmp/shot.png',
+      tenantId: 'tenant-a',
+      artifactType: 'screenshot',
+      fileName: 'shot.png',
+      displayRotation: 'landscape-left',
+    },
+  ]);
+});
+
+test('finalizeDaemonResponse registers no display rotation for a value outside the rotation vocabulary', () => {
+  const req: DaemonRequest = {
+    token: 'token',
+    session: 'default',
+    command: 'screenshot',
+    positionals: [],
+    meta: { clientArtifactPaths: { path: '/client/shot.png' } },
+  };
+  const tracked: DownloadableArtifactRegistration[] = [];
+
+  finalizeDaemonResponse(
+    req,
+    { ok: true, data: { path: '/tmp/shot.png', displayRotation: 'sideways' } },
+    (registration) => {
+      tracked.push(registration);
+      return 'artifact-id';
+    },
+  );
+
+  expect(tracked).toHaveLength(1);
+  expect(tracked[0]).not.toHaveProperty('displayRotation');
 });

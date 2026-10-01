@@ -8,6 +8,7 @@ import {
   readRunnerScreenCaptureMetadata,
   type RunnerScreenCaptureMetadata,
 } from '@agent-device/contracts/screen-capture-contract';
+import type { ScreenshotCaptureFacts } from '@agent-device/contracts/interactor-types';
 
 import { resizePngFile } from '@agent-device/capture-kit/png-resize';
 import { readPngSize } from '@agent-device/capture-kit/png-size';
@@ -28,7 +29,8 @@ import {
 import { prepareSimulatorStatusBarForScreenshot } from './screenshot-status-bar.ts';
 import {
   appleSimulatorDisplayArgvFragment,
-  resolveAppleCaptureDisplay,
+  resolveAppleCaptureTarget,
+  type AppleCaptureTarget,
   type AppleDeviceDisplay,
 } from './display-inventory.ts';
 import { ensureBootedSimulator } from './simulator.ts';
@@ -39,7 +41,7 @@ import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 type SimulatorScreenshotFlowDeps = {
   ensureBooted: (device: DeviceInfo) => Promise<void>;
   prepareStatusBarForScreenshot: (device: DeviceInfo) => Promise<() => Promise<void>>;
-  resolveCaptureDisplay: (device: DeviceInfo) => Promise<AppleDeviceDisplay | undefined>;
+  resolveCaptureTarget: (device: DeviceInfo) => Promise<AppleCaptureTarget>;
   captureWithRetry: (
     device: DeviceInfo,
     outPath: string,
@@ -81,7 +83,7 @@ type SimulatorScreenshotFlowOptions = {
 const defaultSimulatorScreenshotFlowDeps: SimulatorScreenshotFlowDeps = {
   ensureBooted: ensureBootedSimulator,
   prepareStatusBarForScreenshot: prepareSimulatorStatusBarForScreenshot,
-  resolveCaptureDisplay: resolveAppleCaptureDisplay,
+  resolveCaptureTarget: resolveAppleCaptureTarget,
   captureWithRetry: captureSimulatorScreenshotWithRetry,
   normalizeDensity: normalizeIosSimulatorScreenshotDensity,
   captureWithRunner: captureScreenshotViaRunner,
@@ -95,7 +97,7 @@ export async function screenshotIos(
   device: DeviceInfo,
   outPath: string,
   options: Omit<SimulatorScreenshotFlowOptions, 'deps'> = {},
-): Promise<void> {
+): Promise<ScreenshotCaptureFacts> {
   if (isMacOs(device)) {
     await captureScreenshotViaRunner(
       device,
@@ -104,11 +106,10 @@ export async function screenshotIos(
       options.fullscreen,
       options.runnerOptions,
     );
-    return;
+    return {};
   }
   if (device.kind === 'simulator') {
-    await captureSimulatorScreenshotWithFallback(device, outPath, options);
-    return;
+    return await captureSimulatorScreenshotWithFallback(device, outPath, options);
   }
 
   await resolveIosPhysicalDeviceControl(device).captureScreenshot(device, outPath, {
@@ -117,13 +118,14 @@ export async function screenshotIos(
     runnerOptions: options.runnerOptions,
     runRunnerCommand: runAppleRunnerCommand,
   });
+  return {};
 }
 
 export async function captureSimulatorScreenshotWithFallback(
   device: DeviceInfo,
   outPath: string,
   options: SimulatorScreenshotFlowOptions = {},
-): Promise<void> {
+): Promise<ScreenshotCaptureFacts> {
   if (device.kind !== 'simulator') {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
@@ -138,7 +140,8 @@ export async function captureSimulatorScreenshotWithFallback(
   }
   // A foldable lights one panel at a time, so the capture must name the panel the
   // system is currently showing rather than accept simctl's implicit default.
-  const display = await deps.resolveCaptureDisplay(device);
+  const { display, displayRotation } = await deps.resolveCaptureTarget(device);
+  const captureFacts: ScreenshotCaptureFacts = displayRotation ? { displayRotation } : {};
   const captureAndNormalize = async () => {
     await deps.captureWithRetry(device, outPath, display);
     await deps.normalizeDensity(device, outPath, options.pixelDensity, display?.pointScale);
@@ -154,7 +157,7 @@ export async function captureSimulatorScreenshotWithFallback(
   try {
     try {
       await captureAndNormalize();
-      return;
+      return captureFacts;
     } catch (error) {
       let screenshotError = error;
       if (
@@ -164,7 +167,7 @@ export async function captureSimulatorScreenshotWithFallback(
         await deps.ensureBooted(device);
         try {
           await captureAndNormalize();
-          return;
+          return captureFacts;
         } catch (retryError) {
           screenshotError = retryError;
         }
@@ -186,6 +189,7 @@ export async function captureSimulatorScreenshotWithFallback(
     // A runner that reports nothing measured nothing: the probe stays the pre-panel answer rather
     // than borrowing a scale from a panel nobody captured (#2728).
     await deps.normalizeDensity(device, outPath, options.pixelDensity, captured?.pixelsPerPoint);
+    return captureFacts;
   } finally {
     await restoreStatusBar().catch((error) =>
       emitStatusBarDiagnostic(device, 'restore_failed', error),

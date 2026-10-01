@@ -1,6 +1,6 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { ProviderAppCatalog } from '@agent-device/contracts/device';
-import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
+import type { TrackDownloadableArtifact } from './artifact-tracking.ts';
 import {
   emitDiagnostic,
   getDiagnosticsMeta,
@@ -481,12 +481,7 @@ function applyRequestCommandDefaults(req: DaemonRequest): DaemonRequest {
 export async function prepareLockedRequestScope(params: {
   scope: RequestExecutionScope;
   sessionStore: SessionStore;
-  trackDownloadableArtifact: (opts: {
-    artifactPath: string;
-    tenantId?: string;
-    artifactType: DaemonArtifactType | undefined;
-    fileName?: string;
-  }) => string;
+  trackDownloadableArtifact: TrackDownloadableArtifact;
 }): Promise<LockedRequestScopeResult> {
   const { scope, sessionStore, trackDownloadableArtifact } = params;
   const logPath = scope.runnerLogPath;
