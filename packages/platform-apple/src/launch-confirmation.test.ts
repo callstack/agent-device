@@ -202,12 +202,17 @@ function wedgedCoreSimulator(): AppleToolProvider & { spawns: () => number } {
   const hang = async (options?: ExecOptions): Promise<ExecResult> =>
     await new Promise((_resolve, reject) => {
       spawns += 1;
-      if (options?.timeoutMs) {
-        setTimeout(() => reject(spawnTimeout()), options.timeoutMs);
-      }
-      options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
-        once: true,
-      });
+      const timer = options?.timeoutMs
+        ? setTimeout(() => reject(spawnTimeout()), options.timeoutMs)
+        : undefined;
+      options?.signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timer);
+          reject(options.signal?.reason);
+        },
+        { once: true },
+      );
     });
   return {
     whichCommand: async () => true,
