@@ -93,25 +93,29 @@ struct CommandTraits {
   let isInteraction: Bool
   /// Whether the command is eligible for the session-invalidating retry.
   let retryOnSessionLoss: Bool
-  /// What the runner may do when the command's app is not running. The one fact with no default: no
-  /// command inherits a launch answer from how it was classified for anything else.
+  /// What the runner may do when the command's app is not running. No command inherits a launch
+  /// answer from how it was classified for anything else.
   let launchPolicy: CommandLaunchPolicy
   /// Whether an XCTest-recorded failure during this command turns its own healthy response into a
   /// failure and invalidates the session. That conversion is the only evidence a mutation with no
   /// settle and no post-action observation ever landed, while a command that reports the runner's own
   /// state or drives its lifecycle has no user-visible mutation to prove.
   let convertsRecordedFailure: Bool
+  /// Whether the journal may store this command's response JSON, subject to its byte limit.
+  let retainsJournalResponseJson: Bool
 
   init(
     isInteraction: Bool = false,
     retryOnSessionLoss: Bool = false,
     launchPolicy: CommandLaunchPolicy,
-    convertsRecordedFailure: Bool = false
+    convertsRecordedFailure: Bool = false,
+    retainsJournalResponseJson: Bool
   ) {
     self.isInteraction = isInteraction
     self.retryOnSessionLoss = retryOnSessionLoss
     self.launchPolicy = launchPolicy
     self.convertsRecordedFailure = convertsRecordedFailure
+    self.retainsJournalResponseJson = retainsJournalResponseJson
   }
 }
 
@@ -121,18 +125,26 @@ fileprivate extension CommandTraits {
   static let interaction = CommandTraits(
     isInteraction: true,
     launchPolicy: .mayLaunch,
-    convertsRecordedFailure: true
+    convertsRecordedFailure: true,
+    retainsJournalResponseJson: true
   )
 
   /// Mutations the runner performs without the element-interaction preflight. NOTE: `mouseClick`
   /// stays non-interaction for now — it is macOS-only and the foreground guard interacts with
   /// bespoke macOS activation, so classifying it needs a macOS smoke check first (tracked as a
   /// follow-up).
-  static let appMutation = CommandTraits(launchPolicy: .mayLaunch, convertsRecordedFailure: true)
+  static let appMutation = CommandTraits(
+    launchPolicy: .mayLaunch, convertsRecordedFailure: true, retainsJournalResponseJson: true
+  )
 
   /// Reads of the session app: replayable after session invalidation, and refused rather than
   /// answered by starting the app.
-  static let appRead = CommandTraits(retryOnSessionLoss: true, launchPolicy: .existingApp)
+  static func appRead(retainsJournalResponseJson: Bool) -> CommandTraits {
+    CommandTraits(
+      retryOnSessionLoss: true, launchPolicy: .existingApp,
+      retainsJournalResponseJson: retainsJournalResponseJson
+    )
+  }
 
   /// Selector resolution is an observation: it refuses a stopped app instead of bare-launching it,
   /// and the runner still must not replay it after session invalidation. Those are two facts about
@@ -140,33 +152,41 @@ fileprivate extension CommandTraits {
   /// half: off iOS a selector read of a stopped app still activates it, as it did before this axis.
   static let selectorResolution = CommandTraits(
     launchPolicy: .existingApp,
-    convertsRecordedFailure: true
+    convertsRecordedFailure: true,
+    retainsJournalResponseJson: true
   )
 
   /// Reads the runner answers from its own capture and state, so preparation never brings an app
   /// forward; a capture aimed at an app still observes that app while it executes.
-  static let runnerCaptureRead = CommandTraits(retryOnSessionLoss: true, launchPolicy: .noApp)
+  static func runnerCaptureRead(retainsJournalResponseJson: Bool) -> CommandTraits {
+    CommandTraits(
+      retryOnSessionLoss: true, launchPolicy: .noApp,
+      retainsJournalResponseJson: retainsJournalResponseJson
+    )
+  }
 
   /// The runner's own lifecycle: no session app is brought forward, and no mutation is proven.
-  static let runnerLifecycle = CommandTraits(launchPolicy: .noApp)
+  static let runnerLifecycle = CommandTraits(launchPolicy: .noApp, retainsJournalResponseJson: true)
 
   /// Device state the runner sets from its own process, such as the pasteboard: no app is brought
   /// forward, since the state belongs to the device rather than to the session app, and no UI
   /// mutation is proven.
-  static let deviceState = CommandTraits(launchPolicy: .noApp)
+  static let deviceState = CommandTraits(launchPolicy: .noApp, retainsJournalResponseJson: true)
 
   /// Commands hosted by the surface that already has focus, which no activation may cancel. A
   /// hardware press belongs to the system rather than to the session app, and an alert answers from
   /// the modal where it sits; both mutate.
   static let presentedSurfaceMutation = CommandTraits(
     launchPolicy: .presentedSurface,
-    convertsRecordedFailure: true
+    convertsRecordedFailure: true,
+    retainsJournalResponseJson: true
   )
 
   /// `alert get` changes nothing, so it is the one alert action that may be replayed.
   static let presentedSurfaceQuery = CommandTraits(
     retryOnSessionLoss: true,
-    launchPolicy: .presentedSurface
+    launchPolicy: .presentedSurface,
+    retainsJournalResponseJson: true
   )
 }
 
@@ -179,8 +199,8 @@ extension CommandTraits {
 
 extension Command {
   /// Whether arriving at the prepared command path invalidates a remembered text-entry tap. Not a
-  /// fifth trait: everywhere but the two owner commands, it is having a mutation to prove that makes
-  /// the witness stale, so this reads `convertsRecordedFailure` and that set rather than declaring a
+  /// separate trait: everywhere but the two owner commands, having a mutation to prove makes the
+  /// witness stale, so this reads `convertsRecordedFailure` and that set rather than declaring a
   /// fact no command would answer for itself (#2890 review). `executeOnMainPrepared` is its only
   /// consumer, and the exhaustive table test pins the answer for every command.
   var invalidatesRememberedTextEntryTap: Bool {
@@ -243,13 +263,19 @@ extension Command {
          .keyboardDismiss, .keyboardReturn, .sequence, .gesture:
       return .interaction
 
-    case .findText, .readText, .snapshot, .gestureViewport:
-      return .appRead
+    case .findText, .readText, .gestureViewport:
+      return .appRead(retainsJournalResponseJson: true)
+
+    case .snapshot:
+      return .appRead(retainsJournalResponseJson: false)
 
     // appState reads the session app's XCUIApplication.state; bringing no app forward is what makes
     // its answer the state the app is in, not the one a repair leaves.
-    case .screenshot, .status, .appState:
-      return .runnerCaptureRead
+    case .status, .appState:
+      return .runnerCaptureRead(retainsJournalResponseJson: true)
+
+    case .screenshot:
+      return .runnerCaptureRead(retainsJournalResponseJson: false)
 
     case .alert:
       return (action ?? "get").lowercased() == "get"

@@ -153,19 +153,22 @@ extension RunnerTests {
     let retryOnSessionLoss: Bool
     let launchPolicy: CommandLaunchPolicy
     let convertsRecordedFailure: Bool
+    let retainsJournalResponseJson: Bool
   }
 
   private func expectation(
     interaction: Bool,
     retry: Bool,
     launch: CommandLaunchPolicy,
-    converts: Bool
+    converts: Bool,
+    retains: Bool
   ) -> ExpectedTraits {
     ExpectedTraits(
       isInteraction: interaction,
       retryOnSessionLoss: retry,
       launchPolicy: launch,
-      convertsRecordedFailure: converts
+      convertsRecordedFailure: converts,
+      retainsJournalResponseJson: retains
     )
   }
 
@@ -185,6 +188,11 @@ extension RunnerTests {
       traits.convertsRecordedFailure,
       expectation.convertsRecordedFailure,
       "\(request) convertsRecordedFailure"
+    )
+    XCTAssertEqual(
+      traits.retainsJournalResponseJson,
+      expectation.retainsJournalResponseJson,
+      "\(request) retainsJournalResponseJson"
     )
   }
 
@@ -244,54 +252,54 @@ extension RunnerTests {
   /// a concrete launch case, so re-pointing a command at another policy fails that row.
   func testEveryCommandDeclaresEveryRunnerSideDecisionTogether() throws {
     let table: [(CommandType, ExpectedTraits)] = [
-      (.tap, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),
-      (.mouseClick, expectation(interaction: false, retry: false, launch: .mayLaunch, converts: true)),
-      (.longPress, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),
-      (.drag, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),
-      (.remotePress, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),
-      (.type, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),
-      (.swipe, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),
-      (.scroll, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),
-      (.desktopScroll, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),
-      (.findText, expectation(interaction: false, retry: true, launch: .existingApp, converts: false)),
+      (.tap, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true)),
+      (.mouseClick, expectation(interaction: false, retry: false, launch: .mayLaunch, converts: true, retains: true)),
+      (.longPress, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true)),
+      (.drag, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true)),
+      (.remotePress, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true)),
+      (.type, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true)),
+      (.swipe, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true)),
+      (.scroll, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true)),
+      (.desktopScroll, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true)),
+      (.findText, expectation(interaction: false, retry: true, launch: .existingApp, converts: false, retains: true)),
       (
         .querySelector,
-        expectation(interaction: false, retry: false, launch: .existingApp, converts: true)
+        expectation(interaction: false, retry: false, launch: .existingApp, converts: true, retains: true)
       ),
-      (.readText, expectation(interaction: false, retry: true, launch: .existingApp, converts: false)),
-      (.snapshot, expectation(interaction: false, retry: true, launch: .existingApp, converts: false)),
-      (.screenshot, expectation(interaction: false, retry: true, launch: .noApp, converts: false)),
-      (.backInApp, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),
-      (.backSystem, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),
-      (.home, expectation(interaction: false, retry: false, launch: .mayLaunch, converts: true)),
-      (.rotate, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),
-      (.appSwitcher, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),
+      (.readText, expectation(interaction: false, retry: true, launch: .existingApp, converts: false, retains: true)),
+      (.snapshot, expectation(interaction: false, retry: true, launch: .existingApp, converts: false, retains: false)),
+      (.screenshot, expectation(interaction: false, retry: true, launch: .noApp, converts: false, retains: false)),
+      (.backInApp, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true)),
+      (.backSystem, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true)),
+      (.home, expectation(interaction: false, retry: false, launch: .mayLaunch, converts: true, retains: true)),
+      (.rotate, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true)),
+      (.appSwitcher, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true)),
       (
         .actionButton,
-        expectation(interaction: false, retry: false, launch: .presentedSurface, converts: true)
+        expectation(interaction: false, retry: false, launch: .presentedSurface, converts: true, retains: true)
       ),
-      (.keyboardDismiss, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),
-      (.keyboardReturn, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),
+      (.keyboardDismiss, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true)),
+      (.keyboardReturn, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true)),
       (
         .alert,
-        expectation(interaction: false, retry: true, launch: .presentedSurface, converts: false)
+        expectation(interaction: false, retry: true, launch: .presentedSurface, converts: false, retains: true)
       ),
-      (.sequence, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),
-      (.gesture, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true)),
+      (.sequence, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true)),
+      (.gesture, expectation(interaction: true, retry: false, launch: .mayLaunch, converts: true, retains: true)),
       (
         .gestureViewport,
-        expectation(interaction: false, retry: true, launch: .existingApp, converts: false)
+        expectation(interaction: false, retry: true, launch: .existingApp, converts: false, retains: true)
       ),
-      (.recordStart, expectation(interaction: false, retry: false, launch: .mayLaunch, converts: true)),
-      (.recordStop, expectation(interaction: false, retry: false, launch: .noApp, converts: false)),
-      (.status, expectation(interaction: false, retry: true, launch: .noApp, converts: false)),
-      (.uptime, expectation(interaction: false, retry: false, launch: .noApp, converts: false)),
-      (.appState, expectation(interaction: false, retry: true, launch: .noApp, converts: false)),
-      (.pasteboardWrite, expectation(interaction: false, retry: false, launch: .noApp, converts: false)),
-      (.activate, expectation(interaction: false, retry: false, launch: .mayLaunch, converts: true)),
-      (.terminate, expectation(interaction: false, retry: false, launch: .noApp, converts: false)),
-      (.targetReset, expectation(interaction: false, retry: false, launch: .noApp, converts: false)),
-      (.shutdown, expectation(interaction: false, retry: false, launch: .noApp, converts: false))
+      (.recordStart, expectation(interaction: false, retry: false, launch: .mayLaunch, converts: true, retains: true)),
+      (.recordStop, expectation(interaction: false, retry: false, launch: .noApp, converts: false, retains: true)),
+      (.status, expectation(interaction: false, retry: true, launch: .noApp, converts: false, retains: true)),
+      (.uptime, expectation(interaction: false, retry: false, launch: .noApp, converts: false, retains: true)),
+      (.appState, expectation(interaction: false, retry: true, launch: .noApp, converts: false, retains: true)),
+      (.pasteboardWrite, expectation(interaction: false, retry: false, launch: .noApp, converts: false, retains: true)),
+      (.activate, expectation(interaction: false, retry: false, launch: .mayLaunch, converts: true, retains: true)),
+      (.terminate, expectation(interaction: false, retry: false, launch: .noApp, converts: false, retains: true)),
+      (.targetReset, expectation(interaction: false, retry: false, launch: .noApp, converts: false, retains: true)),
+      (.shutdown, expectation(interaction: false, retry: false, launch: .noApp, converts: false, retains: true))
     ]
     for (type, rowExpectation) in table {
       let request = #"{"command":"\#(type.rawValue)"}"#
@@ -314,15 +322,15 @@ extension RunnerTests {
     // The one payload-dependent command settles each fact per action: `get` changes nothing and may
     // be replayed, while `accept` and `dismiss` mutate and must not be.
     let alertCases: [(action: String?, expectation: ExpectedTraits)] = [
-      (nil, expectation(interaction: false, retry: true, launch: .presentedSurface, converts: false)),
-      ("get", expectation(interaction: false, retry: true, launch: .presentedSurface, converts: false)),
+      (nil, expectation(interaction: false, retry: true, launch: .presentedSurface, converts: false, retains: true)),
+      ("get", expectation(interaction: false, retry: true, launch: .presentedSurface, converts: false, retains: true)),
       (
         "accept",
-        expectation(interaction: false, retry: false, launch: .presentedSurface, converts: true)
+        expectation(interaction: false, retry: false, launch: .presentedSurface, converts: true, retains: true)
       ),
       (
         "dismiss",
-        expectation(interaction: false, retry: false, launch: .presentedSurface, converts: true)
+        expectation(interaction: false, retry: false, launch: .presentedSurface, converts: true, retains: true)
       )
     ]
     for alertCase in alertCases {
