@@ -16,7 +16,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   capturePostGestureStabilizedResult,
   markDeferredInteractionOutcome,
-} from '../post-gesture-stabilization.ts';
+} from '../deferred-interaction-outcome.ts';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 import type { PostGestureAction } from '@agent-device/kernel/snapshot';
 import type { SessionState } from '../session-state.ts';
@@ -38,7 +38,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-// Marking is module-private behind `markDeferredInteractionOutcome`;
+// Marking is module-private behind the deferred-interaction-outcome interface;
 // this shim drives the same public entry every shipping caller uses.
 function markPostGestureStabilization(
   session: SessionState,

@@ -4,7 +4,7 @@ import type { Rect, SnapshotPreferredBackend, SnapshotState } from '@agent-devic
 import type { RequestCaptureProof } from '../../capture-disclosure.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { CommandSessionStore } from '../../../runtime-contract.ts';
-import type { DeferredInteractionOutcomeMark } from '../../post-gesture-stabilization.ts';
+import type { DeferredInteractionOutcomeMark } from '../../deferred-interaction-outcome.ts';
 import type { RecordActionEntry } from '../../session-action-recorder.ts';
 import type { BoundContextFromFlags } from '../../context.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';

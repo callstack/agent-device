@@ -11,7 +11,7 @@ import { handleInteractionCommands } from '../../index.ts';
 import { getRuntimeBindings } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { contextFromFlags, makeSession } from './interaction-touch-fixtures.ts';
 import { legacyDispatchCapture } from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
-import { markDeferredInteractionOutcome } from '../../../post-gesture-stabilization.ts';
+import { markDeferredInteractionOutcome } from '../../../deferred-interaction-outcome.ts';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 
 vi.mock('../../../snapshot-interactor-capture.ts', async () => {

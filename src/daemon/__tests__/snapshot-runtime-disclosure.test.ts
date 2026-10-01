@@ -4,7 +4,7 @@ import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-targe
 import type { IosTargetActivation, PostGestureOutcome } from '@agent-device/kernel/snapshot';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import { markDeferredInteractionOutcome } from '../post-gesture-stabilization.ts';
+import { markDeferredInteractionOutcome } from '../deferred-interaction-outcome.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { SessionStore } from '../session-store.ts';

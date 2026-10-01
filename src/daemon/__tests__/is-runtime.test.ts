@@ -13,7 +13,7 @@ import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fix
 import type { PostGestureOutcome } from '@agent-device/kernel/snapshot';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { selectorCaptureFixture } from './selector-capture-fixture.ts';
-import { markDeferredInteractionOutcome } from '../post-gesture-stabilization.ts';
+import { markDeferredInteractionOutcome } from '../deferred-interaction-outcome.ts';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({ mockRunAppleRunnerCommand: vi.fn() }));

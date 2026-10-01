@@ -9,7 +9,7 @@ import {
   ensureAndroidBlockingSystemDialogReady,
   recoverAndroidBlockingSystemDialog,
 } from './android-system-dialog.ts';
-import { markDeferredInteractionOutcome } from './post-gesture-stabilization.ts';
+import { markDeferredInteractionOutcome } from './deferred-interaction-outcome.ts';
 import {
   augmentScrollVisualizationResult,
   recordTouchVisualizationEvent,
