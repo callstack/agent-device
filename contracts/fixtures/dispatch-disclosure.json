@@ -66,6 +66,18 @@
     "dispatched": "no"
   },
   {
+    "id": "daemon.route.scroll-until-third-pass-refused",
+    "producer": "daemon",
+    "trigger": "scroll --until whose first two gestures returned and whose third is refused with a producer verdict of no; the request ledger counts each bound send once, so details.dispatchedSteps is exactly 2",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon.route.scroll-edge-third-pass-refused",
+    "producer": "daemon",
+    "trigger": "scroll bottom whose first two gestures returned and whose third is refused with a producer verdict of no; the request ledger counts each bound send once, so details.dispatchedSteps is exactly 2",
+    "dispatched": "unknown"
+  },
+  {
     "id": "daemon.route.scroll-then-dialog-read-refused",
     "producer": "daemon",
     "trigger": "an Android scroll whose gesture returned, then the post-command dialog read failed with a producer verdict of no; the request reports unknown with details.dispatchedSteps 1",
