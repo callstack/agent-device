@@ -237,16 +237,13 @@ test('usageForCommand resolves workflow help topic', async () => {
   );
   assert.match(help, /run serially within one session/);
   assert.match(help, /Wait failure contract:/);
-  assert.match(help, /wait_target_absent: a readable capture ran and found no match/);
-  assert.match(help, /wait_target_present: wait absent timed out with matches/);
-  assert.match(
-    help,
-    /predicate_failed: wait absent had no valid capture; final observation\/diagnostic is preserved/,
-  );
-  assert.match(help, /wait_capture_stalled: no readable capture finished before the deadline/);
-  assert.match(help, /wait_deadline_exceeded: a later capture used the remaining budget/);
-  assert.match(help, /wait_landmark_identity_mismatch: a replay destination guard/);
-  assert.match(help, /wait_stable_timeout: wait stable never saw a stable UI/);
+  assert.match(help, /wait_target_absent: readable capture, no match/);
+  assert.match(help, /wait_target_present: absence timeout/);
+  assert.match(help, /predicate_failed: no valid absence capture; observation\/diagnostic kept/);
+  assert.match(help, /wait_capture_stalled: no readable capture by deadline/);
+  assert.match(help, /wait_deadline_exceeded: later capture exhausted budget/);
+  assert.match(help, /wait_landmark_identity_mismatch: replay guard/);
+  assert.match(help, /wait_stable_timeout: no stable UI/);
   assert.match(help, /Ambiguous find: add --first or --last/);
   assert.match(help, /macOS context menus are secondary clicks \(help macos\)/);
   assert.match(help, /Nearby mutation diff: diff snapshot -i/);

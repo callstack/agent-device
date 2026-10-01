@@ -1,12 +1,14 @@
 export const WAIT_FAILURE_CONTRACT = `Wait failure contract:
-  Read error.details.reason in --json, not the message text.
-  wait_target_absent: a readable capture ran and found no match.
-  wait_target_present: wait absent timed out with matches; details include matches and firstMatch.
-  predicate_failed: wait absent had no valid capture; final observation/diagnostic is preserved.
-  wait_capture_stalled: no readable capture finished before the deadline -- retriable.
-  wait_deadline_exceeded: a later capture used the remaining budget after an earlier readable one.
-  wait_landmark_identity_mismatch: a replay destination guard found the selector but not the recorded identity.
-  wait_stable_timeout: wait stable never saw a stable UI -- not an absence verdict.
+  Read --json error.details.reason.
+  wait_target_absent: readable capture, no match.
+  wait_target_present: absence timeout; details.matches/firstMatch.
+  predicate_failed: no valid absence capture; observation/diagnostic kept.
+  wait_capture_stalled: no readable capture by deadline -- retriable.
+  wait_deadline_exceeded: later capture exhausted budget after a readable one.
+  wait_readiness_exhausted: readiness deadline; details.readinessPhase -- retriable.
+  wait_runner_restart_exhausted: restart deadline -- retriable.
+  wait_landmark_identity_mismatch: replay guard: selector matched, recorded identity differed.
+  wait_stable_timeout: no stable UI -- not absence.
 `;
 
 export const manualQaHelpTopics = {

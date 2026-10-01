@@ -63,9 +63,9 @@ test('usageForCommand resolves manual QA help topic', async () => {
   assert.match(help, /Do not use placeholders such as @ref/);
   assert.match(help, /wait text\/selector\/absent/);
   assert.match(help, /wait absent 'label="Loading\.\.\."' 3000/);
-  assert.match(help, /wait_target_absent: a readable capture ran and found no match/);
-  assert.match(help, /wait_target_present: wait absent timed out with matches/);
-  assert.match(help, /wait_capture_stalled: no readable capture finished before the deadline/);
+  assert.match(help, /wait_target_absent: readable capture, no match/);
+  assert.match(help, /wait_target_present: absence timeout/);
+  assert.match(help, /wait_capture_stalled: no readable capture by deadline/);
 });
 
 test('usageForCommand resolves validate help topic', async () => {
