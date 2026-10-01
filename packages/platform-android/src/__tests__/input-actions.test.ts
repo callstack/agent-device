@@ -5,7 +5,6 @@ import {
   homeAndroid,
   longPressAndroid,
   pressAndroidEnter,
-  parseAndroidDisplayRotationIndices,
   pressAndroidTvRemote,
   probeAndroidDisplayRotation,
   scrollAndroid,
@@ -484,20 +483,6 @@ test('setAndroidOrientation leaves a display that reports no rotation to the set
   });
 });
 
-test('parseAndroidDisplayRotationIndices reads one index per logical display', () => {
-  assert.deepEqual(parseAndroidDisplayRotationIndices('  mCurrentOrientation=1\n  mOther=2\n'), [
-    '1',
-  ]);
-  assert.deepEqual(
-    parseAndroidDisplayRotationIndices('  mCurrentOrientation=0\n  mCurrentOrientation=3\n'),
-    ['0', '3'],
-  );
-  assert.deepEqual(
-    parseAndroidDisplayRotationIndices('  mOverrideDisplayInfo=DisplayInfo{}\n'),
-    [],
-  );
-});
-
 test('probeAndroidDisplayRotation reads the rotation of the only display', async () => {
   await withFakeAdb(displayReporting(['3']), async ({ device }) => {
     const rotation = await probeAndroidDisplayRotation(device, {
@@ -540,4 +525,17 @@ test('probeAndroidDisplayRotation hands its budget and abort signal to the adb s
   assert.equal(seen.length, 1);
   assert.equal(seen[0]!.timeoutMs, 2_000);
   assert.equal(seen[0]!.signal, controller.signal);
+});
+
+test('probeAndroidDisplayRotation reports none when the display read fails', async () => {
+  await withFakeAdb(
+    (args) => (args[1] === 'dumpsys' ? { stdout: '', stderr: 'denied', exitCode: 1 } : undefined),
+    async ({ device }) => {
+      const rotation = await probeAndroidDisplayRotation(device, {
+        timeoutMs: 2_000,
+        signal: new AbortController().signal,
+      });
+      assert.equal(rotation, undefined);
+    },
+  );
 });

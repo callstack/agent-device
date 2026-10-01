@@ -123,10 +123,9 @@ async function readAndroidDisplayRotation(
   deadline: number,
 ): Promise<string | undefined> {
   try {
-    const result = await runAndroidShell(device, ['dumpsys', 'display'], {
-      timeoutMs: remainingMs(deadline),
-    });
-    return parseAndroidDisplayRotationIndices(result.stdout)[0];
+    return (
+      await readAndroidDisplayRotationIndices(device, { timeoutMs: remainingMs(deadline) })
+    )[0];
   } catch (error) {
     throw new AppError(
       'COMMAND_FAILED',
@@ -140,9 +139,17 @@ function remainingMs(deadline: number): number {
   return Math.max(1, deadline - Date.now());
 }
 
-/** `dumpsys display` reports one `Surface.ROTATION_*` index per logical display under this key. */
-export function parseAndroidDisplayRotationIndices(dumpsysDisplay: string): string[] {
-  return [...dumpsysDisplay.matchAll(/mCurrentOrientation=(\d)/g)].map((match) => match[1]!);
+/**
+ * The one `dumpsys display` read both the orientation settle and the screenshot probe use: the
+ * `Surface.ROTATION_*` index of each logical display. A failed or aborted read throws; each caller
+ * decides what that means.
+ */
+async function readAndroidDisplayRotationIndices(
+  device: DeviceInfo,
+  options: { timeoutMs: number; signal?: AbortSignal },
+): Promise<string[]> {
+  const result = await runAndroidShell(device, ['dumpsys', 'display'], options);
+  return [...result.stdout.matchAll(/mCurrentOrientation=(\d)/g)].map((match) => match[1]!);
 }
 
 /**
@@ -156,13 +163,7 @@ export async function probeAndroidDisplayRotation(
   options: { timeoutMs: number; signal: AbortSignal },
 ): Promise<DeviceRotation | undefined> {
   try {
-    const result = await runAndroidShell(device, ['dumpsys', 'display'], {
-      allowFailure: true,
-      timeoutMs: options.timeoutMs,
-      signal: options.signal,
-    });
-    if (result.exitCode !== 0) return undefined;
-    const indices = parseAndroidDisplayRotationIndices(result.stdout);
+    const indices = await readAndroidDisplayRotationIndices(device, options);
     return indices.length === 1 ? deviceRotationFromSurfaceIndex(Number(indices[0])) : undefined;
   } catch {
     return undefined;

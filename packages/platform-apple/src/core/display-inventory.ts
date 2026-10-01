@@ -338,7 +338,8 @@ export async function resolveAppleCaptureTarget(
   if (inventory.multiScreen) {
     return inventory.activeDisplay ? { display: inventory.activeDisplay } : {};
   }
-  const panel = inventory.displays.find((entry) => entry.integrated) ?? inventory.displays[0];
+  // Only a built-in panel is the screen simctl captures; an attached display says nothing about it.
+  const panel = inventory.displays.find((entry) => entry.integrated);
   const displayRotation = panel ? appleDisplayRotation(panel) : undefined;
   return displayRotation ? { displayRotation } : {};
 }

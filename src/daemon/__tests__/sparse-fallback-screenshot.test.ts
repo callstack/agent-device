@@ -5,6 +5,8 @@ import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts'
 import { mkdtempForTest } from '../../__tests__/test-utils/tmp-dir.ts';
 import { SessionStore } from '../session-store.ts';
 import { dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
+import type { DownloadableArtifactRegistration } from '../artifact-tracking.ts';
+import { finalizeDaemonResponse } from '../request-finalization.ts';
 import {
   screenshotRuntimeFixture,
   writeSolidPng,
@@ -129,7 +131,7 @@ test('a failed fallback screenshot does not fail the snapshot that was asked for
   expect(warnings.some((line) => line.includes('Use screenshot as visual truth'))).toBe(true);
 });
 
-test('the fallback screenshot artifact carries the display rotation its capture reported', async () => {
+test('the fallback screenshot reaches the artifact inventory with its display rotation', async () => {
   const input = await scenario();
   const runtime = seed(SPARSE, (captureInput) => {
     writeSolidPng(captureInput.outPath);
@@ -137,10 +139,20 @@ test('the fallback screenshot artifact carries the display rotation its capture 
   });
 
   const data = await dispatch(input, runtime);
+  const tracked: DownloadableArtifactRegistration[] = [];
+  finalizeDaemonResponse(
+    { command: 'snapshot', positionals: [], token: 't', session: input.sessionName },
+    { ok: true, data },
+    (registration) => {
+      tracked.push(registration);
+      return 'artifact-id';
+    },
+  );
 
-  expect(data.artifacts).toEqual([
+  expect(tracked).toEqual([
     expect.objectContaining({
-      field: 'fallbackScreenshotPath',
+      artifactType: 'screenshot',
+      fileName: 'snapshot-fallback.png',
       displayRotation: 'landscape-left',
     }),
   ]);

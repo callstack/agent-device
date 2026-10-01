@@ -441,6 +441,23 @@ describe('resolveAppleCaptureTarget', () => {
     }
   });
 
+  test('reports no rotation when CoreDevice lists no built-in panel', async () => {
+    mockReadHostTextFile.mockResolvedValue(
+      JSON.stringify({
+        result: {
+          displays: [
+            {
+              ...IPHONE_17_NO_ACTIVE_KEY.result.displays[0],
+              currentOrientation: 'rot90',
+              type: { external: {} },
+            },
+          ],
+        },
+      }),
+    );
+    assert.deepEqual(await resolveAppleCaptureTarget(IOS_TEST_SIMULATOR), {});
+  });
+
   test('names the panel but reports no rotation on a multi-panel device', async () => {
     // Open, the inner panel is lit and reads rot90 in a portrait hold: its rotation is relative to
     // the panel's own geometry, so reporting it would call a portrait capture landscape.
