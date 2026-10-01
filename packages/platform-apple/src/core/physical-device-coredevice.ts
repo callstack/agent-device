@@ -177,7 +177,7 @@ async function runCoreDeviceDetails(
   commandTimeoutBufferMs = 0,
   signal?: AbortSignal,
 ): Promise<CoreDeviceDetailsProbe> {
-  const timeoutSeconds = Math.max(1, Math.ceil(timeoutMs / 1000));
+  const timeoutSeconds = Math.max(5, Math.ceil(timeoutMs / 1000));
   const outcome = await runIosDevicectlJsonRequest({
     jsonPrefix: 'agent-device-coredevice-info',
     args: [
