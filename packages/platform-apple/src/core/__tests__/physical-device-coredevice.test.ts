@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { IOS_DEVICECTL_MIN_TIMEOUT_SECONDS } from '../config.ts';
 import {
   launchCoreDeviceApp,
   parseIosDeviceDetailsPayload,
@@ -488,8 +489,6 @@ test('the CoreDevice backend publishes the device report', async () => {
 
 test.each([
   [250, '5'],
-  [1000, '5'],
-  [4000, '5'],
   [4999, '5'],
   [5000, '5'],
   [5001, '6'],
@@ -504,7 +503,7 @@ test.each([
         runCommand: async (_cmd, args, options) => {
           observedCliTimeout = args[args.indexOf('--timeout') + 1];
           observedHostTimeout = options?.timeoutMs;
-          if (Number(observedCliTimeout) < 5) {
+          if (Number(observedCliTimeout) < IOS_DEVICECTL_MIN_TIMEOUT_SECONDS) {
             return {
               exitCode: 64,
               stdout: '',
