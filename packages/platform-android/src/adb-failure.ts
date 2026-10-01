@@ -23,8 +23,18 @@ export type AndroidAdbFailureClassification = Readonly<{
 type AndroidAdbFailureMatcher = readonly [
   pattern: RegExp,
   failure: AndroidAdbFailureClassification,
-  matchStdout?: true,
+  options?: Readonly<{
+    matchStdout?: true;
+    /** Anchored shape of the host adb's first stderr line when it issues this refusal before the command leaves the host. */
+    hostRefusal?: RegExp;
+  }>,
 ];
+
+const HOST_REFUSAL_PREFIX = String.raw`(?:adb|error): `;
+
+function hostRefusalHead(body: string): RegExp {
+  return new RegExp(`^${HOST_REFUSAL_PREFIX}${body}$`);
+}
 
 const ANDROID_ADB_DEVICE_OFFLINE_FAILURE = {
   reason: 'device_offline',
@@ -32,20 +42,30 @@ const ANDROID_ADB_DEVICE_OFFLINE_FAILURE = {
   retriable: true,
 } as const satisfies AndroidAdbFailureClassification;
 
-const ANDROID_ADB_FAILURE_MATCHERS = [
+const ANDROID_ADB_FAILURE_MATCHERS: readonly AndroidAdbFailureMatcher[] = [
   [
     /device unauthorized|device still authorizing/,
     {
       reason: 'device_unauthorized',
       hint: 'USB debugging is not authorized — accept the authorization prompt on the device screen (re-plug the cable if none appears), then retry.',
     },
+    { hostRefusal: hostRefusalHead(String.raw`device (?:unauthorized|still authorizing)\.?`) },
   ],
-  [/device offline/, ANDROID_ADB_DEVICE_OFFLINE_FAILURE],
+  [
+    /device offline/,
+    ANDROID_ADB_DEVICE_OFFLINE_FAILURE,
+    { hostRefusal: hostRefusalHead(String.raw`device (?:'[^']*' )?offline`) },
+  ],
   [
     /more than one (?:device\/emulator|device and emulator)/,
     {
       reason: 'multiple_devices',
       hint: 'Multiple Android devices are connected — pass --serial <serial> (see adb devices) to select one.',
+    },
+    {
+      hostRefusal: hostRefusalHead(
+        String.raw`more than one (?:device/emulator|device and emulator)`,
+      ),
     },
   ],
   [
@@ -54,6 +74,7 @@ const ANDROID_ADB_FAILURE_MATCHERS = [
       reason: 'no_devices',
       hint: 'No Android devices detected — boot an emulator or connect a device and verify it appears in adb devices.',
     },
+    { hostRefusal: hostRefusalHead(String.raw`no devices(?:/emulators)? found`) },
   ],
   [
     /device (?:'[^']*' )?not found/,
@@ -62,6 +83,7 @@ const ANDROID_ADB_FAILURE_MATCHERS = [
       hint: 'The device disconnected or is restarting — verify it is listed in adb devices, then retry.',
       retriable: true,
     },
+    { hostRefusal: hostRefusalHead(String.raw`device (?:'[^']*' )?not found`) },
   ],
   [
     /adb server version \(\d+\) doesn't match this client/,
@@ -85,7 +107,7 @@ const ANDROID_ADB_FAILURE_MATCHERS = [
       reason: 'install_insufficient_storage',
       hint: 'The device is out of storage — free up space or uninstall unused apps, then retry the install.',
     },
-    true,
+    { matchStdout: true },
   ],
   [
     /install_failed_update_incompatible/,
@@ -93,7 +115,7 @@ const ANDROID_ADB_FAILURE_MATCHERS = [
       reason: 'install_update_incompatible',
       hint: 'The installed app has an incompatible signature — uninstall the existing app first, then retry the install.',
     },
-    true,
+    { matchStdout: true },
   ],
   [
     /install_failed_version_downgrade/,
@@ -101,7 +123,7 @@ const ANDROID_ADB_FAILURE_MATCHERS = [
       reason: 'install_version_downgrade',
       hint: 'The APK is older than the installed app — uninstall the app first (or install with downgrade allowed), then retry.',
     },
-    true,
+    { matchStdout: true },
   ],
   [
     /install_failed_\w+|install_parse_failed_\w+/,
@@ -109,9 +131,9 @@ const ANDROID_ADB_FAILURE_MATCHERS = [
       reason: 'install_failed',
       hint: 'The Android package installer rejected the APK — see the INSTALL_FAILED code in the error output for the exact cause.',
     },
-    true,
+    { matchStdout: true },
   ],
-] as const satisfies readonly AndroidAdbFailureMatcher[];
+];
 
 const ANDROID_ADB_TIMEOUT_FAILURE: AndroidAdbFailureClassification = Object.freeze({
   reason: 'timeout',
@@ -121,33 +143,9 @@ const ANDROID_ADB_TIMEOUT_FAILURE: AndroidAdbFailureClassification = Object.free
 const ANDROID_HELPER_INSTALL_TIMEOUT_HINT =
   'The helper install timed out — some OEM builds (ColorOS is one) hold the first install of each package behind a system install-confirmation dialog and adb waits for it. Check the device screen, confirm any pending install prompt, then retry; if none is showing, run adb kill-server && adb start-server and retry.';
 
-type HostRefusalShape = readonly [head: RegExp, reason: AndroidAdbFailureReason];
-
-const HOST_REFUSAL_PREFIX = String.raw`(?:adb|error): `;
-
-/** First stderr line, lowercased, of each refusal the host adb issues before the command leaves the host. */
-const HOST_REFUSAL_SHAPES: readonly HostRefusalShape[] = [
-  [
-    new RegExp(`^${HOST_REFUSAL_PREFIX}device (?:unauthorized|still authorizing)\\.?$`),
-    'device_unauthorized',
-  ],
-  [new RegExp(`^${HOST_REFUSAL_PREFIX}device (?:'[^']*' )?offline$`), 'device_offline'],
-  [
-    new RegExp(`^${HOST_REFUSAL_PREFIX}more than one (?:device/emulator|device and emulator)$`),
-    'multiple_devices',
-  ],
-  [new RegExp(`^${HOST_REFUSAL_PREFIX}no devices(?:/emulators)? found$`), 'no_devices'],
-  [new RegExp(`^${HOST_REFUSAL_PREFIX}device (?:'[^']*' )?not found$`), 'device_not_found'],
-];
-
 /** The fixed trailer lines adb appends to a device_unauthorized refusal. */
 const HOST_REFUSAL_TRAILER =
   /^(?:this adb server's \$adb_vendor_keys is not set|try 'adb kill-server' if that seems wrong\.|(?:otherwise|please) check (?:for|the) (?:a )?confirmation dialog on your device\.)$/;
-
-const ANDROID_ADB_FAILURES_BY_REASON = new Map<
-  AndroidAdbFailureReason,
-  AndroidAdbFailureClassification
->(ANDROID_ADB_FAILURE_MATCHERS.map(([, failure]) => [failure.reason, failure]));
 
 function classifyHostRefusal(
   stderrText: string,
@@ -161,9 +159,10 @@ function classifyHostRefusal(
   if (head === undefined || !trailer.every((line) => HOST_REFUSAL_TRAILER.test(line))) {
     return undefined;
   }
-  const reason = HOST_REFUSAL_SHAPES.find(([shape]) => shape.test(head))?.[1];
-  const failure = reason && ANDROID_ADB_FAILURES_BY_REASON.get(reason);
-  return failure && { ...failure, hostRefusal: true };
+  const row = ANDROID_ADB_FAILURE_MATCHERS.find(([, , options]) =>
+    options?.hostRefusal?.test(head),
+  );
+  return row && { ...row[1], hostRefusal: true };
 }
 
 export function classifyAndroidAdbFailure(
@@ -174,8 +173,8 @@ export function classifyAndroidAdbFailure(
   const stdoutText = stdout.toLowerCase();
   const refusal = classifyHostRefusal(stderrText, stdoutText);
   if (refusal) return refusal;
-  for (const [pattern, classification, matchStdout] of ANDROID_ADB_FAILURE_MATCHERS) {
-    if (pattern.test(stderrText) || (matchStdout && pattern.test(stdoutText))) {
+  for (const [pattern, classification, options] of ANDROID_ADB_FAILURE_MATCHERS) {
+    if (pattern.test(stderrText) || (options?.matchStdout && pattern.test(stdoutText))) {
       return classification;
     }
   }
