@@ -6,11 +6,17 @@ Accepted (2026-09-01; scope amended 2026-10-01). This ADR defines the minimal Ho
 [Simlock #70](https://github.com/callstackincubator/simlock/issues/70) tracks allocator-side work;
 the supported client contract and conformance tests enforce the boundary.
 
+Implementation alignment is pending: the [managed-device allocator contract](../../packages/contracts/src/managed-device-allocation.ts)
+still requires `supersedeLeaseRequest`, `confirmLeaseActivation`, `getManagedIdentityStatus`,
+and `acknowledgeManagedIdentityRemoval`, and exposes `activation: 'external-fence'`. Host implementation
+must trim those requirements, their consumers/tests, and Android reuse documentation to this scope.
+This amendment changes the decision and glossary; runtime contracts remain unchanged in this PR.
+
 ## Rules at a glance
 
 - Host provides authenticated remote access, sessions, automation, and verification artifacts.
 - Simlock is the sole owner of managed-device allocation, capacity, provisioning, and deletion.
-- Every new Host lease gets a newly created, clean iOS simulator or Android emulator identity.
+- Every new managed Host lease gets a newly created, clean iOS simulator or Android emulator identity.
   Released or expired devices are deleted, never reset and leased again.
 - Host uses Simlock's supported typed client over a local Unix socket. Simlock runs as a separate
   daemon; its core is not imported into agent-device.
@@ -114,7 +120,7 @@ inventory identity first. Simlock resolves it against installed components. An o
 the newest compatible installed runtime; an explicit major selects the newest compatible installed
 minor; an exact version must match an installed version.
 
-Every new lease creates a new iOS simulator or Android AVD with a new identity incarnation and
+Every new managed Host lease creates a new iOS simulator or Android AVD with a new incarnation and
 clean initial user data. It never uses a device or mutable device snapshot from an earlier lease.
 Renewal or recovery of the same live lease keeps its identity; neither creates a new lease.
 An Android transport serial or port is an address, not proof of a fresh device identity.
@@ -192,8 +198,8 @@ The integration must prove both iOS and Android behavior through the real Simloc
 
 1. From another machine, a worker acquires a device by type, installs its CI build, opens the app,
    takes snapshots, interacts, retrieves verification artifacts, and releases the lease.
-2. Successive leases use distinct created identities and clean user data. Simlock deletes each
-   terminated identity; failed deletion never enables reuse or frees capacity prematurely.
+2. Successive managed Host leases use distinct created identities and clean user data. Simlock deletes
+   each terminated identity; failed deletion never enables reuse or frees capacity prematurely.
 3. Lost allocation responses, repeated requests, and crashes during provisioning or Host binding
    publication produce no duplicate or untracked allocation. Restart recovery can identify and
    reconcile Host's outstanding requests and leases.
