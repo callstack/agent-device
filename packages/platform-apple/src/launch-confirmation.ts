@@ -9,7 +9,12 @@ import { resolveIosSimulatorDeepLinkBundleId } from './core/app-resolution.ts';
 
 export const LAUNCH_CONFIRMATION_FOREIGN_APP_REASON = 'launch_confirmation_foreign_app';
 
-/** SpringBoard's title for a URL it holds until the user confirms the app that will open it. */
+/**
+ * SpringBoard's English title for a URL it holds until the user confirms the app that will open
+ * it. The runner reports an alert only as its localized title and button labels, and a name match
+ * is unsafe (a permission alert names the app too), so a Simulator in another language is not
+ * recognized; the unrecognized alert is reported instead.
+ */
 const LAUNCH_CONFIRMATION_TITLE = /^Open in [“"].+[”"]\?$/u;
 
 /** A custom-scheme launch URL SpringBoard may hold for the session app it was checked for. */
@@ -37,7 +42,15 @@ export async function answerLaunchConfirmation(
   port: LaunchConfirmationPort,
 ): Promise<LaunchConfirmation | undefined> {
   const alert = await port.readAlert().catch(failed('alert-read'));
-  if (!alert || !isLaunchConfirmation(alert)) return undefined;
+  if (!alert) return undefined;
+  if (!isLaunchConfirmation(alert)) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'ios_launch_confirmation_unanswered',
+      data: { reason: 'alert-unrecognized', title: alert['message'], buttons: alert['items'] },
+    });
+    return undefined;
+  }
   const owner = await port.resolveUrlOwner().catch(failed('url-owner'));
   if (owner === undefined) {
     reportUnanswered('url-owner-unresolved', {});

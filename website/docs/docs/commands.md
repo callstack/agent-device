@@ -79,6 +79,7 @@ agent-device fold open
 - `open <url>` deep links are supported on Android and iOS.
 - `open <app> <url>` opens a deep link on iOS.
 - On an iOS Simulator, iOS can ask `Open in "<App>"?` before your app receives the URL from `open <app> --launch-url <url>`. If the URL's scheme belongs to your session app, `open` taps **Open** for you and its JSON data includes `launchConfirmation: "accepted"`. If no prompt appears, the response has no `launchConfirmation` field.
+- `open` recognizes the prompt by its English title. On a Simulator set to another language, it leaves the prompt on screen and returns as if no prompt appeared; answer it with `alert accept` or `alert dismiss`. Run with `--debug` to see the title `open` did not recognize.
 - `open` answers only a prompt that is on screen when it first checks the app. A prompt that appears after `open` has already seen your app stays on screen; answer it with `alert accept` or `alert dismiss`.
 - If the URL's scheme belongs to a different installed app, `open` does not answer the prompt. The command fails with `details.reason: launch_confirmation_foreign_app`; `details.foreignAppBundleId` names that app. The prompt stays on screen: close it with `alert dismiss`, then pass a launch URL whose scheme your app handles.
 - If no installed app owns the scheme, or more than one does (for example a debug and a release build), `open` cannot tell which app would receive the URL. It leaves the prompt on screen and returns as if no prompt appeared; answer it with `alert accept` or `alert dismiss`.

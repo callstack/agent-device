@@ -2,6 +2,7 @@ import { expect, test, vi } from 'vitest';
 import { ALERT_NOT_FOUND_RUNNER_CODE } from '@agent-device/contracts/alert-contract';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveIosSimulatorDeepLinkBundleId } from './core/app-resolution.ts';
 import {
@@ -11,6 +12,11 @@ import {
   LAUNCH_CONFIRMATION_FOREIGN_APP_REASON,
   type LaunchConfirmationPort,
 } from './launch-confirmation.ts';
+
+vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
+  return { ...actual, emitDiagnostic: vi.fn() };
+});
 
 vi.mock('./core/app-resolution.ts', () => ({
   resolveIosSimulatorDeepLinkBundleId: vi.fn(async () => 'com.example.app'),
@@ -102,7 +108,7 @@ test('no alert costs one read and answers nothing', async () => {
   expect(acceptAlert).not.toHaveBeenCalled();
 });
 
-test('an alert that is not a launch confirmation is left for the caller', async () => {
+test('an alert that is not a launch confirmation is left for the caller and reported', async () => {
   const {
     port: device,
     acceptAlert,
@@ -115,6 +121,33 @@ test('an alert that is not a launch confirmation is left for the caller', async 
   await expect(answerLaunchConfirmation(device)).resolves.toBeUndefined();
   expect(resolveUrlOwner).not.toHaveBeenCalled();
   expect(acceptAlert).not.toHaveBeenCalled();
+  expect(emitDiagnostic).toHaveBeenCalledWith({
+    level: 'warn',
+    phase: 'ios_launch_confirmation_unanswered',
+    data: {
+      reason: 'alert-unrecognized',
+      title: 'Allow “Example App” to use your location?',
+      buttons: ['Allow Once', 'Don’t Allow'],
+    },
+  });
+});
+
+test('a launch confirmation in another language is left on screen and reported', async () => {
+  const { port: device, acceptAlert } = port(async () => ({
+    message: 'In „Beispiel-App“ öffnen?',
+    items: ['Abbrechen', 'Öffnen'],
+  }));
+
+  await expect(answerLaunchConfirmation(device)).resolves.toBeUndefined();
+  expect(acceptAlert).not.toHaveBeenCalled();
+  expect(emitDiagnostic).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({
+        reason: 'alert-unrecognized',
+        title: 'In „Beispiel-App“ öffnen?',
+      }),
+    }),
+  );
 });
 
 test('a URL no single installed app owns is neither accepted nor reported as foreign', async () => {
