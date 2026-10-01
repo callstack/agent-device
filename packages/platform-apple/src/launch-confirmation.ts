@@ -24,38 +24,36 @@ export type LaunchConfirmationPort = Readonly<{
   resolveUrlOwner(): Promise<string | undefined>;
 }>;
 
-type Leg = 'alert-read' | 'url-owner' | 'alert-accept';
-
 /**
- * Answers a launch confirmation within `budgetMs`, shared by the alert read, the URL owner lookup
- * and the accept. The title only recognizes the confirmation; the app it opens is the URL scheme's
- * owner. An owner that is the session app is accepted; any other owner is never accepted and fails
- * the open, because accepting would hand it the launch URL. Anything else (no alert, another alert,
- * an owner no single installed app is, a failed or late leg) leaves the open as it was.
+ * Answers a launch confirmation. The title only recognizes the confirmation; the app it opens is
+ * the URL scheme's owner. An owner that is the session app is accepted; any other owner is never
+ * accepted and fails the open, because accepting would hand it the launch URL. Anything else (no
+ * alert, another alert, an owner no single installed app is, a failed read, lookup or accept)
+ * leaves the open as it was. Each step is bounded by its own timeout, so nothing outlives the
+ * answer.
  */
 export async function answerLaunchConfirmation(
   port: LaunchConfirmationPort,
-  budgetMs: number,
 ): Promise<LaunchConfirmation | undefined> {
-  const deadline = Date.now() + budgetMs;
-  const alert = await runLeg('alert-read', port.readAlert(), deadline);
-  if (!alert.settled || !isLaunchConfirmation(alert.value)) return undefined;
-  const owner = await runLeg('url-owner', port.resolveUrlOwner(), deadline);
-  if (!owner.settled) return undefined;
-  if (owner.value === undefined) {
+  const alert = await port.readAlert().catch((error: unknown) => {
+    if (!isAlertNotFoundError(error)) reportFailed('alert-read', error);
+    return undefined;
+  });
+  if (!alert || !isLaunchConfirmation(alert)) return undefined;
+  const owner = await port.resolveUrlOwner().catch(failed('url-owner'));
+  if (owner === undefined) {
     reportUnanswered('url-owner-unresolved', {});
     return undefined;
   }
-  if (owner.value !== port.appBundleId) {
-    throw new AppError('COMMAND_FAILED', `The launch URL asks to open ${owner.value} instead.`, {
+  if (owner !== port.appBundleId) {
+    throw new AppError('COMMAND_FAILED', `The launch URL asks to open ${owner} instead.`, {
       reason: LAUNCH_CONFIRMATION_FOREIGN_APP_REASON,
-      foreignAppBundleId: owner.value,
+      foreignAppBundleId: owner,
       sessionAppBundleId: port.appBundleId,
-      hint: `iOS is asking whether to open ${owner.value}. Answer it with alert accept or alert dismiss, and pass a launch URL whose scheme belongs to the session app.`,
+      hint: `iOS is asking whether to open ${owner}. Answer it with alert accept or alert dismiss, and pass a launch URL whose scheme belongs to the session app.`,
     });
   }
-  const accepted = await runLeg('alert-accept', port.acceptAlert(), deadline);
-  return accepted.settled ? 'accepted' : undefined;
+  return await port.acceptAlert().then(() => 'accepted' as const, failed('alert-accept'));
 }
 
 function isLaunchConfirmation(alert: Record<string, unknown>): boolean {
@@ -63,36 +61,17 @@ function isLaunchConfirmation(alert: Record<string, unknown>): boolean {
   return typeof title === 'string' && LAUNCH_CONFIRMATION_TITLE.test(title);
 }
 
-/** A leg's value within what is left of the budget; a failure or a late settle is reported. */
-async function runLeg<T>(
-  leg: Leg,
-  operation: Promise<T>,
-  deadline: number,
-): Promise<Readonly<{ settled: true; value: T }> | Readonly<{ settled: false }>> {
-  operation.catch(() => {});
-  let cancelExpiry = () => {};
-  const expired = new Promise<'expired'>((resolve) => {
-    const timer = setTimeout(() => resolve('expired'), Math.max(0, deadline - Date.now()));
-    cancelExpiry = () => clearTimeout(timer);
+/** A failed step leaves the open unanswered; the failure is reported, not thrown. */
+function failed(step: string): (error: unknown) => undefined {
+  return (error) => reportFailed(step, error);
+}
+
+function reportFailed(step: string, error: unknown): undefined {
+  reportUnanswered('step-failed', {
+    step,
+    code: error instanceof AppError ? error.code : undefined,
   });
-  try {
-    const outcome = await Promise.race([
-      operation.then((value) => ({ settled: true, value }) as const),
-      expired,
-    ]);
-    if (outcome !== 'expired') return outcome;
-    reportUnanswered('budget-spent', { leg });
-  } catch (error) {
-    if (!(leg === 'alert-read' && isAlertNotFoundError(error))) {
-      reportUnanswered('leg-failed', {
-        leg,
-        code: error instanceof AppError ? error.code : undefined,
-      });
-    }
-  } finally {
-    cancelExpiry();
-  }
-  return { settled: false };
+  return undefined;
 }
 
 function reportUnanswered(reason: string, data: Record<string, unknown>): void {

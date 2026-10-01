@@ -37,7 +37,6 @@ function spawnTimeout(): AppError {
   return new AppError('COMMAND_FAILED', 'xcrun timed out', { timeoutMs: 10_000 });
 }
 
-const BUDGET_MS = 60_000;
 const CONFIRMATION = { message: 'Open in “Example App”?', items: ['Cancel', 'Open'] };
 
 function port(
@@ -70,7 +69,7 @@ test.each([
       items: ['Cancel', 'Open'],
     }));
 
-    await expect(answerLaunchConfirmation(device, BUDGET_MS)).resolves.toBe('accepted');
+    await expect(answerLaunchConfirmation(device)).resolves.toBe('accepted');
     expect(device.readAlert).toHaveBeenCalledOnce();
     expect(acceptAlert).toHaveBeenCalledOnce();
   },
@@ -81,9 +80,7 @@ test('a confirmation for a URL another app owns is never accepted, whatever name
     resolveUrlOwner: async () => 'com.example.other',
   });
 
-  const failure = await answerLaunchConfirmation(device, BUDGET_MS).catch(
-    (error: unknown) => error,
-  );
+  const failure = await answerLaunchConfirmation(device).catch((error: unknown) => error);
 
   expect(failure).toBeInstanceOf(AppError);
   expect((failure as AppError).code).toBe('COMMAND_FAILED');
@@ -104,7 +101,7 @@ test('no alert costs one read and answers nothing', async () => {
     throw alertNotFound();
   });
 
-  await expect(answerLaunchConfirmation(device, BUDGET_MS)).resolves.toBeUndefined();
+  await expect(answerLaunchConfirmation(device)).resolves.toBeUndefined();
   expect(device.readAlert).toHaveBeenCalledOnce();
   expect(resolveUrlOwner).not.toHaveBeenCalled();
   expect(acceptAlert).not.toHaveBeenCalled();
@@ -120,7 +117,7 @@ test('an alert that is not a launch confirmation is left for the caller', async 
     items: ['Allow Once', 'Don’t Allow'],
   }));
 
-  await expect(answerLaunchConfirmation(device, BUDGET_MS)).resolves.toBeUndefined();
+  await expect(answerLaunchConfirmation(device)).resolves.toBeUndefined();
   expect(resolveUrlOwner).not.toHaveBeenCalled();
   expect(acceptAlert).not.toHaveBeenCalled();
 });
@@ -130,7 +127,7 @@ test('a URL no single installed app owns is neither accepted nor reported as for
     resolveUrlOwner: async () => undefined,
   });
 
-  await expect(answerLaunchConfirmation(device, BUDGET_MS)).resolves.toBeUndefined();
+  await expect(answerLaunchConfirmation(device)).resolves.toBeUndefined();
   expect(acceptAlert).not.toHaveBeenCalled();
 });
 
@@ -158,29 +155,29 @@ test.each([
     }),
   ],
 ])('the open is left unanswered when %s', async (_case, { port: device }) => {
-  await expect(answerLaunchConfirmation(device, BUDGET_MS)).resolves.toBeUndefined();
+  await expect(answerLaunchConfirmation(device)).resolves.toBeUndefined();
 });
 
-test.each([
-  ['the alert read', { read: BUDGET_MS * 2, owner: 0, accept: 0 }],
-  ['the URL owner lookup', { read: BUDGET_MS / 2, owner: BUDGET_MS * 0.75, accept: 0 }],
-  ['the accept', { read: BUDGET_MS / 3, owner: BUDGET_MS / 3, accept: BUDGET_MS / 2 }],
-])('%s spending the rest of one shared budget leaves the open unanswered', async (_leg, delays) => {
+test('the answer returns only after its accept settled, however long the accept takes', async () => {
   vi.useFakeTimers();
   try {
-    const after = <T>(ms: number, value: T) =>
-      new Promise<T>((resolve) => {
-        setTimeout(() => resolve(value), ms);
-      });
-    const { port: device } = port(async () => await after(delays.read, CONFIRMATION), {
-      resolveUrlOwner: async () => await after(delays.owner, 'com.example.app'),
-      acceptAlert: async () => await after(delays.accept, {}),
+    const acceptMs = 70_000;
+    const { port: device, acceptAlert } = port(async () => CONFIRMATION, {
+      acceptAlert: async () =>
+        await new Promise((resolve) => {
+          setTimeout(() => resolve({}), acceptMs);
+        }),
     });
+    let answered: unknown = 'pending';
+    const answer = answerLaunchConfirmation(device).then((value) => (answered = value));
 
-    const answer = answerLaunchConfirmation(device, BUDGET_MS);
-    await vi.advanceTimersByTimeAsync(BUDGET_MS);
+    await vi.advanceTimersByTimeAsync(acceptMs - 1);
+    expect(acceptAlert).toHaveBeenCalledOnce();
+    expect(answered).toBe('pending');
 
-    await expect(answer).resolves.toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    await answer;
+    expect(answered).toBe('accepted');
   } finally {
     vi.useRealTimers();
   }

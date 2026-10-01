@@ -28,7 +28,6 @@ import type { LaunchObservationPort } from './snapshot-observability.ts';
 import type { LaunchConfirmationTarget } from './launch-confirmation.ts';
 import { isApplePlatform, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { IOS_APP_LAUNCH_TIMEOUT_MS } from './core/config.ts';
 
 const POST_CLOSE_SETTLE_MS = 300;
 
@@ -129,7 +128,6 @@ async function openAppleApplication(
     await applyAppleOpenRuntimeHints(input, timing);
     await prewarmAppleRunnerBeforeOpen(runner, shouldPrewarmRunner, input.prewarmRunnerBeforeOpen);
     const runnerTargetPredatesOpen = runner.wasAwaited();
-    const launchStartedAtMs = Date.now();
     await dispatchAppleOpen(binding, input, launch, localIosSimulator, timing);
     await finishAppleRunnerPrewarm(runner, shouldPrewarmRunner, policy.awaitPrewarmAfterOpen);
     await notifyAppleRunnerRelaunch(
@@ -141,13 +139,7 @@ async function openAppleApplication(
       retainRunnerForRelaunch,
     );
     await settleAppleOpen(host, binding, input, localIosSimulator, observation, timing);
-    const launchConfirmation = await answerAppleLaunchConfirmation(
-      binding,
-      input,
-      launch,
-      launchStartedAtMs,
-      timing,
-    );
+    const launchConfirmation = await answerAppleLaunchConfirmation(binding, input, launch, timing);
     if (!launchConfirmation) return { appBundleId: input.appBundleId, timing };
     await settleAppleOpen(host, binding, input, localIosSimulator, observation, timing);
     return { appBundleId: input.appBundleId, timing, launchConfirmation };
@@ -259,21 +251,18 @@ async function dispatchAppleLaunchUrl(
  * One launch confirmation answer, spent only when the launch handed SpringBoard a URL it may hold
  * behind a confirmation and the host AX bridge then read the launched app as unobservable, the
  * state a system surface over the app leaves. An observed app, or a bridge that could not observe
- * at all, is not covered, so its open never reaches the runner. The answer runs within what is
- * left of the launch budget, and the runner it needs is recorded as the open's demand.
+ * at all, is not covered, so its open never reaches the runner. The runner the answer needs is
+ * recorded as the open's demand.
  */
 async function answerAppleLaunchConfirmation(
   binding: BoundAppleInteractor,
   input: OpenApplicationInput,
   launch: AppleLaunchPlan,
-  launchStartedAtMs: number,
   timing: MutableOpenTiming,
 ): Promise<LaunchConfirmation | undefined> {
   const { confirmation } = launch;
   if (!confirmation) return undefined;
   if (timing.postOpenObservation !== 'unobservable') return undefined;
-  const budgetMs = IOS_APP_LAUNCH_TIMEOUT_MS - (Date.now() - launchStartedAtMs);
-  if (budgetMs <= 0) return undefined;
   timing.runnerDemand = 'required';
   const { answerLaunchConfirmation, createLaunchConfirmationPort } = await loadLaunchConfirmation();
   return await answerLaunchConfirmation(
@@ -282,7 +271,6 @@ async function answerAppleLaunchConfirmation(
       confirmation,
       async () => await binding.resolveInteractor(input.execution, confirmation.appBundleId),
     ),
-    budgetMs,
   );
 }
 
