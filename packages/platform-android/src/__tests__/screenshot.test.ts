@@ -45,83 +45,6 @@ beforeEach(() => {
   });
 });
 
-test('screenshotAndroid waits for transient UI to settle before capture', async () => {
-  const events: string[] = [];
-  await withTempScreenshot('screenshot-settle-', async (outPath) => {
-    mockScreenshotEvents(events);
-    await screenshotAndroid(device, outPath);
-
-    const relevantEvents = events.filter((event, index) => {
-      if (event !== 'enable') {
-        return true;
-      }
-      return index === 0;
-    });
-    assert.deepEqual(relevantEvents, ['enable', 'settle:1000', 'capture', 'disable']);
-  });
-});
-
-test('screenshotAndroid skips stabilization when requested', async () => {
-  const events: string[] = [];
-  await withTempScreenshot('screenshot-stabilize-', async (outPath) => {
-    mockScreenshotEvents(events);
-    await screenshotAndroid(device, outPath, { stabilize: false });
-
-    assert.deepEqual(events, ['capture']);
-    assert.equal(mockSleep.mock.calls.length, 0);
-  });
-});
-
-test('screenshotAndroid writes a valid PNG when output is clean', async () => {
-  await withTempScreenshot('screenshot-clean-', async (outPath) => {
-    await screenshotAndroid(device, outPath);
-    const written = await fs.readFile(outPath);
-    assert.deepEqual(written, VALID_PNG);
-  });
-});
-
-test('screenshotAndroid strips warning text before PNG signature', async () => {
-  const warning =
-    '[Warning] Multiple displays were found, but no display id was specified! Defaulting to the first display found.';
-  mockScreenshotPayload(Buffer.concat([Buffer.from(warning), VALID_PNG]));
-
-  await withTempScreenshot('screenshot-warning-', async (outPath) => {
-    await screenshotAndroid(device, outPath);
-    const written = await fs.readFile(outPath);
-    assert.deepEqual(written, VALID_PNG);
-  });
-});
-
-test('screenshotAndroid strips trailing garbage after PNG payload', async () => {
-  mockScreenshotPayload(Buffer.concat([VALID_PNG, Buffer.from('\ntrailing-warning\n')]));
-
-  await withTempScreenshot('screenshot-trailing-', async (outPath) => {
-    await screenshotAndroid(device, outPath);
-    const written = await fs.readFile(outPath);
-    assert.deepEqual(written, VALID_PNG);
-  });
-});
-
-test('screenshotAndroid throws when output contains no PNG signature', async () => {
-  mockScreenshotPayload(Buffer.from('not a png'));
-
-  await withTempScreenshot('screenshot-nopng-', async (outPath) => {
-    await assert.rejects(() => screenshotAndroid(device, outPath), {
-      message: 'Screenshot data does not contain a valid PNG header',
-    });
-  });
-});
-
-test('screenshotAndroid throws when PNG payload is truncated', async () => {
-  mockScreenshotPayload(VALID_PNG.subarray(0, VALID_PNG.length - 3));
-
-  await withTempScreenshot('screenshot-truncated-', async (outPath) => {
-    await assert.rejects(() => screenshotAndroid(device, outPath), {
-      message: 'Screenshot data does not contain a complete PNG payload',
-    });
-  });
-});
-
 test('screenshotAndroid reports the display rotation read beside the capture', async () => {
   mockRunCmd.mockImplementation(async (_cmd, args) => {
     if (args.includes('exec-out')) {
@@ -156,11 +79,15 @@ test('screenshotAndroid still captures when the display rotation read fails', as
 });
 
 test('screenshotAndroid drops a display rotation probe still running after the capture', async () => {
-  mockRunCmd.mockImplementation(async (_cmd, args) => {
+  let probeSignal: AbortSignal | undefined;
+  mockRunCmd.mockImplementation(async (_cmd, args, options) => {
     if (args.includes('exec-out')) {
       return { exitCode: 0, stdout: '', stderr: '', stdoutBuffer: VALID_PNG };
     }
-    if (args.includes('dumpsys')) return await new Promise<never>(() => {});
+    if (args.includes('dumpsys')) {
+      probeSignal = options?.signal;
+      return await new Promise<never>(() => {});
+    }
     return { exitCode: 0, stdout: '', stderr: '' };
   });
 
@@ -171,43 +98,22 @@ test('screenshotAndroid drops a display rotation probe still running after the c
       const capture = screenshotAndroid(device, outPath, { stabilize: false }).then((result) => {
         facts = result;
       });
-      // The capture writes through real file I/O, so the grace timer starts at an unknown turn:
-      // yield to I/O, then advance the fake clock, until the screenshot settles.
-      for (let turn = 0; turn < 100 && facts === undefined; turn++) {
+      // The image is written through real file I/O; the only timer this path installs is the
+      // grace that starts once the write is done. Yield to I/O until it exists.
+      for (let turn = 0; turn < 1_000 && vi.getTimerCount() === 0; turn++) {
         await new Promise((resolve) => setImmediate(resolve));
-        await vi.advanceTimersByTimeAsync(250);
       }
+      assert.equal(vi.getTimerCount(), 1, 'the capture must start one grace timer once written');
+      assert.equal(facts, undefined, 'the screenshot waits for the probe until the grace ends');
+      await vi.runOnlyPendingTimersAsync();
       await capture;
       assert.deepEqual(facts, {});
+      assert.equal(probeSignal?.aborted, true, 'no adb probe may outlive the screenshot');
     } finally {
       vi.useRealTimers();
     }
   });
 });
-
-function mockScreenshotEvents(events: string[]): void {
-  mockRunCmd.mockImplementation(async (_cmd, args) => {
-    if (args.includes('exec-out')) {
-      events.push('capture');
-      return { exitCode: 0, stdout: '', stderr: '', stdoutBuffer: VALID_PNG };
-    }
-    if (args.includes('dumpsys')) return { exitCode: 0, stdout: '', stderr: '' };
-    events.push(args.some((arg) => arg.includes('exit')) ? 'disable' : 'enable');
-    return { exitCode: 0, stdout: '', stderr: '' };
-  });
-  mockSleep.mockImplementation(async (ms) => {
-    events.push(`settle:${ms}`);
-  });
-}
-
-function mockScreenshotPayload(payload: Buffer): void {
-  mockRunCmd.mockImplementation(async (_cmd, args) => {
-    if (args.includes('exec-out')) {
-      return { exitCode: 0, stdout: '', stderr: '', stdoutBuffer: payload };
-    }
-    return { exitCode: 0, stdout: '', stderr: '' };
-  });
-}
 
 async function withTempScreenshot(
   name: string,

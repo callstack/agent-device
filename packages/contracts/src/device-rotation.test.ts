@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
   DEVICE_ROTATIONS,
-  DEVICE_ROTATION_SURFACE_INDEX,
   deviceRotationFromSurfaceIndex,
   isDeviceRotation,
   parseDeviceRotation,
@@ -45,12 +44,12 @@ describe('parseDeviceRotation', () => {
 });
 
 describe('deviceRotationFromSurfaceIndex', () => {
-  test('reads every rotation back from its own surface index', () => {
-    for (const rotation of DEVICE_ROTATIONS) {
-      expect(deviceRotationFromSurfaceIndex(DEVICE_ROTATION_SURFACE_INDEX[rotation])).toBe(
-        rotation,
-      );
-    }
+  test('reads the Android Surface.ROTATION_* index each rotation is observed at', () => {
+    // Observed on an Android 37 emulator: `orientation <rotation>` then `dumpsys display`.
+    expect(deviceRotationFromSurfaceIndex(0)).toBe('portrait');
+    expect(deviceRotationFromSurfaceIndex(1)).toBe('landscape-left');
+    expect(deviceRotationFromSurfaceIndex(2)).toBe('portrait-upside-down');
+    expect(deviceRotationFromSurfaceIndex(3)).toBe('landscape-right');
   });
 
   test('has no rotation for an index outside the surface table', () => {

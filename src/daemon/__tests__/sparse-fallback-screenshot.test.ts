@@ -128,3 +128,20 @@ test('a failed fallback screenshot does not fail the snapshot that was asked for
   // The manual remedy is still on the response, so the caller is not left without one.
   expect(warnings.some((line) => line.includes('Use screenshot as visual truth'))).toBe(true);
 });
+
+test('the fallback screenshot artifact carries the display rotation its capture reported', async () => {
+  const input = await scenario();
+  const runtime = seed(SPARSE, (captureInput) => {
+    writeSolidPng(captureInput.outPath);
+    return { displayRotation: 'landscape-left' };
+  });
+
+  const data = await dispatch(input, runtime);
+
+  expect(data.artifacts).toEqual([
+    expect.objectContaining({
+      field: 'fallbackScreenshotPath',
+      displayRotation: 'landscape-left',
+    }),
+  ]);
+});

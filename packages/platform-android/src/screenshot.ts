@@ -4,14 +4,15 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { ShellWord } from '@agent-device/kernel/device-shell';
 import { runAndroidExecOut, runAndroidShell, sleep } from './adb.ts';
 import { requireAndroidAdbHost } from './adb-host.ts';
-import { probeAndroidDisplayRotation } from './display-rotation.ts';
+import { probeAndroidDisplayRotation } from './input-actions.ts';
 
 // PNG file signature: 0x89 P N G \r \n 0x1A \n
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const ANDROID_SCREENSHOT_SETTLE_DELAY_MS = 1_000;
 const ANDROID_SCREENSHOT_ROTATION_PROBE_TIMEOUT_MS = 2_000;
 // The rotation probe is optional metadata: one still running once the image is written gets this
-// long before it is dropped, so a slow `dumpsys` adds at most this much to a screenshot.
+// long, then is aborted, so a slow `dumpsys` adds at most this much to a screenshot and no adb
+// work outlives it.
 const ANDROID_SCREENSHOT_ROTATION_GRACE_MS = 250;
 
 export type AndroidScreenshotOptions = {
@@ -68,12 +69,18 @@ async function captureAndroidScreenshotWithRotation(
   device: DeviceInfo,
   outPath: string,
 ): Promise<ScreenshotCaptureFacts> {
+  const probeController = new AbortController();
   const probe = probeAndroidDisplayRotation(device, {
     timeoutMs: ANDROID_SCREENSHOT_ROTATION_PROBE_TIMEOUT_MS,
+    signal: probeController.signal,
   });
-  await captureAndroidScreenshot(device, outPath);
-  const displayRotation = await settledWithin(probe, ANDROID_SCREENSHOT_ROTATION_GRACE_MS);
-  return displayRotation ? { displayRotation } : {};
+  try {
+    await captureAndroidScreenshot(device, outPath);
+    const displayRotation = await settledWithin(probe, ANDROID_SCREENSHOT_ROTATION_GRACE_MS);
+    return displayRotation ? { displayRotation } : {};
+  } finally {
+    probeController.abort();
+  }
 }
 
 async function settledWithin<T>(pending: Promise<T>, graceMs: number): Promise<T | undefined> {

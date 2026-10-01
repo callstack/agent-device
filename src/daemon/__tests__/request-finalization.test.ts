@@ -327,3 +327,31 @@ test('finalizeDaemonResponse registers no display rotation for a value outside t
   expect(tracked).toHaveLength(1);
   expect(tracked[0]).not.toHaveProperty('displayRotation');
 });
+
+test('finalizeDaemonResponse registers the display rotation a handler put on its own artifact', () => {
+  const req: DaemonRequest = {
+    token: 'token',
+    session: 'default',
+    command: 'snapshot',
+    positionals: [],
+  };
+  const tracked: DownloadableArtifactRegistration[] = [];
+  const fallbackArtifact = {
+    field: 'fallbackScreenshotPath',
+    artifactType: 'screenshot' as const,
+    path: '/tmp/snapshot-fallback.png',
+    fileName: 'snapshot-fallback.png',
+    displayRotation: 'landscape-right' as const,
+  };
+
+  finalizeDaemonResponse(
+    req,
+    { ok: true, data: { artifacts: [fallbackArtifact] } },
+    (registration) => {
+      tracked.push(registration);
+      return 'artifact-id';
+    },
+  );
+
+  expect(tracked[0]?.displayRotation).toBe('landscape-right');
+});

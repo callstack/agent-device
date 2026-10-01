@@ -2,7 +2,11 @@
  * Pointer, key, and gesture actions on an Android device. Text entry — provider injection, the test
  * IME, and the adb-shell writer — is `text-input.ts`.
  */
-import { DEVICE_ROTATION_SURFACE_INDEX, type DeviceRotation } from '@agent-device/contracts/device';
+import {
+  DEVICE_ROTATION_SURFACE_INDEX,
+  deviceRotationFromSurfaceIndex,
+  type DeviceRotation,
+} from '@agent-device/contracts/device';
 import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import { GESTURE_DURATION_MIN_MS } from '@agent-device/contracts/gesture-plan-types';
 import {
@@ -22,7 +26,6 @@ import type { Rect } from '@agent-device/kernel/snapshot';
 import { sleep } from '@agent-device/host-kit/retry';
 import { runAndroidShell } from './adb.ts';
 import { discloseAdbInputDispatch } from './adb-failure.ts';
-import { parseAndroidDisplayRotationIndex } from './display-rotation.ts';
 import { executeAndroidTouchPlan, readAndroidGestureViewportReading } from './touch-executor.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
@@ -123,7 +126,7 @@ async function readAndroidDisplayRotation(
     const result = await runAndroidShell(device, ['dumpsys', 'display'], {
       timeoutMs: remainingMs(deadline),
     });
-    return parseAndroidDisplayRotationIndex(result.stdout);
+    return parseAndroidDisplayRotationIndices(result.stdout)[0];
   } catch (error) {
     throw new AppError(
       'COMMAND_FAILED',
@@ -135,6 +138,35 @@ async function readAndroidDisplayRotation(
 
 function remainingMs(deadline: number): number {
   return Math.max(1, deadline - Date.now());
+}
+
+/** `dumpsys display` reports one `Surface.ROTATION_*` index per logical display under this key. */
+export function parseAndroidDisplayRotationIndices(dumpsysDisplay: string): string[] {
+  return [...dumpsysDisplay.matchAll(/mCurrentOrientation=(\d)/g)].map((match) => match[1]!);
+}
+
+/**
+ * Best-effort read of the rotation the only display is rendering in. A device with more than one
+ * display yields none: `screencap` without a display id captures whichever display it finds
+ * first, so no single rotation is known to pair with the image. A probe that fails, is aborted,
+ * or reports no index also yields none rather than failing the operation it accompanies.
+ */
+export async function probeAndroidDisplayRotation(
+  device: DeviceInfo,
+  options: { timeoutMs: number; signal: AbortSignal },
+): Promise<DeviceRotation | undefined> {
+  try {
+    const result = await runAndroidShell(device, ['dumpsys', 'display'], {
+      allowFailure: true,
+      timeoutMs: options.timeoutMs,
+      signal: options.signal,
+    });
+    if (result.exitCode !== 0) return undefined;
+    const indices = parseAndroidDisplayRotationIndices(result.stdout);
+    return indices.length === 1 ? deviceRotationFromSurfaceIndex(Number(indices[0])) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function appSwitcherAndroid(device: DeviceInfo): Promise<void> {

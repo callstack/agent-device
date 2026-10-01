@@ -5,7 +5,9 @@ import {
   homeAndroid,
   longPressAndroid,
   pressAndroidEnter,
+  parseAndroidDisplayRotationIndices,
   pressAndroidTvRemote,
+  probeAndroidDisplayRotation,
   scrollAndroid,
   setAndroidOrientation,
 } from '../input-actions.ts';
@@ -480,4 +482,62 @@ test('setAndroidOrientation leaves a display that reports no rotation to the set
       DISPLAY_READ,
     ]);
   });
+});
+
+test('parseAndroidDisplayRotationIndices reads one index per logical display', () => {
+  assert.deepEqual(parseAndroidDisplayRotationIndices('  mCurrentOrientation=1\n  mOther=2\n'), [
+    '1',
+  ]);
+  assert.deepEqual(
+    parseAndroidDisplayRotationIndices('  mCurrentOrientation=0\n  mCurrentOrientation=3\n'),
+    ['0', '3'],
+  );
+  assert.deepEqual(
+    parseAndroidDisplayRotationIndices('  mOverrideDisplayInfo=DisplayInfo{}\n'),
+    [],
+  );
+});
+
+test('probeAndroidDisplayRotation reads the rotation of the only display', async () => {
+  await withFakeAdb(displayReporting(['3']), async ({ device }) => {
+    const rotation = await probeAndroidDisplayRotation(device, {
+      timeoutMs: 2_000,
+      signal: new AbortController().signal,
+    });
+    assert.equal(rotation, 'landscape-right');
+  });
+});
+
+test('probeAndroidDisplayRotation reports none when the device has more than one display', async () => {
+  // Measured on a foldable emulator: two built-in displays, one index each, and screencap
+  // defaulting to whichever display it finds first.
+  await withFakeAdb(
+    (args) =>
+      args[1] === 'dumpsys' ? '  mCurrentOrientation=0\n  mCurrentOrientation=1\n' : undefined,
+    async ({ device }) => {
+      const rotation = await probeAndroidDisplayRotation(device, {
+        timeoutMs: 2_000,
+        signal: new AbortController().signal,
+      });
+      assert.equal(rotation, undefined);
+    },
+  );
+});
+
+test('probeAndroidDisplayRotation hands its budget and abort signal to the adb seam', async () => {
+  const controller = new AbortController();
+  const seen: Array<{ timeoutMs?: number; signal?: AbortSignal }> = [];
+  await withFakeAdb(
+    (args, options) => {
+      if (args[1] === 'dumpsys')
+        seen.push({ timeoutMs: options?.timeoutMs, signal: options?.signal });
+      return displayReporting(['0'])(args);
+    },
+    async ({ device }) => {
+      await probeAndroidDisplayRotation(device, { timeoutMs: 2_000, signal: controller.signal });
+    },
+  );
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0]!.timeoutMs, 2_000);
+  assert.equal(seen[0]!.signal, controller.signal);
 });
