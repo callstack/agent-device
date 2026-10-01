@@ -116,13 +116,18 @@ function resolveRunnerRecoveryFailure(
   return discloseDispatch(buildLostReplyError(context, failure.lostReply), 'unknown');
 }
 
-/** The one shape of a mutation's lost-reply failure; the transport's own reason stays readable. */
+/**
+ * The one shape of a mutation's lost-reply failure; the transport's own reason stays readable, and
+ * its own hint wins because it names a cause (a boot failure, an unattached cable) the generic
+ * lost-reply hint does not.
+ */
 function buildLostReplyError(
   context: RunnerTransportRecoveryContext,
   lostReply: LostReply,
 ): AppError {
   const { command, transportError, options } = context;
   const transportReason = transportError.details?.reason;
+  const transportHint = transportError.details?.hint;
   return new AppError(
     'COMMAND_FAILED',
     lostReply.message,
@@ -136,7 +141,7 @@ function buildLostReplyError(
       ...(transportReason === undefined ? {} : { transportReason }),
       recovery: lostReply.recovery,
       ...readReadinessPreflightRecoveryDetails(transportError),
-      hint: lostReply.hint,
+      hint: typeof transportHint === 'string' ? transportHint : lostReply.hint,
       logPath: options.logPath ?? transportError.details?.logPath,
       transportError: transportError.message,
     },
