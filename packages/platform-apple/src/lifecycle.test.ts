@@ -828,6 +828,32 @@ test('a launch URL held behind a confirmation for the session app is accepted an
   ]);
 });
 
+test('the reported settle spans both observations and the answer between them', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    const { lifecycle } = launchUrlSimulator(
+      async () => {
+        vi.advanceTimersByTime(100);
+        return CONFIRMATION;
+      },
+      [UNOBSERVABLE, OBSERVABLE],
+      {
+        owner: async () => {
+          vi.advanceTimersByTime(100);
+          return 'com.example.app';
+        },
+      },
+    );
+
+    const outcome = await lifecycle.openApplication(launchUrlInput());
+
+    expect(outcome.launchConfirmation).toBe('accepted');
+    expect(outcome.timing.postOpenSettleDurationMs).toBe(200);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test.each([
   ['finds no alert', alertNotFound()],
   [

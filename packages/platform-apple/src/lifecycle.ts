@@ -138,11 +138,19 @@ async function openAppleApplication(
       runnerTargetPredatesOpen,
       retainRunnerForRelaunch,
     );
-    await settleAppleOpen(host, binding, input, localIosSimulator, observation, timing);
-    const launchConfirmation = await answerAppleLaunchConfirmation(binding, input, launch, timing);
-    if (!launchConfirmation) return { appBundleId: input.appBundleId, timing };
-    await settleAppleOpen(host, binding, input, localIosSimulator, observation, timing);
-    return { appBundleId: input.appBundleId, timing, launchConfirmation };
+    const launchConfirmation = await settleAppleOpen(
+      host,
+      binding,
+      input,
+      localIosSimulator,
+      { observation, answerConfirmation: confirmationAnswer(binding, input, launch) },
+      timing,
+    );
+    return {
+      appBundleId: input.appBundleId,
+      timing,
+      ...(launchConfirmation ? { launchConfirmation } : {}),
+    };
   } catch (error) {
     if (retainRunnerForRelaunch) {
       await host.appleApplications.stopRunnerSession(binding.device.id).catch(() => {});
@@ -248,28 +256,24 @@ async function dispatchAppleLaunchUrl(
 }
 
 /**
- * One launch confirmation answer, spent only when the launch handed SpringBoard a URL it may hold
- * behind a confirmation and the host AX bridge then read the launched app as unobservable, the
- * state a system surface over the app leaves. An observed app, or a bridge that could not observe
- * at all, is not covered, so its open never reaches the runner. The runner the answer needs is
- * recorded as the open's demand.
+ * How the settle answers a launch confirmation, present only when the launch handed SpringBoard a
+ * custom-scheme URL it may hold for the session app. The settle spends it only on a launch the
+ * host AX bridge read as unobservable, the state a system surface over the app leaves.
  */
-async function answerAppleLaunchConfirmation(
+function confirmationAnswer(
   binding: BoundAppleInteractor,
   input: OpenApplicationInput,
-  launch: AppleLaunchPlan,
-  timing: MutableOpenTiming,
-): Promise<LaunchConfirmation | undefined> {
-  const { confirmation } = launch;
+  { confirmation }: AppleLaunchPlan,
+): (() => Promise<LaunchConfirmation | undefined>) | undefined {
   if (!confirmation) return undefined;
-  if (timing.postOpenObservation !== 'unobservable') return undefined;
-  timing.runnerDemand = 'required';
-  const { answerSimulatorLaunchConfirmation } = await loadLaunchConfirmation();
-  return await answerSimulatorLaunchConfirmation(
-    binding.device,
-    confirmation,
-    binding.resolveInteractor(input.execution, confirmation.appBundleId),
-  );
+  return async () => {
+    const { answerSimulatorLaunchConfirmation } = await loadLaunchConfirmation();
+    return await answerSimulatorLaunchConfirmation(
+      binding.device,
+      confirmation,
+      binding.resolveInteractor(input.execution, confirmation.appBundleId),
+    );
+  };
 }
 
 async function finishAppleRunnerPrewarm(
