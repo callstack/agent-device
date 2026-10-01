@@ -662,7 +662,7 @@ test.each([
 
   await expect(route.awaitObservable(ios, input.options.appBundleId, signal())).resolves.toEqual({
     observation: 'probe-failed',
-    failure: { code: 'bridge-disabled', reason: 'circuit-disabled' },
+    failure: { source: 'circuit' },
   });
   expect(source.acquire).toHaveBeenCalledOnce();
 });

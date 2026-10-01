@@ -139,7 +139,7 @@ test('a capture mechanism failure is a failed probe with its typed reason', asyn
 
   await expect(observation.observe()).resolves.toEqual({
     observation: 'probe-failed',
-    failure: { code: 'COMMAND_FAILED', reason: 'accessibility-timeout' },
+    failure: { source: 'capture', code: 'COMMAND_FAILED', reason: 'accessibility-timeout' },
   });
 });
 
@@ -151,7 +151,11 @@ test('a device without the current helper is a failed probe', async () => {
 
   await expect(observation.observe()).resolves.toEqual({
     observation: 'probe-failed',
-    failure: { code: 'COMMAND_FAILED', reason: 'android-snapshot-helper-not-current' },
+    failure: {
+      source: 'capture',
+      code: 'COMMAND_FAILED',
+      reason: 'android-snapshot-helper-not-current',
+    },
   });
 });
 

@@ -50,5 +50,8 @@ export async function observeAndroidLaunch(
 function typedFailure(error: unknown): PostOpenObservationFailure {
   const normalized = normalizeError(error);
   const reason = readAndroidCaptureFailureReason(normalized) ?? normalized.details?.reason;
-  return typeof reason === 'string' ? { code: normalized.code, reason } : { code: normalized.code };
+  const { code } = normalized;
+  return typeof reason === 'string'
+    ? { source: 'capture', code, reason }
+    : { source: 'capture', code };
 }

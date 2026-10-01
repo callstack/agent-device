@@ -145,7 +145,7 @@ test.each(['bridge-disconnected', 'continuation-budget-exhausted', 'snapshot-tre
     });
     await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toEqual({
       observation: 'probe-failed',
-      failure: { code: 'transport-failure', reason: code },
+      failure: { source: 'bridge', kind: 'transport-failure', code },
     });
     expect(acquire).toHaveBeenCalledOnce();
     expect(sleep).not.toHaveBeenCalled();
@@ -160,7 +160,7 @@ test('a generation whose bridge circuit is open is a failed probe without a brid
   );
   await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toEqual({
     observation: 'probe-failed',
-    failure: { code: 'bridge-disabled', reason: 'circuit-disabled' },
+    failure: { source: 'circuit' },
   });
   expect(gate).toHaveBeenCalledWith(target);
   expect(acquire).not.toHaveBeenCalled();
@@ -208,7 +208,11 @@ test.each([
     1,
     {
       observation: 'probe-failed',
-      failure: { code: 'COMMAND_FAILED', reason: 'simulator-target-probe-failed' },
+      failure: {
+        source: 'target',
+        code: 'COMMAND_FAILED',
+        reason: 'simulator-target-probe-failed',
+      },
     },
   ],
 ])('%s', async (_name, reason, expectedResolutions, verdict) => {

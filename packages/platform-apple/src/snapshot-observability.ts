@@ -95,14 +95,14 @@ export function createLaunchObservationProbe(
               generation: target.generation,
             },
           });
-          return probeFailed({ code: 'bridge-disabled', reason: 'circuit-disabled' });
+          return probeFailed({ source: 'circuit' });
         }
         const outcome = await deps.source.acquire({ target, hint, signal });
         if (outcome.stage !== 'failed') return { observation: 'observable' };
         signal.throwIfAborted();
         const { kind, code } = outcome.failure;
         const windowMs = LAUNCH_TRANSITION_WINDOW_MS.get(code);
-        if (windowMs === undefined) return probeFailed({ code: kind, reason: code });
+        if (windowMs === undefined) return probeFailed({ source: 'bridge', kind, code });
         const now = deps.clock.now();
         deadline = Math.min(deadline ?? Number.POSITIVE_INFINITY, now + windowMs);
         if (now >= deadline) return { observation: 'unobservable' };
@@ -142,7 +142,13 @@ async function resolveLaunchedTarget(
       if (isSimulatorTargetNotRunning(error)) return { verdict: { observation: 'unobservable' } };
       const { code, details } = normalizeError(error);
       const reason = details?.reason;
-      return { verdict: probeFailed(typeof reason === 'string' ? { code, reason } : { code }) };
+      return {
+        verdict: probeFailed(
+          typeof reason === 'string'
+            ? { source: 'target', code, reason }
+            : { source: 'target', code },
+        ),
+      };
     }
   }
 }

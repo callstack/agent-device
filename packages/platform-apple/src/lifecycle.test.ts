@@ -787,7 +787,7 @@ test('a launch URL whose bridge probe failed never reaches the runner', async ()
     [
       {
         observation: 'probe-failed',
-        failure: { code: 'bridge-disabled', reason: 'circuit-disabled' },
+        failure: { source: 'circuit' },
       },
     ],
   );
@@ -797,10 +797,7 @@ test('a launch URL whose bridge probe failed never reaches the runner', async ()
   expect(outcome.launchConfirmation).toBeUndefined();
   expect(outcome.timing.runnerDemand).toBe('none');
   expect(outcome.timing.postOpenObservation).toBe('probe-failed');
-  expect(outcome.timing.postOpenObservationFailure).toEqual({
-    code: 'bridge-disabled',
-    reason: 'circuit-disabled',
-  });
+  expect(outcome.timing.postOpenObservationFailure).toEqual({ source: 'circuit' });
   expect(interactor.readAlert).not.toHaveBeenCalled();
   expect(events).toEqual(['release', `open ${LAUNCH_URL}`, 'observe probe-failed']);
 });

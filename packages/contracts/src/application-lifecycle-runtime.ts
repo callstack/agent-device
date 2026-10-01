@@ -140,9 +140,9 @@ export type OpenApplicationTiming = Readonly<{
  *   or AX-server state that did not clear, a system surface over the app, a content verdict after
  *   the capture's own re-captures, or the window ran out.
  * - `probe-failed`: the observation could not run (Android: the helper is not installed at the
- *   current version, or adb or the accessibility service failed; iOS Simulator: the app's target
- *   could not be resolved, the bridge circuit is open, or the bridge failed with a code that is not
- *   a launch transition). `postOpenObservationFailure` carries the typed failure.
+ *   current version, or adb or the accessibility service failed; iOS Simulator: the app's bridge
+ *   target could not be resolved, the bridge circuit is open, or the bridge failed with a code that
+ *   is not a launch transition). `postOpenObservationFailure` carries the typed failure.
  * - `app-unidentified`: the open targeted an app, but the owner could not read which package it
  *   launched, so nothing was observed.
  * - `not-eligible`: the device has no observation path.
@@ -155,13 +155,18 @@ export type PostOpenObservation =
   | 'not-eligible';
 
 /**
- * The typed failure of a `probe-failed` observation: the error code and its typed reason. An iOS
- * Simulator bridge failure carries the bridge failure kind as `code` and its code as `reason`.
+ * The typed failure of a `probe-failed` observation, by what stopped it.
+ * - `capture`: an Android capture failed with this error `code` and typed `reason`.
+ * - `target`: an iOS Simulator could not resolve the app's bridge target; the error `code` and
+ *   typed `reason`.
+ * - `bridge`: the iOS Simulator host AX bridge failed with this failure `kind` and `code`.
+ * - `circuit`: the bridge circuit is open for this app generation, so the probe did not run.
  */
-export type PostOpenObservationFailure = Readonly<{
-  code: string;
-  reason?: string;
-}>;
+export type PostOpenObservationFailure =
+  | Readonly<{ source: 'capture'; code: string; reason?: string }>
+  | Readonly<{ source: 'target'; code: string; reason?: string }>
+  | Readonly<{ source: 'bridge'; kind: string; code: string }>
+  | Readonly<{ source: 'circuit' }>;
 
 /**
  * A system confirmation the launch itself raised and the open answered. `accepted`: iOS held a
