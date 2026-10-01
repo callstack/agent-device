@@ -256,7 +256,13 @@
   {
     "id": "ios-runner.transport.written-then-lost",
     "producer": "ios-runner",
-    "trigger": "a connect attempt posted the command and then timed out (fetch deadline, simctl curl exit 28); the failure keeps the runner_connect_refused restart verdict, and the restart that replays it failed",
+    "trigger": "a mutating command was posted and the runner process died before replying; the status probe fails, the session is invalidated, and the command is not sent again (details.reason runner_reply_lost)",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.transport.read-only-written-then-lost",
+    "producer": "ios-runner",
+    "trigger": "a connect attempt posted a read-only command and then timed out (fetch deadline, simctl curl exit 28); the runner is restarted and the read is sent again, and the resend failed; the first send may have run, so the runner reports unknown, and the daemon's read-only rule (daemon.read-only-command) reports no to the caller",
     "dispatched": "unknown"
   },
   {
@@ -287,6 +293,12 @@
     "id": "ios-runner.status.completed-without-retained-reply",
     "producer": "ios-runner",
     "trigger": "transport lost; status probe reports lifecycleState completed without a readable retained reply",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.status.read-only-completed-without-retained-reply",
+    "producer": "ios-runner",
+    "trigger": "transport lost on a read-only command; status probe reports lifecycleState completed without a readable retained reply; the runner reports unknown, and the daemon's read-only rule (daemon.read-only-command) reports no to the caller",
     "dispatched": "unknown"
   },
   {

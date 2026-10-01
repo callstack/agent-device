@@ -5,6 +5,7 @@ import {
   createTestRequestCancellation,
   makeRunnerSession,
   runnerConnectFailure,
+  unwrittenConnectRefusal,
 } from './runner-session-fixtures.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { Deadline } from '../host.ts';
@@ -49,6 +50,7 @@ vi.mock('../runner-xctestrun.ts', async () => {
 
 import { prepareIosRunner, runAppleRunnerCommand } from '../runner-client.ts';
 import { resetRunnerRecycleLedgerForTests } from '../runner-recycle-ledger.ts';
+import { RUNNER_REPLY_LOST_REASON } from '../runner-error-classification.ts';
 import type { RunnerXctestrunArtifact } from '../runner-xctestrun.ts';
 
 const requestCancellation = createTestRequestCancellation();
@@ -306,7 +308,7 @@ test('mutating commands restart stale ready sessions when the preflight probe ne
 
   mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
+    .mockRejectedValueOnce(unwrittenConnectRefusal())
     .mockResolvedValueOnce({ message: 'tapped' });
 
   const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
@@ -329,7 +331,7 @@ test('mutating commands retry startup sessions with stale bundle cleanup', async
 
   mockEnsureRunnerSession.mockResolvedValueOnce(startupSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
+    .mockRejectedValueOnce(unwrittenConnectRefusal())
     .mockResolvedValueOnce({ message: 'tapped' });
 
   const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
@@ -474,10 +476,9 @@ test('mutating commands keep invalidating when status recovery probe fails', asy
   await assert.rejects(
     () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
     (error: unknown) => {
-      // A failed status probe re-throws the original transport error, not the probe's own.
       assert.ok(error instanceof AppError);
-      assert.equal(error.code, 'COMMAND_FAILED');
-      assert.equal(error.message, 'fetch failed');
+      assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+      assert.equal(error.details?.transportError, 'fetch failed');
       return true;
     },
   );
@@ -814,7 +815,7 @@ test('mutating commands invalidate the retry session without replaying again', a
 
   mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
+    .mockRejectedValueOnce(unwrittenConnectRefusal())
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
     .mockResolvedValueOnce({ lifecycleState: 'notAccepted' });
 
@@ -970,10 +971,9 @@ test('sequence invalidates the session when the status probe fails', async () =>
         steps: [{ kind: 'tap', x: 1, y: 2 }],
       }),
     (error: unknown) => {
-      // A failed status probe re-throws the original transport error, not the probe's own.
       assert.ok(error instanceof AppError);
-      assert.equal(error.code, 'COMMAND_FAILED');
-      assert.equal(error.message, 'fetch failed');
+      assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+      assert.equal(error.details?.transportError, 'fetch failed');
       return true;
     },
   );
@@ -1189,10 +1189,9 @@ test('a later command in the same request cannot pay for a second recycle boot',
   const requestId = 'req-restart-cap';
   const staleSession = makeRunnerSession({ port: 8100, state: 'ready' });
   const freshSession = makeRunnerSession({ port: 8101, state: 'starting' });
-
   mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
   mockExecuteRunnerCommandWithSession
-    .mockRejectedValueOnce(runnerConnectFailure('runner_connect_refused'))
+    .mockRejectedValueOnce(unwrittenConnectRefusal())
     .mockResolvedValueOnce({ message: 'tapped' });
 
   // First command consumes the request's only recycle via restart-and-replay.

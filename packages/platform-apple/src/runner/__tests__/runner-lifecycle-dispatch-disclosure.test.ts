@@ -10,6 +10,7 @@ import {
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { createTestRequestCancellation, makeRunnerSession } from './runner-session-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
+import { startFakeRunnerServer, type FakeRunnerServer } from './fake-runner-server.ts';
 
 // contracts/fixtures/dispatch-disclosure.json, ios-runner pre-send and transport rows: each row
 // drives runAppleRunnerCommand through the real lifecycle and restart path with the session start
@@ -39,6 +40,11 @@ vi.mock('../runner-session.ts', async () => {
 });
 
 import { runAppleRunnerCommand } from '../runner-client.ts';
+import {
+  isRetryableRunnerError,
+  RUNNER_REPLY_LOST_REASON,
+} from '../runner-error-classification.ts';
+import type { RunnerCommand } from '../runner-contract.ts';
 import { resetRunnerRecycleLedgerForTests } from '../runner-recycle-ledger.ts';
 import { waitForRunner } from '../runner-startup-transport.ts';
 
@@ -57,8 +63,12 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+let fakeRunner: FakeRunnerServer | undefined;
+
+afterEach(async () => {
   vi.unstubAllGlobals();
+  await fakeRunner?.close();
+  fakeRunner = undefined;
 });
 
 async function tap(): Promise<unknown> {
@@ -72,12 +82,9 @@ const readinessPreflightFailure = (): AppError =>
 
 /**
  * The first attempt runs the real connect loop against a simulator whose every fetch fails the
- * same way and whose simctl curl fallback exits with `curlExitCode`; the restart it earns fails.
+ * same way and whose simctl curl fallback exits with `curlExitCode`.
  */
-async function connectLoopThenFailedRestart(transport: {
-  fetchFailure: () => Error;
-  curlExitCode: number;
-}): Promise<unknown> {
+function stubConnectLoopFailure(transport: { fetchFailure: () => Error; curlExitCode: number }) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => {
@@ -91,13 +98,21 @@ async function connectLoopThenFailedRestart(transport: {
       stderr: `curl exited ${transport.curlExitCode}`,
     })),
   });
-  mockEnsureRunnerSession
-    .mockResolvedValueOnce(makeRunnerSession())
-    .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'runner restart failed'));
   mockExecuteRunnerCommandWithSession.mockImplementationOnce(
     async (device, session, command) =>
       await waitForRunner(device, session.port, command, undefined, 400),
   );
+}
+
+/** A connect loop that fails as `transport` says, then a restart that fails. */
+async function connectLoopThenFailedRestart(transport: {
+  fetchFailure: () => Error;
+  curlExitCode: number;
+}): Promise<unknown> {
+  stubConnectLoopFailure(transport);
+  mockEnsureRunnerSession
+    .mockResolvedValueOnce(makeRunnerSession())
+    .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'runner restart failed'));
   try {
     return await tap();
   } catch (error) {
@@ -105,6 +120,38 @@ async function connectLoopThenFailedRestart(transport: {
     assert.equal(error.details?.runnerRestartReason, 'runner_connect_failed_before_command_send');
     throw error;
   }
+}
+
+/** A fetch deadline, then a simctl curl that timed out after its POST: the command may have run. */
+const writtenThenLost = {
+  fetchFailure: () => new AppError('COMMAND_FAILED', 'Runner command deadline exceeded'),
+  curlExitCode: 28,
+};
+
+/**
+ * `command` is written and its reply lost on the first runner, the runner restarts, and the
+ * restarted runner answers every command with `restartedAnswer`.
+ */
+async function writtenThenLostThenRestarted(
+  command: RunnerCommand,
+  restartedAnswer: () => Promise<Record<string, unknown>>,
+): Promise<Record<string, unknown>> {
+  stubConnectLoopFailure(writtenThenLost);
+  mockEnsureRunnerSession
+    .mockResolvedValueOnce(makeRunnerSession())
+    .mockResolvedValueOnce(makeRunnerSession({ port: 8101 }));
+  mockExecuteRunnerCommandWithSession.mockImplementation(restartedAnswer);
+  try {
+    return await runAppleRunnerCommand(IOS_SIMULATOR, command);
+  } finally {
+    assert.equal(mockEnsureRunnerSession.mock.calls.length, 2, 'the runner is restarted');
+  }
+}
+
+function sendsOnRestartedRunner(): number {
+  return mockExecuteRunnerCommandWithSession.mock.calls.filter(
+    ([, session]) => session.port === 8101,
+  ).length;
 }
 
 const DRIVERS: Record<string, () => Promise<unknown>> = {
@@ -124,11 +171,47 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
         }),
       curlExitCode: 7,
     }),
-  'ios-runner.transport.written-then-lost': () =>
-    connectLoopThenFailedRestart({
-      fetchFailure: () => new AppError('COMMAND_FAILED', 'Runner command deadline exceeded'),
-      curlExitCode: 28,
-    }),
+  'ios-runner.transport.written-then-lost': async () => {
+    const runnerSession =
+      await vi.importActual<typeof import('../runner-session.ts')>('../runner-session.ts');
+    const runner = await startFakeRunnerServer({ tap: [{ kind: 'exit' }] });
+    fakeRunner = runner;
+    // The status probe finds no listener, over fetch or the simctl curl fallback.
+    const { retryWithPolicy } = appleRunnerTestHost.defaults();
+    appleRunnerTestHost.update({
+      runXcrun: vi.fn(async () => ({ exitCode: 7, stdout: '', stderr: 'curl exited 7' })),
+      retryWithPolicy: (task, policy, options) =>
+        retryWithPolicy(task, { ...policy, baseDelayMs: 1, maxDelayMs: 1, jitter: 0 }, options),
+    });
+    mockEnsureRunnerSession.mockResolvedValueOnce(makeRunnerSession({ port: runner.port }));
+    mockExecuteRunnerCommandWithSession.mockImplementation(
+      runnerSession.executeRunnerCommandWithSession,
+    );
+    try {
+      return await tap();
+    } catch (error) {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+      assert.equal(error.details?.recovery, 'status_probe_failed');
+      assert.equal(error.details?.runnerRestarted, undefined, 'the runner is not restarted');
+      throw error;
+    } finally {
+      assert.equal(runner.requests.filter((entry) => entry.command === 'tap').length, 1);
+      assert.deepEqual(
+        mockInvalidateRunnerSession.mock.calls[0]?.[1],
+        'transport_error_after_command_send',
+      );
+    }
+  },
+  'ios-runner.transport.read-only-written-then-lost': async () => {
+    try {
+      return await writtenThenLostThenRestarted({ command: 'snapshot' }, async () => {
+        throw new AppError('COMMAND_FAILED', 'runner resend failed', { dispatched: 'unknown' });
+      });
+    } finally {
+      assert.equal(sendsOnRestartedRunner(), 1, 'the read is sent again');
+    }
+  },
   'ios-runner.pre-send.readiness-preflight-after-restart': async () => {
     mockEnsureRunnerSession
       .mockResolvedValueOnce(makeRunnerSession())
@@ -173,6 +256,61 @@ for (const row of ROWS) {
     });
   });
 }
+
+test('a mutation whose connect-loop POST timed out after writing is not restarted or resent', async () => {
+  stubConnectLoopFailure(writtenThenLost);
+  mockEnsureRunnerSession.mockResolvedValueOnce(makeRunnerSession());
+  mockExecuteRunnerCommandWithSession.mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'status probe failed'),
+  );
+  await assert.rejects(tap(), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.runnerRestarted, undefined);
+    assert.equal(error.details?.dispatched, 'unknown');
+    assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+    assert.equal(error.details?.recovery, 'status_probe_failed');
+    return true;
+  });
+  assert.equal(mockEnsureRunnerSession.mock.calls.length, 1, 'the runner is not restarted');
+  const taps = mockExecuteRunnerCommandWithSession.mock.calls.filter(
+    ([, , command]) => command.command === 'tap',
+  );
+  assert.equal(taps.length, 1, 'the tap is sent once');
+});
+
+test('a mutation whose reply and status probe both fail on transport text is not resent', async () => {
+  mockEnsureRunnerSession.mockResolvedValueOnce(makeRunnerSession());
+  mockExecuteRunnerCommandWithSession
+    .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
+    .mockRejectedValue(new AppError('COMMAND_FAILED', 'connect ECONNREFUSED 127.0.0.1:8100'));
+  await assert.rejects(tap(), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+    assert.equal(error.details?.transportError, 'fetch failed');
+    assert.equal(isRetryableRunnerError(error), false);
+    return true;
+  });
+  const taps = mockExecuteRunnerCommandWithSession.mock.calls.filter(
+    ([, , command]) => command.command === 'tap',
+  );
+  assert.equal(taps.length, 1, 'the tap is sent once');
+});
+
+test('a read whose first POST may have been written and whose restart fails discloses unknown', async () => {
+  stubConnectLoopFailure(writtenThenLost);
+  mockEnsureRunnerSession
+    .mockResolvedValueOnce(makeRunnerSession())
+    .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'runner restart failed'));
+  await assert.rejects(
+    runAppleRunnerCommand(IOS_SIMULATOR, { command: 'snapshot' }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.runnerRestartReason, 'runner_connect_failed_before_command_send');
+      assert.equal(error.details?.dispatched, 'unknown');
+      return true;
+    },
+  );
+});
 
 test('a plain Error before the exchange is normalized and discloses no', async () => {
   mockEnsureRunnerSession.mockRejectedValueOnce(new Error('spawn EACCES'));

@@ -3,6 +3,7 @@ import {
   isRequestCanceledDetails,
   type AppErrorCode,
   type AppErrorDetails,
+  type DispatchDisclosure,
 } from '@agent-device/kernel/errors';
 import {
   isCommandTimeoutError,
@@ -13,7 +14,9 @@ import {
   MAIN_THREAD_TIMEOUT_RUNNER_CODE,
   RUNNER_BUSY_RUNNER_CODE,
   RUNNER_WEDGED_RUNNER_CODE,
+  type RunnerCommand,
 } from './runner-contract.ts';
+import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';
 
 export const RUNNER_CACHE_RECOVERY_HINT =
   'If runner build products look stale or corrupted, run `pnpm clean:xcuitest` in a local checkout, or remove ~/.agent-device/apple-runner/derived, then retry.';
@@ -42,6 +45,13 @@ export function runnerConnectFailureDetails(reason: RunnerConnectFailureReason):
   return { runnerConnectFailureReason: reason };
 }
 
+/**
+ * `details.reason` of a mutation whose reply stayed lost: status recovery found no result and no
+ * runner answer, so nothing proves the command did not run. The command is not resent; the caller
+ * observes the screen before acting again. A read never carries it, because it is resent.
+ */
+export const RUNNER_REPLY_LOST_REASON = 'runner_reply_lost';
+
 type RunnerErrorMatch = {
   /** Required `AppError.code`; absent = any AppError. */
   code?: AppErrorCode;
@@ -69,6 +79,8 @@ type RunnerErrorMatch = {
   details?: RunnerErrorDetailsMatch;
 };
 
+const hasRunnerReplyLostReason: RunnerErrorDetailsMatch = (details) =>
+  details.reason === RUNNER_REPLY_LOST_REASON;
 /**
  * The runner refused the command before running it while abandoned main-thread work drains (#1105).
  * A resend keys on this code, never on `details.retriable`: that flag tells a caller's poll to try
@@ -221,6 +233,18 @@ const PROFILE_UNUSABLE: RunnerErrorRule['buildFailure'] = {
  * typed verdict carries the recovery hint a generic connect failure would replace).
  */
 export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
+  {
+    // A mutation that may have run: no axis may resend or restart it, whatever text it carries.
+    reason: RUNNER_REPLY_LOST_REASON,
+    match: { code: 'COMMAND_FAILED', details: hasRunnerReplyLostReason },
+    verdicts: {
+      retryable: false,
+      drainResend: false,
+      connectRetry: false,
+      restartBeforeSend: false,
+      restartAfterReadinessPreflight: false,
+    },
+  },
   {
     reason: 'usbmux_device_unattached',
     match: { code: 'DEVICE_NOT_FOUND', details: hasUsbmuxDeviceUnattached },
@@ -610,11 +634,21 @@ export function resolveRunnerFatalErrorReason(error: unknown): string | undefine
 }
 
 /**
- * A connect-shaped failure that surfaced before the command was sent: restart
- * the runner session and replay the command, rather than probing a runner
- * that never accepted the connection.
+ * A connect-shaped failure that lets the session restart and resend `command`, rather than probing a
+ * runner that never accepted the connection. The connect loop posts the command on every attempt, so
+ * its failure restarts only when no attempt could have written the command, or when the command is
+ * read-only: a POST that timed out after it was written (simctl curl exit 28) is no proof the
+ * command did not run, and a mutation is never resent on it.
  */
-export function shouldRestartRunnerBeforeCommandSend(error: unknown): boolean {
+export function shouldRestartRunnerBeforeCommandSend(
+  error: unknown,
+  command: RunnerCommand,
+): boolean {
+  if (!isRunnerConnectRefusal(error)) return false;
+  return resolveFirstAttemptDispatch(error) === 'no' || isReadOnlyRunnerCommand(command);
+}
+
+function isRunnerConnectRefusal(error: unknown): boolean {
   return runnerErrorVerdict(error, 'restartBeforeSend') ?? false;
 }
 
@@ -625,7 +659,7 @@ export function shouldRestartRunnerBeforeCommandSend(error: unknown): boolean {
  */
 export function isRunnerPreSendRefusal(error: unknown): boolean {
   return (
-    (shouldRestartRunnerBeforeCommandSend(error) && isRunnerCommandProvablyUnwritten(error)) ||
+    (isRunnerConnectRefusal(error) && isRunnerCommandProvablyUnwritten(error)) ||
     shouldRestartRunnerAfterReadinessPreflight(error) ||
     isRunnerBusyError(error)
   );
@@ -639,6 +673,11 @@ export function isRunnerPreSendRefusal(error: unknown): boolean {
 export function isRunnerCommandProvablyUnwritten(error: unknown): boolean {
   if (error instanceof AppError && error.details?.dispatched === 'no') return true;
   return isConnectionRefused(error, 0);
+}
+
+/** What a failed connect attempt proves about writing the command: `no` only with that proof. */
+export function resolveFirstAttemptDispatch(error: unknown): DispatchDisclosure {
+  return isRunnerCommandProvablyUnwritten(error) ? 'no' : 'unknown';
 }
 
 function isConnectionRefused(error: unknown, depth: number): boolean {

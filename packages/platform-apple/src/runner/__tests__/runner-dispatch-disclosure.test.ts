@@ -10,14 +10,17 @@ import {
 } from '@agent-device/contracts/dispatch-disclosure-fixtures';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { handleRunnerTransportErrorAfterCommandSend } from '../runner-command-recovery.ts';
+import { isReadOnlyRunnerCommand } from '../runner-command-traits.ts';
 import type { RunnerCommand } from '../runner-contract.ts';
 import {
   isRetryableRunnerError,
   isStructuredRunnerFailure,
+  RUNNER_REPLY_LOST_REASON,
 } from '../runner-error-classification.ts';
 import { runApplePressSeries } from '../runner-sequence.ts';
 import { executeRunnerCommandWithSession, type RunnerSession } from '../runner-session.ts';
 import { RunnerCommandAccounting } from '../runner-session-types.ts';
+import { appleRunnerTestHost } from '../test-host.ts';
 import {
   startFakeRunnerServer,
   type FakeRunnerCommandScript,
@@ -66,19 +69,33 @@ async function replyFailure(code: string): Promise<unknown> {
   );
 }
 
-/** The runner hangs up on the command, then answers the status probe with `status`. */
+/**
+ * The runner hangs up on the command, then answers the status probe with `status`. A read goes
+ * through the connect loop, which posts again on each attempt, so the runner hangs up on every
+ * attempt until the loop gives up, and the loop's simctl curl fallback times out after its POST.
+ * The read's short timeout only bounds how long the loop runs.
+ */
 async function lostResponse(
   status: FakeRunnerResponse[],
   command: RunnerCommand = TAP,
 ): Promise<unknown> {
-  server = await startFakeRunnerServer({ tap: [{ kind: 'hangUp' }], status });
+  const readOnly = isReadOnlyRunnerCommand(command);
+  server = await startFakeRunnerServer({
+    [command.command]: [{ kind: readOnly ? 'hangUpAlways' : 'hangUp' }],
+    status,
+  });
+  if (readOnly) {
+    appleRunnerTestHost.update({
+      runXcrun: vi.fn(async () => ({ exitCode: 28, stdout: '', stderr: 'curl exited 28' })),
+    });
+  }
   const session = runnerSession(server.port);
   const transportError = await executeRunnerCommandWithSession(
     IOS_SIMULATOR,
     session,
     command,
     undefined,
-    5_000,
+    readOnly ? 400 : 5_000,
   ).then(
     () => assert.fail('the fake runner hangs up on the command'),
     (error: unknown) => asAppError(error, 'COMMAND_FAILED'),
@@ -175,6 +192,11 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
     lostResponse(statusReply({ lifecycleState: 'failed', lifecycleErrorCode: 'RUNNER_BUSY' })),
   'ios-runner.status.completed-without-retained-reply': () =>
     lostResponse(statusReply({ lifecycleState: 'completed' })),
+  'ios-runner.status.read-only-completed-without-retained-reply': () =>
+    lostResponse(statusReply({ lifecycleState: 'completed' }), {
+      command: 'snapshot',
+      commandId: 'cmd-1',
+    }),
   'ios-runner.status.accepted': () => lostResponse(statusReply({ lifecycleState: 'accepted' })),
   'ios-runner.status.started': () => lostResponse(statusReply({ lifecycleState: 'started' })),
   'ios-runner.status.notAccepted': () =>
@@ -184,6 +206,16 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
   'ios-runner.status.unavailable': () =>
     lostResponse([], { command: 'tap', x: 10, y: 10 } as RunnerCommand),
 };
+
+/** The rows whose mutation's reply stayed lost: each fails as runner_reply_lost and is not resent. */
+const REPLY_LOST_ROWS: ReadonlySet<string> = new Set([
+  'ios-runner.status.completed-without-retained-reply',
+  'ios-runner.status.accepted',
+  'ios-runner.status.started',
+  'ios-runner.status.notAccepted',
+  'ios-runner.status.probe-failed',
+  'ios-runner.status.unavailable',
+]);
 
 const ROWS = dispatchDisclosureRowsOwnedBy(
   import.meta.url,
@@ -201,7 +233,27 @@ for (const row of ROWS) {
     await assert.rejects(drive(), (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.details?.dispatched, row.dispatched);
+      assert.equal(error.details?.reason === RUNNER_REPLY_LOST_REASON, REPLY_LOST_ROWS.has(row.id));
       return true;
     });
   });
 }
+
+const SNAPSHOT: RunnerCommand = { command: 'snapshot', commandId: 'cmd-1' };
+
+test.each([
+  ['the status probe fails', [{ kind: 'runnerError', code: 'COMMAND_FAILED', message: 'down' }]],
+  ['status answers notAccepted', statusReply({ lifecycleState: 'notAccepted' })],
+  ['status answers started', statusReply({ lifecycleState: 'started' })],
+  ['status answers completed with no retained reply', statusReply({ lifecycleState: 'completed' })],
+] as const)(
+  'a read whose reply is lost when %s keeps the transport error it is resent on',
+  async (_, status) => {
+    await assert.rejects(lostResponse([...status], SNAPSHOT), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.notEqual(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+      assert.equal(isRetryableRunnerError(error), true);
+      return true;
+    });
+  },
+);
