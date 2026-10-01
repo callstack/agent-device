@@ -158,13 +158,19 @@ test('a failing status probe retains the invalidation and names the lost reply',
   assert.equal(invalidate.mock.calls.length, 1);
 });
 
-test('a command without an id cannot be probed: invalidate and rethrow', async () => {
+test('a command without an id cannot be probed: invalidate and name the lost reply', async () => {
   const { result, invalidate, transportError } = await runRecovery({
     script: [],
     command: { command: 'tap', x: 10, y: 10 } as RunnerCommand,
   });
 
-  await assert.rejects(result, (error: unknown) => error === transportError);
+  await assert.rejects(result, (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.cause, transportError);
+    assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+    assert.equal(error.details?.recovery, 'status_recovery_unavailable');
+    return true;
+  });
   assert.equal(invalidate.mock.calls.length, 1);
   assert.equal(server?.requests.length, 0);
 });

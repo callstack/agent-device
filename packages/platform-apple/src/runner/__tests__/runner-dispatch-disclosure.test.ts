@@ -9,7 +9,10 @@ import {
   dispatchDisclosureRowsOwnedBy,
 } from '@agent-device/contracts/dispatch-disclosure-fixtures';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
-import { handleRunnerTransportErrorAfterCommandSend } from '../runner-command-recovery.ts';
+import {
+  handleRunnerTransportErrorAfterCommandSend,
+  RUNNER_REPLY_LOST_REASON,
+} from '../runner-command-recovery.ts';
 import { isReadOnlyRunnerCommand } from '../runner-command-traits.ts';
 import type { RunnerCommand } from '../runner-contract.ts';
 import {
@@ -206,6 +209,16 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
     lostResponse([], { command: 'tap', x: 10, y: 10 } as RunnerCommand),
 };
 
+/** The rows whose mutation's reply stayed lost: each fails as runner_reply_lost and is not resent. */
+const REPLY_LOST_ROWS: ReadonlySet<string> = new Set([
+  'ios-runner.status.completed-without-retained-reply',
+  'ios-runner.status.accepted',
+  'ios-runner.status.started',
+  'ios-runner.status.notAccepted',
+  'ios-runner.status.probe-failed',
+  'ios-runner.status.unavailable',
+]);
+
 const ROWS = dispatchDisclosureRowsOwnedBy(
   import.meta.url,
   fs.readFileSync(DISPATCH_DISCLOSURE_TABLE_PATH, 'utf8'),
@@ -222,7 +235,27 @@ for (const row of ROWS) {
     await assert.rejects(drive(), (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.details?.dispatched, row.dispatched);
+      assert.equal(error.details?.reason === RUNNER_REPLY_LOST_REASON, REPLY_LOST_ROWS.has(row.id));
       return true;
     });
   });
 }
+
+const SNAPSHOT: RunnerCommand = { command: 'snapshot', commandId: 'cmd-1' };
+
+test.each([
+  ['the status probe fails', [{ kind: 'runnerError', code: 'COMMAND_FAILED', message: 'down' }]],
+  ['status answers notAccepted', statusReply({ lifecycleState: 'notAccepted' })],
+  ['status answers started', statusReply({ lifecycleState: 'started' })],
+  ['status answers completed with no retained reply', statusReply({ lifecycleState: 'completed' })],
+] as const)(
+  'a read whose reply is lost when %s keeps the transport error it is resent on',
+  async (_, status) => {
+    await assert.rejects(lostResponse([...status], SNAPSHOT), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.notEqual(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+      assert.equal(isRetryableRunnerError(error), true);
+      return true;
+    });
+  },
+);

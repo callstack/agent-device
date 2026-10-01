@@ -194,9 +194,11 @@ producer.
 
 The Apple runner does not resend a mutating command whose first send may have
 run: a restart resends only a command the first attempt provably did not write,
-or a read-only one. A mutation whose runner dies mid-command fails with
-`reason: runner_reply_lost` and `dispatched: unknown` (row
-`ios-runner.transport.written-then-lost`).
+or a read-only one. A mutation whose reply stays lost (the runner dies
+mid-command, or status recovery finds neither a retained result nor a runner
+answer) fails with `reason: runner_reply_lost` and `dispatched: unknown` (row
+`ios-runner.transport.written-then-lost` and the lost-reply `ios-runner.status.*`
+rows). A read keeps its transport error and is resent.
 
 Remaining gaps: a failure before the router's locked scope (session
 resolution, lock acquisition, lease and daemon-policy admission) never reaches
