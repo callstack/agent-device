@@ -42,6 +42,14 @@ function createOpenClient(params: { stateDir: string; session: string; sessionRe
 }
 
 describe('open startup budget', () => {
+  test('open help documents simulator URL dispatch timeout uncertainty', () => {
+    expect(openCommandFacet.text.cliDetail).toContain('simctl openurl is bounded to 20s');
+    expect(openCommandFacet.text.cliDetail).toContain(
+      'details.reason ios-simulator-openurl-timeout',
+    );
+    expect(openCommandFacet.text.cliDetail).toContain('details.dispatched unknown');
+  });
+
   test('open --timeout projects the startup budget onto the daemon request', async () => {
     const parsed = parseArgs(['open', 'Settings', '--timeout', '600000'], { strictFlags: true });
     const stateDir = tempStateDir();

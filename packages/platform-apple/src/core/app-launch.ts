@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { execFailureDetails } from '@agent-device/host-kit/command';
+import { execFailureDetails, isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { ensureHostDirectory, writeHostTextFile } from '@agent-device/host-kit/host-file';
 import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
@@ -16,7 +16,11 @@ import {
   isWebUrl,
   resolveIosDeviceDeepLinkBundleId,
 } from '@agent-device/contracts/command';
-import { IOS_APP_LAUNCH_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from './config.ts';
+import {
+  IOS_APP_LAUNCH_TIMEOUT_MS,
+  IOS_SIMULATOR_OPENURL_TIMEOUT_MS,
+  IOS_SIMULATOR_TERMINATE_TIMEOUT_MS,
+} from './config.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 import { runAppleRunnerCommand } from './runner-client.ts';
 import type { AppleRunnerCommandOptions } from '../runner/index.ts';
@@ -85,7 +89,7 @@ export async function openIosApp(
           await terminateIosSimulatorApp(device, bundleId);
         }
       }
-      await openIosSimulatorUrl(device, explicitUrl, undefined);
+      await openIosSimulatorUrl(device, explicitUrl, undefined, options?.runnerOptions?.signal);
       return;
     }
     const appBundleId = options?.appBundleId ?? (await resolveIosApp(device, app));
@@ -110,7 +114,7 @@ export async function openIosApp(
       throw new AppError('INVALID_ARGS', LAUNCH_CONSOLE_DIRECT_APP_ONLY_MESSAGE);
     }
     if (device.kind === 'simulator') {
-      await openIosSimulatorUrl(device, deepLinkTarget, launchArgs);
+      await openIosSimulatorUrl(device, deepLinkTarget, launchArgs, options?.runnerOptions?.signal);
       return;
     }
     const bundleId = resolveIosDeviceDeepLinkBundleId(options?.appBundleId, deepLinkTarget);
@@ -148,12 +152,32 @@ async function openIosSimulatorUrl(
   device: DeviceInfo,
   url: string,
   launchArgs: string[] | undefined,
+  signal: AbortSignal | undefined,
 ): Promise<void> {
   if (launchArgs && launchArgs.length > 0) {
     throw new AppError('INVALID_ARGS', IOS_SIMULATOR_LAUNCH_ARGS_WITH_URL_MESSAGE);
   }
   await ensureBootedSimulator(device);
-  await runSimctlForDevice(device, ['openurl', device.id, url]);
+  try {
+    await runSimctlForDevice(device, ['openurl', device.id, url], {
+      timeoutMs: IOS_SIMULATOR_OPENURL_TIMEOUT_MS,
+      ...(signal ? { signal } : {}),
+    });
+  } catch (error) {
+    if (!isCommandTimeoutError(error)) throw error;
+    throw new AppError(
+      'COMMAND_FAILED',
+      `iOS Simulator URL open timed out after ${IOS_SIMULATOR_OPENURL_TIMEOUT_MS}ms`,
+      {
+        ...error.details,
+        reason: 'ios-simulator-openurl-timeout',
+        dispatched: 'unknown',
+        timeoutMs: IOS_SIMULATOR_OPENURL_TIMEOUT_MS,
+        hint: 'CoreSimulator did not finish simctl openurl before the local bound; the URL may already have been delivered, so inspect the app state before retrying.',
+      },
+      error,
+    );
+  }
 }
 
 export async function openIosDevice(device: DeviceInfo): Promise<void> {
