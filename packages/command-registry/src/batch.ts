@@ -164,7 +164,7 @@ function batchStepFailure(
       ...(error.supportedOn === undefined ? {} : { supportedOn: error.supportedOn }),
       details: {
         ...(error.details ?? {}),
-        ...(progress.executedSteps.some(stepMutatesApp) ? { dispatched: 'unknown' } : {}),
+        ...(progress.executedSteps.some(stepMayMutateApp) ? { dispatched: 'unknown' } : {}),
         step: stepResponse.step,
         command: step.command,
         positionals: step.positionals,
@@ -176,9 +176,9 @@ function batchStepFailure(
   };
 }
 
-/** A batch that executed a mutating step cannot promise that a resend repeats nothing. */
-function stepMutatesApp(step: NormalizedBatchStep): boolean {
-  return resolveCommandRecordingEffect(step) === 'mutates-app';
+/** A batch reports no only when every executed step is a declared read. */
+function stepMayMutateApp(step: NormalizedBatchStep): boolean {
+  return resolveCommandRecordingEffect(step) !== 'observes-app';
 }
 
 export function validateAndNormalizeBatchSteps(
