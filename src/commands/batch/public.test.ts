@@ -79,3 +79,9 @@ test('batch keeps the refused step verdict when only reads executed before it', 
   assert.equal(response.ok, false);
   if (!response.ok) assert.equal(response.error.details?.dispatched, 'no');
 });
+
+test('batch reports unknown when a step with no declared effect executed before the refused step', async () => {
+  const response = await runBatchFailingAtSecondStep('test', ['flow.ad']);
+  assert.equal(response.ok, false);
+  if (!response.ok) assert.equal(response.error.details?.dispatched, 'unknown');
+});
