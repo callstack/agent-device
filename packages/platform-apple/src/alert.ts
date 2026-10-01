@@ -56,6 +56,16 @@ function runAppleAlert(
     )) as Record<string, unknown>;
 }
 
+/** The alert `read` settles with, or `undefined` when the backend reports a typed absence. */
+export async function alertIfPresent<T>(read: Promise<T>): Promise<T | undefined> {
+  try {
+    return await read;
+  } catch (error) {
+    if (isAlertNotFoundError(error)) return undefined;
+    throw error;
+  }
+}
+
 export async function readAppleAlert(
   device: DeviceInfo,
   runnerOptions: RunnerCallOptions,
@@ -142,7 +152,7 @@ function withAlertFallbackHint(error: unknown): unknown {
  * `details.runnerErrorCode` (it stays `COMMAND_FAILED` on the wire, like `RUNNER_BUSY`); the macOS
  * helper's arrives as `details.reason`, forwarded verbatim from its JSON error envelope.
  */
-export function isAlertNotFoundError(error: unknown): boolean {
+function isAlertNotFoundError(error: unknown): boolean {
   if (!(error instanceof AppError)) return false;
   const details = error.details ?? {};
   return (

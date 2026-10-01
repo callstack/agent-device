@@ -4,7 +4,7 @@ import { invalidRuntimeContract } from '@agent-device/contracts/runtime-contract
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { isAlertNotFoundError } from './alert.ts';
+import { alertIfPresent } from './alert.ts';
 import { resolveIosSimulatorDeepLinkBundleId } from './core/app-resolution.ts';
 
 export const LAUNCH_CONFIRMATION_FOREIGN_APP_REASON = 'launch_confirmation_foreign_app';
@@ -18,7 +18,8 @@ export type LaunchConfirmationTarget = Readonly<{ url: string; appBundleId: stri
 /** The device reads and the answer one launch confirmation needs, bound to the session app. */
 export type LaunchConfirmationPort = Readonly<{
   appBundleId: string;
-  readAlert(): Promise<Record<string, unknown>>;
+  /** The alert on screen, or `undefined` when there is none. */
+  readAlert(): Promise<Record<string, unknown> | undefined>;
   acceptAlert(): Promise<unknown>;
   /** The installed app that owns the launch URL's scheme, when exactly one does. */
   resolveUrlOwner(): Promise<string | undefined>;
@@ -35,10 +36,7 @@ export type LaunchConfirmationPort = Readonly<{
 export async function answerLaunchConfirmation(
   port: LaunchConfirmationPort,
 ): Promise<LaunchConfirmation | undefined> {
-  const alert = await port.readAlert().catch((error: unknown) => {
-    if (!isAlertNotFoundError(error)) reportFailed('alert-read', error);
-    return undefined;
-  });
+  const alert = await port.readAlert().catch(failed('alert-read'));
   if (!alert || !isLaunchConfirmation(alert)) return undefined;
   const owner = await port.resolveUrlOwner().catch(failed('url-owner'));
   if (owner === undefined) {
@@ -95,7 +93,7 @@ export function createLaunchConfirmationPort(
       throw invalidRuntimeContract('Apple interactor has no alert read or accept leg');
     }
     return {
-      read: () => readAlert.call(interactor, target),
+      read: async () => await alertIfPresent(readAlert.call(interactor, target)),
       accept: () => acceptAlert.call(interactor, target),
     };
   };

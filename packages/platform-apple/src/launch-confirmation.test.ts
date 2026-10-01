@@ -40,7 +40,7 @@ function spawnTimeout(): AppError {
 const CONFIRMATION = { message: 'Open in “Example App”?', items: ['Cancel', 'Open'] };
 
 function port(
-  readAlert: () => Promise<Record<string, unknown>>,
+  readAlert: () => Promise<Record<string, unknown> | undefined>,
   legs: Readonly<{
     resolveUrlOwner?: () => Promise<string | undefined>;
     acceptAlert?: () => Promise<unknown>;
@@ -93,13 +93,7 @@ test('a confirmation for a URL another app owns is never accepted, whatever name
 });
 
 test('no alert costs one read and answers nothing', async () => {
-  const {
-    port: device,
-    acceptAlert,
-    resolveUrlOwner,
-  } = port(async () => {
-    throw alertNotFound();
-  });
+  const { port: device, acceptAlert, resolveUrlOwner } = port(async () => undefined);
 
   await expect(answerLaunchConfirmation(device)).resolves.toBeUndefined();
   expect(device.readAlert).toHaveBeenCalledOnce();
@@ -204,4 +198,24 @@ test('the port reads and accepts the alert for the session app and asks the sche
     simulator,
     'example://automation',
   );
+});
+
+test('the port reads a typed absence as no alert and keeps any other failure', async () => {
+  const runnerDown = new AppError('COMMAND_FAILED', 'runner unavailable', {
+    reason: 'runner-start-failed',
+  });
+  const readAlert = vi
+    .fn<() => Promise<Record<string, unknown>>>()
+    .mockRejectedValueOnce(alertNotFound())
+    .mockRejectedValueOnce(runnerDown);
+  const interactor = { readAlert, acceptAlert: vi.fn() } as unknown as Interactor;
+
+  const device = createLaunchConfirmationPort(
+    simulator,
+    { url: 'example://automation', appBundleId: 'com.example.app' },
+    async () => interactor,
+  );
+
+  await expect(device.readAlert()).resolves.toBeUndefined();
+  await expect(device.readAlert()).rejects.toBe(runnerDown);
 });
