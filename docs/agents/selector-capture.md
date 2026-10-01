@@ -23,8 +23,7 @@ These are cross-route behavior requirements; their rationale and owning decision
   or unchanged evidence remains failure.
 - Android helper reuse is not snapshot-result caching. Freshness is short-lived, action-triggered,
   and learned only from route-safe complete observations.
-- The deferred-outcome path never re-sends; Maestro `retryTapIfNoChange` is the flow author's own retry.
-  Post-gesture stabilization runs first and Android freshness recovery composes afterward when
+- Post-gesture stabilization runs first and Android freshness recovery composes afterward when
   required. Gesture-like mutations mark stabilization and disable direct iOS selector shortcuts
   while it is pending.
 - Session snapshot writes go through the shared snapshot mutation boundary. Sparse observations and

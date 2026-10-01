@@ -46,8 +46,7 @@ import type { SessionState } from './session-state.ts';
 /**
  * Mutation-side marking, called once per mutating dispatch after the device op
  * returned. Each marker keeps its own eligibility gate, so callers do not
- * pre-filter — an ineligible action simply marks nothing. The daemon never
- * re-sends the mutation from here: a capture only observes what it produced.
+ * pre-filter — an ineligible action simply marks nothing.
  */
 export type DeferredInteractionOutcomeMark = {
   command: string;

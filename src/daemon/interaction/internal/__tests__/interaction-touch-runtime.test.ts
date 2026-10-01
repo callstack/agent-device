@@ -12,7 +12,7 @@ import { contextFromFlags, makeSession } from './interaction-touch-fixtures.ts';
 
 // What the shared runtime dispatch does with the resolved target: refuse
 // unusable frame evidence rather than recapture positionally (ADR 0014), refuse
-// off-screen targets, and record the ref the caller wrote rather than the point it resolved to.
+// off-screen targets, and record the `@ref` the caller wrote.
 
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
