@@ -267,6 +267,8 @@ test('a mutation whose connect-loop POST timed out after writing is not restarte
     assert.ok(error instanceof AppError);
     assert.equal(error.details?.runnerRestarted, undefined);
     assert.equal(error.details?.dispatched, 'unknown');
+    assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+    assert.equal(error.details?.recovery, 'status_probe_failed');
     return true;
   });
   assert.equal(mockEnsureRunnerSession.mock.calls.length, 1, 'the runner is not restarted');
