@@ -274,6 +274,18 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: true,
   },
   {
+    key: 'snapshotObserveOnly',
+    names: ['--observe-only'],
+    type: 'boolean',
+    usageLabel: '--observe-only',
+    usageDescription:
+      'Snapshot: observe the iOS session app without activation or foreground repair',
+    inputDescription:
+      'iOS only. Refuse instead of activating or repairing the session app. Reports XCUIApplication state, which does not prove screen ownership (#2696).',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'snapshotForceFull',
     names: ['--force-full'],
     type: 'boolean',

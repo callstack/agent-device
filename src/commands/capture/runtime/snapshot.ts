@@ -107,6 +107,9 @@ export const diffSnapshotCommand: RuntimeCommand<
   DiffSnapshotCommandOptions,
   DiffSnapshotCommandResult
 > = async (runtime, options): Promise<DiffSnapshotCommandResult> => {
+  if (options.observeOnly === true) {
+    throw new AppError('INVALID_ARGS', 'observeOnly is supported by snapshot, not diff.');
+  }
   const capture = await captureRuntimeSnapshot(runtime, options);
   const flattenForDiff = options.interactiveOnly === true;
   const previousSnapshot = capture.session?.snapshot;
@@ -168,6 +171,7 @@ async function captureRuntimeSnapshot(
       scope: options.scope,
       raw: options.raw,
       customActions: options.customActions,
+      ...(options.observeOnly === undefined ? {} : { observeOnly: options.observeOnly }),
     },
   );
   const normalizedSnapshot = normalizeBackendSnapshot(result, runtime);

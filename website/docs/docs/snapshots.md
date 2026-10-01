@@ -44,6 +44,36 @@ agent-device snapshot --diff             # Alias for the same diff operation
   path, which the raw diagnostic strategy does not take, so the pair is rejected as `INVALID_ARGS`
   before any device work — on the CLI, the Node client, and MCP alike. Choose one or the other.
 
+## iOS observe-only snapshots
+
+`agent-device snapshot --observe-only --json` reads the bound local iOS app without activation or
+foreground repair. It requires an already-ready runner supporting this policy; it never starts or
+recycles a runner. A non-activating capability probe refuses older/external runners before snapshot
+dispatch. Other platforms, provider-owned sessions, and `--diff` are unsupported.
+
+The runner refuses with `OBSERVATION_UNAVAILABLE` (also named by
+`details.runnerErrorCode`) when the app does not report `runningForeground` before and after capture.
+Missing runner/protocol support is `COMMAND_FAILED` with `details.reason: "observation-unavailable"`.
+It does not substitute SpringBoard or a presented system surface. Successful JSON includes:
+
+```json
+{
+  "observation": {
+    "mode": "observe-only",
+    "activationPerformed": false,
+    "appState": "runningForeground",
+    "appStateSource": "xcuiapplication-state"
+  }
+}
+```
+
+This reports **XCUIApplication state, not verified foreground ownership**: XCTest can report that
+state incorrectly when another app owns the screen ([#2696](https://github.com/callstack/agent-device/issues/2696)).
+Observe-only results never carry `targetActivation`. Regular snapshots retain their existing repair
+and disclosure behavior ([#2682](https://github.com/callstack/agent-device/issues/2682),
+[#2694](https://github.com/callstack/agent-device/issues/2694)). Stronger ownership verification and
+observe-only settle are follow-ups in [#3106](https://github.com/callstack/agent-device/issues/3106).
+
 ## Efficient snapshot usage
 
 - iOS and Android share the same mobile snapshot contract: visible-first output, actionable-now refs, and hidden list content communicated via discovery hints.

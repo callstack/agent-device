@@ -15,6 +15,7 @@ const ROUTED_SNAPSHOT_OPTIONS = {
   depth: true,
   raw: true,
   customActions: true,
+  observeOnly: true,
   includeHiddenContentHints: true,
   preferredBackend: true,
 } as const satisfies Record<RoutedSnapshotOption, true>;

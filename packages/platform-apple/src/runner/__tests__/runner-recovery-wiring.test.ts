@@ -600,6 +600,40 @@ test('an exact-session command never dispatches to a replacement runner', async 
   assert.deepEqual(server.requests, []);
 });
 
+test('observe-only refuses an unavailable runner without creating a session', async () => {
+  await expect(
+    runAppleRunnerCommand(IOS_SIMULATOR, { command: 'snapshot', observeOnly: true }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'observation-unavailable', dispatched: 'no' },
+  });
+  expect(ensureRunnerSessionMock).not.toHaveBeenCalled();
+  expect(invalidateRunnerSessionMock).not.toHaveBeenCalled();
+});
+
+test('observe-only keeps the capability-probed identity when a replacement runner is ready', async () => {
+  server = await startFakeRunnerServer({ snapshot: [{ kind: 'ok', data: {} }] });
+  const replacement = seedSession(server.port);
+  const sessionModule = await import('../runner-session.ts');
+  const liveness = vi.spyOn(sessionModule, 'readRunnerSessionLiveness').mockReturnValue({
+    sessionId: replacement.sessionId,
+    liveness: 'ready',
+  });
+  try {
+    await expect(
+      runAppleRunnerCommand(
+        IOS_SIMULATOR,
+        { command: 'snapshot', observeOnly: true },
+        { expectedRunnerSessionId: `${replacement.sessionId}:capability-probed` },
+      ),
+    ).rejects.toThrow('runner session ownership changed');
+    assert.deepEqual(server.requests, []);
+    expect(invalidateRunnerSessionMock).not.toHaveBeenCalled();
+  } finally {
+    liveness.mockRestore();
+  }
+});
+
 test.each(
   (['accept', 'dismiss'] as const).flatMap((action) =>
     (['accepted', 'started', 'completed'] as const).map((lifecycleState) => ({

@@ -76,7 +76,7 @@ test('snapshot synopsis is generated from its allowed flags', () => {
   assert.equal(schema.usageOverride, undefined);
   assert.equal(
     buildCommandUsage('snapshot', schema),
-    'snapshot [--diff] [-i] [--depth, -d <depth>] [--scope, -s <scope>] [--raw] [--actions] [--force-full] [--timeout <ms>]',
+    'snapshot [--diff] [-i] [--depth, -d <depth>] [--scope, -s <scope>] [--raw] [--actions] [--observe-only] [--force-full] [--timeout <ms>]',
   );
 });
 

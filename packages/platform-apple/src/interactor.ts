@@ -212,6 +212,9 @@ async function captureAppleSnapshot(
   options: SnapshotOptions | undefined,
   runnerOpts: RunnerCallOptions,
 ) {
+  if (options?.observeOnly === true && device.appleOs !== 'ios') {
+    throw new AppError('UNSUPPORTED_OPERATION', 'observe-only snapshot is supported on iOS only.');
+  }
   const helper = isMacOs(device) ? macOsHelperSurface(options?.surface) : undefined;
   if (helper) {
     return await captureMacOsSurfaceSnapshot({ ...options, surface: helper }, options?.signal);
@@ -224,6 +227,13 @@ async function captureAppleRunnerSnapshot(
   options: SnapshotOptions | undefined,
   runnerOpts: RunnerCallOptions,
 ) {
+  const { expectedRunnerSessionId, ...observationPolicy } = await snapshotObservationPolicy(
+    device,
+    options,
+    runnerOpts,
+  );
+  const captureRunnerOpts =
+    expectedRunnerSessionId === undefined ? runnerOpts : { ...runnerOpts, expectedRunnerSessionId };
   const result = readAppleSnapshotResult(
     await withDiagnosticTimer(
       'snapshot_capture',
@@ -236,15 +246,17 @@ async function captureAppleRunnerSnapshot(
             interactiveOnly: options?.interactiveOnly,
             preferredBackend: options?.preferredBackend,
             customActions: options?.customActions,
+            ...observationPolicy,
             depth: options?.depth,
             scope: options?.scope,
             raw: options?.raw,
           },
-          mergeRunnerCallSignal(runnerOpts, options?.signal),
+          mergeRunnerCallSignal(captureRunnerOpts, options?.signal),
         ),
       { backend: 'xctest' },
     ),
   );
+  assertSnapshotObservationResponse(options, result);
   assertReportedRunnerSnapshotNodes(device, options, result);
   const warnings = runnerSnapshotWarnings(result);
   return {
@@ -256,8 +268,44 @@ async function captureAppleRunnerSnapshot(
     ...(result.systemSurface ? { systemSurface: result.systemSurface } : {}),
     ...(result.keyboard ? { keyboard: result.keyboard } : {}),
     ...(result.targetActivation ? { targetActivation: result.targetActivation } : {}),
+    ...(result.observation ? { observation: result.observation } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   };
+}
+
+async function snapshotObservationPolicy(
+  device: DeviceInfo,
+  options: SnapshotOptions | undefined,
+  runnerOpts: RunnerCallOptions,
+): Promise<{ observeOnly?: true; expectedRunnerSessionId?: string }> {
+  if (options?.observeOnly !== true) return {};
+  const capabilities = await runAppleRunnerCommand(
+    device,
+    { command: 'uptime', observeOnly: true },
+    mergeRunnerCallSignal(runnerOpts, options.signal),
+  );
+  if (
+    capabilities.supportsObserveOnlySnapshot !== true ||
+    typeof capabilities.runnerSessionId !== 'string' ||
+    capabilities.runnerSessionId.length === 0
+  ) {
+    throw new AppError('COMMAND_FAILED', 'Runner does not support observe-only snapshots.', {
+      reason: 'observation-unavailable',
+      dispatched: 'no',
+    });
+  }
+  return { observeOnly: true, expectedRunnerSessionId: capabilities.runnerSessionId };
+}
+
+function assertSnapshotObservationResponse(
+  options: SnapshotOptions | undefined,
+  result: AppleRunnerSnapshotResult,
+): void {
+  if (options?.observeOnly !== true) return;
+  if (result.observation && !result.targetActivation) return;
+  throw new AppError('COMMAND_FAILED', 'Runner did not return an observe-only snapshot.', {
+    reason: 'observation-unavailable',
+  });
 }
 
 /**

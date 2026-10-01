@@ -17,7 +17,7 @@ struct SnapshotCaptureTarget {
 /// What snapshot command preparation hands the off-main capture.
 enum SnapshotCommandPreparation {
   case response(Response)
-  case capture(SnapshotCaptureTarget, systemSurface: SystemSurfaceHost?)
+  case capture(SnapshotCaptureTarget, systemSurface: SystemSurfaceHost?, observation: SnapshotObservationPayload?)
 }
 
 /// The target a bounded XCTest probe arms its abandonment penalty with.

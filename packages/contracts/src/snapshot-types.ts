@@ -3,6 +3,7 @@ import type {
   SnapshotState,
   SnapshotOptions,
   SnapshotQualityVerdict,
+  IosSnapshotObservation,
   ScreenshotOverlayRef,
 } from '@agent-device/kernel/snapshot';
 import type { DeviceRotation } from './device-rotation.ts';
@@ -38,6 +39,7 @@ export type BackendSnapshotResult = {
   };
   quality?: SnapshotQualityVerdict;
   warnings?: string[];
+  observation?: IosSnapshotObservation;
 };
 export type BackendSnapshotOptions = SnapshotOptions & {
   includeRects?: boolean;
