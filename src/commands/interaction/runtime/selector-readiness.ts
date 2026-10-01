@@ -178,14 +178,17 @@ async function pollSelectorReadinessOnce(
   if (attempt.resolved?.node.rect) return attempt;
   const quality = attempt.capture.snapshot.snapshotQuality;
   if (isSparseSnapshotQualityVerdict(quality)) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `Selector ${selectorExpression} was not found in a sparse capture; the tree cannot prove it absent`,
-      {
-        reason: INTERACTION_ERROR_REASONS.captureSparse,
-        snapshotQuality: quality,
-        hint: 'Re-run after the screen settles, or capture a snapshot to inspect the tree.',
-      },
+    throw discloseDispatch(
+      new AppError(
+        'COMMAND_FAILED',
+        `Selector ${selectorExpression} was not found in a sparse capture; the tree cannot prove it absent`,
+        {
+          reason: INTERACTION_ERROR_REASONS.captureSparse,
+          snapshotQuality: quality,
+          hint: 'Re-run after the screen settles, or capture a snapshot to inspect the tree.',
+        },
+      ),
+      'no',
     );
   }
   const covered = await detectCoveredSelectorTarget({

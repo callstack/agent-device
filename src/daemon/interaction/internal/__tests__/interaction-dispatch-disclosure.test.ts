@@ -63,9 +63,14 @@ async function routeInteraction(params: InteractionRouteInput) {
 type PressScenario = {
   command?: 'press' | 'get' | 'fill';
   positionals: string[];
+  flags?: Record<string, unknown>;
 };
 
-async function press({ command = 'press', positionals }: PressScenario): Promise<unknown> {
+async function press({
+  command = 'press',
+  positionals,
+  flags = {},
+}: PressScenario): Promise<unknown> {
   const sessionStore = makeSessionStore();
   const session = makeSession('dispatch-disclosure');
   session.snapshot = {
@@ -84,7 +89,7 @@ async function press({ command = 'press', positionals }: PressScenario): Promise
   };
   sessionStore.set(session.name, session);
   const response = await routeInteraction({
-    req: { token: 't', session: session.name, command, positionals, flags: {} },
+    req: { token: 't', session: session.name, command, positionals, flags },
     sessionName: session.name,
     sessionStore,
     contextFromFlags,
@@ -94,9 +99,12 @@ async function press({ command = 'press', positionals }: PressScenario): Promise
   throw new AppError(response.error.code, response.error.message, response.error.details);
 }
 
-async function refusedPress(positionals: string[]): Promise<unknown> {
+async function refusedPress(
+  positionals: string[],
+  flags?: Record<string, unknown>,
+): Promise<unknown> {
   try {
-    return await press({ positionals });
+    return await press({ positionals, flags });
   } finally {
     assert.equal(mockTapPoint.mock.calls.length, 0, 'a refusal must not reach the device');
   }
@@ -108,6 +116,35 @@ async function refusedFill(positionals: string[]): Promise<unknown> {
   } finally {
     assert.equal(mockFillPoint.mock.calls.length, 0, 'a refusal must not reach the device');
   }
+}
+
+/** A press whose readiness wait polls a tree that never lists the selector's target. */
+async function pressWhoseTargetNeverAppears(): Promise<unknown> {
+  const capture = vi.mocked(captureSnapshotWithInteractor);
+  capture.mockResolvedValue({
+    nodes: [
+      {
+        index: 0,
+        type: 'Application',
+        label: 'Example',
+        rect: { x: 0, y: 0, width: 400, height: 800 },
+      },
+    ],
+    backend: 'xctest',
+    producer: 'apple-runner',
+  });
+  try {
+    await refusedPress(['label="Missing"'], { readinessTimeoutMs: 300 });
+  } catch (error) {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, 'selector_not_found');
+    const readiness = error.details?.readiness as { polls: number } | undefined;
+    assert.ok(readiness && readiness.polls >= 2, `expected >=2 polls, got ${readiness?.polls}`);
+    throw error;
+  } finally {
+    capture.mockReset();
+  }
+  assert.fail('expected the press to be refused');
 }
 
 async function pressAfterUnclassifiedTouchFailure(
@@ -207,6 +244,7 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
   'daemon.refusal.ref-not-found': () => refusedPress(['@e9']),
   'daemon.refusal.admission': () => refusedPress([]),
   'daemon.refusal.fill-admission': () => refusedFill(['@e1']),
+  'daemon.refusal.selector-readiness-exhausted': pressWhoseTargetNeverAppears,
   'daemon.unclassified': () => pressAfterUnclassifiedTouchFailure(),
   'daemon.series.swipe-later-repetition-refused': swipeRefusedOnSecondRepetition,
   'daemon.post-dispatch.press-then-foreground-read-refused': pressThenForegroundReadRefused,

@@ -266,6 +266,7 @@ test('press ends the wait at once on a sparse capture with capture_sparse, and n
         readiness: { polls: number; end: string };
       };
       assert.equal(details.reason, 'capture_sparse');
+      assert.equal((error.details as { dispatched?: unknown }).dispatched, 'no');
       assert.equal(details.snapshotQuality.state, 'sparse');
       assert.equal(details.readiness.end, 'sparse');
       assert.ok(Date.now() - startedAt < 1_500, 'a sparse capture must not burn the budget');

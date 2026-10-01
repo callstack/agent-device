@@ -18,6 +18,12 @@
     "dispatched": "no"
   },
   {
+    "id": "daemon.refusal.selector-readiness-exhausted",
+    "producer": "daemon",
+    "trigger": "press with readinessTimeoutMs whose selector target never appears: the readiness wait (pollForSelectorReadiness) spends its budget over two or more polls and refuses with selector_not_found before any backend touch",
+    "dispatched": "no"
+  },
+  {
     "id": "daemon.unclassified",
     "producer": "daemon",
     "trigger": "an interaction failure no producer classified; the seam reads only the failure, never session state",
