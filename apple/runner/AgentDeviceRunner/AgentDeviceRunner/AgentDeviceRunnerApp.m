@@ -422,6 +422,8 @@ static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
 // UIApplicationSceneManifest in Info.plist names this class; a rename must update the manifest.
 @interface AgentDeviceRunnerSceneDelegate : UIResponder <UIWindowSceneDelegate>
 @property(nonatomic, strong) UIWindow *window;
+// Held for the app's lifetime: a window nobody retained would be gone before the test queried it.
+@property(nonatomic, strong) UIWindow *secondWindow;
 @end
 
 @implementation AgentDeviceRunnerSceneDelegate
@@ -441,6 +443,16 @@ static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
 #if TARGET_OS_IOS
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-dismiss-popup-window"]) {
     self.window.accessibilityIdentifier = @"Dismiss popup";
+  }
+  // A second window the app keeps visible, so `app.windows` reports the main window and this one.
+  // Window order is what the resolver walks, and a candidate behind the answer must never be read.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-second-window"]) {
+    UIWindow *second = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
+    second.frame = ((UIWindowScene *)scene).coordinateSpace.bounds;
+    second.accessibilityIdentifier = @"agent-device-second-window";
+    second.rootViewController = [UIViewController new];
+    self.secondWindow = second;
+    [second makeKeyAndVisible];
   }
 #endif
   [self.window makeKeyAndVisible];

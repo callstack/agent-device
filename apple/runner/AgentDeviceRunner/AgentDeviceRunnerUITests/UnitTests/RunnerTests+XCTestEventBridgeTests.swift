@@ -110,14 +110,6 @@ extension RunnerTests {
     XCTAssertEqual(displayID, 99)
   }
 
-  func testFirstUsableWindowSkipsAbsentAndEmptyWindows() {
-    let lit = CGRect(x: 0, y: 0, width: 402, height: 874)
-    XCTAssertEqual(RunnerTests.firstUsableWindowIndex(frames: [lit]), 0)
-    XCTAssertEqual(RunnerTests.firstUsableWindowIndex(frames: [nil, .zero, lit]), 2)
-    XCTAssertNil(RunnerTests.firstUsableWindowIndex(frames: [nil, .zero, nil]))
-    XCTAssertNil(RunnerTests.firstUsableWindowIndex(frames: []))
-  }
-
   func testResolvedScreenHandsBackTheScreenTheResolvedWindowReported() {
     let window = DisplayWindowFixture(frame: CGRect(x: 0, y: 0, width: 951, height: 669), displayID: 3)
     var screen: AnyObject?
