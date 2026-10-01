@@ -12,6 +12,9 @@ export const LAUNCH_CONFIRMATION_FOREIGN_APP_REASON = 'launch_confirmation_forei
 /** SpringBoard's title for a URL it holds until the user confirms the app that will open it. */
 const LAUNCH_CONFIRMATION_TITLE = /^Open in [“"].+[”"]\?$/u;
 
+/** A custom-scheme launch URL SpringBoard may hold for the session app it was checked for. */
+export type LaunchConfirmationTarget = Readonly<{ url: string; appBundleId: string }>;
+
 /** The device reads and the answer one launch confirmation needs, bound to the session app. */
 export type LaunchConfirmationPort = Readonly<{
   appBundleId: string;
@@ -102,8 +105,7 @@ function reportUnanswered(reason: string, data: Record<string, unknown>): void {
 
 export function createLaunchConfirmationPort(
   device: DeviceInfo,
-  appBundleId: string,
-  launchUrl: string,
+  { url, appBundleId }: LaunchConfirmationTarget,
   resolveInteractor: () => Promise<Interactor>,
 ): LaunchConfirmationPort {
   const target = { appBundleId, surface: 'app' } as const;
@@ -122,6 +124,6 @@ export function createLaunchConfirmationPort(
     appBundleId,
     readAlert: async () => await (await alertLegs()).read(),
     acceptAlert: async () => await (await alertLegs()).accept(),
-    resolveUrlOwner: async () => await resolveIosSimulatorDeepLinkBundleId(device, launchUrl),
+    resolveUrlOwner: async () => await resolveIosSimulatorDeepLinkBundleId(device, url),
   });
 }

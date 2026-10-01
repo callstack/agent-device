@@ -25,6 +25,7 @@ import {
   releaseSpeculativeRunner,
 } from './open-policy.ts';
 import type { LaunchObservationPort } from './snapshot-observability.ts';
+import type { LaunchConfirmationTarget } from './launch-confirmation.ts';
 import { isApplePlatform, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { IOS_APP_LAUNCH_TIMEOUT_MS } from './core/config.ts';
@@ -268,8 +269,8 @@ async function answerAppleLaunchConfirmation(
   launchStartedAtMs: number,
   timing: MutableOpenTiming,
 ): Promise<LaunchConfirmation | undefined> {
-  const { appBundleId } = input;
-  if (!launch.confirmationUrl || !appBundleId) return undefined;
+  const { confirmation } = launch;
+  if (!confirmation) return undefined;
   if (timing.postOpenObservation !== 'unobservable') return undefined;
   const budgetMs = IOS_APP_LAUNCH_TIMEOUT_MS - (Date.now() - launchStartedAtMs);
   if (budgetMs <= 0) return undefined;
@@ -278,9 +279,8 @@ async function answerAppleLaunchConfirmation(
   return await answerLaunchConfirmation(
     createLaunchConfirmationPort(
       binding.device,
-      appBundleId,
-      launch.confirmationUrl,
-      async () => await binding.resolveInteractor(input.execution, appBundleId),
+      confirmation,
+      async () => await binding.resolveInteractor(input.execution, confirmation.appBundleId),
     ),
     budgetMs,
   );
@@ -474,14 +474,15 @@ function isUnawaitedPhysicalIosOpen(device: DeviceInfo, input: OpenApplicationIn
 }
 
 /**
- * How the open dispatches its app and launch URL. `confirmationUrl`: the custom-scheme launch URL
- * an iOS Simulator hands to SpringBoard for the session app, which may hold the launch behind an
- * `Open in "<App>"?` confirmation.
+ * How the open dispatches its app and launch URL. `followUpUrl` is how the URL is dispatched;
+ * `confirmation` is whether SpringBoard may hold it, so a direct Simulator launch carries both.
+ * `confirmation`: the custom-scheme launch URL an iOS Simulator hands to SpringBoard for the
+ * session app, which may hold the launch behind an `Open in "<App>"?` confirmation.
  */
 type AppleLaunchPlan = Readonly<{
   positionals: readonly string[];
   followUpUrl?: string;
-  confirmationUrl?: string;
+  confirmation?: LaunchConfirmationTarget;
 }>;
 
 function openLaunchPlan(
@@ -492,24 +493,22 @@ function openLaunchPlan(
   const url = input.runtimeLaunchUrl?.trim();
   const target = input.positionals.length === 1 ? input.positionals[0]?.trim() : undefined;
   if (!url || !target || isDeepLinkTarget(target)) return { positionals: input.positionals };
-  const confirmation = isConfirmableLaunchUrl(device, input, url) ? { confirmationUrl: url } : {};
+  const confirmation = confirmableLaunchUrl(device, input.appBundleId, url);
+  const confirmable = confirmation ? { confirmation } : {};
   if (foldLaunchUrl && !isDirectAppLaunch(input)) {
-    return { positionals: [target, url], ...confirmation };
+    return { positionals: [target, url], ...confirmable };
   }
-  return { positionals: input.positionals, followUpUrl: url, ...confirmation };
+  return { positionals: input.positionals, followUpUrl: url, ...confirmable };
 }
 
-function isConfirmableLaunchUrl(
+function confirmableLaunchUrl(
   device: DeviceInfo,
-  input: OpenApplicationInput,
+  appBundleId: string | undefined,
   url: string,
-): boolean {
-  return (
-    device.appleOs === 'ios' &&
-    device.kind === 'simulator' &&
-    input.appBundleId !== undefined &&
-    !isWebUrl(url)
-  );
+): LaunchConfirmationTarget | undefined {
+  if (device.appleOs !== 'ios' || device.kind !== 'simulator') return undefined;
+  if (appBundleId === undefined || isWebUrl(url)) return undefined;
+  return { url, appBundleId };
 }
 
 function isDirectAppLaunch(input: OpenApplicationInput): boolean {

@@ -193,8 +193,7 @@ test('the port reads and accepts the alert for the session app and asks the sche
 
   const device = createLaunchConfirmationPort(
     simulator,
-    'com.example.app',
-    'example://automation',
+    { url: 'example://automation', appBundleId: 'com.example.app' },
     async () => interactor,
   );
   await device.readAlert();
