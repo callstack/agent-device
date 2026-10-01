@@ -40,6 +40,8 @@
     "!packages/selectors/src/**/*.test.ts",
     "!packages/selectors/src/internal/__tests__/**",
     "packages/ad-script/src/internal/target-annotation-serde.ts",
-    "packages/capture-kit/src/snapshot-occlusion.ts"
+    "packages/capture-kit/src/snapshot-occlusion.ts",
+    "packages/capture-kit/src/snapshot-chrome-kind.ts",
+    "packages/capture-kit/src/snapshot-sibling-sized-chrome.ts"
   ]
 }
