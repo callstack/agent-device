@@ -9,10 +9,9 @@ import {
   assertElementText,
   assertElementTextAfterScrolling,
   assertJsonContains,
-  assertLaunchConfirmationAnswered,
   assertWaitText,
-  DEEP_LINK_DESTINATION_WAIT_MS,
 } from './live-assertions.ts';
+import { waitForDeepLinkDestination } from './live-deep-link-destination.ts';
 import { clearStateLaunchUrlMaestroFlow } from './live-fixtures.ts';
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
 
@@ -85,7 +84,7 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   verifyCommand(context, C.open, 'cold launch exposes the fixture UI through snapshot and wait');
 
   await openAutomationDeepLink(context, 'cold launch fixture through a deep link');
-  await assertWaitText(context, 'Automation lab', { timeoutMs: DEEP_LINK_DESTINATION_WAIT_MS });
+  await waitForDeepLinkDestination(context, ['text', 'Automation lab']);
   await assertElementText(context, 'id="automation-event-name"', 'cold.start');
   await assertElementText(context, 'id="automation-event-payload"', '{"source":"deep-link"}');
   await assertClearStateLaunchUrl(context);
@@ -253,12 +252,11 @@ async function assertClearStateLaunchUrl(context: LiveContext): Promise<void> {
 }
 
 async function openAutomationDeepLink(context: LiveContext, step: string): Promise<void> {
-  const opened = await runStep(context, step, [
+  await runStep(context, step, [
     'open',
     context.appId,
     '--relaunch',
     '--launch-url',
     AUTOMATION_DEEP_LINK,
   ]);
-  assertLaunchConfirmationAnswered(opened);
 }
