@@ -73,27 +73,16 @@ extension RunnerTests {
   }
 
   extension RunnerTests {
-    /// #2995, measured against live `XCUIApplication`/`XCUIElement` objects. The resolver used to fetch
-    /// a frame for every window the app reported before picking the first usable one, so a trailing
-    /// candidate — typically a keyboard or overlay window — could disappear between its `exists` answer
-    /// and its `frame` fetch. XCTest records that as a stale-element issue, and an issue `record(_:)`
-    /// does not mute turns an otherwise ok interaction into `XCTEST_RECORDED_FAILURE` and ends the
-    /// long-lived runner session (ADR 0004, ADR 0005). The frame such a read produced was discarded
-    /// either way, so the resolver now stops at the first window that qualifies.
-    ///
-    /// Reads are counted rather than matched by identity: which window `XCUIApplication.windows`
-    /// reports first is XCTest's to choose, and the property is that the first answer is the last read.
+    /// #2995: resolving a window must read the window it books and nothing behind it. Reads are
+    /// counted rather than matched by identity because which window `XCUIApplication.windows` reports
+    /// first is XCTest's to choose; the property is that the first answer is the last read.
     @MainActor
     func testRunnerWindowResolutionStopsReadingAtTheWindowItChose() throws {
       let outcome = try resolveRunnerWindowAgainstTwoWindows(
         answering: [RunnerWindowFrameReads.usableFrame]
       )
       XCTAssertNotNil(outcome.resolved.window, "an app with two usable windows resolves one of them")
-      XCTAssertEqual(
-        outcome.reads,
-        1,
-        "the second window was still read, which is the fetch that recorded the failure"
-      )
+      XCTAssertEqual(outcome.reads, 1, "a window behind the chosen one was read")
     }
 
     /// The closest negative, so the single read above cannot pass because the resolver never looked at
@@ -121,6 +110,14 @@ extension RunnerTests {
         outcome.reads,
         3,
         "the walk gives up only after asking both windows, and the fallback's own app.frame read is the third"
+      )
+      // `XCUIApplication` declares no `frame` of its own, so the third read is the same swizzled
+      // `XCUIElement` getter and the fallback frame is the probe's answer. A real app frame here would
+      // mean the fallback reads geometry the probe never saw.
+      XCTAssertEqual(
+        outcome.resolved.frame,
+        .zero,
+        "the app.frame fallback goes through the same read as a window's"
       )
     }
 

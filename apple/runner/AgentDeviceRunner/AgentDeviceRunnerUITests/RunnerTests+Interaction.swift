@@ -225,12 +225,10 @@ extension RunnerTests {
   /// Synthesized gestures route their display ID through the returned window so the record's
   /// display can never name a different window than the one the reference frame was measured on.
   ///
-  /// Stops at the first qualifying window: a later candidate cannot change which window is first, and
-  /// a read is not free. A transient window — a keyboard, an overlay — that disappears between its
-  /// `exists` answer and its `frame` fetch makes XCTest record a stale-element issue, and an issue
-  /// `record(_:)` does not mute turns an otherwise ok interaction into `XCTEST_RECORDED_FAILURE` and
-  /// ends the long-lived runner session (ADR 0004, ADR 0005). The frame such a read produced was one
-  /// this resolver discards anyway (#2995).
+  /// Stops at the first qualifying window. Reading a window that will be discarded is not free: a
+  /// transient candidate that disappears between its `exists` answer and its `frame` fetch makes
+  /// XCTest record an issue, and an issue `record(_:)` does not mute ends the runner session
+  /// (ADR 0004, ADR 0005, #2995).
   ///
   /// The read that remains is not atomic: a window vanishing while it is the one being resolved still
   /// records, and the chosen window is read again on its way to a display ID
