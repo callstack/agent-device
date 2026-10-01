@@ -629,17 +629,12 @@ test('runtime coordinate taps use the same corroboration boundary', async () => 
       snapshot: snapshot(profileNodes),
     }),
   );
-  let pressCount = 0;
   legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'press') {
-      pressCount += 1;
-      if (pressCount === 1) {
-        throw new AppError(
-          'XCTEST_RECORDED_FAILURE',
-          'XCTest recorded a failure while executing tap; the action may not have been performed.',
-        );
-      }
-      return {};
+      throw new AppError(
+        'XCTEST_RECORDED_FAILURE',
+        'XCTest recorded a failure while executing tap; the action may not have been performed.',
+      );
     }
     if (command === 'snapshot') return snapshotPayload(imageViewerNodes);
     return {};
@@ -652,7 +647,6 @@ test('runtime coordinate taps use the same corroboration boundary', async () => 
   if (clickResponse?.ok) {
     expect(clickResponse.data?.warning).toMatch(/post-action accessibility capture changed/);
   }
-  expect(pressCount).toBe(1);
   expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
 });
 

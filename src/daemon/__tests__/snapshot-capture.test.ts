@@ -126,12 +126,20 @@ test('captureSnapshot composes post-gesture stabilization with Android freshness
     .mockResolvedValueOnce(androidCapture(changedNodes, { rawNodeCount: 18, maxDepth: 1 }))
     .mockResolvedValueOnce(androidCapture(changedNodes, { rawNodeCount: 18, maxDepth: 1 }));
 
-  const result = await captureSnapshot({
-    device: androidDevice,
-    session,
-    flags: { snapshotInteractiveOnly: true },
-    logPath: '/tmp/daemon.log',
-  });
+  vi.useFakeTimers();
+  let result: Awaited<ReturnType<typeof captureSnapshot>>;
+  try {
+    const pending = captureSnapshot({
+      device: androidDevice,
+      session,
+      flags: { snapshotInteractiveOnly: true },
+      logPath: '/tmp/daemon.log',
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    result = await pending;
+  } finally {
+    vi.useRealTimers();
+  }
 
   expect(result.snapshot.nodes).toEqual(
     expect.arrayContaining([expect.objectContaining({ label: 'album-0' })]),
