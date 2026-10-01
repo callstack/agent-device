@@ -3,12 +3,6 @@ import { centerOfRect } from '@agent-device/kernel/snapshot';
 import { areRectsApproximatelyEqual, normalizeRect } from '@agent-device/kernel/rect-center';
 import { containsPoint } from '@agent-device/kernel/rect';
 import { normalizeType, isViewportRootNode } from '@agent-device/contracts/snapshot';
-import {
-  collectSiblingChromeNeighbourhood,
-  isSiblingSizedChromeContainer,
-  type SiblingChromeNeighbourhood,
-} from './snapshot-sibling-sized-chrome.ts';
-import { isViewportChromeNode } from './snapshot-chrome-kind.ts';
 
 const COVERED_PRESENTATION_HINT = 'covered';
 const OVERLAY_KIND_FRAGMENTS = [
@@ -23,6 +17,7 @@ const OVERLAY_KIND_FRAGMENTS = [
   'popover',
   'menu',
 ];
+const VIEWPORT_CHROME_KIND_FRAGMENTS = ['tabbar', 'toolbar', 'navigationbar'];
 const SEMANTIC_TOUCH_KIND_FRAGMENTS = [
   'button',
   'link',
@@ -56,10 +51,29 @@ const SEMANTIC_TOUCH_KIND_FRAGMENTS = [
 type OcclusionScan = {
   nodes: readonly RawSnapshotNode[];
   byIndex: Map<number, RawSnapshotNode>;
-  chromeNeighbourhood: SiblingChromeNeighbourhood;
+  neighbourhood: NeighbourhoodIndex;
   overlayPositions: number[];
   coverCache: Map<number, RawSnapshotNode | null>;
 };
+
+/** One-tree context for classifying a node's neighbours without rescanning the whole snapshot. */
+type NeighbourhoodIndex = {
+  byIndex: Map<number, RawSnapshotNode>;
+  childrenByParent: Map<number, RawSnapshotNode[]>;
+};
+
+function collectNeighbourhoodIndex(nodes: readonly RawSnapshotNode[]): NeighbourhoodIndex {
+  const byIndex = new Map<number, RawSnapshotNode>();
+  const childrenByParent = new Map<number, RawSnapshotNode[]>();
+  for (const node of nodes) {
+    byIndex.set(node.index, node);
+    if (typeof node.parentIndex !== 'number') continue;
+    const siblings = childrenByParent.get(node.parentIndex);
+    if (siblings) siblings.push(node);
+    else childrenByParent.set(node.parentIndex, [node]);
+  }
+  return { byIndex, childrenByParent };
+}
 
 export type SnapshotOcclusionOptions = {
   /** Backend-declared overlay roots that use the shared geometric scan (for example Android IME). */
@@ -77,19 +91,19 @@ export function annotateCoveredSnapshotNodes(
 ): RawSnapshotNode[] {
   if (nodes.length < 2) return nodes;
 
-  const byIndex = new Map(nodes.map((node) => [node.index, node]));
-  const chromeNeighbourhood = collectSiblingChromeNeighbourhood(nodes);
+  const neighbourhood = collectNeighbourhoodIndex(nodes);
+  const byIndex = neighbourhood.byIndex;
   const scan: OcclusionScan = {
     nodes,
     byIndex,
-    chromeNeighbourhood,
+    neighbourhood,
     // Mutation-lane note: replacing the `[]` (non-overlay) branch with a
     // non-empty placeholder would only add extra, non-numeric entries to
     // this array; every consumer treats it as a plain array of positions to
     // compare/index with, so a stray non-numeric entry is inert (fails the
     // comparison, indexes to `undefined`) rather than observable.
     overlayPositions: nodes.flatMap((node, position) =>
-      isOverlayLikeNode(node, byIndex, chromeNeighbourhood, options) ? [position] : [],
+      isOverlayLikeNode(node, neighbourhood, options) ? [position] : [],
     ),
     coverCache: new Map(),
   };
@@ -229,12 +243,7 @@ function visibleCoverRect(
   options: SnapshotOcclusionOptions,
 ): Rect | null {
   const candidate = scan.nodes[candidatePosition];
-  if (
-    !candidate ||
-    !isOverlayLikeNode(candidate, scan.byIndex, scan.chromeNeighbourhood, options)
-  ) {
-    return null;
-  }
+  if (!candidate || !isOverlayLikeNode(candidate, scan.neighbourhood, options)) return null;
   if (areRelatedSnapshotNodes(target, candidate, scan.byIndex)) return null;
   const candidateRect = positiveRect(candidate.rect);
   if (!candidateRect || areRectsApproximatelyEqual(targetRect, candidateRect)) return null;
@@ -259,19 +268,50 @@ function isCandidateTouchNode(node: RawSnapshotNode): boolean {
 // node.
 function isOverlayLikeNode(
   node: RawSnapshotNode,
-  byIndex: Map<number, RawSnapshotNode>,
-  chromeNeighbourhood: SiblingChromeNeighbourhood,
+  neighbourhood: NeighbourhoodIndex,
   options: SnapshotOcclusionOptions,
 ): boolean {
   if (!positiveRect(node.rect)) return false;
   if (isViewportRootNode(node)) return false;
-  if (isFullViewportChromeContainer(node, byIndex)) return false;
-  if (isSiblingSizedChromeContainer(node, chromeNeighbourhood)) return false;
+  if (isFullViewportChromeContainer(node, neighbourhood.byIndex)) return false;
+  if (isSiblingSizedChromeContainer(node, neighbourhood)) return false;
   // This is a presentation-order heuristic: only known floating UI chrome should cover
   // later targets. Generic hittable containers can appear later without being visually on top.
   return (
     nodeKindIncludesAny(node, OVERLAY_KIND_FRAGMENTS) ||
-    isAdditionalOverlayRootNode(node, byIndex, options)
+    isAdditionalOverlayRootNode(node, neighbourhood.byIndex, options)
+  );
+}
+
+/**
+ * A chrome container published with exactly the frame of a sibling reports that sibling's footprint
+ * rather than a surface drawn over it: such a container is a host that paints nothing itself, and
+ * everything it really draws is a descendant with its own smaller rect that this scan judges on its
+ * own. `isFullViewportChromeContainer` reaches this verdict only for a container sized to the
+ * viewport root, so a container stopping short of it condemned content on both sides — a bottom-bar
+ * container matching the 812pt content branch beside it marked that branch's 36 nodes and the bar's
+ * own navigation bar, and a tab-bar badge container matching the platter content view beside it
+ * marked every tab (#2996).
+ *
+ * Only the chrome kinds qualify: a `dialog`/`sheet`/`alert` sized to the content around it is a real
+ * presentation over that content and keeps covering.
+ */
+// Mutation-lane note: the `typeof parentIndex` and `!rect` guards below are provably
+// redundant — with no parent index the sibling lookup finds nothing and answers "not
+// sibling-sized" on its own, and a rect-less node fails `areRectsApproximatelyEqual`,
+// which is the same answer the guard gives. They state the preconditions rather than
+// enforce them.
+function isSiblingSizedChromeContainer(
+  node: RawSnapshotNode,
+  neighbourhood: NeighbourhoodIndex,
+): boolean {
+  if (!nodeKindIncludesAny(node, VIEWPORT_CHROME_KIND_FRAGMENTS)) return false;
+  if (typeof node.parentIndex !== 'number') return false;
+  const rect = positiveRect(node.rect);
+  if (!rect) return false;
+  const siblings = neighbourhood.childrenByParent.get(node.parentIndex) ?? [];
+  return siblings.some(
+    (sibling) => sibling.index !== node.index && areRectsApproximatelyEqual(rect, sibling.rect),
   );
 }
 
@@ -279,7 +319,7 @@ function isFullViewportChromeContainer(
   node: RawSnapshotNode,
   byIndex: Map<number, RawSnapshotNode>,
 ): boolean {
-  if (!isViewportChromeNode(node)) return false;
+  if (!nodeKindIncludesAny(node, VIEWPORT_CHROME_KIND_FRAGMENTS)) return false;
   const rect = positiveRect(node.rect);
   if (!rect) return false;
 

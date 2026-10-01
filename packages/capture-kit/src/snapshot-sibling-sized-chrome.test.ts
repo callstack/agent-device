@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import { annotateCoveredSnapshotNodes } from './snapshot-occlusion.ts';
-import {
-  collectSiblingChromeNeighbourhood,
-  isSiblingSizedChromeContainer,
-} from './snapshot-sibling-sized-chrome.ts';
 
+// The sibling-sized-chrome family of `snapshot-occlusion.test.ts`: every test here drives the rule
+// through `annotateCoveredSnapshotNodes`, which owns it as a private classification step. The rule
+// stays inside that module because the eager-closure gate (#1739, ADR-0019) forbids a new module in
+// the closure of a published entry surface, and `snapshot-occlusion.ts` is one.
+//
 // #2996: on iOS 26/27 UIKit hosts a bottom tab bar in a `_UIFloatingBarContainerView` (published as
 // `type: 'Toolbar'`) that is a SIBLING of the tab screen's content branch under the same layout
 // container, sized to that branch's frame. The reporter's capture shows `0,0,402,791` beside a
@@ -32,6 +33,8 @@ type NodeSpec = {
 const VIEWPORT: Rect = { x: 0, y: 0, width: 402, height: 874 };
 const BRANCH: Rect = { x: 0, y: 0, width: 402, height: 791 };
 const TARGET: Rect = { x: 151, y: 74, width: 100, height: 32 };
+/** A chrome container 60pt short of the branch: matches neither the sibling nor the viewport. */
+const SHORTER_CHROME: Rect = { x: 0, y: 0, width: 402, height: 731 };
 
 function node(spec: NodeSpec): RawSnapshotNode {
   return {
@@ -52,6 +55,8 @@ type ChromeHostDeltas = {
   chromeRect?: Rect;
   /** UIKit class published in `role` beside `type: 'Toolbar'`; omit for the runner shape. */
   chromeRole?: string;
+  /** AX subrole carrying the kind, for the publication that names neither type nor role. */
+  chromeSubrole?: string;
   /** Frame of the content branch; the chrome container's default is to match it. */
   branchRect?: Rect;
   /** Frame of the target button inside the content branch. */
@@ -63,9 +68,9 @@ type ChromeHostDeltas = {
 
 /**
  * Application > Window > layout container holding the content branch (with one button inside) and
- * the chrome container as listed siblings; `TARGET` sits inside the branch. Both published iOS
- * producer shapes are covered by `chromeRole`: the AX bridge names the UIKit class, the runner
- * leaves `type: 'Toolbar'` alone.
+ * the chrome container as listed siblings; `TARGET` sits inside the branch. The `chrome*` kind fields
+ * cover each published iOS producer shape: the AX bridge names the UIKit class in `role` or `subrole`,
+ * the runner leaves `type: 'Toolbar'` alone.
  */
 function chromeHostTree(deltas: ChromeHostDeltas = {}): RawSnapshotNode[] {
   const branchRect = deltas.branchRect ?? BRANCH;
@@ -76,6 +81,7 @@ function chromeHostTree(deltas: ChromeHostDeltas = {}): RawSnapshotNode[] {
     depth: 3,
     type: deltas.chromeType ?? 'Toolbar',
     ...(deltas.chromeRole === undefined ? {} : { role: deltas.chromeRole }),
+    ...(deltas.chromeSubrole === undefined ? {} : { subrole: deltas.chromeSubrole }),
     label: deltas.chromeLabel ?? 'Toolbar',
     rect: chromeRect,
     hittable: true,
@@ -129,22 +135,15 @@ function targetVerdict(nodes: RawSnapshotNode[]): RawSnapshotNode | undefined {
 
 test("a chrome container sized to its content sibling branch does not cover that branch's targets (#2996)", () => {
   // The reporter's capture: the container is 791pt tall, matching the content branch beside it and
-  // stopping 83pt short of the 874pt viewport the existing exemption keys on.
+  // stopping 83pt short of the 874pt viewport the existing exemption keys on. The four publications
+  // of the chrome kind are pinned by the table below, so this pins the geometry and the target's own
+  // readback.
   const annotated = targetVerdict(
-    chromeHostTree({
-      branchRect: BRANCH,
-      chromeRole: '_UIFloatingBarContainerView',
-    }),
+    chromeHostTree({ branchRect: BRANCH, chromeRole: '_UIFloatingBarContainerView' }),
   );
 
   assert.equal(annotated?.interactionBlocked, undefined);
   assert.equal(annotated?.hittable, true);
-});
-
-test('the same content stays actionable when the container is published without a UIKit class name (#2996 runner shape)', () => {
-  // The runner path publishes the same container as a bare `Toolbar` with no `role`, so the kind
-  // match must not depend on the private class name.
-  assert.equal(targetVerdict(chromeHostTree())?.interactionBlocked, undefined);
 });
 
 test('a control the exempt container really hosts still covers what it overlaps (#2996)', () => {
@@ -395,70 +394,37 @@ test('the captured system-app bottom-bar container stops condemning the content 
   );
 });
 
-test('the predicate keys on the viewport-chrome kinds matched across type, role, and subrole', () => {
-  const neighbourhood = (nodes: RawSnapshotNode[]) => collectSiblingChromeNeighbourhood(nodes);
-  const sibling = node({ index: 1, parentIndex: 0, depth: 1, type: 'Other', rect: BRANCH });
-  const chromeAt = (candidate: NodeSpec): boolean =>
-    isSiblingSizedChromeContainer(
-      node(candidate),
-      neighbourhood([
-        node({ index: 0, depth: 0, type: 'Application', rect: VIEWPORT }),
-        sibling,
-        node(candidate),
-      ]),
+type ChromeKindPublication = {
+  name: string;
+  chromeType: string;
+  chromeRole?: string;
+  chromeSubrole?: string;
+};
+
+// The iOS producers publish the same container three ways: the runner path leaves `type: 'Toolbar'`
+// alone, the AX bridge names the UIKit class in `role`, and a subrole-only shape appears where the
+// bridge publishes only the AX role. Each pair below pins both directions for one publication, so a
+// kind read that stopped consulting a field would fail that publication's exemption case while its
+// offset case stays `covered`.
+const CHROME_KIND_PUBLICATIONS: ChromeKindPublication[] = [
+  { name: 'type only (runner shape)', chromeType: 'Toolbar' },
+  { name: 'UIKit class in role', chromeType: 'Toolbar', chromeRole: '_UIFloatingBarContainerView' },
+  { name: 'class in role beside a generic type', chromeType: 'Other', chromeRole: 'UITabBar' },
+  { name: 'subrole only', chromeType: 'Other', chromeSubrole: 'AXToolbar' },
+];
+
+test.for(CHROME_KIND_PUBLICATIONS)(
+  'the exemption reads the chrome kind from the $name publication (#2996)',
+  ({ chromeType, chromeRole, chromeSubrole }) => {
+    const published = { chromeType, chromeRole, chromeSubrole };
+    assert.equal(targetVerdict(chromeHostTree(published))?.interactionBlocked, undefined);
+
+    // Non-vacuity for this publication: with the frame 60pt short of the branch it matches neither
+    // the sibling nor the viewport, so the same node is ordinary covering chrome.
+    assert.equal(
+      targetVerdict(chromeHostTree({ ...published, chromeRect: SHORTER_CHROME }))
+        ?.interactionBlocked,
+      'covered',
     );
-  const chrome = (over: Partial<NodeSpec>): NodeSpec => ({
-    index: 2,
-    parentIndex: 0,
-    depth: 1,
-    type: 'Toolbar',
-    rect: BRANCH,
-    ...over,
-  });
-
-  assert.equal(chromeAt(chrome({})), true);
-  assert.equal(
-    chromeAt(chrome({ type: 'Other', role: 'UITabBar' })),
-    true,
-    'role carries the kind',
-  );
-  assert.equal(
-    chromeAt(chrome({ type: 'Other', subrole: 'AXToolbar' })),
-    true,
-    'subrole carries the kind',
-  );
-  assert.equal(chromeAt(chrome({ type: 'Dialog' })), false);
-  assert.equal(
-    chromeAt(chrome({ parentIndex: undefined })),
-    false,
-    'a parentless node has no siblings',
-  );
-  assert.equal(
-    chromeAt(chrome({ rect: { x: 0, y: 0, width: 0, height: 0 } })),
-    false,
-    'a degenerate frame is not a host footprint',
-  );
-  // `type: 'Tab'` + `role: 'Bar'` must read as "tab bar", never the joined `tabbar` fragment.
-  assert.equal(chromeAt(chrome({ type: 'Tab', role: 'Bar' })), false);
-});
-
-test('the neighbourhood index groups children by parent and ignores parentless nodes', () => {
-  const nodes = [
-    node({ index: 0, depth: 0, type: 'Application', rect: VIEWPORT }),
-    node({ index: 1, parentIndex: 0, depth: 1, type: 'Other', rect: BRANCH }),
-    node({ index: 2, parentIndex: 0, depth: 1, type: 'Other', rect: BRANCH }),
-    node({ index: 3, parentIndex: 1, depth: 2, type: 'Other', rect: BRANCH }),
-  ];
-  const neighbourhood = collectSiblingChromeNeighbourhood(nodes);
-
-  assert.deepEqual(
-    [...neighbourhood.childrenByParent.entries()].map(([parent, children]) => [
-      parent,
-      children.map((child) => child.index),
-    ]),
-    [
-      [0, [1, 2]],
-      [1, [3]],
-    ],
-  );
-});
+  },
+);
