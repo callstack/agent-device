@@ -255,11 +255,11 @@ async function dispatchAppleLaunchUrl(
 }
 
 /**
- * One alert read, spent only when the launch handed SpringBoard a URL it may hold behind a
- * confirmation and the host AX bridge then read the launched app as unobservable, the state a
- * system surface over the app leaves. An observed app, or a bridge that could not observe at all,
- * is not covered, so its open never reaches the runner. The read runs within what is left of the
- * launch budget, and the runner it needs is recorded as the open's demand.
+ * One launch confirmation answer, spent only when the launch handed SpringBoard a URL it may hold
+ * behind a confirmation and the host AX bridge then read the launched app as unobservable, the
+ * state a system surface over the app leaves. An observed app, or a bridge that could not observe
+ * at all, is not covered, so its open never reaches the runner. The answer runs within what is
+ * left of the launch budget, and the runner it needs is recorded as the open's demand.
  */
 async function answerAppleLaunchConfirmation(
   binding: BoundAppleInteractor,
@@ -268,15 +268,20 @@ async function answerAppleLaunchConfirmation(
   launchStartedAtMs: number,
   timing: MutableOpenTiming,
 ): Promise<LaunchConfirmation | undefined> {
-  if (!launch.confirmable || !input.appBundleId) return undefined;
+  const { appBundleId } = input;
+  if (!launch.confirmationUrl || !appBundleId) return undefined;
   if (timing.postOpenObservation !== 'unobservable') return undefined;
   const budgetMs = IOS_APP_LAUNCH_TIMEOUT_MS - (Date.now() - launchStartedAtMs);
   if (budgetMs <= 0) return undefined;
   timing.runnerDemand = 'required';
   const { answerLaunchConfirmation, createLaunchConfirmationPort } = await loadLaunchConfirmation();
-  const interactor = await binding.resolveInteractor(input.execution, input.appBundleId);
   return await answerLaunchConfirmation(
-    createLaunchConfirmationPort(binding.device, input.appBundleId, interactor),
+    createLaunchConfirmationPort(
+      binding.device,
+      appBundleId,
+      launch.confirmationUrl,
+      async () => await binding.resolveInteractor(input.execution, appBundleId),
+    ),
     budgetMs,
   );
 }
@@ -469,14 +474,14 @@ function isUnawaitedPhysicalIosOpen(device: DeviceInfo, input: OpenApplicationIn
 }
 
 /**
- * How the open dispatches its app and launch URL. `confirmable`: an iOS Simulator hands a
- * custom-scheme launch URL for the session app to SpringBoard, which may hold the launch behind an
+ * How the open dispatches its app and launch URL. `confirmationUrl`: the custom-scheme launch URL
+ * an iOS Simulator hands to SpringBoard for the session app, which may hold the launch behind an
  * `Open in "<App>"?` confirmation.
  */
 type AppleLaunchPlan = Readonly<{
   positionals: readonly string[];
   followUpUrl?: string;
-  confirmable: boolean;
+  confirmationUrl?: string;
 }>;
 
 function openLaunchPlan(
@@ -486,14 +491,12 @@ function openLaunchPlan(
 ): AppleLaunchPlan {
   const url = input.runtimeLaunchUrl?.trim();
   const target = input.positionals.length === 1 ? input.positionals[0]?.trim() : undefined;
-  if (!url || !target || isDeepLinkTarget(target)) {
-    return { positionals: input.positionals, confirmable: false };
-  }
-  const confirmable = isConfirmableLaunchUrl(device, input, url);
+  if (!url || !target || isDeepLinkTarget(target)) return { positionals: input.positionals };
+  const confirmation = isConfirmableLaunchUrl(device, input, url) ? { confirmationUrl: url } : {};
   if (foldLaunchUrl && !isDirectAppLaunch(input)) {
-    return { positionals: [target, url], confirmable };
+    return { positionals: [target, url], ...confirmation };
   }
-  return { positionals: input.positionals, followUpUrl: url, confirmable };
+  return { positionals: input.positionals, followUpUrl: url, ...confirmation };
 }
 
 function isConfirmableLaunchUrl(
