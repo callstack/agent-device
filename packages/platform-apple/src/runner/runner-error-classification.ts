@@ -3,6 +3,7 @@ import {
   isRequestCanceledDetails,
   type AppErrorCode,
   type AppErrorDetails,
+  type DispatchDisclosure,
 } from '@agent-device/kernel/errors';
 import {
   isCommandTimeoutError,
@@ -623,7 +624,7 @@ export function shouldRestartRunnerBeforeCommandSend(
   command: RunnerCommand,
 ): boolean {
   if (!isRunnerConnectRefusal(error)) return false;
-  return isRunnerCommandProvablyUnwritten(error) || isReadOnlyRunnerCommand(command);
+  return resolveFirstAttemptDispatch(error) === 'no' || isReadOnlyRunnerCommand(command);
 }
 
 function isRunnerConnectRefusal(error: unknown): boolean {
@@ -651,6 +652,11 @@ export function isRunnerPreSendRefusal(error: unknown): boolean {
 export function isRunnerCommandProvablyUnwritten(error: unknown): boolean {
   if (error instanceof AppError && error.details?.dispatched === 'no') return true;
   return isConnectionRefused(error, 0);
+}
+
+/** What a failed connect attempt proves about writing the command: `no` only with that proof. */
+export function resolveFirstAttemptDispatch(error: unknown): DispatchDisclosure {
+  return isRunnerCommandProvablyUnwritten(error) ? 'no' : 'unknown';
 }
 
 function isConnectionRefused(error: unknown, depth: number): boolean {

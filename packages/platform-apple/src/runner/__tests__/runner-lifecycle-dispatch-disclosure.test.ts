@@ -273,6 +273,22 @@ test('a mutation whose connect-loop POST timed out after writing is not restarte
   assert.equal(taps.length, 1, 'the tap is sent once');
 });
 
+test('a read whose first POST may have been written and whose restart fails discloses unknown', async () => {
+  stubConnectLoopFailure(writtenThenLost);
+  mockEnsureRunnerSession
+    .mockResolvedValueOnce(makeRunnerSession())
+    .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'runner restart failed'));
+  await assert.rejects(
+    runAppleRunnerCommand(IOS_SIMULATOR, { command: 'snapshot' }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.runnerRestartReason, 'runner_connect_failed_before_command_send');
+      assert.equal(error.details?.dispatched, 'unknown');
+      return true;
+    },
+  );
+});
+
 test('a plain Error before the exchange is normalized and discloses no', async () => {
   mockEnsureRunnerSession.mockRejectedValueOnce(new Error('spawn EACCES'));
   await assert.rejects(tap(), (error: unknown) => {
