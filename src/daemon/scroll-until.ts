@@ -1,10 +1,6 @@
 import type { SnapshotResult } from '@agent-device/contracts/interactor-types';
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
-import {
-  AppError,
-  discloseDispatch,
-  discloseDispatchAfterSteps,
-} from '@agent-device/kernel/errors';
+import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
@@ -100,7 +96,7 @@ export async function runScrollUntilVisible<TResult>(params: {
     if (passes === 0 && !scrolling && error instanceof AppError) {
       throw discloseDispatch(error, 'no');
     }
-    throw discloseDispatchAfterSteps(error, passes);
+    throw error;
   }
 }
 

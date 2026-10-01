@@ -159,6 +159,52 @@ async function scrollUntilRefusedBeforeFirstGesture(): Promise<unknown> {
   }
 }
 
+/** A list whose `Email` row stays below the fold while each pass moves the content up. */
+function belowTheFoldList(offset: number): unknown[] {
+  return [
+    {
+      index: 0,
+      type: 'XCUIElementTypeScrollView',
+      label: 'Form',
+      hiddenContentBelow: true,
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+    },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'XCUIElementTypeTextField',
+      label: 'Email',
+      rect: { x: 0, y: 4000 - offset, width: 400, height: 40 },
+    },
+  ];
+}
+
+/** Refuses the third gesture after two returned; the content moves only when a gesture returns. */
+async function scrollRefusedOnThirdPass(flags: DaemonRequest['flags'], positionals: string[]) {
+  gestureRuntimeSpies.captureSnapshot.mockImplementation(async () => {
+    const moved = gestureRuntimeSpies.scrollDirection.mock.calls.length;
+    return {
+      backend: 'xctest',
+      producer: 'apple-runner',
+      nodes: belowTheFoldList(moved * 100),
+    } as never;
+  });
+  gestureRuntimeSpies.scrollDirection
+    .mockResolvedValueOnce({})
+    .mockResolvedValueOnce({})
+    .mockRejectedValueOnce(RUNNER_BUSY());
+  const failure = await route(makeSession(SESSION), {
+    command: 'scroll',
+    positionals,
+    flags,
+  }).catch((error: unknown) => error);
+  assert.equal(gestureRuntimeSpies.scrollDirection.mock.calls.length, 3);
+  assert.ok(failure instanceof AppError);
+  assert.equal(failure.message, 'runner busy');
+  assert.equal(failure.details?.dispatchedSteps, 2);
+  throw failure;
+}
+
 async function androidScrollThenDialogReadRefused(): Promise<unknown> {
   const observation: AndroidObservationAdapter = {
     ...clearAndroidObservationFixture,
@@ -282,6 +328,9 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
   'daemon.route.batch-read-then-refused-step': batchReadThenRefusedStep,
   'daemon.route.scroll-transport-failure': scrollWhoseGestureSendFailed,
   'daemon.route.scroll-until-before-first-gesture': scrollUntilRefusedBeforeFirstGesture,
+  'daemon.route.scroll-until-third-pass-refused': () =>
+    scrollRefusedOnThirdPass({ until: 'label=Email' }, ['down']),
+  'daemon.route.scroll-edge-third-pass-refused': () => scrollRefusedOnThirdPass({}, ['bottom']),
   'daemon.route.scroll-then-dialog-read-refused': androidScrollThenDialogReadRefused,
   'daemon.route.read-only-get': readOnlyGet,
 };

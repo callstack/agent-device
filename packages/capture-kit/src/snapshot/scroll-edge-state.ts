@@ -1,4 +1,4 @@
-import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
 import type { ScrollMovementObservation } from '@agent-device/contracts/scroll-command';
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import type { Point, RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
@@ -165,33 +165,29 @@ export async function runScrollEdgePasses<TResult>(params: {
   let result: TResult | undefined;
   const recentSignatures: string[] = [];
   pushScrollSurfaceSignature(recentSignatures, state.fingerprint, SCROLL_EDGE_STUCK_WINDOW);
-  try {
-    while (state.canScroll) {
-      if (passes >= SCROLL_EDGE_PASS_LIMIT) {
-        throw new AppError(
-          'COMMAND_FAILED',
-          `scroll ${edge} reached the safety limit before the snapshot showed the edge`,
-          {
-            reason: 'scroll_edge_pass_limit',
-            edge,
-            passes,
-            hint: 'The scoped scroll container still reports hidden content. Run scroll <dir> --until <selector> to stop on the element you are after, or snapshot -i to inspect the current state.',
-          },
-        );
-      }
-
-      result = await scroll();
-      passes += 1;
-      await settleAfterPass();
-      state = await captureState(state.scope);
-
-      pushScrollSurfaceSignature(recentSignatures, state.fingerprint, SCROLL_EDGE_STUCK_WINDOW);
-      if (state.canScroll && scrollSurfaceIsStuck(recentSignatures)) {
-        throw buildScrollEdgeNoProgressError(edge, passes);
-      }
+  while (state.canScroll) {
+    if (passes >= SCROLL_EDGE_PASS_LIMIT) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `scroll ${edge} reached the safety limit before the snapshot showed the edge`,
+        {
+          reason: 'scroll_edge_pass_limit',
+          edge,
+          passes,
+          hint: 'The scoped scroll container still reports hidden content. Run scroll <dir> --until <selector> to stop on the element you are after, or snapshot -i to inspect the current state.',
+        },
+      );
     }
-  } catch (error) {
-    throw discloseDispatchAfterSteps(error, passes);
+
+    result = await scroll();
+    passes += 1;
+    await settleAfterPass();
+    state = await captureState(state.scope);
+
+    pushScrollSurfaceSignature(recentSignatures, state.fingerprint, SCROLL_EDGE_STUCK_WINDOW);
+    if (state.canScroll && scrollSurfaceIsStuck(recentSignatures)) {
+      throw buildScrollEdgeNoProgressError(edge, passes);
+    }
   }
 
   return { passes, result };
