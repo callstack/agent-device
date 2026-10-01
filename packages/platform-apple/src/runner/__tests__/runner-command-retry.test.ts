@@ -50,6 +50,7 @@ vi.mock('../runner-xctestrun.ts', async () => {
 
 import { prepareIosRunner, runAppleRunnerCommand } from '../runner-client.ts';
 import { resetRunnerRecycleLedgerForTests } from '../runner-recycle-ledger.ts';
+import { RUNNER_REPLY_LOST_REASON } from '../runner-error-classification.ts';
 import type { RunnerXctestrunArtifact } from '../runner-xctestrun.ts';
 
 const requestCancellation = createTestRequestCancellation();
@@ -475,10 +476,9 @@ test('mutating commands keep invalidating when status recovery probe fails', asy
   await assert.rejects(
     () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
     (error: unknown) => {
-      // A failed status probe re-throws the original transport error, not the probe's own.
       assert.ok(error instanceof AppError);
-      assert.equal(error.code, 'COMMAND_FAILED');
-      assert.equal(error.message, 'fetch failed');
+      assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+      assert.equal(error.details?.transportError, 'fetch failed');
       return true;
     },
   );
@@ -971,10 +971,9 @@ test('sequence invalidates the session when the status probe fails', async () =>
         steps: [{ kind: 'tap', x: 1, y: 2 }],
       }),
     (error: unknown) => {
-      // A failed status probe re-throws the original transport error, not the probe's own.
       assert.ok(error instanceof AppError);
-      assert.equal(error.code, 'COMMAND_FAILED');
-      assert.equal(error.message, 'fetch failed');
+      assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+      assert.equal(error.details?.transportError, 'fetch failed');
       return true;
     },
   );

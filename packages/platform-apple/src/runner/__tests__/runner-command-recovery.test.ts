@@ -4,11 +4,9 @@ import { afterEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import type { ExecResult } from '@agent-device/host-kit/command';
-import {
-  handleRunnerTransportErrorAfterCommandSend,
-  RUNNER_REPLY_LOST_REASON,
-} from '../runner-command-recovery.ts';
+import { handleRunnerTransportErrorAfterCommandSend } from '../runner-command-recovery.ts';
 import type { RunnerCommand } from '../runner-contract.ts';
+import { RUNNER_REPLY_LOST_REASON } from '../runner-error-classification.ts';
 import type { RunnerSession } from '../runner-session.ts';
 import {
   startFakeRunnerServer,
@@ -147,7 +145,8 @@ test('a failing status probe retains the invalidation and names the lost reply',
 
   await assert.rejects(result, (error: unknown) => {
     assert.ok(error instanceof AppError);
-    assert.equal(error.message, transportError.message);
+    assert.notEqual(error.message, transportError.message);
+    assert.equal(error.details?.transportError, transportError.message);
     assert.equal(error.cause, transportError);
     assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
     assert.equal(error.details?.transportReason, 'socket_reset');

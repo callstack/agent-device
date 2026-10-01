@@ -7,6 +7,7 @@ import {
 } from '../runner-contract.ts';
 import {
   RUNNER_ERROR_RULES,
+  RUNNER_REPLY_LOST_REASON,
   isRetryableRunnerError,
   isRunnerBusyError,
   resolveRunnerFatalErrorReason,
@@ -43,6 +44,15 @@ test('transport-shaped failures are retryable', () => {
   );
   for (const message of ['fetch failed', 'connect ECONNREFUSED 127.0.0.1:8100', 'socket hang up']) {
     assert.equal(isRetryableRunnerError(commandFailed(message)), true, message);
+  }
+});
+
+test('a lost reply keys on its typed reason, never on the transport text it carries', () => {
+  for (const message of ['fetch failed', 'connect ECONNREFUSED 127.0.0.1:8100', 'socket hang up']) {
+    const lostReply = commandFailed(message, { reason: RUNNER_REPLY_LOST_REASON });
+    assert.equal(isRetryableRunnerError(lostReply), false, message);
+    assert.equal(shouldRetryRunnerConnectError(lostReply), false, message);
+    assert.equal(shouldRestartRunnerBeforeCommandSend(lostReply, TAP), false, message);
   }
 });
 

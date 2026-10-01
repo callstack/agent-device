@@ -9,15 +9,13 @@ import {
   dispatchDisclosureRowsOwnedBy,
 } from '@agent-device/contracts/dispatch-disclosure-fixtures';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
-import {
-  handleRunnerTransportErrorAfterCommandSend,
-  RUNNER_REPLY_LOST_REASON,
-} from '../runner-command-recovery.ts';
+import { handleRunnerTransportErrorAfterCommandSend } from '../runner-command-recovery.ts';
 import { isReadOnlyRunnerCommand } from '../runner-command-traits.ts';
 import type { RunnerCommand } from '../runner-contract.ts';
 import {
   isRetryableRunnerError,
   isStructuredRunnerFailure,
+  RUNNER_REPLY_LOST_REASON,
 } from '../runner-error-classification.ts';
 import { runApplePressSeries } from '../runner-sequence.ts';
 import { executeRunnerCommandWithSession, type RunnerSession } from '../runner-session.ts';

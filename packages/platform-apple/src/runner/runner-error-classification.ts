@@ -45,6 +45,13 @@ export function runnerConnectFailureDetails(reason: RunnerConnectFailureReason):
   return { runnerConnectFailureReason: reason };
 }
 
+/**
+ * `details.reason` of a mutation whose reply stayed lost: status recovery found no result and no
+ * runner answer, so nothing proves the command did not run. The command is not resent; the caller
+ * observes the screen before acting again. A read never carries it, because it is resent.
+ */
+export const RUNNER_REPLY_LOST_REASON = 'runner_reply_lost';
+
 type RunnerErrorMatch = {
   /** Required `AppError.code`; absent = any AppError. */
   code?: AppErrorCode;
@@ -72,6 +79,8 @@ type RunnerErrorMatch = {
   details?: RunnerErrorDetailsMatch;
 };
 
+const hasRunnerReplyLostReason: RunnerErrorDetailsMatch = (details) =>
+  details.reason === RUNNER_REPLY_LOST_REASON;
 /**
  * The runner refused the command before running it while abandoned main-thread work drains (#1105).
  * A resend keys on this code, never on `details.retriable`: that flag tells a caller's poll to try
@@ -224,6 +233,18 @@ const PROFILE_UNUSABLE: RunnerErrorRule['buildFailure'] = {
  * typed verdict carries the recovery hint a generic connect failure would replace).
  */
 export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
+  {
+    // A mutation that may have run: no axis may resend or restart it, whatever text it carries.
+    reason: RUNNER_REPLY_LOST_REASON,
+    match: { code: 'COMMAND_FAILED', details: hasRunnerReplyLostReason },
+    verdicts: {
+      retryable: false,
+      drainResend: false,
+      connectRetry: false,
+      restartBeforeSend: false,
+      restartAfterReadinessPreflight: false,
+    },
+  },
   {
     reason: 'usbmux_device_unattached',
     match: { code: 'DEVICE_NOT_FOUND', details: hasUsbmuxDeviceUnattached },

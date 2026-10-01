@@ -10,7 +10,7 @@ import type { RunnerSession } from '../runner-session.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { withAppleRunnerProvider } from '../runner-provider.ts';
 import { classifyRunnerReportedError, type RunnerCommand } from '../runner-contract.ts';
-import { RUNNER_REPLY_LOST_REASON } from '../runner-command-recovery.ts';
+import { RUNNER_REPLY_LOST_REASON } from '../runner-error-classification.ts';
 import {
   createRunnerPhaseBudget,
   requireRunnerPhaseRemainingMs,

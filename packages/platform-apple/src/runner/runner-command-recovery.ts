@@ -11,6 +11,7 @@ import {
   type RunnerResponsePayload,
 } from './runner-contract.ts';
 import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';
+import { RUNNER_REPLY_LOST_REASON } from './runner-error-classification.ts';
 import type { AppleRunnerCommandOptions } from './runner-provider.ts';
 import { executeRunnerCommandWithSession, type RunnerSession } from './runner-session.ts';
 
@@ -34,8 +35,11 @@ type RunnerRecoveryFailure =
 type LostReply = Readonly<{
   recovery: string;
   lifecycleState?: string;
-  /** Defaults to the transport error's message. */
-  message?: string;
+  /**
+   * Never the transport error's message: classification rows match foreign transport text, and a
+   * lost reply must not read as the retryable transport failure it wraps.
+   */
+  message: string;
   hint: string;
 }>;
 
@@ -55,13 +59,6 @@ type RunnerReadinessPreflightRecoveryDetails = {
 };
 
 const RUNNER_STATUS_RECOVERY_TIMEOUT_MS = 3_000;
-
-/**
- * `details.reason` of a mutation whose reply stayed lost: status recovery found no result and no
- * runner answer, so nothing proves the command did not run. The command is not resent; the caller
- * observes the screen before acting again. A read never carries it, because it is resent.
- */
-export const RUNNER_REPLY_LOST_REASON = 'runner_reply_lost';
 
 export async function handleRunnerTransportErrorAfterCommandSend(params: {
   device: DeviceInfo;
@@ -128,7 +125,7 @@ function buildLostReplyError(
   const transportReason = transportError.details?.reason;
   return new AppError(
     'COMMAND_FAILED',
-    lostReply.message ?? transportError.message,
+    lostReply.message,
     {
       command: command.command,
       commandId: command.commandId,
@@ -209,6 +206,7 @@ async function tryRecoverRunnerCommandAfterTransportError(
       reason: 'status_recovery_unavailable',
       lostReply: {
         recovery: 'status_recovery_unavailable',
+        message: lostReplyWithoutStatusMessage(command.command, 'status recovery was unavailable'),
         hint: unknownLifecycleStateHint(command.command),
       },
     };
@@ -240,6 +238,7 @@ async function tryRecoverRunnerCommandAfterTransportError(
       reason: 'status_probe_failed',
       lostReply: {
         recovery: 'status_probe_failed',
+        message: lostReplyWithoutStatusMessage(command.command, 'the status probe failed'),
         hint: unknownLifecycleStateHint(command.command),
       },
     };
@@ -502,6 +501,10 @@ function readReadinessPreflightRecoveryDetails(
   const ageMs = readNumberDetail(error, 'runnerReadinessPreflightSkippedAgeMs');
   if (ageMs !== undefined) details.readinessPreflightSkippedAgeMs = ageMs;
   return details;
+}
+
+function lostReplyWithoutStatusMessage(command: string, statusOutcome: string): string {
+  return `Runner command "${command}" lost its transport response and ${statusOutcome}, so agent-device invalidated the runner session instead of replaying the command.`;
 }
 
 function unknownLifecycleStateHint(command: string): string {

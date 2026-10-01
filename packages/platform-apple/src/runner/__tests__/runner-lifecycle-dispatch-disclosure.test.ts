@@ -40,7 +40,10 @@ vi.mock('../runner-session.ts', async () => {
 });
 
 import { runAppleRunnerCommand } from '../runner-client.ts';
-import { RUNNER_REPLY_LOST_REASON } from '../runner-command-recovery.ts';
+import {
+  isRetryableRunnerError,
+  RUNNER_REPLY_LOST_REASON,
+} from '../runner-error-classification.ts';
 import type { RunnerCommand } from '../runner-contract.ts';
 import { resetRunnerRecycleLedgerForTests } from '../runner-recycle-ledger.ts';
 import { waitForRunner } from '../runner-startup-transport.ts';
@@ -267,6 +270,24 @@ test('a mutation whose connect-loop POST timed out after writing is not restarte
     return true;
   });
   assert.equal(mockEnsureRunnerSession.mock.calls.length, 1, 'the runner is not restarted');
+  const taps = mockExecuteRunnerCommandWithSession.mock.calls.filter(
+    ([, , command]) => command.command === 'tap',
+  );
+  assert.equal(taps.length, 1, 'the tap is sent once');
+});
+
+test('a mutation whose reply and status probe both fail on transport text is not resent', async () => {
+  mockEnsureRunnerSession.mockResolvedValueOnce(makeRunnerSession());
+  mockExecuteRunnerCommandWithSession
+    .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
+    .mockRejectedValue(new AppError('COMMAND_FAILED', 'connect ECONNREFUSED 127.0.0.1:8100'));
+  await assert.rejects(tap(), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+    assert.equal(error.details?.transportError, 'fetch failed');
+    assert.equal(isRetryableRunnerError(error), false);
+    return true;
+  });
   const taps = mockExecuteRunnerCommandWithSession.mock.calls.filter(
     ([, , command]) => command.command === 'tap',
   );
