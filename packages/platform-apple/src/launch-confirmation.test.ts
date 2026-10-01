@@ -231,11 +231,19 @@ function wedgedCoreSimulator(
   return {
     whichCommand: async () => true,
     runCommand: async (cmd, args, options) =>
-      answered(`${cmd} ${args[args.length - 1]}`) ?? (await hang(options)),
+      answered(`${cmd} ${args.at(-1)}`) ?? (await hang(options)),
     simctl: { run: async (args, options) => answered(args[0] ?? '') ?? (await hang(options)) },
     devicectl: { run: async (_args, options) => await hang(options) },
     spawns: () => spawns,
   };
+}
+
+/** Real I/O turns until the provider saw `count` spawns; bounded so a lookup that stops early fails here, not at the test timeout. */
+async function untilSpawned(coreSimulator: { spawns: () => number }, count: number): Promise<void> {
+  for (let turn = 0; turn < 1000 && coreSimulator.spawns() < count; turn += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  expect(coreSimulator.spawns()).toBe(count);
 }
 
 const LISTED_APP = JSON.stringify({
@@ -272,11 +280,10 @@ test.each([
         ).then((value) => (answered = value)),
       );
 
-      while (coreSimulator.spawns() < 2) await new Promise((resolve) => setImmediate(resolve));
+      await untilSpawned(coreSimulator, 2);
       await vi.advanceTimersByTimeAsync(URL_OWNER_LOOKUP_TIMEOUT_MS + 1);
       expect(answered).toBeUndefined();
       await answer;
-      expect(coreSimulator.spawns()).toBe(2);
       expect(acceptAlert).not.toHaveBeenCalled();
       expect(emitDiagnostic).toHaveBeenCalledWith(
         expect.objectContaining({
