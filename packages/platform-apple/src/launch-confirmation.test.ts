@@ -14,6 +14,7 @@ import {
   createLaunchConfirmationPort,
   LAUNCH_CONFIRMATION_FOREIGN_APP_REASON,
   type LaunchConfirmationPort,
+  URL_OWNER_LOOKUP_TIMEOUT_MS,
 } from './launch-confirmation.ts';
 
 vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
@@ -195,10 +196,19 @@ test.each([
 
 /**
  * A CoreSimulator that never answers: each spawn settles only when its exec timeout fires or its
- * signal aborts, the way `exec.ts` ends a wedged child.
+ * signal aborts, the way `exec.ts` ends a wedged child. `answers` lets named spawns answer at once,
+ * so the wedge can sit behind a listing that succeeded.
  */
-function wedgedCoreSimulator(): AppleToolProvider & { spawns: () => number } {
+function wedgedCoreSimulator(
+  answers: Readonly<Record<string, string>> = {},
+): AppleToolProvider & { spawns: () => number } {
   let spawns = 0;
+  const answered = (key: string): ExecResult | undefined => {
+    const stdout = answers[key];
+    if (stdout === undefined) return undefined;
+    spawns += 1;
+    return { stdout, stderr: '', exitCode: 0 } as ExecResult;
+  };
   const hang = async (options?: ExecOptions): Promise<ExecResult> =>
     await new Promise((_resolve, reject) => {
       spawns += 1;
@@ -220,12 +230,64 @@ function wedgedCoreSimulator(): AppleToolProvider & { spawns: () => number } {
     });
   return {
     whichCommand: async () => true,
-    runCommand: async (_cmd, _args, options) => await hang(options),
-    simctl: { run: async (_args, options) => await hang(options) },
+    runCommand: async (cmd, args, options) =>
+      answered(`${cmd} ${args[args.length - 1]}`) ?? (await hang(options)),
+    simctl: { run: async (args, options) => answered(args[0] ?? '') ?? (await hang(options)) },
     devicectl: { run: async (_args, options) => await hang(options) },
     spawns: () => spawns,
   };
 }
+
+const LISTED_APP = JSON.stringify({
+  'com.example.app': {
+    ApplicationType: 'User',
+    Path: '/apps/Example.app',
+    CFBundleName: 'Example',
+  },
+});
+
+test.each([
+  ['one Info.plist read hangs after the app list answered', { listapps: LISTED_APP }],
+  [
+    'the app list answered in a format only plutil can convert, and that conversion hangs',
+    { listapps: '{ "com.example.app" = { ApplicationType = User; }; }' },
+  ],
+])(
+  'the owner lookup is bounded as a whole: %s and the open is left unanswered within its budget',
+  async (_case, answers) => {
+    // Only the clock is faked: the lookup stats the Info.plist on the real file system before it
+    // spawns plutil, and that I/O must complete before the budget is advanced past.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.mocked(emitDiagnostic).mockClear();
+    try {
+      const { interactor, acceptAlert } = confirmationRunner();
+      const coreSimulator = wedgedCoreSimulator(answers);
+      let answered: unknown = 'pending';
+      const answer = withAppleToolProvider(coreSimulator, async () =>
+        answerSimulatorLaunchConfirmation(
+          simulator,
+          { url: 'example://automation', appBundleId: 'com.example.app' },
+          Promise.resolve(interactor),
+          new AbortController().signal,
+        ).then((value) => (answered = value)),
+      );
+
+      while (coreSimulator.spawns() < 2) await new Promise((resolve) => setImmediate(resolve));
+      await vi.advanceTimersByTimeAsync(URL_OWNER_LOOKUP_TIMEOUT_MS + 1);
+      expect(answered).toBeUndefined();
+      await answer;
+      expect(coreSimulator.spawns()).toBe(2);
+      expect(acceptAlert).not.toHaveBeenCalled();
+      expect(emitDiagnostic).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ reason: 'step-failed', step: 'url-owner' }),
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
 
 function confirmationRunner() {
   const acceptAlert = vi.fn(async () => ({}));

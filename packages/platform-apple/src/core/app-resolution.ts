@@ -2,7 +2,8 @@ import path from 'node:path';
 import { hostFileStat } from '@agent-device/host-kit/host-file';
 import { fileURLToPath } from 'node:url';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
+import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import {
   createAppResolutionCache,
@@ -247,71 +248,31 @@ async function listSimulatorApps(
   }));
 }
 
+type SimulatorAppListRecord = Record<
+  string,
+  {
+    ApplicationType?: string;
+    Bundle?: string;
+    CFBundleDisplayName?: string;
+    CFBundleName?: string;
+    Path?: string;
+  }
+>;
+
 async function listSimulatorAppMetadata(
   device: DeviceInfo,
   options?: SimulatorAppListOptions,
 ): Promise<SimulatorAppMetadata[]> {
+  const remaining = remainingLookupBudget(options ?? {});
   const result = await runSimctlForDevice(device, ['listapps', device.id], {
     allowFailure: true,
-    timeoutMs: options?.timeoutMs,
-    signal: options?.signal,
+    ...remaining(),
   });
-  const stdout = result.stdout as string;
-  const trimmed = stdout.trim();
-  if (!trimmed) return [];
+  const trimmed = (result.stdout as string).trim();
+  if (!trimmed.startsWith('{')) return [];
 
-  let parsed: Record<
-    string,
-    {
-      ApplicationType?: string;
-      Bundle?: string;
-      CFBundleDisplayName?: string;
-      CFBundleName?: string;
-      Path?: string;
-    }
-  > | null = null;
-  if (trimmed.startsWith('{')) {
-    try {
-      parsed = JSON.parse(trimmed) as Record<
-        string,
-        {
-          ApplicationType?: string;
-          Bundle?: string;
-          CFBundleDisplayName?: string;
-          CFBundleName?: string;
-          Path?: string;
-        }
-      >;
-    } catch {
-      parsed = null;
-    }
-  }
-
-  if (!parsed && trimmed.startsWith('{')) {
-    try {
-      const converted = await runAppleToolCommand('plutil', ['-convert', 'json', '-o', '-', '-'], {
-        allowFailure: true,
-        stdin: trimmed,
-        timeoutMs: options?.timeoutMs,
-        signal: options?.signal,
-      });
-      if (converted.exitCode === 0 && converted.stdout.trim().startsWith('{')) {
-        parsed = JSON.parse(converted.stdout) as Record<
-          string,
-          {
-            ApplicationType?: string;
-            Bundle?: string;
-            CFBundleDisplayName?: string;
-            CFBundleName?: string;
-            Path?: string;
-          }
-        >;
-      }
-    } catch {
-      parsed = null;
-    }
-  }
-
+  const parsed =
+    parseSimulatorAppList(trimmed) ?? (await convertSimulatorAppList(trimmed, remaining()));
   if (!parsed) return [];
   return Object.entries(parsed).map(([bundleId, info]) => {
     const appPath = resolveSimulatorAppPath(info);
@@ -322,6 +283,36 @@ async function listSimulatorAppMetadata(
       ...(info.ApplicationType ? { applicationType: info.ApplicationType } : {}),
     };
   });
+}
+
+function parseSimulatorAppList(text: string): SimulatorAppListRecord | null {
+  try {
+    return JSON.parse(text) as SimulatorAppListRecord;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `simctl listapps` prints an OpenStep plist on some Xcode versions; `plutil` converts it. A
+ * timeout or abort of that conversion is the lookup's failure, not an empty app list.
+ */
+async function convertSimulatorAppList(
+  text: string,
+  options: SimulatorAppListOptions,
+): Promise<SimulatorAppListRecord | null> {
+  try {
+    const converted = await runAppleToolCommand('plutil', ['-convert', 'json', '-o', '-', '-'], {
+      allowFailure: true,
+      stdin: text,
+      ...options,
+    });
+    if (converted.exitCode !== 0 || !converted.stdout.trim().startsWith('{')) return null;
+    return JSON.parse(converted.stdout) as SimulatorAppListRecord;
+  } catch (error) {
+    if (isCommandTimeoutError(error) || isRequestCanceledError(error)) throw error;
+    return null;
+  }
 }
 
 function resolveSimulatorAppPath(info: { Bundle?: string; Path?: string }): string | undefined {

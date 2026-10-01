@@ -23,7 +23,7 @@ const LAUNCH_CONFIRMATION_TITLE = /^Open in [“"].+[”"]\?$/u;
  * the same bound, well inside `IOS_APP_LAUNCH_TIMEOUT_MS`, so a wedged CoreSimulator leaves the open
  * unanswered instead of holding it.
  */
-const URL_OWNER_LOOKUP_TIMEOUT_MS = 10_000;
+export const URL_OWNER_LOOKUP_TIMEOUT_MS = 10_000;
 
 /** A custom-scheme launch URL SpringBoard may hold for the session app it was checked for. */
 export type LaunchConfirmationTarget = Readonly<{ url: string; appBundleId: string }>;
