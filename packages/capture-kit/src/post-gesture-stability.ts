@@ -9,7 +9,7 @@ import { observeUntil, type ObservationClock, type ObservationSchedule } from '.
  * imports no cycle owners and no `SessionState`, so it stays outside the R9
  * type cycle while the deferred-interaction-outcome owner (which holds the
  * pending record and the session mutation) stays the one seam callers see. The
- * owner supplies the comparators from interaction-outcome-policy; their
+ * owner supplies the comparators from interaction-surface-signature; their
  * semantics (subset tolerance, identity keying, discriminating entries) are
  * documented there.
  */

@@ -2,10 +2,8 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SnapshotCaptureAnnotations } from '@agent-device/contracts/capture';
 import { isApplePlatform, isMobilePlatform } from '@agent-device/kernel/device';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import { sleep } from '@agent-device/host-kit/retry';
 import {
   captureAndroidFreshnessRecoveredAttempt,
-  clearAndroidSnapshotFreshness,
   getActiveAndroidSnapshotFreshness,
   markAndroidSnapshotFreshness,
 } from './session-snapshot-freshness.ts';
@@ -17,18 +15,10 @@ import {
   areInteractionSurfaceSignaturesStable,
   buildInteractionSurfaceSignature,
   classifyBaselineSurfaceEvidence,
-  classifyInteractionSurfaceChange,
-  clearPendingInteractionOutcome,
-  emitInteractionSettled,
-  emitInteractionSettleTimeout,
-  getActivePendingInteractionOutcome,
   haveIdenticalDiscriminatingSurfaces,
   summarizeDiscriminatingSurfaceDivergence,
-  markPendingInteractionOutcome,
-  retryPendingInteractionOutcome,
   snapshotSurfaceComparisonKey,
-  type InteractionRetryTap,
-} from './interaction-outcome-policy.ts';
+} from './interaction-surface-signature.ts';
 import {
   runPostGestureStabilityLoop,
   type PostGestureStabilityOutcome,
@@ -40,7 +30,7 @@ import type { SessionState } from './session-state.ts';
  * actually take effect?", produced after the mutation's own response has been
  * sent. This module is its one interface — every mutating route marks through
  * `markDeferredInteractionOutcome` right after dispatch, and every snapshot
- * capture resolves through `resolveDeferredInteractionOutcome`. The three
+ * capture resolves through `resolveDeferredInteractionOutcome`. The two
  * SessionState fields stay with their owner modules; this module is itself the
  * `postGestureStabilization` owner (R7), so hosting the interface here adds no
  * new node to the R9 type cycle — the seam lives in a node that was already on
@@ -53,14 +43,10 @@ import type { SessionState } from './session-state.ts';
  * disciplines and never route through here.
  */
 
-const INTERACTION_CHANGE_RECHECK_DELAY_MS = 500;
-
 /**
  * Mutation-side marking, called once per mutating dispatch after the device op
- * returned. Ordering across the markers is load-bearing (Selector Capture
- * Reliability Contract: pending interaction outcome retry runs before
- * post-gesture stabilization) and each marker keeps its own eligibility gate,
- * so callers do not pre-filter — an ineligible action simply marks nothing.
+ * returned. Each marker keeps its own eligibility gate, so callers do not
+ * pre-filter — an ineligible action simply marks nothing.
  */
 export type DeferredInteractionOutcomeMark = {
   command: string;
@@ -68,8 +54,6 @@ export type DeferredInteractionOutcomeMark = {
   action?: string;
   positionals: string[];
   flags: CommandFlags | undefined;
-  /** True only when no post-action observation already proved the interaction landed. */
-  scheduleOutcomeRetry?: boolean;
   androidFreshnessBaseline?: SnapshotState | undefined;
 };
 
@@ -82,18 +66,8 @@ export function markDeferredInteractionOutcome(
     action = command,
     positionals,
     flags,
-    scheduleOutcomeRetry = false,
     androidFreshnessBaseline,
   } = params;
-  if (scheduleOutcomeRetry) {
-    markPendingInteractionOutcome({
-      session,
-      command,
-      positionals,
-      flags,
-      preSnapshot: session.snapshot,
-    });
-  }
   if (isNavigationSensitiveAction(action)) {
     markAndroidSnapshotFreshness(session, action, androidFreshnessBaseline ?? session.snapshot);
   }
@@ -110,9 +84,8 @@ function markPostGestureStabilization(
   if (!isPostGestureStabilizingAction(action, positionals, flags)) return;
   // No extra capture: `session.snapshot` is still whatever was captured
   // before this gesture dispatched (this call happens post-dispatch,
-  // pre-capture — the same "last known pre-action snapshot" idiom
-  // `markPendingInteractionOutcome` already relies on). Like that sibling, an
-  // empty signature is never stored: "no usable baseline" has exactly one
+  // pre-capture — the last known pre-action snapshot). An empty signature is
+  // never stored: "no usable baseline" has exactly one
   // representation (absent), so no consumer has to tell `undefined` from `[]`
   // — and the loop cannot rebase a baseline that was never really there.
   const baselineSignature = requiresPostGestureBaselineDistrust(session.device)
@@ -157,9 +130,6 @@ export type DeferredOutcomeSnapshotAttempt = {
 type DeferredOutcomeCaptureParams = {
   session: SessionState | undefined;
   device: SessionState['device'];
-  logPath: string;
-  /** How a no-change retry re-fires the recorded tap; absent on captures that cannot tap. */
-  retryTap?: InteractionRetryTap;
   /** Whether the capture the verdict rides on was interactive-only filtered. */
   interactiveOnly: boolean;
   androidFreshnessMode?: SnapshotFreshnessMode;
@@ -172,21 +142,14 @@ export type DeferredOutcomeCaptureResult = {
 
 /**
  * Capture-side resolution: when the session carries a deferred outcome, run
- * the capture through the machinery that settles it (pending-outcome retry,
- * then post-gesture stabilization, then Android freshness recovery) and
+ * the capture through the machinery that settles it (post-gesture
+ * stabilization, then Android freshness recovery) and
  * return the resolved capture. Returns undefined when nothing is deferred —
  * the caller then captures plainly.
  */
 export async function resolveDeferredInteractionOutcome(
   params: DeferredOutcomeCaptureParams,
 ): Promise<DeferredOutcomeCaptureResult | undefined> {
-  const pendingInteractionOutcome = getActivePendingInteractionOutcome(params.session);
-  if (pendingInteractionOutcome && params.session) {
-    return await captureInteractionOutcomeAwareSnapshot(
-      { ...params, session: params.session },
-      pendingInteractionOutcome,
-    );
-  }
   if (
     isMobilePlatform(params.device) &&
     params.session &&
@@ -203,86 +166,6 @@ export async function resolveDeferredInteractionOutcome(
     };
   }
   return undefined;
-}
-
-async function captureInteractionOutcomeAwareSnapshot(
-  params: DeferredOutcomeCaptureParams & { session: SessionState },
-  pending: NonNullable<SessionState['pendingInteractionOutcome']>,
-): Promise<DeferredOutcomeCaptureResult> {
-  const session = params.session;
-
-  const startedAt = Date.now();
-  let retryAttempts = 0;
-  let latest = await waitForDelayedInteractionSurfaceChange(
-    params,
-    pending,
-    await capturePostActionSnapshotAttempt(params),
-  );
-  let outcome = await retryPendingInteractionOutcome({
-    session,
-    pending,
-    logPath: params.logPath,
-    snapshot: latest.snapshot,
-    retryTap: params.retryTap,
-  });
-
-  while (outcome.retried) {
-    retryAttempts += 1;
-    latest = await waitForDelayedInteractionSurfaceChange(
-      params,
-      pending,
-      await capturePostActionSnapshotAttempt(params),
-    );
-    outcome = await retryPendingInteractionOutcome({
-      session,
-      pending,
-      logPath: params.logPath,
-      snapshot: latest.snapshot,
-      retryTap: params.retryTap,
-    });
-  }
-
-  clearPendingInteractionOutcome(session);
-  const stabilized = await capturePostGestureStabilizedResult({
-    session,
-    initial: latest,
-    capture: async () => await capturePostActionSnapshotAttempt(params),
-    readSnapshot: (attempt) => attempt.snapshot,
-  });
-  latest = stabilized.value;
-  if (outcome.change !== 'ambiguous' && latest.annotations.freshness?.staleAfterRetries !== true) {
-    clearAndroidSnapshotFreshness(session);
-  }
-  if (outcome.change === 'unchanged') {
-    emitInteractionSettleTimeout({ pending, attempts: retryAttempts, startedAt });
-  } else {
-    emitInteractionSettled({
-      pending,
-      change: outcome.change,
-      attempts: retryAttempts,
-      startedAt,
-    });
-  }
-
-  return resolvedPostGestureCapture(stabilized);
-}
-
-async function waitForDelayedInteractionSurfaceChange(
-  params: DeferredOutcomeCaptureParams & { session: SessionState },
-  pending: NonNullable<SessionState['pendingInteractionOutcome']>,
-  initial: DeferredOutcomeSnapshotAttempt,
-): Promise<DeferredOutcomeSnapshotAttempt> {
-  let latest = initial;
-  const change = classifyInteractionSurfaceChange(
-    pending.preSignature,
-    buildInteractionSurfaceSignature(latest.snapshot.nodes),
-  );
-  if (change !== 'unchanged') return latest;
-
-  await sleep(INTERACTION_CHANGE_RECHECK_DELAY_MS);
-  latest = await capturePostActionSnapshotAttempt(params);
-
-  return latest;
 }
 
 async function capturePostGestureAwareSnapshot(
@@ -309,7 +192,7 @@ async function capturePostActionSnapshotAttempt(
 /**
  * Session-aware adapter over the pure stability loop
  * (`post-gesture-stability.ts`): reads the pending record, supplies the
- * interaction-surface comparators from interaction-outcome-policy as hooks,
+ * interaction-surface comparators from interaction-surface-signature as hooks,
  * and — as the R7 owner — clears `postGestureStabilization` once the loop
  * has run, on settle, timeout and an aborted capture alike.
  */
@@ -365,6 +248,14 @@ function resolvedPostGestureCapture(
   const { snapshot, annotations } = stabilized.value;
   if (stabilized.postGestureOutcome) snapshot.postGestureOutcome = stabilized.postGestureOutcome;
   return { snapshot, ...annotations };
+}
+
+export function stripInternalInteractionFlags(
+  flags: CommandFlags | undefined,
+): CommandFlags | undefined {
+  if (!flags?.postGestureStabilization) return flags;
+  const { postGestureStabilization: _postGestureStabilization, ...publicFlags } = flags;
+  return publicFlags;
 }
 
 function isPostGestureStabilizingAction(

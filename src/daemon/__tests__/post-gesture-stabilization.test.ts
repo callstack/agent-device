@@ -6,7 +6,7 @@ import {
   countDiagnosticEventsByPhase,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
-import { buildInteractionSurfaceSignature } from '../interaction-outcome-policy.ts';
+import { buildInteractionSurfaceSignature } from '../interaction-surface-signature.ts';
 import {
   capturePostGestureStabilizedResult,
   markDeferredInteractionOutcome,

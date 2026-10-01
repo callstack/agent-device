@@ -29,7 +29,7 @@ import {
   summarizeDiscriminatingSurfaceDivergence,
   type InteractionSurfaceChange,
   type InteractionSurfaceSignature,
-} from './interaction-outcome-policy.ts';
+} from './interaction-surface-signature.ts';
 import { refFrameState } from './ref-frame.ts';
 import { isPostGestureStabilizationPending } from './deferred-interaction-outcome.ts';
 import type { SessionState } from './session-state.ts';
@@ -46,7 +46,7 @@ import type { SessionState } from './session-state.ts';
  *
  * The evidence rules are not a second opinion on that pair. The signature, the subset-tolerant
  * baseline classifier, and the strict no-effect bar all belong to
- * `interaction-outcome-policy.ts`, the same comparators the deferred post-gesture stabilization
+ * `interaction-surface-signature.ts`, the same comparators the deferred post-gesture stabilization
  * applies to every other gesture, so "that scroll did nothing" means one thing in this daemon.
  * What is new here is only WHEN the answer is owed: a directional scroll pays one capture to gate its
  * own reply instead of leaving the proof to the next command's snapshot.

@@ -127,7 +127,7 @@ only by its named composition module per ADR Decision §1).
 **Response path (not hops).** 8 files execute only after the platform call:
 `src/daemon/interaction/internal/interaction-touch-response.ts`,
 `src/daemon/interaction/internal/interaction-common.ts`,
-`src/daemon/interaction-outcome-policy.ts`, `src/daemon/request-finalization.ts`,
+`src/daemon/interaction-surface-signature.ts`, `src/daemon/request-finalization.ts`,
 `src/daemon/session-event-log.ts`, `src/daemon/session-snapshot.ts`,
 `src/daemon/recording-gestures.ts`, `src/daemon/deferred-interaction-outcome.ts`.
 

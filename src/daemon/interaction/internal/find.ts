@@ -21,7 +21,7 @@ import { readCommandMessage, successText } from '@agent-device/kernel/success-te
 import type { RequestCaptureProof } from '../../capture-disclosure.ts';
 import { withCaptureDisclosures } from '../../capture-disclosure.ts';
 import { recordSessionAction } from '../../session-action-recorder.ts';
-import { stripInternalInteractionFlags } from '../../interaction-outcome-policy.ts';
+import { stripInternalInteractionFlags } from '../../deferred-interaction-outcome.ts';
 import { resolveFindMatch } from './find-match-resolution.ts';
 import { executeFocusPoint } from '../../focus-runtime.ts';
 import { executeBoundTypeText } from '../../type-text-runtime.ts';

@@ -12,7 +12,7 @@ import { contextFromFlags, makeSession } from './interaction-touch-fixtures.ts';
 
 // What the shared runtime dispatch does with the resolved target: refuse
 // unusable frame evidence rather than recapture positionally (ADR 0014), refuse
-// off-screen targets, and store the coordinates a lazy outcome retry replays.
+// off-screen targets, and record the `@ref` the caller wrote.
 
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
@@ -66,25 +66,22 @@ beforeEach(() => {
   mockRunAppleRunnerCommand.mockResolvedValue({});
 });
 
-test('press @ref stores resolved coordinate retry payload for lazy outcome retry', async () => {
+test('press @ref taps the resolved point once and records the ref', async () => {
   const sessionStore = makeSessionStore();
-  const sessionName = 'retry-ref';
+  const sessionName = 'press-ref';
   const session = makeSession(sessionName);
-  session.snapshot = {
-    nodes: attachRefs([
-      {
-        index: 0,
-        type: 'XCUIElementTypeButton',
-        label: 'Continue',
-        identifier: 'auth_continue',
-        rect: { x: 10, y: 20, width: 100, height: 40 },
-        enabled: true,
-        hittable: true,
-      },
-    ]),
-    createdAt: Date.now(),
-    backend: 'xctest',
-  };
+  const nodes = attachRefs([
+    {
+      index: 0,
+      type: 'XCUIElementTypeButton',
+      label: 'Continue',
+      identifier: 'auth_continue',
+      rect: { x: 10, y: 20, width: 100, height: 40 },
+      enabled: true,
+      hittable: true,
+    },
+  ]);
+  session.snapshot = { nodes, createdAt: Date.now(), backend: 'xctest' };
   sessionStore.set(sessionName, session);
 
   const response = await handleInteractionCommands({
@@ -93,7 +90,7 @@ test('press @ref stores resolved coordinate retry payload for lazy outcome retry
       session: sessionName,
       command: 'press',
       positionals: ['@e1'],
-      flags: { interactionOutcome: { retryOnNoChange: true } },
+      flags: {},
     },
     sessionName,
     sessionStore,
@@ -102,9 +99,9 @@ test('press @ref stores resolved coordinate retry payload for lazy outcome retry
   });
 
   expect(response?.ok).toBe(true);
+  expect(mockTapPoint).toHaveBeenCalledTimes(1);
+  expect(mockTapPoint.mock.calls[0]?.[0]?.point).toEqual({ x: 60, y: 40 });
   const stored = sessionStore.get(sessionName);
-  expect(stored?.pendingInteractionOutcome?.command).toBe('press');
-  expect(stored?.pendingInteractionOutcome?.positionals).toEqual(['60', '40']);
   expect(stored?.actions[0]?.positionals).toEqual(['@e1']);
   expect(stored?.actions[0]?.flags).toEqual({});
 });
