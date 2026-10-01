@@ -43,7 +43,6 @@ import type {
 } from './runner-provider.ts';
 import { markRunnerXctestrunArtifactBadForRun } from './runner-xctestrun.ts';
 import { handleRunnerTransportErrorAfterCommandSend } from './runner-command-recovery.ts';
-import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';
 import {
   buildRunnerRecycleBudgetExhaustedError,
   commitRunnerRecycle,
@@ -352,12 +351,7 @@ async function executeRunnerCommandAttempt(
         appErr,
       );
     }
-    const firstAttemptUnwritten = isRunnerPreSendRefusal(appErr);
-    if (
-      shouldRestartRunnerBeforeCommandSend(appErr) &&
-      session &&
-      (firstAttemptUnwritten || isReadOnlyRunnerCommand(command))
-    ) {
+    if (shouldRestartRunnerBeforeCommandSend(appErr, command) && session) {
       assertRunnerRequestActive(options.requestId);
       return await restartSessionAndRunCommand({
         device,
@@ -366,7 +360,7 @@ async function executeRunnerCommandAttempt(
         options,
         signal,
         restartReason: 'runner_connect_failed_before_command_send',
-        firstAttemptUnwritten,
+        firstAttemptUnwritten: isRunnerPreSendRefusal(appErr),
       });
     }
     if (session && shouldRestartRunnerAfterReadinessPreflight(appErr)) {

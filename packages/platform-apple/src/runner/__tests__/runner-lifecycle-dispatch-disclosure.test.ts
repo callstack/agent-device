@@ -254,6 +254,25 @@ for (const row of ROWS) {
   });
 }
 
+test('a mutation whose connect-loop POST timed out after writing is not restarted or resent', async () => {
+  stubConnectLoopFailure(writtenThenLost);
+  mockEnsureRunnerSession.mockResolvedValueOnce(makeRunnerSession());
+  mockExecuteRunnerCommandWithSession.mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'status probe failed'),
+  );
+  await assert.rejects(tap(), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.runnerRestarted, undefined);
+    assert.equal(error.details?.dispatched, 'unknown');
+    return true;
+  });
+  assert.equal(mockEnsureRunnerSession.mock.calls.length, 1, 'the runner is not restarted');
+  const taps = mockExecuteRunnerCommandWithSession.mock.calls.filter(
+    ([, , command]) => command.command === 'tap',
+  );
+  assert.equal(taps.length, 1, 'the tap is sent once');
+});
+
 test('a plain Error before the exchange is normalized and discloses no', async () => {
   mockEnsureRunnerSession.mockRejectedValueOnce(new Error('spawn EACCES'));
   await assert.rejects(tap(), (error: unknown) => {

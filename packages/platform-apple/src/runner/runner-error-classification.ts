@@ -13,7 +13,9 @@ import {
   MAIN_THREAD_TIMEOUT_RUNNER_CODE,
   RUNNER_BUSY_RUNNER_CODE,
   RUNNER_WEDGED_RUNNER_CODE,
+  type RunnerCommand,
 } from './runner-contract.ts';
+import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';
 
 export const RUNNER_CACHE_RECOVERY_HINT =
   'If runner build products look stale or corrupted, run `pnpm clean:xcuitest` in a local checkout, or remove ~/.agent-device/apple-runner/derived, then retry.';
@@ -610,11 +612,21 @@ export function resolveRunnerFatalErrorReason(error: unknown): string | undefine
 }
 
 /**
- * A connect-shaped failure that surfaced before the command was sent: restart
- * the runner session and replay the command, rather than probing a runner
- * that never accepted the connection.
+ * A connect-shaped failure that lets the session restart and resend `command`, rather than probing a
+ * runner that never accepted the connection. The connect loop posts the command on every attempt, so
+ * its failure restarts only when no attempt could have written the command, or when the command is
+ * read-only: a POST that timed out after it was written (simctl curl exit 28) is no proof the
+ * command did not run, and a mutation is never resent on it.
  */
-export function shouldRestartRunnerBeforeCommandSend(error: unknown): boolean {
+export function shouldRestartRunnerBeforeCommandSend(
+  error: unknown,
+  command: RunnerCommand,
+): boolean {
+  if (!isRunnerConnectRefusal(error)) return false;
+  return isRunnerCommandProvablyUnwritten(error) || isReadOnlyRunnerCommand(command);
+}
+
+function isRunnerConnectRefusal(error: unknown): boolean {
   return runnerErrorVerdict(error, 'restartBeforeSend') ?? false;
 }
 
@@ -625,7 +637,7 @@ export function shouldRestartRunnerBeforeCommandSend(error: unknown): boolean {
  */
 export function isRunnerPreSendRefusal(error: unknown): boolean {
   return (
-    (shouldRestartRunnerBeforeCommandSend(error) && isRunnerCommandProvablyUnwritten(error)) ||
+    (isRunnerConnectRefusal(error) && isRunnerCommandProvablyUnwritten(error)) ||
     shouldRestartRunnerAfterReadinessPreflight(error) ||
     isRunnerBusyError(error)
   );
