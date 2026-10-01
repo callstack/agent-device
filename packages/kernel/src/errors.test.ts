@@ -11,6 +11,15 @@ import {
   summarizeCommandAttemptFailures,
 } from './errors.ts';
 
+test('normalizeError retains redacted nested command errors through repeated normalization', () => {
+  const stderr = `Launch request denied\n${'Context line\n'.repeat(50)}Underlying reason: token=private-value device locked`;
+  const expected = stderr.replace('private-value', '[REDACTED]');
+  const first = normalizeError(new AppError('COMMAND_FAILED', 'Launch failed', { stderr }));
+  const second = normalizeError(new AppError(first.code, first.message, first.details));
+  assert.equal(first.details?.stderr, expected);
+  assert.equal(second.details?.stderr, expected);
+});
+
 test('readElementMatchCandidateRefs extracts refs from candidate lines', () => {
   assert.deepEqual(
     readElementMatchCandidateRefs({
