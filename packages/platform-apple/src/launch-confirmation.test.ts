@@ -202,6 +202,10 @@ function wedgedCoreSimulator(): AppleToolProvider & { spawns: () => number } {
   const hang = async (options?: ExecOptions): Promise<ExecResult> =>
     await new Promise((_resolve, reject) => {
       spawns += 1;
+      if (options?.signal?.aborted) {
+        reject(options.signal.reason);
+        return;
+      }
       const timer = options?.timeoutMs
         ? setTimeout(() => reject(spawnTimeout()), options.timeoutMs)
         : undefined;
@@ -252,9 +256,14 @@ test('a hung URL owner lookup leaves the open unanswered within the launch budge
   }
 });
 
-test('the open aborting ends the URL owner lookup', async () => {
+test.each([
+  ['during the lookup', false],
+  ['before the lookup starts', true],
+])('the open aborting %s ends the URL owner lookup', async (_label, abortedBeforeLookup) => {
   const { interactor, acceptAlert } = confirmationRunner();
   const open = new AbortController();
+  const canceled = new AppError('COMMAND_FAILED', 'request canceled');
+  if (abortedBeforeLookup) open.abort(canceled);
   const coreSimulator = wedgedCoreSimulator();
   const answer = withAppleToolProvider(coreSimulator, async () =>
     answerSimulatorLaunchConfirmation(
@@ -266,7 +275,7 @@ test('the open aborting ends the URL owner lookup', async () => {
   );
 
   await vi.waitFor(() => expect(coreSimulator.spawns()).toBe(1));
-  open.abort(new AppError('COMMAND_FAILED', 'request canceled'));
+  if (!abortedBeforeLookup) open.abort(canceled);
 
   await expect(answer).resolves.toBeUndefined();
   expect(acceptAlert).not.toHaveBeenCalled();
