@@ -5,7 +5,7 @@ import {
 } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { WebDriverClient } from './webdriver-client.ts';
-import { isWebDriverRouteUnsupported } from './webdriver-transport.ts';
+import { isWebDriverRouteUnsupported, unsupportedRouteRefusal } from './webdriver-transport.ts';
 
 export type WebDriverOrientationBackend = 'android' | 'xctest';
 
@@ -58,6 +58,7 @@ export async function setWebDriverOrientation(
     'COMMAND_FAILED',
     `Could not set device orientation to ${rotation} on the hosted WebDriver session.`,
     {
+      ...unsupportedRouteRefusal(),
       hint: 'The provider driver rejected both orientation endpoints. Set the orientation as a session capability instead, for example connect --provider-device-orientation portrait.',
       rotation,
       attempts,

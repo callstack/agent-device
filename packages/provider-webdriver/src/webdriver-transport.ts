@@ -334,10 +334,9 @@ function webdriverError(status: number, payload: unknown): AppError {
       : `WebDriver request failed with HTTP ${status}.`;
   if (isUnsupportedRouteAnswer(status, payload)) {
     return new AppError('COMMAND_FAILED', message, {
-      reason: WEBDRIVER_ROUTE_UNSUPPORTED_REASON,
+      ...unsupportedRouteRefusal(),
       status,
       response: payload,
-      ...dispatchDisclosure('no'),
     });
   }
   return new AppError('COMMAND_FAILED', message, {
@@ -351,6 +350,17 @@ function webdriverError(status: number, payload: unknown): AppError {
 
 /** Machine-readable `details.reason` of a driver answer that it does not implement the route. */
 const WEBDRIVER_ROUTE_UNSUPPORTED_REASON = 'webdriver_route_unsupported';
+
+/**
+ * The details of a refusal the driver answered before running anything: it does not implement
+ * the route. A command that tried every route it has and was refused by each carries the same.
+ */
+export function unsupportedRouteRefusal(): {
+  reason: typeof WEBDRIVER_ROUTE_UNSUPPORTED_REASON;
+  dispatched: DispatchDisclosure;
+} {
+  return { reason: WEBDRIVER_ROUTE_UNSUPPORTED_REASON, ...dispatchDisclosure('no') };
+}
 
 /** W3C `error` codes a driver answers with when it does not implement the route. */
 const UNSUPPORTED_ROUTE_ERROR_CODES: ReadonlySet<string> = new Set([

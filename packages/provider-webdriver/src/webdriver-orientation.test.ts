@@ -5,6 +5,12 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { WebDriverClient } from './webdriver-client.ts';
 import { setWebDriverOrientation } from './webdriver-orientation.ts';
 import { WebDriverTransport } from './webdriver-transport.ts';
+import fs from 'node:fs';
+import {
+  assertDispatchDisclosureDriversMatchRows,
+  DISPATCH_DISCLOSURE_TABLE_PATH,
+  dispatchDisclosureRowsOwnedBy,
+} from '@agent-device/contracts/dispatch-disclosure-fixtures';
 
 type Call = { method: string; args: unknown[] };
 
@@ -181,6 +187,8 @@ test('exhausting both endpoints reports the rotation and each attempt', async ()
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'COMMAND_FAILED');
       assert.match(error.message, /landscape-left/);
+      assert.equal(error.details?.reason, 'webdriver_route_unsupported');
+      assert.equal(error.details?.dispatched, 'no');
       assert.match(String(error.details?.hint), /--provider-device-orientation/);
       const attempts = error.details?.attempts;
       assert.ok(Array.isArray(attempts));
@@ -192,3 +200,33 @@ test('exhausting both endpoints reports the rotation and each attempt', async ()
     },
   );
 });
+
+const DRIVERS: Record<string, () => Promise<unknown>> = {
+  'webdriver.orientation.every-route-unsupported': async () =>
+    await setWebDriverOrientation(
+      makeClient({ reject: ['setRotation', 'setOrientation'] }).client,
+      'android',
+      'landscape-left',
+    ),
+};
+
+const ROWS = dispatchDisclosureRowsOwnedBy(
+  import.meta.url,
+  fs.readFileSync(DISPATCH_DISCLOSURE_TABLE_PATH, 'utf8'),
+);
+
+test('every webdriver orientation dispatch-disclosure row has exactly one driver', () => {
+  assertDispatchDisclosureDriversMatchRows(ROWS, Object.keys(DRIVERS));
+});
+
+for (const row of ROWS) {
+  test(`${row.id}: ${row.trigger} → dispatched ${row.dispatched}`, async () => {
+    const drive = DRIVERS[row.id];
+    assert.ok(drive, `no driver for ${row.id}`);
+    await assert.rejects(drive(), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.dispatched, row.dispatched);
+      return true;
+    });
+  });
+}

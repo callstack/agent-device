@@ -51,6 +51,7 @@ export const DISPATCH_DISCLOSURE_DRIVER_OWNERS: Readonly<Record<string, string>>
   'android-helper.gesture-session.':
     'packages/platform-android/src/__tests__/touch-helper-session.test.ts',
   'webdriver.': 'packages/provider-webdriver/src/webdriver-transport.test.ts',
+  'webdriver.orientation.': 'packages/provider-webdriver/src/webdriver-orientation.test.ts',
   'maestro-direct.':
     'src/daemon/interaction/internal/__tests__/interaction-touch-direct-ios.test.ts',
 };

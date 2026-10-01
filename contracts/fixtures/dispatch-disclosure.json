@@ -474,5 +474,11 @@
     "producer": "webdriver",
     "trigger": "a mutating POST the driver answered 503: it received the request, but not whether the mutation completed",
     "dispatched": "unknown"
+  },
+  {
+    "id": "webdriver.orientation.every-route-unsupported",
+    "producer": "webdriver",
+    "trigger": "orientation refused by both the rotation route and the orientation route: each answer said the route is not implemented, so nothing ran",
+    "dispatched": "no"
   }
 ]
