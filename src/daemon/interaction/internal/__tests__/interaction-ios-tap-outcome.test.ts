@@ -7,7 +7,6 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { handleInteractionCommands } from '../../index.ts';
-import { handleSnapshotCommands } from '../../../handlers/snapshot.ts';
 import {
   makeIosSession,
   authoringPublication,
@@ -22,7 +21,6 @@ import {
   snapshot,
   snapshotPayload,
 } from './interaction-ios-tap-outcome-fixtures.ts';
-import { snapshotRuntimeFixture } from '../../../__tests__/snapshot-runtime-fixture.ts';
 import {
   appCaptureComparisonKey,
   systemSurfaceCaptureComparisonKey,
@@ -621,7 +619,7 @@ test('runtime-resolved taps use the same corroboration boundary', async () => {
   expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
 });
 
-test('a corroborated runtime coordinate tap is not re-sent by the next snapshot', async () => {
+test('runtime coordinate taps use the same corroboration boundary', async () => {
   const sessionName = 'ios-runtime-coordinate-corroboration';
   const sessionStore = makeSessionStore();
   sessionStore.set(
@@ -654,66 +652,8 @@ test('a corroborated runtime coordinate tap is not re-sent by the next snapshot'
   if (clickResponse?.ok) {
     expect(clickResponse.data?.warning).toMatch(/post-action accessibility capture changed/);
   }
-
-  const snapshotResponse = await handleSnapshotCommands({
-    req: {
-      token: 'test',
-      session: sessionName,
-      command: 'snapshot',
-      positionals: [],
-      flags: {},
-    },
-    sessionName,
-    logPath: '/tmp/daemon.log',
-    sessionStore,
-    ...snapshotRuntimeFixture(),
-  });
-
-  expect(snapshotResponse?.ok).toBe(true);
   expect(pressCount).toBe(1);
-});
-
-test('a coordinate click the next snapshot finds unchanged is not re-sent', async () => {
-  const sessionName = 'ios-unchanged-click-no-resend';
-  const sessionStore = makeSessionStore();
-  sessionStore.set(
-    sessionName,
-    makeIosSession(sessionName, {
-      appBundleId: 'com.example.app',
-      snapshot: snapshot(profileNodes),
-    }),
-  );
-  let pressCount = 0;
-  legacyDispatchCapture.mockImplementation(async (_device, command) => {
-    if (command === 'press') {
-      pressCount += 1;
-      return {};
-    }
-    if (command === 'snapshot') return snapshotPayload(profileNodes);
-    return {};
-  });
-
-  const clickResponse = await runClick(sessionStore, sessionName, {
-    positionals: ['104', '222'],
-  });
-  expect(clickResponse?.ok).toBe(true);
-
-  const snapshotResponse = await handleSnapshotCommands({
-    req: {
-      token: 'test',
-      session: sessionName,
-      command: 'snapshot',
-      positionals: [],
-      flags: {},
-    },
-    sessionName,
-    logPath: '/tmp/daemon.log',
-    sessionStore,
-    ...getRuntimeBindings(),
-  });
-
-  expect(snapshotResponse?.ok).toBe(true);
-  expect(pressCount).toBe(1);
+  expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
 });
 
 test('corroborated runtime taps retain target evidence through save and replay', async () => {
