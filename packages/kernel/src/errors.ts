@@ -566,41 +566,32 @@ export function discloseDispatch<Failure extends AppError>(
 }
 
 /**
- * The failure of a series that issues more than one device-reaching step, after `dispatchedSteps`
- * of them reached the device. `no` describes the whole requested operation, so it holds only while
- * no step was dispatched; after that the failure is `unknown`, and `details.dispatchedSteps` adds
- * this series' count to any count the failing step already carries. A failure that is not an
- * {@link AppError} passes through unchanged for the boundary that normalizes it.
- */
-export function discloseDispatchAfterSteps(error: unknown, dispatchedSteps: number): unknown {
-  if (dispatchedSteps === 0 || !(error instanceof AppError)) return error;
-  return discloseDispatch(error, 'unknown', {
-    dispatchedSteps: stepsIncludingFailingStep(error.details, dispatchedSteps),
-  });
-}
-
-/**
- * {@link discloseDispatchAfterSteps} for a failure already on the wire: the details a failed
- * response carries after `dispatchedSteps` device-reaching steps of its request returned.
+ * The details of a failure after `dispatchedSteps` device-reaching steps of its operation returned.
+ * `no` describes the whole requested operation, so it holds only while no step was dispatched; after
+ * that the failure is `unknown`, and `details.dispatchedSteps` adds this count to any count the
+ * failing step already carries.
  */
 export function detailsAfterDispatchedSteps(
   details: ErrorWireDetails | undefined,
   dispatchedSteps: number,
 ): ErrorWireDetails | undefined {
   if (dispatchedSteps === 0) return details;
+  const innerSteps = details?.dispatchedSteps;
   return {
     ...details,
-    dispatchedSteps: stepsIncludingFailingStep(details, dispatchedSteps),
+    dispatchedSteps: dispatchedSteps + (typeof innerSteps === 'number' ? innerSteps : 0),
     dispatched: 'unknown',
   };
 }
 
-function stepsIncludingFailingStep(
-  details: Record<string, unknown> | undefined,
-  dispatchedSteps: number,
-): number {
-  const innerSteps = details?.dispatchedSteps;
-  return dispatchedSteps + (typeof innerSteps === 'number' ? innerSteps : 0);
+/**
+ * {@link detailsAfterDispatchedSteps} on a thrown failure. A failure that is not an
+ * {@link AppError} passes through unchanged for the boundary that normalizes it.
+ */
+export function discloseDispatchAfterSteps(error: unknown, dispatchedSteps: number): unknown {
+  if (!(error instanceof AppError)) return error;
+  error.details = detailsAfterDispatchedSteps(error.details, dispatchedSteps);
+  return error;
 }
 
 /** The side-effect seam's verdict, recorded only when no producer classified the failure. */
