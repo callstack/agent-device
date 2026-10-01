@@ -284,17 +284,20 @@ function isOverlayLikeNode(
 }
 
 /**
- * A chrome container published with exactly the frame of a sibling reports that sibling's footprint
- * rather than a surface drawn over it: such a container is a host that paints nothing itself, and
- * everything it really draws is a descendant with its own smaller rect that this scan judges on its
- * own. `isFullViewportChromeContainer` reaches this verdict only for a container sized to the
- * viewport root, so a container stopping short of it condemned content on both sides — a bottom-bar
- * container matching the 812pt content branch beside it marked that branch's 36 nodes and the bar's
- * own navigation bar, and a tab-bar badge container matching the platter content view beside it
- * marked every tab (#2996).
+ * Exempt a viewport-chrome container whose frame equals a listed sibling's. UIKit sizes a bar
+ * container to the branch it presents over, so in the captured shapes a sibling-matching frame is
+ * that branch's footprint, not a surface drawn on top of it; what the container really draws is its
+ * descendants, each with its own rect the scan judges on its own (#2996).
  *
- * Only the chrome kinds qualify: a `dialog`/`sheet`/`alert` sized to the content around it is a real
- * presentation over that content and keeps covering.
+ * Two captures carry the shape: a system app's bar container matching the 812pt content branch beside
+ * it marked that branch's 36 nodes plus the navigation bar listed with it, and a tab-bar badge
+ * container matching the platter content view beside it marked every tab. `isFullViewportChromeContainer`
+ * reaches the same verdict only against the viewport root, which such a container stops short of.
+ *
+ * Accepted limit: a snapshot publishes geometry and kind only, so the predicate cannot tell a
+ * pass-through host from an opaque bar of the same frame, and chrome siblings that share one frame
+ * excuse each other. Both captures show the match only where content was being refused, and the kind
+ * gate keeps a `dialog`/`sheet`/`alert` sized to the content around it covering.
  */
 // Mutation-lane note: the `typeof parentIndex` and `!rect` guards below are provably
 // redundant — with no parent index the sibling lookup finds nothing and answers "not
