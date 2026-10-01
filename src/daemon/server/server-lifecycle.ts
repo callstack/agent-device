@@ -81,6 +81,13 @@ export type InfoRemoval =
  * Every refusal is fail-closed, including `unproven` for a record that agrees on pid but on no start
  * time. Keeping such a record leaves a client to find a dead pid, which its own liveness check
  * already recovers from; removing one that belongs to a successor is the unrecoverable direction.
+ *
+ * The read and the unlink are not one atomic step, and there is no check-and-delete primitive to make
+ * them one. What closes the gap is the daemon lock the caller still holds: a successor can only reach
+ * `writeInfo` after {@link acquireDaemonLock} steals it, and stealing it requires
+ * `isAgentDeviceDaemonProcess` to prove the holder dead — which this process running this line is not.
+ * The premise is therefore that nothing removed the lock out from under us, and #3105 records the one
+ * path that currently breaks it by clearing the lock without proving ownership.
  */
 export function removeInfoOwnedBy(infoPath: string, owner: OwnerIdentity): InfoRemoval {
   const ownership = readRegisteredDaemonOwnership(infoPath, owner);
