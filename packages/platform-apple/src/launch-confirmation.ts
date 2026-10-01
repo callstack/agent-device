@@ -17,6 +17,14 @@ export const LAUNCH_CONFIRMATION_FOREIGN_APP_REASON = 'launch_confirmation_forei
  */
 const LAUNCH_CONFIRMATION_TITLE = /^Open in [“"].+[”"]\?$/u;
 
+/**
+ * One shared deadline for the URL-owner lookup (the app listing and every Info.plist read). The
+ * alert read and accept are each bounded by the runner's `DEFAULT_ALERT_TIMEOUT_MS`; the lookup gets
+ * the same bound, well inside `IOS_APP_LAUNCH_TIMEOUT_MS`, so a wedged CoreSimulator leaves the open
+ * unanswered instead of holding it.
+ */
+const URL_OWNER_LOOKUP_TIMEOUT_MS = 10_000;
+
 /** A custom-scheme launch URL SpringBoard may hold for the session app it was checked for. */
 export type LaunchConfirmationTarget = Readonly<{ url: string; appBundleId: string }>;
 
@@ -101,11 +109,12 @@ export async function answerSimulatorLaunchConfirmation(
   device: DeviceInfo,
   confirmation: LaunchConfirmationTarget,
   interactor: Promise<Interactor>,
+  signal: AbortSignal,
 ): Promise<LaunchConfirmation | undefined> {
   const resolved = await interactor.catch(failed('runner'));
   if (!resolved) return undefined;
   return await answerLaunchConfirmation(
-    createLaunchConfirmationPort(device, confirmation, resolved),
+    createLaunchConfirmationPort(device, confirmation, resolved, signal),
   );
 }
 
@@ -113,6 +122,7 @@ export function createLaunchConfirmationPort(
   device: DeviceInfo,
   { url, appBundleId }: LaunchConfirmationTarget,
   interactor: Interactor,
+  signal: AbortSignal,
 ): LaunchConfirmationPort {
   const readAlert = interactor.readAlert?.bind(interactor);
   const acceptAlert = interactor.acceptAlert?.bind(interactor);
@@ -124,6 +134,10 @@ export function createLaunchConfirmationPort(
     appBundleId,
     readAlert: async () => await alertIfPresent(readAlert(target)),
     acceptAlert: async () => await acceptAlert(target),
-    resolveUrlOwner: async () => await resolveIosSimulatorDeepLinkBundleId(device, url),
+    resolveUrlOwner: async () =>
+      await resolveIosSimulatorDeepLinkBundleId(device, url, {
+        timeoutMs: URL_OWNER_LOOKUP_TIMEOUT_MS,
+        signal,
+      }),
   });
 }

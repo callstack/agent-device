@@ -272,6 +272,7 @@ function confirmationAnswer(
       binding.device,
       confirmation,
       binding.resolveInteractor(input.execution, confirmation.appBundleId),
+      binding.signal,
     );
   };
 }

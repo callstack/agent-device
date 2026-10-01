@@ -4,7 +4,10 @@ import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError } from '@agent-device/kernel/errors';
+import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
 import { resolveIosSimulatorDeepLinkBundleId } from './core/app-resolution.ts';
+import { IOS_APP_LAUNCH_TIMEOUT_MS } from './core/config.ts';
+import { type AppleToolProvider, withAppleToolProvider } from './core/tool-provider.ts';
 import {
   answerLaunchConfirmation,
   answerSimulatorLaunchConfirmation,
@@ -18,9 +21,13 @@ vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
   return { ...actual, emitDiagnostic: vi.fn() };
 });
 
-vi.mock('./core/app-resolution.ts', () => ({
-  resolveIosSimulatorDeepLinkBundleId: vi.fn(async () => 'com.example.app'),
-}));
+vi.mock('./core/app-resolution.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./core/app-resolution.ts')>();
+  return {
+    ...actual,
+    resolveIosSimulatorDeepLinkBundleId: vi.fn(actual.resolveIosSimulatorDeepLinkBundleId),
+  };
+});
 
 const simulator: DeviceInfo = {
   platform: 'apple',
@@ -186,29 +193,78 @@ test.each([
   await expect(answerLaunchConfirmation(device)).resolves.toBeUndefined();
 });
 
-test('the answer returns only after its accept settled, however long the accept takes', async () => {
+/**
+ * A CoreSimulator that never answers: each spawn settles only when its exec timeout fires or its
+ * signal aborts, the way `exec.ts` ends a wedged child.
+ */
+function wedgedCoreSimulator(): AppleToolProvider & { spawns: () => number } {
+  let spawns = 0;
+  const hang = async (options?: ExecOptions): Promise<ExecResult> =>
+    await new Promise((_resolve, reject) => {
+      spawns += 1;
+      if (options?.timeoutMs) {
+        setTimeout(() => reject(spawnTimeout()), options.timeoutMs);
+      }
+      options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+        once: true,
+      });
+    });
+  return {
+    whichCommand: async () => true,
+    runCommand: async (_cmd, _args, options) => await hang(options),
+    simctl: { run: async (_args, options) => await hang(options) },
+    devicectl: { run: async (_args, options) => await hang(options) },
+    spawns: () => spawns,
+  };
+}
+
+function confirmationRunner() {
+  const acceptAlert = vi.fn(async () => ({}));
+  const interactor = { readAlert: async () => CONFIRMATION, acceptAlert } as unknown as Interactor;
+  return { interactor, acceptAlert };
+}
+
+test('a hung URL owner lookup leaves the open unanswered within the launch budget', async () => {
   vi.useFakeTimers();
   try {
-    const acceptMs = 70_000;
-    const { port: device, acceptAlert } = port(async () => CONFIRMATION, {
-      acceptAlert: async () =>
-        await new Promise((resolve) => {
-          setTimeout(() => resolve({}), acceptMs);
-        }),
-    });
+    const { interactor, acceptAlert } = confirmationRunner();
     let answered: unknown = 'pending';
-    const answer = answerLaunchConfirmation(device).then((value) => (answered = value));
+    const answer = withAppleToolProvider(wedgedCoreSimulator(), async () =>
+      answerSimulatorLaunchConfirmation(
+        simulator,
+        { url: 'example://automation', appBundleId: 'com.example.app' },
+        Promise.resolve(interactor),
+        new AbortController().signal,
+      ).then((value) => (answered = value)),
+    );
 
-    await vi.advanceTimersByTimeAsync(acceptMs - 1);
-    expect(acceptAlert).toHaveBeenCalledOnce();
-    expect(answered).toBe('pending');
-
-    await vi.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(IOS_APP_LAUNCH_TIMEOUT_MS - 1);
+    expect(answered).toBeUndefined();
     await answer;
-    expect(answered).toBe('accepted');
+    expect(acceptAlert).not.toHaveBeenCalled();
   } finally {
     vi.useRealTimers();
   }
+});
+
+test('the open aborting ends the URL owner lookup', async () => {
+  const { interactor, acceptAlert } = confirmationRunner();
+  const open = new AbortController();
+  const coreSimulator = wedgedCoreSimulator();
+  const answer = withAppleToolProvider(coreSimulator, async () =>
+    answerSimulatorLaunchConfirmation(
+      simulator,
+      { url: 'example://automation', appBundleId: 'com.example.app' },
+      Promise.resolve(interactor),
+      open.signal,
+    ),
+  );
+
+  await vi.waitFor(() => expect(coreSimulator.spawns()).toBe(1));
+  open.abort(new AppError('COMMAND_FAILED', 'request canceled'));
+
+  await expect(answer).resolves.toBeUndefined();
+  expect(acceptAlert).not.toHaveBeenCalled();
 });
 
 test('the port reads and accepts the alert for the session app and asks the scheme owner', async () => {
@@ -216,10 +272,14 @@ test('the port reads and accepts the alert for the session app and asks the sche
   const acceptAlert = vi.fn(async () => ({}));
   const interactor = { readAlert, acceptAlert } as unknown as Interactor;
 
+  const signal = new AbortController().signal;
+  vi.mocked(resolveIosSimulatorDeepLinkBundleId).mockResolvedValueOnce('com.example.app');
+
   const device = createLaunchConfirmationPort(
     simulator,
     { url: 'example://automation', appBundleId: 'com.example.app' },
     interactor,
+    signal,
   );
   await device.readAlert();
   await device.acceptAlert();
@@ -231,6 +291,7 @@ test('the port reads and accepts the alert for the session app and asks the sche
   expect(resolveIosSimulatorDeepLinkBundleId).toHaveBeenCalledWith(
     simulator,
     'example://automation',
+    { timeoutMs: expect.any(Number), signal },
   );
 });
 
@@ -248,6 +309,7 @@ test('the port reads a typed absence as no alert and keeps any other failure', a
     simulator,
     { url: 'example://automation', appBundleId: 'com.example.app' },
     interactor,
+    new AbortController().signal,
   );
 
   await expect(device.readAlert()).resolves.toBeUndefined();
@@ -260,6 +322,7 @@ test('a runner that cannot be resolved leaves the open unanswered', async () => 
       simulator,
       { url: 'example://automation', appBundleId: 'com.example.app' },
       Promise.reject(new AppError('COMMAND_FAILED', 'xcrun timed out', { timeoutMs: 10_000 })),
+      new AbortController().signal,
     ),
   ).resolves.toBeUndefined();
 });
