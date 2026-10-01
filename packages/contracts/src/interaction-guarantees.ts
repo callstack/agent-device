@@ -165,7 +165,7 @@ const SHARED_RESPONSE_CONSTRUCTION: GuaranteeEnforcement = {
 const TAP_OUTCOME_NOT_OBSERVED_GAP: GuaranteeEnforcement = {
   kind: 'waived',
   reason:
-    'gap: the response reports the dispatch only; only opt-in --verify/--settle capture post-action evidence into it. The deferred marks set after dispatch (Android snapshot freshness after press/click, the no-change tap retry when the request sets interactionOutcome.retryOnNoChange, post-gesture stabilization when the request sets postGestureStabilization) are judged by the next capture, never in this response, and the iOS ambiguous-failure corroboration reconsiders only a thrown runner error.',
+    'gap: the response reports the dispatch only; only opt-in --verify/--settle capture post-action evidence into it. The deferred marks set after dispatch (Android snapshot freshness after press/click, post-gesture stabilization when the request sets postGestureStabilization) are judged by the next capture, never in this response, and the iOS ambiguous-failure corroboration reconsiders only a thrown runner error.',
   trackingIssue: GAPS_UMBRELLA_ISSUE,
 };
 
