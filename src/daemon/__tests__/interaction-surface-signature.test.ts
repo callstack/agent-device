@@ -6,8 +6,7 @@ import {
   classifyBaselineSurfaceEvidence,
   areInteractionSurfaceSignaturesStable,
   discriminatingSurfaceChangedWithinRect,
-  stripInternalInteractionFlags,
-} from '../interaction-outcome-policy.ts';
+} from '../interaction-surface-signature.ts';
 
 test('areInteractionSurfaceSignaturesStable treats identical surfaces as stable', () => {
   const before = buildInteractionSurfaceSignature(makeSnapshot('Inbox').nodes);
@@ -296,16 +295,6 @@ function applicationRootNode() {
     rect: { x: 0, y: 0, width: 390, height: 844 },
   };
 }
-
-test('stripInternalInteractionFlags removes internal interaction controls', () => {
-  assert.deepEqual(
-    stripInternalInteractionFlags({
-      platform: 'ios',
-      postGestureStabilization: true,
-    }),
-    { platform: 'ios' },
-  );
-});
 
 function makeSnapshot(label: string, y = 100): SnapshotState {
   return {

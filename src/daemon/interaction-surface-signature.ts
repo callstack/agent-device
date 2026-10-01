@@ -1,4 +1,3 @@
-import type { CommandFlags } from '@agent-device/contracts/command';
 import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { collectKeyboardChromeRefs } from '@agent-device/capture-kit/snapshot-chrome';
 import { stateMarkers } from '@agent-device/capture-kit/snapshot-lines';
@@ -10,14 +9,6 @@ const RECT_TOLERANCE_PX = 1;
 export type InteractionSurfaceSignature = InteractionSurfaceEntry[];
 
 export type InteractionSurfaceChange = 'changed' | 'unchanged' | 'ambiguous';
-
-export function stripInternalInteractionFlags(
-  flags: CommandFlags | undefined,
-): CommandFlags | undefined {
-  if (!flags?.postGestureStabilization) return flags;
-  const { postGestureStabilization: _postGestureStabilization, ...publicFlags } = flags;
-  return publicFlags;
-}
 
 export function buildInteractionSurfaceSignature(
   nodes: SnapshotNode[],

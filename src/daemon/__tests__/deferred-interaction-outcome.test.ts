@@ -4,6 +4,7 @@ import {
   isPostGestureStabilizationPending,
   markDeferredInteractionOutcome,
   resolveDeferredInteractionOutcome,
+  stripInternalInteractionFlags,
   type DeferredOutcomeSnapshotAttempt,
 } from '../deferred-interaction-outcome.ts';
 import type { SessionState } from '../session-state.ts';
@@ -194,4 +195,14 @@ test('android freshness recovery re-captures past a stale dump and clears the wi
   assert.equal(result?.freshness?.retryCount, 1);
   assert.equal(result?.freshness?.staleAfterRetries, false);
   assert.equal(session.androidSnapshotFreshness, undefined);
+});
+
+test('stripInternalInteractionFlags removes internal interaction controls', () => {
+  assert.deepEqual(
+    stripInternalInteractionFlags({
+      platform: 'ios',
+      postGestureStabilization: true,
+    }),
+    { platform: 'ios' },
+  );
 });

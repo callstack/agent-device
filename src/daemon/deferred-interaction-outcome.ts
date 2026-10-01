@@ -18,7 +18,7 @@ import {
   haveIdenticalDiscriminatingSurfaces,
   summarizeDiscriminatingSurfaceDivergence,
   snapshotSurfaceComparisonKey,
-} from './interaction-outcome-policy.ts';
+} from './interaction-surface-signature.ts';
 import {
   runPostGestureStabilityLoop,
   type PostGestureStabilityOutcome,
@@ -193,7 +193,7 @@ async function capturePostActionSnapshotAttempt(
 /**
  * Session-aware adapter over the pure stability loop
  * (`post-gesture-stability.ts`): reads the pending record, supplies the
- * interaction-surface comparators from interaction-outcome-policy as hooks,
+ * interaction-surface comparators from interaction-surface-signature as hooks,
  * and — as the R7 owner — clears `postGestureStabilization` once the loop
  * has run, on settle, timeout and an aborted capture alike.
  */
@@ -249,6 +249,14 @@ function resolvedPostGestureCapture(
   const { snapshot, annotations } = stabilized.value;
   if (stabilized.postGestureOutcome) snapshot.postGestureOutcome = stabilized.postGestureOutcome;
   return { snapshot, ...annotations };
+}
+
+export function stripInternalInteractionFlags(
+  flags: CommandFlags | undefined,
+): CommandFlags | undefined {
+  if (!flags?.postGestureStabilization) return flags;
+  const { postGestureStabilization: _postGestureStabilization, ...publicFlags } = flags;
+  return publicFlags;
 }
 
 function isPostGestureStabilizingAction(

@@ -67,7 +67,7 @@ export type InteractionSurfaceEntry = {
    * False for structurally fixed elements (the viewport root, keyboard
    * chrome) whose rect is invariant regardless of any gesture — shared
    * evidence limited to these is not evidence at all. See
-   * `classifyBaselineSurfaceEvidence` in interaction-outcome-policy.ts.
+   * `classifyBaselineSurfaceEvidence` in interaction-surface-signature.ts.
    */
   discriminating: boolean;
 };

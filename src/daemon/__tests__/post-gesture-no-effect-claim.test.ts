@@ -11,7 +11,7 @@ import {
 import {
   buildInteractionSurfaceSignature,
   summarizeDiscriminatingSurfaceDivergence,
-} from '../interaction-outcome-policy.ts';
+} from '../interaction-surface-signature.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   capturePostGestureStabilizedResult,
