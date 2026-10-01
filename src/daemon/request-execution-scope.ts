@@ -125,7 +125,7 @@ export type LockedRequestScope = {
   ): DaemonCommandContext;
 };
 
-export type LockedRequestScopeResult =
+type LockedRequestScopeResult =
   | { type: 'scope'; scope: LockedRequestScope }
   | { type: 'response'; response: DaemonResponse };
 

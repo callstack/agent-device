@@ -7,7 +7,7 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
  * app-visible action — reads, idempotent readiness and preparation, and host-side recorder, log,
  * probe, and profiler controls whose repeat the device refuses or ignores.
  */
-export type RuntimeOperationEffect = 'mutates' | 'repeatable';
+type RuntimeOperationEffect = 'mutates' | 'repeatable';
 
 /** Every bound operation's effect; the request binding records each `mutates` send it returns. */
 export const RUNTIME_OPERATION_EFFECTS: Readonly<
