@@ -98,17 +98,25 @@ test('ownership is decided by the identity in the record, not by its pid alone',
   publishDaemonRegistration(stateDir, owner);
   assert.deepEqual(readRegisteredDaemonOwnership(infoPath, owner), { state: 'match' });
 
+  // Two unreadable start times agree, and agreeing on nothing is not proof of ownership. Nor is this
+  // a proved takeover, so it lands between the two rather than defaulting either way.
+  publishDaemonRegistration(stateDir, { pid: process.pid, startTime: null });
+  assert.deepEqual(readRegisteredDaemonOwnership(infoPath, { pid: process.pid, startTime: null }), {
+    state: 'unproven',
+  });
+
+  // Same pid with a readable start time on the record but not on this side is still unproven: the
+  // proof of a recycle has to run on two readable birth times, and `ownerIdentityDiffers` is one-way
+  // by design so no caller mistakes one owner for two.
+  publishDaemonRegistration(stateDir, { pid: process.pid, startTime: 'recycled' });
+  assert.deepEqual(readRegisteredDaemonOwnership(infoPath, { pid: process.pid, startTime: null }), {
+    state: 'unproven',
+  });
+
   publishDaemonRegistration(stateDir, { pid: 4242, startTime: 'successor-start' });
   assert.deepEqual(readRegisteredDaemonOwnership(infoPath, owner), {
     state: 'replaced',
     identity: { pid: 4242, startTime: 'successor-start' },
-  });
-
-  // A recycled pid is a different process, and the only proof available is the start time.
-  publishDaemonRegistration(stateDir, { pid: process.pid, startTime: 'recycled' });
-  assert.deepEqual(readRegisteredDaemonOwnership(infoPath, owner), {
-    state: 'replaced',
-    identity: { pid: process.pid, startTime: 'recycled' },
   });
 });
 
@@ -120,19 +128,32 @@ test('ownership names each way a record yields no owner', () => {
   assert.deepEqual(readRegisteredDaemonOwnership(infoPath, owner), { state: 'absent' });
 
   fs.writeFileSync(infoPath, '{not json');
-  assert.deepEqual(readRegisteredDaemonOwnership(infoPath, owner), { state: 'decodable' });
+  assert.deepEqual(readRegisteredDaemonOwnership(infoPath, owner), { state: 'ownerless' });
 
   fs.writeFileSync(infoPath, JSON.stringify({ pid: 4242 }));
   assert.deepEqual(readRegisteredDaemonOwnership(infoPath, owner), {
     state: 'replaced',
     identity: { pid: 4242, startTime: null },
   });
-
-  if (process.getuid?.() === 0) return;
-  fs.chmodSync(infoPath, 0o000);
-  try {
-    assert.deepEqual(readRegisteredDaemonOwnership(infoPath, owner), { state: 'unreadable' });
-  } finally {
-    fs.chmodSync(infoPath, 0o600);
-  }
 });
+
+test.skipIf(process.getuid?.() === 0)(
+  'a registration this process cannot read is unreadable, not absent',
+  () => {
+    // EACCES leaves the file on disk: only a root-owned CI host reads mode 000 anyway, and reading it
+    // there — or reading the failure as absence — would repeat #3087 from the other side.
+    const infoPath = infoPathOf(useStateDir());
+    fs.writeFileSync(infoPath, JSON.stringify({ pid: process.pid, processStartTime: 'ours' }));
+    fs.chmodSync(infoPath, 0o000);
+    try {
+      assert.deepEqual(
+        readRegisteredDaemonOwnership(infoPath, { pid: process.pid, startTime: 'ours' }),
+        {
+          state: 'unreadable',
+        },
+      );
+    } finally {
+      fs.chmodSync(infoPath, 0o600);
+    }
+  },
+);

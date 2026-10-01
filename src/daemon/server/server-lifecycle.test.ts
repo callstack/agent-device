@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { removeInfoOwnedBy, writeInfo, type OwnerIdentity } from './server-lifecycle.ts';
+import type { OwnerIdentity } from '@agent-device/host-kit/process';
+import { removeInfoOwnedBy, writeInfo } from './server-lifecycle.ts';
 import { readRegisteredDaemonOwnership } from '../daemon-registration.ts';
 
 const OWN_PID = process.pid;
@@ -71,6 +72,18 @@ test('a record recycling our pid after our start time is not ours to remove', ()
   assert.equal(fs.existsSync(infoPath), true);
 });
 
+test('a record agreeing on pid alone is refused, not removed on the strength of the pid', () => {
+  // One side cannot read its own start time, so nothing proves this record is ours. Removing it would
+  // be the pid-only rule the fence exists to replace; keeping it costs a client one liveness probe.
+  const [, infoPath] = writeRegistration(OWN_PID, null);
+
+  assert.deepEqual(removeInfoOwnedBy(infoPath, OWN_IDENTITY), {
+    removed: false,
+    reason: 'unproven',
+  });
+  assert.equal(fs.existsSync(infoPath), true);
+});
+
 test('an absent registration is nothing to remove', () => {
   const [, infoPath] = scratchInfoPath();
 
@@ -82,7 +95,7 @@ test('a corrupt or pid-less registration names no owner, so it is refused and ke
   fs.writeFileSync(corrupt, '{not json');
   assert.deepEqual(removeInfoOwnedBy(corrupt, OWN_IDENTITY), {
     removed: false,
-    reason: 'decodable',
+    reason: 'ownerless',
   });
   assert.equal(
     fs.existsSync(corrupt),
@@ -95,7 +108,7 @@ test('a corrupt or pid-less registration names no owner, so it is refused and ke
     fs.writeFileSync(pidLess, JSON.stringify({ pid, token: 'token' }));
     assert.deepEqual(removeInfoOwnedBy(pidLess, OWN_IDENTITY), {
       removed: false,
-      reason: 'decodable',
+      reason: 'ownerless',
     });
     assert.equal(fs.existsSync(pidLess), true);
   }

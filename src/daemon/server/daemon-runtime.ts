@@ -60,16 +60,16 @@ import {
 import {
   createOwnedProcessRecordStore,
   type OwnedProcessRecordStore,
+  readCurrentOwnerIdentity,
   reapOwnedProcessRecordsAtStartup,
+  type OwnerIdentity,
 } from '@agent-device/host-kit/process';
 import { isEnvTruthy, sleep } from '@agent-device/host-kit/retry';
 
 import {
   acquireDaemonLock,
   parseIntegerEnv,
-  readProcessStartTime,
   readVersion,
-  type OwnerIdentity,
   releaseDaemonLock,
   removeInfoOwnedBy,
   resolveDaemonCodeOrigin,
@@ -241,14 +241,6 @@ export async function flushDaemonStartupDiagnostics(
 }
 
 /**
- * The identity this process asserts as the owner of `daemon.json`. A bare pid is not ownership: after a
- * pid is recycled it names an unrelated process, so the start time is what makes the pair unique.
- */
-function createDaemonOwnerIdentity(): OwnerIdentity {
-  return { pid: process.pid, startTime: readProcessStartTime(process.pid) ?? null };
-}
-
-/**
  * Records one daemon-level event. These run outside any request, so there is no request scope and no
  * resolved debug level to inherit; debug is forced on for the same reason the #2681 handoff forces it —
  * the event is the point of the record and must not be dropped by a level that was never set for it.
@@ -351,7 +343,7 @@ export async function startDaemonRuntime(
   const screenRecordingAdmissionLedger = createScreenRecordingAdmissionLedger();
   const version = readVersion();
   const token = crypto.randomBytes(24).toString('hex');
-  const daemonIdentity = createDaemonOwnerIdentity();
+  const daemonIdentity = readCurrentOwnerIdentity();
   const daemonProcessStartTime = daemonIdentity.startTime ?? undefined;
   const daemonCodeOrigin = resolveDaemonCodeOrigin();
   const daemonCodeSignature = resolveDaemonCodeSignature();
@@ -741,6 +733,7 @@ export async function startDaemonRuntime(
     const appErr = asAppError(error);
     stderr.write(`Daemon error: ${appErr.message}\n`);
     closeServersBestEffort(servers);
+    stopMetadataLossWatch();
     await removeOwnDaemonInfo({ infoPath, logPath, owner: daemonIdentity });
     releaseDaemonLock(lockPath);
     await platformDaemonLifecycleOwners.clearDaemonLockConfiguration();

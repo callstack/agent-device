@@ -15,8 +15,8 @@ export type DaemonMetadataLoss = Readonly<{
  * Which ownership findings are a loss. A table so a state added to `RegisteredDaemonOwnership` has
  * to declare itself here rather than default its way into a report that also cancels the watch.
  *
- * A record that is present but unreadable or unparseable is NOT a loss: the file is on disk and this
- * read learned nothing about its owner, so nothing proves it was taken.
+ * A record that is present but unreadable or names no owner is NOT a loss: the file is on disk and
+ * this read learned nothing about its owner, so nothing proves it was taken.
  */
 const REPORTED_LOSSES: Readonly<Record<RegisteredDaemonOwnership['state'], boolean>> =
   Object.freeze({
@@ -24,7 +24,8 @@ const REPORTED_LOSSES: Readonly<Record<RegisteredDaemonOwnership['state'], boole
     replaced: true,
     absent: true,
     unreadable: false,
-    decodable: false,
+    ownerless: false,
+    unproven: false,
   });
 
 /**
@@ -73,6 +74,12 @@ export function watchDaemonMetadataLoss(params: {
     timer = undefined;
   };
   const poll = (): void => {
+    // A pruned state dir ends the watch on its own terms: there is no record left to lose, and a
+    // daemon whose directory the operator removed has nothing left to report about it.
+    if (stateDirGone(params.stateDir)) {
+      cancel();
+      return;
+    }
     const loss = readDaemonMetadataLoss(params);
     if (!loss) return;
     cancel();

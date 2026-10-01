@@ -85,6 +85,16 @@ describe('readDaemonMetadataLoss', () => {
     },
   );
 
+  test('a record that agrees on pid alone is ours by neither proof, so it is not reported lost', () => {
+    // The shape a host whose start-time probe failed publishes. Reporting it would announce a takeover
+    // with no evidence of one, while `removeInfoOwnedBy` refuses the same record: the two callers read
+    // one verdict, and neither gets to default in its own direction.
+    const { stateDir, infoPath } = scratch();
+    publish(stateDir, OWN_PID, null);
+
+    assert.equal(readDaemonMetadataLoss({ infoPath, stateDir, owner: OWN }), undefined);
+  });
+
   test('a corrupt record is not evidence that the registration was taken', () => {
     const { stateDir, infoPath } = scratch();
     fs.writeFileSync(infoPath, '{not json');
@@ -127,6 +137,28 @@ describe('watchDaemonMetadataLoss', () => {
       } finally {
         watch.cancel();
       }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('a pruned state dir ends the watch instead of polling a directory that no longer exists', () => {
+    vi.useFakeTimers();
+    try {
+      const { stateDir, infoPath } = scratch();
+      publish(stateDir, OWN_PID, 'own-start');
+      const watch = startWatch(stateDir, infoPath);
+
+      fs.rmSync(stateDir, { recursive: true, force: true });
+      watch.advance();
+      assert.deepEqual(watch.losses, [], 'a pruned dir is not a loss to report');
+
+      // The dir is gone, so a later record under that path cannot be this daemon's metadata to lose.
+      fs.mkdirSync(stateDir, { recursive: true });
+      publish(stateDir, FOREIGN_PID, 'successor-start');
+      watch.advance();
+      assert.deepEqual(watch.losses, [], 'the watch stopped at the prune');
+      fs.rmSync(stateDir, { recursive: true, force: true });
     } finally {
       vi.useRealTimers();
     }

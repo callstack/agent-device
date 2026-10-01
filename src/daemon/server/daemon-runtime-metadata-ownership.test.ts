@@ -108,6 +108,7 @@ test('a shutdown whose daemon.json names a successor keeps the file and logs the
     await runtime?.shutdown();
 
     expect(exits).toEqual([0]);
+    expect(lifecycleEvents).toContain('gateway-shutdown');
     expect(fs.existsSync(paths.infoPath), 'the serving daemon keeps its metadata').toBe(true);
     expect(fs.existsSync(paths.lockPath), 'the exiting daemon still releases its own lock').toBe(
       false,
@@ -136,28 +137,6 @@ test('a shutdown that still owns its daemon.json removes it without a decline', 
     expect(logEvents(stateDir).map((event) => event.phase)).not.toContain(
       'daemon_info_removal_declined',
     );
-  } finally {
-    fs.rmSync(stateDir, { recursive: true, force: true });
-  }
-});
-
-test('a shutdown whose record a successor recycled with the same pid keeps the file', async () => {
-  // The pid is not an identity: a successor that reuses it after the exiting daemon's start time is a
-  // different process, and removing its record is the same failure the issue describes.
-  const stateDir = mkdtempForTestSync('agent-device-daemon-info-pid-recycled-');
-  const paths = resolveDaemonPaths(stateDir);
-  try {
-    const runtime = await startRuntime(stateDir, () => {});
-    expect(runtime).not.toBeNull();
-    const own = JSON.parse(fs.readFileSync(paths.infoPath, 'utf8')) as Record<string, unknown>;
-
-    fs.writeFileSync(
-      paths.infoPath,
-      JSON.stringify({ ...own, pid: process.pid, processStartTime: 'recycled-start' }),
-    );
-    await runtime?.shutdown();
-
-    expect(fs.existsSync(paths.infoPath), 'a recycled pid is not the same owner').toBe(true);
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
@@ -238,4 +217,18 @@ test('the loss watch is armed only after this daemon publishes its own record', 
 
   expect(published).toBeGreaterThanOrEqual(0);
   expect(armed).toBeGreaterThan(published);
+});
+
+test('both exits tear the watch down before they touch daemon.json', () => {
+  // A watch still armed when the removal runs can report a loss for a record its own process just
+  // deleted. The startup-failure half of this is unreachable from a test — everything after
+  // publication needs a real toolchain — so the invariant is read off the source, the same way the
+  // arming order above is.
+  const source = fs.readFileSync(new URL('./daemon-runtime.ts', import.meta.url), 'utf8');
+  const stopped = source.indexOf('stopMetadataLossWatch();');
+  const removal = source.indexOf('await removeOwnDaemonInfo(');
+
+  expect(stopped).toBeGreaterThanOrEqual(0);
+  expect(removal).toBeGreaterThan(stopped);
+  expect(source.match(/stopMetadataLossWatch\(\);/g)).toHaveLength(2);
 });

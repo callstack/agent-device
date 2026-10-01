@@ -6,7 +6,6 @@ import { isAgentDeviceDaemonProcess } from '../../daemon-process.ts';
 import { readRegisteredDaemonOwnership } from '../daemon-registration.ts';
 
 export { readVersion } from '@agent-device/host-kit/version';
-export { readProcessStartTime, type OwnerIdentity } from '@agent-device/host-kit/process';
 export {
   type DaemonCodeOrigin,
   resolveDaemonCodeOrigin,
@@ -68,7 +67,7 @@ export type InfoRemoval =
   | Readonly<{ removed: true }>
   | Readonly<{
       removed: false;
-      reason: 'replaced' | 'absent' | 'unreadable' | 'decodable';
+      reason: 'replaced' | 'unproven' | 'absent' | 'unreadable' | 'ownerless';
       registeredPid?: number;
     }>;
 
@@ -78,6 +77,10 @@ export type InfoRemoval =
  * present takes the metadata of the daemon now serving clients (#3087). The record is re-read here
  * rather than trusted from publication, because a successor that took this state dir makes anything
  * this process remembered about the file stale.
+ *
+ * Every refusal is fail-closed, including `unproven` for a record that agrees on pid but on no start
+ * time. Keeping such a record leaves a client to find a dead pid, which its own liveness check
+ * already recovers from; removing one that belongs to a successor is the unrecoverable direction.
  */
 export function removeInfoOwnedBy(infoPath: string, owner: OwnerIdentity): InfoRemoval {
   const ownership = readRegisteredDaemonOwnership(infoPath, owner);
