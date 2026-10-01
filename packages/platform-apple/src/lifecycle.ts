@@ -264,13 +264,11 @@ async function answerAppleLaunchConfirmation(
   if (!confirmation) return undefined;
   if (timing.postOpenObservation !== 'unobservable') return undefined;
   timing.runnerDemand = 'required';
-  const { answerLaunchConfirmation, createLaunchConfirmationPort } = await loadLaunchConfirmation();
-  return await answerLaunchConfirmation(
-    createLaunchConfirmationPort(
-      binding.device,
-      confirmation,
-      async () => await binding.resolveInteractor(input.execution, confirmation.appBundleId),
-    ),
+  const { answerSimulatorLaunchConfirmation } = await loadLaunchConfirmation();
+  return await answerSimulatorLaunchConfirmation(
+    binding.device,
+    confirmation,
+    binding.resolveInteractor(input.execution, confirmation.appBundleId),
   );
 }
 

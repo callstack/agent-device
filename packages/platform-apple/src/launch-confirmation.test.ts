@@ -6,6 +6,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { resolveIosSimulatorDeepLinkBundleId } from './core/app-resolution.ts';
 import {
   answerLaunchConfirmation,
+  answerSimulatorLaunchConfirmation,
   createLaunchConfirmationPort,
   LAUNCH_CONFIRMATION_FOREIGN_APP_REASON,
   type LaunchConfirmationPort,
@@ -185,7 +186,7 @@ test('the port reads and accepts the alert for the session app and asks the sche
   const device = createLaunchConfirmationPort(
     simulator,
     { url: 'example://automation', appBundleId: 'com.example.app' },
-    async () => interactor,
+    interactor,
   );
   await device.readAlert();
   await device.acceptAlert();
@@ -213,9 +214,19 @@ test('the port reads a typed absence as no alert and keeps any other failure', a
   const device = createLaunchConfirmationPort(
     simulator,
     { url: 'example://automation', appBundleId: 'com.example.app' },
-    async () => interactor,
+    interactor,
   );
 
   await expect(device.readAlert()).resolves.toBeUndefined();
   await expect(device.readAlert()).rejects.toBe(runnerDown);
+});
+
+test('a runner that cannot be resolved leaves the open unanswered', async () => {
+  await expect(
+    answerSimulatorLaunchConfirmation(
+      simulator,
+      { url: 'example://automation', appBundleId: 'com.example.app' },
+      Promise.reject(new AppError('COMMAND_FAILED', 'xcrun timed out', { timeoutMs: 10_000 })),
+    ),
+  ).resolves.toBeUndefined();
 });

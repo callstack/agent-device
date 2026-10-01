@@ -732,7 +732,14 @@ function launchUrlSimulator(
       },
     },
   });
-  return { lifecycle, events, interactor, releaseSpeculativeRunner, prewarmRunnerSession };
+  return {
+    lifecycle,
+    events,
+    interactor,
+    releaseSpeculativeRunner,
+    prewarmRunnerSession,
+    resolutions: () => resolutions,
+  };
 }
 
 const LAUNCH_URL = 'example://automation';
@@ -799,7 +806,7 @@ test('a launch URL whose bridge probe failed never reaches the runner', async ()
 });
 
 test('a launch URL held behind a confirmation for the session app is accepted and reported', async () => {
-  const { lifecycle, events } = launchUrlSimulator(
+  const { lifecycle, events, resolutions } = launchUrlSimulator(
     async () => CONFIRMATION,
     [UNOBSERVABLE, OBSERVABLE],
   );
@@ -807,6 +814,8 @@ test('a launch URL held behind a confirmation for the session app is accepted an
   const outcome = await lifecycle.openApplication(launchUrlInput());
 
   expect(outcome.launchConfirmation).toBe('accepted');
+  // One resolution dispatches the open; one more serves both the alert read and the accept.
+  expect(resolutions()).toBe(2);
   expect(outcome.timing.runnerDemand).toBe('required');
   expect(outcome.timing.postOpenObservation).toBe('observable');
   expect(events).toEqual([

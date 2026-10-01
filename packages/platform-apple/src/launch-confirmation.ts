@@ -80,27 +80,37 @@ function reportUnanswered(reason: string, data: Record<string, unknown>): void {
   });
 }
 
+/**
+ * Answers the confirmation through the runner interactor, resolved once for the read and the
+ * accept. A runner that cannot be resolved leaves the open as it was.
+ */
+export async function answerSimulatorLaunchConfirmation(
+  device: DeviceInfo,
+  confirmation: LaunchConfirmationTarget,
+  interactor: Promise<Interactor>,
+): Promise<LaunchConfirmation | undefined> {
+  const resolved = await interactor.catch(failed('runner'));
+  if (!resolved) return undefined;
+  return await answerLaunchConfirmation(
+    createLaunchConfirmationPort(device, confirmation, resolved),
+  );
+}
+
 export function createLaunchConfirmationPort(
   device: DeviceInfo,
   { url, appBundleId }: LaunchConfirmationTarget,
-  resolveInteractor: () => Promise<Interactor>,
+  interactor: Interactor,
 ): LaunchConfirmationPort {
+  const readAlert = interactor.readAlert?.bind(interactor);
+  const acceptAlert = interactor.acceptAlert?.bind(interactor);
+  if (!readAlert || !acceptAlert) {
+    throw invalidRuntimeContract('Apple interactor has no alert read or accept leg');
+  }
   const target = { appBundleId, surface: 'app' } as const;
-  const alertLegs = async () => {
-    const interactor = await resolveInteractor();
-    const { readAlert, acceptAlert } = interactor;
-    if (!readAlert || !acceptAlert) {
-      throw invalidRuntimeContract('Apple interactor has no alert read or accept leg');
-    }
-    return {
-      read: async () => await alertIfPresent(readAlert.call(interactor, target)),
-      accept: () => acceptAlert.call(interactor, target),
-    };
-  };
   return Object.freeze({
     appBundleId,
-    readAlert: async () => await (await alertLegs()).read(),
-    acceptAlert: async () => await (await alertLegs()).accept(),
+    readAlert: async () => await alertIfPresent(readAlert(target)),
+    acceptAlert: async () => await acceptAlert(target),
     resolveUrlOwner: async () => await resolveIosSimulatorDeepLinkBundleId(device, url),
   });
 }
