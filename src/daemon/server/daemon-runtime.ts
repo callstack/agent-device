@@ -69,12 +69,14 @@ import {
   parseIntegerEnv,
   readProcessStartTime,
   readVersion,
+  type OwnerIdentity,
   releaseDaemonLock,
-  removeInfo,
+  removeInfoOwnedBy,
   resolveDaemonCodeOrigin,
   resolveDaemonCodeSignature,
   writeInfo,
 } from './server-lifecycle.ts';
+import { watchDaemonMetadataLoss, type DaemonMetadataLoss } from './daemon-metadata-loss.ts';
 import {
   createSocketServer,
   listenHttpServer,
@@ -238,6 +240,82 @@ export async function flushDaemonStartupDiagnostics(
   );
 }
 
+/**
+ * The identity this process asserts as the owner of `daemon.json`. A bare pid is not ownership: after a
+ * pid is recycled it names an unrelated process, so the start time is what makes the pair unique.
+ */
+function createDaemonOwnerIdentity(): OwnerIdentity {
+  return { pid: process.pid, startTime: readProcessStartTime(process.pid) ?? null };
+}
+
+/**
+ * Records one daemon-level event. These run outside any request, so there is no request scope and no
+ * resolved debug level to inherit; debug is forced on for the same reason the #2681 handoff forces it —
+ * the event is the point of the record and must not be dropped by a level that was never set for it.
+ */
+async function emitDaemonDiagnostic(
+  logPath: string,
+  phase: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  await withDiagnosticsScope(
+    { command: 'daemon', session: 'daemon', logPath, debug: true },
+    async () => {
+      emitDiagnostic({ level: 'warn', phase, data });
+      flushDiagnosticsToSessionFile({ force: true });
+    },
+  );
+}
+
+/**
+ * Removes this daemon's `daemon.json` at exit, and only while the record still names it: a shutdown
+ * that unlinked whatever file was present took the metadata of the daemon now serving clients (#3087).
+ * An absent record is not a decline worth logging, because client cleanup removes it routinely and a
+ * startup that failed before publication must not leave a `daemon.log` behind.
+ */
+async function removeOwnDaemonInfo(params: {
+  infoPath: string;
+  logPath: string;
+  owner: OwnerIdentity;
+}): Promise<void> {
+  const removal = removeInfoOwnedBy(params.infoPath, params.owner);
+  if (removal.removed || removal.reason === 'absent') return;
+  await emitDaemonDiagnostic(params.logPath, 'daemon_info_removal_declined', {
+    infoPath: params.infoPath,
+    ...removal,
+  });
+}
+
+async function noteDaemonMetadataLoss(params: {
+  infoPath: string;
+  logPath: string;
+  loss: DaemonMetadataLoss;
+}): Promise<void> {
+  await emitDaemonDiagnostic(params.logPath, 'daemon_metadata_lost', {
+    infoPath: params.infoPath,
+    ...params.loss,
+  });
+}
+
+/**
+ * Starts the watch that reports this daemon's registration being taken over, and returns the handle
+ * that stops it. It is armed only once this process has published its own record: before publication
+ * the file legitimately describes a predecessor, and losing that is not this daemon's event.
+ */
+function armDaemonMetadataLossWatch(
+  stateDir: string,
+  infoPath: string,
+  logPath: string,
+  owner: OwnerIdentity,
+): () => void {
+  return watchDaemonMetadataLoss({
+    infoPath,
+    stateDir,
+    owner,
+    onLoss: (loss) => void noteDaemonMetadataLoss({ infoPath, logPath, loss }).catch(() => {}),
+  });
+}
+
 export async function startDaemonRuntime(
   options: DaemonRuntimeOptions = {},
 ): Promise<DaemonRuntimeController | null> {
@@ -273,7 +351,8 @@ export async function startDaemonRuntime(
   const screenRecordingAdmissionLedger = createScreenRecordingAdmissionLedger();
   const version = readVersion();
   const token = crypto.randomBytes(24).toString('hex');
-  const daemonProcessStartTime = readProcessStartTime(process.pid) ?? undefined;
+  const daemonIdentity = createDaemonOwnerIdentity();
+  const daemonProcessStartTime = daemonIdentity.startTime ?? undefined;
   const daemonCodeOrigin = resolveDaemonCodeOrigin();
   const daemonCodeSignature = resolveDaemonCodeSignature();
   const providerComposition = await createDefaultProviderRuntimeComposition(env);
@@ -362,6 +441,8 @@ export async function startDaemonRuntime(
     trackDownloadableArtifact,
     daemonPolicy,
   });
+
+  let stopMetadataLossWatch: () => void = () => {};
 
   const emitFatalDiagnostic = async (error: unknown): Promise<void> => {
     await withDiagnosticsScope(
@@ -642,6 +723,7 @@ export async function startDaemonRuntime(
     socketPort = opened.socketPort;
     httpPort = opened.httpPort;
     publishDaemonInfo(socketPort, httpPort);
+    stopMetadataLossWatch = armDaemonMetadataLossWatch(baseDir, infoPath, logPath, daemonIdentity);
     await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
     // After publication: publishDaemonInfo truncates daemon.log, so anything
     // written before it is lost — including reconciliation diagnostics.
@@ -659,7 +741,7 @@ export async function startDaemonRuntime(
     const appErr = asAppError(error);
     stderr.write(`Daemon error: ${appErr.message}\n`);
     closeServersBestEffort(servers);
-    removeInfo(infoPath);
+    await removeOwnDaemonInfo({ infoPath, logPath, owner: daemonIdentity });
     releaseDaemonLock(lockPath);
     await platformDaemonLifecycleOwners.clearDaemonLockConfiguration();
     exit(1);
@@ -677,6 +759,7 @@ export async function startDaemonRuntime(
     sessionIdleExpiry.cancel();
     if (shuttingDown) return;
     shuttingDown = true;
+    stopMetadataLossWatch();
     if (shutdownOptions.cause) {
       await emitFatalDiagnostic(shutdownOptions.cause);
     }
@@ -736,7 +819,7 @@ export async function startDaemonRuntime(
       terminatePngWorker().catch(() => {}),
       sleep(DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
     ]);
-    removeInfo(infoPath);
+    await removeOwnDaemonInfo({ infoPath, logPath, owner: daemonIdentity });
     releaseDaemonLock(lockPath);
     await platformDaemonLifecycleOwners.clearDaemonLockConfiguration();
     exit(shutdownOptions.exitCode ?? 0);

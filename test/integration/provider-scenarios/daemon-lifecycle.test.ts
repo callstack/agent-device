@@ -7,7 +7,7 @@ import {
   acquireDaemonLock,
   parseIntegerEnv,
   releaseDaemonLock,
-  removeInfo,
+  removeInfoOwnedBy,
   writeInfo,
 } from '../../../src/daemon/server/server-lifecycle.ts';
 
@@ -87,8 +87,26 @@ test('Provider-backed integration daemon lifecycle writes metadata and protects 
     assert.equal(parseIntegerEnv('1.5'), undefined);
     assert.equal(parseIntegerEnv(undefined), undefined);
 
-    removeInfo(infoPath);
+    const owner = { pid: process.pid, startTime: 'start-time' };
+    fs.writeFileSync(
+      infoPath,
+      JSON.stringify({ pid: process.pid, processStartTime: 'start-time', token: 't', port: 1 }),
+    );
+    assert.deepEqual(removeInfoOwnedBy(infoPath, owner), { removed: true });
     assert.equal(fs.existsSync(infoPath), false);
+
+    // A successor's record survives this process's shutdown, which is what #3087 is about.
+    const foreignPath = path.join(root, 'daemon-foreign.json');
+    fs.writeFileSync(
+      foreignPath,
+      JSON.stringify({ pid: 999_999_999, processStartTime: 'other', token: 't', port: 1 }),
+    );
+    assert.deepEqual(removeInfoOwnedBy(foreignPath, owner), {
+      removed: false,
+      reason: 'replaced',
+      registeredPid: 999_999_999,
+    });
+    assert.equal(fs.existsSync(foreignPath), true);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

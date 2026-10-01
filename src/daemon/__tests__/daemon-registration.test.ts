@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test } from 'vitest';
-import { isSupersededDaemonOwner, readRegisteredDaemonIdentity } from '../daemon-registration.ts';
+import {
+  isSupersededDaemonOwner,
+  readRegisteredDaemonIdentity,
+  readRegisteredDaemonOwnership,
+} from '../daemon-registration.ts';
 import { writeInfo } from '../server/server-lifecycle.ts';
 import { publishDaemonRegistration } from '../../__tests__/test-utils/device-claim-store.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
@@ -84,4 +88,51 @@ test('the reading process is never superseded by a registration naming someone e
   publishDaemonRegistration(stateDir, { pid: 4242, startTime: 'successor-start' });
 
   assert.equal(isSupersededDaemonOwner({ stateDir, pid: process.pid, startTime: 'ours' }), false);
+});
+
+test('ownership is decided by the identity in the record, not by its pid alone', () => {
+  const stateDir = useStateDir();
+  const infoPath = infoPathOf(stateDir);
+  const owner = { pid: process.pid, startTime: 'ours' };
+
+  publishDaemonRegistration(stateDir, owner);
+  assert.deepEqual(readRegisteredDaemonOwnership(infoPath, owner), { state: 'match' });
+
+  publishDaemonRegistration(stateDir, { pid: 4242, startTime: 'successor-start' });
+  assert.deepEqual(readRegisteredDaemonOwnership(infoPath, owner), {
+    state: 'replaced',
+    identity: { pid: 4242, startTime: 'successor-start' },
+  });
+
+  // A recycled pid is a different process, and the only proof available is the start time.
+  publishDaemonRegistration(stateDir, { pid: process.pid, startTime: 'recycled' });
+  assert.deepEqual(readRegisteredDaemonOwnership(infoPath, owner), {
+    state: 'replaced',
+    identity: { pid: process.pid, startTime: 'recycled' },
+  });
+});
+
+test('ownership names each way a record yields no owner', () => {
+  const stateDir = useStateDir();
+  const infoPath = infoPathOf(stateDir);
+  const owner = { pid: process.pid, startTime: 'ours' };
+
+  assert.deepEqual(readRegisteredDaemonOwnership(infoPath, owner), { state: 'absent' });
+
+  fs.writeFileSync(infoPath, '{not json');
+  assert.deepEqual(readRegisteredDaemonOwnership(infoPath, owner), { state: 'decodable' });
+
+  fs.writeFileSync(infoPath, JSON.stringify({ pid: 4242 }));
+  assert.deepEqual(readRegisteredDaemonOwnership(infoPath, owner), {
+    state: 'replaced',
+    identity: { pid: 4242, startTime: null },
+  });
+
+  if (process.getuid?.() === 0) return;
+  fs.chmodSync(infoPath, 0o000);
+  try {
+    assert.deepEqual(readRegisteredDaemonOwnership(infoPath, owner), { state: 'unreadable' });
+  } finally {
+    fs.chmodSync(infoPath, 0o600);
+  }
 });
