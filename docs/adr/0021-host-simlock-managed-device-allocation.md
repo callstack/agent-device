@@ -29,7 +29,7 @@ This amendment changes the decision and glossary; runtime contracts remain uncha
 
 ## 1. Context
 
-Apex Sentinel `/verify` installs a PR's CI build on a remote device and drives it with agent-device.
+A remote verification worker installs a PR's CI build on a device and drives it with agent-device.
 The initial deployment is a self-hosted Mac running agent-device Host and Simlock. Each verification
 needs a clean starting state, and a crashed worker or daemon must not leak or duplicate devices.
 
