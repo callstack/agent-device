@@ -134,23 +134,10 @@ extension SnapshotPresentation {
     return nodes.enumerated().map { offset, node in
       let raw = node.raw
       return SnapshotPresentationNode(
-        raw: RawAXNode(
+        raw: raw.reindexed(
           index: offset,
-          type: raw.type,
-          label: raw.label,
-          identifier: raw.identifier,
-          value: raw.value,
-          placeholder: raw.placeholder,
-          rect: raw.rect,
-          enabled: raw.enabled,
-          focused: raw.focused,
-          selected: raw.selected,
-          hittable: raw.hittable,
           depth: max(0, raw.depth - depthOffset),
-          parentIndex: raw.parentIndex.flatMap { indexMap[$0] },
-          hiddenContentAbove: raw.hiddenContentAbove,
-          hiddenContentBelow: raw.hiddenContentBelow,
-          actions: raw.actions
+          parentIndex: raw.parentIndex.flatMap { indexMap[$0] }
         ),
         effectiveRect: node.effectiveRect
       )

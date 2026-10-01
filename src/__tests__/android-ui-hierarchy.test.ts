@@ -199,7 +199,7 @@ test('androidUiNodes exposes decoded Android hierarchy metadata', () => {
     },
   ]);
   assert.equal('drawingOrder' in parseUiHierarchyTree(xml).children[0]!, false);
-  assert.equal(parseUiHierarchyTree(xml).children[0]!.selected, true);
+  assert.equal(parseUiHierarchyTree(xml).children[0]!.passiveFacts.selected, true);
 });
 
 // The #2462 screen: a bottom tab bar where the only difference between the selected tab and its
