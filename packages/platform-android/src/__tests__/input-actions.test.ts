@@ -458,9 +458,10 @@ test('a display probe that hangs for the whole budget ends the settle as a failu
 
 test('a display probe that exits non-zero fails the settle instead of passing as no field', async () => {
   await withFakeAdb(
+    // A failed read that still printed the requested index must not confirm the rotation.
     (args) =>
       args[1] === 'dumpsys'
-        ? { stdout: '', stderr: 'dumpsys: permission denied', exitCode: 1 }
+        ? { stdout: '  mCurrentOrientation=1\n', stderr: 'dumpsys: permission denied', exitCode: 1 }
         : undefined,
     async ({ calls, device }) => {
       await assert.rejects(
@@ -469,6 +470,7 @@ test('a display probe that exits non-zero fails the settle instead of passing as
       );
       assert.equal(calls.filter((call) => call[1] === 'dumpsys').length, 1);
     },
+    { returnFailedResults: true },
   );
 });
 
@@ -541,5 +543,6 @@ test('probeAndroidDisplayRotation reports none when the display read fails', asy
       });
       assert.equal(rotation, undefined);
     },
+    { returnFailedResults: true },
   );
 });
