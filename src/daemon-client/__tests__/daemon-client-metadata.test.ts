@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { writeInfo } from '../../daemon/server/server-lifecycle.ts';
-import { readDaemonInfo, cleanupFailedDaemonStartupMetadata } from '../daemon-client-metadata.ts';
+import {
+  readDaemonInfo,
+  cleanupFailedDaemonStartupMetadata,
+  stopDaemonProcessForTakeover,
+} from '../daemon-client-metadata.ts';
 import { isAgentDeviceDaemonProcess, stopDaemonProcess } from '../../daemon-process.ts';
 import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 
@@ -80,3 +85,15 @@ for (const artifact of ['daemon.json', 'daemon.lock']) {
     assert.match(result.error ?? '', /exit could not be confirmed/);
   });
 }
+
+test('a retained takeover keeps its reason at the normalized error boundary', async () => {
+  vi.mocked(stopDaemonProcess).mockResolvedValue({ status: 'retained', reason: 'exit-timeout' });
+  await assert.rejects(
+    stopDaemonProcessForTakeover({ pid: 7, token: 'secret', processStartTime: 'start' }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(normalizeError(error).details?.reason, 'daemon_exit_unconfirmed');
+      return true;
+    },
+  );
+});

@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
@@ -186,7 +186,13 @@ function resetDaemonAfterTimeout(info: DaemonInfo, paths: DaemonPaths): { forced
       forcedKill = true;
     }
   } catch {
-    void stopDaemonProcessForTakeover(info);
+    void stopDaemonProcessForTakeover(info).catch((error: unknown) => {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'daemon_timeout_stop_failed',
+        data: { error: normalizeError(error) },
+      });
+    });
   } finally {
     removeDaemonInfo(paths.infoPath);
     removeDaemonLock(paths.lockPath);

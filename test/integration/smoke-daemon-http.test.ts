@@ -73,10 +73,14 @@ test('daemon HTTP transport starts from CLI and accepts a command RPC', async (t
     await stopDaemon(info);
     await assertNoDaemonLeaks({ stateDir, daemonPids: [info.pid], phase: 'after-shutdown' });
   } finally {
-    if (fs.existsSync(path.join(stateDir, 'daemon.json'))) {
-      await stopDaemon(readDaemonInfo(stateDir));
+    try {
+      if (fs.existsSync(path.join(stateDir, 'daemon.json'))) {
+        await stopDaemon(readDaemonInfo(stateDir));
+      }
+      fs.rmSync(stateDir, { recursive: true, force: true });
+    } catch (error) {
+      console.warn('Daemon test cleanup retained state:', stateDir, error);
     }
-    fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
 

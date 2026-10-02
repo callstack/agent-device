@@ -273,7 +273,8 @@ export async function stopDaemonProcessForTakeover(
 function requireDaemonExit(termination: DaemonTerminationResult): void {
   if (termination.status !== 'retained') return;
   throw new AppError('COMMAND_FAILED', 'Daemon exit could not be confirmed.', {
-    details: { reason: 'daemon_exit_unconfirmed', termination },
+    reason: 'daemon_exit_unconfirmed',
+    termination,
   });
 }
 
