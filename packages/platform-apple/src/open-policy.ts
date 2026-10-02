@@ -112,11 +112,14 @@ export function releaseSpeculativeRunner(
  * its own deadline — reads the sheet. Only a verdict that proves the app up skips the read, and a
  * sheet that is not there costs one runner command.
  *
- * An answer that reaches no verdict leaves the app proven not running: the accept died with the
- * runner session that raised it, or the device dropped the URL it was handed. The settle hands the
- * launch URL to the device once more, bounded to two rounds, and reads again. A launch still
- * proven not running afterwards fails the open with `launch_confirmation_unanswered` rather than
- * returning green to a session whose every later command then fails `app is not running`.
+ * An accept is the only answer that changes the device, so only its outcome is re-observed: the URL
+ * is in flight and this open is the only one that knows whether it landed. When the app is then
+ * proven not running, the accept died with the runner session that raised it or the device dropped a
+ * held URL, and the URL is handed over again and read once more. A launch still proven not running
+ * afterwards fails the open with `launch_confirmation_unanswered` rather than returning green to a
+ * session whose every later command then fails `app is not running`. A read that found no prompt, an
+ * unrecognized prompt and an unresolved URL owner all leave the open as green as it was, with only
+ * the one extra runner command spent.
  */
 export async function settleAppleOpen(
   host: Pick<PlatformRuntimeHost, 'clock'>,

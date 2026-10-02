@@ -9,11 +9,12 @@ import { resolveIosSimulatorDeepLinkBundleId } from './core/app-resolution.ts';
 export const LAUNCH_CONFIRMATION_FOREIGN_APP_REASON = 'launch_confirmation_foreign_app';
 
 /**
- * How one launch-confirmation answer attempt ended. Every value except `absent` and `accepted`
- * means the caller cannot tell whether the launch is still held: `unreadable` steps failed, and
- * `unanswered` found a prompt the open is not allowed or not able to accept. A caller deciding
- * whether to hand the launch URL to the device again acts on `accepted` or on its own proof that
- * no process is running, never on text.
+ * How one launch-confirmation answer attempt ended. Two endings mean the launch URL left the
+ * caller's hands and only that caller knows whether it landed: `accepted`, and the `unreadable`
+ * whose step is `alert-accept`, where the accept was attempted and its outcome never arrived. Every
+ * other ending leaves the launch exactly as it was — `absent` found no prompt, `unanswered` found a
+ * prompt this answer must not accept, and any other `unreadable` step failed before one. A caller
+ * acts on these outcomes and its own proof about the process, never on text.
  */
 export type LaunchConfirmationAttempt =
   | Readonly<{ outcome: 'accepted' }>
