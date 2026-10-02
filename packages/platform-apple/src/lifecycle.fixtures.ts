@@ -1,5 +1,4 @@
 import { vi } from 'vitest';
-import { ALERT_NOT_FOUND_RUNNER_CODE } from '@agent-device/contracts/alert-contract';
 import type { OpenApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
@@ -117,7 +116,6 @@ export const COMING_UP: LaunchObservation = {
   proof: 'launch-transition',
 };
 export const OBSERVABLE: LaunchObservation = { observation: 'observable' };
-export const CONFIRMATION = { message: 'Open in “Example App”?', items: ['Cancel', 'Open'] };
 export const SPAWN_TIMEOUT = new AppError('COMMAND_FAILED', 'xcrun timed out', {
   timeoutMs: 10_000,
 });
@@ -128,13 +126,6 @@ export function launchUrlInput(): OpenApplicationInput {
     runtimeLaunchUrl: LAUNCH_URL,
     execution: { plannedOperations: ['captureSnapshot'] },
   };
-}
-
-/** The runner's typed absence: `alert get` looked once and found no alert. */
-export function alertNotFound(): AppError {
-  return new AppError('COMMAND_FAILED', 'alert not found', {
-    runnerErrorCode: ALERT_NOT_FOUND_RUNNER_CODE,
-  });
 }
 
 /**

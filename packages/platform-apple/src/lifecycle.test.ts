@@ -7,14 +7,13 @@ import { AppError } from '@agent-device/kernel/errors';
 import { bindAppleApplicationLifecycle } from './lifecycle.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
 import type { LaunchObservation } from './snapshot-observability.ts';
+import { alertNotFound, CONFIRMATION } from './launch-confirmation.fixtures.ts';
 import {
   COMING_UP,
-  CONFIRMATION,
   LAUNCH_URL,
   OBSERVABLE,
   SPAWN_TIMEOUT,
   UNOBSERVABLE,
-  alertNotFound,
   device,
   launchUrlInput,
   launchUrlSimulator,

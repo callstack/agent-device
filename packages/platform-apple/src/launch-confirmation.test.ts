@@ -1,5 +1,4 @@
 import { expect, test, vi } from 'vitest';
-import { ALERT_NOT_FOUND_RUNNER_CODE } from '@agent-device/contracts/alert-contract';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -16,6 +15,7 @@ import {
   type LaunchConfirmationPort,
   URL_OWNER_LOOKUP_TIMEOUT_MS,
 } from './launch-confirmation.ts';
+import { alertNotFound, CONFIRMATION } from './launch-confirmation.fixtures.ts';
 
 vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
@@ -40,19 +40,10 @@ const simulator: DeviceInfo = {
   booted: true,
 };
 
-/** The runner's typed absence: `alert get` looked once and found no alert. */
-function alertNotFound(): AppError {
-  return new AppError('COMMAND_FAILED', 'alert not found', {
-    runnerErrorCode: ALERT_NOT_FOUND_RUNNER_CODE,
-  });
-}
-
 /** How `exec.ts` rejects a spawn that outlives its timeout; `allowFailure` does not absorb it. */
 function spawnTimeout(): AppError {
   return new AppError('COMMAND_FAILED', 'xcrun timed out', { timeoutMs: 10_000 });
 }
-
-const CONFIRMATION = { message: 'Open in “Example App”?', items: ['Cancel', 'Open'] };
 
 function port(
   readAlert: () => Promise<Record<string, unknown> | undefined>,

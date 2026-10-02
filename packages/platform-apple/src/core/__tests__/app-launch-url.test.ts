@@ -15,7 +15,11 @@ vi.mock('../simulator.ts', async (importOriginal) => {
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import { ensureBootedSimulator } from '../simulator.ts';
-import { IOS_SIMULATOR_OPENURL_TIMEOUT_REASON, openIosApp } from '../app-launch.ts';
+import {
+  IOS_SIMULATOR_OPENURL_TIMEOUT_HINT,
+  IOS_SIMULATOR_OPENURL_TIMEOUT_REASON,
+  openIosApp,
+} from '../app-launch.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockEnsureBootedSimulator = vi.mocked(ensureBootedSimulator);
@@ -65,7 +69,7 @@ test('a Simulator that never answers openurl fails the open at its own bound', a
     timeoutMs: IOS_SIMULATOR_OPENURL_TIMEOUT_MS,
     reason: IOS_SIMULATOR_OPENURL_TIMEOUT_REASON,
     deviceId: IOS_TEST_SIMULATOR.id,
-    hint: failure.details?.hint,
+    hint: IOS_SIMULATOR_OPENURL_TIMEOUT_HINT,
   });
 });
 

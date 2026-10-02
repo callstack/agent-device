@@ -43,6 +43,13 @@ const IOS_SIMULATOR_LAUNCH_ARGS_WITH_URL_MESSAGE =
 /** Why an open failed because CoreSimulator never answered its `simctl openurl` within the bound. */
 export const IOS_SIMULATOR_OPENURL_TIMEOUT_REASON = 'ios-simulator-openurl-timeout';
 
+/**
+ * A killed child answers nothing, so the bound cannot report whether the hand-off landed; the hint is
+ * the operator's only notice that a retry can duplicate the deep link.
+ */
+export const IOS_SIMULATOR_OPENURL_TIMEOUT_HINT =
+  'The Simulator may still have received the URL; CoreSimulator is slow to answer. Retry the open, or answer any "Open in" prompt with alert accept.';
+
 // fallow-ignore-next-line complexity
 export async function openIosApp(
   device: DeviceInfo,
@@ -178,7 +185,7 @@ async function openIosSimulatorUrl(
         reason: IOS_SIMULATOR_OPENURL_TIMEOUT_REASON,
         timeoutMs: IOS_SIMULATOR_OPENURL_TIMEOUT_MS,
         deviceId: device.id,
-        hint: 'The Simulator may still have received the URL; CoreSimulator is slow to answer. Retry the open, or answer any "Open in" prompt with alert accept.',
+        hint: IOS_SIMULATOR_OPENURL_TIMEOUT_HINT,
       },
     );
   }
