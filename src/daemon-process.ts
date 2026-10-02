@@ -39,7 +39,7 @@ export function isAgentDeviceDaemonProcess(
   return isAgentDeviceDaemonCommand(command);
 }
 
-export function trySignalProcess(pid: number, signal: NodeJS.Signals): boolean {
+function trySignalProcess(pid: number, signal: NodeJS.Signals): boolean {
   try {
     process.kill(pid, signal);
     return true;
@@ -116,32 +116,47 @@ export async function stopDaemonProcess(
     return { status: 'retained', reason: 'missing-start-time' };
   }
   const identity: DaemonProcessIdentity = { pid: observed.pid, startTime: observed.startTime };
-  let mode: 'already-exited' | 'graceful' | 'forced' = 'already-exited';
-  const confirmed = (): DaemonTerminationResult => ({
-    status: 'exited',
-    identity,
-    mode,
-  });
-  if ((await waitForDaemonExit(identity, { timeoutMs: 0 })).exited) return confirmed();
-  for (const signal of options.mode === 'force'
-    ? (['SIGKILL'] as const)
-    : (['SIGTERM', 'SIGKILL'] as const)) {
-    const verified = isAgentDeviceDaemonProcess(identity.pid, identity.startTime);
-    const signaled = verified && trySignalProcess(identity.pid, signal);
-    if (signaled) mode = signal === 'SIGTERM' ? 'graceful' : 'forced';
-    const timeoutMs = signal === 'SIGTERM' ? options.termTimeoutMs : options.killTimeoutMs;
-    if (
-      (await waitForDaemonExit(identity, { timeoutMs: mode === 'already-exited' ? 0 : timeoutMs }))
-        .exited
-    ) {
-      return confirmed();
-    }
-    if (!signaled)
-      return {
-        status: 'retained',
-        signal,
-        reason: verified ? 'signal-failed' : 'identity-unverified',
-      };
+  if ((await waitForDaemonExit(identity, { timeoutMs: 0 })).exited) {
+    return { status: 'exited', identity, mode: 'already-exited' };
   }
-  return { status: 'retained', reason: 'exit-timeout' };
+  let previousSignal: 'SIGTERM' | undefined;
+  if (options.mode === 'graceful') {
+    const result = await signalAndWaitForDaemonExit(identity, {
+      signal: 'SIGTERM',
+      timeoutMs: options.termTimeoutMs,
+    });
+    if (result.status !== 'survived') return result;
+    previousSignal = 'SIGTERM';
+  }
+  const result = await signalAndWaitForDaemonExit(identity, {
+    signal: 'SIGKILL',
+    timeoutMs: options.killTimeoutMs,
+    previousSignal,
+  });
+  return result.status === 'survived' ? { status: 'retained', reason: 'exit-timeout' } : result;
+}
+
+async function signalAndWaitForDaemonExit(
+  identity: DaemonProcessIdentity,
+  options: { signal: 'SIGTERM' | 'SIGKILL'; timeoutMs: number; previousSignal?: 'SIGTERM' },
+): Promise<DaemonTerminationResult | Readonly<{ status: 'survived' }>> {
+  const verified = isAgentDeviceDaemonProcess(identity.pid, identity.startTime);
+  const signaled = verified && trySignalProcess(identity.pid, options.signal);
+  const mode = signaled
+    ? options.signal === 'SIGTERM'
+      ? 'graceful'
+      : 'forced'
+    : options.previousSignal
+      ? 'graceful'
+      : 'already-exited';
+  const wait = await waitForDaemonExit(identity, {
+    timeoutMs: mode === 'already-exited' ? 0 : options.timeoutMs,
+  });
+  if (wait.exited) return { status: 'exited', identity, mode };
+  if (signaled) return { status: 'survived' };
+  return {
+    status: 'retained',
+    signal: options.signal,
+    reason: verified ? 'signal-failed' : 'identity-unverified',
+  };
 }
