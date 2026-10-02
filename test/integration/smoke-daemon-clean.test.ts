@@ -34,6 +34,10 @@ test('clean daemon retains metadata when a live recorded process is not a verifi
       },
     );
     assert.notEqual(cleanup.exitCode, 0, 'unconfirmed exit cannot complete cleanup');
+    assert.match(
+      cleanup.stderr,
+      /Daemon cleanup retained state because exit could not be confirmed/,
+    );
     assert.equal(fs.readFileSync(path.join(stateDir, 'daemon.json'), 'utf8'), contents);
     assert.equal(fs.readFileSync(path.join(stateDir, 'daemon.lock'), 'utf8'), contents);
     assert.equal(isProcessAlive(process.pid), true);
@@ -74,10 +78,11 @@ test('clean daemon script stops a live daemon before removing metadata', async (
     await assertNoDaemonLeaks({ stateDir, daemonPids: [info.pid], phase: 'after-shutdown' });
   } finally {
     if (info) {
-      await stopDaemonProcess(
+      const termination = await stopDaemonProcess(
         { pid: info.pid, startTime: info.processStartTime ?? null },
         { mode: 'graceful', termTimeoutMs: 1_500, killTimeoutMs: 1_500 },
       );
+      assert.notEqual(termination.status, 'retained', JSON.stringify(termination));
     }
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

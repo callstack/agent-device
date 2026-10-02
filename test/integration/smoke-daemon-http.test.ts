@@ -113,8 +113,9 @@ async function callCommandRpc(
 
 async function stopDaemon(info: DaemonInfo): Promise<void> {
   if (!Number.isInteger(info.pid) || info.pid <= 0) return;
-  await stopDaemonProcess(
+  const termination = await stopDaemonProcess(
     { pid: info.pid, startTime: info.processStartTime ?? null },
     { mode: 'graceful', termTimeoutMs: 1500, killTimeoutMs: 1500 },
   );
+  assert.notEqual(termination.status, 'retained', JSON.stringify(termination));
 }

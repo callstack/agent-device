@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { AppError } from '@agent-device/kernel/errors';
 import { shellQuote } from '@agent-device/kernel/device-shell';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
@@ -202,7 +203,7 @@ export async function cleanupFailedDaemonStartupMetadata(
         result.retainedLockProcess = true;
       } else {
         if (liveLockProcess) {
-          await stopDaemonProcess(
+          const termination = await stopDaemonProcess(
             { pid: lockInfo.pid, startTime: lockInfo.processStartTime ?? null },
             {
               mode: 'graceful',
@@ -210,6 +211,7 @@ export async function cleanupFailedDaemonStartupMetadata(
               killTimeoutMs: DAEMON_TAKEOVER_KILL_TIMEOUT_MS,
             },
           );
+          requireDaemonExit(termination);
           result.stoppedLockProcess = true;
         }
         removeDaemonLock(paths.lockPath);
@@ -256,7 +258,7 @@ export async function recoverDaemonLockHolder(paths: DaemonPaths): Promise<boole
 export async function stopDaemonProcessForTakeover(
   info: DaemonInfo,
 ): Promise<DaemonTerminationResult> {
-  return await stopDaemonProcess(
+  const termination = await stopDaemonProcess(
     { pid: info.pid, startTime: info.processStartTime ?? null },
     {
       mode: 'graceful',
@@ -264,6 +266,15 @@ export async function stopDaemonProcessForTakeover(
       killTimeoutMs: DAEMON_TAKEOVER_KILL_TIMEOUT_MS,
     },
   );
+  requireDaemonExit(termination);
+  return termination;
+}
+
+function requireDaemonExit(termination: DaemonTerminationResult): void {
+  if (termination.status !== 'retained') return;
+  throw new AppError('COMMAND_FAILED', 'Daemon exit could not be confirmed.', {
+    details: { reason: 'daemon_exit_unconfirmed', termination },
+  });
 }
 
 export function isRemoteDaemon(info: DaemonInfo): boolean {

@@ -244,7 +244,7 @@ async function cleanupWebShutdownSmoke(
   const errors: unknown[] = [];
   if (daemonIdentity !== undefined) {
     try {
-      await stopDaemonProcess(
+      const termination = await stopDaemonProcess(
         { pid: daemonIdentity.pid, startTime: daemonIdentity.startTime ?? null },
         {
           mode: 'graceful',
@@ -252,6 +252,9 @@ async function cleanupWebShutdownSmoke(
           killTimeoutMs: timeouts.killTimeoutMs,
         },
       );
+      if (termination.status === 'retained') {
+        errors.push(new Error(`Daemon cleanup retained the process: ${termination.reason}`));
+      }
     } catch (error) {
       errors.push(error);
     }
