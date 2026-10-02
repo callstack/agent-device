@@ -1,9 +1,15 @@
 import fs from 'node:fs';
-import { normalizeError } from '@agent-device/kernel/errors';
+import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
+import {
+  stopDaemonProcess,
+  waitForDaemonExit,
+  type DaemonTerminationResult,
+} from './daemon-process.ts';
 import { readCurrentOwnerIdentity, type OwnerIdentity } from '@agent-device/host-kit/process';
 import {
   publishFileSync,
   tryAcquireProcessLock,
+  acquireProcessLockAcquisition,
   type ProcessLockAttempt,
   type ProcessLockAcquisition,
 } from '@agent-device/host-kit/file';
@@ -102,7 +108,7 @@ export async function tryAcquireDaemonRegistration(
 
 function removeRegistrationUnderLock(
   infoPath: string,
-  identity: OwnerIdentity,
+  identity: OwnerIdentity | null,
   acquisition: ProcessLockAcquisition,
 ): DaemonRegistrationRemoval {
   acquisition.assertHeld();
@@ -125,16 +131,7 @@ async function releaseRegistrationAfterFailure(
   try {
     await acquisition.release();
   } catch (releaseError) {
-    await withDiagnosticsScope(
-      { command: 'daemon', session: 'daemon', logPath, debug: true },
-      () => {
-        emitDiagnostic({
-          level: 'warn',
-          phase: 'daemon_registration_release_failed',
-          data: { error: normalizeError(releaseError) },
-        });
-      },
-    );
+    await recordRegistrationWarning(logPath, 'daemon_registration_release_failed', releaseError);
   }
   throw error;
 }
@@ -162,4 +159,183 @@ function truncateDaemonLog(logPath: string): void {
   } finally {
     fs.closeSync(descriptor);
   }
+}
+
+export type DaemonRetirementInput = Readonly<{
+  paths: DaemonPaths;
+  observed: OwnerIdentity | null;
+  termTimeoutMs?: number;
+  killTimeoutMs?: number;
+  lockTimeoutMs?: number;
+}>;
+
+type ConfirmedDaemonTermination = Extract<DaemonTerminationResult, { status: 'exited' }>;
+export type DaemonRetirementResult =
+  | Readonly<{ status: 'retired'; termination: ConfirmedDaemonTermination; removedInfo: boolean }>
+  | Readonly<{ status: 'absent'; removedInfo: false }>
+  | Readonly<{
+      status: 'retained';
+      termination?: DaemonTerminationResult;
+      removedInfo: boolean;
+      reason:
+        | 'ownership-unproven'
+        | 'exit-unconfirmed'
+        | 'stop-failed'
+        | 'lock-busy'
+        | 'registration-replaced'
+        | 'metadata-unreadable'
+        | 'retirement-unconfirmed';
+      error?: NormalizedError;
+    }>;
+
+/** Stops only the captured daemon lifetime, then retires its registration under the startup lock. */
+export async function stopAndRetireDaemon(
+  input: DaemonRetirementInput & Readonly<{ mode: 'graceful' | 'force' }>,
+): Promise<DaemonRetirementResult> {
+  return await retireObservedDaemon(input, (identity) =>
+    stopDaemonProcess(identity, {
+      mode: input.mode,
+      termTimeoutMs: input.termTimeoutMs ?? 3_000,
+      killTimeoutMs: input.killTimeoutMs ?? 1_000,
+    }),
+  );
+}
+
+/** Recovers a confirmed abandoned registration without signaling a live process. */
+export async function recoverAbandonedDaemonRegistration(
+  input: DaemonRetirementInput,
+): Promise<DaemonRetirementResult> {
+  return await retireObservedDaemon(input, async (identity) => {
+    if (!identity.startTime?.trim()) return { status: 'retained', reason: 'missing-start-time' };
+    const confirmed = { pid: identity.pid, startTime: identity.startTime };
+    return (await waitForDaemonExit(confirmed, { timeoutMs: 0 })).exited
+      ? { status: 'exited', identity: confirmed, mode: 'already-exited' }
+      : { status: 'retained', reason: 'identity-unverified' };
+  });
+}
+
+async function retireObservedDaemon(
+  input: DaemonRetirementInput,
+  terminate: (identity: OwnerIdentity) => Promise<DaemonTerminationResult>,
+): Promise<DaemonRetirementResult> {
+  const paths = { ...input.paths };
+  const observed = input.observed && { ...input.observed };
+  let termination: ConfirmedDaemonTermination | undefined;
+  if (observed) {
+    try {
+      const result = await terminate(observed);
+      if (result.status !== 'exited')
+        return {
+          status: 'retained',
+          reason: 'exit-unconfirmed',
+          termination: result,
+          removedInfo: false,
+        };
+      termination = result;
+    } catch (error) {
+      return {
+        status: 'retained',
+        reason: 'stop-failed',
+        removedInfo: false,
+        error: normalizeError(error),
+      };
+    }
+  }
+  return await retireDaemonRegistration({ ...input, paths }, termination);
+}
+
+async function retireDaemonRegistration(
+  input: DaemonRetirementInput,
+  termination: ConfirmedDaemonTermination | undefined,
+): Promise<DaemonRetirementResult> {
+  const paths = input.paths;
+  let acquisition: ProcessLockAcquisition;
+  try {
+    acquisition = await acquireProcessLockAcquisition({
+      lockDirPath: paths.lockPath,
+      owner: { ...readCurrentOwnerIdentity(), acquiredAtMs: Date.now() },
+      description: 'daemon registration retirement',
+      timeoutMs: input.lockTimeoutMs ?? 1_000,
+    });
+  } catch (error) {
+    const failure = normalizeError(error);
+    return {
+      status: 'retained',
+      reason:
+        failure.details?.reason === 'process_lock_timeout' ? 'lock-busy' : 'retirement-unconfirmed',
+      termination,
+      removedInfo: false,
+      error: failure,
+    };
+  }
+  let result: DaemonRetirementResult;
+  try {
+    const removal = removeRegistrationUnderLock(
+      paths.infoPath,
+      termination?.identity ?? null,
+      acquisition,
+    );
+    result = retirementAfterRemoval(removal, termination);
+  } catch (error) {
+    result = {
+      status: 'retained',
+      reason: 'retirement-unconfirmed',
+      termination,
+      removedInfo: false,
+      error: normalizeError(error),
+    };
+  }
+  return await releaseAfterRetirement(acquisition, result, paths.logPath);
+}
+
+async function releaseAfterRetirement(
+  acquisition: ProcessLockAcquisition,
+  result: DaemonRetirementResult,
+  logPath: string,
+): Promise<DaemonRetirementResult> {
+  try {
+    await acquisition.release();
+  } catch (error) {
+    const primary = result.status === 'retained' ? result.error : undefined;
+    if (primary)
+      await recordRegistrationWarning(logPath, 'daemon_retirement_release_failed', error);
+    result = {
+      ...result,
+      status: 'retained',
+      reason: 'retirement-unconfirmed',
+      error: primary ?? normalizeError(error),
+    };
+  }
+  return result;
+}
+
+function retirementAfterRemoval(
+  removal: DaemonRegistrationRemoval,
+  termination: ConfirmedDaemonTermination | undefined,
+): DaemonRetirementResult {
+  if (termination && (removal.state === 'removed' || removal.state === 'absent')) {
+    return { status: 'retired', termination, removedInfo: removal.state === 'removed' };
+  }
+  if (removal.state === 'absent') return { status: 'absent', removedInfo: false };
+  return {
+    status: 'retained',
+    termination,
+    removedInfo: false,
+    reason:
+      removal.state === 'replaced'
+        ? 'registration-replaced'
+        : removal.state === 'unreadable'
+          ? 'metadata-unreadable'
+          : 'ownership-unproven',
+  };
+}
+
+async function recordRegistrationWarning(
+  logPath: string,
+  phase: string,
+  error: unknown,
+): Promise<void> {
+  await withDiagnosticsScope({ command: 'daemon', session: 'daemon', logPath, debug: true }, () => {
+    emitDiagnostic({ level: 'warn', phase, data: { error: normalizeError(error) } });
+  });
 }

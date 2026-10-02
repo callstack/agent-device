@@ -37,6 +37,11 @@ pnpm test-app:typecheck
 `pnpm build` compiles the TypeScript CLI and library. If a running development daemon must pick up
 that build, use `pnpm rebuild:cli`; it builds and then stops the worktree-scoped daemon.
 
+`pnpm clean:daemon` retains state when it cannot confirm the recorded daemon exited. Restore
+process inspection or stop the verified owner before retrying. Its `--prune-dev` option retires
+confirmed abandoned registrations older than 14 days; it keeps session artifacts and state
+directories for inspection.
+
 Build only the Apple runner target you changed:
 
 ```bash

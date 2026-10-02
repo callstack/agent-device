@@ -7,6 +7,8 @@ import path from 'node:path';
 import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { isProcessAlive, readProcessStartTime } from '@agent-device/host-kit/process';
+import { stopAndRetireDaemon } from '../../src/daemon-registration-owner.ts';
+import { resolveDaemonPaths } from '../../src/daemon-resolution.ts';
 
 import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import { runCliJson } from './test-helpers.ts';
@@ -36,8 +38,9 @@ test('clean daemon retains metadata when a live recorded process is not a verifi
     assert.notEqual(cleanup.exitCode, 0, 'unconfirmed exit cannot complete cleanup');
     assert.match(
       cleanup.stderr,
-      /Daemon cleanup retained state because exit could not be confirmed/,
+      /Daemon cleanup retained state because retirement could not be confirmed/,
     );
+    assert.match(cleanup.stderr, /exit-unconfirmed/);
     assert.equal(fs.readFileSync(path.join(stateDir, 'daemon.json'), 'utf8'), contents);
     assert.equal(fs.readFileSync(path.join(stateDir, 'daemon.lock'), 'utf8'), contents);
     assert.equal(isProcessAlive(process.pid), true);
@@ -78,6 +81,40 @@ test('clean daemon script stops a live daemon before removing metadata', async (
     await assertNoDaemonLeaks({ stateDir, daemonPids: [info.pid], phase: 'after-shutdown' });
   } finally {
     await cleanupDaemonTestState(stateDir, info);
+  }
+});
+
+test('forced retirement waits for a real daemon and reclaims its abandoned registration claim', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-forced-retirement-'));
+  let info: DaemonInfo | undefined;
+  try {
+    const cli = runCliJson(['session', 'list', '--json', '--state-dir', stateDir]);
+    assert.equal(cli.status, 0, `${cli.stderr}\n${cli.stdout}`);
+    info = readDaemonInfo(stateDir);
+    const paths = resolveDaemonPaths(stateDir);
+    assert.equal(fs.existsSync(paths.lockPath), true);
+    const result = await stopAndRetireDaemon({
+      paths,
+      observed: { pid: info.pid, startTime: info.processStartTime ?? null },
+      mode: 'force',
+    });
+    assert.equal(result.status, 'retired', JSON.stringify(result));
+    if (result.status !== 'retired') assert.fail('retirement not confirmed');
+    assert.equal(result.termination.mode, 'forced');
+    assert.equal(result.removedInfo, true);
+    assert.equal(isProcessAlive(info.pid), false);
+    assert.equal(fs.existsSync(paths.infoPath), false);
+    assert.equal(fs.existsSync(paths.lockPath), false);
+  } finally {
+    if (info) {
+      const termination = await stopDaemonProcess(
+        { pid: info.pid, startTime: info.processStartTime ?? null },
+        { mode: 'force', termTimeoutMs: 0, killTimeoutMs: 1_500 },
+      );
+      assert.notEqual(termination.status, 'retained', JSON.stringify(termination));
+    }
+    fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
 
