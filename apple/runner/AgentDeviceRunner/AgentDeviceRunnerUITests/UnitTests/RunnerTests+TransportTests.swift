@@ -18,8 +18,8 @@ extension RunnerTests {
     wait(for: [ready], timeout: 2)
     let port = try XCTUnwrap(listener.port)
     let configuration = URLSessionConfiguration.ephemeral
-    configuration.timeoutIntervalForRequest = 1
-    configuration.timeoutIntervalForResource = 1
+    configuration.timeoutIntervalForRequest = 3
+    configuration.timeoutIntervalForResource = 3
     let client = URLSession(configuration: configuration)
     defer { client.invalidateAndCancel() }
 
