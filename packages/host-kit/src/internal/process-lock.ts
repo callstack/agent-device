@@ -223,6 +223,7 @@ export async function acquireProcessLockAcquisition(
     `Timed out waiting for ${params.description ?? 'process lock'}`,
     {
       lockDirPath: params.lockDirPath,
+      reason: 'process_lock_timeout',
       ...readProcessLockDiagnostics(params.lockDirPath, reading),
       inspection: inspectProcessLock(params.lockDirPath),
       hint: staleLockHint(params.lockDirPath),
