@@ -107,14 +107,7 @@ test('forced retirement waits for a real daemon and reclaims its abandoned regis
     assert.equal(fs.existsSync(paths.infoPath), false);
     assert.equal(fs.existsSync(paths.lockPath), false);
   } finally {
-    if (info) {
-      const termination = await stopDaemonProcess(
-        { pid: info.pid, startTime: info.processStartTime ?? null },
-        { mode: 'force', termTimeoutMs: 0, killTimeoutMs: 1_500 },
-      );
-      assert.notEqual(termination.status, 'retained', JSON.stringify(termination));
-    }
-    fs.rmSync(stateDir, { recursive: true, force: true });
+    await cleanupDaemonTestState(stateDir, info);
   }
 });
 
