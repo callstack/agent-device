@@ -244,17 +244,7 @@ async function cleanupWebShutdownSmoke(
   const errors: unknown[] = [];
   if (daemonIdentity !== undefined) {
     try {
-      const termination = await stopDaemonProcess(
-        { pid: daemonIdentity.pid, startTime: daemonIdentity.startTime ?? null },
-        {
-          mode: 'graceful',
-          termTimeoutMs: timeouts.termTimeoutMs,
-          killTimeoutMs: timeouts.killTimeoutMs,
-        },
-      );
-      if (termination.status === 'retained') {
-        errors.push(new Error(`Daemon cleanup retained the process: ${termination.reason}`));
-      }
+      await stopWebSmokeDaemon(daemonIdentity, timeouts);
     } catch (error) {
       errors.push(error);
     }
@@ -273,6 +263,16 @@ async function cleanupWebShutdownSmoke(
   }
   if (errors.length === 1) throw errors[0];
   if (errors.length > 1) throw new AggregateError(errors, 'web shutdown smoke cleanup failed');
+}
+
+async function stopWebSmokeDaemon(
+  identity: DaemonProcessIdentity,
+  timeouts: { termTimeoutMs: number; killTimeoutMs: number },
+): Promise<void> {
+  const termination = await stopDaemonProcess(identity, { mode: 'graceful', ...timeouts });
+  if (termination.status === 'retained') {
+    throw new Error(`Daemon cleanup retained the process: ${termination.reason}`);
+  }
 }
 
 // Deliberately NOT cleanupManagedAgentBrowserOrphans: that function exists to leave an actively
