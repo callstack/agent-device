@@ -25,6 +25,7 @@ import {
 } from './inventory-parsers.ts';
 
 const PROBE_TIMEOUT_MS = 10_000;
+const DEVICE_DESCRIPTION_TIMEOUT_MS = 2_000;
 const DEVICE_DESCRIPTION_PROBE = shellFragment(
   'getprop ro.product.model; getprop ro.build.version.release',
 );
@@ -146,7 +147,12 @@ async function readDeviceDescription(
   serial: string,
 ): Promise<Pick<DeviceInfo, 'model' | 'osVersion'>> {
   try {
-    const result = await runAdbShell(context, serial, [DEVICE_DESCRIPTION_PROBE]);
+    const result = await runAdbShell(
+      context,
+      serial,
+      [DEVICE_DESCRIPTION_PROBE],
+      DEVICE_DESCRIPTION_TIMEOUT_MS,
+    );
     return result.exitCode === 0 ? parseAndroidDeviceDescription(result.stdout) : {};
   } catch (error) {
     if (context.scope.signal.aborted) throw error;
@@ -264,14 +270,16 @@ async function runAdbShell(
   context: AndroidInventoryContext,
   serial: string,
   words: readonly ShellWord[],
+  timeoutMs = PROBE_TIMEOUT_MS,
 ): Promise<HostCommandResult> {
-  return await run(context, context.adb, adbShellArgv(serial, words));
+  return await run(context, context.adb, adbShellArgv(serial, words), timeoutMs);
 }
 
 async function run(
   context: AndroidInventoryContext,
   executable: string,
   args: readonly string[],
+  timeoutMs = PROBE_TIMEOUT_MS,
 ): Promise<HostCommandResult> {
   try {
     return await context.host.commands.run(
@@ -279,7 +287,7 @@ async function run(
         executable,
         args,
         allowFailure: true,
-        timeoutMs: PROBE_TIMEOUT_MS,
+        timeoutMs,
       },
       context.scope.signal,
     );

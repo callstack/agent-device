@@ -102,7 +102,7 @@ test.skipIf(process.platform === 'win32')(
         String.raw`      ? "1\n"`,
         '      : args.includes("ro.build.characteristics")',
         String.raw`        ? "phone\n"`,
-        '        : args.some((arg) => arg.includes("ro.product.model"))',
+        '        : args.some((arg) => arg.includes("ro.product.model") && arg.includes("ro.build.version.release"))',
         String.raw`          ? "sdk_gphone64_arm64\n16\n"`,
         '        : args.includes("has-feature") || args.includes("pm")',
         String.raw`          ? "false\n"`,

@@ -17,7 +17,7 @@ const scope: PlatformRequestScope = {
 const RUNNING_EMULATOR_PROBES: ReadonlyArray<readonly [string, string]> = [
   ['ro.boot.qemu.avd_name', 'Pixel_9_Pro_XL\n'],
   ['sys.boot_completed', '1\n'],
-  ['ro.product.model', 'sdk_gphone16k_arm64\n17\n'],
+  ['getprop ro.product.model; getprop ro.build.version.release', 'sdk_gphone16k_arm64\n17\n'],
   ['ro.build.characteristics', 'phone\n'],
   ['has-feature', 'false\n'],
   ['pm\0list\0features', ''],
@@ -64,7 +64,15 @@ test.each([
           : []),
       ],
     );
-    assert.ok(calls.every((call) => call.timeoutMs === 10_000));
+    const isDescriptionProbe = (call: HostCommandRequest) =>
+      call.args.some((arg) => arg.includes('ro.product.model'));
+    assert.deepEqual(
+      calls.filter(isDescriptionProbe).map((call) => call.timeoutMs),
+      [2_000],
+    );
+    assert.ok(
+      calls.filter((call) => !isDescriptionProbe(call)).every((call) => call.timeoutMs === 10_000),
+    );
     assert.ok(calls.every((call) => call.allowFailure === true));
   },
 );
@@ -74,7 +82,7 @@ test.each([
   [
     'times out',
     async () => {
-      throw new AppError('COMMAND_FAILED', 'adb timed out after 10000ms', { timeoutMs: 10_000 });
+      throw new AppError('COMMAND_FAILED', 'adb timed out after 2000ms', { timeoutMs: 2_000 });
     },
   ],
 ] as const)(
