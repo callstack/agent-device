@@ -43,7 +43,7 @@ vi.mock('../../platform-runtime.ts', () => ({
 
 vi.mock('../../provider-device-runtimes.ts', () => ({
   DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS: [],
-  createDefaultProviderRuntimeComposition: async () => ({ runtimes: [], platformModules: [] }),
+  createDaemonProviderRuntimeComposition: async () => ({ runtimes: [], platformModules: [] }),
 }));
 
 import { startDaemonRuntime } from './daemon-runtime.ts';

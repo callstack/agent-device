@@ -10,6 +10,17 @@ import {
 type SchemaOnlyCliCommandName = Exclude<LocalCliCommandName, CommandName>;
 
 const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
+  plugins: {
+    text: {
+      summary: 'Manage installed provider plugins',
+      description:
+        'Install, list, update, or remove npm provider plugins in AGENT_DEVICE_HOME (default ~/.agent-device). Changes take effect after restarting the local daemon. Use --json for structured results.',
+    },
+    usageOverride: 'plugins list|add <package[@version]>|update <package>|remove <package>',
+    listUsageOverride: 'plugins',
+    positionalArgs: ['list|add|update|remove', 'package?'],
+    supportedFlags: [],
+  },
   cdp: {
     text: {
       summary: 'Inspect CDP targets, JS heap, and leaks',

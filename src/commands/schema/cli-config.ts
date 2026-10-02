@@ -2,6 +2,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import { isRecord } from '@agent-device/kernel/record';
 import { mergeDefinedFlags } from './merge-flags.ts';
 import { type FlagKey } from '@agent-device/command-registry/flag-types';
 import { projectConfigFlagKeys } from '@agent-device/command-registry/flag-registry';
@@ -55,8 +56,13 @@ function resolveConfigPaths(
   ];
 }
 
-function resolveUserConfigPath(env: EnvMap): string {
-  return path.join(expandUserHomePath('~', { env }), '.agent-device', 'config.json');
+export function resolveUserConfigPath(env: EnvMap): string {
+  const home = env.AGENT_DEVICE_HOME
+    ? expandUserHomePath(env.AGENT_DEVICE_HOME, { env })
+    : path.join(expandUserHomePath('~', { env }), '.agent-device');
+  if (!path.isAbsolute(home))
+    throw new AppError('INVALID_ARGS', 'AGENT_DEVICE_HOME must be absolute or ~/...');
+  return path.join(home, 'config.json');
 }
 
 function resolveInputPath(inputPath: string, cwd: string, env: EnvMap): string {
@@ -99,7 +105,7 @@ function loadSingleConfigFile(entry: ConfigPath): Partial<CliFlags> {
     });
   }
 
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+  if (!isRecord(parsed)) {
     throw new AppError('INVALID_ARGS', `Config file must contain a JSON object: ${filePath}`);
   }
 
@@ -114,7 +120,10 @@ function parseConfigObject(
   origin: { source: ConfigFileSource; label: string },
 ): Partial<CliFlags> {
   const flags: Partial<CliFlags> = {};
-  for (const [rawKey, rawValue] of Object.entries(source)) {
+  const entries = Object.entries(source).filter(
+    ([key]) => key !== 'plugins' || origin.source !== 'user',
+  );
+  for (const [rawKey, rawValue] of entries) {
     const key = rawKey as FlagKey;
     const spec = getOptionSpec(key);
     if (!spec) {

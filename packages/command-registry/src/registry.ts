@@ -1692,6 +1692,17 @@ export const RAW_COMMAND_DESCRIPTORS = [
     platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
+    name: 'plugins',
+    deviceClaimPolicy: 'none',
+    ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/plugins.ts'] as const } : {}),
+    catalog: { group: 'local-cli' },
+    recordsSessionAction: false,
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+    mcpExposed: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
+  },
+  {
     name: 'connect',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/connection.ts'] as const } : {}),

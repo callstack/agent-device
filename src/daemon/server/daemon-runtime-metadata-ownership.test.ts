@@ -33,7 +33,7 @@ vi.mock('../../platform-runtime.ts', () => ({
 
 vi.mock('../../provider-device-runtimes.ts', () => ({
   DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS: [],
-  createDefaultProviderRuntimeComposition: async () => ({ runtimes: [], platformModules: [] }),
+  createDaemonProviderRuntimeComposition: async () => ({ runtimes: [], platformModules: [] }),
 }));
 
 // The post-lock, pre-publication step the runtime awaits first. Making it throw lands the runtime in

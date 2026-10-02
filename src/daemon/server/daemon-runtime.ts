@@ -22,7 +22,7 @@ import {
 } from '../../platform-runtime.ts';
 import { createHostDiagnostics } from '../../platform-runtime-host-diagnostics.ts';
 import {
-  createDefaultProviderRuntimeComposition,
+  createDaemonProviderRuntimeComposition,
   DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS,
 } from '../../provider-device-runtimes.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
@@ -347,7 +347,7 @@ export async function startDaemonRuntime(
   const daemonProcessStartTime = daemonIdentity.startTime ?? undefined;
   const daemonCodeOrigin = resolveDaemonCodeOrigin();
   const daemonCodeSignature = resolveDaemonCodeSignature();
-  const providerComposition = await createDefaultProviderRuntimeComposition(env);
+  const providerComposition = await createDaemonProviderRuntimeComposition(env);
   const providerDeviceRuntimes = [...providerComposition.runtimes];
   const deviceRuntimeGateway = createPlatformRuntimeGateway({
     assertShutdownAllowed: daemonPolicy
@@ -649,6 +649,9 @@ export async function startDaemonRuntime(
     processStartTime: daemonProcessStartTime,
   };
   if (!acquireDaemonLock(baseDir, lockPath, lockData)) {
+    await Promise.allSettled(
+      providerDeviceRuntimes.map(async (runtime) => await runtime.shutdown()),
+    );
     stderr.write('Daemon lock is held by another process; exiting.\n');
     exit(0);
     return null;
@@ -735,6 +738,9 @@ export async function startDaemonRuntime(
     closeServersBestEffort(servers);
     stopMetadataLossWatch();
     await removeOwnDaemonInfo({ infoPath, logPath, owner: daemonIdentity });
+    await Promise.allSettled(
+      providerDeviceRuntimes.map(async (runtime) => await runtime.shutdown()),
+    );
     releaseDaemonLock(lockPath);
     await platformDaemonLifecycleOwners.clearDaemonLockConfiguration();
     exit(1);

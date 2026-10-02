@@ -40,6 +40,26 @@ export function createProviderPlatformRuntimeRegistrations(
   );
 }
 
+export async function createDaemonProviderRuntimeComposition(
+  env: DefaultProviderDeviceRuntimeEnv = process.env,
+): Promise<DefaultProviderRuntimeComposition> {
+  const bundled = await createDefaultProviderRuntimeComposition(env);
+  try {
+    const { loadProviderPlugins } = await import('./plugins/load.ts');
+    const plugins = await loadProviderPlugins(env, DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS);
+    return Object.freeze({
+      runtimes: Object.freeze([...bundled.runtimes, ...plugins.map(({ runtime }) => runtime)]),
+      platformModules: Object.freeze([
+        ...bundled.platformModules,
+        ...plugins.map(({ runtime, platformModule }) => ({ runtime, module: platformModule })),
+      ]),
+    });
+  } catch (error) {
+    await Promise.allSettled(bundled.runtimes.map(async (runtime) => await runtime.shutdown()));
+    throw error;
+  }
+}
+
 export async function createDefaultProviderRuntimeComposition(
   env: DefaultProviderDeviceRuntimeEnv = process.env,
 ): Promise<DefaultProviderRuntimeComposition> {

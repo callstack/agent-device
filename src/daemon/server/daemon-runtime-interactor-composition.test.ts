@@ -5,6 +5,7 @@ import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { setActiveProviderDeviceRuntimes } from '../../provider-device-runtime.ts';
 import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { createDaemonProviderRuntimeComposition } from '../../provider-device-runtimes.ts';
 import { interactorResolution } from '../interactor-resolution.ts';
 
 vi.mock('../../platform-runtime.ts', () => ({
@@ -31,13 +32,17 @@ vi.mock('../../platform-runtime.ts', () => ({
 
 vi.mock('../../provider-device-runtimes.ts', () => ({
   DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS: [],
-  createDefaultProviderRuntimeComposition: async () => ({ runtimes: [], platformModules: [] }),
+  createDaemonProviderRuntimeComposition: vi.fn(async () => ({
+    runtimes: [],
+    platformModules: [],
+  })),
 }));
 
 import { startDaemonRuntime } from './daemon-runtime.ts';
 
 afterEach(() => {
   setActiveProviderDeviceRuntimes([]);
+  vi.restoreAllMocks();
 });
 
 /**
@@ -77,4 +82,35 @@ test('daemon startup composes the interactor resolution the daemon resolves thro
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
+});
+
+test('a daemon attempt losing the lock shuts down every constructed provider', async () => {
+  vi.spyOn(await import('./server-lifecycle.ts'), 'acquireDaemonLock').mockReturnValueOnce(false);
+  const shutdown = vi.fn(() => {
+    throw new Error('cleanup failed');
+  });
+  const otherShutdown = vi.fn(async () => {});
+  vi.mocked(createDaemonProviderRuntimeComposition).mockResolvedValueOnce({
+    runtimes: [shutdown, otherShutdown].map(
+      (stop, index) =>
+        ({
+          provider: `fixture-${index}`,
+          shutdown: stop,
+          leaseLifecycle: {},
+        }) as unknown as ProviderDeviceRuntime,
+    ),
+    platformModules: [],
+  });
+  const exit = vi.fn();
+  const runtime = await startDaemonRuntime({
+    env: { AGENT_DEVICE_STATE_DIR: mkdtempForTestSync('daemon-held-lock-') },
+    exit,
+    registerProcessHandlers: false,
+    stderr: { write: () => {} },
+    stdout: { write: () => {} },
+  });
+  expect(runtime).toBeNull();
+  expect(shutdown).toHaveBeenCalledOnce();
+  expect(otherShutdown).toHaveBeenCalledOnce();
+  expect(exit).toHaveBeenCalledWith(0);
 });

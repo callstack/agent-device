@@ -22,6 +22,9 @@ Project-level values override user-level values where they are permitted. Enviro
 both. CLI flags always win. `--config <path>` or `AGENT_DEVICE_CONFIG` loads one explicit,
 operator-controlled file instead of the default locations.
 
+Set `AGENT_DEVICE_HOME` to an absolute path (or `~/...`) to relocate the user config and
+[managed provider plugins](./plugins.md). This setting does not relocate daemon state.
+
 `./agent-device.json` cannot contain endpoint, credential, daemon transport/server, tenant/run/lease,
 provider/cloud, Metro connection, or other operator-controlled fields. The CLI rejects those keys during
 parse, before it creates a daemon transport or sends a health request. This prevents a repository from
@@ -122,7 +125,7 @@ These env vars are the supported user-facing configuration surface. Other `AGENT
 
 | Category | Env vars | Decision |
 | --- | --- | --- |
-| CLI defaults and config | `AGENT_DEVICE_CONFIG`, `AGENT_DEVICE_SESSION`, `AGENT_DEVICE_PLATFORM`, `AGENT_DEVICE_SCREENSHOT_SCALE`, `AGENT_DEVICE_SESSION_LOCK`, `AGENT_DEVICE_DAEMON_BASE_URL`, `AGENT_DEVICE_DAEMON_AUTH_TOKEN`, `AGENT_DEVICE_CLOUD_BASE_URL` | Public |
+| CLI defaults and config | `AGENT_DEVICE_HOME`, `AGENT_DEVICE_CONFIG`, `AGENT_DEVICE_SESSION`, `AGENT_DEVICE_PLATFORM`, `AGENT_DEVICE_SCREENSHOT_SCALE`, `AGENT_DEVICE_SESSION_LOCK`, `AGENT_DEVICE_DAEMON_BASE_URL`, `AGENT_DEVICE_DAEMON_AUTH_TOKEN`, `AGENT_DEVICE_CLOUD_BASE_URL` | Public |
 | Device scoping | `AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST` | Public |
 | Local daemon storage | `AGENT_DEVICE_STATE_DIR` | Public |
 | Metro and install helpers | `AGENT_DEVICE_METRO_BEARER_TOKEN`, `AGENT_DEVICE_BUNDLETOOL_JAR` | Public |
