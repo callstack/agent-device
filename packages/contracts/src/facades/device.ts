@@ -38,9 +38,11 @@ export {
   parseFoldKeyframesJson,
   FOLD_POSES,
   FOLD_POSE_USAGE,
+  deviceRotationFromSurfaceIndex,
   deviceRotationOrientation,
   deviceRotationSurfaceDegrees,
   foldPoseForHingeAngle,
+  isDeviceRotation,
   parseDeviceRotation,
   parseFoldPose,
 } from '../device-rotation.ts';

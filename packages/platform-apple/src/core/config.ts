@@ -5,12 +5,22 @@ export const IOS_SIMCTL_LIST_TIMEOUT_MS = 60_000;
 export const IOS_APP_LAUNCH_TIMEOUT_MS = 60_000;
 
 export const IOS_DEVICECTL_TIMEOUT_MS = 20_000;
+/** The smallest `--timeout` in seconds devicectl accepts; smaller values exit 64 before querying. */
+export const IOS_DEVICECTL_MIN_TIMEOUT_SECONDS = 5;
 
 export const IOS_DEVICE_INSTALL_TIMEOUT_MS = 120_000;
 
 export const IOS_SIMULATOR_FOCUS_TIMEOUT_MS = 10_000;
 
 export const IOS_SIMULATOR_TERMINATE_TIMEOUT_MS = 15_000;
+
+/**
+ * How long a Simulator `simctl openurl` may take. CoreSimulator can hold an URL hand-off for
+ * minutes while it is wedged, and every other simctl call this open makes is bounded; the bound
+ * stays well under the daemon request budget so the open answers with its own typed reason and
+ * kills the child instead of being cancelled around a still-running `openurl`.
+ */
+export const IOS_SIMULATOR_OPENURL_TIMEOUT_MS = 20_000;
 
 export const IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS = 20_000;
 
@@ -20,10 +30,10 @@ export const IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS = 20_000;
 // request-level daemon reset. Measured probe cost is ~0.2s.
 export const IOS_APPLE_DISPLAY_PROBE_TIMEOUT_MS = 5_000;
 /**
- * The smallest `--timeout` devicectl accepts. The hinge-angle stream never ends on its own, so
- * one read costs exactly this long and the exec deadline below only guards a wedged CoreDevice.
+ * The hinge-angle stream never ends on its own, so one read costs the devicectl minimum
+ * and the exec deadline below only guards a wedged CoreDevice.
  */
-export const IOS_HINGE_ANGLE_STREAM_SECONDS = 5;
+export const IOS_HINGE_ANGLE_STREAM_SECONDS = IOS_DEVICECTL_MIN_TIMEOUT_SECONDS;
 export const IOS_HINGE_ANGLE_TIMEOUT_MS = 20_000;
 /** How many hinge reads a dispatched hinge request gets to reach its pose before the pose is refused. */
 export const IOS_FOLD_POSE_SETTLE_ATTEMPTS = 4;

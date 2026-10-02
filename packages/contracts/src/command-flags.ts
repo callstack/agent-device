@@ -28,13 +28,15 @@ export type MaestroRuntimeFlags = {
 export type CommandFlags = Omit<CliFlags, DaemonExcludedCliFlag> & {
   batchSteps?: DaemonBatchStep[];
   clearAppState?: boolean;
-  interactionOutcome?: {
-    retryOnNoChange?: boolean;
-  };
   launchArgs?: string[];
   kind?: string;
   maestro?: MaestroRuntimeFlags;
   postGestureStabilization?: boolean;
+  /**
+   * Readiness budget for press/click/longpress, capped at the promotedTarget row's maxTimeoutMs.
+   * No CliFlags counterpart: never CLI- or model-writable.
+   */
+  readinessTimeoutMs?: number;
   snapshotIncludeHiddenContentHints?: boolean;
   leaseProvider?: string;
   provider?: string;

@@ -22,10 +22,15 @@ test.each([false, true])(
 
 test('selection offsets survive on a read-only selectable node (independent of editable)', () => {
   const tree = parseUiHierarchyTree(`<hierarchy><node class="android.widget.TextView"
-    resource-id="field" text="Read-only text" bounds="[0,0][200,100]" visible-to-user="true"
+    resource-id="field" text="Read-only text" content-desc="Read-only announcement"
+    hint="Label prompt" bounds="[0,0][200,100]" visible-to-user="true"
     editable="false" selection-start="2" selection-end="5" /></hierarchy>`);
   const { nodes } = buildUiHierarchySnapshot(tree, undefined, { raw: true });
   expect(nodes.find((node) => node.identifier === 'field')).toMatchObject({
+    label: 'Read-only text',
+    value: 'Read-only text',
+    contentDescription: 'Read-only announcement',
+    placeholder: 'Label prompt',
     editable: false,
     selectionStart: 2,
     selectionEnd: 5,
@@ -44,4 +49,11 @@ test('missing native field metadata remains unknown instead of becoming false or
   expect(field?.hintShowing).toBeUndefined();
   expect(field?.selectionStart).toBeUndefined();
   expect(field?.selectionEnd).toBeUndefined();
+  const serialized = JSON.parse(JSON.stringify(field));
+  expect(serialized).not.toHaveProperty('value');
+  expect(serialized).not.toHaveProperty('editable');
+  expect(serialized).not.toHaveProperty('password');
+  expect(serialized).not.toHaveProperty('hintShowing');
+  expect(serialized).not.toHaveProperty('selectionStart');
+  expect(serialized).not.toHaveProperty('selectionEnd');
 });

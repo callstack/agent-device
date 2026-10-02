@@ -73,24 +73,7 @@ extension SnapshotVisibilityFold {
       let node = presentationNode.raw
       guard let hint = hints[node.index] else { return presentationNode }
       return SnapshotPresentationNode(
-        raw: RawAXNode(
-          index: node.index,
-          type: node.type,
-          label: node.label,
-          identifier: node.identifier,
-          value: node.value,
-          placeholder: node.placeholder,
-          rect: node.rect,
-          enabled: node.enabled,
-          focused: node.focused,
-          selected: node.selected,
-          hittable: node.hittable,
-          depth: node.depth,
-          parentIndex: node.parentIndex,
-          hiddenContentAbove: node.hiddenContentAbove == true || hint.above ? true : nil,
-          hiddenContentBelow: node.hiddenContentBelow == true || hint.below ? true : nil,
-          actions: node.actions
-        ),
+        raw: node.addingHiddenContentHints(above: hint.above, below: hint.below),
         effectiveRect: presentationNode.effectiveRect
       )
     }

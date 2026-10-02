@@ -266,6 +266,7 @@ function createPreparationHost(
   } = { host: undefined as never, builds: 0, signals: [] };
   const host: SnapshotSourceHost = {
     ...createSnapshotSourceHost(),
+    cpuArch: async () => 'arm64',
     run: async (command, args, options) => {
       if (command === 'xcrun' && args.includes('clang')) {
         fixture.builds += 1;
@@ -281,9 +282,7 @@ function createPreparationHost(
             ? 'Xcode 16.4\nBuild version 16F6'
             : command === 'sw_vers'
               ? '15.6'
-              : command === 'uname'
-                ? 'arm64'
-                : '26.2',
+              : '26.2',
         stderr: '',
         exitCode: 0,
       };

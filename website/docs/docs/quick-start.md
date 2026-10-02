@@ -77,7 +77,7 @@ agent-device close
 - `.aab` requires `bundletool` in `PATH`, or `AGENT_DEVICE_BUNDLETOOL_JAR=<absolute-path-to-bundletool-all.jar>` with `java` in `PATH`.
 - `.aab` installs use bundletool `build-apks --mode universal`.
 - `.ipa` installs extract `Payload/*.app`; if multiple app bundles exist, `<app>` selects the target by bundle id or bundle name.
-- Use `install-from-source` for existing artifact URLs, including direct Android `.apk`/`.aab` URLs and trusted archives with one installable artifact. Use `install-from-source --github-actions-artifact <owner/repo:artifact>` for daemon-resolved GitHub Actions artifacts.
+- Use `install-from-source` for existing artifact URLs, including direct Android `.apk`/`.aab` and iOS `.ipa` URLs, and archives with one installable artifact. Use `install-from-source --github-actions-artifact <owner/repo:artifact>` for daemon-resolved GitHub Actions artifacts.
 
 If `open` fails because no booted simulator/emulator/device is available, run `boot --platform ios|android` and retry.
 If `open` fails because the app id is wrong or missing, run `apps` and retry with the discovered package or bundle id instead of guessing.

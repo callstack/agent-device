@@ -11,6 +11,7 @@ import { readRefMutationFrame } from '../../ref-frame.ts';
 import type { DaemonResponse } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
 import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
+import { refusedBeforeDispatch } from '../../request-dispatch-disclosure.ts';
 import { settleFlagGuardResponse } from './interaction-flags.ts';
 import type {
   CaptureSnapshotForSession,
@@ -58,6 +59,16 @@ export type AdmittedTargetedTouch = {
 type ParsedTargetedTouch = Extract<ParsedTouchTarget | ParsedLongPressTarget, { ok: true }>;
 
 export async function admitTargetedTouch(
+  params: TargetedTouchParams,
+  command: TargetedTouchCommand,
+): Promise<{ response: DaemonResponse } | { admitted: AdmittedTargetedTouch }> {
+  const admission = await readTargetedTouchAdmission(params, command);
+  return 'response' in admission
+    ? { response: refusedBeforeDispatch(admission.response) }
+    : admission;
+}
+
+async function readTargetedTouchAdmission(
   params: TargetedTouchParams,
   command: TargetedTouchCommand,
 ): Promise<{ response: DaemonResponse } | { admitted: AdmittedTargetedTouch }> {

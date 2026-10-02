@@ -15,6 +15,8 @@ import {
   makeRunnerSession,
   runnerError,
   runnerResponse,
+  RUNNER_CACHE_METADATA_FIXTURE,
+  RUNNER_CACHE_KEY_FIXTURE,
 } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
@@ -175,6 +177,7 @@ beforeEach(async () => {
   mockEnsureXctestrunArtifact.mockResolvedValue({
     xctestrunPath: '/tmp/base-runner.xctestrun',
     derived: '/tmp/derived',
+    cacheKey: RUNNER_CACHE_KEY_FIXTURE,
     cache: 'miss',
     artifact: 'rebuilt',
     buildMs: 12,
@@ -185,7 +188,7 @@ beforeEach(async () => {
     xctestrunPath: '/tmp/session-runner.xctestrun',
     jsonPath: '/tmp/session-runner.json',
   });
-  mockResolveExpectedRunnerCacheMetadata.mockReturnValue({ schemaVersion: 1 });
+  mockResolveExpectedRunnerCacheMetadata.mockReturnValue(RUNNER_CACHE_METADATA_FIXTURE);
   mockResolveRunnerDerivedPath.mockReturnValue('/tmp/derived');
   mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
   mockRunAppleToolCommand.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
@@ -325,6 +328,7 @@ test('runner session emits XCTest startup progress only after a runner rebuild',
   mockEnsureXctestrunArtifact.mockResolvedValue({
     xctestrunPath: '/tmp/cached-runner.xctestrun',
     derived: '/tmp/derived',
+    cacheKey: RUNNER_CACHE_KEY_FIXTURE,
     cache: 'hit',
     artifact: 'valid',
     buildMs: 0,
@@ -994,36 +998,6 @@ test('runner lease cleanup reclaims only leases owned by the stopped daemon', as
   assert.equal(fs.existsSync(path.join(leaseDir, `${owned.deviceId}.json`)), false);
   assert.equal(fs.existsSync(path.join(leaseDir, `${foreign.deviceId}.json`)), true);
   assert.deepEqual(mockCleanupTempFile.mock.calls, [[owned.xctestrunPath], [owned.jsonPath]]);
-});
-
-test('runner session restarts alive runner when expected xctestrun artifact changes', async () => {
-  const device = { ...IOS_SIMULATOR, id: 'runner-session-stale-artifact-sim' };
-
-  mockEnsureXctestrunArtifact
-    .mockResolvedValueOnce({
-      xctestrunPath: '/tmp/base-runner.xctestrun',
-      derived: '/tmp/derived',
-      cache: 'miss',
-      artifact: 'rebuilt',
-      buildMs: 12,
-      xctestrunPathSource: 'build',
-    })
-    .mockResolvedValueOnce({
-      xctestrunPath: '/tmp/base-runner-next.xctestrun',
-      derived: '/tmp/derived-next',
-      cache: 'miss',
-      artifact: 'rebuilt',
-      buildMs: 13,
-      xctestrunPathSource: 'build',
-    });
-
-  const session = await ensureRunnerSession(device, {});
-  mockResolveRunnerDerivedPath.mockReturnValue('/tmp/derived-next');
-  const restarted = await ensureRunnerSession(device, {});
-
-  assert.notEqual(restarted, session);
-  assert.equal(restarted.xctestrunArtifact?.derived, '/tmp/derived-next');
-  assert.equal(mockRunCmdBackground.mock.calls.length, 2);
 });
 
 test('runner session reuses external xctestrun artifact without cache-derived comparison', async () => {

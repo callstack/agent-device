@@ -81,6 +81,8 @@ Use this flow when you need a clean repro window with logs, recent network activ
 
 `open` prints `Session state: <path>`. Inspect that directory for per-run artifacts: `requests/<request-id>.ndjson` contains daemon request diagnostics, `runner.log` contains Apple runner/`xcodebuild` output, and `app.log` contains app/device logs when log capture is active. The top-level daemon log is for daemon lifecycle/startup issues.
 
+For command failures, use `--json` to inspect `error.details.stderr` when available. Diagnostic stderr is secret-redacted and retains up to 8,192 characters; longer output keeps its beginning and end with a truncation marker between them. Other diagnostic strings remain limited to 400 characters. Compact retry summaries may retain less output.
+
 On iOS simulators, `logs` scope by bundle id and the resolved app executable. For launch-time stdout/stderr, capture the direct app launch console instead of starting raw `simctl` streams:
 
 ```bash

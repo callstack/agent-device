@@ -51,9 +51,29 @@ const SEMANTIC_TOUCH_KIND_FRAGMENTS = [
 type OcclusionScan = {
   nodes: readonly RawSnapshotNode[];
   byIndex: Map<number, RawSnapshotNode>;
+  neighbourhood: NeighbourhoodIndex;
   overlayPositions: number[];
   coverCache: Map<number, RawSnapshotNode | null>;
 };
+
+/** One-tree context for classifying a node's neighbours without rescanning the whole snapshot. */
+type NeighbourhoodIndex = {
+  byIndex: Map<number, RawSnapshotNode>;
+  childrenByParent: Map<number, RawSnapshotNode[]>;
+};
+
+function collectNeighbourhoodIndex(nodes: readonly RawSnapshotNode[]): NeighbourhoodIndex {
+  const byIndex = new Map<number, RawSnapshotNode>();
+  const childrenByParent = new Map<number, RawSnapshotNode[]>();
+  for (const node of nodes) {
+    byIndex.set(node.index, node);
+    if (typeof node.parentIndex !== 'number') continue;
+    const siblings = childrenByParent.get(node.parentIndex);
+    if (siblings) siblings.push(node);
+    else childrenByParent.set(node.parentIndex, [node]);
+  }
+  return { byIndex, childrenByParent };
+}
 
 export type SnapshotOcclusionOptions = {
   /** Backend-declared overlay roots that use the shared geometric scan (for example Android IME). */
@@ -71,17 +91,19 @@ export function annotateCoveredSnapshotNodes(
 ): RawSnapshotNode[] {
   if (nodes.length < 2) return nodes;
 
-  const byIndex = new Map(nodes.map((node) => [node.index, node]));
+  const neighbourhood = collectNeighbourhoodIndex(nodes);
+  const byIndex = neighbourhood.byIndex;
   const scan: OcclusionScan = {
     nodes,
     byIndex,
+    neighbourhood,
     // Mutation-lane note: replacing the `[]` (non-overlay) branch with a
     // non-empty placeholder would only add extra, non-numeric entries to
     // this array; every consumer treats it as a plain array of positions to
     // compare/index with, so a stray non-numeric entry is inert (fails the
     // comparison, indexes to `undefined`) rather than observable.
     overlayPositions: nodes.flatMap((node, position) =>
-      isOverlayLikeNode(node, byIndex, options) ? [position] : [],
+      isOverlayLikeNode(node, neighbourhood, options) ? [position] : [],
     ),
     coverCache: new Map(),
   };
@@ -221,7 +243,7 @@ function visibleCoverRect(
   options: SnapshotOcclusionOptions,
 ): Rect | null {
   const candidate = scan.nodes[candidatePosition];
-  if (!candidate || !isOverlayLikeNode(candidate, scan.byIndex, options)) return null;
+  if (!candidate || !isOverlayLikeNode(candidate, scan.neighbourhood, options)) return null;
   if (areRelatedSnapshotNodes(target, candidate, scan.byIndex)) return null;
   const candidateRect = positiveRect(candidate.rect);
   if (!candidateRect || areRectsApproximatelyEqual(targetRect, candidateRect)) return null;
@@ -246,17 +268,53 @@ function isCandidateTouchNode(node: RawSnapshotNode): boolean {
 // node.
 function isOverlayLikeNode(
   node: RawSnapshotNode,
-  byIndex: Map<number, RawSnapshotNode>,
+  neighbourhood: NeighbourhoodIndex,
   options: SnapshotOcclusionOptions,
 ): boolean {
   if (!positiveRect(node.rect)) return false;
   if (isViewportRootNode(node)) return false;
-  if (isFullViewportChromeContainer(node, byIndex)) return false;
+  if (isFullViewportChromeContainer(node, neighbourhood.byIndex)) return false;
+  if (isSiblingSizedChromeContainer(node, neighbourhood)) return false;
   // This is a presentation-order heuristic: only known floating UI chrome should cover
   // later targets. Generic hittable containers can appear later without being visually on top.
   return (
     nodeKindIncludesAny(node, OVERLAY_KIND_FRAGMENTS) ||
-    isAdditionalOverlayRootNode(node, byIndex, options)
+    isAdditionalOverlayRootNode(node, neighbourhood.byIndex, options)
+  );
+}
+
+/**
+ * Exempt a viewport-chrome container whose frame equals a listed sibling's. UIKit sizes a bar
+ * container to the branch it presents over, so in the captured shapes a sibling-matching frame is
+ * that branch's footprint, not a surface drawn on top of it; what the container really draws is its
+ * descendants, each with its own rect the scan judges on its own (#2996).
+ *
+ * Two captures carry the shape: a system app's bar container matching the 812pt content branch beside
+ * it marked that branch's 36 nodes plus the navigation bar listed with it, and a tab-bar badge
+ * container matching the platter content view beside it marked every tab. `isFullViewportChromeContainer`
+ * reaches the same verdict only against the viewport root, which such a container stops short of.
+ *
+ * Accepted limit: a snapshot publishes geometry and kind only, so the predicate cannot tell a
+ * pass-through host from an opaque bar of the same frame, and chrome siblings that share one frame
+ * excuse each other. Both captures show the match only where content was being refused, and the kind
+ * gate keeps a `dialog`/`sheet`/`alert` sized to the content around it covering.
+ */
+// Mutation-lane note: the `typeof parentIndex` and `!rect` guards below are provably
+// redundant — with no parent index the sibling lookup finds nothing and answers "not
+// sibling-sized" on its own, and a rect-less node fails `areRectsApproximatelyEqual`,
+// which is the same answer the guard gives. They state the preconditions rather than
+// enforce them.
+function isSiblingSizedChromeContainer(
+  node: RawSnapshotNode,
+  neighbourhood: NeighbourhoodIndex,
+): boolean {
+  if (!nodeKindIncludesAny(node, VIEWPORT_CHROME_KIND_FRAGMENTS)) return false;
+  if (typeof node.parentIndex !== 'number') return false;
+  const rect = positiveRect(node.rect);
+  if (!rect) return false;
+  const siblings = neighbourhood.childrenByParent.get(node.parentIndex) ?? [];
+  return siblings.some(
+    (sibling) => sibling.index !== node.index && areRectsApproximatelyEqual(rect, sibling.rect),
   );
 }
 

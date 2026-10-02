@@ -5,6 +5,7 @@ import type {
   SnapshotQualityVerdict,
   ScreenshotOverlayRef,
 } from '@agent-device/kernel/snapshot';
+import type { DeviceRotation } from './device-rotation.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 
 export type ScreenshotResultData = {
@@ -14,6 +15,8 @@ export type ScreenshotResultData = {
   logicalWidth?: number;
   logicalHeight?: number;
   pixelDensity?: number;
+  /** Display rotation the capture was rendered in; absent when the target reports none. */
+  displayRotation?: DeviceRotation;
   overlayRefs?: ScreenshotOverlayRef[];
   warnings?: string[];
 };

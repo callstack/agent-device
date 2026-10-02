@@ -12,4 +12,12 @@ export const INTERACTION_ERROR_REASONS = {
   refUnlabeled: 'ref_unlabeled',
   /** The target names a node with no usable centre to touch: a missing, non-finite, or negative rect. */
   targetBoundsInvalid: 'target_bounds_invalid',
+  /**
+   * A readiness poll captured a tree the snapshot-quality verdict calls sparse and the selector did
+   * not resolve in it: the tree is untrustworthy, so absence proves nothing and the wait ends now.
+   * `details.snapshotQuality` carries the verdict.
+   */
+  captureSparse: 'capture_sparse',
+  /** The target resolved, but another visible element covers it. */
+  targetCovered: 'target_covered',
 } as const;

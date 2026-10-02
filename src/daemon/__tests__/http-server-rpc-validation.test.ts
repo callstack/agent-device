@@ -326,6 +326,46 @@ test('local command RPC keeps host paths unrestricted', async (t) => {
   }
 });
 
+test('only local command RPC keeps the client developer dir', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const root = mkdtempForTestSync('agent-device-http-developer-dir-');
+  const params = {
+    command: 'devices',
+    positionals: [],
+    meta: { developerDir: '/Applications/Xcode.app/Contents/Developer' },
+  };
+  const developerDirSeenBy = async (env: NodeJS.ProcessEnv): Promise<unknown> => {
+    const received: DaemonRequest[] = [];
+    const server = await createDaemonHttpServer({
+      env,
+      handleRequest: async (request): Promise<DaemonResponse> => {
+        received.push(request);
+        return { ok: true, data: {} };
+      },
+    });
+    try {
+      const response = await postCommandRpc(await listenOnLoopback(server), params);
+      assert.equal(response.status, 200);
+      return received[0]?.meta?.developerDir;
+    } finally {
+      await closeLoopbackServer(server);
+    }
+  };
+
+  try {
+    assert.equal(
+      await developerDirSeenBy(localHttpEnvironment()),
+      '/Applications/Xcode.app/Contents/Developer',
+    );
+    assert.equal(
+      await developerDirSeenBy(remoteHttpEnvironment(writeAllowingAuthHook(root))),
+      undefined,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function writeAllowingAuthHook(root: string): string {
   const hookPath = path.join(root, 'auth-hook.mjs');
   fs.writeFileSync(hookPath, "export default () => ({ tenantId: 'tenant-test' });\n");

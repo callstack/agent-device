@@ -1,6 +1,6 @@
 import type { SnapshotResult } from '@agent-device/contracts/interactor-types';
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
@@ -71,22 +71,32 @@ export async function runScrollUntilVisible<TResult>(params: {
   let result: TResult | undefined;
   const recentSignatures: string[] = [];
 
-  while (true) {
-    const decision = await decideUntilPass({
-      captured: await capture(),
-      selector,
-      direction,
-      platform,
-      edge,
-      passes,
-      passLimit,
-      recentSignatures,
-    });
-    if (decision.visible) {
-      return { passes, ...(result === undefined ? {} : { result }) };
+  let scrolling = false;
+  try {
+    while (true) {
+      const decision = await decideUntilPass({
+        captured: await capture(),
+        selector,
+        direction,
+        platform,
+        edge,
+        passes,
+        passLimit,
+        recentSignatures,
+      });
+      if (decision.visible) {
+        return { passes, ...(result === undefined ? {} : { result }) };
+      }
+      scrolling = true;
+      result = await scroll();
+      scrolling = false;
+      passes += 1;
     }
-    result = await scroll();
-    passes += 1;
+  } catch (error) {
+    if (passes === 0 && !scrolling && error instanceof AppError) {
+      throw discloseDispatch(error, 'no');
+    }
+    throw error;
   }
 }
 

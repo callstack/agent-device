@@ -8,6 +8,7 @@ import type { DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts'
 import { runCmdDetachedMonitored, type ExecDetachedExit } from '@agent-device/host-kit/command';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { isProcessAlive, readProcessStartTime } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 
 import { findUnrecoveredRepairCommitFailure } from '../session-repair-tombstone.ts';
@@ -30,6 +31,7 @@ import {
   cleanupFailedDaemonStartupMetadata,
   cleanupStaleDaemonLockIfSafe,
   getDaemonMetadataState,
+  isDaemonLockHeldByAnotherDaemon,
   isRemoteDaemon,
   readDaemonInfo,
   recoverDaemonLockHolder,
@@ -43,8 +45,7 @@ import {
 import {
   canConnect,
   cachedRemoteDaemonHealth,
-  DAEMON_HTTP_ENDPOINT_UNAVAILABLE_MESSAGE,
-  DAEMON_SOCKET_ENDPOINT_UNAVAILABLE_MESSAGE,
+  isDaemonTransportUnavailableError,
 } from './daemon-client-transport.ts';
 
 export type DaemonClientSettings = {
@@ -63,15 +64,19 @@ export type EnsuredDaemon = {
 
 type DaemonStartupLaunch = {
   pid: number;
+  /** The launched process's start time, so a reused pid is never taken for it. */
+  startTime?: string;
   exited: Promise<ExecDetachedExit>;
 };
 
 type DaemonStartupWaitResult =
-  | { kind: 'ready'; info: DaemonInfo }
+  | { kind: 'ready'; daemon: EnsuredDaemon }
   | { kind: 'early_exit'; exit: ExecDetachedExit }
   | { kind: 'timeout' };
 
 const DAEMON_STARTUP_TIMEOUT_MS = 15_000;
+const LIVE_DAEMON_PROBE_RETRIES = 3;
+const LIVE_DAEMON_PROBE_RETRY_DELAY_MS = 200;
 const DAEMON_STARTUP_ATTEMPTS = 2;
 const DAEMON_STARTUP_LOG_TAIL_BYTES = 64_000;
 const LOOPBACK_BLOCK_LIST = new net.BlockList();
@@ -157,6 +162,13 @@ export async function ensureDaemon(settings: DaemonClientSettings): Promise<Ensu
     return await ensureRemoteDaemon(settings);
   }
 
+  const ensured = await ensureLocalDaemon(settings);
+  // Checked on both branches: a startup can resolve to a daemon another caller raced in.
+  await assertDaemonPolicyMatches(ensured.info, settings.paths.baseDir);
+  return ensured;
+}
+
+async function ensureLocalDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {
   const reusable = await readReusableLocalDaemon(settings);
   if (reusable) return { info: reusable, startedByClient: false };
 
@@ -188,11 +200,9 @@ async function readReusableLocalDaemon(settings: DaemonClientSettings): Promise<
   const existing = readDaemonInfo(settings.paths.infoPath);
   if (!existing) return null;
 
-  const viaClientTransport = await canConnectReusableDaemon(existing, settings.transportPreference);
   const decision = await resolveDaemonTakeover(existing, {
-    viaClientTransport,
-    onAnyAdvertisedTransport: async () =>
-      viaClientTransport || (await canConnectReusableDaemon(existing, 'auto')),
+    onClientTransport: () => canReachReusableDaemon(existing, settings.transportPreference),
+    onAnyAdvertisedTransport: () => canReachReusableDaemon(existing, 'auto'),
   });
   if (decision.kind === 'reuse') return existing;
   if (decision.kind === 'refuseNewer') {
@@ -205,6 +215,55 @@ async function readReusableLocalDaemon(settings: DaemonClientSettings): Promise<
   return null;
 }
 
+/**
+ * A daemon whose pid is still alive is probed again before it can be judged unreachable. A probe's
+ * budget is wall-clock time on this client's event loop, so a client that stalls past it (a large
+ * synchronous parse, a GC pause on a loaded host) reads a listening daemon as unreachable, and
+ * replacing it ends every session the daemon holds. Liveness is the signal-0 check, not the `ps`
+ * identity read: under the load that stalls the probe, `ps` misses its deadline too, and the
+ * takeover still proves identity before it signals anything.
+ */
+async function canReachReusableDaemon(
+  info: DaemonInfo,
+  preference: DaemonTransportPreference,
+): Promise<boolean> {
+  if (await canConnectReusableDaemon(info, preference)) return true;
+  for (let retry = 1; retry <= LIVE_DAEMON_PROBE_RETRIES; retry += 1) {
+    if (!isProcessAlive(info.pid)) return false;
+    await sleep(LIVE_DAEMON_PROBE_RETRY_DELAY_MS);
+    if (await canConnectReusableDaemon(info, preference)) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'daemon_probe_recovered',
+        data: { pid: info.pid, retry },
+      });
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * ADR 0029: a caller that names a daemon policy must not silently use a daemon that enforces a
+ * different one (or none). A caller that names no policy uses whatever the daemon enforces.
+ */
+async function assertDaemonPolicyMatches(existing: DaemonInfo, stateDir: string): Promise<void> {
+  if (!process.env.AGENT_DEVICE_DAEMON_POLICY?.trim()) return;
+  const { loadDaemonPolicy } = await import('../daemon-policy-file.ts');
+  const expected = loadDaemonPolicy(process.env)?.digest;
+  if (expected === existing.policyDigest) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    'The running daemon does not enforce the daemon policy named by AGENT_DEVICE_DAEMON_POLICY.',
+    {
+      reason: 'DAEMON_POLICY_MISMATCH',
+      expectedPolicyDigest: expected,
+      daemonPolicyDigest: existing.policyDigest ?? null,
+      hint: `Stop the running daemon (agent-device daemon stop --state-dir ${shellQuoteIfNeeded(stateDir)}), then retry so a daemon starts with this policy.`,
+    },
+  );
+}
+
 async function canConnectReusableDaemon(
   info: DaemonInfo,
   preference: DaemonTransportPreference,
@@ -215,15 +274,6 @@ async function canConnectReusableDaemon(
     if (isDaemonTransportUnavailableError(error)) return false;
     throw error;
   }
-}
-
-function isDaemonTransportUnavailableError(error: unknown): boolean {
-  return (
-    error instanceof AppError &&
-    error.code === 'COMMAND_FAILED' &&
-    (error.message === DAEMON_HTTP_ENDPOINT_UNAVAILABLE_MESSAGE ||
-      error.message === DAEMON_SOCKET_ENDPOINT_UNAVAILABLE_MESSAGE)
-  );
 }
 
 function newerDaemonRefusedError(
@@ -274,7 +324,7 @@ async function startLocalDaemon(settings: DaemonClientSettings): Promise<Ensured
     }
 
     const startup = await waitForDaemonStartup(DAEMON_STARTUP_TIMEOUT_MS, settings, launch);
-    if (startup.kind === 'ready') return { info: startup.info, startedByClient: true };
+    if (startup.kind === 'ready') return startup.daemon;
     if (startup.kind === 'early_exit') {
       daemonProcess = startup.exit;
       startError = describeDaemonEarlyExit(startup.exit);
@@ -299,7 +349,7 @@ async function startLocalDaemon(settings: DaemonClientSettings): Promise<Ensured
     cleanupResults.push(cleanup);
     if (cleanup.retainedInfoProcess || cleanup.retainedLockProcess) {
       const extended = await waitForDaemonStartup(DAEMON_STARTUP_TIMEOUT_MS, settings, launch);
-      if (extended.kind === 'ready') return { info: extended.info, startedByClient: true };
+      if (extended.kind === 'ready') return extended.daemon;
       if (extended.kind === 'early_exit') {
         daemonProcess = extended.exit;
         startError = describeDaemonEarlyExit(extended.exit);
@@ -589,15 +639,32 @@ async function waitForDaemonStartup(
   });
 
   while (Date.now() - start < timeoutMs) {
-    if (earlyExit) return { kind: 'early_exit', exit: earlyExit };
     const info = readDaemonInfo(settings.paths.infoPath);
     if (info && (await canConnect(info, settings.transportPreference))) {
-      return { kind: 'ready', info };
+      if (isLaunchedDaemon(info, launch)) {
+        return { kind: 'ready', daemon: { info, startedByClient: true } };
+      }
+      // Another client's daemon won the start: adopt it only as a reusable daemon would be. An
+      // incompatible one is replaced, and this wait then sees its own daemon's early exit.
+      const winner = await readReusableLocalDaemon(settings);
+      if (winner) return { kind: 'ready', daemon: { info: winner, startedByClient: false } };
     }
-    if (earlyExit) return { kind: 'early_exit', exit: earlyExit };
+    // A daemon that lost the startup lock exits cleanly; the daemon that won it is still starting.
+    if (earlyExit && !isDaemonLockHeldByAnotherDaemon(settings.paths, earlyExit.pid)) {
+      return { kind: 'early_exit', exit: earlyExit };
+    }
     await sleep(100);
   }
   return { kind: 'timeout' };
+}
+
+/** Whether `info` names the daemon process this client launched: same pid and start time. */
+function isLaunchedDaemon(info: DaemonInfo, launch: DaemonStartupLaunch): boolean {
+  return (
+    info.pid === launch.pid &&
+    launch.startTime !== undefined &&
+    info.processStartTime === launch.startTime
+  );
 }
 
 function startDaemon(settings: DaemonClientSettings): DaemonStartupLaunch {
@@ -615,10 +682,11 @@ function startDaemon(settings: DaemonClientSettings): DaemonStartupLaunch {
   const stdoutFd = fs.openSync(settings.paths.logPath, 'a');
   const stderrFd = fs.openSync(settings.paths.logPath, 'a');
   try {
-    return runCmdDetachedMonitored(process.execPath, args, {
+    const launched = runCmdDetachedMonitored(process.execPath, args, {
       env,
       stdio: ['ignore', stdoutFd, stderrFd],
     });
+    return { ...launched, startTime: readProcessStartTime(launched.pid) ?? undefined };
   } finally {
     fs.closeSync(stdoutFd);
     fs.closeSync(stderrFd);

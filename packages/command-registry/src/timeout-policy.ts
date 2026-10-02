@@ -64,7 +64,12 @@ type BoundedTimeoutPolicy = CommandTimeoutPolicy & { envelopeMs: number };
 type FlagTimeoutBudget = Extract<CommandTimeoutBudget, { source: 'flag' }>;
 type RequestTimeoutInput = Readonly<{
   positionals?: string[];
-  flags?: Readonly<{ timeoutMs?: number; settle?: boolean; waitMs?: number }>;
+  flags?: Readonly<{
+    timeoutMs?: number;
+    settle?: boolean;
+    waitMs?: number;
+    readinessTimeoutMs?: number;
+  }>;
 }>;
 
 /** Resolves the request envelope from its declared policy and user-supplied budget. */
@@ -74,11 +79,32 @@ export function resolveCommandRequestTimeoutMs(
 ): number | undefined {
   if (policy.envelopeMs === 'unbounded') return undefined;
   const boundedPolicy: BoundedTimeoutPolicy = { ...policy, envelopeMs: policy.envelopeMs };
-  return (
+  const envelopeMs =
     resolvePositionalBudgetTimeoutMs(boundedPolicy, input.positionals ?? []) ??
     resolveFlagBudgetTimeoutMs(boundedPolicy, input.flags) ??
-    boundedPolicy.envelopeMs
-  );
+    boundedPolicy.envelopeMs;
+  return envelopeMs + readinessBudgetMs(policy, input.flags);
+}
+
+/**
+ * The ceiling of a `targetReadiness: 'budgeted'` command's readiness budget: the promotedTarget
+ * selector row's poll ceiling, pinned to it by test.
+ */
+export const READINESS_BUDGET_MAX_MS = 2_000;
+
+/**
+ * A readiness budget is target-poll time spent before the action itself, so it extends whatever
+ * envelope the command otherwise has; the daemon's own poll must never outlive the client's clock.
+ * The poll never runs past the promotedTarget row's ceiling, so neither does the widening.
+ */
+function readinessBudgetMs(
+  policy: CommandTimeoutPolicy,
+  flags: RequestTimeoutInput['flags'],
+): number {
+  if (policy.targetReadiness !== 'budgeted') return 0;
+  const budgetMs = flags?.readinessTimeoutMs;
+  if (typeof budgetMs !== 'number' || !Number.isInteger(budgetMs) || budgetMs <= 0) return 0;
+  return Math.min(budgetMs, READINESS_BUDGET_MAX_MS);
 }
 
 function resolvePositionalBudgetTimeoutMs(

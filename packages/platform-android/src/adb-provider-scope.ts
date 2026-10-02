@@ -6,6 +6,7 @@ import {
   deviceShellExecutableOf,
   type ShellWord,
 } from '@agent-device/kernel/device-shell';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   androidAdbInvocation,
   androidAdbPayloadWithoutSerial,
@@ -35,7 +36,11 @@ import {
   type AndroidAdbCommandExecutorOverride,
   type AndroidAdbHostTransport,
 } from './adb-host.ts';
-import { withAdbFailureHints } from './adb-failure.ts';
+import {
+  attachAdbFailureHint,
+  classifyAndroidAdbFailure,
+  withAdbFailureHints,
+} from './adb-failure.ts';
 import { createExecAndroidPortReverseProvider } from './adb-port-reverse.ts';
 import { normalizeAndroidAdbProvider } from './adb-provider-normalization.ts';
 
@@ -60,13 +65,162 @@ export function createDeviceAdbExecutor(
 
 function createSerialAdbExecutor(serial: string, serverPort?: number): AndroidAdbExecutor {
   return withAdbFailureHints(async (args, options) => {
-    const request = deviceAdbRouteRequest(serial, serverPort, args, options);
-    // A device-scoped executor is the terminal local route: an installed provider must not
-    // capture it and route the call back into itself.
-    return await requireAndroidAdbHost().withoutAdbCommandExecutorOverride(
-      async () => await requireAndroidAdbHost().execAdb(request.invocation, request.options),
+    const host = requireAndroidAdbHost();
+    const exec = async (
+      argv: readonly string[],
+      execOptions: AndroidAdbExecutorOptions | undefined,
+    ): Promise<AndroidAdbExecutorResult> => {
+      const request = deviceAdbRouteRequest(serial, serverPort, argv, execOptions);
+      // A device-scoped executor is the terminal local route: an installed provider must not
+      // capture it and route the call back into itself.
+      return await host.withoutAdbCommandExecutorOverride(
+        async () => await host.execAdb(request.invocation, request.options),
+      );
+    };
+    return await retryOnceAfterDeviceOffline(
+      `${serverPort ?? options?.serverPort ?? ''}/${serial}`,
+      options,
+      async (attemptOptions) => await exec(args, attemptOptions),
+      async (timeoutMs) => {
+        await exec(['wait-for-device'], {
+          allowFailure: true,
+          timeoutMs,
+          signal: options?.signal,
+          env: options?.env,
+          serverPort: options?.serverPort,
+        }).catch(() => undefined);
+      },
     );
   });
+}
+
+/** Devices, keyed by adb server and serial, that stayed offline through a wait for the device. */
+export type StayedOfflineDevices = Readonly<{
+  /** Whether the device's refusals still surface without another wait. */
+  has(device: string): boolean;
+  /** Records that the device stayed offline, and drops every mark that has lapsed. */
+  mark(device: string): void;
+  forget(device: string): void;
+}>;
+
+export function createStayedOfflineDevices(
+  windowMs: number,
+  expiries = new Map<string, number>(),
+): StayedOfflineDevices {
+  return {
+    has: (device) => (expiries.get(device) ?? 0) > Date.now(),
+    mark: (device) => {
+      const now = Date.now();
+      for (const [key, expiresAt] of expiries) {
+        if (expiresAt <= now) expiries.delete(key);
+      }
+      expiries.set(device, now + windowMs);
+    },
+    forget: (device) => {
+      expiries.delete(device);
+    },
+  };
+}
+
+/**
+ * The longest a command refused as `device offline` waits for the device before its one retry. An
+ * emulator drops to offline for a few seconds after boot while its adbd restarts.
+ */
+const ANDROID_DEVICE_OFFLINE_WAIT_MS = 15_000;
+
+/** A device that stayed offline through a wait has its refusals surface without another for 30 s. */
+const devicesStayingOffline = createStayedOfflineDevices(30_000);
+
+/**
+ * Runs `run`, and once more after `waitForDevice` when the host adb refused it as `device offline`.
+ * The refusal comes before the command reaches the device, so the retry cannot repeat an effect.
+ * The wait and the retry stay inside the caller's `timeoutMs`, the wait taking at most half of what
+ * is left; with no budget left the refusal stands. A failed wait is not reported: the retry's
+ * outcome is the device's state. A device that stayed offline through its wait fails fast for a
+ * while instead of making every call wait.
+ */
+async function retryOnceAfterDeviceOffline(
+  device: string,
+  options: AndroidAdbExecutorOptions | undefined,
+  run: (options: AndroidAdbExecutorOptions | undefined) => Promise<AndroidAdbExecutorResult>,
+  waitForDevice: (timeoutMs: number) => Promise<void>,
+): Promise<AndroidAdbExecutorResult> {
+  const startedAt = Date.now();
+  const first = await attemptAdb(device, async () => await run(options));
+  if (!first.offline || devicesStayingOffline.has(device)) {
+    return first.outcome();
+  }
+  const budgetMs = options?.timeoutMs;
+  const remainingMs = () =>
+    budgetMs === undefined ? Infinity : Math.floor(budgetMs - (Date.now() - startedAt));
+  const waitMs = Math.min(ANDROID_DEVICE_OFFLINE_WAIT_MS, Math.floor(remainingMs() / 2));
+  if (waitMs < 1) return first.outcome();
+  await waitForDevice(waitMs);
+  options?.signal?.throwIfAborted();
+  const retryMs = remainingMs();
+  if (retryMs < 1) return first.outcome();
+  const retry = await attemptAdb(
+    device,
+    async () => await run(budgetMs === undefined ? options : { ...options, timeoutMs: retryMs }),
+  );
+  if (retry.offline) {
+    devicesStayingOffline.mark(device);
+  }
+  return retry.outcome();
+}
+
+/**
+ * Runs one adb attempt and reports whether the host adb refused it as `device offline`. An outcome
+ * the device answered forgets that the device stayed offline; a timeout or cancellation does not.
+ */
+async function attemptAdb(
+  device: string,
+  run: () => Promise<AndroidAdbExecutorResult>,
+): Promise<{ offline: boolean; outcome: () => AndroidAdbExecutorResult }> {
+  try {
+    const result = await run();
+    const offline = isOfflineRefusalResult(result);
+    if (!offline) devicesStayingOffline.forget(device);
+    return { offline, outcome: () => result };
+  } catch (error) {
+    const classified = attachAdbFailureHint(error);
+    const offline = isOfflineRefusalError(classified);
+    if (!offline && deviceAnswered(classified)) devicesStayingOffline.forget(device);
+    return {
+      offline,
+      outcome: () => {
+        throw classified;
+      },
+    };
+  }
+}
+
+/** Whether the host adb refused the command for an offline device, as a result. */
+function isOfflineRefusalResult(result: AndroidAdbExecutorResult): boolean {
+  if (result.exitCode === 0) return false;
+  const failure = classifyAndroidAdbFailure(result.stderr, result.stdout);
+  return isDeviceOfflineHostRefusal(failure?.reason, failure?.hostRefusal);
+}
+
+/** Whether the host adb refused the command for an offline device, as a classified thrown error. */
+function isOfflineRefusalError(classified: unknown): boolean {
+  if (!(classified instanceof AppError)) return false;
+  return isDeviceOfflineHostRefusal(
+    classified.details?.adbFailure,
+    classified.details?.adbHostRefusal,
+  );
+}
+
+/** Whether a classified adb failure is the host adb refusing a command for an offline device. */
+function isDeviceOfflineHostRefusal(reason: unknown, hostRefusal: unknown): boolean {
+  return reason === 'device_offline' && hostRefusal === true;
+}
+
+/** Whether a thrown adb failure is an exit the device reached, not a timeout or cancellation. */
+function deviceAnswered(error: unknown): boolean {
+  if (!(error instanceof AppError) || error.details?.timeoutMs !== undefined) return false;
+  const exitCode = error.details?.exitCode;
+  return typeof exitCode === 'number' && exitCode >= 0;
 }
 
 function createSerialAdbSpawner(serial: string, serverPort?: number): AndroidAdbSpawner {

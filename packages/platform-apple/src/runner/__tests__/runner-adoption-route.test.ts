@@ -10,14 +10,18 @@ import { usbmuxRunnerTransport } from '../runner-usbmux.ts';
 import { createRunnerPhaseBudget } from '../runner-xctestrun.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { usbmuxDeviceUnattachedError } from './runner-transport.fixtures.ts';
-import { runnerResponse } from './runner-session-fixtures.ts';
+import {
+  RUNNER_CACHE_KEY_FIXTURE,
+  RUNNER_CACHE_METADATA_FIXTURE,
+  runnerResponse,
+} from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
 vi.mock('../runner-xctestrun.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../runner-xctestrun.ts')>();
   return {
     ...actual,
-    resolveExpectedRunnerCacheMetadata: vi.fn(() => ({})),
+    resolveExpectedRunnerCacheMetadata: vi.fn(() => RUNNER_CACHE_METADATA_FIXTURE),
     resolveRunnerDerivedPath: vi.fn(() => expectedDerived),
   };
 });
@@ -130,6 +134,7 @@ function writeDetachedLease(device: DeviceInfo): void {
       sessionId: `${device.id}:${RUNNER_PORT}:1`,
       runnerPid: RUNNER_PID,
       port: RUNNER_PORT,
+      cacheKey: RUNNER_CACHE_KEY_FIXTURE,
       xctestrunPath: path.join(expectedDerived, 'Build', 'Products', 'env.session.xctestrun'),
       jsonPath: path.join(expectedDerived, 'Build', 'Products', 'env.session.json'),
     }),

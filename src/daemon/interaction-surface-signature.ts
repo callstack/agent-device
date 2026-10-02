@@ -1,243 +1,14 @@
-import type { CommandFlags } from '@agent-device/contracts/command';
-import { isMobilePlatform } from '@agent-device/kernel/device';
 import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { collectKeyboardChromeRefs } from '@agent-device/capture-kit/snapshot-chrome';
 import { stateMarkers } from '@agent-device/capture-kit/snapshot-lines';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { isViewportRootNode } from '@agent-device/contracts/snapshot';
-import { contextFromFlags, type DaemonCommandContext } from './context.ts';
-import type { SessionState } from './session-state.ts';
+import type { InteractionSurfaceEntry } from './session-state.ts';
 
-const OUTCOME_RETRY_WINDOW_MS = 30_000;
-const OUTCOME_RETRY_ATTEMPTS = 2;
 const RECT_TOLERANCE_PX = 1;
 
-export type InteractionSurfaceSignature = NonNullable<
-  SessionState['pendingInteractionOutcome']
->['preSignature'];
+export type InteractionSurfaceSignature = InteractionSurfaceEntry[];
 
 export type InteractionSurfaceChange = 'changed' | 'unchanged' | 'ambiguous';
-
-/**
- * How this policy re-fires a recorded tap. The policy owns *whether* a retry is warranted; the
- * request route that already admitted a device cell owns *how* the tap reaches the device, and
- * supplies it here. Keeping the seam a plain callback is what stops the policy from importing
- * runtime admission — a read of "should we retry?" must stay readable without the binding stack.
- *
- * Answers `false` when the caller's owner cannot tap, so the policy can report a skipped retry
- * instead of burning an attempt.
- */
-export type InteractionRetryTap = (
-  request: Readonly<{
-    device: SessionState['device'];
-    point: Readonly<{ x: number; y: number }>;
-    context: InteractionRetryContext;
-  }>,
-) => Promise<boolean>;
-
-/** The runner metadata a re-fired tap carries — the same context any bound touch executes on. */
-export type InteractionRetryContext = DaemonCommandContext &
-  Readonly<{ surface?: SessionState['surface'] }>;
-
-function shouldRetryTouchOnNoChange(flags: CommandFlags | undefined): boolean {
-  return flags?.interactionOutcome?.retryOnNoChange === true;
-}
-
-export function markPendingInteractionOutcome(params: {
-  session: SessionState;
-  command: string;
-  positionals: string[];
-  flags: CommandFlags | undefined;
-  preSnapshot: SnapshotState | undefined;
-}): void {
-  const { session, command, positionals, flags, preSnapshot } = params;
-  if (!shouldRetryTouchOnNoChange(flags)) return;
-  if (!supportsInteractionOutcomePolicy(session)) return;
-  const retryCommand = retryCommandForTap(command);
-  if (!retryCommand) return;
-  if (!isCoordinatePair(positionals)) return;
-  const preSignature = buildInteractionSurfaceSignature(preSnapshot?.nodes ?? []);
-  if (preSignature.length === 0) return;
-  session.pendingInteractionOutcome = {
-    action: command,
-    command: retryCommand,
-    positionals,
-    flags: stripInternalInteractionFlags(flags),
-    markedAt: Date.now(),
-    attemptsRemaining: OUTCOME_RETRY_ATTEMPTS,
-    preSignature,
-  };
-}
-
-export function getActivePendingInteractionOutcome(
-  session: SessionState | undefined,
-): NonNullable<SessionState['pendingInteractionOutcome']> | undefined {
-  const pending = session?.pendingInteractionOutcome;
-  if (!session || !pending) return undefined;
-  if (!supportsInteractionOutcomePolicy(session)) {
-    clearPendingInteractionOutcome(session);
-    return undefined;
-  }
-  if (Date.now() - pending.markedAt > OUTCOME_RETRY_WINDOW_MS) {
-    clearPendingInteractionOutcome(session);
-    return undefined;
-  }
-  return pending;
-}
-
-export function clearPendingInteractionOutcome(session: SessionState | undefined): void {
-  if (!session?.pendingInteractionOutcome) return;
-  session.pendingInteractionOutcome = undefined;
-}
-
-export async function retryPendingInteractionOutcome(params: {
-  session: SessionState;
-  pending: NonNullable<SessionState['pendingInteractionOutcome']>;
-  logPath: string;
-  snapshot: SnapshotState;
-  retryTap?: InteractionRetryTap;
-}): Promise<{ retried: boolean; change: InteractionSurfaceChange }> {
-  const { pending, snapshot } = params;
-  const change = classifyInteractionSurfaceChange(
-    pending.preSignature,
-    buildInteractionSurfaceSignature(snapshot.nodes),
-  );
-  if (change !== 'unchanged' || pending.attemptsRemaining <= 0) {
-    return { retried: false, change };
-  }
-
-  // The retry re-fires the same coordinate tap the original press used (R48). Nothing was
-  // attempted when this capture path carries no retry seam or the recorded coordinates are
-  // unreadable, so those leave the pending record whole instead of burning an attempt, and say so
-  // rather than letting the caller infer it from an unchanged surface.
-  const retryTap = params.retryTap;
-  const point = retryTap ? readRetryPoint(pending.positionals) : undefined;
-  if (!retryTap || !point) {
-    emitSkippedRetry(pending, retryTap ? 'unreadable-retry-point' : 'device-runtime-unavailable');
-    return { retried: false, change };
-  }
-
-  const startedAt = Date.now();
-  // Spent before the device work, matching the retired route: an owner that refuses the tap or
-  // fails mid-flight has still consumed the attempt, so the next capture inside the pending
-  // window cannot re-attempt it from a full budget.
-  pending.attemptsRemaining -= 1;
-  // Opt-in Maestro retries intentionally re-fire the same coordinate tap; delayed or
-  // non-visual side effects can duplicate, but unchanged visual taps are the target gap.
-  const fired = await fireRetryTap(retryTap, params);
-  if (!fired) {
-    emitSkippedRetry(pending, 'retry-tap-unavailable');
-    return { retried: false, change };
-  }
-
-  emitDiagnostic({
-    level: 'info',
-    phase: 'interaction_no_change_retry',
-    data: {
-      action: pending.action,
-      attemptsRemaining: pending.attemptsRemaining,
-      durationMs: Date.now() - startedAt,
-    },
-  });
-  return { retried: true, change };
-}
-
-/**
- * The seam is allowed to refuse and allowed to fail; neither may escape into the capture this
- * retry decorates. A press whose re-fire dies on the device leaves the caller with the honest
- * unchanged surface plus a diagnostic, not a failed `snapshot`.
- */
-async function fireRetryTap(
-  retryTap: InteractionRetryTap,
-  params: Readonly<{
-    session: SessionState;
-    pending: NonNullable<SessionState['pendingInteractionOutcome']>;
-    logPath: string;
-  }>,
-): Promise<boolean> {
-  const { session, pending } = params;
-  const point = readRetryPoint(pending.positionals);
-  if (!point) return false;
-  try {
-    return await retryTap({
-      device: session.device,
-      point,
-      context: {
-        ...contextFromFlags(
-          params.logPath,
-          pending.flags,
-          session.appBundleId,
-          session.trace?.outPath,
-        ),
-        surface: session.surface,
-      },
-    });
-  } catch {
-    return false;
-  }
-}
-
-/** Never silent: a retry the opt-in flag asked for and this request did not deliver says why. */
-function emitSkippedRetry(
-  pending: NonNullable<SessionState['pendingInteractionOutcome']>,
-  reason: 'device-runtime-unavailable' | 'unreadable-retry-point' | 'retry-tap-unavailable',
-): void {
-  emitDiagnostic({
-    level: 'info',
-    phase: 'interaction_no_change_retry_skipped',
-    data: {
-      action: pending.action,
-      attemptsRemaining: pending.attemptsRemaining,
-      reason,
-    },
-  });
-}
-
-export function emitInteractionSettled(params: {
-  pending: NonNullable<SessionState['pendingInteractionOutcome']>;
-  change: InteractionSurfaceChange;
-  attempts: number;
-  startedAt: number;
-}): void {
-  emitDiagnostic({
-    level: params.attempts > 0 ? 'info' : 'debug',
-    phase: 'interaction_settled',
-    data: {
-      action: params.pending.action,
-      change: params.change,
-      attempts: params.attempts,
-      durationMs: Date.now() - params.startedAt,
-    },
-  });
-}
-
-export function emitInteractionSettleTimeout(params: {
-  pending: NonNullable<SessionState['pendingInteractionOutcome']>;
-  attempts: number;
-  startedAt: number;
-}): void {
-  emitDiagnostic({
-    level: 'warn',
-    phase: 'interaction_settle_timeout',
-    data: {
-      action: params.pending.action,
-      attempts: params.attempts,
-      durationMs: Date.now() - params.startedAt,
-    },
-  });
-}
-
-export function stripInternalInteractionFlags(
-  flags: CommandFlags | undefined,
-): CommandFlags | undefined {
-  if (!flags?.interactionOutcome && !flags?.postGestureStabilization) return flags;
-  const {
-    interactionOutcome: _interactionOutcome,
-    postGestureStabilization: _postGestureStabilization,
-    ...publicFlags
-  } = flags;
-  return publicFlags;
-}
 
 export function buildInteractionSurfaceSignature(
   nodes: SnapshotNode[],
@@ -266,15 +37,6 @@ export function snapshotSurfaceComparisonKey(
   snapshot: SnapshotState | undefined,
 ): string | undefined {
   return snapshot?.comparisonKey ?? snapshot?.snapshotQuality?.backend;
-}
-
-export function classifyInteractionSurfaceChange(
-  before: InteractionSurfaceSignature,
-  after: InteractionSurfaceSignature,
-): InteractionSurfaceChange {
-  if (before.length === 0 || after.length === 0) return 'ambiguous';
-  if (areInteractionSurfaceSignaturesStable(before, after)) return 'unchanged';
-  return 'changed';
 }
 
 /**
@@ -521,26 +283,6 @@ function discriminatingEntriesWithinRect(
   );
 }
 
-function supportsInteractionOutcomePolicy(session: SessionState): boolean {
-  return isMobilePlatform(session.device);
-}
-
-/**
- * The pending record stores the coordinate pair `isCoordinatePair` already validated, so this
- * only re-reads it; a record that somehow fails the read is skipped rather than retried blind.
- */
-function readRetryPoint(positionals: readonly string[]): { x: number; y: number } | undefined {
-  const x = Number(positionals[0]);
-  const y = Number(positionals[1]);
-  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
-}
-
-function retryCommandForTap(command: string): string | undefined {
-  if (command === 'click') return 'press';
-  if (command === 'press') return 'press';
-  return undefined;
-}
-
 function buildInteractionSurfaceEntry(
   node: SnapshotNode,
   occurrenceCounts: Map<string, number>,
@@ -609,7 +351,7 @@ function isNonDiscriminatingSurfaceNode(
 /**
  * What the element is and the state it is in. The states are the ones `stateMarkers` prints, so the
  * outcome lane, the unchanged-snapshot comparison, and the diff weigh one list: a tap whose only
- * effect is a toggle is a change here, not a no-op to retry.
+ * effect is a toggle is a change here.
  */
 function interactionSurfaceSemanticKey(node: SnapshotNode): string | undefined {
   const semanticKey = [
@@ -624,11 +366,6 @@ function interactionSurfaceSemanticKey(node: SnapshotNode): string | undefined {
     .map((value) => (typeof value === 'string' ? value.trim() : ''))
     .join('|');
   return semanticKey.replaceAll('|', '') ? semanticKey : undefined;
-}
-
-function isCoordinatePair(positionals: string[]): boolean {
-  if (positionals.length !== 2) return false;
-  return positionals.every((value) => Number.isFinite(Number(value)));
 }
 
 function isFiniteRect(rect: NonNullable<SnapshotNode['rect']>): boolean {

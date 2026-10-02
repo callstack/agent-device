@@ -5,6 +5,12 @@ NS_ASSUME_NONNULL_BEGIN
 FOUNDATION_EXPORT NSInteger RunnerControlledScrollFrameCount(double durationMs);
 FOUNDATION_EXPORT double RunnerControlledScrollProgress(double t);
 
+typedef NS_ENUM(NSInteger, RunnerTapSynthesisStatus) {
+  RunnerTapSynthesisStatusSucceeded,
+  RunnerTapSynthesisStatusDeadlineExceeded,
+  RunnerTapSynthesisStatusFailed,
+};
+
 @interface RunnerSynthesizedGesture : NSObject
 
 // `resolvedWindow` is the app window the caller already resolved for the gesture's reference
@@ -26,10 +32,12 @@ FOUNDATION_EXPORT double RunnerControlledScrollProgress(double t);
                                                                y2:(double)y2
                                                         durationMs:(double)durationMs;
 
-+ (NSString * _Nullable)synthesizeTapWithApplication:(id)application
++ (RunnerTapSynthesisStatus)synthesizeTapWithApplication:(id)application
                                       resolvedWindow:(id _Nullable)resolvedWindow
                                                    x:(double)x
-                                                   y:(double)y;
+                                                   y:(double)y
+                                            deadline:(NSDate * _Nullable)deadline
+                                        errorMessage:(NSString * _Nullable * _Nullable)errorMessage;
 
 // Each pointer is an ordered array of { x, y, offsetMs } samples. The first sample
 // starts contact; subsequent samples move it; all pointers lift at their final offset.

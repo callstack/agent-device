@@ -76,7 +76,7 @@ Supported public entry points for Node consumers:
   - types: `FindMatchOptions`
 - `agent-device/install-source`
   - `ARCHIVE_EXTENSIONS`
-  - `isTrustedInstallSourceUrl(sourceUrl)`
+  - `isTrustedInstallSourceUrl(sourceUrl)` (deprecated; install sources are not gated on it)
   - `validateDownloadSourceUrl(url)`
   - types: `MaterializeInstallSource`
 - `agent-device/artifacts`
@@ -234,6 +234,8 @@ Use `client.command.<method>()` for command-level device actions. It uses the sa
 
 Results are daemon-shaped objects with typed known fields, so command semantics stay aligned with the CLI.
 
+A failed interaction rejects with the same error the CLI prints. Read `error.details.dispatched` before you retry; [Commands](./commands.md) explains the two values.
+
 ```ts
 await client.command.wait({
   text: 'Continue',
@@ -287,6 +289,17 @@ await client.command.fold({
 ```
 
 `fold` accepts either `pose` or `keyframes`. Keyframes use linear interpolation at roughly 60 updates per second; repeat an angle to hold it. Timestamps must start at zero and increase strictly, with 2–64 frames and a final timestamp no greater than 60,000ms. Angles must be finite and between 0° and 180°. The final timestamp bounds motion, excluding helper preparation and final hinge verification. A custom final angle is verified within 0.5°; interior angles must also settle. Cancellation stops the motion at its current angle. Re-snapshot afterwards, including after interrupted motion.
+
+`press`, `click`, and `longpress` take `readinessTimeoutMs`. With it, the command waits up to that many milliseconds for a target that is not on screen yet, then performs the requested interaction. Without it, the command looks once and fails at once, which is the right choice for an agent that most often misses because the selector is wrong. Use it in scripted flows, where a step can land a render early:
+
+```ts
+await client.interactions.press({
+  selector: 'label="Continue"',
+  readinessTimeoutMs: 2_000,
+});
+```
+
+The wait is capped at 2 seconds and covers only a target that has not appeared. When the target is still missing after the wait, the error carries `error.details.readiness` with `waitedMs`, `polls`, and `end` (`expired` or `stalled`). A capture that shows an empty accessibility tree ends the wait at once with `capture_sparse` and `readiness.end: sparse`. When the command had to wait and then succeeded, the result carries `data.readiness` with `polls` and `waitedMs`. A command that found its target on the first look has no `readiness` field. A covered, off-screen, or ambiguous target fails at once, and a screen that stays unreadable for the whole wait fails with its own error; neither carries `readiness`. `readinessTimeoutMs` is not an MCP tool argument and has no CLI flag.
 
 Vega OS client support is currently VVD-only and covers device discovery, app open/close, `back`, `home`, and `tvRemote`. Physical Fire TV, capture, selector, install, logging, and performance methods report unsupported for Vega targets.
 
@@ -416,7 +429,7 @@ If the daemon cannot determine installed app identity, the request fails instead
 `installFromSource()` URL sources are intentionally limited:
 
 - Private and loopback hosts are blocked by default.
-- Archive-backed URL installs are only supported for trusted artifact services, currently GitHub Actions and EAS.
+- URL sources from any public host may point directly to an installable, including a bare iOS `.ipa`, or to a `.zip`, `.tar`, `.tar.gz`, or `.tgz` archive containing exactly one.
 - For existing reachable artifact URLs, use `source: { kind: 'url', url: ... }`.
 - For local artifacts, use `source: { kind: 'path', path: ... }` or the CLI `install`/`reinstall` commands.
 - For compatible remote daemons that resolve CI artifacts server-side, pass a GitHub Actions artifact source:
@@ -435,7 +448,7 @@ await client.apps.installFromSource({
 
 Remote daemons may also support `{ kind: 'github-actions-artifact', owner, repo, artifactName }` or `{ kind: 'github-actions-artifact', owner, repo, runId, artifactName }`. The local client preserves these payloads and does not perform GitHub authentication or artifact download.
 
-Direct Android `.apk` and `.aab` URL sources can still resolve package identity from the downloaded install artifact. Trusted GitHub Actions and EAS archive URLs may contain one installable `.apk`, `.aab`, `.ipa`, or iOS `.app` tar archive.
+Android `.apk` and `.aab` URL sources resolve package identity from the downloaded install artifact. Archive URLs may contain one installable `.apk`, `.aab`, `.ipa`, or iOS `.app`, including inside nested archives.
 
 ## Remote Metro helpers
 

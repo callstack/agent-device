@@ -8,6 +8,7 @@ import {
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import {
   type CaptureScreenshotInput,
+  type ScreenshotCaptureFacts,
   screenshotRuntimeOperationFacts,
 } from '@agent-device/contracts/screenshot-runtime';
 import {
@@ -38,7 +39,9 @@ export type ScreenshotRuntimeFixtureOptions = Readonly<{
   /** The exact-owner `captureSnapshot` fact, which `--overlay-refs` also requires. */
   snapshot?: RuntimeOperationFact;
   /** Replaces the default "write a solid PNG at the requested path" capture behavior. */
-  onCapture?: (input: CaptureScreenshotInput) => Promise<void> | void;
+  onCapture?: (
+    input: CaptureScreenshotInput,
+  ) => Promise<ScreenshotCaptureFacts | void> | ScreenshotCaptureFacts | void;
   snapshotResult?: (input: CaptureSnapshotInput) => SnapshotResult;
   /** Gate for the neighbouring bound `scroll`, used by the device-lock serialization tests. */
   onScroll?: () => Promise<void> | void;
@@ -48,7 +51,7 @@ export type ScreenshotRuntimeFixture = Readonly<{
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   inspectFacts: InspectDeviceRuntimeFacts;
   bindDevice: BindDeviceRuntime;
-  captureScreenshot: Mock<(input: CaptureScreenshotInput) => Promise<void>>;
+  captureScreenshot: Mock<(input: CaptureScreenshotInput) => Promise<ScreenshotCaptureFacts>>;
   captureSnapshot: Mock<(input: CaptureSnapshotInput) => Promise<SnapshotResult>>;
   tapPoint: Mock<(input: TapPointInput) => Promise<Record<string, unknown>>>;
   /** Every `(device, use)` the route bound, so a test can prove exactly one bind happened. */
@@ -64,13 +67,15 @@ export function screenshotRuntimeFixture(
   options: ScreenshotRuntimeFixtureOptions = {},
 ): ScreenshotRuntimeFixture {
   const binds: Array<Readonly<{ device: DeviceInfo }>> = [];
-  const captureScreenshot = vi.fn(async (input: CaptureScreenshotInput) => {
-    if (options.onCapture) {
-      await options.onCapture(input);
-      return;
-    }
-    writeSolidPng(input.outPath);
-  });
+  const captureScreenshot = vi.fn(
+    async (input: CaptureScreenshotInput): Promise<ScreenshotCaptureFacts> => {
+      if (options.onCapture) {
+        return (await options.onCapture(input)) ?? {};
+      }
+      writeSolidPng(input.outPath);
+      return {};
+    },
+  );
   const captureSnapshot = vi.fn(
     async (input: CaptureSnapshotInput): Promise<SnapshotResult> =>
       options.snapshotResult?.(input) ?? {

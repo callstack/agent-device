@@ -18,6 +18,7 @@ import {
   buildDaemonHttpUrl,
 } from '@agent-device/contracts/daemon-http';
 import { readVersion } from '@agent-device/host-kit/version';
+import { readHostCpuArch } from '@agent-device/host-kit/process';
 import {
   carriesUnbackedHostPathInstallSource,
   sendHostPathInstallSourceRefused,
@@ -119,7 +120,11 @@ async function sendProxyHealth(
   res.setHeader('content-type', 'application/json');
   res.end(
     JSON.stringify(
-      buildDaemonHealthPayload('agent-device-proxy', readVersion(), { upstream, instanceId }),
+      buildDaemonHealthPayload('agent-device-proxy', readVersion(), {
+        upstream,
+        instanceId,
+        hostArch: await readHostCpuArch(),
+      }),
     ),
   );
 }

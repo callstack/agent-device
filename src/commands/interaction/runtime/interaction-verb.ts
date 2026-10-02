@@ -1,4 +1,4 @@
-import type { InteractionAction } from './resolution.ts';
+import type { InteractionAction } from './interaction-resolution-request.ts';
 
 /**
  * The passive verb a refusal uses for the action it declined, so every acting guard that refuses

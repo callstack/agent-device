@@ -57,6 +57,7 @@ export type AppleRunnerHost = Pick<
   | 'runCmdBackground'
   | 'requireExecSuccess'
   | 'isCommandTimeoutError'
+  | 'commandDeveloperDir'
 > &
   Pick<typeof HostDiagnostics, 'emitDiagnostic' | 'withDiagnosticTimer'> &
   Pick<typeof HostRetry, 'retryWithPolicy' | 'isEnvTruthy'> &
@@ -69,6 +70,7 @@ export type AppleRunnerHost = Pick<
     | 'signalPidsBestEffort'
     | 'signalProcessGroupBestEffort'
     | 'classifyOwnerLiveness'
+    | 'readHostCpuArchSync'
   > &
   Pick<typeof HostVersion, 'findProjectRoot' | 'readVersion'> &
   Pick<typeof HostFile, 'acquireProcessLock' | 'withProcessLock' | 'publishFileSync'> &
@@ -152,6 +154,7 @@ export const runCmdSync = delegate('runCmdSync');
 export const runCmdBackground = delegate('runCmdBackground');
 export const requireExecSuccess = delegate('requireExecSuccess');
 export const isCommandTimeoutError = delegate('isCommandTimeoutError');
+export const commandDeveloperDir = delegate('commandDeveloperDir');
 export const shellQuote = delegate('shellQuote');
 export const emitDiagnostic = delegate('emitDiagnostic');
 export const withDiagnosticTimer = delegate('withDiagnosticTimer');
@@ -164,6 +167,7 @@ export const readProcessCommand = delegate('readProcessCommand');
 export const signalPidsBestEffort = delegate('signalPidsBestEffort');
 export const signalProcessGroupBestEffort = delegate('signalProcessGroupBestEffort');
 export const classifyOwnerLiveness = delegate('classifyOwnerLiveness');
+export const readHostCpuArchSync = delegate('readHostCpuArchSync');
 export const findProjectRoot = delegate('findProjectRoot');
 export const readVersion = delegate('readVersion');
 export const acquireProcessLock = delegate('acquireProcessLock');

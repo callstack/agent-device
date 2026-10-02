@@ -21,6 +21,7 @@ import {
   assertBatchRuntimeCommandAllowed,
   normalizeBatchCommandName,
 } from './batch-policy.ts';
+import { resolveCommandRecordingEffect } from './registry.ts';
 
 const batchAllowedStepKeys = new Set<string>(BATCH_DAEMON_STEP_KEYS);
 
@@ -115,31 +116,11 @@ export async function runBatch(
         })),
       });
       if (!stepResponse.ok) {
-        return {
-          ok: false,
-          error: {
-            code: stepResponse.error.code,
-            message: `Batch failed at step ${stepResponse.step} (${step.command}): ${stepResponse.error.message}`,
-            hint: stepResponse.error.hint,
-            diagnosticId: stepResponse.error.diagnosticId,
-            logPath: stepResponse.error.logPath,
-            ...(stepResponse.error.retriable === undefined
-              ? {}
-              : { retriable: stepResponse.error.retriable }),
-            ...(stepResponse.error.supportedOn === undefined
-              ? {}
-              : { supportedOn: stepResponse.error.supportedOn }),
-            details: {
-              ...(stepResponse.error.details ?? {}),
-              step: stepResponse.step,
-              command: step.command,
-              positionals: step.positionals,
-              executed: index,
-              total: steps.length,
-              partialResults,
-            },
-          },
-        };
+        return batchStepFailure(stepResponse, step, {
+          executedSteps: steps.slice(0, index),
+          total: steps.length,
+          partialResults,
+        });
       }
       partialResults.push(stepResponse.result);
     }
@@ -157,6 +138,47 @@ export async function runBatch(
     const appErr = asAppError(error);
     return batchErrorResponse(appErr.code, appErr.message, appErr.details);
   }
+}
+
+type BatchStepFailure = Extract<Awaited<ReturnType<typeof runBatchStep>>, { ok: false }>;
+
+function batchStepFailure(
+  stepResponse: BatchStepFailure,
+  step: NormalizedBatchStep,
+  progress: {
+    executedSteps: readonly NormalizedBatchStep[];
+    total: number;
+    partialResults: BatchStepResult[];
+  },
+): Extract<BatchRunResponse, { ok: false }> {
+  const { error } = stepResponse;
+  return {
+    ok: false,
+    error: {
+      code: error.code,
+      message: `Batch failed at step ${stepResponse.step} (${step.command}): ${error.message}`,
+      hint: error.hint,
+      diagnosticId: error.diagnosticId,
+      logPath: error.logPath,
+      ...(error.retriable === undefined ? {} : { retriable: error.retriable }),
+      ...(error.supportedOn === undefined ? {} : { supportedOn: error.supportedOn }),
+      details: {
+        ...(error.details ?? {}),
+        ...(progress.executedSteps.some(stepMayMutateApp) ? { dispatched: 'unknown' } : {}),
+        step: stepResponse.step,
+        command: step.command,
+        positionals: step.positionals,
+        executed: progress.executedSteps.length,
+        total: progress.total,
+        partialResults: progress.partialResults,
+      },
+    },
+  };
+}
+
+/** A batch reports no only when every executed step is a declared read. */
+function stepMayMutateApp(step: NormalizedBatchStep): boolean {
+  return resolveCommandRecordingEffect(step) !== 'observes-app';
 }
 
 export function validateAndNormalizeBatchSteps(

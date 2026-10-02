@@ -122,6 +122,20 @@ test('an unreachable newer daemon is replaced like any version mismatch', async 
   );
 });
 
+test('a version mismatch is decided without asking the client transport', async () => {
+  let asked = false;
+  const decision = await resolveDaemonTakeover(runningDaemon({ version: '0.0.1' }), {
+    onClientTransport: async () => {
+      asked = true;
+      return false;
+    },
+    onAnyAdvertisedTransport: async () => false,
+  });
+
+  assert.equal(decision.kind, 'replace');
+  assert.equal(asked, false);
+});
+
 test('a newer daemon alive only on a transport the client does not prefer is still refused', async () => {
   assert.deepEqual(
     await resolveDaemonTakeover(runningDaemon({ version: '999.0.0' }), onlyOnAnotherTransport()),
@@ -159,15 +173,15 @@ function useClientTree(sourceCheckout: boolean): void {
 }
 
 function reachable(): DaemonReachability {
-  return { viaClientTransport: true, onAnyAdvertisedTransport: async () => true };
+  return { onClientTransport: async () => true, onAnyAdvertisedTransport: async () => true };
 }
 
 function unreachable(): DaemonReachability {
-  return { viaClientTransport: false, onAnyAdvertisedTransport: async () => false };
+  return { onClientTransport: async () => false, onAnyAdvertisedTransport: async () => false };
 }
 
 function onlyOnAnotherTransport(): DaemonReachability {
-  return { viaClientTransport: false, onAnyAdvertisedTransport: async () => true };
+  return { onClientTransport: async () => false, onAnyAdvertisedTransport: async () => true };
 }
 
 function runningDaemon(info: {

@@ -143,9 +143,14 @@ extension RunnerTests {
     _ app: XCUIApplication,
     kind: SynthesizedGesturePolicyKind,
     context: SynthesizedCoordinateContext?,
-    synthesize: () -> RunnerInteractionOutcome
+    synthesize: () -> RunnerInteractionOutcome?
   ) -> SynthesizedGestureAttempt {
-    let (timing, outcome) = performGesture(app, idleTimeout: false, synthesize)
+    var outcome: RunnerInteractionOutcome?
+    let timing = measureGesture { outcome = synthesize() }
+    guard let outcome else {
+      logSynthesizedGesturePolicyDecision(kind: kind, context: context, fallbackAttempted: false)
+      return .refused(timing: timing, message: "synthesized gesture deadline expired before dispatch", hint: nil)
+    }
     guard case .unsupported(let message, let hint) = outcome else {
       logSynthesizedGesturePolicyDecision(kind: kind, context: context, fallbackAttempted: false)
       return .performed(timing: timing)

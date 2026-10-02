@@ -6,17 +6,17 @@ import {
   getDiagnosticsMeta,
 } from '@agent-device/host-kit/diagnostics';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData } from './daemon-request.ts';
-import type { DaemonArtifact, DaemonArtifactType } from '@agent-device/kernel/contracts';
+import type { DaemonArtifact } from '@agent-device/kernel/contracts';
+import { isDeviceRotation, type DeviceRotation } from '@agent-device/contracts/device';
+import type { TrackDownloadableArtifact } from './artifact-tracking.ts';
+
+/** A response artifact plus the capture facts the inventory reports beside it. */
+type PendingArtifact = DaemonArtifact & { displayRotation?: DeviceRotation };
 
 export function finalizeDaemonResponse(
   req: DaemonRequest,
   response: DaemonResponse,
-  trackArtifact: (opts: {
-    artifactPath: string;
-    tenantId?: string;
-    artifactType: DaemonArtifactType | undefined;
-    fileName?: string;
-  }) => string,
+  trackArtifact: TrackDownloadableArtifact,
 ): DaemonResponse {
   const details = getDiagnosticsMeta();
   if (!response.ok) {
@@ -80,12 +80,7 @@ export function finalizeDaemonResponse(
 function registerDownloadableArtifacts(
   req: DaemonRequest,
   data: DaemonResponseData | undefined,
-  trackArtifact: (opts: {
-    artifactPath: string;
-    tenantId?: string;
-    artifactType: DaemonArtifactType | undefined;
-    fileName?: string;
-  }) => string,
+  trackArtifact: TrackDownloadableArtifact,
 ): DaemonResponseData | undefined {
   if (!data) return data;
   const pendingArtifacts = collectPendingArtifacts(req, data);
@@ -104,6 +99,9 @@ function registerDownloadableArtifacts(
           tenantId: req.meta?.tenantId,
           artifactType: artifact.artifactType,
           fileName: artifact.fileName,
+          ...(isDeviceRotation(artifact.displayRotation)
+            ? { displayRotation: artifact.displayRotation }
+            : {}),
         }),
         fileName: artifact.fileName,
         localPath: artifact.localPath,
@@ -112,8 +110,8 @@ function registerDownloadableArtifacts(
   };
 }
 
-function collectPendingArtifacts(req: DaemonRequest, data: DaemonResponseData): DaemonArtifact[] {
-  const artifacts = Array.isArray(data.artifacts) ? [...data.artifacts] : [];
+function collectPendingArtifacts(req: DaemonRequest, data: DaemonResponseData): PendingArtifact[] {
+  const artifacts: PendingArtifact[] = Array.isArray(data.artifacts) ? [...data.artifacts] : [];
   const hasField = (field: string): boolean =>
     artifacts.some((artifact) => artifact?.field === field);
   if (req.command === 'screenshot' && !hasField('path') && typeof data.path === 'string') {
@@ -123,9 +121,10 @@ function collectPendingArtifacts(req: DaemonRequest, data: DaemonResponseData): 
       path: data.path,
       localPath: req.meta?.clientArtifactPaths?.path,
       fileName: path.basename(req.meta?.clientArtifactPaths?.path ?? data.path),
+      ...(isDeviceRotation(data.displayRotation) ? { displayRotation: data.displayRotation } : {}),
     });
   }
-  return artifacts.filter((artifact): artifact is DaemonArtifact =>
+  return artifacts.filter((artifact): artifact is PendingArtifact =>
     Boolean(
       artifact &&
       typeof artifact.field === 'string' &&

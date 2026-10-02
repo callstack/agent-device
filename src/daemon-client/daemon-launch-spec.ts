@@ -119,7 +119,8 @@ export type DaemonTakeoverDecision =
  * transport preference the daemon does not serve must still see a live newer daemon.
  */
 export type DaemonReachability = {
-  viaClientTransport: boolean;
+  /** Asked last, only once version and code identity leave the decision to it. */
+  onClientTransport: () => Promise<boolean>;
   onAnyAdvertisedTransport: () => Promise<boolean>;
 };
 
@@ -152,7 +153,7 @@ export async function resolveDaemonTakeover(
   const localIdentity = await resolveLocalDaemonCodeIdentity();
   const codeMismatch = resolveCodeIdentityMismatch(localIdentity, info);
   if (codeMismatch) return { kind: 'replace', reason: codeMismatch };
-  if (!reachability.viaClientTransport) return { kind: 'replace', reason: 'unreachable' };
+  if (!(await reachability.onClientTransport())) return { kind: 'replace', reason: 'unreachable' };
   return { kind: 'reuse' };
 }
 

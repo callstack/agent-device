@@ -222,9 +222,7 @@ This rule applies to every execution shape:
   the same idempotent seam before acting, even when invoked from apparent readiness work. If recovery
   mutates before a requested ref action dispatches, that ref action aborts with
   `ref_frame_expired`; it cannot continue against the recovered UI. Selector and coordinate actions
-  may re-resolve and continue under their existing policies; and
-- automatic no-change retries assert that the originating action already expired the frame before
-  any retry coordinate is sent.
+  may re-resolve and continue under their existing policies.
 
 The seam is deliberately inside leaf execution. Expiring at router entry would reject the ref needed
 by the current command, invalidate on ordinary validation failures, and mishandle multiplexed and

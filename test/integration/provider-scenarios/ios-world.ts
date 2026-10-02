@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DeviceInventoryRequest } from '@agent-device/device-selection/dispatch-resolve';
+import type { AppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { type ProviderScenarioTranscript, createProviderTranscript } from './transcript.ts';
@@ -167,6 +168,13 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       result: { backed: true },
     },
     {
+      command: 'ios.runner.pasteboardWrite',
+      deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+      platform: 'apple',
+      request: { command: 'pasteboardWrite', text: 'runner otp 246810' },
+      result: { message: 'pasteboard written' },
+    },
+    {
       command: 'ios.runner.keyboardDismiss',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
       platform: 'apple',
@@ -174,11 +182,17 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       result: { dismissed: true },
     },
   ]);
-  const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
-    runnerTranscript,
-    'ios.runner',
-  );
   let clipboardText = '';
+  const scriptedRunner = createAppleRunnerProviderFromTranscript(runnerTranscript, 'ios.runner');
+  // The simulator's pasteboard is one cell: the runner writes it and `simctl pbpaste` reads it back.
+  const appleRunnerProvider: AppleRunnerProvider = {
+    ...scriptedRunner,
+    runCommand: async (device, command, options) => {
+      const result = await scriptedRunner.runCommand(device, command, options);
+      if (command.command === 'pasteboardWrite') clipboardText = command.text ?? '';
+      return result;
+    },
+  };
   const appleTool = createRecordingAppleToolProvider({
     plist: {
       readJson: async (plistPath) => {
@@ -192,11 +206,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
         return null;
       },
     },
-    simctl: async (args, options) => {
-      if (args.join(' ') === 'pbcopy sim-1') {
-        clipboardText = String(options?.stdin ?? '');
-        return { stdout: '', stderr: '', exitCode: 0 };
-      }
+    simctl: async (args) => {
       if (args.join(' ') === 'pbpaste sim-1') {
         return { stdout: `${clipboardText}\n`, stderr: '', exitCode: 0 };
       }

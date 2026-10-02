@@ -158,6 +158,43 @@ test('waitForRunner types a failed simulator fallback as a refused connection', 
   assert.equal(mockRunCmd.mock.calls.length, 1);
 });
 
+test('waitForRunner discloses no when the runner exited before any attempt could write', async () => {
+  const session: RunnerSession = {
+    ...makeReadyRunnerSession(),
+    device: iosDevice,
+    deviceId: iosDevice.id,
+    child: { pid: 1234, exitCode: 65 } as ExecBackgroundResult['child'],
+  };
+  await assert.rejects(
+    () => waitForRunner(iosDevice, 8100, { command: 'tap', x: 1, y: 1 }, undefined, 100, session),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.message, 'Runner did not accept connection (xcodebuild exited early)');
+      assert.equal(error.details?.dispatched, 'no');
+      return true;
+    },
+  );
+  assert.equal(mockUsbmuxPostCommand.mock.calls.length, 0);
+});
+
+test('waitForRunner discloses unknown when an attempt may have written before a refused fallback', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockRejectedValue(new AppError('COMMAND_FAILED', 'Runner command deadline exceeded')),
+  );
+  mockRunCmd.mockResolvedValue({ exitCode: 7, stdout: '', stderr: 'curl: (7) Failed to connect' });
+
+  await assert.rejects(
+    () => waitForRunner(iosSimulator, 8100, { command: 'tap', x: 1, y: 1 }, undefined, 100),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.dispatched, 'unknown');
+      return true;
+    },
+  );
+  assert.equal(mockRunCmd.mock.calls.length, 1);
+});
+
 test('waitForRunner wakes a simulator startup retry when the listener reports ready', async () => {
   vi.useFakeTimers();
   const readiness = new AbortController();

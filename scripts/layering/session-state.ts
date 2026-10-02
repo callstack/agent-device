@@ -87,7 +87,6 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   pendingRecordAndHeal: ['src/daemon/session-replay-coordinator.ts'],
 
   trace: ['src/daemon/handlers/trace-runtime.ts'],
-  pendingInteractionOutcome: ['src/daemon/interaction-outcome-policy.ts'],
   postGestureStabilization: ['src/daemon/deferred-interaction-outcome.ts'],
 
   // Snapshot lineage on a freshly BUILT record. snapshot-command-runtime.ts constructs a new

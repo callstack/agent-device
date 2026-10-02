@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  emitWebDriverDiagnostic,
+  isWebDriverRouteUnsupported,
   WebDriverTransport,
   type WebDriverAuth,
   type WebDriverRequestOverrides,
@@ -92,17 +94,13 @@ export class WebDriverClient {
       'POST',
       '/session',
       { capabilities: normalizeCapabilities(capabilities) },
-      {
-        retryAttempts: 0,
-        timeoutMs: budgetWithin(this.sessionCreateTimeoutMs, options?.deadline),
-      },
+      { timeoutMs: budgetWithin(this.sessionCreateTimeoutMs, options?.deadline) },
     );
     const session = readSession(value);
     this.sessionId = session.sessionId;
     return session;
   }
 
-  // fallow-ignore-next-line unused-class-member
   async deleteSession(): Promise<void> {
     const sessionId = this.requireSessionId();
     await this.requestValue('DELETE', `/session/${sessionId}`);
@@ -114,18 +112,36 @@ export class WebDriverClient {
   }
 
   async activateApp(appId: string): Promise<void> {
-    try {
-      await this.sessionRequest('POST', '/appium/device/activate_app', { appId });
-    } catch {
-      await this.executeScript('mobile: activateApp', [{ appId, bundleId: appId }]);
-    }
+    await this.appRouteWithSibling('/appium/device/activate_app', 'mobile: activateApp', appId);
   }
 
   async terminateApp(appId: string): Promise<void> {
+    await this.appRouteWithSibling('/appium/device/terminate_app', 'mobile: terminateApp', appId);
+  }
+
+  /**
+   * Sends the Appium app route, and the `mobile:` sibling script only when the driver answered
+   * that it does not implement the first route.
+   */
+  private async appRouteWithSibling(
+    route: string,
+    siblingScript: string,
+    appId: string,
+  ): Promise<void> {
     try {
-      await this.sessionRequest('POST', '/appium/device/terminate_app', { appId });
-    } catch {
-      await this.executeScript('mobile: terminateApp', [{ appId, bundleId: appId }]);
+      await this.sessionRequest('POST', route, { appId });
+    } catch (error) {
+      if (!isWebDriverRouteUnsupported(error)) throw error;
+      const { status } = await this.transport.request(
+        'POST',
+        `/session/${this.requireSessionId()}/execute/sync`,
+        { script: siblingScript, args: [{ appId, bundleId: appId }] },
+      );
+      emitWebDriverDiagnostic('webdriver_route_fallback', {
+        from: route,
+        to: siblingScript,
+        status,
+      });
     }
   }
 
@@ -134,7 +150,7 @@ export class WebDriverClient {
   }
 
   async releaseActions(): Promise<void> {
-    await this.sessionRequest('DELETE', '/actions', undefined, { retryAttempts: 0 });
+    await this.sessionRequest('DELETE', '/actions');
   }
 
   async sendKeys(text: string): Promise<void> {
@@ -142,9 +158,7 @@ export class WebDriverClient {
   }
 
   async hideKeyboard(): Promise<void> {
-    await this.sessionRequest('POST', '/appium/device/hide_keyboard', undefined, {
-      retryAttempts: 0,
-    });
+    await this.sessionRequest('POST', '/appium/device/hide_keyboard');
   }
 
   /**
@@ -167,7 +181,7 @@ export class WebDriverClient {
         ...(timeoutMs === undefined ? {} : { timeoutMs }),
       });
     } catch (error) {
-      if (isUnimplementedWebDriverRoute(error)) return 'unsupported';
+      if (isWebDriverRouteUnsupported(error)) return 'unsupported';
       throw error;
     }
     return typeof value === 'boolean' ? value : 'unsupported';
@@ -207,7 +221,7 @@ export class WebDriverClient {
         await this.sessionRequest('GET', '/element/active', undefined, requestBudget(deadline)),
       );
     } catch (error) {
-      if (isUnimplementedWebDriverRoute(error)) return 'unsupported';
+      if (isWebDriverRouteUnsupported(error)) return 'unsupported';
       if (isNoSuchElementError(error)) return 'none';
       throw error;
     }
@@ -221,7 +235,7 @@ export class WebDriverClient {
       );
       return { id: elementId, rect: readWindowRect(value) };
     } catch (error) {
-      if (isUnimplementedWebDriverRoute(error)) return 'unsupported';
+      if (isWebDriverRouteUnsupported(error)) return 'unsupported';
       // The focused element went away between the two calls — a stale answer,
       // not a broken driver. Report it as "nothing focused" so the caller polls
       // again rather than failing on a race it can simply retry out of.
@@ -274,8 +288,19 @@ export class WebDriverClient {
     return readWindowRect(await this.sessionRequest('GET', '/window/rect'));
   }
 
+  /** A script that may change device state; it is sent once. */
   async executeScript(script: string, args: unknown[] = []): Promise<unknown> {
     return await this.sessionRequest('POST', '/execute/sync', { script, args });
+  }
+
+  /** A script that only reads, so it may be resent after an ambiguous failure. */
+  async executeReadScript(script: string, args: unknown[] = []): Promise<unknown> {
+    return await this.sessionRequest(
+      'POST',
+      '/execute/sync',
+      { script, args },
+      { idempotent: true },
+    );
   }
 
   private async sessionRequest(
@@ -363,18 +388,6 @@ function readSession(value: unknown): WebDriverSession {
 }
 
 /**
- * A route this driver does not implement, as opposed to one that failed.
- *
- * Classified from the W3C error code, NOT from the HTTP status: `unknown
- * command` and `invalid session id` are both 404, so a status test would read a
- * dead session as a missing feature — exactly the confusion that turns a broken
- * session into a blind text entry. Only 405/501 are unambiguous enough to stand
- * on their own. A 5xx, an auth rejection, or a timeout is a real failure.
- */
-const UNIMPLEMENTED_WEBDRIVER_STATUSES = new Set([405, 501]);
-const UNIMPLEMENTED_WEBDRIVER_ERRORS = new Set(['unknown command', 'unknown method']);
-
-/**
  * The W3C element identifier, whose key is the spec's fixed UUID rather than a
  * readable name. Appium also echoes the legacy `ELEMENT` key; accept either so
  * the caller works across grid versions.
@@ -412,13 +425,6 @@ function remainingMs(deadline: number): number {
 function isNoSuchElementError(error: unknown): boolean {
   if (!(error instanceof AppError)) return false;
   return readWebDriverErrorCode(error).toLowerCase() === 'no such element';
-}
-
-function isUnimplementedWebDriverRoute(error: unknown): boolean {
-  if (!(error instanceof AppError)) return false;
-  const status = error.details?.status;
-  if (typeof status === 'number' && UNIMPLEMENTED_WEBDRIVER_STATUSES.has(status)) return true;
-  return UNIMPLEMENTED_WEBDRIVER_ERRORS.has(readWebDriverErrorCode(error).toLowerCase());
 }
 
 function readWebDriverErrorCode(error: AppError): string {

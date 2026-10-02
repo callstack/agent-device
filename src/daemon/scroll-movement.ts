@@ -11,10 +11,14 @@ import {
   type ScrollEdge,
 } from '@agent-device/capture-kit/scroll-edge-state';
 import { containsPoint } from '@agent-device/kernel/rect';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import type { Point, Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { sleep } from '@agent-device/host-kit/retry';
+import {
+  observeUntil,
+  type ObservationClock,
+  type ObservationSchedule,
+} from '@agent-device/capture-kit/observe-until';
 import {
   areInteractionSurfaceSignaturesStable,
   buildInteractionSurfaceSignature,
@@ -25,7 +29,7 @@ import {
   summarizeDiscriminatingSurfaceDivergence,
   type InteractionSurfaceChange,
   type InteractionSurfaceSignature,
-} from './interaction-outcome-policy.ts';
+} from './interaction-surface-signature.ts';
 import { refFrameState } from './ref-frame.ts';
 import { isPostGestureStabilizationPending } from './deferred-interaction-outcome.ts';
 import type { SessionState } from './session-state.ts';
@@ -42,7 +46,7 @@ import type { SessionState } from './session-state.ts';
  *
  * The evidence rules are not a second opinion on that pair. The signature, the subset-tolerant
  * baseline classifier, and the strict no-effect bar all belong to
- * `interaction-outcome-policy.ts`, the same comparators the deferred post-gesture stabilization
+ * `interaction-surface-signature.ts`, the same comparators the deferred post-gesture stabilization
  * applies to every other gesture, so "that scroll did nothing" means one thing in this daemon.
  * What is new here is only WHEN the answer is owed: a directional scroll pays one capture to gate its
  * own reply instead of leaving the proof to the next command's snapshot.
@@ -61,9 +65,14 @@ import type { SessionState } from './session-state.ts';
  * lineages can never answer either way and the claim is withheld rather than re-based.
  */
 
-/** How long a scroll keeps asking whether an untouched surface is really untouched (#1542's window). */
-const MOVEMENT_VERDICT_BUDGET_MS = 1_500;
-const MOVEMENT_POLL_MS = 200;
+/**
+ * How long a scroll keeps asking whether an untouched surface is really untouched (#1542's window).
+ * No per-capture deadline: the scroll capture takes no signal, so a late capture is judged.
+ */
+const SCROLL_MOVEMENT_SCHEDULE: ObservationSchedule = {
+  intervalMs: 200,
+  budgetMs: 1_500,
+};
 
 /** The pre-gesture surface, already in hand: no capture is spent to produce it. */
 export type ScrollSurfaceBaseline = Readonly<{
@@ -187,6 +196,7 @@ export async function observeScrollMovement(params: {
   /** The same two overrides `pollForScrollRest` takes: how long to ask, and how often. */
   budgetMs?: number;
   pollMs?: number;
+  clock?: ObservationClock;
 }): Promise<ScrollMovementObservation> {
   const { direction, baseline, swipe } = params;
   const verdict = await pollForSurfaceVerdict(baseline, params);
@@ -216,6 +226,12 @@ type SurfaceVerdict =
       attempts: number;
       startedAt: number;
     }>;
+
+/** What one capture's verdict decides, before the loop's own timing is stitched back on. */
+type SurfaceJudgement =
+  | Readonly<{ kind: 'blind'; reason: SurfaceBlindReason }>
+  | Readonly<{ kind: 'moved'; observed: ObservedSurface }>
+  | Readonly<{ kind: 'settled'; observed: ObservedSurface; evidence: InteractionSurfaceChange }>;
 
 /** Why this capture cannot be compared against the pre-gesture tree at all, movement included. */
 type SurfaceBlindReason = 'capture-unreadable' | 'surface-unsettled' | ScrollSurfacePairDrift;
@@ -255,32 +271,43 @@ async function pollForSurfaceVerdict(
     budgetMs?: number;
     pollMs?: number;
     swipe: ScrollSwipeEvidence;
+    clock?: ObservationClock;
   },
 ): Promise<SurfaceVerdict> {
-  const startedAt = Date.now();
-  const deadline = startedAt + (params.budgetMs ?? MOVEMENT_VERDICT_BUDGET_MS);
   let previous: InteractionSurfaceSignature | undefined;
-  let attempts = 0;
   let changeNeedsRest: boolean | undefined;
+  const observed = await observeUntil<CaptureReading, SurfaceJudgement>({
+    capture: async () => {
+      const reading = await readOneCapture(baseline, params.capture);
+      if (reading.kind === 'changed') {
+        changeNeedsRest ??= await baselineEndsInDirection(baseline, params.direction, params.swipe);
+      }
+      return reading;
+    },
+    schedule: {
+      intervalMs: params.pollMs ?? SCROLL_MOVEMENT_SCHEDULE.intervalMs,
+      budgetMs: params.budgetMs ?? SCROLL_MOVEMENT_SCHEDULE.budgetMs,
+    },
+    verdict: (latest) => {
+      if (latest.kind === 'blind')
+        return { kind: 'done', result: { kind: 'blind', reason: latest.reason } };
+      const judged = settledVerdict(latest, {
+        previous,
+        changeNeedsRest: changeNeedsRest === true,
+      });
+      previous = latest.observed.signature;
+      return judged ? { kind: 'done', result: judged } : { kind: 'continue' };
+    },
+    ...(params.clock ? { clock: params.clock } : {}),
+  });
 
-  while (true) {
-    const reading = await readOneCapture(baseline, params.capture);
-    attempts += 1;
-    if (reading.kind === 'blind') return { kind: 'blind', reason: reading.reason };
-    if (reading.kind === 'changed') {
-      changeNeedsRest ??= await baselineEndsInDirection(baseline, params.direction, params.swipe);
-    }
-    const verdict = settledVerdict(reading, {
-      previous,
-      changeNeedsRest: changeNeedsRest === true,
-      attempts,
-      startedAt,
-    });
-    if (verdict) return verdict;
-    if (Date.now() >= deadline) return budgetExpiredVerdict(params, attempts, startedAt);
-    previous = reading.observed.signature;
-    await sleep(params.pollMs ?? MOVEMENT_POLL_MS);
-  }
+  const attempts = observed.polls.length;
+  if (observed.kind === 'failed') throw observed.error;
+  if (observed.kind !== 'done') return budgetExpiredVerdict(params, attempts, observed.waitedMs);
+  const startedAt = Date.now() - observed.waitedMs;
+  return observed.result.kind === 'blind'
+    ? observed.result
+    : { ...observed.result, attempts, startedAt };
 }
 
 /**
@@ -293,26 +320,17 @@ function settledVerdict(
   poll: {
     previous: InteractionSurfaceSignature | undefined;
     changeNeedsRest: boolean;
-    attempts: number;
-    startedAt: number;
   },
-): SurfaceVerdict | undefined {
+): SurfaceJudgement | undefined {
   const atRest = surfaceIsAtRest(poll.previous, reading.observed.signature);
-  const { attempts, startedAt } = poll;
   if (reading.kind === 'changed') {
     if (!poll.changeNeedsRest || atRest) {
-      return { kind: 'moved', observed: reading.observed, attempts, startedAt };
+      return { kind: 'moved', observed: reading.observed };
     }
     return undefined;
   }
   if (!atRest) return undefined;
-  return {
-    kind: 'settled',
-    observed: reading.observed,
-    evidence: reading.evidence,
-    attempts,
-    startedAt,
-  };
+  return { kind: 'settled', observed: reading.observed, evidence: reading.evidence };
 }
 
 /**
@@ -379,7 +397,7 @@ function budgetExpiredVerdict(
     swipe: ScrollSwipeEvidence;
   },
   attempts: number,
-  startedAt: number,
+  durationMs: number,
 ): SurfaceVerdict {
   emitDiagnostic({
     level: 'warn',
@@ -387,7 +405,7 @@ function budgetExpiredVerdict(
     data: {
       direction: params.direction,
       attempts,
-      durationMs: Date.now() - startedAt,
+      durationMs,
       ...(params.swipe.pixels === undefined ? {} : { requestedPixels: params.swipe.pixels }),
     },
   });
@@ -558,7 +576,7 @@ function scrollNoProgressError(
   swipe: ScrollSwipeEvidence,
   containerRect: Rect,
 ): AppError {
-  return new AppError(
+  const error = new AppError(
     'COMMAND_FAILED',
     `scroll ${direction} moved nothing: the container still reports hidden content ${
       edge === 'bottom' ? 'below' : 'above'
@@ -575,6 +593,7 @@ function scrollNoProgressError(
       }),
     },
   );
+  return discloseDispatch(error, 'unknown');
 }
 
 /**

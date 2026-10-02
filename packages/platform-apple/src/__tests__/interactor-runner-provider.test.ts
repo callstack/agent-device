@@ -78,6 +78,7 @@ const RUNNER_TRANSPORT_METHODS: Record<
   tvRemote: { invoke: (i) => i.tvRemote!('select'), runnerCommand: 'remotePress' },
   keyboardDismiss: { invoke: (i) => i.keyboardDismiss!(), runnerCommand: 'keyboardDismiss' },
   keyboardEnter: { invoke: (i) => i.keyboardEnter!(), runnerCommand: 'keyboardReturn' },
+  writeClipboard: { invoke: (i) => i.writeClipboard!('hi'), runnerCommand: 'pasteboardWrite' },
   // R59: same reading as `readTextAtPoint` — the macOS-helper branch is reachable only for a
   // local desktop surface, which a provider-owned mobile device never carries, so every
   // provider-backed alert leg rides the runner. Each spends one runner call when it succeeds.
@@ -93,7 +94,6 @@ const LOCAL_TOOL_METHODS: Record<string, (interactor: Interactor) => Promise<unk
   close: (i) => i.close('com.example.app'),
   screenshot: (i) => i.screenshot('/dev/null'),
   readClipboard: (i) => i.readClipboard!(),
-  writeClipboard: (i) => i.writeClipboard!('hi'),
   setSetting: (i) => i.setSetting('wifi', 'on'),
   // `simctl ui ... content_size` is local Apple tooling like the write leg beside it, so a provider-owned
   // device has no way to answer a text-size read.

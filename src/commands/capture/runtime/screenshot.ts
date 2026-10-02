@@ -2,6 +2,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { validateScreenshotScale } from '@agent-device/contracts/capture';
 import { successText } from '@agent-device/kernel/success-text';
 import { resizePngFileToScale } from '@agent-device/capture-kit/png-resize';
+import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { ArtifactDescriptor } from '../../../io.ts';
 import type { RuntimeCommand, ScreenshotCommandOptions } from '../../runtime-types.ts';
 import { reserveCommandOutput } from '../../io-policy.ts';
@@ -9,6 +10,7 @@ import { reserveCommandOutput } from '../../io-policy.ts';
 export type ScreenshotCommandResult = {
   path: string;
   artifacts?: ArtifactDescriptor[];
+  displayRotation?: DeviceRotation;
   message?: string;
 };
 
@@ -28,8 +30,9 @@ export const screenshotCommand: RuntimeCommand<
   });
 
   let artifact: ArtifactDescriptor | undefined;
+  let displayRotation: DeviceRotation | undefined;
   try {
-    await runtime.backend.captureScreenshot(
+    const captured = await runtime.backend.captureScreenshot(
       {
         session: options.session,
         requestId: options.requestId,
@@ -48,6 +51,7 @@ export const screenshotCommand: RuntimeCommand<
         surface: options.surface,
       },
     );
+    displayRotation = captured?.displayRotation;
     if (options.scale !== undefined) {
       await resizePngFileToScale(reserved.path, options.scale);
     }
@@ -60,6 +64,7 @@ export const screenshotCommand: RuntimeCommand<
   return {
     path: reserved.path,
     ...(artifact ? { artifacts: [artifact] } : {}),
+    ...(displayRotation ? { displayRotation } : {}),
     ...successText(`Saved screenshot: ${reserved.path}`),
   };
 };

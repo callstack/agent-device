@@ -21,6 +21,7 @@ import {
   SWIPE_REPETITION_MAX,
 } from '@agent-device/contracts/scroll-gesture';
 import { FIND_LOCATORS } from '@agent-device/selectors';
+import { commandAcceptsReadinessBudget } from '@agent-device/command-registry/registry';
 import {
   booleanField,
   elementTargetField,
@@ -28,6 +29,7 @@ import {
   integerField,
   interactionTargetField,
   numberField,
+  operatorField,
   pointField,
   repeatedFields,
   requiredField,
@@ -78,12 +80,37 @@ const interactionCommandDescriptions = {
 
 type InteractionCommandName = keyof typeof interactionCommandDescriptions;
 
+/**
+ * The input field a command's `targetReadiness: 'budgeted'` descriptor trait entitles it to. Only
+ * those commands declare `readinessTimeoutMs`; the common input reader refuses the key for every
+ * command whose fields do not (`common-input-fields.ts`). Fails closed at module load for a command
+ * without the trait, so a field map cannot advertise a budget its runtime never polls under.
+ */
+function targetReadinessFields(command: InteractionCommandName) {
+  if (!commandAcceptsReadinessBudget(command)) {
+    throw new Error(`${command} does not declare targetReadiness: 'budgeted'`);
+  }
+  return {
+    readinessTimeoutMs: operatorField(
+      integerField(
+        "Operator-only: how long the command may poll for a target that does not exist yet, in milliseconds. Capped at the promotedTarget row's maxTimeoutMs; omitted takes the one-attempt resolution path.",
+        { min: 1 },
+      ),
+      {
+        operatorPath:
+          'Pass readinessTimeoutMs directly as CLI/Node.js command input; it is not exposed to model-facing tools.',
+      },
+    ),
+  };
+}
+
 const clickFields = {
   target: requiredField(interactionTargetField()),
   button: enumField(CLICK_BUTTONS, 'Pointer button for platforms that support mouse buttons.'),
   ...selectorSnapshotFields(),
   ...repeatedFields(),
   ...postActionObservationFields('click'),
+  ...targetReadinessFields('click'),
 };
 
 const pressFields = {
@@ -91,6 +118,7 @@ const pressFields = {
   ...selectorSnapshotFields(),
   ...repeatedFields(),
   ...postActionObservationFields('press'),
+  ...targetReadinessFields('press'),
 };
 
 const fillFields = {
@@ -113,6 +141,7 @@ const longPressFields = {
   durationMs: integerField('Long press duration in milliseconds.', { min: 0 }),
   ...selectorSnapshotFields(),
   ...postActionObservationFields('longpress'),
+  ...targetReadinessFields('longpress'),
 };
 
 const hoverFields = {

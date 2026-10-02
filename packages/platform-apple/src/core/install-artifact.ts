@@ -10,10 +10,7 @@ import {
   noteInstallArtifactArchiveDepth,
   withInstallArtifactArchiveScope,
 } from '@agent-device/provision-kit/install-artifact-archive-context';
-import {
-  isTrustedInstallSourceUrl,
-  materializeInstallablePath,
-} from '@agent-device/provision-kit/install-source';
+import { materializeInstallablePath } from '@agent-device/provision-kit/install-source';
 import {
   makeHostTemporaryDirectory,
   readHostDirectory,
@@ -53,19 +50,12 @@ async function prepareIosInstallArtifactInScope(
   source: LocalInstallSource,
   options?: InstallIosArtifactOptions,
 ): Promise<PreparedIosInstallArtifact> {
-  if (source.kind === 'url' && !isTrustedInstallSourceUrl(source.url)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'iOS install_from_source URL sources are only supported for trusted artifact services such as GitHub Actions and EAS. Use a path source for other hosts.',
-    );
-  }
   const materialized = await materializeInstallablePath({
     source,
     isInstallablePath: (candidatePath, stat) =>
       (stat.isDirectory() && candidatePath.toLowerCase().endsWith('.app')) ||
       (stat.isFile() && candidatePath.toLowerCase().endsWith('.ipa')),
     installableLabel: 'iOS installable (.app or .ipa)',
-    allowArchiveExtraction: source.kind !== 'url' || isTrustedInstallSourceUrl(source.url),
     signal: options?.signal,
   });
 

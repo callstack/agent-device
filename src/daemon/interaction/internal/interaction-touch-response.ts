@@ -234,6 +234,7 @@ export function buildInteractionResponseData(params: {
     visualization.warning = warning;
     responseData.warning = warning;
   }
+  if ('readiness' in result && result.readiness) responseData.readiness = result.readiness;
   return { result: visualization, responseData, ...recordedTargetCapture(result) };
 }
 
@@ -368,9 +369,4 @@ export function maestroFallbackDisclosure(
       ...(used ? { maestroFallbackReason: 'non-hittable-coordinate' as const } : {}),
     },
   };
-}
-
-/** The coordinate a lazy outcome retry re-dispatches against (`finalizeTouchInteraction`). */
-export function pointPositionals(point: { x: number; y: number }): string[] {
-  return [String(point.x), String(point.y)];
 }

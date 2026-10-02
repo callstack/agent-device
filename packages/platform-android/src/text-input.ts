@@ -6,7 +6,7 @@
  */
 import type { FillUnconfirmedVerification } from '@agent-device/contracts/fill-evidence';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
 import {
@@ -32,6 +32,7 @@ import {
   sendAndroidImeHelperText,
 } from './ime-helper.ts';
 import { getAndroidTestImeOwnership } from './ime-state.ts';
+import { discloseAdbInputDispatch } from './adb-failure.ts';
 import { focusAndroid } from './input-actions.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
@@ -83,34 +84,39 @@ export async function fillAndroid(
     return completeAndroidFillVerification(text, beforeTarget, verification);
   }
   let lastVerification: AndroidFillVerification | null = null;
-
-  for (const attempt of buildAndroidShellFillAttempts(delayMs)) {
-    await focusAndroid(device, x, y);
-    const channel = await admitAndroidTextChannel(device, 'fill', text);
-    if (channel.backend === 'test-ime') {
-      const verification = await fillAndroidImeHelper(
+  let dispatchedSteps = 0;
+  try {
+    for (const attempt of buildAndroidShellFillAttempts(delayMs)) {
+      await focusAndroid(device, x, y);
+      dispatchedSteps += 1;
+      const channel = await admitAndroidTextChannel(device, 'fill', text);
+      if (channel.backend === 'test-ime') {
+        const verification = await fillAndroidImeHelper(
+          device,
+          channel.packageName,
+          x,
+          y,
+          text,
+          beforeTarget,
+          helper,
+        );
+        return completeAndroidFillVerification(text, beforeTarget, verification);
+      }
+      const verification = await runAndroidShellFillAttempt(
         device,
-        channel.packageName,
-        x,
-        y,
-        text,
-        beforeTarget,
+        { x, y, text, beforeTarget, attempt },
         helper,
       );
-      return completeAndroidFillVerification(text, beforeTarget, verification);
+      lastVerification = verification;
+      if (verification.ok) return;
+      if (verification.reason === 'ime_capture') {
+        return completeAndroidFillVerification(text, beforeTarget, verification);
+      }
+      const unconfirmed = buildAndroidFillUnconfirmedVerification(text, beforeTarget, verification);
+      if (unconfirmed) return unconfirmed;
     }
-    const verification = await runAndroidShellFillAttempt(
-      device,
-      { x, y, text, beforeTarget, attempt },
-      helper,
-    );
-    lastVerification = verification;
-    if (verification.ok) return;
-    if (verification.reason === 'ime_capture') {
-      return completeAndroidFillVerification(text, beforeTarget, verification);
-    }
-    const unconfirmed = buildAndroidFillUnconfirmedVerification(text, beforeTarget, verification);
-    if (unconfirmed) return unconfirmed;
+  } catch (error) {
+    throw discloseDispatchAfterSteps(error, dispatchedSteps);
   }
 
   return completeAndroidFillVerification(text, beforeTarget, lastVerification);
@@ -239,19 +245,14 @@ async function typeAndroidImeHelper(
   delayMs: number,
 ): Promise<void> {
   const adb = resolveAndroidAdbExecutor(device);
-  const parts = text.split('\n');
-  for (const [partIndex, part] of parts.entries()) {
-    const chunks = delayMs > 0 ? chunkAndroidInputText(part, 1) : [part];
-    for (const [chunkIndex, chunk] of chunks.entries()) {
-      if (chunk) await sendAndroidImeHelperText(adb, packageName, chunk);
-      if (delayMs > 0 && (chunkIndex + 1 < chunks.length || partIndex + 1 < parts.length)) {
-        await sleep(delayMs);
-      }
-    }
-    if (partIndex + 1 < parts.length) {
-      await runAndroidShell(device, ['input', 'keyevent', 'ENTER']);
-    }
-  }
+  await sendAndroidTextSteps(
+    device,
+    planAndroidTextSteps(text, delayMs > 0 ? 1 : Infinity, delayMs),
+    {
+      delayMs,
+      sendChunk: async (chunk) => await sendAndroidImeHelperText(adb, packageName, chunk),
+    },
+  );
   emitAndroidTextDiagnostic('type', 'test-ime', text);
 }
 
@@ -266,22 +267,32 @@ async function fillAndroidImeHelper(
 ): Promise<AndroidFillVerification> {
   const adb = resolveAndroidAdbExecutor(device);
   let lastVerification: AndroidFillVerification | null = null;
+  let dispatchedSteps = 0;
   // The caller focused the target while resolving the channel; the retry re-focuses because it
   // covers the rare not-yet-bound InputConnection right after focus. A commit none of which reached
   // the field may also have gone to a stale input session, which only a rebind of the IME replaces.
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    if (
-      lastVerification &&
-      !(await prepareAndroidImeHelperRetry(device, x, y, lastVerification, beforeTarget))
-    ) {
-      break;
+  try {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (
+        lastVerification &&
+        !(await prepareAndroidImeHelperRetry(device, x, y, lastVerification, beforeTarget))
+      ) {
+        break;
+      }
+      if (attempt > 0) dispatchedSteps += 1;
+      await clearAndroidImeHelperText(adb, packageName);
+      dispatchedSteps += 1;
+      if (text) {
+        await sendAndroidImeHelperText(adb, packageName, text);
+        dispatchedSteps += 1;
+      }
+      const verification = await verifyAndroidFilledText(device, x, y, text, helper);
+      lastVerification = verification;
+      if (verification.ok) break;
+      if (buildAndroidFillUnconfirmedVerification(text, beforeTarget, verification)) break;
     }
-    await clearAndroidImeHelperText(adb, packageName);
-    if (text) await sendAndroidImeHelperText(adb, packageName, text);
-    const verification = await verifyAndroidFilledText(device, x, y, text, helper);
-    lastVerification = verification;
-    if (verification.ok) break;
-    if (buildAndroidFillUnconfirmedVerification(text, beforeTarget, verification)) break;
+  } catch (error) {
+    throw discloseDispatchAfterSteps(error, dispatchedSteps);
   }
   emitAndroidTextDiagnostic('fill', 'test-ime', text);
   return lastVerification as AndroidFillVerification;
@@ -319,24 +330,77 @@ async function typeAndroidShell(
   device: DeviceInfo,
   options: { action: AndroidTextInputAction; text: string; chunkSize: number; delayMs: number },
 ): Promise<void> {
-  const parts = options.text.split('\n');
-  for (const [partIndex, part] of parts.entries()) {
-    const chunks = chunkAndroidInputText(part, options.chunkSize);
-    for (const [chunkIndex, chunk] of chunks.entries()) {
-      await typeAndroidShellChunk(device, chunk);
-      if (options.delayMs > 0 && (chunkIndex + 1 < chunks.length || partIndex + 1 < parts.length)) {
-        await sleep(options.delayMs);
-      }
-    }
-    if (partIndex + 1 < parts.length) {
-      await runAndroidShell(device, ['input', 'keyevent', 'ENTER']);
-    }
-  }
+  await sendAndroidTextSteps(
+    device,
+    planAndroidTextSteps(options.text, options.chunkSize, options.delayMs),
+    {
+      delayMs: options.delayMs,
+      sendChunk: async (chunk) => {
+        try {
+          await typeAndroidShellChunk(device, chunk);
+        } catch (error) {
+          throw discloseAdbInputDispatch(error);
+        }
+      },
+    },
+  );
   emitAndroidTextDiagnostic(options.action, 'adb-shell', options.text);
 }
 
+/**
+ * One step of multi-line text entry: a chunk of one line (empty for an empty line, which sends
+ * nothing), or the ENTER keyevent between lines. A chunk pauses after itself unless it ends the text.
+ */
+type AndroidTextStep = { kind: 'chunk'; text: string; pauseAfter: boolean } | { kind: 'enter' };
+
+function planAndroidTextSteps(text: string, chunkSize: number, delayMs: number): AndroidTextStep[] {
+  const parts = text.split('\n');
+  return parts.flatMap((part, partIndex) => {
+    const chunks = chunkAndroidInputText(part, chunkSize);
+    const lastPart = partIndex + 1 === parts.length;
+    const chunkSteps = chunks.map((chunk, chunkIndex): AndroidTextStep => ({
+      kind: 'chunk',
+      text: chunk,
+      pauseAfter: delayMs > 0 && !(lastPart && chunkIndex + 1 === chunks.length),
+    }));
+    return lastPart ? chunkSteps : [...chunkSteps, { kind: 'enter' }];
+  });
+}
+
+/** Each non-empty chunk and each ENTER is one dispatched step of the series. */
+async function sendAndroidTextSteps(
+  device: DeviceInfo,
+  steps: readonly AndroidTextStep[],
+  options: { delayMs: number; sendChunk: (chunk: string) => Promise<void> },
+): Promise<void> {
+  let dispatchedSteps = 0;
+  try {
+    for (const step of steps) {
+      if (step.kind === 'enter') {
+        await pressAndroidEnterKey(device);
+        dispatchedSteps += 1;
+        continue;
+      }
+      if (step.text) {
+        await options.sendChunk(step.text);
+        dispatchedSteps += 1;
+      }
+      if (step.pauseAfter) await sleep(options.delayMs);
+    }
+  } catch (error) {
+    throw discloseDispatchAfterSteps(error, dispatchedSteps);
+  }
+}
+
+async function pressAndroidEnterKey(device: DeviceInfo): Promise<void> {
+  try {
+    await runAndroidShell(device, ['input', 'keyevent', 'ENTER']);
+  } catch (error) {
+    throw discloseAdbInputDispatch(error);
+  }
+}
+
 async function typeAndroidShellChunk(device: DeviceInfo, text: string): Promise<void> {
-  if (!text) return;
   try {
     await runAndroidShell(device, ['input', 'text', encodeAndroidInputText(text)]);
   } catch (error) {
@@ -349,15 +413,22 @@ async function typeAndroidShellChunk(device: DeviceInfo, text: string): Promise<
 
 async function clearFocusedText(device: DeviceInfo, count: number): Promise<void> {
   const deletes = Math.max(0, count);
-  await runAndroidShell(device, ['input', 'keyevent', 'KEYCODE_MOVE_END'], {
-    allowFailure: true,
-  });
   const batchSize = 24;
-  for (let i = 0; i < deletes; i += batchSize) {
-    const size = Math.min(batchSize, deletes - i);
-    await runAndroidShell(device, ['input', 'keyevent', ...Array(size).fill('KEYCODE_DEL')], {
+  let dispatchedSteps = 0;
+  try {
+    await runAndroidShell(device, ['input', 'keyevent', 'KEYCODE_MOVE_END'], {
       allowFailure: true,
     });
+    dispatchedSteps += 1;
+    for (let i = 0; i < deletes; i += batchSize) {
+      const size = Math.min(batchSize, deletes - i);
+      await runAndroidShell(device, ['input', 'keyevent', ...Array(size).fill('KEYCODE_DEL')], {
+        allowFailure: true,
+      });
+      dispatchedSteps += 1;
+    }
+  } catch (error) {
+    throw discloseDispatchAfterSteps(error, dispatchedSteps);
   }
 }
 

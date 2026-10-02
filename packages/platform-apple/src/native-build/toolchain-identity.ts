@@ -29,11 +29,40 @@ export async function readHostToolchainIdentity(
   const xcode = await toolOutput(host, 'xcodebuild', ['-version'], deadline);
   const macosProductVersion = await toolOutput(host, 'sw_vers', ['-productVersion'], deadline);
   const macosBuild = await toolOutput(host, 'sw_vers', ['-buildVersion'], deadline);
-  const architecture = await toolOutput(host, 'uname', ['-m'], deadline);
+  const architecture = await hostCpuArchWithin(host, deadline);
   if (architecture !== 'arm64' && architecture !== 'x86_64') {
     throw nativeBuildError('unsupported', 'simulator-architecture-unsupported', { architecture });
   }
   return { xcode, macosProductVersion, macosBuild, architecture };
+}
+
+/**
+ * The host arch is one per-process value shared by every caller, so a request cannot cancel its
+ * probe; it stops waiting for it instead when it is cancelled or its budget runs out.
+ */
+async function hostCpuArchWithin(
+  host: NativeBuildHost,
+  deadline: NativeBuildDeadline,
+): Promise<string> {
+  const remainingMs = remainingNativeBuildMs(deadline, 'host-arch-deadline');
+  const signal = deadline.signal;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let onAbort: (() => void) | undefined;
+  const ended = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(nativeBuildError('timeout', 'host-arch-deadline')),
+      remainingMs,
+    );
+    timer.unref?.();
+    onAbort = () => reject(nativeBuildError('cancelled', 'abort-signal'));
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+  try {
+    return await Promise.race([host.cpuArch(), ended]);
+  } finally {
+    clearTimeout(timer);
+    if (onAbort) signal?.removeEventListener('abort', onAbort);
+  }
 }
 
 async function toolOutput(

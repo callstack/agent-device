@@ -58,6 +58,19 @@ agent-device replay ~/.agent-device/sessions/e2e-2026-02-09T12-00-00-000Z.ad --s
 
   Interior `close` actions still run. The flag is intentionally unavailable to `test` because suite
   attempts own cleanup, and it is rejected for Maestro YAML because that runtime owns its lifecycle.
+- `press`, `click`, and `longpress` steps wait up to 2 seconds for their target to appear before
+  they fail. A step recorded against a screen that was still loading passes on replay once the
+  target shows up. The wait covers only a target that is not on screen yet: a target that is
+  covered, off-screen, or matched by more than one element fails at once, as it does live.
+  A step that waited and then passed shows no trace of the wait in the replay output; run with
+  `--debug` to see it in the diagnostics.
+- When the target never appears, replay stops with `REPLAY_DIVERGENCE`, and
+  `error.details.readiness` says how long the step waited and how many times it looked (`waitedMs`,
+  `polls`, `end`). For a step recorded with a target annotation (the `# agent-device:target-v1`
+  line above it), `error.details.divergence.kind` is `selector-miss` and the step is never sent.
+  For a step without an annotation, `error.details.reason` is `selector_not_found`, as for a live
+  command. If the app shows an empty accessibility tree during that wait, `error.details.reason`
+  is `capture_sparse` instead; take a snapshot to see where the app is.
 
 ## Run Maestro compatibility flows
 
@@ -384,5 +397,12 @@ Passing `--plan-digest` that no longer matches the current script — because yo
   - Leave the replay plan unchanged, repair app state so the reported failed step can be retried, then use its `--from`/`--plan-digest`. Resume starts at `--from`; it does not skip that step.
 - Replay file parse error:
   - Validate quoting in `.ad` lines (unclosed quotes are rejected).
+- A `press` or `click` step fails because its target was not found, but the element is on the
+  screenshot:
+  - A `selector-miss` divergence, or `error.details.readiness.end: expired`, means the element was
+    not in the accessibility tree for the whole 2-second wait: the selector is wrong for this
+    build, or the element is not exposed to accessibility. `readiness.end: sparse` means the app
+    showed an empty tree: the screen was mid-transition or the app had left. Add a `wait` step for
+    a landmark on the new screen before the press.
 - Maestro compatibility flow fails on unsupported syntax:
   - Check [ADR 0015](https://github.com/callstack/agent-device/blob/main/docs/adr/0015-direct-maestro-engine.md). If the missing feature matters to your suite, open a focused issue with a small flow snippet.

@@ -66,9 +66,9 @@ function probe(
 
 test('a launched app is observable as soon as the bridge publishes it', async () => {
   const { observe, acquire, sleep } = probe([acquired()], { now: () => 0, sleep: async () => {} });
-  await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toBe(
-    'observable',
-  );
+  await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toEqual({
+    observation: 'observable',
+  });
   expect(acquire).toHaveBeenCalledOnce();
   expect(sleep).not.toHaveBeenCalled();
 });
@@ -88,9 +88,9 @@ test('a missing AX server is re-read inside its window until it registers', asyn
       },
     },
   );
-  await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toBe(
-    'observable',
-  );
+  await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toEqual({
+    observation: 'observable',
+  });
   expect(acquire).toHaveBeenCalledTimes(3);
 });
 
@@ -113,9 +113,10 @@ test('an ownership miss after an AX-server miss shrinks the deadline to the owne
       },
     },
   );
-  await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toBe(
-    'unobservable',
-  );
+  await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toEqual({
+    observation: 'unobservable',
+    proof: 'launch-transition',
+  });
   expect(now).toBeGreaterThanOrEqual(3_000);
   expect(now).toBeLessThanOrEqual(3_150);
   expect(acquire.mock.calls.length).toBeGreaterThan(2);
@@ -137,37 +138,37 @@ test('the last poll is capped to the remaining window', async () => {
 });
 
 test.each(['bridge-disconnected', 'continuation-budget-exhausted', 'snapshot-tree-malformed'])(
-  'a %s failure ends the launch wait at once',
+  'a %s failure ends the launch wait at once as a failed probe, not an unreadable app',
   async (code) => {
     const { observe, acquire, sleep } = probe([failed(code, 'transport-failure'), acquired()], {
       now: () => 0,
       sleep: async () => {},
     });
-    await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toBe(
-      'unobservable',
-    );
+    await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toEqual({
+      observation: 'probe-failed',
+      failure: { source: 'bridge', kind: 'transport-failure', code },
+    });
     expect(acquire).toHaveBeenCalledOnce();
     expect(sleep).not.toHaveBeenCalled();
   },
 );
 
-test('a generation whose bridge circuit is open is unobservable without a bridge round trip', async () => {
+test('a generation whose bridge circuit is open is a failed probe without a bridge round trip', async () => {
   const { observe, acquire, sleep, gate } = probe(
     [acquired()],
     { now: () => 0, sleep: async () => {} },
     () => true,
   );
-  await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toBe(
-    'unobservable',
-  );
+  await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toEqual({
+    observation: 'probe-failed',
+    failure: { source: 'circuit' },
+  });
   expect(gate).toHaveBeenCalledWith(target);
   expect(acquire).not.toHaveBeenCalled();
   expect(sleep).not.toHaveBeenCalled();
 });
 
 test('the skip is reported, so a live run can tell it from an unresolvable target', async () => {
-  // Both verdicts are `unobservable` with zero acquisitions; only the diagnostic separates a
-  // circuit skip from a target that never resolved.
   await withDiagnosticsScope({ command: 'open' }, async () => {
     const skipped = probe([acquired()], { now: () => 0, sleep: async () => {} }, () => true);
     await skipped.observe.awaitObservable(simulator, 'com.example.app', signal());
@@ -184,15 +185,51 @@ test('the skip is reported, so a live run can tell it from an unresolvable targe
     });
     await expect(
       unresolvable.awaitObservable(simulator, 'com.example.app', signal()),
-    ).resolves.toBe('unobservable');
+    ).resolves.toMatchObject({ observation: 'probe-failed' });
     expect(countDiagnosticEventsByPhase(['ios_launch_observation_skipped'])).toBe(0);
   });
 });
 
 test.each([
-  ['a discovery still running is joined until it answers', 'simulator-target-discovery-pending', 3],
-  ['any other resolution failure is unobservable at once', 'simulator-target-unavailable', 1],
-])('%s', async (_name, reason, expectedResolutions) => {
+  [
+    'a discovery still running is joined until it answers',
+    'simulator-target-discovery-pending',
+    3,
+    { observation: 'observable' },
+  ],
+  [
+    'an app with no running process is unobservable at once',
+    'simulator-target-unavailable',
+    1,
+    { observation: 'unobservable', proof: 'no-running-process' },
+  ],
+  [
+    'a discovery that failed on its own deadline is a failed probe, which proves no process nothing',
+    'simulator-target-timeout',
+    1,
+    {
+      observation: 'probe-failed',
+      failure: {
+        source: 'target',
+        code: 'COMMAND_FAILED',
+        reason: 'simulator-target-timeout',
+      },
+    },
+  ],
+  [
+    'any other resolution failure is a failed probe at once',
+    'simulator-target-probe-failed',
+    1,
+    {
+      observation: 'probe-failed',
+      failure: {
+        source: 'target',
+        code: 'COMMAND_FAILED',
+        reason: 'simulator-target-probe-failed',
+      },
+    },
+  ],
+])('%s', async (_name, reason, expectedResolutions, verdict) => {
   let resolutions = 0;
   const acquire = vi.fn(async () => acquired());
   const observe = createLaunchObservationProbe({
@@ -209,8 +246,8 @@ test.each([
     clock: { now: () => 0, sleep: async () => {} },
     isBridgeDisabled: () => false,
   });
-  await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toBe(
-    expectedResolutions === 3 ? 'observable' : 'unobservable',
+  await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toEqual(
+    verdict,
   );
   expect(resolutions).toBe(expectedResolutions);
 });
@@ -220,9 +257,9 @@ test.each([
   ['a tvOS Simulator', { ...simulator, appleOs: 'tvos' as const, target: 'tv' as const }],
 ])('%s has no bridge and is not eligible', async (_name, device) => {
   const { observe, acquire, gate } = probe([acquired()], { now: () => 0, sleep: async () => {} });
-  await expect(observe.awaitObservable(device, 'com.example.app', signal())).resolves.toBe(
-    'not-eligible',
-  );
+  await expect(observe.awaitObservable(device, 'com.example.app', signal())).resolves.toEqual({
+    observation: 'not-eligible',
+  });
   expect(acquire).not.toHaveBeenCalled();
   expect(gate).not.toHaveBeenCalled();
 });

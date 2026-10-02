@@ -6,6 +6,7 @@ const SENSITIVE_ASSIGNMENT_RE =
   /\b([a-z0-9_-]*(?:api[_-]?key|token|secret|password|user[_-]?code|device[_-]?code|refresh[_-]?credential)[a-z0-9_-]*)(\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi;
 const URL_RE = /https?:\/\/[^\s"'<>]+/gi;
 const REDACTED_STRING_MAX_LENGTH = 400;
+const REDACTED_STDERR_MAX_LENGTH = 8192;
 const TRUNCATION_SUFFIX = '...<truncated>';
 
 export function redactDiagnosticData<T>(input: T): T {
@@ -50,7 +51,7 @@ function redactValue(value: unknown, seen: WeakSet<object>, keyHint?: string): u
 
 function redactString(value: string, keyHint?: string): string {
   const trimmed = value.trim();
-  if (!trimmed) return boundRedactedString(value);
+  if (!trimmed) return boundRedactedString(value, keyHint);
   if (keyHint && SENSITIVE_KEY_RE.test(keyHint)) return '[REDACTED]';
   let output = redactUrls(trimmed);
   output = output.replace(SECRET_TOKEN_RE, '[REDACTED]');
@@ -62,10 +63,17 @@ function redactString(value: string, keyHint?: string): string {
       return `${key}${separator}[REDACTED]`;
     },
   );
-  return boundRedactedString(output);
+  return boundRedactedString(output, keyHint);
 }
 
-function boundRedactedString(value: string): string {
+function boundRedactedString(value: string, keyHint?: string): string {
+  if (keyHint === 'stderr') {
+    if (value.length <= REDACTED_STDERR_MAX_LENGTH) return value;
+    const marker = `\n${TRUNCATION_SUFFIX}\n`;
+    const retainedLength = REDACTED_STDERR_MAX_LENGTH - marker.length;
+    const headLength = Math.ceil(retainedLength / 2);
+    return `${value.slice(0, headLength)}${marker}${value.slice(-(retainedLength - headLength))}`;
+  }
   if (value.length <= REDACTED_STRING_MAX_LENGTH) return value;
   return `${value.slice(0, REDACTED_STRING_MAX_LENGTH - TRUNCATION_SUFFIX.length)}${TRUNCATION_SUFFIX}`;
 }

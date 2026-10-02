@@ -5,6 +5,7 @@ import { beforeEach, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { IOS_DEVICE, IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
+import { resolveRunnerCacheKey } from '../runner-cache-metadata.ts';
 import { resolveRunnerLaunchLogPath } from '../runner-io.ts';
 import type { RunnerSession } from '../runner-session-types.ts';
 import {
@@ -12,7 +13,10 @@ import {
   makeClassifyOwnerLivenessViaMocks,
   assertRunnerCommand,
   makeBackgroundRunner,
+  makeRunnerArtifact,
   runnerResponse,
+  RUNNER_CACHE_METADATA_FIXTURE,
+  RUNNER_CACHE_KEY_FIXTURE,
 } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
@@ -175,6 +179,7 @@ beforeEach(async () => {
   mockEnsureXctestrunArtifact.mockResolvedValue({
     xctestrunPath: '/tmp/base-runner.xctestrun',
     derived: '/tmp/derived',
+    cacheKey: RUNNER_CACHE_KEY_FIXTURE,
     cache: 'miss',
     artifact: 'rebuilt',
     buildMs: 12,
@@ -185,7 +190,7 @@ beforeEach(async () => {
     xctestrunPath: '/tmp/session-runner.xctestrun',
     jsonPath: '/tmp/session-runner.json',
   });
-  mockResolveExpectedRunnerCacheMetadata.mockReturnValue({ schemaVersion: 1 });
+  mockResolveExpectedRunnerCacheMetadata.mockReturnValue(RUNNER_CACHE_METADATA_FIXTURE);
   mockResolveRunnerDerivedPath.mockReturnValue('/tmp/derived');
   mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
   mockRunAppleToolCommand.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
@@ -681,4 +686,58 @@ test('a draining session is never reused while its next command starts a fresh r
   await disposal;
   assert.equal(first.state, 'stopped');
   assert.equal(second.state, 'starting');
+});
+
+test('retained runner restarts on a toolchain change even when its derived directory is fixed', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-lifecycle-toolchain-switch' };
+  const underA = { ...RUNNER_CACHE_METADATA_FIXTURE, xcodeBuildVersion: 'Xcode-A' };
+  const underB = { ...RUNNER_CACHE_METADATA_FIXTURE, xcodeBuildVersion: 'Xcode-B' };
+  mockResolveExpectedRunnerCacheMetadata.mockReturnValue(underA);
+  const artifact = await mockEnsureXctestrunArtifact();
+  mockEnsureXctestrunArtifact.mockResolvedValue({
+    ...artifact,
+    cacheKey: resolveRunnerCacheKey(mockResolveExpectedRunnerCacheMetadata()),
+  });
+  const first = await ensureRunnerSession(device, {});
+  assert.equal(await ensureRunnerSession(device, {}), first);
+
+  mockResolveExpectedRunnerCacheMetadata.mockReturnValue(underB);
+  mockEnsureXctestrunArtifact.mockResolvedValue({
+    ...artifact,
+    cacheKey: resolveRunnerCacheKey(mockResolveExpectedRunnerCacheMetadata()),
+  });
+  const second = await ensureRunnerSession(device, {});
+  assert.notEqual(second, first);
+  assert.equal(first.state, 'stopped');
+  assert.equal(second.xctestrunArtifact?.derived, first.xctestrunArtifact?.derived);
+  assert.equal(await ensureRunnerSession(device, {}), second);
+  assert.equal(mockRunCmdBackground.mock.calls.length, 2);
+});
+
+test('runner session restarts alive runner when expected xctestrun artifact changes', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-stale-artifact-sim' };
+
+  mockEnsureXctestrunArtifact
+    .mockResolvedValueOnce(
+      makeRunnerArtifact({
+        xctestrunPath: '/tmp/base-runner.xctestrun',
+        derived: '/tmp/derived',
+        buildMs: 12,
+      }),
+    )
+    .mockResolvedValueOnce(
+      makeRunnerArtifact({
+        xctestrunPath: '/tmp/base-runner-next.xctestrun',
+        derived: '/tmp/derived-next',
+        buildMs: 13,
+      }),
+    );
+
+  const session = await ensureRunnerSession(device, {});
+  mockResolveRunnerDerivedPath.mockReturnValue('/tmp/derived-next');
+  const restarted = await ensureRunnerSession(device, {});
+
+  assert.notEqual(restarted, session);
+  assert.equal(restarted.xctestrunArtifact?.derived, '/tmp/derived-next');
+  assert.equal(mockRunCmdBackground.mock.calls.length, 2);
 });

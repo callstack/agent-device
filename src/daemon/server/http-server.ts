@@ -41,6 +41,7 @@ import {
   DAEMON_HTTP_TENANT_HEADER,
 } from '@agent-device/contracts/daemon-http';
 import { readVersion } from '@agent-device/host-kit/version';
+import { readHostCpuArch } from '@agent-device/host-kit/process';
 import { readLeaseAllocateProviderFlags } from '@agent-device/contracts/lease-scope';
 import { sendRestJsonError, statusCodeForNormalizedError } from '../http-errors.ts';
 import { tryHandleUploadHttpRoute } from '../upload-http.ts';
@@ -137,8 +138,11 @@ function restrictRemoteHttpRequest(
       'Invalid params: path install sources are disabled on the remote HTTP surface',
     );
   }
+  // A developer dir is a host path whose tools the daemon would run, so only local callers set it.
+  const { developerDir: _developerDir, ...meta } = request.meta ?? {};
   return {
     ...request,
+    ...(request.meta ? { meta } : {}),
     internal: { ...request.internal, publicNetworkOnly: true },
   };
 }
@@ -574,6 +578,7 @@ export async function createDaemonHttpServer(options: {
   resolveRequestDiagnosticsPath?: (ref: DiagnosticsRecordRef) => string;
 }): Promise<http.Server> {
   const instanceId = randomUUID();
+  const hostArch = await readHostCpuArch();
   const environment = options.env ?? process.env;
   const authHook = await loadHttpAuthHook(environment);
   const { handleRequest, token, retainArtifacts = false, resolveRequestDiagnosticsPath } = options;
@@ -583,7 +588,10 @@ export async function createDaemonHttpServer(options: {
       res.setHeader('content-type', 'application/json');
       res.end(
         JSON.stringify(
-          buildDaemonHealthPayload('agent-device-daemon', readVersion(), { instanceId }),
+          buildDaemonHealthPayload('agent-device-daemon', readVersion(), {
+            instanceId,
+            hostArch,
+          }),
         ),
       );
       return;

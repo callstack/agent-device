@@ -1,6 +1,6 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { ProviderAppCatalog } from '@agent-device/contracts/device';
-import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
+import type { TrackDownloadableArtifact } from './artifact-tracking.ts';
 import {
   emitDiagnostic,
   getDiagnosticsMeta,
@@ -69,6 +69,12 @@ import {
   resolveCommandDeviceClaimPolicy,
 } from '@agent-device/command-registry/registry';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
+import {
+  assertDaemonPolicyAdmitsDevice,
+  assertDaemonPolicyAdmitsRequest,
+} from './daemon-policy.ts';
+import type { DaemonPolicy } from '../daemon-policy-file.ts';
+import { requestDispatchLedger, type RequestDispatchLedger } from './request-dispatch-ledger.ts';
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps
 // test and embedded routers isolated without changing process-level serialization there.
@@ -91,6 +97,8 @@ export type RequestExecutionScope = AsyncDisposable & {
   bindDevice: BindDeviceRuntime;
   inspectFacts: InspectDeviceRuntimeFacts;
   bindExactDevice: BindExactDeviceRuntime;
+  /** The request's mutations, recorded by every bound operation this scope hands out. */
+  dispatchLedger: RequestDispatchLedger;
   throwIfCanceled(): void;
 };
 
@@ -103,6 +111,7 @@ export type LockedRequestScope = {
   bindDevice: BindDeviceRuntime;
   inspectFacts: InspectDeviceRuntimeFacts;
   bindExactDevice: BindExactDeviceRuntime;
+  dispatchLedger: RequestDispatchLedger;
   throwIfCanceled(): void;
   contextFromFlags(
     flags: CommandFlags | undefined,
@@ -116,7 +125,7 @@ export type LockedRequestScope = {
   ): DaemonCommandContext;
 };
 
-export type LockedRequestScopeResult =
+type LockedRequestScopeResult =
   | { type: 'scope'; scope: LockedRequestScope }
   | { type: 'response'; response: DaemonResponse };
 
@@ -128,6 +137,7 @@ export async function createRequestExecutionScope(params: {
   platformRequestScope?: PlatformRequestScope;
   platformResourceCleanup?: PlatformResourceCleanup;
   providerAppCatalog?: ProviderAppCatalog;
+  daemonPolicy?: DaemonPolicy;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
   let scopedReq = applyRequestCommandDefaults(scopeRequestSession(params.req));
@@ -182,6 +192,7 @@ export async function createRequestExecutionScope(params: {
     );
   }
   try {
+    if (params.daemonPolicy) assertDaemonPolicyAdmitsRequest(params.daemonPolicy, scopedReq);
     assertLockedLeaseAdmissionPreflight(scopedReq);
     // Parse the budget once, before resolving the target device or taking any lock. The lock plan
     // still supplies the device to wait for, but an out-of-range budget is refused before either.
@@ -206,12 +217,15 @@ export async function createRequestExecutionScope(params: {
       locks: executionLocks,
       initialKeys: lockPlan.keys,
     });
+    const dispatchLedger = requestDispatchLedger(scopedReq);
     const { claimAdmission, runtimeBindings } = createRequestDeviceAccess({
       command,
+      dispatchLedger,
       workspace: scopedReq.meta?.cwd ?? process.cwd(),
       stateDir: sessionStore.resolveDaemonStateDir(),
       deviceRuntimeGateway: params.deviceRuntimeGateway,
       platformRequestScope: params.platformRequestScope,
+      daemonPolicy: params.daemonPolicy,
     });
 
     const scope: RequestExecutionScope = {
@@ -250,6 +264,7 @@ export async function createRequestExecutionScope(params: {
             { reason: 'runtime-gateway-missing' },
           );
         }),
+      dispatchLedger,
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
       runAdmitted: async (task) => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
@@ -359,15 +374,17 @@ export async function createRequestExecutionScope(params: {
  */
 function createRequestDeviceAccess(params: {
   command: string;
+  dispatchLedger: RequestDispatchLedger;
   workspace: string;
   stateDir: string;
   deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> | undefined;
   platformRequestScope: PlatformRequestScope | undefined;
+  daemonPolicy: DaemonPolicy | undefined;
 }): {
   claimAdmission: DeviceClaimAdmission | undefined;
   runtimeBindings: RequestRuntimeBindings | undefined;
 } {
-  const { deviceRuntimeGateway, platformRequestScope } = params;
+  const { deviceRuntimeGateway, platformRequestScope, daemonPolicy } = params;
   if (!deviceRuntimeGateway || !platformRequestScope) {
     return { claimAdmission: undefined, runtimeBindings: undefined };
   }
@@ -383,7 +400,11 @@ function createRequestDeviceAccess(params: {
     runtimeBindings: createRequestRuntimeBindings({
       gateway: deviceRuntimeGateway,
       scope: platformRequestScope,
+      dispatchLedger: params.dispatchLedger,
       admitDeviceClaim: claimAdmission.admit,
+      admitDevice: daemonPolicy
+        ? (device) => assertDaemonPolicyAdmitsDevice(daemonPolicy, device)
+        : undefined,
     }),
   };
 }
@@ -460,12 +481,7 @@ function applyRequestCommandDefaults(req: DaemonRequest): DaemonRequest {
 export async function prepareLockedRequestScope(params: {
   scope: RequestExecutionScope;
   sessionStore: SessionStore;
-  trackDownloadableArtifact: (opts: {
-    artifactPath: string;
-    tenantId?: string;
-    artifactType: DaemonArtifactType | undefined;
-    fileName?: string;
-  }) => string;
+  trackDownloadableArtifact: TrackDownloadableArtifact;
 }): Promise<LockedRequestScopeResult> {
   const { scope, sessionStore, trackDownloadableArtifact } = params;
   const logPath = scope.runnerLogPath;
@@ -540,6 +556,7 @@ export async function prepareLockedRequestScope(params: {
       bindDevice: scope.bindDevice,
       inspectFacts: scope.inspectFacts,
       bindExactDevice: scope.bindExactDevice,
+      dispatchLedger: scope.dispatchLedger,
       throwIfCanceled: scope.throwIfCanceled,
       contextFromFlags,
       handlerContextFromFlags: (flags, appBundleId, traceLogPath) =>

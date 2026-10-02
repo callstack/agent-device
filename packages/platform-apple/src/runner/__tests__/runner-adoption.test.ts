@@ -17,6 +17,7 @@ import {
   createRunnerPhaseBudget,
   resolveExpectedRunnerCacheMetadata,
 } from '../runner-xctestrun.ts';
+import { resolveRunnerCacheKey } from '../runner-cache-metadata.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import type { DiagnosticEventInput } from '@agent-device/host-kit/diagnostics';
 import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
@@ -114,6 +115,7 @@ function writeStaleLeaseFor(device: DeviceInfo, overrides: Partial<RunnerLease> 
       runnerPid: 424242,
       port: 50700,
       xctestrunPath: path.join(expectedDerived, 'Build', 'Products', 'env.session.xctestrun'),
+      cacheKey: resolveRunnerCacheKey(mockResolveExpectedRunnerCacheMetadata(device)),
       jsonPath: path.join(expectedDerived, 'Build', 'Products', 'env.session.json'),
     }),
     // A pid+start-time that cannot belong to a live process makes the lease
@@ -194,6 +196,8 @@ test('adoption succeeds for a live, matching, probe-healthy runner', async () =>
   expect(session?.child.pid).toBe(424242);
   expect(session?.sessionId).toBe(lease.sessionId);
   expect(session?.xctestrunArtifact?.reason).toBe('adopted_from_lease');
+  expect(session?.xctestrunArtifact?.cacheKey).toBe(lease.cacheKey);
+  expect(session?.lease?.cacheKey).toBe(lease.cacheKey);
   // Adoption transfers ownership: the lease on disk now belongs to us.
   expect(readStaleRunnerLease(simulator.id)).toBeNull();
 });
@@ -624,3 +628,16 @@ test('the kill switch disables the physical lane too', async () => {
   expect(await tryAdoptRunnerSessionFromLease(physicalCoreDevice, {})).toBeNull();
   expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
 });
+
+test.each([undefined, 'cache-another-xcode'])(
+  'adoption refuses an unverified toolchain (%s) at the same derived path before probing',
+  async (cacheKey) => {
+    mockIsProcessAlive.mockImplementation((pid) => pid === 424242);
+    mockSendRunnerCommandOnce.mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+    writeStaleLease({ cacheKey });
+
+    expect(await tryAdoptRunnerSessionFromLease(simulator, {})).toBeNull();
+    expect(adoptionRefusalReason()).toBe('artifact_fingerprint_mismatch');
+    expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
+  },
+);

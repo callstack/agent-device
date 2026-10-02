@@ -54,8 +54,12 @@ export function bindAndroidApplicationLifecycle(
     resolveOpenTarget: async (input) =>
       await host.androidApplications.resolveOpenTarget(device, input),
     prepareApplicationOpen: async (input) => {
-      await ensureAndroidReady(host, device, { headless: false }, signal);
-      void input;
+      await ensureAndroidReady(
+        host,
+        device,
+        { headless: false, deadlineAtMs: input.execution.startupDeadlineAtMs },
+        signal,
+      );
     },
     openApplication: async (input) => await openAndroidApplication(host, binding, input),
     applyRuntimeHints: async (input) =>

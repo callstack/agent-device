@@ -138,12 +138,40 @@ extension RunnerTests {
 #if !os(tvOS)
         guard !frame.isEmpty else { return }
 #endif
+#if os(iOS)
+        let postEventWaitSelector = NSSelectorFromString("_waitForQuiescenceAsPreEvent:")
+        guard alert.ownerApp.responds(to: postEventWaitSelector) else {
+          outcome = .unsupported(
+            message: "alert activation could not wait for post-event quiescence",
+            hint: "Inspect the current alert before deciding whether to act again."
+          )
+          return
+        }
+        switch synthesizedTapAt(app: alert.ownerApp, x: frame.midX, y: frame.midY, deadline: deadline) {
+        case .performed?:
+          typealias WaitForQuiescence = @convention(c) (NSObject, Selector, Bool) -> Void
+          let waitForQuiescence = unsafeBitCast(
+            alert.ownerApp.method(for: postEventWaitSelector),
+            to: WaitForQuiescence.self
+          )
+          waitForQuiescence(alert.ownerApp, postEventWaitSelector, false)
+          outcome = .performed
+        case .unsupported(let message, _)?:
+          outcome = .unsupported(
+            message: message,
+            hint: "Inspect the current alert before deciding whether to act again."
+          )
+        case nil:
+          break
+        }
+#else
         outcome = activateElement(
           app: alert.ownerApp,
           element: button,
           action: "alert \(action)",
           resolvedFrame: frame
         )
+#endif
       }
     }
     return outcome

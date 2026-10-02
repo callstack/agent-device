@@ -14,7 +14,6 @@ import { installProviderDeviceAdmission } from '../../provider-device-admission.
 // installs it from root composition, and these tests compose it the same way.
 installProviderDeviceAdmission({ isActive: isActiveProviderDevice });
 import { AppError } from '@agent-device/kernel/errors';
-import { buildInteractionSurfaceSignature } from '../../interaction-outcome-policy.ts';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { snapshotCliOutput } from '../../../commands/capture/output.ts';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
@@ -139,7 +138,7 @@ function assertAndroidTimeoutEvidencePayload(evidence: unknown) {
   expect(record.overlayRefs).toEqual([expect.objectContaining({ ref: 'e1', label: 'Continue' })]);
 }
 
-test('snapshot annotations survive pending interaction capture into CLI JSON', async () => {
+test('snapshot annotations survive a deferred post-gesture capture into CLI JSON', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-interaction-annotation-bundle';
   const session = makeSession(sessionName, androidDevice);
@@ -164,15 +163,8 @@ test('snapshot annotations survive pending interaction capture into CLI JSON', a
     },
   ];
   const snapshotQuality = { state: 'healthy', backend: 'tree' };
-  session.pendingInteractionOutcome = {
-    action: 'click',
-    command: 'press',
-    positionals: ['100', '144'],
-    flags: { platform: 'android' },
-    markedAt: Date.now(),
-    attemptsRemaining: 2,
-    preSignature: buildInteractionSurfaceSignature(baselineNodes),
-  };
+  session.snapshot = { nodes: baselineNodes, createdAt: Date.now(), backend: 'android' };
+  session.postGestureStabilization = { action: 'swipe', positionals: [], markedAt: Date.now() };
   sessionStore.set(sessionName, session);
 
   legacyDispatchCapture.mockResolvedValue({

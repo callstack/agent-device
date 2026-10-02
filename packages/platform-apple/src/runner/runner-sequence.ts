@@ -1,7 +1,12 @@
 import type { PressPointOptions } from '@agent-device/contracts/interactor-types';
 import { pressJitter } from '@agent-device/contracts/touch-runtime';
 import { runnerSynthesizesTap, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError, toAppErrorCode } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  discloseDispatch,
+  discloseDispatchAfterSteps,
+  toAppErrorCode,
+} from '@agent-device/kernel/errors';
 import type { RunnerCommand, RunnerSequenceStep } from './runner-contract.ts';
 
 export const SEQUENCEABLE_RUNNER_STEP_KINDS = ['tap', 'doubleTap', 'longPress'] as const;
@@ -55,8 +60,16 @@ function isSequenceableKind(kind: unknown): kind is SequenceableRunnerStepKind {
   );
 }
 
+/** A sequence the daemon refuses before sending it: nothing reached the runner. */
+function invalidSequence(message: string, details: Record<string, unknown>): AppError {
+  return discloseDispatch(
+    new AppError('INVALID_ARGS', message, { ...details, reason: 'runner_sequence_invalid' }),
+    'no',
+  );
+}
+
 function invalidStep(index: number, kind: unknown, message: string): AppError {
-  return new AppError('INVALID_ARGS', message, {
+  return invalidSequence(message, {
     stepIndex: index,
     kind: typeof kind === 'string' ? kind : undefined,
   });
@@ -71,13 +84,12 @@ function invalidStep(index: number, kind: unknown, message: string): AppError {
  */
 export function validateRunnerSequenceSteps(steps: RunnerSequenceStep[]): void {
   if (!Array.isArray(steps) || steps.length === 0) {
-    throw new AppError('INVALID_ARGS', 'sequence requires at least one step', {
+    throw invalidSequence('sequence requires at least one step', {
       stepCount: Array.isArray(steps) ? steps.length : 0,
     });
   }
   if (steps.length > MAX_RUNNER_SEQUENCE_STEPS) {
-    throw new AppError(
-      'INVALID_ARGS',
+    throw invalidSequence(
       `sequence accepts at most ${MAX_RUNNER_SEQUENCE_STEPS} steps, received ${steps.length}`,
       { stepCount: steps.length, maxSteps: MAX_RUNNER_SEQUENCE_STEPS },
     );
@@ -147,17 +159,22 @@ export async function runApplePressSeries(
   appBundleId: string | undefined,
   runCommand: (command: RunnerCommand) => Promise<Record<string, unknown>>,
 ): Promise<Record<string, unknown>> {
-  const chunks = chunkRunnerSequenceStepsByBudget(
+  const commands = chunkRunnerSequenceStepsByBudget(
     buildPressSteps(device, point, options),
     MAX_RUNNER_SEQUENCE_STEPS,
-  );
+  ).map((chunk) => buildRunnerSequenceCommand(chunk, appBundleId));
   let first: Record<string, unknown> | undefined;
   let last: Record<string, unknown> | undefined;
   let completedSteps = 0;
   const sequenceResults: unknown[] = [];
   let stepOffset = 0;
-  for (const chunk of chunks) {
-    const result = await runCommand(buildRunnerSequenceCommand(chunk, appBundleId));
+  for (const command of commands) {
+    let result: Record<string, unknown>;
+    try {
+      result = await runCommand(command);
+    } catch (error) {
+      throw discloseDispatchAfterSteps(error, completedSteps);
+    }
     first ??= result;
     last = result;
     let parsed;
@@ -165,11 +182,14 @@ export async function runApplePressSeries(
       parsed = parseRunnerSequenceResult(result);
     } catch (error) {
       // The runner reports an index local to its chunk; callers need the global series index.
-      throw remapSequenceErrorStepIndex(error, stepOffset);
+      throw discloseDispatchAfterSteps(
+        remapSequenceErrorStepIndex(error, stepOffset),
+        completedSteps + chunkCompletedSteps(error),
+      );
     }
     completedSteps += parsed.completedSteps;
     sequenceResults.push(...parsed.results);
-    stepOffset += chunk.length;
+    stepOffset += command.steps?.length ?? 0;
   }
   // Preserve the first response's acquisition frame and the last response's gesture completion.
   return {
@@ -230,6 +250,12 @@ function buildPressSteps(
         : {}),
     };
   });
+}
+
+/** The inputs a failed chunk completed before its failing step, as the runner reported them. */
+function chunkCompletedSteps(error: unknown): number {
+  const completed = error instanceof AppError ? error.details?.completedSteps : undefined;
+  return typeof completed === 'number' ? completed : 0;
 }
 
 function remapSequenceErrorStepIndex(error: unknown, stepOffset: number): unknown {

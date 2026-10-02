@@ -76,7 +76,7 @@ export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
   'packages/contracts/src/request-envelope.ts#InternalRequestOptions':
     'CLI-side option projection; reaches the peer inside DaemonRequest.input/flags (Record<string, unknown>, both listed), and ADR 0006 calls new flags additive.',
   'packages/contracts/src/command-flags.ts#CommandFlags':
-    'CLI-side flag vocabulary; reaches the peer inside DaemonRequest.flags (Record<string, unknown>, listed), and ADR 0006 calls new flags additive.',
+    'CLI-side flag vocabulary; reaches the peer inside DaemonRequest.flags (Record<string, unknown>, listed), and ADR 0006 calls new flags additive. Removing a flag is covered too: flags travel as an untyped record, so an older peer ignores or rejects an unknown key.',
 };
 
 export function isExternalWireSpecifier(specifier: string): boolean {

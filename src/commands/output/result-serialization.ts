@@ -132,21 +132,28 @@ export function serializeOpenResult(result: AppOpenResult): Record<string, unkno
     {
       session: result.session,
       ...(result.warnings?.length ? { warnings: result.warnings } : {}),
-      ...(result.sessionStateDir ? { sessionStateDir: result.sessionStateDir } : {}),
-      ...(result.runnerLogPath ? { runnerLogPath: result.runnerLogPath } : {}),
-      ...(result.requestLogPath ? { requestLogPath: result.requestLogPath } : {}),
-      ...(result.eventLogPath ? { eventLogPath: result.eventLogPath } : {}),
+      ...serializeOpenSessionPaths(result),
       ...(result.appName ? { appName: result.appName } : {}),
       ...(result.appBundleId ? { appBundleId: result.appBundleId } : {}),
       ...(result.selection ? { selection: result.selection } : {}),
       ...(result.startup ? { startup: result.startup } : {}),
       ...(result.runtime ? { runtime: result.runtime } : {}),
       ...(result.device ? serializeSessionDevice(result.device) : {}),
+      ...(result.launchConfirmation ? { launchConfirmation: result.launchConfirmation } : {}),
       ...(result.snapshot ? { snapshot: result.snapshot } : {}),
       ...(result.initialSnapshotError ? { initialSnapshotError: result.initialSnapshotError } : {}),
     },
     target ? `Opened: ${target}` : 'Opened',
   );
+}
+
+function serializeOpenSessionPaths(result: AppOpenResult): Record<string, string> {
+  return {
+    ...(result.sessionStateDir ? { sessionStateDir: result.sessionStateDir } : {}),
+    ...(result.runnerLogPath ? { runnerLogPath: result.runnerLogPath } : {}),
+    ...(result.requestLogPath ? { requestLogPath: result.requestLogPath } : {}),
+    ...(result.eventLogPath ? { eventLogPath: result.eventLogPath } : {}),
+  };
 }
 
 export function serializeCloseResult(

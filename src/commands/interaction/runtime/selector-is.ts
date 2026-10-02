@@ -16,7 +16,8 @@ import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { SelectorTarget } from '@agent-device/contracts/interaction';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import type { RuntimeCommand } from '../../runtime-types.ts';
-import { assertExpectedResolvedTarget, type ExpectedResolvedTarget } from './resolution.ts';
+import { assertExpectedResolvedTarget } from './replay-target-guard.ts';
+import type { ExpectedResolvedTarget } from './interaction-resolution-request.ts';
 import {
   type CapturedSnapshot,
   type SelectorSnapshotOptions,

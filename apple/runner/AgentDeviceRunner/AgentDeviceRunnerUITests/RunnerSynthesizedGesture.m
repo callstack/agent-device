@@ -75,7 +75,13 @@ static NSString * _Nullable RunnerTrySynthesizeDrag(
   NSString *recordName,
   RunnerDragPointerPathFactory pathFactory
 );
-static NSString * _Nullable RunnerTrySynthesizeTap(id application, id _Nullable resolvedWindow, CGPoint point);
+static RunnerTapSynthesisStatus RunnerTrySynthesizeTap(
+  id application,
+  id _Nullable resolvedWindow,
+  CGPoint point,
+  NSDate * _Nullable deadline,
+  NSString * _Nullable * _Nullable errorMessage
+);
 // XCTest's proven swipe profile reaches the endpoint in 100 ms, then holds for the planned
 // fling duration. Fast movement is what lets UIKit distinguish a fling from a timed pan.
 static const NSTimeInterval RunnerSwipeMovementDurationSeconds = 0.1;
@@ -132,14 +138,20 @@ static id RunnerTapPointerPath(
   }
 }
 
-+ (NSString * _Nullable)synthesizeTapWithApplication:(id)application
++ (RunnerTapSynthesisStatus)synthesizeTapWithApplication:(id)application
                                       resolvedWindow:(id _Nullable)resolvedWindow
                                                    x:(double)x
-                                                   y:(double)y {
+                                                   y:(double)y
+                                            deadline:(NSDate * _Nullable)deadline
+                                        errorMessage:(NSString * _Nullable * _Nullable)errorMessage {
+  if (errorMessage != NULL) *errorMessage = nil;
   @try {
-    return RunnerTrySynthesizeTap(application, resolvedWindow, CGPointMake(x, y));
+    return RunnerTrySynthesizeTap(application, resolvedWindow, CGPointMake(x, y), deadline, errorMessage);
   } @catch (NSException *exception) {
-    return RunnerFormatXCTestException(exception, @"private XCTest event synthesis failed");
+    if (errorMessage != NULL) {
+      *errorMessage = RunnerFormatXCTestException(exception, @"private XCTest event synthesis failed");
+    }
+    return RunnerTapSynthesisStatusFailed;
   }
 }
 
@@ -227,7 +239,13 @@ static NSString * _Nullable RunnerTrySynthesizeDrag(
   return RunnerSynthesizeEventRecord(&bridge, record);
 }
 
-static NSString * _Nullable RunnerTrySynthesizeTap(id application, id _Nullable resolvedWindow, CGPoint point) {
+static RunnerTapSynthesisStatus RunnerTrySynthesizeTap(
+  id application,
+  id _Nullable resolvedWindow,
+  CGPoint point,
+  NSDate * _Nullable deadline,
+  NSString * _Nullable * _Nullable errorMessage
+) {
   RunnerGestureEventBridge bridge;
   id record = nil;
   NSString *error = RunnerCreateEventRecord(
@@ -237,14 +255,23 @@ static NSString * _Nullable RunnerTrySynthesizeTap(id application, id _Nullable 
     &bridge,
     &record
   );
-  if (error != nil) return error;
+  if (error != nil) {
+    if (errorMessage != NULL) *errorMessage = error;
+    return RunnerTapSynthesisStatusFailed;
+  }
 
   id path = RunnerTapPointerPath(&bridge, point);
   if (path == nil) {
-    return @"private XCTest event synthesis failed: could not create pointer path";
+    if (errorMessage != NULL) *errorMessage = @"private XCTest event synthesis failed: could not create pointer path";
+    return RunnerTapSynthesisStatusFailed;
   }
   ((RunnerMsgSendAddPath)objc_msgSend)(record, bridge.core.addPathSelector, path);
-  return RunnerSynthesizeEventRecord(&bridge, record);
+  if (deadline != nil && deadline.timeIntervalSinceNow <= 0) {
+    return RunnerTapSynthesisStatusDeadlineExceeded;
+  }
+  error = RunnerSynthesizeEventRecord(&bridge, record);
+  if (errorMessage != NULL) *errorMessage = error;
+  return error == nil ? RunnerTapSynthesisStatusSucceeded : RunnerTapSynthesisStatusFailed;
 }
 
 static NSString * _Nullable RunnerResolveGestureEventBridge(

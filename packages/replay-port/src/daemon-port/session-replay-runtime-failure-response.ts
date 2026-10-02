@@ -122,6 +122,7 @@ function readStringDetail(
 }
 
 const SAFE_CAUSE_DETAIL_KEYS = [
+  'readiness',
   'reason',
   'recovery',
   'retriable',

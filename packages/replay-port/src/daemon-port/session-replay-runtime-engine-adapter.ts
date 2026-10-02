@@ -17,8 +17,17 @@ import {
 import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
 import { withReplayFailureDiagnostics } from './session-replay-runtime-failure.ts';
 
-import { invokeReplayAction } from './session-replay-action-runtime.ts';
-import type { AdReplayStepFailure, AdReplayStepRuntime } from '@agent-device/ad-replay';
+import {
+  invokeReplayAction,
+  replayStepReadinessSchedule,
+} from './session-replay-action-runtime.ts';
+import type {
+  AdReplayStepFailure,
+  AdReplayStepRuntime,
+  AdReplayTargetObservation,
+} from '@agent-device/ad-replay';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { ObservationEvidence } from '@agent-device/capture-kit/observe-until';
 import { collectReplayActionArtifactPaths } from '@agent-device/replay-port/session-replay-runtime-artifacts';
 import {
   applyReplayDispatchGuard,
@@ -79,7 +88,7 @@ import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
  * engine itself never touches it.
  *
  * `lastObservation` is the analogous side-map for `buildTargetBindingFailure`
- * — it reuses the SAME capture `captureObservation` just took (for its
+ * — it reuses the SAME capture `observeTarget` last took (for its
  * `screen`), mirroring the pre-R3 code's single-capture-serves-both-paths
  * invariant instead of taking a second, possibly-different snapshot.
  *
@@ -88,14 +97,14 @@ import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
  * `createAdReplayStepRuntime` call covers every step), so an un-reset
  * `lastObservation` would silently carry a PREVIOUS step's capture into a
  * step that somehow reached `buildTargetBindingFailure` without its own
- * `captureObservation` call first — the `?? { reason: 'observation-missing'
+ * `observeTarget` call first — the `?? { reason: 'observation-missing'
  * }` fallback below exists to name that condition, but could never actually
  * fire for it; it would instead attach a stale, wrong-step screen. `armStep`
  * runs exactly once per step, before any of this step's capabilities do —
  * clearing `lastObservation` there makes the fallback message correct for
  * ANY future call ordering, not just the current one where every
  * `buildTargetBindingFailure` call site happens to be preceded by this same
- * step's own `captureObservation`.
+ * step's own `observeTarget`.
  */
 export function createAdReplayStepRuntime(params: {
   ctx: ReplayStepContext;
@@ -115,6 +124,8 @@ export function createAdReplayStepRuntime(params: {
   const { ctx, req, artifactPaths, onStep, armSaveScript } = params;
   let lastResponse: DaemonResponse | undefined;
   let lastObservation: DivergenceObservation | undefined;
+  /** This step's pre-dispatch readiness wait, when the gate polled more than once. */
+  let gateWait: GateReadinessWait | undefined;
 
   /**
    * The `TargetBindingDivergenceContext` every wire-builder needs — built
@@ -157,6 +168,31 @@ export function createAdReplayStepRuntime(params: {
     );
   };
 
+  // #1385: the pre-dispatch gate a step right after `open --relaunch` can
+  // race — the app may still be launching/mounting when this capture lands,
+  // producing a transient `capture-failed` / `sparse-snapshot` verdict that is
+  // not a real divergence. Bounded retry (`retryLaunchRace`) rides out that
+  // transition instead of failing closed on the first unlucky capture.
+  const captureTargetObservation = async (
+    action: SessionAction,
+  ): Promise<DivergenceObservation> => {
+    const session = ctx.observationStore.get();
+    if (!session) {
+      return {
+        state: 'unavailable',
+        reason: 'no-session',
+        hint: 'The session closed before a screen could be captured to verify the recorded target.',
+      };
+    }
+    return await captureDivergenceObservation({
+      session,
+      observationStore: ctx.observationStore,
+      logPath: ctx.logPath,
+      action,
+      retryLaunchRace: true,
+    });
+  };
+
   const runtime: AdReplayStepRuntime = {
     beginTargetVerification(action, resolvedAction, _index, targetRole) {
       return resolveTargetVerificationEntry({
@@ -167,46 +203,60 @@ export function createAdReplayStepRuntime(params: {
       });
     },
 
-    async captureObservation(action, _index, options) {
-      const session = ctx.observationStore.get();
-      // #1385: this is the pre-dispatch gate a step right after `open
-      // --relaunch` can race — the app may still be launching/mounting when
-      // this capture lands, producing a transient `capture-failed` /
-      // `sparse-snapshot` verdict that is not a real divergence. Bounded
-      // retry (`retryLaunchRace`, engine-driven) rides out that transition
-      // instead of failing closed on the first unlucky capture.
-      const observation: DivergenceObservation = session
-        ? await captureDivergenceObservation({
-            session,
-            observationStore: ctx.observationStore,
-            logPath: ctx.logPath,
+    async observeTarget({ action, token }) {
+      const observeOnce = async (): Promise<AdReplayTargetObservation> => {
+        const observation = await captureTargetObservation(action);
+        lastObservation = observation;
+        if (observation.state !== 'available') {
+          return { state: 'unavailable', reason: observation.reason, hint: observation.hint };
+        }
+        const session = ctx.sessionStore.get();
+        return {
+          state: 'classified',
+          classification: classifyPreDispatchTarget({
+            // An available capture implies an active session, and the engine
+            // only calls this for an action carrying `targetEvidence`.
+            recorded: action.targetEvidence!,
+            token,
             action,
-            retryLaunchRace: options.retryLaunchRace,
-          })
-        : {
-            state: 'unavailable',
-            reason: 'no-session',
-            hint: 'The session closed before a screen could be captured to verify the recorded target.',
-          };
-      lastObservation = observation;
-      return observation.state === 'available'
-        ? { state: 'available', nodes: observation.nodes }
-        : { state: 'unavailable', reason: observation.reason, hint: observation.hint };
-    },
-
-    classifyTarget({ action, token, nodes }) {
-      const session = ctx.sessionStore.get();
-      return classifyPreDispatchTarget({
-        // Only ever called right after a successful `captureObservation`,
-        // which itself only reaches `state: 'available'` when a session is
-        // active — `action.targetEvidence`/`session` are always defined here
-        // in practice.
-        recorded: action.targetEvidence!,
-        token,
-        action,
-        nodes: [...nodes],
-        platform: session!.device.platform,
+            nodes: [...observation.nodes],
+            platform: session!.device.platform,
+          }),
+        };
+      };
+      // The gate waits only where the dispatch would: a readiness-budgeted
+      // command resolving a selector (a `@ref` resolves without a wait).
+      const readiness = token.startsWith('@')
+        ? undefined
+        : await replayStepReadinessSchedule(ctx.replayReq.flags, action);
+      if (!readiness) return await observeOnce();
+      const { observeUntil } = await import('@agent-device/capture-kit/observe-until');
+      const observed = await observeUntil<AdReplayTargetObservation, AdReplayTargetObservation>({
+        capture: observeOnce,
+        verdict: (latest) =>
+          isTargetNotRenderedYet(latest) ? { kind: 'continue' } : { kind: 'done', result: latest },
+        schedule: readiness,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+        ...(ctx.dependencies.clock ? { clock: ctx.dependencies.clock } : {}),
       });
+      if (observed.polls.length > 1) {
+        gateWait = {
+          remainingBudgetMs: Math.max(0, readiness.budgetMs - budgetSpentMs(observed)),
+          readiness: {
+            polls: observed.polls.length,
+            waitedMs: observed.waitedMs,
+            end: observed.kind,
+          },
+        };
+        emitDiagnostic({
+          level: 'debug',
+          phase: 'interaction_target_readiness',
+          data: { ...gateWait.readiness, command: action.command },
+        });
+      }
+      if (observed.kind === 'done') return observed.result;
+      if (observed.last !== undefined) return observed.last;
+      throw observed.kind === 'expired' ? observed.lastError : observed.error;
     },
 
     // `_stepArtifactPaths` (the pre-step snapshot) is unused here — dispatch
@@ -215,6 +265,11 @@ export function createAdReplayStepRuntime(params: {
     async dispatchStep(action, resolvedAction, index, _stepArtifactPaths, guard) {
       const sourceLine = ctx.actionLines[index] ?? 1;
       const response = await invokeReplayAction({
+        ...(gateWait
+          ? {
+              readinessTimeoutMs: gateWait.remainingBudgetMs,
+            }
+          : {}),
         req: applyReplayDispatchGuard(ctx.replayReq, guard),
         sessionName: ctx.sessionName,
         action,
@@ -263,7 +318,11 @@ export function createAdReplayStepRuntime(params: {
         evidence,
         observation,
       );
-      return recordFailure(response);
+      return recordFailure(
+        evidence.kind === 'selector-miss' && gateWait
+          ? withReadinessDetail(response, gateWait.readiness)
+          : response,
+      );
     },
 
     async buildPostDispatchTargetBindingFailure(
@@ -316,6 +375,7 @@ export function createAdReplayStepRuntime(params: {
       // capabilities — the natural per-step boundary to clear the previous
       // step's capture (see this factory's own header).
       lastObservation = undefined;
+      gateWait = undefined;
       armSaveScript();
     },
     isRepairArmed: () => ctx.coordinator.view()?.repairBoundary !== undefined,
@@ -452,4 +512,38 @@ function readSessionSnapshotSamplesSince(
   start: number,
 ): SnapshotTimingSample[] {
   return sessionStore.get()?.snapshotDiagnostics?.samples.slice(start) ?? [];
+}
+
+/** A selector miss on a readiness-budgeted step: the target may still be rendering. */
+function isTargetNotRenderedYet(observation: AdReplayTargetObservation): boolean {
+  return (
+    observation.state === 'classified' &&
+    !observation.classification.verified &&
+    observation.classification.kind === 'selector-miss'
+  );
+}
+
+type GateReadinessWait = {
+  /** The step's readiness budget the gate left for the dispatch. */
+  remainingBudgetMs: number;
+  /** The same evidence a dispatched readiness wait reports (`SelectorReadinessDetails`). */
+  readiness: { polls: number; waitedMs: number; end: string };
+};
+
+/** The budget a `budgetFrom: 'first-capture'` wait spent: its time after the first capture ended. */
+function budgetSpentMs(observed: ObservationEvidence): number {
+  const first = observed.polls[0];
+  return first ? observed.waitedMs - (first.startedMs + first.durationMs) : 0;
+}
+
+/** Carries the gate's wait where a dispatched step's target-not-found failure carries its own. */
+function withReadinessDetail(
+  response: DaemonResponse,
+  readiness: GateReadinessWait['readiness'],
+): DaemonResponse {
+  if (response.ok) return response;
+  return {
+    ...response,
+    error: { ...response.error, details: { ...response.error.details, readiness } },
+  };
 }

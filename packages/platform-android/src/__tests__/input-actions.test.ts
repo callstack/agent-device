@@ -6,6 +6,7 @@ import {
   longPressAndroid,
   pressAndroidEnter,
   pressAndroidTvRemote,
+  probeAndroidDisplayRotation,
   scrollAndroid,
   setAndroidOrientation,
 } from '../input-actions.ts';
@@ -457,9 +458,10 @@ test('a display probe that hangs for the whole budget ends the settle as a failu
 
 test('a display probe that exits non-zero fails the settle instead of passing as no field', async () => {
   await withFakeAdb(
+    // A failed read that still printed the requested index must not confirm the rotation.
     (args) =>
       args[1] === 'dumpsys'
-        ? { stdout: '', stderr: 'dumpsys: permission denied', exitCode: 1 }
+        ? { stdout: '  mCurrentOrientation=1\n', stderr: 'dumpsys: permission denied', exitCode: 1 }
         : undefined,
     async ({ calls, device }) => {
       await assert.rejects(
@@ -468,6 +470,7 @@ test('a display probe that exits non-zero fails the settle instead of passing as
       );
       assert.equal(calls.filter((call) => call[1] === 'dumpsys').length, 1);
     },
+    { returnFailedResults: true },
   );
 });
 
@@ -480,4 +483,66 @@ test('setAndroidOrientation leaves a display that reports no rotation to the set
       DISPLAY_READ,
     ]);
   });
+});
+
+test('probeAndroidDisplayRotation reads the rotation of the only display', async () => {
+  await withFakeAdb(displayReporting(['3']), async ({ device }) => {
+    const rotation = await probeAndroidDisplayRotation(device, {
+      timeoutMs: 2_000,
+      signal: new AbortController().signal,
+    });
+    assert.equal(rotation, 'landscape-right');
+  });
+});
+
+test('probeAndroidDisplayRotation reports none when the device has more than one display', async () => {
+  // Measured on a foldable emulator: two built-in displays, one index each, and screencap
+  // defaulting to whichever display it finds first.
+  await withFakeAdb(
+    (args) =>
+      args[1] === 'dumpsys' ? '  mCurrentOrientation=0\n  mCurrentOrientation=1\n' : undefined,
+    async ({ device }) => {
+      const rotation = await probeAndroidDisplayRotation(device, {
+        timeoutMs: 2_000,
+        signal: new AbortController().signal,
+      });
+      assert.equal(rotation, undefined);
+    },
+  );
+});
+
+test('probeAndroidDisplayRotation hands its budget and abort signal to the adb seam', async () => {
+  const controller = new AbortController();
+  const seen: Array<{ timeoutMs?: number; signal?: AbortSignal }> = [];
+  await withFakeAdb(
+    (args, options) => {
+      if (args[1] === 'dumpsys')
+        seen.push({ timeoutMs: options?.timeoutMs, signal: options?.signal });
+      return displayReporting(['0'])(args);
+    },
+    async ({ device }) => {
+      await probeAndroidDisplayRotation(device, { timeoutMs: 2_000, signal: controller.signal });
+    },
+  );
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0]!.timeoutMs, 2_000);
+  assert.equal(seen[0]!.signal, controller.signal);
+});
+
+test('probeAndroidDisplayRotation reports none when the display read fails', async () => {
+  await withFakeAdb(
+    // A failed read that still printed an index must not be trusted.
+    (args) =>
+      args[1] === 'dumpsys'
+        ? { stdout: '  mCurrentOrientation=1\n', stderr: 'denied', exitCode: 1 }
+        : undefined,
+    async ({ device }) => {
+      const rotation = await probeAndroidDisplayRotation(device, {
+        timeoutMs: 2_000,
+        signal: new AbortController().signal,
+      });
+      assert.equal(rotation, undefined);
+    },
+    { returnFailedResults: true },
+  );
 });

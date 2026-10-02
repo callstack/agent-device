@@ -3,7 +3,8 @@
  * that piggyback on it. Session ownership itself — starting, reusing, retiring — belongs to
  * `snapshot-helper-session-lifecycle.ts`, which this module acquires through.
  */
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
+import { isAdbHostRefusal } from './adb-failure.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { readAndroidCaptureFailureReason } from '@agent-device/contracts/android-snapshot-quality';
 import type {
@@ -89,9 +90,25 @@ async function captureFromAndroidSnapshotHelperSession(params: {
 // (a second instrumentation for the helper package would force-stop the session that has it). They
 // never start a session: without one, callers use the same helper APK through a one-shot
 // `am instrument` run instead.
+export type AndroidTouchHelperAction = 'gesture' | 'viewport';
+
+/**
+ * Only a gesture injects input, so only its failures say whether input reached the device. Its
+ * failure is `unknown` unless the host adb refused the launch: an `ok=false` result carries the
+ * thrown `errorType` but no count of events injected before the throw, so a parse refusal and a
+ * mid-injection failure read alike.
+ */
+export function discloseHelperTouchDispatch(
+  action: AndroidTouchHelperAction,
+  error: unknown,
+): unknown {
+  if (action !== 'gesture' || !(error instanceof AppError)) return error;
+  return discloseDispatch(error, isAdbHostRefusal(error) ? 'no' : 'unknown');
+}
+
 export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
   deviceKey: string;
-  action: 'gesture' | 'viewport';
+  action: AndroidTouchHelperAction;
   helper: AndroidSnapshotHelperSessionHelperIdentity;
   payloadBase64?: string;
   timeoutMs: number;
@@ -131,14 +148,17 @@ export async function runAndroidSnapshotHelperSessionTouchCommand(params: {
     // Transport-level failure: the session process can no longer be trusted. Stop it so the next
     // command runs against a fresh helper instead of a wedged socket.
     await stopAndroidSnapshotHelperSession(params.deviceKey);
-    throw error;
+    throw discloseHelperTouchDispatch(params.action, error);
   }
   if (headers.ok !== 'true') {
     // The helper ran and reported a structured failure; the session itself stays healthy.
-    throw new AppError(
-      'COMMAND_FAILED',
-      headers.message || headers.errorType || `Android automation helper ${params.action} failed`,
-      { errorType: headers.errorType, helper: headers },
+    throw discloseHelperTouchDispatch(
+      params.action,
+      new AppError(
+        'COMMAND_FAILED',
+        headers.message || headers.errorType || `Android automation helper ${params.action} failed`,
+        { errorType: headers.errorType, helper: headers },
+      ),
     );
   }
   return headers;

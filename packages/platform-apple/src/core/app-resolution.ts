@@ -2,7 +2,8 @@ import path from 'node:path';
 import { hostFileStat } from '@agent-device/host-kit/host-file';
 import { fileURLToPath } from 'node:url';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
+import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import {
   createAppResolutionCache,
@@ -16,6 +17,7 @@ import { runAppleToolCommand } from './tool-provider.ts';
 import { runSimctlForDevice } from './simctl.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
+import { Deadline } from '@agent-device/host-kit/retry';
 
 const ALIASES: Record<string, string> = {
   settings: 'com.apple.Preferences',
@@ -168,20 +170,30 @@ type SimulatorAppMetadata = {
   applicationType?: string;
 };
 
+/**
+ * The installed app that owns `url`'s scheme, when exactly one does. `timeoutMs` is one deadline
+ * shared by the app listing and every Info.plist read; a spawn it cuts short or `signal` aborts
+ * rejects the lookup.
+ */
 export async function resolveIosSimulatorDeepLinkBundleId(
   device: DeviceInfo,
   url: string,
+  options: SimulatorAppListOptions = {},
 ): Promise<string | undefined> {
   if (!isIosFamily(device) || device.kind !== 'simulator') return undefined;
   const scheme = parseUrlScheme(url);
   if (!scheme) return undefined;
 
-  const apps = await listSimulatorAppMetadata(device);
+  const remaining = remainingLookupBudget(options);
+  const apps = await listSimulatorAppMetadata(device, remaining());
   const matches: SimulatorAppMetadata[] = [];
   for (const app of apps) {
     if (app.bundleId.startsWith(AGENT_DEVICE_RUNNER_BUNDLE_PREFIX)) continue;
     if (!app.path) continue;
-    const schemes = await readIosSimulatorAppUrlSchemes(path.join(app.path, 'Info.plist'));
+    const schemes = await readIosSimulatorAppUrlSchemes(
+      path.join(app.path, 'Info.plist'),
+      remaining(),
+    );
     if (schemes.has(scheme)) {
       matches.push(app);
     }
@@ -191,6 +203,16 @@ export async function resolveIosSimulatorDeepLinkBundleId(
   if (userMatches.length === 1) return userMatches[0]?.bundleId;
   if (userMatches.length > 1) return undefined;
   return matches.length === 1 ? matches[0]?.bundleId : undefined;
+}
+
+function remainingLookupBudget({
+  timeoutMs,
+  signal,
+}: SimulatorAppListOptions): () => SimulatorAppListOptions {
+  const abortable = signal ? { signal } : {};
+  if (timeoutMs === undefined) return () => abortable;
+  const deadline = Deadline.fromTimeoutMs(timeoutMs);
+  return () => ({ timeoutMs: Math.max(1, deadline.remainingMs()), ...abortable });
 }
 
 function parseUrlScheme(url: string): string | undefined {
@@ -209,10 +231,11 @@ export async function listIosApps(device: DeviceInfo, filter: AppsFilter): Promi
   return await resolveIosPhysicalDeviceControl(device).listApps(device, filter);
 }
 
-type SimulatorAppListOptions = {
+type SimulatorAppListOptions = Readonly<{
   /** Unset (default) preserves prior unbounded behavior for normal command flow. */
   timeoutMs?: number;
-};
+  signal?: AbortSignal;
+}>;
 
 async function listSimulatorApps(
   device: DeviceInfo,
@@ -225,69 +248,31 @@ async function listSimulatorApps(
   }));
 }
 
+type SimulatorAppListRecord = Record<
+  string,
+  {
+    ApplicationType?: string;
+    Bundle?: string;
+    CFBundleDisplayName?: string;
+    CFBundleName?: string;
+    Path?: string;
+  }
+>;
+
 async function listSimulatorAppMetadata(
   device: DeviceInfo,
   options?: SimulatorAppListOptions,
 ): Promise<SimulatorAppMetadata[]> {
+  const remaining = remainingLookupBudget(options ?? {});
   const result = await runSimctlForDevice(device, ['listapps', device.id], {
     allowFailure: true,
-    timeoutMs: options?.timeoutMs,
+    ...remaining(),
   });
-  const stdout = result.stdout as string;
-  const trimmed = stdout.trim();
-  if (!trimmed) return [];
+  const trimmed = (result.stdout as string).trim();
+  if (!trimmed.startsWith('{')) return [];
 
-  let parsed: Record<
-    string,
-    {
-      ApplicationType?: string;
-      Bundle?: string;
-      CFBundleDisplayName?: string;
-      CFBundleName?: string;
-      Path?: string;
-    }
-  > | null = null;
-  if (trimmed.startsWith('{')) {
-    try {
-      parsed = JSON.parse(trimmed) as Record<
-        string,
-        {
-          ApplicationType?: string;
-          Bundle?: string;
-          CFBundleDisplayName?: string;
-          CFBundleName?: string;
-          Path?: string;
-        }
-      >;
-    } catch {
-      parsed = null;
-    }
-  }
-
-  if (!parsed && trimmed.startsWith('{')) {
-    try {
-      const converted = await runAppleToolCommand('plutil', ['-convert', 'json', '-o', '-', '-'], {
-        allowFailure: true,
-        stdin: trimmed,
-        timeoutMs: options?.timeoutMs,
-      });
-      if (converted.exitCode === 0 && converted.stdout.trim().startsWith('{')) {
-        parsed = JSON.parse(converted.stdout) as Record<
-          string,
-          {
-            ApplicationType?: string;
-            Bundle?: string;
-            CFBundleDisplayName?: string;
-            CFBundleName?: string;
-            Path?: string;
-          }
-        >;
-      }
-    } catch {
-      parsed = null;
-    }
-  }
-
+  const parsed =
+    parseSimulatorAppList(trimmed) ?? (await convertSimulatorAppList(trimmed, remaining()));
   if (!parsed) return [];
   return Object.entries(parsed).map(([bundleId, info]) => {
     const appPath = resolveSimulatorAppPath(info);
@@ -298,6 +283,36 @@ async function listSimulatorAppMetadata(
       ...(info.ApplicationType ? { applicationType: info.ApplicationType } : {}),
     };
   });
+}
+
+function parseSimulatorAppList(text: string): SimulatorAppListRecord | null {
+  try {
+    return JSON.parse(text) as SimulatorAppListRecord;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `simctl listapps` prints an OpenStep plist on some Xcode versions; `plutil` converts it. A
+ * timeout or abort of that conversion is the lookup's failure, not an empty app list.
+ */
+async function convertSimulatorAppList(
+  text: string,
+  options: SimulatorAppListOptions,
+): Promise<SimulatorAppListRecord | null> {
+  try {
+    const converted = await runAppleToolCommand('plutil', ['-convert', 'json', '-o', '-', '-'], {
+      allowFailure: true,
+      stdin: text,
+      ...options,
+    });
+    if (converted.exitCode !== 0 || !converted.stdout.trim().startsWith('{')) return null;
+    return JSON.parse(converted.stdout) as SimulatorAppListRecord;
+  } catch (error) {
+    if (isCommandTimeoutError(error) || isRequestCanceledError(error)) throw error;
+    return null;
+  }
 }
 
 function resolveSimulatorAppPath(info: { Bundle?: string; Path?: string }): string | undefined {
@@ -322,7 +337,10 @@ const iosSimulatorAppUrlSchemeMemo = createTtlMemo<string, Set<string>>({
   scheduleExpiry: true,
 });
 
-async function readIosSimulatorAppUrlSchemes(infoPlistPath: string): Promise<Set<string>> {
+async function readIosSimulatorAppUrlSchemes(
+  infoPlistPath: string,
+  options: SimulatorAppListOptions,
+): Promise<Set<string>> {
   let cacheKey: string | undefined;
   try {
     cacheKey = `${infoPlistPath}:${(await hostFileStat(infoPlistPath)).mtimeMs}`;
@@ -330,11 +348,11 @@ async function readIosSimulatorAppUrlSchemes(infoPlistPath: string): Promise<Set
     cacheKey = undefined;
   }
   if (cacheKey === undefined) {
-    return (await readIosSimulatorAppUrlSchemesUncached(infoPlistPath)) ?? new Set();
+    return (await readIosSimulatorAppUrlSchemesUncached(infoPlistPath, options)) ?? new Set();
   }
   const cached = iosSimulatorAppUrlSchemeMemo.get(cacheKey);
   if (cached) return cached;
-  const schemes = await readIosSimulatorAppUrlSchemesUncached(infoPlistPath);
+  const schemes = await readIosSimulatorAppUrlSchemesUncached(infoPlistPath, options);
   if (schemes) iosSimulatorAppUrlSchemeMemo.set(cacheKey, schemes);
   return schemes ?? new Set();
 }
@@ -345,13 +363,12 @@ async function readIosSimulatorAppUrlSchemes(infoPlistPath: string): Promise<Set
  */
 async function readIosSimulatorAppUrlSchemesUncached(
   infoPlistPath: string,
+  options: SimulatorAppListOptions,
 ): Promise<Set<string> | undefined> {
   const result = await runAppleToolCommand(
     'plutil',
     ['-convert', 'json', '-o', '-', infoPlistPath],
-    {
-      allowFailure: true,
-    },
+    { allowFailure: true, ...options },
   );
   if (result.exitCode !== 0) return undefined;
   try {

@@ -7,6 +7,7 @@ import {
 } from '../runner-contract.ts';
 import {
   RUNNER_ERROR_RULES,
+  RUNNER_REPLY_LOST_REASON,
   isRetryableRunnerError,
   isRunnerBusyError,
   resolveRunnerFatalErrorReason,
@@ -15,7 +16,10 @@ import {
   shouldRestartRunnerBeforeCommandSend,
   shouldRetryRunnerConnectError,
 } from '../runner-error-classification.ts';
-import { runnerConnectFailure } from './runner-session-fixtures.ts';
+import { runnerConnectFailure, unwrittenConnectRefusal } from './runner-session-fixtures.ts';
+
+const TAP = { command: 'tap' } as const;
+const SNAPSHOT = { command: 'snapshot' } as const;
 
 function commandFailed(message: string, details?: Record<string, unknown>): AppError {
   return new AppError('COMMAND_FAILED', message, details);
@@ -40,6 +44,15 @@ test('transport-shaped failures are retryable', () => {
   );
   for (const message of ['fetch failed', 'connect ECONNREFUSED 127.0.0.1:8100', 'socket hang up']) {
     assert.equal(isRetryableRunnerError(commandFailed(message)), true, message);
+  }
+});
+
+test('a lost reply keys on its typed reason, never on the transport text it carries', () => {
+  for (const message of ['fetch failed', 'connect ECONNREFUSED 127.0.0.1:8100', 'socket hang up']) {
+    const lostReply = commandFailed(message, { reason: RUNNER_REPLY_LOST_REASON });
+    assert.equal(isRetryableRunnerError(lostReply), false, message);
+    assert.equal(shouldRetryRunnerConnectError(lostReply), false, message);
+    assert.equal(shouldRestartRunnerBeforeCommandSend(lostReply, TAP), false, message);
   }
 });
 
@@ -69,6 +82,18 @@ test('only the runner busy refusal earns a resend; a retriable flag alone does n
     false,
   );
   assert.equal(isRetryableRunnerError(commandFailed('boom', { retriable: true })), false);
+});
+
+test('the main-thread runner codes publish details.reason beside details.runnerErrorCode', () => {
+  const busy = classifyRunnerReportedError('RUNNER_BUSY');
+  assert.equal(busy.code, 'COMMAND_FAILED');
+  assert.equal(busy.details.runnerErrorCode, 'RUNNER_BUSY');
+  assert.equal(busy.details.reason, 'runner_busy');
+  const timeout = classifyRunnerReportedError('MAIN_THREAD_TIMEOUT');
+  assert.equal(timeout.code, 'COMMAND_FAILED');
+  assert.equal(timeout.details.runnerErrorCode, 'MAIN_THREAD_TIMEOUT');
+  assert.equal(timeout.details.reason, 'runner_main_thread_timeout');
+  assert.equal(classifyRunnerReportedError('APP_NOT_RUNNING').details.reason, undefined);
 });
 
 test('retryable requires an AppError with COMMAND_FAILED', () => {
@@ -153,7 +178,7 @@ test('a deadline on its own earns no recovery verdict', () => {
     timeoutMs: 45_000,
   });
   assert.equal(isRetryableRunnerError(deadline), false);
-  assert.equal(shouldRestartRunnerBeforeCommandSend(deadline), false);
+  assert.equal(shouldRestartRunnerBeforeCommandSend(deadline, SNAPSHOT), false);
   assert.equal(shouldRestartRunnerAfterReadinessPreflight(deadline), false);
   assert.equal(shouldRebuildCachedRunnerArtifact(deadline), false);
   assert.equal(shouldRetryRunnerConnectError(deadline), true);
@@ -232,12 +257,16 @@ test('ordinary errors are never session-fatal', () => {
 // --- restart-before-send axis (shouldRestartRunnerBeforeCommandSend) ---
 
 test('a refused connection before send restarts the session', () => {
-  assert.equal(
-    shouldRestartRunnerBeforeCommandSend(
-      runnerConnectFailure('runner_connect_refused', 'Runner did not accept connection'),
-    ),
-    true,
-  );
+  assert.equal(shouldRestartRunnerBeforeCommandSend(unwrittenConnectRefusal(), TAP), true);
+});
+
+test('a connect failure whose POST may have been written restarts only a read', () => {
+  // simctl curl exit 28: the POST left, then the request timed out.
+  const writtenThenTimedOut = runnerConnectFailure('runner_connect_refused', undefined, {
+    dispatched: 'unknown',
+  });
+  assert.equal(shouldRestartRunnerBeforeCommandSend(writtenThenTimedOut, TAP), false);
+  assert.equal(shouldRestartRunnerBeforeCommandSend(writtenThenTimedOut, SNAPSHOT), true);
 });
 
 test('an early exit or a foreign transport failure earns no restart before send', () => {
@@ -245,8 +274,11 @@ test('an early exit or a foreign transport failure earns no restart before send'
     'xcodebuild_exited_early',
     'xcodebuild exited early: runner did not accept connection',
   );
-  assert.equal(shouldRestartRunnerBeforeCommandSend(earlyExit), false);
-  assert.equal(shouldRestartRunnerBeforeCommandSend(commandFailed('socket hang up')), false);
+  assert.equal(shouldRestartRunnerBeforeCommandSend(earlyExit, SNAPSHOT), false);
+  assert.equal(
+    shouldRestartRunnerBeforeCommandSend(commandFailed('socket hang up'), SNAPSHOT),
+    false,
+  );
 });
 
 // --- typed connect-failure reasons (agent-device's own connect path) ---
@@ -257,7 +289,7 @@ test('xcodebuild_exited_early is decided by the typed reason, not the message', 
     assert.equal(isRetryableRunnerError(error), false, message);
     assert.equal(shouldRetryRunnerConnectError(error), false, message);
     assert.equal(shouldRebuildCachedRunnerArtifact(error), false, message);
-    assert.equal(shouldRestartRunnerBeforeCommandSend(error), false, message);
+    assert.equal(shouldRestartRunnerBeforeCommandSend(error, SNAPSHOT), false, message);
   }
   // The same words without the reason earn no terminal verdict.
   const untyped = commandFailed('Runner did not accept connection (xcodebuild exited early)');
@@ -270,12 +302,12 @@ test('runner_connect_refused is decided by the typed reason, not the message', (
     assert.equal(isRetryableRunnerError(error), true, message);
     assert.equal(shouldRetryRunnerConnectError(error), true, message);
     assert.equal(shouldRebuildCachedRunnerArtifact(error), true, message);
-    assert.equal(shouldRestartRunnerBeforeCommandSend(error), true, message);
+    assert.equal(shouldRestartRunnerBeforeCommandSend(error, SNAPSHOT), true, message);
   }
   const untyped = commandFailed('Runner did not accept connection');
   assert.equal(isRetryableRunnerError(untyped), false);
   assert.equal(shouldRebuildCachedRunnerArtifact(untyped), false);
-  assert.equal(shouldRestartRunnerBeforeCommandSend(untyped), false);
+  assert.equal(shouldRestartRunnerBeforeCommandSend(untyped, SNAPSHOT), false);
 });
 
 test('runner_endpoint_probe_exhausted is decided by the typed reason, not the message', () => {
@@ -283,7 +315,7 @@ test('runner_endpoint_probe_exhausted is decided by the typed reason, not the me
     const error = runnerConnectFailure('runner_endpoint_probe_exhausted', message);
     assert.equal(shouldRebuildCachedRunnerArtifact(error), true, message);
     assert.equal(isRetryableRunnerError(error), false, message);
-    assert.equal(shouldRestartRunnerBeforeCommandSend(error), false, message);
+    assert.equal(shouldRestartRunnerBeforeCommandSend(error, SNAPSHOT), false, message);
     assert.equal(shouldRetryRunnerConnectError(error), true, message);
   }
   assert.equal(

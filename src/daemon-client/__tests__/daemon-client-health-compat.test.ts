@@ -15,7 +15,12 @@ import {
  * what the check itself accepts and refuses when a proxy sits in front of the daemon.
  */
 
-const DAEMON_LINK = { ok: true, service: 'agent-device-daemon', version: '98.0.0' } as const;
+const DAEMON_LINK = {
+  ok: true,
+  service: 'agent-device-daemon',
+  version: '98.0.0',
+  hostArch: 'arm64',
+} as const;
 
 async function withHealthServer<T>(
   payload: Record<string, unknown>,
@@ -40,6 +45,7 @@ function proxyHealth(upstreamRpcProtocolVersion: number): Record<string, unknown
     service: 'agent-device-proxy',
     version: '99.0.0',
     rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
+    hostArch: 'x86_64',
     upstream: { ...DAEMON_LINK, rpcProtocolVersion: upstreamRpcProtocolVersion },
   };
 }
@@ -51,10 +57,12 @@ test('a proxy whose daemon speaks the same protocol passes with the upstream lin
     const health = await readRemoteDaemonHealth({ baseUrl, token: 'proxy-token', pid: 0 });
     assert.equal(health.reachable, true);
     assert.equal(health.service, 'agent-device-proxy');
+    assert.equal(health.hostArch, 'x86_64');
     assert.deepEqual(health.upstream, {
       service: 'agent-device-daemon',
       version: '98.0.0',
       rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
+      hostArch: 'arm64',
     });
   });
 });
@@ -79,15 +87,17 @@ test('a proxy whose daemon speaks another protocol is refused, naming the daemon
   });
 });
 
-test('a daemon health payload without an upstream link parses as before', async (t) => {
+test('a daemon health payload without an upstream link or host arch parses as before', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
+  const { hostArch: _hostArch, ...legacyLink } = DAEMON_LINK;
   await withHealthServer(
-    { ...DAEMON_LINK, rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION },
+    { ...legacyLink, rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION },
     async (baseUrl) => {
       const health = await readRemoteDaemonHealth({ baseUrl, token: 'daemon-token', pid: 0 });
       assert.equal(health.reachable, true);
       assert.equal(health.upstream, undefined);
+      assert.equal('hostArch' in health, false);
       assert.equal(health.rpcProtocolVersion, DAEMON_RPC_PROTOCOL_VERSION);
     },
   );

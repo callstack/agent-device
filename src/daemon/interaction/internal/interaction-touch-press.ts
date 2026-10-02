@@ -177,6 +177,7 @@ async function runTargetedTouchInteraction(params: {
       return await runtime.interactions.longPress(target, {
         ...shared,
         durationMs: params.durationMs,
+        readinessTimeoutMs: flags?.readinessTimeoutMs,
       });
     case 'hover':
       return await runtime.interactions.hover(target, shared);
@@ -210,6 +211,7 @@ function pressRuntimeOptions(
     jitterPx: flags?.jitterPx,
     doubleTap: flags?.doubleTap,
     verify: flags?.verify,
+    readinessTimeoutMs: flags?.readinessTimeoutMs,
     // Only click/press take it: `find` dispatches click and fill, never
     // longpress or hover, so declaring it on their options would be an
     // unconsumed claim (#1649 review).

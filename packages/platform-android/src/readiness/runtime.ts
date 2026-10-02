@@ -1,4 +1,7 @@
-import type { EnsureReadyInput } from '@agent-device/contracts/device-readiness-runtime';
+import {
+  BOOT_TIMEOUT_REASON,
+  type EnsureReadyInput,
+} from '@agent-device/contracts/device-readiness-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 
 /** Readiness reads exactly these host ports; the lifecycle binding composes the same subset. */
@@ -25,7 +28,9 @@ export async function ensureAndroidReady(
   if (device.kind === 'emulator' && (device.booted !== true || !isRunningEmulator(device))) {
     return await ensureEmulatorReady(host, device, input, signal);
   }
-  if (device.booted !== true) await waitForBoot(host, device.id, BOOT_TIMEOUT_MS, signal);
+  if (device.booted !== true) {
+    await waitForBoot(host, device.id, bootDeadlineAtMs(host, input), signal);
+  }
   return { ...device, booted: true };
 }
 
@@ -37,6 +42,7 @@ async function ensureEmulatorReady(
 ): Promise<DeviceInfo> {
   await prepareAndroidEmulatorToolchain(host);
   const request = inventoryRequest(input);
+  const deadlineAtMs = bootDeadlineAtMs(host, input);
   const available = await host.deviceReadiness.androidEmulator.discover(request, signal);
   const selected = requireAvailableAvd(available, device.name, input.serial);
 
@@ -46,8 +52,9 @@ async function ensureEmulatorReady(
     : host.deviceReadiness.androidEmulator.launch(selected.name, input.headless);
   try {
     const discovered =
-      existing ?? (await waitForDiscovery(host, selected.name, request, input.serial, signal));
-    await waitForBoot(host, discovered.id, BOOT_TIMEOUT_MS, signal);
+      existing ??
+      (await waitForDiscovery(host, selected.name, request, input.serial, deadlineAtMs, signal));
+    await waitForBoot(host, discovered.id, deadlineAtMs, signal);
     const refreshed = (await host.deviceReadiness.androidEmulator.discover(request, signal)).find(
       (candidate) => candidate.id === discovered.id,
     );
@@ -90,29 +97,24 @@ async function waitForDiscovery(
   avdName: string,
   request: ReturnType<typeof inventoryRequest>,
   serial: string | undefined,
+  deadline: number,
   signal: AbortSignal,
 ): Promise<DeviceInfo> {
-  const deadline = host.clock.now() + BOOT_TIMEOUT_MS;
   while (host.clock.now() < deadline) {
     const devices = await host.deviceReadiness.androidEmulator.discover(request, signal);
     const device = findByAvdName(devices, avdName, serial);
     if (device && isRunningEmulator(device)) return device;
     await host.clock.sleep(POLL_MS, signal);
   }
-  throw new AppError('COMMAND_FAILED', 'Android emulator did not appear in time', {
-    avdName,
-    serial,
-    timeoutMs: BOOT_TIMEOUT_MS,
-  });
+  throw bootTimeoutError('Android emulator did not appear in time', { avdName, serial });
 }
 
 async function waitForBoot(
   host: AndroidReadinessHost,
   serial: string,
-  timeoutMs: number,
+  deadline: number,
   signal: AbortSignal,
 ): Promise<void> {
-  const deadline = host.clock.now() + timeoutMs;
   while (host.clock.now() < deadline) {
     const result = await host.commands.run(
       {
@@ -126,11 +128,20 @@ async function waitForBoot(
     if (result.stdout.trim() === '1') return;
     await host.clock.sleep(POLL_MS, signal);
   }
-  throw new AppError('COMMAND_FAILED', 'Android device failed to finish booting', {
-    serial,
-    timeoutMs,
-    reason: 'ANDROID_BOOT_TIMEOUT',
+  throw bootTimeoutError('Android device failed to finish booting', { serial });
+}
+
+function bootTimeoutError(message: string, details: Record<string, unknown>): AppError {
+  return new AppError('COMMAND_FAILED', message, {
+    ...details,
+    reason: BOOT_TIMEOUT_REASON,
+    hint: 'The emulator keeps booting in the background. Retry once it is up, or pass a larger --timeout.',
   });
+}
+
+/** The caller's `--timeout` deadline when stated, else the default boot wait from now. */
+function bootDeadlineAtMs(host: AndroidReadinessHost, input: EnsureReadyInput): number {
+  return input.deadlineAtMs ?? host.clock.now() + BOOT_TIMEOUT_MS;
 }
 
 function inventoryRequest(input: EnsureReadyInput) {

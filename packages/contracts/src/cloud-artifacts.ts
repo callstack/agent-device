@@ -1,4 +1,5 @@
 import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
+import type { DeviceRotation } from './device-rotation.ts';
 
 const CLOUD_ARTIFACT_KINDS = [
   'video',
@@ -45,6 +46,8 @@ export type DaemonArtifactInventoryEntry = {
   sizeBytes: number;
   createdAt: string;
   expiresAt: string;
+  /** Display rotation a screenshot was rendered in; absent when the capture reported none. */
+  displayRotation?: DeviceRotation;
 };
 
 export type DaemonArtifactsResult = {

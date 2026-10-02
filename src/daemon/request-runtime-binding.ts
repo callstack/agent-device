@@ -16,6 +16,7 @@ import {
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { ensureDeviceReady } from './device/device-ready.ts';
+import { recordBoundMutations, type RequestDispatchLedger } from './request-dispatch-ledger.ts';
 import type {
   ManagedRequestAdmission,
   ResolveManagedRequestLease,
@@ -110,16 +111,23 @@ export type RequestRuntimeBindings = AsyncDisposable &
     bindExactDevice: BindExactDeviceRuntime;
   }>;
 
-/** Owns request runtime bindings while exposing only the requested operation projection. */
+/**
+ * Owns request runtime bindings while exposing only the requested operation projection. Every
+ * projection records its mutations in the request's `dispatchLedger`, so no route reaches the
+ * device without its mutations counting toward the request's disclosure.
+ */
 export function createRequestRuntimeBindings(params: {
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
+  dispatchLedger: RequestDispatchLedger;
   resolveManagedLease?: ResolveManagedRequestLease;
   admitDeviceClaim: (
     device: DeviceInfo,
     owner: RuntimeOwnerRef,
     intent: DeviceBindingIntent,
   ) => Promise<void>;
+  /** ADR 0029 daemon-policy device scope, checked before the gateway inspects or binds a device. */
+  admitDevice?: (device: DeviceInfo) => void;
 }): RequestRuntimeBindings {
   const cleanups = new AsyncCleanupStack();
   const managedLifetime = new AbortController();
@@ -134,6 +142,7 @@ export function createRequestRuntimeBindings(params: {
   };
 
   const bindDevice: BindDeviceRuntime = async (device, use) => {
+    params.admitDevice?.(device);
     const key = deviceIdentityKey(deviceIdentity(device));
     let bindingPromise = bindings.get(key);
     if (!bindingPromise) {
@@ -147,10 +156,14 @@ export function createRequestRuntimeBindings(params: {
         if (bindings.get(key) === bindingPromise) bindings.delete(key);
       });
     }
-    return narrowDeviceBinding(await bindingPromise, use);
+    return recordBoundMutations(
+      narrowDeviceBinding(await bindingPromise, use),
+      params.dispatchLedger,
+    );
   };
 
   const bindExactDevice: BindExactDeviceRuntime = async (device, owner, fence, use, scope) => {
+    params.admitDevice?.(device);
     const intent: DeviceBindingIntent = { kind: 'exact-owner', owner, fence };
     let managed: ManagedRequestAdmission | undefined;
     if (owner.kind === 'managed-local') {
@@ -170,14 +183,17 @@ export function createRequestRuntimeBindings(params: {
       : await params.gateway.bind({ device, intent, scope });
     const adopted = await adoptExactBinding(cleanups, published, scope);
     const binding = managed ? adopted : await admitBinding(adopted, intent);
-    const bound = narrowDeviceBinding(binding, use);
+    const bound = recordBoundMutations(narrowDeviceBinding(binding, use), params.dispatchLedger);
     managed?.activate();
     if (managed) managedReadiness.set(bound, managed.ensureReady);
     return bound;
   };
 
   return {
-    inspectFacts: async (device) => await params.gateway.inspectFacts(device),
+    inspectFacts: async (device) => {
+      params.admitDevice?.(device);
+      return await params.gateway.inspectFacts(device);
+    },
     bindDevice,
     bindExactDevice,
     [Symbol.asyncDispose]: async () => {

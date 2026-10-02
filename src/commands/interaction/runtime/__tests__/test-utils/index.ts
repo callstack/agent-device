@@ -342,6 +342,8 @@ export function createInteractionDevice(
   > & {
     platform?: AgentDeviceBackend['platform'];
     sessionMetadata?: Record<string, unknown>;
+    /** An advancing clock, for interactions that poll (the promotedTarget readiness loop). */
+    clock?: { now: () => number; sleep: (ms: number) => Promise<void> };
   } = {},
 ) {
   return createAgentDevice({
@@ -378,6 +380,7 @@ export function createInteractionDevice(
       { name: 'default', snapshot, metadata: overrides.sessionMetadata },
     ]),
     policy: localCommandPolicy(),
+    ...(overrides.clock ? { clock: overrides.clock } : {}),
   });
 }
 

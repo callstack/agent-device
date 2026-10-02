@@ -99,9 +99,8 @@ The per-requester monotonic number of one allocation attempt on a lane; never sh
 requesters.
 
 **Identity incarnation**:
-The allocator-issued id of one creation of a managed identity, stable for its pool lifetime
-and preserved across Android clean-baseline reuse; a fresh iOS identity is a new device with a
-new incarnation, and a different incarnation on a claimed device is a conflict.
+The allocator-issued id of one creation of a managed device, stable for that identity's lifetime
+and distinct from its transport address or the request generation.
 _Avoid_: Request generation
 
 **Human-control hold**:
@@ -182,7 +181,7 @@ The decision that an active ref frame's epoch and issuance scope authorize a ref
 An optional `~s<n>` suffix carrying the snapshot generation an `@ref` was minted from.
 
 **Deferred interaction outcome**:
-Post-response state recording whether a mutation still needs outcome retry, stabilization, or
+Post-response state recording whether a mutation's next capture still needs stabilization or
 snapshot freshness recovery.
 
 **Settled observation**:

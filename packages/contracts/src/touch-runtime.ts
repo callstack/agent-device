@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 import type { Point } from '@agent-device/kernel/snapshot';
 import {
   localInteractorSource,
@@ -264,19 +264,33 @@ async function executeGenericPress(
   }
   const doubleTap = options.doubleTap ? requireDoubleTapMechanic(interactor) : undefined;
   let first: Record<string, unknown> | void = undefined;
-  for (let index = 0; index < options.count; index += 1) {
-    const [dx, dy] = pressJitter(index, options.jitterPx);
-    const result = doubleTap
-      ? await doubleTap.call(interactor, point.x + dx, point.y + dy)
-      : options.holdMs > 0
-        ? await interactor.longPress(point.x + dx, point.y + dy, options.holdMs)
-        : await interactor.tap(point.x + dx, point.y + dy);
-    first ??= result;
-    if (index < options.count - 1 && options.intervalMs > 0) {
-      await pause(options.intervalMs);
+  let dispatchedPresses = 0;
+  try {
+    for (let index = 0; index < options.count; index += 1) {
+      const [dx, dy] = pressJitter(index, options.jitterPx);
+      const result = await pressOnce(interactor, doubleTap, point.x + dx, point.y + dy, options);
+      dispatchedPresses += 1;
+      first ??= result;
+      if (index < options.count - 1 && options.intervalMs > 0) {
+        await pause(options.intervalMs);
+      }
     }
+  } catch (error) {
+    throw discloseDispatchAfterSteps(error, dispatchedPresses);
   }
   return first;
+}
+
+async function pressOnce(
+  interactor: Interactor,
+  doubleTap: NonNullable<Interactor['doubleTap']> | undefined,
+  x: number,
+  y: number,
+  options: PressPointOptions,
+): Promise<Record<string, unknown> | void> {
+  if (doubleTap) return await doubleTap.call(interactor, x, y);
+  if (options.holdMs > 0) return await interactor.longPress(x, y, options.holdMs);
+  return await interactor.tap(x, y);
 }
 
 const PRESS_JITTER = [

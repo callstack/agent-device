@@ -24,7 +24,8 @@ import type {
   ResolvedTarget,
 } from '@agent-device/contracts/interaction';
 import type { RuntimeCommand } from '../../runtime-types.ts';
-import { assertExpectedResolvedTarget, type ExpectedResolvedTarget } from './resolution.ts';
+import { assertExpectedResolvedTarget } from './replay-target-guard.ts';
+import type { ExpectedResolvedTarget } from './interaction-resolution-request.ts';
 import {
   type CapturedSnapshot,
   type SelectorSnapshotOptions,

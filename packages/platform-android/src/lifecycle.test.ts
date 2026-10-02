@@ -167,6 +167,7 @@ test('a failed launch probe reports its typed failure and the open still succeed
 
   expect(outcome.timing.postOpenObservation).toBe('probe-failed');
   expect(outcome.timing.postOpenObservationFailure).toEqual({
+    source: 'capture',
     code: 'COMMAND_FAILED',
     reason: 'accessibility-timeout',
   });

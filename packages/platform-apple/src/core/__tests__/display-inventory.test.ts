@@ -35,6 +35,7 @@ import {
   parseCoreDeviceDisplays,
   readPanelPower,
   resolveAppleCaptureDisplay,
+  resolveAppleCaptureTarget,
   type AppleDeviceDisplay,
 } from '../display-inventory.ts';
 import {
@@ -404,6 +405,87 @@ describe('resolveAppleCaptureDisplay', () => {
   });
 });
 
+describe('resolveAppleCaptureTarget', () => {
+  beforeEach(() => {
+    mockRunXcrun.mockClear();
+    mockReadHostTextFile.mockReset();
+    mockReadHostTextFile.mockResolvedValue('');
+  });
+
+  function singlePanelReporting(currentOrientation: string): string {
+    return JSON.stringify({
+      result: {
+        displays: [{ ...IPHONE_17_NO_ACTIVE_KEY.result.displays[0], currentOrientation }],
+      },
+    });
+  }
+
+  test('maps each CoreDevice content rotation observed on a rotated simulator', async () => {
+    const observed = [
+      ['rot0', 'portrait'],
+      ['rot90', 'landscape-right'],
+      ['rot180', 'portrait-upside-down'],
+      ['rot270', 'landscape-left'],
+    ] as const;
+    for (const [currentOrientation, displayRotation] of observed) {
+      mockReadHostTextFile.mockResolvedValue(singlePanelReporting(currentOrientation));
+      // A single panel keeps simctl's implicit display, so only the rotation is reported.
+      assert.deepEqual(await resolveAppleCaptureTarget(IOS_TEST_SIMULATOR), { displayRotation });
+    }
+  });
+
+  test('reports no rotation for an unrecognized CoreDevice value', async () => {
+    for (const currentOrientation of ['unknown', 'constructor']) {
+      mockReadHostTextFile.mockResolvedValue(singlePanelReporting(currentOrientation));
+      assert.deepEqual(await resolveAppleCaptureTarget(IOS_TEST_SIMULATOR), {});
+    }
+  });
+
+  test('reports no rotation when CoreDevice lists no built-in panel', async () => {
+    mockReadHostTextFile.mockResolvedValue(
+      JSON.stringify({
+        result: {
+          displays: [
+            {
+              ...IPHONE_17_NO_ACTIVE_KEY.result.displays[0],
+              currentOrientation: 'rot90',
+              type: { external: {} },
+            },
+          ],
+        },
+      }),
+    );
+    assert.deepEqual(await resolveAppleCaptureTarget(IOS_TEST_SIMULATOR), {});
+  });
+
+  test('names the panel but reports no rotation on a multi-panel device', async () => {
+    // Open, the inner panel is lit and reads rot90 in a portrait hold: its rotation is relative to
+    // the panel's own geometry, so reporting it would call a portrait capture landscape.
+    mockReadHostTextFile.mockResolvedValue(
+      JSON.stringify({
+        result: {
+          displays: IPHONE_DUO_CLOSED.result.displays.map((entry) => ({
+            ...entry,
+            backlightState: entry.displayId === 3 ? 'activeOn' : 'off',
+          })),
+        },
+      }),
+    );
+    const target = await resolveAppleCaptureTarget(IOS_TEST_SIMULATOR);
+    assert.equal(target.display?.name, 'LCD-1');
+    assert.equal(target.displayRotation, undefined);
+  });
+
+  test('reports nothing when CoreDevice cannot be asked', async () => {
+    mockRunXcrun.mockResolvedValueOnce({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'The specified device was not found',
+    } as Awaited<ReturnType<typeof runXcrun>>);
+    assert.deepEqual(await resolveAppleCaptureTarget(IOS_TEST_SIMULATOR), {});
+  });
+});
+
 describe('appleSimulatorDisplayArgvFragment', () => {
   test('names the panel for capture commands that share the same implicit default', () => {
     assert.deepEqual(appleSimulatorDisplayArgvFragment(outerPanel), ['--display=LCD']);
@@ -450,7 +532,7 @@ describe('captureSimulatorScreenshotWithFallback runner fallback', () => {
       pixelDensity: 2,
       deps: {
         ensureBooted: async () => {},
-        resolveCaptureDisplay: async () => litPanel,
+        resolveCaptureTarget: async () => ({ display: litPanel }),
         captureWithRetry: async () => {
           throw new Error('simctl screenshot failed');
         },
@@ -480,7 +562,7 @@ describe('captureSimulatorScreenshotWithFallback runner fallback', () => {
       pixelDensity: 2,
       deps: {
         ensureBooted: async () => {},
-        resolveCaptureDisplay: async () => outerPanel,
+        resolveCaptureTarget: async () => ({ display: outerPanel }),
         captureWithRetry: async () => {
           throw new Error('simctl screenshot failed');
         },
@@ -505,7 +587,7 @@ describe('captureSimulatorScreenshotWithFallback runner fallback', () => {
       pixelDensity: 2,
       deps: {
         ensureBooted: async () => {},
-        resolveCaptureDisplay: async () => outerPanel,
+        resolveCaptureTarget: async () => ({ display: outerPanel }),
         captureWithRetry: async () => {},
         normalizeDensity: async (_device, _path, _density, sourcePixelDensity) => {
           sourceScales.push(sourcePixelDensity);

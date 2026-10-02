@@ -112,6 +112,37 @@ Holds do not survive daemon restart, matching lease state. Reconnect and re-esta
 before continuing human interaction. Local takeover without a device-scoped remote lease is
 deferred; this does not provide a host-global fence across local daemons.
 
+## Restricting What Clients Can Do
+
+Start the proxy with a daemon policy to confine every client to named devices and commands. The
+daemon enforces it for every request, including `batch` steps and `replay` actions:
+
+```json
+{
+  "version": 1,
+  "devices": { "allow": [{ "udid": "<simulator-udid>" }] },
+  "commands": { "deny": ["boot", "shutdown"] },
+  "capabilities": { "deny": ["device-shutdown"] }
+}
+```
+
+```bash
+AGENT_DEVICE_DAEMON_POLICY=./policy.json agent-device proxy
+```
+
+- `devices.allow` lists the only devices clients can see (`devices`) or use. Use `udid` for Apple
+  devices and `serial` for Android.
+- `commands` takes either `allow` or `deny`, not both. With `allow`, commands a later release adds
+  stay denied. Client-side tools reach the daemon through internal commands: allow `runtime` for
+  `react-devtools` and Maestro flows, and `install-from-source` for remote installs.
+- `capabilities.deny: ["device-shutdown"]` blocks `shutdown`, `close --shutdown`, and any other path
+  that would shut the device down.
+
+The daemon reads the file once at start and refuses to start if it is invalid. If a daemon is
+already running for the state directory with a different policy, the proxy refuses to reuse it;
+stop that daemon first. A denied request fails with `UNAUTHORIZED` and
+`details.reason: "DAEMON_POLICY_DENIED"`.
+
 ## What Is Exposed
 
 The proxy allows only the daemon HTTP contract: `/health`, `/rpc`, `/upload` plus resumable `/upload/*` routes, and `/artifacts/*`, with the same routes also available under `/agent-device/*`. Health checks are unauthenticated; command, upload, and artifact routes require the bearer token.
@@ -124,6 +155,12 @@ the device-host VM must use the daemon's loopback port and local daemon token.
 ## Compatibility
 
 Remote clients read `/health` before issuing commands and compare the daemon RPC protocol version. Keep the client and proxy versions reasonably close; patch-level differences should normally work, but incompatible RPC protocol versions fail before commands run.
+
+`/health` also reports `hostArch`, the native CPU architecture of the machine serving it: the one its simulators run by default, even when Node itself runs under Rosetta. Macs report `arm64` or `x86_64`; other hosts report `x86_64` for x64 and Node's `process.arch` name otherwise (for example `arm64`). The top-level value describes the proxy's own machine, so a client behind a proxy reads `upstream.hostArch` for the host that runs the simulators, for example to build only that slice of a simulator app. Older daemons omit the field.
+
+```json
+{"ok":true,"service":"agent-device-proxy","version":"0.21.17","rpcProtocolVersion":2,"instanceId":"5f0c2d7e-8a41-4b7e-9c3a-2e6d1f4b8a90","hostArch":"arm64","upstream":{"ok":true,"service":"agent-device-daemon","version":"0.21.17","rpcProtocolVersion":2,"instanceId":"b3e9a6c1-4d2f-4f8e-a0b7-7c5d9e1f2a34","hostArch":"arm64"}}
+```
 
 ## Cleanup
 

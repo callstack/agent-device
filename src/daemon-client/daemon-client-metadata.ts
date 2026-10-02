@@ -21,6 +21,8 @@ export type DaemonInfo = {
   codeOrigin?: DaemonCodeOrigin;
   codeSignature?: string;
   processStartTime?: string;
+  /** ADR 0029: digest of the daemon policy the daemon enforces; absent when it has none. */
+  policyDigest?: string;
   baseUrl?: string;
   remoteInstanceId?: string;
   remoteUpstreamInstanceId?: string;
@@ -70,6 +72,7 @@ export function readDaemonInfo(infoPath: string): DaemonInfo | null {
     codeOrigin: readDaemonInfoCodeOrigin(parsed.codeOrigin),
     codeSignature: readOptionalString(parsed.codeSignature),
     processStartTime: readOptionalString(parsed.processStartTime),
+    policyDigest: readOptionalString(parsed.policyDigest),
   };
 }
 
@@ -116,6 +119,19 @@ function readDaemonLockInfo(lockPath: string): DaemonLockInfo | null {
       typeof parsed.processStartTime === 'string' ? parsed.processStartTime : undefined,
     startedAt: typeof parsed.startedAt === 'number' ? parsed.startedAt : undefined,
   };
+}
+
+/**
+ * Whether a live daemon other than `pid` holds the startup lock: another client's daemon won the
+ * start, and the daemon at `pid` exited because it lost the lock.
+ */
+export function isDaemonLockHeldByAnotherDaemon(paths: DaemonPaths, pid: number): boolean {
+  const lockInfo = readDaemonLockInfo(paths.lockPath);
+  return (
+    lockInfo !== null &&
+    lockInfo.pid !== pid &&
+    isAgentDeviceDaemonProcess(lockInfo.pid, lockInfo.processStartTime)
+  );
 }
 
 export function removeDaemonInfo(infoPath: string): void {

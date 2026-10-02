@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { test, vi } from 'vitest';
+import {
+  assertDispatchDisclosureDriversMatchRows,
+  DISPATCH_DISCLOSURE_TABLE_PATH,
+  dispatchDisclosureRowsOwnedBy,
+} from '@agent-device/contracts/dispatch-disclosure-fixtures';
 import type { SnapshotResult } from '@agent-device/contracts/interactor-types';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { readScrollEdgeState } from '@agent-device/capture-kit/scroll-edge-state';
 import { IOS_SIMULATOR, MACOS_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
 import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { expireRefFrame } from '../ref-frame.ts';
@@ -24,6 +31,12 @@ import {
 vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
   return { ...actual, emitDiagnostic: vi.fn() };
+});
+
+vi.mock('@agent-device/capture-kit/scroll-edge-state', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/capture-kit/scroll-edge-state')>();
+  return { ...actual, readScrollEdgeState: vi.fn(actual.readScrollEdgeState) };
 });
 
 const loggedDiagnostics = vi.mocked(emitDiagnostic);
@@ -177,6 +190,58 @@ test('a surface that no longer holds the pre-gesture content answers moved on th
   assert.equal(spy.calls(), 1);
 });
 
+/** A clock that moves only when the loop sleeps or a capture spends its own time. */
+function steppedClock() {
+  let nowMs = 0;
+  return {
+    now: () => nowMs,
+    advance: (ms: number) => {
+      nowMs += ms;
+    },
+    sleep: async (ms: number) => {
+      nowMs += ms;
+    },
+  };
+}
+
+/** Observes under the real 1.5 s budget and 200 ms cadence, with captures that cost clock time. */
+function observeTimed(frames: ReadonlyArray<{ nodes: SnapshotNode[]; costMs: number }>) {
+  const clock = steppedClock();
+  let calls = 0;
+  loggedDiagnostics.mockClear();
+  const observation = observeScrollMovement({
+    direction: 'down',
+    baseline: baselineOf(screen(0)),
+    swipe: { midpoint: SWIPE_MIDPOINT, pixels: REQUESTED_PIXELS },
+    capture: async (): Promise<SnapshotResult> => {
+      const frame = frames[calls];
+      calls += 1;
+      if (!frame) throw new Error('the observation captured more times than the case supplied');
+      clock.advance(frame.costMs);
+      return { nodes: frame.nodes, backend: 'xctest', producer: 'apple-runner' };
+    },
+    clock,
+  });
+  return { observation, calls: () => calls };
+}
+
+test('a post-scroll capture slower than the whole budget that shows movement answers moved', async () => {
+  const { observation, calls } = observeTimed([{ nodes: screen(-300), costMs: 2_000 }]);
+
+  assert.equal(await observation, 'moved');
+  assert.equal(calls(), 1);
+});
+
+test('a later poll that outlives the remaining budget is judged, not dropped', async () => {
+  const { observation, calls } = observeTimed([
+    { nodes: screen(0), costMs: 0 },
+    { nodes: screen(-300), costMs: 2_000 },
+  ]);
+
+  assert.equal(await observation, 'moved');
+  assert.equal(calls(), 2);
+});
+
 /**
  * At the end of a list iOS rubber-bands past the edge: the first capture lands mid-bounce with every row
  * shifted, then the content springs back to exactly the pre-gesture tree (#2884). A baseline that already
@@ -287,6 +352,37 @@ test('a surface that never shifted while the container still hides content refus
   assert.equal(spy.calls(), 2);
 });
 
+// contracts/fixtures/dispatch-disclosure.json, the scroll-no-progress row: the gesture ran, so the
+// refusal is not a pre-dispatch one.
+const DISPATCH_DISCLOSURE_ROWS = dispatchDisclosureRowsOwnedBy(
+  import.meta.url,
+  fs.readFileSync(DISPATCH_DISCLOSURE_TABLE_PATH, 'utf8'),
+);
+const DISPATCH_DISCLOSURE_DRIVERS: Record<string, () => Promise<unknown>> = {
+  'daemon.scroll-no-progress': async () =>
+    await observe({ baseline: baselineOf(screen(0)), screens: [screen(0), screen(0)] }).observation,
+};
+
+test('every scroll-movement dispatch-disclosure row has exactly one driver', () => {
+  assertDispatchDisclosureDriversMatchRows(
+    DISPATCH_DISCLOSURE_ROWS,
+    Object.keys(DISPATCH_DISCLOSURE_DRIVERS),
+  );
+});
+
+for (const row of DISPATCH_DISCLOSURE_ROWS) {
+  test(`${row.id}: ${row.trigger} → dispatched ${row.dispatched}`, async () => {
+    const drive = DISPATCH_DISCLOSURE_DRIVERS[row.id];
+    assert.ok(drive, `no driver for ${row.id}`);
+    await assert.rejects(drive(), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'scroll_no_progress');
+      assert.equal(error.details?.dispatched, row.dispatched);
+      return true;
+    });
+  });
+}
+
 /**
  * The refusal above names a raw drag because it knows where the swipe ran. An owner that reports no
  * coordinates (a tvOS scroll is a remote keypress) must not be told to swipe where it cannot.
@@ -307,6 +403,21 @@ test('a refusal without gesture coordinates does not recommend a swipe', async (
     (error: unknown) =>
       error instanceof AppError && !/swipe x1 y1 x2 y2/.test(String(error.details?.hint)),
   );
+});
+
+test('an untouched surface never asks whether the baseline ended in the scrolled direction', async () => {
+  const baseline = baselineOf(screen(0, false));
+  vi.mocked(readScrollEdgeState).mockClear();
+  const { observation } = observe({
+    baseline,
+    screens: [screen(0, false), screen(0, false)],
+  });
+
+  assert.equal(await observation, 'at-edge');
+  const askedOfBaseline = vi
+    .mocked(readScrollEdgeState)
+    .mock.calls.filter(([nodes]) => nodes === baseline.nodes);
+  assert.deepEqual(askedOfBaseline, []);
 });
 
 test('a surface that never shifted with nothing left to reveal answers at-edge, not a refusal', async () => {

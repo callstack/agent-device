@@ -150,6 +150,70 @@ Parity is enforced by **golden fixture tables**: JSON files under
 Drift between TS and Swift then turns CI red on whichever side changed,
 without needing a simulator.
 
+`contracts/fixtures/dispatch-disclosure.json` is the table for
+`AppErrorDetails.dispatched` on interaction failures: one row per producer
+event, each with the value it must leave. The field has two values: `no` (the
+operation never reached the device, or the command is a read, so a resend is
+safe) and `unknown` (it may have landed, so observe before resending). Only a
+producer that refuses before dispatch (target resolution, admission, a runner
+pre-send refusal) may say `no`; no producer can prove execution on its failure
+path, so there is no third value.
+
+Each request owns one dispatch ledger. Every bound runtime operation declares
+its effect once, in `RUNTIME_OPERATION_EFFECTS`, a record over the runtime
+operation keys, so an operation cannot bind without one. The request binding
+records each `mutates` operation in the request's ledger when its send
+returns, so no bound runtime operation sends a mutation outside the ledger.
+Android ANR and blocking-dialog recovery is outside the ledger: its
+`AndroidObservationAdapter.tap` and `openApp` calls reach the device without a
+record. A nested request (a
+batch step, a replay action, a delegated `find` click or fill) records into a
+ledger of its own and moves its sends into its parent's.
+
+The request router discloses around every routed command. Once the ledger
+holds a sent mutation, a failure is `unknown` with the sent count in
+`details.dispatchedSteps`, whatever produced it and whatever the command
+declares: a wrong `no` makes a consumer resend an action that already ran,
+while a wrong `unknown` only costs an observation. Before that, the registry's
+`recordingEffect` decides. For `'mutates-app'` the router keeps a producer's
+value and fills `unknown` for a failure no producer classified. For
+`'observes-app'` it sets `no` over any producer value. A command with no
+declared effect passes through.
+
+`no` for a read means that a resend repeats no app-visible action. The
+registry declares `record`, `trace`, and `perf` as `'observes-app'`, although
+their recorder and profiler controls reach the device: no registry trait
+separates a pure read from a device control, and those controls are declared
+`repeatable` at the operation level, because the device refuses or ignores a
+repeat. A producer that runs several device inputs inside one bound operation
+(an Android double tap, an iOS press series) counts them in
+`details.dispatchedSteps` itself, because the ledger sees one operation.
+
+Each row names its driver file by id prefix, and that file drives the real
+producer.
+
+The Apple runner does not resend a mutating command whose first send may have
+run: a restart resends only a command the first attempt provably did not write,
+or a read-only one. A mutation whose reply stays lost (the runner dies
+mid-command, or status recovery finds neither a retained result nor a runner
+answer) fails with `reason: runner_reply_lost` and `dispatched: unknown` (rows
+`ios-runner.transport.written-then-lost`,
+`ios-runner.status.completed-without-retained-reply`,
+`ios-runner.status.accepted`, `ios-runner.status.started`,
+`ios-runner.status.notAccepted`, `ios-runner.status.probe-failed`, and
+`ios-runner.status.unavailable`). The `ios-runner.status.failed*` rows carry the
+runner's own answer instead. A read keeps its transport error and is resent.
+
+Remaining gaps: a failure before the router's locked scope (session
+resolution, lock acquisition, lease and daemon-policy admission) never reaches
+the disclosure and carries no `dispatched`. It sends nothing, but a consumer
+must read the absent field as `unknown`.
+
+`runBatch` reports `no` only when every executed step is a command declared
+`observes-app` (a read); any other executed step, including one with no
+declared `recordingEffect`, makes the batch failure `unknown` for every caller,
+including one that supplies its own `invoke`.
+
 For `responseFields`, one `buildInteractionResponseData(...)` becomes the only
 construction site for interaction response payloads (this deletes the class of
 bug where `fill @ref` rebuilt its response by hand and dropped `evidence`). A

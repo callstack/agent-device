@@ -88,12 +88,15 @@
     {
       "comment": "The app-resolution package facade is consumed through workspace package exports. Fallow does not follow that package boundary, so keep only its externally consumed helper that has no visible production edge here.",
       "file": "packages/platform-apple/src/app-resolution-facade.ts",
-      "exports": ["buildAppNotInstalledError"]
+      "exports": ["buildAppNotInstalledError", "detectSoleRunningIosSimulatorApp"]
     },
     {
       "comment": "Runner operations reach the daemon only through the memoized loader in src/platform-runtime-apple-application-tools.ts (one dynamic import per specifier, #2314). Fallow cannot connect a member read off that loader's promise to these re-exports; keep the list to the facade members no static import consumes.",
       "file": "packages/platform-apple/src/runner-operations-facade.ts",
       "exports": [
+        "notifyIosRunnerAppRelaunched",
+        "prepareIosRunner",
+        "prewarmIosRunnerSession",
         "detachIosRunnerSessionsForShutdown",
         "hasLiveIosRunnerSession",
         "releaseIosRunnerOnClose",
@@ -229,6 +232,41 @@
         "diffCommand",
         "takeoverCommand"
       ]
+    },
+    {
+      "comment": "The macOS façade members are read off the memoized loadMacOs() loader in src/platform-runtime-apple-application-tools.ts. Fallow cannot connect that dynamic member read to the re-exports.",
+      "file": "packages/platform-apple/src/macos-facade.ts",
+      "exports": ["resolveFrontmostMacOsApp", "runMacOsAlertAction"]
+    },
+    {
+      "comment": "answerSimulatorLaunchConfirmation is called from packages/platform-apple/src/lifecycle.ts through the lazy loadLaunchConfirmation() import; Fallow cannot connect the dynamic member read.",
+      "file": "packages/platform-apple/src/launch-confirmation.ts",
+      "exports": ["answerSimulatorLaunchConfirmation"]
+    },
+    {
+      "comment": "preflightIosRunnerDeviceReadiness is called from packages/platform-apple/src/runner/runner-session.ts through a dynamic import; Fallow cannot connect the dynamic member read.",
+      "file": "packages/platform-apple/src/runner/runner-device-readiness.ts",
+      "exports": ["preflightIosRunnerDeviceReadiness"]
+    },
+    {
+      "comment": "The CLI and MCP process entrypoints are loaded lazily by the module table in src/cli/entry.ts; Fallow cannot connect those dynamic member reads.",
+      "file": "{src/cli/process-entry.ts,src/mcp/server.ts}",
+      "exports": ["runCliProcess", "runAgentDeviceMcpServer"]
+    },
+    {
+      "comment": "Runtime hint application is reached from the Android and Apple application tools through the lazy loadRuntimeHints() import; Fallow cannot connect the dynamic member read.",
+      "file": "src/platform-runtime-runtime-hints.ts",
+      "exports": ["applyRuntimeHintValues", "clearRuntimeHintValues"]
+    },
+    {
+      "comment": "createAgentDevice and localCommandPolicy are consumed by the lazy imports in src/cli/commands/{recording,screenshot}.ts; Fallow cannot connect the dynamic member reads.",
+      "file": "src/runtime.ts",
+      "exports": ["createAgentDevice", "localCommandPolicy"]
+    },
+    {
+      "comment": "The contracts snapshot façade must re-export every symbol of ../snapshot-scope.ts (scripts/layering/package-boundaries.test.ts, façade exhaustiveness); callers import it from @agent-device/contracts/snapshot-scope, so the façade copy has no consumer.",
+      "file": "packages/contracts/src/facades/snapshot.ts",
+      "exports": ["findSnapshotScopeRange"]
     },
     {
       "comment": "Test fixtures: every *.fixtures.ts builds doubles for co-located *.test.ts files (several import `vi` directly) and none is imported by production source, so --production analysis sees no consumer for any of them. Scoped to unused-exports rather than ignorePatterns so fixtures stay inside every other Fallow rule (health, dead-code, cycles); `*` rather than today's three symbols because the property being asserted is per-file, not per-symbol.",

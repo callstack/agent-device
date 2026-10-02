@@ -284,6 +284,9 @@ export function createAgentDeviceClient(
           startup: normalizeStartupSample(data.startup),
           runtime: normalizeRuntimeHints(data.runtime),
           device,
+          ...(data.launchConfirmation === 'accepted'
+            ? { launchConfirmation: 'accepted' as const }
+            : {}),
           ...normalizeOpenForegroundComposition(data),
           identifiers: {
             session,

@@ -10,6 +10,7 @@ import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
 import type { DaemonResponse, SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { ObservationClock } from '@agent-device/capture-kit/observe-until';
 
 /**
  * The slice of the daemon's live session record replay reads. The daemon passes its full
@@ -127,6 +128,11 @@ export type ReplayInvoke = (request: ReplayDispatchRequest) => Promise<DaemonRes
 export type ReplayDaemonDependencies = Readonly<{
   /** The isolation scope a request opens sessions under. Throws when the request is inadmissible. */
   resolveSessionScope: (request: DaemonWireRequest) => SessionScope;
+  /**
+   * The time source the pre-dispatch target-readiness wait paces itself by. Absent: wall clock.
+   * The daemon never sets it; tests inject one, as `AgentDeviceRuntime.clock` does for the dispatch.
+   */
+  clock?: ObservationClock;
 }>;
 
 export type ReplayCommand = Readonly<{

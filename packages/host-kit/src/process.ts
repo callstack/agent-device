@@ -13,6 +13,8 @@ export {
   isProcessGroupAlive,
   isProcessZombie,
   listHostProcesses,
+  readHostCpuArch,
+  readHostCpuArchSync,
   readHostEnvironmentVariable,
   readHostProcessIdentityObservations,
   readProcessCommand,

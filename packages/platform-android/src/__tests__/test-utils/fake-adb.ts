@@ -27,6 +27,11 @@ export async function withFakeAdb<T>(
   options: {
     device?: DeviceInfo;
     provider?: FakeAdbProviderExtras;
+    /**
+     * Hand back a nonzero result even when `allowFailure` is unset, as the managed scoped
+     * transport does, instead of throwing like the local route.
+     */
+    returnFailedResults?: boolean;
   } = {},
 ): Promise<T> {
   const device: DeviceInfo = { ...(options.device ?? ANDROID_EMULATOR) };
@@ -43,7 +48,7 @@ export async function withFakeAdb<T>(
       typeof response === 'string'
         ? { stdout: response, stderr: '', exitCode: 0 }
         : { stdout: '', stderr: '', exitCode: 0, ...response };
-    if (result.exitCode !== 0 && !execOptions?.allowFailure) {
+    if (result.exitCode !== 0 && !execOptions?.allowFailure && !options.returnFailedResults) {
       throw androidAdbResultError(
         `adb ${args.join(' ')} exited with code ${result.exitCode}`,
         result,

@@ -6,6 +6,8 @@ import type {
   ReplayInvoke,
 } from '@agent-device/replay-port/command-types';
 import { mergeParentFlags } from '@agent-device/command-registry/batch';
+import { commandAcceptsReadinessBudget } from '@agent-device/command-registry/registry';
+import type { ReadinessSchedule } from '@agent-device/selectors/selector-pipeline-policy';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   gesturePayloadFromPositionals,
@@ -44,6 +46,11 @@ export async function invokeReplayAction(params: {
   /** The isolation scope the daemon already resolved for the request, when it did. */
   resolvedSessionScope: SessionScope | undefined;
   dependencies: ReplayDaemonDependencies;
+  /**
+   * What is left of the step's readiness budget after the pre-dispatch target gate waited; 0 makes
+   * the dispatch resolve its target once. Absent: the step's full budget.
+   */
+  readinessTimeoutMs?: number;
 }): Promise<DaemonResponse> {
   const {
     req,
@@ -85,6 +92,7 @@ export async function invokeReplayAction(params: {
       invoke,
       resolvedSessionScope,
       dependencies,
+      readinessTimeoutMs: params.readinessTimeoutMs,
     });
   } catch (error) {
     // Only an expected AppError dispatch failure (e.g. a selector-miss) gets
@@ -142,10 +150,12 @@ async function invokeResolvedReplayAction(params: {
   invoke: ReplayInvoke;
   resolvedSessionScope: SessionScope | undefined;
   dependencies: ReplayDaemonDependencies;
+  readinessTimeoutMs: number | undefined;
 }): Promise<DaemonResponse> {
   const { req, sessionName, resolved, sourceAction, invoke, resolvedSessionScope, dependencies } =
     params;
-  const flags = buildReplayActionFlags(req.flags, resolved.flags);
+  const flags = buildReplayActionFlags(req.flags, resolved.flags, resolved.command);
+  if (params.readinessTimeoutMs !== undefined) flags.readinessTimeoutMs = params.readinessTimeoutMs;
   const recordedInputVariable =
     sourceAction.command === 'fill'
       ? readRecordedInputVariableName(inferFillText(sourceAction))
@@ -215,9 +225,37 @@ function readResponseTiming(data: unknown): Record<string, unknown> | undefined 
   );
 }
 
+/**
+ * A replayed step of a readiness-budgeted command carries no budget of its own; replay supplies one
+ * so a step recorded against a loading screen can land.
+ */
+const REPLAY_DEFAULT_READINESS_TIMEOUT_MS = 2_000;
+
+/**
+ * The readiness schedule a replayed step's dispatch polls its target under, or undefined when the
+ * step's command does not wait for its target. The pre-dispatch target gate polls under this same
+ * schedule, built by the selector policy's `readinessScheduleFor` as the dispatch builds its own.
+ */
+export async function replayStepReadinessSchedule(
+  parentFlags: CommandFlags | undefined,
+  action: SessionAction,
+): Promise<ReadinessSchedule | undefined> {
+  const { readinessTimeoutMs } = buildReplayActionFlags(parentFlags, action.flags, action.command);
+  if (readinessTimeoutMs === undefined) return undefined;
+  // Loaded only by a step that waits, so the replay entry does not evaluate the selector policy.
+  const { SELECTOR_PIPELINE_POLICIES, readinessScheduleFor } =
+    await import('@agent-device/selectors/selector-pipeline-policy');
+  return readinessScheduleFor(SELECTOR_PIPELINE_POLICIES.promotedTarget.poll, readinessTimeoutMs);
+}
+
 function buildReplayActionFlags(
   parentFlags: CommandFlags | undefined,
   actionFlags: SessionAction['flags'] | undefined,
+  command: string,
 ): CommandFlags {
-  return mergeParentFlags(parentFlags, { ...(actionFlags ?? {}) });
+  const flags = mergeParentFlags(parentFlags, { ...(actionFlags ?? {}) });
+  if (commandAcceptsReadinessBudget(command) && flags.readinessTimeoutMs === undefined) {
+    flags.readinessTimeoutMs = REPLAY_DEFAULT_READINESS_TIMEOUT_MS;
+  }
+  return flags;
 }

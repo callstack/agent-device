@@ -24,6 +24,7 @@ import {
   createRequestRuntimeBindings,
   ensureBoundDeviceReady,
 } from '../request-runtime-binding.ts';
+import { createRequestDispatchLedger } from '../request-dispatch-ledger.ts';
 import { ensureDeviceReady } from '../device/device-ready.ts';
 import { admitRuntimeUse } from '../runtime-admission.ts';
 
@@ -88,6 +89,7 @@ test('runtime readiness follows allocator claim admission', async () => {
     events.push('claim');
   });
   const bindings = createRequestRuntimeBindings({
+    dispatchLedger: createRequestDispatchLedger(),
     gateway: runtime.gateway,
     scope,
     admitDeviceClaim: admit,
@@ -116,6 +118,7 @@ test('request runtime binding caches one broad owner and projects each declared 
     async (_device: DeviceInfo, _owner: RuntimeOwnerRef, _intent: DeviceBindingIntent) => {},
   );
   const bindings = createRequestRuntimeBindings({
+    dispatchLedger: createRequestDispatchLedger(),
     gateway: runtime.gateway,
     scope,
     admitDeviceClaim: admit,
@@ -143,6 +146,7 @@ test('request runtime binding caches one broad owner and projects each declared 
 test('facts inspection answers admission without creating a request binding', async () => {
   const runtime = makeGateway();
   const bindings = createRequestRuntimeBindings({
+    dispatchLedger: createRequestDispatchLedger(),
     gateway: runtime.gateway,
     scope,
     admitDeviceClaim,
@@ -161,6 +165,7 @@ test('facts inspection answers admission without creating a request binding', as
 test('request binding disposes multiple owners in reverse adoption order', async () => {
   const runtime = makeGateway();
   const bindings = createRequestRuntimeBindings({
+    dispatchLedger: createRequestDispatchLedger(),
     gateway: runtime.gateway,
     scope,
     admitDeviceClaim,
@@ -174,6 +179,7 @@ test('request binding disposes multiple owners in reverse adoption order', async
 test('concurrent uses share one in-flight broad binding for the device', async () => {
   const runtime = makeGateway();
   const bindings = createRequestRuntimeBindings({
+    dispatchLedger: createRequestDispatchLedger(),
     gateway: runtime.gateway,
     scope,
     admitDeviceClaim,
@@ -194,6 +200,7 @@ test('concurrent uses share one in-flight broad binding for the device', async (
 test('preferred absence is visible without failing while required absence fails typed', async () => {
   const runtime = makeGateway({ inspectAvailable: false });
   const bindings = createRequestRuntimeBindings({
+    dispatchLedger: createRequestDispatchLedger(),
     gateway: runtime.gateway,
     scope,
     admitDeviceClaim,
@@ -213,6 +220,7 @@ test('exact-owner recovery binds the persisted owner and fence without ordinary 
     async (_device: DeviceInfo, _owner: RuntimeOwnerRef, _intent: DeviceBindingIntent) => {},
   );
   const bindings = createRequestRuntimeBindings({
+    dispatchLedger: createRequestDispatchLedger(),
     gateway: runtime.gateway,
     scope,
     admitDeviceClaim: admit,
@@ -273,7 +281,12 @@ test('late exact-owner binding is rolled back when request cleanup already began
     ),
     shutdown: async () => {},
   };
-  const bindings = createRequestRuntimeBindings({ gateway, scope, admitDeviceClaim });
+  const bindings = createRequestRuntimeBindings({
+    gateway,
+    scope,
+    admitDeviceClaim,
+    dispatchLedger: createRequestDispatchLedger(),
+  });
   const binding = bindings.bindExactDevice(
     selected,
     owner,
@@ -321,7 +334,12 @@ test('late exact-owner rollback failure is secondary diagnostic evidence', async
     diagnostics: { emit },
     progress: { report: () => {} },
   };
-  const bindings = createRequestRuntimeBindings({ gateway, scope, admitDeviceClaim });
+  const bindings = createRequestRuntimeBindings({
+    gateway,
+    scope,
+    admitDeviceClaim,
+    dispatchLedger: createRequestDispatchLedger(),
+  });
   const binding = bindings.bindExactDevice(
     selected,
     owner,
@@ -384,7 +402,12 @@ test('request cancellation aborts deferred exact recovery and late publication i
     diagnostics: { emit: vi.fn() },
     progress: { report: () => {} },
   };
-  const bindings = createRequestRuntimeBindings({ gateway, scope: requestScope, admitDeviceClaim });
+  const bindings = createRequestRuntimeBindings({
+    gateway,
+    scope: requestScope,
+    admitDeviceClaim,
+    dispatchLedger: createRequestDispatchLedger(),
+  });
   const acquisition = acquireDurableCaptureRecoveryAuthorityBeforeDeadline({
     displayName: 'screen recording',
     envelope,

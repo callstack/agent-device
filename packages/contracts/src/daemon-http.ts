@@ -56,13 +56,14 @@ export type DaemonHealthPayload = {
   version: string;
   rpcProtocolVersion: number;
   instanceId?: string;
+  hostArch?: string;
   upstream?: unknown;
 };
 
 export function buildDaemonHealthPayload(
   service: DaemonHealthPayload['service'],
   version: string,
-  options: { upstream?: unknown; instanceId?: string } = {},
+  options: { upstream?: unknown; instanceId?: string; hostArch?: string } = {},
 ): DaemonHealthPayload {
   return {
     ok: true,
@@ -70,6 +71,7 @@ export function buildDaemonHealthPayload(
     version,
     rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
     ...(options.instanceId !== undefined ? { instanceId: options.instanceId } : {}),
+    ...(options.hostArch !== undefined ? { hostArch: options.hostArch } : {}),
     ...(options.upstream !== undefined ? { upstream: options.upstream } : {}),
   };
 }

@@ -6,6 +6,8 @@ import * as tar from 'tar-stream';
 import {
   ArchiveBudget,
   archiveError,
+  createExtractedDirectory,
+  extractedEntryMode,
   normalizeArchiveEntryName,
   reserveArchiveManifest,
   resolveArchiveOutputPath,
@@ -120,11 +122,6 @@ function readTarKind(type: tar.Headers['type']): 'directory' | 'file' {
   throw archiveError('ARCHIVE_UNSAFE_ENTRY', 'Archive contains a link or special entry');
 }
 
-function safeMode(mode: number | undefined, kind: 'directory' | 'file'): number {
-  const fallback = kind === 'directory' ? 0o755 : 0o644;
-  return (mode ?? fallback) & 0o777;
-}
-
 function manifestEntryFromTarHeader(header: tar.Headers): ArchiveManifestEntry | undefined {
   if (isRootDirectoryMarker(header.name, header.type)) return undefined;
   const name = normalizeArchiveEntryName(header.name);
@@ -133,7 +130,7 @@ function manifestEntryFromTarHeader(header: tar.Headers): ArchiveManifestEntry |
   if (!Number.isSafeInteger(size) || size < 0) {
     throw archiveError('ARCHIVE_INVALID_ENTRY', 'Archive entry has an invalid size');
   }
-  return { name, kind, size, mode: safeMode(header.mode, kind) };
+  return { name, kind, size, mode: extractedEntryMode(kind, header.mode) };
 }
 
 async function writeTarEntry(
@@ -144,7 +141,7 @@ async function writeTarEntry(
 ): Promise<void> {
   const outputPath = resolveArchiveOutputPath(outputRoot, manifestEntry.name);
   if (manifestEntry.kind === 'directory') {
-    await fs.mkdir(outputPath, { recursive: true, mode: manifestEntry.mode });
+    await createExtractedDirectory(outputPath, manifestEntry.mode);
     await drainTarEntry(entry);
     return;
   }

@@ -2,7 +2,7 @@ import { execFailureDetails } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { hostPlatform, type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 
 import type { Rect } from '@agent-device/kernel/snapshot';
 import {
@@ -127,9 +127,15 @@ async function runPacedScroll(
   scrollOptions: { amount?: number; pixels?: number; durationMs?: number } | undefined,
 ): Promise<void> {
   const steps = buildPacedScrollSteps(resolveWebScrollDistance(scrollOptions));
-  for (const step of steps) {
-    await runJson(buildScrollArgs(direction, step.distance));
-    if (step.delayAfterMs > 0) await sleep(step.delayAfterMs);
+  let dispatchedSteps = 0;
+  try {
+    for (const step of steps) {
+      await runJson(buildScrollArgs(direction, step.distance));
+      dispatchedSteps += 1;
+      if (step.delayAfterMs > 0) await sleep(step.delayAfterMs);
+    }
+  } catch (error) {
+    throw discloseDispatchAfterSteps(error, dispatchedSteps);
   }
 }
 

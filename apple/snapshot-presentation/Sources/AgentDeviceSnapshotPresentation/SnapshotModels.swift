@@ -29,7 +29,7 @@ public struct SnapshotRect: Codable, Equatable {
 }
 
 public struct RawAXNode: Equatable {
-  public let index: Int
+  public private(set) var index: Int
   public let type: String
   public let label: String?
   public let identifier: String?
@@ -42,10 +42,10 @@ public struct RawAXNode: Equatable {
   public let selected: Bool?
   /// Geometric actionability; `nil` when the capture has no viewport box to decide it against.
   public var hittable: Bool?
-  public let depth: Int
-  public let parentIndex: Int?
-  public let hiddenContentAbove: Bool?
-  public let hiddenContentBelow: Bool?
+  public private(set) var depth: Int
+  public private(set) var parentIndex: Int?
+  public private(set) var hiddenContentAbove: Bool?
+  public private(set) var hiddenContentBelow: Bool?
   public var actions: [String]?
 
   public init(
@@ -88,6 +88,21 @@ public struct RawAXNode: Equatable {
     var updated = self
     updated.rect = rect
     updated.hittable = hittable
+    return updated
+  }
+
+  func reindexed(index: Int, depth: Int, parentIndex: Int?) -> RawAXNode {
+    var updated = self
+    updated.index = index
+    updated.depth = depth
+    updated.parentIndex = parentIndex
+    return updated
+  }
+
+  func addingHiddenContentHints(above: Bool, below: Bool) -> RawAXNode {
+    var updated = self
+    updated.hiddenContentAbove = hiddenContentAbove == true || above ? true : nil
+    updated.hiddenContentBelow = hiddenContentBelow == true || below ? true : nil
     return updated
   }
 

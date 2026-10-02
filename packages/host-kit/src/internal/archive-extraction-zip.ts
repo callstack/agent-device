@@ -5,6 +5,8 @@ import * as yauzl from 'yauzl';
 import {
   ArchiveBudget,
   archiveError,
+  createExtractedDirectory,
+  extractedEntryMode,
   normalizeArchiveEntryName,
   reserveArchiveManifest,
   resolveArchiveOutputPath,
@@ -59,7 +61,7 @@ export async function extractZipArchive(options: ZipOptions): Promise<void> {
       }
       const outputPath = resolveArchiveOutputPath(options.outputRoot, expected.name);
       if (expected.kind === 'directory') {
-        await fs.mkdir(outputPath, { recursive: true, mode: expected.mode });
+        await createExtractedDirectory(outputPath, expected.mode);
       } else {
         await fs.mkdir(path.dirname(outputPath), { recursive: true });
         const source = await openEntryStream(zipFile, entry);
@@ -152,13 +154,12 @@ function toManifestEntry(entry: yauzl.Entry): ArchiveManifestEntry {
   assertZipEntryIsReadable(entry);
   const name = normalizeArchiveEntryName(entry.fileName);
   const unixMode = (entry.externalFileAttributes >>> 16) & 0xffff;
-  const directory = isZipDirectory(entry.fileName, unixMode);
-  const fallback = directory ? 0o755 : 0o644;
+  const kind = isZipDirectory(entry.fileName, unixMode) ? 'directory' : 'file';
   return {
     name,
-    kind: directory ? 'directory' : 'file',
-    size: directory ? 0 : entry.uncompressedSize,
-    mode: unixMode & 0o777 || fallback,
+    kind,
+    size: kind === 'directory' ? 0 : entry.uncompressedSize,
+    mode: extractedEntryMode(kind, unixMode === 0 ? undefined : unixMode),
   };
 }
 

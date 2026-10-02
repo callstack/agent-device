@@ -1,3 +1,4 @@
+import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isCommandTimeoutError } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -321,9 +322,51 @@ export async function resolveAppleCaptureDisplay(
   device: DeviceInfo,
   options: { timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<AppleDeviceDisplay | undefined> {
+  return (await resolveAppleCaptureTarget(device, options)).display;
+}
+
+/**
+ * The display a capture must name (see `resolveAppleCaptureDisplay`) and, on a single-panel device,
+ * the rotation that panel is showing, both from one CoreDevice read.
+ */
+export async function resolveAppleCaptureTarget(
+  device: DeviceInfo,
+  options: { timeoutMs?: number; signal?: AbortSignal } = {},
+): Promise<AppleCaptureTarget> {
   const inventory = await queryAppleDisplayInventory(device, options);
-  if (inventory.unresolved || !inventory.multiScreen) return undefined;
-  return inventory.activeDisplay;
+  if (inventory.unresolved) return {};
+  if (inventory.multiScreen) {
+    return inventory.activeDisplay ? { display: inventory.activeDisplay } : {};
+  }
+  // Only a built-in panel is the screen simctl captures; an attached display says nothing about it.
+  const panel = inventory.displays.find((entry) => entry.integrated);
+  const displayRotation = panel ? appleDisplayRotation(panel) : undefined;
+  return displayRotation ? { displayRotation } : {};
+}
+
+/**
+ * A multi-panel device names its display and reports no rotation: a foldable panel's
+ * `currentOrientation` is relative to that panel's own geometry (the iPhone Duo inner panel
+ * reads `rot90` in a portrait hold, ADR 0025), so it cannot be read as a device rotation.
+ */
+export type AppleCaptureTarget =
+  | Readonly<{ display: AppleDeviceDisplay; displayRotation?: never }>
+  | Readonly<{ display?: never; displayRotation?: DeviceRotation }>;
+
+/**
+ * A portrait-shaped panel's content rotation, as measured on rotated iPhone and iPad simulators:
+ * `rot270` is what the display shows after a rotation to landscape-left. An unrecognized or
+ * missing value maps to no rotation.
+ */
+const CORE_DEVICE_ROTATIONS: ReadonlyMap<string, DeviceRotation> = new Map<string, DeviceRotation>([
+  ['rot0', 'portrait'],
+  ['rot90', 'landscape-right'],
+  ['rot180', 'portrait-upside-down'],
+  ['rot270', 'landscape-left'],
+]);
+
+function appleDisplayRotation(display: AppleDeviceDisplay): DeviceRotation | undefined {
+  return CORE_DEVICE_ROTATIONS.get(display.currentOrientation);
 }
 
 /**

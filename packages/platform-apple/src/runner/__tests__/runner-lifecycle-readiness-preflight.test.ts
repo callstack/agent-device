@@ -6,9 +6,9 @@ import {
   isRequestCanceledError,
 } from '@agent-device/kernel/errors';
 import { appleRunnerTestHost } from '../test-host.ts';
-import type { RunnerXctestrunArtifact } from '../runner-xctestrun.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import {
+  makeRunnerArtifact,
   createTestRequestCancellation,
   makeRunnerSession,
   runnerConnectFailure,
@@ -74,20 +74,6 @@ beforeEach(() => {
     getRequestSignal: () => undefined,
   });
 });
-
-function makeRunnerArtifact(
-  overrides: Partial<RunnerXctestrunArtifact> = {},
-): RunnerXctestrunArtifact {
-  return {
-    xctestrunPath: '/tmp/runner.xctestrun',
-    derived: '/tmp/derived',
-    cache: 'exact',
-    artifact: 'valid',
-    buildMs: 0,
-    xctestrunPathSource: 'manifest',
-    ...overrides,
-  };
-}
 
 test('mutating commands restart stale sessions when readiness preflight fails before command send', async () => {
   const staleSession = makeRunnerSession({ port: 8100, state: 'ready' });

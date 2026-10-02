@@ -10,6 +10,8 @@ import {
   isActiveProviderDevice,
 } from '../../provider-device-runtime.ts';
 import { installProviderDeviceAdmission } from '../provider-device-admission.ts';
+import { assertDaemonPolicyAllowsCapability } from '../daemon-policy.ts';
+import { loadDaemonPolicy, type DaemonPolicy } from '../../daemon-policy-file.ts';
 import { getInteractor } from '../../core/interactors.ts';
 import { installInteractorResolution } from '../interactor-resolution.ts';
 import {
@@ -58,21 +60,23 @@ import {
 import {
   createOwnedProcessRecordStore,
   type OwnedProcessRecordStore,
+  readCurrentOwnerIdentity,
   reapOwnedProcessRecordsAtStartup,
+  type OwnerIdentity,
 } from '@agent-device/host-kit/process';
 import { isEnvTruthy, sleep } from '@agent-device/host-kit/retry';
 
 import {
   acquireDaemonLock,
   parseIntegerEnv,
-  readProcessStartTime,
   readVersion,
   releaseDaemonLock,
-  removeInfo,
+  removeInfoOwnedBy,
   resolveDaemonCodeOrigin,
   resolveDaemonCodeSignature,
   writeInfo,
 } from './server-lifecycle.ts';
+import { watchDaemonMetadataLoss, type DaemonMetadataLoss } from './daemon-metadata-loss.ts';
 import {
   createSocketServer,
   listenHttpServer,
@@ -236,6 +240,74 @@ export async function flushDaemonStartupDiagnostics(
   );
 }
 
+/**
+ * Records one daemon-level event. These run outside any request, so there is no request scope and no
+ * resolved debug level to inherit; debug is forced on for the same reason the #2681 handoff forces it —
+ * the event is the point of the record and must not be dropped by a level that was never set for it.
+ */
+async function emitDaemonDiagnostic(
+  logPath: string,
+  phase: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  await withDiagnosticsScope(
+    { command: 'daemon', session: 'daemon', logPath, debug: true },
+    async () => {
+      emitDiagnostic({ level: 'warn', phase, data });
+      flushDiagnosticsToSessionFile({ force: true });
+    },
+  );
+}
+
+/**
+ * Removes this daemon's `daemon.json` at exit, and only while the record still names it: a shutdown
+ * that unlinked whatever file was present took the metadata of the daemon now serving clients (#3087).
+ * An absent record is not a decline worth logging, because client cleanup removes it routinely and a
+ * startup that failed before publication must not leave a `daemon.log` behind.
+ */
+async function removeOwnDaemonInfo(params: {
+  infoPath: string;
+  logPath: string;
+  owner: OwnerIdentity;
+}): Promise<void> {
+  const removal = removeInfoOwnedBy(params.infoPath, params.owner);
+  if (removal.removed || removal.reason === 'absent') return;
+  await emitDaemonDiagnostic(params.logPath, 'daemon_info_removal_declined', {
+    infoPath: params.infoPath,
+    ...removal,
+  });
+}
+
+async function noteDaemonMetadataLoss(params: {
+  infoPath: string;
+  logPath: string;
+  loss: DaemonMetadataLoss;
+}): Promise<void> {
+  await emitDaemonDiagnostic(params.logPath, 'daemon_metadata_lost', {
+    infoPath: params.infoPath,
+    ...params.loss,
+  });
+}
+
+/**
+ * Starts the watch that reports this daemon's registration being taken over, and returns the handle
+ * that stops it. It is armed only once this process has published its own record: before publication
+ * the file legitimately describes a predecessor, and losing that is not this daemon's event.
+ */
+function armDaemonMetadataLossWatch(
+  stateDir: string,
+  infoPath: string,
+  logPath: string,
+  owner: OwnerIdentity,
+): () => void {
+  return watchDaemonMetadataLoss({
+    infoPath,
+    stateDir,
+    owner,
+    onLoss: (loss) => void noteDaemonMetadataLoss({ infoPath, logPath, loss }).catch(() => {}),
+  });
+}
+
 export async function startDaemonRuntime(
   options: DaemonRuntimeOptions = {},
 ): Promise<DaemonRuntimeController | null> {
@@ -247,6 +319,16 @@ export async function startDaemonRuntime(
   const { baseDir, infoPath, lockPath, logPath, sessionsDir } = daemonPaths;
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
+  // ADR 0029: a policy that cannot be read or validated stops startup; the daemon never runs
+  // with a weaker policy than its operator named.
+  let daemonPolicy: DaemonPolicy | undefined;
+  try {
+    daemonPolicy = loadDaemonPolicy(env);
+  } catch (error) {
+    stderr.write(`Daemon error: ${asAppError(error).message}\n`);
+    exit(1);
+    return null;
+  }
 
   const sessionStore = new SessionStore(sessionsDir);
   const ownedProcessRecords = createOwnedProcessRecordStore({
@@ -261,12 +343,16 @@ export async function startDaemonRuntime(
   const screenRecordingAdmissionLedger = createScreenRecordingAdmissionLedger();
   const version = readVersion();
   const token = crypto.randomBytes(24).toString('hex');
-  const daemonProcessStartTime = readProcessStartTime(process.pid) ?? undefined;
+  const daemonIdentity = readCurrentOwnerIdentity();
+  const daemonProcessStartTime = daemonIdentity.startTime ?? undefined;
   const daemonCodeOrigin = resolveDaemonCodeOrigin();
   const daemonCodeSignature = resolveDaemonCodeSignature();
   const providerComposition = await createDefaultProviderRuntimeComposition(env);
   const providerDeviceRuntimes = [...providerComposition.runtimes];
   const deviceRuntimeGateway = createPlatformRuntimeGateway({
+    assertShutdownAllowed: daemonPolicy
+      ? () => assertDaemonPolicyAllowsCapability(daemonPolicy, 'device-shutdown')
+      : undefined,
     providerRuntimes: providerDeviceRuntimes,
     providerModules: providerComposition.platformModules,
     sessionsDir,
@@ -345,7 +431,10 @@ export async function startDaemonRuntime(
     providerRuntimeRequiredIds: providerRuntimeProviders.providerRuntimeRequiredIds,
     providerDeviceRuntimeScope: providerRuntimeProviders.providerDeviceRuntimeScope,
     trackDownloadableArtifact,
+    daemonPolicy,
   });
+
+  let stopMetadataLossWatch: () => void = () => {};
 
   const emitFatalDiagnostic = async (error: unknown): Promise<void> => {
     await withDiagnosticsScope(
@@ -539,6 +628,7 @@ export async function startDaemonRuntime(
       codeOrigin: daemonCodeOrigin,
       codeSignature: daemonCodeSignature,
       processStartTime: daemonProcessStartTime,
+      policyDigest: daemonPolicy?.digest,
     });
     if (socketPort) stdout.write(`AGENT_DEVICE_DAEMON_PORT=${socketPort}\n`);
     if (httpPort) stdout.write(`AGENT_DEVICE_DAEMON_HTTP_PORT=${httpPort}\n`);
@@ -625,6 +715,7 @@ export async function startDaemonRuntime(
     socketPort = opened.socketPort;
     httpPort = opened.httpPort;
     publishDaemonInfo(socketPort, httpPort);
+    stopMetadataLossWatch = armDaemonMetadataLossWatch(baseDir, infoPath, logPath, daemonIdentity);
     await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
     // After publication: publishDaemonInfo truncates daemon.log, so anything
     // written before it is lost — including reconciliation diagnostics.
@@ -642,7 +733,8 @@ export async function startDaemonRuntime(
     const appErr = asAppError(error);
     stderr.write(`Daemon error: ${appErr.message}\n`);
     closeServersBestEffort(servers);
-    removeInfo(infoPath);
+    stopMetadataLossWatch();
+    await removeOwnDaemonInfo({ infoPath, logPath, owner: daemonIdentity });
     releaseDaemonLock(lockPath);
     await platformDaemonLifecycleOwners.clearDaemonLockConfiguration();
     exit(1);
@@ -660,6 +752,7 @@ export async function startDaemonRuntime(
     sessionIdleExpiry.cancel();
     if (shuttingDown) return;
     shuttingDown = true;
+    stopMetadataLossWatch();
     if (shutdownOptions.cause) {
       await emitFatalDiagnostic(shutdownOptions.cause);
     }
@@ -719,7 +812,7 @@ export async function startDaemonRuntime(
       terminatePngWorker().catch(() => {}),
       sleep(DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
     ]);
-    removeInfo(infoPath);
+    await removeOwnDaemonInfo({ infoPath, logPath, owner: daemonIdentity });
     releaseDaemonLock(lockPath);
     await platformDaemonLifecycleOwners.clearDaemonLockConfiguration();
     exit(shutdownOptions.exitCode ?? 0);

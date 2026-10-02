@@ -5,7 +5,7 @@ import type {
   SettleObservation,
   SettleParams,
 } from '@agent-device/contracts/interaction';
-import { captureInteractionSnapshot } from './resolution.ts';
+import { captureInteractionSnapshot } from './interaction-snapshot-capture.ts';
 import { summarizePostActionEvidence, surfaceScopedNodes } from './post-action-surface.ts';
 import { settleAfterInteraction, settleEvidence } from './settle.ts';
 

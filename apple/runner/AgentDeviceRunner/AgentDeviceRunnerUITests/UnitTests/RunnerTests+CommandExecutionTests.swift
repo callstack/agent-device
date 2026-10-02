@@ -5,16 +5,24 @@ import AgentDeviceSnapshotPresentation
 import ObjectiveC.runtime
 
 private final class RunnerSynthesizedTapFailureStub: NSObject {
-  @objc(synthesizeTapWithApplication:resolvedWindow:x:y:)
-  class func synthesizeTap(application: XCUIApplication, resolvedWindow: Any?, x: Double, y: Double) -> String? {
-    "forced private synthesis failure"
+  @objc(synthesizeTapWithApplication:resolvedWindow:x:y:deadline:errorMessage:)
+  class func synthesizeTap(
+    application: XCUIApplication,
+    resolvedWindow: Any?,
+    x: Double,
+    y: Double,
+    deadline: NSDate?,
+    errorMessage: AutoreleasingUnsafeMutablePointer<NSString?>?
+  ) -> RunnerTapSynthesisStatus {
+    errorMessage?.pointee = "forced private synthesis failure"
+    return .failed
   }
 }
 
 extension RunnerTests {
   /// Makes private tap synthesis fail until the returned closure restores it.
   func forceSynthesizedTapFailure() throws -> () -> Void {
-    let selector = NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:x:y:")
+    let selector = NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:x:y:deadline:errorMessage:")
     let synthesizedTapMethod = try XCTUnwrap(class_getClassMethod(RunnerSynthesizedGesture.self, selector))
     let failureStubMethod = try XCTUnwrap(class_getClassMethod(RunnerSynthesizedTapFailureStub.self, selector))
     let originalImplementation = method_getImplementation(synthesizedTapMethod)

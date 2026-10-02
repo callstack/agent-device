@@ -76,7 +76,7 @@ export async function sendToDaemon(
   const request = buildTransportRequest(
     requestWithoutAuthFlag,
     preparedRemoteRequest,
-    info.token,
+    info,
     requestId,
     debug,
   );
@@ -119,7 +119,7 @@ export async function sendToDaemon(
 function buildTransportRequest(
   request: Omit<DaemonRequest, 'token'>,
   preparedRemoteRequest: Awaited<ReturnType<typeof prepareRemoteRequestArtifacts>>,
-  token: string,
+  info: DaemonInfo,
   requestId: string,
   debug: boolean,
 ): DaemonRequest {
@@ -127,9 +127,21 @@ function buildTransportRequest(
     ...request,
     positionals: preparedRemoteRequest.positionals,
     flags: preparedRemoteRequest.flags,
-    token,
-    meta: buildTransportRequestMeta(request, preparedRemoteRequest, requestId, debug),
+    token: info.token,
+    meta: {
+      ...buildTransportRequestMeta(request, preparedRemoteRequest, requestId, debug),
+      ...buildLocalHostEnvMeta(info),
+    },
   };
+}
+
+// A developer dir is a path on the client's host, so only a local daemon can use it.
+function buildLocalHostEnvMeta(
+  info: DaemonInfo,
+): Pick<NonNullable<DaemonRequest['meta']>, 'developerDir'> {
+  const developerDir = process.env.DEVELOPER_DIR;
+  if (isRemoteDaemon(info)) return { developerDir: undefined };
+  return developerDir !== undefined ? { developerDir } : {};
 }
 
 function buildTransportRequestMeta(

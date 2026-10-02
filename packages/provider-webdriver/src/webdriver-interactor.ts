@@ -363,7 +363,7 @@ class WebDriverInteractor implements Interactor {
 
   async readClipboard(): Promise<string> {
     this.requireSupport('clipboard.read');
-    const value = await this.client.executeScript('mobile: getClipboard', [{}]);
+    const value = await this.client.executeReadScript('mobile: getClipboard', [{}]);
     return typeof value === 'string' ? value : '';
   }
 

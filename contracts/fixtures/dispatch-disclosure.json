@@ -1,0 +1,484 @@
+[
+  {
+    "id": "daemon.refusal.ref-not-found",
+    "producer": "daemon",
+    "trigger": "target resolution refused the @ref (refMissRefusal) before any backend call",
+    "dispatched": "no"
+  },
+  {
+    "id": "daemon.refusal.admission",
+    "producer": "daemon",
+    "trigger": "targeted-touch admission refused the request (admitTargetedTouch) before any backend call",
+    "dispatched": "no"
+  },
+  {
+    "id": "daemon.refusal.fill-admission",
+    "producer": "daemon",
+    "trigger": "fill admission (admitFill) refused the request before any backend call, e.g. a target with no text",
+    "dispatched": "no"
+  },
+  {
+    "id": "daemon.refusal.selector-readiness-exhausted",
+    "producer": "daemon",
+    "trigger": "press with readinessTimeoutMs whose selector target never appears: the readiness wait (pollForSelectorReadiness) spends its budget over two or more polls and refuses with selector_not_found before any backend touch",
+    "dispatched": "no"
+  },
+  {
+    "id": "daemon.unclassified",
+    "producer": "daemon",
+    "trigger": "an interaction failure no producer classified; the seam reads only the failure, never session state",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon.read-only-command",
+    "producer": "daemon",
+    "trigger": "any failure of a command the registry declares read-only (recordingEffect observes-app), e.g. get, even one a producer classified unknown: a read has no side effect",
+    "dispatched": "no"
+  },
+  {
+    "id": "daemon.scroll-no-progress",
+    "producer": "daemon",
+    "trigger": "scroll_no_progress: the scroll gesture was sent and the container, still hiding content, never shifted; nothing proves whether the gesture landed",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon.series.swipe-later-repetition-refused",
+    "producer": "daemon",
+    "trigger": "swipe --count 2: the first repetition ran and the second failed with a producer verdict of no; the series reports unknown with details.dispatchedSteps 1",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon.post-dispatch.press-then-foreground-read-refused",
+    "producer": "daemon",
+    "trigger": "press returned from the device, then the post-press foreground read failed with a producer verdict of no; the request reports unknown with details.dispatchedSteps 1",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon.route.scroll-transport-failure",
+    "producer": "daemon",
+    "trigger": "a plain scroll (generic route) whose gesture send failed with no producer verdict; the request router fills unknown for a command the registry declares mutates-app",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon.route.scroll-until-before-first-gesture",
+    "producer": "daemon",
+    "trigger": "scroll --until whose first capture is refused before any gesture was sent; scroll-until proves nothing was sent",
+    "dispatched": "no"
+  },
+  {
+    "id": "daemon.route.scroll-until-third-pass-refused",
+    "producer": "daemon",
+    "trigger": "scroll --until whose first two gestures returned and whose third is refused with a producer verdict of no; the request ledger counts each bound send once, so details.dispatchedSteps is exactly 2",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon.route.scroll-edge-third-pass-refused",
+    "producer": "daemon",
+    "trigger": "scroll bottom whose first two gestures returned and whose third is refused with a producer verdict of no; the request ledger counts each bound send once, so details.dispatchedSteps is exactly 2",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon.route.scroll-then-dialog-read-refused",
+    "producer": "daemon",
+    "trigger": "an Android scroll whose gesture returned, then the post-command dialog read failed with a producer verdict of no; the request reports unknown with details.dispatchedSteps 1",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon.route.read-only-get",
+    "producer": "daemon",
+    "trigger": "get through the request router: the router, not only the interaction route, discloses no for a command the registry declares observes-app",
+    "dispatched": "no"
+  },
+  {
+    "id": "daemon.route.find-type-refused-after-focus",
+    "producer": "daemon",
+    "trigger": "find <q> type: the focus tap returned, then the typeText send was refused before send (no); the request reports unknown with details.dispatchedSteps 1",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon.route.session-close-then-finalize-refused",
+    "producer": "daemon",
+    "trigger": "close (session route): the app-close send returned, then the lifecycle finalize was refused before send (no); the cleanup failure reports unknown with details.dispatchedSteps 1",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon.route.maestro-deferred-settle-capture-refused",
+    "producer": "daemon",
+    "trigger": "a Maestro replay (session route): back (stability deferred) returned, then the deferred settle capture the next command takes was refused with RUNNER_BUSY (no); the replay reports unknown with details.dispatchedSteps 1",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon.route.batch-mutation-then-refused-step",
+    "producer": "daemon",
+    "trigger": "batch [press lands, press refused before send]: the failing step reports no, but an executed step mutated; the batch reports unknown with details.dispatchedSteps 1",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon.route.batch-read-then-refused-step",
+    "producer": "daemon",
+    "trigger": "batch [get, press refused before send]: no executed step mutated, so the failing step's no stands",
+    "dispatched": "no"
+  },
+  {
+    "id": "maestro-direct.fallback.pre-send-refusal",
+    "producer": "daemon",
+    "trigger": "the direct iOS selector tap failed with a runner refusal disclosed no (connect refused before send); the tree path taps instead",
+    "dispatched": "no",
+    "fallsBack": true
+  },
+  {
+    "id": "maestro-direct.fallback.lost-reply",
+    "producer": "daemon",
+    "trigger": "the direct iOS selector tap lost its reply and the status probe failed (unknown); the tap may have landed, so the tree path must not tap again",
+    "dispatched": "unknown",
+    "fallsBack": false
+  },
+  {
+    "id": "post-action-guard.android-press-left-app",
+    "producer": "post-action-guard",
+    "trigger": "assertAndroidPressStayedInApp observed an escape surface in the foreground after the press; the guard stamps nothing and the daemon seam fills unknown",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.reply.INVALID_ARGS",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code INVALID_ARGS: request decoding or argument validation refused before any gesture",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.RUNNER_BUSY",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code RUNNER_BUSY: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.RUNNER_WEDGED",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code RUNNER_WEDGED: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.APP_NOT_RUNNING",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code APP_NOT_RUNNING: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.SCROLL_KEYBOARD_OCCLUDES_SURFACE",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code SCROLL_KEYBOARD_OCCLUDES_SURFACE: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.ALERT_NOT_FOUND",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code ALERT_NOT_FOUND: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.APP_SCREEN_WINDOW_UNRESOLVED",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code APP_SCREEN_WINDOW_UNRESOLVED: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.APP_SCREEN_UNRESOLVED",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code APP_SCREEN_UNRESOLVED: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.APP_SCREEN_CAPTURE_UNRENDERABLE",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code APP_SCREEN_CAPTURE_UNRENDERABLE: a refusal that ran nothing",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.ELEMENT_NOT_FOUND",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code ELEMENT_NOT_FOUND: a selector refusal before any gesture",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.ELEMENT_OFFSCREEN",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code ELEMENT_OFFSCREEN: a selector refusal before any gesture",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.AMBIGUOUS_MATCH",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code AMBIGUOUS_MATCH: a selector refusal before any gesture",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.reply.MAIN_THREAD_TIMEOUT",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code MAIN_THREAD_TIMEOUT: abandoned work may still land",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.reply.UNSUPPORTED_OPERATION",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code UNSUPPORTED_OPERATION, which a synthesized gesture or an element tap also reports after it ran",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.reply.unlisted-code",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with any other code, e.g. XCTEST_RECORDED_FAILURE, which the runner reports as \"the action may not have been performed\"",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.series.later-chunk-refused",
+    "producer": "ios-runner",
+    "trigger": "press --count 25 splits into two sequence chunks; the first completed its 20 taps and the second was refused with RUNNER_BUSY; the series reports unknown with details.dispatchedSteps 20, one per completed tap",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.series.invalid-step-before-send",
+    "producer": "ios-runner",
+    "trigger": "press --count 2 at a non-finite point: sequence validation refuses the steps before any sequence request is sent (reason runner_sequence_invalid)",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.pre-send.session-start-failed",
+    "producer": "ios-runner",
+    "trigger": "the runner session could not start, so the command never reached the exchange",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.pre-send.connect-refused-before-write",
+    "producer": "ios-runner",
+    "trigger": "every connect attempt was refused before a byte was written (ECONNREFUSED, simctl curl exit 7), and the restart that would replay the command failed",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.transport.written-then-lost",
+    "producer": "ios-runner",
+    "trigger": "a mutating command was posted and the runner process died before replying; the status probe fails, the session is invalidated, and the command is not sent again (details.reason runner_reply_lost)",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.transport.read-only-written-then-lost",
+    "producer": "ios-runner",
+    "trigger": "a connect attempt posted a read-only command and then timed out (fetch deadline, simctl curl exit 28); the runner is restarted and the read is sent again, and the resend failed; the first send may have run, so the runner reports unknown, and the daemon's read-only rule (daemon.read-only-command) reports no to the caller",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.pre-send.readiness-preflight-after-restart",
+    "producer": "ios-runner",
+    "trigger": "the readiness preflight gave up before the command was written, again after the restart",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.transport.replay-failed-after-unwritten-first-attempt",
+    "producer": "ios-runner",
+    "trigger": "the first attempt was refused before the write (readiness preflight), the restart replayed the command, and the replay failed with no producer verdict; the replay may have landed",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.status.failed",
+    "producer": "ios-runner",
+    "trigger": "transport lost; status probe reports lifecycleState failed with no code the runner proves pre-gesture",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.status.failed-RUNNER_BUSY",
+    "producer": "ios-runner",
+    "trigger": "transport lost; status probe reports lifecycleState failed with journal code RUNNER_BUSY",
+    "dispatched": "no"
+  },
+  {
+    "id": "ios-runner.status.completed-without-retained-reply",
+    "producer": "ios-runner",
+    "trigger": "transport lost; status probe reports lifecycleState completed without a readable retained reply",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.status.read-only-completed-without-retained-reply",
+    "producer": "ios-runner",
+    "trigger": "transport lost on a read-only command; status probe reports lifecycleState completed without a readable retained reply; the runner reports unknown, and the daemon's read-only rule (daemon.read-only-command) reports no to the caller",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.status.accepted",
+    "producer": "ios-runner",
+    "trigger": "transport lost; status probe reports lifecycleState accepted",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.status.started",
+    "producer": "ios-runner",
+    "trigger": "transport lost; status probe reports lifecycleState started",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.status.notAccepted",
+    "producer": "ios-runner",
+    "trigger": "transport lost; status probe reports lifecycleState notAccepted (the journal may not have survived a restart)",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.status.probe-failed",
+    "producer": "ios-runner",
+    "trigger": "transport lost; the status probe itself failed",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "ios-runner.status.unavailable",
+    "producer": "ios-runner",
+    "trigger": "transport lost; the command carries no commandId to probe",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-adb.input-tap.tool-missing",
+    "producer": "android-adb",
+    "trigger": "adb input tap could not start: TOOL_MISSING",
+    "dispatched": "no"
+  },
+  {
+    "id": "android-adb.input-tap.failed",
+    "producer": "android-adb",
+    "trigger": "adb input tap started and failed with an exit the host adb did not refuse",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-adb.input-tap.host-refused.device-unauthorized",
+    "producer": "android-adb",
+    "trigger": "adb input tap refused by the host adb (device_unauthorized) before it reached the device; the classifier's hostRefusal verdict, stamped as details.adbHostRefusal, makes it no",
+    "dispatched": "no"
+  },
+  {
+    "id": "android-adb.input-tap.host-refused.device-offline",
+    "producer": "android-adb",
+    "trigger": "adb input tap refused by the host adb (device_offline) before it reached the device; the classifier's hostRefusal verdict, stamped as details.adbHostRefusal, makes it no",
+    "dispatched": "no"
+  },
+  {
+    "id": "android-adb.input-tap.host-refused.multiple-devices",
+    "producer": "android-adb",
+    "trigger": "adb input tap refused by the host adb (multiple_devices) before it reached the device; the classifier's hostRefusal verdict, stamped as details.adbHostRefusal, makes it no",
+    "dispatched": "no"
+  },
+  {
+    "id": "android-adb.input-tap.host-refused.no-devices",
+    "producer": "android-adb",
+    "trigger": "adb input tap refused by the host adb (no_devices) before it reached the device; the classifier's hostRefusal verdict, stamped as details.adbHostRefusal, makes it no",
+    "dispatched": "no"
+  },
+  {
+    "id": "android-adb.input-tap.host-refused.device-not-found",
+    "producer": "android-adb",
+    "trigger": "adb input tap refused by the host adb (device_not_found) before it reached the device; the classifier's hostRefusal verdict, stamped as details.adbHostRefusal, makes it no",
+    "dispatched": "no"
+  },
+  {
+    "id": "android-adb.input-tap.refusal-text-beside-other-output",
+    "producer": "android-adb",
+    "trigger": "adb input tap failed with a recognized refusal line followed by a non-trailer line (error: device offline, then Killed); only a refusal that is the entire output makes it no",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-adb.input-tap.double-tap-second-refused",
+    "producer": "android-adb",
+    "trigger": "press --double: the first input tap ran and the second could not start (TOOL_MISSING, no); the double tap reports unknown with details.dispatchedSteps 1",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-adb.input-text.failed-after-chunk",
+    "producer": "android-adb",
+    "trigger": "adb input text failed after at least one chunk was typed (details.dispatchedSteps)",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-adb.input-text.tool-missing-before-first-input",
+    "producer": "android-adb",
+    "trigger": "type \"\\nfiled\": adb is missing, so the leading ENTER keyevent, the first input sent, fails with TOOL_MISSING; the empty text before the newline sends nothing and is not a dispatched step",
+    "dispatched": "no"
+  },
+  {
+    "id": "android-adb.fill.unverified",
+    "producer": "android-adb",
+    "trigger": "fill sent the text and its verification still failed after the last clear-and-retype pass",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-adb.fill.second-pass-input-failed",
+    "producer": "android-adb",
+    "trigger": "fill's first clear-and-retype pass typed and failed verification; the second pass's adb input text then failed, so the fill reports unknown with details.dispatchedSteps counting the steps both passes sent",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-helper.gesture.reported-failure",
+    "producer": "android-helper",
+    "trigger": "one-shot helper gesture returned a parsed final result with ok=false, which carries no count of events injected before the failure",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-helper.gesture.failed-after-result",
+    "producer": "android-helper",
+    "trigger": "one-shot helper gesture returned a parsed final result and exited non-zero",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-helper.gesture.no-parseable-output",
+    "producer": "android-helper",
+    "trigger": "one-shot helper gesture failed before returning parseable output",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-helper.gesture.host-refused",
+    "producer": "android-helper",
+    "trigger": "one-shot helper gesture: the host adb refused the am instrument launch (device unauthorized) before it reached the device",
+    "dispatched": "no"
+  },
+  {
+    "id": "android-helper.ime.broadcast-tool-missing",
+    "producer": "android-helper",
+    "trigger": "type through the helper IME: adb is missing, so the first text broadcast never started (TOOL_MISSING)",
+    "dispatched": "no"
+  },
+  {
+    "id": "android-helper.ime.broadcast-failed",
+    "producer": "android-helper",
+    "trigger": "type through the helper IME: the text broadcast started and exited non-zero; the IME may have received it",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-helper.gesture-session.reported-failure",
+    "producer": "android-helper",
+    "trigger": "persistent helper session answered the gesture with ok=false, which carries no count of events injected before the failure",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-helper.gesture-session.transport-failure",
+    "producer": "android-helper",
+    "trigger": "persistent helper session transport failed during the gesture",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "webdriver.connect-refused",
+    "producer": "webdriver",
+    "trigger": "a mutating POST to a port nothing listens on: the connection was refused before any byte of the request was sent",
+    "dispatched": "no"
+  },
+  {
+    "id": "webdriver.timeout-after-send",
+    "producer": "webdriver",
+    "trigger": "a mutating POST whose body the driver read and never answered: the transport deadline aborted it after send",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "webdriver.http-5xx-after-send",
+    "producer": "webdriver",
+    "trigger": "a mutating POST the driver answered 503: it received the request, but not whether the mutation completed",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "webdriver.orientation.every-route-unsupported",
+    "producer": "webdriver",
+    "trigger": "orientation refused by both the rotation route and the orientation route: each answer said the route is not implemented, so nothing ran",
+    "dispatched": "no"
+  }
+]

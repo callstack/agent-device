@@ -1,5 +1,25 @@
 import XCTest
 
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+import ObjectiveC.runtime
+
+private final class AlertTapDeadlineStub: NSObject {
+  static var status: RunnerTapSynthesisStatus?
+
+  @objc(synthesizeTapWithApplication:resolvedWindow:x:y:deadline:errorMessage:)
+  class func synthesizeTap(
+    application: XCUIApplication,
+    resolvedWindow: Any?,
+    x: Double,
+    y: Double,
+    deadline: NSDate?,
+    errorMessage: AutoreleasingUnsafeMutablePointer<NSString?>?
+  ) -> RunnerTapSynthesisStatus {
+    status ?? (deadline == nil ? .succeeded : .deadlineExceeded)
+  }
+}
+#endif
+
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
   @MainActor
@@ -83,6 +103,42 @@ extension RunnerTests {
   }
 
   @MainActor
+  func testAlertDeadlineDuringSynthesisPreparationLeavesTheOriginalUntouched() throws {
+    app.launchArguments = ["--agent-device-alert-replacement-regression"]
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: appExistenceTimeout))
+    let alert = try resolveAlertBeforeTheCommand()
+    let button = try XCTUnwrap(alert.buttons.first { $0.label == "OK" })
+    let frame = button.frame
+    let selector = NSSelectorFromString("synthesizeTapWithApplication:resolvedWindow:x:y:deadline:errorMessage:")
+    let method = try XCTUnwrap(class_getClassMethod(RunnerSynthesizedGesture.self, selector))
+    let stub = try XCTUnwrap(class_getClassMethod(AlertTapDeadlineStub.self, selector))
+    let original = method_getImplementation(method)
+    method_setImplementation(method, method_getImplementation(stub))
+    defer {
+      AlertTapDeadlineStub.status = nil
+      method_setImplementation(method, original)
+    }
+
+    let outcome = activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantFuture)
+
+    XCTAssertNil(outcome)
+    XCTAssertTrue(app.alerts.firstMatch.exists)
+    XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
+
+    AlertTapDeadlineStub.status = RunnerTapSynthesisStatus(rawValue: 999)
+    let unknown = activateAlertButton(alert, button: button, action: "accept", frame: frame, deadline: .distantFuture)
+    guard case .unsupported? = unknown else {
+      return XCTFail("an unknown native status must report failure rather than deadline expiry")
+    }
+    XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 0; replacement actions: 0")
+  }
+
+  @MainActor
   func testAlertActivationIgnoresAnAppThatNeverSettlesBeforeTheDeadline() throws {
     app.launchArguments = [
       "--agent-device-alert-replacement-regression",
@@ -109,42 +165,63 @@ extension RunnerTests {
   }
 
   @MainActor
-  func testAlertActivationDoesNotWaitOutANotificationBanner() throws {
+  func testAlertActivationDoesNotConsultInterruptionHandlingWithANotificationBanner() throws {
+    try withNotificationBannerAlert { alert in
+      var consultedInterruptions: [String] = []
+      let monitor = addUIInterruptionMonitor(withDescription: "alert activation banner") { element in
+        consultedInterruptions.append(element.identifier)
+        return false
+      }
+      defer { removeUIInterruptionMonitor(monitor) }
+
+      _ = handleAlert(alert, action: "accept", deadline: Date().addingTimeInterval(RunnerTests.alertActivationDeadline))
+
+      XCTAssertEqual(consultedInterruptions, [], "alert activation consulted XCTest's interruption handling")
+    }
+  }
+
+  @MainActor
+  func testAlertActivationConfirmsBeforeDeadlineWithANotificationBanner() throws {
+    try withNotificationBannerAlert { alert in
+      let deadline = Date().addingTimeInterval(RunnerTests.alertActivationDeadline)
+      let response = handleAlert(alert, action: "accept", deadline: deadline)
+
+      XCTAssertTrue(response.ok, String(describing: response.error))
+      XCTAssertLessThan(Date(), deadline)
+      XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 1; replacement actions: 0")
+    }
+  }
+
+  @MainActor
+  private func withNotificationBannerAlert(_ assertions: (RunnerAlert) throws -> Void) throws {
     app.launchArguments = ["--agent-device-alert-replacement-regression", "--agent-device-alert-banner"]
     app.launch()
     let banner = XCUIApplication(bundleIdentifier: "com.apple.springboard")
       .descendants(matching: .any)["NotificationShortLookView"]
-    var consultedInterruptions: [String] = []
-    let monitor = addUIInterruptionMonitor(withDescription: "alert activation banner") { element in
-      consultedInterruptions.append(element.identifier)
-      return false
-    }
     defer {
-      removeUIInterruptionMonitor(monitor)
       invalidateCachedTarget(reason: "unit_test_cleanup")
       app.terminate()
       _ = banner.waitForNonExistence(timeout: 15)
     }
-    acceptNotificationAuthorizationUntilAlertAppears()
+    try acceptNotificationAuthorizationUntilAlertAppears()
     XCTAssertTrue(banner.waitForExistence(timeout: appExistenceTimeout), "the fixture keeps a banner up")
     let alert = try resolveAlertBeforeTheCommand()
 
-    let response = handleAlert(alert, action: "accept", deadline: Date().addingTimeInterval(RunnerTests.alertBannerActivationDeadline))
-
-    XCTAssertEqual(consultedInterruptions, [], "alert activation waited on XCTest's interruption handling")
-    XCTAssertTrue(response.ok, String(describing: response.error))
-    XCTAssertEqual(app.staticTexts["agent-device-alert-actions"].label, "First actions: 1; replacement actions: 0")
+    try assertions(alert)
   }
 
   /// The banner fixture presents its alert only once this app may post notifications; a fresh
   /// simulator asks first, through SpringBoard.
-  private func acceptNotificationAuthorizationUntilAlertAppears() {
+  @MainActor
+  private func acceptNotificationAuthorizationUntilAlertAppears() throws {
     let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
     let fixtureAlert = app.alerts.firstMatch
     let deadline = Date().addingTimeInterval(appExistenceTimeout)
     while Date() < deadline, !fixtureAlert.exists {
       if allow.exists {
-        allow.tap()
+        let authorization = try XCTUnwrap(resolveAlert(app: app, deadline: deadline))
+        let response = handleAlert(authorization, action: "accept", deadline: deadline)
+        XCTAssertTrue(response.ok, String(describing: response.error))
       } else {
         Thread.sleep(forTimeInterval: 0.25)
       }
@@ -163,7 +240,6 @@ extension RunnerTests {
   /// the deadline itself pays it in full. It buys the dozen reads after resolution 2.5 s each, above the
   /// 1.7 s a read cost on the worst hosted nights traced (#2708).
   static let alertActivationDeadline: TimeInterval = 30
-  static let alertBannerActivationDeadline: TimeInterval = 90
 
   @MainActor
   private func resolveAlertBeforeTheCommand() throws -> RunnerAlert {

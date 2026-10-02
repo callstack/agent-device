@@ -54,6 +54,7 @@ import {
   resolveRunnerBuildDestination,
   resolveRunnerXctestrunHints,
 } from './apple-runner-platform.ts';
+import { resolveRunnerCacheKey } from './runner-cache-metadata.ts';
 import { resolveAppleRunnerProjectPath } from './runner-source.ts';
 export { prepareXctestrunWithEnv } from './runner-artifact-env.ts';
 
@@ -65,12 +66,14 @@ export type RunnerXctestrunArtifactState = 'valid' | 'rebuilt';
 export type RunnerXctestrunArtifact = {
   xctestrunPath: string;
   derived: string;
-  cache: RunnerXctestrunCacheKind;
   artifact: RunnerXctestrunArtifactState;
   buildMs: number;
   xctestrunPathSource: 'manifest' | 'build' | 'external';
   reason?: string;
-};
+} & (
+  | { cache: Exclude<RunnerXctestrunCacheKind, 'external'>; cacheKey: string }
+  | { cache: 'external'; cacheKey?: string }
+);
 
 export type ExternalXctestRunnerOptions = {
   iosXctestrunFile?: string;
@@ -215,7 +218,7 @@ async function resolveReusableXctestrunArtifact(params: {
   derived: string;
   expectedCacheMetadata: RunnerXctestrunCacheMetadata;
   existing: ExistingXctestrunState;
-  cache: RunnerXctestrunArtifact['cache'];
+  cache: Exclude<RunnerXctestrunArtifact['cache'], 'external'>;
 }): Promise<RunnerXctestrunArtifact | null> {
   const { device, derived, expectedCacheMetadata, existing, cache } = params;
   if (existing.reason !== 'reuse_ready') return null;
@@ -230,6 +233,7 @@ async function resolveReusableXctestrunArtifact(params: {
     xctestrunPath: reusableXctestrun,
     derived,
     cache,
+    cacheKey: resolveRunnerCacheKey(expectedCacheMetadata),
     artifact: 'valid',
     buildMs: 0,
     xctestrunPathSource: 'manifest',
@@ -242,7 +246,7 @@ async function buildXctestrunArtifact(params: {
   projectRoot: string;
   expectedCacheMetadata: RunnerXctestrunCacheMetadata;
   derived: string;
-  cache: RunnerXctestrunArtifact['cache'];
+  cache: Exclude<RunnerXctestrunArtifact['cache'], 'external'>;
   reason: ExistingXctestrunState['reason'];
 }): Promise<RunnerXctestrunArtifact> {
   const { device, options, projectRoot, expectedCacheMetadata, derived, cache, reason } = params;
@@ -294,6 +298,7 @@ async function buildXctestrunArtifact(params: {
     xctestrunPath: built,
     derived,
     cache,
+    cacheKey: resolveRunnerCacheKey(expectedCacheMetadata),
     artifact: 'rebuilt',
     buildMs,
     xctestrunPathSource: 'build',

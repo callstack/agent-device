@@ -3,9 +3,12 @@ import { beforeEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { Deadline } from '../host.ts';
-import type { RunnerXctestrunArtifact } from '../runner-xctestrun.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
-import { createTestRequestCancellation, makeRunnerSession } from './runner-session-fixtures.ts';
+import {
+  makeRunnerArtifact,
+  createTestRequestCancellation,
+  makeRunnerSession,
+} from './runner-session-fixtures.ts';
 
 const {
   mockEnsureRunnerSession,
@@ -46,20 +49,6 @@ vi.mock('../runner-xctestrun.ts', async () => {
 
 import { prepareIosRunner } from '../runner-client.ts';
 import { resetRunnerRecycleLedgerForTests } from '../runner-recycle-ledger.ts';
-
-function makeRunnerArtifact(
-  overrides: Partial<RunnerXctestrunArtifact> = {},
-): RunnerXctestrunArtifact {
-  return {
-    xctestrunPath: '/tmp/runner.xctestrun',
-    derived: '/tmp/derived',
-    cache: 'exact',
-    artifact: 'valid',
-    buildMs: 0,
-    xctestrunPathSource: 'manifest',
-    ...overrides,
-  };
-}
 
 const requestCancellation = createTestRequestCancellation();
 const { isRequestCanceled } = requestCancellation;

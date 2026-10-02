@@ -32,7 +32,11 @@ export type CommonCommandInput = Pick<
   noRecord?: boolean;
 };
 
-export type CommonInputReadOptions = { readTargetAlias?: boolean };
+export type CommonInputReadOptions = {
+  readTargetAlias?: boolean;
+  /** The command's own fields declare `readinessTimeoutMs` (`interaction/metadata.ts`). */
+  readinessBudgetDeclared?: boolean;
+};
 
 /**
  * `cli-grammar/common.ts`'s two flag-derived projections a row can join:
@@ -212,6 +216,11 @@ const COMMON_INPUT_FIELDS = {
     flagKey: 'noRecord',
     flagIn: ['input', 'selection'],
   },
+  readinessTimeoutMs: {
+    // No schema and no value: a command whose descriptor declares `targetReadiness: 'budgeted'`
+    // carries and reads the key through its own fields; every other command refuses it here.
+    read: refuseUndeclaredReadinessBudget,
+  },
   daemonBaseUrl: {
     schema: { type: 'string', description: 'Remote daemon base URL.' },
     read: (record) => optionalString(record, 'daemonBaseUrl'),
@@ -246,7 +255,10 @@ const COMMON_INPUT_FIELDS = {
     schema: { type: 'boolean', description: 'Enable debug diagnostics.' },
     read: (record) => optionalBoolean(record, 'debug'),
   },
-} as const satisfies Record<keyof CommonCommandInput | 'target', CommonInputFieldSpec>;
+} as const satisfies Record<
+  keyof CommonCommandInput | 'target' | 'readinessTimeoutMs',
+  CommonInputFieldSpec
+>;
 
 const COMMON_INPUT_ROWS: ReadonlyArray<readonly [string, CommonInputFieldSpec]> =
   Object.entries(COMMON_INPUT_FIELDS);
@@ -323,4 +335,17 @@ function readDeviceTarget(
     );
   }
   return deviceTarget ?? targetAlias;
+}
+
+function refuseUndeclaredReadinessBudget(
+  record: Record<string, unknown>,
+  options: CommonInputReadOptions,
+): undefined {
+  if (options.readinessBudgetDeclared === true || !Object.hasOwn(record, 'readinessTimeoutMs')) {
+    return undefined;
+  }
+  throw new AppError(
+    'INVALID_ARGS',
+    'readinessTimeoutMs applies only to commands that wait for their target: press, click, and longpress.',
+  );
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 
 import { assertWaitText, snapshotNodes } from './live-assertions.ts';
-import { acceptDeepLinkConfirmationIfPresent } from './live-deep-link-confirmation.ts';
+import { waitForDeepLinkDestination } from './live-deep-link-destination.ts';
 import { type LiveContext, runStep, verifyBehavior } from './live-harness.ts';
 
 const WEBVIEW_LAB_DEEP_LINK = 'agent-device-test-app:///webview';
@@ -35,7 +35,7 @@ export async function assertWebViewRemoteContent(context: LiveContext): Promise<
     '--launch-url',
     WEBVIEW_LAB_DEEP_LINK,
   ]);
-  await acceptDeepLinkConfirmationIfPresent(context, [`id="${LAB_CHROME_ID}"`]);
+  await waitForDeepLinkDestination(context, [`id="${LAB_CHROME_ID}"`]);
   // `wait` observes through the same route as `snapshot`: page content is reachable only once the
   // route has stopped publishing the bridge's page-less tree.
   await runStep(context, 'wait for the WebView page to expose its link', [

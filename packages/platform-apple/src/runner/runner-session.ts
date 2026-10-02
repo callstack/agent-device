@@ -28,6 +28,7 @@ import {
   resolveRunnerDerivedPath,
   type RunnerPhaseBudget,
 } from './runner-xctestrun.ts';
+import { resolveRunnerCacheKey } from './runner-cache-metadata.ts';
 import type { RunnerCommand } from './runner-contract.ts';
 import { enrichRunnerStartupFailureWithDeviceStates } from './runner-error-classification.ts';
 import { isRunnerReadinessProbeCommand } from './runner-command-traits.ts';
@@ -281,6 +282,7 @@ async function startRunnerSessionWithLease(
     runnerPid: runnerProcess.child.pid,
     port,
     xctestrunPath,
+    cacheKey: xctestrunArtifact.cacheKey,
     jsonPath,
     runnerLogPath,
   });
@@ -416,11 +418,13 @@ async function resolveReusableRunnerSession(
     return existing;
   }
 
-  const expectedDerived = resolveRunnerDerivedPath(
-    device,
-    resolveExpectedRunnerCacheMetadata(device, undefined, startupBudget),
-  );
-  if (existingArtifact?.derived !== expectedDerived) {
+  const expectedMetadata = resolveExpectedRunnerCacheMetadata(device, undefined, startupBudget);
+  const expectedDerived = resolveRunnerDerivedPath(device, expectedMetadata);
+  const expectedCacheKey = resolveRunnerCacheKey(expectedMetadata);
+  if (
+    existingArtifact?.derived !== expectedDerived ||
+    existingArtifact.cacheKey !== expectedCacheKey
+  ) {
     emitDiagnostic({
       level: 'debug',
       phase: 'ios_runner_session_artifact_stale',
@@ -429,6 +433,8 @@ async function resolveReusableRunnerSession(
         sessionId: existing.sessionId,
         currentDerived: existingArtifact?.derived,
         expectedDerived,
+        currentCacheKey: existingArtifact?.cacheKey,
+        expectedCacheKey,
       },
     });
     await measureRunnerStartupStep({}, 'stop_stale_artifact_session', async () => {

@@ -4,40 +4,36 @@ import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import {
   buildInteractionSurfaceSignature,
   classifyBaselineSurfaceEvidence,
-  classifyInteractionSurfaceChange,
+  areInteractionSurfaceSignaturesStable,
   discriminatingSurfaceChangedWithinRect,
-  markPendingInteractionOutcome,
-  stripInternalInteractionFlags,
-} from '../interaction-outcome-policy.ts';
-import type { SessionState } from '../session-state.ts';
-import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+} from '../interaction-surface-signature.ts';
 
-test('classifyInteractionSurfaceChange treats identical surfaces as unchanged', () => {
+test('areInteractionSurfaceSignaturesStable treats identical surfaces as stable', () => {
   const before = buildInteractionSurfaceSignature(makeSnapshot('Inbox').nodes);
   const after = buildInteractionSurfaceSignature(makeSnapshot('Inbox').nodes);
 
-  assert.equal(classifyInteractionSurfaceChange(before, after), 'unchanged');
+  assert.equal(areInteractionSurfaceSignaturesStable(before, after), true);
 });
 
-test('classifyInteractionSurfaceChange tolerates tiny rect drift', () => {
+test('areInteractionSurfaceSignaturesStable tolerates tiny rect drift', () => {
   const before = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 100).nodes);
   const after = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 100.4).nodes);
 
-  assert.equal(classifyInteractionSurfaceChange(before, after), 'unchanged');
+  assert.equal(areInteractionSurfaceSignaturesStable(before, after), true);
 });
 
-test('classifyInteractionSurfaceChange detects semantic screen changes', () => {
+test('areInteractionSurfaceSignaturesStable detects semantic screen changes', () => {
   const before = buildInteractionSurfaceSignature(makeSnapshot('Inbox').nodes);
   const after = buildInteractionSurfaceSignature(makeSnapshot('Article detail').nodes);
 
-  assert.equal(classifyInteractionSurfaceChange(before, after), 'changed');
+  assert.equal(areInteractionSurfaceSignaturesStable(before, after), false);
 });
 
-test('classifyInteractionSurfaceChange detects material layout movement', () => {
+test('areInteractionSurfaceSignaturesStable detects material layout movement', () => {
   const before = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 100).nodes);
   const after = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 180).nodes);
 
-  assert.equal(classifyInteractionSurfaceChange(before, after), 'changed');
+  assert.equal(areInteractionSurfaceSignaturesStable(before, after), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -300,72 +296,6 @@ function applicationRootNode() {
   };
 }
 
-test('markPendingInteractionOutcome stores retry state only for explicit retry flags', () => {
-  const session = makeSession();
-  markPendingInteractionOutcome({
-    session,
-    command: 'click',
-    positionals: ['20', '40'],
-    flags: {},
-    preSnapshot: makeSnapshot('Inbox'),
-  });
-  assert.equal(session.pendingInteractionOutcome, undefined);
-
-  const retrySession = makeSession();
-  markPendingInteractionOutcome({
-    session: retrySession,
-    command: 'click',
-    positionals: ['20', '40'],
-    flags: { interactionOutcome: { retryOnNoChange: true } },
-    preSnapshot: makeSnapshot('Inbox'),
-  });
-
-  assert.equal(retrySession.pendingInteractionOutcome?.action, 'click');
-  assert.equal(retrySession.pendingInteractionOutcome?.command, 'press');
-  assert.equal(retrySession.pendingInteractionOutcome?.attemptsRemaining, 2);
-  assert.equal(retrySession.pendingInteractionOutcome?.flags?.interactionOutcome, undefined);
-
-  const refSession = makeSession();
-  markPendingInteractionOutcome({
-    session: refSession,
-    command: 'click',
-    positionals: ['@e1'],
-    flags: { interactionOutcome: { retryOnNoChange: true } },
-    preSnapshot: makeSnapshot('Inbox'),
-  });
-  assert.equal(refSession.pendingInteractionOutcome, undefined);
-
-  const longPressSession = makeSession();
-  markPendingInteractionOutcome({
-    session: longPressSession,
-    command: 'longpress',
-    positionals: ['20', '40', '800'],
-    flags: { interactionOutcome: { retryOnNoChange: true } },
-    preSnapshot: makeSnapshot('Inbox'),
-  });
-  assert.equal(longPressSession.pendingInteractionOutcome, undefined);
-});
-
-test('stripInternalInteractionFlags removes internal interaction controls', () => {
-  assert.deepEqual(
-    stripInternalInteractionFlags({
-      platform: 'ios',
-      interactionOutcome: { retryOnNoChange: true },
-      postGestureStabilization: true,
-    }),
-    { platform: 'ios' },
-  );
-});
-
-function makeSession(): SessionState {
-  return {
-    name: 'ios',
-    device: IOS_SIMULATOR,
-    createdAt: Date.now(),
-    actions: [],
-  };
-}
-
 function makeSnapshot(label: string, y = 100): SnapshotState {
   return {
     nodes: [
@@ -469,13 +399,13 @@ test('discriminatingSurfaceChangedWithinRect counts content appearing inside the
 });
 
 // Android is the only producer of `checked`, and a tap whose only effect is a toggle changes nothing
-// else on a screen without a mirrored label. The outcome lane has to read the flip as a change, or a
-// no-change retry taps the switch straight back.
-test('classifyInteractionSurfaceChange reads a checked-only flip as a change', () => {
+// else on a screen without a mirrored label. The flip has to read as a change, or a quiet window
+// that spans it reports a surface that never moved.
+test('areInteractionSurfaceSignaturesStable reads a checked-only flip as a change', () => {
   const before = buildInteractionSurfaceSignature(makeToggleSnapshot(false).nodes);
   const after = buildInteractionSurfaceSignature(makeToggleSnapshot(true).nodes);
 
-  assert.equal(classifyInteractionSurfaceChange(before, after), 'changed');
+  assert.equal(areInteractionSurfaceSignaturesStable(before, after), false);
 });
 
 test.each([

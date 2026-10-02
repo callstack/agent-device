@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   ArchiveBudget,
+  extractedEntryMode,
   normalizeArchiveEntryName,
   resolveArchiveOutputPath,
 } from './archive-safety.ts';
@@ -78,4 +79,24 @@ test('archive reservation rejects bytes or entries beyond its inspected manifest
     () => entryReservation.commitEntry(),
     (error) => reason(error) === 'ARCHIVE_MANIFEST_MISMATCH',
   );
+});
+
+test('every declared mode extracts owner-accessible with set-id and sticky bits stripped', () => {
+  const ownerAccess = { directory: 0o700, file: 0o600 } as const;
+  for (const kind of ['directory', 'file'] as const) {
+    for (let declared = 0; declared <= 0o177777; declared += 1) {
+      const mode = extractedEntryMode(kind, declared);
+      assert.equal(mode & ~0o777, 0, `${kind} ${declared.toString(8)} kept non-permission bits`);
+      assert.equal(mode & ownerAccess[kind], ownerAccess[kind]);
+      assert.equal(
+        mode & 0o077,
+        declared & 0o077,
+        `${kind} ${declared.toString(8)} changed group/other bits`,
+      );
+    }
+  }
+  assert.equal(extractedEntryMode('directory', undefined), 0o755);
+  assert.equal(extractedEntryMode('file', undefined), 0o644);
+  assert.equal(extractedEntryMode('directory', 0), 0o700);
+  assert.equal(extractedEntryMode('file', 0), 0o600);
 });

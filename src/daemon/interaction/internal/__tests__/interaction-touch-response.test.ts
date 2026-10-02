@@ -2,7 +2,11 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../../index.ts';
-import { transformTouchResponseData } from '../interaction-touch-response.ts';
+import {
+  buildInteractionResponseData,
+  transformTouchResponseData,
+} from '../interaction-touch-response.ts';
+import type { PressCommandResult } from '@agent-device/contracts/interaction';
 import {
   getRuntimeBindings,
   mockFillPoint,
@@ -80,6 +84,41 @@ test('commandless longpress response omits internal interaction diagnostics', ()
       },
     }),
   ).toEqual({ completedSteps: 1 });
+});
+
+function selectorResult(readiness?: { polls: number; waitedMs: number }): PressCommandResult {
+  return {
+    kind: 'selector',
+    point: { x: 10, y: 20 },
+    target: { kind: 'selector', selector: 'label=Continue' },
+    node: { ref: 'e1', index: 0, type: 'Button', label: 'Continue' },
+    selectorChain: ['label=Continue'],
+    warning: 'earlier warning',
+    ...(readiness ? { readiness } : {}),
+  };
+}
+
+const WAITED_SELECTOR_RESULT = selectorResult({ polls: 3, waitedMs: 400 });
+
+test('the response builder reports the resolved wait and keeps the prior warning', () => {
+  const { responseData, result } = buildInteractionResponseData({
+    source: { kind: 'runtime', result: WAITED_SELECTOR_RESULT },
+    referenceFrame: undefined,
+    staleRefsWarning: 'stale refs',
+  });
+
+  expect(responseData.readiness).toEqual({ polls: 3, waitedMs: 400 });
+  expect(responseData.warning).toBe('earlier warning stale refs');
+  expect(result.readiness).toBeUndefined();
+});
+
+test('the response builder omits readiness when nothing waited', () => {
+  const { responseData } = buildInteractionResponseData({
+    source: { kind: 'runtime', result: selectorResult() },
+    referenceFrame: undefined,
+  });
+
+  expect('readiness' in responseData).toBe(false);
 });
 
 test('press @ref --verify surfaces evidence through the interactionResultExtra allowlist', async () => {

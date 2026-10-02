@@ -26,6 +26,7 @@ import type {
   Interactor,
   RunnerCallOptions,
   RunnerContext,
+  ScreenshotCaptureFacts,
   ScreenshotOptions,
   SnapshotOptions,
 } from '@agent-device/contracts/interactor-types';
@@ -192,7 +193,7 @@ export function createAppleInteractor(
       };
     },
     readClipboard: () => readIosClipboardText(device),
-    writeClipboard: (text) => writeIosClipboardText(device, text),
+    writeClipboard: (text) => writeIosClipboardText(device, text, runnerOpts),
     setSetting: (setting, state, appId, options) =>
       setIosSetting(device, setting, state, appId, options),
     readSetting: (setting) => readIosSetting(device, setting),
@@ -363,7 +364,6 @@ function withInjectedAppleRunnerTransport(
     close: async () => rejectLocalAppleToolMethod('close'),
     screenshot: async () => rejectLocalAppleToolMethod('screenshot'),
     readClipboard: async () => rejectLocalAppleToolMethod('readClipboard'),
-    writeClipboard: async () => rejectLocalAppleToolMethod('writeClipboard'),
     setSetting: async () => rejectLocalAppleToolMethod('setSetting'),
     readSetting: async () => rejectLocalAppleToolMethod('readSetting'),
   };
@@ -388,7 +388,7 @@ async function runAppleScreenshot(
   outPath: string,
   options: ScreenshotOptions = {},
   runnerOpts: RunnerCallOptions,
-): Promise<void> {
+): Promise<ScreenshotCaptureFacts> {
   const helper = isMacOs(device) ? macOsHelperSurface(options.surface) : undefined;
   if (helper) {
     if (options.fullscreen) {
@@ -402,7 +402,7 @@ async function runAppleScreenshot(
       );
     }
     await runMacOsScreenshotAction(outPath, { surface: helper });
-    return;
+    return {};
   }
   if (options.captureBackend === 'runner') {
     // Runner capture returns the XCTest surface as-is; density and simulator
@@ -414,9 +414,9 @@ async function runAppleScreenshot(
       options.fullscreen,
       runnerOpts,
     );
-    return;
+    return {};
   }
-  await screenshotIos(device, outPath, {
+  return await screenshotIos(device, outPath, {
     appBundleId: options.appBundleId,
     pixelDensity: options.pixelDensity,
     fullscreen: options.fullscreen,

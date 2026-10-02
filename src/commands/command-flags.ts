@@ -87,6 +87,7 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
     durationMs: options.durationMs,
     holdMs: options.holdMs,
     jitterPx: options.jitterPx,
+    readinessTimeoutMs: options.readinessTimeoutMs,
     pixels: options.pixels,
     until: options.until,
     doubleTap: options.doubleTap,

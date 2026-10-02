@@ -56,6 +56,7 @@ function node(overrides: Partial<AndroidNode>): AndroidNode {
     type: 'android.widget.Button',
     label: null,
     value: null,
+    passiveFacts: {},
     identifier: null,
     packageName: null,
     rect: { x: 0, y: 0, width: 20, height: 20 },

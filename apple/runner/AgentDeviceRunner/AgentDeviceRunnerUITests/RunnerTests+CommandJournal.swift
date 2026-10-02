@@ -125,22 +125,9 @@ final class RunnerCommandJournal {
   }
 
   private func encodeResponseJson(command: Command, response: Response) -> String? {
-    guard shouldRetainResponseJson(command: command) else { return nil }
+    guard command.traits.retainsJournalResponseJson else { return nil }
     guard let data = try? JSONEncoder().encode(response) else { return nil }
     guard data.count <= maxResponseJsonBytes else { return nil }
     return String(data: data, encoding: .utf8)
-  }
-
-  private func shouldRetainResponseJson(command: Command) -> Bool {
-    switch command.command {
-    case .snapshot, .screenshot:
-      return false
-    case .tap, .mouseClick, .longPress, .drag,
-         .remotePress, .type, .swipe, .scroll, .desktopScroll, .findText, .querySelector, .readText,
-         .backInApp, .backSystem, .home, .rotate, .appSwitcher, .actionButton, .keyboardDismiss, .keyboardReturn,
-         .alert, .sequence, .gesture, .gestureViewport, .recordStart, .recordStop,
-         .status, .uptime, .appState, .activate, .terminate, .targetReset, .shutdown:
-      return true
-    }
   }
 }

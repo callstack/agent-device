@@ -8,7 +8,7 @@ import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/devi
 import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import type { GenericPlatformExecutionParams } from '../request-generic-dispatch.ts';
 import { resolveScreenshotGenericExecution } from '../screenshot-runtime.ts';
-import { screenshotRuntimeFixture } from './screenshot-runtime-fixture.ts';
+import { screenshotRuntimeFixture, writeSolidPng } from './screenshot-runtime-fixture.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
@@ -349,4 +349,44 @@ test('the crop plan is refused up front when the target cannot capture a tree', 
   });
   expect(fixture.binds).toHaveLength(0);
   expect(fixture.captureScreenshot).not.toHaveBeenCalled();
+});
+
+test('the result record carries the display rotation the capture reported', async () => {
+  const fixture = screenshotRuntimeFixture({
+    onCapture: (input) => {
+      writeSolidPng(input.outPath);
+      return { displayRotation: 'landscape-left' };
+    },
+  });
+  const session = makeSession('default', { device: ANDROID_EMULATOR });
+  const outPath = path.join(mkdtempForTestSync('agent-device-display-rotation'), 'shot.png');
+  const req = screenshotRequest({ positionals: [outPath] });
+
+  const resolved = await resolveScreenshotGenericExecution({
+    req,
+    session,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+
+  expect(await executeResult(resolved, session, req)).toMatchObject({
+    path: outPath,
+    displayRotation: 'landscape-left',
+  });
+});
+
+test('the result record omits the display rotation when the capture reported none', async () => {
+  const fixture = screenshotRuntimeFixture();
+  const session = makeSession('default', { device: ANDROID_EMULATOR });
+  const outPath = path.join(mkdtempForTestSync('agent-device-display-rotation'), 'shot.png');
+  const req = screenshotRequest({ positionals: [outPath] });
+
+  const resolved = await resolveScreenshotGenericExecution({
+    req,
+    session,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+
+  expect(await executeResult(resolved, session, req)).not.toHaveProperty('displayRotation');
 });

@@ -10,14 +10,15 @@ import {
   retriableForErrorCode,
   type DaemonError,
 } from '@agent-device/kernel/errors';
+import { withRequestCommandEnv } from '@agent-device/host-kit/command';
 import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import {
-  type DaemonArtifactType,
   type ResponseCost,
   errorResponse,
   noActiveSessionError,
 } from '@agent-device/kernel/contracts';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
+import type { TrackDownloadableArtifact } from './artifact-tracking.ts';
 import type {
   RequestPlatformProviderScope,
   RequestPlatformProviders,
@@ -79,8 +80,12 @@ import {
 } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
 import { resolveGenericRuntimeExecution } from './generic-runtime-execution.ts';
+import { discloseRequestDispatch, refusedBeforeDispatch } from './request-dispatch-disclosure.ts';
+import { recordNestedRequests } from './request-dispatch-ledger.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
+import { restrictDeviceInventoryToDaemonPolicy } from './daemon-policy.ts';
+import type { DaemonPolicy } from '../daemon-policy-file.ts';
 
 // ---------------------------------------------------------------------------
 // Request handler API
@@ -107,12 +112,9 @@ export type RequestRouterDeps = {
   androidObservation?: AndroidObservationAdapter;
   platformResourceCleanup?: PlatformResourceCleanup;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
-  trackDownloadableArtifact: (opts: {
-    artifactPath: string;
-    tenantId?: string;
-    artifactType: DaemonArtifactType | undefined;
-    fileName?: string;
-  }) => string;
+  /** ADR 0029: the daemon policy every admitted request, including nested steps, obeys. */
+  daemonPolicy?: DaemonPolicy;
+  trackDownloadableArtifact: TrackDownloadableArtifact;
 };
 
 const unavailableAndroidObservation = new Proxy({} as AndroidObservationAdapter, {
@@ -153,7 +155,6 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     logPath,
     token,
     requestPlatformProviders = EMPTY_REQUEST_PLATFORM_PROVIDERS,
-    deviceInventoryGateways,
     deviceRuntimeGateway,
     appLogAdmissionLedger = createAppLogAdmissionLedger(),
     audioProbeAdmissionLedger = createAudioProbeAdmissionLedger(),
@@ -169,8 +170,12 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     platformResourceCleanup = unavailablePlatformResourceCleanup,
     providerDeviceRuntimeScope,
     trackDownloadableArtifact,
+    daemonPolicy,
   } = deps;
   const { sessionStore, leaseRegistry } = deps;
+  const deviceInventoryGateways = daemonPolicy
+    ? restrictDeviceInventoryToDaemonPolicy(deps.deviceInventoryGateways, daemonPolicy)
+    : deps.deviceInventoryGateways;
 
   async function handleRequest(req: DaemonRequest): Promise<DaemonResponse> {
     const start = Date.now();
@@ -184,7 +189,10 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         logPath,
       },
       async () => {
-        const response = await runRequestWithinScope(req);
+        const response = await withRequestCommandEnv(
+          requestCommandEnv(req),
+          async () => await runRequestWithinScope(req),
+        );
         if (!response.ok) {
           // ADR 0012 decision 6, R7 (C5a): a command that finds no session but
           // hits a live repair tombstone gets `REPAIR_SESSION_EXPIRED` with
@@ -237,6 +245,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
               platformRequestScope,
               platformResourceCleanup,
               providerAppCatalog,
+              daemonPolicy,
             });
             return await executeRequestScope(scope);
           }),
@@ -295,6 +304,20 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     allowReplayActions: boolean;
   }): Promise<DaemonResponse> {
     const { lockedScope, providerScope, allowReplayActions } = params;
+    return await discloseRequestDispatch(
+      lockedScope.req,
+      lockedScope.dispatchLedger,
+      async () => await routeLockedRequest({ lockedScope, providerScope, allowReplayActions }),
+    );
+  }
+
+  async function routeLockedRequest(params: {
+    lockedScope: LockedRequestScope;
+    providerScope: RequestPlatformProviderScope;
+    allowReplayActions: boolean;
+  }): Promise<DaemonResponse> {
+    const { lockedScope, providerScope, allowReplayActions } = params;
+    const { dispatchLedger } = lockedScope;
     const requestScope = createPlatformRequestScope(lockedScope.req);
     const handlerResponse = await runRequestHandlerChain({
       req: lockedScope.req,
@@ -307,9 +330,12 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       providerRuntimeRequiredIds,
       cloudArtifactProvider,
       providerAppCatalog,
-      invoke: handleRequest,
+      invoke: recordNestedRequests(handleRequest, dispatchLedger),
       invokeReplayAction: allowReplayActions
-        ? createReplayScopedActionInvoker(lockedScope, providerScope)
+        ? recordNestedRequests(
+            createReplayScopedActionInvoker(lockedScope, providerScope),
+            dispatchLedger,
+          )
         : undefined,
       providerScope,
       androidObservation,
@@ -361,6 +387,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           platformRequestScope: createPlatformRequestScope(scopedReq),
           platformResourceCleanup,
           providerAppCatalog,
+          daemonPolicy,
         });
         // The outer replay keeps its stable session lock plus the device lock
         // from the first device binding through response projection and ref
@@ -379,6 +406,11 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   }
 
   return handleRequest;
+}
+
+function requestCommandEnv(req: DaemonRequest): NodeJS.ProcessEnv | undefined {
+  const developerDir = req.meta?.developerDir;
+  return typeof developerDir === 'string' ? { DEVELOPER_DIR: developerDir } : undefined;
 }
 
 const EMPTY_REQUEST_PLATFORM_PROVIDERS: RequestPlatformProviders = Object.freeze({
@@ -479,7 +511,7 @@ async function dispatchGenericForLockedScope(params: {
     inspectFacts: lockedScope.inspectFacts,
     bindDevice: lockedScope.bindDevice,
   });
-  if (!runtimeExecution.ok) return runtimeExecution.response;
+  if (!runtimeExecution.ok) return refusedBeforeDispatch(runtimeExecution.response);
 
   const { dispatchGenericCommand } = await loadGenericRequestHandlerModule();
   const dispatchResponse = await dispatchGenericCommand({

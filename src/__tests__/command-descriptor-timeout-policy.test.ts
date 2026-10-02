@@ -2,12 +2,16 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
+  commandAcceptsReadinessBudget,
   commandDescriptors,
   resolveCommandPostActionObservationSupport,
   resolveCommandTimeoutPolicy,
 } from '@agent-device/command-registry/registry';
+import { INTERACTION_DISPATCH_PATHS } from '@agent-device/contracts/interaction-guarantees';
+import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import {
   DEFAULT_TIMEOUT_POLICY,
+  READINESS_BUDGET_MAX_MS,
   resolveCommandRequestTimeoutMs,
 } from '@agent-device/command-registry/timeout-policy';
 import { DEFAULT_STABLE_TIMEOUT_MS } from '../commands/interaction/runtime/stable-capture.ts';
@@ -402,4 +406,58 @@ test('open and prepare startup budgets keep a client-envelope margin over the da
     }),
     90_000,
   );
+});
+
+test('a readiness budget widens the request envelope on top of the settle envelope', () => {
+  const press = resolveCommandTimeoutPolicy('press');
+  const withoutReadiness = resolveCommandRequestTimeoutMs(press, { flags: {} });
+  assert.equal(withoutReadiness, 90_000);
+  assert.equal(
+    resolveCommandRequestTimeoutMs(press, { flags: { readinessTimeoutMs: 2_000 } }),
+    92_000,
+  );
+  assert.equal(
+    resolveCommandRequestTimeoutMs(press, { flags: { settle: true, readinessTimeoutMs: 2_000 } }),
+    90_000 + 10_000 + 30_000 + 2_000,
+  );
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('longpress'), {
+      flags: { readinessTimeoutMs: 2_000 },
+    }),
+    212_000,
+  );
+  assert.equal(resolveCommandRequestTimeoutMs(press, { flags: { readinessTimeoutMs: 0 } }), 90_000);
+  assert.equal(
+    resolveCommandRequestTimeoutMs(press, { flags: { readinessTimeoutMs: 999_000 } }),
+    90_000 + 2_000,
+  );
+});
+
+test('the envelope readiness cap is the promotedTarget row poll ceiling', () => {
+  assert.equal(
+    READINESS_BUDGET_MAX_MS,
+    SELECTOR_PIPELINE_POLICIES.promotedTarget.poll.maxTimeoutMs,
+  );
+  assert.equal(
+    resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('fill'), {
+      flags: { readinessTimeoutMs: 2_000 },
+    }),
+    90_000,
+  );
+});
+
+test('the readiness-budgeted commands are the ones a runtime targetReadiness cell enforces', () => {
+  const declared = commandDescriptors
+    .map((descriptor) => descriptor.name)
+    .filter((command) => commandAcceptsReadinessBudget(command))
+    .sort();
+  const enforced = [
+    ...new Set(
+      Object.values(INTERACTION_DISPATCH_PATHS).flatMap((path) => {
+        const cell = path.guarantees.targetReadiness;
+        return cell.kind === 'runtime' ? (cell.appliesTo ?? path.commands) : [];
+      }),
+    ),
+  ].sort();
+  assert.deepEqual(declared, enforced);
 });

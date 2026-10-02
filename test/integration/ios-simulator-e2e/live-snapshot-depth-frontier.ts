@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict';
 
 import {
-  assertWaitSelector,
   assertWaitText,
   type LiveSnapshotNode as SnapshotNode,
   snapshotNodes,
 } from './live-assertions.ts';
-import { acceptDeepLinkConfirmationIfPresent } from './live-deep-link-confirmation.ts';
+import { waitForDeepLinkDestination } from './live-deep-link-destination.ts';
 import { type LiveContext, runStep, verifyBehavior } from './live-harness.ts';
 
 const VISIBLE_DEPTH_DEEP_LINK = 'agent-device-test-app:///snapshot-depth';
@@ -23,9 +22,8 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     VISIBLE_DEPTH_DEEP_LINK,
     '--debug',
   ]);
-  await acceptDeepLinkConfirmationIfPresent(context, [`id="${CHILD_ID}"`], { debug: true });
   // Wait for the target itself so the depth assertion is about the frontier, not route readiness.
-  await assertWaitSelector(context, `id="${CHILD_ID}"`, { debug: true });
+  await waitForDeepLinkDestination(context, [`id="${CHILD_ID}"`], { debug: true });
 
   const regular = await runStep(context, 'capture regular visible-depth frontier', [
     'snapshot',

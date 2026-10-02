@@ -224,25 +224,23 @@ extension RunnerTests {
   /// fold, a sheet, or a rotation moves every consumer to the same window in the same pass.
   /// Synthesized gestures route their display ID through the returned window so the record's
   /// display can never name a different window than the one the reference frame was measured on.
+  ///
+  /// Stops at the first qualifying window. Reading a window that will be discarded is not free: a
+  /// transient candidate that disappears between its `exists` answer and its `frame` fetch makes
+  /// XCTest record an issue, and an issue `record(_:)` does not mute ends the runner session
+  /// (ADR 0004, ADR 0005, #2995).
+  ///
+  /// The read that remains is not atomic: a window vanishing while it is the one being resolved still
+  /// records, and the chosen window is read again on its way to a display ID
+  /// (`RunnerResolveWindowDisplayID`).
   func resolveRunnerWindow(app: XCUIApplication) -> (window: XCUIElement?, frame: CGRect) {
-    let windows = app.windows.allElementsBoundByIndex
-    var frames: [CGRect?] = []
-    for window in windows {
-      frames.append(window.exists ? window.frame : nil)
-    }
-    if let index = Self.firstUsableWindowIndex(frames: frames) {
-      return (windows[index], frames[index] ?? .zero)
-    }
-    return (nil, app.frame)
-  }
-
-  static func firstUsableWindowIndex(frames: [CGRect?]) -> Int? {
-    for (index, frame) in frames.enumerated() {
-      if let frame, !frame.isEmpty {
-        return index
+    for window in app.windows.allElementsBoundByIndex where window.exists {
+      let frame = window.frame
+      if !frame.isEmpty {
+        return (window, frame)
       }
     }
-    return nil
+    return (nil, app.frame)
   }
 
   func onScreenWindowFrame(app: XCUIApplication) -> CGRect {

@@ -2,6 +2,7 @@ import type { PointerTrajectory } from '@agent-device/contracts/gesture-plan-typ
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
+import { attachAdbFailureHint } from './adb-failure.ts';
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 
@@ -23,7 +24,11 @@ import type { AndroidLoweredTouchPlan } from './touch-plan-lowering.ts';
 import { resolveAndroidHelperArtifact } from './helper-package-install.ts';
 import { parseAndroidSnapshotHelperManifest } from './snapshot-helper-artifact.ts';
 import { ensureAndroidSnapshotHelper } from './snapshot-helper-install.ts';
-import { runAndroidSnapshotHelperSessionTouchCommand } from './snapshot-helper-session.ts';
+import {
+  discloseHelperTouchDispatch,
+  runAndroidSnapshotHelperSessionTouchCommand,
+  type AndroidTouchHelperAction,
+} from './snapshot-helper-session.ts';
 import {
   ensureAndroidSnapshotHelperSession,
   stopAndroidSnapshotHelperSession,
@@ -100,7 +105,8 @@ export async function executeAndroidTouchHelperPlan(
         ...(await runOneShotTouchHelper({
           adb: prepared.adb,
           runner: prepared.artifact.manifest.instrumentationRunner,
-          extraArgs: ['-e', 'mode', 'gesture', '-e', 'payloadBase64', payloadBase64],
+          action: 'gesture',
+          extraArgs: ['-e', 'payloadBase64', payloadBase64],
           timeoutMs,
           readResult: readGestureResult,
         })),
@@ -160,7 +166,8 @@ export async function readAndroidTouchHelperViewportReading(
   return await runOneShotTouchHelper({
     adb: prepared.adb,
     runner: prepared.artifact.manifest.instrumentationRunner,
-    extraArgs: ['-e', 'mode', 'viewport'],
+    action: 'viewport',
+    extraArgs: [],
     timeoutMs: HELPER_VIEWPORT_TIMEOUT_MS,
     readResult: readViewportResult,
   });
@@ -265,13 +272,14 @@ function toAndroidPlannedPointerTrajectory(
 async function runOneShotTouchHelper<Result>(options: {
   adb: AndroidAdbExecutor;
   runner: string;
+  action: AndroidTouchHelperAction;
   extraArgs: string[];
   timeoutMs: number;
   readResult: (record: Record<string, string>) => Result;
 }): Promise<Result> {
   const result = await runAdbShell(
     options.adb,
-    ['am', 'instrument', '-w', ...options.extraArgs, options.runner],
+    ['am', 'instrument', '-w', '-e', 'mode', options.action, ...options.extraArgs, options.runner],
     { allowFailure: true, timeoutMs: options.timeoutMs },
   );
   let finalRecord: Record<string, string>;
@@ -280,11 +288,14 @@ async function runOneShotTouchHelper<Result>(options: {
   } catch (error) {
     if (error instanceof AppError) {
       if (error.code === HELPER_REPORTED_FAILURE) {
-        throw new AppError('COMMAND_FAILED', error.message, error.details, error);
+        throw discloseHelperTouchDispatch(
+          options.action,
+          new AppError('COMMAND_FAILED', error.message, error.details, error),
+        );
       }
       if (error.code !== HELPER_NO_FINAL_RESULT) throw error;
     }
-    throw new AppError(
+    const unparsed = new AppError(
       'COMMAND_FAILED',
       result.exitCode === 0
         ? 'Android automation helper output could not be parsed'
@@ -292,12 +303,21 @@ async function runOneShotTouchHelper<Result>(options: {
       execFailureDetails(result),
       error,
     );
+    throw discloseHelperTouchDispatch(
+      options.action,
+      result.exitCode === 0 ? unparsed : attachAdbFailureHint(unparsed),
+    );
   }
   if (result.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Android automation helper failed',
-      execFailureDetails(result, { helper: finalRecord }),
+    throw discloseHelperTouchDispatch(
+      options.action,
+      attachAdbFailureHint(
+        new AppError(
+          'COMMAND_FAILED',
+          'Android automation helper failed',
+          execFailureDetails(result, { helper: finalRecord }),
+        ),
+      ),
     );
   }
   return options.readResult(finalRecord);

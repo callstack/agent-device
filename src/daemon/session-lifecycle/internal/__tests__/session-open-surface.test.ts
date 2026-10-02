@@ -84,6 +84,26 @@ test('buildOpenResult exposes typed device-selection evidence once at response l
   });
 });
 
+test('buildOpenResult reports an answered launch confirmation and omits one that never appeared', () => {
+  const base = {
+    sessionName: 'ios-launch-url',
+    sessionStateDir: '/tmp/state',
+    runnerLogPath: '/tmp/runner.log',
+    requestLogPath: '/tmp/request.ndjson',
+    eventLogPath: '/tmp/events.ndjson',
+    surface: 'app' as const,
+    device: IOS_SIMULATOR,
+    runtimeHintCount: () => 0,
+    sessionReused: false,
+  };
+
+  assert.equal(
+    buildOpenResult({ ...base, launchConfirmation: 'accepted' }).launchConfirmation,
+    'accepted',
+  );
+  assert.equal('launchConfirmation' in buildOpenResult(base), false);
+});
+
 // --- #1533: a re-open cannot resurrect a terminal authoring lifecycle ---
 //
 // This surface used to decide recording on its own (`existingSession.recordSession || saveScript`),

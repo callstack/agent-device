@@ -56,6 +56,16 @@ function runAppleAlert(
     )) as Record<string, unknown>;
 }
 
+/** The alert `read` settles with, or `undefined` when the backend reports a typed absence. */
+export async function alertIfPresent<T>(read: Promise<T>): Promise<T | undefined> {
+  try {
+    return await read;
+  } catch (error) {
+    if (isAlertNotFoundError(error)) return undefined;
+    throw error;
+  }
+}
+
 export async function readAppleAlert(
   device: DeviceInfo,
   runnerOptions: RunnerCallOptions,

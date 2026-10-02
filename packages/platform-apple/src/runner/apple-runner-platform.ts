@@ -6,6 +6,7 @@ import {
   resolveDeviceAppleOs,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
+import { readHostCpuArchSync } from './host.ts';
 
 /**
  * Ceiling on one Apple toolchain identity probe attempt (`xcodebuild -version`, `xcrun
@@ -342,5 +343,5 @@ function runnerPlatformDeviceKind(deviceKind: DeviceInfo['kind']): RunnerPlatfor
 }
 
 function resolveMacRunnerArch(): 'arm64' | 'x86_64' {
-  return process.arch === 'arm64' ? 'arm64' : 'x86_64';
+  return readHostCpuArchSync() === 'arm64' ? 'arm64' : 'x86_64';
 }

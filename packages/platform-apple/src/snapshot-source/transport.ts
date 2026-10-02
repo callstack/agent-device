@@ -33,13 +33,15 @@ export async function roundTripSnapshotBridge(
   const timeoutMs = remainingSnapshotSourceMs(input.deadline, 'bridge-request-deadline');
   return await new Promise<SnapshotBridgeEnvelope>((resolve, reject) => {
     let settled = false;
-    let dispatched = false;
+    let bridgeRequestSent = false;
     const timer = setTimeout(() => {
-      finishReject(snapshotSourceError('timeout', 'bridge-request-deadline', { dispatched }));
+      finishReject(
+        snapshotSourceError('timeout', 'bridge-request-deadline', { bridgeRequestSent }),
+      );
       input.socket.destroy();
     }, timeoutMs);
     const onAbort = () => {
-      finishReject(snapshotSourceError('cancelled', 'abort-signal', { dispatched }));
+      finishReject(snapshotSourceError('cancelled', 'abort-signal', { bridgeRequestSent }));
       input.socket.destroy();
     };
     const onData = (chunk: unknown) => {
@@ -103,7 +105,7 @@ export async function roundTripSnapshotBridge(
     input.deadline.signal?.addEventListener('abort', onAbort, { once: true });
     try {
       if (input.deadline.signal?.aborted) throw snapshotSourceError('cancelled', 'abort-signal');
-      dispatched = true;
+      bridgeRequestSent = true;
       input.socket.write(input.frame);
     } catch (error) {
       finishReject(asSnapshotSourceError(error));

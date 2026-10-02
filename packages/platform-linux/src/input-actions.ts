@@ -1,5 +1,6 @@
 import { ensureInputTool } from './linux-env.ts';
 import { resolveLinuxToolProvider, type LinuxPointerButton } from './tool-provider.ts';
+import { discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 import { sleep } from '@agent-device/host-kit/retry';
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import { DEFAULT_SCROLL_AMOUNT } from '@agent-device/contracts/scroll-gesture';
@@ -270,9 +271,15 @@ async function runPacedScrollSteps(
   }
 
   const intervalMs = durationMs / Math.max(1, totalCount - 1);
-  for (let index = 0; index < totalCount; index += 1) {
-    await runStep(1);
-    if (index < totalCount - 1) await sleep(intervalMs);
+  let dispatchedSteps = 0;
+  try {
+    for (let index = 0; index < totalCount; index += 1) {
+      await runStep(1);
+      dispatchedSteps += 1;
+      if (index < totalCount - 1) await sleep(intervalMs);
+    }
+  } catch (error) {
+    throw discloseDispatchAfterSteps(error, dispatchedSteps);
   }
 }
 

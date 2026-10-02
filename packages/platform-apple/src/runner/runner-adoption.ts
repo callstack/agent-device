@@ -30,6 +30,7 @@ import {
   type RunnerPhaseBudget,
   type RunnerXctestrunArtifact,
 } from './runner-xctestrun.ts';
+import { resolveRunnerCacheKey } from './runner-cache-metadata.ts';
 import {
   RunnerCommandAccounting,
   type RunnerProcessHandle,
@@ -121,7 +122,7 @@ export async function tryAdoptRunnerSessionFromLease(
   const fingerprint = verifyLeaseArtifactFingerprint(device, lease, options.budget);
   if ('refusal' in fingerprint) return skip(fingerprint.refusal, lease);
   const runnerPid = leased.value;
-  const expectedDerived = fingerprint.value;
+  const expectedArtifact = fingerprint.value;
   const probe = await probeRunnerAnswersUptime(device, lease.port, target.lane, options.budget);
   if (probe !== 'answered') return skip(probe, lease);
   // The probe awaited network I/O — the xcodebuild can have exited and its pid
@@ -131,7 +132,7 @@ export async function tryAdoptRunnerSessionFromLease(
     return skip('runner_pid_recycled', lease);
   }
 
-  const session = buildAdoptedRunnerSession(device, lease, runnerPid, expectedDerived);
+  const session = buildAdoptedRunnerSession(device, lease, runnerPid, expectedArtifact);
   try {
     writeRunnerLease(session.lease);
   } catch {
@@ -184,13 +185,16 @@ function verifyLeaseArtifactFingerprint(
   device: DeviceInfo,
   lease: RunnerLease,
   budget: RunnerPhaseBudget | undefined,
-): RunnerAdoptionCheck<string> {
-  const expectedDerived = resolveExpectedDerivedPath(device, budget);
-  if (!expectedDerived) return { refusal: 'expected_derived_unresolved' };
-  if (!lease.xctestrunPath.startsWith(`${expectedDerived}${path.sep}`)) {
+): RunnerAdoptionCheck<ExpectedRunnerArtifact> {
+  const expectedArtifact = resolveExpectedArtifact(device, budget);
+  if (!expectedArtifact) return { refusal: 'expected_derived_unresolved' };
+  if (
+    lease.cacheKey !== expectedArtifact.cacheKey ||
+    !lease.xctestrunPath.startsWith(`${expectedArtifact.derived}${path.sep}`)
+  ) {
     return { refusal: 'artifact_fingerprint_mismatch' };
   }
-  return { value: expectedDerived };
+  return { value: expectedArtifact };
 }
 
 /**
@@ -254,15 +258,18 @@ function runnerProbeTimeoutMs(budget: RunnerPhaseBudget | undefined, capMs: numb
   return Math.min(capMs, Math.floor(budget.deadline.remainingMs()));
 }
 
-function resolveExpectedDerivedPath(
+type ExpectedRunnerArtifact = { derived: string; cacheKey: string };
+
+function resolveExpectedArtifact(
   device: DeviceInfo,
   budget: RunnerPhaseBudget | undefined,
-): string | null {
+): ExpectedRunnerArtifact | null {
   try {
-    return resolveRunnerDerivedPath(
-      device,
-      resolveExpectedRunnerCacheMetadata(device, undefined, budget),
-    );
+    const metadata = resolveExpectedRunnerCacheMetadata(device, undefined, budget);
+    return {
+      derived: resolveRunnerDerivedPath(device, metadata),
+      cacheKey: resolveRunnerCacheKey(metadata),
+    };
   } catch (error) {
     // An unresolvable fingerprint is a miss the caller starts fresh from; a cancel is not.
     if (isRequestCanceledError(error)) throw error;
@@ -274,12 +281,12 @@ function buildAdoptedRunnerSession(
   device: DeviceInfo,
   lease: RunnerLease,
   runnerPid: number,
-  expectedDerived: string,
+  expectedArtifact: ExpectedRunnerArtifact,
 ): RunnerSession & { lease: RunnerLease } {
   const sessionId = lease.sessionId;
   const artifact: RunnerXctestrunArtifact = {
     xctestrunPath: lease.xctestrunPath,
-    derived: expectedDerived,
+    ...expectedArtifact,
     cache: 'exact',
     artifact: 'valid',
     buildMs: 0,
@@ -309,6 +316,7 @@ function buildAdoptedRunnerSession(
       runnerPid,
       port: lease.port,
       xctestrunPath: lease.xctestrunPath,
+      cacheKey: expectedArtifact.cacheKey,
       jsonPath: lease.jsonPath,
       runnerLogPath: lease.runnerLogPath,
     }),

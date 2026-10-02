@@ -107,6 +107,17 @@ extension RunnerTests {
   }
 
   @MainActor
+  func testCoordinateTapThatWasNotDispatchedDoesNotFallBackToXCTest() {
+    for health: RunnerAccessibilityHealth in [.unknown, .healthy, .unavailable] {
+      mainOwned.accessibilityHealth = health
+      for context in [nil, synthesizedGestureTestContext(accessibilityHealth: health)] {
+        let attempt = performSynthesizedGesture(app, kind: .coordinateTap, context: context) { nil }
+        XCTAssertEqual(synthesizedGestureRoute(attempt), "refused", "axHealth=\(health.rawValue)")
+      }
+    }
+  }
+
+  @MainActor
   func testFailedCoordinateTapSynthesisFallsBackToXCTestAtEveryAccessibilityHealth() {
     for health: RunnerAccessibilityHealth in [.unknown, .healthy, .unavailable] {
       mainOwned.accessibilityHealth = health

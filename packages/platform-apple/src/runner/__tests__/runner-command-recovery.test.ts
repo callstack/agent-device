@@ -6,6 +6,7 @@ import { IOS_SIMULATOR } from './device-fixtures.ts';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import { handleRunnerTransportErrorAfterCommandSend } from '../runner-command-recovery.ts';
 import type { RunnerCommand } from '../runner-contract.ts';
+import { RUNNER_REPLY_LOST_REASON } from '../runner-error-classification.ts';
 import type { RunnerSession } from '../runner-session.ts';
 import {
   startFakeRunnerServer,
@@ -122,22 +123,53 @@ test('an unknown lifecycle state invalidates the session and says so', async () 
   assert.equal(invalidate.mock.calls[0]?.[1], 'transport_error_after_command_send');
 });
 
-test('a failing status probe retains the invalidation and rethrows the transport error', async () => {
-  const { result, invalidate, transportError } = await runRecovery({
-    script: [{ kind: 'runnerError', code: 'COMMAND_FAILED', message: 'status probe exploded' }],
+test('notAccepted from a restarted runner fails the lost command as unknown, naming the lost reply', async () => {
+  const { result, invalidate } = await runRecovery({
+    script: [{ kind: 'ok', data: { lifecycleState: 'notAccepted' } }],
   });
 
-  await assert.rejects(result, (error: unknown) => error === transportError);
+  await assert.rejects(result, (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+    assert.equal(error.details?.dispatched, 'unknown');
+    return true;
+  });
   assert.equal(invalidate.mock.calls.length, 1);
 });
 
-test('a command without an id cannot be probed: invalidate and rethrow', async () => {
+test('a failing status probe retains the invalidation and names the lost reply', async () => {
+  const { result, invalidate, transportError } = await runRecovery({
+    script: [{ kind: 'runnerError', code: 'COMMAND_FAILED', message: 'status probe exploded' }],
+    transportError: new AppError('COMMAND_FAILED', 'socket hang up', { reason: 'socket_reset' }),
+  });
+
+  await assert.rejects(result, (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.notEqual(error.message, transportError.message);
+    assert.equal(error.details?.transportError, transportError.message);
+    assert.equal(error.cause, transportError);
+    assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+    assert.equal(error.details?.transportReason, 'socket_reset');
+    assert.equal(error.details?.recovery, 'status_probe_failed');
+    assert.equal(error.details?.dispatched, 'unknown');
+    return true;
+  });
+  assert.equal(invalidate.mock.calls.length, 1);
+});
+
+test('a command without an id cannot be probed: invalidate and name the lost reply', async () => {
   const { result, invalidate, transportError } = await runRecovery({
     script: [],
     command: { command: 'tap', x: 10, y: 10 } as RunnerCommand,
   });
 
-  await assert.rejects(result, (error: unknown) => error === transportError);
+  await assert.rejects(result, (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.cause, transportError);
+    assert.equal(error.details?.reason, RUNNER_REPLY_LOST_REASON);
+    assert.equal(error.details?.recovery, 'status_recovery_unavailable');
+    return true;
+  });
   assert.equal(invalidate.mock.calls.length, 1);
   assert.equal(server?.requests.length, 0);
 });

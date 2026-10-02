@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { execFailureDetails } from '@agent-device/host-kit/command';
+import { isCommandTimeoutError, execFailureDetails } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { ensureHostDirectory, writeHostTextFile } from '@agent-device/host-kit/host-file';
 import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
@@ -16,7 +16,11 @@ import {
   isWebUrl,
   resolveIosDeviceDeepLinkBundleId,
 } from '@agent-device/contracts/command';
-import { IOS_APP_LAUNCH_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from './config.ts';
+import {
+  IOS_APP_LAUNCH_TIMEOUT_MS,
+  IOS_SIMULATOR_OPENURL_TIMEOUT_MS,
+  IOS_SIMULATOR_TERMINATE_TIMEOUT_MS,
+} from './config.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 import { runAppleRunnerCommand } from './runner-client.ts';
 import type { AppleRunnerCommandOptions } from '../runner/index.ts';
@@ -30,11 +34,21 @@ import { ensureBootedSimulator } from './simulator.ts';
 import { runXcrun, type ScopedSimctlCommand } from './tool-provider.ts';
 import { closeMacOsApp, openMacOsApp } from '../os/macos/apps.ts';
 import { resolveIosApp } from './app-resolution.ts';
-import { buildSimctlArgsForDevice, runSimctlForDevice } from './simctl.ts';
+import { buildSimctlArgsForDevice } from './simctl.ts';
 
 const IOS_SIMULATOR_CONSOLE_CAPTURE_MS = 25_000;
 const IOS_SIMULATOR_LAUNCH_ARGS_WITH_URL_MESSAGE =
   '--launch-args is not supported with iOS simulator URL opens (simctl openurl ignores launch args). Launch the app first with --launch-args, then issue the URL open in a separate call.';
+
+/** Why an open failed because CoreSimulator never answered its `simctl openurl` within the bound. */
+export const IOS_SIMULATOR_OPENURL_TIMEOUT_REASON = 'ios-simulator-openurl-timeout';
+
+/**
+ * A killed child answers nothing, so the bound cannot report whether the hand-off landed; the hint is
+ * the operator's only notice that a retry can duplicate the deep link.
+ */
+export const IOS_SIMULATOR_OPENURL_TIMEOUT_HINT =
+  'The Simulator may still have received the URL; CoreSimulator is slow to answer. Retry the open, or answer any "Open in" prompt with alert accept.';
 
 // fallow-ignore-next-line complexity
 export async function openIosApp(
@@ -85,7 +99,7 @@ export async function openIosApp(
           await terminateIosSimulatorApp(device, bundleId);
         }
       }
-      await openIosSimulatorUrl(device, explicitUrl, undefined);
+      await openIosSimulatorUrl(device, explicitUrl, undefined, options?.runnerOptions);
       return;
     }
     const appBundleId = options?.appBundleId ?? (await resolveIosApp(device, app));
@@ -110,7 +124,7 @@ export async function openIosApp(
       throw new AppError('INVALID_ARGS', LAUNCH_CONSOLE_DIRECT_APP_ONLY_MESSAGE);
     }
     if (device.kind === 'simulator') {
-      await openIosSimulatorUrl(device, deepLinkTarget, launchArgs);
+      await openIosSimulatorUrl(device, deepLinkTarget, launchArgs, options?.runnerOptions);
       return;
     }
     const bundleId = resolveIosDeviceDeepLinkBundleId(options?.appBundleId, deepLinkTarget);
@@ -148,12 +162,33 @@ async function openIosSimulatorUrl(
   device: DeviceInfo,
   url: string,
   launchArgs: string[] | undefined,
+  runnerOptions?: AppleRunnerCommandOptions,
 ): Promise<void> {
   if (launchArgs && launchArgs.length > 0) {
     throw new AppError('INVALID_ARGS', IOS_SIMULATOR_LAUNCH_ARGS_WITH_URL_MESSAGE);
   }
   await ensureBootedSimulator(device);
-  await runSimctlForDevice(device, ['openurl', device.id, url]);
+  const args = buildSimctlArgsForDevice(device, ['openurl', device.id, url]);
+  try {
+    await runXcrun(args, {
+      timeoutMs: IOS_SIMULATOR_OPENURL_TIMEOUT_MS,
+      ...(runnerOptions?.signal ? { signal: runnerOptions.signal } : {}),
+    });
+  } catch (error) {
+    // Only a bound this call armed is relabelled; a cancelled request stays a cancelled request.
+    if (!isCommandTimeoutError(error)) throw error;
+    throw new AppError(
+      'COMMAND_FAILED',
+      `xcrun simctl openurl did not answer within ${IOS_SIMULATOR_OPENURL_TIMEOUT_MS}ms.`,
+      {
+        ...error.details,
+        reason: IOS_SIMULATOR_OPENURL_TIMEOUT_REASON,
+        timeoutMs: IOS_SIMULATOR_OPENURL_TIMEOUT_MS,
+        deviceId: device.id,
+        hint: IOS_SIMULATOR_OPENURL_TIMEOUT_HINT,
+      },
+    );
+  }
 }
 
 export async function openIosDevice(device: DeviceInfo): Promise<void> {

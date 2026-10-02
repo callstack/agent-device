@@ -2,7 +2,11 @@
  * Pointer, key, and gesture actions on an Android device. Text entry — provider injection, the test
  * IME, and the adb-shell writer — is `text-input.ts`.
  */
-import { DEVICE_ROTATION_SURFACE_INDEX, type DeviceRotation } from '@agent-device/contracts/device';
+import {
+  DEVICE_ROTATION_SURFACE_INDEX,
+  deviceRotationFromSurfaceIndex,
+  type DeviceRotation,
+} from '@agent-device/contracts/device';
 import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import { GESTURE_DURATION_MIN_MS } from '@agent-device/contracts/gesture-plan-types';
 import {
@@ -17,15 +21,30 @@ import {
 } from '@agent-device/contracts/scroll-gesture';
 import { type TvRemoteButton, toAndroidTvRemoteKeyevent } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import { sleep } from '@agent-device/host-kit/retry';
 import { runAndroidShell } from './adb.ts';
+import { androidAdbResultError, discloseAdbInputDispatch } from './adb-failure.ts';
 import { executeAndroidTouchPlan, readAndroidGestureViewportReading } from './touch-executor.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
 export async function pressAndroid(device: DeviceInfo, x: number, y: number): Promise<void> {
-  await runAndroidShell(device, ['input', 'tap', x, y]);
+  try {
+    await runAndroidShell(device, ['input', 'tap', x, y]);
+  } catch (error) {
+    throw discloseAdbInputDispatch(error);
+  }
+}
+
+/** Two `input tap` sends; a failure of the second follows a tap that already landed. */
+export async function doubleTapAndroid(device: DeviceInfo, x: number, y: number): Promise<void> {
+  await pressAndroid(device, x, y);
+  try {
+    await pressAndroid(device, x, y);
+  } catch (error) {
+    throw discloseDispatchAfterSteps(error, 1);
+  }
 }
 
 export async function pressAndroidTvRemote(
@@ -104,10 +123,9 @@ async function readAndroidDisplayRotation(
   deadline: number,
 ): Promise<string | undefined> {
   try {
-    const result = await runAndroidShell(device, ['dumpsys', 'display'], {
-      timeoutMs: remainingMs(deadline),
-    });
-    return /mCurrentOrientation=(\d)/.exec(result.stdout)?.[1];
+    return (
+      await readAndroidDisplayRotationIndices(device, { timeoutMs: remainingMs(deadline) })
+    )[0];
   } catch (error) {
     throw new AppError(
       'COMMAND_FAILED',
@@ -119,6 +137,48 @@ async function readAndroidDisplayRotation(
 
 function remainingMs(deadline: number): number {
   return Math.max(1, deadline - Date.now());
+}
+
+/**
+ * The one `dumpsys display` read both the orientation settle and the screenshot probe use: the
+ * `Surface.ROTATION_*` index of each logical display. A failed or aborted read throws; each caller
+ * decides what that means.
+ */
+async function readAndroidDisplayRotationIndices(
+  device: DeviceInfo,
+  options: { timeoutMs: number; signal?: AbortSignal },
+): Promise<string[]> {
+  // An executor may hand back a failed result instead of throwing, so the exit code is checked
+  // here rather than trusted to the transport.
+  const result = await runAndroidShell(device, ['dumpsys', 'display'], {
+    ...options,
+    allowFailure: true,
+  });
+  if (result.exitCode !== 0) {
+    throw androidAdbResultError(
+      `adb shell dumpsys display exited with code ${result.exitCode}`,
+      result,
+    );
+  }
+  return [...result.stdout.matchAll(/mCurrentOrientation=(\d)/g)].map((match) => match[1]!);
+}
+
+/**
+ * Best-effort read of the rotation the only display is rendering in. A device with more than one
+ * display yields none: `screencap` without a display id captures whichever display it finds
+ * first, so no single rotation is known to pair with the image. A probe that fails, is aborted,
+ * or reports no index also yields none rather than failing the operation it accompanies.
+ */
+export async function probeAndroidDisplayRotation(
+  device: DeviceInfo,
+  options: { timeoutMs: number; signal: AbortSignal },
+): Promise<DeviceRotation | undefined> {
+  try {
+    const indices = await readAndroidDisplayRotationIndices(device, options);
+    return indices.length === 1 ? deviceRotationFromSurfaceIndex(Number(indices[0])) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function appSwitcherAndroid(device: DeviceInfo): Promise<void> {

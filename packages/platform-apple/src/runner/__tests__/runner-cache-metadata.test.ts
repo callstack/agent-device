@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { resetAllProcessMemosForTests } from '@agent-device/kernel/ttl-memo';
@@ -17,11 +17,18 @@ import {
   resolveRunnerPerformanceBuildSettings,
   resolveRunnerSandboxBuildArgs,
   resolveExpectedRunnerCacheMetadata,
+  resolveRunnerDerivedPath,
+  memoizedRunnerXcodeVersion,
 } from '../runner-cache-metadata.ts';
 import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../apple-runner-platform.ts';
-import { appleToolchainProbeResult, stubAppleToolchainProbes } from './apple-toolchain-fixtures.ts';
+import {
+  appleToolchainProbeResult,
+  STUBBED_APPLE_TOOLCHAIN,
+  stubAppleToolchainProbes,
+} from './apple-toolchain-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import { xcodebuildLogWithBuildArguments } from './runner-build-log.fixtures.ts';
+import { withoutRunnerDerivedPathEnv } from './runner-xctestrun.fixtures.ts';
 
 const runCmdSync = stubAppleToolchainProbes();
 
@@ -750,4 +757,70 @@ test('an unreadable or setting-less build log fails the check', () => {
       requireRunnerBuildSettingsMatchBuildLog(metadata, path.join(root, 'never-written-build.log')),
     /did not use the settings its cache identity records/,
   );
+});
+
+test('a toolchain read under one DEVELOPER_DIR does not answer for another, so its runner is stale', () => {
+  // An AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH override pins one path for every toolchain.
+  withoutRunnerDerivedPathEnv();
+  let developerDir: string | undefined = '/Applications/Xcode-A.app/Contents/Developer';
+  appleRunnerTestHost.update({ commandDeveloperDir: () => developerDir });
+  runCmdSync.mockImplementation((command: string, args: readonly string[]) =>
+    developerDir === '/Applications/Xcode-B.app/Contents/Developer' && command === 'xcodebuild'
+      ? { exitCode: 0, stdout: 'Xcode 27.0\nBuild version 18A100\n', stderr: '' }
+      : appleToolchainProbeResult(command, args),
+  );
+
+  const underA = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+  developerDir = '/Applications/Xcode-B.app/Contents/Developer';
+  runCmdSync.mockClear();
+  const underB = resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+  expect(runCmdSync.mock.calls.map(([command]) => command)).toEqual([
+    'xcodebuild',
+    'xcrun',
+    'xcrun',
+  ]);
+  assert.equal(underA.xcodeBuildVersion, STUBBED_APPLE_TOOLCHAIN.xcodeBuildVersion);
+  assert.equal(underB.xcodeBuildVersion, '18A100');
+  // The derived path is what a retained runner is reused by, so a differing one makes it stale.
+  assert.notEqual(
+    resolveRunnerDerivedPath(IOS_SIMULATOR, underA),
+    resolveRunnerDerivedPath(IOS_SIMULATOR, underB),
+  );
+
+  developerDir = '/Applications/Xcode-A.app/Contents/Developer';
+  runCmdSync.mockClear();
+  assert.equal(
+    resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR).xcodeBuildVersion,
+    STUBBED_APPLE_TOOLCHAIN.xcodeBuildVersion,
+  );
+  expect(runCmdSync).not.toHaveBeenCalled();
+});
+
+test('a toolchain fingerprint expires once no request uses it; each use renews it', () => {
+  vi.useFakeTimers();
+  try {
+    appleRunnerTestHost.update({
+      commandDeveloperDir: () => '/Applications/Xcode-A.app/Contents/Developer',
+    });
+    resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+    runCmdSync.mockClear();
+    // Used every 9 minutes, it outlives a 10-minute window without another probe.
+    vi.advanceTimersByTime(9 * 60_000);
+    resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+    vi.advanceTimersByTime(9 * 60_000);
+    resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+    expect(runCmdSync).not.toHaveBeenCalled();
+    expect(memoizedRunnerXcodeVersion(IOS_SIMULATOR)).toBe(STUBBED_APPLE_TOOLCHAIN.xcodeVersion);
+
+    vi.advanceTimersByTime(10 * 60_000);
+    expect(memoizedRunnerXcodeVersion(IOS_SIMULATOR)).toBeUndefined();
+    resolveExpectedRunnerCacheMetadata(IOS_SIMULATOR);
+    expect(runCmdSync.mock.calls.map(([command]) => command)).toEqual([
+      'xcodebuild',
+      'xcrun',
+      'xcrun',
+    ]);
+  } finally {
+    vi.useRealTimers();
+  }
 });

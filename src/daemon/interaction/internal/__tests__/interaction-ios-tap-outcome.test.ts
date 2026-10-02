@@ -7,7 +7,6 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { handleInteractionCommands } from '../../index.ts';
-import { handleSnapshotCommands } from '../../../handlers/snapshot.ts';
 import {
   makeIosSession,
   authoringPublication,
@@ -22,7 +21,6 @@ import {
   snapshot,
   snapshotPayload,
 } from './interaction-ios-tap-outcome-fixtures.ts';
-import { snapshotRuntimeFixture } from '../../../__tests__/snapshot-runtime-fixture.ts';
 import {
   appCaptureComparisonKey,
   systemSurfaceCaptureComparisonKey,
@@ -621,7 +619,7 @@ test('runtime-resolved taps use the same corroboration boundary', async () => {
   expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
 });
 
-test('a corroborated runtime coordinate tap does not schedule a no-change retry', async () => {
+test('runtime coordinate taps use the same corroboration boundary', async () => {
   const sessionName = 'ios-runtime-coordinate-corroboration';
   const sessionStore = makeSessionStore();
   sessionStore.set(
@@ -631,17 +629,12 @@ test('a corroborated runtime coordinate tap does not schedule a no-change retry'
       snapshot: snapshot(profileNodes),
     }),
   );
-  let pressCount = 0;
   legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'press') {
-      pressCount += 1;
-      if (pressCount === 1) {
-        throw new AppError(
-          'XCTEST_RECORDED_FAILURE',
-          'XCTest recorded a failure while executing tap; the action may not have been performed.',
-        );
-      }
-      return {};
+      throw new AppError(
+        'XCTEST_RECORDED_FAILURE',
+        'XCTest recorded a failure while executing tap; the action may not have been performed.',
+      );
     }
     if (command === 'snapshot') return snapshotPayload(imageViewerNodes);
     return {};
@@ -649,30 +642,12 @@ test('a corroborated runtime coordinate tap does not schedule a no-change retry'
 
   const clickResponse = await runClick(sessionStore, sessionName, {
     positionals: ['104', '222'],
-    flags: { interactionOutcome: { retryOnNoChange: true } },
   });
   expect(clickResponse?.ok).toBe(true);
   if (clickResponse?.ok) {
     expect(clickResponse.data?.warning).toMatch(/post-action accessibility capture changed/);
   }
-
-  const snapshotResponse = await handleSnapshotCommands({
-    req: {
-      token: 'test',
-      session: sessionName,
-      command: 'snapshot',
-      positionals: [],
-      flags: {},
-    },
-    sessionName,
-    logPath: '/tmp/daemon.log',
-    sessionStore,
-    ...snapshotRuntimeFixture(),
-  });
-
-  expect(snapshotResponse?.ok).toBe(true);
-  expect(pressCount).toBe(1);
-  expect(sessionStore.get(sessionName)?.pendingInteractionOutcome).toBeUndefined();
+  expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
 });
 
 test('corroborated runtime taps retain target evidence through save and replay', async () => {

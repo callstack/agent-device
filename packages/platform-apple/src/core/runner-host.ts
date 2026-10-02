@@ -2,6 +2,7 @@ import type { AppleRunnerHost } from '../runner/index.ts';
 import { publishFileSync, acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
 
 import {
+  commandDeveloperDir,
   isCommandTimeoutError,
   requireExecSuccess,
   runCmdBackground,
@@ -18,6 +19,7 @@ import {
   signalPidsBestEffort,
   signalProcessGroupBestEffort,
   classifyOwnerLiveness,
+  readHostCpuArchSync,
 } from '@agent-device/host-kit/process';
 import { Deadline, isEnvTruthy, retryWithPolicy } from '@agent-device/host-kit/retry';
 
@@ -63,6 +65,7 @@ export const appleRunnerHost: AppleRunnerHost = {
   runCmdBackground,
   requireExecSuccess,
   isCommandTimeoutError,
+  commandDeveloperDir,
   shellQuote,
   emitDiagnostic,
   withDiagnosticTimer,
@@ -82,6 +85,7 @@ export const appleRunnerHost: AppleRunnerHost = {
   withKeyedLock,
   publishFileSync,
   classifyOwnerLiveness,
+  readHostCpuArchSync,
   createTtlMemo,
   parseBooleanLiteral,
   isRecord,

@@ -56,6 +56,17 @@ export type DiagnosticsRecordRef = {
   requestId: string;
 };
 
+/**
+ * Whether the operation a failed request asked for reached the device. `no`: it provably never
+ * did, so resending it is safe. `unknown`: it may have landed, so observe the device before
+ * resending. A failure without the field was classified by no producer. The producer rows live in
+ * `contracts/fixtures/dispatch-disclosure.json`.
+ */
+export type DispatchDisclosure = 'no' | 'unknown';
+
+/** The error details bag as it crosses the wire: free-form, with the typed keys a reader may rely on. */
+export type ErrorWireDetails = Record<string, unknown> & { dispatched?: DispatchDisclosure };
+
 export type ErrorCause = {
   message: string;
   code?: string;
@@ -73,6 +84,8 @@ export type ErrorCause = {
  *   rather than by hand.
  * - `retriable` — typed retry signal hoisted to the wire error shape.
  * - `reason` — machine-dispatchable sub-classification within a code.
+ * - `dispatched` — {@link DispatchDisclosure} set by the producer that proved it; kept in details on
+ *   the wire and never defaulted.
  */
 export type AppErrorDetails = Record<string, unknown> & {
   hint?: string;
@@ -88,6 +101,7 @@ export type AppErrorDetails = Record<string, unknown> & {
   // null mirrors the raw child_process exit event: killed by signal, no code.
   exitCode?: number | null;
   reason?: string;
+  dispatched?: DispatchDisclosure;
 };
 
 export type NormalizedError = {
@@ -119,7 +133,7 @@ export type NormalizedError = {
    */
   retriable?: boolean;
   supportedOn?: string;
-  details?: Record<string, unknown>;
+  details?: ErrorWireDetails;
 };
 
 export type ElementMatchCandidateDetails = {
@@ -199,7 +213,7 @@ export type DaemonError = {
    * being handed a path on a filesystem it cannot read.
    */
   diagnosticsRecord?: DiagnosticsRecordRef;
-  details?: Record<string, unknown>;
+  details?: ErrorWireDetails;
   /** Additive retry and platform-support signals; absent when not derivable. */
   retriable?: boolean;
   supportedOn?: string;
@@ -530,4 +544,61 @@ export function defaultHintForCode(code: string): string | undefined {
     default:
       return 'Retry with --debug and inspect diagnostics log for details.';
   }
+}
+
+export type DispatchDisclosureEvidence = {
+  /** Steps of a multi-step operation that reached the device before it failed. */
+  dispatchedSteps?: number;
+};
+
+/**
+ * Records, on the failure it proved, what a producer knows about whether the requested operation
+ * reached the device. A producer owns its verdict, so this overwrites; a later layer that only
+ * infers the verdict from its own side-effect seam uses {@link discloseUnclassifiedDispatch}.
+ */
+export function discloseDispatch<Failure extends AppError>(
+  error: Failure,
+  dispatched: DispatchDisclosure,
+  evidence: DispatchDisclosureEvidence = {},
+): Failure {
+  error.details = { ...error.details, ...evidence, dispatched };
+  return error;
+}
+
+/**
+ * The details of a failure after `dispatchedSteps` device-reaching steps of its operation returned.
+ * `no` describes the whole requested operation, so it holds only while no step was dispatched; after
+ * that the failure is `unknown`, and `details.dispatchedSteps` adds this count to any count the
+ * failing step already carries.
+ */
+export function detailsAfterDispatchedSteps(
+  details: ErrorWireDetails | undefined,
+  dispatchedSteps: number,
+): ErrorWireDetails | undefined {
+  if (dispatchedSteps === 0) return details;
+  const innerSteps = details?.dispatchedSteps;
+  return {
+    ...details,
+    dispatchedSteps: dispatchedSteps + (typeof innerSteps === 'number' ? innerSteps : 0),
+    dispatched: 'unknown',
+  };
+}
+
+/**
+ * {@link detailsAfterDispatchedSteps} on a thrown failure. A failure that is not an
+ * {@link AppError} passes through unchanged for the boundary that normalizes it.
+ */
+export function discloseDispatchAfterSteps(error: unknown, dispatchedSteps: number): unknown {
+  if (!(error instanceof AppError)) return error;
+  error.details = detailsAfterDispatchedSteps(error.details, dispatchedSteps);
+  return error;
+}
+
+/** The side-effect seam's verdict, recorded only when no producer classified the failure. */
+export function discloseUnclassifiedDispatch<Failure extends AppError>(
+  error: Failure,
+  dispatched: DispatchDisclosure,
+): Failure {
+  if (error.details?.dispatched !== undefined) return error;
+  return discloseDispatch(error, dispatched);
 }

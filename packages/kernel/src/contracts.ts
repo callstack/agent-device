@@ -136,6 +136,8 @@ export type DaemonRequestMeta = {
   includeCost?: boolean;
   responseLevel?: ResponseLevel;
   cwd?: string;
+  /** The client's `DEVELOPER_DIR`, applied to the commands a local daemon spawns for this request. */
+  developerDir?: string;
   sessionExplicit?: boolean;
   tenantId?: string;
   runId?: string;

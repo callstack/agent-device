@@ -1,5 +1,6 @@
 export {
   coerceExecResult,
+  commandDeveloperDir,
   type CommandExecutorOverride,
   type ExecBackgroundOptions,
   type ExecBackgroundResult,
@@ -21,5 +22,6 @@ export {
   runCmdSync,
   whichCmd,
   withCommandExecutorOverride,
+  withRequestCommandEnv,
   withoutCommandExecutorOverride,
 } from './internal/exec.ts';

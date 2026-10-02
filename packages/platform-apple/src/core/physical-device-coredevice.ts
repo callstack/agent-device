@@ -1,6 +1,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails, type ExecResult } from '@agent-device/host-kit/command';
+import { IOS_DEVICECTL_MIN_TIMEOUT_SECONDS } from './config.ts';
 import {
   IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT,
   IOS_DEVICE_DEVELOPER_MODE_OFF_HINT,
@@ -177,7 +178,8 @@ async function runCoreDeviceDetails(
   commandTimeoutBufferMs = 0,
   signal?: AbortSignal,
 ): Promise<CoreDeviceDetailsProbe> {
-  const timeoutSeconds = Math.max(1, Math.ceil(timeoutMs / 1000));
+  // devicectl rejects sub-minimum values; shorter budgets use the host deadline alone.
+  const timeoutSeconds = Math.max(IOS_DEVICECTL_MIN_TIMEOUT_SECONDS, Math.ceil(timeoutMs / 1000));
   const outcome = await runIosDevicectlJsonRequest({
     jsonPrefix: 'agent-device-coredevice-info',
     args: [

@@ -619,7 +619,7 @@ test('an open waits out a slow app discovery, so the first capture after it star
         let verdict: string | undefined;
         const observed = route
           .awaitObservable(ios, input.options.appBundleId, signal())
-          .then((value) => (verdict = value));
+          .then((value) => (verdict = value.observation));
         await vi.advanceTimersByTimeAsync(4_500);
         expect(verdict).toBeUndefined();
         expect(source.acquire).not.toHaveBeenCalled();
@@ -660,9 +660,10 @@ test.each([
   await route.capture(ios, input, signal(), async () => runnerResult());
   expect(source.acquire).toHaveBeenCalledOnce();
 
-  await expect(route.awaitObservable(ios, input.options.appBundleId, signal())).resolves.toBe(
-    'unobservable',
-  );
+  await expect(route.awaitObservable(ios, input.options.appBundleId, signal())).resolves.toEqual({
+    observation: 'probe-failed',
+    failure: { source: 'circuit' },
+  });
   expect(source.acquire).toHaveBeenCalledOnce();
 });
 
@@ -685,9 +686,9 @@ test('a relaunched generation rebaselines the circuit and observes the launch', 
 
   await route.capture(ios, input, signal(), async () => runnerResult());
 
-  await expect(route.awaitObservable(ios, input.options.appBundleId, signal())).resolves.toBe(
-    'observable',
-  );
+  await expect(route.awaitObservable(ios, input.options.appBundleId, signal())).resolves.toEqual({
+    observation: 'observable',
+  });
   expect(source.acquire).toHaveBeenCalledTimes(2);
 });
 

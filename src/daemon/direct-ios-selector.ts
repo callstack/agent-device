@@ -4,7 +4,7 @@ import { isActiveProviderDevice } from './provider-device-admission.ts';
 import { isPostGestureStabilizationPending } from './deferred-interaction-outcome.ts';
 import type { SessionState } from './session-state.ts';
 import { readSimpleSelectorTarget } from '@agent-device/selectors';
-import { asAppError } from '@agent-device/kernel/errors';
+import { asAppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { ElementSelectorTapOptions } from '@agent-device/contracts/interactor-types';
 import { queryAppleRuntimeSelector } from '../platform-runtime-apple-resources.ts';
 import type { AppleRunnerRequestOptions } from './apple-runner-options.ts';
@@ -79,28 +79,26 @@ function readDirectIosSelectorNode(data: Record<string, unknown>): SnapshotNode 
   return node as SnapshotNode;
 }
 
+/** The runner's selector refusals: it resolved the selector and refused before any gesture. */
+const RUNNER_SELECTOR_REFUSAL_CODES: ReadonlySet<string> = new Set([
+  'ELEMENT_NOT_FOUND',
+  'ELEMENT_OFFSCREEN',
+  'AMBIGUOUS_MATCH',
+]);
+
+/**
+ * Whether a failed direct iOS selector tap may delegate to the tree path, which taps again. Only a
+ * failure disclosed `dispatched: no` may: a connect refusal, a pre-send restart or readiness
+ * verdict, `RUNNER_BUSY`, or a runner selector refusal. An `unknown` failure may already have
+ * tapped. Selector refusals delegate only when `delegateSemanticFailures` is set;
+ * Maestro replay keeps their runner-native shapes.
+ */
 export function isDirectIosSelectorFallbackError(
   error: unknown,
-  options: {
-    allowElementNotFound?: boolean;
-    delegateSemanticFailures?: boolean;
-  } = {},
+  options: { delegateSemanticFailures: boolean },
 ): boolean {
   const appError = asAppError(error);
-  if (appError.code === 'ELEMENT_NOT_FOUND') {
-    return options.delegateSemanticFailures === true || options.allowElementNotFound === true;
-  }
-  if (appError.code === 'AMBIGUOUS_MATCH') return options.delegateSemanticFailures === true;
-  if (appError.code === 'ELEMENT_OFFSCREEN') {
-    return options.delegateSemanticFailures !== false;
-  }
-  if (appError.code !== 'COMMAND_FAILED') return false;
-  const message = appError.message.toLowerCase();
-  return (
-    message.includes('fetch failed') ||
-    message.includes('timed out') ||
-    message.includes('timeout') ||
-    message.includes('runner did not accept connection') ||
-    message.includes('invalid runner response')
-  );
+  if (appError.details?.dispatched !== 'no' || isRequestCanceledError(appError)) return false;
+  if (RUNNER_SELECTOR_REFUSAL_CODES.has(appError.code)) return options.delegateSemanticFailures;
+  return appError.code === 'COMMAND_FAILED';
 }

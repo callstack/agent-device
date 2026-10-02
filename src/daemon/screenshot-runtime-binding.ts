@@ -5,6 +5,7 @@ import {
 } from '@agent-device/contracts/platform-runtime-operations';
 import type {
   CaptureScreenshotInput,
+  ScreenshotCaptureFacts,
   ScreenshotRuntimeOperations,
 } from '@agent-device/contracts/screenshot-runtime';
 import type {
@@ -35,7 +36,7 @@ export type ScreenshotRuntimeBindings = Readonly<{
  * capture it never declared a snapshot for — and both operations come from the same single binding.
  */
 export type BoundScreenshotRuntime = Readonly<{
-  captureScreenshot(input: CaptureScreenshotInput): Promise<void>;
+  captureScreenshot(input: CaptureScreenshotInput): Promise<ScreenshotCaptureFacts>;
   captureSnapshot?: (input: CaptureSnapshotInput) => Promise<SnapshotResult>;
 }>;
 

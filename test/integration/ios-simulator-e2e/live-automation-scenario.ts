@@ -11,7 +11,7 @@ import {
   assertJsonContains,
   assertWaitText,
 } from './live-assertions.ts';
-import { acceptDeepLinkConfirmationIfPresent } from './live-deep-link-confirmation.ts';
+import { waitForDeepLinkDestination } from './live-deep-link-destination.ts';
 import { clearStateLaunchUrlMaestroFlow } from './live-fixtures.ts';
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
 
@@ -20,8 +20,6 @@ const ALERT_WAIT_TIMEOUT = String(DEFAULT_ALERT_TIMEOUT_MS);
 const FIXTURE_HOME_TITLE = 'Agent Device Tester';
 // The first wait may pay the runner's 45 s startup budget before its first capture.
 const COLD_RUNNER_WAIT_TIMEOUT_MS = 60_000;
-/** The Automation lab's own first landmark; see `acceptDeepLinkConfirmationIfPresent`. */
-const AUTOMATION_LAB_LANDMARK = ['text', 'Automation lab'] as const;
 const AUTOMATION_DEEP_LINK =
   'agent-device-test-app:///automation?event=cold.start&payload=%7B%22source%22%3A%22deep-link%22%7D';
 
@@ -86,8 +84,7 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   verifyCommand(context, C.open, 'cold launch exposes the fixture UI through snapshot and wait');
 
   await openAutomationDeepLink(context, 'cold launch fixture through a deep link');
-  await acceptDeepLinkConfirmationIfPresent(context, AUTOMATION_LAB_LANDMARK);
-  await assertWaitText(context, 'Automation lab');
+  await waitForDeepLinkDestination(context, ['text', 'Automation lab']);
   await assertElementText(context, 'id="automation-event-name"', 'cold.start');
   await assertElementText(context, 'id="automation-event-payload"', '{"source":"deep-link"}');
   await assertClearStateLaunchUrl(context);
@@ -255,11 +252,14 @@ async function assertClearStateLaunchUrl(context: LiveContext): Promise<void> {
 }
 
 async function openAutomationDeepLink(context: LiveContext, step: string): Promise<void> {
+  // --debug keeps the open's own request log, which is where a held launch URL's alert read, the
+  // post-open observation verdict and any re-hand-off are visible when this step fails.
   await runStep(context, step, [
     'open',
     context.appId,
     '--relaunch',
     '--launch-url',
     AUTOMATION_DEEP_LINK,
+    '--debug',
   ]);
 }

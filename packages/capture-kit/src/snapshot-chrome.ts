@@ -333,7 +333,7 @@ export function collectSettleChromeRefs(
  * only excludes nodes whose OWN type is `keyboard` still leaks every key and
  * assistant control as "discriminating" evidence.
  *
- * Used by `src/daemon/interaction-outcome-policy.ts`'s post-gesture
+ * Used by `src/daemon/interaction-surface-signature.ts`'s post-gesture
  * baseline-distrust discriminating-overlap classification (#1542 defect 2,
  * #1563 review): that comparison operates on flat signature entries with no
  * ref-selection budget of its own, so it needs the ref set directly rather

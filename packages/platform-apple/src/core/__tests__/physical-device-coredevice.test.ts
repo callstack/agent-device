@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { IOS_DEVICECTL_MIN_TIMEOUT_SECONDS } from '../config.ts';
 import {
   launchCoreDeviceApp,
   parseIosDeviceDetailsPayload,
@@ -485,6 +486,44 @@ test('the CoreDevice backend publishes the device report', async () => {
   assert.equal(readiness.developerMode, 'enabled');
   assert.equal(readiness.developerDiskImage, 'available');
 });
+
+test.each([
+  [250, '5'],
+  [4999, '5'],
+  [5000, '5'],
+  [5001, '6'],
+  [10000, '10'],
+])(
+  'CoreDevice tunnel lookup keeps a %i ms host budget with CLI timeout %s',
+  async (budget, cliTimeout) => {
+    let observedCliTimeout: string | undefined;
+    let observedHostTimeout: number | undefined;
+    const tunnel = await withAppleToolProvider(
+      createLocalAppleToolProvider({
+        runCommand: async (_cmd, args, options) => {
+          observedCliTimeout = args[args.indexOf('--timeout') + 1];
+          observedHostTimeout = options?.timeoutMs;
+          if (Number(observedCliTimeout) < IOS_DEVICECTL_MIN_TIMEOUT_SECONDS) {
+            return {
+              exitCode: 64,
+              stdout: '',
+              stderr: "Error: Please specify a 'timeout' value between 5 and 9223372036854775807",
+            };
+          }
+          const outputPath = jsonOutputPath(args);
+          if (outputPath) fs.writeFileSync(outputPath, DEVICE_INFO_DETAILS_TEXT);
+          return { exitCode: 0, stdout: '', stderr: '' };
+        },
+      }),
+      async () =>
+        await resolveIosPhysicalDeviceControl(IOS_DEVICE).resolveTunnel(IOS_DEVICE, budget),
+    );
+
+    assert.deepEqual(tunnel, { tunnelIp: 'fd00:0000:0000::1' });
+    assert.equal(observedCliTimeout, cliTimeout);
+    assert.equal(observedHostTimeout, budget);
+  },
+);
 
 /**
  * A `deviceProperties` payload together with the context it was read in. Both default to the state a

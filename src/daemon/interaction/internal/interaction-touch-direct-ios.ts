@@ -16,7 +16,6 @@ import {
   buildCorroboratedTapResponseData,
   buildInteractionResponseData,
   maestroFallbackDisclosure,
-  pointPositionals,
   readInteractionResponseDataTransformCommand,
   transformTouchResponseData,
 } from './interaction-touch-response.ts';
@@ -77,7 +76,6 @@ export async function dispatchDirectIosSelectorTap(
       sessionStore: handlerParams.sessionStore,
       command: handlerParams.req.command,
       positionals: handlerParams.req.positionals ?? [],
-      retryPositionals: pointPositionals(point),
       flags: handlerParams.req.flags,
       result,
       responseData,
@@ -94,9 +92,9 @@ export async function dispatchDirectIosSelectorTap(
       actionStartedAt,
     });
     if (corroboratedResponse) return corroboratedResponse;
-    // ADR 0011 delegation-on-error: semantic runner failures fall back to the
-    // tree-based runtime path — except for Maestro replay dispatches, whose
-    // runner-native error shapes must be preserved.
+    // ADR 0011 delegation-on-error: only a failure disclosed `dispatched: no`
+    // falls back to the tree path, which taps again; Maestro replay keeps the
+    // runner's selector refusal shapes.
     const fallback = isDirectIosSelectorFallbackError(error, {
       delegateSemanticFailures: selector.allowNonHittableCoordinateFallback !== true,
     });
@@ -152,7 +150,6 @@ async function buildDirectIosCorroboratedResponse(params: {
     flags: handlerParams.req.flags,
     result,
     responseData,
-    scheduleInteractionOutcomeRetry: false,
     actionStartedAt,
     actionFinishedAt: Date.now(),
   });

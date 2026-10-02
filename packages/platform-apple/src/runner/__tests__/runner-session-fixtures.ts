@@ -2,8 +2,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
 import { AppError } from '@agent-device/kernel/errors';
+import type { RunnerXctestrunArtifact } from '../runner-artifact.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
+import {
+  resolveRunnerCacheKey,
+  type RunnerXctestrunCacheMetadata,
+} from '../runner-cache-metadata.ts';
+import { STUBBED_APPLE_TOOLCHAIN } from './apple-toolchain-fixtures.ts';
 import { runnerOwnerStartTime, type RunnerLease } from '../runner-lease.ts';
 import { RunnerCommandAccounting, type RunnerSession } from '../runner-session-types.ts';
 import {
@@ -16,6 +22,39 @@ import {
 // (`4242`): nothing in a test may deliver a real signal to them, so the owning
 // tests mock the signal seam in `@agent-device/host-kit/process` — see
 // `src/__tests__/hermetic-signal-setup.ts` and #1824.
+
+export const RUNNER_CACHE_METADATA_FIXTURE: RunnerXctestrunCacheMetadata = {
+  ...STUBBED_APPLE_TOOLCHAIN,
+  schemaVersion: 1,
+  packageVersion: 'fixture',
+  runnerSourceFingerprint: 'fixture',
+  sdkName: 'iphonesimulator',
+  platformName: 'ios',
+  deviceKind: 'simulator',
+  target: 'mobile',
+  buildDestinationFamily: 'iOS Simulator',
+  runnerBundleBuildSettings: [],
+  runnerSigningBuildSettings: [],
+  runnerPerformanceBuildSettings: [],
+  runnerArchBuildSettings: [],
+  runnerSandboxBuildArgs: [],
+};
+export const RUNNER_CACHE_KEY_FIXTURE = resolveRunnerCacheKey(RUNNER_CACHE_METADATA_FIXTURE);
+
+export function makeRunnerArtifact(
+  overrides: Partial<RunnerXctestrunArtifact> = {},
+): RunnerXctestrunArtifact {
+  return {
+    xctestrunPath: '/tmp/runner.xctestrun',
+    derived: '/tmp/derived',
+    cacheKey: RUNNER_CACHE_KEY_FIXTURE,
+    cache: 'exact',
+    artifact: 'valid',
+    buildMs: 0,
+    xctestrunPathSource: 'manifest',
+    ...overrides,
+  };
+}
 
 export function makeRunnerSession(overrides: Partial<RunnerSession> = {}): RunnerSession {
   return {
@@ -91,6 +130,10 @@ export function runnerConnectFailure(
     ...runnerConnectFailureDetails(reason),
   });
 }
+
+/** Every connect attempt was refused before a byte was written, so a restart may resend the command. */
+export const unwrittenConnectRefusal = (): AppError =>
+  runnerConnectFailure('runner_connect_refused', undefined, { dispatched: 'no' });
 
 // Records everything the runner package emits through host.emitDiagnostic /
 // host.withDiagnosticTimer during `callback` and renders it back as the same

@@ -8,7 +8,11 @@ import {
   DAEMON_RPC_PROTOCOL_VERSION,
 } from '@agent-device/contracts/daemon-http';
 import { sendToDaemon } from '../daemon-client.ts';
-import { sendRequest } from '../daemon-client-transport.ts';
+import {
+  canConnect,
+  isDaemonTransportUnavailableError,
+  sendRequest,
+} from '../daemon-client-transport.ts';
 import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { createDaemonProxyServer } from '../../remote/daemon-proxy.ts';
 import {
@@ -256,6 +260,65 @@ test('a restart health probe cut short by the RPC deadline reports the deadline 
   }
 });
 
+type RestartProbeFailure = 'http-503' | 'closed-connection' | 'refused-connection';
+
+async function assertRestartProbeFailureReportsUnavailable(
+  t: Parameters<typeof skipWhenLoopbackUnavailable>[0],
+  failure: RestartProbeFailure,
+) {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let healthProbes = 0;
+  let rpcCount = 0;
+  const server = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      healthProbes += 1;
+      if (failure === 'http-503') {
+        res.statusCode = 503;
+        res.end();
+      } else {
+        req.socket.destroy();
+      }
+      return;
+    }
+    rpcCount += 1;
+    res.statusCode = 409;
+    res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
+    res.setHeader('connection', 'close');
+    res.end();
+    if (failure === 'refused-connection') server.close();
+  });
+  try {
+    const port = await listenOnLoopback(server);
+    await assert.rejects(sendWithStaleInstance(port, 150), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.message, 'Remote daemon is unavailable');
+      assert.equal(error.details?.daemonBaseUrl, `http://127.0.0.1:${port}`);
+      assert.notEqual(error.details?.reason, 'daemon_transport_timeout');
+      return true;
+    });
+    assert.equal(rpcCount, 1);
+    // A closed listener cannot count the probe; its attempt is proven by elimination: a skipped
+    // probe would exhaust the budget and report daemon_transport_timeout, which the error check rejects.
+    if (failure !== 'refused-connection') assert.equal(healthProbes, 1);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+}
+
+// Catches a mutation that marks every unreachable restart probe timedOut: a probe that fails
+// outright inside the capped budget would then surface as an RPC timeout.
+test('a restart health probe answering 503 near the RPC deadline reports the daemon unavailable', async (t) => {
+  await assertRestartProbeFailureReportsUnavailable(t, 'http-503');
+});
+
+test('a restart health probe on a closed connection near the RPC deadline reports the daemon unavailable', async (t) => {
+  await assertRestartProbeFailureReportsUnavailable(t, 'closed-connection');
+});
+
+test('a restart health probe refused near the RPC deadline reports the daemon unavailable', async (t) => {
+  await assertRestartProbeFailureReportsUnavailable(t, 'refused-connection');
+});
+
 test('proxy forwards cached upstream identity and rejects a restarted upstream before dispatch', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   let upstreamInstance = 'upstream-one';
@@ -321,4 +384,31 @@ test('proxy forwards cached upstream identity and rejects a restarted upstream b
     await closeLoopbackServer(proxy);
     await closeLoopbackServer(upstream);
   }
+});
+
+test('an endpoint missing for the requested transport rejects with a typed reason the classifier accepts', async () => {
+  const socketOnly = { port: 1, token: 't', pid: 1 };
+  const error = await canConnect(socketOnly, 'http').then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  assert.ok(error instanceof AppError);
+  assert.equal(error.details?.reason, 'daemon_endpoint_unavailable');
+  assert.equal(error.details?.transport, 'http');
+  assert.equal(isDaemonTransportUnavailableError(error), true);
+});
+
+test('the classifier ignores message text', () => {
+  assert.equal(
+    isDaemonTransportUnavailableError(
+      new AppError('COMMAND_FAILED', 'Daemon HTTP endpoint is unavailable'),
+    ),
+    false,
+  );
+  assert.equal(
+    isDaemonTransportUnavailableError(
+      new AppError('COMMAND_FAILED', 'reworded', { reason: 'daemon_endpoint_unavailable' }),
+    ),
+    true,
+  );
 });

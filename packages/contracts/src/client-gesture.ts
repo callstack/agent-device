@@ -35,11 +35,20 @@ export type SettleCommandOptions = {
   timeoutMs?: number;
 };
 
+/**
+ * How long a tap-shaped interaction may poll for a target that does not exist yet, capped at the
+ * promotedTarget row's maxTimeoutMs. Never model- or CLI-writable; omitted means one attempt.
+ */
+export type ReadinessBudgetOptions = {
+  readinessTimeoutMs?: number;
+};
+
 export type ClickOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions &
   InteractionTarget &
   RepeatedPressOptions &
-  SettleCommandOptions & {
+  SettleCommandOptions &
+  ReadinessBudgetOptions & {
     button?: ClickButton;
     /**
      * Opt-in (#1047): return cheap post-action evidence (AX digest, node counts,
@@ -53,14 +62,16 @@ export type PressOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions &
   InteractionTarget &
   RepeatedPressOptions &
-  SettleCommandOptions & {
+  SettleCommandOptions &
+  ReadinessBudgetOptions & {
     verify?: boolean;
   };
 
 export type LongPressOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions &
   InteractionTarget &
-  SettleCommandOptions & {
+  SettleCommandOptions &
+  ReadinessBudgetOptions & {
     durationMs?: number;
   };
 

@@ -4,7 +4,7 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   buildInteractionSurfaceSignature,
   classifyBaselineSurfaceEvidence,
-} from '../interaction-outcome-policy.ts';
+} from '../interaction-surface-signature.ts';
 
 // #1569: node shapes below are transcribed from a live iPhone 17 Pro capture of
 // examples/test-app's checkout form, before and after `scroll down 0.6`. Two

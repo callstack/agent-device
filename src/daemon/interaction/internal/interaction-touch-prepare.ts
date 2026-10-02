@@ -7,6 +7,7 @@ import {
 } from '../../touch-runtime.ts';
 import type { InteractionRouteInput } from './types.ts';
 import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
+import { refusedBeforeDispatch } from '../../request-dispatch-disclosure.ts';
 
 export type PreparedTouchDispatch =
   | Readonly<{ ok: false; response: DaemonFailureResponse }>
@@ -26,7 +27,7 @@ export async function prepareTouchDispatch(
     inspectFacts: params.inspectFacts,
     bindDevice: params.bindDevice,
   });
-  if (!bound.ok) return bound;
+  if (!bound.ok) return { ok: false, response: refusedBeforeDispatch(bound.response) };
   return {
     ok: true,
     touchExecutor: createBoundTouchExecutor(

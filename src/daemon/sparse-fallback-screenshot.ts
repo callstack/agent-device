@@ -1,3 +1,4 @@
+import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { contextFromFlags } from './context.ts';
@@ -16,6 +17,7 @@ export type SparseFallbackScreenshot = {
     artifactType: 'screenshot';
     path: string;
     fileName: string;
+    displayRotation?: DeviceRotation;
   };
 };
 
@@ -45,8 +47,9 @@ export async function captureSparseFallbackScreenshot(
   if (!isSparseSnapshotQualityVerdict(params.verdict)) return undefined;
   if (params.req.internal?.observationOnly === true) return undefined;
 
-  const path = await captureFallbackScreenshotPath({ ...params, session });
-  if (path === undefined) return undefined;
+  const captured = await captureFallbackScreenshot({ ...params, session });
+  if (captured === undefined) return undefined;
+  const { path, displayRotation } = captured;
   return {
     path,
     artifact: {
@@ -54,18 +57,19 @@ export async function captureSparseFallbackScreenshot(
       artifactType: 'screenshot',
       path,
       fileName: 'snapshot-fallback.png',
+      ...(displayRotation ? { displayRotation } : {}),
     },
   };
 }
 
-async function captureFallbackScreenshotPath(
+async function captureFallbackScreenshot(
   params: {
     req: DaemonRequest;
     session: SessionState;
     sessionName: string;
     logPath: string;
   } & ScreenshotRuntimeBindings,
-): Promise<string | undefined> {
+): Promise<Readonly<{ path: string; displayRotation?: DeviceRotation }> | undefined> {
   const { req, session } = params;
   try {
     const capture = await resolveBoundScreenshotRuntime({
@@ -95,7 +99,7 @@ async function captureFallbackScreenshotPath(
         req.meta,
       ),
     });
-    return data.path;
+    return data;
   } catch {
     // A convenience on an already-degraded path. The sparse verdict's own warning still
     // carries the manual remedy, so a failed fallback must not fail the snapshot the

@@ -24,6 +24,15 @@ export const DEVICE_ROTATION_SURFACE_INDEX = {
   'landscape-right': 3,
 } as const satisfies Record<DeviceRotation, 0 | 1 | 2 | 3>;
 
+/** Reads an Android `Surface.ROTATION_*` index back into its rotation through the same table. */
+export function deviceRotationFromSurfaceIndex(index: number): DeviceRotation | undefined {
+  return DEVICE_ROTATIONS.find((rotation) => DEVICE_ROTATION_SURFACE_INDEX[rotation] === index);
+}
+
+export function isDeviceRotation(value: unknown): value is DeviceRotation {
+  return typeof value === 'string' && (DEVICE_ROTATIONS as readonly string[]).includes(value);
+}
+
 export function deviceRotationSurfaceDegrees(rotation: DeviceRotation): 0 | 90 | 180 | 270 {
   return (DEVICE_ROTATION_SURFACE_INDEX[rotation] * 90) as 0 | 90 | 180 | 270;
 }

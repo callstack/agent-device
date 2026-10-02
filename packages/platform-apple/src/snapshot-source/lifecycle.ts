@@ -316,7 +316,7 @@ function shouldDiscardSession(
 ): boolean {
   return (
     (error.failureKind === 'cancelled' || error.failureKind === 'timeout') &&
-    (error.details?.dispatched === true || previousSession !== session)
+    (error.details?.bridgeRequestSent === true || previousSession !== session)
   );
 }
 

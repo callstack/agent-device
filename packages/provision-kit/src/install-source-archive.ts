@@ -21,7 +21,6 @@ export async function resolveInstallableCandidate(
     archivePath: string | undefined;
     isInstallablePath: InstallableMatcher;
     installableLabel: string;
-    allowArchiveExtraction: boolean;
     registerCleanup: (cleanup: () => Promise<void>) => void;
     budget: ArchiveBudget;
     archiveDepth: number;
@@ -34,7 +33,6 @@ export async function resolveInstallableCandidate(
     return { archivePath: params.archivePath, installablePath: candidatePath };
   }
   if (stat.isFile() && isArchivePath(candidatePath)) {
-    assertArchiveExtractionAllowed(candidatePath, params, false);
     return await resolveExtractedArchive(candidatePath, params);
   }
   if (stat.isDirectory()) {
@@ -53,7 +51,6 @@ export async function resolveInstallableCandidate(
       Boolean(entryStat.isFile() && isArchivePath(entryPath)),
     );
     if (archives.length === 1) {
-      assertArchiveExtractionAllowed(archives[0]!, params, true);
       return await resolveExtractedArchive(archives[0]!, params);
     }
     if (archives.length > 1) {
@@ -126,18 +123,6 @@ async function collectMatchingPaths(
     }
   }
   return [...new Set(matches)];
-}
-
-function assertArchiveExtractionAllowed(
-  archivePath: string,
-  params: Parameters<typeof resolveInstallableCandidate>[1],
-  nested: boolean,
-): void {
-  if (params.allowArchiveExtraction) return;
-  const message = nested
-    ? `URL sources must point directly to a ${params.installableLabel}; nested archives are not allowed`
-    : `URL sources must point directly to a ${params.installableLabel}; archive extraction is not allowed`;
-  throw new AppError('INVALID_ARGS', message, { path: archivePath });
 }
 
 function isArchivePath(candidatePath: string): boolean {

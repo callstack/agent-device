@@ -408,6 +408,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/ios-snapshot-runtime',
     '@agent-device/capture-kit/ios-snapshot-tree',
     '@agent-device/capture-kit/mobile-snapshot-semantics',
+    '@agent-device/capture-kit/observe-until',
     '@agent-device/capture-kit/perf-capture-admission-ledger',
     '@agent-device/capture-kit/perf-capture-recovery',
     '@agent-device/capture-kit/perf-capture-resource-store',
@@ -652,6 +653,7 @@ test('the real tree parses, declares, and passes R11', () => {
       'AdReplayStepRuntime',
       'AdReplayTargetBindingEvidence',
       'AdReplayTargetClassification',
+      'AdReplayTargetObservation',
       'AdReplayVarSources',
       'AdReplayVerificationEntry',
       'inspectAdReplay',
@@ -758,6 +760,7 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.deepEqual([...providerWebDriverPackage.workspaceDependencies].sort(), [
     '@agent-device/capture-kit',
     '@agent-device/contracts',
+    '@agent-device/host-kit',
     '@agent-device/kernel',
     '@agent-device/xml',
   ]);

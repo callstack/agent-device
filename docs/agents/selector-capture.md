@@ -23,9 +23,9 @@ These are cross-route behavior requirements; their rationale and owning decision
   or unchanged evidence remains failure.
 - Android helper reuse is not snapshot-result caching. Freshness is short-lived, action-triggered,
   and learned only from route-safe complete observations.
-- Pending interaction outcome retry precedes stabilization; Android freshness recovery composes
-  afterward when required. Gesture-like mutations mark stabilization and disable direct iOS
-  selector shortcuts while it is pending.
+- Post-gesture stabilization runs first and Android freshness recovery composes afterward when
+  required. Gesture-like mutations mark stabilization and disable direct iOS selector shortcuts
+  while it is pending.
 - Session snapshot writes go through the shared snapshot mutation boundary. Sparse observations and
   empty ref-scoped projections do not overwrite stored evidence.
 - Maestro matching remains snapshot- and policy-owned. Coordinate dispatch uses fresh geometry; an

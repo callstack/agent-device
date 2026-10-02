@@ -143,6 +143,7 @@ export function createPlatformRuntimeGateway(
     resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
     sessionsDir: string;
     ownedProcesses?: OwnedProcessRecordWriter;
+    assertShutdownAllowed?: () => void;
   }>,
 ): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   return createComposedPlatformRuntimeGateway({
@@ -154,6 +155,7 @@ export function createPlatformRuntimeGateway(
         sessionsDir: options.sessionsDir,
         resolveSessionArtifacts: options.resolveSessionArtifacts,
         shutdownLoaders,
+        assertShutdownAllowed: options.assertShutdownAllowed,
         snapshot: createSnapshotRuntimeHost({
           linux: captureLinuxSurfaceSnapshot,
           macos: loadMacOsSurfaceSnapshot,

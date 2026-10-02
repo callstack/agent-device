@@ -1,4 +1,9 @@
-import { AppError, createRequestCanceledError, toAppErrorCode } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  toAppErrorCode,
+  type DispatchDisclosure,
+} from '@agent-device/kernel/errors';
 import crypto from 'node:crypto';
 import { ALERT_NOT_FOUND_RUNNER_CODE } from '@agent-device/contracts/alert-contract';
 import type { DeviceRotation } from '@agent-device/contracts/device';
@@ -26,6 +31,12 @@ export const RUNNER_BUSY_RUNNER_CODE = 'RUNNER_BUSY';
  * immediate retry would only meet `RUNNER_BUSY`.
  */
 export const MAIN_THREAD_TIMEOUT_RUNNER_CODE = 'MAIN_THREAD_TIMEOUT';
+
+/**
+ * The runner's own code for a command it refused because abandoned main-thread work has occupied it
+ * past the wedge threshold (#1105). Like `RUNNER_BUSY`, the refused command never ran.
+ */
+export const RUNNER_WEDGED_RUNNER_CODE = 'RUNNER_WEDGED';
 
 /**
  * The runner's own code for a read whose session app is not running. No runner read launches the
@@ -79,6 +90,9 @@ export type RunnerCommand = {
     // The session app's XCUIApplication.state by name. A lifecycle read: it skips the activation
     // preflight, so it reports the state the app is in rather than the one a repair leaves.
     | 'appState'
+    // Sets the device's general pasteboard from the runner's own process: a simulator's
+    // `simctl pbcopy` only promises its data from a process that exits before anything reads it.
+    | 'pasteboardWrite'
     | 'activate'
     | 'terminate'
     | 'targetReset'
@@ -248,19 +262,53 @@ export const RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES: ReadonlySet<string> = n
  * the scroll keyboard refusal for a surface the runner declined to swipe under the keys, and the
  * retriable `APP_NOT_RUNNING` for a read the runner refused rather than launch the session app.
  */
-const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlyMap<string, { retriable?: true }> = new Map([
-  [RUNNER_BUSY_RUNNER_CODE, { retriable: true }],
-  [MAIN_THREAD_TIMEOUT_RUNNER_CODE, {}],
+const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlyMap<
+  string,
+  { retriable?: true; reason?: RunnerReportedErrorReason }
+> = new Map([
+  [RUNNER_BUSY_RUNNER_CODE, { retriable: true, reason: 'runner_busy' }],
+  [MAIN_THREAD_TIMEOUT_RUNNER_CODE, { reason: 'runner_main_thread_timeout' }],
   [APP_NOT_RUNNING_RUNNER_CODE, { retriable: true }],
   [ALERT_NOT_FOUND_RUNNER_CODE, {}],
   [SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE, {}],
   ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, {}] as const),
 ]);
 
+/**
+ * Runner codes whose reply proves the command never reached the device. The refusals answer before
+ * the command runs, the selector refusals included: the runner resolves the element and refuses
+ * before any gesture. `INVALID_ARGS` comes only from request decoding and argument validation,
+ * each ahead of any gesture. Every other code, and a reply without one, is `unknown`:
+ * `UNSUPPORTED_OPERATION` is also what a synthesized gesture or element tap reports after it ran.
+ */
+const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new Map([
+  ['INVALID_ARGS', 'no'],
+  ['ELEMENT_NOT_FOUND', 'no'],
+  ['ELEMENT_OFFSCREEN', 'no'],
+  ['AMBIGUOUS_MATCH', 'no'],
+  [RUNNER_BUSY_RUNNER_CODE, 'no'],
+  [RUNNER_WEDGED_RUNNER_CODE, 'no'],
+  [APP_NOT_RUNNING_RUNNER_CODE, 'no'],
+  [SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE, 'no'],
+  [ALERT_NOT_FOUND_RUNNER_CODE, 'no'],
+  ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, 'no'] as const),
+]);
+
+/**
+ * `details.reason` for the runner codes a consumer acts on, so it reads one field instead of
+ * `details.runnerErrorCode`, which stays for the runner's own vocabulary.
+ */
+type RunnerReportedErrorReason = 'runner_busy' | 'runner_main_thread_timeout';
+
 /** Wire code plus the details every path must publish for one runner-reported error code. */
 export type RunnerReportedErrorClass = Readonly<{
   code: AppError['code'];
-  details: Readonly<{ runnerErrorCode?: string; retriable?: true }>;
+  details: Readonly<{
+    runnerErrorCode?: string;
+    retriable?: true;
+    reason?: RunnerReportedErrorReason;
+    dispatched: DispatchDisclosure;
+  }>;
 }>;
 
 /**
@@ -278,7 +326,14 @@ export function classifyRunnerReportedError(
       : DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES.get(runnerErrorCode);
   return Object.freeze({
     code: diagnosticOnly ? 'COMMAND_FAILED' : toAppErrorCode(runnerErrorCode),
-    details: Object.freeze({ runnerErrorCode, ...diagnosticOnly }),
+    details: Object.freeze({
+      runnerErrorCode,
+      ...diagnosticOnly,
+      dispatched:
+        (runnerErrorCode === undefined
+          ? undefined
+          : RUNNER_ERROR_CODE_DISPATCH.get(runnerErrorCode)) ?? 'unknown',
+    }),
   });
 }
 

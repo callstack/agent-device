@@ -51,6 +51,7 @@ export type RunnerLease = {
   runnerStartTime?: string | null;
   port: number;
   xctestrunPath: string;
+  cacheKey?: string;
   jsonPath: string;
   /**
    * Where the leased runner's own output goes. The runner appends to this file for its whole life,
@@ -118,6 +119,7 @@ export function buildRunnerLease(params: {
   runnerPid: number | undefined;
   port: number;
   xctestrunPath: string;
+  cacheKey?: string;
   jsonPath: string;
   runnerLogPath?: string;
 }): RunnerLease {
@@ -134,6 +136,7 @@ export function buildRunnerLease(params: {
     runnerStartTime: params.runnerPid ? readProcessStartTime(params.runnerPid) : null,
     port: params.port,
     xctestrunPath: params.xctestrunPath,
+    cacheKey: params.cacheKey,
     jsonPath: params.jsonPath,
     ...(runnerLogPath ? { runnerLogPath } : {}),
     ...optionalSimulatorSetPath(runnerSimulatorSetPath(params.device)),
@@ -488,6 +491,7 @@ function normalizeRunnerLease(value: unknown, deviceId: string): RunnerLease | n
     runnerPid: readPositiveInteger(raw.runnerPid),
     runnerStartTime: readOptionalString(raw.runnerStartTime),
     runnerLogPath: readOptionalNonEmptyString(raw.runnerLogPath),
+    cacheKey: readOptionalNonEmptyString(raw.cacheKey),
     ...optionalSimulatorSetPath(raw.simulatorSetPath),
     ...(raw.deviceClaimProtocol === 1 ? { deviceClaimProtocol: 1 as const } : {}),
   };

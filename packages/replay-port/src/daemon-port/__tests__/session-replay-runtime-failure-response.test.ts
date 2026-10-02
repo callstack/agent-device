@@ -46,3 +46,27 @@ test('native replay failure metadata keeps machine fields and daemon-owned paths
   expect(response.error.details).toHaveProperty('reason');
   expect(response.error.details).not.toHaveProperty('reas<var:MODE>');
 });
+
+test('a replay divergence carries the readiness evidence of an exhausted target wait', () => {
+  const readiness = { polls: 11, waitedMs: 2_004, end: 'expired' };
+  const response = buildReplayDivergenceFailureResponseFromDescriptor({
+    error: {
+      code: 'COMMAND_FAILED',
+      message: 'Selector did not match',
+      details: { reason: 'selector_not_found', readiness },
+    },
+    actionLabel: 'press label=Continue',
+    action: 'press',
+    positionals: ['label=Continue'],
+    step: 3,
+    replayPath: '/tmp/flows/checkout.ad',
+    artifactPaths: [],
+    divergence: {},
+    scrubVars: [],
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('REPLAY_DIVERGENCE');
+  expect(response.error.details).toMatchObject({ reason: 'selector_not_found', readiness });
+});

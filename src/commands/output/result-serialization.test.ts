@@ -80,6 +80,17 @@ test('serializeOpenResult includes android serial for open payloads', () => {
   });
 });
 
+test('serializeOpenResult carries an answered launch confirmation', () => {
+  const data = serializeOpenResult({
+    session: 'qa',
+    appBundleId: 'com.example.app',
+    launchConfirmation: 'accepted',
+    identifiers: { session: 'qa', appId: 'com.example.app', appBundleId: 'com.example.app' },
+  });
+
+  assert.equal(data.launchConfirmation, 'accepted');
+});
+
 test('serializeInstallFromSourceResult uses install-family package naming', () => {
   const data = serializeInstallFromSourceResult({
     launchTarget: 'com.example.demo',

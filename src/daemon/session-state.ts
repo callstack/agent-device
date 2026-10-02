@@ -1,4 +1,3 @@
-import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SnapshotDiagnosticsState } from '@agent-device/contracts/capture';
 import type { AppLogFailure, AppLogLiveHandle } from '@agent-device/contracts/app-log-runtime';
 import type { AudioProbeLiveHandle } from '@agent-device/contracts/audio-probe-runtime';
@@ -68,7 +67,7 @@ export type InteractionSurfaceEntry = {
    * False for structurally fixed elements (the viewport root, keyboard
    * chrome) whose rect is invariant regardless of any gesture — shared
    * evidence limited to these is not evidence at all. See
-   * `classifyBaselineSurfaceEvidence` in interaction-outcome-policy.ts.
+   * `classifyBaselineSurfaceEvidence` in interaction-surface-signature.ts.
    */
   discriminating: boolean;
 };
@@ -98,16 +97,6 @@ export type PostGestureStabilization = {
    * (#1569).
    */
   baselineBackend?: string;
-};
-
-export type PendingInteractionOutcome = {
-  action: string;
-  command: string;
-  positionals: string[];
-  flags?: CommandFlags;
-  markedAt: number;
-  attemptsRemaining: number;
-  preSignature: InteractionSurfaceEntry[];
 };
 
 /**
@@ -197,7 +186,6 @@ export type SessionState = {
   lastComparisonSafeSnapshot?: SnapshotState;
   androidSnapshotFreshness?: SnapshotFreshnessWindow;
   postGestureStabilization?: PostGestureStabilization;
-  pendingInteractionOutcome?: PendingInteractionOutcome;
   snapshotDiagnostics?: SnapshotDiagnosticsState;
   trace?: {
     outPath: string;

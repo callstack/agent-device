@@ -19,7 +19,11 @@ import { runApplePressSeries } from '../runner-sequence.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { startFakeRunnerServer, type FakeRunnerServer } from './fake-runner-server.ts';
-import { makeRunnerSession } from './runner-session-fixtures.ts';
+import {
+  RUNNER_CACHE_KEY_FIXTURE,
+  RUNNER_CACHE_METADATA_FIXTURE,
+  makeRunnerSession,
+} from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
 const runnerState = vi.hoisted(() => ({ ensureRunnerSession: vi.fn(), derivedPath: '' }));
@@ -31,7 +35,7 @@ vi.mock('../runner-session.ts', async (importOriginal) => ({
 
 vi.mock('../runner-xctestrun.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../runner-xctestrun.ts')>()),
-  resolveExpectedRunnerCacheMetadata: () => ({}),
+  resolveExpectedRunnerCacheMetadata: () => RUNNER_CACHE_METADATA_FIXTURE,
   resolveRunnerDerivedPath: () => runnerState.derivedPath,
 }));
 
@@ -105,6 +109,7 @@ test('runner-internal request sites build exactly their runner-requests.json ent
       sessionId: `${IOS_SIMULATOR.id}:${server.port}:1`,
       runnerPid: 424242,
       port: server.port,
+      cacheKey: RUNNER_CACHE_KEY_FIXTURE,
       xctestrunPath: path.join(runnerState.derivedPath, 'Build', 'Products', 'r.xctestrun'),
       jsonPath: path.join(runnerState.derivedPath, 'Build', 'Products', 'r.json'),
     }),

@@ -1,4 +1,21 @@
-import type { Rect } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
+
+/** Normalized attributes carried unchanged into the public node, independent of presentation. */
+type AndroidPassiveNodeFacts = Pick<
+  RawSnapshotNode,
+  | 'contentDescription'
+  | 'enabled'
+  | 'selected'
+  | 'heading'
+  | 'roleDescription'
+  | 'checked'
+  | 'editable'
+  | 'password'
+  | 'hintShowing'
+  | 'placeholder'
+  | 'selectionStart'
+  | 'selectionEnd'
+>;
 
 /**
  * One normalized Android accessibility node presented to the snapshot engine. Helper/API-specific
@@ -8,24 +25,12 @@ export type AndroidUiHierarchy = {
   type: string | null;
   label: string | null;
   value: string | null;
-  /** The content description when the label is the text rather than it; see `RawSnapshotNode`. */
-  contentDescription?: string;
+  passiveFacts: AndroidPassiveNodeFacts;
   identifier: string | null;
   packageName: string | null;
   rect?: Rect;
-  enabled?: boolean;
   visibleToUser?: boolean;
   focused?: boolean;
-  selected?: boolean;
-  heading?: boolean;
-  roleDescription?: string;
-  checked?: boolean;
-  editable?: boolean;
-  password?: boolean;
-  hintShowing?: boolean;
-  placeholder?: string;
-  selectionStart?: number;
-  selectionEnd?: number;
   // Two independent facts, never collapsed, and never undefined: the helper omits false attributes
   // while stock UiAutomator writes them out, so reading an absent attribute as a value gave two
   // encodings of one control opposite answers.

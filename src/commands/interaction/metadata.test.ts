@@ -1,5 +1,7 @@
 import { expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
+import { commandAcceptsReadinessBudget } from '@agent-device/command-registry/registry';
+import { findCommandMetadata, listCommandMetadata } from '../command-metadata.ts';
 import { interactionCommandMetadata } from './metadata.ts';
 
 // `fill <target> ""` is the clear-field primitive (#2063): before it existed, emptying an input
@@ -49,4 +51,35 @@ test('type keeps refusing an empty text: appending nothing is not a clear', () =
   } catch (error) {
     expect((error as AppError).code).toBe('INVALID_ARGS');
   }
+});
+
+const SELECTOR_TARGET = { kind: 'selector', selector: 'label=Continue' };
+
+test('a command advertises readinessTimeoutMs exactly when its descriptor declares the budget', () => {
+  for (const metadata of listCommandMetadata()) {
+    const properties = metadata.inputSchema.properties ?? {};
+    expect('readinessTimeoutMs' in properties, metadata.name).toBe(
+      commandAcceptsReadinessBudget(metadata.name),
+    );
+  }
+});
+
+test('press reads readinessTimeoutMs', () => {
+  const input = findCommandMetadata('press').readInput({
+    target: SELECTOR_TARGET,
+    readinessTimeoutMs: 2_000,
+  }) as { readinessTimeoutMs?: number };
+  expect(input.readinessTimeoutMs).toBe(2_000);
+});
+
+test('fill refuses readinessTimeoutMs with an input error, and reads without it', () => {
+  const fill = findCommandMetadata('fill');
+  expect(() => fill.readInput({ target: SELECTOR_TARGET, text: 'hi' })).not.toThrow();
+  let refusal: unknown;
+  try {
+    fill.readInput({ target: SELECTOR_TARGET, text: 'hi', readinessTimeoutMs: 2_000 });
+  } catch (error) {
+    refusal = error;
+  }
+  expect(refusal instanceof AppError && refusal.code).toBe('INVALID_ARGS');
 });

@@ -191,33 +191,18 @@ public enum SnapshotVisibilityFold {
       if decision.isIncluded {
         let outIndex = kept.count
         let outDepth = keptDepth + 1
+        var projected = node.reindexed(index: outIndex, depth: outDepth, parentIndex: keptIndex)
+        projected.hittable = node.parentIndex == nil
+          ? false
+          : clippedHittability(
+            source: node.hittable,
+            enabled: node.enabled,
+            clippedFrame: decision.effectiveFrame,
+            viewport: viewport
+          )
         kept.append(
           SnapshotPresentationNode(
-            raw: RawAXNode(
-              index: outIndex,
-              type: node.type,
-              label: node.label,
-              identifier: node.identifier,
-              value: node.value,
-              placeholder: node.placeholder,
-              rect: node.rect,
-              enabled: node.enabled,
-              focused: node.focused,
-              selected: node.selected,
-              hittable: node.parentIndex == nil
-                ? false
-                : clippedHittability(
-                  source: node.hittable,
-                  enabled: node.enabled,
-                  clippedFrame: decision.effectiveFrame,
-                  viewport: viewport
-                ),
-              depth: outDepth,
-              parentIndex: keptIndex,
-              hiddenContentAbove: node.hiddenContentAbove,
-              hiddenContentBelow: node.hiddenContentBelow,
-              actions: node.actions
-            ),
+            raw: projected,
             effectiveRect: SnapshotGeometry.snapshotRect(
               from: decision.effectiveFrame,
               reportedFrame: rect

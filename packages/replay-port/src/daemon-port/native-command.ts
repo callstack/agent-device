@@ -1,4 +1,4 @@
-import { asAppError } from '@agent-device/kernel/errors';
+import { normalizeError } from '@agent-device/kernel/errors';
 import { runAdReplay } from '@agent-device/ad-replay';
 import type { SnapshotTimingSample } from '@agent-device/contracts/capture';
 import { summarizeSnapshotTimingSamples } from '@agent-device/contracts/capture';
@@ -183,12 +183,15 @@ export async function runReplayCommand(command: ReplayCommand): Promise<DaemonRe
       keepSession,
     });
   } catch (error) {
-    const appErr = asAppError(error);
-    return errorResponse(
-      appErr.code,
-      appErr.message,
-      artifactPaths.size > 0 ? { artifactPaths: [...artifactPaths] } : undefined,
-    );
+    const normalized = normalizeError(error);
+    if (artifactPaths.size === 0) return { ok: false, error: normalized };
+    return {
+      ok: false,
+      error: {
+        ...normalized,
+        details: { ...normalized.details, artifactPaths: [...artifactPaths] },
+      },
+    };
   }
 }
 

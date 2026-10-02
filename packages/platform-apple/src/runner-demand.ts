@@ -47,7 +47,8 @@ const APPLE_SIMULATOR_OPERATION_HOSTS: Readonly<
   audioProbeReattach: 'simulator',
   audioProbeCleanup: 'simulator',
   readClipboard: 'simulator',
-  writeClipboard: 'simulator',
+  // The runner writes the pasteboard: `simctl pbcopy` leaves it empty under Xcode 27.
+  writeClipboard: 'runner',
   setSetting: 'simulator',
   readSetting: 'simulator',
   setFoldPose: 'simulator',
