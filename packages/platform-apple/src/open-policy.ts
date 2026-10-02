@@ -6,14 +6,42 @@ import type {
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { resolveAppleSimulatorRunnerDemand } from './runner-demand.ts';
 import {
   hasSimulatorBridge,
+  isProvenNotRunning,
   type LaunchObservation,
   type LaunchObservationPort,
 } from './snapshot-observability.ts';
+import type { LaunchConfirmationAttempt } from './launch-confirmation.ts';
+
+/** Why an open failed because its launch URL never reached the app it names. */
+const LAUNCH_CONFIRMATION_UNANSWERED_REASON = 'launch_confirmation_unanswered';
 
 const POST_OPEN_SETTLE_MS = 300;
+
+/**
+ * How many times the settle reads and answers the confirmation. Two: the first answer can die with
+ * the runner session that raised it, which is the state where handing the launch URL again is the
+ * only thing left. A third round would cost another runner command and another observation for a
+ * device that has now refused twice.
+ */
+const LAUNCH_CONFIRMATION_ROUNDS = 2;
+
+type HeldLaunchOutcome = Readonly<{
+  observed: LaunchObservation | undefined;
+  launchConfirmation?: LaunchConfirmation;
+  /** The launch was proven to have no process after every round this open can spend on it. */
+  unanswered: boolean;
+}>;
+
+type HeldLaunchRound = Readonly<{
+  observed: LaunchObservation | undefined;
+  launchConfirmation?: LaunchConfirmation;
+  /** Whether an accept has run or been attempted; only an accept can change what the bridge sees. */
+  acceptAttempted: boolean;
+}>;
 
 export type MutableOpenTiming = {
   -readonly [Key in keyof OpenApplicationOutcome['timing']]: OpenApplicationOutcome['timing'][Key];
@@ -79,9 +107,16 @@ export function releaseSpeculativeRunner(
  * launch and never falls back to a runner start for it. Any other device, or a Simulator whose
  * bridge cannot answer, keeps the fixed settle.
  *
- * A launch the bridge reads as unobservable may be a launch URL SpringBoard holds behind a
- * confirmation. When the open can answer one, the settle answers it once and, after an accept,
- * observes the app again. Only that path needs the runner, so only it records the demand.
+ * A launch the bridge cannot read as up may be a launch URL SpringBoard holds behind a
+ * confirmation, so any verdict short of `observable` — including a target discovery that failed on
+ * its own deadline — reads the sheet. Only a verdict that proves the app up skips the read, and a
+ * sheet that is not there costs one runner command.
+ *
+ * An answer that reaches no verdict leaves the app proven not running: the accept died with the
+ * runner session that raised it, or the device dropped the URL it was handed. The settle hands the
+ * launch URL to the device once more, bounded to two rounds, and reads again. A launch still
+ * proven not running afterwards fails the open with `launch_confirmation_unanswered` rather than
+ * returning green to a session whose every later command then fails `app is not running`.
  */
 export async function settleAppleOpen(
   host: Pick<PlatformRuntimeHost, 'clock'>,
@@ -90,7 +125,8 @@ export async function settleAppleOpen(
   localIosSimulator: boolean,
   launch: Readonly<{
     observation?: LaunchObservationPort;
-    answerConfirmation?: () => Promise<LaunchConfirmation | undefined>;
+    answerConfirmation?: () => Promise<LaunchConfirmationAttempt>;
+    redispatchLaunchUrl?: () => Promise<void>;
   }>,
   timing: MutableOpenTiming,
 ): Promise<LaunchConfirmation | undefined> {
@@ -99,11 +135,26 @@ export async function settleAppleOpen(
     await observeLaunchedApp(binding, input, localIosSimulator, launch.observation);
   let observed = await observe();
   let launchConfirmation: LaunchConfirmation | undefined;
-  const answerConfirmation =
-    observed?.observation === 'unobservable' ? launch.answerConfirmation : undefined;
-  if (answerConfirmation) {
-    launchConfirmation = await answerConfirmation();
-    if (launchConfirmation) observed = await observe();
+  const answer = launch.answerConfirmation;
+  const held =
+    answer && observed?.observation !== 'observable'
+      ? await answerHeldLaunch(answer, launch.redispatchLaunchUrl, observe, observed)
+      : undefined;
+  if (held) {
+    timing.runnerDemand = 'required';
+    launchConfirmation = held.launchConfirmation;
+    observed = held.observed;
+    if (held.unanswered) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `The launch URL was handed to the Simulator but ${input.appBundleId} never came up.`,
+        {
+          reason: LAUNCH_CONFIRMATION_UNANSWERED_REASON,
+          appBundleId: input.appBundleId,
+          hint: 'iOS may still be holding an "Open in" prompt, or the answer died with the runner session that raised it. Answer it with alert accept, or re-run open with the same --launch-url.',
+        },
+      );
+    }
   }
   if (localIosSimulator && observed?.observation !== 'observable') {
     await host.clock.sleep(POST_OPEN_SETTLE_MS, binding.signal);
@@ -114,9 +165,76 @@ export async function settleAppleOpen(
       timing.postOpenObservationFailure = observed.failure;
     }
   }
-  if (answerConfirmation) timing.runnerDemand = 'required';
   timing.postOpenSettleDurationMs = Math.max(0, Date.now() - startedAtMs);
   return launchConfirmation;
+}
+
+/**
+ * Reads and answers the confirmation the launch may be held behind. Only an accept changes the
+ * device: a read that finds no prompt, or a prompt this open must not answer, leaves the launch
+ * exactly as the first verdict described it, at the cost of one runner command. Once an accept has
+ * been attempted the launch URL is in flight and only this open knows whether it landed — an accept
+ * that reported failure died with the runner session that raised it, and one that reported success
+ * can still leave the device having dropped a held URL. Either way, an app then proven to have no
+ * process is a launch that was lost, so the URL is handed over again and read once more.
+ *
+ * Every step keeps the bound it already had: `openurl` at `IOS_SIMULATOR_OPENURL_TIMEOUT_MS`, the
+ * read and accept at the runner's alert timeouts, and the observation at the discovery deadline and
+ * the bridge's own launch-transition windows. Nothing here adds an unbounded wait.
+ */
+async function answerHeldLaunch(
+  answer: () => Promise<LaunchConfirmationAttempt>,
+  redispatchLaunchUrl: (() => Promise<void>) | undefined,
+  observe: () => Promise<LaunchObservation | undefined>,
+  observed: LaunchObservation | undefined,
+): Promise<HeldLaunchOutcome> {
+  let round: HeldLaunchRound = { observed, acceptAttempted: false };
+  for (let roundIndex = 0; roundIndex < LAUNCH_CONFIRMATION_ROUNDS; roundIndex += 1) {
+    round = await answerConfirmationOnce(answer, observe, round);
+    const lastRound = roundIndex === LAUNCH_CONFIRMATION_ROUNDS - 1;
+    if (lastRound || !acceptLeftTheUrlInFlight(round) || !redispatchLaunchUrl) break;
+    await redispatchLaunchUrl();
+  }
+  // A second hand-off and another read later, a launch with no process is one this open cannot
+  // complete. An expired launch-transition window leaves the open green: it proves only that the
+  // app was still coming up.
+  return {
+    observed: round.observed,
+    launchConfirmation: round.launchConfirmation,
+    unanswered: acceptLeftTheUrlInFlight(round),
+  };
+}
+
+async function answerConfirmationOnce(
+  answer: () => Promise<LaunchConfirmationAttempt>,
+  observe: () => Promise<LaunchObservation | undefined>,
+  round: HeldLaunchRound,
+): Promise<HeldLaunchRound> {
+  const attempt = await answer();
+  const acceptAttempted = round.acceptAttempted || acceptWasAttempted(attempt);
+  const launchConfirmation =
+    attempt.outcome === 'accepted' ? ('accepted' as const) : round.launchConfirmation;
+  if (!acceptAttempted) {
+    // Only an accept changes the device, so a read that found no prompt, an unrecognized prompt or
+    // an unresolved URL owner leaves the launch as the verdict before it already described it.
+    return { observed: round.observed, launchConfirmation, acceptAttempted };
+  }
+  return { observed: await observe(), launchConfirmation, acceptAttempted };
+}
+
+/**
+ * An app proven to have no process after an accept is a launch this open still owns the URL for:
+ * the hand-off or the answer did not land, so handing it over again is what is left.
+ */
+function acceptLeftTheUrlInFlight(round: HeldLaunchRound): boolean {
+  return round.acceptAttempted && isProvenNotRunning(round.observed);
+}
+
+function acceptWasAttempted(attempt: LaunchConfirmationAttempt): boolean {
+  return (
+    attempt.outcome === 'accepted' ||
+    (attempt.outcome === 'unreadable' && attempt.step === 'alert-accept')
+  );
 }
 
 async function observeLaunchedApp(

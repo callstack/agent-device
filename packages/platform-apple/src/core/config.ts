@@ -14,6 +14,14 @@ export const IOS_SIMULATOR_FOCUS_TIMEOUT_MS = 10_000;
 
 export const IOS_SIMULATOR_TERMINATE_TIMEOUT_MS = 15_000;
 
+/**
+ * How long a Simulator `simctl openurl` may take. CoreSimulator can hold an URL hand-off for
+ * minutes while it is wedged, and every other simctl call this open makes is bounded; the bound
+ * stays well under the daemon request budget so the open answers with its own typed reason and
+ * kills the child instead of being cancelled around a still-running `openurl`.
+ */
+export const IOS_SIMULATOR_OPENURL_TIMEOUT_MS = 20_000;
+
 export const IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS = 20_000;
 
 // The CoreDevice panel probe runs on the same request budget as the capture it

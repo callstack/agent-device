@@ -115,6 +115,7 @@ test('an ownership miss after an AX-server miss shrinks the deadline to the owne
   );
   await expect(observe.awaitObservable(simulator, 'com.example.app', signal())).resolves.toEqual({
     observation: 'unobservable',
+    proof: 'launch-transition',
   });
   expect(now).toBeGreaterThanOrEqual(3_000);
   expect(now).toBeLessThanOrEqual(3_150);
@@ -200,7 +201,20 @@ test.each([
     'an app with no running process is unobservable at once',
     'simulator-target-unavailable',
     1,
-    { observation: 'unobservable' },
+    { observation: 'unobservable', proof: 'no-running-process' },
+  ],
+  [
+    'a discovery that failed on its own deadline is a failed probe, which proves no process nothing',
+    'simulator-target-timeout',
+    1,
+    {
+      observation: 'probe-failed',
+      failure: {
+        source: 'target',
+        code: 'COMMAND_FAILED',
+        reason: 'simulator-target-timeout',
+      },
+    },
   ],
   [
     'any other resolution failure is a failed probe at once',

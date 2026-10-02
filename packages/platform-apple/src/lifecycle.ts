@@ -3,7 +3,6 @@ import {
   type AppleRunnerSessionPrewarmOptions,
   type CloseApplicationFinalizationInput,
   type CloseApplicationInput,
-  type LaunchConfirmation,
   type OpenApplicationInput,
   type OpenApplicationOutcome,
   type PrepareAppleRunnerInput,
@@ -25,7 +24,7 @@ import {
   releaseSpeculativeRunner,
 } from './open-policy.ts';
 import type { LaunchObservationPort } from './snapshot-observability.ts';
-import type { LaunchConfirmationTarget } from './launch-confirmation.ts';
+import type { LaunchConfirmationAttempt, LaunchConfirmationTarget } from './launch-confirmation.ts';
 import { isApplePlatform, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -143,7 +142,11 @@ async function openAppleApplication(
       binding,
       input,
       localIosSimulator,
-      { observation, answerConfirmation: confirmationAnswer(binding, input, launch) },
+      {
+        observation,
+        answerConfirmation: confirmationAnswer(binding, input, launch),
+        redispatchLaunchUrl: confirmationRedispatch(binding, input, launch),
+      },
       timing,
     );
     return {
@@ -238,33 +241,43 @@ async function dispatchAppleLaunchUrl(
     timing.launchUrlDurationMs = 0;
     return;
   }
+  const startedAtMs = Date.now();
+  await openLaunchUrl(binding, input, followUpUrl);
+  timing.launchUrlDurationMs = elapsed(startedAtMs);
+}
+
+/** Hands one URL to the device on its own, whatever the open's launch sequencing was. */
+async function openLaunchUrl(
+  binding: BoundAppleInteractor,
+  input: OpenApplicationInput,
+  url: string,
+): Promise<void> {
   const execution = {
     ...input.execution,
     clearAppState: undefined,
     launchConsole: undefined,
     launchArgs: undefined,
   };
-  const startedAtMs = Date.now();
   await invokeApplicationOpen({
     device: binding.device,
     interactor: await binding.resolveInteractor(execution, input.appBundleId),
-    positionals: [followUpUrl],
+    positionals: [url],
     appBundleId: input.appBundleId,
     execution,
   });
-  timing.launchUrlDurationMs = elapsed(startedAtMs);
 }
 
 /**
  * How the settle answers a launch confirmation, present only when the launch handed SpringBoard a
- * custom-scheme URL it may hold for the session app. The settle spends it only on a launch the
- * host AX bridge read as unobservable, the state a system surface over the app leaves.
+ * custom-scheme URL it may hold for the session app. The settle spends it on any launch the host AX
+ * bridge cannot read as up: a system surface over the app, or a target discovery that never
+ * answered.
  */
 function confirmationAnswer(
   binding: BoundAppleInteractor,
   input: OpenApplicationInput,
   { confirmation }: AppleLaunchPlan,
-): (() => Promise<LaunchConfirmation | undefined>) | undefined {
+): (() => Promise<LaunchConfirmationAttempt>) | undefined {
   if (!confirmation) return undefined;
   return async () => {
     const { answerSimulatorLaunchConfirmation } = await loadLaunchConfirmation();
@@ -274,6 +287,23 @@ function confirmationAnswer(
       binding.resolveInteractor(input.execution, confirmation.appBundleId),
       binding.signal,
     );
+  };
+}
+
+/**
+ * Hands a confirmable launch URL to the device again. Only the settle calls it, and only once the
+ * bridge proves no process is running: an accept that died with the runner session that raised it
+ * leaves SpringBoard holding an URL whose answer is gone, and the device drops an URL it never
+ * delivered. Both are answered by the same `simctl openurl` the open already used.
+ */
+function confirmationRedispatch(
+  binding: BoundAppleInteractor,
+  input: OpenApplicationInput,
+  { confirmation }: AppleLaunchPlan,
+): (() => Promise<void>) | undefined {
+  if (!confirmation) return undefined;
+  return async () => {
+    await openLaunchUrl(binding, input, confirmation.url);
   };
 }
 

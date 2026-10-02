@@ -252,11 +252,14 @@ async function assertClearStateLaunchUrl(context: LiveContext): Promise<void> {
 }
 
 async function openAutomationDeepLink(context: LiveContext, step: string): Promise<void> {
+  // --debug keeps the open's own request log, which is where a held launch URL's alert read, the
+  // post-open observation verdict and any re-hand-off are visible when this step fails.
   await runStep(context, step, [
     'open',
     context.appId,
     '--relaunch',
     '--launch-url',
     AUTOMATION_DEEP_LINK,
+    '--debug',
   ]);
 }

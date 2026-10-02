@@ -1,32 +1,40 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import { ALERT_NOT_FOUND_RUNNER_CODE } from '@agent-device/contracts/alert-contract';
-import type { OpenApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+
 import { bindAppleApplicationLifecycle } from './lifecycle.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
 import type { LaunchObservation } from './snapshot-observability.ts';
+import {
+  COMING_UP,
+  CONFIRMATION,
+  LAUNCH_URL,
+  OBSERVABLE,
+  SPAWN_TIMEOUT,
+  UNOBSERVABLE,
+  alertNotFound,
+  device,
+  launchUrlInput,
+  launchUrlSimulator,
+  openInput,
+  resetUrlOwner,
+  simulator,
+  simulatorHost,
+  urlOwner,
+} from './lifecycle.fixtures.ts';
 
-const urlOwner = vi.hoisted(() => ({
-  resolve: async (): Promise<string | undefined> => 'com.example.app',
-}));
+vi.mock('./core/app-resolution.ts', async () => {
+  const fixtures = await import('./lifecycle.fixtures.ts');
+  return {
+    resolveIosSimulatorDeepLinkBundleId: async () => await fixtures.urlOwner.resolve(),
+  };
+});
 
-vi.mock('./core/app-resolution.ts', () => ({
-  resolveIosSimulatorDeepLinkBundleId: async () => await urlOwner.resolve(),
-}));
-
-const device: DeviceInfo = {
-  platform: 'apple',
-  appleOs: 'ios',
-  id: 'ios-device',
-  name: 'iPhone',
-  kind: 'device',
-  target: 'mobile',
-  booted: true,
-  iosPhysicalDeviceBackend: 'coredevice',
-};
+beforeEach(() => {
+  resetUrlOwner();
+});
 
 test.each(['coredevice', 'xctest'] as const)(
   'retains a physical iOS runner through relaunch and resets its target with the %s backend',
@@ -392,81 +400,6 @@ function coldSimulatorLifecycleHost(hooks: { onBoot?: () => void; onBootstatus?:
   return { host, calls, prepareRunner };
 }
 
-function openInput(): OpenApplicationInput {
-  return {
-    target: 'com.example.app',
-    positionals: ['com.example.app'],
-    appBundleId: 'com.example.app',
-    surface: 'app',
-    hasExistingSession: true,
-    relaunch: true,
-    prewarmRunnerBeforeOpen: false,
-    enableTestIme: false,
-    stateDir: '/tmp/agent-device-lifecycle-test',
-    runtimeHints: {},
-    execution: {},
-  };
-}
-
-const simulator: DeviceInfo = {
-  platform: 'apple',
-  appleOs: 'ios',
-  id: 'ios-simulator',
-  name: 'iPhone 17 Pro',
-  kind: 'simulator',
-  target: 'mobile',
-  booted: true,
-};
-
-function simulatorHost(overrides: {
-  prewarmRunnerSession?: () => Promise<void>;
-  hasLiveRunnerSession?: () => Promise<boolean>;
-  events: string[];
-}) {
-  const interactor = {
-    close: vi.fn(async () => {
-      overrides.events.push('close');
-    }),
-    open: vi.fn(async () => {
-      overrides.events.push('open');
-    }),
-  } as unknown as Interactor;
-  const baseHost = platformRuntimeHostFixture();
-  const prewarmRunnerSession = vi.fn(
-    overrides.prewarmRunnerSession ??
-      (async () => {
-        overrides.events.push('prewarm');
-      }),
-  );
-  const notifyRunnerAppRelaunched = vi.fn(async () => {
-    overrides.events.push('reset');
-  });
-  const hasLiveRunnerSession = vi.fn(overrides.hasLiveRunnerSession ?? (async () => false));
-  const releaseSpeculativeRunner = vi.fn(async () => {
-    overrides.events.push('release');
-    return true;
-  });
-  const host = {
-    ...baseHost,
-    clock: { ...baseHost.clock, sleep: async () => {} },
-    localInteractors: { resolve: async () => interactor },
-    appleApplications: {
-      ...baseHost.appleApplications,
-      prewarmRunnerSession,
-      notifyRunnerAppRelaunched,
-      hasLiveRunnerSession,
-      releaseSpeculativeRunner,
-    },
-  } as unknown as PlatformRuntimeHost;
-  return {
-    host,
-    prewarmRunnerSession,
-    notifyRunnerAppRelaunched,
-    hasLiveRunnerSession,
-    releaseSpeculativeRunner,
-  };
-}
-
 test('a Simulator open whose plan is observation-only starts no runner, releases a speculative one, and reports demand none', async () => {
   const events: string[] = [];
   const { host, prewarmRunnerSession, notifyRunnerAppRelaunched, releaseSpeculativeRunner } =
@@ -639,7 +572,9 @@ test('a Simulator whose bridge cannot answer keeps the fixed settle', async () =
     host: { ...host, clock: { ...host.clock, sleep } } as unknown as PlatformRuntimeHost,
     device: simulator,
     signal: new AbortController().signal,
-    observation: { awaitObservable: async () => ({ observation: 'unobservable' }) as const },
+    observation: {
+      awaitObservable: async () => ({ observation: 'unobservable', proof: 'launch-transition' }),
+    },
   });
 
   const outcome = await lifecycle.openApplication({
@@ -677,94 +612,6 @@ test('a tvOS Simulator relaunch keeps the awaited prewarm and asks for no observ
   expect(notifyRunnerAppRelaunched).not.toHaveBeenCalled();
 });
 
-/**
- * A Simulator whose host AX bridge reports `observations` in turn after each settle, and whose
- * runner answers the alert read with `readAlert`.
- */
-function launchUrlSimulator(
-  readAlert: () => Promise<Record<string, unknown>>,
-  observations: readonly LaunchObservation[] = [{ observation: 'observable' }],
-  legs: Readonly<{
-    acceptAlert?: () => Promise<unknown>;
-    resolveInteractor?: () => Promise<void>;
-    owner?: () => Promise<string | undefined>;
-  }> = {},
-) {
-  if (legs.owner) urlOwner.resolve = legs.owner;
-  const events: string[] = [];
-  const pending = [...observations];
-  const interactor = {
-    open: vi.fn(async (_app: string, options?: { url?: string }) => {
-      events.push(options?.url ? `open ${options.url}` : 'open');
-    }),
-    readAlert: vi.fn(async () => {
-      events.push('alert get');
-      return await readAlert();
-    }),
-    acceptAlert: vi.fn(async () => {
-      events.push('alert accept');
-      return await (legs.acceptAlert ?? (async () => ({})))();
-    }),
-  } as unknown as Interactor;
-  let resolutions = 0;
-  const { host, releaseSpeculativeRunner, prewarmRunnerSession } = simulatorHost({ events });
-  const lifecycle = bindAppleApplicationLifecycle({
-    host: {
-      ...host,
-      localInteractors: {
-        resolve: async () => {
-          resolutions += 1;
-          // The open dispatch resolves first; later resolutions serve the confirmation answer.
-          if (resolutions > 1) await legs.resolveInteractor?.();
-          return interactor;
-        },
-      },
-    },
-    device: simulator,
-    signal: new AbortController().signal,
-    observation: {
-      awaitObservable: async () => {
-        const observed = (pending.length > 1 ? pending.shift() : pending[0]) ?? {
-          observation: 'observable',
-        };
-        events.push(`observe ${observed.observation}`);
-        return observed;
-      },
-    },
-  });
-  return {
-    lifecycle,
-    events,
-    interactor,
-    releaseSpeculativeRunner,
-    prewarmRunnerSession,
-    resolutions: () => resolutions,
-  };
-}
-
-const LAUNCH_URL = 'example://automation';
-const UNOBSERVABLE: LaunchObservation = { observation: 'unobservable' };
-const OBSERVABLE: LaunchObservation = { observation: 'observable' };
-const CONFIRMATION = { message: 'Open in “Example App”?', items: ['Cancel', 'Open'] };
-
-function launchUrlInput(): OpenApplicationInput {
-  return {
-    ...openInput(),
-    runtimeLaunchUrl: LAUNCH_URL,
-    execution: { plannedOperations: ['captureSnapshot'] },
-  };
-}
-
-function alertNotFound(): AppError {
-  return new AppError('COMMAND_FAILED', 'alert not found', {
-    runnerErrorCode: ALERT_NOT_FOUND_RUNNER_CODE,
-  });
-}
-
-beforeEach(() => {
-  urlOwner.resolve = async () => 'com.example.app';
-});
-
 test('a launch URL the bridge sees land in the app never reaches the runner', async () => {
   const { lifecycle, events, interactor, releaseSpeculativeRunner, prewarmRunnerSession } =
     launchUrlSimulator(async () => {
@@ -781,26 +628,57 @@ test('a launch URL the bridge sees land in the app never reaches the runner', as
   expect(events).toEqual(['release', `open ${LAUNCH_URL}`, 'observe observable']);
 });
 
-test('a launch URL whose bridge probe failed never reaches the runner', async () => {
-  const { lifecycle, events, interactor } = launchUrlSimulator(
-    async () => CONFIRMATION,
-    [
-      {
-        observation: 'probe-failed',
-        failure: { source: 'circuit' },
-      },
-    ],
-  );
+/** Verdicts that prove nothing about whether the app came up, so the sheet is still read. */
+const DISCOVERY_DEADLINE_TIMEOUT: LaunchObservation = {
+  observation: 'probe-failed',
+  failure: { source: 'target', code: 'COMMAND_FAILED' },
+};
+const TARGET_PROBE_FAILED: LaunchObservation = {
+  observation: 'probe-failed',
+  failure: {
+    source: 'target',
+    code: 'COMMAND_FAILED',
+    reason: 'simulator-target-probe-failed',
+  },
+};
+const BRIDGE_CIRCUIT: LaunchObservation = {
+  observation: 'probe-failed',
+  failure: { source: 'circuit' },
+};
 
-  const outcome = await lifecycle.openApplication(launchUrlInput());
+test.each([
+  ['the bridge circuit is open', BRIDGE_CIRCUIT, BRIDGE_CIRCUIT],
+  ['target discovery fails on its deadline', DISCOVERY_DEADLINE_TIMEOUT, OBSERVABLE],
+  ['the target probe fails outright', TARGET_PROBE_FAILED, OBSERVABLE],
+])(
+  'a confirmable launch whose bridge verdict is %s still reads and answers the sheet',
+  async (_name, beforeAnswer, afterAnswer) => {
+    const { lifecycle, events, interactor } = launchUrlSimulator(
+      async () => CONFIRMATION,
+      [beforeAnswer, afterAnswer],
+    );
 
-  expect(outcome.launchConfirmation).toBeUndefined();
-  expect(outcome.timing.runnerDemand).toBe('none');
-  expect(outcome.timing.postOpenObservation).toBe('probe-failed');
-  expect(outcome.timing.postOpenObservationFailure).toEqual({ source: 'circuit' });
-  expect(interactor.readAlert).not.toHaveBeenCalled();
-  expect(events).toEqual(['release', `open ${LAUNCH_URL}`, 'observe probe-failed']);
-});
+    const outcome = await lifecycle.openApplication(launchUrlInput());
+
+    expect(outcome.launchConfirmation).toBe('accepted');
+    expect(outcome.timing.runnerDemand).toBe('required');
+    expect(interactor.readAlert).toHaveBeenCalledOnce();
+    expect(outcome.timing.postOpenObservation).toBe(afterAnswer.observation);
+    // A verdict the bridge could not produce keeps its typed failure, so the open still says why
+    // the app came back unreadable.
+    expect(outcome.timing.postOpenObservationFailure).toEqual(
+      afterAnswer.observation === 'probe-failed' ? afterAnswer.failure : undefined,
+    );
+    expect(events).toEqual([
+      'release',
+      `open ${LAUNCH_URL}`,
+      'observe probe-failed',
+      'alert get',
+      'alert accept',
+      `observe ${afterAnswer.observation}`,
+    ]);
+  },
+);
 
 test('a launch URL held behind a confirmation for the session app is accepted and reported', async () => {
   const { lifecycle, events, resolutions } = launchUrlSimulator(
@@ -873,8 +751,6 @@ test.each([
   },
 );
 
-const SPAWN_TIMEOUT = new AppError('COMMAND_FAILED', 'xcrun timed out', { timeoutMs: 10_000 });
-
 test.each([
   [
     'the runner interactor cannot be resolved',
@@ -894,15 +770,6 @@ test.each([
     },
     ['release', `open ${LAUNCH_URL}`, 'observe unobservable', 'alert get'],
   ],
-  [
-    'the accept rejects',
-    {
-      acceptAlert: async () => {
-        throw SPAWN_TIMEOUT;
-      },
-    },
-    ['release', `open ${LAUNCH_URL}`, 'observe unobservable', 'alert get', 'alert accept'],
-  ],
 ])('an unobservable launch where %s returns the open as it was', async (_case, legs, expected) => {
   const { lifecycle, events } = launchUrlSimulator(async () => CONFIRMATION, [UNOBSERVABLE], legs);
 
@@ -911,6 +778,86 @@ test.each([
   expect(outcome.launchConfirmation).toBeUndefined();
   expect(outcome.timing.postOpenObservation).toBe('unobservable');
   expect(events).toEqual(expected);
+});
+
+test('an accept that dies with the runner session hands the URL over again and reads once more', async () => {
+  let accepts = 0;
+  const { lifecycle, events } = launchUrlSimulator(
+    async () => CONFIRMATION,
+    [UNOBSERVABLE, UNOBSERVABLE, OBSERVABLE],
+    {
+      acceptAlert: async () => {
+        accepts += 1;
+        if (accepts === 1) throw SPAWN_TIMEOUT;
+        return {};
+      },
+    },
+  );
+
+  const outcome = await lifecycle.openApplication(launchUrlInput());
+
+  expect(outcome.launchConfirmation).toBe('accepted');
+  expect(outcome.timing.postOpenObservation).toBe('observable');
+  // The re-dispatch hands the URL as its own open target, the way the follow-up open does.
+  expect(events).toEqual([
+    'release',
+    `open ${LAUNCH_URL}`,
+    'observe unobservable',
+    'alert get',
+    'alert accept',
+    'observe unobservable',
+    'open',
+    'alert get',
+    'alert accept',
+    'observe observable',
+  ]);
+});
+
+test('an accept leaving a launch-transition window open stays green and re-hands nothing', async () => {
+  const { lifecycle, events } = launchUrlSimulator(
+    async () => CONFIRMATION,
+    [UNOBSERVABLE, COMING_UP],
+  );
+
+  const outcome = await lifecycle.openApplication(launchUrlInput());
+
+  // The window proves only that the app was still coming up, which no second hand-off can fix.
+  expect(outcome.launchConfirmation).toBe('accepted');
+  expect(outcome.timing.postOpenObservation).toBe('unobservable');
+  expect(events).toEqual([
+    'release',
+    `open ${LAUNCH_URL}`,
+    'observe unobservable',
+    'alert get',
+    'alert accept',
+    'observe unobservable',
+  ]);
+});
+
+test('a launch URL handed over twice that still leaves no process fails the open', async () => {
+  const { lifecycle, events } = launchUrlSimulator(
+    async () => CONFIRMATION,
+    Array.from({ length: 3 }, () => UNOBSERVABLE),
+    {
+      acceptAlert: async () => {
+        throw SPAWN_TIMEOUT;
+      },
+    },
+  );
+
+  const failure = await lifecycle
+    .openApplication(launchUrlInput())
+    .catch((error: unknown) => error);
+
+  expect(failure).toBeInstanceOf(AppError);
+  expect((failure as AppError).details).toMatchObject({
+    reason: 'launch_confirmation_unanswered',
+    appBundleId: 'com.example.app',
+  });
+  expect(events.filter((event) => event === 'open' || event === `open ${LAUNCH_URL}`)).toEqual([
+    `open ${LAUNCH_URL}`,
+    'open',
+  ]);
 });
 
 test('a launch URL whose scheme another app owns fails the open without accepting it', async () => {

@@ -32,7 +32,7 @@ import { screenshotIos } from '../screenshot.ts';
 import { withMockedMacOsHelper } from './macos-helper-test-utils.ts';
 import { quitMacOsApp, resolveMacOsHelperPackageRootFrom } from '../../os/macos/helper.ts';
 import { ensureBootedSimulator } from '../simulator.ts';
-import { IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from '../config.ts';
+import { IOS_SIMULATOR_OPENURL_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from '../config.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { runCmd } from '@agent-device/host-kit/command';
 import { retryWithPolicy } from '@agent-device/host-kit/retry';
@@ -407,7 +407,7 @@ test('openIosApp opens custom-scheme iOS simulator URLs directly when launch arg
   assert.deepEqual(mockRunCmd.mock.calls[0], [
     'xcrun',
     ['simctl', 'openurl', 'sim-1', 'myapp://item/42'],
-    undefined,
+    { timeoutMs: IOS_SIMULATOR_OPENURL_TIMEOUT_MS },
   ]);
 });
 
@@ -432,7 +432,7 @@ test('openIosApp launches iOS simulator app before opening custom-scheme URL wit
   assert.deepEqual(mockRunCmd.mock.calls[1], [
     'xcrun',
     ['simctl', 'openurl', 'sim-1', 'myapp://item/42'],
-    undefined,
+    { timeoutMs: IOS_SIMULATOR_OPENURL_TIMEOUT_MS },
   ]);
 });
 
@@ -457,7 +457,7 @@ test('openIosApp launches iOS simulator app before opening https URL with launch
   assert.deepEqual(mockRunCmd.mock.calls[1], [
     'xcrun',
     ['simctl', 'openurl', 'sim-1', 'https://example.com/item/42'],
-    undefined,
+    { timeoutMs: IOS_SIMULATOR_OPENURL_TIMEOUT_MS },
   ]);
 });
 

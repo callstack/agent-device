@@ -23,12 +23,24 @@ import {
  * app's own state: no running process, or a launch-transition code whose window ran out.
  * `probe-failed` is a bridge that could not observe: an unresolvable target, an open circuit, or
  * any other bridge failure, with the failure that stopped it.
+ *
+ * `unobservable` says *how* it was proven, because only one proof is safe to act on: a settled
+ * `launchctl list` with no job for the app proves no process, while an expired launch-transition
+ * window leaves a process that may still be coming up. A caller relaunching a held URL acts on the
+ * first proof only.
  */
 export type LaunchObservation =
-  | Readonly<{
-      observation: Extract<PostOpenObservation, 'observable' | 'unobservable' | 'not-eligible'>;
-    }>
+  | Readonly<{ observation: Extract<PostOpenObservation, 'observable' | 'not-eligible'> }>
+  | Readonly<{ observation: 'unobservable'; proof: NoRunningProcessProof }>
   | Readonly<{ observation: 'probe-failed'; failure: PostOpenObservationFailure }>;
+
+/** Whether a settled target discovery, rather than a window running out, proved no process. */
+export type NoRunningProcessProof = 'no-running-process' | 'launch-transition';
+
+/** Whether an observation proves the app has no running process on the Simulator. */
+export function isProvenNotRunning(observed: LaunchObservation | undefined): boolean {
+  return observed?.observation === 'unobservable' && observed.proof === 'no-running-process';
+}
 
 export type LaunchObservationPort = Readonly<{
   awaitObservable(
@@ -105,7 +117,7 @@ export function createLaunchObservationProbe(
         if (windowMs === undefined) return probeFailed({ source: 'bridge', kind, code });
         const now = deps.clock.now();
         deadline = Math.min(deadline ?? Number.POSITIVE_INFINITY, now + windowMs);
-        if (now >= deadline) return { observation: 'unobservable' };
+        if (now >= deadline) return { observation: 'unobservable', proof: 'launch-transition' };
         await deps.clock.sleep(Math.min(OBSERVATION_POLL_MS, deadline - now), signal);
       }
     },
@@ -139,7 +151,8 @@ async function resolveLaunchedTarget(
     } catch (error) {
       signal.throwIfAborted();
       if (isSimulatorTargetDiscoveryPending(error)) continue;
-      if (isSimulatorTargetNotRunning(error)) return { verdict: { observation: 'unobservable' } };
+      if (isSimulatorTargetNotRunning(error))
+        return { verdict: { observation: 'unobservable', proof: 'no-running-process' } };
       const { code, details } = normalizeError(error);
       const reason = details?.reason;
       return {

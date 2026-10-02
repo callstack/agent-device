@@ -1,4 +1,3 @@
-import type { LaunchConfirmation } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { invalidRuntimeContract } from '@agent-device/contracts/runtime-contract-error';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -8,6 +7,22 @@ import { alertIfPresent } from './alert.ts';
 import { resolveIosSimulatorDeepLinkBundleId } from './core/app-resolution.ts';
 
 export const LAUNCH_CONFIRMATION_FOREIGN_APP_REASON = 'launch_confirmation_foreign_app';
+
+/**
+ * How one launch-confirmation answer attempt ended. Every value except `absent` and `accepted`
+ * means the caller cannot tell whether the launch is still held: `unreadable` steps failed, and
+ * `unanswered` found a prompt the open is not allowed or not able to accept. A caller deciding
+ * whether to hand the launch URL to the device again acts on `accepted` or on its own proof that
+ * no process is running, never on text.
+ */
+export type LaunchConfirmationAttempt =
+  | Readonly<{ outcome: 'accepted' }>
+  | Readonly<{ outcome: 'absent' }>
+  | Readonly<{ outcome: 'unanswered'; reason: 'alert-unrecognized' | 'url-owner-unresolved' }>
+  | Readonly<{ outcome: 'unreadable'; step: LaunchConfirmationStep }>;
+
+/** A step of the answer that failed, keyed for diagnostics and tests. */
+export type LaunchConfirmationStep = 'alert-read' | 'alert-accept' | 'url-owner' | 'runner';
 
 /**
  * SpringBoard's English title for a URL it holds until the user confirms the app that will open
@@ -41,38 +56,59 @@ export type LaunchConfirmationPort = Readonly<{
 /**
  * Answers a launch confirmation. The title only recognizes the confirmation; the app it opens is
  * the URL scheme's owner. An owner that is the session app is accepted; any other owner is never
- * accepted and fails the open, because accepting would hand it the launch URL. Anything else (no
- * alert, another alert, an owner no single installed app is, a failed read, lookup or accept)
- * leaves the open as it was. Each step is bounded by its own timeout, so nothing outlives the
- * answer.
+ * accepted and fails the open, because accepting would hand it the launch URL. Every other ending
+ * is reported as its typed attempt so the settle can decide what the launch still needs. Each step
+ * is bounded by its own timeout, so nothing outlives the answer.
  */
 export async function answerLaunchConfirmation(
   port: LaunchConfirmationPort,
-): Promise<LaunchConfirmation | undefined> {
-  const alert = await port.readAlert().catch(failed('alert-read'));
-  if (!alert) return undefined;
-  if (!isLaunchConfirmation(alert)) {
+): Promise<LaunchConfirmationAttempt> {
+  const read = await readAlert(port);
+  if ('outcome' in read) return read;
+  if (!read.alert) return { outcome: 'absent' };
+  if (!isLaunchConfirmation(read.alert)) {
     emitDiagnostic({
       level: 'warn',
       phase: 'ios_launch_confirmation_unanswered',
-      data: { reason: 'alert-unrecognized', title: alert['message'], buttons: alert['items'] },
+      data: {
+        reason: 'alert-unrecognized',
+        title: read.alert['message'],
+        buttons: read.alert['items'],
+      },
     });
-    return undefined;
+    return { outcome: 'unanswered', reason: 'alert-unrecognized' };
   }
-  const owner = await port.resolveUrlOwner().catch(failed('url-owner'));
-  if (owner === undefined) {
+  const owner = await resolveUrlOwner(port);
+  if ('outcome' in owner) return owner;
+  if (owner.owner === undefined) {
     reportUnanswered('url-owner-unresolved', {});
-    return undefined;
+    return { outcome: 'unanswered', reason: 'url-owner-unresolved' };
   }
-  if (owner !== port.appBundleId) {
-    throw new AppError('COMMAND_FAILED', `The launch URL asks to open ${owner} instead.`, {
+  if (owner.owner !== port.appBundleId) {
+    throw new AppError('COMMAND_FAILED', `The launch URL asks to open ${owner.owner} instead.`, {
       reason: LAUNCH_CONFIRMATION_FOREIGN_APP_REASON,
-      foreignAppBundleId: owner,
+      foreignAppBundleId: owner.owner,
       sessionAppBundleId: port.appBundleId,
-      hint: `iOS is asking whether to open ${owner}. Answer it with alert accept or alert dismiss, and pass a launch URL whose scheme belongs to the session app.`,
+      hint: `iOS is asking whether to open ${owner.owner}. Answer it with alert accept or alert dismiss, and pass a launch URL whose scheme belongs to the session app.`,
     });
   }
-  return await port.acceptAlert().then(() => 'accepted' as const, failed('alert-accept'));
+  return await port.acceptAlert().then(accepted, unreadable('alert-accept'));
+}
+
+async function readAlert(
+  port: LaunchConfirmationPort,
+): Promise<Readonly<{ alert: Record<string, unknown> | undefined }> | LaunchConfirmationAttempt> {
+  return await port.readAlert().then((alert) => ({ alert }), unreadable('alert-read'));
+}
+
+async function resolveUrlOwner(
+  port: LaunchConfirmationPort,
+): Promise<Readonly<{ owner: string | undefined }> | LaunchConfirmationAttempt> {
+  return await port.resolveUrlOwner().then((owner) => ({ owner }), unreadable('url-owner'));
+}
+
+function accepted(): LaunchConfirmationAttempt {
+  return { outcome: 'accepted' };
 }
 
 function isLaunchConfirmation(alert: Record<string, unknown>): boolean {
@@ -81,16 +117,14 @@ function isLaunchConfirmation(alert: Record<string, unknown>): boolean {
 }
 
 /** A failed step leaves the open unanswered; the failure is reported, not thrown. */
-function failed(step: string): (error: unknown) => undefined {
-  return (error) => reportFailed(step, error);
-}
-
-function reportFailed(step: string, error: unknown): undefined {
-  reportUnanswered('step-failed', {
-    step,
-    code: error instanceof AppError ? error.code : undefined,
-  });
-  return undefined;
+function unreadable(step: LaunchConfirmationStep): (error: unknown) => LaunchConfirmationAttempt {
+  return (error) => {
+    reportUnanswered('step-failed', {
+      step,
+      code: error instanceof AppError ? error.code : undefined,
+    });
+    return { outcome: 'unreadable', step };
+  };
 }
 
 function reportUnanswered(reason: string, data: Record<string, unknown>): void {
@@ -103,18 +137,19 @@ function reportUnanswered(reason: string, data: Record<string, unknown>): void {
 
 /**
  * Answers the confirmation through the runner interactor, resolved once for the read and the
- * accept. A runner that cannot be resolved leaves the open as it was.
+ * accept. A runner that cannot be resolved is reported as an unreadable attempt.
  */
 export async function answerSimulatorLaunchConfirmation(
   device: DeviceInfo,
   confirmation: LaunchConfirmationTarget,
   interactor: Promise<Interactor>,
   signal: AbortSignal,
-): Promise<LaunchConfirmation | undefined> {
-  const resolved = await interactor.catch(failed('runner'));
-  if (!resolved) return undefined;
+): Promise<LaunchConfirmationAttempt> {
+  const settled: Readonly<{ interactor: Interactor }> | LaunchConfirmationAttempt =
+    await interactor.then((resolved) => ({ interactor: resolved }), unreadable('runner'));
+  if ('outcome' in settled) return settled;
   return await answerLaunchConfirmation(
-    createLaunchConfirmationPort(device, confirmation, resolved, signal),
+    createLaunchConfirmationPort(device, confirmation, settled.interactor, signal),
   );
 }
 
