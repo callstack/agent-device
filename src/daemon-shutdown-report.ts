@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { publishFileSync } from '@agent-device/host-kit/file';
 
 const SHUTDOWN_REPORT_FILE = 'daemon-shutdown.json';
 
@@ -40,19 +39,18 @@ export type DaemonShutdownReport = {
   };
 };
 
-export function writeDaemonShutdownReport(
-  stateDir: string,
-  outcome: {
-    providerReleases: { released: readonly DeviceLease[]; pending: readonly DeviceLease[] };
-    claims: {
-      released: readonly DeviceClaimRecord[];
-      orphaned: readonly DeviceClaimRecord[];
-      superseded: readonly DeviceClaimRecord[];
-      unattributable: readonly DeviceClaimRecord[];
-    };
-  },
-): void {
-  const report: DaemonShutdownReport = {
+export type DaemonShutdownOutcome = {
+  providerReleases: { released: readonly DeviceLease[]; pending: readonly DeviceLease[] };
+  claims: {
+    released: readonly DeviceClaimRecord[];
+    orphaned: readonly DeviceClaimRecord[];
+    superseded: readonly DeviceClaimRecord[];
+    unattributable: readonly DeviceClaimRecord[];
+  };
+};
+
+export function buildDaemonShutdownReport(outcome: DaemonShutdownOutcome): DaemonShutdownReport {
+  return {
     providerReleases: {
       released: outcome.providerReleases.released.map(toProviderReleaseRecord),
       pending: outcome.providerReleases.pending.map(toProviderReleaseRecord),
@@ -64,23 +62,13 @@ export function writeDaemonShutdownReport(
       unattributable: [...outcome.claims.unattributable],
     },
   };
-  const filePath = shutdownReportPath(stateDir);
-  try {
-    publishFileSync({
-      destination: filePath,
-      contents: `${JSON.stringify(report)}\n`,
-      mode: 0o600,
-    });
-    fs.chmodSync(filePath, 0o600);
-  } catch {
-    // Shutdown reporting is best effort; the atomic publisher has already
-    // preserved the primary filesystem failure and cleaned its temp sibling.
-  }
 }
 
 export function readDaemonShutdownReport(stateDir: string): DaemonShutdownReport | null {
   try {
-    const parsed = JSON.parse(fs.readFileSync(shutdownReportPath(stateDir), 'utf8')) as unknown;
+    const parsed = JSON.parse(
+      fs.readFileSync(resolveDaemonShutdownReportPath(stateDir), 'utf8'),
+    ) as unknown;
     if (!isProviderReleaseReport(parsed)) return null;
     // A report left behind by a daemon that predates claim reporting still
     // describes its provider releases honestly; it just knows nothing of claims.
@@ -90,13 +78,7 @@ export function readDaemonShutdownReport(stateDir: string): DaemonShutdownReport
   }
 }
 
-export function clearDaemonShutdownReport(stateDir: string): void {
-  try {
-    fs.rmSync(shutdownReportPath(stateDir), { force: true });
-  } catch {}
-}
-
-function shutdownReportPath(stateDir: string): string {
+export function resolveDaemonShutdownReportPath(stateDir: string): string {
   return path.join(stateDir, SHUTDOWN_REPORT_FILE);
 }
 

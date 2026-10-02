@@ -8,7 +8,8 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { acquireDeviceClaim } from '../device/device-claims.ts';
 import { canonicalLocalDeviceKey } from '../device/device-claim-paths.ts';
 import { createDurableCaptureResourceStore } from '@agent-device/capture-kit/durable-capture';
-import { writeDaemonShutdownReport } from '../../daemon-shutdown-report.ts';
+import { tryAcquireDaemonRegistration } from '../../daemon-registration-owner.ts';
+import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { SessionScriptWriter, type SessionScriptWriteResult } from '../session-script-writer.ts';
 import { SessionStore } from '../session-store.ts';
 import {
@@ -135,11 +136,15 @@ function createSessionScriptFixture(root: string): FilesystemBoundaryFixture {
 function createShutdownReportFixture(root: string): FilesystemBoundaryFixture {
   return {
     targetPath: path.join(root, 'daemon-shutdown.json'),
-    run: async () =>
-      writeDaemonShutdownReport(root, {
+    run: async () => {
+      const attempt = await tryAcquireDaemonRegistration(resolveDaemonPaths(root));
+      assert.equal(attempt.status, 'acquired');
+      if (attempt.status !== 'acquired') throw new Error('registration refused');
+      await attempt.owner.finish({
         providerReleases: { released: [], pending: [] },
         claims: { released: [], orphaned: [], superseded: [], unattributable: [] },
-      }),
+      });
+    },
     expected: 'return',
   };
 }

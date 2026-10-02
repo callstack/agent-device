@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { asAppError, AppError } from '@agent-device/kernel/errors';
+import { asAppError, AppError, normalizeError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../session-store.ts';
 import { resolveSessionRequestLogPath } from '../session-artifact-paths.ts';
 import { resolveDaemonPaths, resolveDaemonServerMode } from '../../daemon-resolution.ts';
@@ -27,10 +27,6 @@ import {
 } from '../../provider-device-runtimes.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
-import {
-  clearDaemonShutdownReport,
-  writeDaemonShutdownReport,
-} from '../../daemon-shutdown-report.ts';
 import { createRequestHandler } from '../request-router.ts';
 import { getLeaseRegistryExecutionLocks } from '../request-execution-scope.ts';
 import { stopSessionAppLog, teardownSessionResources } from '../session-teardown.ts';
@@ -70,15 +66,16 @@ import {
 import { isEnvTruthy, sleep } from '@agent-device/host-kit/retry';
 
 import {
-  acquireDaemonLock,
   parseIntegerEnv,
   readVersion,
-  releaseDaemonLock,
-  removeInfoOwnedBy,
   resolveDaemonCodeOrigin,
   resolveDaemonCodeSignature,
-  writeInfo,
 } from './server-lifecycle.ts';
+import {
+  tryAcquireDaemonRegistration,
+  DAEMON_STARTUP_EXIT_CODES,
+  type DaemonRegistrationOwner,
+} from '../../daemon-registration-owner.ts';
 import { watchDaemonMetadataLoss, type DaemonMetadataLoss } from './daemon-metadata-loss.ts';
 import {
   createSocketServer,
@@ -262,23 +259,27 @@ async function emitDaemonDiagnostic(
   );
 }
 
-/**
- * Removes this daemon's `daemon.json` at exit, and only while the record still names it: a shutdown
- * that unlinked whatever file was present took the metadata of the daemon now serving clients (#3087).
- * An absent record is not a decline worth logging, because client cleanup removes it routinely and a
- * startup that failed before publication must not leave a `daemon.log` behind.
- */
-async function removeOwnDaemonInfo(params: {
+async function finishDaemonRegistration(params: {
+  registration: DaemonRegistrationOwner;
   infoPath: string;
   logPath: string;
-  owner: OwnerIdentity;
+  outcome?: Parameters<DaemonRegistrationOwner['finish']>[0];
 }): Promise<void> {
-  const removal = removeInfoOwnedBy(params.infoPath, params.owner);
-  if (removal.removed || removal.reason === 'absent') return;
-  await emitDaemonDiagnostic(params.logPath, 'daemon_info_removal_declined', {
-    infoPath: params.infoPath,
-    ...removal,
-  });
+  try {
+    const removal = await params.registration.finish(params.outcome);
+    if (removal.state !== 'removed' && removal.state !== 'absent') {
+      await emitDaemonDiagnostic(params.logPath, 'daemon_info_removal_declined', {
+        infoPath: params.infoPath,
+        removed: false,
+        reason: removal.state,
+        ...(removal.state === 'replaced' ? { registeredPid: removal.identity.pid } : {}),
+      });
+    }
+  } catch (error) {
+    await emitDaemonDiagnostic(params.logPath, 'daemon_registration_finish_failed', {
+      error: normalizeError(error),
+    });
+  }
 }
 
 async function noteDaemonMetadataLoss(params: {
@@ -319,7 +320,7 @@ export async function startDaemonRuntime(
   const stderr = options.stderr ?? process.stderr;
   const exit = options.exit ?? ((code: number) => process.exit(code));
   const daemonPaths = resolveDaemonPaths(env.AGENT_DEVICE_STATE_DIR);
-  const { baseDir, infoPath, lockPath, logPath, sessionsDir } = daemonPaths;
+  const { baseDir, infoPath, logPath, sessionsDir } = daemonPaths;
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
   // ADR 0029: a policy that cannot be read or validated stops startup; the daemon never runs
@@ -347,7 +348,6 @@ export async function startDaemonRuntime(
   const version = readVersion();
   const token = crypto.randomBytes(24).toString('hex');
   const daemonIdentity = readCurrentOwnerIdentity();
-  const daemonProcessStartTime = daemonIdentity.startTime ?? undefined;
   const daemonCodeOrigin = resolveDaemonCodeOrigin();
   const daemonCodeSignature = resolveDaemonCodeSignature();
   const providerComposition = await createDaemonProviderRuntimeComposition(env);
@@ -623,14 +623,13 @@ export async function startDaemonRuntime(
   };
 
   const publishDaemonInfo = (socketPort: number | undefined, httpPort: number | undefined) => {
-    writeInfo(baseDir, infoPath, logPath, {
+    registration.publish({
       socketPort,
       httpPort,
       token,
       version,
       codeOrigin: daemonCodeOrigin,
       codeSignature: daemonCodeSignature,
-      processStartTime: daemonProcessStartTime,
       policyDigest: daemonPolicy?.digest,
     });
     if (socketPort) stdout.write(`AGENT_DEVICE_DAEMON_PORT=${socketPort}\n`);
@@ -645,21 +644,16 @@ export async function startDaemonRuntime(
     }
   };
 
-  const lockData = {
-    pid: process.pid,
-    version,
-    startedAt: Date.now(),
-    processStartTime: daemonProcessStartTime,
-  };
-  if (!acquireDaemonLock(baseDir, lockPath, lockData)) {
+  const acquisition = await tryAcquireDaemonRegistration(daemonPaths);
+  if (acquisition.status !== 'acquired') {
     await Promise.allSettled(
       providerDeviceRuntimes.map(async (runtime) => await runtime.shutdown()),
     );
-    stderr.write('Daemon lock is held by another process; exiting.\n');
-    exit(0);
+    stderr.write(`Daemon registration ${acquisition.status}; exiting.\n`);
+    exit(DAEMON_STARTUP_EXIT_CODES[acquisition.status]);
     return null;
   }
-  clearDaemonShutdownReport(baseDir);
+  const registration = acquisition.owner;
 
   let servers: DaemonServer[] = [];
   let socketPort: number | undefined;
@@ -740,11 +734,10 @@ export async function startDaemonRuntime(
     stderr.write(`Daemon error: ${appErr.message}\n`);
     closeServersBestEffort(servers);
     stopMetadataLossWatch();
-    await removeOwnDaemonInfo({ infoPath, logPath, owner: daemonIdentity });
     await Promise.allSettled(
       providerDeviceRuntimes.map(async (runtime) => await runtime.shutdown()),
     );
-    releaseDaemonLock(lockPath);
+    await finishDaemonRegistration({ registration, infoPath, logPath });
     await platformDaemonLifecycleOwners.clearDaemonLockConfiguration();
     exit(1);
     return null;
@@ -796,10 +789,6 @@ export async function startDaemonRuntime(
     const providerReleaseDrain = await expiredProviderLeaseReleaser.drain(
       DAEMON_PROVIDER_RELEASE_DRAIN_TIMEOUT_MS,
     );
-    writeDaemonShutdownReport(baseDir, {
-      providerReleases: providerReleaseDrain,
-      claims: shutdownClaimLedger.claims,
-    });
     emitDiagnostic({
       level: providerReleaseDrain.pending.length === 0 ? 'info' : 'warn',
       phase: 'daemon_shutdown_provider_release_drain',
@@ -821,8 +810,12 @@ export async function startDaemonRuntime(
       terminatePngWorker().catch(() => {}),
       sleep(DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
     ]);
-    await removeOwnDaemonInfo({ infoPath, logPath, owner: daemonIdentity });
-    releaseDaemonLock(lockPath);
+    await finishDaemonRegistration({
+      registration,
+      infoPath,
+      logPath,
+      outcome: { providerReleases: providerReleaseDrain, claims: shutdownClaimLedger.claims },
+    });
     await platformDaemonLifecycleOwners.clearDaemonLockConfiguration();
     exit(shutdownOptions.exitCode ?? 0);
   };
