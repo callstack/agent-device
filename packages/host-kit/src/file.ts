@@ -14,7 +14,13 @@ export {
 export { expandUserHomePath, resolveUserPath } from './internal/path-resolution.ts';
 export {
   acquireProcessLock,
+  acquireProcessLockAcquisition,
+  tryAcquireProcessLock,
+  inspectProcessLock,
   withProcessLock,
+  type ProcessLockAcquisition,
+  type ProcessLockAttempt,
+  type ProcessLockInspection,
   type ProcessLockOwner,
   type ProcessLockRelease,
 } from './internal/process-lock.ts';
