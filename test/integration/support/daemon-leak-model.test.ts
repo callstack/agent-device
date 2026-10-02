@@ -158,7 +158,7 @@ describe('recorded owned-process rules', () => {
 });
 
 describe('surviving-daemon rule', () => {
-  // stopProcessForTakeover is best-effort void: it returns silently on identity
+  // A retained stopDaemonProcess result is not proof of exit: identity
   // mismatch, signal failure, or kill timeout, so a daemon can outlive the stop.
   test('a daemon still alive after shutdown is itself a leak', () => {
     const snapshot = evaluateDaemonLeaks(

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
 import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
-import { stopProcessForTakeover } from '../../src/daemon-process.ts';
+import { stopDaemonProcess } from '../../src/daemon-process.ts';
 import { formatResultDebug } from './cli-json.ts';
 import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import { runCliJson } from './test-helpers.ts';
@@ -113,9 +113,8 @@ async function callCommandRpc(
 
 async function stopDaemon(info: DaemonInfo): Promise<void> {
   if (!Number.isInteger(info.pid) || info.pid <= 0) return;
-  await stopProcessForTakeover(info.pid, {
-    termTimeoutMs: 1500,
-    killTimeoutMs: 1500,
-    expectedStartTime: info.processStartTime,
-  });
+  await stopDaemonProcess(
+    { pid: info.pid, startTime: info.processStartTime ?? null },
+    { mode: 'graceful', termTimeoutMs: 1500, killTimeoutMs: 1500 },
+  );
 }

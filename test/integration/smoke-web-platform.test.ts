@@ -17,7 +17,7 @@ import {
   type AgentBrowserToolStatus,
 } from '@agent-device/platform-web';
 import {
-  stopProcessForTakeover,
+  stopDaemonProcess,
   waitForDaemonExit,
   type DaemonProcessIdentity,
 } from '../../src/daemon-process.ts';
@@ -227,7 +227,7 @@ async function runWebShutdownSmoke(context: WebSmokeContext): Promise<void> {
 }
 
 // Best-effort and independent of how far the `try` block got: a daemon that survived SIGTERM
-// (stopProcessForTakeover escalates to SIGKILL) and a Chrome fleet that outlived it (a forceful
+// (stopDaemonProcess escalates to SIGKILL) and a Chrome fleet that outlived it (a forceful
 // reap, not cleanupManagedAgentBrowserOrphans — see forceKillManagedBrowserProcesses) are reaped
 // here regardless of which assertion above failed, or whether none did. Mirrors cleanupWebSmoke's
 // AggregateError shape so a cleanup failure never silently swallows the assertion failure it ran
@@ -244,11 +244,14 @@ async function cleanupWebShutdownSmoke(
   const errors: unknown[] = [];
   if (daemonIdentity !== undefined) {
     try {
-      await stopProcessForTakeover(daemonIdentity.pid, {
-        termTimeoutMs: timeouts.termTimeoutMs,
-        killTimeoutMs: timeouts.killTimeoutMs,
-        expectedStartTime: daemonIdentity.startTime,
-      });
+      await stopDaemonProcess(
+        { pid: daemonIdentity.pid, startTime: daemonIdentity.startTime ?? null },
+        {
+          mode: 'graceful',
+          termTimeoutMs: timeouts.termTimeoutMs,
+          killTimeoutMs: timeouts.killTimeoutMs,
+        },
+      );
     } catch (error) {
       errors.push(error);
     }

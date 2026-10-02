@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { AppError } from '@agent-device/kernel/errors';
 import { resolveDaemonPaths } from '../src/daemon-resolution.ts';
-import { isAgentDeviceDaemonProcess, stopProcessForTakeover } from '../src/daemon-process.ts';
+import { isAgentDeviceDaemonProcess, stopDaemonProcess } from '../src/daemon-process.ts';
 
 const DAEMON_TERM_TIMEOUT_MS = 15_000;
 const DAEMON_KILL_TIMEOUT_MS = 2_000;
@@ -19,11 +20,24 @@ const info = readDaemonInfo(paths.infoPath);
 const daemonPid = readPositivePid(info?.pid);
 
 if (daemonPid !== null) {
-  await stopProcessForTakeover(daemonPid, {
-    termTimeoutMs: DAEMON_TERM_TIMEOUT_MS,
-    killTimeoutMs: DAEMON_KILL_TIMEOUT_MS,
-    expectedStartTime: info?.processStartTime,
-  });
+  const termination = await stopDaemonProcess(
+    { pid: daemonPid, startTime: info?.processStartTime ?? null },
+    {
+      mode: 'graceful',
+      termTimeoutMs: DAEMON_TERM_TIMEOUT_MS,
+      killTimeoutMs: DAEMON_KILL_TIMEOUT_MS,
+    },
+  );
+  if (termination.status !== 'exited') {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Daemon cleanup retained state because exit could not be confirmed.',
+      {
+        reason: 'daemon_exit_unconfirmed',
+        termination,
+      },
+    );
+  }
   const { cleanupRunnerLeasesForOwner } =
     await import('@agent-device/platform-apple/runner/operations');
   await cleanupRunnerLeasesForOwner({ pid: daemonPid, startTime: info?.processStartTime });

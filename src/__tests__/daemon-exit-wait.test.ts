@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { stopProcessForTakeover, waitForDaemonExit } from '../daemon-process.ts';
+import { stopDaemonProcess, waitForDaemonExit } from '../daemon-process.ts';
 
 const DAEMON_COMMAND = '/opt/checkout/dist/src/internal/daemon.js';
 const OURS = 'Mon Aug 24 10:00:00 2026';
@@ -92,26 +92,122 @@ test('waitForDaemonExit keeps waiting through a zombie until the pid is reaped',
   expect(reaped.exited).toBe(true);
 });
 
-test('stopProcessForTakeover does not SIGKILL a pid recycled during the grace wait', async () => {
+test('stopDaemonProcess does not SIGKILL a pid recycled during the grace wait', async () => {
   onSignal = (signal) => {
     if (signal === 'SIGTERM') state.starts.set(PID, RECYCLED);
   };
-  await stopProcessForTakeover(PID, {
-    termTimeoutMs: TIMEOUT_MS,
-    killTimeoutMs: 40,
-    expectedStartTime: OURS,
-  });
+  await stopDaemonProcess(
+    { pid: PID, startTime: OURS },
+    { mode: 'graceful', termTimeoutMs: TIMEOUT_MS, killTimeoutMs: 40 },
+  );
   expect(signals).toEqual(['SIGTERM']);
 });
 
-test('stopProcessForTakeover still escalates to SIGKILL for a daemon that survives SIGTERM', async () => {
+test('stopDaemonProcess still escalates to SIGKILL for a daemon that survives SIGTERM', async () => {
   onSignal = (signal) => {
     if (signal === 'SIGKILL') state.alive.set(PID, false);
   };
-  await stopProcessForTakeover(PID, {
-    termTimeoutMs: 40,
-    killTimeoutMs: 40,
-    expectedStartTime: OURS,
-  });
+  await stopDaemonProcess(
+    { pid: PID, startTime: OURS },
+    { mode: 'graceful', termTimeoutMs: 40, killTimeoutMs: 40 },
+  );
   expect(signals).toEqual(['SIGTERM', 'SIGKILL']);
+});
+
+test('a changed command in the same process lifetime does not prove exit', async () => {
+  state.commands.set(PID, '/usr/bin/another-command');
+  expect(await waitForDaemonExit({ pid: PID, startTime: OURS }, { timeoutMs: 0 })).toMatchObject({
+    exited: false,
+  });
+});
+
+test('an unreadable process start time does not prove exit', async () => {
+  state.starts.delete(PID);
+  expect(await waitForDaemonExit({ pid: PID, startTime: OURS }, { timeoutMs: 0 })).toMatchObject({
+    exited: false,
+  });
+});
+
+test('a recycled pid proves the original exit even when its successor is a zombie', async () => {
+  state.starts.set(PID, RECYCLED);
+  state.states.set(PID, 'Z');
+  expect(await waitForDaemonExit({ pid: PID, startTime: OURS }, { timeoutMs: 0 })).toMatchObject({
+    exited: true,
+  });
+});
+
+test('missing start-time identity retains a live daemon without signaling', async () => {
+  expect(
+    await stopDaemonProcess(
+      { pid: PID, startTime: null },
+      { mode: 'graceful', termTimeoutMs: 0, killTimeoutMs: 0 },
+    ),
+  ).toMatchObject({ status: 'retained', reason: 'missing-start-time' });
+  expect(signals).toEqual([]);
+});
+
+test('an unidentified released pid has no lifetime cleanup proof', async () => {
+  state.alive.set(PID, false);
+  expect(
+    await stopDaemonProcess(
+      { pid: PID, startTime: null },
+      {
+        mode: 'graceful',
+        termTimeoutMs: 0,
+        killTimeoutMs: 0,
+      },
+    ),
+  ).toEqual({ status: 'not-running' });
+  expect(signals).toEqual([]);
+});
+
+test('an exhausted kill wait returns retained rather than silently completing', async () => {
+  expect(
+    await stopDaemonProcess(
+      { pid: PID, startTime: OURS },
+      { mode: 'graceful', termTimeoutMs: 0, killTimeoutMs: 0 },
+    ),
+  ).toMatchObject({ status: 'retained', reason: 'exit-timeout' });
+  expect(signals).toEqual(['SIGTERM', 'SIGKILL']);
+});
+
+test('failed signaling is retained when the same daemon is still alive', async () => {
+  vi.mocked(process.kill).mockImplementation(() => {
+    throw Object.assign(new Error('signal refused'), { code: 'EPERM' });
+  });
+  expect(
+    await stopDaemonProcess(
+      { pid: PID, startTime: OURS },
+      { mode: 'graceful', termTimeoutMs: 0, killTimeoutMs: 0 },
+    ),
+  ).toMatchObject({ status: 'retained', reason: 'signal-failed', signal: 'SIGTERM' });
+});
+
+test('force termination delivers KILL first and returns its confirmed exit', async () => {
+  onSignal = (signal) => {
+    if (signal === 'SIGKILL') state.alive.set(PID, false);
+  };
+  const options = { mode: 'force' as const, termTimeoutMs: 0, killTimeoutMs: 0 };
+  const result = await stopDaemonProcess({ pid: PID, startTime: OURS }, options);
+  expect(signals).toEqual(['SIGKILL']);
+  expect(result).toMatchObject({
+    status: 'exited',
+    identity: { pid: PID, startTime: OURS },
+    mode: 'forced',
+  });
+});
+
+test('a daemon reaped after the TERM budget retains graceful mode without signaling its zombie', async () => {
+  onSignal = (signal) => {
+    if (signal !== 'SIGTERM') return;
+    state.states.set(PID, 'Z');
+    state.commands.set(PID, '<defunct>');
+    setTimeout(() => state.alive.set(PID, false), 10);
+  };
+  const result = await stopDaemonProcess(
+    { pid: PID, startTime: OURS },
+    { mode: 'graceful', termTimeoutMs: 0, killTimeoutMs: 40 },
+  );
+  expect(signals).toEqual(['SIGTERM']);
+  expect(result).toMatchObject({ status: 'exited', mode: 'graceful' });
 });

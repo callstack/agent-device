@@ -5,8 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
 import { runCmdSync } from '@agent-device/host-kit/command';
-import { isProcessAlive } from '@agent-device/host-kit/process';
-import { stopProcessForTakeover } from '../../src/daemon-process.ts';
+import { isProcessAlive, readProcessStartTime } from '@agent-device/host-kit/process';
+import { stopDaemonProcess } from '../../src/daemon-process.ts';
 
 import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import { runCliJson } from './test-helpers.ts';
@@ -15,6 +15,32 @@ type DaemonInfo = {
   pid: number;
   processStartTime?: string;
 };
+
+test('clean daemon retains metadata when a live recorded process is not a verified daemon', () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-clean-retained-'));
+  const identity = { pid: process.pid, processStartTime: readProcessStartTime(process.pid) };
+  assert.ok(identity.processStartTime);
+  const contents = JSON.stringify(identity);
+  fs.writeFileSync(path.join(stateDir, 'daemon.json'), contents);
+  fs.writeFileSync(path.join(stateDir, 'daemon.lock'), contents);
+  try {
+    const cleanup = runCmdSync(
+      process.execPath,
+      ['--experimental-strip-types', 'scripts/clean-daemon.ts'],
+      {
+        env: { ...process.env, AGENT_DEVICE_STATE_DIR: stateDir },
+        timeoutMs: 5_000,
+        allowFailure: true,
+      },
+    );
+    assert.notEqual(cleanup.exitCode, 0, 'unconfirmed exit cannot complete cleanup');
+    assert.equal(fs.readFileSync(path.join(stateDir, 'daemon.json'), 'utf8'), contents);
+    assert.equal(fs.readFileSync(path.join(stateDir, 'daemon.lock'), 'utf8'), contents);
+    assert.equal(isProcessAlive(process.pid), true);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
 
 test('clean daemon script stops a live daemon before removing metadata', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) {
@@ -48,11 +74,10 @@ test('clean daemon script stops a live daemon before removing metadata', async (
     await assertNoDaemonLeaks({ stateDir, daemonPids: [info.pid], phase: 'after-shutdown' });
   } finally {
     if (info) {
-      await stopProcessForTakeover(info.pid, {
-        termTimeoutMs: 1_500,
-        killTimeoutMs: 1_500,
-        expectedStartTime: info.processStartTime,
-      });
+      await stopDaemonProcess(
+        { pid: info.pid, startTime: info.processStartTime ?? null },
+        { mode: 'graceful', termTimeoutMs: 1_500, killTimeoutMs: 1_500 },
+      );
     }
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

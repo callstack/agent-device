@@ -19,10 +19,18 @@ vi.mock('../../daemon-process.ts', async (importOriginal) => {
     isAgentDeviceDaemonProcess: vi.fn((pid: number, startTime: string | undefined) =>
       pid === winner.pid ? winner.alive : actual.isAgentDeviceDaemonProcess(pid, startTime),
     ),
-    stopProcessForTakeover: vi.fn(
-      async (pid: number, options: Parameters<typeof actual.stopProcessForTakeover>[1]) => {
-        if (pid !== winner.pid) return await actual.stopProcessForTakeover(pid, options);
+    stopDaemonProcess: vi.fn(
+      async (
+        identity: Parameters<typeof actual.stopDaemonProcess>[0],
+        options: Parameters<typeof actual.stopDaemonProcess>[1],
+      ) => {
+        if (identity.pid !== winner.pid) return await actual.stopDaemonProcess(identity, options);
         winner.alive = false;
+        return {
+          status: 'exited' as const,
+          identity: { pid: identity.pid, startTime: identity.startTime! },
+          mode: 'graceful' as const,
+        };
       },
     ),
   };

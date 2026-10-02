@@ -1,7 +1,11 @@
 import fs from 'node:fs';
 import { shellQuote } from '@agent-device/kernel/device-shell';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { isAgentDeviceDaemonProcess, stopProcessForTakeover } from '../daemon-process.ts';
+import {
+  isAgentDeviceDaemonProcess,
+  stopDaemonProcess,
+  type DaemonTerminationResult,
+} from '../daemon-process.ts';
 
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 
@@ -198,11 +202,14 @@ export async function cleanupFailedDaemonStartupMetadata(
         result.retainedLockProcess = true;
       } else {
         if (liveLockProcess) {
-          await stopProcessForTakeover(lockInfo.pid, {
-            termTimeoutMs: DAEMON_TAKEOVER_TERM_TIMEOUT_MS,
-            killTimeoutMs: DAEMON_TAKEOVER_KILL_TIMEOUT_MS,
-            expectedStartTime: lockInfo.processStartTime,
-          });
+          await stopDaemonProcess(
+            { pid: lockInfo.pid, startTime: lockInfo.processStartTime ?? null },
+            {
+              mode: 'graceful',
+              termTimeoutMs: DAEMON_TAKEOVER_TERM_TIMEOUT_MS,
+              killTimeoutMs: DAEMON_TAKEOVER_KILL_TIMEOUT_MS,
+            },
+          );
           result.stoppedLockProcess = true;
         }
         removeDaemonLock(paths.lockPath);
@@ -246,12 +253,17 @@ export async function recoverDaemonLockHolder(paths: DaemonPaths): Promise<boole
   return false;
 }
 
-export async function stopDaemonProcessForTakeover(info: DaemonInfo): Promise<void> {
-  await stopProcessForTakeover(info.pid, {
-    termTimeoutMs: DAEMON_TAKEOVER_TERM_TIMEOUT_MS,
-    killTimeoutMs: DAEMON_TAKEOVER_KILL_TIMEOUT_MS,
-    expectedStartTime: info.processStartTime,
-  });
+export async function stopDaemonProcessForTakeover(
+  info: DaemonInfo,
+): Promise<DaemonTerminationResult> {
+  return await stopDaemonProcess(
+    { pid: info.pid, startTime: info.processStartTime ?? null },
+    {
+      mode: 'graceful',
+      termTimeoutMs: DAEMON_TAKEOVER_TERM_TIMEOUT_MS,
+      killTimeoutMs: DAEMON_TAKEOVER_KILL_TIMEOUT_MS,
+    },
+  );
 }
 
 export function isRemoteDaemon(info: DaemonInfo): boolean {
