@@ -235,14 +235,14 @@ async function expectConcurrentCacheReuse(compile: () => Promise<string>): Promi
 
   const firstCompile = compile();
   await compileStarted;
-  const originalMkdirSync = fs.mkdirSync;
+  const originalOpenSync = fs.openSync;
   const lockAttempted = new Promise<void>((resolve) => {
-    const mkdirSpy = vi.spyOn(fs, 'mkdirSync').mockImplementation((dirPath, options) => {
-      if (typeof dirPath === 'string' && dirPath.endsWith('.lock')) {
+    const openSpy = vi.spyOn(fs, 'openSync').mockImplementation((filePath, flags, mode) => {
+      if (typeof filePath === 'string' && filePath.endsWith('.reclaim.lock') && flags === 'wx') {
         resolve();
-        mkdirSpy.mockRestore();
+        openSpy.mockRestore();
       }
-      return originalMkdirSync(dirPath, options);
+      return originalOpenSync(filePath, flags, mode);
     });
   });
   const secondCompile = compile();

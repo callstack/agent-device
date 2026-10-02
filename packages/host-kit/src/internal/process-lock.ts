@@ -131,7 +131,12 @@ export function inspectProcessLock(lockDirPath: string): ProcessLockInspection {
   };
 }
 
-/** Makes one attempt. Publication, reclaim and release share a non-expiring mutation guard. */
+/**
+ * Makes one attempt. Publication, reclaim and release share a non-expiring mutation guard.
+ * All users of this path must use this protocol. Drain legacy users before upgrading and
+ * prevent them from returning: a guard cannot revoke a legacy reclaimer already admitted.
+ * See docs/adr/0030-process-lock-exclusion.md for the migration contract.
+ */
 export function tryAcquireProcessLock(params: ProcessLockOptions): ProcessLockAttempt {
   const { lockDirPath, owner } = params;
   const ownerFilePath = path.join(lockDirPath, OWNER_FILE_NAME);
@@ -371,7 +376,7 @@ function reclaimMutexPath(lockDirPath: string): string {
   return `${stem}${RECLAIM_MUTEX_SUFFIX}${LOCK_DIRECTORY_SUFFIX}`;
 }
 
-// A file also excludes legacy reclaimers: their age-based rmdir cannot remove this guard.
+// Legacy age-based rmdir cannot remove this file, so fresh legacy reclaim admission fails.
 function holdReclaimMutex(lockDirPath: string): boolean {
   let descriptor: number;
   try {
