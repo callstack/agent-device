@@ -371,19 +371,21 @@ function reclaimMutexPath(lockDirPath: string): string {
   return `${stem}${RECLAIM_MUTEX_SUFFIX}${LOCK_DIRECTORY_SUFFIX}`;
 }
 
-// A crashed critical section is retained: age cannot distinguish it from a paused publisher.
+// A file also excludes legacy reclaimers: their age-based rmdir cannot remove this guard.
 function holdReclaimMutex(lockDirPath: string): boolean {
+  let descriptor: number;
   try {
-    fs.mkdirSync(reclaimMutexPath(lockDirPath));
-    return true;
+    descriptor = fs.openSync(reclaimMutexPath(lockDirPath), 'wx', 0o600);
   } catch (error) {
     if (errorCode(error) !== 'EEXIST') throw error;
     return false;
   }
+  fs.closeSync(descriptor);
+  return true;
 }
 
 function releaseReclaimMutex(lockDirPath: string): void {
-  fs.rmdirSync(reclaimMutexPath(lockDirPath));
+  fs.unlinkSync(reclaimMutexPath(lockDirPath));
 }
 
 function errorCode(error: unknown): string | undefined {

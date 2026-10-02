@@ -22,6 +22,7 @@ import {
 } from './process-lock.ts';
 import { readProcessStartTime } from './host-process.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
+import { holdLegacyReclaimMutex } from './legacy-process-lock.fixtures.ts';
 
 let tmpDir: string;
 
@@ -454,13 +455,14 @@ test('a contender that claims the path during a reclaim keeps its lock', async (
   // claim and publishes its own. Nothing is removed: the record re-read under the mutex names a
   // claim token the dead one cannot answer to, and the judge walks away from the path.
   let claimed = false;
-  const realMkdir = fs.mkdirSync;
-  const mkdirSpy = vi.spyOn(fs, 'mkdirSync').mockImplementation(((
+  const realOpen = fs.openSync;
+  const guardSpy = vi.spyOn(fs, 'openSync').mockImplementation(((
     target: fs.PathLike,
-    options?: fs.MakeDirectoryOptions & { recursive: true },
+    flags: fs.OpenMode,
+    mode?: fs.Mode,
   ) => {
     if (String(target) !== mutexPath || claimed) {
-      return realMkdir(target as string, options as fs.MakeDirectoryOptions);
+      return realOpen(target, flags, mode);
     }
     claimed = true;
     fs.rmSync(lockDirPath, { recursive: true, force: true });
@@ -476,8 +478,8 @@ test('a contender that claims the path during a reclaim keeps its lock', async (
         claimToken: 'contender-claim',
       }),
     );
-    return realMkdir(target as string, options as fs.MakeDirectoryOptions);
-  }) as typeof fs.mkdirSync);
+    return realOpen(target, flags, mode);
+  }) as typeof fs.openSync);
 
   try {
     await assert.rejects(
@@ -503,7 +505,7 @@ test('a contender that claims the path during a reclaim keeps its lock', async (
     assert.equal(record.pid, process.ppid);
     assert.equal(record.claimToken, 'contender-claim');
   } finally {
-    mkdirSpy.mockRestore();
+    guardSpy.mockRestore();
   }
 });
 
@@ -520,13 +522,14 @@ test('a claim published while a reclaim holds the mutex outlives the empty direc
   // Writing the record is also what re-dates the directory, which is the fact the reclaim re-asks
   // for under its mutex before it removes anything.
   let published = false;
-  const realMkdir = fs.mkdirSync;
-  const mkdirSpy = vi.spyOn(fs, 'mkdirSync').mockImplementation(((
+  const realOpen = fs.openSync;
+  const guardSpy = vi.spyOn(fs, 'openSync').mockImplementation(((
     target: fs.PathLike,
-    options?: fs.MakeDirectoryOptions & { recursive: true },
+    flags: fs.OpenMode,
+    mode?: fs.Mode,
   ) => {
     if (String(target) !== mutexPath || published) {
-      return realMkdir(target as string, options as fs.MakeDirectoryOptions);
+      return realOpen(target, flags, mode);
     }
     published = true;
     fs.writeFileSync(
@@ -539,8 +542,8 @@ test('a claim published while a reclaim holds the mutex outlives the empty direc
         claimToken: 'late-claim',
       }),
     );
-    return realMkdir(target as string, options as fs.MakeDirectoryOptions);
-  }) as typeof fs.mkdirSync);
+    return realOpen(target, flags, mode);
+  }) as typeof fs.openSync);
 
   try {
     await assert.rejects(
@@ -562,7 +565,7 @@ test('a claim published while a reclaim holds the mutex outlives the empty direc
     const record = JSON.parse(fs.readFileSync(ownerFilePath, 'utf8')) as { claimToken: string };
     assert.equal(record.claimToken, 'late-claim');
   } finally {
-    mkdirSpy.mockRestore();
+    guardSpy.mockRestore();
   }
 });
 
@@ -576,20 +579,21 @@ test('a lock directory made anew while a reclaim holds the mutex is not the one 
   // like from the inside: same name, same emptiness, and an age that says it was never abandoned.
   let replaced = false;
   let refilledAtMs = 0;
-  const realMkdir = fs.mkdirSync;
-  const mkdirSpy = vi.spyOn(fs, 'mkdirSync').mockImplementation(((
+  const realOpen = fs.openSync;
+  const guardSpy = vi.spyOn(fs, 'openSync').mockImplementation(((
     target: fs.PathLike,
-    options?: fs.MakeDirectoryOptions & { recursive: true },
+    flags: fs.OpenMode,
+    mode?: fs.Mode,
   ) => {
     if (String(target) !== mutexPath || replaced) {
-      return realMkdir(target as string, options as fs.MakeDirectoryOptions);
+      return realOpen(target, flags, mode);
     }
     replaced = true;
     fs.rmSync(lockDirPath, { recursive: true, force: true });
     fs.mkdirSync(lockDirPath);
     refilledAtMs = fs.statSync(lockDirPath).mtimeMs;
-    return realMkdir(target as string, options as fs.MakeDirectoryOptions);
-  }) as typeof fs.mkdirSync);
+    return realOpen(target, flags, mode);
+  }) as typeof fs.openSync);
 
   try {
     await assert.rejects(
@@ -612,7 +616,7 @@ test('a lock directory made anew while a reclaim holds the mutex is not the one 
       'the reclaim removed a directory it had not judged abandoned',
     );
   } finally {
-    mkdirSpy.mockRestore();
+    guardSpy.mockRestore();
   }
 });
 
@@ -626,14 +630,15 @@ test('a reclaim mutex another contender holds leaves the abandoned lock standing
   fs.mkdirSync(path.join(tmpDir, 'judged-by-another.reclaim.lock'));
 
   let lockAttempts = 0;
-  const realMkdir = fs.mkdirSync;
-  const mkdirSpy = vi.spyOn(fs, 'mkdirSync').mockImplementation(((
+  const realOpen = fs.openSync;
+  const guardSpy = vi.spyOn(fs, 'openSync').mockImplementation(((
     target: fs.PathLike,
-    options?: fs.MakeDirectoryOptions & { recursive: true },
+    flags: fs.OpenMode,
+    mode?: fs.Mode,
   ) => {
     if (String(target) === path.join(tmpDir, 'judged-by-another.reclaim.lock')) lockAttempts += 1;
-    return realMkdir(target as string, options as fs.MakeDirectoryOptions);
-  }) as typeof fs.mkdirSync);
+    return realOpen(target, flags, mode);
+  }) as typeof fs.openSync);
 
   try {
     await assert.rejects(
@@ -651,7 +656,7 @@ test('a reclaim mutex another contender holds leaves the abandoned lock standing
       },
     );
   } finally {
-    mkdirSpy.mockRestore();
+    guardSpy.mockRestore();
   }
   assert.ok(lockAttempts > 1, `contender polled ${lockAttempts} times`);
   assert.equal(fs.existsSync(ownerFilePath), true);
@@ -895,6 +900,32 @@ test('release after guarded private-directory removal never recreates it', async
   fs.rmSync(privateDir, { recursive: true });
   await attempt.acquisition.release();
   assert.equal(fs.existsSync(privateDir), false);
+});
+
+test('legacy reclaim cannot age-delete a paused publisher mutation guard', async () => {
+  const lockDirPath = path.join(tmpDir, 'mixed-version.lock');
+  const guard = path.join(tmpDir, 'mixed-version.reclaim.lock');
+  const mkdir = fs.mkdirSync;
+  let legacyAdmitted: boolean | undefined;
+  const spy = vi.spyOn(fs, 'mkdirSync').mockImplementation(((
+    target: fs.PathLike,
+    options?: fs.MakeDirectoryOptions,
+  ) => {
+    const result = mkdir(target, options);
+    if (String(target) === lockDirPath) {
+      stampDirectoryAbandoned(guard);
+      legacyAdmitted = holdLegacyReclaimMutex(guard, 5_000);
+    }
+    return result;
+  }) as typeof fs.mkdirSync);
+  let acquisition: ProcessLockRelease | undefined;
+  try {
+    acquisition = await acquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
+    assert.equal(legacyAdmitted, false);
+  } finally {
+    spy.mockRestore();
+    await acquisition?.();
+  }
 });
 
 test('an acquisition cannot authorize a successor record', async () => {
