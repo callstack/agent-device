@@ -13,6 +13,7 @@ vi.mock('./host-process.ts', async (importOriginal) => {
 
 import {
   acquireProcessLock,
+  acquireProcessLockAcquisition,
   tryAcquireProcessLock,
   inspectProcessLock,
   withProcessLock,
@@ -829,6 +830,25 @@ test('one nonblocking attempt acquires, refuses a live claim, and invalidates it
   await first.acquisition.release();
   assert.throws(() => first.acquisition.assertHeld(), /no longer held/);
   assert.deepEqual(inspectProcessLock(lockDirPath), { state: 'absent' });
+});
+
+test('bounded acquisition makes one attempt at zero timeout and carries mutation authority', async () => {
+  const lockDirPath = path.join(tmpDir, 'bounded-authority.lock');
+  const acquisition = await acquireProcessLockAcquisition({
+    lockDirPath,
+    owner: currentProcessOwner(),
+    timeoutMs: 0,
+  });
+  acquisition.assertHeld();
+  await assert.rejects(
+    acquireProcessLockAcquisition({
+      lockDirPath,
+      owner: currentProcessOwner(),
+      timeoutMs: 0,
+    }),
+  );
+  await acquisition.release();
+  assert.throws(() => acquisition.assertHeld());
 });
 
 test('a paused publisher retains exclusion after the old publication grace', async () => {

@@ -202,11 +202,17 @@ export function tryAcquireProcessLock(params: ProcessLockOptions): ProcessLockAt
 export async function acquireProcessLock(
   params: ProcessLockOptions & { timeoutMs?: number; pollMs?: number },
 ): Promise<ProcessLockRelease> {
+  return (await acquireProcessLockAcquisition(params)).release;
+}
+
+export async function acquireProcessLockAcquisition(
+  params: ProcessLockOptions & { timeoutMs?: number; pollMs?: number },
+): Promise<ProcessLockAcquisition> {
   const deadline = Date.now() + (params.timeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS);
   const pollMs = params.pollMs ?? DEFAULT_LOCK_POLL_MS;
   do {
     const attempt = tryAcquireProcessLock(params);
-    if (attempt.status === 'acquired') return attempt.acquisition.release;
+    if (attempt.status === 'acquired') return attempt.acquisition;
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
     await sleep(Math.min(pollMs, remaining));
@@ -234,13 +240,7 @@ function createProcessLockAcquisition(
   let released = false;
   return Object.freeze({
     assertHeld() {
-      const reading = readProcessLockOwner(ownerFilePath);
-      if (
-        !active ||
-        reading.kind !== 'owner' ||
-        !ownerIdentityMatches(reading.owner, claim) ||
-        reading.owner.claimToken !== claim.claimToken
-      ) {
+      if (!active || readClaimOwnership(lockDirPath, claim) !== 'owned') {
         throw new AppError('COMMAND_FAILED', 'Process lock acquisition is no longer held', {
           lockDirPath,
           ownerOwnershipLost: true,
@@ -251,13 +251,8 @@ function createProcessLockAcquisition(
       if (released) return;
       active = false;
       liveClaimTokens.delete(claim.claimToken!);
-      const reading = readProcessLockOwner(ownerFilePath);
-      if (
-        (reading.kind === 'unwritten' && !fs.existsSync(lockDirPath)) ||
-        (reading.kind === 'owner' &&
-          (!ownerIdentityMatches(reading.owner, claim) ||
-            reading.owner.claimToken !== claim.claimToken))
-      ) {
+      const ownership = readClaimOwnership(lockDirPath, claim);
+      if (ownership === 'absent' || ownership === 'not-owner') {
         released = true;
         return;
       }
@@ -312,16 +307,21 @@ function releaseProcessLock(
   ownerFilePath: string,
   claim: ProcessLockOwnerRecord,
 ): 'removed' | 'not-owner' | 'unverified' {
-  const reading = readProcessLockOwner(ownerFilePath);
+  const ownership = readClaimOwnership(lockDirPath, claim);
+  if (ownership === 'owned') return clearLockDirectory(lockDirPath, ownerFilePath, claim);
+  return ownership === 'absent' ? 'removed' : ownership;
+}
+
+function readClaimOwnership(
+  lockDirPath: string,
+  claim: ProcessLockOwnerRecord,
+): 'owned' | 'not-owner' | 'absent' | 'unverified' {
+  const reading = readProcessLockOwner(path.join(lockDirPath, OWNER_FILE_NAME));
   if (reading.kind === 'unreadable') return 'unverified';
-  if (reading.kind === 'unwritten') {
-    return fs.existsSync(lockDirPath) ? 'unverified' : 'removed';
-  }
-  if (!ownerIdentityMatches(reading.owner, claim)) return 'not-owner';
-  // The same process can hold this path twice in sequence, so the token is what tells this
-  // acquisition's record from an earlier one that names the very same process.
-  if (reading.owner.claimToken !== claim.claimToken) return 'not-owner';
-  return clearLockDirectory(lockDirPath, ownerFilePath, reading.owner);
+  if (reading.kind === 'unwritten') return fs.existsSync(lockDirPath) ? 'unverified' : 'absent';
+  return ownerIdentityMatches(reading.owner, claim) && reading.owner.claimToken === claim.claimToken
+    ? 'owned'
+    : 'not-owner';
 }
 
 /**
