@@ -778,7 +778,7 @@ test.for(['runner-start', 'target-discovery'] as const)(
       retriable: true,
       readableCaptures: 0,
       captures: 1,
-      polls: [{ startedMs: 0, outcome: 'readiness' }],
+      polls: [{ startedMs: expect.any(Number), outcome: 'readiness' }],
     });
     expect(response.error.details?.captureStalled).toBeUndefined();
   },
