@@ -8,7 +8,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { acquireDeviceClaim } from '../device/device-claims.ts';
 import { canonicalLocalDeviceKey } from '../device/device-claim-paths.ts';
 import { createDurableCaptureResourceStore } from '@agent-device/capture-kit/durable-capture';
-import { writeDaemonShutdownReport } from '../daemon-shutdown-report.ts';
+import { writeDaemonShutdownReport } from '../../daemon-shutdown-report.ts';
 import { SessionScriptWriter, type SessionScriptWriteResult } from '../session-script-writer.ts';
 import { SessionStore } from '../session-store.ts';
 import {

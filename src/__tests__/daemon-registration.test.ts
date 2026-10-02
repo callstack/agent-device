@@ -7,9 +7,9 @@ import {
   readRegisteredDaemonIdentity,
   readRegisteredDaemonOwnership,
 } from '../daemon-registration.ts';
-import { writeInfo } from '../server/server-lifecycle.ts';
-import { publishDaemonRegistration } from '../../__tests__/test-utils/device-claim-store.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { writeInfo } from '../daemon/server/server-lifecycle.ts';
+import { publishDaemonRegistration } from './test-utils/device-claim-store.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 const roots: string[] = [];
 

@@ -6,8 +6,8 @@ import {
   readDaemonShutdownReport,
   writeDaemonShutdownReport,
 } from '../daemon-shutdown-report.ts';
-import { LeaseRegistry } from '../lease-registry.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { LeaseRegistry } from '../daemon/lease-registry.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 const claim = {
   deviceKey: 'local:android:none:emulator-5554',

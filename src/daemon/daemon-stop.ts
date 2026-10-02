@@ -10,8 +10,8 @@ import { isProcessAlive } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 
 import type { DaemonPaths } from '../daemon-resolution.ts';
-import { readRegisteredDaemonIdentity } from './daemon-registration.ts';
-import type { DeviceClaimRecord, ProviderReleaseRecord } from './daemon-shutdown-report.ts';
+import { readRegisteredDaemonIdentity } from '../daemon-registration.ts';
+import type { DeviceClaimRecord, ProviderReleaseRecord } from '../daemon-shutdown-report.ts';
 
 const DAEMON_STOP_GRACE_TIMEOUT_MS = 10_000;
 const DAEMON_STOP_KILL_TIMEOUT_MS = 2_000;

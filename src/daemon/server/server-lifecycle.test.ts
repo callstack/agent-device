@@ -5,7 +5,7 @@ import { test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import type { OwnerIdentity } from '@agent-device/host-kit/process';
 import { removeInfoOwnedBy, writeInfo } from './server-lifecycle.ts';
-import { readRegisteredDaemonOwnership } from '../daemon-registration.ts';
+import { readRegisteredDaemonOwnership } from '../../daemon-registration.ts';
 
 const OWN_PID = process.pid;
 const SUCCESSOR_PID = 999_999_999;

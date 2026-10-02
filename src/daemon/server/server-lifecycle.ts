@@ -3,7 +3,7 @@ import type { OwnerIdentity } from '@agent-device/host-kit/process';
 import { publishFileSync } from '@agent-device/host-kit/file';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import { isAgentDeviceDaemonProcess } from '../../daemon-process.ts';
-import { readRegisteredDaemonOwnership } from '../daemon-registration.ts';
+import { readRegisteredDaemonOwnership } from '../../daemon-registration.ts';
 
 export { readVersion } from '@agent-device/host-kit/version';
 export {

@@ -27,7 +27,10 @@ import {
 } from '../../provider-device-runtimes.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
-import { clearDaemonShutdownReport, writeDaemonShutdownReport } from '../daemon-shutdown-report.ts';
+import {
+  clearDaemonShutdownReport,
+  writeDaemonShutdownReport,
+} from '../../daemon-shutdown-report.ts';
 import { createRequestHandler } from '../request-router.ts';
 import { getLeaseRegistryExecutionLocks } from '../request-execution-scope.ts';
 import { stopSessionAppLog, teardownSessionResources } from '../session-teardown.ts';
