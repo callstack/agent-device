@@ -62,20 +62,31 @@ test('a Simulator that never answers openurl fails the open at its own bound', a
   assert.ok(failure instanceof AppError);
   assert.equal(failure.code, 'COMMAND_FAILED');
   assert.deepEqual(failure.details, {
-    reason: IOS_SIMULATOR_OPENURL_TIMEOUT_REASON,
     timeoutMs: IOS_SIMULATOR_OPENURL_TIMEOUT_MS,
+    reason: IOS_SIMULATOR_OPENURL_TIMEOUT_REASON,
     deviceId: IOS_TEST_SIMULATOR.id,
     hint: failure.details?.hint,
   });
 });
 
-test('a request canceled while openurl runs stays a canceled request', async () => {
+test('a request canceled while openurl runs stays a canceled request, not a timeout', async () => {
+  const open = new AbortController();
+  mockRunCmd.mockImplementation(
+    (_cmd, _args, options) =>
+      new Promise((_resolve, reject) => {
+        options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+          once: true,
+        });
+      }),
+  );
+
+  const pending = openIosApp(IOS_TEST_SIMULATOR, 'myapp://automation', {
+    runnerOptions: { signal: open.signal },
+  }).catch((error: unknown) => error);
+
+  await vi.waitFor(() => assert.equal(mockRunCmd.mock.calls.length, 1));
   const canceled = new AppError('COMMAND_FAILED', 'request canceled');
-  mockRunCmd.mockRejectedValueOnce(canceled);
+  open.abort(canceled);
 
-  const failure = await openIosApp(IOS_TEST_SIMULATOR, 'myapp://automation', {})
-    .then(() => undefined)
-    .catch((error: unknown) => error);
-
-  assert.equal(failure, canceled);
+  assert.equal(await pending, canceled);
 });
