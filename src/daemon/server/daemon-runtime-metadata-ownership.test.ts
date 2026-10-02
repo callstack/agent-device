@@ -250,7 +250,7 @@ test('both exits tear the watch down before they touch daemon.json', () => {
   const finishes = [...source.matchAll(/await finishDaemonRegistration\(/g)].map((m) => m.index);
   expect(stops).toHaveLength(2);
   expect(finishes).toHaveLength(2);
-  expect(finishes[0]).toBeGreaterThan(stops[0]);
-  expect(finishes[0]).toBeLessThan(stops[1]);
-  expect(finishes[1]).toBeGreaterThan(stops[1]);
+  expect(finishes[0]).toBeGreaterThan(stops[0]!);
+  expect(finishes[0]).toBeLessThan(stops[1]!);
+  expect(finishes[1]).toBeGreaterThan(stops[1]!);
 });
