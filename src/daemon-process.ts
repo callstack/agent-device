@@ -57,7 +57,7 @@ export type DaemonProcessIdentity = Readonly<{
 }>;
 
 export type DaemonExitWait = {
-  /** The pid was released, or the host handed it to a different process. */
+  /** The process terminated, or the host handed its pid to a different process. */
   exited: boolean;
   elapsedMs: number;
 };
@@ -65,8 +65,8 @@ export type DaemonExitWait = {
 const DAEMON_EXIT_POLL_MS = 100;
 
 /**
- * Resolves once `identity` has left the host — released or recycled. A pid still
- * being torn down is neither, so the wait continues until the number is free.
+ * Confirms termination from a released pid, a verified zombie, or a different
+ * readable process lifetime. An unreadable process observation is not proof.
  */
 export async function waitForDaemonExit(
   identity: DaemonProcessIdentity,
@@ -78,7 +78,10 @@ export async function waitForDaemonExit(
   const hasExited = (): boolean => {
     if (!isProcessAlive(identity.pid)) return true;
     const observed = readHostProcessIdentityObservations([identity.pid]).get(identity.pid);
-    return Boolean(observed?.startTime && observed.startTime !== identity.startTime);
+    return Boolean(
+      observed?.state.startsWith('Z') ||
+      (observed?.startTime && observed.startTime !== identity.startTime),
+    );
   };
   let exited = hasExited();
   while (!exited && Date.now() < deadline) {

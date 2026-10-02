@@ -75,14 +75,22 @@ test('waitForDaemonExit reports a daemon that keeps its identity as not exited',
   expect(wait.exited).toBe(false);
 });
 
-test('waitForDaemonExit keeps waiting through a zombie until the pid is reaped', async () => {
+test('a verified zombie proves exit before its pid is reaped', async () => {
   state.states.set(PID, 'Z+');
   state.commands.set(PID, '<defunct>');
   const stillTaken = await waitForDaemonExit(
     { pid: PID, startTime: OURS },
     { timeoutMs: 40, pollMs: POLL_MS },
   );
-  expect(stillTaken.exited).toBe(false);
+  expect(stillTaken.exited).toBe(true);
+  expect(stillTaken.elapsedMs).toBeLessThan(40);
+  expect(
+    await stopDaemonProcess(
+      { pid: PID, startTime: OURS },
+      { mode: 'force', termTimeoutMs: 0, killTimeoutMs: 0 },
+    ),
+  ).toMatchObject({ status: 'exited', mode: 'already-exited' });
+  expect(signals).toEqual([]);
 
   state.alive.set(PID, false);
   const reaped = await waitForDaemonExit(

@@ -59,6 +59,7 @@ test('stops a branch-named daemon before replacement can strand its session', as
     { mode: 'graceful', ...TAKEOVER_TIMEOUTS },
   );
   assert.equal(result.status, 'exited');
+  await spawnedChildren.at(-1)!.exited;
   assert.equal(isProcessAlive(pid), false);
 });
 
