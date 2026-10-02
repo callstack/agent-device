@@ -17,8 +17,7 @@ const scope: PlatformRequestScope = {
 const RUNNING_EMULATOR_PROBES: ReadonlyArray<readonly [string, string]> = [
   ['ro.boot.qemu.avd_name', 'Pixel_9_Pro_XL\n'],
   ['sys.boot_completed', '1\n'],
-  ['ro.product.model', 'sdk_gphone16k_arm64\n'],
-  ['ro.build.version.release', '17\n'],
+  ['ro.product.model', 'sdk_gphone16k_arm64\n17\n'],
   ['ro.build.characteristics', 'phone\n'],
   ['has-feature', 'false\n'],
   ['pm\0list\0features', ''],
@@ -70,30 +69,39 @@ test.each([
   },
 );
 
-test('Android inventory leaves model and OS version unset when the getprop probe fails', async () => {
-  const host = createHost(async (request) => {
-    const key = request.args.join('\0');
-    if (key === 'devices\0-l')
-      return result('List of devices attached\nR5CT1 device model:SM_S921B\n');
-    if (key.includes('ro.product.model') || key.includes('ro.build.version.release')) {
-      return result('', 'error: closed', 1);
-    }
-    if (key.includes('sys.boot_completed')) return result('1\n');
-    if (key.includes('ro.build.characteristics')) return result('phone\n');
-    if (key.includes('has-feature')) return result('false\n');
-    if (key.includes('pm\0list\0features')) return result('');
-    throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
-  });
+test.each([
+  ['exits non-zero', async () => result('', 'error: closed', 1)],
+  [
+    'times out',
+    async () => {
+      throw new AppError('COMMAND_FAILED', 'adb timed out after 10000ms', { timeoutMs: 10_000 });
+    },
+  ],
+] as const)(
+  'Android inventory leaves model and OS version unset when the description probe %s',
+  async (_case, describeProbe) => {
+    const host = createHost(async (request) => {
+      const key = request.args.join('\0');
+      if (key === 'devices\0-l') {
+        return result('List of devices attached\nR5CT1 device model:SM_S921B\n');
+      }
+      if (key.includes('ro.product.model')) return await describeProbe();
+      const probe = RUNNING_EMULATOR_PROBES.find(([fragment]) => key.includes(fragment));
+      if (probe) return result(probe[1]);
+      throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
+    });
 
-  const [device] = await createAndroidInventory(host).discover(
-    { androidAvdSelection: 'running-only' },
-    scope,
-  );
+    const [device] = await createAndroidInventory(host).discover(
+      { androidAvdSelection: 'running-only' },
+      scope,
+    );
 
-  assert.equal(device?.name, 'SM S921B');
-  assert.equal(device?.model, undefined);
-  assert.equal(device?.osVersion, undefined);
-});
+    assert.equal(device?.name, 'SM S921B');
+    assert.equal(device?.booted, true);
+    assert.equal(device?.model, undefined);
+    assert.equal(device?.osVersion, undefined);
+  },
+);
 
 test('Android inventory fails closed when adb is unavailable', async () => {
   const host = createHost(async () => result(''), { adb: undefined });
