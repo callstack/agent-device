@@ -204,7 +204,6 @@ async function acquireSwiftCacheLock(
       },
       timeoutMs,
       pollMs: LOCK_RETRY_DELAY_MS,
-      ownerGraceMs: timeoutMs,
       description: `Swift cache lock: ${lockDir} (${timeoutMs}ms)`,
     });
   } catch (error) {

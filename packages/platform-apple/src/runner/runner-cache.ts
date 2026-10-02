@@ -38,7 +38,6 @@ export {
 
 const RUNNER_XCTESTRUN_CACHE_LOCK_TIMEOUT_MS = 10 * 60_000;
 const RUNNER_XCTESTRUN_CACHE_LOCK_POLL_MS = 100;
-const RUNNER_XCTESTRUN_CACHE_LOCK_OWNER_GRACE_MS = 5_000;
 
 const badRunnerArtifactsForRun = new Set<string>();
 
@@ -131,7 +130,6 @@ export async function acquireRunnerXctestrunCacheLock(
     },
     timeoutMs: RUNNER_XCTESTRUN_CACHE_LOCK_TIMEOUT_MS,
     pollMs: RUNNER_XCTESTRUN_CACHE_LOCK_POLL_MS,
-    ownerGraceMs: RUNNER_XCTESTRUN_CACHE_LOCK_OWNER_GRACE_MS,
     description: 'iOS runner cache lock',
   });
 }

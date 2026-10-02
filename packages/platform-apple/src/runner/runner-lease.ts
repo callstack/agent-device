@@ -23,7 +23,6 @@ import { runnerSimulatorSetPath } from './runner-device-set.ts';
 const RUNNER_LEASE_SCHEMA_VERSION = 1;
 const RUNNER_LEASE_LOCK_TIMEOUT_MS = 30_000;
 const RUNNER_LEASE_LOCK_POLL_MS = 100;
-const RUNNER_LEASE_OWNER_GRACE_MS = 5_000;
 
 const RUNNER_OWNER_PID = process.pid;
 
@@ -157,7 +156,6 @@ export async function withRunnerLeaseLock<T>(deviceId: string, task: () => Promi
         },
         timeoutMs: RUNNER_LEASE_LOCK_TIMEOUT_MS,
         pollMs: RUNNER_LEASE_LOCK_POLL_MS,
-        ownerGraceMs: RUNNER_LEASE_OWNER_GRACE_MS,
         description: `iOS runner lease for ${deviceId}`,
       }),
     task,

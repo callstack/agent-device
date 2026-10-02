@@ -13,6 +13,8 @@ vi.mock('./host-process.ts', async (importOriginal) => {
 
 import {
   acquireProcessLock,
+  tryAcquireProcessLock,
+  inspectProcessLock,
   withProcessLock,
   type ProcessLockOwner,
   type ProcessLockRelease,
@@ -228,41 +230,45 @@ test('acquireProcessLock does not evict an owner record it cannot read', async (
   assert.equal(fs.existsSync(lockDirPath), true);
 });
 
-test('acquireProcessLock reclaims a lock whose owner record was never written', async () => {
+test('acquireProcessLock retains an owner whose record was never written', async () => {
   const lockDirPath = path.join(tmpDir, 'unpublished.lock');
   fs.mkdirSync(lockDirPath);
   stampDirectoryAbandoned(lockDirPath);
 
-  const release = await acquireProcessLock({
-    lockDirPath,
-    owner: currentProcessOwner(),
-    timeoutMs: 500,
-    pollMs: 1,
-  });
-  await release();
-  assert.equal(fs.existsSync(lockDirPath), false);
+  await assert.rejects(() =>
+    acquireProcessLock({
+      lockDirPath,
+      owner: currentProcessOwner(),
+      timeoutMs: 10,
+      pollMs: 1,
+    }),
+  );
+  assert.equal(fs.existsSync(lockDirPath), true);
 });
 
-// The grace is a second in the future rather than zero: an abandoned mutex is what a zero grace
-// would say about the mutex the winner holds, and this test would then be measuring a reclaim
-// that skipped it. What the mutex itself is worth is the two mutex tests further down.
 test('one abandoned lock offered to two contenders is held by exactly one of them', async () => {
   const lockDirPath = path.join(tmpDir, 'contended.lock');
   fs.mkdirSync(lockDirPath);
+  fs.writeFileSync(
+    path.join(lockDirPath, 'owner.json'),
+    JSON.stringify({
+      pid: 999_999_999,
+      startTime: null,
+      acquiredAtMs: Date.now(),
+    }),
+  );
   stampDirectoryAbandoned(lockDirPath);
 
   const attempts = await Promise.allSettled([
     acquireProcessLock({
       lockDirPath,
       owner: currentProcessOwner(),
-      ownerGraceMs: 1_000,
       timeoutMs: 250,
       pollMs: 2,
     }),
     acquireProcessLock({
       lockDirPath,
       owner: currentProcessOwner(),
-      ownerGraceMs: 1_000,
       timeoutMs: 250,
       pollMs: 2,
     }),
@@ -417,20 +423,19 @@ test('a claim issued by another loading of this module is not read as spent', as
   assert.equal(fs.existsSync(path.join(lockDirPath, 'owner.json')), true);
 });
 
-test('acquireProcessLock reclaims a stray path in place of the lock directory', async () => {
-  const lockDirPath = path.join(tmpDir, 'stray.lock');
-  fs.writeFileSync(lockDirPath, 'not a lock');
-  const stale = new Date(Date.now() - 60_000);
-  fs.utimesSync(lockDirPath, stale, stale);
-
-  const release = await acquireProcessLock({
-    lockDirPath,
-    owner: currentProcessOwner(),
-    timeoutMs: 500,
-    pollMs: 1,
-  });
-  await release();
-  assert.equal(fs.existsSync(lockDirPath), false);
+test('acquireProcessLock retains a legacy file at the lock path', async () => {
+  const lockDirPath = path.join(tmpDir, 'legacy.lock');
+  fs.writeFileSync(lockDirPath, '{"pid":999999999}');
+  stampDirectoryAbandoned(lockDirPath);
+  await assert.rejects(() =>
+    acquireProcessLock({
+      lockDirPath,
+      owner: currentProcessOwner(),
+      timeoutMs: 10,
+      pollMs: 1,
+    }),
+  );
+  assert.equal(fs.readFileSync(lockDirPath, 'utf8'), '{"pid":999999999}');
 });
 
 test('a contender that claims the path during a reclaim keeps its lock', async () => {
@@ -619,16 +624,13 @@ test('a reclaim mutex another contender holds leaves the abandoned lock standing
   stampDirectoryAbandoned(lockDirPath);
   fs.mkdirSync(path.join(tmpDir, 'judged-by-another.reclaim.lock'));
 
-  // Nobody may judge this lock twice, and a contender that cannot say so keeps polling
-  // rather than clearing what it has not finished reading. The grace is the default five seconds,
-  // so the mutex this test placed is held rather than abandoned.
   let lockAttempts = 0;
   const realMkdir = fs.mkdirSync;
   const mkdirSpy = vi.spyOn(fs, 'mkdirSync').mockImplementation(((
     target: fs.PathLike,
     options?: fs.MakeDirectoryOptions & { recursive: true },
   ) => {
-    if (String(target) === lockDirPath) lockAttempts += 1;
+    if (String(target) === path.join(tmpDir, 'judged-by-another.reclaim.lock')) lockAttempts += 1;
     return realMkdir(target as string, options as fs.MakeDirectoryOptions);
   }) as typeof fs.mkdirSync);
 
@@ -654,7 +656,7 @@ test('a reclaim mutex another contender holds leaves the abandoned lock standing
   assert.equal(fs.existsSync(ownerFilePath), true);
 });
 
-test('a reclaim mutex left behind by a dead process is cleared by age', async () => {
+test('age alone never authorizes taking a publication or reclaim mutex', async () => {
   const lockDirPath = path.join(tmpDir, 'dead-janitor.lock');
   const mutexPath = path.join(tmpDir, 'dead-janitor.reclaim.lock');
   fs.mkdirSync(lockDirPath);
@@ -666,16 +668,15 @@ test('a reclaim mutex left behind by a dead process is cleared by age', async ()
   stampDirectoryAbandoned(lockDirPath);
   stampDirectoryAbandoned(mutexPath);
 
-  const release = await acquireProcessLock({
-    lockDirPath,
-    owner: currentProcessOwner(),
-    timeoutMs: 500,
-    pollMs: 1,
-  });
-
-  assert.equal(fs.existsSync(path.join(lockDirPath, 'owner.json')), true);
-  assert.equal(fs.existsSync(mutexPath), false);
-  await release();
+  await assert.rejects(() =>
+    acquireProcessLock({
+      lockDirPath,
+      owner: currentProcessOwner(),
+      timeoutMs: 10,
+      pollMs: 1,
+    }),
+  );
+  assert.equal(fs.existsSync(mutexPath), true);
 });
 
 test('a reclaim that cannot clear the lock directory leaves the record it judged', async () => {
@@ -688,13 +689,13 @@ test('a reclaim that cannot clear the lock directory leaves the record it judged
   );
   stampDirectoryAbandoned(lockDirPath);
 
-  const realRemove = fs.rmSync;
-  const removeSpy = vi.spyOn(fs, 'rmSync').mockImplementation(((target: fs.PathLike) => {
+  const realRemove = fs.rmdirSync;
+  const removeSpy = vi.spyOn(fs, 'rmdirSync').mockImplementation(((target: fs.PathLike) => {
     if (String(target) !== lockDirPath) {
       return realRemove(target as string);
     }
     throw Object.assign(new Error('directory is busy'), { code: 'EBUSY' });
-  }) as typeof fs.rmSync);
+  }) as typeof fs.rmdirSync);
 
   try {
     await assert.rejects(
@@ -726,8 +727,6 @@ test('an abandoned lock with no record and something else inside is left alone',
   // Stamping the directory's own clocks back makes the stranger look older than the grace, too.
   fs.utimesSync(strangerPath, new Date(Date.now() - 60_000), new Date(Date.now() - 60_000));
 
-  // No record means no claim to attribute the directory to, and the age of the path is
-  // evidence about the path alone. An empty directory is removed; this one is not.
   await assert.rejects(
     () =>
       acquireProcessLock({
@@ -819,3 +818,117 @@ function currentProcessOwner(): ProcessLockOwner {
     acquiredAtMs: Date.now(),
   };
 }
+
+test('one nonblocking attempt acquires, refuses a live claim, and invalidates its released handle', async () => {
+  const lockDirPath = path.join(tmpDir, 'one-attempt.lock');
+  const first = tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
+  assert.equal(first.status, 'acquired');
+  if (first.status !== 'acquired') throw new Error('first claim was refused');
+  first.acquisition.assertHeld();
+  assert.equal(tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() }).status, 'busy');
+  await first.acquisition.release();
+  assert.throws(() => first.acquisition.assertHeld(), /no longer held/);
+  assert.deepEqual(inspectProcessLock(lockDirPath), { state: 'absent' });
+});
+
+test('a paused publisher retains exclusion after the old publication grace', async () => {
+  const lockDirPath = path.join(tmpDir, 'paused-publication.lock');
+  let contender: Promise<ProcessLockRelease> | undefined;
+  let entered = false;
+  const realMkdir = fs.mkdirSync;
+  const mkdirSpy = vi.spyOn(fs, 'mkdirSync').mockImplementation(((
+    target: fs.PathLike,
+    options?: fs.MakeDirectoryOptions,
+  ) => {
+    const value = realMkdir(target as string, options);
+    if (String(target) === lockDirPath && !entered) {
+      entered = true;
+      stampDirectoryAbandoned(lockDirPath);
+      contender = acquireProcessLock({
+        lockDirPath,
+        owner: currentProcessOwner(),
+        timeoutMs: 10,
+        pollMs: 1,
+      });
+    }
+    return value;
+  }) as typeof fs.mkdirSync);
+  let owner: ProcessLockRelease;
+  try {
+    owner = await acquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
+    await assert.rejects(contender!);
+  } finally {
+    mkdirSpy.mockRestore();
+  }
+  assert.equal(inspectProcessLock(lockDirPath).state, 'held');
+  await owner!();
+});
+
+test('release after guarded private-directory removal never recreates it', async () => {
+  const privateDir = path.join(tmpDir, 'private-replay');
+  const attempt = tryAcquireProcessLock({
+    lockDirPath: path.join(privateDir, 'daemon.lock'),
+    owner: currentProcessOwner(),
+  });
+  if (attempt.status !== 'acquired') throw new Error('private claim was refused');
+  attempt.acquisition.assertHeld();
+  fs.rmSync(privateDir, { recursive: true });
+  await attempt.acquisition.release();
+  assert.equal(fs.existsSync(privateDir), false);
+});
+
+test('an acquisition cannot authorize a successor record', async () => {
+  const lockDirPath = path.join(tmpDir, 'assertion.lock');
+  const attempt = tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
+  if (attempt.status !== 'acquired') throw new Error('first claim was refused');
+  const ownerPath = path.join(lockDirPath, 'owner.json');
+  const successor = { ...currentProcessOwner(), claimToken: 'successor' };
+  fs.writeFileSync(ownerPath, JSON.stringify(successor));
+  assert.throws(() => attempt.acquisition.assertHeld(), /no longer held/);
+  await attempt.acquisition.release();
+  assert.deepEqual(JSON.parse(fs.readFileSync(ownerPath, 'utf8')), successor);
+});
+
+test('failed owner publication rolls back only the attempted empty directory', async () => {
+  const lockDirPath = path.join(tmpDir, 'failed-publication.lock');
+  const realRename = fs.renameSync;
+  const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation((source, destination) => {
+    if (String(destination) === path.join(lockDirPath, 'owner.json')) {
+      throw Object.assign(new Error('publication failed'), { code: 'EIO' });
+    }
+    return realRename(source, destination);
+  });
+  try {
+    assert.throws(
+      () => tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() }),
+      /publication failed/,
+    );
+  } finally {
+    renameSpy.mockRestore();
+  }
+  const retry = tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
+  assert.equal(retry.status, 'acquired');
+  if (retry.status === 'acquired') await retry.acquisition.release();
+});
+
+test('incomplete release preserves owner evidence and can be retried', async () => {
+  const lockDirPath = path.join(tmpDir, 'partial-release.lock');
+  const attempt = tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
+  if (attempt.status !== 'acquired') throw new Error('first claim was refused');
+  const realRmdir = fs.rmdirSync;
+  const rmdirSpy = vi.spyOn(fs, 'rmdirSync').mockImplementation((target, options) => {
+    if (String(target) === lockDirPath) throw Object.assign(new Error('busy'), { code: 'EBUSY' });
+    return realRmdir(target, options);
+  });
+  try {
+    await assert.rejects(attempt.acquisition.release(), /Cannot verify ownership/);
+    assert.equal(fs.existsSync(path.join(lockDirPath, 'owner.json')), true);
+  } finally {
+    rmdirSpy.mockRestore();
+  }
+  await attempt.acquisition.release();
+  assert.equal(fs.existsSync(lockDirPath), false);
+  const retry = tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
+  assert.equal(retry.status, 'acquired');
+  if (retry.status === 'acquired') await retry.acquisition.release();
+});
