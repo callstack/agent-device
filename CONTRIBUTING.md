@@ -38,9 +38,9 @@ pnpm test-app:typecheck
 that build, use `pnpm rebuild:cli`; it builds and then stops the worktree-scoped daemon.
 
 `pnpm clean:daemon` retains state when it cannot confirm the recorded daemon exited. Restore
-process inspection or stop the verified owner before retrying. Its `--prune-dev` option retires
-confirmed abandoned registrations older than 14 days; it keeps session artifacts and state
-directories for inspection.
+process inspection or stop the verified owner before retrying. Its `--prune-dev` option considers
+dev state directories whose newest observed modification is at least 14 days old. It retires
+confirmed abandoned registrations and keeps session artifacts and state directories for inspection.
 
 Build only the Apple runner target you changed:
 
