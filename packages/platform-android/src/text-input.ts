@@ -31,7 +31,6 @@ import {
   selectAndroidImeHelperArtifact,
   sendAndroidImeHelperText,
 } from './ime-helper.ts';
-import { rebindAndroidTestIme } from './ime-rebind.ts';
 import { getAndroidTestImeOwnership } from './ime-state.ts';
 import { discloseAdbInputDispatch } from './adb-failure.ts';
 import { focusAndroid } from './input-actions.ts';
@@ -230,6 +229,7 @@ async function admitAndroidTextChannel(
  * rebind went unconfirmed may hold no session, so no text may reach it.
  */
 async function confirmAndroidTestImeRebound(device: DeviceInfo): Promise<void> {
+  const { rebindAndroidTestIme } = await import('./ime-rebind.ts');
   const outcome = await rebindAndroidTestIme(device);
   if (outcome.kind === 'confirmed') return;
   throw new AppError(
