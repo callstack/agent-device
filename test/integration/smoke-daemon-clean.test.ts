@@ -80,7 +80,7 @@ test('clean daemon script stops a live daemon before removing metadata', async (
     // leave only classified artifacts in its state dir.
     await assertNoDaemonLeaks({ stateDir, daemonPids: [info.pid], phase: 'after-shutdown' });
   } finally {
-    await cleanupDaemonTestState(stateDir, info);
+    await cleanupDaemonTestState(stateDir, info ?? null);
   }
 });
 
@@ -107,7 +107,7 @@ test('forced retirement waits for a real daemon and reclaims its abandoned regis
     assert.equal(fs.existsSync(paths.infoPath), false);
     assert.equal(fs.existsSync(paths.lockPath), false);
   } finally {
-    await cleanupDaemonTestState(stateDir, info);
+    await cleanupDaemonTestState(stateDir, info ?? null);
   }
 });
 
