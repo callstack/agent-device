@@ -1,5 +1,6 @@
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
+import type { AppError } from '@agent-device/kernel/errors';
 
 const PACKAGE = 'com.callstack.agentdevice.imehelper';
 
@@ -386,8 +387,11 @@ test('fillAndroid stops on an unconfirmed rebind and leaves the helper for close
     { exec: adb, snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
     { serial: ANDROID_EMULATOR.id },
     async () => {
-      await assert.rejects(fillAndroid(ANDROID_EMULATOR, 10, 10, 'Jane'), {
-        code: 'COMMAND_FAILED',
+      await assert.rejects(fillAndroid(ANDROID_EMULATOR, 10, 10, 'Jane'), (error: AppError) => {
+        assert.equal(error.code, 'COMMAND_FAILED');
+        assert.equal(error.details?.reason, 'android_test_ime_rebind_unconfirmed');
+        assert.equal(error.details?.rebindCause, 'read-failed');
+        return true;
       });
     },
   );

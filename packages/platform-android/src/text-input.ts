@@ -20,17 +20,18 @@ import { getAndroidKeyboardState, type AndroidKeyboardState } from './device-inp
 import {
   buildAndroidFillUnconfirmedVerification,
   completeAndroidFillVerification,
+  isAndroidFillCommitDropped,
   readAndroidFillTargetBeforeMutation,
   verifyAndroidFilledText,
   type AndroidFillVerification,
 } from './fill-verification.ts';
-import { rebindAndroidTestIme } from './ime-activation.ts';
 import {
   clearAndroidImeHelperText,
   isAndroidImeHelperPackage,
   selectAndroidImeHelperArtifact,
   sendAndroidImeHelperText,
 } from './ime-helper.ts';
+import { rebindAndroidTestIme } from './ime-rebind.ts';
 import { getAndroidTestImeOwnership } from './ime-state.ts';
 import { discloseAdbInputDispatch } from './adb-failure.ts';
 import { focusAndroid } from './input-actions.ts';
@@ -224,14 +225,19 @@ async function admitAndroidTextChannel(
   return { backend: 'adb-shell' };
 }
 
-/** A helper whose last rebind went unconfirmed holds no input session until a rebind confirms it. */
+/**
+ * Rebinds the test IME so the focused field gets a fresh input session, or throws: a helper whose
+ * rebind went unconfirmed may hold no session, so no text may reach it.
+ */
 async function confirmAndroidTestImeRebound(device: DeviceInfo): Promise<void> {
-  if (await rebindAndroidTestIme(device)) return;
+  const outcome = await rebindAndroidTestIme(device);
+  if (outcome.kind === 'confirmed') return;
   throw new AppError(
     'COMMAND_FAILED',
     `Could not confirm the Android test IME rebind on ${device.name ?? device.id}.`,
     {
       reason: 'android_test_ime_rebind_unconfirmed',
+      rebindCause: outcome.kind === 'not-owned' ? 'not-owned' : outcome.cause,
       deviceId: device.id,
       hint: 'Close and reopen the session to restore the keyboard and reactivate the test IME.',
     },
@@ -266,64 +272,37 @@ async function fillAndroidImeHelper(
   helper: AndroidHelperSessionOptions,
 ): Promise<AndroidFillVerification> {
   const adb = resolveAndroidAdbExecutor(device);
-  let lastVerification: AndroidFillVerification | null = null;
   let dispatchedSteps = 0;
-  // The caller focused the target while resolving the channel; the retry re-focuses because it
-  // covers the rare not-yet-bound InputConnection right after focus. A commit none of which reached
-  // the field may also have gone to a stale input session, which only a rebind of the IME replaces.
-  try {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      if (
-        lastVerification &&
-        !(await prepareAndroidImeHelperRetry(device, x, y, lastVerification, beforeTarget))
-      ) {
-        break;
-      }
-      if (attempt > 0) dispatchedSteps += 1;
-      await clearAndroidImeHelperText(adb, packageName);
+  const attemptFill = async (): Promise<AndroidFillVerification> => {
+    await clearAndroidImeHelperText(adb, packageName);
+    dispatchedSteps += 1;
+    if (text) {
+      await sendAndroidImeHelperText(adb, packageName, text);
       dispatchedSteps += 1;
-      if (text) {
-        await sendAndroidImeHelperText(adb, packageName, text);
-        dispatchedSteps += 1;
-      }
-      const verification = await verifyAndroidFilledText(device, x, y, text, helper);
-      lastVerification = verification;
-      if (verification.ok) break;
-      if (buildAndroidFillUnconfirmedVerification(text, beforeTarget, verification)) break;
     }
+    return await verifyAndroidFilledText(device, x, y, text, helper);
+  };
+  const attemptFillWithRetry = async (): Promise<AndroidFillVerification> => {
+    const first = await attemptFill();
+    if (first.ok || buildAndroidFillUnconfirmedVerification(text, beforeTarget, first)) {
+      return first;
+    }
+    // The caller focused the target while resolving the channel; the retry re-focuses because it
+    // covers the rare not-yet-bound InputConnection right after focus. A commit none of which
+    // reached the field may also have gone to a stale input session, which only a rebind replaces.
+    if (isAndroidFillCommitDropped(first, beforeTarget)) await confirmAndroidTestImeRebound(device);
+    await focusAndroid(device, x, y);
+    dispatchedSteps += 1;
+    return await attemptFill();
+  };
+  let verification: AndroidFillVerification;
+  try {
+    verification = await attemptFillWithRetry();
   } catch (error) {
     throw discloseDispatchAfterSteps(error, dispatchedSteps);
   }
   emitAndroidTextDiagnostic('fill', 'test-ime', text);
-  return lastVerification as AndroidFillVerification;
-}
-
-/**
- * Readies the field for the helper's retry: rebinds the IME when none of the last commit reached the
- * field, then re-focuses it. Answers `false` when the rebind could not confirm the helper selected,
- * since a retry would broadcast to an IME that may hold no session.
- */
-async function prepareAndroidImeHelperRetry(
-  device: DeviceInfo,
-  x: number,
-  y: number,
-  lastVerification: AndroidFillVerification,
-  beforeTarget: AndroidFillVerification['targetInput'],
-): Promise<boolean> {
-  if (isAndroidImeCommitDropped(lastVerification, beforeTarget)) {
-    if (!(await rebindAndroidTestIme(device))) return false;
-  }
-  await focusAndroid(device, x, y);
-  return true;
-}
-
-/** Whether none of a helper commit reached the field: it shows its hint, or the value it held before. */
-function isAndroidImeCommitDropped(
-  verification: AndroidFillVerification,
-  beforeTarget: AndroidFillVerification['targetInput'],
-): boolean {
-  if (verification.actualInput?.hintShowing === true) return true;
-  return beforeTarget?.text != null && verification.actual === beforeTarget.text;
+  return verification;
 }
 
 async function typeAndroidShell(

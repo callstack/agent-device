@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { asAppError, isRequestCanceledError, normalizeError } from '@agent-device/kernel/errors';
+import { asAppError, normalizeError } from '@agent-device/kernel/errors';
 import { waitForStartupRecoveryFence } from '@agent-device/contracts/startup-recovery-fence';
 import { emitAndroidAdbDiagnostic, requireAndroidAdbHost } from './adb-host.ts';
 import { resolveAndroidAdbExecutor, resolveAndroidAdbProvider } from './adb-provider-scope.ts';
@@ -7,26 +7,19 @@ import { runAdbShell } from './adb-executor.ts';
 import type { AndroidAdbExecutor } from './adb-transport.ts';
 import type { AndroidImeHelperArtifact } from './helper-artifacts.ts';
 import {
-  ANDROID_IME_HELPER_SERVICE_COMPONENT,
   ensureAndroidImeHelper,
   getAndroidImeHelperDeviceKey,
-  rebindAndroidImeHelper,
   selectAndroidImeHelperArtifact,
 } from './ime-helper.ts';
 import {
   clearPersistedRebindDisplacement,
   readAndroidDefaultInputMethod,
-  readPersistedPreviousIme,
-  readPersistedRebindDisplacement,
+  readAndroidTestImeDeviceRecord,
   restorePriorPersistedIme,
   writePersistedPreviousIme,
-  writePersistedRebindDisplacement,
+  type AndroidTestImeDeviceRecord,
 } from './ime-settings-record.ts';
-import {
-  activeTestImeDevices,
-  getAndroidTestImeOwnership,
-  withAndroidTestImeRecoveryLock,
-} from './ime-state.ts';
+import { activeTestImeDevices, withAndroidTestImeRecoveryLock } from './ime-state.ts';
 
 // The activation transaction: acquire the helper, durably record the restore target, write the
 // crash-recovery marker, and only then switch the IME — confirming each step by read-back.
@@ -72,29 +65,14 @@ export async function activateAndroidTestIme(
 }
 
 /**
- * The IME activation records for restore. After a rebind displaced the helper, the current IME is
- * Android's fallback, so the record written when the helper was first activated stays the target.
+ * The IME activation records for restore. After a rebind displaced the helper, the current IME may
+ * be Android's fallback, so the record written when the helper was first activated stays the target.
  */
-async function readActivationRestoreTarget(
-  adb: AndroidAdbExecutor,
+function activationRestoreTarget(
+  record: Exclude<AndroidTestImeDeviceRecord, { kind: 'unreadable' }>,
   currentIme: string,
-  priorPersistedIme: string | undefined,
-): Promise<string> {
-  if (priorPersistedIme === undefined) return currentIme;
-  // An unreadable record keeps the recorded target rather than risk recording the fallback.
-  return (await readPersistedRebindDisplacement(adb)) === false ? currentIme : priorPersistedIme;
-}
-
-/**
- * A confirmed activation settles any earlier unconfirmed rebind, which only a prior record can carry.
- * Answers false when the record may still mark the rebind.
- */
-async function settleRebindDisplacement(
-  adb: AndroidAdbExecutor,
-  priorPersistedIme: string | undefined,
-): Promise<boolean> {
-  if (priorPersistedIme === undefined) return true;
-  return await clearPersistedRebindDisplacement(adb);
+): string {
+  return record.kind === 'owned' && record.rebindDisplaced ? record.previousIme : currentIme;
 }
 
 function androidTestImeUnavailableOutcome(error: unknown): AndroidTestImeActivationResult {
@@ -136,8 +114,25 @@ async function activateAndroidTestImeAfterStartupRecovery(
   // reads back. If it cannot be persisted, do NOT switch and report a failed activation to the
   // caller, so a rejected `settings put` can never strand the user on the helper with no restore
   // target.
-  const priorPersistedIme = await readPersistedPreviousIme(adb);
-  const previousIme = await readActivationRestoreTarget(adb, currentIme, priorPersistedIme);
+  const record = await readAndroidTestImeDeviceRecord(adb);
+  // An unreadable record could hide the user's IME behind Android's fallback; do not switch.
+  if (record.kind === 'unreadable') {
+    emitAndroidAdbDiagnostic({
+      level: 'warn',
+      phase: 'android_test_ime_record_unreadable',
+      data: { device: device.id },
+    });
+    return {
+      outcome: 'settled',
+      activated: false,
+      alreadyActive: false,
+      persistFailed: true,
+      helperServiceComponent: manifest.serviceComponent,
+      helperPackageName: manifest.packageName,
+    };
+  }
+  const priorPersistedIme = record.kind === 'owned' ? record.previousIme : undefined;
+  const previousIme = activationRestoreTarget(record, currentIme);
   const persisted = await writePersistedPreviousIme(adb, previousIme);
   if (!persisted) {
     await restorePriorPersistedIme(adb, priorPersistedIme, device.id);
@@ -211,12 +206,14 @@ async function activateAndroidTestImeAfterStartupRecovery(
   }
 
   // The recovery lock spans both durable records and the switch, so this process only claims
-  // active ownership after the helper is confirmed active on the device.
-  const rebindSettled = await settleRebindDisplacement(adb, priorPersistedIme);
-  activeTestImeDevices.set(deviceKey, {
-    stateDir: options.stateDir,
-    rebindUnconfirmed: !rebindSettled,
-  });
+  // active ownership after the helper is confirmed active on the device. Ownership is published
+  // before settling an earlier rebind's record, so a settle that rejects still leaves an owner for
+  // close-time restore.
+  const ownership = { stateDir: options.stateDir, rebindUnconfirmed: record.rebindDisplaced };
+  activeTestImeDevices.set(deviceKey, ownership);
+  if (record.rebindDisplaced) {
+    ownership.rebindUnconfirmed = !(await clearPersistedRebindDisplacement(adb));
+  }
   emitAndroidAdbDiagnostic({
     phase: 'android_test_ime_activated',
     data: { device: device.id, previousIme },
@@ -245,14 +242,13 @@ async function claimAlreadyActiveTestIme(
     stateDir,
     device.id,
   );
-  const previousIme = await readPersistedPreviousIme(adb);
+  const record = await readAndroidTestImeDeviceRecord(adb);
   if (markerPersisted) {
-    // A rebind that a previous activation or process left unconfirmed still needs one.
-    const rebindUnconfirmed =
-      activeTestImeDevices.get(deviceKey)?.rebindUnconfirmed === true ||
-      (await readPersistedRebindDisplacement(adb)) !== false;
+    // A rebind the device record marks, or may mark, still needs a confirmed one before text entry.
+    const rebindUnconfirmed = record.kind === 'unreadable' || record.rebindDisplaced;
     activeTestImeDevices.set(deviceKey, { stateDir, rebindUnconfirmed });
   }
+  const previousIme = record.kind === 'owned' ? record.previousIme : undefined;
   return {
     outcome: 'settled',
     activated: false,
@@ -262,68 +258,4 @@ async function claimAlreadyActiveTestIme(
     helperServiceComponent: manifest.serviceComponent,
     helperPackageName: manifest.packageName,
   };
-}
-
-/**
- * Rebinds the owned test IME so the focused field starts a fresh input session with it, and answers
- * whether the helper reads back as the selected IME. Serialized with activation and restore under
- * the owner's recovery lock. The device record marks the rebind before the helper is disabled and
- * is cleared only on confirmation, so restore — at close or after a crash — returns an unconfirmed
- * device to the user's IME even when Android fell back to another one.
- */
-export async function rebindAndroidTestIme(device: DeviceInfo): Promise<boolean> {
-  const ownership = getAndroidTestImeOwnership(device);
-  if (!ownership) return false;
-  return await withAndroidTestImeRecoveryLock(ownership.stateDir, device.id, async () => {
-    if (getAndroidTestImeOwnership(device) !== ownership) return false;
-    const adb = resolveAndroidAdbExecutor(device);
-    emitAndroidAdbDiagnostic({
-      level: 'warn',
-      phase: 'android_test_ime_rebind',
-      data: { device: device.id },
-    });
-    ownership.rebindUnconfirmed = true;
-    if (!(await writePersistedRebindDisplacement(adb))) {
-      emitAndroidAdbDiagnostic({
-        level: 'warn',
-        phase: 'android_test_ime_rebind_record_failed',
-        data: { device: device.id },
-      });
-      return false;
-    }
-    const activeIme = await rebindAndReadSelectedIme(adb);
-    if (activeIme === ANDROID_IME_HELPER_SERVICE_COMPONENT) {
-      // The helper holds a fresh session either way; an uncleared record keeps the next entry on
-      // the rebind path, which retries the clear.
-      ownership.rebindUnconfirmed = !(await clearPersistedRebindDisplacement(adb));
-      if (ownership.rebindUnconfirmed) {
-        emitAndroidAdbDiagnostic({
-          level: 'warn',
-          phase: 'android_test_ime_rebind_record_clear_failed',
-          data: { device: device.id },
-        });
-      }
-      return true;
-    }
-    emitAndroidAdbDiagnostic({
-      level: 'warn',
-      phase: 'android_test_ime_rebind_failed',
-      data: { device: device.id, activeIme },
-    });
-    return false;
-  });
-}
-
-/**
- * The IME selected after the rebind, or `undefined` when the rebind or its read-back failed. A
- * canceled request rejects instead; the device record stays set for restore either way.
- */
-async function rebindAndReadSelectedIme(adb: AndroidAdbExecutor): Promise<string | undefined> {
-  try {
-    await rebindAndroidImeHelper(adb);
-    return await readAndroidDefaultInputMethod(adb);
-  } catch (error) {
-    if (isRequestCanceledError(error)) throw error;
-    return undefined;
-  }
 }

@@ -151,6 +151,15 @@ export function completeAndroidFillVerification(
   );
 }
 
+/** Whether none of a fill's commit reached the field: it shows its hint, or the value it held before. */
+export function isAndroidFillCommitDropped(
+  verification: AndroidFillVerification,
+  beforeTarget: AndroidFillVerification['targetInput'],
+): boolean {
+  if (verification.actualInput?.hintShowing === true) return true;
+  return beforeTarget?.text != null && verification.actual === beforeTarget.text;
+}
+
 export function buildAndroidFillUnconfirmedVerification(
   requested: string,
   beforeTarget: AndroidFillVerification['targetInput'],
@@ -164,8 +173,8 @@ export function buildAndroidFillUnconfirmedVerification(
     // and the soft-success would also skip the second, bigger delete burst.
     requested.length === 0 ||
     verification.reason === 'ime_capture' ||
-    // A field back on its hint holds none of the requested text; no formatting empties a field.
-    verification.actualInput?.hintShowing === true ||
+    // A field holding none of the requested text was not formatted; nothing formats a field empty.
+    isAndroidFillCommitDropped(verification, beforeTarget) ||
     !beforeTarget ||
     !afterTarget ||
     !actualInput ||
@@ -173,8 +182,7 @@ export function buildAndroidFillUnconfirmedVerification(
     isSensitiveFillDiagnosticNode(afterTarget) ||
     isSensitiveFillDiagnosticNode(actualInput) ||
     !sameAndroidFillTarget(beforeTarget, afterTarget) ||
-    !sameAndroidFillTarget(beforeTarget, actualInput) ||
-    beforeTarget.text === verification.actual
+    !sameAndroidFillTarget(beforeTarget, actualInput)
   ) {
     return null;
   }

@@ -31,13 +31,7 @@ export async function readAndroidDefaultInputMethod(adb: AndroidAdbExecutor): Pr
 export async function readPersistedPreviousIme(
   adb: AndroidAdbExecutor,
 ): Promise<string | undefined> {
-  const result = await runAdbShell(
-    adb,
-    ['settings', 'get', SETTINGS_NAMESPACE, SETTINGS_KEY_PREVIOUS_IME],
-    { allowFailure: true, timeoutMs: 5_000 },
-  );
-  const value = normalizeSettingsValue(result.exitCode === 0 ? result.stdout : '');
-  return value ? value : undefined;
+  return (await readSecureSetting(adb, SETTINGS_KEY_PREVIOUS_IME)) || undefined;
 }
 
 // Returns true only when the write succeeded AND reads back as the requested value — callers must
@@ -62,17 +56,25 @@ export async function clearPersistedPreviousIme(adb: AndroidAdbExecutor): Promis
   });
 }
 
-/** Whether the device record marks an unconfirmed rebind, or `undefined` when it cannot be read. */
-export async function readPersistedRebindDisplacement(
+/**
+ * The restore record on the device. Every reader switches on this one shape, so a record that cannot
+ * be read is `unreadable` everywhere and never passes for a clean device.
+ */
+export type AndroidTestImeDeviceRecord =
+  | Readonly<{ kind: 'unreadable' }>
+  | Readonly<{ kind: 'absent'; rebindDisplaced: boolean }>
+  | Readonly<{ kind: 'owned'; previousIme: string; rebindDisplaced: boolean }>;
+
+export async function readAndroidTestImeDeviceRecord(
   adb: AndroidAdbExecutor,
-): Promise<boolean | undefined> {
-  const result = await runAdbShell(
-    adb,
-    ['settings', 'get', SETTINGS_NAMESPACE, SETTINGS_KEY_REBIND_DISPLACED],
-    { allowFailure: true, timeoutMs: 5_000 },
-  );
-  if (result.exitCode !== 0) return undefined;
-  return normalizeSettingsValue(result.stdout) === '1';
+): Promise<AndroidTestImeDeviceRecord> {
+  const previousIme = await readSecureSetting(adb, SETTINGS_KEY_PREVIOUS_IME);
+  const displaced = await readSecureSetting(adb, SETTINGS_KEY_REBIND_DISPLACED);
+  if (previousIme === undefined || displaced === undefined) return { kind: 'unreadable' };
+  const rebindDisplaced = displaced === '1';
+  return previousIme
+    ? { kind: 'owned', previousIme, rebindDisplaced }
+    : { kind: 'absent', rebindDisplaced };
 }
 
 /** Answers true only when the write succeeded and reads back. */
@@ -83,7 +85,7 @@ export async function writePersistedRebindDisplacement(adb: AndroidAdbExecutor):
     { allowFailure: true, timeoutMs: 5_000 },
   );
   if (result.exitCode !== 0) return false;
-  return (await readPersistedRebindDisplacement(adb)) === true;
+  return (await readSecureSetting(adb, SETTINGS_KEY_REBIND_DISPLACED)) === '1';
 }
 
 /** Answers true only when the record reads back as cleared. */
@@ -96,7 +98,7 @@ export async function clearPersistedRebindDisplacement(adb: AndroidAdbExecutor):
       timeoutMs: 5_000,
     },
   );
-  return (await readPersistedRebindDisplacement(adb)) === false;
+  return (await readSecureSetting(adb, SETTINGS_KEY_REBIND_DISPLACED)) === '';
 }
 
 /** Restores the device record changed by a failed pre-switch transaction; never touches markers. */
@@ -132,6 +134,18 @@ export async function restorePriorPersistedIme(
 async function clearAndConfirmPersistedPreviousIme(adb: AndroidAdbExecutor): Promise<boolean> {
   await clearPersistedPreviousIme(adb);
   return (await readPersistedPreviousIme(adb)) === undefined;
+}
+
+/** The setting's value, `''` when unset, or `undefined` when it cannot be read. */
+async function readSecureSetting(
+  adb: AndroidAdbExecutor,
+  key: string,
+): Promise<string | undefined> {
+  const result = await runAdbShell(adb, ['settings', 'get', SETTINGS_NAMESPACE, key], {
+    allowFailure: true,
+    timeoutMs: 5_000,
+  });
+  return result.exitCode === 0 ? normalizeSettingsValue(result.stdout) : undefined;
 }
 
 function normalizeSettingsValue(raw: string): string {

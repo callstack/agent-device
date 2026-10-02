@@ -57,6 +57,32 @@ test('close-time restore puts the previous IME back and clears record and marker
   expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([]);
 });
 
+test('an unreadable rebind record keeps the restore record and the marker for a retry', async () => {
+  const host = bindAndroidAdbHostStub();
+  await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
+  setAndroidTestImeActiveForTests(DEVICE, true);
+  // An unconfirmed rebind left Android on its fallback IME; the close-time record read times out.
+  const state = stuckDeviceState();
+  state.settings.set('default_input_method', 'com.android.inputmethod.latin/.LatinIME');
+  state.settings.set('agent_device_ime_helper_rebind_displaced', '1');
+  const deviceAdb = fakeImeDeviceAdb(state);
+
+  const result = await withAndroidAdbProvider(
+    {
+      exec: async (args) =>
+        args[2] === 'get' && args[4] === 'agent_device_ime_helper_rebind_displaced'
+          ? { exitCode: 1, stdout: '', stderr: 'timed out' }
+          : await deviceAdb(args),
+    },
+    { serial: DEVICE.id },
+    async () => await restoreAndroidTestIme(DEVICE, { stateDir: STATE_DIR }),
+  );
+
+  expect(result).toMatchObject({ restored: false, reason: 'record-unreadable' });
+  expect(state.settings.get('agent_device_ime_helper_previous_ime')).toBe('com.samsung/.Keyboard');
+  expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
+});
+
 test('a failed restore keeps the record and the marker for a later retry', async () => {
   const host = bindAndroidAdbHostStub();
   await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);

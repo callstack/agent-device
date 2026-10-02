@@ -12,8 +12,7 @@ import {
   clearPersistedPreviousIme,
   clearPersistedRebindDisplacement,
   readAndroidDefaultInputMethod,
-  readPersistedPreviousIme,
-  readPersistedRebindDisplacement,
+  readAndroidTestImeDeviceRecord,
 } from './ime-settings-record.ts';
 import { activeTestImeDevices, withAndroidTestImeRecoveryLock } from './ime-state.ts';
 
@@ -22,6 +21,7 @@ import { activeTestImeDevices, withAndroidTestImeRecoveryLock } from './ime-stat
 
 export type AndroidTestImeRestoreReason =
   | 'no-record'
+  | 'record-unreadable'
   | 'helper-not-active'
   | 'owned-by-live-session'
   | 'set-failed'
@@ -57,8 +57,9 @@ export async function restoreAndroidTestIme(
 }
 
 // A device no longer needs recovery once the helper is confirmed off it (restored, or already not
-// the active IME, or no record). A `set-failed` (still stuck) or `owned-by-live-session` (a live
-// session will restore it on close) keeps its pending marker for a later retry.
+// the active IME, or no record). A `set-failed` (still stuck), `record-unreadable` (the device may be
+// on Android's fallback IME) or `owned-by-live-session` (a live session will restore it on close)
+// keeps its pending marker for a later retry.
 function isDeviceRecoveryComplete(reason: AndroidTestImeRestoreReason): boolean {
   return reason === 'ok' || reason === 'helper-not-active' || reason === 'no-record';
 }
@@ -78,15 +79,21 @@ async function restoreAndroidTestImeFor(
     // A live session in this process activated (or is activating) the helper here; leave it be.
     return { restored: false, reason: 'owned-by-live-session' };
   }
-  const previousIme = await readPersistedPreviousIme(adb);
-  if (!previousIme) {
+  const record = await readAndroidTestImeDeviceRecord(adb);
+  if (record.kind === 'unreadable') {
+    emitAndroidAdbDiagnostic({
+      level: 'warn',
+      phase: 'android_test_ime_restore_record_unreadable',
+      data: { device: deviceLabel },
+    });
+    return { restored: false, reason: 'record-unreadable' };
+  }
+  if (record.kind === 'absent') {
     return { restored: false, reason: 'no-record' };
   }
+  const { previousIme } = record;
   const currentIme = await readAndroidDefaultInputMethod(adb);
-  if (
-    currentIme !== ANDROID_IME_HELPER_SERVICE_COMPONENT &&
-    (await readPersistedRebindDisplacement(adb)) !== true
-  ) {
+  if (currentIme !== ANDROID_IME_HELPER_SERVICE_COMPONENT && !record.rebindDisplaced) {
     // Helper is not active — the user switched away, or the helper was never really set. Do not
     // overwrite the current IME, and do not clear the device record (a concurrent activation could
     // have just written it).
