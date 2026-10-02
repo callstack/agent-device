@@ -1,3 +1,4 @@
+import { cleanupDaemonTestState } from './support/daemon-test-cleanup.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -24,6 +25,7 @@ test('daemon HTTP transport starts from CLI and accepts a command RPC', async (t
   }
 
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-http-smoke-'));
+  let info: DaemonInfo | null = null;
   try {
     const args = [
       'session',
@@ -46,7 +48,7 @@ test('daemon HTTP transport starts from CLI and accepts a command RPC', async (t
     assert.equal(cli.status, 0, formatResultDebug('start HTTP daemon', ['session', 'list'], cli));
     assert.equal(cli.json?.success, true, JSON.stringify(cli.json));
 
-    const info = readDaemonInfo(stateDir);
+    info = readDaemonInfo(stateDir);
     assert.equal(info.transport, 'http');
     assert.equal(typeof info.httpPort, 'number');
     assert.ok((info.httpPort ?? 0) > 0);
@@ -73,14 +75,7 @@ test('daemon HTTP transport starts from CLI and accepts a command RPC', async (t
     await stopDaemon(info);
     await assertNoDaemonLeaks({ stateDir, daemonPids: [info.pid], phase: 'after-shutdown' });
   } finally {
-    try {
-      if (fs.existsSync(path.join(stateDir, 'daemon.json'))) {
-        await stopDaemon(readDaemonInfo(stateDir));
-      }
-      fs.rmSync(stateDir, { recursive: true, force: true });
-    } catch (error) {
-      console.warn('Daemon test cleanup retained state:', stateDir, error);
-    }
+    await cleanupDaemonTestState(stateDir, info);
   }
 });
 

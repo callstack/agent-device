@@ -1,3 +1,4 @@
+import { cleanupDaemonTestState } from './support/daemon-test-cleanup.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -6,7 +7,6 @@ import path from 'node:path';
 import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { isProcessAlive, readProcessStartTime } from '@agent-device/host-kit/process';
-import { stopDaemonProcess } from '../../src/daemon-process.ts';
 
 import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import { runCliJson } from './test-helpers.ts';
@@ -77,18 +77,7 @@ test('clean daemon script stops a live daemon before removing metadata', async (
     // leave only classified artifacts in its state dir.
     await assertNoDaemonLeaks({ stateDir, daemonPids: [info.pid], phase: 'after-shutdown' });
   } finally {
-    try {
-      if (info) {
-        const termination = await stopDaemonProcess(
-          { pid: info.pid, startTime: info.processStartTime ?? null },
-          { mode: 'graceful', termTimeoutMs: 1_500, killTimeoutMs: 1_500 },
-        );
-        assert.notEqual(termination.status, 'retained', JSON.stringify(termination));
-      }
-      fs.rmSync(stateDir, { recursive: true, force: true });
-    } catch (error) {
-      console.warn('Daemon test cleanup retained state:', stateDir, error);
-    }
+    await cleanupDaemonTestState(stateDir, info);
   }
 });
 

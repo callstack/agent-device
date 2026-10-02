@@ -1,3 +1,4 @@
+import { cleanupDaemonTestState } from './support/daemon-test-cleanup.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -84,20 +85,8 @@ test('daemon replace mid-command returns a structured, parseable error and exits
     // `finally` retry below rather than have
     // the state dir removed out from under a daemon that is still running.
     await assertNoDaemonLeaks({ stateDir, daemonPids, phase: 'after-shutdown' });
-    info = null;
   } finally {
-    try {
-      if (info) {
-        const termination = await stopDaemonProcess(
-          { pid: info.pid, startTime: info.processStartTime ?? null },
-          { mode: 'graceful', termTimeoutMs: 1_500, killTimeoutMs: 1_500 },
-        );
-        assert.notEqual(termination.status, 'retained', JSON.stringify(termination));
-      }
-      fs.rmSync(stateDir, { recursive: true, force: true });
-    } catch (error) {
-      console.warn('Daemon test cleanup retained state:', stateDir, error);
-    }
+    await cleanupDaemonTestState(stateDir, info);
   }
 });
 
