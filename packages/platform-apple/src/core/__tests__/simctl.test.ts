@@ -7,7 +7,7 @@ import {
   readSimctlDeviceState,
   scopeSimctlArgsForDevice,
   simctlAvailabilityProbeArgs,
-  simctlListDevicesArgs,
+  simctlListInventoryArgs,
   simulatorAddressFor,
   type SimulatorAddress,
 } from '../simctl.ts';
@@ -60,16 +60,10 @@ test('buildSimctlArgsForDevice leaves non-simulator commands unchanged', () => {
   assert.deepEqual(args, ['simctl', 'bootstatus', 'sim-1', '-b']);
 });
 
-test('simctlListDevicesArgs prefixes a trimmed simulator set and omits a blank one', () => {
-  assert.deepEqual(simctlListDevicesArgs(' /tmp/set '), [
-    '--set',
-    '/tmp/set',
-    'list',
-    'devices',
-    '-j',
-  ]);
-  assert.deepEqual(simctlListDevicesArgs('  '), ['list', 'devices', '-j']);
-  assert.deepEqual(simctlListDevicesArgs(undefined), ['list', 'devices', '-j']);
+test('simctlListInventoryArgs prefixes a trimmed simulator set and omits a blank one', () => {
+  assert.deepEqual(simctlListInventoryArgs(' /tmp/set '), ['--set', '/tmp/set', 'list', '-j']);
+  assert.deepEqual(simctlListInventoryArgs('  '), ['list', '-j']);
+  assert.deepEqual(simctlListInventoryArgs(undefined), ['list', '-j']);
 });
 
 test('simctlAvailabilityProbeArgs names no set', () => {

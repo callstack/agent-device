@@ -62,3 +62,27 @@ test('devicectl records map to normalized physical Apple devices', () => {
     null,
   );
 });
+
+test('devicectl records report the marketing model and OS version', () => {
+  const devicectlRecord = {
+    identifier: '3F1DAD0D-212F-44F2-B41E-C390F96140BE',
+    hardwareProperties: {
+      deviceType: 'iPhone',
+      marketingName: 'iPhone 17 Pro',
+      platform: 'iOS',
+      productType: 'iPhone18,1',
+      udid: '00008150-000A1C2E3F40001E',
+    },
+    deviceProperties: {
+      bootState: 'booted',
+      name: 'Oskar iPhone',
+      osBuildUpdate: '23F77',
+      osVersionNumber: '26.5',
+    },
+    connectionProperties: { pairingState: 'paired', tunnelState: 'connected' },
+  };
+  const device = mapDevicectlAppleDevice(devicectlRecord);
+  assert.equal(device?.name, 'Oskar iPhone');
+  assert.equal(device?.model, 'iPhone 17 Pro');
+  assert.equal(device?.osVersion, '26.5');
+});

@@ -64,3 +64,20 @@ test('device normalization preserves the projected claim owner and drops malform
   expect(normalizeDevice(base).claimedBy).toBeUndefined();
   expect(normalizeDevice({ ...base, claimedBy: { session: 42 } }).claimedBy).toBeUndefined();
 });
+
+test('device normalization carries the listed model and OS version and drops malformed ones', () => {
+  const base = {
+    platform: 'android',
+    target: 'mobile',
+    kind: 'device',
+    id: 'R5CT1',
+    name: 'Pixel 9',
+    booted: true,
+  };
+  const described = normalizeDevice({ ...base, model: 'Pixel 9', osVersion: '16' });
+  expect(described).toMatchObject({ model: 'Pixel 9', osVersion: '16' });
+
+  const malformed = normalizeDevice({ ...base, model: '', osVersion: 16 });
+  expect(malformed).not.toHaveProperty('model');
+  expect(malformed).not.toHaveProperty('osVersion');
+});

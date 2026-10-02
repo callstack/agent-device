@@ -10,8 +10,18 @@ const APPLE_TV_LABEL_HINTS = ['apple tv', 'appletv', 'tvos'] as const;
 export type DevicectlAppleDevice = {
   identifier?: string;
   name?: string;
-  hardwareProperties?: { platform?: string; udid?: string; productType?: string };
-  deviceProperties?: { name?: string; productType?: string; deviceType?: string };
+  hardwareProperties?: {
+    platform?: string;
+    udid?: string;
+    productType?: string;
+    marketingName?: string;
+  };
+  deviceProperties?: {
+    name?: string;
+    productType?: string;
+    deviceType?: string;
+    osVersionNumber?: string;
+  };
   connectionProperties?: { tunnelState?: string };
 };
 
@@ -106,6 +116,8 @@ export function mapDevicectlAppleDevice(device: DevicectlAppleDevice): DeviceInf
   const name = device.name ?? device.deviceProperties?.name ?? id;
   if (!id) return null;
   const target = resolveAppleTargetFromDevicectlDevice(device);
+  const model = device.hardwareProperties?.marketingName?.trim();
+  const osVersion = device.deviceProperties?.osVersionNumber?.trim();
   return {
     platform: 'apple',
     id,
@@ -113,6 +125,8 @@ export function mapDevicectlAppleDevice(device: DevicectlAppleDevice): DeviceInf
     kind: 'device',
     target,
     appleOs: resolveAppleOs(target, [devicectlProductType(device), ...devicectlLabels(device)]),
+    ...(model ? { model } : {}),
+    ...(osVersion ? { osVersion } : {}),
     iosPhysicalDeviceBackend: 'coredevice',
     booted: true,
   };

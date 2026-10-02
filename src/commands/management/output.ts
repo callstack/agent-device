@@ -235,11 +235,13 @@ export const managementCliOutputFormatters = {
 function formatDeviceLine(device: AgentDeviceDevice): string {
   const kind = device.kind ? ` ${device.kind}` : '';
   const target = device.target ? ` target=${device.target}` : '';
+  const model = device.model ? ` model=${JSON.stringify(device.model)}` : '';
+  const osVersion = device.osVersion ? ` os=${device.osVersion}` : '';
   const booted = typeof device.booted === 'boolean' ? ` booted=${device.booted}` : '';
   const claimed = device.claimedBy
     ? ` claimed by session "${device.claimedBy.session}" in ${device.claimedBy.workspace}`
     : '';
-  return `${device.name} (${device.platform}${kind}${target})${booted}${claimed}`;
+  return `${device.name} (${device.platform}${kind}${target}${model}${osVersion})${booted}${claimed}`;
 }
 
 function formatCloudArtifactLine(artifact: CloudArtifactsResult['cloudArtifacts'][number]): string {

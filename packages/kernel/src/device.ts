@@ -53,6 +53,10 @@ export type DeviceInfo = {
   // Explicit Apple OS discriminant populated at discovery for Apple devices.
   // Optional so legacy records (and non-Apple platforms) remain valid.
   appleOs?: AppleOS;
+  // Presentation-only hardware model and OS version reported by discovery when the
+  // platform tooling exposes them; never part of device identity or selection.
+  model?: string;
+  osVersion?: string;
   booted?: boolean;
   simulatorSetPath?: string;
   // Internal physical-iOS execution backend selected during discovery.

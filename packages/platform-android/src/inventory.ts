@@ -119,10 +119,12 @@ async function probeRunningDevice(
   context: AndroidInventoryContext,
   entry: AndroidDeviceEntry,
 ): Promise<DeviceInfo> {
-  const [name, booted, target] = await Promise.all([
+  const [name, booted, target, model, osVersion] = await Promise.all([
     resolveDeviceName(context, entry),
     isBooted(context, entry.serial),
     resolveTarget(context, entry.serial),
+    readDeviceProp(context, entry.serial, 'ro.product.model'),
+    readDeviceProp(context, entry.serial, 'ro.build.version.release'),
   ]);
   return {
     platform: 'android',
@@ -130,8 +132,25 @@ async function probeRunningDevice(
     name,
     kind: isAndroidEmulatorSerial(entry.serial) ? 'emulator' : 'device',
     target,
+    ...(model ? { model } : {}),
+    ...(osVersion ? { osVersion } : {}),
     booted,
   };
+}
+
+/** Best-effort `getprop` read for presentation fields; a failed probe leaves the field unset. */
+async function readDeviceProp(
+  context: AndroidInventoryContext,
+  serial: string,
+  prop: string,
+): Promise<string | undefined> {
+  try {
+    const result = await runAdbShell(context, serial, ['getprop', prop]);
+    return (result.exitCode === 0 && result.stdout.trim()) || undefined;
+  } catch (error) {
+    if (context.scope.signal.aborted) throw error;
+    return undefined;
+  }
 }
 
 async function resolveDeviceName(

@@ -237,6 +237,7 @@ agent-device capabilities --session checkout --json
 - `devices` lists available targets after applying any platform selector or isolation scope flags.
 - Use `--platform` to narrow discovery to Apple-family (`ios`, `tvOS`, `macOS`), Android, HarmonyOS, or Vega OS targets.
 - Use `--ios-simulator-device-set` and `--android-device-allowlist` when you need tenant- or lab-scoped discovery.
+- Each listed device carries `model` (hardware model, for example `iPhone 17 Pro` or `Pixel 9`) and `osVersion` (for example `26.1` or `16`) when the platform tooling reports them. iOS simulators read them from `simctl` device types and runtimes, physical iOS devices from `devicectl` (or the OS version printed by `xctrace`), and running Android devices from `ro.product.model` and `ro.build.version.release`; Android emulators report the system image model, such as `sdk_gphone64_arm64`. Stopped AVDs and other platforms omit both fields. They describe a device only and are not selectors.
 - `capabilities` reports the command names supported by the selected session device or an explicit `--platform`/`--device`/`--udid`/`--serial` target.
 - In JSON output, `capabilities` returns `{ device, availableCommands }`. Use `availableCommands` for dynamic integrations instead of maintaining a separate platform support table.
 

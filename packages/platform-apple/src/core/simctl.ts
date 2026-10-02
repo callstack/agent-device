@@ -35,9 +35,12 @@ export function simctlAvailabilityProbeArgs(): ScopedSimctlArgs {
   return scopeSimctlArgs(undefined, ['help']);
 }
 
-/** `simctl list devices -j` over one simulator set; `undefined` lists the default set. */
-export function simctlListDevicesArgs(simulatorSetPath: string | undefined): ScopedSimctlArgs {
-  return scopeSimctlArgs(simulatorSetPath, ['list', 'devices', '-j']);
+/**
+ * `simctl list -j` over one simulator set; `undefined` lists the default set. The unfiltered
+ * listing carries devices together with the device types and runtimes that describe them.
+ */
+export function simctlListInventoryArgs(simulatorSetPath: string | undefined): ScopedSimctlArgs {
+  return scopeSimctlArgs(simulatorSetPath, ['list', '-j']);
 }
 
 /** Arguments that follow the `simctl` tool name, scoped to the simulator set holding the device. */

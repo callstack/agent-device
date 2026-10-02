@@ -114,7 +114,7 @@ test('simulator-only inventory avoids physical discovery and observes fresh boot
     ['sim-1'],
   );
   assert.deepEqual(observed, ['sim-1']);
-  assert.deepEqual(calls, [['simctl', 'list', 'devices', '-j']]);
+  assert.deepEqual(calls, [['simctl', 'list', '-j']]);
 });
 
 test('simulator-set inventory remains scoped while retaining the host Mac', async () => {
@@ -148,7 +148,7 @@ test('simulator-set inventory remains scoped while retaining the host Mac', asyn
     devices.map((device) => device.id),
     ['tv-1', 'host-macos-local'],
   );
-  assert.deepEqual(calls, [['simctl', '--set', '/tmp/custom-set', 'list', 'devices', '-j']]);
+  assert.deepEqual(calls, [['simctl', '--set', '/tmp/custom-set', 'list', '-j']]);
 });
 
 test('unscoped Apple inventory starts simulator and physical discovery concurrently', async () => {
