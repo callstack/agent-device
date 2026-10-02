@@ -246,10 +246,11 @@ test('both exits tear the watch down before they touch daemon.json', () => {
   // publication needs a real toolchain — so the invariant is read off the source, the same way the
   // arming order above is.
   const source = fs.readFileSync(new URL('./daemon-runtime.ts', import.meta.url), 'utf8');
-  const stopped = source.indexOf('stopMetadataLossWatch();');
-  const removal = source.indexOf('await finishDaemonRegistration(');
-
-  expect(stopped).toBeGreaterThanOrEqual(0);
-  expect(removal).toBeGreaterThan(stopped);
-  expect(source.match(/stopMetadataLossWatch\(\);/g)).toHaveLength(2);
+  const stops = [...source.matchAll(/stopMetadataLossWatch\(\);/g)].map((m) => m.index);
+  const finishes = [...source.matchAll(/await finishDaemonRegistration\(/g)].map((m) => m.index);
+  expect(stops).toHaveLength(2);
+  expect(finishes).toHaveLength(2);
+  expect(finishes[0]).toBeGreaterThan(stops[0]);
+  expect(finishes[0]).toBeLessThan(stops[1]);
+  expect(finishes[1]).toBeGreaterThan(stops[1]);
 });

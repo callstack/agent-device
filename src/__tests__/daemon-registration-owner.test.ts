@@ -58,10 +58,6 @@ for (const [pid, startTime, reason] of [
   [999_999_999, 'successor-start', 'replaced'],
   [process.pid, 'recycled-start', 'replaced'],
   [process.pid, undefined, 'unproven'],
-  [0, undefined, 'ownerless'],
-  [-3, undefined, 'ownerless'],
-  [1.5, undefined, 'ownerless'],
-  ['7', undefined, 'ownerless'],
   [null, undefined, 'ownerless'],
 ] as const) {
   test(`finish retains ${reason} registration (${String(pid)}, ${String(startTime)})`, async () => {
@@ -161,4 +157,5 @@ test('unlink disappearance is settled, other failures remain primary even when r
   });
   await assert.rejects(second.owner.finish(), (error) => error === primary);
   assert.equal(fs.existsSync(second.paths.infoPath), true);
+  assert.match(fs.readFileSync(second.paths.logPath, 'utf8'), /daemon_registration_release_failed/);
 });

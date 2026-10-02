@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { normalizeError } from '@agent-device/kernel/errors';
 import { readCurrentOwnerIdentity, type OwnerIdentity } from '@agent-device/host-kit/process';
 import {
   publishFileSync,
@@ -6,7 +7,7 @@ import {
   type ProcessLockAttempt,
   type ProcessLockAcquisition,
 } from '@agent-device/host-kit/file';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { emitDiagnostic, withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import type { DaemonPaths } from './daemon-resolution.ts';
 import {
@@ -20,7 +21,6 @@ import {
 } from './daemon-shutdown-report.ts';
 
 export const DAEMON_STARTUP_EXIT_CODES = Object.freeze({ busy: 75, unproven: 78 });
-
 export type DaemonRegistrationFields = Readonly<{
   socketPort?: number;
   httpPort?: number;
@@ -30,17 +30,14 @@ export type DaemonRegistrationFields = Readonly<{
   codeSignature: string;
   policyDigest?: string;
 }>;
-
 type DaemonRegistrationRemoval =
   | Readonly<{ state: 'removed' }>
   | Exclude<RegisteredDaemonOwnership, { state: 'match' }>;
-
 export type DaemonRegistrationOwner = Readonly<{
   publish(fields: DaemonRegistrationFields): void;
   finish(outcome?: DaemonShutdownOutcome): Promise<DaemonRegistrationRemoval>;
 }>;
 
-/** Makes one acquisition attempt and binds every daemon write to that acquisition. */
 export async function tryAcquireDaemonRegistration(
   paths: DaemonPaths,
 ): Promise<
@@ -60,31 +57,26 @@ export async function tryAcquireDaemonRegistration(
     acquisition.assertHeld();
     fs.rmSync(resolveDaemonShutdownReportPath(boundPaths.baseDir), { force: true });
   } catch (error) {
-    await releaseRegistrationAfterFailure(acquisition, error);
+    await releaseRegistrationAfterFailure(acquisition, error, boundPaths.logPath);
   }
   return {
     status: 'acquired',
     owner: Object.freeze({
-      publish(fields: DaemonRegistrationFields) {
+      publish({ socketPort, httpPort, ...fields }: DaemonRegistrationFields) {
         acquisition.assertHeld();
         publishFileSync({ destination: boundPaths.logPath, contents: '', mode: 0o600 });
-        const transport =
-          fields.socketPort && fields.httpPort ? 'dual' : fields.httpPort ? 'http' : 'socket';
+        const transport = socketPort && httpPort ? 'dual' : httpPort ? 'http' : 'socket';
         acquisition.assertHeld();
         publishFileSync({
           destination: boundPaths.infoPath,
           contents: JSON.stringify(
             {
-              port: fields.socketPort,
-              httpPort: fields.httpPort,
+              ...fields,
+              port: socketPort,
+              httpPort,
               transport,
-              token: fields.token,
               pid: identity.pid,
-              version: fields.version,
-              codeOrigin: fields.codeOrigin,
-              codeSignature: fields.codeSignature,
               processStartTime: identity.startTime ?? undefined,
-              policyDigest: fields.policyDigest,
               stateDir: boundPaths.baseDir,
             },
             null,
@@ -99,7 +91,7 @@ export async function tryAcquireDaemonRegistration(
           if (outcome) writeShutdownReport(boundPaths.baseDir, outcome, acquisition);
           removal = removeRegistrationUnderLock(boundPaths.infoPath, identity, acquisition);
         } catch (error) {
-          return await releaseRegistrationAfterFailure(acquisition, error);
+          return await releaseRegistrationAfterFailure(acquisition, error, boundPaths.logPath);
         }
         await acquisition.release();
         return removal;
@@ -128,15 +120,21 @@ function removeRegistrationUnderLock(
 async function releaseRegistrationAfterFailure(
   acquisition: ProcessLockAcquisition,
   error: unknown,
+  logPath: string,
 ): Promise<never> {
   try {
     await acquisition.release();
   } catch (releaseError) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'daemon_registration_release_failed',
-      data: { error: String(releaseError) },
-    });
+    await withDiagnosticsScope(
+      { command: 'daemon', session: 'daemon', logPath, debug: true },
+      () => {
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'daemon_registration_release_failed',
+          data: { error: normalizeError(releaseError) },
+        });
+      },
+    );
   }
   throw error;
 }
@@ -154,8 +152,4 @@ function writeShutdownReport(
   } catch {
     return;
   }
-  acquisition.assertHeld();
-  try {
-    fs.chmodSync(filePath, 0o600);
-  } catch {}
 }

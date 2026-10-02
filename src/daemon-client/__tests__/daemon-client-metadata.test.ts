@@ -22,7 +22,6 @@ vi.mock('../../daemon-process.ts', async (importOriginal) => ({
 }));
 afterEach(() => vi.resetAllMocks());
 
-
 // The reuse decision is only as good as the identity that survives the round trip
 // through `daemon.json`: a client cannot compare what the file lost (#2458).
 
