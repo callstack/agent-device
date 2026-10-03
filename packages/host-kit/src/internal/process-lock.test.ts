@@ -957,12 +957,12 @@ test('release waits for a guard another process holds for a filesystem step', as
     timeoutMs: 0,
   });
   fs.writeFileSync(mutexPath, '');
-  const guardReleased = setTimeout(() => fs.unlinkSync(mutexPath), 50);
-  try {
-    await acquisition.release();
-  } finally {
-    clearTimeout(guardReleased);
-  }
+  const releasing = acquisition.release();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(fs.existsSync(lockDirPath), true);
+  assert.equal(fs.existsSync(mutexPath), true);
+  fs.unlinkSync(mutexPath);
+  await releasing;
 
   assert.equal(fs.existsSync(lockDirPath), false);
   const next = tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
