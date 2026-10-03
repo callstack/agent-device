@@ -18,6 +18,33 @@ import { createRequestCanceledError, type AppError } from '@agent-device/kernel/
  * extends a request deadline, and no timeout path may produce this rejection.
  */
 
+/**
+ * The typed canceled-request error for a caller's own abort: the reason the caller aborted with
+ * survives as the cause, while the rejection itself always dispatches on `reason:
+ * 'request_canceled'` with the delivery evidence the aborting layer can prove. A built-in transport
+ * rejects every abort through this, so a caller's arbitrary abort reason never escapes as the
+ * outcome of a daemon request.
+ */
+export function abortedRequestError(
+  signal: AbortSignal,
+  dispatched: 'no' | 'unknown',
+  requestId?: string,
+): AppError {
+  return createRequestCanceledError(
+    { requestId, dispatched },
+    signal.reason instanceof Error ? signal.reason : undefined,
+  );
+}
+
+/**
+ * Refuse a send attempt that starts while the caller's signal is already aborted: nothing may leave
+ * the process, so this never touches a connection and the refusal carries `details.dispatched: 'no'`.
+ */
+export function refuseAbortedRequest(signal: AbortSignal | undefined, requestId?: string): void {
+  if (!signal?.aborted) return;
+  throw abortedRequestError(signal, 'no', requestId);
+}
+
 export type RequestGuard = {
   /** Refuses an already-aborted call before anything is sent. No-op without a signal. */
   refuseIfAborted(): void;
