@@ -117,6 +117,7 @@ extension RunnerTests {
       )
     }
 
+    var entryBaseline: TextEntryObservation?
     if repairMode == .replacement {
       guard let replacementTarget = initialTarget else {
         logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
@@ -134,6 +135,7 @@ extension RunnerTests {
           mode: repairMode
         )
       }
+      entryBaseline = textEntryObservation(for: replacementTarget)
     }
 
     // The shape this command posts, decided once: a spaced per-character plan, a peeled warmup plus
@@ -344,7 +346,8 @@ extension RunnerTests {
       app: app,
       target: activeTarget,
       expectedText: expectedText,
-      repairMode: repairMode
+      repairMode: repairMode,
+      baseline: entryBaseline
     )
     logTextEntryPhase(
       commandId: commandId,
@@ -390,7 +393,8 @@ extension RunnerTests {
     app: XCUIApplication,
     target: TextEntryTarget,
     expectedText: String?,
-    repairMode: TextTypingRepairMode
+    repairMode: TextTypingRepairMode,
+    baseline: TextEntryObservation?
   ) -> TextEntryResult {
     let initialResult = verifyTextEntry(
       app: app,
@@ -398,6 +402,16 @@ extension RunnerTests {
       expectedText: expectedText,
       repaired: false
     )
+    // Retyping cannot make a value that does not echo the entry match, and it would deliver the
+    // text twice to an app that already acted on it.
+    if let unconfirmed = settledUnconfirmedTextEntry(
+      app: app,
+      target: target,
+      result: initialResult,
+      baseline: baseline
+    ) {
+      return unconfirmed
+    }
 #if os(iOS)
     guard initialResult.verified == false,
           let expectedText = initialResult.expectedText
@@ -429,15 +443,74 @@ extension RunnerTests {
     )
     clearTextInput(repairTarget)
     repairTarget.typeText(expectedText)
-    return verifyTextEntry(
+    let repairedTarget = target.withElement(repairTarget)
+    let repairedResult = verifyTextEntry(
       app: app,
-      target: target.withElement(repairTarget),
+      target: repairedTarget,
       expectedText: expectedText,
       repaired: true
     )
+    return settledUnconfirmedTextEntry(
+      app: app,
+      target: repairedTarget,
+      result: repairedResult,
+      baseline: baseline
+    ) ?? repairedResult
 #else
     return initialResult
 #endif
+  }
+
+  /// Turns a failed replacement read-back into unconfirmed evidence once the same field's value has
+  /// settled on one that does not echo the request; nil leaves the failure standing.
+  private func settledUnconfirmedTextEntry(
+    app: XCUIApplication,
+    target: TextEntryTarget,
+    result: TextEntryResult,
+    baseline: TextEntryObservation?
+  ) -> TextEntryResult? {
+    guard result.verified == false, let requested = result.expectedText, let baseline else {
+      return nil
+    }
+    func observe() -> TextEntryObservation? {
+      textEntryObservation(for: resolveTextEntryElement(app: app, target: target))
+    }
+    func evidence(_ observed: TextEntryObservation?) -> TextEntryUnconfirmedEvidence? {
+      Self.unconfirmedTextEntryEvidence(requested: requested, baseline: baseline, observed: observed)
+    }
+    var latest = observe()
+    guard evidence(latest) != nil else {
+      return nil
+    }
+    let ceiling = Date().addingTimeInterval(TextEntryTiming.unconfirmedSettleCeiling)
+    var stableSince = Date()
+    while Date().timeIntervalSince(stableSince) < TextEntryTiming.verificationStabilityWindow {
+      guard Date() < ceiling else {
+        return nil
+      }
+      sleepFor(TextEntryTiming.pollInterval)
+      let next = observe()
+      if next != latest {
+        latest = next
+        stableSince = Date()
+      }
+    }
+    guard let unconfirmed = evidence(latest) else {
+      return nil
+    }
+    NSLog(
+      "AGENT_DEVICE_RUNNER_TEXT_ENTRY_UNCONFIRMED expectedLength=%d observedLength=%d repaired=%d",
+      requested.count,
+      unconfirmed.after.count,
+      result.repaired ? 1 : 0
+    )
+    return TextEntryResult(
+      verified: nil,
+      repaired: result.repaired,
+      expectedText: requested,
+      observedText: unconfirmed.after,
+      unconfirmed: unconfirmed
+    )
   }
 
   private func verifyTextEntry(
