@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import type { ConnectionProviderCapabilities } from '../cli/connection/provider-policy.ts';
+import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
 
 import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
 

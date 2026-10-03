@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import os from 'node:os';
+import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { DoublespeedApiClient } from './api-client.ts';
@@ -109,7 +109,7 @@ test('lists simulators by label selector and deletes by id', async () => {
 });
 
 test('registers, uploads and completes an asset with the signed URL as the only capability', async () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'doublespeed-asset-'));
+  const tempDir = mkdtempForTestSync('doublespeed-asset-');
   const filePath = path.join(tempDir, 'app.zip');
   fs.writeFileSync(filePath, 'zip-bytes');
   const { fetch, calls } = scriptedFetch([

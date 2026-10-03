@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import os from 'node:os';
+import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import type { DoublespeedApiClient } from './api-client.ts';
@@ -119,7 +119,7 @@ test('remote install infers the single new user app when the session reports no 
 });
 
 test('packages a .app directory, publishes it once, and installs through the signed download', async () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'doublespeed-ios-app-'));
+  const tempDir = mkdtempForTestSync('doublespeed-ios-app-');
   const appPath = path.join(tempDir, 'Example.app');
   fs.mkdirSync(appPath);
   const archiveDirectory = vi.fn(async ({ archivePath }: { archivePath: string }) => {
@@ -178,11 +178,7 @@ test('packages a .app directory, publishes it once, and installs through the sig
     sha256: sha,
     launchMode: 'ForegroundIfRunning',
   });
-  expect(
-    fs
-      .readdirSync(os.tmpdir())
-      .filter((name) => name.startsWith('agent-device-doublespeed-ios-app-')),
-  ).toEqual([]);
+  expect(fs.existsSync(path.dirname(archiveDirectory.mock.calls[0]![0].archivePath))).toBe(false);
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 

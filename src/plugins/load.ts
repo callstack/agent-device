@@ -4,10 +4,13 @@ import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/platform-runtime-operations';
 import type { ProviderPluginHost } from '../sdk/plugins.ts';
 import { installedPlugins } from './store.ts';
-import { resolvePluginEntry, assertUniquePluginProviders } from './manifest.ts';
+import {
+  resolvePluginEntry,
+  assertUniquePluginProviders,
+  RESERVED_PLUGIN_PROVIDERS,
+} from './manifest.ts';
 import { createPluginHost } from './host.ts';
 import type { PluginConnection } from './connection.ts';
-import { RESERVED_PLUGIN_PROVIDERS } from './manifest.ts';
 import type { WebDriverPluginOptions } from '../sdk/plugin-webdriver.ts';
 
 type ProviderPluginRegistration = Readonly<{
@@ -101,7 +104,7 @@ export async function loadProviderPlugins(
 export async function withPluginConnection<T>(
   provider: string,
   env: NodeJS.ProcessEnv,
-  use: (connection: PluginConnection) => Promise<T>,
+  runConnection: (connection: PluginConnection) => Promise<T>,
 ): Promise<T> {
   const registrations = await loadProviderPlugins(env, RESERVED_PLUGIN_PROVIDERS, provider);
   try {
@@ -110,7 +113,7 @@ export async function withPluginConnection<T>(
     )?.connection;
     if (!connection)
       throw new AppError('INVALID_ARGS', `Plugin does not register connect: ${provider}`);
-    return await use(connection);
+    return await runConnection(connection);
   } finally {
     await Promise.allSettled(registrations.map(async ({ runtime }) => await runtime.shutdown()));
   }

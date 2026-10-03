@@ -2,7 +2,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import type { RemoteConfigProfile } from '../remote/remote-config-schema.ts';
-import type { ConnectionProviderCapabilities } from '../cli/connection/provider-policy.ts';
+import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
 import { installedPlugins } from './store.ts';
 
 export type PluginConnection = Readonly<{

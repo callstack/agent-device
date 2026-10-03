@@ -1,3 +1,4 @@
+import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
 import {
   CLOUD_WEBDRIVER_PROVIDERS,
   isCloudWebDriverProviderName,
@@ -10,16 +11,6 @@ export { RESERVED_PLUGIN_PROVIDERS as BUILTIN_CONNECT_PROVIDERS } from '../../pl
 import { RESERVED_PLUGIN_PROVIDERS as BUILTIN_CONNECT_PROVIDERS } from '../../plugins/manifest.ts';
 export type BuiltinConnectProvider = (typeof BUILTIN_CONNECT_PROVIDERS)[number];
 export type ConnectProvider = BuiltinConnectProvider | (string & {});
-
-export type ConnectionProviderCapabilities = {
-  leaseKind: 'proxy' | 'direct-device-provider' | 'remote-provider';
-  requiresAppAttachment: boolean;
-  requiresRemoteDaemon: boolean;
-  supportsArtifacts: boolean;
-  supportsDeferredAppSelection: boolean;
-  supportsDirectPortReverse: boolean;
-  usesCloudWebDriverLease: boolean;
-};
 
 export function isConnectProviderName(
   value: string | undefined,

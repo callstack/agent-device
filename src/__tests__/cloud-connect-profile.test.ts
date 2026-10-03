@@ -53,11 +53,11 @@ vi.mock('../plugins/load.ts', () => ({
   withPluginConnection: async (
     _provider: string,
     env: NodeJS.ProcessEnv,
-    use: (connection: PluginConnection) => Promise<unknown>,
+    runConnection: (connection: PluginConnection) => Promise<unknown>,
   ) => {
     const registration = doublespeedPlugin(createPluginHost(env, undefined));
     try {
-      return await use(registration.connection);
+      return await runConnection(registration.connection);
     } finally {
       await registration.runtime.shutdown();
     }
