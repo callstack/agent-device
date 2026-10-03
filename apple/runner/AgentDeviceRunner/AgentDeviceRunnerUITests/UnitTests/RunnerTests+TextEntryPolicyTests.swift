@@ -198,6 +198,31 @@ extension RunnerTests {
     XCTAssertFalse(TextEntryFailure.commitNotObserved.message.contains("only part"))
   }
 
+  // Codes observed from `snapshot()` on an iOS 27.0 simulator: 10008 for an input the app removed,
+  // 10006 for a query with several matches, 10001 for an app that is not running.
+  func testOnlyXCTestNoMatchProvesATextEntryInputIsGone() {
+    let domain = Self.xCTestUITestingErrorDomain
+    let cases: [(error: NSError, expected: TextEntryInputProbe)] = [
+      (NSError(domain: domain, code: 10008), .noMatch),
+      (NSError(domain: domain, code: 10006), .unavailable),
+      (NSError(domain: domain, code: 10001), .unavailable),
+      (NSError(domain: "com.example.other", code: 10008), .unavailable),
+    ]
+    for testCase in cases {
+      XCTAssertEqual(Self.textEntryInputProbe(snapshotError: testCase.error), testCase.expected, String(describing: testCase))
+    }
+  }
+
+  func testTextEntryRepairNeedsAnIdentityASuccessorCannotShare() {
+    XCTAssertTrue(Self.textEntryRepairCanTarget(boundIdentity: nil))
+    XCTAssertTrue(
+      Self.textEntryRepairCanTarget(boundIdentity: TextEntryInputIdentity(elementType: .textField, identifier: "code"))
+    )
+    XCTAssertFalse(
+      Self.textEntryRepairCanTarget(boundIdentity: TextEntryInputIdentity(elementType: .textField, identifier: ""))
+    )
+  }
+
 #if os(iOS)
   func testSynthesizedTextEntryFallsBackOnlyWhenPrivateSynthesisIsUnavailable() {
     XCTAssertEqual(

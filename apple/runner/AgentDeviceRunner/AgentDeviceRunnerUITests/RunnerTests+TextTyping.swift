@@ -194,7 +194,7 @@ extension RunnerTests {
         textEntryRoute = "xctest-element"
         currentTarget.typeText(value)
         return (currentTarget, nil)
-      } else if activeTarget.prefersFocusedElement && isKeyboardVisible(app: app) {
+      } else if activeTarget.boundIdentity == nil && activeTarget.prefersFocusedElement && isKeyboardVisible(app: app) {
 #if os(iOS)
         // Two ways this post leaves the synthesized channel, and both hand the text to
         // application-wide typing: the command's own budget refused it, or XCTest's private synthesis
@@ -392,6 +392,21 @@ extension RunnerTests {
     expectedText: String?,
     repairMode: TextTypingRepairMode
   ) -> TextEntryResult {
+    if target.boundIdentity != nil, resolveTextEntryElement(app: app, target: target) == nil {
+      guard boundTextEntryInputIsGone(app: app, target: target) else {
+        return TextEntryResult(
+          verified: nil,
+          repaired: false,
+          expectedText: expectedText,
+          observedText: nil,
+          failure: .commitNotObserved
+        )
+      }
+      // Every character was delivered and the app then removed the input, as an auto-submitting
+      // code field does. Its value can no longer be read back.
+      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_INPUT_REMOVED_AFTER_DELIVERY")
+      return TextEntryResult(verified: nil, repaired: false, expectedText: expectedText, observedText: nil)
+    }
     let initialResult = verifyTextEntry(
       app: app,
       target: target,
@@ -410,6 +425,15 @@ extension RunnerTests {
       expectedText: expectedText,
       repairMode: repairMode
     ) else {
+      return verifyTextEntry(
+        app: app,
+        target: target,
+        expectedText: expectedText,
+        repaired: false
+      )
+    }
+    guard Self.textEntryRepairCanTarget(boundIdentity: target.boundIdentity) else {
+      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_REPAIR_REFUSED reason=unidentified-input")
       return verifyTextEntry(
         app: app,
         target: target,

@@ -153,6 +153,134 @@ extension RunnerTests {
     XCTAssertFalse(textField.exists)
   }
 
+  // An auto-submitting code field: the last digit navigates to a screen with its own input where the
+  // code field was. Every character was delivered, so the fill succeeds unverified, without an
+  // XCTest failure (XCTEST_RECORDED_FAILURE and a session restart), and without verifying or
+  // repairing into the next screen's input.
+  @MainActor
+  func testFillSucceedsWhenAppReplacesInputAfterLastCharacter() throws {
+    let textField = try launchRemovableInputFixture("--agent-device-text-entry-auto-submit")
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-auto-submit", text: "123456", at: textField)
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(response.data?.message, "typed")
+    XCTAssertFalse(textField.exists)
+    let nextScreenField = app.textFields["agent-device-auto-submit-next-screen-input"]
+    XCTAssertTrue(nextScreenField.exists)
+    XCTAssertEqual(editableTextValue(for: nextScreenField, treatingPlaceholderAsEmpty: true), "")
+  }
+
+  // The reported shape: the last digit navigates to a screen without an input.
+  @MainActor
+  func testFillSucceedsWhenAppRemovesInputAfterLastCharacter() throws {
+    let textField = try launchRemovableInputFixture("--agent-device-text-entry-auto-submit-without-successor")
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-auto-submit-no-successor", text: "123456", at: textField)
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(response.data?.message, "typed")
+    XCTAssertFalse(textField.exists)
+    XCTAssertEqual(app.textFields.count, 0)
+  }
+
+  // The closest negative: the input is removed after the first character, so the rest was never
+  // delivered. That stays a typed failure, still without an XCTest failure.
+  @MainActor
+  func testFillFailsWhenAppRemovesInputBeforeTextIsDelivered() throws {
+    let textField = try launchRemovableInputFixture("--agent-device-text-entry-disappear-after-input")
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-disappearing-input", text: "123456", at: textField)
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "TEXT_INPUT_NOT_FOCUSED")
+    XCTAssertFalse(textField.exists)
+  }
+
+  // The navigation lands after the first character and focuses a successor input in the same spot.
+  // The remaining posts resolve that successor by point, so they must refuse it rather than type the
+  // rest of the code into the next screen.
+  @MainActor
+  func testFillFailsWhenAppReplacesInputBeforeTextIsDelivered() throws {
+    let textField = try launchRemovableInputFixture("--agent-device-text-entry-replace-after-input")
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-replaced-input", text: "123456", at: textField)
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "TEXT_INPUT_NOT_FOCUSED")
+    XCTAssertFalse(textField.exists)
+    let nextScreenField = app.textFields["agent-device-auto-submit-next-screen-input"]
+    XCTAssertTrue(nextScreenField.exists)
+    XCTAssertEqual(editableTextValue(for: nextScreenField, treatingPlaceholderAsEmpty: true), "")
+  }
+
+  // Neither input has an identifier, so the successor carries the same identity as the code field.
+  // The runner cannot tell them apart and must not clear and retype the successor: it reports the
+  // mismatch it read instead of repairing.
+  @MainActor
+  func testFillDoesNotRepairIntoAnIndistinguishableSuccessorInput() throws {
+    let textField = try launchRemovableInputFixture(
+      "--agent-device-text-entry-auto-submit",
+      "--agent-device-text-entry-unnamed-input"
+    )
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-unnamed-successor", text: "123456", at: textField)
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "TEXT_ENTRY_MISMATCH")
+    XCTAssertEqual(app.textFields.count, 1)
+    XCTAssertEqual(editableTextValue(for: app.textFields.element(boundBy: 0), treatingPlaceholderAsEmpty: true), "")
+  }
+
+  // The known limit: neither input has an identifier, and the successor takes the code field's index
+  // in the query that bound it, so the remaining posts resolve to it. Refusing point and focus
+  // re-resolution would not help, because the index-bound query itself returns the successor. The
+  // command must still fail typed, never report success or repair into the successor.
+  @MainActor
+  func testFillFailsTypedWhenAnIndistinguishableInputReplacesItMidDelivery() throws {
+    let textField = try launchRemovableInputFixture(
+      "--agent-device-text-entry-replace-after-input",
+      "--agent-device-text-entry-unnamed-input"
+    )
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-unnamed-replaced", text: "123456", at: textField)
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "TEXT_ENTRY_MISMATCH")
+    XCTAssertEqual(app.textFields.count, 1)
+    XCTAssertEqual(editableTextValue(for: app.textFields.element(boundBy: 0), treatingPlaceholderAsEmpty: true), "23456")
+  }
+
   // Text past the delivery budget cannot be paced into a field the runner cannot resolve, so it goes
   // through application-wide typing. The budget is charged the whole command, warmup split included:
   // an append peels its first character for warmup, so a per-dispatch charge would find both of its
@@ -239,6 +367,34 @@ extension RunnerTests {
     XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
     XCTAssertFalse(textField.frame.isEmpty)
     return textField
+  }
+
+  /// Launches the soft-keyboard text-entry fixture with `arguments` choosing when the app removes or
+  /// replaces its input, and returns that input bound by index, since it may have no identifier.
+  private func launchRemovableInputFixture(_ arguments: String...) throws -> XCUIElement {
+    app.launchArguments = [
+      "--agent-device-text-entry-regression",
+      "--agent-device-text-entry-soft-keyboard",
+    ] + arguments
+    app.launch()
+    addTeardownBlock { [self] in
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    let textField = arguments.contains("--agent-device-text-entry-unnamed-input")
+      ? app.textFields.element(boundBy: 0)
+      : app.textFields["agent-device-hardware-keyboard-input"]
+    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
+    return textField
+  }
+
+  /// The `type` command the daemon sends for `fill`: replace mode, addressed by the input's center.
+  private func fillCommandFixture(commandId: String, text: String, at element: XCUIElement) throws -> Command {
+    let frame = element.frame
+    return try runnerCommandFixture(
+      #"{"command":"type","commandId":"\#(commandId)","text":"\#(text)","textEntryMode":"replace","x":\#(frame.midX),"y":\#(frame.midY)}"#
+    )
   }
 
   @MainActor
