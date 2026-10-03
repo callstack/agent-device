@@ -14,13 +14,13 @@ import {
 import type { AgentDeviceClient } from '../agent-device-client.ts';
 import { resolveCloudWebDriverConnectProfile } from '../cli/connection/cloud-webdriver-profile.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { verifyDoublespeedConnection } from '../../packages/provider-doublespeed/src/connection-verification.ts';
+import { verifyDoublespeedConnection } from '@agent-device/doublespeed/connection-verification';
 import { verifyLimrunConnection } from '@agent-device/provider-limrun';
-import doublespeedPlugin from '../../packages/provider-doublespeed/src/plugin.ts';
+import doublespeedPlugin from '@agent-device/doublespeed';
 import { createPluginHost } from '../plugins/host.ts';
 import { selectPlugin, pluginHome } from '../plugins/plugin.fixtures.ts';
 import { installedPlugins } from '../plugins/store.ts';
-import manifest from '../../packages/provider-doublespeed/package.json' with { type: 'json' };
+import manifest from '@agent-device/doublespeed/package.json' with { type: 'json' };
 import type { PluginConnection } from '../plugins/connection.ts';
 import { providerWebDriver } from '../provider-webdriver.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
@@ -35,15 +35,10 @@ vi.mock('@agent-device/provider-limrun', async (importOriginal) => ({
   verifyLimrunConnection: vi.fn(),
 }));
 
-vi.mock(
-  '../../packages/provider-doublespeed/src/connection-verification.ts',
-  async (importOriginal) => ({
-    ...(await importOriginal<
-      typeof import('../../packages/provider-doublespeed/src/connection-verification.ts')
-    >()),
-    verifyDoublespeedConnection: vi.fn(),
-  }),
-);
+vi.mock('@agent-device/doublespeed/connection-verification', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/doublespeed/connection-verification')>()),
+  verifyDoublespeedConnection: vi.fn(),
+}));
 
 vi.mock('../provider-webdriver.ts', () => ({
   providerWebDriver: { verifyConnection: vi.fn() },

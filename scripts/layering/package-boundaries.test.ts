@@ -16,6 +16,7 @@ import {
   checkPackageInternalSites,
   checkRootSites,
   readWorkspacePackages,
+  workspacePackagesFromManifests,
   rootExternalDependencyRanges,
   rootWorkspaceDependencyNames,
   specifierSites,
@@ -146,6 +147,38 @@ test('readWorkspacePackages reads tracked manifests only', () => {
     !names.includes('@agent-device/scratch'),
     'an uncommitted package directory is not part of the committed state R11 describes',
   );
+});
+
+test('published ESM plugins declare bundled workspace build dependencies without runtime dependencies', () => {
+  const [plugin] = workspacePackagesFromManifests(
+    new Map([
+      [
+        'packages/provider-example/package.json',
+        JSON.stringify({
+          name: '@agent-device/example',
+          exports: { '.': { import: './dist/plugin.mjs' } },
+          devDependencies: { '@agent-device/kernel': 'workspace:*', tsdown: '^0.21.0' },
+        }),
+      ],
+    ]),
+  );
+  assert.ok(plugin);
+  assert.equal(
+    plugin.exportTargets.get('@agent-device/example'),
+    'packages/provider-example/dist/plugin.mjs',
+  );
+  assert.deepEqual([...plugin.workspaceDependencies], ['@agent-device/kernel']);
+  assert.equal(plugin.externalDependencies.size, 0);
+  const sites = specifierSites(
+    'packages/provider-example/src/plugin.ts',
+    "import { AppError } from '@agent-device/kernel/errors';",
+  );
+  assert.deepEqual(checkPackageInternalSites(plugin, sites, [plugin, kernel]), []);
+  const undeclared = { ...plugin, workspaceDependencies: new Set<string>() };
+  const violations = checkPackageInternalSites(undeclared, sites, [undeclared, kernel]);
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0]?.rule, 'R11 package-boundaries');
+  assert.match(violations[0]?.message ?? '', /without declaring/);
 });
 
 test('every workspace package façade names its exports explicitly (no bare `export *`)', () => {
@@ -785,7 +818,11 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.ok(providerDoublespeedPackage, 'provider-doublespeed package must exist');
   assert.deepEqual(
     [...providerDoublespeedPackage.exportTargets.keys()],
-    ['@agent-device/doublespeed'],
+    [
+      '@agent-device/doublespeed',
+      '@agent-device/doublespeed/connection-verification',
+      '@agent-device/doublespeed/package.json',
+    ],
   );
   assert.deepEqual([...providerDoublespeedPackage.workspaceDependencies].sort(), [
     '@agent-device/capture-kit',
@@ -846,8 +883,8 @@ test('the real tree parses, declares, and passes R11', () => {
   );
   assert.equal(
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/doublespeed'),
-    false,
-    'optional plugin is absent from the root dependency graph',
+    true,
+    'workspace tests resolve the plugin through its declared development dependency',
   );
   assert.ok(
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/xml'),
@@ -916,11 +953,7 @@ test('Node resolution enforces the exports map at runtime', () => {
     providerLimrunResolved.endsWith('packages/provider-limrun/src/index.ts'),
     providerLimrunResolved,
   );
-  assert.throws(
-    () => import.meta.resolve('@agent-device/doublespeed'),
-    /ERR_MODULE_NOT_FOUND/,
-    'core does not resolve optional providers before installation',
-  );
+  assert.ok(import.meta.resolve('@agent-device/doublespeed').endsWith('/src/index.ts'));
   const xmlResolved = import.meta.resolve('@agent-device/xml');
   assert.ok(xmlResolved.endsWith('packages/xml/src/index.ts'), xmlResolved);
   const adScriptResolved = import.meta.resolve('@agent-device/ad-script');

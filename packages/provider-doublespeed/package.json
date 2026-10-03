@@ -6,8 +6,14 @@
   "description": "Doublespeed iOS simulator plugin for agent-device.",
   "exports": {
     ".": {
-      "import": "./dist/plugin.mjs"
-    }
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./connection-verification": {
+      "types": "./src/connection-verification.ts",
+      "default": "./src/connection-verification.ts"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist"
@@ -34,6 +40,13 @@
       "supportsDeferredAppSelection": true,
       "supportsDirectPortReverse": false,
       "usesCloudWebDriverLease": false
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "import": "./dist/plugin.mjs"
+      }
     }
   }
 }

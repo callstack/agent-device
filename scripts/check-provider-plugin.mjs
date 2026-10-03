@@ -31,6 +31,11 @@ async function run(command, args, cwd) {
   return await exec(command, args, { cwd, maxBuffer: 16 * 1024 * 1024, timeout: 120_000 });
 }
 async function pack(directory) {
+  if (directory === plugin) {
+    const tarball = path.join(scratch, 'plugin.tgz');
+    await run('pnpm', ['pack', '--out', tarball], directory);
+    return tarball;
+  }
   const { stdout } = await run(
     'npm',
     ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch],
@@ -57,6 +62,12 @@ try {
     project,
   );
   const manifest = JSON.parse(await fs.readFile(path.join(plugin, 'package.json'), 'utf8'));
+  const installed = JSON.parse(
+    await fs.readFile(path.join(project, 'node_modules', manifest.name, 'package.json'), 'utf8'),
+  );
+  assert.deepEqual(installed.exports, { '.': { import: './dist/plugin.mjs' } });
+  assert.equal(installed.dependencies, undefined);
+  assert.equal(installed.peerDependencies, undefined);
   await assert.rejects(fs.stat(path.join(project, 'node_modules', 'agent-device')), {
     code: 'ENOENT',
   });

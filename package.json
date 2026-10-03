@@ -343,6 +343,7 @@
     "vite": "^8.2.1",
     "vitest": "^4.1.11",
     "yaml": "^2.9.0",
-    "yauzl": "^3.4.0"
+    "yauzl": "^3.4.0",
+    "@agent-device/doublespeed": "workspace:*"
   }
 }
