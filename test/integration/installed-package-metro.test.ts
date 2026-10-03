@@ -327,6 +327,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
           },
           './metro': (mod) => mod.buildBundleUrl('https://public.example.test', 'ios'),
           './plugins': (mod) => Object.keys(mod).length === 0,
+          './plugins/webdriver': (mod) => Object.keys(mod).length === 0,
           './remote-config': (mod) => typeof mod,
           './selectors': (mod) =>
             mod.isSelectorToken('||') && typeof mod.parseSelectorChain === 'function',
@@ -402,6 +403,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       './io': 'function',
       './limrun': 'limrun',
       './plugins': true,
+      './plugins/webdriver': true,
       // Type-only subpath: resolving the module from the packed exports map is
       // the entire runtime check.
       './remote-config': 'object',
