@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'vitest';
+import { readAndroidCaptureFailureReason } from '@agent-device/contracts/android-snapshot-quality';
 import { AppError } from '@agent-device/kernel/errors';
 import { captureAndroidSnapshotWithHelper } from '../snapshot-helper-capture.ts';
 import { resetAndroidSnapshotHelperRetirements } from '../snapshot-helper-retirement.ts';
@@ -140,8 +141,8 @@ test('a helper failure reported under a zero am exit status keeps its own reason
       exitCode: 0,
       stdout: [
         'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-snapshot-helper-v1',
-        'INSTRUMENTATION_RESULT: errorType=com.callstack.agentdevice.snapshothelper.AccessibilityCaptureStabilizer$IncompleteCaptureException',
-        'INSTRUMENTATION_RESULT: message=Android accessibility capture remained incomplete after 500 ms',
+        'INSTRUMENTATION_RESULT: errorType=java.util.concurrent.TimeoutException',
+        'INSTRUMENTATION_RESULT: message=Timed out waiting for the accessibility hierarchy',
         'INSTRUMENTATION_RESULT: ok=false',
         'INSTRUMENTATION_CODE: 1',
       ].join('\n'),
@@ -153,8 +154,8 @@ test('a helper failure reported under a zero am exit status keeps its own reason
     captureAndroidSnapshotWithHelper({ adb, deviceKey: 'android:emulator-5554' }),
     (error: unknown) =>
       error instanceof AppError &&
-      error.message === 'Android accessibility capture remained incomplete after 500 ms' &&
-      typeof error.details?.helper === 'object',
+      readAndroidCaptureFailureReason(error) === 'accessibility-timeout' &&
+      error.details?.errorType === 'java.util.concurrent.TimeoutException',
   );
 });
 
