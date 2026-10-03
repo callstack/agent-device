@@ -50,13 +50,24 @@ async function recordHelperCalls(
   return { calls, result };
 }
 
-test('a native tap presses the app surface and reports the mechanism', async () => {
+test('a native tap presses the app surface under the ghost cursor and reports the mechanism', async () => {
   const { calls, result } = await recordHelperCalls(
     { x: 10, y: 20, mechanism: 'ax-press' },
     async (overrides) => await overrides.tap(10, 20),
   );
   assert.deepEqual(calls, [
-    ['press', '--x', '10', '--y', '20', '--bundle-id', 'com.apple.TextEdit', '--surface', 'app'],
+    [
+      'press',
+      '--x',
+      '10',
+      '--y',
+      '20',
+      '--bundle-id',
+      'com.apple.TextEdit',
+      '--surface',
+      'app',
+      '--ghost-cursor',
+    ],
   ]);
   assert.deepEqual(result, { mechanism: 'ax-press' });
 });
@@ -67,8 +78,19 @@ test('native type and fill address the session app, not the frontmost one', asyn
     await overrides.fill(5, 6, 'world');
   });
   assert.deepEqual(calls, [
-    ['type', '--text', 'hello', '--bundle-id', 'com.apple.TextEdit'],
-    ['fill', '--x', '5', '--y', '6', '--text', 'world', '--bundle-id', 'com.apple.TextEdit'],
+    ['type', '--text', 'hello', '--bundle-id', 'com.apple.TextEdit', '--ghost-cursor'],
+    [
+      'fill',
+      '--x',
+      '5',
+      '--y',
+      '6',
+      '--text',
+      'world',
+      '--bundle-id',
+      'com.apple.TextEdit',
+      '--ghost-cursor',
+    ],
   ]);
 });
 
@@ -87,7 +109,16 @@ test('a native scroll reports travel from the window frame the helper resolved',
     async (overrides) => await overrides.scroll('down', { pixels: 300 }),
   );
   assert.deepEqual(calls, [
-    ['scroll', '--direction', 'down', '--pixels', '300', '--bundle-id', 'com.apple.TextEdit'],
+    [
+      'scroll',
+      '--direction',
+      'down',
+      '--pixels',
+      '300',
+      '--bundle-id',
+      'com.apple.TextEdit',
+      '--ghost-cursor',
+    ],
   ]);
   assert.deepEqual(result, {
     x1: 480,

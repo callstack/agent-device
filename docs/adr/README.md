@@ -32,7 +32,7 @@
 | [0028 Capability-Family Cell Vocabulary — One Runtime Source (Proposed)](0028-capability-family-cell-vocabulary.md) | adding a capability operation family, `UnavailablePlatformRuntimeFacts` / `UNAVAILABLE_CELLS`, `INTERACTOR_OPERATIONS`, and why an eight-package fan-out recurs |
 | [0029 Daemon Policy](0029-daemon-policy.md) | `AGENT_DEVICE_DAEMON_POLICY`, confining a daemon's commands, devices, or device shutdown, and where operator rules are enforced for batch/replay steps |
 | [0030 Process Lock Exclusion](0030-process-lock-exclusion.md) | process-lock publication/reclaim/release, retained mutation guards, and the single-protocol upgrade boundary |
-| [0031 macOS Native App Backend](0031-macos-native-app-backend.md) | `AGENT_DEVICE_MACOS_APP_BACKEND`, driving macOS app sessions without XCTest Automation Mode, and why pointer actions are accessibility actions only |
+| [0031 macOS Native App Backend](0031-macos-native-app-backend.md) | `AGENT_DEVICE_MACOS_APP_BACKEND`, driving macOS app sessions without XCTest Automation Mode, why pointer actions are accessibility actions only, and the ghost cursor |
 
 ADRs record *why*; the registries and gates they describe are the living source of truth — when
 prose and a registry disagree, the registry wins and the ADR needs a follow-up.

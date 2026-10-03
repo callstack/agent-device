@@ -53,6 +53,11 @@ test with wrapper groups that all claim `AXPress`, so a group is pressed only wh
 contains the point. This resolves the same point the daemon computed from the snapshot node; the
 daemon dispatch paths and their ADR 0011 guarantees are unchanged.
 
+**Ghost cursor.** Each helper action draws its own pointer, glides to the target, and pulses on
+delivery so a person can follow the agent without losing the real pointer.
+`AGENT_DEVICE_MACOS_GHOST_CURSOR=0` disables it. The helper is one-shot, so the cursor lives for
+the action and persists only its last position.
+
 ## Rejected alternatives
 
 - **Suppressing Automation Mode.** `automationmodetool` removes the authentication prompt, not the
