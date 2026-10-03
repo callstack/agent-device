@@ -16,6 +16,7 @@ export type {
 } from '../provider-connection.ts';
 export {
   PROVIDER_DEVICE_ORIENTATIONS,
+  PROVIDER_PROFILE_FIELD_FLAG_ALIASES,
   PROVIDER_PROFILE_FIELD_FLAGS,
 } from '../remote-config-fields.ts';
 export type {

@@ -1,5 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  PROVIDER_PROFILE_FIELD_FLAG_ALIASES,
   PROVIDER_PROFILE_FIELD_FLAGS,
   type CloudProviderProfileFields,
 } from './remote-config-fields.ts';
@@ -25,20 +26,27 @@ export function rejectRefusedProviderProfileFields(
   flags: Readonly<Record<string, unknown>> | undefined,
   declaration: ProviderProfileFieldDeclaration,
 ): void {
-  const refused = (Object.keys(declaration.fields) as ProviderProfileField[])
-    .filter((field) => declaration.fields[field] === 'refused' && isSet(flags?.[field]))
-    .map((field) => PROVIDER_PROFILE_FIELD_FLAGS[field]);
+  const refused = (Object.keys(declaration.fields) as ProviderProfileField[]).filter(
+    (field) => declaration.fields[field] === 'refused' && isSet(flags?.[field]),
+  );
   if (refused.length === 0) return;
   const plural = refused.length !== 1;
   throw new AppError(
     'INVALID_ARGS',
-    `${refused.join(', ')} ${plural ? 'are' : 'is'} not supported by ${declaration.label}.`,
+    `${refused.map(describeFlag).join(', ')} ${plural ? 'are' : 'is'} not supported by ${declaration.label}.`,
     {
       hint: `Drop ${plural ? 'those flags' : 'the flag'} or use a provider that supports ${plural ? 'them' : 'it'}.`,
       provider: declaration.provider,
-      flags: refused,
+      flags: refused.map((field) => PROVIDER_PROFILE_FIELD_FLAGS[field]),
     },
   );
+}
+
+// The flags bag keeps the field, not the spelling, so name every spelling the user could have typed.
+function describeFlag(field: ProviderProfileField): string {
+  const aliases = PROVIDER_PROFILE_FIELD_FLAG_ALIASES[field];
+  const flag = PROVIDER_PROFILE_FIELD_FLAGS[field];
+  return aliases?.length ? `${flag} (${aliases.join(', ')})` : flag;
 }
 
 function isSet(value: unknown): boolean {

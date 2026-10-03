@@ -67,6 +67,21 @@ export const PROVIDER_PROFILE_FIELD_FLAGS: Readonly<
   awsInteractionMode: '--aws-interaction-mode',
 };
 
+/** Other spellings the CLI accepts for a profile field, so an error also names the one typed. */
+export const PROVIDER_PROFILE_FIELD_FLAG_ALIASES: Readonly<
+  Partial<Record<keyof CloudProviderProfileFields, readonly string[]>>
+> = {
+  providerOsVersion: ['--os-version'],
+  providerDeviceOrientation: ['--device-orientation'],
+  providerGeoLocation: ['--geo-location'],
+  providerTimezone: ['--timezone'],
+  providerAppiumVersion: ['--appium-version'],
+  providerLanguage: ['--language'],
+  providerLocale: ['--locale'],
+  providerNetworkProfile: ['--network-profile'],
+  providerCustomNetwork: ['--custom-network'],
+};
+
 export type RemoteConfigMetroOptions = {
   metroProjectRoot?: string;
   metroKind?: MetroPrepareKind;
