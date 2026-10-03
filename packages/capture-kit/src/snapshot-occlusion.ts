@@ -1,8 +1,12 @@
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import { centerOfRect } from '@agent-device/kernel/snapshot';
 import { areRectsApproximatelyEqual, normalizeRect } from '@agent-device/kernel/rect-center';
-import { containsPoint } from '@agent-device/kernel/rect';
-import { normalizeType, isViewportRootNode } from '@agent-device/contracts/snapshot';
+import { containsPoint, rectContains } from '@agent-device/kernel/rect';
+import {
+  isScrollableNodeLike,
+  normalizeType,
+  isViewportRootNode,
+} from '@agent-device/contracts/snapshot';
 
 const COVERED_PRESENTATION_HINT = 'covered';
 const OVERLAY_KIND_FRAGMENTS = [
@@ -18,6 +22,7 @@ const OVERLAY_KIND_FRAGMENTS = [
   'menu',
 ];
 const VIEWPORT_CHROME_KIND_FRAGMENTS = ['tabbar', 'toolbar', 'navigationbar'];
+const TOOLBAR_HOST_KIND_FRAGMENTS = ['toolbar'];
 const SEMANTIC_TOUCH_KIND_FRAGMENTS = [
   'button',
   'link',
@@ -275,6 +280,7 @@ function isOverlayLikeNode(
   if (isViewportRootNode(node)) return false;
   if (isFullViewportChromeContainer(node, neighbourhood.byIndex)) return false;
   if (isSiblingSizedChromeContainer(node, neighbourhood)) return false;
+  if (isSiblingEnclosingToolbarHost(node, neighbourhood)) return false;
   // This is a presentation-order heuristic: only known floating UI chrome should cover
   // later targets. Generic hittable containers can appear later without being visually on top.
   return (
@@ -316,6 +322,41 @@ function isSiblingSizedChromeContainer(
   return siblings.some(
     (sibling) => sibling.index !== node.index && areRectsApproximatelyEqual(rect, sibling.rect),
   );
+}
+
+/**
+ * Exempt a toolbar host that encloses a listed sibling bar or scroll region. A bar does not enclose
+ * another bar or a list; SwiftUI's toolbar host does: it spans the presentation it belongs to (a
+ * sheet, the navigation container), so its frame wraps the navigation bar and the list listed beside
+ * it, while the bar it really draws is its own descendants.
+ *
+ * The sibling-sized rule cannot see this host once a projection reshapes the tree: pruning drops the
+ * pass-through wrappers that share the host's frame, and the scroll-indicator viewport rewrites the
+ * list's frame to its visible band, so no sibling keeps the host's frame. Captured in `snapshot -i`
+ * on an iOS 27 simulator, this refused every control of a SwiftUI sheet, with or without a visible
+ * navigation bar beside the list.
+ *
+ * Only the toolbar kind hosts this way: a navigation bar enclosing a same-kind sibling is a stacked
+ * presentation drawn over the one beneath it. The enclosed sibling must be chrome or a scroll region,
+ * since a host enclosing a plain content view cannot be told from a bar painted over that view.
+ */
+function isSiblingEnclosingToolbarHost(
+  node: RawSnapshotNode,
+  neighbourhood: NeighbourhoodIndex,
+): boolean {
+  if (!nodeKindIncludesAny(node, TOOLBAR_HOST_KIND_FRAGMENTS)) return false;
+  if (typeof node.parentIndex !== 'number') return false;
+  const rect = positiveRect(node.rect);
+  if (!rect) return false;
+  const siblings = neighbourhood.childrenByParent.get(node.parentIndex) ?? [];
+  return siblings.some((sibling) => {
+    if (sibling.index === node.index) return false;
+    const siblingRect = positiveRect(sibling.rect);
+    if (!siblingRect || !rectContains(rect, siblingRect)) return false;
+    return (
+      nodeKindIncludesAny(sibling, VIEWPORT_CHROME_KIND_FRAGMENTS) || isScrollableNodeLike(sibling)
+    );
+  });
 }
 
 function isFullViewportChromeContainer(

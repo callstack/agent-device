@@ -428,3 +428,113 @@ test.for(CHROME_KIND_PUBLICATIONS)(
     );
   },
 );
+
+type CapturedNode = [
+  index: number,
+  parentIndex: number | undefined,
+  type: string,
+  role: string,
+  label: string | undefined,
+  rect: [x: number, y: number, width: number, height: number],
+];
+
+/** Builds a tree from rows captured with `snapshot -i --json`, every node hittable as published. */
+function capturedTree(rows: CapturedNode[]): RawSnapshotNode[] {
+  const depthByIndex = new Map<number, number>();
+  return rows.map(([index, parentIndex, type, role, label, [x, y, width, height]]) => {
+    const depth = parentIndex === undefined ? 0 : (depthByIndex.get(parentIndex) ?? 0) + 1;
+    depthByIndex.set(index, depth);
+    return node({
+      index,
+      parentIndex,
+      depth,
+      type,
+      role,
+      label,
+      rect: { x, y, width, height },
+      hittable: true,
+    });
+  });
+}
+
+/** Labels (or types, for unlabelled nodes) the occlusion pass marks covered, in tree order. */
+function coveredLabels(nodes: RawSnapshotNode[]): string[] {
+  return annotateCoveredSnapshotNodes(nodes)
+    .filter((candidate) => candidate.interactionBlocked === 'covered')
+    .map((candidate) => candidate.label ?? candidate.type ?? '');
+}
+
+test('the captured iOS 27 SwiftUI sheet toolbar host stops condemning the sheet in the interactive projection', () => {
+  // `snapshot -i` of a `.medium` SwiftUI sheet on an iOS 27 simulator. Pruning dropped the wrappers
+  // sharing the host's frame and the list's frame was rewritten to its scroll-indicator band, so no
+  // sibling matches the host's 386x451 frame; it encloses the navigation bar and the list beside it.
+  const nodes = capturedTree([
+    [0, undefined, 'Other', 'SwiftUIApplication', 'SheetRepro', [0, 0, 402, 874]],
+    [2, 0, 'Button', '_UIGrabber', 'Sheet Grabber', [152.99, 411.19, 96.02, 23.04]],
+    [3, 0, 'NavigationBar', 'SwiftUI.UIKitNavigationBar', undefined, [8, 430.39, 386, 101.78]],
+    [4, 3, 'Button', 'SwiftUI.AccessibilityNode', 'Close', [27.2, 434.23, 64.33, 34.57]],
+    [7, 3, 'SearchField', 'UISearchBarTextField', 'Search', [23.36, 482.24, 355.27, 40.33]],
+    [8, 0, 'CollectionView', 'SwiftUI.CollectionView', undefined, [8, 482.24, 386, 331.91]],
+    [9, 8, 'Cell', 'SwiftUI.ListCollectionViewCell', undefined, [23.36, 532.17, 355.27, 49.93]],
+    [
+      10,
+      9,
+      'Button',
+      'SwiftUI.AccessibilityNode',
+      'Primary action',
+      [23.36, 532.17, 355.27, 49.93],
+    ],
+    [13, 8, 'Cell', 'SwiftUI.ListCollectionViewCell', undefined, [23.36, 632.03, 355.27, 49.93]],
+    [14, 13, 'TextField', 'SwiftUI.UIKitTextField', 'Name', [38.73, 646.43, 324.55, 21.12]],
+    [15, 8, 'Cell', 'SwiftUI.ListCollectionViewCell', undefined, [23.36, 681.96, 355.27, 132.19]],
+    [16, 15, 'TextView', 'SwiftUI.TextEditorTextView', 'Notes', [38.73, 696.36, 324.55, 115.22]],
+    [17, 0, 'Toolbar', '_UIFloatingBarContainerView', 'Toolbar', [8, 415.03, 386, 450.97]],
+    [18, 17, 'Button', 'SwiftUI.AccessibilityNode', 'Bottom', [163.55, 798.79, 74.9, 34.57]],
+  ]);
+
+  assert.deepEqual(coveredLabels(nodes), []);
+});
+
+test('the captured iOS 27 sheet toolbar host with a hidden navigation bar stops condemning the list', () => {
+  // The same host beside nothing but the list: with `.toolbar(.hidden, for: .navigationBar)` the
+  // enclosed scroll region is the only sibling evidence the interactive projection keeps.
+  const nodes = capturedTree([
+    [0, undefined, 'Other', 'SwiftUIApplication', 'SheetRepro', [0, 0, 402, 874]],
+    [1, 0, 'CollectionView', 'SwiftUI.CollectionView', undefined, [0, 100, 402, 712]],
+    [2, 1, 'Cell', 'SwiftUI.ListCollectionViewCell', undefined, [16, 100, 370, 49]],
+    [3, 2, 'Button', 'SwiftUI.AccessibilityNode', 'Barless primary', [16, 100, 370, 49]],
+    [16, 1, 'Cell', 'SwiftUI.ListCollectionViewCell', 'Barless row 12', [16, 773, 370, 39]],
+    [17, 0, 'Toolbar', '_UIFloatingBarContainerView', 'Toolbar', [0, 62, 402, 812]],
+    [18, 17, 'Button', 'SwiftUI.AccessibilityNode', 'Barless bottom', [132.67, 804, 137, 36]],
+  ]);
+
+  assert.deepEqual(coveredLabels(nodes), []);
+});
+
+test('a navigation bar enclosing the navigation bar it was presented over still covers it', () => {
+  // `snapshot -i` of a full-screen cover on an iOS 27 simulator: the cover's navigation bar encloses
+  // the presenting screen's bar. A stacked bar is drawn over the one beneath, so only the toolbar
+  // kind is read as a host.
+  const nodes = capturedTree([
+    [0, undefined, 'Other', 'SwiftUIApplication', 'SheetRepro', [0, 0, 402, 874]],
+    [1, 0, 'NavigationBar', 'SwiftUI.UIKitNavigationBar', 'Home', [0, 62, 402, 106]],
+    [2, 1, 'Button', 'SwiftUI.AccessibilityNode', 'Edit', [328.67, 66, 53.33, 36]],
+    [19, 0, 'NavigationBar', 'SwiftUI.UIKitNavigationBar', 'Sheet cover', [0, 62, 402, 108]],
+    [20, 19, 'Button', 'SwiftUI.AccessibilityNode', 'Close', [20, 66, 67, 36]],
+  ]);
+
+  assert.deepEqual(coveredLabels(nodes), ['Home', 'Edit']);
+});
+
+test('a toolbar host enclosing a plain content sibling still covers it, so the enclosed kind is gated', () => {
+  // Non-vacuity for the host rule: the same host frame beside a plain `Other` branch instead of the
+  // list keeps covering, as the containment case above requires.
+  const nodes = capturedTree([
+    [0, undefined, 'Other', 'SwiftUIApplication', 'SheetRepro', [0, 0, 402, 874]],
+    [1, 0, 'Other', 'UIView', undefined, [0, 100, 402, 712]],
+    [3, 1, 'Button', 'SwiftUI.AccessibilityNode', 'Barless primary', [16, 100, 370, 49]],
+    [17, 0, 'Toolbar', '_UIFloatingBarContainerView', 'Toolbar', [0, 62, 402, 812]],
+  ]);
+
+  assert.deepEqual(coveredLabels(nodes), ['Other', 'Barless primary']);
+});
