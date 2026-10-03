@@ -1,11 +1,19 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/tool-provider.ts';
 import { macOsNativeAppInteractor } from './native-app-interactor.ts';
 
 const context: RunnerContext = { appBundleId: 'com.apple.TextEdit' };
+
+// The drawn cursor is the default; pin it so an operator's opt-out does not change the argv.
+beforeEach(() => {
+  vi.stubEnv('AGENT_DEVICE_MACOS_GHOST_CURSOR', '');
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 /** The XCTest-backed interactor the native one draws from; any member it calls is recorded. */
 function runnerInteractor(reached: string[] = []): Interactor {
@@ -44,13 +52,24 @@ async function recordHelperCalls(
   return { calls, result };
 }
 
-test('a native tap presses the app surface and reports the mechanism', async () => {
+test('a native tap presses the app surface under the ghost cursor and reports the mechanism', async () => {
   const { calls, result } = await recordHelperCalls(
     { x: 10, y: 20, mechanism: 'ax-press', windowTitle: 'Untitled' },
     async (interactor) => await interactor.tap(10, 20),
   );
   assert.deepEqual(calls, [
-    ['press', '--x', '10', '--y', '20', '--bundle-id', 'com.apple.TextEdit', '--surface', 'app'],
+    [
+      'press',
+      '--x',
+      '10',
+      '--y',
+      '20',
+      '--bundle-id',
+      'com.apple.TextEdit',
+      '--surface',
+      'app',
+      '--ghost-cursor',
+    ],
   ]);
   assert.deepEqual(result, { mechanism: 'ax-press', windowTitle: 'Untitled' });
 });
@@ -61,8 +80,19 @@ test('native type and fill address the session app, not the frontmost one', asyn
     await interactor.fill(5, 6, 'world');
   });
   assert.deepEqual(calls, [
-    ['type', '--text', 'hello', '--bundle-id', 'com.apple.TextEdit'],
-    ['fill', '--x', '5', '--y', '6', '--text', 'world', '--bundle-id', 'com.apple.TextEdit'],
+    ['type', '--text', 'hello', '--bundle-id', 'com.apple.TextEdit', '--ghost-cursor'],
+    [
+      'fill',
+      '--x',
+      '5',
+      '--y',
+      '6',
+      '--text',
+      'world',
+      '--bundle-id',
+      'com.apple.TextEdit',
+      '--ghost-cursor',
+    ],
   ]);
 });
 
@@ -81,7 +111,16 @@ test('a native scroll reports travel from the window frame the helper resolved',
     async (interactor) => await interactor.scroll('down', { pixels: 300 }),
   );
   assert.deepEqual(calls, [
-    ['scroll', '--direction', 'down', '--pixels', '300', '--bundle-id', 'com.apple.TextEdit'],
+    [
+      'scroll',
+      '--direction',
+      'down',
+      '--pixels',
+      '300',
+      '--bundle-id',
+      'com.apple.TextEdit',
+      '--ghost-cursor',
+    ],
   ]);
   assert.deepEqual(result, {
     x1: 480,
@@ -93,6 +132,31 @@ test('a native scroll reports travel from the window frame the helper resolved',
     pixels: 300,
     mechanism: 'ax-scroll-bar',
   });
+});
+
+test('AGENT_DEVICE_MACOS_GHOST_CURSOR=0 sends the action without a drawn cursor', async () => {
+  vi.stubEnv('AGENT_DEVICE_MACOS_GHOST_CURSOR', '0');
+  const { calls } = await recordHelperCalls({ mechanism: 'ax-press' }, async (interactor) => {
+    await interactor.tap(10, 20);
+    await interactor.type('hello');
+  });
+  assert.ok(calls.every((argv) => !argv.includes('--ghost-cursor')));
+});
+
+test('only a drawn cursor extends the helper deadline', async () => {
+  const deadlines: Array<number | undefined> = [];
+  const provider = createLocalAppleToolProvider({
+    macosHelper: {
+      run: async (_args, options) => {
+        deadlines.push(options?.timeoutMs);
+        return { exitCode: 0, stdout: JSON.stringify({ ok: true, data: {} }), stderr: '' };
+      },
+    },
+  });
+  await withAppleToolProvider(provider, async () => await nativeInteractor().fill(1, 2, 'x'));
+  vi.stubEnv('AGENT_DEVICE_MACOS_GHOST_CURSOR', '0');
+  await withAppleToolProvider(provider, async () => await nativeInteractor().fill(1, 2, 'x'));
+  assert.equal(deadlines[0]! - deadlines[1]!, 1_000);
 });
 
 test('runner-only members refuse with the backend reason instead of starting XCTest', async () => {

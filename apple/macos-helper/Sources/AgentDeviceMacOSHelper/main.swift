@@ -419,7 +419,9 @@ struct AgentDeviceMacOSHelper {
     if surface == "app" {
       let app = try requireSessionApplication(bundleId: bundleId)
       return SuccessEnvelope(
-        data: try pressInBackground(request, app: app)
+        data: try withGhostCursor(arguments) { cursor in
+          try pressInBackground(request, app: app, cursor: cursor)
+        }
       )
     }
     try pressAtPosition(request)
@@ -450,7 +452,9 @@ struct AgentDeviceMacOSHelper {
       bundleId: try optionValue(arguments: arguments, name: "--bundle-id").map(validatedBundleId)
     )
     return SuccessEnvelope(
-      data: try typeInBackground(text: text, delayMs: delayMs, app: app)
+      data: try withGhostCursor(arguments) { cursor in
+        try typeInBackground(text: text, delayMs: delayMs, app: app, cursor: cursor)
+      }
     )
   }
 
@@ -467,7 +471,10 @@ struct AgentDeviceMacOSHelper {
       bundleId: try optionValue(arguments: arguments, name: "--bundle-id").map(validatedBundleId)
     )
     return SuccessEnvelope(
-      data: try fillInBackground(point: CGPoint(x: x, y: y), text: text, app: app)
+      data: try withGhostCursor(arguments) { cursor in
+        try fillInBackground(
+          point: CGPoint(x: x, y: y), text: text, app: app, cursor: cursor)
+      }
     )
   }
 
@@ -484,12 +491,15 @@ struct AgentDeviceMacOSHelper {
       bundleId: try optionValue(arguments: arguments, name: "--bundle-id").map(validatedBundleId)
     )
     return SuccessEnvelope(
-      data: try scrollInBackground(
-        direction: direction,
-        amount: amount,
-        pixels: pixels,
-        app: app
-      )
+      data: try withGhostCursor(arguments) { cursor in
+        try scrollInBackground(
+          direction: direction,
+          amount: amount,
+          pixels: pixels,
+          app: app,
+          cursor: cursor
+        )
+      }
     )
   }
 
@@ -540,6 +550,13 @@ private func optionValue(arguments: [String], name: String) -> String? {
     return nil
   }
   return arguments[index + 1]
+}
+
+/// Runs a background action under the ghost cursor when the host asked for one.
+private func withGhostCursor<T>(_ arguments: [String], _ body: (GhostCursor?) throws -> T) throws -> T {
+  let cursor = arguments.contains("--ghost-cursor") ? GhostCursor.show() : nil
+  defer { cursor?.hide() }
+  return try body(cursor)
 }
 
 private func positiveDoubleOption(arguments: [String], name: String) throws -> Double? {

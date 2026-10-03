@@ -84,7 +84,8 @@ func requireSessionApplication(bundleId: String?) throws -> NSRunningApplication
 
 func pressInBackground(
   _ request: MouseClickRequest,
-  app: NSRunningApplication
+  app: NSRunningApplication,
+  cursor: GhostCursor?
 ) throws -> BackgroundPressResponse {
   guard !request.doubleClick, request.holdMs <= 0 else {
     throw refusal(
@@ -94,6 +95,7 @@ func pressInBackground(
     )
   }
   let point = CGPoint(x: request.x, y: request.y)
+  cursor?.move(to: point)
   guard let target = resolvePressTarget(app: app, point: point),
     let mechanism = perform(target)
   else {
@@ -105,6 +107,7 @@ func pressInBackground(
     guard perform(target) != nil else { break }
     clicks += 1
   }
+  cursor?.pulse()
   return BackgroundPressResponse(
     x: request.x,
     y: request.y,
@@ -121,14 +124,19 @@ func pressInBackground(
 func typeInBackground(
   text: String,
   delayMs: Int,
-  app: NSRunningApplication
+  app: NSRunningApplication,
+  cursor: GhostCursor?
 ) throws -> BackgroundTextResponse {
   let appElement = AXUIElementCreateApplication(app.processIdentifier)
   let focused = elementAttribute(appElement, attribute: kAXFocusedUIElementAttribute as String)
+  if let focused, let rect = rectAttribute(focused) {
+    cursor?.move(to: CGPoint(x: rect.x + rect.width / 2, y: rect.y + rect.height / 2))
+  }
   let focusedRole = focused.map(role(of:))
   if text == "\n", let focused, actionNames(of: focused).contains(kAXConfirmAction as String),
     AXUIElementPerformAction(focused, kAXConfirmAction as CFString) == .success
   {
+    cursor?.pulse()
     return BackgroundTextResponse(
       bundleId: app.bundleIdentifier, mechanism: .axConfirm, role: focusedRole,
       windowTitle: windowTitle(of: focused))
@@ -138,11 +146,13 @@ func typeInBackground(
     AXUIElementSetAttributeValue(focused, kAXSelectedTextAttribute as CFString, text as CFString)
       == .success
   {
+    cursor?.pulse()
     return BackgroundTextResponse(
       bundleId: app.bundleIdentifier, mechanism: .axSelectedText, role: focusedRole,
       windowTitle: windowTitle(of: focused))
   }
   try postText(text, delayMs: delayMs, pid: app.processIdentifier)
+  cursor?.pulse()
   return BackgroundTextResponse(
     bundleId: app.bundleIdentifier, mechanism: .keyEvents, role: focusedRole,
     windowTitle: focused.flatMap(windowTitle(of:)))
@@ -152,8 +162,10 @@ func typeInBackground(
 func fillInBackground(
   point: CGPoint,
   text: String,
-  app: NSRunningApplication
+  app: NSRunningApplication,
+  cursor: GhostCursor?
 ) throws -> BackgroundTextResponse {
+  cursor?.move(to: point)
   let hit = elementAtPoint(in: app, point: point)
   let chain = hit.map(pressSearchChain) ?? []
   let fallback = actionWindow(app: app, hit: hit).flatMap { window in
@@ -169,6 +181,7 @@ func fillInBackground(
   else {
     throw refusal(.noTextInput, "the text input refused the new value", app: app)
   }
+  cursor?.pulse()
   return BackgroundTextResponse(
     bundleId: app.bundleIdentifier, mechanism: .axValue, role: role(of: input),
     windowTitle: windowTitle(of: input))
@@ -179,7 +192,8 @@ func scrollInBackground(
   direction: String,
   amount: Double?,
   pixels: Double?,
-  app: NSRunningApplication
+  app: NSRunningApplication,
+  cursor: GhostCursor?
 ) throws -> BackgroundScrollResponse {
   let isVertical = direction == "up" || direction == "down"
   guard isVertical || direction == "left" || direction == "right" else {
@@ -197,6 +211,7 @@ func scrollInBackground(
     pixels: pixels
   )
   let center = CGPoint(x: frame.midX, y: frame.midY)
+  cursor?.move(to: center)
   let revealsLaterContent = direction == "down" || direction == "right"
   guard
     performScrollBarScroll(
@@ -208,6 +223,7 @@ func scrollInBackground(
   else {
     throw refusal(.noScrollBar, "no scroll area with a settable scroll bar under the window center", app: app)
   }
+  cursor?.pulse()
   // Reported as the equivalent drag, start to end, the way the runner reports a desktop scroll.
   let half = travel / 2
   let sign: Double = revealsLaterContent ? 1 : -1

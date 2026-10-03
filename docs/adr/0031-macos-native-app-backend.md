@@ -67,6 +67,11 @@ point. Sending an element identity instead would be a new dispatch path with its
 row, and an `AXUIElement` cannot outlive the one-shot helper process that resolved it, so an
 identity would be a tree path re-resolved against a tree that may have changed.
 
+**Ghost cursor.** Each helper action draws its own pointer, glides onto the target from a short
+fixed offset, and pulses on delivery, so a person can follow the agent without losing the real
+pointer. It costs about 0.3 s per action and keeps no state between helper processes; a persistent
+pointer would need a long-lived helper. `AGENT_DEVICE_MACOS_GHOST_CURSOR=0` disables it.
+
 ## Rejected alternatives
 
 - **Suppressing Automation Mode.** `automationmodetool` removes the authentication prompt, not the

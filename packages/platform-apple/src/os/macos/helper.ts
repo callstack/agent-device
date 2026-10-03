@@ -112,6 +112,26 @@ function appendMacOsHelperContextArgs(
   }
 }
 
+const MACOS_GHOST_CURSOR_ENV = 'AGENT_DEVICE_MACOS_GHOST_CURSOR';
+
+/**
+ * A background action on an app session draws its own pointer so the user can follow it while
+ * keeping the real one; `AGENT_DEVICE_MACOS_GHOST_CURSOR=0` turns the drawing off.
+ */
+function appendGhostCursorArg(args: string[], surface: SessionSurface | undefined): void {
+  if (surface !== 'app') return;
+  if (readHostEnvironmentVariable(MACOS_GHOST_CURSOR_ENV)?.trim() === '0') return;
+  args.push('--ghost-cursor');
+}
+
+/**
+ * The ghost cursor's glide and pulse take about 0.3 s; the budget also covers the helper's first
+ * WindowServer connection. Only a drawn cursor earns it.
+ */
+function ghostCursorBudgetMs(args: readonly string[]): number {
+  return args.includes('--ghost-cursor') ? 1_000 : 0;
+}
+
 /**
  * The helper's app-surface vocabulary, pinned with its Swift enums by
  * `contracts/fixtures/macos-native-helper-outcomes.json`.
@@ -492,9 +512,10 @@ export async function runMacOsPressAction(
     args.push('--double-click');
   }
   appendMacOsHelperContextArgs(args, options);
+  appendGhostCursorArg(args, options.surface);
   return await runMacOsHelper(args, {
     signal: options.signal,
-    timeoutMs: macOsClickScheduleMs(options) + MACOS_HELPER_TIMEOUT_MS,
+    timeoutMs: macOsClickScheduleMs(options) + MACOS_HELPER_TIMEOUT_MS + ghostCursorBudgetMs(args),
   });
 }
 
@@ -506,9 +527,11 @@ export async function runMacOsTypeAction(
   const args = ['type', '--text', text];
   if (options.delayMs && options.delayMs > 0) args.push('--delay-ms', String(options.delayMs));
   appendMacOsHelperContextArgs(args, { bundleId: options.bundleId });
+  appendGhostCursorArg(args, 'app');
   return await runMacOsHelper(args, {
     signal: options.signal,
-    timeoutMs: MACOS_HELPER_TIMEOUT_MS + text.length * (options.delayMs ?? 0),
+    timeoutMs:
+      MACOS_HELPER_TIMEOUT_MS + ghostCursorBudgetMs(args) + text.length * (options.delayMs ?? 0),
   });
 }
 
@@ -521,7 +544,11 @@ export async function runMacOsFillAction(
 ): Promise<{ mechanism?: MacOsDeliveryMechanism; role?: string; windowTitle?: string }> {
   const args = ['fill', '--x', String(x), '--y', String(y), '--text', text];
   appendMacOsHelperContextArgs(args, { bundleId: options.bundleId });
-  return await runMacOsHelper(args, { signal: options.signal });
+  appendGhostCursorArg(args, 'app');
+  return await runMacOsHelper(args, {
+    signal: options.signal,
+    timeoutMs: MACOS_HELPER_TIMEOUT_MS + ghostCursorBudgetMs(args),
+  });
 }
 
 /** Scrolls the scroll area at the center of the app session's front window. */
@@ -538,7 +565,11 @@ export async function runMacOsScrollAction(
   if (options.amount !== undefined) args.push('--amount', String(options.amount));
   if (options.pixels !== undefined) args.push('--pixels', String(options.pixels));
   appendMacOsHelperContextArgs(args, { bundleId: options.bundleId });
-  return await runMacOsHelper(args, { signal: options.signal });
+  appendGhostCursorArg(args, 'app');
+  return await runMacOsHelper(args, {
+    signal: options.signal,
+    timeoutMs: MACOS_HELPER_TIMEOUT_MS + ghostCursorBudgetMs(args),
+  });
 }
 
 export async function runMacOsScreenshotAction(
