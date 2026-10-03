@@ -1,6 +1,7 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { sessionOrDeviceSelectorRequiredDetails } from '@agent-device/kernel/errors';
 
 vi.mock('@agent-device/device-selection/device-inventory-context', async (importOriginal) => {
   const actual =
@@ -71,6 +72,7 @@ test('inventory commands retain their route responses and typed failures', async
         code: 'INVALID_ARGS',
         message:
           'capabilities requires an active session or an explicit device selector (e.g. --platform ios).',
+        details: sessionOrDeviceSelectorRequiredDetails(),
       },
     },
     apps: {
@@ -79,6 +81,7 @@ test('inventory commands retain their route responses and typed failures', async
         code: 'INVALID_ARGS',
         message:
           'apps requires an active session or an explicit device selector (e.g. --platform ios).',
+        details: sessionOrDeviceSelectorRequiredDetails(),
       },
     },
   };
