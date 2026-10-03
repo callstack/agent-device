@@ -1,5 +1,6 @@
 import {
   PROVIDER_DEVICE_ORIENTATIONS,
+  PROVIDER_DEVICE_TYPES,
   type CloudProviderProfileFields,
   type RemoteConfigMetroOptions,
   type RemoteConnectionProfileFields,
@@ -78,6 +79,7 @@ export const REMOTE_CONFIG_FIELD_SPECS = [
   { key: 'session', type: 'string' },
   { key: 'providerApp', type: 'string' },
   { key: 'providerOsVersion', type: 'string' },
+  { key: 'providerDeviceType', type: 'enum', enumValues: PROVIDER_DEVICE_TYPES },
   { key: 'providerProject', type: 'string' },
   { key: 'providerBuild', type: 'string' },
   { key: 'providerSessionName', type: 'string' },

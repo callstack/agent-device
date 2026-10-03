@@ -204,6 +204,11 @@ function resolveInstallSource(positionals: string[], flags: CliFlags) {
   }
   if (githubArtifactSource) return githubArtifactSource;
   if (configuredSource) return configuredSource;
+  if (!/^https?:\/\//i.test(url!)) {
+    throw new AppError('INVALID_ARGS', `install-from-source <url> must be an http(s) URL: ${url}`, {
+      hint: 'Install a local build with install <app> <path>.',
+    });
+  }
   return {
     kind: 'url' as const,
     url: url!,

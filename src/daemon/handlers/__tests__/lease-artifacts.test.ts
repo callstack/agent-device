@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { CloudArtifactsQuery } from '@agent-device/contracts/observability';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
+import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { handleLeaseCommands } from '../lease.ts';
@@ -117,7 +118,7 @@ test('artifacts refuses an expired provider session after retention before lazy 
   assert.deepEqual(world.providerCalls, []);
 });
 
-test('artifacts refuses a provider session returned after allocation expiry retention', async () => {
+test('artifacts lists a provider session whose allocation outlasted the lease TTL', async () => {
   let now = 1_000;
   const world = createWorld({
     now: () => now,
@@ -128,16 +129,60 @@ test('artifacts refuses a provider session returned after allocation expiry rete
   });
   world.lifecycle.allocate = async (lease) => {
     now = lease.expiresAt + 51;
-    return { providerSessionId: 'late-allocation-session' };
+    return { providerSessionId: 'slow-allocation-session' };
   };
 
   await allocateLease(world, 'tenant-a', 'run-a');
-  await assertProviderSessionNotOwned(world, {
+  const listed = await listArtifacts(world, {
     tenantId: 'tenant-a',
     runId: 'run-a',
-    providerSessionId: 'late-allocation-session',
+    providerSessionId: 'slow-allocation-session',
   });
-  assert.deepEqual(world.providerCalls, []);
+  assert.equal(listed.ok, true);
+});
+
+test('artifacts refuses a provider session returned after a canceled allocation outlived retention', async () => {
+  let now = 1_000;
+  const world = createWorld({
+    now: () => now,
+    defaultLeaseTtlMs: 100,
+    minLeaseTtlMs: 1,
+    maxLeaseTtlMs: 100,
+    providerSessionRetentionMs: 50,
+  });
+  const requestId = 'late-canceled-allocation';
+  world.lifecycle.allocate = async (lease) => {
+    markRequestCanceled(requestId);
+    now = lease.expiresAt + 51;
+    return { providerSessionId: 'late-allocation-session' };
+  };
+
+  try {
+    await assert.rejects(
+      handleLeaseCommands({
+        req: leaseRequest('lease_allocate', {
+          requestId,
+          tenantId: 'tenant-a',
+          runId: 'run-a',
+          leaseBackend: 'android-instance',
+          leaseProvider: CLOUD_PROVIDER,
+        }),
+        sessionName: 'artifact-test',
+        sessionStore: world.sessionStore,
+        leaseRegistry: world.leaseRegistry,
+        leaseLifecycleProvider: world.lifecycle,
+      }),
+      isRequestCanceledError,
+    );
+    await assertProviderSessionNotOwned(world, {
+      tenantId: 'tenant-a',
+      runId: 'run-a',
+      providerSessionId: 'late-allocation-session',
+    });
+    assert.deepEqual(world.providerCalls, []);
+  } finally {
+    clearRequestCanceled(requestId);
+  }
 });
 
 test('artifacts refuses a provider session returned after release expiry retention', async () => {

@@ -1,12 +1,17 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contracts/observability';
 import type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
 import type { CloudWebDriverUploadApp } from './runtime.ts';
-import { AppError } from '@agent-device/kernel/errors';
-import { agentDeviceRequestHeaders } from './request-headers.ts';
-import { cloudArtifactsReadyOrPending } from './artifact-results.ts';
-import { basicAuthHeader, trimTrailingSlash } from './webdriver-utils.ts';
+import { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
+import { isBrowserStackAppReference } from './providers.ts';
+import {
+  appendUrlPath,
+  appFileUploadForm,
+  asRecord,
+  createHubUploadApp,
+  fetchProviderSessionDetails,
+  postHubAppUpload,
+  resolveHubAppReference,
+} from './webdriver-utils.ts';
 
 export const BROWSERSTACK_APP_AUTOMATE_ENDPOINT = 'https://hub-cloud.browserstack.com/wd/hub/';
 export const BROWSERSTACK_APP_UPLOAD_ENDPOINT =
@@ -76,41 +81,42 @@ export async function uploadBrowserStackApp(
   signal?: AbortSignal,
 ): Promise<string> {
   signal?.throwIfAborted();
-  const file = await fs.readFile(appPath);
-  const form = new FormData();
-  form.set('file', new Blob([file]), path.basename(appPath));
-  const response = await fetch(options.endpoint ?? BROWSERSTACK_APP_UPLOAD_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      ...agentDeviceRequestHeaders(options.clientVersion),
-      Authorization: basicAuthHeader(options),
+  return await postHubAppUpload(
+    await appFileUploadForm(appPath, 'file'),
+    {
+      service: 'BrowserStack',
+      endpoint: options.endpoint ?? BROWSERSTACK_APP_UPLOAD_ENDPOINT,
+      clientVersion: options.clientVersion,
+      auth: options,
+      readAppReference: readBrowserStackAppUrl,
     },
-    body: form,
     signal,
-  });
-  const json = (await response.json()) as unknown;
-  const appUrl = readBrowserStackAppUrl(json);
-  if (!response.ok || !appUrl) {
-    throw new AppError('COMMAND_FAILED', 'BrowserStack app upload failed.', {
-      status: response.status,
-      response: json,
-    });
-  }
-  return appUrl;
+  );
 }
 
 export function createBrowserStackUploadApp(
   options: Required<BrowserStackUploadOptions>,
 ): CloudWebDriverUploadApp {
-  return async ({ appPath, options: installOptions, signal }) => {
-    const appReference = await uploadBrowserStackApp(appPath, options, signal);
-    return {
-      appReference,
-      bundleId: installOptions?.appIdentifierHint,
-      packageName: installOptions?.packageNameHint,
-      launchTarget: installOptions?.appIdentifierHint ?? installOptions?.packageNameHint,
-    };
-  };
+  return createHubUploadApp(
+    async (appPath, signal) => await uploadBrowserStackApp(appPath, options, signal),
+  );
+}
+
+/** The hub fetches a public URL itself, so only a local path is uploaded. */
+export async function resolveBrowserStackAppReference(
+  app: string,
+  options: BrowserStackUploadOptions & { cwd?: string; signal?: AbortSignal },
+): Promise<string> {
+  return await resolveHubAppReference({
+    service: 'BrowserStack',
+    app,
+    cwd: options.cwd,
+    referenceScheme: 'bs://',
+    referenceLabel: 'a bs:// app id',
+    isReference: isBrowserStackAppReference,
+    uploadFile: async (appPath, signal) => await uploadBrowserStackApp(appPath, options, signal),
+    signal: options.signal,
+  });
 }
 
 /**
@@ -138,39 +144,25 @@ export function buildBrowserStackCapabilities(
       buildName: options.buildName,
       sessionName: options.sessionName,
       ...(options.deviceFeatures ?? {}),
-      ...asRecord(configuredBstackOptions),
+      ...(asRecord(configuredBstackOptions) ?? {}),
     },
   };
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
 }
 
 async function fetchBrowserStackSessionDetails(
   sessionId: string,
   options: BrowserStackSessionDetailsOptions,
 ): Promise<Record<string, unknown>> {
-  const endpoint = new URL(
-    `${trimTrailingSlash(String(options.endpoint ?? BROWSERSTACK_SESSION_DETAILS_ENDPOINT))}/${sessionId}.json`,
+  const endpoint = appendUrlPath(
+    options.endpoint ?? BROWSERSTACK_SESSION_DETAILS_ENDPOINT,
+    `${sessionId}.json`,
   );
-  const response = await fetch(endpoint, {
-    headers: {
-      ...agentDeviceRequestHeaders(options.clientVersion),
-      Authorization: basicAuthHeader(options),
-    },
+  const json = await fetchProviderSessionDetails(endpoint, {
+    clientVersion: options.clientVersion,
+    auth: options,
+    service: 'BrowserStack',
   });
-  const json = (await response.json()) as unknown;
-  if (!response.ok || !json || typeof json !== 'object') {
-    throw new AppError('COMMAND_FAILED', 'BrowserStack session details lookup failed.', {
-      status: response.status,
-      response: json,
-    });
-  }
-  const details = (json as { automation_session?: unknown }).automation_session ?? json;
-  return details && typeof details === 'object' ? (details as Record<string, unknown>) : {};
+  return asRecord(json.automation_session) ?? json;
 }
 
 function mapBrowserStackArtifacts(
@@ -179,7 +171,7 @@ function mapBrowserStackArtifacts(
   details: Record<string, unknown>,
 ): CloudArtifact[] {
   return [
-    browserStackUrlArtifact(
+    urlArtifactFromDetails(
       provider,
       providerSessionId,
       details,
@@ -187,7 +179,7 @@ function mapBrowserStackArtifacts(
       'video',
       'Session video',
     ),
-    browserStackUrlArtifact(
+    urlArtifactFromDetails(
       provider,
       providerSessionId,
       details,
@@ -195,7 +187,7 @@ function mapBrowserStackArtifacts(
       'appium-log',
       'Appium logs',
     ),
-    browserStackUrlArtifact(
+    urlArtifactFromDetails(
       provider,
       providerSessionId,
       details,
@@ -203,7 +195,7 @@ function mapBrowserStackArtifacts(
       'device-log',
       'Device logs',
     ),
-    browserStackUrlArtifact(
+    urlArtifactFromDetails(
       provider,
       providerSessionId,
       details,
@@ -211,7 +203,7 @@ function mapBrowserStackArtifacts(
       'provider-session',
       'BrowserStack dashboard',
     ),
-    browserStackUrlArtifact(
+    urlArtifactFromDetails(
       provider,
       providerSessionId,
       details,
@@ -220,19 +212,6 @@ function mapBrowserStackArtifacts(
       'Public session link',
     ),
   ].filter((artifact): artifact is CloudArtifact => artifact !== undefined);
-}
-
-function browserStackUrlArtifact(
-  provider: string,
-  providerSessionId: string,
-  details: Record<string, unknown>,
-  field: string,
-  kind: CloudArtifact['kind'],
-  name: string,
-): CloudArtifact | undefined {
-  const url = details[field];
-  if (typeof url !== 'string' || url.length === 0) return undefined;
-  return { provider, providerSessionId, kind, name, url, availability: 'ready' };
 }
 
 function readBrowserStackAppUrl(value: unknown): string | undefined {

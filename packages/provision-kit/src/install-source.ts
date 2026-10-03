@@ -32,6 +32,8 @@ export type MaterializeInstallableOptions = {
 
 export type MaterializedInstallable = {
   archivePath?: string;
+  /** The archive the installable was extracted from directly, when it came out of one. */
+  containingArchivePath?: string;
   installablePath: string;
   cleanup: () => Promise<void>;
 };
@@ -67,6 +69,9 @@ export async function materializeInstallablePath(
     });
     return {
       archivePath: resolved.archivePath,
+      ...(resolved.containingArchivePath
+        ? { containingArchivePath: resolved.containingArchivePath }
+        : {}),
       installablePath: resolved.installablePath,
       cleanup: async () => {
         await runCleanupTasks(cleanupTasks);
@@ -158,7 +163,8 @@ export async function validateDownloadSourceUrl(parsedUrl: URL): Promise<void> {
  * whether a URL names a GitHub Actions or EAS artifact, which says nothing about who built it.
  */
 export function isTrustedInstallSourceUrl(sourceUrl: string | URL): boolean {
-  const parsed = sourceUrl instanceof URL ? sourceUrl : new URL(sourceUrl);
+  const parsed = sourceUrl instanceof URL ? sourceUrl : URL.parse(sourceUrl);
+  if (!parsed) throw new AppError('INVALID_ARGS', 'Invalid source URL');
   const hostname = parsed.hostname.toLowerCase();
   if (!hostname) return false;
   const pathname = parsed.pathname;

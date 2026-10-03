@@ -14,10 +14,11 @@ export type {
   ProviderConnectionResource,
   ProviderConnectionVerification,
 } from '../provider-connection.ts';
-export { PROVIDER_DEVICE_ORIENTATIONS } from '../remote-config-fields.ts';
+export { PROVIDER_DEVICE_ORIENTATIONS, PROVIDER_DEVICE_TYPES } from '../remote-config-fields.ts';
 export type {
   CloudProviderProfileFields,
   ProviderDeviceOrientation,
+  ProviderDeviceType,
   RemoteConfigMetroOptions,
   RemoteConnectionProfileFields,
 } from '../remote-config-fields.ts';

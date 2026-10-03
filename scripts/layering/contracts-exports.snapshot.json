@@ -87,6 +87,7 @@
   "@agent-device/contracts/platform-runtime-operations",
   "@agent-device/contracts/platform-runtime-unavailable",
   "@agent-device/contracts/progress",
+  "@agent-device/contracts/provider-profile-fields",
   "@agent-device/contracts/react-native-overlay",
   "@agent-device/contracts/record-runtime-execution",
   "@agent-device/contracts/recording",

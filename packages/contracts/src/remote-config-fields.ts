@@ -20,9 +20,14 @@ import type { MetroPrepareKind } from './metro.ts';
 export const PROVIDER_DEVICE_ORIENTATIONS = ['portrait', 'landscape'] as const;
 export type ProviderDeviceOrientation = (typeof PROVIDER_DEVICE_ORIENTATIONS)[number];
 
+/** Device pool a hosted provider session is created in: physical devices or emulators/simulators. */
+export const PROVIDER_DEVICE_TYPES = ['real', 'virtual'] as const;
+export type ProviderDeviceType = (typeof PROVIDER_DEVICE_TYPES)[number];
+
 export type CloudProviderProfileFields = {
   providerApp?: string;
   providerOsVersion?: string;
+  providerDeviceType?: ProviderDeviceType;
   providerProject?: string;
   providerBuild?: string;
   providerSessionName?: string;

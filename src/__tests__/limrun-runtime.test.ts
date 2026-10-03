@@ -172,6 +172,32 @@ test('Limrun runtime identifies direct CLI usage to the Limrun API', async () =>
   }
 });
 
+test('Limrun refuses a refused field on a repeat allocation of its live lease', async () => {
+  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key' });
+  const lease: SimulatorLease = {
+    leaseId: 'lease-repeat',
+    tenantId: 'team-a',
+    runId: 'run-a',
+    backend: 'ios-instance',
+    leaseProvider: 'limrun',
+    createdAt: 1,
+    heartbeatAt: 1,
+    expiresAt: 60_001,
+  };
+  try {
+    const allocateLease = runtime.leaseLifecycle.allocate;
+    if (!allocateLease) throw new Error('Limrun runtime must provide lease allocation');
+    await allocateLease(lease);
+    await assert.rejects(
+      allocateLease(lease, { flags: { providerDeviceType: 'real' } }),
+      /--provider-device-type is not supported by Limrun/,
+    );
+    assert.equal(limrunMockState.iosCreate.mock.calls.length, 1);
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
 test('Limrun iOS uses shared deep-link classification', async () => {
   const runtime = new LimrunRuntime({ apiKey: 'lim_test_key' });
 

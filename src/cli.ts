@@ -456,6 +456,7 @@ function buildClientConfig(ctx: CliRunContext): AgentDeviceClientConfig {
     deviceKey: connection?.deviceKey,
     providerApp: currentFlags.providerApp,
     providerOsVersion: currentFlags.providerOsVersion,
+    providerDeviceType: currentFlags.providerDeviceType,
     providerProject: currentFlags.providerProject,
     providerBuild: currentFlags.providerBuild,
     providerSessionName: currentFlags.providerSessionName,

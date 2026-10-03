@@ -28,6 +28,7 @@ function buildFlags(options: InternalRequestOptions): CommandFlags {
     providerSessionId: options.providerSessionId,
     providerApp: options.providerApp,
     providerOsVersion: options.providerOsVersion,
+    providerDeviceType: options.providerDeviceType,
     providerProject: options.providerProject,
     providerBuild: options.providerBuild,
     providerSessionName: options.providerSessionName,

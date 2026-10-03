@@ -70,21 +70,33 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         providerRuntimeIds,
         providerRuntimeRequiredIds,
       );
+      const activeLeaseIds = new Set(
+        leaseRegistry.listActiveLeases().map((entry) => entry.leaseId),
+      );
       const lease = leaseRegistry.allocateLease(leaseScopeToAllocateRequest(leaseScope));
+      // A run's repeat allocation reuses its live lease; refusing that request must not end the
+      // lease, or the provider session the first allocation created is left without an owner.
+      const reused = activeLeaseIds.has(lease.leaseId);
+      const requestId = req.meta?.requestId;
       return await leaseRegistry.runDeviceMutation(lease, async () => {
         let providerData: Record<string, unknown> | undefined;
+        // A hosted provider can take longer than the lease TTL to create its session; the work
+        // pass keeps the lease alive until it does, and ending the pass restarts the TTL then.
+        const work = leaseRegistry.retainLeaseWork(lease, () => !isRequestCanceled(requestId));
         try {
           providerData = await leaseLifecycleProvider?.allocate?.(lease, {
             ...leaseLifecycleContext(req),
-            signal: getRequestSignal(req.meta?.requestId),
+            signal: getRequestSignal(requestId),
             deadline: Date.now() + LEASE_ALLOCATION_BUDGET_MS,
           });
           recordProviderSession(leaseRegistry, lease, providerData);
         } catch (error) {
-          leaseRegistry.releaseLease(leaseReleaseRequestFor(lease));
+          if (!reused) leaseRegistry.releaseLease(leaseReleaseRequestFor(lease));
           throw error;
+        } finally {
+          work.release();
         }
-        if (isRequestCanceled(req.meta?.requestId)) {
+        if (isRequestCanceled(requestId)) {
           // The requester left while the provider was allocating; the lease it
           // produced is real (and billed) and nobody will ever release it.
           throw await releaseAllocationForGoneRequester(
@@ -93,9 +105,10 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
             leaseRegistry,
           );
         }
+        const allocated = leaseRegistry.getLease(leaseReleaseRequestFor(lease)) ?? lease;
         return {
           ok: true,
-          data: { lease, ...(providerData ? { provider: providerData } : {}) },
+          data: { lease: allocated, ...(providerData ? { provider: providerData } : {}) },
         };
       });
     }

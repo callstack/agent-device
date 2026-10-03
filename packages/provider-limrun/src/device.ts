@@ -1,9 +1,38 @@
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/provider-profile-fields';
 
 export type LimrunPlatform = 'ios' | 'android';
 
 export const LIMRUN_PROVIDER = 'limrun';
+
+/** Limrun reads only the app to preinstall; it picks the instance itself. */
+export const LIMRUN_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
+  provider: LIMRUN_PROVIDER,
+  label: 'Limrun',
+  fields: {
+    providerApp: 'consumed',
+    providerOsVersion: 'refused',
+    providerDeviceType: 'refused',
+    providerProject: 'refused',
+    providerBuild: 'refused',
+    providerSessionName: 'refused',
+    providerDeviceOrientation: 'refused',
+    providerGeoLocation: 'refused',
+    providerTimezone: 'refused',
+    providerAppiumVersion: 'refused',
+    providerLanguage: 'refused',
+    providerLocale: 'refused',
+    providerNetworkProfile: 'refused',
+    providerCustomNetwork: 'refused',
+    providerNoResignApp: 'refused',
+    awsProjectArn: 'refused',
+    awsDeviceArn: 'refused',
+    awsAppArn: 'refused',
+    awsRegion: 'refused',
+    awsInteractionMode: 'refused',
+  },
+};
 
 const LIMRUN_DEVICE_ID_PREFIX = LIMRUN_PROVIDER;
 

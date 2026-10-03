@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises';
 import type {
   ProviderDeviceInstallOptions,
   ProviderDeviceInstallResult,
@@ -49,10 +50,10 @@ export function createWebDriverDeploymentRuntime(
     findSessionForDevice(device: DeviceInfo): WebDriverProviderSession | undefined;
   }>,
 ): WebDriverDeploymentRuntime {
-  const installApp = async (
+  const install = async (
     device: DeviceInfo,
     app: string,
-    appPath: string,
+    paths: Readonly<{ appPath: string; uploadPath: string }>,
     installOptions?: ProviderDeviceInstallOptions,
     signal?: AbortSignal,
   ): Promise<ProviderDeviceInstallResult | undefined> => {
@@ -63,13 +64,20 @@ export function createWebDriverDeploymentRuntime(
       session,
       device,
       app,
-      appPath,
+      paths.uploadPath,
       installOptions,
       signal,
     );
-    await session.client.installApp(upload?.appReference ?? appPath, signal);
+    await session.client.installApp(upload?.appReference ?? paths.appPath, signal);
     return providerInstallResult(upload, installOptions);
   };
+  const installApp = async (
+    device: DeviceInfo,
+    app: string,
+    appPath: string,
+    installOptions?: ProviderDeviceInstallOptions,
+    signal?: AbortSignal,
+  ) => await install(device, app, { appPath, uploadPath: appPath }, installOptions, signal);
   return Object.freeze({
     fact: (device) => deploymentFact(options.findSessionForDevice(device)),
     installApp,
@@ -92,10 +100,13 @@ export function createWebDriverDeploymentRuntime(
       ),
     deployMaterializedApp: async (device, input, signal) =>
       deploymentResult(
-        await installApp(
+        await install(
           device,
           '',
-          input.artifact.installablePath,
+          {
+            appPath: input.artifact.installablePath,
+            uploadPath: input.artifact.uploadPath ?? input.artifact.installablePath,
+          },
           {
             appIdentifierHint: input.artifact.bundleId,
             packageNameHint: input.artifact.packageName,
@@ -145,6 +156,7 @@ async function uploadAppIfNeeded(
   }
   const uploadApp = session.prepared.uploadApp ?? options.uploadApp;
   if (!uploadApp) return undefined;
+  await assertUploadableFile(options.provider, appPath);
   return await uploadApp({
     provider: options.provider,
     lease: session.lease,
@@ -154,6 +166,21 @@ async function uploadAppIfNeeded(
     options: installOptions,
     signal,
   });
+}
+
+/** Hosted upload APIs take one file; an extracted `.app` with no declared archive is a directory. */
+async function assertUploadableFile(provider: string, appPath: string): Promise<void> {
+  const stat = await fs.stat(appPath).catch(() => undefined);
+  if (!stat || stat.isFile()) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    `${provider} can only upload an app file, not a directory: ${appPath}`,
+    {
+      provider,
+      appPath,
+      hint: 'Zip the iOS simulator .app bundle and install the .zip, or install the .ipa, .apk, or .aab.',
+    },
+  );
 }
 
 function deploymentResult(

@@ -254,6 +254,7 @@ function summarizeProviderScenarioFlagExclusions() {
         'providerSessionId',
         'providerApp',
         'providerOsVersion',
+        'providerDeviceType',
         'providerProject',
         'providerBuild',
         'providerSessionName',

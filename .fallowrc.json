@@ -380,6 +380,15 @@
       "exports": ["LimrunIosCommandExecution"]
     },
     {
+      "comment": "TestMu session preparation reads these off the lazy loadTestMuDeviceFeatures() import in packages/provider-webdriver/src/provider-definitions.ts, which keeps the package entry's eager closure unchanged; Fallow cannot connect the dynamic member reads.",
+      "file": "packages/provider-webdriver/src/testmu-device-features.ts",
+      "exports": [
+        "buildTestMuDeviceFeatureCapabilities",
+        "readTestMuDeviceFeatureFields",
+        "readTestMuDeviceType"
+      ]
+    },
+    {
       "comment": "Converting the contracts façades from `export *` to explicit named re-exports (the pin-table retirement) made these individually visible to --production analysis for the first time; a bare star previously hid them from this exact check. isRecord/IOS_SAFARI_BUNDLE_ID/REPLAY_DIVERGENCE_* have no production consumer. Kept rather than narrowed here so the façade's re-export surface stays byte-identical to the symbol set the retired pin table asserted — narrowing the surface is a follow-up with its own review, not a side effect of this mechanical conversion.",
       "file": "packages/contracts/src/facades/{client,command,divergence,recording}.ts",
       "exports": [
