@@ -74,6 +74,7 @@ import { isRecord, readSnapshotKeyboardBandFact } from '@agent-device/kernel/rec
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { createLeaseClient } from './client/lease-client.ts';
 import { normalizeScreenshotCaptureResult } from './client/screenshot-result.ts';
+import { createRequestGuard } from '@agent-device/host-kit/request';
 
 export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},
@@ -95,6 +96,11 @@ export function createAgentDeviceClient(
     input?: Record<string, unknown>,
   ): Promise<Record<string, unknown>> => {
     const merged = mergeClientOptions(config, options);
+    const cancellation = createRequestGuard({
+      signal: merged.signal,
+      requestId: merged.requestId,
+    });
+    cancellation.refuseIfAborted();
     const request = {
       session: resolveSessionName(merged.session),
       command,
@@ -104,7 +110,14 @@ export function createAgentDeviceClient(
       runtime: merged.runtime,
       meta: buildMeta(merged),
     };
-    const response = await transport(request, { authToken: merged.daemonAuthToken });
+    // `signal` rides the transport context (it is a live object, never wire data), and the guard
+    // answers for a custom transport that ignores it: the caller's promise settles on abort either
+    // way. The built-in transport closes the request's connection, which is what makes the daemon
+    // mark the request canceled.
+    const response = await cancellation.guard(
+      async () =>
+        await transport(request, { authToken: merged.daemonAuthToken, signal: merged.signal }),
+    );
     if (!response.ok) {
       throwDaemonError(response.error);
     }
