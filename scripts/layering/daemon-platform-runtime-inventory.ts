@@ -223,7 +223,7 @@ export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[]
   {
     file: 'src/daemon/server/daemon-runtime.ts',
     target: 'src/provider-device-runtimes.ts',
-    symbols: ['createDefaultProviderRuntimeComposition', 'DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS'],
+    symbols: ['createDaemonProviderRuntimeComposition', 'DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS'],
     classification: 'composition-essential',
     rationale:
       'process-root assembly of the default provider runtime composition and the ids whose runtime ' +

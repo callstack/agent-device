@@ -69,6 +69,10 @@
     "./ai-sdk": {
       "types": "./dist/src/ai-sdk.d.ts",
       "import": "./dist/src/ai-sdk.js"
+    },
+    "./plugins": {
+      "types": "./dist/src/plugins.d.ts",
+      "import": "./dist/src/plugins.js"
     }
   },
   "engines": {

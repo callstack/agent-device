@@ -68,6 +68,7 @@ test('every command that deviates from require-owner is a reviewed, diffable set
       'lease_release',
       'mcp',
       'metro',
+      'plugins',
       'proxy',
       'react-devtools',
       'release_materialized_paths',
