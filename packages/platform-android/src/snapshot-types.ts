@@ -1,8 +1,22 @@
+import type { SnapshotViewportSize } from '@agent-device/kernel/snapshot';
 import type {
   AndroidSnapshotCaptureMode,
   AndroidSnapshotHelperInstallReason,
   AndroidSnapshotHelperTransport,
 } from './snapshot-helper-types.ts';
+
+/**
+ * One Android capture as the host holds it: the tree, the helper facts behind it, and the screen the
+ * bounds are measured in (#3182). The viewport is a sibling rather than a field of `metadata` because
+ * the metadata travels to the response, where the same fact is already published once as `viewport`;
+ * carrying the raw display pair further than this boundary would leave two copies with different
+ * lifetimes. Absent when the helper's own display read answered with nothing usable.
+ */
+export type AndroidUiHierarchyCapture = {
+  xml: string;
+  metadata: AndroidSnapshotBackendMetadata;
+  viewport?: SnapshotViewportSize;
+};
 
 export type AndroidSnapshotBackendMetadata = {
   backend: 'android-helper';

@@ -14,6 +14,7 @@ import type {
   SnapshotNode,
   SnapshotState,
   SnapshotUnchanged,
+  SnapshotViewportSize,
   SnapshotVisibility,
 } from '@agent-device/kernel/snapshot';
 import type { BackendSnapshotResult } from '../../../backend.ts';
@@ -56,6 +57,12 @@ export type SnapshotCommandResult = {
    * keyboard was refused without reconstructing the band from the tree.
    */
   keyboard?: SnapshotKeyboardBandFact;
+  /**
+   * The box this capture's rects are measured in, as its producer measured it (#3182) — the same
+   * space and orientation as the nodes beside it. Absent means the producer measured no box, never
+   * a zero. See `CaptureSnapshotResult.viewport` for what each producer measures.
+   */
+  viewport?: SnapshotViewportSize;
 } & PublicSnapshotCaptureAnnotations;
 
 type SnapshotCapture = {
@@ -99,6 +106,7 @@ export const snapshotCommand: RuntimeCommand<
       ? { snapshotDiagnostics: capture.result.snapshotDiagnostics }
       : {}),
     ...(capture.snapshot.keyboard ? { keyboard: capture.snapshot.keyboard } : {}),
+    ...(capture.snapshot.viewport ? { viewport: capture.snapshot.viewport } : {}),
     ...snapshotAppFields(capture),
   });
 };
@@ -205,6 +213,7 @@ function normalizeBackendSnapshot(
     backend: result.backend as SnapshotState['backend'],
     createdAt: now(runtime),
     ...(result.keyboard ? { keyboard: result.keyboard } : {}),
+    ...(result.viewport ? { viewport: result.viewport } : {}),
   };
 }
 

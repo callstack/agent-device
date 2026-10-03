@@ -5,6 +5,7 @@ import android.app.UiAutomation;
 import android.content.res.Resources;
 import android.os.Bundle;
 import android.util.Base64;
+import android.util.DisplayMetrics;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -124,8 +125,19 @@ public final class SnapshotInstrumentation extends Instrumentation {
     // Physical pixels per dp of the display the bounds above were measured on, from the same
     // configuration the framework lays out with (a `wm density` override included), so a host that
     // works in dp has the factor beside the pixels instead of a second adb round trip.
-    result.putString(
-        "pixelDensity", Float.toString(Resources.getSystem().getDisplayMetrics().density));
+    DisplayMetrics metrics = Resources.getSystem().getDisplayMetrics();
+    result.putString("pixelDensity", Float.toString(metrics.density));
+    // The same display's extent, so the host can publish the box the bounds are measured in without
+    // reading the tree for it. One metrics read backs both facts, so a rotation landing between the
+    // density and the size cannot make them describe two configurations. Published by absence: a
+    // display this helper could not address adds no keys, which the host reads as unknown rather
+    // than as a screen of no size (#3182).
+    DisplaySizeReader.Size display =
+        DisplaySizeReader.resolve(metrics.widthPixels, metrics.heightPixels);
+    if (display != null) {
+      result.putString("displayWidth", Integer.toString(display.width));
+      result.putString("displayHeight", Integer.toString(display.height));
+    }
   }
 
   private void runOneShotViewport(Bundle result) {

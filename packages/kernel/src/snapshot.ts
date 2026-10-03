@@ -338,6 +338,28 @@ export type SnapshotKeyboardBandFact =
    */
   | { kind: 'unmeasurable'; reason: string };
 
+/**
+ * The box a capture's node rects are measured in, published beside them so a reader never has to
+ * infer it from the tree (#3182). Two dimensions and no origin: the field answers "how big is the
+ * surface these numbers describe", which is the only question a consumer that places points on the
+ * tree cannot answer from the tree itself when the tree is empty or sparse.
+ *
+ * It is the box of the surface the producer read, which is not always the physical panel. iOS
+ * reports the app window in the app's orientation space (ADR 0004), which is smaller than the panel
+ * under iPad Split View and is never the foldable panel `fold` reports (ADR 0025); Android and the
+ * Apple TV runner report the screen the bounds were measured on; web reports the browser viewport
+ * the box model is relative to. A consumer that needs a *gesture* band inside those bounds still
+ * reads `keyboard` and the app window, which is #1821's remaining scope.
+ *
+ * Absent means the producer measured no box. Absence is never `0`: `snapshotViewportSizeFrom` from
+ * `@agent-device/kernel/rect` is the sole construction path and refuses a box
+ * `isPositiveFiniteRect` refuses, so a zero-size viewport is not a value this type can hold.
+ */
+export type SnapshotViewportSize = {
+  width: number;
+  height: number;
+};
+
 export type SnapshotNode = RawSnapshotNode & {
   ref: string;
   /**
@@ -642,6 +664,12 @@ export type SnapshotState = {
    * needs no geometry to be plausible (#2660). Absent means the guard measures the tree as before.
    */
   keyboard?: SnapshotKeyboardBandFact;
+  /**
+   * The box these rects are measured in, as the producer measured it (#3182). The session keeps it so
+   * a consumer of the stored tree — the find-path viewport, a later diff — reads the same box the
+   * response published instead of inferring one from the largest rect still on screen.
+   */
+  viewport?: SnapshotViewportSize;
   /**
    * iOS: this capture's own command found the session app out of foreground and the runner
    * activated it before answering, so an earlier observation in the session described whatever held

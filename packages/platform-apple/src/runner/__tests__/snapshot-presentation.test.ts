@@ -141,7 +141,7 @@ test('a sparse verdict still presents the nodes it did read', () => {
     ],
     truncated: true,
     quality: { state: 'sparse', backend: 'private-ax', reasonCode: 'sparse-tree' },
-  });
+  }).nodes;
 
   assert.deepEqual(
     nodes.map((node) => node.label),
@@ -200,7 +200,7 @@ test('a healthy payload with valid viewport roots still presents', () => {
   };
   const nodes = presentAppleRunnerSnapshot('device-1', undefined, {
     nodes: [screen, button],
-  });
+  }).nodes;
   assert.deepEqual(
     nodes.map((node) => node.index),
     [0, 1],
@@ -227,7 +227,7 @@ test('a runner payload with the hittable bit absent presents without declaring i
     },
   ];
   for (const interactiveOnly of [false, true]) {
-    const presented = presentAppleRunnerSnapshot('device-1', { interactiveOnly }, { nodes });
+    const presented = presentAppleRunnerSnapshot('device-1', { interactiveOnly }, { nodes }).nodes;
     const button = presented.find((node) => node.label === 'Not Now');
     assert.ok(button, `interactiveOnly=${interactiveOnly}: the undecided button is presented`);
     assert.equal('hittable' in button, false);
