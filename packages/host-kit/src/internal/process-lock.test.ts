@@ -30,12 +30,16 @@ import {
   tryAcquireProcessLock,
   inspectProcessLock,
   withProcessLock,
-  type ProcessLockOwner,
   type ProcessLockRelease,
 } from './process-lock.ts';
-import { readProcessStartTime } from './host-process.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 import { holdLegacyReclaimMutex } from './legacy-process-lock.fixtures.ts';
+import {
+  currentProcessOwner,
+  listReclaimSiblings,
+  onFirstGuardOpen,
+  stampDirectoryAbandoned,
+} from './process-lock.fixtures.ts';
 
 let tmpDir: string;
 
@@ -301,14 +305,6 @@ test('one abandoned lock offered to two contenders is held by exactly one of the
   assert.deepEqual(listReclaimSiblings(tmpDir), []);
 });
 
-/** A reclaim that finishes leaves neither a parked directory nor a mutex behind. */
-function listReclaimSiblings(directory: string): string[] {
-  return fs
-    .readdirSync(directory)
-    .filter((entry) => entry.includes('.reclaim'))
-    .sort();
-}
-
 const UNINFORMATIVE_OWNER_RECORDS = [
   '{ pid: ',
   'null',
@@ -468,17 +464,7 @@ test('a contender that claims the path during a reclaim keeps its lock', async (
   // The moment a contender is admitted to judging this lock, another process clears the dead
   // claim and publishes its own. Nothing is removed: the record re-read under the mutex names a
   // claim token the dead one cannot answer to, and the judge walks away from the path.
-  let claimed = false;
-  const realOpen = fs.openSync;
-  const guardSpy = vi.spyOn(fs, 'openSync').mockImplementation(((
-    target: fs.PathLike,
-    flags: fs.OpenMode,
-    mode?: fs.Mode,
-  ) => {
-    if (String(target) !== mutexPath || claimed) {
-      return realOpen(target, flags, mode);
-    }
-    claimed = true;
+  const guard = onFirstGuardOpen(mutexPath, () => {
     fs.rmSync(lockDirPath, { recursive: true, force: true });
     fs.mkdirSync(lockDirPath);
     fs.writeFileSync(
@@ -492,8 +478,7 @@ test('a contender that claims the path during a reclaim keeps its lock', async (
         claimToken: 'contender-claim',
       }),
     );
-    return realOpen(target, flags, mode);
-  }) as typeof fs.openSync);
+  });
 
   try {
     await assert.rejects(
@@ -511,7 +496,7 @@ test('a contender that claims the path during a reclaim keeps its lock', async (
         return true;
       },
     );
-    assert.equal(claimed, true);
+    assert.equal(guard.fired(), true);
     const record = JSON.parse(fs.readFileSync(ownerFilePath, 'utf8')) as {
       pid: number;
       claimToken: string;
@@ -519,7 +504,7 @@ test('a contender that claims the path during a reclaim keeps its lock', async (
     assert.equal(record.pid, process.ppid);
     assert.equal(record.claimToken, 'contender-claim');
   } finally {
-    guardSpy.mockRestore();
+    guard.restore();
   }
 });
 
@@ -535,17 +520,7 @@ test('a claim published while a reclaim holds the mutex outlives the empty direc
 
   // Writing the record is also what re-dates the directory, which is the fact the reclaim re-asks
   // for under its mutex before it removes anything.
-  let published = false;
-  const realOpen = fs.openSync;
-  const guardSpy = vi.spyOn(fs, 'openSync').mockImplementation(((
-    target: fs.PathLike,
-    flags: fs.OpenMode,
-    mode?: fs.Mode,
-  ) => {
-    if (String(target) !== mutexPath || published) {
-      return realOpen(target, flags, mode);
-    }
-    published = true;
+  const guard = onFirstGuardOpen(mutexPath, () => {
     fs.writeFileSync(
       ownerFilePath,
       // See the contender above: another process's claim names another pid.
@@ -556,8 +531,7 @@ test('a claim published while a reclaim holds the mutex outlives the empty direc
         claimToken: 'late-claim',
       }),
     );
-    return realOpen(target, flags, mode);
-  }) as typeof fs.openSync);
+  });
 
   try {
     await assert.rejects(
@@ -574,12 +548,12 @@ test('a claim published while a reclaim holds the mutex outlives the empty direc
         return true;
       },
     );
-    assert.equal(published, true);
+    assert.equal(guard.fired(), true);
     assert.equal(fs.existsSync(lockDirPath), true);
     const record = JSON.parse(fs.readFileSync(ownerFilePath, 'utf8')) as { claimToken: string };
     assert.equal(record.claimToken, 'late-claim');
   } finally {
-    guardSpy.mockRestore();
+    guard.restore();
   }
 });
 
@@ -591,23 +565,12 @@ test('a lock directory made anew while a reclaim holds the mutex is not the one 
 
   // Replacing the directory rather than filling it is what a contender that won the path looks
   // like from the inside: same name, same emptiness, and an age that says it was never abandoned.
-  let replaced = false;
   let refilledAtMs = 0;
-  const realOpen = fs.openSync;
-  const guardSpy = vi.spyOn(fs, 'openSync').mockImplementation(((
-    target: fs.PathLike,
-    flags: fs.OpenMode,
-    mode?: fs.Mode,
-  ) => {
-    if (String(target) !== mutexPath || replaced) {
-      return realOpen(target, flags, mode);
-    }
-    replaced = true;
+  const guard = onFirstGuardOpen(mutexPath, () => {
     fs.rmSync(lockDirPath, { recursive: true, force: true });
     fs.mkdirSync(lockDirPath);
     refilledAtMs = fs.statSync(lockDirPath).mtimeMs;
-    return realOpen(target, flags, mode);
-  }) as typeof fs.openSync);
+  });
 
   try {
     await assert.rejects(
@@ -623,14 +586,14 @@ test('a lock directory made anew while a reclaim holds the mutex is not the one 
         return true;
       },
     );
-    assert.equal(replaced, true);
+    assert.equal(guard.fired(), true);
     assert.equal(
       fs.statSync(lockDirPath).mtimeMs,
       refilledAtMs,
       'the reclaim removed a directory it had not judged abandoned',
     );
   } finally {
-    guardSpy.mockRestore();
+    guard.restore();
   }
 });
 
@@ -825,19 +788,6 @@ test('a completed task still reports a lock it could not give back', async () =>
     },
   );
 });
-
-function stampDirectoryAbandoned(directory: string): void {
-  const abandoned = new Date(Date.now() - 60_000);
-  fs.utimesSync(directory, abandoned, abandoned);
-}
-
-function currentProcessOwner(): ProcessLockOwner {
-  return {
-    pid: process.pid,
-    startTime: readProcessStartTime(process.pid),
-    acquiredAtMs: Date.now(),
-  };
-}
 
 test('one nonblocking attempt acquires, refuses a live claim, and invalidates its released handle', async () => {
   const lockDirPath = path.join(tmpDir, 'one-attempt.lock');
