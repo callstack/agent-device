@@ -48,6 +48,7 @@ agent-device snapshot --diff             # Alias for the same diff operation
 
 - iOS and Android share the same mobile snapshot contract: visible-first output, actionable-now refs, and hidden list content communicated via discovery hints.
 - Default to `snapshot -i` for agent loops.
+- Repeated unfiltered Android snapshots with unchanged presented content and bounds return a compact acknowledgement. `-i`, `-d`, `-s`, `--json`, and `--raw` retain full output. Use `--force-full` to re-emit the tree explicitly.
 - Default snapshot text is an agent-facing, token-efficient view for planning and targeting actions. It is visible-first and may collapse helper/accessibility noise; use `--raw` or `--json` when you need the full provider tree.
 - Off-screen interactive content is collapsed into discovery summaries such as `[off-screen below] 3 interactive items: "Privacy", "Battery", "About"`.
 - If a target only appears in an off-screen summary, use `scroll <direction>` and re-snapshot until the target becomes visible.
@@ -59,6 +60,7 @@ agent-device snapshot --diff             # Alias for the same diff operation
 - Re-snapshot after any UI mutation before reusing refs.
 - On Android after navigation or submit, snapshot capture retries suspicious trees for a short post-action deadline and `@ref` interactions refresh while that freshness window is active. If `snapshot -i` still disagrees with the visible screen, trust `screenshot`, wait briefly, then take one fresh snapshot instead of looping stale snapshots.
 - For automation runs affected by Android animation churn, use `settings animations off` as an opt-in stabilizer and restore with `settings animations on` after the run.
+- On a device cloud the tree is read by the provider's driver, so a screen that never goes still — a looping video, a live ticker, continuous animation — gives that read no quiet moment and it can run out of its budget while `screenshot` still returns. The read is cancelled with the request that asked for it, so agent-device stops waiting on it and stops holding the session open for it; the driver's own walk can continue on the provider, where it may still occupy that session's queue. Two dead ends: the read carries its own budget, so a larger `--timeout` cannot lengthen it, and `settings animations` is not implemented on hosted WebDriver sessions.
 - Use `diff snapshot` between mutations to validate structural changes with lower output volume.
 - Use `snapshot --diff` when you discover the feature from snapshot help, but keep `diff snapshot` as the default exploration command.
 - Keep `--raw` for troubleshooting only when you need the full tree instead of visible-first output.
@@ -84,6 +86,31 @@ agent-device snapshot -i
 #       @e9 [other] "John Doe"
 # [off-screen below] 2 interactive items: "All Contacts", "New List"
 ```
+
+## Structured node fields (`--json`)
+
+Every node in `snapshot --json` output carries `kind`, next to `type` when the platform reports one:
+
+- `type` is the raw platform class, verbatim: `Button` / `StaticText` from XCUI, `android.widget.Button`
+  from the Android hierarchy. It differs by platform for the same UI role.
+- `kind` is the platform-neutral classification shown in brackets on the text line above
+  (`button`, `text-field`, `text`, `switch`, `link`, …), computed by the same function on every
+  platform, backend, and projection (`snapshot` and `snapshot -i` alike) — so text and JSON never
+  disagree about a node's role.
+
+```json
+{ "ref": "e4", "type": "android.widget.Button", "kind": "button", "label": "Send code" }
+{ "ref": "e40", "type": "Button", "role": "UIButton", "kind": "button", "label": "Continue to catalog" }
+```
+
+On iOS, `role` (when present) is the native AX class (`UIButton`) — a different fact carried only
+on iOS nodes; `kind` is the cross-platform one, present on every node on every platform.
+
+`role=` selectors (and `find role=...`) do not share `kind`'s vocabulary yet: they match a raw,
+leaf-only normalization of `type` (`statictext`, `edittext`), not `kind` values like `text` or
+`text-field`. Reconciling the two is tracked separately
+([#3021](https://github.com/callstack/agent-device/issues/3021)) because it would change matching
+for selectors already in use.
 
 ## iOS capture behavior
 
@@ -111,3 +138,47 @@ the strategy owns which tiers it may use.
   an empty tree.
 - Private-accessibility recovery and `--actions` reads are simulator-specific. Physical iOS devices
   have no equivalent independent semantic backend; they bound the XCTest work with a probe instead.
+
+## Android node metadata
+
+Android bounds are physical pixels, as the accessibility tree reports them, and so are the points
+`press`, `fill`, and the gesture commands take. `androidSnapshot.pixelDensity` on a helper capture
+is the display's physical pixels per density-independent pixel, as the helper's `DisplayMetrics`
+report it (a 420 dpi phone reports `2.625`, a `wm density` override included); a consumer that works
+in dp divides rects by it and multiplies its points. An older helper omits it. iOS reports points
+already, so it carries no such factor.
+
+Android snapshot nodes and `get attrs` (including the digest response) carry the native
+`selected`, `checked`, `heading`, `roleDescription`, `editable`, `password`, `hintShowing`,
+`placeholder`, `selectionStart`, and `selectionEnd` facts whenever the accessibility tree reports
+them. Explicit `false` and `0` are kept; an absent field means the fact was unavailable, not false.
+`hintShowing` and `placeholder` need Android API 26 or later, `heading` API 28 or later.
+
+- `selected` is the accessibility selected state an app sets on a control — the active bottom-tab or
+  segmented-control item, or the chosen row of a list. Android reports it explicitly as `true` or
+  `false`; an older helper APK omits the field, which means the answer is unavailable rather than
+  unselected. Snapshot text marks the node `[selected]`, and `is selected`, a `selected=true`
+  selector, and a Maestro `selected:` qualifier all match on it.
+- `checked` is the checked state of a checkable control — a switch, a checkbox, a radio button, or a
+  view an app marked checkable. Android reports it as `true` or `false` on those nodes only; a node
+  that cannot be checked, or an older helper APK, omits the field. Snapshot text marks the node
+  `[checked]` or `[unchecked]`, so a toggle that reads as plain text is one Android did not report as
+  checkable.
+- `heading` is the accessibility heading flag an app sets on a node, the way React Native's
+  `accessibilityRole="header"` does on a plain `View`; it is present only as `true`.
+- `roleDescription` is the localized role description an app sets beside the native class, verbatim
+  (React Native writes `Tab`, `Tab List`, `Radio Group`, `Link`, `Menu`), when the class alone would
+  not say what the control is. The `type` stays the class; a consumer maps the description to a role.
+- `value: ""` is an explicitly empty accessibility text; a missing `value` means no text was
+  reported. The text of an empty field is its hint on modern Android, so check `hintShowing`
+  before reading `value` as the entered contents.
+- `placeholder` is the field's hint text itself, present whether the field is empty or filled: an
+  empty field shows it (`hintShowing: true`, and `value` repeats it), a filled field no longer does.
+  A field without a hint omits it. iOS nodes carry the same fact from the field's
+  `placeholderValue`, on every producer (the XCTest tree, the Simulator AX bridge, and the runner's
+  private-AX reader). XCTest reports an empty field's placeholder as its `value` too, so a `value`
+  equal to `placeholder` is either an empty field or one holding exactly that text; equality alone
+  cannot tell them apart.
+- `selectionStart`/`selectionEnd` are accessibility selection offsets. They are independent of
+  `editable` (read-only selectable text exposes them too), they are not a character count, and
+  they do not prove that a masked or secure value equals expected text.

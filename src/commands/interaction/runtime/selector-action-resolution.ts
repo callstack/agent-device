@@ -2,10 +2,10 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SelectorResolution } from '@agent-device/selectors';
-import { classifyActionableTouchCandidates } from '../../../core/interaction-targeting.ts';
-import { listSelectorPipelineMatches } from '../../../core/selector-pipeline.ts';
-import type { ActingPipelinePolicy } from '../../../core/selector-pipeline-policy.ts';
-import { formatSnapshotLine } from '../../../snapshot/snapshot-lines.ts';
+import { classifyActionableTouchCandidates } from '@agent-device/selectors/interaction-targeting';
+import { listSelectorPipelineMatches } from '@agent-device/selectors/selector-pipeline';
+import type { ActingPipelinePolicy } from '@agent-device/selectors/selector-pipeline-policy';
+import { formatSnapshotLine } from '@agent-device/capture-kit/snapshot-lines';
 
 const AMBIGUOUS_ACTION_CANDIDATE_LIMIT = 5;
 

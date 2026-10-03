@@ -1,5 +1,6 @@
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
   private static func foldNode(
@@ -8,11 +9,12 @@ extension RunnerTests {
     label: String? = nil,
     rect: SnapshotRect,
     depth: Int,
-    parentIndex: Int?
+    parentIndex: Int?,
+    hittable: Bool? = false
   ) -> RawAXNode {
     RawAXNode(
       index: index, type: type, label: label, identifier: nil, value: nil, rect: rect,
-      enabled: true, focused: nil, selected: nil, hittable: false, depth: depth,
+      enabled: true, focused: nil, selected: nil, hittable: hittable, depth: depth,
       parentIndex: parentIndex, hiddenContentAbove: nil, hiddenContentBelow: nil
     )
   }
@@ -24,7 +26,11 @@ extension RunnerTests {
     policy: SnapshotVisibilityFold.Policy = .cursorProjected
   ) -> [SnapshotPresentationNode] {
     SnapshotVisibilityFold.fold(
-      nodes, viewport: viewport, interactiveOnly: interactiveOnly, policy: policy)
+      nodes,
+      viewport: .reported(box: viewport),
+      interactiveOnly: interactiveOnly,
+      policy: policy
+    )
   }
 
   func testRegularFoldClipsScrollOverflowReparentsAndBooksHints() {
@@ -145,6 +151,39 @@ extension RunnerTests {
 
     let cursorProjected = Self.folded(nodes, viewport: viewport, policy: .cursorProjected)
     XCTAssertFalse(cursorProjected.contains { $0.raw.label == "Outside scroll clip" })
+  }
+
+  /// #2891: with no viewport box the fold withholds the bit for everything whose answer is
+  /// containment, and still answers for what its own frame decides. A `visibilityExempt` carrier is
+  /// retained even when a scroll anchor clips it to nothing, so it is the retained node whose frame
+  /// is degenerate -- and `nil` there would hand the #2638 wrapper verdict neither answer.
+  func testFoldWithUnknownViewportWithholdsContainmentButNotFrameEvidence() throws {
+    // Source bits as `normalized()` leaves them when the viewport read failed: the root is decided,
+    // everything whose answer is containment is undecided.
+    let nodes = [
+      Self.foldNode(0, type: "Application", label: "App",
+        rect: SnapshotRect(x: 0, y: 0, width: 402, height: 874), depth: 0, parentIndex: nil),
+      Self.foldNode(1, type: "ScrollView", label: "Scroll",
+        rect: SnapshotRect(x: 0, y: 96, width: 402, height: 700), depth: 1, parentIndex: 0,
+        hittable: nil),
+      Self.foldNode(2, type: "Window", label: "Clipped carrier",
+        rect: SnapshotRect(x: 0, y: 900, width: 402, height: 52), depth: 2, parentIndex: 1,
+        hittable: nil),
+      Self.foldNode(3, type: "Button", label: "Inside",
+        rect: SnapshotRect(x: 0, y: 120, width: 402, height: 52), depth: 2, parentIndex: 1,
+        hittable: nil),
+    ]
+    let folded = SnapshotVisibilityFold.fold(
+      nodes,
+      viewport: .missing(reason: .notProvided),
+      interactiveOnly: false,
+      policy: .cursorProjected
+    )
+
+    let carrier = try XCTUnwrap(folded.first { $0.raw.label == "Clipped carrier" })
+    XCTAssertEqual(carrier.raw.hittable, false, "a clipped-to-nothing frame is evidence, not a gap")
+    let inside = try XCTUnwrap(folded.first { $0.raw.label == "Inside" })
+    XCTAssertNil(inside.raw.hittable, "containment is undecided until a box exists")
   }
 
   func testScrollContainerTypeNamesMatchElementTypeSet() {

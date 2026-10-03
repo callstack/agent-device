@@ -2,6 +2,7 @@ package com.callstack.agentdevice.snapshothelper;
 
 import android.app.Instrumentation;
 import android.app.UiAutomation;
+import android.content.res.Resources;
 import android.os.Bundle;
 import android.util.Base64;
 import java.io.BufferedReader;
@@ -120,6 +121,11 @@ public final class SnapshotInstrumentation extends Instrumentation {
     result.putString("nodeCount", Integer.toString(capture.nodeCount));
     result.putString("truncated", Boolean.toString(capture.truncated));
     result.putString("elapsedMs", Long.toString(elapsedMs));
+    // Physical pixels per dp of the display the bounds above were measured on, from the same
+    // configuration the framework lays out with (a `wm density` override included), so a host that
+    // works in dp has the factor beside the pixels instead of a second adb round trip.
+    result.putString(
+        "pixelDensity", Float.toString(Resources.getSystem().getDisplayMetrics().density));
   }
 
   private void runOneShotViewport(Bundle result) {

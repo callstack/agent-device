@@ -8,6 +8,9 @@ scripts/perf/.results/
 dist/
 coverage/
 .tmp/
+# Per-project agent-device output: test artifacts, metro and tunnel logs
+/.agent-device/
+.device-evidence/
 .DS_Store
 
 # Host-local Codex state and embedded worktree clones
@@ -48,3 +51,6 @@ android/ime-helper/dist/
 # Workspace package declaration output (tsc -b project references)
 packages/*/dist-types/
 *.tsbuildinfo
+
+# Reproducible AX bridge captures are published on the evidence branch.
+docs/evidence/ios-simulator-ax-bridge-*.json.gz

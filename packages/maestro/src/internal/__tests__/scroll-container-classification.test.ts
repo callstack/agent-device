@@ -4,7 +4,9 @@ import { resolveMaestroScrollableGesture } from '../runtime-port-geometry.ts';
 // The snapshot-facing platform union ('android' | 'ios'), not program-ir's,
 // which also carries 'web'.
 import type { MaestroPlatform } from '../runtime-target-policy.ts';
+import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { isMaestroNodeVisible } from '../snapshot-policy.ts';
+import { formatRole } from '@agent-device/kernel/snapshot';
 
 // Maestro asks two questions about a scrollable node, and they must agree:
 //
@@ -23,6 +25,7 @@ const APPLICATION: SnapshotNode = {
   index: 0,
   ref: '@e1',
   type: 'Application',
+  kind: formatRole('Application'),
   visibleToUser: true,
   rect: { x: 0, y: 0, width: 402, height: 874 },
 };
@@ -40,6 +43,7 @@ function snapshotWithContainer(containerType: string) {
       ref: '@e2',
       parentIndex: 0,
       type: containerType,
+      kind: formatRole(containerType),
       visibleToUser: true,
       rect: CONTAINER_RECT,
     },
@@ -48,6 +52,7 @@ function snapshotWithContainer(containerType: string) {
       ref: '@e3',
       parentIndex: 1,
       type: 'Button',
+      kind: formatRole('Button'),
       identifier: 'target',
       visibleToUser: true,
       rect: TARGET_RECT,
@@ -61,7 +66,7 @@ function clips(containerType: string, platform: MaestroPlatform): boolean {
   const { nodes } = snapshotWithContainer(containerType);
   // The target sits outside the container rect but inside the Application rect,
   // so it reads as hidden exactly when the container is the viewport.
-  return !isMaestroNodeVisible(nodes[2]!, nodes, platform);
+  return !isMaestroNodeVisible(nodes[2]!, createSnapshotVisibility(nodes), platform);
 }
 
 /** True when scrollUntilVisible swipes inside the container instead of the screen. */

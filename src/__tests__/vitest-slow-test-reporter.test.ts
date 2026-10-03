@@ -4,7 +4,7 @@ import { classifySlowTest, reportSlowTests } from '../../scripts/vitest-slow-tes
 
 const base = {
   root: '/repo',
-  moduleId: '/repo/src/utils/__tests__/example.test.ts',
+  moduleId: '/repo/src/__tests__/example.test.ts',
   name: 'does a thing',
   fullName: 'group > does a thing',
 };
@@ -20,7 +20,7 @@ test('over-budget unit tests enter the warn band; 2x budget enforces', () => {
   const fail = classifySlowTest({ ...base, durationMs: 5_100 });
   assert.ok(fail);
   assert.equal(fail.enforce, true);
-  assert.equal(fail.key, 'src/utils/__tests__/example.test.ts :: group does a thing');
+  assert.equal(fail.key, 'src/__tests__/example.test.ts :: group does a thing');
 });
 
 test('integration paths get the larger budget', () => {
@@ -35,7 +35,7 @@ test('integration paths get the larger budget', () => {
 test('known slow tests are reported when they exceed the budget', () => {
   const offender = classifySlowTest({
     root: '/repo',
-    moduleId: '/repo/src/platforms/android/__tests__/app-deployment.test.ts',
+    moduleId: '/repo/packages/platform-android/src/__tests__/app-deployment.test.ts',
     name: 'installAndroidInstallablePath installs .apk via adb install -r',
     fullName: 'installAndroidInstallablePath installs .apk via adb install -r',
     durationMs: 9_000,

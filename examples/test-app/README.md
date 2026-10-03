@@ -16,7 +16,7 @@ It is intentionally small, but each surface is dense with durable accessibility 
 - `Product detail`: back navigation, quantity stepper, multiline notes, save action
 - `Checkout form`: required-field validation, fill vs type, checkbox state, choice groups, keyboard dismiss, success summary
 - `Settings`: switch rows, accordion content, loading and error states, retry flow, destructive-confirm modal
-- `Automation lab`: long-press, alert-result, app-event, app-state, appearance, orientation, permission-recovery, and log canaries
+- `Automation lab`: long-press, alert-result, app-event, app-state, appearance, orientation, permission-recovery, log canaries, a flattened (`accessible={true}`) text input, and an Apple Pay sheet hosted in `com.apple.PassbookUIService`
 - `WebView accessibility`: a deterministic semantic fixture plus live websites with varied HTML for native accessibility snapshot verification
 
 Navigation uses Expo Router native bottom tabs, so the tab bar itself is also part of the test surface.
@@ -38,8 +38,9 @@ These are the main case families this app can support without adding more screen
 - `press` on stable buttons, pills, and rows
 - `fill` on single-line and multiline fields
 - `type` after focus for append flows
+- `type` into a focused field the accessibility tree cannot resolve (flattened input, Apple Pay billing address form)
 - `get text` on headings, badges, summaries, and accordion content
-- `is visible` and `is exists` assertions
+- `is visible`, `is exists`, and `is absent` assertions
 - `wait` for async loading and success states
 - `diff snapshot` after dismissals and submits
 - long-list scrolling and `scrollintoview`
@@ -90,9 +91,14 @@ The `/automation` route is intentionally JavaScript-only and can be opened from
 outcomes for long press, native alert actions, app-event name/payload, app state, appearance,
 window orientation, and microphone permission recovery; the
 `maestro-clickable-first-target` duplicate pair exercises Android Maestro clickable-first
-ordering. CI repacks JavaScript-only changes into the
-cached Release app without starting Metro; native configuration changes intentionally produce one
-new fingerprinted build that all simulator consumers share.
+ordering. `automation-flattened-group` wraps a `TextInput` in an `accessible={true}` view, so the
+field itself never appears in the accessibility tree and only the keyboard proves it has focus;
+`automation-flattened-value` mirrors what was typed. `automation-open-apple-pay` (iOS only, native
+module `modules/apple-pay-lab`) presents the system Apple Pay sheet requiring a billing address plus
+contact email and phone; those forms are hosted out of process in `com.apple.PassbookUIService`, and
+`automation-apple-pay-result` reports `authorized` or `dismissed` once the sheet closes. CI repacks
+JavaScript-only changes into the cached Release app without starting Metro; native configuration
+changes intentionally produce one new fingerprinted build that all simulator consumers share.
 
 ### iOS simulator
 
@@ -290,3 +296,51 @@ local bundle.
 The suite intentionally covers the compat layer syntax used by public Maestro suites:
 `runFlow` file/inline blocks, `when.platform`, config hooks, deterministic `repeat.times`,
 flow `env`, selectors, input, assertions, and swipe.
+
+## Local iPhone Duo pose-transition semantic checks (manual)
+
+`examples/test-app/foldable/duo-pose-semantic.mjs` drives one booted iPhone Duo through
+closed → half-open → open → closed and asserts the app reacts after **every** pose change —
+a Catalog tap is proved to activate by an absent→present `catalog-title` transition measured from
+the same snapshot that resolved the tap's ref (with `home-title` gone after), the Home reset is
+asserted before the next fold, Add to cart moves the cart counter, a scroll reveals a canary,
+a long press moves a dedicated count, and one multipointer pinch changes a recognized scale.
+It reuses the `agent-device` CLI/daemon and this fixture app; it adds no framework.
+
+This is **local/manual coverage only, never automatic regression coverage.** GitHub Actions
+cannot select it yet (no hosted iPhone Duo runtime, no registered Duo runner), so it is not a CI
+gate and does not change the ordinary iPhone lane.
+
+Requirements: `DEVELOPER_DIR` pinned to a Duo-capable Xcode (iOS 27.1 ships only with Xcode 27.1+);
+exactly one booted iPhone Duo not shared with a concurrent run (concurrent runs rebuild the shared
+Apple runner and race capture/pose state); nothing else for pose control, because `fold` drives the
+hinge through simulator HID — a helper compiled and dispatched inside the simulator with `simctl
+spawn`, so no Device Hub window and no host Accessibility permission is involved; the Agent Device
+Tester app installed on that simulator.
+
+```bash
+# List booted Duo simulators, then run the scenario against one:
+DEVELOPER_DIR=/Applications/Xcode-27.1.0-Beta.app/Contents/Developer \
+  node examples/test-app/foldable/duo-pose-semantic.mjs --udid <DUO-UDID>
+
+# Prove the activation check is sensitive to targeting geometry: derive the pinch origin from a
+# different control's bounds. This flips the pinch scale check to FAIL (red is expected here):
+DEVELOPER_DIR=/Applications/Xcode-27.1.0-Beta.app/Contents/Developer \
+  node examples/test-app/foldable/duo-pose-semantic.mjs --udid <DUO-UDID> --demo-geometry-mutation
+
+# Prove the activation check is sensitive to a missed reset: skip the return-to-Home tap so a
+# closed/half-open activation or Home-reset check FAILS (red is expected here):
+DEVELOPER_DIR=/Applications/Xcode-27.1.0-Beta.app/Contents/Developer \
+  node examples/test-app/foldable/duo-pose-semantic.mjs --udid <DUO-UDID> --demo-skip-home-reset
+```
+
+A clean run prints `15/15 semantic checks passed` and exits 0; each pose's Catalog check reports a
+`catalog absent->present, home present->absent` transition. Failure snapshots land under
+`--artifacts-dir` (default `<state-dir>/artifacts`). The scenario never reuses a ref or coordinate
+across a pose change or mutation (a dropped session re-opens but never replays an `@ref`), saves
+failure artifacts, closes the session, and restores the starting pose.
+
+**Deferred GitHub Actions enablement (not a completion condition).** Wiring an automatic Duo job
+later requires, all at once: a Duo runtime/device type on the runner image, an Xcode with foldable
+HID support, and one actual successful lane run — then re-check the runner-image inventories, which
+are dated, not permanent.

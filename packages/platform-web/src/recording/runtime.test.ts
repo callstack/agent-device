@@ -1,10 +1,11 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { expect, test, vi } from 'vitest';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
 import { bindWebScreenRecordingRuntime } from './runtime.ts';
+import { mkdtempForTestSync } from '../__tests__/test-utils.ts';
 
 const device = {
   platform: 'web' as const,
@@ -60,6 +61,17 @@ test('does not report completion when the browser stop or finalizer fails', asyn
   await expect(second.pendingHandle.transfer().finish()).rejects.toThrow('finalizer failed');
 });
 
+test('reports the recorder the session browser acknowledged stopping', async () => {
+  const recording = await runtime({ start: async () => {}, stop: async () => {} });
+  const started = await recording.operations.screenRecordingStart?.(input());
+  if (!started) throw new Error('missing recording operation');
+  await expect(started.pendingHandle.transfer().finish()).resolves.toMatchObject({
+    status: 'completed',
+    // The browser writes the served WebM itself, so this backend has no second path to dispose of.
+    result: { stopObservation: { recorder: 'confirmed' } },
+  });
+});
+
 test('rolls back an acquired browser recorder when setup is cancelled', async () => {
   const controller = new AbortController();
   const reason = new Error('request cancelled');
@@ -94,7 +106,7 @@ test('does not stop a browser recorder that failed before acquisition', async ()
 });
 
 test('validates options before destructive output preparation', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'agent-device-web-recording-'));
+  const directory = mkdtempForTestSync('agent-device-web-recording-');
   const outputPath = join(directory, 'capture.webm');
   await writeFile(outputPath, 'existing recording');
   let preparations = 0;
@@ -174,8 +186,8 @@ async function runtime(
     host: {
       screenRecording: {
         web: { resolve: async () => transport },
-        finalize: { complete },
-        outputs: { prepare },
+        finalize: { sniff: async () => {}, complete },
+        outputs: { ...recordingFileStore().outputs, prepare },
       },
     },
     device,

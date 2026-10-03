@@ -1,7 +1,6 @@
 export {
   createDurableResourceEnvelope,
   decodeDeviceIdentity,
-  decodeDurableResourceEnvelope,
   encodeDurableDescriptor,
 } from './durable-resource-envelope.ts';
 export {
@@ -29,4 +28,8 @@ export {
   appLogSessionArtifactsMatch,
   assertAppLogSessionArtifacts,
 } from './app-log-session-artifacts.ts';
-export { mergeNetworkDumps, readRecentNetworkTrafficFromText } from './network-traffic.ts';
+export {
+  mergeNetworkScans,
+  readRecentNetworkTrafficFromText,
+  type NetworkScan,
+} from './network-traffic.ts';

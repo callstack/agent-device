@@ -1,4 +1,4 @@
-import type { CommandFlags } from '@agent-device/contracts/command';
+import type { CommandFlags, InternalRequestOptions } from '@agent-device/contracts/command';
 import {
   readSerializedSnapshotCaptureAnnotations,
   readSnapshotDiagnosticsSummary,
@@ -18,8 +18,6 @@ import type {
   CaptureSnapshotResult,
   DragOptions,
   FlingOptions,
-  InternalRequestOptions,
-  Lease,
   MaterializationReleaseOptions,
   PanOptions,
   PinchOptions,
@@ -55,22 +53,16 @@ import {
   readSnapshotNodes,
   resolveSessionName,
 } from './client/client-normalizers.ts';
-import type {
-  AgentDeviceClient,
-  AgentDeviceCommandClient,
-  MetroPrepareResult,
-} from './client/client-types.ts';
-import { INTERNAL_COMMANDS } from './command-catalog.ts';
+import type { AgentDeviceClient, MetroPrepareResult } from './client/client-types.ts';
+import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { buildRequestFlags } from './commands/command-flags.ts';
 import {
   prepareDaemonCommandRequest,
   type DaemonCommandName,
 } from './commands/command-projection.ts';
-import { systemCommandFamily } from './commands/system/index.ts';
-import type { ProjectedNavigationCommandClient } from './commands/system/navigation-projection.ts';
-import type { CommandResult } from './core/command-descriptor/command-result.ts';
-import { sendToDaemon } from './daemon/client/daemon-client.ts';
-import { resolveDaemonPaths } from './daemon/config.ts';
+import type { CommandResult } from '@agent-device/command-registry/command-result';
+import { sendToDaemon } from './daemon-client/daemon-client.ts';
+import { resolveDaemonPaths } from './daemon-resolution.ts';
 import { prepareMetroRuntime, reloadMetro } from './metro/client-metro.ts';
 import {
   clearMetroSessionHints,
@@ -78,11 +70,10 @@ import {
   writeMetroSessionHints,
   type MetroSessionHints,
 } from './metro/metro-session-hints.ts';
-import { isRecord } from './utils/parsing.ts';
-import { readScreenshotResultData } from './utils/screenshot-result.ts';
-
-type ProjectedSystemCommandClient = ProjectedNavigationCommandClient<InternalRequestOptions> &
-  Pick<AgentDeviceCommandClient, 'appState' | 'keyboard' | 'clipboard'>;
+import { isRecord, readSnapshotKeyboardBandFact } from '@agent-device/kernel/record';
+import { readResponseWarnings } from '@agent-device/kernel/success-text';
+import { createLeaseClient } from './client/lease-client.ts';
+import { normalizeScreenshotCaptureResult } from './client/screenshot-result.ts';
 
 export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},
@@ -142,13 +133,28 @@ export function createAgentDeviceClient(
 
   const resolveRequestSession = (options: InternalRequestOptions = {}) =>
     resolveSessionName(mergeClientOptions(config, options).session);
-  const projectedSystemCommands = buildProjectedSystemCommandClient(executeCommand);
 
   return {
     command: {
       wait: async (options) => await executeCommand<CommandResult<'wait'>>('wait', options),
       alert: async (options = {}) => await executeCommand('alert', options),
-      ...projectedSystemCommands,
+      appState: async (options = {}) =>
+        await executeCommand<CommandResult<'appstate'>>('appstate', options),
+      back: async (options = {}) => await executeCommand<CommandResult<'back'>>('back', options),
+      home: async (options = {}) => await executeCommand<CommandResult<'home'>>('home', options),
+      orientation: async (options) =>
+        await executeCommand<CommandResult<'orientation'>>('orientation', options),
+      fold: async (options) => await executeCommand<CommandResult<'fold'>>('fold', options),
+      appSwitcher: async (options = {}) =>
+        await executeCommand<CommandResult<'app-switcher'>>('app-switcher', options),
+      actionButton: async (options = {}) =>
+        await executeCommand<CommandResult<'action-button'>>('action-button', options),
+      keyboard: async (options = {}) =>
+        await executeCommand<CommandResult<'keyboard'>>('keyboard', options),
+      clipboard: async (options) =>
+        await executeCommand<CommandResult<'clipboard'>>('clipboard', options),
+      tvRemote: async (options) =>
+        await executeCommand<CommandResult<'tv-remote'>>('tv-remote', options),
       reactNative: async (options) => await executeCommand('react-native', options),
       doctor: async (options = {}) =>
         await executeCommand<CommandResult<'doctor'>>('doctor', options),
@@ -263,9 +269,7 @@ export function createAgentDeviceClient(
         const device = normalizeOpenDevice(data);
         const appBundleId = readOptionalString(data, 'appBundleId');
         const appId = appBundleId;
-        const warnings = Array.isArray(data.warnings)
-          ? data.warnings.filter((warning): warning is string => typeof warning === 'string')
-          : [];
+        const warnings = readResponseWarnings(data);
         return {
           session,
           ...(warnings.length > 0 ? { warnings } : {}),
@@ -280,6 +284,9 @@ export function createAgentDeviceClient(
           startup: normalizeStartupSample(data.startup),
           runtime: normalizeRuntimeHints(data.runtime),
           device,
+          ...(data.launchConfirmation === 'accepted'
+            ? { launchConfirmation: 'accepted' as const }
+            : {}),
           ...normalizeOpenForegroundComposition(data),
           identifiers: {
             session,
@@ -316,21 +323,7 @@ export function createAgentDeviceClient(
           }),
         ),
     },
-    leases: {
-      allocate: async (options) =>
-        normalizeLease(
-          await execute(INTERNAL_COMMANDS.leaseAllocate, [], {
-            ...options,
-            leaseId: undefined,
-          }),
-        ),
-      heartbeat: async (options) =>
-        normalizeLease(await execute(INTERNAL_COMMANDS.leaseHeartbeat, [], options)),
-      release: async (options) => {
-        const data = await execute(INTERNAL_COMMANDS.leaseRelease, [], options);
-        return { released: data.released === true, provider: readObject(data.provider) };
-      },
-    },
+    leases: createLeaseClient(execute),
     metro: {
       prepare: async (options: MetroPrepareOptions) => {
         const result = await prepareMetroRuntime({
@@ -386,17 +379,7 @@ export function createAgentDeviceClient(
         // (The caller opted into a non-default level, so the static type is the
         // default shape; the runtime value is the leveled payload.)
         if (isLeveledResponse(options)) return data as unknown as CaptureScreenshotResult;
-        const screenshot = readScreenshotResultData(data);
-        return {
-          path: readRequiredString(data, 'path'),
-          width: screenshot?.width,
-          height: screenshot?.height,
-          logicalWidth: screenshot?.logicalWidth,
-          logicalHeight: screenshot?.logicalHeight,
-          pixelDensity: screenshot?.pixelDensity,
-          overlayRefs: screenshot?.overlayRefs,
-          identifiers: { session },
-        };
+        return normalizeScreenshotCaptureResult(data, session);
       },
       diff: async (options) => await executeCommand<CommandResult<'diff'>>('diff', options),
     },
@@ -441,7 +424,7 @@ export function createAgentDeviceClient(
     debug: {
       symbols: async (options) => {
         const { symbolicateCrashArtifact } =
-          await import('./platforms/apple/core/debug-symbols.ts');
+          await import('@agent-device/platform-apple/debug-symbols');
         return symbolicateCrashArtifact({ cwd: options.cwd ?? config.cwd, ...options });
       },
     },
@@ -525,7 +508,7 @@ function normalizeSnapshotResult(
   const appBundleId = readOptionalString(data, 'appBundleId');
   return {
     nodes: readSnapshotNodes(data.nodes),
-    truncated: data.truncated === true,
+    ...(typeof data.truncated === 'boolean' ? { truncated: data.truncated } : {}),
     appName: readOptionalString(data, 'appName'),
     appBundleId,
     ...optionalSnapshotResponseFields(data),
@@ -545,6 +528,7 @@ function optionalSnapshotResponseFields(
     | 'androidSnapshot'
     | 'unchanged'
     | 'visibility'
+    | 'keyboard'
     | 'warnings'
     | 'snapshotQuality'
     | 'snapshotDiagnostics'
@@ -554,8 +538,10 @@ function optionalSnapshotResponseFields(
 > {
   const visibility = readObject(data.visibility);
   const unchanged = readObject(data.unchanged);
+  const keyboard = readSnapshotKeyboardBandFact(data.keyboard);
   const snapshotDiagnostics = readSnapshotDiagnosticsSummary(data.snapshotDiagnostics);
   return {
+    ...(keyboard ? { keyboard } : {}),
     ...(visibility ? { visibility: visibility as CaptureSnapshotResult['visibility'] } : {}),
     ...readSerializedSnapshotCaptureAnnotations(data),
     ...(unchanged ? { unchanged: unchanged as CaptureSnapshotResult['unchanged'] } : {}),
@@ -567,17 +553,6 @@ function optionalSnapshotResponseFields(
     // so callers can pin refs (`@e12~s<refsGeneration>`) before a mutation.
     ...(typeof data.refsGeneration === 'number' ? { refsGeneration: data.refsGeneration } : {}),
   };
-}
-
-function buildProjectedSystemCommandClient(
-  executeCommand: <T>(command: DaemonCommandName, options?: InternalRequestOptions) => Promise<T>,
-): ProjectedSystemCommandClient {
-  const methods: Record<string, (options?: InternalRequestOptions) => Promise<unknown>> = {};
-  for (const [method, command] of Object.entries(systemCommandFamily.clientCommandMethods ?? {})) {
-    methods[method] = async (options = {}) =>
-      await executeCommand<CommandResult<typeof command>>(command as DaemonCommandName, options);
-  }
-  return methods as unknown as ProjectedSystemCommandClient;
 }
 
 function readObject(value: unknown): Record<string, unknown> | undefined {
@@ -675,25 +650,6 @@ function clearMetroSessionHintsQuietly(
   } catch {
     // Session-hint cleanup is best-effort; close must not fail on local file state.
   }
-}
-
-function normalizeLease(data: Record<string, unknown>): Lease {
-  const rawLease = data.lease;
-  if (!isRecord(rawLease)) {
-    throw new Error('Invalid lease response from daemon');
-  }
-  return {
-    leaseId: readRequiredString(rawLease, 'leaseId'),
-    tenantId: readRequiredString(rawLease, 'tenantId'),
-    runId: readRequiredString(rawLease, 'runId'),
-    backend: readRequiredString(rawLease, 'backend') as Lease['backend'],
-    leaseProvider: readOptionalString(rawLease, 'leaseProvider'),
-    clientId: readOptionalString(rawLease, 'clientId'),
-    deviceKey: readOptionalString(rawLease, 'deviceKey'),
-    createdAt: typeof rawLease.createdAt === 'number' ? rawLease.createdAt : undefined,
-    heartbeatAt: typeof rawLease.heartbeatAt === 'number' ? rawLease.heartbeatAt : undefined,
-    expiresAt: typeof rawLease.expiresAt === 'number' ? rawLease.expiresAt : undefined,
-  };
 }
 
 export type * from './client/client-types.ts';

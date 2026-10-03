@@ -1,16 +1,22 @@
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
+import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
+import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import type {
   RuntimeOperationUnavailability,
   RuntimeOwnerRef,
 } from '@agent-device/contracts/platform-runtime';
-import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
+import {
+  createFullyUnavailablePlatformRuntimeFacts,
+  createUnavailablePlatformRuntimeFacts,
+} from '@agent-device/contracts/platform-runtime-unavailable';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
 import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
+import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
 
@@ -42,38 +48,28 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   ...unavailableShutdownOperationFacts,
   ...screenshotRuntimeOperationFacts({ capture: unavailable }),
   findText: unavailable,
-  findSelector: unavailable,
   setViewport: unavailable,
   focusPoint: unavailable,
   typeText: unavailable,
   ...touchRuntimeOperationFacts({
+    unsupported: unavailable,
     tap: unavailable,
     longPress: unavailable,
-    hover: unavailable,
     fill: unavailable,
-    tapElementSelector: unavailable,
   }),
-  ...gestureRuntimeOperationFacts({
-    plan: unavailable,
-    directionalFling: unavailable,
-    multiTouch: unavailable,
-    targetAuthoredDrag: unavailable,
-    viewport: unavailable,
-  }),
+  ...gestureRuntimeOperationFacts({ unsupported: unavailable }),
   ...scrollRuntimeOperationFacts({ scroll: unavailable }),
   ...elementTextRuntimeOperationFacts({ readTextAtPoint: unavailable }),
   back: unavailable,
-  home: unavailable,
   setOrientation: unavailable,
   tvRemote: unavailable,
-  keyboardStatus: unavailable,
-  keyboardDismiss: unavailable,
-  keyboardEnter: unavailable,
-  readClipboard: unavailable,
-  writeClipboard: unavailable,
-  appSwitcher: unavailable,
+  ...keyboardRuntimeOperationFacts({ unsupported: unavailable }),
+  ...clipboardRuntimeOperationFacts({ unsupported: unavailable }),
+  ...systemButtonRuntimeOperationFacts({ unsupported: unavailable }),
+  setFoldPose: unavailable,
   triggerAppEvent: unavailable,
   setSetting: unavailable,
+  readSetting: unavailable,
   readAlert: unavailable,
   awaitAlert: unavailable,
   acceptAlert: unavailable,
@@ -112,45 +108,9 @@ export function createUnavailableRuntimeFactsForTest(
   owner: RuntimeOwnerRef,
   fact: RuntimeOperationUnavailability = unavailable,
 ) {
-  return createUnavailablePlatformRuntimeFacts(device, owner, {
-    appLog: fact,
-    network: fact,
-    screenshot: fact,
-    viewport: fact,
-    focus: fact,
-    gesture: fact,
-    scroll: fact,
-    typeText: fact,
-    touch: fact,
-    elementText: fact,
-    back: fact,
-    home: fact,
-    orientation: fact,
-    tvRemote: fact,
-    keyboardStatus: fact,
-    keyboardDismiss: fact,
-    keyboardEnter: fact,
-    readClipboard: fact,
-    writeClipboard: fact,
-    appSwitcher: fact,
-    triggerAppEvent: fact,
-    setSetting: fact,
-    readAlert: fact,
-    awaitAlert: fact,
-    acceptAlert: fact,
-    dismissAlert: fact,
-    audioProbeCapture: fact,
-    audioProbeQuery: fact,
-    lifecycle: applicationLifecycleOperationFacts({
-      resolveOpenTarget: fact,
-      prepareApplicationOpen: fact,
-      openApplication: fact,
-      applyRuntimeHints: fact,
-      clearRuntimeHints: fact,
-      closeApplication: fact,
-      finalizeApplicationClose: fact,
-      prepareAppleRunner: fact,
-      configureProviderPortReverse: fact,
-    }),
-  });
+  return createUnavailablePlatformRuntimeFacts(
+    device,
+    owner,
+    createFullyUnavailablePlatformRuntimeFacts(fact),
+  );
 }

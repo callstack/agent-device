@@ -3,8 +3,9 @@ import type {
   AppTriggerEventOptions,
   JsonObject,
 } from '@agent-device/contracts/client';
-import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
+import type { CommandResultMap } from '@agent-device/command-registry/command-result';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   commonInputFromFlags,
   direct,
@@ -12,11 +13,14 @@ import {
   requiredString,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
+import type { JsonSchema } from '../command-contract.ts';
 import {
+  constSchema,
   jsonSchemaField,
   looseObjectField,
   looseObjectSchema,
+  numberSchema,
+  objectSchema,
   requiredField,
   stringField,
   stringSchema,
@@ -24,6 +28,47 @@ import {
 } from '../command-input.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
+
+/**
+ * This family's advertised MCP `outputSchema`s, keyed by daemon command name and projected into
+ * the command map by `src/mcp/command-output-schemas.ts`. Non-strict like every other entry: no
+ * `additionalProperties: false`, so additive response fields such as `cost` keep validating.
+ * Neither command carries the post-action observation trait (#1652): both fire-and-report a push
+ * delivery or an app event, not an interaction, so no settle graft applies here.
+ */
+export const PUSH_MANAGEMENT_COMMAND_OUTPUT_SCHEMAS = {
+  // packages/contracts/src/push.ts — discriminated union on public platform.
+  push: {
+    type: 'object',
+    oneOf: [
+      objectSchema(
+        { platform: constSchema('ios'), bundleId: stringSchema(), message: stringSchema() },
+        ['platform', 'bundleId', 'message'],
+      ),
+      objectSchema(
+        {
+          platform: constSchema('android'),
+          package: stringSchema(),
+          action: stringSchema(),
+          extrasCount: numberSchema(),
+          message: stringSchema(),
+        },
+        ['platform', 'package', 'action', 'extrasCount', 'message'],
+      ),
+    ],
+  },
+
+  // packages/contracts/src/app-events.ts
+  'trigger-app-event': objectSchema(
+    {
+      event: stringSchema(),
+      eventUrl: stringSchema(),
+      transport: constSchema('deep-link'),
+      message: stringSchema(),
+    },
+    ['event', 'eventUrl', 'transport', 'message'],
+  ),
+} satisfies Pick<Record<keyof CommandResultMap, JsonSchema>, 'push' | 'trigger-app-event'>;
 
 const pushCommandMetadata = defineFieldCommandMetadata(
   'push',
@@ -49,15 +94,6 @@ const triggerAppEventCommandMetadata = defineFieldCommandMetadata(
       'Structured payload passed to the event, in the shape the app documents for it.',
     ),
   },
-);
-
-const pushCommandDefinition = defineExecutableCommand(pushCommandMetadata, (client, input) =>
-  client.apps.push(input),
-);
-
-const triggerAppEventCommandDefinition = defineExecutableCommand(
-  triggerAppEventCommandMetadata,
-  (client, input) => client.apps.triggerEvent(input),
 );
 
 const pushCliSchema = {
@@ -97,7 +133,7 @@ const pushCommandFacet = defineCommandFacet({
     summary: 'Deliver a push notification payload',
   },
   metadata: pushCommandMetadata,
-  definition: pushCommandDefinition,
+  run: (client, input) => client.apps.push(input),
   cliSchema: pushCliSchema,
   cliReader: pushCliReader,
   daemonWriter: pushDaemonWriter,
@@ -109,7 +145,7 @@ const triggerAppEventCommandFacet = defineCommandFacet({
     summary: 'Invoke an app-defined automation event',
   },
   metadata: triggerAppEventCommandMetadata,
-  definition: triggerAppEventCommandDefinition,
+  run: (client, input) => client.apps.triggerEvent(input),
   cliSchema: triggerAppEventCliSchema,
   cliReader: triggerAppEventCliReader,
   daemonWriter: triggerAppEventDaemonWriter,

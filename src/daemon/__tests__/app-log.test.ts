@@ -5,7 +5,7 @@ import { assertThrowsAppError } from '../../__tests__/test-utils/app-error.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { appendAppLogMarker, clearAppLogFiles, getAppLogPathMetadata } from '../app-log.ts';
 
-// Pinned as a literal on purpose — see the note in src/utils/__tests__/verified-file.test.ts.
+// Pinned as a literal on purpose — see the note in packages/host-kit/src/internal/verified-file.test.ts.
 const NOT_REGULAR_FILE_HINT =
   'agent-device only reads and writes regular files at this path. Remove the symbolic link or special file there and retry.';
 

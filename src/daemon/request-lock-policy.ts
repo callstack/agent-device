@@ -1,6 +1,7 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
-import type { SessionRef, SessionState, DaemonRequest } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
 import {
   formatSessionSelectorConflict,
   listSessionSelectorConflicts,
@@ -8,13 +9,13 @@ import {
   type SessionSelectorConflictKey,
 } from './session-selector.ts';
 import {
-  isApplePlatform,
+  platformSelectorsConflict,
   publicPlatformString,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
 import { buildSessionRecoveryHint, describeSessionDevice } from './session-recovery-hints.ts';
-import { shellQuoteIfNeeded } from '../utils/shell-quote.ts';
-import { hasLockableDeviceSelector, hasSelectorValue } from './device-selector-intent.ts';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
+import { hasLockableDeviceSelector, hasSelectorValue } from './device/device-selector-intent.ts';
 import { canOverrideLockPolicySelector } from './daemon-command-registry.ts';
 
 type LockPlatform = NonNullable<DaemonRequest['meta']>['lockPlatform'];
@@ -115,8 +116,8 @@ function buildLockPolicyConflictMessage(
   const conflictList = conflicts.map(formatSessionSelectorConflict).join(', ');
   if (existingRef) {
     return (
-      `${req.command} is already bound to session "${existingRef.address}" on ${describeSessionDevice(existingRef.session)}, ` +
-      `but this request selected ${conflictList}.`
+      `Session "${existingRef.address}" is already bound to ${describeSessionDevice(existingRef.session)}, ` +
+      `but ${req.command} selected ${conflictList}.`
     );
   }
   const lockPlatform = req.meta?.lockPlatform;
@@ -213,17 +214,6 @@ function listFreshSessionConflicts(
   appendFreshSessionTargetConflict(conflicts, flags, normalizedLockPlatform);
   appendFreshSessionDeviceSelectorConflicts(conflicts, flags, normalizedLockPlatform);
   return conflicts;
-}
-
-function platformSelectorsConflict(
-  requested: PlatformSelector | undefined,
-  locked: PlatformSelector | undefined,
-): boolean {
-  if (!requested || !locked) return false;
-  if (requested === locked) return false;
-  if (requested === 'apple') return !isApplePlatform(locked);
-  if (locked === 'apple') return !isApplePlatform(requested);
-  return true;
 }
 
 function appendFreshSessionTargetConflict(

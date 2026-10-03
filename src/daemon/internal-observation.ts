@@ -1,25 +1,15 @@
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import { readSessionRuntimeRevision } from './ref-frame.ts';
+import type {
+  ReplayObservationAuthority,
+  ReplayObservationCapture,
+  ReplayObservationEvidence,
+  ReplayRefPublicationProjection,
+  ReplayRefPublicationResult,
+} from '@agent-device/contracts/replay';
+import { readSessionRuntimeRevision, refFrame } from './ref-frame.ts';
+import type { RefFrame } from './ref-frame-slot.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from './session-snapshot.ts';
-import { SessionStore } from './session-store.ts';
-import type { SessionState } from './types.ts';
-
-declare const INTERNAL_OBSERVATION_EVIDENCE: unique symbol;
-
-/**
- * Opaque capture lineage that engines may carry as data but cannot use to
- * publish refs. Only the daemon-owned finalizer in this module can resolve it.
- */
-export type InternalObservationEvidence = {
-  readonly [INTERNAL_OBSERVATION_EVIDENCE]: true;
-};
-
-type RefFrameLineage = Readonly<{
-  state: SessionState['refFrameState'];
-  scope: SessionState['refFrameScope'];
-  tree: SessionState['refFrameTree'];
-  generation: SessionState['refFrameGeneration'];
-}>;
+import type { SessionState } from './session-state.ts';
 
 type InternalObservationLineage = Readonly<{
   sessionName: string;
@@ -28,40 +18,20 @@ type InternalObservationLineage = Readonly<{
   snapshot: SnapshotState;
   snapshotGeneration: number;
   runtimeRevision: number;
-  refFrame: RefFrameLineage;
+  refFrame: RefFrame;
 }>;
 
 const evidenceLineage = new WeakMap<object, InternalObservationLineage>();
 
-type StoredInternalObservation = Readonly<{
-  evidence: InternalObservationEvidence;
-  refsGeneration: number;
-}>;
-
-type ClientRefPublicationProjection = Readonly<{
-  refsGeneration: number | undefined;
-  refs: readonly string[];
-}>;
-
-type ClientRefPublicationResult =
-  | Readonly<{ published: true; refsGeneration: number; refCount: number }>
-  | Readonly<{
-      published: false;
-      reason: 'empty' | 'cancelled' | 'stale-capture' | 'invalid-projection';
-    }>;
-
-type InternalObservationAuthority = Readonly<{
-  store(snapshot: SnapshotState): StoredInternalObservation;
-  finalize(
-    evidence: InternalObservationEvidence,
-    projection: ClientRefPublicationProjection,
-  ): ClientRefPublicationResult;
-}>;
-
 type BoundInternalObservationSession = Readonly<{
-  sessionStore: SessionStore;
+  sessionStore: InternalObservationSessionStore;
   sessionName: string;
   signal?: AbortSignal;
+}>;
+
+type InternalObservationSessionStore = Readonly<{
+  get: () => SessionState | undefined;
+  update: (mutate: (session: SessionState) => void) => boolean;
 }>;
 
 /**
@@ -71,7 +41,7 @@ type BoundInternalObservationSession = Readonly<{
  */
 export function bindInternalObservationAuthority(
   params: BoundInternalObservationSession,
-): InternalObservationAuthority {
+): ReplayObservationAuthority {
   return {
     store: (snapshot) => storeInternalObservation(params, snapshot),
     finalize: (evidence, projection) =>
@@ -90,20 +60,25 @@ export function bindInternalObservationAuthority(
 function storeInternalObservation(
   params: Pick<BoundInternalObservationSession, 'sessionStore' | 'sessionName'>,
   snapshot: SnapshotState,
-): StoredInternalObservation {
+): ReplayObservationCapture {
   const { sessionStore, sessionName } = params;
-  const session = sessionStore.get(sessionName);
-  if (!session) {
+  let storedSession: SessionState | undefined;
+  if (
+    !sessionStore.update((session) => {
+      setSessionSnapshot(session, snapshot);
+      storedSession = session;
+    }) ||
+    !storedSession
+  ) {
     throw new Error('Internal observation session is no longer available.');
   }
-  setSessionSnapshot(session, snapshot);
-  sessionStore.set(sessionName, session);
+  const session = storedSession;
   const snapshotGeneration = session.snapshotGeneration;
   if (snapshotGeneration === undefined) {
     throw new Error('Internal observation did not establish a snapshot generation.');
   }
 
-  const evidence = {} as InternalObservationEvidence;
+  const evidence = {} as ReplayObservationEvidence;
   evidenceLineage.set(evidence, {
     sessionName,
     session,
@@ -111,7 +86,7 @@ function storeInternalObservation(
     snapshot,
     snapshotGeneration,
     runtimeRevision: readSessionRuntimeRevision(session),
-    refFrame: readRefFrameLineage(session),
+    refFrame: refFrame(session),
   });
   return { evidence, refsGeneration: snapshotGeneration };
 }
@@ -125,12 +100,12 @@ function storeInternalObservation(
  * before the response returns to the client.
  */
 function finalizeClientRefPublication(params: {
-  sessionStore: SessionStore;
+  sessionStore: InternalObservationSessionStore;
   sessionName: string;
-  evidence: InternalObservationEvidence;
-  projection: ClientRefPublicationProjection;
+  evidence: ReplayObservationEvidence;
+  projection: ReplayRefPublicationProjection;
   signal?: AbortSignal;
-}): ClientRefPublicationResult {
+}): ReplayRefPublicationResult {
   const lineage = evidenceLineage.get(params.evidence);
   // Evidence is a one-shot capability. Consume it before every outcome,
   // including empty, cancelled, invalid, and stale attempts, so request-end
@@ -162,7 +137,7 @@ function isCurrentLineage(
   params: Pick<BoundInternalObservationSession, 'sessionStore' | 'sessionName'>,
   lineage: InternalObservationLineage,
 ): boolean {
-  const current = params.sessionStore.get(params.sessionName);
+  const current = params.sessionStore.get();
   return (
     params.sessionName === lineage.sessionName &&
     current === lineage.session &&
@@ -170,25 +145,7 @@ function isCurrentLineage(
     current.snapshot === lineage.snapshot &&
     current.snapshotGeneration === lineage.snapshotGeneration &&
     readSessionRuntimeRevision(current) === lineage.runtimeRevision &&
-    sameRefFrameLineage(readRefFrameLineage(current), lineage.refFrame)
-  );
-}
-
-function readRefFrameLineage(session: SessionState): RefFrameLineage {
-  return {
-    state: session.refFrameState,
-    scope: session.refFrameScope,
-    tree: session.refFrameTree,
-    generation: session.refFrameGeneration,
-  };
-}
-
-function sameRefFrameLineage(left: RefFrameLineage, right: RefFrameLineage): boolean {
-  return (
-    left.state === right.state &&
-    left.scope === right.scope &&
-    left.tree === right.tree &&
-    left.generation === right.generation
+    refFrame(current) === lineage.refFrame
   );
 }
 

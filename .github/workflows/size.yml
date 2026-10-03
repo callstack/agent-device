@@ -7,7 +7,6 @@ on:
       - 'website/**'
       - 'README.md'
       - 'AGENTS.md'
-      - 'CHANGELOG.md'
       - 'CONTEXT.md'
       - 'CONTRIBUTING.md'
       - 'LICENSE'
@@ -31,6 +30,9 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      # The helper build refuses to guess its build-tools version on CI.
+      AGENT_DEVICE_ANDROID_BUILD_TOOLS: 36.0.0
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -44,6 +46,21 @@ jobs:
         run: |
           mkdir -p /tmp/agent-device-size-report
           cp scripts/size-report*.mjs /tmp/agent-device-size-report/
+          cp scripts/prepare-publish-assets.mjs /tmp/agent-device-size-report/
+
+      - name: Install Android helper toolchain
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$SDK_ROOT/cmdline-tools/bin/sdkmanager"
+          fi
+          if [ ! -x "$SDKMANAGER" ]; then
+            echo "sdkmanager not found under $SDK_ROOT" >&2
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;$AGENT_DEVICE_ANDROID_BUILD_TOOLS"
 
       # dist is fully determined by the base commit, so reuse it across PR runs
       # against the same base. Startup medians are still measured fresh on this
@@ -58,6 +75,7 @@ jobs:
       - name: Measure base size
         run: |
           git checkout --detach "${{ github.event.pull_request.base.sha }}"
+          cp scripts/size-report-package.mjs /tmp/agent-device-size-report/
           pnpm install --frozen-lockfile
           if [ "${{ steps.base-dist-cache.outputs.cache-hit }}" != "true" ]; then
             pnpm build
@@ -84,6 +102,15 @@ jobs:
             --startup-runs 7 \
             --json .tmp/size-report.json \
             --markdown .tmp/size-report.md
+          cp /tmp/agent-device-size-base.json .tmp/size-report-base.json
+
+      - name: Upload detailed size reports
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: size-report
+          path: .tmp/size-report*.json
+          include-hidden-files: true
+          if-no-files-found: error
 
       - name: Add job summary
         run: cat .tmp/size-report.md >> "$GITHUB_STEP_SUMMARY"

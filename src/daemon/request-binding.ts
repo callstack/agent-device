@@ -1,46 +1,65 @@
-import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
-import { hasDeviceSelectionInput } from './device-selector-intent.ts';
+import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
+import { hasDeviceSelectionInput } from './device/device-selector-intent.ts';
 import { applyRequestLockPolicy } from './request-lock-policy.ts';
-import { buildOpenTargetDeviceResolutionOptions } from './open-device-selection.ts';
+import { buildOpenTargetDeviceResolutionOptions } from '@agent-device/device-selection/open-target';
 import { buildReplayTargetDeviceResolution } from './replay-device-selection.ts';
 import type { SessionStore } from './session-store.ts';
-import type { DaemonRequest, SessionRef } from './types.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { DaemonRequest } from './daemon-request.ts';
+import type { SessionRef } from './session-state.ts';
 
 export type RequestExecutionLockKey = `session:${string}` | `device:${string}`;
+
+/**
+ * The lock pair an already-bound session's commands take, in acquisition order. The #2833
+ * session-idle expiry settles a session through these same keys in this same order: settling a
+ * session while a device-lock-holding command still runs on its device would release a device
+ * under work, and any other order would deadlock against a request's pair.
+ */
+export function existingSessionExecutionLockKeys(
+  sessionName: string,
+  deviceId: string,
+): RequestExecutionLockKey[] {
+  return orderRequestExecutionLockKeys([
+    sessionExecutionLockKey(sessionName),
+    deviceExecutionLockKey(deviceId),
+  ]);
+}
+
+export type RequestExecutionLockPlan = {
+  keys: RequestExecutionLockKey[];
+  /**
+   * The device {@link RequestExecutionLockPlan.keys} reserves, or `undefined` when the plan locks
+   * only the session. A caller that must look at this device before it holds the lock reads it
+   * here rather than resolving a target of its own, so one request has one answer to "which
+   * device am I waiting for"; the locked request still resolves and binds its device alone.
+   */
+  deviceId: string | undefined;
+};
 
 export type LockedRequestBinding = {
   req: DaemonRequest;
   existingRef: SessionRef | undefined;
 };
 
-export async function resolveRequestExecutionLockKeys(params: {
+export async function resolveRequestExecutionLockPlan(params: {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
-}): Promise<RequestExecutionLockKey[]> {
+}): Promise<RequestExecutionLockPlan> {
   const { req, sessionName, sessionStore } = params;
   const existingSession = sessionStore.get(sessionName);
   if (existingSession) {
-    return orderRequestExecutionLockKeys([
-      sessionExecutionLockKey(sessionName),
-      deviceExecutionLockKey(existingSession.device.id),
-    ]);
+    return {
+      keys: existingSessionExecutionLockKeys(sessionName, existingSession.device.id),
+      deviceId: existingSession.device.id,
+    };
   }
 
   const keys = new Set<RequestExecutionLockKey>([sessionExecutionLockKey(sessionName)]);
-  const bindingReq = resolveFreshSessionBindingRequest(req);
-  const resolution = resolveFreshSessionDeviceLock(bindingReq);
-  if (resolution) {
-    try {
-      // This is advisory lock selection before the request enters the lock; the
-      // locked request still resolves and binds the target device authoritatively.
-      const device = await resolveTargetDevice(resolution.flags, resolution.options);
-      keys.add(deviceExecutionLockKey(device.id));
-    } catch {
-      // Fall back to session scoping when device resolution is not yet available.
-    }
-  }
-  return orderRequestExecutionLockKeys(keys);
+  const device = await resolveFreshSessionDevice(req);
+  if (device) keys.add(deviceExecutionLockKey(device.id));
+  return { keys: orderRequestExecutionLockKeys(keys), deviceId: device?.id };
 }
 
 export function prepareLockedRequestBinding(params: {
@@ -75,6 +94,22 @@ function resolveFreshSessionDeviceLock(req: DaemonRequest):
   if (req.command === 'open') return resolveOpenDeviceLock(req);
   if (req.command === 'replay') return resolveReplayDeviceLock(req);
   return resolveExplicitDeviceLock(req);
+}
+
+/**
+ * The device a fresh session is expected to bind, resolved the advisory way its device execution
+ * lock is chosen. This runs before the request holds that lock and is never an authority on what
+ * happens after: the locked request resolves and binds its device on its own.
+ */
+async function resolveFreshSessionDevice(req: DaemonRequest): Promise<DeviceInfo | undefined> {
+  const resolution = resolveFreshSessionDeviceLock(resolveFreshSessionBindingRequest(req));
+  if (!resolution) return undefined;
+  try {
+    return await resolveTargetDevice(resolution.flags, resolution.options);
+  } catch {
+    // Unresolvable here means unresolvable for lock selection too, which is already tolerated.
+    return undefined;
+  }
 }
 
 function resolveOpenDeviceLock(req: DaemonRequest) {

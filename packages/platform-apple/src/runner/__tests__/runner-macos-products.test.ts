@@ -12,7 +12,7 @@ import {
   repairMacOsRunnerProductsIfNeeded,
 } from '../runner-macos-products.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
-import type { ExecOptions, ExecResult } from '../host.ts';
+import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
 
 const XCTESTRUN_PATH = '/tmp/agent-device-runner.xctestrun';
 
@@ -46,7 +46,7 @@ test('repair fails when re-signing leaves the product unverifiable', async () =>
     XCTESTRUN_PATH,
   ).then(
     () => null,
-    (thrown: unknown) => thrown,
+    (error: unknown) => error,
   );
 
   assert.ok(error instanceof AppError);

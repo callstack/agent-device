@@ -7,14 +7,16 @@ if [ -z "$HELPER" ]; then
   [ "$#" -ge 1 ] && shift
 fi
 
-if [ "$#" -ne 2 ]; then
-  echo "Usage: AGENT_DEVICE_ANDROID_HELPER=<snapshot|ime> $0 <version> <output-dir>" >&2
-  echo "   or: $0 <snapshot|ime> <version> <output-dir>" >&2
+if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+  echo "Usage: AGENT_DEVICE_ANDROID_HELPER=<snapshot|ime> $0 <version> <output-dir> [build-tools-version]" >&2
+  echo "   or: $0 <snapshot|ime> <version> <output-dir> [build-tools-version]" >&2
+  echo "The version also comes from AGENT_DEVICE_ANDROID_BUILD_TOOLS." >&2
   exit 1
 fi
 
 VERSION="$1"
 OUTPUT_DIR="$2"
+BUILD_TOOLS_VERSION="${3:-${AGENT_DEVICE_ANDROID_BUILD_TOOLS:-}}"
 PROJECT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 MIN_SDK=23
 TARGET_SDK=36
@@ -56,13 +58,43 @@ if [ ! -f "$ANDROID_JAR" ]; then
   exit 1
 fi
 
-BUILD_TOOLS_DIR="$(
-  find "$SDK_ROOT/build-tools" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort -V | tail -n 1
-)"
-if [ -z "$BUILD_TOOLS_DIR" ] || [ ! -x "$BUILD_TOOLS_DIR/aapt2" ]; then
-  echo "Missing Android build tools under $SDK_ROOT/build-tools" >&2
+# d8 and aapt2 come from build-tools, so the version decides the compiled bytecode and resources,
+# not only packaging. CI names the version it installed; only a local build may take the newest.
+if [ -z "$BUILD_TOOLS_VERSION" ]; then
+  if [ "${CI:-}" = "true" ]; then
+    echo "AGENT_DEVICE_ANDROID_BUILD_TOOLS must name a build-tools version under $SDK_ROOT/build-tools" >&2
+    exit 1
+  fi
+  NEWEST_BUILD_TOOLS_DIR="$(
+    find "$SDK_ROOT/build-tools" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort -V | tail -n 1
+  )"
+  if [ -z "$NEWEST_BUILD_TOOLS_DIR" ]; then
+    echo "No Android build tools installed under $SDK_ROOT/build-tools" >&2
+    exit 1
+  fi
+  BUILD_TOOLS_VERSION="${NEWEST_BUILD_TOOLS_DIR##*/}"
+  echo "No build-tools version requested; newest installed is $BUILD_TOOLS_VERSION" >&2
+fi
+
+case "$BUILD_TOOLS_VERSION" in
+  */* | *[[:space:]]*)
+    echo "Not an Android build-tools version: '$BUILD_TOOLS_VERSION'" >&2
+    exit 1
+    ;;
+esac
+
+BUILD_TOOLS_DIR="$SDK_ROOT/build-tools/$BUILD_TOOLS_VERSION"
+if [ ! -d "$BUILD_TOOLS_DIR" ]; then
+  echo "No Android build tools $BUILD_TOOLS_VERSION under $SDK_ROOT/build-tools" >&2
   exit 1
 fi
+
+for BUILD_TOOL in aapt2 d8 zipalign apksigner; do
+  if [ ! -x "$BUILD_TOOLS_DIR/$BUILD_TOOL" ]; then
+    echo "Incomplete Android build tools: no $BUILD_TOOL in $BUILD_TOOLS_DIR" >&2
+    exit 1
+  fi
+done
 
 VERSION_CODE="$(
   printf '%s\n' "$VERSION" | awk -F. '

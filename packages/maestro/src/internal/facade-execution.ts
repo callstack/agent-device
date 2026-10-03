@@ -7,6 +7,7 @@ import {
   isMaestroControlCommandDescriptor,
   type MaestroEngineEvent,
   type MaestroEngineObserver,
+  type MaestroRuntimeMetrics,
   type MaestroRuntimePort,
 } from './engine-types.ts';
 import { parseMaestroProgram } from './program-ir-parser.ts';
@@ -49,11 +50,7 @@ export type MaestroActionEvent = {
 
 export type MaestroCompletedActionEvent = MaestroActionEvent & {
   readonly durationMs: number;
-  readonly runtimeMetrics?: {
-    hierarchyCaptures: number;
-    screenshotCaptures: number;
-    tapRetries: number;
-  };
+  readonly runtimeMetrics?: MaestroRuntimeMetrics;
   readonly data?: Record<string, unknown>;
 };
 
@@ -62,6 +59,8 @@ export type MaestroFailedAction = MaestroActionEvent & {
   readonly runtimeMetrics?: MaestroCompletedActionEvent['runtimeMetrics'];
   readonly error: unknown;
   readonly artifactPaths: readonly string[];
+  /** Warnings accumulated before this failure, including skipped `optional` steps. */
+  readonly warnings: readonly string[];
   readonly isControl: boolean;
   readonly redactions: readonly { name: string; value: string }[];
   readonly resume:
@@ -92,6 +91,8 @@ export type MaestroExecutionOptions = {
   readonly planDigest?: string;
   readonly signal?: AbortSignal;
   readonly observer?: MaestroExecutionObserver;
+  /** Forwarded to `MaestroEngineOptions.trustedScripts` — see its doc there. */
+  readonly trustedScripts?: boolean;
   /**
    * #1802: how a `runFlow` include's text is obtained. Required — the engine
    * owns no filesystem, so a run against a remote daemon reads the caller's
@@ -154,6 +155,7 @@ export async function executeMaestroFlow(
       loadProgram: loader,
       signal: options.signal,
       startIndex,
+      trustedScripts: options.trustedScripts,
       observer: createObserver(plan, options.observer, (event) => {
         failed = event;
       }),
@@ -215,6 +217,7 @@ function createObserver(
         durationMs: event.durationMs,
         error: event.error,
         artifactPaths: event.artifactPaths,
+        warnings: [...event.warnings],
         isControl: isMaestroControlCommandDescriptor(event.command),
         redactions:
           event.command.kind === 'inputText' && event.command.text.length > 0

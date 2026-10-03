@@ -53,6 +53,31 @@ test('screenshot --level digest --json preserves the digest payload through the 
   assert.deepEqual(parsed.data, digest);
 });
 
+const CROP_WARNING =
+  'CROP_PARTIAL_INTERSECTION: the selector frame extends past the captured image; the crop was clipped to the image frame';
+
+test('screenshot surfaces response-level warnings under the summary', async () => {
+  const full = { path: '/tmp/shot.png', width: 40, height: 20, warnings: [CROP_WARNING] };
+  const client = clientReturning(full);
+  const flags = { json: false } as CliFlags;
+
+  const out = await captureStdout(() => screenshotCommand({ positionals: [], flags, client }));
+
+  assert.equal(out, `/tmp/shot.png (40x20)\n${CROP_WARNING}\n`);
+});
+
+test('screenshot --json carries response-level warnings in the data', async () => {
+  const full = { path: '/tmp/shot.png', width: 40, height: 20, warnings: [CROP_WARNING] };
+  const client = clientReturning(full);
+  const flags = { json: true } as CliFlags;
+
+  const out = await captureStdout(() => screenshotCommand({ positionals: [], flags, client }));
+  const parsed = JSON.parse(out) as { data: { path: string; warnings?: string[] } };
+
+  assert.equal(parsed.data.path, '/tmp/shot.png');
+  assert.deepEqual(parsed.data.warnings, [CROP_WARNING]);
+});
+
 test('screenshot --json at the default level still emits normalized screenshot metadata', async () => {
   const full = {
     path: '/tmp/shot.png',

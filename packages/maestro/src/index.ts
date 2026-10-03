@@ -20,12 +20,13 @@ export {
 
 export {
   exportReplayActionsToMaestro,
-  MAESTRO_SELECTOR_PROJECTION,
   type MaestroExportOptions,
   type MaestroExportResult,
   type MaestroExportWarning,
   type MaestroSelectorProjection,
-} from './internal/facade-export.ts';
+} from './internal/export-flow.ts';
+
+export { MAESTRO_SELECTOR_PROJECTION } from './internal/selector-vocabulary.ts';
 
 export {
   formatMaestroCompatibilityReference,

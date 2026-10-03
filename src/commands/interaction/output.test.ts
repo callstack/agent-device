@@ -143,7 +143,9 @@ describe('press CLI output', () => {
     );
   });
 
-  test('prints the response warning after the tap line', () => {
+  // The warning itself is the dispatcher's output, not this formatter's (#2682);
+  // `cli-output.test.ts` asserts it lands on stdout for `press`.
+  test('leaves the response warning to the dispatcher', () => {
     const output = formatPress({
       message: 'Tapped (278, 817)',
       x: 278,
@@ -152,12 +154,8 @@ describe('press CLI output', () => {
         'press id="request-mic" opened an Android permission dialog (com.google.android.permissioncontroller) over com.example.app. Use "alert get" to inspect it, then "alert accept" or "alert dismiss" to respond.',
     });
 
-    expect(output.text).toBe(
-      [
-        'Tapped (278, 817)',
-        'Warning: press id="request-mic" opened an Android permission dialog (com.google.android.permissioncontroller) over com.example.app. Use "alert get" to inspect it, then "alert accept" or "alert dismiss" to respond.',
-      ].join('\n'),
-    );
+    expect(output.text).toBe('Tapped (278, 817)');
+    expect(output.stderr).toBeUndefined();
   });
 
   test('appends the unchanged interactive tail after a removals-only diff', () => {
@@ -306,6 +304,50 @@ describe('longpress CLI output', () => {
         'settled after 600ms: +1 -0 (~6 unchanged)',
         '+ @e12 [button] "Copy"',
       ].join('\n'),
+    );
+  });
+});
+
+// #2682: the family's formatters render their own result and nothing else. Whether a response's
+// `Warning:` lines reach stdout is decided once, by `formatCliOutput`, from the command's descriptor
+// — so these tests pin the reachable inputs (the CLI reader always supplies `get`'s format) and the
+// dispatcher's routing lives in `cli-output.test.ts`.
+const REPAIR_WARNING =
+  'The session app was not foreground when this command arrived (prior state runningBackground), ' +
+  'so the runner activated it before answering (reason stale_target).';
+
+describe('formatter text stays free of warnings', () => {
+  test('get text renders the value with no format, no stderr', async () => {
+    const output = await interactionCliOutputFormatters.get({
+      input: { format: 'text' },
+      result: { text: 'General', warnings: [REPAIR_WARNING] },
+    });
+    expect(output.text).toBe('General');
+    expect(output.stderr).toBeUndefined();
+  });
+
+  test('get --format attrs keeps its JSON parseable', async () => {
+    const output = await interactionCliOutputFormatters.get({
+      input: { format: 'attrs' },
+      result: { node: { type: 'Cell', label: 'General' }, warnings: [REPAIR_WARNING] },
+    });
+    expect(() => JSON.parse(String(output.text))).not.toThrow();
+    expect(output.stderr).toBeUndefined();
+  });
+
+  test('a settle-capable command renders its tap line and settled diff only', async () => {
+    const output = await interactionCliOutputFormatters.press({
+      input: {},
+      result: {
+        message: 'Tapped (10, 20)',
+        x: 10,
+        y: 20,
+        warnings: [REPAIR_WARNING],
+        settle: { settled: true, waitedMs: 400, diff: { summary: { additions: 1, removals: 0 } } },
+      },
+    });
+    expect(output.text).toBe(
+      ['Tapped (10, 20)', 'settled after 400ms: +1 -0 (~0 unchanged)'].join('\n'),
     );
   });
 });

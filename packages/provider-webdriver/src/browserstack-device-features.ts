@@ -20,6 +20,7 @@ export type BrowserStackDeviceFeatureFields = Pick<
   | 'providerDeviceOrientation'
   | 'providerGeoLocation'
   | 'providerTimezone'
+  | 'providerAppiumVersion'
   | 'providerLanguage'
   | 'providerLocale'
   | 'providerNetworkProfile'
@@ -62,6 +63,14 @@ export const BROWSERSTACK_DEVICE_FEATURE_SPECS: readonly BrowserStackDeviceFeatu
     field: 'providerTimezone',
     capability: 'timezone',
     flag: '--provider-timezone',
+    type: 'string',
+  },
+  {
+    // BrowserStack defaults to Appium 1.x when unset; `mobile:` commands the interactor issues
+    // (deepLink, pressButton, activateApp) need a 2.x+ server.
+    field: 'providerAppiumVersion',
+    capability: 'appiumVersion',
+    flag: '--provider-appium-version',
     type: 'string',
   },
   {

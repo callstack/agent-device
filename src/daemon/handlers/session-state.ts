@@ -1,4 +1,4 @@
-import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { AppError, asAppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import {
@@ -13,23 +13,26 @@ import {
   publicPlatformString,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { SessionStore } from '../session-store.ts';
-import { resolveAndroidSerialAllowlist } from '../../utils/device-isolation.ts';
+import { startupDeadlineAtMs } from '../startup-deadline.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { AppleApplicationState } from '@agent-device/kernel/snapshot';
+import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import {
   hasExplicitSessionFlag,
   requireSessionOrExplicitSelector,
   resolveCommandDevice,
   selectorTargetsSessionDevice,
-} from './session-device-utils.ts';
-import { errorResponse } from './response.ts';
+} from '../session-device-resolution.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import {
   admitRuntimeOperations,
   admitRuntimeUse,
   type UnavailableRuntimeResponse,
 } from '../runtime-admission.ts';
-import type { RuntimeCommandHandlerParams } from './session-runtime-admission.ts';
+import type { RuntimeCommandHandlerParams } from '../session-runtime-admission.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 const IOS_APPSTATE_SESSION_REQUIRED_MESSAGE =
   'iOS appstate requires an active session on the target device. Run open first (for example: open --session sim --platform ios --device "<name>" <app>).';
@@ -83,6 +86,39 @@ function hasAndroidAvdIdentity(
     selectedName?.trim() ||
     (sessionDevice?.platform === 'android' && sessionDevice.kind === 'emulator'),
   );
+}
+
+/**
+ * The session app's state as a live runner reads it, when this device's owner admits the read;
+ * nothing otherwise, so the session record alone answers and no state is invented. The owner never
+ * starts a runner for it. A runner that cannot answer right now (busy, mid-restart) leaves the
+ * session answer as it was and says so in the log; a cancelled request stays cancelled.
+ */
+async function readAppleSessionAppState(
+  params: RuntimeCommandHandlerParams,
+  session: Readonly<{ device: DeviceInfo; appBundleId?: string }>,
+): Promise<AppleApplicationState | undefined> {
+  if (!session.appBundleId) return undefined;
+  const admitted = await admitRuntimeUse({
+    command: 'appstate',
+    device: session.device,
+    use: appStateUse,
+    inspectFacts: params.inspectFacts,
+    bindDevice: params.bindDevice,
+  });
+  if (admitted.type === 'response') return undefined;
+  try {
+    const read = await admitted.runtime.operations.appState({ appBundleId: session.appBundleId });
+    return read.applicationState;
+  } catch (error) {
+    if (isRequestCanceledError(error)) throw error;
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'apple_appstate_runner_read_failed',
+      data: { code: asAppError(error).code, message: asAppError(error).message },
+    });
+    return undefined;
+  }
 }
 
 async function handleAppStateCommand(params: RuntimeCommandHandlerParams): Promise<DaemonResponse> {
@@ -142,13 +178,15 @@ async function handleAppStateCommand(params: RuntimeCommandHandlerParams): Promi
       );
     }
 
+    const state = await readAppleSessionAppState(params, session);
     return {
       ok: true,
       data: {
         platform: publicPlatformString(session.device),
         appName: appName ?? 'unknown',
         appBundleId: session.appBundleId,
-        source: 'session',
+        source: state ? 'runner' : 'session',
+        ...(state ? { state } : {}),
         surface: session.surface ?? 'app',
         ...(isIosFamily(session.device)
           ? {
@@ -163,7 +201,6 @@ async function handleAppStateCommand(params: RuntimeCommandHandlerParams): Promi
   const device = await resolveCommandDevice({
     session,
     flags,
-    ensureReady: false,
   });
   if (isIosFamily(device)) {
     return errorResponse('SESSION_NOT_FOUND', IOS_APPSTATE_SESSION_REQUIRED_MESSAGE);
@@ -232,7 +269,6 @@ export async function handleSessionStateCommands(params: {
       device = await resolveCommandDevice({
         session,
         flags,
-        ensureReady: false,
         androidAvdSelection: 'include-stopped',
       });
     } catch (error) {
@@ -267,7 +303,11 @@ export async function handleSessionStateCommands(params: {
     });
     if (admitted.type === 'response') return admitted.response;
 
-    const input = { serial: flags.serial, androidSerialAllowlist };
+    const input = {
+      serial: flags.serial,
+      androidSerialAllowlist,
+      deadlineAtMs: startupDeadlineAtMs(flags.timeoutMs),
+    };
     if (plan.kind === 'boot-target-headless') {
       device = await (await admitted.bind(device, plan.use)).operations.bootTargetHeadless(input);
     } else {
@@ -298,7 +338,6 @@ export async function handleSessionStateCommands(params: {
     if (guard) return guard;
 
     const device = await resolveCommandDevice({
-      ensureReady: false,
       flags,
       session: activeSession,
       androidAvdSelection: 'include-stopped',

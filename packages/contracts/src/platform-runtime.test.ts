@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  decodeManagedBindingFence,
   localRuntimeOwner,
+  managedBindingFence,
+  managedLocalRuntimeOwner,
   narrowDeviceBinding,
   providerRuntimeOwner,
   runtimeOwnerKey,
@@ -98,8 +102,22 @@ test('runtime use freezes declarations and rejects dynamic overlap or duplicates
   );
 });
 
-test('runtime owner keys distinguish local families and configured provider instances', () => {
+test('runtime owner keys distinguish local families, managed local owners, and configured provider instances', () => {
   assert.equal(runtimeOwnerKey(localRuntimeOwner('apple')), 'local:apple');
+  assert.equal(runtimeOwnerKey(managedLocalRuntimeOwner('sim-a')), 'managed:["sim-a"]');
+  // One string names three different owners as a family, an allocator instance, and a provider.
+  assert.notEqual(
+    runtimeOwnerKey(managedLocalRuntimeOwner('apple')),
+    runtimeOwnerKey(localRuntimeOwner('apple')),
+  );
+  assert.notEqual(
+    runtimeOwnerKey(managedLocalRuntimeOwner('limrun')),
+    runtimeOwnerKey(providerRuntimeOwner('limrun', 'limrun')),
+  );
+  assert.notEqual(
+    runtimeOwnerKey(managedLocalRuntimeOwner('a"]')),
+    runtimeOwnerKey(managedLocalRuntimeOwner('a')),
+  );
   assert.notEqual(
     runtimeOwnerKey(providerRuntimeOwner('webdriver', 'tenant-a')),
     runtimeOwnerKey(providerRuntimeOwner('webdriver', 'tenant-b')),
@@ -115,6 +133,87 @@ test('runtime owner keys distinguish local families and configured provider inst
       providerRuntimeOwner('webdriver', 'tenant-a'),
     ),
     true,
+  );
+});
+
+test('managed local owner is keyed by one trimmed allocator instance', () => {
+  const owner = managedLocalRuntimeOwner(' sim-a ');
+  assert.deepEqual(owner, { kind: 'managed-local', instance: 'sim-a' });
+  assert.ok(Object.isFrozen(owner));
+  assert.throws(() => managedLocalRuntimeOwner('  '), /non-empty/);
+  assert.equal(sameRuntimeOwner(owner, managedLocalRuntimeOwner('sim-a')), true);
+  assert.equal(sameRuntimeOwner(owner, managedLocalRuntimeOwner('sim-b')), false);
+});
+
+test('managed binding fence separates requesters that share one identity incarnation', () => {
+  const requesterA = managedBindingFence({
+    requesterId: 'requester-a',
+    requestGeneration: 1,
+    identityIncarnationId: 'incarnation-1',
+  });
+  const requesterB = managedBindingFence({
+    requesterId: 'requester-b',
+    requestGeneration: 1,
+    identityIncarnationId: 'incarnation-1',
+  });
+  assert.notDeepEqual(requesterA, requesterB);
+  assert.equal(requesterA.generation, 1);
+  assert.ok(Object.isFrozen(requesterA));
+  // The allocator owns the form of its ids: a padded id is a different id, fenced verbatim.
+  const padded = managedBindingFence({
+    requesterId: ' requester-a ',
+    requestGeneration: 1,
+    identityIncarnationId: 'incarnation-1',
+  });
+  assert.notDeepEqual(requesterA, padded);
+  assert.deepEqual(decodeManagedBindingFence(padded), {
+    requesterId: ' requester-a ',
+    requestGeneration: 1,
+    identityIncarnationId: 'incarnation-1',
+  });
+  // Canonical JSON, not a separator: requester and incarnation can never re-split.
+  assert.notEqual(
+    managedBindingFence({ requesterId: 'a:b', requestGeneration: 1, identityIncarnationId: 'c' })
+      .token,
+    managedBindingFence({ requesterId: 'a', requestGeneration: 1, identityIncarnationId: 'b:c' })
+      .token,
+  );
+  assert.throws(
+    () =>
+      managedBindingFence({ requesterId: '  ', requestGeneration: 1, identityIncarnationId: 'x' }),
+    TypeError,
+  );
+  assert.throws(
+    () =>
+      managedBindingFence({ requesterId: 'a', requestGeneration: 1.5, identityIncarnationId: 'x' }),
+    TypeError,
+  );
+});
+
+test('managed binding fence decodes only what managedBindingFence encoded', () => {
+  const identity = {
+    requesterId: 'requester-a',
+    requestGeneration: 3,
+    identityIncarnationId: 'incarnation-1',
+  };
+  const decoded = decodeManagedBindingFence(managedBindingFence(identity));
+  assert.deepEqual(decoded, identity);
+  assert.ok(decoded && Object.isFrozen(decoded));
+  // A durable-capture fence token is an opaque UUID, never a managed binding.
+  assert.equal(decodeManagedBindingFence({ token: crypto.randomUUID(), generation: 1 }), null);
+  for (const token of [
+    JSON.stringify(['a', 'b', 'c']),
+    JSON.stringify(['a', 7]),
+    JSON.stringify(['', 'b']),
+    JSON.stringify([' ', 'b']),
+    // Non-canonical encoding of a well-formed pair: it re-encodes to a different token.
+    '["a", "b"]',
+  ]) {
+    assert.equal(decodeManagedBindingFence({ token, generation: 1 }), null, token);
+  }
+  assert.equal(
+    decodeManagedBindingFence({ token: JSON.stringify(['a', 'b']), generation: -1 }),
+    null,
   );
 });
 

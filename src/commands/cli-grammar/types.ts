@@ -1,5 +1,8 @@
-import type { InternalRequestOptions } from '@agent-device/contracts/client';
-import type { CliFlags, CommandFlags } from '@agent-device/contracts/command';
+import type {
+  CliFlags,
+  CommandFlags,
+  InternalRequestOptions,
+} from '@agent-device/contracts/command';
 import type { ClickButton } from '@agent-device/contracts/click-button';
 
 export type DaemonCommandRequest = {

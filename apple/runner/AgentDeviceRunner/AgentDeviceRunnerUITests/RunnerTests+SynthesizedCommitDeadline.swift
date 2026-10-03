@@ -1,11 +1,11 @@
 import XCTest
 
-// The synthesized text-entry commit wait, end to end: the deadline that bounds it, the two waits
-// that run it, the observation/pacing they poll through, and the value-free cadence line that path
-// is allowed to log. Split from RunnerTests+SynthesizedTextEntry.swift, which keeps the
-// private-XCTest synthesis boundary and the route policies; the pure outcome functions these wrap
-// stay there next to the rules they encode. Everything that touches the polled field value now
-// lives in this one file, which is the surface apple-runner-log-redaction.test.ts guards.
+// The synthesized replacement commit wait, end to end: the deadline that bounds it, the wait that
+// runs it, the observation/pacing it polls through, and the value-free cadence line that path is
+// allowed to log. RunnerTests+SynthesizedTextEntry.swift keeps the private-XCTest synthesis
+// boundary, the route policies, and the pure outcome function this wraps. Everything that touches
+// the polled field value lives in this one file, which is the surface
+// apple-runner-log-redaction.test.ts guards.
 extension RunnerTests {
   /// One commit wait's running deadline.
   ///
@@ -57,54 +57,17 @@ extension RunnerTests {
     }
   }
 
-  /// Blocks until the synthesized bare-type text is observable in the target field, so `type`
-  /// cannot report ok while trailing characters are still uncommitted on a slow simulator.
-  ///
-  /// Observation only. A stalled prefix cannot be told apart from a suffix still queued in the
-  /// event stream, so re-synthesizing the difference risks committing it twice after the command
-  /// already reported success (#1676 rejected exactly that repair). Reporting `.notObserved` is
-  /// what the caller does instead: the partial value is the agent's to resolve, and a named
-  /// failure beats a success that misdescribes the field. Text carrying a submit key is skipped
-  /// outright: the app may clear or rewrite the field on submit, so `textBefore + typedText` is
-  /// not the value to wait for.
-  func awaitSynthesizedFirstResponderCommit(
-    app: XCUIApplication,
-    target: TextEntryTarget,
-    textBefore: String?,
-    typedText: String
-  ) -> SynthesizedTextCommitOutcome {
-    guard let textBefore, !typedText.contains("\n"), !typedText.contains("\r") else {
-      return .unobservable
-    }
-    let expectedText = textBefore + typedText
-    let waitStartedAt = Date()
-    NSLog("[DEBUG-1874] wait start expectedLen=%ld route=append", expectedText.count)
-    let ingredients = synthesizedCommitPollingIngredients(app: app, target: target, expectedText: expectedText)
-    let outcome = Self.awaitSynthesizedCommitOutcome(
-      expectedText: expectedText,
-      placeholder: ingredients.placeholder,
-      now: { Date() },
-      observe: ingredients.observe,
-      waitForNextObservation: ingredients.waitForNextObservation
-    )
-    NSLog(
-      "[DEBUG-1874] wait outcome=%@ elapsedMs=%.0f route=append",
-      String(describing: outcome),
-      waitStartedAt.timeIntervalSinceNow * -1000
-    )
-    return outcome
-  }
-
   /// Blocks until the synthesized replacement text (`fill`) is observable in the target field, so
   /// `fill` cannot report ok while the select-all-and-retype it posted is still uncommitted — or
   /// silently wrong — on a slow or channel-penalized simulator (this route runs only when the
-  /// XCTest channel is already penalized, and never resolves an `XCUIElement`, so it previously had
-  /// no verification at all).
+  /// XCTest channel is already penalized, and never resolves an `XCUIElement`).
   ///
-  /// Unlike the append route, the expected value is the final text itself — replacement mode
-  /// clears the field first, so there is no `textBefore` prefix to account for — and unlike the
-  /// append route, a settled mismatch is always reported rather than trusted: see
-  /// `awaitSynthesizedReplacementCommitOutcome`'s doc comment.
+  /// Observation only. A stalled prefix cannot be told apart from a suffix still queued in the
+  /// event stream, so re-synthesizing the difference risks committing it twice after the command
+  /// already reported success. The expected value is the
+  /// final text itself, and a settled mismatch is always reported: see
+  /// `awaitSynthesizedReplacementCommitOutcome`'s doc comment. Text carrying a submit key is
+  /// skipped outright: the app may clear or rewrite the field on submit.
   func awaitSynthesizedReplacementCommit(
     app: XCUIApplication,
     target: TextEntryTarget,
@@ -160,16 +123,9 @@ extension RunnerTests {
     )
   }
 
-  /// The placeholder/observe/pacing ingredients shared by the append route
-  /// (`awaitSynthesizedFirstResponderCommit`) and the replacement route
-  /// (`awaitSynthesizedReplacementCommit`). What must NOT be shared is which outcome function
-  /// consumes them: see `awaitSynthesizedReplacementCommitOutcome`'s doc comment for why append
-  /// mode's "trust a diverged value" rule is wrong for replacement mode. Each caller therefore
-  /// calls its own named outcome function directly, with real argument labels — deliberately not
-  /// a stored closure/function-value parameter here, which would erase those labels at the call
-  /// site and make the observe closure unrecognizable to the static content-redaction check in
-  /// `apple-runner-log-redaction.test.ts` (`extractObserveClosure` locates the labeled closure
-  /// literal by its text; a closure passed as a plain function value carries no such label).
+  /// The placeholder/observe/pacing ingredients the commit wait polls through. The observe closure
+  /// stays a labeled closure literal here: the static content-redaction check in
+  /// `apple-runner-log-redaction.test.ts` (`extractObserveClosure`) locates it by that text.
   private func synthesizedCommitPollingIngredients(
     app: XCUIApplication,
     target: TextEntryTarget,
@@ -189,7 +145,7 @@ extension RunnerTests {
           treatingPlaceholderAsEmpty: true
         )
         // Cadence evidence stays value-free: the polled value is user content typed through
-        // `type`/`fill` and must never reach runner.log. Lengths and the expected-prefix walk
+        // `fill` and must never reach runner.log. Lengths and the expected-prefix walk
         // are enough to distinguish throttling (prefix grows slowly) from a wedge (it freezes).
         Self.logCommitCadence(
           elapsedMs: Int(waitStartedAt.timeIntervalSinceNow * -1000),

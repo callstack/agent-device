@@ -33,7 +33,7 @@ const WAIVED_GENERIC_HINT_CODES: Record<string, string> = {
     'Catch-all wrap of an underlying failure: the specific "what failed" lives in the message, so the generic diagnostics guidance IS its recovery step.',
 };
 
-// Human error rendering (src/utils/output.ts printHumanError) opens with
+// Human error rendering (src/commands/output/error.ts printHumanError) opens with
 // `Error (CODE): message`, so any rendered error text names its own code.
 const RENDERED_ERROR_CODE = /(?:^|\n)Error \(([A-Z_]+)\):/g;
 

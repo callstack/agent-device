@@ -1,6 +1,24 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
-import { normalizeOpenForegroundComposition } from './client-normalizers.ts';
+import { expect, test } from 'vitest';
+import {
+  normalizeDevice,
+  normalizeOpenForegroundComposition,
+  normalizeRuntimeHints,
+} from './client-normalizers.ts';
+
+test.each(['ios', 'android', 'harmonyos'])('runtime response preserves %s platform', (platform) => {
+  expect(normalizeRuntimeHints({ platform, launchUrl: 'demo://open' })).toMatchObject({
+    platform,
+    launchUrl: 'demo://open',
+  });
+});
+
+test.each(['apple', 'unknown', 12])(
+  'runtime response ignores non-runtime platform %s',
+  (platform) => {
+    expect(normalizeRuntimeHints({ platform })?.platform).toBeUndefined();
+  },
+);
 
 test('embedded daemon errors sanitize an untrusted cause before client exposure', () => {
   const secret = 'adc_live_remote-secret';
@@ -26,4 +44,40 @@ test('embedded daemon errors sanitize an untrusted cause before client exposure'
   assert.match(cause.code ?? '', /^token=\[REDACTED\]/);
   assert.equal(cause.code?.length, 400);
   assert.match(cause.code ?? '', /<truncated>$/);
+});
+
+test('device normalization preserves the projected claim owner and drops malformed ones', () => {
+  const base = {
+    platform: 'ios',
+    target: 'mobile',
+    kind: 'simulator',
+    id: 'sim-1',
+    name: 'iPhone 17 Pro',
+    booted: true,
+  };
+  const claimed = normalizeDevice({
+    ...base,
+    claimedBy: { session: 'qa', workspace: '/worktrees/qa' },
+  });
+  expect(claimed.claimedBy).toEqual({ session: 'qa', workspace: '/worktrees/qa' });
+
+  expect(normalizeDevice(base).claimedBy).toBeUndefined();
+  expect(normalizeDevice({ ...base, claimedBy: { session: 42 } }).claimedBy).toBeUndefined();
+});
+
+test('device normalization carries the listed model and OS version and drops malformed ones', () => {
+  const base = {
+    platform: 'android',
+    target: 'mobile',
+    kind: 'device',
+    id: 'R5CT1',
+    name: 'Pixel 9',
+    booted: true,
+  };
+  const described = normalizeDevice({ ...base, model: 'Pixel 9', osVersion: '16' });
+  expect(described).toMatchObject({ model: 'Pixel 9', osVersion: '16' });
+
+  const malformed = normalizeDevice({ ...base, model: '', osVersion: 16 });
+  expect(malformed).not.toHaveProperty('model');
+  expect(malformed).not.toHaveProperty('osVersion');
 });

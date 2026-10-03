@@ -199,7 +199,22 @@ export function readOptionalBoolean(
   return value;
 }
 
-const VARIABLE_PATTERN = /^\$\{[A-Za-z_][A-Za-z0-9_.]*\}$/;
+export const VARIABLE_PATTERN = /^\$\{[A-Za-z_][A-Za-z0-9_.]*\}$/;
+
+/**
+ * The `setPermissions`/`launchApp.permissions` literal values the parser accepts: the plain
+ * states plus the granular `location`/`photos` values. Which value a permission takes is checked
+ * where the permission is applied, after `${VAR}` lookups resolve.
+ */
+export const MAESTRO_PERMISSION_VALUES: ReadonlySet<string> = new Set([
+  'allow',
+  'deny',
+  'unset',
+  'always',
+  'inuse',
+  'never',
+  'limited',
+]);
 const NUMERIC_STRING_PATTERN = /^-?\d+(\.\d+)?$/;
 const INTEGER_STRING_PATTERN = /^-?\d+$/;
 

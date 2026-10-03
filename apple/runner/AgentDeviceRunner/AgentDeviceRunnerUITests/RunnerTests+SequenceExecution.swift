@@ -19,6 +19,7 @@ extension RunnerTests {
     let gestureEndUptimeMs: Double
   }
 
+  @MainActor
   func executeSequence(command: Command, activeApp: XCUIApplication) -> Response {
     guard let steps = command.steps, !steps.isEmpty else {
       return sequenceInvalidArgs("sequence requires at least one step")
@@ -136,6 +137,7 @@ extension RunnerTests {
     return nil
   }
 
+  @MainActor
   private func performSequenceStep(
     _ step: SequenceStep,
     activeApp: XCUIApplication,
@@ -143,51 +145,21 @@ extension RunnerTests {
   ) -> SequenceStepOutcome {
     let x = step.x ?? 0
     let y = step.y ?? 0
-    // Synthesized HID tap fast path mirrors the individual `tap` command (idleTimeout:false, with
-    // a tapAt fallback when synthesis is unsupported), so fusing a jittered tap series does not
-    // change the touch mechanism for these inputs.
-    if step.kind == "tap", step.synthesized == true {
-      let policyKind = SynthesizedGesturePolicyKind.synthesizedDrag
-#if os(iOS)
-      guard let synthesizedContext else {
-        let nowMs = ProcessInfo.processInfo.systemUptime * 1000
-        logSynthesizedGesturePolicyDecision(kind: policyKind, context: nil, fallbackAttempted: false)
-        return SequenceStepOutcome(
-          outcome: .unsupported(
-            message: "synthesized coordinate tap could not resolve a finite coordinate frame",
-            hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
-          ),
-          gestureStartUptimeMs: nowMs,
-          gestureEndUptimeMs: nowMs
-        )
-      }
-#endif
-      let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
+    if let policyKind = synthesizedPolicyKind(forSequenceStep: step) {
+      switch performSynthesizedGesture(activeApp, kind: policyKind, context: synthesizedContext, synthesize: {
         synthesizedTapAt(app: activeApp, x: x, y: y, context: synthesizedContext)
-      }
-      if case .performed = outcome {
-        logSynthesizedGesturePolicyDecision(kind: policyKind, context: synthesizedContext, fallbackAttempted: false)
-        if let pauseMs = step.pauseMs, pauseMs > 0 {
-          sleepFor(min(max(pauseMs, 0), 10000) / 1000.0)
-        }
-        return SequenceStepOutcome(
-          outcome: outcome,
-          gestureStartUptimeMs: timing.gestureStartUptimeMs,
-          gestureEndUptimeMs: timing.gestureEndUptimeMs
+      }) {
+      case .performed(let timing):
+        return finishedSequenceStep(step, timing: timing, outcome: .performed)
+      case .refused(let timing, let message, let hint):
+        return finishedSequenceStep(
+          step,
+          timing: timing,
+          outcome: .unsupported(message: message, hint: hint)
         )
+      case .xctestFallback:
+        break
       }
-#if os(iOS)
-      guard synthesizedContext.allowsXCTestCoordinateFallback else {
-        logSynthesizedGesturePolicyDecision(kind: policyKind, context: synthesizedContext, fallbackAttempted: false)
-        return SequenceStepOutcome(
-          outcome: outcome,
-          gestureStartUptimeMs: timing.gestureStartUptimeMs,
-          gestureEndUptimeMs: timing.gestureEndUptimeMs
-        )
-      }
-      logSynthesizedGesturePolicyDecision(kind: policyKind, context: synthesizedContext, fallbackAttempted: true)
-#endif
-      // Synthesis unsupported (e.g. macOS) — fall through to the drag-based tapAt below.
     }
     let (timing, outcome) = performGesture(activeApp) {
       switch step.kind {
@@ -201,6 +173,14 @@ extension RunnerTests {
         return tapAt(app: activeApp, x: x, y: y)
       }
     }
+    return finishedSequenceStep(step, timing: timing, outcome: outcome)
+  }
+
+  private func finishedSequenceStep(
+    _ step: SequenceStep,
+    timing: (gestureStartUptimeMs: Double, gestureEndUptimeMs: Double),
+    outcome: RunnerInteractionOutcome
+  ) -> SequenceStepOutcome {
     // Sleep AFTER the step — pauseMs is the inter-step gap — but only when the step performed.
     // assembleSequenceExecution stops at the first unsupported outcome, so pausing after a failed
     // step would burn up to 10s of watchdog budget with no following step to separate from.
@@ -239,188 +219,3 @@ extension RunnerTests {
     Response(ok: false, error: ErrorPayload(code: "INVALID_ARGS", message: message))
   }
 }
-
-#if AGENT_DEVICE_RUNNER_UNIT_TESTS
-// MARK: - In-bundle unit tests (device-free)
-
-extension RunnerTests {
-  func testSequenceDecodesStepsFromWire() throws {
-    let json = """
-    {"command":"sequence","commandId":"seq-1","steps":[
-      {"kind":"tap","x":100,"y":200},
-      {"kind":"doubleTap","x":101,"y":200},
-      {"kind":"longPress","x":102,"y":200,"durationMs":300,"pauseMs":50}
-    ]}
-    """
-    let command = try JSONDecoder().decode(Command.self, from: Data(json.utf8))
-    XCTAssertEqual(command.command, .sequence)
-    XCTAssertEqual(command.steps?.count, 3)
-    XCTAssertEqual(command.steps?[0].kind, "tap")
-    XCTAssertEqual(command.steps?[1].kind, "doubleTap")
-    XCTAssertEqual(command.steps?[2].pauseMs, 50)
-  }
-
-  func testSequenceAcceptsDoubleTapKind() {
-    // A doubleTap step missing coords must fail on the coords check, not the kind allowlist —
-    // proving "doubleTap" passes validateSequenceStep without needing a device to execute on.
-    let response = executeSequenceForTest(steps: [
-      sequenceStep(kind: "doubleTap", x: nil)
-    ])
-    XCTAssertEqual(response.ok, false)
-    XCTAssertEqual(response.error?.code, "INVALID_ARGS")
-    XCTAssertTrue(response.error?.message.contains("requires finite x and y") ?? false)
-    XCTAssertFalse(response.error?.message.contains("unsupported kind") ?? true)
-  }
-
-  func testSequenceRejectsUnknownKind() throws {
-    let response = executeSequenceForTest(steps: [
-      sequenceStep(kind: "tap", x: 1, y: 2),
-      sequenceStep(kind: "pinch", x: 3, y: 4),
-    ])
-    XCTAssertEqual(response.ok, false)
-    XCTAssertEqual(response.error?.code, "INVALID_ARGS")
-    XCTAssertTrue(response.error?.message.contains("step 1") ?? false)
-    XCTAssertTrue(response.error?.message.contains("pinch") ?? false)
-  }
-
-  func testSequenceRejectsEmpty() {
-    let response = executeSequenceForTest(steps: [])
-    XCTAssertEqual(response.ok, false)
-    XCTAssertEqual(response.error?.code, "INVALID_ARGS")
-  }
-
-  func testSequenceRejectsTooManySteps() {
-    let steps = (0..<21).map { _ in sequenceStep(kind: "tap", x: 1, y: 2) }
-    let response = executeSequenceForTest(steps: steps)
-    XCTAssertEqual(response.ok, false)
-    XCTAssertEqual(response.error?.code, "INVALID_ARGS")
-    XCTAssertTrue(response.error?.message.contains("at most 20") ?? false)
-  }
-
-  func testSequenceHasSynthesizedCoordinateStep() {
-    XCTAssertTrue(
-      sequenceHasSynthesizedCoordinateStep([
-        sequenceStep(kind: "tap", x: 1, y: 2, synthesized: true),
-      ])
-    )
-    XCTAssertFalse(
-      sequenceHasSynthesizedCoordinateStep([
-        sequenceStep(kind: "tap", x: 1, y: 2),
-        sequenceStep(kind: "doubleTap", x: 1, y: 2, synthesized: true),
-      ])
-    )
-  }
-
-  func testAssembleSequencePreservesOrderOnSuccess() {
-    let steps = [
-      sequenceStep(kind: "tap", x: 1, y: 1),
-      sequenceStep(kind: "longPress", x: 2, y: 2),
-      sequenceStep(kind: "tap", x: 3, y: 3),
-    ]
-    var calls: [Int] = []
-    let execution = assembleSequenceExecution(steps: steps) { index, _ in
-      calls.append(index)
-      return SequenceStepOutcome(
-        outcome: .performed,
-        gestureStartUptimeMs: Double(index * 10),
-        gestureEndUptimeMs: Double(index * 10 + 5)
-      )
-    }
-    XCTAssertEqual(calls, [0, 1, 2])
-    XCTAssertEqual(execution.completedSteps, 3)
-    XCTAssertNil(execution.failedStepIndex)
-    XCTAssertEqual(execution.results.map { $0.kind }, ["tap", "longPress", "tap"])
-    XCTAssertEqual(execution.gestureStartUptimeMs, 0)
-    XCTAssertEqual(execution.gestureEndUptimeMs, 25)
-  }
-
-  func testAssembleSequenceStopsAtFirstFailure() {
-    let steps = [
-      sequenceStep(kind: "tap", x: 1, y: 1),
-      sequenceStep(kind: "longPress", x: 2, y: 2),
-      sequenceStep(kind: "tap", x: 3, y: 3),
-    ]
-    var calls: [Int] = []
-    let execution = assembleSequenceExecution(steps: steps) { index, _ in
-      calls.append(index)
-      if index == 1 {
-        return SequenceStepOutcome(
-          outcome: .unsupported(message: "long press unsupported", hint: nil),
-          gestureStartUptimeMs: 10,
-          gestureEndUptimeMs: 15
-        )
-      }
-      return SequenceStepOutcome(outcome: .performed, gestureStartUptimeMs: 0, gestureEndUptimeMs: 5)
-    }
-    // Step 2 is never invoked.
-    XCTAssertEqual(calls, [0, 1])
-    XCTAssertEqual(execution.completedSteps, 1)
-    XCTAssertEqual(execution.failedStepIndex, 1)
-    // results.count == completedSteps + 1 (the failed step).
-    XCTAssertEqual(execution.results.count, 2)
-    XCTAssertEqual(execution.results[1].ok, false)
-    XCTAssertEqual(execution.results[1].errorCode, "UNSUPPORTED_OPERATION")
-    XCTAssertEqual(execution.results[1].errorMessage, "long press unsupported")
-  }
-
-  func testSequenceWorstCaseResponseStaysUnderJournalCap() throws {
-    let longMessage = String(repeating: "e", count: 200)
-    let results = (0..<20).map { index in
-      SequenceStepResult(
-        ok: index < 19,
-        kind: "longPress",
-        errorCode: index < 19 ? nil : "UNSUPPORTED_OPERATION",
-        errorMessage: index < 19 ? nil : longMessage,
-        gestureStartUptimeMs: 123456.789,
-        gestureEndUptimeMs: 123466.789
-      )
-    }
-    let response = Response(
-      ok: true,
-      data: DataPayload(
-        message: "sequence",
-        completedSteps: 19,
-        failedStepIndex: 19,
-        sequenceResults: results
-      )
-    )
-    let encoded = try JSONEncoder().encode(response)
-    XCTAssertLessThan(encoded.count, 16 * 1024)
-  }
-
-  private func sequenceStep(
-    kind: String,
-    x: Double?,
-    y: Double? = nil,
-    synthesized: Bool? = nil
-  ) -> SequenceStep {
-    SequenceStep(
-      kind: kind,
-      x: x,
-      y: y,
-      durationMs: nil,
-      pauseMs: nil,
-      synthesized: synthesized
-    )
-  }
-
-  /// Validation runs before any executor call, so the INVALID_ARGS paths are exercised without
-  /// reaching the device executor (which is never invoked when validation rejects).
-  private func executeSequenceForTest(steps: [SequenceStep]) -> Response {
-    let command = makeSequenceCommand(steps: steps)
-    return executeSequence(command: command, activeApp: app)
-  }
-
-  /// Build a sequence Command via JSON so the test does not depend on the memberwise init's
-  /// parameter order.
-  private func makeSequenceCommand(steps: [SequenceStep]) -> Command {
-    struct SequenceCommandFixture: Encodable {
-      let command = "sequence"
-      let commandId = "seq-test"
-      let steps: [SequenceStep]
-    }
-    let data = try! JSONEncoder().encode(SequenceCommandFixture(steps: steps))
-    return try! JSONDecoder().decode(Command.self, from: data)
-  }
-}
-#endif

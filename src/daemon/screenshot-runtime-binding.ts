@@ -5,6 +5,7 @@ import {
 } from '@agent-device/contracts/platform-runtime-operations';
 import type {
   CaptureScreenshotInput,
+  ScreenshotCaptureFacts,
   ScreenshotRuntimeOperations,
 } from '@agent-device/contracts/screenshot-runtime';
 import type {
@@ -13,16 +14,16 @@ import type {
   SnapshotRuntimeOperations,
 } from '@agent-device/contracts/snapshot-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { errorResponse } from './handlers/response.ts';
 import {
   admitRuntimePlan,
   requireRuntimeBinding,
   unavailableRuntimeOperationResponse,
   unwrapAdmittedRuntimePlan,
   type AdmittedRuntimePlan,
-} from './handlers/session-runtime-admission.ts';
+} from './session-runtime-admission.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
-import type { DaemonResponse } from './types.ts';
+import type { DaemonResponse } from './daemon-request.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 export type ScreenshotRuntimeBindings = Readonly<{
   inspectFacts?: InspectDeviceRuntimeFacts;
@@ -30,12 +31,12 @@ export type ScreenshotRuntimeBindings = Readonly<{
 }>;
 
 /**
- * One request's admitted capture authority. `captureSnapshot` is present exactly when the
- * overlay-refs plan was admitted, so a caller cannot annotate a capture it never declared — and
- * both operations come from the same single binding.
+ * One request's admitted capture authority. `captureSnapshot` is present exactly when a
+ * tree-requiring plan (overlay-refs or crop-on) was admitted, so a caller cannot post-process a
+ * capture it never declared a snapshot for — and both operations come from the same single binding.
  */
 export type BoundScreenshotRuntime = Readonly<{
-  captureScreenshot(input: CaptureScreenshotInput): Promise<void>;
+  captureScreenshot(input: CaptureScreenshotInput): Promise<ScreenshotCaptureFacts>;
   captureSnapshot?: (input: CaptureSnapshotInput) => Promise<SnapshotResult>;
 }>;
 
@@ -45,9 +46,13 @@ export type ResolvedScreenshotRuntime =
 
 /** Resolves one plan, inspects its owner facts once, then binds once on the admitted device. */
 export async function resolveBoundScreenshotRuntime(
-  params: Readonly<{ device: DeviceInfo; overlayRefs: boolean }> & ScreenshotRuntimeBindings,
+  params: Readonly<{ device: DeviceInfo; overlayRefs: boolean; cropOn?: string }> &
+    ScreenshotRuntimeBindings,
 ): Promise<ResolvedScreenshotRuntime> {
-  const plan = resolveScreenshotRuntimePlan({ overlayRefs: params.overlayRefs });
+  const plan = resolveScreenshotRuntimePlan({
+    overlayRefs: params.overlayRefs,
+    cropOn: params.cropOn !== undefined,
+  });
   const admission = await admitRuntimePlan({
     device: params.device,
     plan,
@@ -56,7 +61,7 @@ export async function resolveBoundScreenshotRuntime(
   if (!admission.admitted) {
     return {
       ok: false,
-      response: screenshotPlanUnavailableResponse(admission.operation, admission.fact),
+      response: screenshotPlanUnavailableResponse(plan.kind, admission.operation, admission.fact),
     };
   }
   return { ok: true, runtime: await bindScreenshotRuntime(params.bindDevice, admission) };
@@ -78,11 +83,12 @@ async function bindScreenshotRuntime(
       const runtime = await bind(device, plan.use);
       return Object.freeze({ captureScreenshot: selectScreenshotCapture(runtime) });
     }
-    case 'capture-with-overlay-refs': {
+    case 'capture-with-overlay-refs':
+    case 'capture-with-crop-on': {
       const runtime = await bind(device, plan.use);
       return Object.freeze({
         captureScreenshot: selectScreenshotCapture(runtime),
-        captureSnapshot: selectOverlaySnapshot(runtime),
+        captureSnapshot: selectSnapshotCapture(runtime),
       });
     }
   }
@@ -97,19 +103,30 @@ function selectScreenshotCapture(runtime: BoundScreenshotOperation<'captureScree
   return async (input: CaptureScreenshotInput) => await runtime.operations.captureScreenshot(input);
 }
 
-/** The overlay plan's tree read, from the same binding as its capture. */
-function selectOverlaySnapshot(
+/** The tree-requiring plans' snapshot read, from the same binding as the capture. */
+function selectSnapshotCapture(
   runtime: Readonly<{ operations: Readonly<Pick<SnapshotRuntimeOperations, 'captureSnapshot'>> }>,
 ) {
   return async (input: CaptureSnapshotInput) => await runtime.operations.captureSnapshot(input);
 }
 
 function screenshotPlanUnavailableResponse(
+  kind: ScreenshotRuntimePlan['kind'],
   operation: ScreenshotRuntimePlan['use']['required'][number],
   fact: RuntimeOperationFact,
 ): DaemonResponse {
   if (operation === 'captureScreenshot') {
     return unavailableRuntimeOperationResponse('screenshot', fact)!;
+  }
+  if (kind === 'capture-with-crop-on') {
+    return errorResponse(
+      'UNSUPPORTED_OPERATION',
+      '--crop-on crops the capture to a selector frame using a snapshot taken on the same screen, which this target cannot capture.',
+      { reason: fact.available ? undefined : fact.reason },
+      {
+        hint: (fact.available ? undefined : fact.hint) ?? 'Re-run screenshot without --crop-on.',
+      },
+    );
   }
   return errorResponse(
     'UNSUPPORTED_OPERATION',

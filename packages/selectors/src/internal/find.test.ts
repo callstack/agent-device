@@ -2,12 +2,14 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { findBestMatchesByLocator } from './find.ts';
+import { formatRole } from '@agent-device/kernel/snapshot';
 
 function makeNode(ref: string, label?: string, identifier?: string): SnapshotNode {
   return {
     index: Number(ref.replace('e', '')) || 0,
     ref,
     type: 'android.widget.TextView',
+    kind: formatRole('android.widget.TextView'),
     label,
     identifier,
     rect: { x: 0, y: 0, width: 100, height: 20 },

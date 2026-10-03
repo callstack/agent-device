@@ -1,103 +1,103 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { isDeepStrictEqual } from 'node:util';
 import { test } from 'vitest';
 import type { RunnerCommand } from '../runner-contract.ts';
 import {
-  canSkipRunnerReadinessPreflightAfterHealthyMutation,
   isReadOnlyRunnerCommand,
-  isRunnerReadinessPreflightExempt,
-  isRunnerReadinessProbeCommand,
   readRunnerCommandTraits,
+  RUNNER_COMMAND_TRAITS,
   type RunnerCommandTraits,
 } from '../runner-command-traits.ts';
-import { RUNNER_COMMAND_TRAIT_MANIFEST } from '../runner-command-manifest.ts';
 
-const EXPECTED_RUNNER_COMMAND_TRAITS = Object.fromEntries(
-  Object.entries(RUNNER_COMMAND_TRAIT_MANIFEST).map(([command, traitClass]) => [
-    command,
-    expectedTraitsForClass(traitClass),
-  ]),
-) as Record<RunnerCommand['command'], RunnerCommandTraits>;
+const RUNNER_COMMANDS = Object.keys(RUNNER_COMMAND_TRAITS) as Array<RunnerCommand['command']>;
 
-test('runner command traits are derived from the runner command manifest', () => {
-  for (const [command, expectedTraits] of Object.entries(EXPECTED_RUNNER_COMMAND_TRAITS) as Array<
-    [RunnerCommand['command'], RunnerCommandTraits]
-  >) {
-    assert.deepEqual(readRunnerCommandTraits(command), expectedTraits, command);
+test('runner command trait table pins lifecycle-sensitive command groups', () => {
+  const groups = {
+    preflightSkippableTouchMutation: commandsWithTraits(hotMutation()),
+    readOnly: commandsWithTraits(readOnly()),
+    payloadDependent: payloadDependentCommands(),
+    readOnlyReadinessProbe: commandsWithTraits(readOnlyReadinessProbe()),
+    readinessPreflightExemptMutation: commandsWithTraits(preflightExemptMutation()),
+    default: commandsWithTraits(defaults()),
+  };
+  assert.deepEqual(groups, {
+    preflightSkippableTouchMutation: [
+      'desktopScroll',
+      'drag',
+      'gesture',
+      'longPress',
+      'scroll',
+      'sequence',
+      'swipe',
+      'tap',
+    ],
+    readOnly: [
+      'appState',
+      'findText',
+      'gestureViewport',
+      'querySelector',
+      'readText',
+      'screenshot',
+      'snapshot',
+    ],
+    payloadDependent: ['alert'],
+    readOnlyReadinessProbe: ['status', 'uptime'],
+    readinessPreflightExemptMutation: ['activate', 'targetReset', 'terminate'],
+    default: [
+      'actionButton',
+      'appSwitcher',
+      'backInApp',
+      'backSystem',
+      'home',
+      'keyboardDismiss',
+      'keyboardReturn',
+      'mouseClick',
+      'pasteboardWrite',
+      'recordStart',
+      'recordStop',
+      'remotePress',
+      'rotate',
+      'shutdown',
+      'type',
+    ],
+  });
+  assert.deepEqual(Object.values(groups).flat().sort(), [...RUNNER_COMMANDS].sort());
+});
+
+test('alert actions match the native read-only golden table', () => {
+  // The fixture's `query` column records whether the alert request changes anything — `get` is the
+  // one action that is side-effect-free — and each side consumes it under its own name: `readOnly`
+  // for this daemon trait, retry eligibility for the Apple runner, which no longer classifies
+  // commands by read-only-ness at all.
+  const cases = JSON.parse(
+    fs.readFileSync(
+      new URL('../../../../../contracts/fixtures/alert-command-traits.json', import.meta.url),
+      'utf8',
+    ),
+  ) as Array<{ name: string; command: RunnerCommand; query: boolean }>;
+  assert.deepEqual(
+    cases.map(({ command }) => command.action),
+    [undefined, 'get', 'accept', 'dismiss'],
+  );
+  for (const { name, command, query } of cases) {
+    assert.deepEqual(readRunnerCommandTraits(command), { ...defaults(), readOnly: query }, name);
+    assert.equal(isReadOnlyRunnerCommand(command), query, name);
   }
 });
 
-test('runner command manifest pins lifecycle-sensitive command groups', () => {
-  assert.deepEqual(commandsForClass('preflightSkippableTouchMutation'), [
-    'desktopScroll',
-    'drag',
-    'gesture',
-    'longPress',
-    'scroll',
-    'sequence',
-    'swipe',
-    'tap',
-  ]);
-  assert.deepEqual(commandsForClass('readOnly'), [
-    'alert',
-    'findText',
-    'gestureViewport',
-    'querySelector',
-    'readText',
-    'screenshot',
-    'snapshot',
-  ]);
-  assert.deepEqual(commandsForClass('readOnlyReadinessProbe'), ['status', 'uptime']);
-  assert.deepEqual(commandsForClass('readinessPreflightExemptMutation'), [
-    'activate',
-    'targetReset',
-    'terminate',
-  ]);
-});
-
-test('runner command trait helpers read from the shared trait table', () => {
-  for (const command of Object.keys(EXPECTED_RUNNER_COMMAND_TRAITS) as Array<
-    RunnerCommand['command']
-  >) {
-    const traits = EXPECTED_RUNNER_COMMAND_TRAITS[command];
-    assert.equal(isReadOnlyRunnerCommand(command), traits.readOnly, command);
-    assert.equal(isRunnerReadinessProbeCommand(command), traits.readinessProbe, command);
-    assert.equal(
-      isRunnerReadinessPreflightExempt(command),
-      traits.readinessPreflightExempt,
-      command,
-    );
-    assert.equal(
-      canSkipRunnerReadinessPreflightAfterHealthyMutation(command),
-      traits.readinessPreflightSkipEligibleAfterHealthyMutation,
-      command,
-    );
-  }
-});
-
-function commandsForClass(
-  traitClass: (typeof RUNNER_COMMAND_TRAIT_MANIFEST)[RunnerCommand['command']],
-): RunnerCommand['command'][] {
-  return Object.entries(RUNNER_COMMAND_TRAIT_MANIFEST)
-    .filter((entry) => entry[1] === traitClass)
-    .map((entry) => entry[0] as RunnerCommand['command'])
-    .sort();
+function commandsWithTraits(traits: RunnerCommandTraits): RunnerCommand['command'][] {
+  return RUNNER_COMMANDS.filter(
+    (command) =>
+      typeof RUNNER_COMMAND_TRAITS[command] !== 'function' &&
+      isDeepStrictEqual(readRunnerCommandTraits({ command }), traits),
+  ).sort();
 }
 
-function expectedTraitsForClass(
-  traitClass: (typeof RUNNER_COMMAND_TRAIT_MANIFEST)[RunnerCommand['command']],
-): RunnerCommandTraits {
-  switch (traitClass) {
-    case 'default':
-      return defaults();
-    case 'readinessPreflightExemptMutation':
-      return preflightExemptMutation();
-    case 'readOnly':
-      return readOnly();
-    case 'readOnlyReadinessProbe':
-      return readOnlyReadinessProbe();
-    case 'preflightSkippableTouchMutation':
-      return hotMutation();
-  }
+function payloadDependentCommands(): RunnerCommand['command'][] {
+  return RUNNER_COMMANDS.filter(
+    (command) => typeof RUNNER_COMMAND_TRAITS[command] === 'function',
+  ).sort();
 }
 
 function defaults(): RunnerCommandTraits {

@@ -31,8 +31,6 @@ export const PERF_AGGREGATE_REMOVED_ERROR_MESSAGE =
 export const PERF_SUBJECT_ERROR_MESSAGE = 'perf cpu requires profile';
 export const PERF_KIND_ERROR_MESSAGE =
   'perf --kind must be xctrace, simpleperf, perfetto, android-hprof, or memgraph';
-export const PERF_MEMORY_KIND_ERROR_MESSAGE =
-  'perf memory snapshot --kind must be android-hprof or memgraph';
 
 export const isPerfArea = PERF_AREAS.is;
 

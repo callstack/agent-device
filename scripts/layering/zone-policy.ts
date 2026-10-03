@@ -1,22 +1,28 @@
 import type { ImportEdge } from './model.ts';
 
 /**
- * R1-R3 as data: which zone may import which, and on what terms.
+ * Catches: a core or daemon module reaching up into commands/ — the one direction the ranked
+ *   spine (R5/R6) cannot see on its own, because "commands is above core" is a zone-table fact,
+ *   not a rank the cycle/back-edge checkers infer.
+ * Evidence: ba1a5efbc6 (#1449) introduced the policy table after R1-R3 lived as hand-written
+ *   predicates; 2e0879a260 (#987) records the SDK-barrel exemption R3 needed before retirement.
+ * Cost: 152 LOC (72 rule + 80 test).
+ * Kill criterion: none enforced today; retire only by maintainer decision that "core and daemon
+ *   never import commands/" no longer matters — moot only if commands/ absorbs core and daemon
+ *   as internal implementation detail and the zone table collapses to one row or fewer.
+ */
+
+/**
+ * R2 as data: which zone may import which.
  *
- * These three rules used to be three hand-written predicate functions. They were short, but each
- * one buried its boundary in control flow — you had to read the early-returns to learn that R3
- * tolerates dynamic imports, or that R1 opens exactly one door. Stating them as a table means the
- * policy is readable without reading code, and a fourth boundary is a table entry rather than a
- * fourth function to keep consistent with the other three.
+ * The original folder policies were hand-written predicate functions. Stating the remaining rule
+ * as data keeps its scope readable without following control flow.
  *
  * The evaluator is deliberately small. Everything a policy can say is in `ZonePolicy`, so a rule
  * that needs more than these fields does NOT belong here: R4 (cycles), R5/R6 (spine ranking),
  * R7 (field ownership) and R9 (cycle size) are whole-graph or non-import properties, and each
  * keeps its own checker.
  */
-
-/** Edge kinds a boundary can tolerate. Both are erased or deferred, so both can be legitimate. */
-export type ToleratedKind = 'type-only' | 'dynamic';
 
 export type ZonePolicy = {
   /** Rule id reported on violation, e.g. `R1 kernel-sink`. */
@@ -27,15 +33,6 @@ export type ZonePolicy = {
   to?: readonly string[];
   /** Target zones this policy does NOT govern — the complement form of `to`. */
   exceptTo?: readonly string[];
-  /**
-   * Edge kinds that do not violate this boundary. A type-only edge costs nothing at runtime; a
-   * dynamic edge defers the cost past startup. Omitted means the boundary is closed to every kind.
-   */
-  tolerates?: readonly ToleratedKind[];
-  /** Path prefixes allowed to cross regardless: the declared seam. */
-  seam?: readonly string[];
-  /** Subtrees of `seam` that are NOT part of it (a seam owner with a non-owning child). */
-  seamExcept?: readonly string[];
   /** Why the boundary exists and what to do instead. ADR 0010: every error carries a hint. */
   hint: string;
 };
@@ -46,37 +43,30 @@ export type ZonePolicy = {
  * R1 kernel-sink retired 2026-07-30 (#1490 W0): the kernel moved to
  * packages/kernel, where package resolution and R11 package-boundaries enforce
  * the sink property physically — a package cannot import root src at all.
+ *
+ * `R2 commands-floor` states that commands sits at a floor and is read from above, keeping
+ * `core`/`daemon` below it. It used to carry a second row placing `cli-schema` above commands
+ * (#2543: commands may not import the schema layer that renders its facets), but #2679 folded
+ * `cli-schema` into `commands/schema/`, putting both sides of that direction in the same zone —
+ * a same-zone edge this table can never see, since `checkLayeringRules` only evaluates edges
+ * that cross zones. `commands-schema-boundary.ts` enforces that direction now, as a
+ * folder-scoped rule instead of a zone-policy row.
  */
 export const ZONE_POLICIES: readonly ZonePolicy[] = [
   {
     rule: 'R2 commands-floor',
-    from: ['platforms', 'core', 'daemon'],
+    from: ['core', 'daemon'],
     to: ['commands'],
     hint:
       'commands/ is the command surface, above these zones. Depend on shared kernel/contracts ' +
       'instead; if two zones need the same rule, put the rule below both of them.',
   },
-  {
-    rule: 'R3 platforms-seam',
-    to: ['platforms'],
-    tolerates: ['type-only', 'dynamic'],
-    seam: ['src/core/interactors/', 'src/sdk/'],
-    hint:
-      'Only src/core/interactors/ and the sdk barrel may statically import ' +
-      'platforms/; elsewhere use a dynamic import() or a type-only import to preserve CLI ' +
-      'cold-start.',
-  },
 ];
 
-function kindOf(imp: ImportEdge): ToleratedKind | 'value' {
+function kindOf(imp: ImportEdge): 'type-only' | 'dynamic' | 'value' {
   if (imp.dynamic) return 'dynamic';
   if (imp.typeOnly) return 'type-only';
   return 'value';
-}
-
-function crossesSeam(policy: ZonePolicy, file: string): boolean {
-  if (!policy.seam?.some((prefix) => file.startsWith(prefix))) return false;
-  return !policy.seamExcept?.some((prefix) => file.startsWith(prefix));
 }
 
 /**
@@ -90,10 +80,6 @@ export function policyViolation(
   if (policy.from && !policy.from.includes(edge.fromZone)) return null;
   if (policy.to && !policy.to.includes(edge.toZone)) return null;
   if (policy.exceptTo?.includes(edge.toZone)) return null;
-
-  const kind = kindOf(edge.imp);
-  if (kind !== 'value' && policy.tolerates?.includes(kind)) return null;
-  if (crossesSeam(policy, edge.file)) return null;
 
   return policy.hint;
 }

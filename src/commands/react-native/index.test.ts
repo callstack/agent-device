@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
 import {
   reactNativeCliReader,
-  reactNativeCommandDefinition,
+  reactNativeCommandFacet,
   reactNativeCommandMetadata,
   reactNativeDaemonWriter,
 } from './index.ts';
@@ -21,7 +21,7 @@ function expectInvalidArgs(fn: () => unknown, messageFragment: string) {
 describe('react-native command interface', () => {
   test('owns its public metadata', () => {
     expect(reactNativeCommandMetadata.name).toBe('react-native');
-    expect(reactNativeCommandDefinition.name).toBe('react-native');
+    expect(reactNativeCommandFacet.definition.name).toBe('react-native');
     expect(reactNativeCommandMetadata.description).toContain('React Native');
   });
 

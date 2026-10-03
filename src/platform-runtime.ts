@@ -4,10 +4,7 @@ import type {
 } from '@agent-device/contracts/device';
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
 import type { OwnedProcessRecordWriter } from '@agent-device/contracts/platform-runtime-host';
-import type {
-  AppStateRuntimeHost,
-  AppStateRuntimeResult,
-} from '@agent-device/contracts/app-state-runtime';
+import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-runtime';
 import type { DeviceShutdownRuntimeDependencies } from '@agent-device/contracts/device-shutdown-runtime';
 import {
   type ComposedDeviceInventoryGateways,
@@ -31,10 +28,9 @@ import {
 import {
   createAndroidObservationAdapter as createPackageAndroidObservationAdapter,
   createAndroidInventoryModule,
-  parseAndroidForegroundApp as parseAndroidPackageForegroundApp,
-  readAndroidAppState as readAndroidPackageAppState,
+  createAndroidRuntimeModule,
+  readAndroidAppStateWithExecutor,
   loadShutdownRuntime as loadAndroidShutdownRuntime,
-  runtimeModule as androidRuntimeModule,
 } from '@agent-device/platform-android';
 import {
   createHarmonyInventoryModule,
@@ -45,6 +41,7 @@ import {
   runtimeModule as vegaRuntimeModule,
 } from '@agent-device/platform-vega';
 import {
+  captureLinuxSurfaceSnapshot,
   inventoryModule as linuxInventoryModule,
   runtimeModule as linuxRuntimeModule,
 } from '@agent-device/platform-linux';
@@ -66,18 +63,11 @@ export type {
   PlatformProviderResolvers,
 } from './platform-runtime/request-providers.ts';
 
-export async function readAndroidAppStateWithHost(
-  host: AppStateRuntimeHost['android'],
-  device: Parameters<AppStateRuntimeHost['android']['run']>[0],
-  signal: AbortSignal,
+export async function getAndroidAppStateWithAdb(
+  adb: Parameters<typeof readAndroidAppStateWithExecutor>[0],
+  signal?: AbortSignal,
 ): Promise<AppStateRuntimeResult> {
-  return await readAndroidPackageAppState(host, device, signal);
-}
-
-export async function parseAndroidForegroundApp(
-  text: string,
-): Promise<Readonly<{ package?: string; activity?: string }> | null> {
-  return await parseAndroidPackageForegroundApp(text);
+  return await readAndroidAppStateWithExecutor(adb, signal);
 }
 
 const androidInventoryModule = createAndroidInventoryModule({
@@ -124,6 +114,13 @@ export function createPlatformDeviceInventoryGateways(
   });
 }
 
+const androidRuntimeModule = createAndroidRuntimeModule({
+  // Evaluating the root's adb host module binds the process-wide port exactly once.
+  bindAdbHost: async () => {
+    await import('./platform-runtime-android-adb-host.ts');
+  },
+});
+
 /** The root composition registry shared by the gateway and bounded host-contract fixtures. */
 export const platformRuntimeModules: ReadonlyMap<Platform, PlatformRuntimeModule> = new Map<
   Platform,
@@ -146,16 +143,23 @@ export function createPlatformRuntimeGateway(
     resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
     sessionsDir: string;
     ownedProcesses?: OwnedProcessRecordWriter;
+    assertShutdownAllowed?: () => void;
   }>,
 ): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   return createComposedPlatformRuntimeGateway({
     modules: platformRuntimeModules,
     loadHost: async () => {
-      const { createPlatformRuntimeHost } = await import('./platform-runtime-operation-host.ts');
+      const { createPlatformRuntimeHost, createSnapshotRuntimeHost, loadMacOsSurfaceSnapshot } =
+        await import('./platform-runtime-operation-host.ts');
       return createPlatformRuntimeHost({
         sessionsDir: options.sessionsDir,
         resolveSessionArtifacts: options.resolveSessionArtifacts,
         shutdownLoaders,
+        assertShutdownAllowed: options.assertShutdownAllowed,
+        snapshot: createSnapshotRuntimeHost({
+          linux: captureLinuxSurfaceSnapshot,
+          macos: loadMacOsSurfaceSnapshot,
+        }),
         ownedProcesses: options.ownedProcesses,
       });
     },

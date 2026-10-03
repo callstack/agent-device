@@ -39,7 +39,7 @@ export type PublicPlatform = (typeof PUBLIC_PLATFORMS)[number];
 // aliases `ios`/`macos`, which still resolve to `apple` devices (read-path back-compat).
 export const PLATFORM_SELECTORS = [...PLATFORMS, 'ios', 'macos'] as const;
 export type PlatformSelector = (typeof PLATFORM_SELECTORS)[number];
-const DEVICE_KINDS = ['simulator', 'emulator', 'device'] as const;
+export const DEVICE_KINDS = ['simulator', 'emulator', 'device'] as const;
 export type DeviceKind = (typeof DEVICE_KINDS)[number];
 export const DEVICE_TARGETS = ['mobile', 'tv', 'desktop'] as const;
 export type DeviceTarget = (typeof DEVICE_TARGETS)[number];
@@ -53,6 +53,10 @@ export type DeviceInfo = {
   // Explicit Apple OS discriminant populated at discovery for Apple devices.
   // Optional so legacy records (and non-Apple platforms) remain valid.
   appleOs?: AppleOS;
+  // Presentation-only hardware model and OS version reported by discovery when the
+  // platform tooling exposes them; never part of device identity or selection.
+  model?: string;
+  osVersion?: string;
   booted?: boolean;
   simulatorSetPath?: string;
   // Internal physical-iOS execution backend selected during discovery.
@@ -111,6 +115,20 @@ export function isIosFamily(device: Pick<DeviceInfo, 'platform' | 'appleOs'>): b
   return isApplePlatform(device.platform) && !isMacOs(device);
 }
 
+/**
+ * The iPhone/iPad simulator leaf: a simulator of an Apple handheld OS. `simctl` surfaces that a
+ * phone or tablet simulator exposes and a television or headset one does not — content size is one
+ * — are confined to this leaf, which is strictly narrower than {@link isIosFamily} (that also covers
+ * tvOS and visionOS simulators) and excludes both the macOS host and every physical device.
+ */
+export function isHandheldAppleSimulator(
+  device: Pick<DeviceInfo, 'platform' | 'target' | 'appleOs' | 'kind'>,
+): boolean {
+  if (device.kind !== 'simulator') return false;
+  const appleOs = resolveDeviceAppleOs(device);
+  return appleOs === 'ios' || appleOs === 'ipados';
+}
+
 export function isMobilePlatform(device: Pick<DeviceInfo, 'platform' | 'appleOs'>): boolean {
   // Phone/tablet device family: Android plus every Apple OS except the macOS desktop
   // host. Preserves the pre-collapse `platform === 'ios' || platform === 'android'`
@@ -164,6 +182,19 @@ export function isTvOsDevice(device: Pick<DeviceInfo, 'platform' | 'target'>): b
   return isApplePlatform(device.platform) && device.target === 'tv';
 }
 
+/**
+ * The Apple leaves whose runner synthesizes tap input (`RunnerTests+SynthesizedInteraction.swift`
+ * gates two-finger HID synthesis behind `#if os(iOS)`, which covers iOS and iPadOS only): every
+ * `isIosFamily` leaf except tvOS (no touchscreen) and visionOS (the runner's `#else` branch, no
+ * synthesis path). Every producer of `synthesized: true` gates on this predicate so none of them
+ * pays for a synthesis attempt the runner cannot perform.
+ */
+export function runnerSynthesizesTap(
+  device: Pick<DeviceInfo, 'platform' | 'appleOs' | 'target'>,
+): boolean {
+  return isIosFamily(device) && !isTvOsDevice(device) && device.appleOs !== 'visionos';
+}
+
 /** Resolve the stored Apple OS, preserving legacy target/leaf inference for old device records. */
 export function resolveDeviceAppleOs(
   device: Pick<DeviceInfo, 'platform' | 'target' | 'appleOs'>,
@@ -172,6 +203,19 @@ export function resolveDeviceAppleOs(
   if ((device.platform as string) === 'macos') return 'macos';
   if (isTvOsDevice(device)) return 'tvos';
   return 'ios';
+}
+
+/**
+ * The Apple leaves that carry a physical Action Button: iPhone and iPad, in a simulator or on
+ * hardware. tvOS and visionOS have no such control. Which *model* inside an admitted leaf has one
+ * is not something `DeviceInfo` records — discovery fills platform, kind, and Apple OS, never a
+ * model identifier — so a runner answers that with `XCUIDevice.hasHardwareButton(.action)`.
+ */
+export function hasAppleActionButton(
+  device: Pick<DeviceInfo, 'platform' | 'target' | 'appleOs'>,
+): boolean {
+  const appleOs = resolveDeviceAppleOs(device);
+  return appleOs === 'ios' || appleOs === 'ipados';
 }
 
 /**
@@ -207,6 +251,31 @@ export function matchesPlatformSelector(
   if (selector === 'ios') return isApplePlatform(device.platform) && !isMacOs(device);
   if (selector === 'macos') return isApplePlatform(device.platform) && isMacOs(device);
   return device.platform === selector;
+}
+
+/**
+ * Whether two `--platform` selections can name the SAME device.
+ *
+ * Selectors name a platform on one of two axes: the collapsed `apple` family, or an Apple leaf
+ * (`ios`/`macos`) — plus the non-Apple platforms, which have one axis each. Equality of the two
+ * strings is therefore not the question: `apple` and `ios` name overlapping devices while `ios` and
+ * `macos` do not. The `apple` selector is only equivalent to a leaf, never to a non-Apple platform.
+ *
+ * Comparing selectors by string instead was the shape behind #2962, where a remote connection bound
+ * to the public `ios` was compared with an `apple`-axis value and every iOS install was refused.
+ * Any caller that decides "this request targets a different platform than the one already bound"
+ * has to answer it on both axes, which is why this lives beside the selectors rather than in one
+ * caller.
+ */
+export function platformSelectorsConflict(
+  requested: PlatformSelector | undefined,
+  bound: PlatformSelector | undefined,
+): boolean {
+  if (!requested || !bound) return false;
+  if (requested === bound) return false;
+  if (requested === 'apple') return !isApplePlatform(bound);
+  if (bound === 'apple') return !isApplePlatform(requested);
+  return true;
 }
 
 export function resolveApplePlatformName(
@@ -375,14 +444,27 @@ function deviceIdentityMistakenForNameHint(
   if (!flag) return undefined;
   return (
     `${deviceName} is the id of ${JSON.stringify(identityMatch.name)}, not its name. ` +
-    `Did you mean ${flag} ${deviceName}?`
+    `Did you mean --${flag} ${deviceName}?`
   );
 }
 
-/** The identity flag that can actually resolve a device on this platform, if one exists. */
-function deviceIdentityFlag(platform: Platform): '--udid' | '--serial' | undefined {
-  if (isApplePlatform(platform)) return '--udid';
-  if (isSerialAddressablePlatform(platform)) return '--serial';
+export type DeviceIdentityFlag = 'udid' | 'serial';
+
+/**
+ * Which flag carries a device identity on a platform: `udid` addresses Apple devices, `serial`
+ * addresses the serial-addressable ones. Resolution rejects the wrong pairing
+ * (`assertSelectorFlagMatchesPlatform`), and a caller that resolved a device and has to re-issue it
+ * as flags — a remote lease request that must bind the device it just picked — has to name the same
+ * flag, or the two drift and the request binds a selector that resolves a DIFFERENT device.
+ *
+ * Two sites still spell the pairing out inline; each differs from this rule in a way that is its own
+ * decision, so they are tracked as follow-ups rather than folded in here.
+ */
+export function deviceIdentityFlag(
+  platform: Platform | PublicPlatform,
+): DeviceIdentityFlag | undefined {
+  if (isApplePlatform(platform)) return 'udid';
+  if (isSerialAddressablePlatform(platform)) return 'serial';
   return undefined;
 }
 
@@ -421,7 +503,7 @@ function throwAmbiguousDeviceSelection(candidates: DeviceInfo[]): never {
     'AMBIGUOUS_MATCH',
     `${candidates.length} devices match this request equally; select one explicitly.`,
     {
-      // The declared device-candidate details domain (src/utils/error-candidates.ts), so the CLI
+      // The declared device-candidate details domain (@agent-device/kernel/errors), so the CLI
       // and MCP renderers print these candidates without a new shape to learn.
       devices: listed.map((device) => ({ id: device.id, name: device.name })),
       matches: candidates.length,
@@ -432,10 +514,9 @@ function throwAmbiguousDeviceSelection(candidates: DeviceInfo[]): never {
 
 function buildAmbiguousDeviceHint(candidates: DeviceInfo[]): string {
   const first = candidates[0];
-  const identitySelector =
-    first && isSerialAddressablePlatform(first.platform)
-      ? `--serial ${first.id}`
-      : `--udid ${first?.id ?? '<id>'}`;
+  const identitySelector = first
+    ? `--${deviceIdentityFlag(first.platform) ?? 'udid'} ${first.id}`
+    : `--udid <id>`;
   return (
     `Select the intended device explicitly, for example ${identitySelector} ` +
     `or --device ${JSON.stringify(first?.name ?? '<name>')}. ` +
@@ -530,7 +611,7 @@ function throwNoDevicesFound(selector: DeviceSelector, context: DeviceSelectionC
 }
 
 function normalizeDeviceName(value: string): string {
-  return value.toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+  return value.toLowerCase().replaceAll('_', ' ').replaceAll(/\s+/g, ' ').trim();
 }
 
 function compareAppleDevicesForSelection<TDevice extends DeviceInfo>(

@@ -4,7 +4,7 @@ import type {
 } from './screenshot-diff-regions.ts';
 import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
 import { rectArea } from '@agent-device/kernel/rect';
-import { intersectArea } from '../utils/screenshot-geometry.ts';
+import { intersectArea } from '@agent-device/kernel/screenshot-geometry';
 
 const MAX_MATCHES_PER_REGION = 3;
 

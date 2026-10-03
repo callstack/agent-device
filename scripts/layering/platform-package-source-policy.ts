@@ -1,3 +1,17 @@
+// Catches: a platform package touching ambient host state (fs, os, process) directly instead
+//   of through capture-kit's declared ports — a substrate leak that lets a platform module read
+//   or mutate host state the request-scoped runtime cannot account for, invisible to a type
+//   check because the ambient APIs are fully typed and legal to call.
+// Evidence: c06bed9f77 (#1699) extracted platform device inventory runtime, the first substrate
+//   split this rule started policing; d76e0f94e9 (#1779) migrated snapshot the same way.
+// Cost: 230 LOC (157 rule + 73 test); shares rule id R13 with platform-package-policy.ts (1030
+//   LOC) and platform-composition-policy.ts (103 LOC).
+// Kill criterion: none enforced today; retire only by maintainer decision that platform packages
+//   keeping host access (ambient fs/os/process imports, host state at module evaluation, xcrun
+//   outside appleTools) behind capture-kit ports no longer matters. Typed ports do not make the
+//   ambient imports unresolvable: @types/node stays in scope for every platform tsconfig, and
+//   the A4 spike found it must (platform-apple's runner subtree legitimately uses fs/net/os).
+
 import { parseSync } from 'oxc-parser';
 import { memberPath } from './layering-ast.ts';
 import { parseImports, type LayeringViolation } from './model.ts';

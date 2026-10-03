@@ -104,6 +104,14 @@ function alertInteractorOptions(input: AlertRuntimeInput): AlertInteractorOption
 
 type AlertLeg = 'readAlert' | 'awaitAlert' | 'acceptAlert' | 'dismissAlert';
 
+/** How a fail-closed refusal names each leg to the caller, matching the command that asked for it. */
+export const ALERT_LEG_LABELS = {
+  readAlert: 'alert get',
+  awaitAlert: 'alert wait',
+  acceptAlert: 'alert accept',
+  dismissAlert: 'alert dismiss',
+} as const satisfies Record<AlertLeg, string>;
+
 export function bindAlertLeg<Leg extends AlertLeg>(
   leg: Leg,
   signal: AbortSignal,
@@ -112,7 +120,11 @@ export function bindAlertLeg<Leg extends AlertLeg>(
   return Object.freeze({
     [leg]: async (input: AlertRuntimeInput) => {
       const interactor = await resolveAlertInteractor(signal, resolveInteractor, input);
-      return await interactor[leg](alertInteractorOptions(input));
+      // Loaded on the call rather than at module evaluation because this module's eager closure is
+      // held at its merge-base size (`eager-closure-budgets`); a static edge would grow it.
+      const { requireInteractorMethod } = await import('./interactor-operation-binding.ts');
+      const method = requireInteractorMethod(interactor[leg], ALERT_LEG_LABELS[leg]);
+      return await method.call(interactor, alertInteractorOptions(input));
     },
   }) as Readonly<Record<Leg, (input: AlertRuntimeInput) => Promise<Record<string, unknown>>>>;
 }

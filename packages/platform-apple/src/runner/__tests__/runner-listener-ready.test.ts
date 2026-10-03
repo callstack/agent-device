@@ -2,28 +2,35 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { createRunnerListenerReadySignal } from '../runner-listener-ready.ts';
 
-test('runner listener readiness survives process-output chunk boundaries', async () => {
+// The runner writes one merged log file, so chunk boundaries still matter and stream boundaries no
+// longer exist.
+
+test('runner listener readiness survives log read boundaries', async () => {
   const signal = createRunnerListenerReadySignal();
 
-  signal.observe('stderr', 'noise AGENT_DEVICE_RUNNER_LISTENER_');
+  signal.observe('noise AGENT_DEVICE_RUNNER_LISTENER_');
   assert.equal(signal.wake.aborted, false);
 
-  signal.observe('stderr', 'READY more noise');
+  signal.observe('READY more noise');
   assert.equal(signal.wake.aborted, true);
 });
 
 test('runner listener readiness ignores unrelated output', async () => {
   const signal = createRunnerListenerReadySignal();
 
-  signal.observe('stdout', 'AGENT_DEVICE_RUNNER_WAITING');
+  signal.observe('AGENT_DEVICE_RUNNER_WAITING');
   assert.equal(signal.wake.aborted, false);
 });
 
-test('runner listener readiness does not combine unrelated process streams', async () => {
+test('runner listener readiness only carries the marker across one read', async () => {
+  // The retained suffix is the shortest tail that can complete the marker, so a first half that no
+  // longer abuts the next read is forgotten rather than matched against output from elsewhere.
   const signal = createRunnerListenerReadySignal();
 
-  signal.observe('stdout', 'AGENT_DEVICE_RUNNER_LISTENER_');
-  signal.observe('stderr', 'READY');
+  signal.observe('AGENT_DEVICE_RUNNER_LISTENER_');
+  signal.observe(`${'x'.repeat(100)}`);
+  signal.observe('READY');
+
   assert.equal(signal.wake.aborted, false);
 });
 

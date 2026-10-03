@@ -35,11 +35,10 @@ import { typeTextRuntimeOperationFacts } from '@agent-device/contracts/type-text
 import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
-import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
-import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
+import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { bindLocalInteractorOperationSet } from '@agent-device/contracts/local-interactor-operation-set';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
@@ -48,12 +47,13 @@ import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createHostAudioProbeCaptureOperations } from '@agent-device/capture-kit';
 import { androidAudioProbeCaptureFact } from './audio-runtime.ts';
+import { ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_HINT } from './clipboard-shell-response.ts';
 import { createAndroidPerfOperations } from './perf/runtime.ts';
 import { createAndroidAppLogRuntime } from './logs/runtime.ts';
 import { dumpAndroidNetworkTraffic } from './network/runtime.ts';
 import { bindAndroidScreenRecordingRuntime } from './recording/runtime.ts';
 import { ensureAndroidReady } from './readiness/runtime.ts';
-import { readAndroidAppState } from './app-state.ts';
+import { readAndroidAppStateWithExecutor } from './app-state.ts';
 import { bindAndroidApplicationLifecycle } from './lifecycle.ts';
 import type { AndroidClipboardShellSupport } from '@agent-device/contracts/android-clipboard-support';
 import {
@@ -76,9 +76,35 @@ const focusKindUnavailable = Object.freeze({
   reason: 'unsupported-device-kind',
   hint: 'focus is supported on Android emulators and physical devices.',
 } as const);
+/** adb drives keyboard actions on the same two kinds it drives everything else. */
+const keyboardKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'keyboard actions are supported on Android emulators and physical devices.',
+} as const);
 const hoverUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
+} as const);
+/**
+ * `home` and `app-switcher` are the system buttons `input keyevent` can press. Any other (the
+ * iPhone Action Button today) is hardware with no Android key event behind it, so there is no adb
+ * path to admit even on the kinds every other Android cell admits.
+ */
+const systemButtonUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'Android has no key event for this system button.',
+} as const);
+/**
+ * Foldable Android emulators do carry a posture control (the emulator console's `fold` and
+ * `posture` commands), but nothing in this project drives it yet, so the cell refuses on every
+ * kind rather than advertising a pose it cannot set.
+ */
+const foldUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'fold drives the hinge of a foldable iPhone simulator; the Android emulator posture control is not driven by agent-device yet.',
 } as const);
 const headlessUnavailable = Object.freeze({
   available: false,
@@ -217,7 +243,7 @@ function androidTouchFact(device: DeviceInfo) {
 const clipboardShellUnavailable = Object.freeze({
   available: false,
   reason: 'owner-capability-missing',
-  hint: 'This Android build ships no shell implementation for the clipboard service, so adb cannot read or write the clipboard on it.',
+  hint: ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_HINT,
 } as const);
 
 /**
@@ -309,11 +335,11 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // No native text reading: every text wait on this owner polls the canonical tree.
         ...selectorObservationRuntimeOperationFacts({
           findText: snapshotKindUnavailable,
-          findSelector: snapshotKindUnavailable,
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...focusRuntimeOperationFacts({ focus: androidTouchFact(device) }),
         ...gestureRuntimeOperationFacts({
+          unsupported: gestureKindUnavailable,
           plan: androidGestureFact(device),
           directionalFling: androidGestureFact(device),
           multiTouch: androidTouchTargetFact(device, androidTvMultiTouchUnavailable),
@@ -327,14 +353,12 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // row has no device behind it (parity with the retired `type` bucket).
         ...typeTextRuntimeOperationFacts({ type: androidTouchFact(device) }),
         ...touchRuntimeOperationFacts({
+          unsupported: focusKindUnavailable,
           tap: androidTouchFact(device),
-          tapRef: focusKindUnavailable,
           longPress: androidTouchFact(device),
+          // Hover is not a device-kind gap: no Android kind raises pointer hover state.
           hover: hoverUnavailable,
-          hoverRef: focusKindUnavailable,
           fill: androidTouchFact(device),
-          fillRef: focusKindUnavailable,
-          tapElementSelector: focusKindUnavailable,
         }),
         // uiautomator reads text at a point through the same adb path the snapshot uses, so the
         // synthetic `simulator` row is the only Android kind without a live read.
@@ -342,16 +366,24 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           readTextAtPoint: device.kind === 'simulator' ? elementTextKindUnavailable : available,
         }),
         ...backRuntimeOperationFacts({ back: androidTouchFact(device) }),
-        ...homeRuntimeOperationFacts({ home: androidTouchFact(device) }),
-        // `app-switcher` shares `home`'s cell: one `input keyevent`, admitted wherever the
-        // retired `ANDROID_ALL` bucket admitted it.
-        ...appSwitcherRuntimeOperationFacts({ appSwitcher: androidTouchFact(device) }),
+        // `home` and `app-switcher` are one `input keyevent` each, admitted wherever the retired
+        // `ANDROID_ALL` bucket admitted them.
+        ...systemButtonRuntimeOperationFacts({
+          unsupported: systemButtonUnavailable,
+          home: androidTouchFact(device),
+          appSwitcher: androidTouchFact(device),
+        }),
+        setFoldPose: foldUnavailable,
         // The deep link opens through `am start`, admitted wherever the retired `ANDROID_ALL`
         // bucket admitted it.
         ...appEventRuntimeOperationFacts({ triggerAppEvent: androidTouchFact(device) }),
         // Settings run over adb (`appops`, `settings put`, `pm clear`, …) on every real kind, so
-        // the cell is the retired `ANDROID_ALL` bucket verbatim.
-        ...settingsRuntimeOperationFacts({ setSetting: androidTouchFact(device) }),
+        // both cells are the retired `ANDROID_ALL` bucket verbatim: the same `settings get`/`put`
+        // pair that writes a value reads it back.
+        ...settingsRuntimeOperationFacts({
+          setSetting: androidTouchFact(device),
+          readSetting: androidTouchFact(device),
+        }),
         // R59: Android reads alerts out of the same accessibility dump every interaction cell
         // depends on and presses their buttons with the same `input tap`, so all four legs take
         // that cell — the retired `ANDROID_ALL` bucket verbatim.
@@ -366,13 +398,18 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // The only owner with a live IME status read; dismiss/enter share every other
         // interaction cell's kind gate (parity with the retired `keyboard` bucket).
         ...keyboardRuntimeOperationFacts({
+          unsupported: keyboardKindUnavailable,
           status: androidTouchFact(device),
           dismiss: androidTouchFact(device),
           enter: androidTouchFact(device),
         }),
         // Read and write share one cell: `cmd clipboard` either has a shell implementation on this
         // build or it has none, and no Android build ships one half of it.
-        ...clipboardRuntimeOperationFacts({ read: clipboardCell, write: clipboardCell }),
+        ...clipboardRuntimeOperationFacts({
+          unsupported: clipboardCell.available ? clipboardShellUnavailable : clipboardCell,
+          read: clipboardCell,
+          write: clipboardCell,
+        }),
         ...audioProbeRuntimeOperationFacts({
           capture: androidAudioProbeCaptureFact(device),
           query: audioQueryUnavailable,
@@ -419,12 +456,18 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           }),
           ...(facts.operations.appState.available
             ? {
-                appState: async () =>
-                  await readAndroidAppState(
-                    host.appState.android,
-                    request.device,
+                appState: async () => {
+                  request.scope.signal.throwIfAborted();
+                  const { runAndroidAdb } = await import('./adb.ts');
+                  return await readAndroidAppStateWithExecutor(
+                    async (args, options) =>
+                      await runAndroidAdb(request.device, args, {
+                        ...options,
+                        signal: request.scope.signal,
+                      }),
                     request.scope.signal,
-                  ),
+                  );
+                },
               }
             : {}),
           networkDump: async (input: NetworkDumpInput) =>
@@ -470,12 +513,14 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
                   ),
               }
             : {}),
-          listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) =>
-            await host.appInventory.android.listApps(
-              input.device,
-              input.filter,
-              request.scope.signal,
-            ),
+          listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) => {
+            request.scope.signal.throwIfAborted();
+            const { listAndroidApps } = await import('./app-lifecycle.ts');
+            return (await listAndroidApps(input.device, input.filter)).map((app) => ({
+              id: app.package,
+              name: app.name,
+            }));
+          },
           ...availableApplicationLifecycleOperations(
             bindAndroidApplicationLifecycle({
               host,

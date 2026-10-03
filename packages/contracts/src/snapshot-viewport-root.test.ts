@@ -73,7 +73,7 @@ const IOS_EMITTED_TYPES = [
   'Element(72)',
 ] as const;
 
-// src/platforms/android/ui-hierarchy.ts — `type` is the uiautomator `class`
+// packages/platform-android/src/ui-hierarchy.ts — `type` is the uiautomator `class`
 // attribute verbatim, a fully-qualified Java class name.
 const ANDROID_EMITTED_TYPES = [
   'android.view.View',
@@ -165,13 +165,6 @@ describe('isViewportRootNode over emitted backend vocabulary', () => {
   test('iOS: exactly Application and Window, out of 31 emitted names', () => {
     const roots = IOS_EMITTED_TYPES.filter((type) => isViewportRootNode({ type }));
     expect(roots).toEqual(['Application', 'Window']);
-  });
-
-  test('iOS: substring and equality agree, so the collapse of the `===` spelling was a no-op', () => {
-    for (const type of IOS_EMITTED_TYPES) {
-      const equality = type === 'Application' || type === 'Window';
-      expect({ type, root: isViewportRootNode({ type }) }).toEqual({ type, root: equality });
-    }
   });
 
   // The load-bearing one. Android has no root node, so `resolveViewportRect`'s

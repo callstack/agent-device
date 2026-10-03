@@ -8,7 +8,7 @@
 //   - host    macos.yml, macOS host, every PR: the whole bundle as compiled for macOS, minus
 //             `-skip-testing:` — the pure runner-decision tests, whose guard is
 //             `#if AGENT_DEVICE_RUNNER_UNIT_TESTS` alone.
-//   - pr      ios.yml, iOS Simulator, every PR: the hand-written `-only-testing:` list.
+//   - pr      ios.yml, iOS Simulator: tests with iOS-specific Swift bodies, when selected.
 //   - nightly xctest-nightly.yml, iOS Simulator, scheduled: the whole bundle as compiled for
 //             iOS, minus `-skip-testing:` — includes the simulator-only tests, whose guard is
 //             `… && os(iOS)` (they launch the host app, route through SpringBoard, or assert an
@@ -18,12 +18,8 @@
 // platform rather than treating a source-level `func test…` as running everywhere. What it
 // holds:
 //
-//   1. Every `-only-testing:`/`-skip-testing:` identifier names a declared method that
-//      compiles for that lane's platform. `xcodebuild` treats an identifier matching nothing
-//      as an empty set rather than an error, in BOTH directions: an unknown `-only-testing:`
-//      drops a test from the PR lane silently, and an unknown `-skip-testing:` re-admits
-//      `RunnerTests/testCommand` — not a test but the runner's server entry point, which opens
-//      an NWListener and waits 24 hours — into a whole-bundle lane and hangs it.
+//   1. Every `-skip-testing:` identifier compiles for its lane. An unknown skip re-admits
+//      `RunnerTests/testCommand`, the server entry point that waits 24 hours.
 //   2. Every declared method is reachable by at least one lane. A test gated to a platform
 //      no lane runs (the tvOS-only pair this check found) is dark from the day it is written.
 //   3. The entry point is reachable by no lane at all.
@@ -35,8 +31,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { runCmdSync } from '../src/utils/exec.ts';
-import type { Platform } from './swift-conditional-compilation.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
+import { activeSource, type Platform } from './swift-conditional-compilation.ts';
 import {
   parseDeclaredTestsByPlatform,
   readSwiftSources,
@@ -51,7 +47,6 @@ const packageAppleRunnerScript = path.join(repoRoot, 'scripts/package-apple-runn
 /** The macOS host lane, which runs the whole macOS-compiled bundle on every PR. */
 export const HOST_WORKFLOW_FILE = '.github/workflows/macos.yml';
 
-/** The PR lane, whose `-only-testing:` list decides what every pull request runs on the simulator. */
 export const PR_WORKFLOW_FILE = '.github/workflows/ios.yml';
 
 /** The nightly lane, whose `-skip-testing:` list decides what the full simulator suite leaves out. */
@@ -63,8 +58,8 @@ export type Lane = {
   readonly id: LaneId;
   readonly workflow: string;
   readonly platform: Platform;
-  /** `whole`: everything compiled minus `-skip-testing:`; `list`: the `-only-testing:` entries. */
-  readonly selection: 'whole' | 'list';
+  /** `whole`: everything compiled minus `-skip-testing:`; `ios-specific`: derived from guards. */
+  readonly selection: 'whole' | 'ios-specific';
   /** The job-summary heading the lane's reporter prints. */
   readonly title: string;
 };
@@ -81,8 +76,8 @@ export const LANES: readonly Lane[] = [
     id: 'pr',
     workflow: PR_WORKFLOW_FILE,
     platform: 'iOS',
-    selection: 'list',
-    title: 'iOS runner PR XCTest list',
+    selection: 'ios-specific',
+    title: 'iOS-specific runner PR XCTest lane',
   },
   {
     id: 'nightly',
@@ -158,6 +153,9 @@ export type SelectionReport = {
   readonly dark: readonly string[];
   /** Lanes that reach the entry point — a failure (a 24-hour hang). */
   readonly entryPointReachedBy: readonly LaneId[];
+  readonly prWorkflowWiringFailures: readonly string[];
+  readonly sharedPlatformBranchIds: readonly string[];
+  readonly sharedPlatformBranchFailures: readonly string[];
 };
 
 export type WorkflowSource = { readonly workflow: string; readonly text: string | null };
@@ -193,15 +191,131 @@ function laneReach(
   entry: Lane,
   declaredTests: readonly DeclaredTest[],
   flagged: readonly FlaggedTest[],
+  sharedPlatformBranchIds: readonly string[],
 ): Set<string> {
-  const only = identifiers(flagged, entry.workflow, 'only-testing');
+  if (entry.selection === 'ios-specific')
+    return new Set(iosPrTestIdentifiers(declaredTests, sharedPlatformBranchIds));
   const skipped = identifiers(flagged, entry.workflow, 'skip-testing');
   return new Set(
     declaredTests
       .filter((test) => test.platforms.includes(entry.platform))
       .map((test) => test.identifier)
-      .filter((id) => (entry.selection === 'whole' || only.has(id)) && !skipped.has(id)),
+      .filter((id) => !skipped.has(id)),
   );
+}
+
+export function iosPrTestIdentifiers(
+  declaredTests: readonly DeclaredTest[],
+  sharedPlatformBranchIds: readonly string[],
+): string[] {
+  const branchSensitive = new Set(sharedPlatformBranchIds);
+  return declaredTests
+    .filter(
+      (test) =>
+        test.platforms.includes('iOS') &&
+        (!test.platforms.includes('macOS') || branchSensitive.has(test.identifier)),
+    )
+    .map((test) => test.identifier)
+    .filter((id) => !id.endsWith(`/${ENTRY_POINT_METHOD}`))
+    .sort();
+}
+
+type SharedMethodBody = { id: string; body: string; file: string };
+type SharedMethodScan = { bodies: SharedMethodBody[]; failures: string[] };
+
+function sharedMethodsByName(shared: readonly DeclaredTest[]): Map<string, string[]> {
+  const byMethod = new Map<string, string[]>();
+  for (const test of shared) {
+    const method = test.identifier.split('/').at(-1)!;
+    byMethod.set(method, [...(byMethod.get(method) ?? []), test.identifier]);
+  }
+  return byMethod;
+}
+
+function methodBody(lines: readonly string[], index: number, indent: number): string | undefined {
+  const start = lines[index]!;
+  const end = /\{[ \t]*}[ \t]*(?:\/\/.*)?$/.test(start)
+    ? index
+    : lines.findIndex(
+        (candidate, candidateIndex) =>
+          candidateIndex > index &&
+          (candidate.match(/^[ \t]*/)?.[0].length ?? 0) === indent &&
+          /^[ \t]*}[ \t]*(?:\/\/.*)?$/.test(candidate),
+      );
+  return end < index ? undefined : lines.slice(index, end + 1).join('\n');
+}
+
+function inspectSharedMethods(
+  source: SwiftSource,
+  byMethod: ReadonlyMap<string, readonly string[]>,
+): SharedMethodScan {
+  const lines = source.text.split('\n');
+  const bodies: SharedMethodBody[] = [];
+  const failures: string[] = [];
+  for (const [index, line] of lines.entries()) {
+    const declaration = /^([ \t]*)(?:[\w@]+[ \t]+)*func[ \t]+(test\w*)[ \t]*\(/.exec(line);
+    if (!declaration) continue;
+    const matching = byMethod.get(declaration[2]!);
+    if (!matching) continue;
+    if (matching.length !== 1) {
+      failures.push(
+        `${source.file}:${index + 1}: ambiguous shared XCTest method ${declaration[2]}.`,
+      );
+      continue;
+    }
+    const body = methodBody(lines, index, declaration[1]!.length);
+    if (body === undefined) {
+      failures.push(
+        `${source.file}:${index + 1}: cannot inspect shared XCTest method ${matching[0]}.`,
+      );
+      continue;
+    }
+    bodies.push({ id: matching[0]!, body, file: source.file });
+  }
+  return { bodies, failures };
+}
+
+function scanSharedPlatformBranches(
+  sources: readonly SwiftSource[],
+  declaredTests: readonly DeclaredTest[],
+): { ids: string[]; failures: string[] } {
+  const shared = declaredTests.filter(
+    (test) => test.platforms.includes('iOS') && test.platforms.includes('macOS'),
+  );
+  const byMethod = sharedMethodsByName(shared);
+  const scans = sources.map((source) => inspectSharedMethods(source, byMethod));
+  const bodies = scans.flatMap((scan) => scan.bodies);
+  const failures = scans.flatMap((scan) => scan.failures);
+  for (const test of shared) {
+    if (bodies.filter((body) => body.id === test.identifier).length !== 1) {
+      failures.push(`${test.identifier}: expected one inspectable shared XCTest method body.`);
+    }
+  }
+  const ids = bodies
+    .filter(
+      ({ body, file }) => activeSource(body, 'iOS', file) !== activeSource(body, 'macOS', file),
+    )
+    .map(({ id }) => id);
+  return { ids: [...new Set(ids)].sort(), failures };
+}
+
+function prWorkflowWiringFailures(text: string | null): string[] {
+  if (text === null) return [];
+  const active = text
+    .split('\n')
+    .filter((line) => !YAML_COMMENT.test(line))
+    .join('\n');
+  const failures: string[] = [];
+  if (!active.includes('scripts/check-xctest-selection.ts --ios-pr-tests')) {
+    failures.push('PR workflow does not invoke the generated iOS-specific XCTest selector.');
+  }
+  if (!active.includes('-only-testing:$test_id') || !active.includes('"${IOS_PR_TEST_ARGS[@]}"')) {
+    failures.push('PR workflow does not pass each generated XCTest identifier to xcodebuild.');
+  }
+  if (parseFlaggedTests(PR_WORKFLOW_FILE, active).length > 0) {
+    failures.push('PR workflow still contains hand-maintained XCTest selection identifiers.');
+  }
+  return failures;
 }
 
 export function buildReport(
@@ -210,6 +324,7 @@ export function buildReport(
   workflows: readonly WorkflowSource[],
 ): SelectionReport {
   const declaredTests = parseDeclaredTestsByPlatform(target, sources);
+  const sharedBranches = scanSharedPlatformBranches(sources, declaredTests);
   const declared = declaredTests.map((test) => test.identifier);
   const known = new Map(declaredTests.map((test) => [test.identifier, test]));
   const flagged = workflows.flatMap((entry) =>
@@ -220,10 +335,11 @@ export function buildReport(
   // and cannot speak for anything else a workflow might select.
   const owned = flagged.filter((entry) => entry.identifier.startsWith(`${target}/`));
   const reach = Object.fromEntries(
-    LANES.map((entry) => [entry.id, laneReach(entry, declaredTests, flagged)]),
+    LANES.map((entry) => [entry.id, laneReach(entry, declaredTests, flagged, sharedBranches.ids)]),
   ) as Record<LaneId, ReadonlySet<string>>;
   const entryPoint = `${target}/${ENTRY_POINT_METHOD}`;
   const reachedAnywhere = new Set(LANES.flatMap((entry) => [...reach[entry.id]]));
+  const prWorkflow = workflows.find((entry) => entry.workflow === PR_WORKFLOW_FILE);
   return {
     target,
     declared,
@@ -241,6 +357,9 @@ export function buildReport(
     entryPointReachedBy: LANES.filter((entry) => reach[entry.id].has(entryPoint)).map(
       (entry) => entry.id,
     ),
+    prWorkflowWiringFailures: prWorkflowWiringFailures(prWorkflow?.text ?? null),
+    sharedPlatformBranchIds: sharedBranches.ids,
+    sharedPlatformBranchFailures: sharedBranches.failures,
   };
 }
 
@@ -322,14 +441,16 @@ export function reportFailures(report: SelectionReport): string[] {
       'widen the guard.',
     );
   }
+  failures.push(...report.prWorkflowWiringFailures);
+  failures.push(...report.sharedPlatformBranchFailures);
   if (report.dark.length > 0) {
     failures.push(
       `${report.dark.length} declared XCTest method(s) are reachable by no lane:`,
       ...report.dark.map((identifier) => `  - ${identifier}`),
       'The host lane runs everything the macOS build compiles, the nightly everything the iOS',
-      'build compiles, and the PR list names its methods; a method outside all three — usually',
+      'build compiles, and the PR lane selects iOS-specific methods; a method outside all three — usually',
       'a guard naming a platform no lane runs — is dark from the day it is written. Widen the',
-      'guard, list it, or delete it.',
+      'guard or delete it.',
     );
   }
   if (report.entryPointReachedBy.length > 0) {
@@ -338,7 +459,7 @@ export function reportFailures(report: SelectionReport): string[] {
         `${report.entryPointReachedBy.join(', ')}.`,
       'It is not a test: it opens an NWListener and waits 24 hours for a client, so a lane that',
       'runs it hangs until timeout-minutes. Whole-bundle lanes must keep their -skip-testing:',
-      'entry for it; the PR list must not name it.',
+      'entry for it; the PR selector must exclude it.',
     );
   }
   return failures;
@@ -348,8 +469,8 @@ export function formatSummary(report: SelectionReport): string {
   const { declared, host, pr, nightly, dark } = counts(report);
   return (
     `xctest selection: ${declared} declared ${report.target} methods — host lane ` +
-    `(${HOST_WORKFLOW_FILE}, macOS, every PR) reaches ${host}, PR list (${PR_WORKFLOW_FILE}, ` +
-    `iOS Simulator, every PR) selects ${pr}, nightly (${NIGHTLY_WORKFLOW_FILE}, iOS Simulator) ` +
+    `(${HOST_WORKFLOW_FILE}, macOS, every PR) reaches ${host}, PR iOS-specific lane (${PR_WORKFLOW_FILE}, ` +
+    `iOS Simulator, selected PRs and main) selects ${pr}, nightly (${NIGHTLY_WORKFLOW_FILE}, iOS Simulator) ` +
     `reaches ${nightly}; ${dark} reachable by no lane; ${ENTRY_POINT_METHOD} skipped everywhere.\n`
   );
 }
@@ -368,6 +489,17 @@ export function runnerPackageSourceFailures(root: string = repoRoot): string[] {
 
 function main(): number {
   const report = loadReport();
+  if (process.argv.slice(2).includes('--ios-pr-tests')) {
+    const failures = reportFailures(report);
+    if (report.reach.pr.size === 0)
+      failures.push('The PR lane selected no iOS-specific XCTest methods.');
+    if (failures.length > 0) {
+      process.stderr.write(`${failures.join('\n')}\n`);
+      return 1;
+    }
+    process.stdout.write(`${[...report.reach.pr].sort().join('\n')}\n`);
+    return 0;
+  }
   const failures = [...reportFailures(report), ...runnerPackageSourceFailures()];
   process.stdout.write(formatSummary(report));
   if (failures.length === 0) return 0;

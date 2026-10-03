@@ -1,12 +1,17 @@
 import {
   type DeviceBinding,
+  type DeviceBindingIntent,
+  type RuntimeProviderMode,
   localRuntimeOwner,
+  managedBindingFence,
+  managedLocalRuntimeOwner,
   providerRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
+  PlatformRuntimeProviderModule,
 } from '@agent-device/contracts/platform-runtime-operations';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
@@ -17,6 +22,7 @@ import { createLimrunRuntime } from '@agent-device/provider-limrun';
 import { describe, expect, test, vi } from 'vitest';
 import { handleSessionStateCommands } from './daemon/handlers/session-state.ts';
 import { createRequestRuntimeBindings } from './daemon/request-runtime-binding.ts';
+import { createRequestDispatchLedger } from './daemon/request-dispatch-ledger.ts';
 import { makeSessionStore } from './__tests__/test-utils/store-factory.ts';
 import { withTestDeviceInventory } from './__tests__/test-utils/device-inventory-gateways.ts';
 import { createComposedPlatformRuntimeGateway } from './platform-runtime-gateway.ts';
@@ -26,6 +32,9 @@ import {
   gatewayFixtureScope as scope,
   LIFECYCLE_FACETS,
   limrunTestDependencies,
+  localFamilyRuntimeFixture,
+  REVIEWED_MANAGED_OPERATION,
+  managedGatewayScope,
   providerLifecycleOwnerFixture as providerLifecycleOwner,
   providerRuntimeFixture as providerRuntime,
   runtimeOwnerFixture as runtimeOwner,
@@ -55,17 +64,14 @@ describe('composed platform runtime gateway', () => {
       scroll: unavailable,
       typeText: unavailable,
       back: unavailable,
-      home: unavailable,
       orientation: unavailable,
       tvRemote: unavailable,
-      keyboardStatus: unavailable,
-      keyboardDismiss: unavailable,
-      keyboardEnter: unavailable,
-      readClipboard: unavailable,
-      writeClipboard: unavailable,
-      appSwitcher: unavailable,
+      keyboard: unavailable,
+      clipboard: unavailable,
+      systemButton: unavailable,
+      fold: unavailable,
       triggerAppEvent: unavailable,
-      setSetting: unavailable,
+      settings: unavailable,
       readAlert: unavailable,
       awaitAlert: unavailable,
       acceptAlert: unavailable,
@@ -92,7 +98,7 @@ describe('composed platform runtime gateway', () => {
         ...screenshotRuntimeOperationFacts({ capture: { available: true } }),
       },
     };
-    const captureScreenshot = vi.fn(async () => undefined);
+    const captureScreenshot = vi.fn(async () => ({}));
     const binding: DeviceBinding<PlatformRuntimeOperations> = {
       device: appleDevice,
       owner,
@@ -156,17 +162,14 @@ describe('composed platform runtime gateway', () => {
       touch: unavailable,
       elementText: unavailable,
       back: unavailable,
-      home: unavailable,
       orientation: unavailable,
       tvRemote: unavailable,
-      keyboardStatus: unavailable,
-      keyboardDismiss: unavailable,
-      keyboardEnter: unavailable,
-      readClipboard: unavailable,
-      writeClipboard: unavailable,
-      appSwitcher: unavailable,
+      keyboard: unavailable,
+      clipboard: unavailable,
+      systemButton: unavailable,
+      fold: unavailable,
       triggerAppEvent: unavailable,
-      setSetting: unavailable,
+      settings: unavailable,
       readAlert: unavailable,
       awaitAlert: unavailable,
       acceptAlert: unavailable,
@@ -339,6 +342,7 @@ describe('composed platform runtime gateway', () => {
     });
 
     const bindings = createRequestRuntimeBindings({
+      dispatchLedger: createRequestDispatchLedger(),
       gateway: runtimeGateway,
       scope,
       admitDeviceClaim: async () => {},
@@ -397,6 +401,38 @@ describe('composed platform runtime gateway', () => {
     });
     expect(binding.owner).toEqual(ref);
     expect(ownsDevice).not.toHaveBeenCalled();
+  });
+
+  test('an exact managed local owner is unavailable until a managed owner registration exists', async () => {
+    const hostLoad = vi.fn(async () => ({}) as PlatformRuntimeHost);
+    const localLoad = vi.fn(async () =>
+      runtimeOwner({ ref: localRuntimeOwner('apple'), providerMode: 'local' }),
+    );
+    const registration = providerRuntime({ ref: providerRuntimeOwner('limrun', 'stable') });
+    const runtimeGateway = createComposedPlatformRuntimeGateway({
+      modules: new Map([['apple', { family: 'apple', loadRuntime: localLoad }]]),
+      loadHost: hostLoad,
+      providerRuntimes: [registration.runtime],
+      providerModules: [registration],
+    });
+
+    await expect(
+      runtimeGateway.bind({
+        device,
+        intent: {
+          kind: 'exact-owner',
+          owner: managedLocalRuntimeOwner('sim-a'),
+          fence: { token: 'fence', generation: 1 },
+        },
+        scope,
+      }),
+    ).rejects.toMatchObject({
+      code: 'UNSUPPORTED_OPERATION',
+      details: { reason: 'owner-unavailable', owner: 'managed:["sim-a"]' },
+    });
+    // Neither the device's local family nor any provider stands in for a managed owner.
+    expect(localLoad).not.toHaveBeenCalled();
+    expect(hostLoad).not.toHaveBeenCalled();
   });
 
   test('rejects ambiguous ordinary provider ownership', async () => {
@@ -475,6 +511,10 @@ describe('composed platform runtime gateway', () => {
     });
     expect(hostLoad).not.toHaveBeenCalled();
     expect(localLoad).not.toHaveBeenCalled();
+    const inspected = await runtimeGateway.inspectFacts(device);
+    // The bind and inspect arms build this fact set independently; both must derive from the same
+    // construction path rather than two hand-maintained maps that can drift from each other.
+    expect(binding.facts).toStrictEqual(inspected);
   });
 
   test.each(LIFECYCLE_FACETS)(
@@ -579,4 +619,109 @@ describe('composed platform runtime gateway', () => {
       expect(disposed).toHaveBeenCalledOnce();
     },
   );
+});
+
+describe('managed local owner registration', () => {
+  const managed = managedLocalRuntimeOwner('sim-a');
+  const fence = managedBindingFence({
+    requesterId: 'requester-a',
+    requestGeneration: 1,
+    identityIncarnationId: 'incarnation-a',
+  });
+  const managedScope = managedGatewayScope(device, managed, fence);
+  const exactly = (owner = managed): DeviceBindingIntent => ({
+    kind: 'exact-owner',
+    owner,
+    fence,
+  });
+
+  function managedGateway(providerMode?: RuntimeProviderMode) {
+    const family = localFamilyRuntimeFixture({ family: 'apple', device, providerMode });
+    const runtimeGateway = createComposedPlatformRuntimeGateway({
+      modules: new Map([['apple', family.module]]),
+      loadHost: async () => ({}) as PlatformRuntimeHost,
+      managedOwners: [managed],
+    });
+    return { family, runtimeGateway };
+  }
+
+  test('binds an exact managed owner through the local family owner under an ordinary intent', async () => {
+    const { family, runtimeGateway } = managedGateway();
+
+    const binding = await runtimeGateway.bind({ device, intent: exactly(), scope: managedScope });
+
+    expect(binding.owner).toEqual(managed);
+    expect(family.requests[0]?.intent).toEqual({ kind: 'ordinary' });
+    expect(binding.facts.operations.bootTarget).toMatchObject({
+      available: false,
+      reason: 'owner-capability-missing',
+    });
+    expect(binding.facts.operations[REVIEWED_MANAGED_OPERATION]).toEqual({ available: true });
+  });
+
+  test('leaves ordinary selection on the local family owner while a managed owner is registered', async () => {
+    const { runtimeGateway } = managedGateway();
+
+    const facts = await runtimeGateway.inspectFacts(device);
+    const binding = await runtimeGateway.bind({ device, intent: { kind: 'ordinary' }, scope });
+
+    expect(binding.owner).toEqual(localRuntimeOwner('apple'));
+    expect(facts.operations.bootTarget).toEqual({ available: true });
+    expect(binding.facts.operations.bootTarget).toEqual({ available: true });
+  });
+
+  test('a managed local owner is not registrable as an ordinary provider module', () => {
+    const managedModule = {
+      // @ts-expect-error `providerModules` pairs one ProviderDeviceRuntime with one
+      // provider-runtime owner, so ordinary selection cannot be handed a managed local owner.
+      owner: managedLocalRuntimeOwner('sim-a'),
+      loadRuntime: async () => runtimeOwner({ ref: managed }),
+    } satisfies PlatformRuntimeProviderModule;
+
+    expect(managedModule.owner).toEqual(managed);
+  });
+
+  // A managed owner delegates to the device's local family owner and inherits its provider mode
+  // verbatim (see the "unlaundered" wrapper test), so it must be admitted the same way an ordinary
+  // local-family binding is: local or transport-composed. Rejecting transport-composed here would
+  // refuse every managed binding over a remote-transport local device (e.g. ADB-over-transport, a
+  // web-provider proxy) as a spurious owner/facts mismatch.
+  test('accepts a managed binding whose local facts report a transport-composed device', async () => {
+    const { runtimeGateway } = managedGateway('transport-composed');
+
+    const binding = await runtimeGateway.bind({ device, intent: exactly(), scope: managedScope });
+
+    expect(binding.owner).toEqual(managed);
+    expect(binding.facts.device.providerMode).toBe('transport-composed');
+  });
+
+  // A second bind resolves only because the managed owner is composed once: a fresh wrapper per
+  // bind would register a second owner under the same key and be refused as a duplicate.
+  test('reuses one managed owner per registered instance and refuses unregistered ones', async () => {
+    const { family, runtimeGateway } = managedGateway();
+
+    const first = await runtimeGateway.bind({ device, intent: exactly(), scope: managedScope });
+    const second = await runtimeGateway.bind({ device, intent: exactly(), scope: managedScope });
+
+    expect(second.owner).toEqual(first.owner);
+    expect(family.calls.loads).toBe(1);
+    await first[Symbol.asyncDispose]();
+    expect(family.calls.disposals).toBe(1);
+    await expect(
+      runtimeGateway.bind({ device, intent: exactly(managedLocalRuntimeOwner('sim-b')), scope }),
+    ).rejects.toMatchObject({
+      code: 'UNSUPPORTED_OPERATION',
+      details: { reason: 'owner-unavailable', owner: 'managed:["sim-b"]' },
+    });
+  });
+
+  test('rejects duplicate managed owner registrations', () => {
+    expect(() =>
+      createComposedPlatformRuntimeGateway({
+        modules: new Map(),
+        loadHost: async () => ({}) as PlatformRuntimeHost,
+        managedOwners: [managed, managedLocalRuntimeOwner('sim-a')],
+      }),
+    ).toThrow('Duplicate platform runtime owner');
+  });
 });

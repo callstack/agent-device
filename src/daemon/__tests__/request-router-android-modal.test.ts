@@ -1,6 +1,6 @@
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { test, expect, vi } from 'vitest';
-import os from 'node:os';
+
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
@@ -13,21 +13,28 @@ import {
   gestureDeviceRuntimeGateway,
   gestureRuntimeSpies,
 } from './test-device-runtime-gateway.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { createProviderDeviceRuntimeRequestProviders } from '../../provider-device-runtime.ts';
+import {
+  createProviderDeviceRuntimeRequestProviders,
+  isActiveProviderDevice,
+} from '../../provider-device-runtime.ts';
+import { installProviderDeviceAdmission } from '../provider-device-admission.ts';
+
+// Root composition installs the daemon's provider-device admission; this test composes the
+// request providers the same way, so it installs the fact the same way.
+installProviderDeviceAdmission({ isActive: isActiveProviderDevice });
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 import { androidObservation } from '../../platform-runtime.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../../platforms/android/snapshot.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/android/snapshot.ts')>();
-  const { createAndroidSnapshotCapture } =
-    await import('../../platforms/android/snapshot-capture.ts');
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
   const capture = (nodes: RawSnapshotNode[]) =>
-    createAndroidSnapshotCapture(
+    actual.createAndroidSnapshotCapture(
       {
         nodes,
         analysis: { rawNodeCount: nodes.length, maxDepth: 0 },
@@ -71,18 +78,7 @@ vi.mock('../../platforms/android/snapshot.ts', async (importOriginal) => {
       }
       return capture([]);
     }),
-  };
-});
-
-vi.mock('../../platforms/android/app-lifecycle.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/android/app-lifecycle.ts')>();
-  return { ...actual, openAndroidApp: vi.fn(async () => {}) };
-});
-
-vi.mock('../../platforms/android/window-state.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/android/window-state.ts')>();
-  return {
-    ...actual,
+    openAndroidApp: vi.fn(async () => {}),
     getAndroidAppState: vi.fn(async () => ({ package: 'com.android.settings' })),
     getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),
   };
@@ -108,13 +104,13 @@ const modalObservation: AndroidObservationAdapter = {
     return { stdout: '', stderr: '', exitCode: 0 };
   },
   async openApp(device, appBundleId) {
-    const { openAndroidApp } = await import('../../platforms/android/app-lifecycle.ts');
+    const { openAndroidApp } = await import('@agent-device/platform-android/mechanics');
     await openAndroidApp(device, appBundleId);
   },
 };
 
-vi.mock('../../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../utils/exec.ts')>();
+vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return {
     ...actual,
     runCmd: vi.fn(async (_cmd: string, args: string[]) => {
@@ -157,10 +153,10 @@ test('generic Android gesture commands dismiss blocking system dialogs during re
   const sessionStore = makeSessionStore('agent-device-router-android-modal-');
   sessionStore.set('default', makeAndroidSession('default'));
 
-  const { openAndroidApp } = await import('../../platforms/android/app-lifecycle.ts');
+  const { openAndroidApp } = await import('@agent-device/platform-android/mechanics');
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -208,11 +204,11 @@ test('generic Android gesture commands continue when recording dialog inspection
   const sessionStore = makeSessionStore('agent-device-router-android-modal-');
   sessionStore.set('default', makeAndroidSession('default'));
 
-  const { openAndroidApp } = await import('../../platforms/android/app-lifecycle.ts');
+  const { openAndroidApp } = await import('@agent-device/platform-android/mechanics');
   vi.mocked(openAndroidApp).mockClear();
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -271,7 +267,7 @@ test('generic Android gesture commands skip local dialog recovery for provider d
   const providers = createProviderDeviceRuntimeRequestProviders([runtime]);
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),

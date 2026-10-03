@@ -81,6 +81,8 @@ Use this flow when you need a clean repro window with logs, recent network activ
 
 `open` prints `Session state: <path>`. Inspect that directory for per-run artifacts: `requests/<request-id>.ndjson` contains daemon request diagnostics, `runner.log` contains Apple runner/`xcodebuild` output, and `app.log` contains app/device logs when log capture is active. The top-level daemon log is for daemon lifecycle/startup issues.
 
+For command failures, use `--json` to inspect `error.details.stderr` when available. Diagnostic stderr is secret-redacted and retains up to 8,192 characters; longer output keeps its beginning and end with a truncation marker between them. Other diagnostic strings remain limited to 400 characters. Compact retry summaries may retain less output.
+
 On iOS simulators, `logs` scope by bundle id and the resolved app executable. For launch-time stdout/stderr, capture the direct app launch console instead of starting raw `simctl` streams:
 
 ```bash
@@ -181,6 +183,7 @@ agent-device perf trace stop --kind perfetto --out app.perfetto-trace
 - For React Native JavaScript heap leaks, use `agent-device cdp` against the Metro CDP target instead of native/process memory samples; see the CDP section above.
 - Heap and memgraph artifacts are returned as paths plus compact metadata. Example default output: `Memory artifact (android-hprof): /tmp/app.hprof (42MB)`. They are not printed or embedded in JSON by default. heapprofd/native allocation tracing is deferred until Perfetto plumbing is available.
 - `perf cpu profile ... --kind xctrace` collects an Apple native `.trace`; `report` aggregates every run, returns at most ten weighted top functions in JSON, and prints five. `perf trace ... --kind xctrace` keeps trace data as an artifact.
+- On iOS simulators and macOS, process sampling and captures target the resolved app executable. Other running copies with the same executable name are excluded, including copies installed on another simulator.
 - Android native profiling uses `perf cpu profile ... --kind simpleperf`; its report likewise returns at most ten top functions and prints five. Android native trace capture uses `perf trace ... --kind perfetto`. These commands require an active Android app session and return artifact paths/summaries instead of dumping profile or trace contents.
 - Use the compact native perf result as agent evidence. For example, a successful Perfetto stop may return `state: "stopped"`, `outPath: "/tmp/app.perfetto-trace"`, `sizeBytes: 5392410`, and `method: "adb-shell-perfetto"` while the 5.3 MB raw trace remains on disk as the artifact.
 - Memory and Android frame-health availability depend on platform and whether the active session is bound to an app/package. HarmonyOS reports process RSS through HDC; CPU profiling, frame sampling, and memory-snapshot artifacts remain unavailable on the public HDC surface.

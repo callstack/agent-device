@@ -6,7 +6,7 @@ test('R16 requires the real registry normalization path to assert the record use
   assert.deepEqual(
     recordRuntimeRegistryJoinViolations([
       {
-        path: 'src/core/command-descriptor/registry.ts',
+        path: 'packages/command-registry/src/registry.ts',
         source: `
           import { assertRecordRuntimeExecution as assertRecord } from '@agent-device/contracts/platform';
           if (descriptor.name === 'record') assertRecord(platformExecution);
@@ -18,7 +18,7 @@ test('R16 requires the real registry normalization path to assert the record use
   assert.deepEqual(
     recordRuntimeRegistryJoinViolations([
       {
-        path: 'src/core/command-descriptor/registry.ts',
+        path: 'packages/command-registry/src/registry.ts',
         source: `
           // assertRecordRuntimeExecution(platformExecution) is only prose.
           const prose = 'record descriptor assertion';
@@ -26,6 +26,6 @@ test('R16 requires the real registry normalization path to assert the record use
         `,
       },
     ]),
-    ['src/core/command-descriptor/registry.ts: missing record runtime descriptor join assertion'],
+    ['packages/command-registry/src/registry.ts: missing record runtime descriptor join assertion'],
   );
 });

@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import { readRecentNetworkTrafficFromText } from './network-traffic.ts';
 
 test('preserves Android adjacent packet enrichment', () => {
-  const dump = readRecentNetworkTrafficFromText(
+  const { dump } = readRecentNetworkTrafficFromText(
     [
       '03-31 17:43:32.564 V/GIBSDK  (17434): [NetworkAgent]: packet id 23911610 added, queue size: 1',
       '03-31 17:43:32.700 V/OtherTag (17434): unrelated line 1',

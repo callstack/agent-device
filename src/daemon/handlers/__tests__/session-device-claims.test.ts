@@ -4,8 +4,9 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../../../core/dispatch-resolve.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch-resolve.ts')>();
+vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
   const { selectionFromResolveTargetDevice } =
     await import('../../__tests__/device-selection-stub.ts');
   const resolveTargetDevice = vi.fn();
@@ -15,51 +16,57 @@ vi.mock('../../../core/dispatch-resolve.ts', async (importOriginal) => {
     resolveTargetDeviceSelection: vi.fn(selectionFromResolveTargetDevice(resolveTargetDevice)),
   };
 });
-vi.mock('../../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../../platform-runtime-runtime-hints.ts')>();
   return { ...actual, applyRuntimeHintValues: vi.fn(async () => {}) };
 });
-vi.mock('../../../platform-runtime-open-target.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platform-runtime-open-target.ts')>();
-  return { ...actual, resolveAndroidPackageForOpen: vi.fn() };
-});
-vi.mock('../../../platforms/android/ime-lifecycle.ts', () => ({
+vi.mock('@agent-device/platform-android/mechanics', () => ({
   activateAndroidTestIme: vi.fn(async () => ({ activated: false })),
   restoreAndroidTestIme: vi.fn(async () => ({ restored: false, reason: 'no-record' })),
+  stopAndroidSnapshotHelperSessionForDevice: vi.fn(async () => {}),
+  resolveAndroidPackageForOpen: vi.fn(),
+  inferAndroidPackageAfterOpen: vi.fn(
+    async (_device, _target, currentAppBundleId) => currentAppBundleId,
+  ),
 }));
-vi.mock('../../../utils/host-process.ts', async (importOriginal) =>
+vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
   (await import('../../../__tests__/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(
     importOriginal,
   ),
 );
 
-import { resolveTargetDevice } from '../../../core/dispatch-resolve.ts';
-import { ensureDeviceReady } from '../../device-ready.ts';
+import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
+import { ensureDeviceReady } from '../../device/device-ready.ts';
 import { applyRuntimeHintValues } from '../../../platform-runtime-runtime-hints.ts';
-import { resolveAndroidPackageForOpen } from '../../../platform-runtime-open-target.ts';
-import { activateAndroidTestIme } from '../../../platforms/android/ime-lifecycle.ts';
+import {
+  activateAndroidTestIme,
+  resolveAndroidPackageForOpen,
+} from '@agent-device/platform-android/mechanics';
 import {
   discoverReadyAndroidEmulators,
   dispatchApplicationLifecycleEffect,
 } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
-import { clearRequestCanceled, markRequestCanceled } from '../../../request/cancel.ts';
-import { acquireDeviceClaim as acquireProductionDeviceClaim } from '../../device-claims.ts';
-import { inspectDeviceClaims } from '../../device-claim-inspection.ts';
+import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
+import { acquireDeviceClaim as acquireProductionDeviceClaim } from '../../device/device-claims.ts';
+import { inspectDeviceClaims } from '../../device/device-claim-inspection.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { SessionStore } from '../../session-store.ts';
-import { handleCloseCommand as handleProductionCloseCommand } from '../session-close.ts';
-import { handleOpenCommand as handleProductionOpenCommand } from '../session-open.ts';
+import {
+  handleSessionCloseCommands as handleProductionCloseCommand,
+  handleSessionOpenCommands as handleProductionOpenCommand,
+} from '../../session-lifecycle/index.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeAuthoringSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  bindManagedLocalLifecycleRuntime,
   bindProviderLifecycleRuntime,
   bindLifecycleRuntime,
   inspectProviderLifecycleRuntimeFacts,
   inspectLifecycleRuntimeFacts,
-} from './application-lifecycle-runtime-harness.ts';
+} from '../../__tests__/application-lifecycle-runtime-harness.ts';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
@@ -181,7 +188,9 @@ test('failed local open after dispatch retains its device claim for recovery', a
       }),
     (error: unknown) => error === rejectionError,
   );
-  assert.equal(inspectDeviceClaims({ serial: android.id })[0]?.classification, 'live');
+  const retained = inspectDeviceClaims({ serial: android.id })[0];
+  assert.equal(retained?.classification, 'live');
+  assert.equal(typeof retained?.claim?.abandonedAtMs, 'number');
 });
 
 test('failed local runtime-hint setup retains its device claim before open dispatch', async () => {
@@ -271,6 +280,55 @@ test('cancellation after local device setup retains the device claim for recover
   }
 });
 
+test('a canceled attempt lets the next attempt of the same suite open the device', async () => {
+  const { store, stateDir } = setup();
+  const requestId = 'suite:1-gesture-pan-duration:attempt:1';
+  mockResolveTargetDevice.mockResolvedValue(android);
+  mockDispatch.mockResolvedValue(undefined);
+  markRequestCanceled(requestId);
+  try {
+    const timedOut = await handleOpenCommand({
+      req: {
+        command: 'open',
+        token: 'test',
+        session: 'suite:1-gesture-pan-duration:attempt-1',
+        positionals: ['Demo'],
+        flags: { platform: 'android' },
+        meta: { requestId },
+      },
+      sessionName: 'suite:1-gesture-pan-duration:attempt-1',
+      logPath: path.join(stateDir, 'daemon.log'),
+      sessionStore: store,
+    });
+    assert.equal(timedOut.ok, false);
+  } finally {
+    clearRequestCanceled(requestId);
+  }
+  assert.equal(store.get('suite:1-gesture-pan-duration:attempt-1'), undefined);
+
+  const retry = await handleOpenCommand({
+    req: {
+      command: 'open',
+      token: 'test',
+      session: 'suite:1-gesture-pan-duration:attempt-2',
+      positionals: ['Demo'],
+      flags: { platform: 'android' },
+    },
+    sessionName: 'suite:1-gesture-pan-duration:attempt-2',
+    logPath: path.join(stateDir, 'daemon.log'),
+    sessionStore: store,
+  });
+
+  assert.equal(retry.ok, true);
+  const claim = inspectDeviceClaims({ serial: android.id })[0]?.claim;
+  assert.equal(claim?.session, 'suite:1-gesture-pan-duration:attempt-2');
+  assert.equal(claim?.abandonedAtMs, undefined);
+  assert.equal(
+    store.get('suite:1-gesture-pan-duration:attempt-2')?.deviceClaim?.ownerToken,
+    claim?.ownerToken,
+  );
+});
+
 test('provider-owned open creates no host-local device claim from its selected owner', async () => {
   const { store, stateDir } = setup();
   mockResolveTargetDevice.mockResolvedValue(android);
@@ -296,6 +354,43 @@ test('provider-owned open creates no host-local device claim from its selected o
   assert.equal(response.ok, true);
   assert.deepEqual(inspectDeviceClaims({ serial: android.id }), []);
   assert.equal(store.get('remote-open')?.deviceClaim, undefined);
+});
+
+test('a managed local owner open is refused through the real route and creates no host-local device claim', async () => {
+  const { store, stateDir } = setup();
+  mockResolveTargetDevice.mockResolvedValue(android);
+  mockDispatch.mockResolvedValue(undefined);
+
+  const response = await handleOpenCommand({
+    req: {
+      command: 'open',
+      token: 'test',
+      session: 'managed-open',
+      positionals: ['Demo'],
+      flags: { platform: 'android' },
+    },
+    sessionName: 'managed-open',
+    logPath: path.join(stateDir, 'daemon.log'),
+    sessionStore: store,
+    bindDevice: bindManagedLocalLifecycleRuntime,
+  });
+
+  assert.equal(response.ok, false);
+  if (response.ok) return;
+  // Session open binds ordinarily, and a managed local owner executes only under a managed
+  // binding fence, so the route refuses before it can ask for an allocator-held claim.
+  assert.equal(response.error.code, 'COMMAND_FAILED');
+  assert.equal(response.error.retriable, false);
+  assert.equal(response.error.details?.reason, 'runtime-contract-invalid');
+  assert.equal(response.error.details?.owner, 'managed:["fixture-allocator"]');
+  // No host-local claim, no session, and no device effect precede the refusal.
+  assert.deepEqual(inspectDeviceClaims({}), []);
+  assert.equal(store.get('managed-open'), undefined);
+  assert.equal(mockEnsureDeviceReady.mock.calls.length, 0);
+  assert.equal(mockResolveAndroidPackage.mock.calls.length, 0);
+  assert.equal(mockApplyRuntimeHints.mock.calls.length, 0);
+  assert.equal(vi.mocked(activateAndroidTestIme).mock.calls.length, 0);
+  assert.equal(mockDispatch.mock.calls.length, 0);
 });
 
 test('a foreign live claim rejects open before platform preparation or mutation', async () => {

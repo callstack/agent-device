@@ -1,3 +1,4 @@
+import AgentDeviceMacOSInput
 import AppKit
 import ApplicationServices
 import CoreGraphics
@@ -63,6 +64,10 @@ struct ReadResponse: Encodable {
 struct PressResponse: Encodable {
   let x: Double
   let y: Double
+  /// Hold actually posted; a short request is raised to the deliverable floor.
+  let holdMs: Int
+  let clicks: Int
+  let doubleClick: Bool
   let bundleId: String?
   let surface: String?
 }
@@ -70,7 +75,6 @@ struct PressResponse: Encodable {
 struct ScreenshotResponse: Encodable {
   let path: String
   let surface: String?
-  let fullscreen: Bool
 }
 
 struct AgentDeviceMacOSHelper {
@@ -378,10 +382,48 @@ struct AgentDeviceMacOSHelper {
       throw HelperError.invalidArgs("press requires --x <number> --y <number>")
     }
 
+    let holdMs = try validatedPressInt(
+      optionValue(arguments: arguments, name: "--hold-ms"),
+      name: "--hold-ms",
+      minimum: 0,
+      default: 0
+    )
+    let clicks = try validatedPressInt(
+      optionValue(arguments: arguments, name: "--clicks"),
+      name: "--clicks",
+      minimum: 1,
+      default: 1
+    )
+    let intervalMs = try validatedPressInt(
+      optionValue(arguments: arguments, name: "--interval-ms"),
+      name: "--interval-ms",
+      minimum: 0,
+      default: 120
+    )
+
+    let doubleClick = arguments.contains("--double-click")
     let bundleId = try optionValue(arguments: arguments, name: "--bundle-id").map(validatedBundleId)
     let surface = optionValue(arguments: arguments, name: "--surface")
-    try pressAtPosition(bundleId: bundleId, surface: surface, x: x, y: y)
-    return SuccessEnvelope(data: PressResponse(x: x, y: y, bundleId: bundleId, surface: surface))
+    let request = MouseClickRequest(
+      x: x,
+      y: y,
+      holdMs: holdMs,
+      clicks: clicks,
+      doubleClick: doubleClick,
+      intervalMs: intervalMs
+    )
+    try pressAtPosition(request)
+    return SuccessEnvelope(
+      data: PressResponse(
+        x: x,
+        y: y,
+        holdMs: mouseClickHoldMs(requestedMs: holdMs),
+        clicks: clicks,
+        doubleClick: doubleClick,
+        bundleId: bundleId,
+        surface: surface
+      )
+    )
   }
 
   static func handleScreenshot(arguments: [String]) throws -> any Encodable {
@@ -393,9 +435,8 @@ struct AgentDeviceMacOSHelper {
     }
 
     let surface = optionValue(arguments: arguments, name: "--surface")
-    let fullscreen = arguments.contains("--fullscreen")
-    try captureSurfaceScreenshot(surface: surface, outPath: outPath, fullscreen: fullscreen)
-    return SuccessEnvelope(data: ScreenshotResponse(path: outPath, surface: surface, fullscreen: fullscreen))
+    try captureSurfaceScreenshot(surface: surface, outPath: outPath)
+    return SuccessEnvelope(data: ScreenshotResponse(path: outPath, surface: surface))
   }
 
   static func handleAudioProbe(arguments: [String]) throws -> any Encodable {
@@ -432,6 +473,21 @@ private func intOption(arguments: [String], name: String) -> Int? {
     return nil
   }
   return Int(value)
+}
+
+private func validatedPressInt(
+  _ raw: String?,
+  name: String,
+  minimum: Int,
+  default fallback: Int
+) throws -> Int {
+  guard let raw else {
+    return fallback
+  }
+  guard let value = Int(raw), value >= minimum else {
+    throw HelperError.invalidArgs("press \(name) must be an integer of at least \(minimum)")
+  }
+  return value
 }
 
 private func readTextAtPosition(bundleId: String?, surface: String?, x: Double, y: Double) throws -> String {
@@ -481,23 +537,15 @@ private func readTextAtPosition(bundleId: String?, surface: String?, x: Double, 
   throw HelperError.commandFailed("read did not resolve text")
 }
 
-private func pressAtPosition(bundleId: String?, surface: String?, x: Double, y: Double) throws {
-  _ = bundleId
-  _ = surface
-  let point = CGPoint(x: x, y: y)
-  guard let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left),
-        let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left),
-        let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)
-  else {
+private func pressAtPosition(_ request: MouseClickRequest) throws {
+  do {
+    try postMouseClick(request)
+  } catch MouseClickDeliveryError.eventCreationFailed {
     throw HelperError.commandFailed("press action failed", details: ["reason": "event_creation_failed"])
   }
-  move.post(tap: .cghidEventTap)
-  down.post(tap: .cghidEventTap)
-  up.post(tap: .cghidEventTap)
 }
 
-private func captureSurfaceScreenshot(surface: String?, outPath: String, fullscreen: Bool) throws {
-  _ = fullscreen
+private func captureSurfaceScreenshot(surface: String?, outPath: String) throws {
   guard #available(macOS 15.2, *) else {
     throw HelperError.commandFailed(
       "screenshot on macOS desktop and menubar surfaces requires macOS 15.2 or newer"

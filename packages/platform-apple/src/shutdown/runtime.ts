@@ -2,7 +2,8 @@ import type { DeviceShutdownRuntimeDependencies } from '@agent-device/contracts/
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { getSimulatorState, simctlArgs } from '../simulator-state.ts';
+import { scopeSimctlArgsForDevice } from '../core/simctl.ts';
+import { getSimulatorState } from '../simulator-state.ts';
 
 const SHUTDOWN_TIMEOUT_MS = 15_000;
 
@@ -30,14 +31,14 @@ async function shutdownAppleTarget(
   device: DeviceInfo,
   signal: AbortSignal,
 ): Promise<TargetShutdownResult> {
-  if (device.booted === false) return stoppedTargetSuccess();
-
+  // `device.booted` is the state at selection time. A session opened on a cold Simulator carries
+  // `false` for its whole life, so only the native tool may decide that nothing needs stopping.
   signal.throwIfAborted();
   try {
     const result = await appleTools.run(
       {
         tool: 'simctl',
-        args: simctlArgs(device, ['shutdown', device.id]),
+        args: scopeSimctlArgsForDevice(device, ['shutdown', device.id]),
         allowFailure: true,
         timeoutMs: SHUTDOWN_TIMEOUT_MS,
       },
@@ -89,8 +90,4 @@ function toShutdownResult(result: {
     stdout: result.stdout,
     stderr: result.stderr,
   };
-}
-
-function stoppedTargetSuccess(): TargetShutdownResult {
-  return { success: true, exitCode: 0, stdout: '', stderr: '' };
 }

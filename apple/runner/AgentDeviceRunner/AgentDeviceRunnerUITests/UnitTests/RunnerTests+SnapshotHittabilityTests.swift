@@ -1,6 +1,7 @@
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 import Foundation
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
   func testRegularPresentationPublishesGeometricActionabilityWithoutOcclusionOrTypeGate() throws {
@@ -96,11 +97,11 @@ extension RunnerTests {
         nodes: nodes,
         truncated: false,
         effectiveDepth: nil,
-        viewport: CGRect(x: 0, y: 0, width: 100, height: 100)
+        viewport: .reported(box: CGRect(x: 0, y: 0, width: 100, height: 100))
       ),
       options: options
     )
-    let presented = try XCTUnwrap(capture.payload.nodes)
+    let presented = capture.nodes
 
     XCTAssertEqual(presented.first { $0.label == "Covered button" }?.hittable, false)
     XCTAssertEqual(presented.first { $0.label == "Labeled image" }?.hittable, false)

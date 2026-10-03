@@ -1,0 +1,352 @@
+import type { LeaseBackend } from '@agent-device/kernel/contracts';
+import { stripUndefined } from '@agent-device/kernel/record';
+import type { CloudProviderProfileFields } from './remote-config-fields.ts';
+import type { CommandFlags } from './command-flags.ts';
+
+const PROXY_LEASE_PROVIDER = 'proxy';
+
+const REQUIRED_PROXY_LEASE_FIELDS = [
+  'leaseId',
+  'tenantId',
+  'runId',
+  'clientId',
+  'deviceKey',
+] as const satisfies readonly (keyof LeaseScope)[];
+
+export type LeaseScope = {
+  tenantId?: string;
+  runId?: string;
+  leaseId?: string;
+  leaseTtlMs?: number;
+  leaseBackend?: LeaseBackend;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
+};
+
+export type LeaseDiagnosticsContext = Omit<LeaseScope, 'leaseTtlMs'>;
+
+export type LeaseRpcCommand = 'lease_allocate' | 'lease_heartbeat' | 'lease_release';
+
+export type LeaseAllocateRequestScope = {
+  tenantId: string;
+  runId: string;
+  leaseBackend?: LeaseBackend;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
+  ttlMs?: number;
+};
+
+export type LeaseScopedRequestScope = {
+  leaseId: string;
+  tenantId?: string;
+  runId?: string;
+  leaseBackend?: LeaseBackend;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
+  ttlMs?: number;
+};
+
+type LeaseRequestLike = {
+  flags?: Record<string, unknown>;
+  meta?: {
+    tenantId?: string;
+    runId?: string;
+    leaseId?: string;
+    leaseTtlMs?: number;
+    leaseBackend?: LeaseBackend;
+    leaseProvider?: string;
+    deviceKey?: string;
+    clientId?: string;
+  };
+};
+
+type LeaseOptionsLike = {
+  tenant?: string;
+  runId?: string;
+  leaseId?: string;
+  leaseTtlMs?: number;
+  ttlMs?: number;
+  leaseBackend?: LeaseBackend;
+  leaseProvider?: string;
+  provider?: string;
+  deviceKey?: string;
+  clientId?: string;
+};
+
+export function leaseScopeFromRequest(req: LeaseRequestLike): LeaseScope {
+  return stripUndefined({
+    tenantId: req.meta?.tenantId ?? readFlagString(req.flags, 'tenant'),
+    runId: req.meta?.runId ?? readFlagString(req.flags, 'runId'),
+    leaseId: req.meta?.leaseId ?? readFlagString(req.flags, 'leaseId'),
+    leaseTtlMs: req.meta?.leaseTtlMs,
+    leaseBackend: req.meta?.leaseBackend,
+    leaseProvider:
+      req.meta?.leaseProvider ??
+      readFlagString(req.flags, 'leaseProvider') ??
+      readFlagString(req.flags, 'provider'),
+    deviceKey: req.meta?.deviceKey ?? readFlagString(req.flags, 'deviceKey'),
+    clientId: req.meta?.clientId ?? readFlagString(req.flags, 'clientId'),
+  });
+}
+
+export function leaseScopeFromOptions(options: LeaseOptionsLike): LeaseScope {
+  return stripUndefined({
+    tenantId: options.tenant,
+    runId: options.runId,
+    leaseId: options.leaseId,
+    leaseTtlMs: options.leaseTtlMs ?? options.ttlMs,
+    leaseBackend: options.leaseBackend,
+    leaseProvider: options.leaseProvider ?? options.provider,
+    deviceKey: options.deviceKey,
+    clientId: options.clientId,
+  });
+}
+
+export function leaseScopeToRequestMeta(scope: LeaseScope): LeaseRequestLike['meta'] {
+  return stripUndefined({
+    tenantId: scope.tenantId,
+    runId: scope.runId,
+    leaseId: scope.leaseId,
+    leaseTtlMs: scope.leaseTtlMs,
+    leaseBackend: scope.leaseBackend,
+    leaseProvider: scope.leaseProvider,
+    deviceKey: scope.deviceKey,
+    clientId: scope.clientId,
+  });
+}
+
+export function leaseScopeToCommandFlags(scope: LeaseScope): Record<string, unknown> {
+  return stripUndefined({
+    tenant: scope.tenantId,
+    runId: scope.runId,
+    leaseId: scope.leaseId,
+    leaseBackend: scope.leaseBackend,
+    leaseProvider: scope.leaseProvider,
+    deviceKey: scope.deviceKey,
+    clientId: scope.clientId,
+  });
+}
+
+export function leaseScopeToAllocateRequest(scope: LeaseScope): LeaseAllocateRequestScope {
+  return stripUndefined({
+    tenantId: scope.tenantId ?? '',
+    runId: scope.runId ?? '',
+    leaseBackend: scope.leaseBackend,
+    leaseProvider: scope.leaseProvider,
+    deviceKey: scope.deviceKey,
+    clientId: scope.clientId,
+    ttlMs: scope.leaseTtlMs,
+  }) as LeaseAllocateRequestScope;
+}
+
+export function leaseScopeToHeartbeatRequest(scope: LeaseScope): LeaseScopedRequestScope {
+  return leaseScopeToScopedRequest(scope);
+}
+
+export function leaseScopeToReleaseRequest(
+  scope: LeaseScope,
+): Omit<LeaseScopedRequestScope, 'ttlMs'> {
+  const { ttlMs: _ttlMs, ...request } = leaseScopeToScopedRequest(scope);
+  return request;
+}
+
+export function leaseScopeToLeaseRpcParams(
+  scope: LeaseScope,
+  command: LeaseRpcCommand,
+  options: {
+    includeTokenParam: boolean;
+    token?: string;
+    session?: string;
+  },
+): Record<string, unknown> {
+  const common = stripUndefined({
+    ...(options.includeTokenParam ? { token: options.token } : {}),
+    session: options.session,
+    tenantId: scope.tenantId,
+    runId: scope.runId,
+    leaseProvider: scope.leaseProvider,
+    clientId: scope.clientId,
+    deviceKey: scope.deviceKey,
+  });
+  switch (command) {
+    case 'lease_allocate':
+      return {
+        ...common,
+        ...stripUndefined({
+          ttlMs: scope.leaseTtlMs,
+          backend: scope.leaseBackend,
+        }),
+      };
+    case 'lease_heartbeat':
+      return {
+        ...common,
+        ...stripUndefined({
+          leaseId: scope.leaseId,
+          ttlMs: scope.leaseTtlMs,
+        }),
+      };
+    case 'lease_release':
+      return {
+        ...common,
+        ...stripUndefined({
+          leaseId: scope.leaseId,
+        }),
+      };
+  }
+}
+
+/**
+ * Request flags that must travel with `lease_allocate` so the daemon's lease-lifecycle provider can
+ * prepare the session — device selection, the app/os, the session-naming fields, and the configured
+ * device-feature and AWS knobs. The line transport forwards the whole request and these arrive for
+ * free; the compact lease envelope is the only projection that has to name them, so the client's
+ * producer and the daemon's consumer read the SAME list and cannot drop a sibling the provider needs.
+ */
+const LEASE_ALLOCATE_PROVIDER_FLAG_KEYS = [
+  // Device selection the lease-lifecycle provider needs to create the session.
+  'platform',
+  'device',
+  // The Cloud provider profile fields; pinned exhaustive against that vocabulary below.
+  'providerApp',
+  'providerOsVersion',
+  'providerProject',
+  'providerBuild',
+  'providerSessionName',
+  'providerDeviceOrientation',
+  'providerGeoLocation',
+  'providerTimezone',
+  'providerAppiumVersion',
+  'providerLanguage',
+  'providerLocale',
+  'providerNetworkProfile',
+  'providerCustomNetwork',
+  'providerNoResignApp',
+  'awsProjectArn',
+  'awsDeviceArn',
+  'awsAppArn',
+  'awsRegion',
+  'awsInteractionMode',
+] as const satisfies readonly (keyof CommandFlags)[];
+
+type LeaseAllocateProviderFlagKey = (typeof LEASE_ALLOCATE_PROVIDER_FLAG_KEYS)[number];
+
+// A Cloud provider profile field added without joining the projection would be dropped from the
+// envelope and fail `prepareSession` on the remote daemon — this makes that omission fail to build.
+type LeaseAllocateProfileKeysAreExhaustive =
+  Exclude<keyof CloudProviderProfileFields, LeaseAllocateProviderFlagKey> extends never
+    ? true
+    : Exclude<keyof CloudProviderProfileFields, LeaseAllocateProviderFlagKey>;
+const leaseAllocateProfileKeysExhaustive: LeaseAllocateProfileKeysAreExhaustive = true;
+void leaseAllocateProfileKeysExhaustive;
+
+type LeaseAllocateProviderFlags = Partial<Pick<CommandFlags, LeaseAllocateProviderFlagKey>>;
+
+/** Reads the provider-allocation flags out of a request flags bag or a lease-envelope param bag. */
+export function readLeaseAllocateProviderFlags(
+  source: Record<string, unknown> | undefined,
+): LeaseAllocateProviderFlags {
+  const flags: Record<string, string | boolean> = {};
+  for (const key of LEASE_ALLOCATE_PROVIDER_FLAG_KEYS) {
+    const value = source?.[key];
+    if (typeof value === 'string' || typeof value === 'boolean') flags[key] = value;
+  }
+  return flags as LeaseAllocateProviderFlags;
+}
+
+export function leaseScopeToConnectionMetadata(
+  scope: LeaseScope,
+): Pick<LeaseScope, 'leaseProvider' | 'deviceKey' | 'clientId'> | undefined {
+  const connection = stripUndefined({
+    leaseProvider: scope.leaseProvider,
+    deviceKey: scope.deviceKey,
+    clientId: scope.clientId,
+  });
+  return Object.keys(connection).length > 0 ? connection : undefined;
+}
+
+/**
+ * @internal Lease diagnostics seam exposed for unit tests.
+ */
+export function buildLeaseDiagnosticsContext(
+  leaseScope: LeaseScope | undefined,
+): LeaseDiagnosticsContext | undefined {
+  if (!leaseScope) return undefined;
+  const context = stripUndefined({
+    tenantId: leaseScope.tenantId,
+    runId: leaseScope.runId,
+    leaseId: leaseScope.leaseId,
+    leaseBackend: leaseScope.leaseBackend,
+    leaseProvider: leaseScope.leaseProvider,
+    deviceKey: leaseScope.deviceKey,
+    clientId: leaseScope.clientId,
+  });
+  return Object.keys(context).length > 0 ? context : undefined;
+}
+
+export function isProxyLeaseScope(scope: LeaseScope): boolean {
+  return scope.leaseProvider === PROXY_LEASE_PROVIDER;
+}
+
+export function findMissingProxyLeaseFields(scope: LeaseScope): string[] {
+  if (!isProxyLeaseScope(scope)) return [];
+  return REQUIRED_PROXY_LEASE_FIELDS.filter((field) => !scope[field]);
+}
+
+/**
+ * The shortest inactivity window a lease can hold by default.
+ *
+ * The registry clamps every ttl to this floor, so it is also the worst case a client plans against
+ * before it has seen a lease answer: work that has to finish inside a lease window it does not know
+ * yet must assume this one, or it can be planning for a window the daemon would never grant.
+ */
+export const MIN_LEASE_WINDOW_MS = 5_000;
+
+/**
+ * Why a lease stopped being ours: it is gone, spent, or taken back.
+ *
+ * This is the whole taxonomy of "the lease is no longer usable" as the daemon reports it, and both
+ * readers ask the same question — a client deciding whether a connection still owns a device, and a
+ * lease beat deciding whether an upload is still worth finishing. A reason naming a mismatch between
+ * a request and a lease is not in here: that says something about the request, not the lease.
+ */
+const INACTIVE_LEASE_REASONS: ReadonlySet<unknown> = new Set([
+  'LEASE_NOT_FOUND',
+  'LEASE_EXPIRED',
+  'LEASE_REVOKED',
+]);
+
+/** Whether `error` says the lease is gone rather than merely unavailable to this request. */
+export function isInactiveLeaseError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as Readonly<{ code?: unknown }>).code === 'UNAUTHORIZED' &&
+    INACTIVE_LEASE_REASONS.has(
+      (error as Readonly<{ details?: Readonly<{ reason?: unknown }> }>).details?.reason,
+    )
+  );
+}
+
+function leaseScopeToScopedRequest(scope: LeaseScope): LeaseScopedRequestScope {
+  return stripUndefined({
+    leaseId: scope.leaseId ?? '',
+    tenantId: scope.tenantId,
+    runId: scope.runId,
+    leaseBackend: scope.leaseBackend,
+    leaseProvider: scope.leaseProvider,
+    deviceKey: scope.deviceKey,
+    clientId: scope.clientId,
+    ttlMs: scope.leaseTtlMs,
+  }) as LeaseScopedRequestScope;
+}
+
+function readFlagString(
+  flags: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const value = flags?.[key];
+  return typeof value === 'string' ? value : undefined;
+}

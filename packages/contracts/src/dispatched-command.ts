@@ -8,8 +8,8 @@ import type { CommandFlags } from './command-flags.ts';
  *
  * - `kernel/contracts.ts` `DaemonRequest` — the WIRE shape, with `flags?: Record<string, unknown>`,
  *   because a process boundary cannot enforce a flag vocabulary.
- * - `daemon/types.ts` `DaemonRequest` — the wire shape with `token`/`session` required, `flags`
- *   narrowed to `CommandFlags`, and `internal?: DaemonRequestInternal` carrying `SessionState`
+ * - `daemon/daemon-request.ts` `DaemonRequest` — `DaemonWireRequest` (`token`/`session` required,
+ *   `flags` narrowed to `CommandFlags`) plus `internal?: DaemonRequestInternal` carrying `SessionState`
  *   callbacks, the admitted lease and the resolved session scope. Server-private, which is why it
  *   cannot move down here.
  *

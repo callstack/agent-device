@@ -8,16 +8,17 @@ import type {
   ProviderDeviceRuntime,
 } from '@agent-device/contracts/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
-import type { DaemonRequest } from '../../../src/daemon/types.ts';
+import type { DaemonRequest } from '../../../src/daemon/daemon-request.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { createAppleInteractor } from '../../../src/platforms/apple/interactor.ts';
+import { applePlugin } from '@agent-device/platform-apple';
 import type {
   AppleRunnerCommandOptions,
   AppleRunnerProvider,
   RunnerCommand,
 } from '@agent-device/platform-apple/runner';
+import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
-import { assertRpcOk } from './assertions.ts';
+import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 import { createProviderScenarioLifecycleModule } from './provider-device-runtime.fixtures.ts';
 
@@ -39,9 +40,8 @@ type RunnerTransportCalls = { runner: RecordedRunnerCall[]; opens: number };
 // AppleRunnerProvider transport (plus its own `open`) reuses the SHARED Apple
 // interactor — selector resolution, tap, fill, and snapshot all arrive at the
 // provider transport as runner-protocol commands instead of local XCTest.
-// This world has NO request-boundary resolver, so the interactor's injected
-// transport is the only thing keeping runner traffic off the local runtime:
-// removing the createAppleInteractor provider param fails this test.
+// This world has NO request-boundary resolver, so the fixture's method scope is
+// the only thing keeping runner traffic off the local runtime.
 test('provider-supplied Apple runner transport reuses the shared interactor stack', async () => {
   await withProviderScenarioResource(createInteractorSeamWorld, async ({ daemon, calls }) => {
     const lease = await allocateLease(daemon);
@@ -102,6 +102,52 @@ test('provider-supplied Apple runner transport reuses the shared interactor stac
       snapshots.length >= 4,
       `expected shared snapshot runtime traffic on the transport, got ${snapshots.length}`,
     );
+  });
+});
+
+// The Action Button press is an interactor operation on the same seam as a tap, and it owes the
+// session app nothing: the press must reach the provider transport and must not spend an activation
+// on the way (#2699). This world has no request-boundary resolver, so a press that leaked to the
+// local XCTest runtime would never be recorded here.
+test('provider transport carries the Action Button press without an app activation', async () => {
+  await withProviderScenarioResource(createInteractorSeamWorld, async ({ daemon, calls }) => {
+    const lease = await allocateLease(daemon);
+    const request = { flags: leaseFlags(lease.leaseId), meta: leaseMeta(lease.leaseId) };
+    assertRpcOk(await daemon.callCommand('open', ['com.example.app'], request.flags, request));
+
+    calls.runner.length = 0;
+    assert.deepEqual(
+      assertRpcOk(await daemon.callCommand('action-button', [], request.flags, request)),
+      { action: 'action-button', message: 'Pressed Action Button' },
+    );
+    assert.ok(
+      calls.runner.some((call) => call.command.command === 'actionButton'),
+      'expected actionButton on the provider transport, not local XCTest',
+    );
+    assert.deepEqual(
+      calls.runner.filter((call) => call.command.command === 'activate'),
+      [],
+      'an Action Button press must not activate the session app',
+    );
+  });
+});
+
+// A hinge pose is sent by a HID helper the host spawns inside a local iOS simulator, which a
+// provider-owned device is not, so the provider fixture states the refusal cell and admission
+// refuses before anything reaches the transport.
+test('provider transport refuses a fold before any runner traffic', async () => {
+  await withProviderScenarioResource(createInteractorSeamWorld, async ({ daemon, calls }) => {
+    const lease = await allocateLease(daemon);
+    const request = { flags: leaseFlags(lease.leaseId), meta: leaseMeta(lease.leaseId) };
+    assertRpcOk(await daemon.callCommand('open', ['com.example.app'], request.flags, request));
+
+    calls.runner.length = 0;
+    assertRpcError(
+      await daemon.callCommand('fold', ['open'], request.flags, request),
+      'UNSUPPORTED_OPERATION',
+      /fold/,
+    );
+    assert.deepEqual(calls.runner, [], 'a refused fold must not reach the provider transport');
   });
 });
 
@@ -212,6 +258,7 @@ function createProviderRuntime(
   options: { requestScope: boolean },
 ): ProviderDeviceRuntime {
   const transport: AppleRunnerProvider = {
+    hasLiveSession: () => true,
     runCommand: async (_device, command, options) => {
       calls.runner.push({ command, options });
       return runnerResultFor(command);
@@ -247,14 +294,31 @@ function createRunnerTransportInteractor(
   transport: AppleRunnerProvider,
   runnerContext: RunnerContext | undefined,
 ): Interactor {
-  return {
-    ...createAppleInteractor(DEVICE, runnerContext ?? {}, transport),
-    // App lifecycle stays provider-owned: the transport seam covers runner
-    // commands only, so the provider composes its own `open` on top.
-    open: async () => {
-      calls.opens += 1;
+  const runner = runnerContext ?? {};
+  const implementation = applePlugin.createInteractor(DEVICE, runner);
+  return new Proxy({} as Interactor, {
+    get(_target, property) {
+      if (property === 'then') return undefined;
+      if (property === 'open') {
+        return async () => {
+          calls.opens += 1;
+        };
+      }
+      return (...args: unknown[]) =>
+        withAppleRunnerProvider(
+          transport,
+          { deviceId: DEVICE.id, requestId: runner.requestId },
+          async () => {
+            const interactor = await implementation;
+            const operation = interactor[property as keyof Interactor];
+            if (typeof operation !== 'function') {
+              throw new TypeError(`Apple interactor method '${String(property)}' is unavailable`);
+            }
+            return Reflect.apply(operation, interactor, args);
+          },
+        );
     },
-  };
+  });
 }
 
 function runnerResultFor(command: RunnerCommand): Record<string, unknown> {

@@ -23,7 +23,20 @@ export async function bindLimrunDeployment(platform: 'android' | 'ios', signal: 
     includePlatformModule: true,
   });
   const device = await allocatedDevice(registration.runtime, lease(platform));
-  const owner = await registration.platformModule.loadRuntime({} as PlatformRuntimeHost);
+  const owner = await registration.platformModule.loadRuntime({
+    snapshot: {
+      captureSurface: async () => ({
+        backend: 'xctest' as const,
+        producer: 'appium-source' as const,
+        nodes: [],
+      }),
+      presentIosAcquisition: async () => ({
+        backend: 'xctest' as const,
+        producer: 'appium-source' as const,
+        nodes: [],
+      }),
+    },
+  } as unknown as PlatformRuntimeHost);
   const binding = await owner.bind({
     device,
     intent: { kind: 'ordinary' },
@@ -107,10 +120,20 @@ function limrunDependencies(): LimrunRuntimeDependencies {
         dismissed: false,
       }),
       readLogs: async () => '',
+      forceStopApp: async () => {},
+      deviceAdbInvocation: (serial: string, command: readonly string[]) => ({
+        target: { selector: { kind: 'serial', serial }, server: { kind: 'ambient' } },
+        command,
+      }),
+      hostAdbInvocation: (command: readonly string[]) => ({
+        target: { selector: { kind: 'unspecified' }, server: { kind: 'ambient' } },
+        command,
+      }),
       adbError: async (message) => new Error(message) as never,
     },
     host: {
       runAdb: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+      downloadFile: async () => undefined,
       archiveDirectory: async () => {},
     },
     ios: {

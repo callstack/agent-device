@@ -12,7 +12,7 @@ import { type SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import {
   STRUCTURED_BATCH_COMMAND_NAMES,
   readStructuredBatchCommandName,
-} from '../../core/batch-policy.ts';
+} from '@agent-device/command-registry/batch-policy';
 import { type CommandMetadata, type JsonSchema } from '../command-contract.ts';
 import {
   customField,

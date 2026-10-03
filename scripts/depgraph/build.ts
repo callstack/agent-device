@@ -43,6 +43,9 @@ type Payload = {
    * flags bit0=R5 back-edge, bit1=target also reachable at distance >= 2, bit2=R6 type inversion.
    */
   edges: [number, number, number, number][];
+  /** Labels aligned with `edges`; one edge may carry multiple declared-authority labels. */
+  edgeAuthorities: GraphData['edgeAuthorities'];
+  authorityCounts: GraphData['authorityCounts'];
   cycles: { kind: string; path: number[] }[];
   /** Type-only spine inversions per zone pair, by the gate's counting rule. */
   typeInversions: Record<string, number>;
@@ -102,6 +105,8 @@ function buildPayload(): Payload {
       edgeKindCode(edge.kind),
       edgeFlags(edge),
     ]),
+    edgeAuthorities: graph.edgeAuthorities,
+    authorityCounts: graph.authorityCounts,
     cycles: graph.cycles.map((cycle) => ({
       kind: cycle.kind,
       path: cycle.path.map((file) => nodeIndex.get(file)!),
@@ -130,6 +135,9 @@ async function main(argv: readonly string[]): Promise<number> {
   const backEdges = payload.edges.filter(([, , , flags]) => flags & 1).length;
   const transitivelyReachable = payload.edges.filter(([, , , flags]) => flags & 2).length;
   const typeInversions = Object.values(payload.typeInversions).reduce((sum, n) => sum + n, 0);
+  const authorityCounts = Object.entries(payload.authorityCounts)
+    .map(([label, count]) => `${label}=${count}`)
+    .join(', ');
   process.stdout.write(
     `Dependency graph: ${payload.generated.files} files, ${payload.generated.edges} edges, ` +
       `${payload.zones.length} zones\n` +
@@ -138,6 +146,7 @@ async function main(argv: readonly string[]): Promise<number> {
       `  spine back-edges (R5): ${backEdges}\n` +
       `  type-only spine inversions (R6): ${typeInversions}\n` +
       `  value edges whose target is also reachable at distance >= 2: ${transitivelyReachable}\n` +
+      `  declared-authority labels: ${authorityCounts}\n` +
       `    (reachability only — not a removability claim, see scripts/depgraph/README.md)\n` +
       `  wrote ${path.relative(repoRoot, jsonPath)}\n`,
   );

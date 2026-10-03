@@ -1,0 +1,115 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { DaemonResponse } from '../../daemon-request.ts';
+import { stripInternalInteractionFlags } from '../../deferred-interaction-outcome.ts';
+import {
+  computeTargetEvidence,
+  type RecordedTargetCapture,
+} from '@agent-device/selectors/target-evidence';
+import type { MultiTargetAnnotationV1 } from '@agent-device/contracts/replay';
+import { inferFillText, recordedInputPlaceholder } from '@agent-device/ad-script';
+import { parameterizeRecordedFillPayload } from '@agent-device/selectors/parameterized-recorded-fill';
+import type { InteractionFinalizationOperations } from './types.ts';
+
+export function finalizeTouchInteraction(params: {
+  operations: InteractionFinalizationOperations;
+  command: string;
+  positionals: string[];
+  actionCommand?: string;
+  flags: CommandFlags | undefined;
+  result: Record<string, unknown>;
+  responseData: Record<string, unknown>;
+  recordedTarget?: RecordedTargetCapture;
+  recordedTargets?: { source: RecordedTargetCapture; destination: RecordedTargetCapture };
+  actionStartedAt: number;
+  actionFinishedAt: number;
+  androidFreshnessBaseline?: SnapshotState | undefined;
+}): DaemonResponse {
+  const {
+    operations,
+    command,
+    positionals,
+    actionCommand = command,
+    flags,
+    result,
+    responseData,
+    recordedTarget,
+    recordedTargets,
+    actionStartedAt,
+    actionFinishedAt,
+    androidFreshnessBaseline,
+  } = params;
+  const actionFlags = stripInternalInteractionFlags(flags);
+  const [parameterizedResult, parameterizedResponseData] = parameterizeFillPayloads({
+    command,
+    positionals,
+    flags: actionFlags,
+    result,
+    responseData,
+  });
+  const targetEvidence =
+    operations.isSessionRecording() && recordedTarget
+      ? computeTargetEvidence(recordedTarget)
+      : undefined;
+  const targetEvidences =
+    operations.isSessionRecording() && recordedTargets
+      ? computeMultiTargetEvidence(recordedTargets)
+      : undefined;
+  operations.recordAction({
+    command,
+    positionals,
+    flags: actionFlags ?? {},
+    result: parameterizedResult,
+    ...(targetEvidence ? { targetEvidence } : {}),
+    ...(targetEvidences ? { targetEvidences } : {}),
+  });
+  operations.markDeferredOutcome({
+    command,
+    action: actionCommand,
+    positionals,
+    flags,
+    androidFreshnessBaseline,
+  });
+  operations.recordGestureVisualization(
+    actionCommand,
+    positionals,
+    parameterizedResult,
+    (actionFlags ?? {}) as Record<string, unknown>,
+    actionStartedAt,
+    actionFinishedAt,
+  );
+  return { ok: true, data: parameterizedResponseData };
+}
+
+function computeMultiTargetEvidence(recordedTargets: {
+  source: RecordedTargetCapture;
+  destination: RecordedTargetCapture;
+}): MultiTargetAnnotationV1 | undefined {
+  const source = computeTargetEvidence(recordedTargets.source);
+  const destination = computeTargetEvidence(recordedTargets.destination);
+  return source && destination ? { source, destination } : undefined;
+}
+
+function parameterizeFillPayloads(params: {
+  command: string;
+  positionals: string[];
+  flags: CommandFlags | undefined;
+  result: Record<string, unknown>;
+  responseData: Record<string, unknown>;
+}): readonly [result: Record<string, unknown>, responseData: Record<string, unknown>] {
+  if (params.command !== 'fill' || typeof params.flags?.recordAs !== 'string') {
+    return [params.result, params.responseData];
+  }
+  const literal = inferFillText({
+    ts: 0,
+    command: 'fill',
+    positionals: params.positionals,
+    flags: params.flags,
+    result: params.result,
+  });
+  const placeholder = recordedInputPlaceholder(params.flags.recordAs);
+  return [
+    parameterizeRecordedFillPayload(params.result, literal, placeholder),
+    parameterizeRecordedFillPayload(params.responseData, literal, placeholder),
+  ];
+}

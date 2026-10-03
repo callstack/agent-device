@@ -1,0 +1,268 @@
+import type { DaemonCommandDescriptor } from './daemon-command-descriptor.ts';
+// The typed-flags request from contracts/, not the daemon's server-side refinement: these
+// descriptors read `command`, `positionals` and `flags` and never touch `internal`.
+import type { DispatchedCommand } from '@agent-device/contracts/command';
+import type { PostActionObservationSupport } from './post-action-observation.ts';
+import type { CommandPlatformExecution } from '@agent-device/contracts/command-platform-execution';
+
+export type ResponseDataFieldTransform = {
+  defaultValue?: unknown;
+  omitDefault?: boolean;
+};
+
+export type CommandResponseDataTransform = {
+  fields: Record<string, ResponseDataFieldTransform>;
+};
+
+/**
+ * The daemon route + request-policy traits for a command, minus the `command`
+ * key (which is carried at the descriptor top level as `name`). This reuses the
+ * existing hand-authored `DaemonCommandDescriptor` shape VERBATIM — including the
+ * closure traits (`allowSessionlessDefaultDevice`, `skipSessionlessProviderDevice`)
+ * — rather than flattening them into booleans.
+ */
+export type DaemonCommandTraits = Omit<DaemonCommandDescriptor, 'command'>;
+
+/**
+ * Where a command's user-facing time budget comes from. The policy lives on
+ * command descriptors (ADR 0008); ADR 0011 moved the former timeout hand lists
+ * onto that descriptor surface.
+ *
+ *  - `'none'`             — the command has no user-supplied budget; the request
+ *                           envelope is exactly `envelopeMs`.
+ *  - `'flag'`             — the `--timeout` flag (`flags.timeoutMs`). By default it
+ *                           REPLACES the envelope (replay semantics: --timeout
+ *                           bounds the request). With `envelope: 'widen'` it only
+ *                           ever EXTENDS the envelope to envelopeMs + budget +
+ *                           margin (interaction --settle semantics, #1101: the
+ *                           flag bounds a post-action wait, so the request must
+ *                           also cover selector/action overhead). With
+ *                           `envelope: 'margin'` the budget is a daemon-side
+ *                           deadline (open/prepare startup): the envelope is
+ *                           budget + margin, never below `envelopeMs`, so the
+ *                           daemon's own structured timeout wins the race against
+ *                           the client envelope. `defaultBudgetMs` is used when
+ *                           the feature flag is present but the numeric timeout
+ *                           flag is omitted.
+ *  - `'positional-parser'`— the budget travels inside the positionals; `parser`
+ *                           extracts it (or returns null when none was given).
+ *                           The client widens the envelope to
+ *                           budget + margin, never shrinking below `envelopeMs`.
+ */
+export type CommandTimeoutBudget =
+  | { source: 'none' }
+  | { source: 'flag'; envelope?: 'bound' | 'widen' | 'margin'; defaultBudgetMs?: number }
+  | { source: 'positional-parser'; parser: (positionals: string[]) => number | null };
+
+/**
+ * The request-envelope + on-timeout daemon policy for one command. This is what
+ * used to live in two hand-maintained client lists (`isExplicitTimeoutCommand`
+ * in daemon-client.ts and `DAEMON_PRESERVING_TIMEOUT_COMMANDS` in
+ * daemon-client-timeout.ts) — the split that let `wait` fall through both
+ * (#1075). Declared per descriptor so a new command must decide, and read by
+ * the daemon client via `resolveCommandTimeoutPolicy`.
+ *
+ *  - `envelopeMs`  — the base client request envelope; `'unbounded'` disables the
+ *                    client-side timeout entirely (only `test`, which streams
+ *                    per-scenario progress and has its own budgets downstream).
+ *  - `onTimeout`   — whether a timed-out request tears the local daemon down
+ *                    (`'reset-daemon'`) or keeps it alive so sessions survive and
+ *                    evidence commands still work (`'preserve-daemon'`; read-only
+ *                    capture/polling commands that can block in platform
+ *                    accessibility bridges).
+ */
+export type CommandTimeoutPolicy = {
+  budget: CommandTimeoutBudget;
+  envelopeMs: number | 'unbounded';
+  onTimeout: 'preserve-daemon' | 'reset-daemon';
+  /**
+   * The descriptor's {@link CommandTargetReadiness} trait, attached by `resolveCommandTimeoutPolicy`
+   * so the envelope can widen by the readiness budget. Descriptors declare it as `targetReadiness`,
+   * never on their `timeoutPolicy`.
+   */
+  targetReadiness?: CommandTargetReadiness;
+};
+
+/**
+ * `budgeted`: the command's target resolution may poll for a target that does not exist yet, under
+ * a caller-supplied `readinessTimeoutMs`, capped at `READINESS_BUDGET_MAX_MS` (`timeout-policy.ts`).
+ * Must match the commands the `targetReadiness` interaction guarantee cells mark `runtime`.
+ */
+export type CommandTargetReadiness = 'budgeted';
+
+/**
+ * #1320 "Command descriptor policy": what a command may do with the host-global
+ * device claim store. REQUIRED on every descriptor (no default), and read by the
+ * request-execution scope so enforcement is derived from the declaration rather
+ * than from a per-handler call a new author can forget.
+ *
+ *  - `none`                — host/config-only; never binds a device.
+ *  - `observe`             — device inventory/ownership projection; may report a
+ *                            claim, never mutates one.
+ *  - `require-owner`       — session-bound work; trusts the invariant `open`
+ *                            established and does NO claim-store I/O.
+ *  - `transient-exclusive` — sessionless device mutation; acquires a
+ *                            command-scoped claim before device operations reach
+ *                            the handler, refuses a foreign claim, and releases
+ *                            in `finally`. Enforced at the request scope's
+ *                            device binding, so it is available only to ADR 0019
+ *                            `device-runtime` commands.
+ *  - `acquire-session`     — `open`; acquires the session claim before platform
+ *                            preparation or mutation.
+ *  - `release-session`     — `close`; releases the session claim only after
+ *                            teardown reaches a safe terminal state.
+ */
+export type DeviceClaimPolicy =
+  | 'none'
+  | 'observe'
+  | 'require-owner'
+  | 'transient-exclusive'
+  | 'acquire-session'
+  | 'release-session';
+
+export type CommandCatalogGroup = 'public' | 'internal' | 'local-cli';
+
+/**
+ * Which default tool set a framework adapter (`agent-device/ai-sdk`, the
+ * planned `@agent-device/eve` package) includes a public command in.
+ *  - `'core'`     — the small, curated perceive/act loop a typical tool-calling
+ *                   agent needs by default: launch, observe, interact, read,
+ *                   verify, wait, navigate, and system-dialog handling.
+ *  - `'extended'` — everything else public: device/session management,
+ *                   observability, recording/replay, and specialized or
+ *                   destructive commands. Still available with an explicit
+ *                   opt-in (e.g. `set: 'all'`), just excluded from the default
+ *                   tool set so a model isn't handed dozens of rarely-needed
+ *                   tools up front.
+ * Declared per public command so the classification lives beside the rest of
+ * that command's descriptor facets instead of a separate hand-maintained list
+ * in the adapter code; `resolveCommandFrameworkTier` reads it back.
+ */
+export type CommandFrameworkTier = 'core' | 'extended';
+
+type CommandCatalogFacetBase = {
+  /**
+   * Stable property name used by catalog object projections, e.g.
+   * `longPress` for the command name `longpress`.
+   */
+  key?: string;
+};
+
+/**
+ * The command catalog group is explicit on every descriptor so new descriptors cannot
+ * accidentally become public CLI/MCP commands by omission.
+ */
+export type CommandCatalogFacet = CommandCatalogFacetBase &
+  (
+    | {
+        group: 'internal';
+        /**
+         * The public command this internal command carries to the daemon, so ADR 0029
+         * daemon-policy command rules name the public command (`install_source` serves
+         * `install-from-source`). An internal command with platform execution and no value is
+         * named by itself.
+         */
+        servesPublicCommand?: string;
+      }
+    | { group: Exclude<CommandCatalogGroup, 'internal'>; servesPublicCommand?: never }
+  );
+
+/**
+ * ADR 0016: whether a recorded request changes app-visible state or only
+ * observes it. The resolver form keeps subcommand-sensitive decisions on the
+ * descriptor (for example, `alert get` versus `alert accept`).
+ */
+export type RecordingEffect = 'mutates-app' | 'observes-app';
+export type CommandRecordingEffect =
+  | RecordingEffect
+  | ((req: DispatchedCommand) => RecordingEffect);
+
+/**
+ * ADR 0012 / #1349: when replay verifies a recorded `target-v1` annotation.
+ * `pre-dispatch` — the step loop verifies against a fresh capture before
+ * dispatch (touch/fill/get/is expect their target present). `post-resolution`
+ * — the command's own resolution verifies (wait's polling loop, whose
+ * landmark may legitimately be absent at step start); only decision 3 path 1
+ * runs up front. Declared on every evidence-carrying command and pinned as a literal
+ * set by `src/__tests__/command-descriptor-parity.test.ts`, so a new one must choose a
+ * phase explicitly.
+ */
+export type TargetIdentityVerification = 'pre-dispatch' | 'post-resolution';
+
+/**
+ * The single command-descriptor shape (ADR 0008).
+ *
+ * Per command this carries, side-by-side, the facts its consumer projections are built
+ * from. Four of them replaced a hand-authored list outright:
+ *  - `daemon`     — the daemon route + request-policy traits, projected into
+ *                   DAEMON_COMMAND_DESCRIPTORS (#907). Absent for commands with no
+ *                   daemon route: the local-cli commands, and `install-from-source`,
+ *                   which reaches the daemon through the `install_source` internal command.
+ *  - `batchable`  — whether the command is exposed through `batch`, projected into
+ *                   STRUCTURED_BATCH_COMMAND_NAMES (#909).
+ *  - `mcpExposed` — whether the command is surfaced over MCP, in place of the
+ *                   hand-maintained exclusion list (`8ef4e73408` #1137).
+ *  - `timeoutPolicy` — the request-envelope budget source + on-timeout daemon policy,
+ *                   in place of the daemon client's timeout lists (`b25ef7b024` #1084).
+ *                   REQUIRED on every entry — most commands share the
+ *                   explicit `DEFAULT_TIMEOUT_POLICY` constant, but a new
+ *                   command must say so rather than inherit silently.
+ * The remaining facets are plain declarations their consumers derive from:
+ *  - `postActionObservation` — optional interaction observation trait for
+ *                   commands that support `--settle`/`--verify`; consumed by
+ *                   command surfaces and timeout policy instead of repeated
+ *                   command-name lists.
+ *  - `targetReadiness` — optional; the commands whose target resolution accepts a
+ *                   `readinessTimeoutMs` budget. Read by replay (which supplies a
+ *                   default budget) and by the request envelope (which widens by it).
+ *  - `responseDataTransform` — optional public response data shaping rules for
+ *                   command-owned fields in daemon responses. This keeps
+ *                   response shaping on the same descriptor surface as other
+ *                   command traits.
+ *  - `catalog` — command identity projection metadata. Every descriptor
+ *                   declares its catalog group explicitly.
+ *  - `frameworkTier` — which default tool set a framework adapter includes a
+ *                   public command in (see {@link CommandFrameworkTier}).
+ */
+type CommandDescriptorBase = {
+  name: string;
+  daemon?: DaemonCommandTraits;
+  batchable: boolean;
+  mcpExposed: boolean;
+  timeoutPolicy: CommandTimeoutPolicy;
+  /**
+   * #1320 device-claim policy. REQUIRED with no default so a new command must
+   * classify itself; `transient-exclusive` is the only value that makes the
+   * request scope touch the host-global claim store.
+   */
+  deviceClaimPolicy: DeviceClaimPolicy;
+  postActionObservation?: PostActionObservationSupport;
+  targetReadiness?: CommandTargetReadiness;
+  responseDataTransform?: CommandResponseDataTransform;
+  catalog: CommandCatalogFacet;
+  /** Required iff `catalog.group === 'public'`; see {@link CommandFrameworkTier}. */
+  frameworkTier?: CommandFrameworkTier;
+  /** Internal-only ADR 0019 execution discriminant; public projections must ignore it. */
+  platformExecution: CommandPlatformExecution;
+  /** ADR 0012 / #1349: present iff this command's recorded steps can carry `target-v1` evidence. */
+  targetIdentityVerification?: TargetIdentityVerification;
+  /**
+   * Whether the command records an action into the active session replay script
+   * by default, making `--no-record` meaningful. Declared on every raw descriptor
+   * so the recording decision is explicit; the daemon `replayScopedAction` trait and
+   * MCP `noRecord` schema projection are both derived from this value.
+   */
+};
+
+export type CommandDescriptor = CommandDescriptorBase &
+  (
+    | {
+        recordsSessionAction: true;
+        /** Required for every recordable command; publication ordering consumes only this trait. */
+        recordingEffect: CommandRecordingEffect;
+      }
+    | {
+        recordsSessionAction: false;
+        recordingEffect?: never;
+      }
+  );

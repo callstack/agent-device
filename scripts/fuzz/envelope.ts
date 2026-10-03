@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { laneEnvelope } from '../lib/lane-envelope.ts';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import type { FuzzFailure } from './invariant.ts';
 
 const FILENAME = 'run-envelope.json';

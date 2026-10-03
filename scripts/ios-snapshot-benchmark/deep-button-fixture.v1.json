@@ -1,0 +1,699 @@
+{
+  "version": 1,
+  "fixture": "deep-button-v1",
+  "depth": 72,
+  "changedDescendant": "deep-button-state",
+  "nodes": [
+    {
+      "id": "deep-button-root",
+      "parentId": null,
+      "depth": 0,
+      "role": "window",
+      "label": "Deep button fixture"
+    },
+    {
+      "id": "deep-button-level-01",
+      "parentId": "deep-button-root",
+      "depth": 1,
+      "role": "group",
+      "label": "Descendant level 1"
+    },
+    {
+      "id": "deep-button-level-02",
+      "parentId": "deep-button-level-01",
+      "depth": 2,
+      "role": "group",
+      "label": "Descendant level 2"
+    },
+    {
+      "id": "deep-button-level-03",
+      "parentId": "deep-button-level-02",
+      "depth": 3,
+      "role": "group",
+      "label": "Descendant level 3"
+    },
+    {
+      "id": "deep-button-level-04",
+      "parentId": "deep-button-level-03",
+      "depth": 4,
+      "role": "group",
+      "label": "Descendant level 4"
+    },
+    {
+      "id": "deep-button-level-05",
+      "parentId": "deep-button-level-04",
+      "depth": 5,
+      "role": "group",
+      "label": "Descendant level 5"
+    },
+    {
+      "id": "deep-button-level-06",
+      "parentId": "deep-button-level-05",
+      "depth": 6,
+      "role": "group",
+      "label": "Descendant level 6"
+    },
+    {
+      "id": "deep-button-level-07",
+      "parentId": "deep-button-level-06",
+      "depth": 7,
+      "role": "group",
+      "label": "Descendant level 7"
+    },
+    {
+      "id": "deep-button-level-08",
+      "parentId": "deep-button-level-07",
+      "depth": 8,
+      "role": "group",
+      "label": "Descendant level 8"
+    },
+    {
+      "id": "deep-button-level-09",
+      "parentId": "deep-button-level-08",
+      "depth": 9,
+      "role": "group",
+      "label": "Descendant level 9"
+    },
+    {
+      "id": "deep-button-level-10",
+      "parentId": "deep-button-level-09",
+      "depth": 10,
+      "role": "group",
+      "label": "Descendant level 10"
+    },
+    {
+      "id": "deep-button-level-11",
+      "parentId": "deep-button-level-10",
+      "depth": 11,
+      "role": "group",
+      "label": "Descendant level 11"
+    },
+    {
+      "id": "deep-button-level-12",
+      "parentId": "deep-button-level-11",
+      "depth": 12,
+      "role": "group",
+      "label": "Descendant level 12"
+    },
+    {
+      "id": "deep-button-level-13",
+      "parentId": "deep-button-level-12",
+      "depth": 13,
+      "role": "group",
+      "label": "Descendant level 13"
+    },
+    {
+      "id": "deep-button-level-14",
+      "parentId": "deep-button-level-13",
+      "depth": 14,
+      "role": "group",
+      "label": "Descendant level 14"
+    },
+    {
+      "id": "deep-button-level-15",
+      "parentId": "deep-button-level-14",
+      "depth": 15,
+      "role": "group",
+      "label": "Descendant level 15"
+    },
+    {
+      "id": "deep-button-level-16",
+      "parentId": "deep-button-level-15",
+      "depth": 16,
+      "role": "group",
+      "label": "Descendant level 16"
+    },
+    {
+      "id": "deep-button-level-17",
+      "parentId": "deep-button-level-16",
+      "depth": 17,
+      "role": "group",
+      "label": "Descendant level 17"
+    },
+    {
+      "id": "deep-button-level-18",
+      "parentId": "deep-button-level-17",
+      "depth": 18,
+      "role": "group",
+      "label": "Descendant level 18"
+    },
+    {
+      "id": "deep-button-level-19",
+      "parentId": "deep-button-level-18",
+      "depth": 19,
+      "role": "group",
+      "label": "Descendant level 19"
+    },
+    {
+      "id": "deep-button-level-20",
+      "parentId": "deep-button-level-19",
+      "depth": 20,
+      "role": "group",
+      "label": "Descendant level 20"
+    },
+    {
+      "id": "deep-button-level-21",
+      "parentId": "deep-button-level-20",
+      "depth": 21,
+      "role": "group",
+      "label": "Descendant level 21"
+    },
+    {
+      "id": "deep-button-level-22",
+      "parentId": "deep-button-level-21",
+      "depth": 22,
+      "role": "group",
+      "label": "Descendant level 22"
+    },
+    {
+      "id": "deep-button-level-23",
+      "parentId": "deep-button-level-22",
+      "depth": 23,
+      "role": "group",
+      "label": "Descendant level 23"
+    },
+    {
+      "id": "deep-button-level-24",
+      "parentId": "deep-button-level-23",
+      "depth": 24,
+      "role": "group",
+      "label": "Descendant level 24"
+    },
+    {
+      "id": "deep-button-level-25",
+      "parentId": "deep-button-level-24",
+      "depth": 25,
+      "role": "group",
+      "label": "Descendant level 25"
+    },
+    {
+      "id": "deep-button-level-26",
+      "parentId": "deep-button-level-25",
+      "depth": 26,
+      "role": "group",
+      "label": "Descendant level 26"
+    },
+    {
+      "id": "deep-button-level-27",
+      "parentId": "deep-button-level-26",
+      "depth": 27,
+      "role": "group",
+      "label": "Descendant level 27"
+    },
+    {
+      "id": "deep-button-level-28",
+      "parentId": "deep-button-level-27",
+      "depth": 28,
+      "role": "group",
+      "label": "Descendant level 28"
+    },
+    {
+      "id": "deep-button-level-29",
+      "parentId": "deep-button-level-28",
+      "depth": 29,
+      "role": "group",
+      "label": "Descendant level 29"
+    },
+    {
+      "id": "deep-button-level-30",
+      "parentId": "deep-button-level-29",
+      "depth": 30,
+      "role": "group",
+      "label": "Descendant level 30"
+    },
+    {
+      "id": "deep-button-level-31",
+      "parentId": "deep-button-level-30",
+      "depth": 31,
+      "role": "group",
+      "label": "Descendant level 31"
+    },
+    {
+      "id": "deep-button-level-32",
+      "parentId": "deep-button-level-31",
+      "depth": 32,
+      "role": "group",
+      "label": "Descendant level 32"
+    },
+    {
+      "id": "deep-button-level-33",
+      "parentId": "deep-button-level-32",
+      "depth": 33,
+      "role": "group",
+      "label": "Descendant level 33"
+    },
+    {
+      "id": "deep-button-level-34",
+      "parentId": "deep-button-level-33",
+      "depth": 34,
+      "role": "group",
+      "label": "Descendant level 34"
+    },
+    {
+      "id": "deep-button-level-35",
+      "parentId": "deep-button-level-34",
+      "depth": 35,
+      "role": "group",
+      "label": "Descendant level 35"
+    },
+    {
+      "id": "deep-button-level-36",
+      "parentId": "deep-button-level-35",
+      "depth": 36,
+      "role": "group",
+      "label": "Descendant level 36"
+    },
+    {
+      "id": "deep-button-level-37",
+      "parentId": "deep-button-level-36",
+      "depth": 37,
+      "role": "group",
+      "label": "Descendant level 37"
+    },
+    {
+      "id": "deep-button-level-38",
+      "parentId": "deep-button-level-37",
+      "depth": 38,
+      "role": "group",
+      "label": "Descendant level 38"
+    },
+    {
+      "id": "deep-button-level-39",
+      "parentId": "deep-button-level-38",
+      "depth": 39,
+      "role": "group",
+      "label": "Descendant level 39"
+    },
+    {
+      "id": "deep-button-level-40",
+      "parentId": "deep-button-level-39",
+      "depth": 40,
+      "role": "group",
+      "label": "Descendant level 40"
+    },
+    {
+      "id": "deep-button-level-41",
+      "parentId": "deep-button-level-40",
+      "depth": 41,
+      "role": "group",
+      "label": "Descendant level 41"
+    },
+    {
+      "id": "deep-button-level-42",
+      "parentId": "deep-button-level-41",
+      "depth": 42,
+      "role": "group",
+      "label": "Descendant level 42"
+    },
+    {
+      "id": "deep-button-level-43",
+      "parentId": "deep-button-level-42",
+      "depth": 43,
+      "role": "group",
+      "label": "Descendant level 43"
+    },
+    {
+      "id": "deep-button-level-44",
+      "parentId": "deep-button-level-43",
+      "depth": 44,
+      "role": "group",
+      "label": "Descendant level 44"
+    },
+    {
+      "id": "deep-button-level-45",
+      "parentId": "deep-button-level-44",
+      "depth": 45,
+      "role": "group",
+      "label": "Descendant level 45"
+    },
+    {
+      "id": "deep-button-level-46",
+      "parentId": "deep-button-level-45",
+      "depth": 46,
+      "role": "group",
+      "label": "Descendant level 46"
+    },
+    {
+      "id": "deep-button-level-47",
+      "parentId": "deep-button-level-46",
+      "depth": 47,
+      "role": "group",
+      "label": "Descendant level 47"
+    },
+    {
+      "id": "deep-button-level-48",
+      "parentId": "deep-button-level-47",
+      "depth": 48,
+      "role": "group",
+      "label": "Descendant level 48"
+    },
+    {
+      "id": "deep-button-level-49",
+      "parentId": "deep-button-level-48",
+      "depth": 49,
+      "role": "group",
+      "label": "Descendant level 49"
+    },
+    {
+      "id": "deep-button-level-50",
+      "parentId": "deep-button-level-49",
+      "depth": 50,
+      "role": "group",
+      "label": "Descendant level 50"
+    },
+    {
+      "id": "deep-button-level-51",
+      "parentId": "deep-button-level-50",
+      "depth": 51,
+      "role": "group",
+      "label": "Descendant level 51"
+    },
+    {
+      "id": "deep-button-level-52",
+      "parentId": "deep-button-level-51",
+      "depth": 52,
+      "role": "group",
+      "label": "Descendant level 52"
+    },
+    {
+      "id": "deep-button-level-53",
+      "parentId": "deep-button-level-52",
+      "depth": 53,
+      "role": "group",
+      "label": "Descendant level 53"
+    },
+    {
+      "id": "deep-button-level-54",
+      "parentId": "deep-button-level-53",
+      "depth": 54,
+      "role": "group",
+      "label": "Descendant level 54"
+    },
+    {
+      "id": "deep-button-level-55",
+      "parentId": "deep-button-level-54",
+      "depth": 55,
+      "role": "group",
+      "label": "Descendant level 55"
+    },
+    {
+      "id": "deep-button-level-56",
+      "parentId": "deep-button-level-55",
+      "depth": 56,
+      "role": "group",
+      "label": "Descendant level 56"
+    },
+    {
+      "id": "deep-button-level-57",
+      "parentId": "deep-button-level-56",
+      "depth": 57,
+      "role": "group",
+      "label": "Descendant level 57"
+    },
+    {
+      "id": "deep-button-level-58",
+      "parentId": "deep-button-level-57",
+      "depth": 58,
+      "role": "group",
+      "label": "Descendant level 58"
+    },
+    {
+      "id": "deep-button-level-59",
+      "parentId": "deep-button-level-58",
+      "depth": 59,
+      "role": "group",
+      "label": "Descendant level 59"
+    },
+    {
+      "id": "deep-button-level-60",
+      "parentId": "deep-button-level-59",
+      "depth": 60,
+      "role": "group",
+      "label": "Descendant level 60"
+    },
+    {
+      "id": "deep-button-level-61",
+      "parentId": "deep-button-level-60",
+      "depth": 61,
+      "role": "group",
+      "label": "Descendant level 61"
+    },
+    {
+      "id": "deep-button-level-62",
+      "parentId": "deep-button-level-61",
+      "depth": 62,
+      "role": "group",
+      "label": "Descendant level 62"
+    },
+    {
+      "id": "deep-button-level-63",
+      "parentId": "deep-button-level-62",
+      "depth": 63,
+      "role": "group",
+      "label": "Descendant level 63"
+    },
+    {
+      "id": "deep-button-level-64",
+      "parentId": "deep-button-level-63",
+      "depth": 64,
+      "role": "group",
+      "label": "Descendant level 64"
+    },
+    {
+      "id": "deep-button-level-65",
+      "parentId": "deep-button-level-64",
+      "depth": 65,
+      "role": "group",
+      "label": "Descendant level 65"
+    },
+    {
+      "id": "deep-button-level-66",
+      "parentId": "deep-button-level-65",
+      "depth": 66,
+      "role": "group",
+      "label": "Descendant level 66"
+    },
+    {
+      "id": "deep-button-level-67",
+      "parentId": "deep-button-level-66",
+      "depth": 67,
+      "role": "group",
+      "label": "Descendant level 67"
+    },
+    {
+      "id": "deep-button-level-68",
+      "parentId": "deep-button-level-67",
+      "depth": 68,
+      "role": "group",
+      "label": "Descendant level 68"
+    },
+    {
+      "id": "deep-button-level-69",
+      "parentId": "deep-button-level-68",
+      "depth": 69,
+      "role": "group",
+      "label": "Descendant level 69"
+    },
+    {
+      "id": "deep-button-level-70",
+      "parentId": "deep-button-level-69",
+      "depth": 70,
+      "role": "group",
+      "label": "Descendant level 70"
+    },
+    {
+      "id": "deep-button-level-71",
+      "parentId": "deep-button-level-70",
+      "depth": 71,
+      "role": "group",
+      "label": "Descendant level 71"
+    },
+    {
+      "id": "deep-button-state",
+      "parentId": "deep-button-level-71",
+      "depth": 72,
+      "role": "button",
+      "label": "Deep button state"
+    }
+  ],
+  "before": {
+    "state": "off",
+    "shallowNodeIds": ["deep-button-root", "deep-button-level-01"],
+    "fullNodeIds": [
+      "deep-button-root",
+      "deep-button-level-01",
+      "deep-button-level-02",
+      "deep-button-level-03",
+      "deep-button-level-04",
+      "deep-button-level-05",
+      "deep-button-level-06",
+      "deep-button-level-07",
+      "deep-button-level-08",
+      "deep-button-level-09",
+      "deep-button-level-10",
+      "deep-button-level-11",
+      "deep-button-level-12",
+      "deep-button-level-13",
+      "deep-button-level-14",
+      "deep-button-level-15",
+      "deep-button-level-16",
+      "deep-button-level-17",
+      "deep-button-level-18",
+      "deep-button-level-19",
+      "deep-button-level-20",
+      "deep-button-level-21",
+      "deep-button-level-22",
+      "deep-button-level-23",
+      "deep-button-level-24",
+      "deep-button-level-25",
+      "deep-button-level-26",
+      "deep-button-level-27",
+      "deep-button-level-28",
+      "deep-button-level-29",
+      "deep-button-level-30",
+      "deep-button-level-31",
+      "deep-button-level-32",
+      "deep-button-level-33",
+      "deep-button-level-34",
+      "deep-button-level-35",
+      "deep-button-level-36",
+      "deep-button-level-37",
+      "deep-button-level-38",
+      "deep-button-level-39",
+      "deep-button-level-40",
+      "deep-button-level-41",
+      "deep-button-level-42",
+      "deep-button-level-43",
+      "deep-button-level-44",
+      "deep-button-level-45",
+      "deep-button-level-46",
+      "deep-button-level-47",
+      "deep-button-level-48",
+      "deep-button-level-49",
+      "deep-button-level-50",
+      "deep-button-level-51",
+      "deep-button-level-52",
+      "deep-button-level-53",
+      "deep-button-level-54",
+      "deep-button-level-55",
+      "deep-button-level-56",
+      "deep-button-level-57",
+      "deep-button-level-58",
+      "deep-button-level-59",
+      "deep-button-level-60",
+      "deep-button-level-61",
+      "deep-button-level-62",
+      "deep-button-level-63",
+      "deep-button-level-64",
+      "deep-button-level-65",
+      "deep-button-level-66",
+      "deep-button-level-67",
+      "deep-button-level-68",
+      "deep-button-level-69",
+      "deep-button-level-70",
+      "deep-button-level-71",
+      "deep-button-state"
+    ],
+    "changedNode": {
+      "id": "deep-button-state",
+      "parentId": "deep-button-level-71",
+      "depth": 72,
+      "role": "button",
+      "label": "Deep button off",
+      "value": "off",
+      "state": "off"
+    },
+    "shallowDigest": "bd7118623fd764b18b99394d25021372840cea98e8b3b0c0196d3e791b199062",
+    "fullDigest": "275f9d14720d5a02ed77b54a03a8f51830afcdc2b12577bd8014631bfbf2c81a"
+  },
+  "after": {
+    "state": "on",
+    "shallowNodeIds": ["deep-button-root", "deep-button-level-01"],
+    "fullNodeIds": [
+      "deep-button-root",
+      "deep-button-level-01",
+      "deep-button-level-02",
+      "deep-button-level-03",
+      "deep-button-level-04",
+      "deep-button-level-05",
+      "deep-button-level-06",
+      "deep-button-level-07",
+      "deep-button-level-08",
+      "deep-button-level-09",
+      "deep-button-level-10",
+      "deep-button-level-11",
+      "deep-button-level-12",
+      "deep-button-level-13",
+      "deep-button-level-14",
+      "deep-button-level-15",
+      "deep-button-level-16",
+      "deep-button-level-17",
+      "deep-button-level-18",
+      "deep-button-level-19",
+      "deep-button-level-20",
+      "deep-button-level-21",
+      "deep-button-level-22",
+      "deep-button-level-23",
+      "deep-button-level-24",
+      "deep-button-level-25",
+      "deep-button-level-26",
+      "deep-button-level-27",
+      "deep-button-level-28",
+      "deep-button-level-29",
+      "deep-button-level-30",
+      "deep-button-level-31",
+      "deep-button-level-32",
+      "deep-button-level-33",
+      "deep-button-level-34",
+      "deep-button-level-35",
+      "deep-button-level-36",
+      "deep-button-level-37",
+      "deep-button-level-38",
+      "deep-button-level-39",
+      "deep-button-level-40",
+      "deep-button-level-41",
+      "deep-button-level-42",
+      "deep-button-level-43",
+      "deep-button-level-44",
+      "deep-button-level-45",
+      "deep-button-level-46",
+      "deep-button-level-47",
+      "deep-button-level-48",
+      "deep-button-level-49",
+      "deep-button-level-50",
+      "deep-button-level-51",
+      "deep-button-level-52",
+      "deep-button-level-53",
+      "deep-button-level-54",
+      "deep-button-level-55",
+      "deep-button-level-56",
+      "deep-button-level-57",
+      "deep-button-level-58",
+      "deep-button-level-59",
+      "deep-button-level-60",
+      "deep-button-level-61",
+      "deep-button-level-62",
+      "deep-button-level-63",
+      "deep-button-level-64",
+      "deep-button-level-65",
+      "deep-button-level-66",
+      "deep-button-level-67",
+      "deep-button-level-68",
+      "deep-button-level-69",
+      "deep-button-level-70",
+      "deep-button-level-71",
+      "deep-button-state"
+    ],
+    "changedNode": {
+      "id": "deep-button-state",
+      "parentId": "deep-button-level-71",
+      "depth": 72,
+      "role": "button",
+      "label": "Deep button on",
+      "value": "on",
+      "state": "on"
+    },
+    "shallowDigest": "bd7118623fd764b18b99394d25021372840cea98e8b3b0c0196d3e791b199062",
+    "fullDigest": "8542024b5b9719f6b2ba9692915bda9011e0e5d10c4e21463257763ee765719d"
+  }
+}

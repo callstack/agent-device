@@ -4,7 +4,7 @@ import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 export function normalizeType(type: string): string {
   let normalized = type
     .trim()
-    .replace(/XCUIElementType/gi, '')
+    .replaceAll(/XCUIElementType/gi, '')
     .replace(/^AX/, '')
     .toLowerCase();
   const lastSeparator = Math.max(normalized.lastIndexOf('.'), normalized.lastIndexOf('/'));
@@ -36,6 +36,14 @@ export function isMeaningfulLabel(value: string): boolean {
   if (/^(true|false)$/i.test(trimmed)) return false;
   if (/^\d+$/.test(trimmed)) return false;
   return true;
+}
+
+/** A non-empty, non-boolean `label`/`value` is a usable overlay or crop signal. */
+export function isMeaningfulSignal(value: string | undefined): boolean {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return !/^(true|false)$/i.test(trimmed);
 }
 
 export function extractNodeText(

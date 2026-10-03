@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { listCliCommandNames } from '../../../command-catalog.ts';
+import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { listExecutableCommandNames } from '../../../commands/command-surface.ts';
 import { isClientBackedCliCommandName } from '../client-backed.ts';
 

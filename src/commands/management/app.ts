@@ -1,8 +1,7 @@
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { AppCloseOptions, AppOpenOptions } from '@agent-device/contracts/client';
-import { DEFAULT_APPS_FILTER } from '@agent-device/contracts/device';
 import { SESSION_SURFACES } from '@agent-device/contracts/session';
-import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
+import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import { assertResolvedAppsFilter } from './app-inventory-contract.ts';
 import {
   booleanField,
@@ -10,14 +9,14 @@ import {
   enumField,
   integerField,
   jsonSchemaField,
+  optionField,
   stringArrayField,
   stringField,
   stringSchema,
 } from '../command-input.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import { commonInputFromFlags, direct, optionalString } from '../cli-grammar/common.ts';
 import type { CliReader, CommandInput, DaemonWriter } from '../cli-grammar/types.ts';
-import { METRO_RELOAD_FLAGS } from '../cli-grammar/flag-groups.ts';
+import { METRO_RELOAD_FLAGS } from '@agent-device/command-registry/flag-groups';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { withCommandRuntimeHints } from '../runtime-hints.ts';
@@ -50,16 +49,18 @@ const openCommandMetadata = defineFieldCommandMetadata(
       'Launch arguments forwarded verbatim to the platform launch command.',
     ),
     relaunch: booleanField('Force relaunch.'),
-    foreground: booleanField(
-      'Include an initial interactive snapshot in a fresh open response. With no app argument, discover the sole running app on the sole booted iOS simulator; ambiguous environments fail closed.',
+    timeoutMs: integerField(
+      'Startup budget in milliseconds. Bounds the Simulator boot wait, so a never-booted Simulator can finish its first-boot migration; omit for the default startup behavior.',
+      { min: 1 },
     ),
+    waitMs: optionField('waitMs'),
+    foreground: optionField('foreground'),
     saveScript: jsonSchemaField<boolean | string>({
       oneOf: [booleanSchema(), stringSchema()],
     }),
     force: booleanField(
       'Overwrite an existing --save-script target instead of refusing (alias: --overwrite).',
     ),
-    deviceHub: booleanField('Use Xcode Device Hub when surfacing Apple simulators.'),
     testIme: booleanField(
       'Activate the headless Android test IME for deterministic Unicode text entry (default on for emulators; opt-in on real devices).',
     ),
@@ -92,14 +93,6 @@ const closeCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-const appsCommandDefinition = defineExecutableCommand(appsCommandMetadata, (client, input) =>
-  client.apps.list(input),
-);
-
-const openCommandDefinition = defineExecutableCommand(openCommandMetadata, (client, input) =>
-  client.apps.open(toAppOpenOptions(input)),
-);
-
 // The flat metro hint flags fold into the `runtime` object open already accepts.
 function toAppOpenOptions(
   input: AppOpenOptions & {
@@ -112,13 +105,8 @@ function toAppOpenOptions(
   return withCommandRuntimeHints(input);
 }
 
-const closeCommandDefinition = defineExecutableCommand(closeCommandMetadata, (client, input) =>
-  input.app ? client.apps.close(input) : client.sessions.close(withoutApp(input)),
-);
-
 const appsCliSchema = {
   allowedFlags: ['appsFilter'],
-  defaults: { appsFilter: DEFAULT_APPS_FILTER },
 } as const satisfies CommandSchemaOverride;
 
 const openCliSchema = {
@@ -127,13 +115,14 @@ const openCliSchema = {
     'activity',
     'launchConsole',
     'launchArgs',
-    'deviceHub',
     'testIme',
     'saveScript',
     'force',
     'noRecord',
     'relaunch',
     'foreground',
+    'timeoutMs',
+    'waitMs',
     'surface',
     ...METRO_RELOAD_FLAGS,
     'launchUrl',
@@ -160,9 +149,10 @@ const openCliReader: CliReader = (positionals, flags) => ({
   launchArgs: flags.launchArgs,
   relaunch: flags.relaunch,
   foreground: flags.foreground,
+  timeoutMs: flags.timeoutMs,
+  waitMs: flags.waitMs,
   saveScript: flags.saveScript,
   force: flags.force,
-  deviceHub: flags.deviceHub,
   testIme: flags.testIme,
   noRecord: flags.noRecord,
   metroHost: flags.metroHost,
@@ -188,11 +178,12 @@ const closeDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.close, (input) =>
 export const appsCommandFacet = defineCommandFacet({
   name: 'apps',
   text: {
-    summary: 'List installed apps',
-    cliDetail: 'Defaults to user-installed apps; use --all to include system/OEM apps.',
+    summary: 'List installed apps or deferred provider app assets',
+    cliDetail:
+      'Before provider allocation, lists uploaded app assets when the selected provider exposes a catalog. On a live device, defaults to user-installed apps; use --all to include system/OEM apps.',
   },
   metadata: appsCommandMetadata,
-  definition: appsCommandDefinition,
+  run: (client, input) => client.apps.list(input),
   cliSchema: appsCliSchema,
   cliReader: appsCliReader,
   daemonWriter: appsDaemonWriter,
@@ -204,12 +195,12 @@ export const openCommandFacet = defineCommandFacet({
   text: {
     summary: 'Open an app, deep link or URL, save replays',
     cliDetail:
-      'Use --platform to bind URL/deep-link opens to the target platform. For iOS simulator initial stdout/stderr, put --launch-console <path> on this open command, for example agent-device open "Agent Device Tester" --platform ios --launch-console artifacts/launch-console.log. Expo Go/dev-client shells accept host + URL, for example agent-device open "Expo Go" exp://127.0.0.1:8081 --platform ios. macOS also supports --surface app|frontmost-app|desktop|menubar. --metro-host/--metro-port/--bundle-url/--launch-url set this session\'s Metro/debug runtime hints as part of open itself (applied to the app\'s dev-server prefs and recorded as the session\'s dev-server binding), so a fresh session has them before its first reload instead of needing a throwaway reload-first call just to seed hints; a later plain metro reload in the same session reuses whichever of these were set. A fresh open without these flags clears any leftover binding from a previous same-name session; close also clears it.',
+      'Use --platform to bind URL/deep-link opens to the target platform. For iOS simulator initial stdout/stderr, put --launch-console <path> on this open command, for example agent-device open "Agent Device Tester" --platform ios --launch-console artifacts/launch-console.log. Expo Go/dev-client shells accept host + URL, for example agent-device open "Expo Go" exp://127.0.0.1:8081 --platform ios. macOS also supports --surface app|frontmost-app|desktop|menubar. --metro-host/--metro-port/--bundle-url/--launch-url set this session\'s Metro/debug runtime hints as part of open itself (applied to the app\'s dev-server prefs and recorded as the session\'s dev-server binding), so a fresh session has them before its first reload instead of needing a throwaway reload-first call just to seed hints; a later plain metro reload in the same session reuses whichever of these were set. A fresh open without these flags clears any leftover binding from a previous same-name session; close also clears it. On an iOS simulator, when --launch-url raises an "Open in <App>?" prompt that keeps open from seeing the app, open accepts it if the URL scheme belongs to the session app (data.launchConfirmation: "accepted"); if the scheme belongs to another installed app, the prompt stays on screen and open fails with details.reason launch_confirmation_foreign_app; if no single installed app owns the scheme, the prompt stays on screen and open returns as usual. The prompt is read whenever open cannot see the app afterwards, including on a slow host where the app\'s target discovery fails on its own deadline. When an accept leaves the app provably not running, open hands the same URL over once more and reads again; still not running, it fails with details.reason launch_confirmation_unanswered. A simulator openurl that CoreSimulator never answers fails within 20s with details.reason ios-simulator-openurl-timeout. Only the English prompt title is recognized, so on a Simulator set to another language the prompt stays on screen. A prompt that appears after open has already seen the app is not answered; use alert accept. A device another session is holding refuses at once; add --wait <ms> to block up to that budget for it and only then fail with DEVICE_IN_USE naming the owning session.',
     mcpDetail:
       "Metro and debug runtime hints given here are recorded as the session's dev-server binding, so a later reload reuses them; a fresh open without them clears any binding left by a previous same-name session.",
   },
   metadata: openCommandMetadata,
-  definition: openCommandDefinition,
+  run: (client, input) => client.apps.open(toAppOpenOptions(input)),
   cliSchema: openCliSchema,
   cliReader: openCliReader,
   daemonWriter: openDaemonWriter,
@@ -222,7 +213,8 @@ export const closeCommandFacet = defineCommandFacet({
     summary: 'Close an app or end the session',
   },
   metadata: closeCommandMetadata,
-  definition: closeCommandDefinition,
+  run: (client, input) =>
+    input.app ? client.apps.close(input) : client.sessions.close(withoutApp(input)),
   cliSchema: closeCliSchema,
   cliReader: closeCliReader,
   daemonWriter: closeDaemonWriter,

@@ -22,6 +22,7 @@
   "ignoreStatic": true,
   "tempDirName": ".tmp/stryker",
   "cleanTempDir": true,
+  "dryRunTimeoutMinutes": 15,
   "timeoutMS": 20000,
   "timeoutFactor": 2,
   "thresholds": {
@@ -33,11 +34,12 @@
     "packages/kernel/src/errors.ts",
     "src/daemon/ref-frame.ts",
     "src/commands/interaction/runtime/settle.ts",
-    "src/utils/scroll-edge-state.ts",
+    "packages/capture-kit/src/snapshot/scroll-edge-state.ts",
+    "packages/capture-kit/src/snapshot/scroll-edge-state/**/*.ts",
     "packages/selectors/src/**/*.ts",
     "!packages/selectors/src/**/*.test.ts",
     "!packages/selectors/src/internal/__tests__/**",
     "packages/ad-script/src/internal/target-annotation-serde.ts",
-    "src/snapshot/snapshot-occlusion.ts"
+    "packages/capture-kit/src/snapshot-occlusion.ts"
   ]
 }

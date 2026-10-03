@@ -17,6 +17,7 @@ import {
 import { deviceShape } from '@agent-device/kernel/device';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { resolveBoundTypeTextRuntime } from '../type-text-runtime.ts';
+import { expectRefusesUnavailableExactOwnerFact } from './runtime-binding-conformance.ts';
 
 const appleDevice = {
   id: 'ios-simulator',
@@ -150,25 +151,9 @@ test('parses exactly as the retired leaf did: refs rejected, spaces joined, dela
 });
 
 test('rejects an unavailable exact-owner fact before binding, with the owner hint', async () => {
-  const harness = runtimeHarness(unavailable);
-
-  const resolved = await resolveBoundTypeTextRuntime({
+  await expectRefusesUnavailableExactOwnerFact({
+    command: 'type',
     device: appleDevice,
-    inspectFacts: harness.inspectFacts,
-    bindDevice: harness.bindDevice,
+    unavailable,
   });
-
-  expect(resolved).toEqual({
-    ok: false,
-    response: {
-      ok: false,
-      error: {
-        code: 'UNSUPPORTED_OPERATION',
-        message: 'type is not supported on this device',
-        hint: unavailable.hint,
-      },
-    },
-  });
-  expect(harness.inspectFacts).toHaveBeenCalledTimes(1);
-  expect(harness.bindDevice).not.toHaveBeenCalled();
 });

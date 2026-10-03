@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { runCmd } from '../src/utils/exec.ts';
+import { runCmd } from '@agent-device/host-kit/command';
 import { TEST_RUN_TMP_PREFIX, TEST_RUN_TMP_ROOT } from './check-tmpdir-leaks-model.ts';
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

@@ -4,12 +4,7 @@ import type {
   SnapshotNode,
   SnapshotState,
 } from '@agent-device/kernel/snapshot';
-import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
-import {
-  buildSnapshotNodeMap,
-  isNodeVisibleOnScreen,
-  isViewportRootNode,
-} from '@agent-device/contracts/snapshot';
+import { createSnapshotVisibility, isViewportRootNode } from '@agent-device/contracts/snapshot';
 
 const GEOMETRY_TOLERANCE_PX = 1;
 export type StableCaptureSignal = {
@@ -32,14 +27,8 @@ export function stableCaptureSignal(
 }
 
 function stableVisibleXCTestNodes(nodes: SnapshotNode[]): SnapshotNode[] {
-  const byIndex = buildSnapshotNodeMap(nodes);
-  const viewportRects = nodes.flatMap((node) =>
-    isViewportRootNode(node) && isPositiveFiniteRect(node.rect) ? [node.rect] : [],
-  );
-  return nodes.filter(
-    (node) =>
-      isViewportRootNode(node) || isNodeVisibleOnScreen(node, nodes, byIndex, viewportRects),
-  );
+  const visibility = createSnapshotVisibility(nodes);
+  return nodes.filter((node) => isViewportRootNode(node) || visibility.isVisibleOnScreen(node));
 }
 
 export function stableCaptureSignalsEqual(

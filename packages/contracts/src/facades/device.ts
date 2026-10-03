@@ -1,9 +1,5 @@
 export type { TriggerAppEventCommandResult } from '../app-events.ts';
-export {
-  DEFAULT_APPS_FILTER,
-  assertResolvedAppsFilter,
-  resolveAppsFilter,
-} from '../app-inventory.ts';
+export { assertResolvedAppsFilter, resolveAppsFilter } from '../app-inventory.ts';
 export type { AppsFilter } from '../app-inventory.ts';
 export type { AppStateCommandResult } from '../app-state.ts';
 export {
@@ -11,9 +7,11 @@ export {
   WEB_DESKTOP_DEVICE,
   countDeviceInventoryByGroup,
   filterDeviceInventoryProjection,
+  isDeviceClaimConflictReason,
   projectProviderDeviceInventoryRequest,
 } from '../device-inventory.ts';
 export type {
+  DeviceClaimConflictReason,
   DeviceInventoryGroup,
   DeviceInventoryGroupCounts,
   DeviceInventoryRequest,
@@ -24,17 +22,37 @@ export type {
   DeviceLease,
   LeaseLifecycleContext,
   LeaseLifecycleProvider,
+  ProviderAppCatalog,
+  ProviderAppCatalogHandler,
+  ProviderAppCatalogQuery,
   ProviderDeviceInventoryOutcome,
   ProviderDeviceInventorySource,
 } from '../device-provider.ts';
 export {
   DEVICE_ROTATIONS,
   DEVICE_ROTATION_SURFACE_INDEX,
+  FOLD_SCREEN_COORDINATE_SPACE,
+  MAX_FOLD_DURATION_MS,
+  MAX_FOLD_KEYFRAMES,
+  parseFoldInput,
+  parseFoldKeyframesJson,
+  FOLD_POSES,
+  FOLD_POSE_USAGE,
+  deviceRotationFromSurfaceIndex,
   deviceRotationOrientation,
   deviceRotationSurfaceDegrees,
+  foldPoseForHingeAngle,
+  isDeviceRotation,
   parseDeviceRotation,
+  parseFoldPose,
 } from '../device-rotation.ts';
-export type { DeviceRotation } from '../device-rotation.ts';
+export type {
+  DeviceRotation,
+  FoldPose,
+  FoldKeyframe,
+  FoldScreenCoordinateSpace,
+  SetFoldPoseInput,
+} from '../device-rotation.ts';
 export type { BootCommandResult, ShutdownCommandResult } from '../device.ts';
 export type {
   ProviderDeviceInstallOptions,

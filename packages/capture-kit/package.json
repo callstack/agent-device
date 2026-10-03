@@ -3,15 +3,314 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Private durable-capture mechanics shared by platform runtimes, providers, and daemon orchestration.",
+  "description": "Private host and durable-capture mechanics shared by platform runtimes, providers, and daemon orchestration: process execution, diagnostics, archives, PNG tooling, and request-scoped plumbing.",
   "dependencies": {
     "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*"
   },
   "exports": {
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./android-replacement-surface-occlusion": {
+      "types": "./src/snapshot/android-replacement-surface-occlusion.ts",
+      "default": "./src/snapshot/android-replacement-surface-occlusion.ts"
+    },
+    "./audio-probe-admission-ledger": {
+      "types": "./src/capture-admission/audio-probe-admission-ledger.ts",
+      "default": "./src/capture-admission/audio-probe-admission-ledger.ts"
+    },
+    "./audio-probe-recovery": {
+      "types": "./src/capture-admission/audio-probe-resource-recovery.ts",
+      "default": "./src/capture-admission/audio-probe-resource-recovery.ts"
+    },
+    "./audio-probe-resource-store": {
+      "types": "./src/capture-admission/audio-probe-resource-store.ts",
+      "default": "./src/capture-admission/audio-probe-resource-store.ts"
+    },
+    "./audio-probe-session-resource": {
+      "types": "./src/capture-admission/audio-probe-session-resource.ts",
+      "default": "./src/capture-admission/audio-probe-session-resource.ts"
+    },
+    "./durable-capture-admission-ledger": {
+      "types": "./src/capture-admission/durable-capture-admission-ledger.ts",
+      "default": "./src/capture-admission/durable-capture-admission-ledger.ts"
+    },
+    "./durable-capture-resource": {
+      "types": "./src/capture-admission/durable-capture-resource.ts",
+      "default": "./src/capture-admission/durable-capture-resource.ts"
+    },
+    "./durable-capture-runtime-recovery": {
+      "types": "./src/capture-admission/durable-capture-runtime-recovery.ts",
+      "default": "./src/capture-admission/durable-capture-runtime-recovery.ts"
+    },
+    "./observe-until": {
+      "types": "./src/observe-until.ts",
+      "default": "./src/observe-until.ts"
+    },
+    "./perf-capture-admission-ledger": {
+      "types": "./src/capture-admission/perf-capture-admission-ledger.ts",
+      "default": "./src/capture-admission/perf-capture-admission-ledger.ts"
+    },
+    "./perf-capture-recovery": {
+      "types": "./src/capture-admission/perf-capture-resource-recovery.ts",
+      "default": "./src/capture-admission/perf-capture-resource-recovery.ts"
+    },
+    "./perf-capture-resource-store": {
+      "types": "./src/capture-admission/perf-capture-resource-store.ts",
+      "default": "./src/capture-admission/perf-capture-resource-store.ts"
+    },
+    "./perf-capture-session-resource": {
+      "types": "./src/capture-admission/perf-capture-session-resource.ts",
+      "default": "./src/capture-admission/perf-capture-session-resource.ts"
+    },
+    "./perf-runtime-plan": {
+      "types": "./src/capture-admission/perf-runtime-plan.ts",
+      "default": "./src/capture-admission/perf-runtime-plan.ts"
+    },
+    "./screen-recording-admission-ledger": {
+      "types": "./src/capture-admission/screen-recording-admission-ledger.ts",
+      "default": "./src/capture-admission/screen-recording-admission-ledger.ts"
+    },
+    "./screen-recording-recovery": {
+      "types": "./src/capture-admission/screen-recording-resource-recovery.ts",
+      "default": "./src/capture-admission/screen-recording-resource-recovery.ts"
+    },
+    "./screen-recording-resource-store": {
+      "types": "./src/capture-admission/screen-recording-resource-store.ts",
+      "default": "./src/capture-admission/screen-recording-resource-store.ts"
+    },
+    "./screen-recording-session-resource": {
+      "types": "./src/capture-admission/screen-recording-session-resource.ts",
+      "default": "./src/capture-admission/screen-recording-session-resource.ts"
+    },
+    "./screen-recording-stop-recovery": {
+      "types": "./src/capture-admission/screen-recording-stop-recovery.ts",
+      "default": "./src/capture-admission/screen-recording-stop-recovery.ts"
+    },
+    "./durable-capture": {
+      "types": "./src/durable-capture/index.ts",
+      "default": "./src/durable-capture/index.ts"
+    },
+    "./durable-json": {
+      "types": "./src/durable-json.ts",
+      "default": "./src/durable-json.ts"
+    },
+    "./recording-stop-sequence": {
+      "types": "./src/recording/stop-sequence.ts",
+      "default": "./src/recording/stop-sequence.ts"
+    },
+    "./screen-recording-transport": {
+      "types": "./src/screen-recording-transport.ts",
+      "default": "./src/screen-recording-transport.ts"
+    },
+    "./ios-snapshot-acquisition": {
+      "types": "./src/ios-snapshot-acquisition.ts",
+      "default": "./src/ios-snapshot-acquisition.ts"
+    },
+    "./ios-snapshot-engine": {
+      "types": "./src/ios-snapshot-engine/index.ts",
+      "default": "./src/ios-snapshot-engine/index.ts"
+    },
+    "./ios-snapshot-tree": {
+      "types": "./src/ios-snapshot-engine/tree.ts",
+      "default": "./src/ios-snapshot-engine/tree.ts"
+    },
+    "./ios-snapshot-planning": {
+      "types": "./src/ios-snapshot-planning.ts",
+      "default": "./src/ios-snapshot-planning.ts"
+    },
+    "./ios-snapshot-runtime": {
+      "types": "./src/snapshot/ios-snapshot-runtime.ts",
+      "default": "./src/snapshot/ios-snapshot-runtime.ts"
+    },
+    "./mobile-snapshot-semantics": {
+      "types": "./src/mobile-snapshot-semantics.ts",
+      "default": "./src/mobile-snapshot-semantics.ts"
+    },
+    "./png": {
+      "types": "./src/png.ts",
+      "default": "./src/png.ts"
+    },
+    "./png-crop": {
+      "types": "./src/png-crop.ts",
+      "default": "./src/png-crop.ts"
+    },
+    "./png-resize": {
+      "types": "./src/png-resize.ts",
+      "default": "./src/png-resize.ts"
+    },
+    "./png-rgb-difference": {
+      "types": "./src/png-rgb-difference.ts",
+      "default": "./src/png-rgb-difference.ts"
+    },
+    "./png-size": {
+      "types": "./src/png-size.ts",
+      "default": "./src/png-size.ts"
+    },
+    "./png-worker-client": {
+      "types": "./src/png-worker-client.ts",
+      "default": "./src/png-worker-client.ts"
+    },
+    "./post-gesture-stability": {
+      "types": "./src/post-gesture-stability.ts",
+      "default": "./src/post-gesture-stability.ts"
+    },
+    "./quality-warnings": {
+      "types": "./src/snapshot/snapshot-presentation/quality-warnings.ts",
+      "default": "./src/snapshot/snapshot-presentation/quality-warnings.ts"
+    },
+    "./react-native-overlay": {
+      "types": "./src/react-native-overlay.ts",
+      "default": "./src/react-native-overlay.ts"
+    },
+    "./recording-artifact-fixtures": {
+      "types": "./src/recording/artifact.fixtures.ts",
+      "default": "./src/recording/artifact.fixtures.ts"
+    },
+    "./recording-contact-sheet": {
+      "types": "./src/recording/contact-sheet.ts",
+      "default": "./src/recording/contact-sheet.ts"
+    },
+    "./recording-facts": {
+      "types": "./src/recording/recording-facts.ts",
+      "default": "./src/recording/recording-facts.ts"
+    },
+    "./recording-mp4-fixtures": {
+      "types": "./src/recording/mp4.fixtures.ts",
+      "default": "./src/recording/mp4.fixtures.ts"
+    },
+    "./recording-mp4-duration": {
+      "types": "./src/recording/mp4-duration.ts",
+      "default": "./src/recording/mp4-duration.ts"
+    },
+    "./recording-output-path": {
+      "types": "./src/recording/output-path.ts",
+      "default": "./src/recording/output-path.ts"
+    },
+    "./recording-overlay": {
+      "types": "./src/recording/overlay.ts",
+      "default": "./src/recording/overlay.ts"
+    },
+    "./recording-telemetry": {
+      "types": "./src/recording/telemetry.ts",
+      "default": "./src/recording/telemetry.ts"
+    },
+    "./recording-video": {
+      "types": "./src/recording/video.ts",
+      "default": "./src/recording/video.ts"
+    },
+    "./repeated-nav-subtree": {
+      "types": "./src/snapshot/snapshot-presentation/repeated-nav-subtree.ts",
+      "default": "./src/snapshot/snapshot-presentation/repeated-nav-subtree.ts"
+    },
+    "./screenshot-density": {
+      "types": "./src/screenshot-density.ts",
+      "default": "./src/screenshot-density.ts"
+    },
+    "./screenshot-diff-pixels": {
+      "types": "./src/screenshot-diff-pixels.ts",
+      "default": "./src/screenshot-diff-pixels.ts"
+    },
+    "./screenshot-overlay": {
+      "types": "./src/screenshot-overlay.ts",
+      "default": "./src/screenshot-overlay.ts"
+    },
+    "./scroll-edge-state": {
+      "types": "./src/snapshot/scroll-edge-state.ts",
+      "default": "./src/snapshot/scroll-edge-state.ts"
+    },
+    "./snapshot-chrome": {
+      "types": "./src/snapshot-chrome.ts",
+      "default": "./src/snapshot-chrome.ts"
+    },
+    "./snapshot-desktop-projection": {
+      "types": "./src/snapshot-desktop-projection.ts",
+      "default": "./src/snapshot-desktop-projection.ts"
+    },
+    "./snapshot-desktop-surface": {
+      "types": "./src/snapshot/snapshot-desktop-surface.ts",
+      "default": "./src/snapshot/snapshot-desktop-surface.ts"
+    },
+    "./snapshot-diff": {
+      "types": "./src/snapshot/snapshot-diff.ts",
+      "default": "./src/snapshot/snapshot-diff.ts"
+    },
+    "./snapshot-evidence": {
+      "types": "./src/snapshot/snapshot-evidence.ts",
+      "default": "./src/snapshot/snapshot-evidence.ts"
+    },
+    "./snapshot-freshness": {
+      "types": "./src/snapshot/snapshot-freshness/index.ts",
+      "default": "./src/snapshot/snapshot-freshness/index.ts"
+    },
+    "./snapshot-label-dedup": {
+      "types": "./src/snapshot/snapshot-label-dedup.ts",
+      "default": "./src/snapshot/snapshot-label-dedup.ts"
+    },
+    "./snapshot-lines": {
+      "types": "./src/snapshot/snapshot-lines.ts",
+      "default": "./src/snapshot/snapshot-lines.ts"
+    },
+    "./snapshot-node-lookup": {
+      "types": "./src/snapshot-node-lookup.ts",
+      "default": "./src/snapshot-node-lookup.ts"
+    },
+    "./snapshot-occlusion": {
+      "types": "./src/snapshot-occlusion.ts",
+      "default": "./src/snapshot-occlusion.ts"
+    },
+    "./snapshot-presentation-android-helper": {
+      "types": "./src/snapshot/snapshot-presentation/android/helper.ts",
+      "default": "./src/snapshot/snapshot-presentation/android/helper.ts"
+    },
+    "./snapshot-presentation-ios-transitions-fixtures": {
+      "types": "./src/snapshot/snapshot-presentation/ios/transitions.fixtures.ts",
+      "default": "./src/snapshot/snapshot-presentation/ios/transitions.fixtures.ts"
+    },
+    "./snapshot-quality-backend-capabilities": {
+      "types": "./src/snapshot-quality-backend-capabilities.ts",
+      "default": "./src/snapshot-quality-backend-capabilities.ts"
+    },
+    "./snapshot-quality-verdict": {
+      "types": "./src/snapshot-quality-verdict.ts",
+      "default": "./src/snapshot-quality-verdict.ts"
+    },
+    "./snapshot-rect-projection": {
+      "types": "./src/snapshot-rect-projection.ts",
+      "default": "./src/snapshot-rect-projection.ts"
+    },
+    "./snapshot-state": {
+      "types": "./src/snapshot-state.ts",
+      "default": "./src/snapshot-state.ts"
+    },
+    "./snapshot-state-fixtures": {
+      "types": "./src/snapshot-state.fixtures.ts",
+      "default": "./src/snapshot-state.fixtures.ts"
+    },
+    "./snapshot-timeout-policy": {
+      "types": "./src/snapshot/snapshot-timeout-policy.ts",
+      "default": "./src/snapshot/snapshot-timeout-policy.ts"
+    },
+    "./snapshot-visibility": {
+      "types": "./src/snapshot/snapshot-visibility.ts",
+      "default": "./src/snapshot/snapshot-visibility.ts"
+    },
+    "./text-surface": {
+      "types": "./src/snapshot/snapshot-presentation/text-surface.ts",
+      "default": "./src/snapshot/snapshot-presentation/text-surface.ts"
+    },
+    "./touch-reference-frame": {
+      "types": "./src/snapshot/touch-reference-frame.ts",
+      "default": "./src/snapshot/touch-reference-frame.ts"
     }
+  },
+  "devDependencies": {
+    "@types/pngjs": "^6.0.5",
+    "fast-check": "^4.9.0",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0"
   }
 }

@@ -2,8 +2,8 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { parseArgs } from '../args.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { listCliCommandNames } from '../../../command-catalog.ts';
-import { getCliCommandSchema } from '../../../cli-schema/command-schema.ts';
+import { listCliCommandNames } from '@agent-device/command-registry/catalog';
+import { getCliCommandSchema } from '../../../commands/schema/command-schema.ts';
 
 test('parseArgs rejects test retries above the supported ceiling', () => {
   assert.throws(
@@ -29,6 +29,65 @@ test('parseArgs rejects invalid record --fps range', () => {
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
       error.message === 'Invalid fps: 0',
+  );
+});
+
+test('parseArgs refuses a record option the chosen action never reads', () => {
+  const cases: Array<[string[], string]> = [
+    [
+      ['record', 'start', './capture.mp4', '--out', './elsewhere.mp4'],
+      'record start does not read --out',
+    ],
+    [['record', 'stop', '--fps', '30'], 'record stop does not read --fps'],
+    [['record', 'stop', '--hide-touches'], 'record stop does not read --hide-touches'],
+    [
+      ['record', 'contact-sheet', './clip.mp4', '--fps', '30'],
+      'record contact-sheet does not read --fps',
+    ],
+  ];
+
+  for (const [argv, message] of cases) {
+    assert.throws(
+      () => parseArgs(argv, { strictFlags: true }),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        error.message.startsWith(message),
+      `expected ${argv.join(' ')} to be refused`,
+    );
+  }
+});
+
+test('parseArgs accepts the options each record action reads', () => {
+  const cases: string[][] = [
+    ['record', 'start', './capture.mp4', '--fps', '30', '--quality', 'high', '--hide-touches'],
+    ['record', 'stop'],
+    ['record', 'contact-sheet', './clip.mp4', '--out', './sheet.png'],
+  ];
+
+  for (const argv of cases) {
+    assert.doesNotThrow(() => parseArgs(argv, { strictFlags: true }), `expected ${argv.join(' ')}`);
+  }
+});
+
+test('parseArgs leaves an option every action reads to the command itself', () => {
+  // --json and --no-record are read whatever action follows the command name, so an action table that
+  // does not list them must not turn them into unread options.
+  for (const argv of [
+    ['record', 'stop', '--json'],
+    ['record', 'contact-sheet', './clip.mp4', '--no-record'],
+  ]) {
+    assert.doesNotThrow(() => parseArgs(argv, { strictFlags: true }), `expected ${argv.join(' ')}`);
+  }
+});
+
+test('parseArgs leaves a command without an action table to its own validation', () => {
+  // `perf` declares no action option table at all, and `record nonsense` names an action the record
+  // table never lists. Neither may be refused as an unread option here: the first is validated by its
+  // own command, and an action the table does not list belongs to the reader that owns the action list.
+  assert.doesNotThrow(() => parseArgs(['perf', 'start', './perf.json'], { strictFlags: true }));
+  assert.doesNotThrow(() =>
+    parseArgs(['record', 'nonsense', '--fps', '30'], { strictFlags: true }),
   );
 });
 

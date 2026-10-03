@@ -69,6 +69,18 @@ test('write() with no boundary set (ordinary open/close --save-script) serialize
   expect(parsed.actions[1]?.positionals).toEqual(['label="Save"']);
 });
 
+test('write() round-trips wait absent positionals without adding an annotation', () => {
+  const root = mkdtempForTestSync('agent-device-script-writer-wait-absent-');
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const session = makeAuthoringSession('default', {
+    actions: [action({ command: 'wait', positionals: ['absent', 'label="Removed"', '2500'] })],
+  });
+
+  const { script, parsed } = writeAndParse(writer, session);
+  expect(script).not.toContain('target-v1');
+  expect(parsed.actions[0]?.positionals).toEqual(['absent', 'label="Removed"', '2500']);
+});
+
 test('a boundary-sliced script still strips diagnostic snapshot actions', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-snapshot-strip-');
   const writer = new SessionScriptWriter(path.join(root, 'sessions'));

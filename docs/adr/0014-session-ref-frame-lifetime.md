@@ -17,8 +17,12 @@ ref-frame vocabulary is promoted into `CONTEXT.md`.
 
 - A session owns at most one **ref frame** — the authorization namespace for mutation refs (epoch
   exposed as `refsGeneration`, immutable source tree, `active`/`expired` state, `all` or bounded
-  issuance scope) — owned by `src/daemon/ref-frame.ts` and kept separate from the latest
-  operational observation (`session.snapshot`).
+  issuance scope) — kept separate from the latest operational observation (`session.snapshot`).
+  The frame is one value on `SessionState`, replaced whole by a transition and never edited in
+  place; its type is nominal (`#`-private fields), so no module outside
+  `src/daemon/ref-frame.ts` can construct a frame, edit one, or derive one from an existing
+  frame. What the type cannot judge is a whole frame moved unchanged — clearing the field, or
+  assigning another session's frame — which the field-owner gate still covers.
 - A complete snapshot activates an `all` frame; `find`, settled diffs, and replay divergence
   screens activate a bounded partial frame that supersedes the prior one; internal read-only
   captures never activate, reindex, or expire a frame.
@@ -218,9 +222,7 @@ This rule applies to every execution shape:
   the same idempotent seam before acting, even when invoked from apparent readiness work. If recovery
   mutates before a requested ref action dispatches, that ref action aborts with
   `ref_frame_expired`; it cannot continue against the recovered UI. Selector and coordinate actions
-  may re-resolve and continue under their existing policies; and
-- automatic no-change retries assert that the originating action already expired the frame before
-  any retry coordinate is sent.
+  may re-resolve and continue under their existing policies.
 
 The seam is deliberately inside leaf execution. Expiring at router entry would reject the ref needed
 by the current command, invalidate on ordinary validation failures, and mishandle multiplexed and
@@ -271,10 +273,13 @@ specialized route. The completeness gate covers every command projected to the d
 generic fallbacks, so a missing facet cannot hide an unclassified mutation. Mutations performed by
 unrelated external tools remain outside this session guarantee.
 
-This policy is not derived from Apple runner `readOnly`. Runner traits govern retry, liveness,
-readiness probes, and preflight skipping at a lower wire-command seam. `refFrameEffect` governs
-daemon session authorization and includes commands that never reach the Apple runner. Narrow
-consistency tests may cover direct mappings, but blanket parity would couple different concepts.
+This policy is not derived from the runner-side classification. Apple runner command traits govern
+retry eligibility, launch policy, and the recorded-failure conversion at a lower wire-command seam,
+while the TypeScript `readOnly` trait is itself consumed as several daemon decisions: read-only
+resend, session-invalidation skip, transport error classification, and readiness preflight.
+`refFrameEffect` governs daemon session authorization and includes commands that never reach the
+Apple runner. Narrow consistency tests may cover direct mappings, but blanket parity would couple
+different concepts.
 
 Frame admission and transitions are serialized by the existing per-session request lock. The frame
 is shared session state, not per-client or per-lease history. Generation pins make the rejected epoch
@@ -462,8 +467,9 @@ registry claims are necessary but do not substitute for this live evidence.
   single-current-frame contract.
 - **Add a per-ref historical ledger immediately:** rejected until evidence requires concurrent
   generation support; one bounded current frame plus issuance scope is sufficient.
-- **Derive the policy from runner read-only traits:** rejected because runner liveness and daemon ref
-  authorization classify different commands for different reasons.
+- **Derive the policy from the runner's command traits:** rejected because those traits classify a
+  wire command for what the runner may still do about its app, while daemon ref authorization
+  classifies a command for what it did to the frame.
 - **Add batch interpolation or an unsafe ref-stability override:** rejected as a new orchestration
   interface that bypasses the same safety rule.
 - **Force lifetime into ADR 0011's element path matrix:** rejected because ref lifetime spans commands,

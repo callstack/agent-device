@@ -562,7 +562,7 @@ violation before the production change is trusted.
 
 The audited seam tests are `packages/ad-script/src/internal/__tests__/script.test.ts`,
 `packages/ad-replay/src/internal/__tests__/plan-digest.test.ts`,
-`src/replay/__tests__/script-source-bundle.test.ts`, and
+`src/commands/replay/script-source-bundle.test.ts`, and
 `packages/maestro/src/internal/__tests__/replay-plan.test.ts`,
 `source-closure.test.ts`, `program-loader.test.ts`,
 `src/daemon/handlers/__tests__/session-replay-runtime.test.ts`. The planted-red checks below are

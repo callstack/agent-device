@@ -1,258 +1,55 @@
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
-import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
-import {
-  resolveIosSimulatorDeviceSetPath,
-  emitDiagnostic,
-  readProcessStartTime,
-  acquireProcessLock,
-  type ProcessLockOwner,
-} from './host.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { simulatorAddressFor } from './host.ts';
+import { memoizedRunnerXcodeVersion } from './runner-cache-metadata.ts';
 
-const XCTEST_DEVICE_SET_BASE_NAME = 'XCTestDevices';
-const XCTEST_DEVICE_SET_BACKUP_SUFFIX = '.agent-device-backup';
-const XCTEST_DEVICE_SET_LEGACY_BACKUP_PREFIX = '.agent-device-xctestdevices-backup-';
-const XCTEST_DEVICE_SET_LOCK_TIMEOUT_MS = 30_000;
-const XCTEST_DEVICE_SET_LOCK_POLL_MS = 100;
-const XCTEST_DEVICE_SET_LOCK_OWNER_GRACE_MS = 5_000;
-
-type XcodebuildSimulatorSetRedirectHandle = {
-  release: () => Promise<void>;
-};
-
-type XcodebuildSimulatorSetRedirectOptions = {
-  xctestDeviceSetPath?: string;
-  backupPath?: string;
-  lockDirPath?: string;
-  ownerPid?: number;
-  ownerStartTime?: string | null;
-  nowMs?: number;
-};
-
-export function resolveXcodebuildSimulatorDeviceSetPath(homeDir: string = os.homedir()): string {
-  return path.join(homeDir, 'Library', 'Developer', 'XCTestDevices');
+/** The scoped simulator set that holds this runner's simulator, or undefined for the default set. */
+export function runnerSimulatorSetPath(device: DeviceInfo): string | undefined {
+  return simulatorAddressFor(device).simulatorSetPath;
 }
 
-function resolveXcodebuildSimulatorDeviceSetLockPath(homeDir: string = os.homedir()): string {
-  return path.join(homeDir, '.agent-device', 'xctest-device-set.lock');
+/** Whether a runner started for one device serves the other: one udid in one simulator set. */
+export function isSameRunnerSimulator(runnerDevice: DeviceInfo, device: DeviceInfo): boolean {
+  const runner = simulatorAddressFor(runnerDevice);
+  const requested = simulatorAddressFor(device);
+  return runner.udid === requested.udid && runner.simulatorSetPath === requested.simulatorSetPath;
 }
 
-function resolveXcodebuildSimulatorDeviceSetBackupPath(
-  xctestDeviceSetPath: string = resolveXcodebuildSimulatorDeviceSetPath(),
-): string {
-  return `${xctestDeviceSetPath}${XCTEST_DEVICE_SET_BACKUP_SUFFIX}`;
+/**
+ * `-destination` for a runner xcodebuild phase. xcodebuild has no `--set` option: it resolves a
+ * simulator in a scoped set only through the `DVTSimulatorSetLocation` Xcode user default, which it
+ * accepts as an argument in the `-Key=value` form alone.
+ */
+export function xcodebuildDestinationArgs(device: DeviceInfo, destination: string): string[] {
+  const simulatorSetPath = runnerSimulatorSetPath(device);
+  return simulatorSetPath === undefined
+    ? ['-destination', destination]
+    : ['-destination', destination, `-DVTSimulatorSetLocation=${simulatorSetPath}`];
 }
 
-export async function acquireXcodebuildSimulatorSetRedirect(
+/** What a runner xcodebuild failure reports about the scoped set it resolved its destination in. */
+type RunnerSimulatorSetFailureDetails = { simulatorSetPath?: string; xcodeVersion?: string };
+
+/**
+ * The scoped set a runner xcodebuild phase resolved its destination in, with the selected Xcode when
+ * the runner cache decision already read it; empty for the default set.
+ */
+export function runnerSimulatorSetFailureDetails(
   device: DeviceInfo,
-  options: XcodebuildSimulatorSetRedirectOptions = {},
-): Promise<XcodebuildSimulatorSetRedirectHandle | null> {
-  if (!isIosFamily(device) || device.kind !== 'simulator') {
-    return null;
-  }
-  const simulatorSetPath = resolveIosSimulatorDeviceSetPath(device.simulatorSetPath);
-  if (!simulatorSetPath) {
-    return null;
-  }
-  const requestedSetPath = path.resolve(simulatorSetPath);
-  const xctestDeviceSetPath = path.resolve(
-    options.xctestDeviceSetPath ?? resolveXcodebuildSimulatorDeviceSetPath(),
-  );
-  const backupPath = path.resolve(
-    options.backupPath ?? resolveXcodebuildSimulatorDeviceSetBackupPath(xctestDeviceSetPath),
-  );
-  const lockDirPath = path.resolve(
-    options.lockDirPath ?? resolveXcodebuildSimulatorDeviceSetLockPath(),
-  );
-  const ownerStartTime = options.ownerStartTime ?? readProcessStartTime(process.pid);
-  const releaseLock = await acquireXcodebuildSimulatorSetLock({
-    lockDirPath,
-    owner: {
-      pid: options.ownerPid ?? process.pid,
-      startTime: ownerStartTime,
-      acquiredAtMs: options.nowMs ?? Date.now(),
-    },
-  });
-
-  try {
-    reconcileXcodebuildSimulatorSetRedirect({
-      xctestDeviceSetPath,
-      backupPath,
-    });
-    if (sameResolvedPath(requestedSetPath, xctestDeviceSetPath)) {
-      await releaseLock();
-      return null;
-    }
-
-    fs.mkdirSync(requestedSetPath, { recursive: true });
-    if (fs.existsSync(xctestDeviceSetPath)) {
-      fs.renameSync(xctestDeviceSetPath, backupPath);
-    }
-    installXcodebuildSimulatorSetSymlink({
-      requestedSetPath,
-      xctestDeviceSetPath,
-    });
-  } catch (error) {
-    reconcileXcodebuildSimulatorSetRedirect({
-      xctestDeviceSetPath,
-      backupPath,
-    });
-    await releaseLock();
-    throw new AppError('COMMAND_FAILED', 'Failed to redirect XCTest device set path', {
-      requestedSetPath,
-      xctestDeviceSetPath,
-      backupPath,
-      error: String(error),
-    });
-  }
-
-  let released = false;
-  return {
-    release: async () => {
-      if (released) {
-        return;
-      }
-      released = true;
-      try {
-        reconcileXcodebuildSimulatorSetRedirect({
-          xctestDeviceSetPath,
-          backupPath,
-        });
-      } finally {
-        await releaseLock();
-      }
-    },
-  };
+): RunnerSimulatorSetFailureDetails {
+  const simulatorSetPath = runnerSimulatorSetPath(device);
+  if (simulatorSetPath === undefined) return {};
+  const xcodeVersion = memoizedRunnerXcodeVersion(device);
+  return xcodeVersion === undefined ? { simulatorSetPath } : { simulatorSetPath, xcodeVersion };
 }
 
-// fallow-ignore-next-line complexity
-function reconcileXcodebuildSimulatorSetRedirect(paths: {
-  xctestDeviceSetPath: string;
-  backupPath: string;
-}): void {
-  const { xctestDeviceSetPath, backupPath } = paths;
-  const existingBackups = [backupPath, ...findLegacyXcodebuildSimulatorSetBackups(backupPath)];
-  const activeBackupPath = existingBackups.find((candidate) => fs.existsSync(candidate));
-  const xctestIsSymlink = isSymlink(xctestDeviceSetPath);
-
-  if (activeBackupPath) {
-    if (xctestIsSymlink) {
-      unlinkIfSymlink(xctestDeviceSetPath);
-    }
-    if (!fs.existsSync(xctestDeviceSetPath)) {
-      fs.mkdirSync(path.dirname(xctestDeviceSetPath), { recursive: true });
-      fs.renameSync(activeBackupPath, xctestDeviceSetPath);
-    } else if (!xctestIsSymlink) {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'ios_runner_xctest_device_set_restore_collision',
-        data: {
-          xctestDeviceSetPath,
-          activeBackupPath,
-        },
-      });
-      return;
-    } else if (activeBackupPath !== backupPath) {
-      fs.rmSync(activeBackupPath, { recursive: true, force: true });
-    } else {
-      fs.rmSync(backupPath, { recursive: true, force: true });
-    }
-    for (const candidate of existingBackups) {
-      if (candidate !== activeBackupPath && fs.existsSync(candidate)) {
-        fs.rmSync(candidate, { recursive: true, force: true });
-      }
-    }
-    return;
-  }
-
-  if (xctestIsSymlink) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'ios_runner_xctest_device_set_orphaned_symlink',
-      data: {
-        xctestDeviceSetPath,
-      },
-    });
-    unlinkIfSymlink(xctestDeviceSetPath);
-  }
-}
-
-function findLegacyXcodebuildSimulatorSetBackups(backupPath: string): string[] {
-  const parentDir = path.dirname(backupPath);
-  const backupBaseName = path.basename(backupPath).replace(XCTEST_DEVICE_SET_BACKUP_SUFFIX, '');
-  const legacyPrefix =
-    backupBaseName === XCTEST_DEVICE_SET_BASE_NAME
-      ? XCTEST_DEVICE_SET_LEGACY_BACKUP_PREFIX
-      : `${backupBaseName}${XCTEST_DEVICE_SET_LEGACY_BACKUP_PREFIX}`;
-  try {
-    return fs
-      .readdirSync(parentDir)
-      .filter((entry) => entry.startsWith(legacyPrefix))
-      .sort()
-      .map((entry) => path.join(parentDir, entry));
-  } catch {
-    return [];
-  }
-}
-
-function installXcodebuildSimulatorSetSymlink(paths: {
-  requestedSetPath: string;
-  xctestDeviceSetPath: string;
-}): void {
-  const { requestedSetPath, xctestDeviceSetPath } = paths;
-  const parentDir = path.dirname(xctestDeviceSetPath);
-  const tmpSymlinkPath = path.join(
-    parentDir,
-    `${XCTEST_DEVICE_SET_BASE_NAME}.agent-device-link-${process.pid}-${Date.now()}`,
-  );
-  fs.mkdirSync(parentDir, { recursive: true });
-  try {
-    fs.symlinkSync(requestedSetPath, tmpSymlinkPath, 'dir');
-    fs.renameSync(tmpSymlinkPath, xctestDeviceSetPath);
-  } catch (error) {
-    unlinkIfSymlink(tmpSymlinkPath);
-    throw error;
-  }
-}
-
-// lstat instead of existsSync: existsSync follows symlinks, so a dangling
-// symlink (target deleted) would read as absent and never get cleaned up.
-function isSymlink(targetPath: string): boolean {
-  return fs.lstatSync(targetPath, { throwIfNoEntry: false })?.isSymbolicLink() ?? false;
-}
-
-function unlinkIfSymlink(targetPath: string): void {
-  if (isSymlink(targetPath)) {
-    fs.unlinkSync(targetPath);
-  }
-}
-
-function sameResolvedPath(left: string, right: string): boolean {
-  if (path.resolve(left) === path.resolve(right)) {
-    return true;
-  }
-  try {
-    return fs.realpathSync.native(left) === fs.realpathSync.native(right);
-  } catch {
-    return false;
-  }
-}
-
-async function acquireXcodebuildSimulatorSetLock(params: {
-  lockDirPath: string;
-  owner: ProcessLockOwner;
-  timeoutMs?: number;
-  pollMs?: number;
-  description?: string;
-}): Promise<() => Promise<void>> {
-  return await acquireProcessLock({
-    lockDirPath: params.lockDirPath,
-    owner: params.owner,
-    timeoutMs: params.timeoutMs ?? XCTEST_DEVICE_SET_LOCK_TIMEOUT_MS,
-    pollMs: params.pollMs ?? XCTEST_DEVICE_SET_LOCK_POLL_MS,
-    ownerGraceMs: XCTEST_DEVICE_SET_LOCK_OWNER_GRACE_MS,
-    description: params.description ?? 'XCTest device set lock',
-  });
+/**
+ * Names the simulator and the scoped set behind a `simulator_set_destination_not_found`, and the Xcode
+ * when this process has read its version.
+ */
+export function simulatorSetDestinationNotFoundMessage(
+  message: string,
+  device: DeviceInfo,
+  details: RunnerSimulatorSetFailureDetails,
+): string {
+  return `${message}: xcodebuild found no simulator ${device.id} in simulator set ${details.simulatorSetPath}${details.xcodeVersion === undefined ? '' : ` with Xcode ${details.xcodeVersion}`}`;
 }

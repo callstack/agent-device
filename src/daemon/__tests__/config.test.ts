@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { resolveDaemonPaths } from '../config.ts';
+import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 test('resolveDaemonPaths keeps explicit state directories authoritative', () => {
@@ -10,6 +10,7 @@ test('resolveDaemonPaths keeps explicit state directories authoritative', () => 
   try {
     const paths = resolveDaemonPaths('~/custom-daemon', { env: { HOME: home } });
     assert.equal(paths.baseDir, path.join(home, 'custom-daemon'));
+    assert.equal(paths.allocationsDir, path.join(home, 'custom-daemon', 'allocations'));
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }

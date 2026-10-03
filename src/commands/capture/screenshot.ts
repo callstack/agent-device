@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { CaptureScreenshotOptions } from '@agent-device/contracts/client';
 import { SESSION_SURFACES } from '@agent-device/contracts/session';
 import {
@@ -18,7 +18,6 @@ import {
   retiredField,
   stringField,
 } from '../command-input.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import { commonInputFromFlags, optionalString, request } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
@@ -34,6 +33,9 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
   screenshotCommandDescription,
   {
     path: stringField('Output path.'),
+    cropOn: stringField(
+      'Selector expression; the capture is cropped to the frame the selector resolves on the same screen.',
+    ),
     overlayRefs: booleanField(),
     pixelDensity: integerField('Output screenshot pixel density in pixels per logical point.', {
       min: 1,
@@ -45,11 +47,6 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
     normalizeStatusBar: booleanField(),
     surface: enumField(SESSION_SURFACES),
   },
-);
-
-const screenshotCommandDefinition = defineExecutableCommand(
-  screenshotCommandMetadata,
-  (client, input) => client.capture.screenshot(input),
 );
 
 const screenshotCliSchema = {
@@ -77,10 +74,10 @@ export const screenshotCommandFacet = defineCommandFacet({
   text: {
     summary: 'Capture a screenshot',
     cliDetail:
-      'Web defaults to the viewport; use --fullscreen, --full, or -f for the entire page. iOS simulators default to 1x logical-point output; use --pixel-density to request a different screenshot density. macOS app sessions default to the app window; use --fullscreen for full desktop, --scale to downscale, --overlay-refs to annotate current refs, --normalize-status-bar for deterministic iOS simulator chrome, or --no-stabilize for low-latency Android capture loops.',
+      'Web defaults to the viewport; use --fullscreen, --full, or -f for the entire page. iOS simulators default to 1x logical-point output; use --pixel-density to request a different screenshot density. macOS app sessions default to the app window; use --fullscreen for full desktop, --scale to downscale, --crop-on <selector> to crop the capture to the frame the selector resolves on the same screen (currently iOS simulators and Android emulators), --overlay-refs to annotate current refs, --normalize-status-bar for deterministic iOS simulator chrome, or --no-stabilize for low-latency Android capture loops. On macOS, any --surface other than app (desktop, menubar, frontmost-app) always captures the main display and refuses an explicit --fullscreen. On single-display iOS simulators and Android devices, the result reports displayRotation, the rotation the display rendered the capture in, when the device returns a reading in time; otherwise the field is absent.',
   },
   metadata: screenshotCommandMetadata,
-  definition: screenshotCommandDefinition,
+  run: (client, input) => client.capture.screenshot(input),
   cliSchema: screenshotCliSchema,
   cliReader: screenshotCliReader,
   daemonWriter: screenshotDaemonWriter,

@@ -7,7 +7,6 @@ import {
   hoverCommand,
   longPressCommand,
   pressCommand,
-  scrollCommand,
   type ClickCommandOptions,
   type FillCommandOptions,
   type FillCommandResult,
@@ -20,17 +19,12 @@ import {
   type LongPressCommandResult,
   type PressCommandOptions,
   type PressCommandResult,
-  type ScrollCommandOptions,
-  type ScrollCommandResult,
 } from './interactions.ts';
 import {
   findCommand,
   getAttrsCommand,
   getCommand,
   getTextCommand,
-  isCommand,
-  isHiddenCommand,
-  isVisibleCommand,
   waitCommand,
   waitForTextCommand,
   type ElementTarget,
@@ -40,21 +34,25 @@ import {
   type GetCommandOptions,
   type GetCommandResult,
   type GetTextCommandOptions,
-  type IsCommandOptions,
-  type IsCommandResult,
-  type IsSelectorCommandOptions,
-  type SelectorTarget,
   type WaitCommandOptions,
   type WaitCommandResult,
   type WaitForTextCommandOptions,
 } from './selector-read.ts';
+import {
+  isCommand,
+  isHiddenCommand,
+  isVisibleCommand,
+  type IsCommandOptions,
+  type IsCommandResult,
+  type IsSelectorCommandOptions,
+} from './selector-is.ts';
 import {
   gestureCommand,
   type GestureCommandOptions,
   type GestureCommandResult,
 } from './gesture-command.ts';
 import { settleObservationCommand, type SettleObservationCommandOptions } from './settle.ts';
-import type { SettleObservation } from '@agent-device/contracts/interaction';
+import type { SelectorTarget, SettleObservation } from '@agent-device/contracts/interaction';
 
 export type SelectorCommands = {
   find: RuntimeCommand<FindReadCommandOptions, FindReadCommandResult>;
@@ -78,7 +76,6 @@ export type InteractionCommands = {
   focus: RuntimeCommand<FocusCommandOptions, FocusCommandResult>;
   longPress: RuntimeCommand<LongPressCommandOptions, LongPressCommandResult>;
   hover: RuntimeCommand<HoverCommandOptions, HoverCommandResult>;
-  scroll: RuntimeCommand<ScrollCommandOptions, ScrollCommandResult>;
   gesture: RuntimeCommand<GestureCommandOptions, GestureCommandResult>;
   /**
    * #1638: the observation half of `--settle` for mutations that resolve no
@@ -142,7 +139,6 @@ export type BoundInteractionCommands = {
     target: InteractionTarget,
     options?: Omit<HoverCommandOptions, 'target'>,
   ) => Promise<HoverCommandResult>;
-  scroll: BoundRuntimeCommand<ScrollCommandOptions, ScrollCommandResult>;
   gesture: BoundRuntimeCommand<GestureCommandOptions, GestureCommandResult>;
   settleObservation: BoundRuntimeCommand<SettleObservationCommandOptions, SettleObservation>;
 };
@@ -166,7 +162,6 @@ export const interactionCommands: InteractionCommands = {
   focus: focusCommand,
   longPress: longPressCommand,
   hover: hoverCommand,
-  scroll: scrollCommand,
   gesture: gestureCommand,
   settleObservation: settleObservationCommand,
 };
@@ -197,7 +192,6 @@ export function bindInteractionCommands(runtime: AgentDeviceRuntime): BoundInter
     longPress: (target, options = {}) =>
       interactionCommands.longPress(runtime, { ...options, target }),
     hover: (target, options = {}) => interactionCommands.hover(runtime, { ...options, target }),
-    scroll: (options) => interactionCommands.scroll(runtime, options),
     gesture: (options) => interactionCommands.gesture(runtime, options),
     settleObservation: (options) => interactionCommands.settleObservation(runtime, options),
   };

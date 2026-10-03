@@ -4,6 +4,7 @@ import {
   isAndroidEmulatorSerial,
   normalizeAndroidDeviceName,
   parseAndroidAvdList,
+  parseAndroidDeviceDescription,
   parseAndroidDeviceEntries,
   parseAndroidEmulatorAvdNameOutput,
   parseAndroidFeatureListForTv,
@@ -32,4 +33,13 @@ test('Android inventory parsers preserve device, AVD-name, and TV detection sema
   assert.equal(parseAndroidTargetFromCharacteristics('tv,nosdcard'), 'tv');
   assert.equal(parseAndroidTargetFromCharacteristics('phone,tablet'), null);
   assert.equal(parseAndroidFeatureListForTv('feature:android.hardware.type.television'), true);
+});
+
+test('Android description parser reads the model and OS version lines and skips unset props', () => {
+  assert.deepEqual(parseAndroidDeviceDescription('sdk_gphone16k_arm64\r\n17\r\n'), {
+    model: 'sdk_gphone16k_arm64',
+    osVersion: '17',
+  });
+  assert.deepEqual(parseAndroidDeviceDescription('\n16\n'), { osVersion: '16' });
+  assert.deepEqual(parseAndroidDeviceDescription(''), {});
 });

@@ -1,11 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  buildSimctlListArgs,
-  listAppleSimulators,
-  parseSimctlAppleDevices,
-} from './simulator-inventory.ts';
+import { listAppleSimulators, parseSimctlAppleDevices } from './simulator-inventory.ts';
 import { commandResult, createInventoryHost, inventoryScope } from './inventory.fixtures.ts';
 
 const simulatorPayload = {
@@ -68,6 +64,64 @@ test('simctl parser keeps available supported runtimes and their target semantic
   ]);
 });
 
+test('simctl parser classifies visionOS from the runtime when the name is not descriptive', () => {
+  const [device] = parseSimctlAppleDevices(
+    {
+      devices: {
+        'com.apple.CoreSimulator.SimRuntime.xrOS-26-2': [
+          {
+            name: 'test-1',
+            udid: 'vision-1',
+            state: 'Shutdown',
+            isAvailable: true,
+            deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.Apple-Vision-Pro-4K',
+          },
+        ],
+      },
+    },
+    undefined,
+  );
+  assert.equal(device?.target, 'mobile');
+  assert.equal(device?.appleOs, 'visionos');
+});
+
+test('simctl parser describes simulators from the listed device types and runtimes', () => {
+  const [renamed, unknownType] = parseSimctlAppleDevices(
+    {
+      devicetypes: [
+        {
+          identifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro',
+          name: 'iPhone 18 Pro',
+        },
+      ],
+      runtimes: [{ identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-27-0', version: '27.0' }],
+      devices: {
+        'com.apple.CoreSimulator.SimRuntime.iOS-27-0': [
+          {
+            name: 'bsky-e2e',
+            udid: '6603BA4F-E38F-46BA-990E-02C685BA5E6E',
+            state: 'Shutdown',
+            isAvailable: true,
+            deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro',
+          },
+          {
+            name: 'Retired type',
+            udid: 'retired-1',
+            state: 'Shutdown',
+            isAvailable: true,
+            deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-X',
+          },
+        ],
+      },
+    },
+    undefined,
+  );
+  assert.equal(renamed?.model, 'iPhone 18 Pro');
+  assert.equal(renamed?.osVersion, '27.0');
+  assert.equal(unknownType?.model, undefined);
+  assert.equal(unknownType?.osVersion, '27.0');
+});
+
 test('simulator inventory scopes bounded simctl and reports fresh booted observations', async () => {
   const calls: Array<{ tool: string; args: readonly string[]; timeoutMs?: number }> = [];
   const observed: string[] = [];
@@ -88,7 +142,7 @@ test('simulator inventory scopes bounded simctl and reports fresh booted observa
   assert.deepEqual(calls, [
     {
       tool: 'simctl',
-      args: ['--set', '/tmp/custom-set', 'list', 'devices', '-j'],
+      args: ['--set', '/tmp/custom-set', 'list', '-j'],
       timeoutMs: 3_000,
     },
   ]);
@@ -97,7 +151,6 @@ test('simulator inventory scopes bounded simctl and reports fresh booted observa
     ['iphone-1', 'tv-1'],
   );
   assert.deepEqual(observed, ['iphone-1']);
-  assert.deepEqual(buildSimctlListArgs(undefined), ['list', 'devices', '-j']);
 });
 
 test('simulator inventory classifies malformed native output as a command failure', async () => {

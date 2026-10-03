@@ -1,13 +1,19 @@
-import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
+import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
+import type { CommandResultMap } from '@agent-device/command-registry/command-result';
+import { messageOutput } from '../output-common.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
+import type { JsonSchema } from '../command-contract.ts';
 import {
   booleanField,
   booleanSchema,
   integerField,
   jsonSchemaField,
+  looseObjectSchema,
+  numberSchema,
+  objectSchema,
   requiredField,
   stringArrayField,
+  stringArraySchema,
   stringField,
   stringSchema,
 } from '../command-input.ts';
@@ -19,15 +25,15 @@ import {
   requiredString,
 } from '../cli-grammar/common.ts';
 import type { AsyncDaemonWriter, CliReader, CommandInput } from '../cli-grammar/types.ts';
-import { METRO_RELOAD_FLAGS, REPLAY_FLAGS } from '../cli-grammar/flag-groups.ts';
+import { METRO_RELOAD_FLAGS, REPLAY_FLAGS } from '@agent-device/command-registry/flag-groups';
 import { withCommandRuntimeHints } from '../runtime-hints.ts';
 import {
   collectReplayShellEnv,
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
 } from '@agent-device/ad-script';
-import { loadReplayScriptSourceBundle } from '../../replay/script-source-bundle.ts';
-import { discoverReplaySourcePaths } from '../../replay/source-discovery.ts';
+import { loadReplayScriptSourceBundle } from './script-source-bundle.ts';
+import { discoverReplaySourcePaths } from './source-discovery.ts';
 
 const REPLAY_COMMAND_NAME = 'replay';
 const TEST_COMMAND_NAME = 'test';
@@ -95,17 +101,57 @@ export const testCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-export const replayCommandDefinition = defineExecutableCommand(
-  replayCommandMetadata,
-  (client, input) => client.replay.run(withCommandRuntimeHints(input)),
-);
-
-export const testCommandDefinition = defineExecutableCommand(testCommandMetadata, (client, input) =>
-  client.replay.test(withCommandRuntimeHints(input)),
-);
+/**
+ * This family's advertised MCP `outputSchema`s — `ReplayCommandResult` and `ReplaySuiteResult`
+ * (`packages/contracts/src/replay.ts`) — keyed by daemon command name and projected into the
+ * command map by `src/mcp/command-output-schemas.ts`. Non-strict like every other entry: no
+ * `additionalProperties: false`, so additive response fields such as `cost` keep validating.
+ */
+export const REPLAY_COMMAND_OUTPUT_SCHEMAS = {
+  replay: objectSchema(
+    {
+      replayed: numberSchema(),
+      healed: numberSchema(),
+      session: stringSchema(),
+      sessionActive: booleanSchema(
+        'True iff the session is still active — the script had no terminal close.',
+      ),
+      artifactPaths: stringArraySchema(),
+      snapshotDiagnostics: looseObjectSchema(),
+      message: stringSchema(),
+    },
+    ['replayed', 'healed', 'session', 'sessionActive', 'artifactPaths', 'message'],
+  ),
+  test: objectSchema(
+    {
+      total: numberSchema(),
+      executed: numberSchema(),
+      passed: numberSchema(),
+      failed: numberSchema(),
+      skipped: numberSchema(),
+      notRun: numberSchema(),
+      durationMs: numberSchema(),
+      failures: { type: 'array', items: looseObjectSchema() },
+      tests: { type: 'array', items: looseObjectSchema() },
+      snapshotDiagnostics: looseObjectSchema(),
+    },
+    [
+      'total',
+      'executed',
+      'passed',
+      'failed',
+      'skipped',
+      'notRun',
+      'durationMs',
+      'failures',
+      'tests',
+    ],
+  ),
+} satisfies Pick<Record<keyof CommandResultMap, JsonSchema>, 'replay' | 'test'>;
 
 const replayCliSchema = {
   usageOverride: 'replay <path> | replay export <file.ad> [--out <path>]',
+  usageFlags: [],
   positionalArgs: ['path'],
   allowsExtraPositionals: true,
   allowedFlags: [
@@ -131,6 +177,7 @@ const replayCliSchema = {
 
 const testCliSchema = {
   usageOverride: 'test <path-or-glob>...',
+  usageFlags: [],
   listUsageOverride: 'test <path-or-glob>...',
   positionalArgs: ['pathOrGlob'],
   allowsExtraPositionals: true,
@@ -235,27 +282,33 @@ export const testDaemonWriter: AsyncDaemonWriter = async (input) => {
   });
 };
 
-const replayCommandFacet = defineCommandFacet({
+export const replayCommandFacet = defineCommandFacet({
   name: REPLAY_COMMAND_NAME,
   text: {
     summary: 'Replay a recorded session or Maestro flow',
     cliDetail:
-      'For Maestro YAML compatibility flows, use replay <flow.yaml> --maestro and keep the target binding such as --platform ios on the replay command. A script with no terminal close leaves its session (and daemon) running until you close it or it idle-reaps — no different from a session opened interactively. For native .ad scripts, --keep-session suppresses exactly an authored terminal close so you can continue interactively.',
+      'For Maestro YAML compatibility flows, use replay <flow.yaml> --maestro and keep the target binding such as --platform ios on the replay command. A script with no terminal close leaves its session (and daemon) running until you close it or it idle-reaps — no different from a session opened interactively. For native .ad scripts, --keep-session suppresses exactly an authored terminal close so you can continue interactively. replay export <file.ad> converts compatible actions to Maestro YAML locally, including app switches with explicit launchApp.appId targets, deep links (including tel: and mailto:) as openLink, and home as pressKey: Home.',
   },
   metadata: replayCommandMetadata,
-  definition: replayCommandDefinition,
+  run: (client, input) => client.replay.run(withCommandRuntimeHints(input)),
   cliSchema: replayCliSchema,
   cliReader: replayCliReader,
   daemonWriter: replayDaemonWriter,
+  // Replay owns a composable warnings channel (`optional` step skips, capture degradations);
+  // a run that reports success while warnings say otherwise must not render as a bare
+  // success line (#2560).
+  cliOutputFormatter: messageOutput,
 });
 
-const testCommandFacet = defineCommandFacet({
+export const testCommandFacet = defineCommandFacet({
   name: TEST_COMMAND_NAME,
   text: {
     summary: 'Run replay test suites',
+    cliDetail:
+      "Relative globs are expanded on the caller from its working directory, whose name is treated literally. Quote glob inputs to defer expansion to test. Copied diagnostic artifacts receive numbered filenames when needed to preserve other artifacts, replay sources, timing traces, and attempt manifests. JUnit reports (--reporter junit:<path>) replace characters forbidden by XML 1.0 with U+FFFD and preserve legal Unicode and whitespace. JSON and other reporters retain the original suite values. Custom reporter getExitCode hooks must return an integer from 0 to 255 or undefined; the highest valid code wins and cannot lower a failing suite's exit code.",
   },
   metadata: testCommandMetadata,
-  definition: testCommandDefinition,
+  run: (client, input) => client.replay.test(withCommandRuntimeHints(input)),
   cliSchema: testCliSchema,
   cliReader: testCliReader,
   daemonWriter: testDaemonWriter,

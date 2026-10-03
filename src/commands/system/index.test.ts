@@ -1,25 +1,24 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import type {
+  ActionButtonCommandOptions,
   AgentDeviceCommandClient,
   AppSwitcherCommandOptions,
   BackCommandOptions,
+  FoldCommandOptions,
+  HomeCommandOptions,
   OrientationCommandOptions,
   TvRemoteCommandOptions,
 } from '../../client/client-types.ts';
-import type { CommandResult } from '../../core/command-descriptor/command-result.ts';
+import type { CommandResult } from '@agent-device/command-registry/command-result';
 import { readInputFromCli } from '../cli-grammar/registry.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import {
-  appStateCliReader,
-  appStateDaemonWriter,
-  appSwitcherCliReader,
-  appSwitcherDaemonWriter,
   backCliReader,
   backDaemonWriter,
   clipboardCliReader,
   clipboardDaemonWriter,
-  homeCliReader,
-  homeDaemonWriter,
+  foldCliReader,
+  foldDaemonWriter,
   keyboardCliReader,
   keyboardDaemonWriter,
   orientationCliReader,
@@ -44,65 +43,47 @@ function expectInvalidArgs(fn: () => unknown, messageFragment: string) {
 }
 
 describe('system command interface', () => {
-  test('navigation executable contracts project the public client signatures', () => {
+  test('navigation commands declare the public client signatures', () => {
     expectTypeOf<AgentDeviceCommandClient['back']>().toEqualTypeOf<
       (options?: BackCommandOptions) => Promise<CommandResult<'back'>>
+    >();
+    expectTypeOf<AgentDeviceCommandClient['home']>().toEqualTypeOf<
+      (options?: HomeCommandOptions) => Promise<CommandResult<'home'>>
     >();
     expectTypeOf<AgentDeviceCommandClient['orientation']>().toEqualTypeOf<
       (options: OrientationCommandOptions) => Promise<CommandResult<'orientation'>>
     >();
+    expectTypeOf<AgentDeviceCommandClient['fold']>().toEqualTypeOf<
+      (options: FoldCommandOptions) => Promise<CommandResult<'fold'>>
+    >();
     expectTypeOf<AgentDeviceCommandClient['appSwitcher']>().toEqualTypeOf<
       (options?: AppSwitcherCommandOptions) => Promise<CommandResult<'app-switcher'>>
+    >();
+    expectTypeOf<AgentDeviceCommandClient['actionButton']>().toEqualTypeOf<
+      (options?: ActionButtonCommandOptions) => Promise<CommandResult<'action-button'>>
     >();
     expectTypeOf<AgentDeviceCommandClient['tvRemote']>().toEqualTypeOf<
       (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>
     >();
   });
 
-  test('system command family projects Node client command methods', () => {
-    expect(systemCommandFamily.clientCommandMethods).toEqual({
-      appState: 'appstate',
-      back: 'back',
-      home: 'home',
-      orientation: 'orientation',
-      appSwitcher: 'app-switcher',
-      keyboard: 'keyboard',
-      clipboard: 'clipboard',
-      tvRemote: 'tv-remote',
-    });
-  });
-
-  test('navigation executable contracts own their MCP output schemas', () => {
-    expect(
-      Object.fromEntries(
-        systemCommandFamily.definitions.flatMap((definition) =>
-          'projection' in definition ? [[definition.name, definition.projection.clientMethod]] : [],
-        ),
-      ),
-    ).toEqual({
-      back: 'back',
-      home: 'home',
-      orientation: 'orientation',
-      'app-switcher': 'appSwitcher',
-      'tv-remote': 'tvRemote',
-    });
-  });
+  const parameterless = ['appstate', 'home', 'app-switcher', 'action-button'] as const;
 
   test('parameterless readers project common selection flags through', () => {
-    for (const reader of [appStateCliReader, homeCliReader, appSwitcherCliReader]) {
-      expect(reader([], flags({ platform: 'ios' }))).toEqual({
+    for (const command of parameterless) {
+      expect(systemCommandFamily.cliReaders[command]([], flags({ platform: 'ios' }))).toEqual({
         platform: 'ios',
       });
     }
   });
 
   test('parameterless daemon writers emit command names with no positionals', () => {
-    expect(appStateDaemonWriter({})).toMatchObject({ command: 'appstate', positionals: [] });
-    expect(homeDaemonWriter({})).toMatchObject({ command: 'home', positionals: [] });
-    expect(appSwitcherDaemonWriter({})).toMatchObject({
-      command: 'app-switcher',
-      positionals: [],
-    });
+    for (const command of parameterless) {
+      expect(systemCommandFamily.daemonWriters?.[command]?.({})).toMatchObject({
+        command,
+        positionals: [],
+      });
+    }
   });
 
   test('back reader and writer normalize back mode', () => {
@@ -183,6 +164,24 @@ describe('system command interface', () => {
       'orientation requires an orientation',
     );
     expectInvalidArgs(() => orientationDaemonWriter({}), 'orientation requires orientation');
+  });
+
+  test('fold reader and writer normalize the pose', () => {
+    expect(foldCliReader(['book'], flags())).toMatchObject({ pose: 'half-open' });
+    expect(foldCliReader(['Unfolded'], flags({ platform: 'ios' }))).toMatchObject({
+      platform: 'ios',
+      pose: 'open',
+    });
+    expect(foldDaemonWriter({ pose: 'closed' })).toMatchObject({
+      command: 'fold',
+      positionals: ['closed'],
+    });
+  });
+
+  test('fold reader and writer reject a missing or unknown pose', () => {
+    expectInvalidArgs(() => foldCliReader([], flags()), 'fold requires a pose');
+    expectInvalidArgs(() => foldCliReader(['sideways'], flags()), 'Invalid fold pose');
+    expectInvalidArgs(() => foldDaemonWriter({}), 'fold requires a pose');
   });
 
   test('keyboard reader maps aliases and validates arguments', () => {
@@ -270,4 +269,19 @@ describe('system command interface', () => {
     );
     expectInvalidArgs(() => tvRemoteCliReader(['blue'], flags()), 'button must be one of');
   });
+});
+
+test('fold keyframes survive CLI and daemon projection without a preset', () => {
+  const keyframes = [
+    { atMs: 0, angle: 0 },
+    { atMs: 5000, angle: 180 },
+  ];
+  const input = foldCliReader([], flags({ keyframes: JSON.stringify(keyframes) }));
+  expect(input).toMatchObject({ keyframes });
+  expect(foldDaemonWriter(input)).toMatchObject({
+    command: 'fold',
+    positionals: [],
+    options: { keyframes: JSON.stringify(keyframes) },
+  });
+  expect(() => foldCliReader(['open'], flags({ keyframes: JSON.stringify(keyframes) }))).toThrow();
 });

@@ -2,7 +2,7 @@ import XCTest
 
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
-  /// A hand-driven clock for the commit waits. Time moves only where the wait sleeps, which is
+  /// A hand-driven clock for the commit wait. Time moves only where the wait sleeps, which is
   /// what makes "the burst kept landing" and "the pipeline froze" expressible as two sequences of
   /// the same length rather than as wall-clock luck — and a test that never advances it cannot
   /// expire any budget, so only a test asking about time names `stallBudget`/`ceiling`.
@@ -29,7 +29,7 @@ extension RunnerTests {
     let expected = "hardware"
     let clock = CommitWaitClock()
     var landed = 0
-    let outcome = Self.awaitSynthesizedCommitOutcome(
+    let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: expected,
       placeholder: nil,
       stallBudget: 3,
@@ -55,7 +55,7 @@ extension RunnerTests {
     let clock = CommitWaitClock()
     clock.advance(60)
     var polls = 0
-    let outcome = Self.awaitSynthesizedCommitOutcome(
+    let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: "hardware",
       placeholder: nil,
       stallBudget: 3,
@@ -76,7 +76,7 @@ extension RunnerTests {
   // fails today starts passing merely by waiting longer.
   func testCommitWaitCondemnsAFrozenPipelineAtTheStallBudget() {
     let clock = CommitWaitClock()
-    let outcome = Self.awaitSynthesizedCommitOutcome(
+    let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: "hardware",
       placeholder: nil,
       stallBudget: 3,
@@ -89,32 +89,9 @@ extension RunnerTests {
     XCTAssertEqual(clock.elapsed, 3, "a frozen prefix must give up on the stall budget, not the ceiling")
   }
 
-  // Progress buys time, but not without bound: one character per stall window would otherwise
-  // hold the command open until the daemon's own 45s budget killed the request. Here every poll
-  // lands a character, so only the ceiling can stop it.
-  func testCommitWaitCeilingStopsAnIndefinitelyThrottledPipeline() {
-    let clock = CommitWaitClock()
-    var landed = 0
-    let outcome = Self.awaitSynthesizedCommitOutcome(
-      expectedText: String(repeating: "a", count: 100),
-      placeholder: nil,
-      stallBudget: 3,
-      ceiling: 10,
-      now: clock.read,
-      observe: { String(repeating: "a", count: landed) },
-      waitForNextObservation: {
-        landed += 1
-        clock.advance(2)
-      }
-    )
-    XCTAssertEqual(outcome, .notObserved)
-    XCTAssertEqual(clock.elapsed, 10, "the ceiling is absolute, however long characters keep arriving")
-  }
-
   // Only forward movement is evidence the burst is still landing. A field the app clears
   // mid-flight would otherwise reset the stall clock on every poll and hold every wedged wait
-  // open to the ceiling. Replacement mode, because that is where a non-matching value keeps
-  // polling rather than settling as `.diverged`.
+  // open to the ceiling.
   func testCommitWaitTreatsARetreatingValueAsNoProgress() {
     let clock = CommitWaitClock()
     let observations = ["ada@", "", "ada@", "", "ada@"]
@@ -135,11 +112,11 @@ extension RunnerTests {
     XCTAssertEqual(clock.elapsed, 3, "churn between two values is not progress and must not buy time")
   }
 
-  // The replacement route earns time the same way, and is bounded the same way — it is the route
-  // `fill` takes when the XCTest channel is penalized, i.e. the one that runs on a loaded host.
-  // Here every poll lands one more character of a value that never completes, so the wait can only
-  // end at the ceiling: it proves the growing prefix carried it past the 3s stall budget (a flat
-  // deadline stops at t=3) and that the ceiling still stops it.
+  // Progress buys time, but not without bound: one character per stall window would otherwise
+  // hold the command open until the daemon's own 45s budget killed the request. Here every poll
+  // lands one more character of a value that never completes, so the wait can only end at the
+  // ceiling: it proves the growing prefix carried it past the 3s stall budget (a flat deadline
+  // stops at t=3) and that the ceiling still stops it.
   func testReplacementCommitWaitOutlivesTheFlatDeadlineThenStopsAtTheCeiling() {
     let expected = "ada@example.com"
     let clock = CommitWaitClock()

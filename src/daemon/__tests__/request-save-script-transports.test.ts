@@ -18,12 +18,13 @@ import net from 'node:net';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '../../replay/script-source-bundle.ts';
+import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '@agent-device/replay-port/script-source';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { SessionStore } from '../session-store.ts';
 import { createDaemonHttpServer } from '../server/http-server.ts';
 import { createSocketServer, listenNetServer } from '../server/transport.ts';
-import type { DaemonInvokeFn, DaemonResponse, SessionState } from '../types.ts';
+import type { DaemonInvokeFn, DaemonResponse } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import {
   closeLoopbackServer,
@@ -31,7 +32,7 @@ import {
   skipWhenLoopbackUnavailable,
 } from '../../__tests__/test-utils/loopback.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { flushSessionEventLogWrites } from '../session-event-log.ts';
+import { flushSessionEventLogWrites } from '@agent-device/session-journal/session-event-log';
 
 const TOKEN = 'save-script-transport-token';
 const SESSION = 'save-script-transport';

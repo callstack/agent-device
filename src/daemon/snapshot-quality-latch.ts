@@ -1,6 +1,8 @@
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
-import { recoveredSnapshotQualityWarning } from '../snapshot-quality/warnings.ts';
-import type { DaemonResponseData, SessionState } from './types.ts';
+import { readResponseWarnings } from '@agent-device/kernel/success-text';
+import { recoveredSnapshotQualityWarning } from '@agent-device/capture-kit/quality-warnings';
+import type { DaemonResponseData } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 
 type RecoveredWarningLatch = NonNullable<SessionState['recoveredSnapshotWarningLatch']>;
 
@@ -91,6 +93,5 @@ export function applyRecoveredWarningLatch(params: {
   });
   session.recoveredSnapshotWarningLatch = decision.latch;
   if (!decision.warning) return data;
-  const warnings = Array.isArray(data.warnings) ? data.warnings : [];
-  return { ...data, warnings: [decision.warning, ...warnings] };
+  return { ...data, warnings: [decision.warning, ...readResponseWarnings(data)] };
 }

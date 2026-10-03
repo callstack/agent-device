@@ -20,7 +20,20 @@ export type AgentDeviceDevice = {
    * Apple devices; `platform` still carries the leaf (`ios`/`macos`).
    */
   appleOs?: AppleOS;
+  /** Hardware model, for example `iPhone 17 Pro` or `Pixel 9`, when discovery reports it. */
+  model?: string;
+  /** OS version, for example `26.1` or `16`, when discovery reports it. */
+  osVersion?: string;
   identifiers: AgentDeviceIdentifiers;
+  /**
+   * Present when a host-local device claim currently blocks foreign use of
+   * this device (#1320). Provably dead owners are not projected — the next
+   * open reconciles and replaces them automatically.
+   */
+  claimedBy?: {
+    session: string;
+    workspace: string;
+  };
   ios?: {
     udid: string;
   };
@@ -92,6 +105,8 @@ export type StartupPerfSample = {
 
 export type DeviceBootOptions = DeviceCommandBaseOptions & {
   headless?: boolean;
+  /** Startup budget in milliseconds: bounds the boot wait on a cold Simulator or emulator. */
+  timeoutMs?: number;
 };
 
 export type DeviceShutdownOptions = DeviceCommandBaseOptions;

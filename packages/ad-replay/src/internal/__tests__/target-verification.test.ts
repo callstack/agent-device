@@ -46,6 +46,16 @@ test('planPostResolutionTargetVerification: a non-selector wait form is inert (s
   );
 });
 
+test('planPostResolutionTargetVerification: wait absent is not a landmark or identity guard', () => {
+  assert.deepEqual(
+    planPostResolutionTargetVerification({
+      recorded: recorded(),
+      isSelectorWait: false,
+    }),
+    { kind: 'skip' },
+  );
+});
+
 test('planPostResolutionTargetVerification: a selector wait with a recorded-unverifiable annotation refuses up front', () => {
   assert.deepEqual(
     planPostResolutionTargetVerification({

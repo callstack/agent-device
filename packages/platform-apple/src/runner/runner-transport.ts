@@ -2,7 +2,8 @@ import { createRequestCanceledError, AppError } from '@agent-device/kernel/error
 import { Deadline, resolveIosPhysicalDeviceControl } from './host.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createRunnerCommandRouteResolver } from './runner-command-route.ts';
-import { isUsbmuxDeviceUnattachedError, type RunnerCommand } from './runner-contract.ts';
+import { isUsbmuxDeviceUnattachedError } from './runner-error-classification.ts';
+import type { RunnerCommand } from './runner-contract.ts';
 import { usbmuxRunnerTransport } from './runner-usbmux.ts';
 
 export const RUNNER_COMMAND_TIMEOUT_MS = 45_000;
@@ -87,5 +88,20 @@ export async function fetchWithTimeout(
 ): Promise<Response> {
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const signal = requestSignal ? AbortSignal.any([requestSignal, timeoutSignal]) : timeoutSignal;
-  return await fetch(url, { ...init, signal });
+  try {
+    return await fetch(url, { ...init, signal });
+  } catch (error) {
+    // `AbortSignal.timeout` rejects with a bare DOMException that no recovery rule can
+    // read. Only a rejection carrying that signal's own reason is our deadline: a
+    // refused connection or a canceled request keeps the error it actually failed with.
+    if (error === timeoutSignal.reason) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        'Runner command deadline exceeded',
+        { timeoutMs },
+        error,
+      );
+    }
+    throw error;
+  }
 }

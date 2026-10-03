@@ -5,9 +5,9 @@ export async function resolveWebScreenRecordingTransport(
   device: DeviceInfo,
 ): ReturnType<ScreenRecordingRuntimeHost['web']['resolve']> {
   if (device.platform !== 'web') return undefined;
-  const { hasScopedWebProvider, resolveWebProvider } = await import('./platforms/web/provider.ts');
-  if (!hasScopedWebProvider()) return undefined;
-  const provider = resolveWebProvider();
+  const { hasScopedWebProvider, resolveWebProvider } = await import('@agent-device/platform-web');
+  if (!(await hasScopedWebProvider())) return undefined;
+  const provider = await resolveWebProvider();
   if (!provider.startRecording || !provider.stopRecording) return undefined;
   return Object.freeze({
     start: async (outputPath: string) => await provider.startRecording!(outputPath),

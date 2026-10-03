@@ -6,8 +6,9 @@ import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
-import type { Interactor } from '@agent-device/contracts/interactor-types';
+import type { Interactor, PressPointOptions } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { createWebPlatformRuntime } from './runtime.ts';
 
 const device: DeviceInfo = {
@@ -211,6 +212,11 @@ test('clipboard, the app switcher, app events, settings and alerts carry no web 
     'readClipboard',
     'writeClipboard',
     'appSwitcher',
+    // The Action Button is iPhone/iPad hardware with no web analogue at all.
+    'actionButton',
+    // A foldable hinge is posed through the host's iOS simulator HID helper; the web target has
+    // none.
+    'setFoldPose',
     'triggerAppEvent',
     // R58/R59: the retired `settings` and `alert` descriptors declared no web leaf either.
     'setSetting',
@@ -385,15 +391,6 @@ function host(
       readProcessMarker: async () => ({ status: 'missing' }),
     },
     networkTransports: { resolve: async () => transport },
-    appInventory: {
-      apple: { listApps: async () => [] },
-      android: { listApps: async () => [] },
-      harmonyos: { listApps: async () => [] },
-    },
-    appState: {
-      android: { run: async () => ({ stdout: '' }) },
-      harmonyos: { run: async () => ({ stdout: '' }) },
-    },
     deviceReadiness: {
       applePhysical: { ensureConnected: async () => {} },
       appleAutomation: {
@@ -608,4 +605,68 @@ test('press shares the admitted tapPoint fact that live click, press and react-n
   });
   expect(binding.facts.operations.tapPoint).toEqual({ available: true });
   expect(binding.operations.tapPoint).toBeTypeOf('function');
+});
+
+/**
+ * A browser click is one immediate pointer press, which is all a repeated `--count` series needs. The
+ * two shapes that ask for more used to ride the admitted `tapPoint` fact into the interactor's bare
+ * denial — a hold into its `longPress` stub, a double-click into a member the web factory no longer
+ * supplies. Each now answers from its own authority: this module's fact for a hold, the absent
+ * mechanic for a fused double-click.
+ */
+test('a browser press repeats single taps and refuses the hold and double-tap shapes it has no mechanic for', async () => {
+  const clicked: Array<[number, number]> = [];
+  const denied: string[] = [];
+  const interactor = {
+    tap: async (x: number, y: number) => {
+      clicked.push([x, y]);
+    },
+    longPress: async () => {
+      denied.push('longPress');
+      throw new AppError('UNSUPPORTED_OPERATION', 'longPress is not supported on web');
+    },
+  } as unknown as Interactor;
+  const binding = await createWebPlatformRuntime(
+    host({ mode: 'local' }, undefined, interactor),
+  ).bind({ device, intent: { kind: 'ordinary' }, scope: scope() });
+
+  expect(binding.facts.operations.tapPoint).toEqual({ available: true });
+  expect(binding.facts.operations.longPressPoint).toMatchObject({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+    hint: 'A web click is one immediate pointer press; the browser backend has no timed hold.',
+  });
+
+  const press = (options: Partial<PressPointOptions>) =>
+    binding.operations.tapPoint!({
+      point: { x: 10, y: 20 },
+      options: {
+        button: 'primary',
+        count: 1,
+        intervalMs: 0,
+        holdMs: 0,
+        jitterPx: 0,
+        doubleTap: false,
+        ...options,
+      },
+    });
+
+  await expect(press({ count: 2, jitterPx: 1 })).resolves.toBeUndefined();
+  expect(clicked).toEqual([
+    [10, 20],
+    [11, 20],
+  ]);
+
+  await expect(press({ holdMs: 600 })).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    details: {
+      reason: 'unsupported-platform-leaf',
+      hint: 'A web click is one immediate pointer press; the browser backend has no timed hold.',
+    },
+  });
+  await expect(press({ doubleTap: true })).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    details: { reason: 'owner-capability-missing' },
+  });
+  expect(denied).toEqual([]);
 });

@@ -1,8 +1,12 @@
 // The public API vocabulary for the system and diagnostic commands (wait, alert, keyboard, clipboard, doctor…).
 
 import type { AlertAction } from './alert-contract.ts';
+import type { BackMode } from './back-mode.ts';
 import type { SelectorSnapshotCommandOptions } from './client-capture.ts';
 import type { DeviceCommandBaseOptions } from './client-connection.ts';
+import type { SettleCommandOptions } from './client-gesture.ts';
+import type { DeviceRotation, SetFoldPoseInput } from './device-rotation.ts';
+import type { TvRemoteButton } from './tv-remote.ts';
 
 export type WaitCommandTarget =
   | {
@@ -10,6 +14,7 @@ export type WaitCommandTarget =
       text?: never;
       ref?: never;
       selector?: never;
+      absent?: never;
       stable?: never;
       quietMs?: never;
       timeoutMs?: never;
@@ -19,6 +24,7 @@ export type WaitCommandTarget =
       durationMs?: never;
       ref?: never;
       selector?: never;
+      absent?: never;
       stable?: never;
       quietMs?: never;
       timeoutMs?: number;
@@ -28,6 +34,7 @@ export type WaitCommandTarget =
       durationMs?: never;
       text?: never;
       selector?: never;
+      absent?: never;
       stable?: never;
       quietMs?: never;
       timeoutMs?: number;
@@ -37,6 +44,17 @@ export type WaitCommandTarget =
       durationMs?: never;
       text?: never;
       ref?: never;
+      absent?: never;
+      stable?: never;
+      quietMs?: never;
+      timeoutMs?: number;
+    })
+  | (SelectorSnapshotCommandOptions & {
+      absent: string;
+      durationMs?: never;
+      text?: never;
+      ref?: never;
+      selector?: never;
       stable?: never;
       quietMs?: never;
       timeoutMs?: number;
@@ -47,6 +65,7 @@ export type WaitCommandTarget =
       text?: never;
       ref?: never;
       selector?: never;
+      absent?: never;
       quietMs?: number;
       timeoutMs?: number;
     });
@@ -59,6 +78,28 @@ export type AlertCommandOptions = DeviceCommandBaseOptions & {
 };
 
 export type AppStateCommandOptions = DeviceCommandBaseOptions;
+
+/** #1638: `back` carries the shared `--settle` triple, and its result may carry the settled diff. */
+export type BackCommandOptions = DeviceCommandBaseOptions & {
+  mode?: BackMode;
+} & SettleCommandOptions;
+
+export type HomeCommandOptions = DeviceCommandBaseOptions;
+
+export type OrientationCommandOptions = DeviceCommandBaseOptions & {
+  orientation: DeviceRotation;
+};
+
+export type FoldCommandOptions = DeviceCommandBaseOptions & SetFoldPoseInput;
+
+export type AppSwitcherCommandOptions = DeviceCommandBaseOptions;
+
+export type ActionButtonCommandOptions = DeviceCommandBaseOptions;
+
+export type TvRemoteCommandOptions = DeviceCommandBaseOptions & {
+  button: TvRemoteButton;
+  durationMs?: number;
+};
 
 export type KeyboardCommandOptions = DeviceCommandBaseOptions & {
   action?: 'status' | 'dismiss' | 'enter' | 'return';

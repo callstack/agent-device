@@ -8,8 +8,8 @@ import {
   listDownloadableArtifacts,
   trackDownloadableArtifact,
 } from '../artifact-tracking.ts';
-import type { DaemonResponse } from '../types.ts';
-import { runCmdSync, withCommandExecutorOverride } from '../../utils/exec.ts';
+import type { DaemonResponse } from '../daemon-request.ts';
+import { runCmdSync, withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import {
   closeLoopbackServer,
   listenOnLoopback,
@@ -341,3 +341,34 @@ async function waitFor(condition: () => boolean | Promise<boolean>): Promise<voi
   }
   throw new Error('Timed out waiting for condition');
 }
+
+test('downloadable artifact inventory reports a screenshot display rotation only when one was registered', async () => {
+  const tempDir = mkdtempForTestSync('agent-device-artifacts-rotation-');
+  const rotatedPath = path.join(tempDir, 'rotated.png');
+  const plainPath = path.join(tempDir, 'plain.png');
+  fs.writeFileSync(rotatedPath, 'png-body');
+  fs.writeFileSync(plainPath, 'png-body');
+  const rotatedId = trackDownloadableArtifact({
+    artifactPath: rotatedPath,
+    artifactType: 'screenshot',
+    fileName: 'rotated.png',
+    displayRotation: 'landscape-right',
+  });
+  const plainId = trackDownloadableArtifact({
+    artifactPath: plainPath,
+    artifactType: 'screenshot',
+    fileName: 'plain.png',
+  });
+
+  try {
+    const inventory = await listDownloadableArtifacts();
+    const rotated = inventory.find((entry) => entry.id === rotatedId);
+    const plain = inventory.find((entry) => entry.id === plainId);
+    assert.equal(rotated?.displayRotation, 'landscape-right');
+    assert.ok(plain);
+    assert.equal(Object.hasOwn(plain, 'displayRotation'), false);
+  } finally {
+    cleanupDownloadableArtifact(rotatedId);
+    cleanupDownloadableArtifact(plainId);
+  }
+});

@@ -11,9 +11,7 @@ export interface ProviderScenarioProviderEntry<
   TResult = unknown,
 > extends ProviderScenarioProviderScope {
   command: string;
-  request?: unknown;
-  /** A factory is invoked per call, so repeated calls can return fresh results. */
-  result?: TResult | (() => TResult);
+  error?: Error | string;
   /**
    * Serves every matching call instead of being consumed by the first, and never
    * counts as unconsumed. Use it where the call COUNT is not the contract — a
@@ -27,7 +25,9 @@ export interface ProviderScenarioProviderEntry<
    * repeat would never advance the queue.
    */
   repeat?: boolean;
-  error?: Error | string;
+  request?: unknown;
+  /** A factory is invoked per call, so repeated calls can return fresh results. */
+  result?: TResult | (() => TResult);
 }
 
 export interface ProviderScenarioProviderCall<
@@ -39,14 +39,14 @@ export interface ProviderScenarioProviderCall<
 }
 
 export interface ProviderScenarioTranscript {
+  assertComplete(): void;
   readonly calls: readonly ProviderScenarioProviderCall[];
-  readonly remaining: readonly ProviderScenarioProviderEntry[];
   next<TResult = unknown>(
     command: string,
     request?: unknown,
     scope?: ProviderScenarioProviderScope,
   ): TResult;
-  assertComplete(): void;
+  readonly remaining: readonly ProviderScenarioProviderEntry[];
 }
 
 export function createProviderTranscript(

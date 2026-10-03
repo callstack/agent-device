@@ -1,11 +1,12 @@
 import XCTest
 
 // Text-entry target acquisition: choosing the element a `type`/`fill` will address and getting
-// focus onto it — the one-shot tap witness, the post-tap stabilization, and the two
-// `focusTextInputForTextEntry` entry points the command layer calls. Whether that target is ready
+// focus onto it — the one-shot tap witness, the post-tap stabilization, and the
+// `focusTextInputForTextEntry` entry point the command layer calls. Whether that target is ready
 // is RunnerTests+TextEntryReadiness.swift's question, and this file asks it rather than answering
 // it.
 extension RunnerTests {
+  @MainActor
   func rememberTextEntryTap(_ element: XCUIElement?) {
     guard let element, isTextEntryElement(element) else {
       clearRememberedTextEntryTap()
@@ -13,8 +14,8 @@ extension RunnerTests {
     }
     textEntryTapWitness = TextEntryTapWitness(
       element: element,
-      bundleId: currentBundleId,
-      processIdentifier: currentAppProcessIdentifier
+      bundleId: mainOwned.bundleId,
+      processIdentifier: mainOwned.processIdentifier
     )
   }
 
@@ -22,6 +23,7 @@ extension RunnerTests {
     textEntryTapWitness = nil
   }
 
+  @MainActor
   private func rememberedTextEntryTarget() -> TextEntryTarget? {
     guard let witness = textEntryTapWitness else {
       return nil
@@ -30,8 +32,8 @@ extension RunnerTests {
     // the element so a failed or interrupted type cannot reuse stale focus evidence.
     clearRememberedTextEntryTap()
     guard witness.matches(
-      bundleId: currentBundleId,
-      processIdentifier: currentAppProcessIdentifier
+      bundleId: mainOwned.bundleId,
+      processIdentifier: mainOwned.processIdentifier
     ) else {
       return nil
     }
@@ -80,6 +82,7 @@ extension RunnerTests {
 #endif
   }
 
+  @MainActor
   func focusTextInputForTextEntry(app: XCUIApplication, x: Double?, y: Double?) -> TextEntryTarget {
     guard let x, let y else {
       let softwareKeyboardVisible = isKeyboardVisible(app: app)
@@ -148,41 +151,6 @@ extension RunnerTests {
     return TextEntryTarget(
       element: element,
       refreshPoint: textEntryRefreshPoint(for: element) ?? requestedPoint,
-      prefersFocusedElement: false
-    )
-  }
-
-  func focusTextInputForTextEntry(app: XCUIApplication, element: XCUIElement) -> TextEntryTarget {
-    let point = textEntryRefreshPoint(for: element)
-    let keyboardVisibleBeforeTap = isKeyboardVisible(app: app)
-    if let point {
-      _ = tapAt(app: app, x: point.x, y: point.y)
-    }
-    // See the coordinate-target path above: direct element typing keeps this scoped to the
-    // tapped target, while the first-character warmup and final verify still catch dropped input.
-    if keyboardVisibleBeforeTap {
-      return TextEntryTarget(
-        element: element,
-        refreshPoint: textEntryRefreshPoint(for: element) ?? point,
-        prefersFocusedElement: false
-      )
-    }
-    let stabilized = stabilizeTextInputBeforeTyping(
-      app: app,
-      target: element,
-      keyboardVisibleBeforeTap: keyboardVisibleBeforeTap
-    )
-    let readyTarget = TextEntryTarget(
-      element: stabilized.element ?? element,
-      refreshPoint: point,
-      prefersFocusedElement: false
-    )
-    let resolved = stabilized.focusConfirmed
-      ? (stabilized.element ?? element)
-      : (waitForTextEntryReadiness(app: app, target: readyTarget) ?? stabilized.element ?? element)
-    return TextEntryTarget(
-      element: resolved,
-      refreshPoint: textEntryRefreshPoint(for: resolved) ?? point,
       prefersFocusedElement: false
     )
   }

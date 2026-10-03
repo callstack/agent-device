@@ -2,6 +2,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { emitAndroidAdbDiagnostic, requireAndroidAdbHost } from './adb-host.ts';
 import { resolveAndroidAdbExecutor } from './adb-provider-scope.ts';
+import { runAdbShell } from './adb-executor.ts';
 import type { AndroidAdbExecutor } from './adb-transport.ts';
 import {
   ANDROID_IME_HELPER_SERVICE_COMPONENT,
@@ -91,7 +92,7 @@ async function restoreAndroidTestImeFor(
     });
     return { restored: false, previousIme, reason: 'helper-not-active' };
   }
-  await adb(['shell', 'ime', 'set', previousIme], { allowFailure: true, timeoutMs: 10_000 });
+  await runAdbShell(adb, ['ime', 'set', previousIme], { allowFailure: true, timeoutMs: 10_000 });
   const afterIme = await readAndroidDefaultInputMethod(adb);
   if (afterIme !== previousIme) {
     // Restore did not take effect. Keep the persisted value so recovery can retry — clearing it

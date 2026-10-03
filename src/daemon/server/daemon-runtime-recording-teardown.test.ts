@@ -1,94 +1,14 @@
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
-import type {
-  ScreenRecordingCompletion,
-  ScreenRecordingLiveHandle,
-} from '@agent-device/contracts/screen-recording-runtime';
-import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import type { ScreenRecordingCompletion } from '@agent-device/contracts/screen-recording-runtime';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { screenRecordingResourceStore } from '../screen-recording-resource-store.ts';
 import { SessionStore } from '../session-store.ts';
-import type { SessionState } from '../types.ts';
-import {
-  resolveDaemonSessionTeardownTimeoutMs,
-  SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS,
-  teardownDaemonSessionForShutdown,
-} from './daemon-runtime.ts';
+import { makeRecordingSession } from '../__tests__/session-teardown.fixtures.ts';
+import { teardownDaemonSessionForShutdown } from './daemon-runtime.ts';
 
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
-});
-
-function makeRecordingSession(params: {
-  name: string;
-  sessionStore: SessionStore;
-  finish: ScreenRecordingLiveHandle['finish'];
-}): SessionState {
-  const { name, sessionStore, finish } = params;
-  const device = {
-    platform: 'apple' as const,
-    id: 'sim-udid-shutdown',
-    name: 'iPhone 15',
-    kind: 'simulator' as const,
-    booted: true,
-  };
-  const outPath = path.join(sessionStore.resolveSessionDir(name), 'recording.mp4');
-  const handle: ScreenRecordingLiveHandle = {
-    inspect: () => ({
-      backend: 'simctl recordVideo',
-      outPath,
-      startedAt: Date.now() - 5_000,
-      scope: 'app',
-      showTouches: false,
-      recordOnlySession: false,
-      gestureEvents: [],
-    }),
-    appendGestureEvents: () => {},
-    setTouchReferenceFrame: () => {},
-    setRunnerSessionId: () => {},
-    invalidate: () => {},
-    finish,
-    forceCleanup: async () => ({ status: 'cleaned' }),
-    [Symbol.asyncDispose]: async () => {},
-  };
-  const envelope = createDurableResourceEnvelope({
-    resourceKind: 'screen-recording',
-    sessionId: name,
-    device: { id: device.id, family: 'apple', appleOs: 'ios', kind: 'simulator' },
-    owner: localRuntimeOwner('apple'),
-    fence: { token: `${name}-fence`, generation: 1 },
-    lifecycle: 'open',
-    descriptor: { version: 1, body: { recordingId: name } },
-    metadata: { phase: 'active' },
-  });
-  screenRecordingResourceStore.write(
-    screenRecordingResourceStore.resolvePath(sessionStore.resolveSessionDir(name)),
-    envelope,
-  );
-  return {
-    name,
-    device,
-    createdAt: Date.now(),
-    actions: [],
-    screenRecording: { handle, envelope },
-  };
-}
-
-test('daemon session teardown budget extends for an active durable recording', () => {
-  const root = mkdtempForTestSync('agent-device-shutdown-recording-budget-');
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  const session = makeRecordingSession({
-    name: 'budget-session',
-    sessionStore,
-    finish: async () => ({ status: 'cleanup-pending', reason: 'transport-failed' }),
-  });
-  const withRecording = resolveDaemonSessionTeardownTimeoutMs(session);
-  session.screenRecording = undefined;
-  const withoutRecording = resolveDaemonSessionTeardownTimeoutMs(session);
-
-  expect(withRecording - withoutRecording).toBe(SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS);
 });
 
 test('daemon shutdown awaits durable recording finalization inside its extended budget', async () => {

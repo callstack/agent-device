@@ -9,7 +9,7 @@ import type {
   NetworkTransport,
 } from '@agent-device/contracts/network-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { openVerifiedFileForRead } from './utils/verified-file.ts';
+import { openVerifiedFileForRead } from '@agent-device/host-kit/file';
 
 type ProcessMarkerReader = Readonly<{
   readMarker(pathname: string): Promise<AppLogProcessMarkerReadOutcome>;

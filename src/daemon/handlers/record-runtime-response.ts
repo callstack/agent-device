@@ -5,8 +5,8 @@ import type {
   ScreenRecordingLiveSnapshot,
 } from '@agent-device/contracts/screen-recording-runtime';
 import type { RuntimeOperationUnavailability } from '@agent-device/contracts/platform-runtime';
-import type { DaemonArtifact, DaemonResponse } from '../types.ts';
-import { deriveRecordingTelemetryPath } from '../../recording/telemetry.ts';
+import type { DaemonArtifact, DaemonResponse } from '../daemon-request.ts';
+import { deriveRecordingTelemetryPath } from '@agent-device/capture-kit/recording-telemetry';
 
 export function buildRecordingStartResponse(
   snapshot: ScreenRecordingLiveSnapshot,
@@ -89,6 +89,17 @@ export function buildRecordingStopResponse(completion: ScreenRecordingCompletion
       recordOnlySession: completion.recordOnlySession,
       activeSessionApp: completion.activeSessionApp,
       durationMs: Math.max(0, completion.completedAt - completion.startedAt),
+      ...(completion.capturedDurationMs === undefined
+        ? {}
+        : { capturedDurationMs: completion.capturedDurationMs }),
+      // Only the word the recorder observation answers with goes on the wire; its reason stays in the
+      // manifest, where recovery and diagnostics read it.
+      ...(completion.stopObservation === undefined
+        ? {}
+        : { recorder: completion.stopObservation.recorder }),
+      ...(completion.nativePathDisposition === undefined
+        ? {}
+        : { nativePathDisposition: completion.nativePathDisposition }),
       showTouches: completion.showTouches,
       warning: completion.warning,
       overlayWarning: completion.overlayWarning,

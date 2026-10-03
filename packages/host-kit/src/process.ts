@@ -1,0 +1,44 @@
+export {
+  expandProcessTree,
+  hostCurrentWorkingDirectory,
+  hostEnvironment,
+  hostNodeExecutablePath,
+  hostNodeVersion,
+  hostPlatform,
+  hostProcessId,
+  type HostProcessIdentityFacts,
+  type HostProcessIdentityObservation,
+  type HostProcessInfo,
+  isProcessAlive,
+  isProcessGroupAlive,
+  isProcessZombie,
+  listHostProcesses,
+  readHostCpuArch,
+  readHostCpuArchSync,
+  readHostEnvironmentVariable,
+  readHostProcessIdentityObservations,
+  readProcessCommand,
+  readProcessIdentityFacts,
+  readProcessStartTime,
+  signalPidsBestEffort,
+  stopPidsWithEscalation,
+  uniquePositivePids,
+  waitForProcessExit,
+  writeHostStderr,
+} from './internal/host-process.ts';
+export { signalProcessGroupBestEffort } from './internal/exec.ts';
+export { reapOwnedProcessRecordsAtStartup } from './internal/owned-process-reaper.ts';
+export {
+  createOwnedProcessRecordStore,
+  type OwnedProcessRecordStore,
+  readOwnedProcessRecordFile,
+} from './internal/owned-process-record.ts';
+export {
+  classifyOwnerLiveness,
+  classifyOwnerLivenessFromObservation,
+  type OwnerIdentity,
+  ownerIdentityDiffers,
+  ownerIdentityMatches,
+  type OwnerLiveness,
+  readCurrentOwnerIdentity,
+} from './internal/owner-identity.ts';

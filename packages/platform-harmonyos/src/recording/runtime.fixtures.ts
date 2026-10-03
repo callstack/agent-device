@@ -1,3 +1,4 @@
+import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
 import type { createHarmonyScreenRecordingOperations } from './runtime.ts';
@@ -51,8 +52,11 @@ export function harmonyRecordingHost(
   return {
     screenRecording: {
       harmony,
-      outputs: { prepare: overrides.prepare ?? (async () => {}) },
-      finalize: { complete: overrides.complete ?? (async () => ({})) },
+      outputs: {
+        ...recordingFileStore().outputs,
+        prepare: overrides.prepare ?? (async () => {}),
+      },
+      finalize: { sniff: async () => {}, complete: overrides.complete ?? (async () => ({})) },
     },
     clock: { now: () => 0, sleep: async () => {} },
   };

@@ -2,16 +2,20 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import {
   clearMetroSessionHints,
   readMetroSessionHints,
   writeMetroSessionHints,
 } from '../metro/metro-session-hints.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 function tempStateDir(): string {
-  const dir = path.join(os.tmpdir(), `agent-device-metro-session-hints-${randomUUID()}`);
+  const dir = path.join(
+    mkdtempForTestSync('agent-device-metro-session-hints'),
+    `agent-device-metro-session-hints-${randomUUID()}`,
+  );
   mkdirSync(dir, { recursive: true });
   return dir;
 }

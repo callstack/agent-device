@@ -4,6 +4,7 @@ import type {
   ScreenRecordingRuntimeOperations,
   ScreenRecordingStartInput,
 } from '@agent-device/contracts/screen-recording-runtime';
+import { provesAndroidScreenRecordTermination } from '@agent-device/contracts/screen-recording-runtime-host';
 import { createScreenRecordingLiveHandle } from '@agent-device/capture-kit';
 import {
   androidScreenRecordingDescriptorCodec,
@@ -14,7 +15,9 @@ import {
   type NativeManifest,
 } from './manifest.ts';
 import { cleanupVerifiedAndroidEvidence } from './cleanup.ts';
-import { snapshot } from './completion.ts';
+import { nativeChunksDisposition } from './chunks.ts';
+import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
+import { snapshot } from './live-snapshot.ts';
 import { finalizeAndroidRecording } from './finalize.ts';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;
@@ -137,13 +140,24 @@ async function reattachEvidence(params: {
   evidence: NativeManifest;
 }) {
   const { host, transport, device, input, descriptor, evidence } = params;
-  if (evidence.completion !== undefined && (await completedEvidenceIsTerminal(transport, evidence)))
-    return { status: 'completed' as const, result: evidence.completion };
-  if (evidence.completion !== undefined)
+  if (evidence.completion !== undefined) {
+    const observed = await observeCompletedEvidence(transport, evidence);
+    if (observed.status === 'terminal')
+      return {
+        status: 'completed' as const,
+        // The marker froze its disposition when the chunks were still owed a removal, so the replay
+        // answers that field from the device in front of it (ADR 0024 2.3). A recording whose chunks
+        // were disposed of while the daemon was down is not still owed a retirement.
+        result: {
+          ...evidence.completion,
+          nativePathDisposition: observed.nativePathDisposition,
+        },
+      };
     return unreattachable(
       'ownership-fence-lost',
       'Android recording completed evidence still names a live or unverifiable recorder.',
     );
+  }
   if (evidence.pendingRemotePath !== undefined)
     return unreattachable(
       'transport-not-reattachable',
@@ -156,7 +170,10 @@ async function reattachEvidence(params: {
     remotePath: active.remotePath,
     startTime: active.remoteStartTime,
   });
-  if (running !== 'owned-alive' && (await transport.exists(active.remotePath)) !== true)
+  // A recorder that is not running is only finished with once the device has *answered* that its
+  // artifact is gone: a probe that could not run leaves the recording finishable, so the caller can
+  // pull it when the device answers again instead of being told a loss nobody observed (ADR 0024).
+  if (running !== 'owned-alive' && (await transport.exists(active.remotePath)) === false)
     return unreattachable(
       'transport-not-reattachable',
       'Android recording process ended before its artifact could be recovered.',
@@ -168,14 +185,16 @@ async function reattachEvidence(params: {
   );
   let nativeCleanupConfirmed = false;
   const handle = createScreenRecordingLiveHandle(snapshot(inputForHandle, evidence.startedAt), {
-    finish: async (current) => {
+    finish: async (current, progress) => {
       const outcome = await finalizeAndroidRecording({
         host,
         transport,
         evidence,
         manifestPath: descriptor.manifestPath,
         recording: current,
-        reachedLimit: running === 'missing',
+        startedAtMs: evidence.startedAt,
+        reachedLimit: provesAndroidScreenRecordTermination(running),
+        progress,
       });
       nativeCleanupConfirmed = true;
       return outcome;
@@ -188,21 +207,33 @@ async function reattachEvidence(params: {
   return { status: 'active' as const, handle };
 }
 
-async function completedEvidenceIsTerminal(transport: Transport, evidence: NativeManifest) {
+type CompletedEvidenceObservation =
+  | Readonly<{ status: 'terminal'; nativePathDisposition: NativePathDisposition }>
+  | Readonly<{ status: 'retained' }>;
+
+async function observeCompletedEvidence(
+  transport: Transport,
+  evidence: NativeManifest,
+): Promise<CompletedEvidenceObservation> {
   try {
     for (const chunk of evidence.chunks) {
       if (
-        (await transport.inspect({
-          pid: chunk.remotePid,
-          remotePath: chunk.remotePath,
-          startTime: chunk.remoteStartTime,
-        })) !== 'missing'
+        !provesAndroidScreenRecordTermination(
+          await transport.inspect({
+            pid: chunk.remotePid,
+            remotePath: chunk.remotePath,
+            startTime: chunk.remoteStartTime,
+          }),
+        )
       )
-        return false;
+        return { status: 'retained' };
     }
-    return true;
+    return {
+      status: 'terminal',
+      nativePathDisposition: await nativeChunksDisposition(transport, evidence.chunks),
+    };
   } catch {
-    return false;
+    return { status: 'retained' };
   }
 }
 

@@ -4,11 +4,11 @@ import type {
   AgentDeviceSessionDevice,
   AppDeployResult,
   AppInstallFromSourceResult,
-  InternalRequestOptions,
   MaterializationReleaseResult,
   StartupPerfSample,
   DeviceSelectionMetadata,
 } from '@agent-device/contracts/client';
+import type { InternalRequestOptions } from '@agent-device/contracts/command';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import {
   isAppleOs,
@@ -17,11 +17,15 @@ import {
   isSerialAddressablePlatform,
   type AppleOS,
 } from '@agent-device/kernel/device';
+import { isSessionRuntimePlatform, type SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import { sanitizeErrorCause } from '@agent-device/kernel/redaction';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { leaseScopeFromOptions, leaseScopeToRequestMeta } from '../core/lease-scope.ts';
-import type { DaemonRequest, SessionRuntimeHints } from '../daemon/types.ts';
+import {
+  leaseScopeFromOptions,
+  leaseScopeToRequestMeta,
+} from '@agent-device/contracts/lease-scope';
+import type { DaemonRequest } from '../daemon/daemon-request.ts';
 import {
   asRecord,
   isRecord,
@@ -33,10 +37,10 @@ import {
   readRequiredPlatform,
   readRequiredString,
   stripUndefined,
-} from '../utils/parsing.ts';
-import { buildAppIdentifiers, buildDeviceIdentifiers } from '../utils/result-serialization.ts';
+} from '@agent-device/kernel/record';
+import { buildAppIdentifiers, buildDeviceIdentifiers } from './client-identifiers.ts';
 
-export { readOptionalString, readRequiredString } from '../utils/parsing.ts';
+export { readOptionalString, readRequiredString } from '@agent-device/kernel/record';
 
 const DEFAULT_SESSION_NAME = 'default';
 
@@ -107,9 +111,33 @@ export function normalizeDevice(value: unknown): AgentDeviceDevice {
     // Additive Apple-OS discriminant; Apple platforms only — gate on the platform so
     // a non-Apple record with a stray appleOs value is not preserved.
     ...(isApplePlatform(platform) && appleOs ? { appleOs } : {}),
+    ...readDeviceDescription(record),
     identifiers: buildDeviceIdentifiers(platform, id, name),
+    ...readClaimedBy(record),
     ...buildClientDevicePlatformFields(platform, id),
   };
+}
+
+/** Reads the optional presentation-only hardware model and OS version of a listed device. */
+function readDeviceDescription(
+  record: Record<string, unknown>,
+): Pick<AgentDeviceDevice, 'model' | 'osVersion'> {
+  const model = readOptionalString(record, 'model');
+  const osVersion = readOptionalString(record, 'osVersion');
+  return {
+    ...(model ? { model } : {}),
+    ...(osVersion ? { osVersion } : {}),
+  };
+}
+
+function readClaimedBy(record: Record<string, unknown>): Pick<AgentDeviceDevice, 'claimedBy'> {
+  const value = record.claimedBy;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const claimedBy = value as Record<string, unknown>;
+  const session = claimedBy.session;
+  const workspace = claimedBy.workspace;
+  if (typeof session !== 'string' || typeof workspace !== 'string') return {};
+  return { claimedBy: { session, workspace } };
 }
 
 export function normalizeSession(value: unknown): AgentDeviceSession {
@@ -188,7 +216,7 @@ export function normalizeRuntimeHints(value: unknown): SessionRuntimeHints | und
   const bundleUrl = readOptionalString(value, 'bundleUrl');
   const launchUrl = readOptionalString(value, 'launchUrl');
   return {
-    platform: platform === 'ios' || platform === 'android' ? platform : undefined,
+    platform: isSessionRuntimePlatform(platform) ? platform : undefined,
     metroHost,
     metroPort,
     bundleUrl,

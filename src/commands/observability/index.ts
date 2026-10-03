@@ -6,11 +6,10 @@ import type {
 } from '@agent-device/contracts/client';
 import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
-import { parseStringMember } from '../../utils/string-enum.ts';
-import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
+import { parseStringMember } from './string-enum.ts';
+import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { booleanField, enumField, integerField, stringField } from '../command-input.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { LOG_ACTION_VALUES, type LogAction } from './log-command-contract.ts';
 import {
@@ -80,28 +79,10 @@ export const audioCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-export const logsCommandDefinition = defineExecutableCommand(logsCommandMetadata, (client, input) =>
-  client.observability.logs(input),
-);
-
-export const eventsCommandDefinition = defineExecutableCommand(
-  eventsCommandMetadata,
-  (client, input) => client.observability.events(input),
-);
-
-export const networkCommandDefinition = defineExecutableCommand(
-  networkCommandMetadata,
-  (client, input) => client.observability.network(input),
-);
-
-export const audioCommandDefinition = defineExecutableCommand(
-  audioCommandMetadata,
-  (client, input) => client.observability.audio(input),
-);
-
 const logsCliSchema = {
   usageOverride:
     'logs path | logs start | logs stop | logs clear [--restart] | logs doctor | logs mark [message...]',
+  usageFlags: [],
   positionalArgs: ['path|start|stop|clear|doctor|mark', 'message?'],
   allowsExtraPositionals: true,
   allowedFlags: ['restart'],
@@ -116,6 +97,7 @@ const eventsCliSchema = {
 const networkCliSchema = {
   usageOverride:
     'network dump [limit] [summary|headers|body|all] [--include summary|headers|body|all] | network log [limit] [summary|headers|body|all] [--include summary|headers|body|all]',
+  usageFlags: [],
   listUsageOverride: 'network',
   positionalArgs: ['dump|log', 'limit?', 'include?'],
   allowedFlags: ['networkInclude'],
@@ -172,52 +154,52 @@ export const networkDaemonWriter: DaemonWriter = (input) =>
 export const audioDaemonWriter: DaemonWriter = (input) =>
   request(AUDIO_COMMAND_NAME, audioPositionals(input as AudioOptions), input);
 
-const logsCommandFacet = defineCommandFacet({
+export const logsCommandFacet = defineCommandFacet({
   name: LOGS_COMMAND_NAME,
   text: {
     summary: 'Manage session app logs',
   },
   metadata: logsCommandMetadata,
-  definition: logsCommandDefinition,
+  run: (client, input) => client.observability.logs(input),
   cliSchema: logsCliSchema,
   cliReader: logsCliReader,
   daemonWriter: logsDaemonWriter,
   cliOutputFormatter: observabilityCliOutputFormatters.logs,
 });
 
-const eventsCommandFacet = defineCommandFacet({
+export const eventsCommandFacet = defineCommandFacet({
   name: EVENTS_COMMAND_NAME,
   text: {
     summary: 'Read session event timeline',
   },
   metadata: eventsCommandMetadata,
-  definition: eventsCommandDefinition,
+  run: (client, input) => client.observability.events(input),
   cliSchema: eventsCliSchema,
   cliReader: eventsCliReader,
   daemonWriter: eventsDaemonWriter,
   cliOutputFormatter: observabilityCliOutputFormatters.events,
 });
 
-const networkCommandFacet = defineCommandFacet({
+export const networkCommandFacet = defineCommandFacet({
   name: NETWORK_COMMAND_NAME,
   text: {
     summary: 'Inspect HTTP(S) traffic from session logs',
   },
   metadata: networkCommandMetadata,
-  definition: networkCommandDefinition,
+  run: (client, input) => client.observability.network(input),
   cliSchema: networkCliSchema,
   cliReader: networkCliReader,
   daemonWriter: networkDaemonWriter,
   cliOutputFormatter: observabilityCliOutputFormatters.network,
 });
 
-const audioCommandFacet = defineCommandFacet({
+export const audioCommandFacet = defineCommandFacet({
   name: AUDIO_COMMAND_NAME,
   text: {
     summary: 'Probe audio levels',
   },
   metadata: audioCommandMetadata,
-  definition: audioCommandDefinition,
+  run: (client, input) => client.observability.audio(input),
   cliSchema: audioCliSchema,
   cliReader: audioCliReader,
   daemonWriter: audioDaemonWriter,

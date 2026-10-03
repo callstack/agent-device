@@ -1,5 +1,4 @@
 import { test, expect, vi } from 'vitest';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -25,10 +24,16 @@ import {
   makeSession,
   noopInvoke,
 } from './session-test-harness.ts';
-import type { SessionState } from '../../types.ts';
+import type { SessionState } from '../../session-state.ts';
 import { handleSessionCommands } from './session-command-harness.ts';
+import { refFrameState } from '../../ref-frame.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 const available = Object.freeze({ available: true } as const);
+const keyboardFamilyDenial = Object.freeze({
+  available: false,
+  reason: 'owner-capability-missing' as const,
+});
 
 /** Admits every keyboard operation so the ADR 0014 seam runs on real admission, not a rejection.
  * `keyboardDismiss` is overridable so a test can force the invocation itself to reject, proving
@@ -40,6 +45,7 @@ function keyboardCapableRuntime(
   const facts: RuntimeFacts<PlatformRuntimeOperations> = {
     device: { ...deviceShape(device), providerMode: 'local' },
     operations: keyboardRuntimeOperationFacts({
+      unsupported: keyboardFamilyDenial,
       status: available,
       dismiss: available,
       enter: available,
@@ -77,7 +83,7 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
   };
   mockResolveTargetDevice.mockResolvedValue(device);
   mockDispatch.mockResolvedValue({});
-  const logPath = path.join(os.tmpdir(), 'daemon.log');
+  const logPath = path.join(mkdtempForTestSync('daemon'), 'daemon.log');
   const { inspectFacts, bindDevice } = keyboardCapableRuntime(device);
 
   // dismiss mutates the device → frame expires.
@@ -97,7 +103,7 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
     inspectFacts,
     bindDevice,
   });
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
 
   // status is a read-only probe → frame preserved (undefined === active).
   sessionStore.set(sessionName, makeSession(sessionName, device));
@@ -116,7 +122,7 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
     inspectFacts,
     bindDevice,
   });
-  expect(sessionStore.get(sessionName)?.refFrameState).toBeUndefined();
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('active');
 });
 
 // ADR 0014 requires the frame to expire immediately before the mutating call, with no
@@ -134,10 +140,10 @@ test('keyboard dismiss expires the frame before the invocation runs, even when i
     booted: true,
   };
   mockResolveTargetDevice.mockResolvedValue(device);
-  const logPath = path.join(os.tmpdir(), 'daemon.log');
+  const logPath = path.join(mkdtempForTestSync('daemon'), 'daemon.log');
   const { inspectFacts, bindDevice } = keyboardCapableRuntime(device, {
     keyboardDismiss: () => {
-      expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+      expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
       return Promise.reject(new AppError('COMMAND_FAILED', 'runner timed out'));
     },
   });
@@ -160,7 +166,7 @@ test('keyboard dismiss expires the frame before the invocation runs, even when i
       bindDevice,
     }),
   ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
 });
 
 test('keyboard requires an active session or explicit device selector', async () => {
@@ -174,7 +180,7 @@ test('keyboard requires an active session or explicit device selector', async ()
       flags: {},
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -201,7 +207,7 @@ test('keyboard dismiss requires active iOS session for explicit selectors', asyn
       flags: { platform: 'ios', device: 'iPhone 17 Pro' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });

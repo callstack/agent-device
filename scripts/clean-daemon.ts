@@ -1,11 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { resolveDaemonPaths } from '../src/daemon/config.ts';
-import {
-  isAgentDeviceDaemonProcess,
-  stopProcessForTakeover,
-} from '../src/daemon/daemon-process.ts';
+import { resolveDaemonPaths } from '../src/daemon-resolution.ts';
+import { isAgentDeviceDaemonProcess, stopProcessForTakeover } from '../src/daemon-process.ts';
 
 const DAEMON_TERM_TIMEOUT_MS = 15_000;
 const DAEMON_KILL_TIMEOUT_MS = 2_000;
@@ -27,12 +24,9 @@ if (daemonPid !== null) {
     killTimeoutMs: DAEMON_KILL_TIMEOUT_MS,
     expectedStartTime: info?.processStartTime,
   });
-  const { cleanupRunnerLeasesForOwner, runnerLeaseCleanupAdapter } =
-    await import('../src/platforms/apple/core/runner-client.ts');
-  await cleanupRunnerLeasesForOwner(
-    { pid: daemonPid, startTime: info?.processStartTime },
-    runnerLeaseCleanupAdapter,
-  );
+  const { cleanupRunnerLeasesForOwner } =
+    await import('@agent-device/platform-apple/runner/operations');
+  await cleanupRunnerLeasesForOwner({ pid: daemonPid, startTime: info?.processStartTime });
 }
 
 removeIfPresent(paths.infoPath);

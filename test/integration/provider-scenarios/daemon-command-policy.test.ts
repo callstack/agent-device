@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { AndroidAdbProvider } from '../../../src/platforms/android/adb-executor.ts';
+import type { AndroidAdbProvider } from '@agent-device/platform-android/mechanics';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
@@ -77,7 +77,10 @@ test('Provider-backed integration daemon command policies gate admission and pro
   );
 });
 
-function androidAdbResult(args: string[], activeRecordingPath: string | undefined): AdbResult {
+function androidAdbResult(
+  args: readonly string[],
+  activeRecordingPath: string | undefined,
+): AdbResult {
   const command = args.join(' ');
   return (
     deviceStatusResponse(command) ??

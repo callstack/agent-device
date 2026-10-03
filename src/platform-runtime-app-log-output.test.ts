@@ -1,8 +1,9 @@
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import { openAppLogOutput, readAppLogOutputTail } from './platform-runtime-app-log-output.ts';
+import { mkdtempForTestSync } from './__tests__/test-utils/tmp-dir.ts';
 
 const roots: string[] = [];
 
@@ -11,7 +12,7 @@ afterEach(() => {
 });
 
 test('reads a bounded trusted app.log suffix and rejects paths outside sessions', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-app-log-output-'));
+  const root = mkdtempForTestSync('agent-device-app-log-output-');
   roots.push(root);
   const sessionsDir = path.join(root, 'sessions');
   const sessionDir = path.join(sessionsDir, 'one');
@@ -29,7 +30,7 @@ test('reads a bounded trusted app.log suffix and rejects paths outside sessions'
 });
 
 test('rejects a symlinked session directory that escapes the sessions root', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-app-log-symlink-'));
+  const root = mkdtempForTestSync('agent-device-app-log-symlink-');
   roots.push(root);
   const sessionsDir = path.join(root, 'sessions');
   const outside = path.join(root, 'outside');
@@ -58,7 +59,7 @@ test('rejects a final app.log symlink before tail read and preserves the outside
 });
 
 test('aligns a bounded UTF-8 suffix to the first complete line', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-app-log-tail-'));
+  const root = mkdtempForTestSync('agent-device-app-log-tail-');
   roots.push(root);
   const sessionsDir = path.join(root, 'sessions');
   const sessionDir = path.join(sessionsDir, 'one');
@@ -70,7 +71,7 @@ test('aligns a bounded UTF-8 suffix to the first complete line', async () => {
 });
 
 test('rejects an asynchronous stream-open failure without an unhandled error', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-app-log-open-'));
+  const root = mkdtempForTestSync('agent-device-app-log-open-');
   roots.push(root);
   const sessionsDir = path.join(root, 'sessions');
   const outputPath = path.join(sessionsDir, 'one', 'app.log');
@@ -80,7 +81,7 @@ test('rejects an asynchronous stream-open failure without an unhandled error', a
 });
 
 function finalSymlinkFixture(label: string) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), `agent-device-app-log-${label}-`));
+  const root = mkdtempForTestSync(`agent-device-app-log-${label}-`);
   roots.push(root);
   const sessionsDir = path.join(root, 'sessions');
   const sessionDir = path.join(sessionsDir, 'one');

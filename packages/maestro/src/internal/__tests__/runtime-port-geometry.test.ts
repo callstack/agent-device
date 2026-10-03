@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, expect, test } from 'vitest';
+import { formatRole } from '@agent-device/kernel/snapshot';
 import {
   resolveMaestroCoordinate,
   resolveMaestroScrollableGesture,
@@ -78,6 +79,7 @@ test('scrollUntilVisible matches Maestro swipeFromCenter endpoints for an app-si
         index: 0,
         ref: '@e1',
         type: 'Application',
+        kind: formatRole('Application'),
         rect: { x: 0, y: 0, width: 402, height: 874 },
       },
       {
@@ -85,6 +87,7 @@ test('scrollUntilVisible matches Maestro swipeFromCenter endpoints for an app-si
         ref: '@e2',
         parentIndex: 0,
         type: 'ScrollView',
+        kind: formatRole('ScrollView'),
         rect: { x: 0, y: 0, width: 402, height: 874 },
       },
     ],
@@ -101,6 +104,39 @@ test('scrollUntilVisible matches Maestro swipeFromCenter endpoints for an app-si
   });
 });
 
+test('one scroll operation reuses one canonical node map and viewport scan', () => {
+  const snapshot = {
+    createdAt: 0,
+    nodes: [
+      {
+        index: 0,
+        ref: '@e1',
+        type: 'Application',
+        kind: formatRole('Application'),
+        rect: { x: 0, y: 0, width: 402, height: 874 },
+      },
+      {
+        index: 1,
+        ref: '@e2',
+        parentIndex: 0,
+        type: 'ScrollView',
+        kind: formatRole('ScrollView'),
+        rect: { x: 0, y: 0, width: 402, height: 800 },
+      },
+    ],
+  };
+  const materialized = { contexts: 0, nodeMaps: 0, viewportRects: 0 };
+
+  expect(
+    resolveMaestroScrollableGesture(snapshot, { id: 'missing' }, 'down', 601, 'ios', {
+      onVisibilityContextCreated: () => materialized.contexts++,
+      onNodeMapBuilt: () => materialized.nodeMaps++,
+      onViewportRectsCollected: () => materialized.viewportRects++,
+    }),
+  ).toBeDefined();
+  expect(materialized).toEqual({ contexts: 1, nodeMaps: 1, viewportRects: 1 });
+});
+
 test('excludes an in-viewport Android scrollable that is hidden from the user', () => {
   const snapshot = {
     createdAt: 0,
@@ -109,6 +145,7 @@ test('excludes an in-viewport Android scrollable that is hidden from the user', 
         index: 0,
         ref: '@e1',
         type: 'Application',
+        kind: formatRole('Application'),
         rect: { x: 0, y: 0, width: 402, height: 874 },
       },
       {
@@ -116,6 +153,7 @@ test('excludes an in-viewport Android scrollable that is hidden from the user', 
         ref: '@e2',
         parentIndex: 0,
         type: 'ScrollView',
+        kind: formatRole('ScrollView'),
         visibleToUser: false,
         rect: { x: 0, y: 0, width: 402, height: 800 },
       },
@@ -124,6 +162,7 @@ test('excludes an in-viewport Android scrollable that is hidden from the user', 
         ref: '@e3',
         parentIndex: 0,
         type: 'ScrollView',
+        kind: formatRole('ScrollView'),
         visibleToUser: true,
         rect: { x: 0, y: 100, width: 402, height: 650 },
       },
@@ -145,6 +184,7 @@ test('derives an Android viewport from visible scroll containers when roots are 
         index: 0,
         ref: '@e1',
         type: 'android.widget.ScrollView',
+        kind: formatRole('android.widget.ScrollView'),
         visibleToUser: true,
         rect: { x: 0, y: 0, width: 1344, height: 2992 },
       },
@@ -153,6 +193,7 @@ test('derives an Android viewport from visible scroll containers when roots are 
         ref: '@e2',
         parentIndex: 0,
         type: 'android.widget.ScrollView',
+        kind: formatRole('android.widget.ScrollView'),
         visibleToUser: true,
         rect: { x: 54, y: 159, width: 1236, height: 2449 },
       },
@@ -175,6 +216,7 @@ test('does not associate a selector in an Android hidden scroll subtree', () => 
         index: 0,
         ref: '@e1',
         type: 'Application',
+        kind: formatRole('Application'),
         rect: { x: 0, y: 0, width: 402, height: 874 },
       },
       {
@@ -182,6 +224,7 @@ test('does not associate a selector in an Android hidden scroll subtree', () => 
         ref: '@e2',
         parentIndex: 0,
         type: 'ScrollView',
+        kind: formatRole('ScrollView'),
         visibleToUser: false,
         rect: { x: 0, y: 0, width: 402, height: 800 },
       },
@@ -190,6 +233,7 @@ test('does not associate a selector in an Android hidden scroll subtree', () => 
         ref: '@e3',
         parentIndex: 1,
         type: 'Button',
+        kind: formatRole('Button'),
         identifier: 'hidden-target',
         visibleToUser: false,
         rect: { x: 20, y: 700, width: 180, height: 44 },
@@ -199,6 +243,7 @@ test('does not associate a selector in an Android hidden scroll subtree', () => 
         ref: '@e4',
         parentIndex: 0,
         type: 'ScrollView',
+        kind: formatRole('ScrollView'),
         visibleToUser: true,
         rect: { x: 0, y: 100, width: 402, height: 650 },
       },
@@ -214,12 +259,19 @@ test('uses the complete recursive selector when choosing the scroll container', 
   const snapshot = {
     createdAt: 0,
     nodes: [
-      { index: 0, ref: '@e1', type: 'Application', rect: { x: 0, y: 0, width: 402, height: 900 } },
+      {
+        index: 0,
+        ref: '@e1',
+        type: 'Application',
+        kind: formatRole('Application'),
+        rect: { x: 0, y: 0, width: 402, height: 900 },
+      },
       {
         index: 1,
         ref: '@e2',
         parentIndex: 0,
         type: 'ScrollView',
+        kind: formatRole('ScrollView'),
         rect: { x: 0, y: 0, width: 300, height: 400 },
       },
       {
@@ -228,12 +280,14 @@ test('uses the complete recursive selector when choosing the scroll container', 
         parentIndex: 1,
         identifier: 'target',
         rect: { x: 20, y: 40, width: 100, height: 40 },
+        kind: formatRole('Element'),
       },
       {
         index: 3,
         ref: '@e4',
         parentIndex: 0,
         type: 'ScrollView',
+        kind: formatRole('ScrollView'),
         rect: { x: 0, y: 450, width: 300, height: 400 },
       },
       {
@@ -242,6 +296,7 @@ test('uses the complete recursive selector when choosing the scroll container', 
         parentIndex: 3,
         identifier: 'target',
         rect: { x: 20, y: 500, width: 100, height: 80 },
+        kind: formatRole('Element'),
       },
       {
         index: 5,
@@ -249,6 +304,7 @@ test('uses the complete recursive selector when choosing the scroll container', 
         parentIndex: 4,
         identifier: 'marker',
         rect: { x: 24, y: 504, width: 40, height: 20 },
+        kind: formatRole('Element'),
       },
     ],
   };
@@ -268,12 +324,19 @@ test('uses positional relations when choosing the scroll container', () => {
   const snapshot = {
     createdAt: 0,
     nodes: [
-      { index: 0, ref: '@e1', type: 'Application', rect: { x: 0, y: 0, width: 402, height: 900 } },
+      {
+        index: 0,
+        ref: '@e1',
+        type: 'Application',
+        kind: formatRole('Application'),
+        rect: { x: 0, y: 0, width: 402, height: 900 },
+      },
       {
         index: 1,
         ref: '@e2',
         parentIndex: 0,
         type: 'ScrollView',
+        kind: formatRole('ScrollView'),
         rect: { x: 0, y: 0, width: 300, height: 400 },
       },
       {
@@ -282,12 +345,14 @@ test('uses positional relations when choosing the scroll container', () => {
         parentIndex: 1,
         identifier: 'target',
         rect: { x: 20, y: 40, width: 100, height: 40 },
+        kind: formatRole('Element'),
       },
       {
         index: 3,
         ref: '@e4',
         parentIndex: 0,
         type: 'ScrollView',
+        kind: formatRole('ScrollView'),
         rect: { x: 0, y: 450, width: 300, height: 400 },
       },
       {
@@ -296,6 +361,7 @@ test('uses positional relations when choosing the scroll container', () => {
         parentIndex: 3,
         identifier: 'target',
         rect: { x: 20, y: 520, width: 100, height: 80 },
+        kind: formatRole('Element'),
       },
       {
         index: 5,
@@ -303,6 +369,7 @@ test('uses positional relations when choosing the scroll container', () => {
         parentIndex: 3,
         identifier: 'caption',
         rect: { x: 20, y: 470, width: 100, height: 20 },
+        kind: formatRole('Element'),
       },
     ],
   };

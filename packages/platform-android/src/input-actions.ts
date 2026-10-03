@@ -1,0 +1,327 @@
+/**
+ * Pointer, key, and gesture actions on an Android device. Text entry — provider injection, the test
+ * IME, and the adb-shell writer — is `text-input.ts`.
+ */
+import {
+  DEVICE_ROTATION_SURFACE_INDEX,
+  deviceRotationFromSurfaceIndex,
+  type DeviceRotation,
+} from '@agent-device/contracts/device';
+import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
+import { GESTURE_DURATION_MIN_MS } from '@agent-device/contracts/gesture-plan-types';
+import {
+  type ScrollReleaseBehavior,
+  DEFAULT_MOBILE_SCROLL_DURATION_MS,
+} from '@agent-device/contracts/scroll-command';
+import {
+  type ScrollDirection,
+  buildScrollGesturePlan,
+  clipScrollViewportAboveKeyboard,
+  scrollKeyboardOccludesSurfaceError,
+} from '@agent-device/contracts/scroll-gesture';
+import { type TvRemoteButton, toAndroidTvRemoteKeyevent } from '@agent-device/contracts/tv-remote';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
+import type { Rect } from '@agent-device/kernel/snapshot';
+import { sleep } from '@agent-device/host-kit/retry';
+import { runAndroidShell } from './adb.ts';
+import { androidAdbResultError, discloseAdbInputDispatch } from './adb-failure.ts';
+import { executeAndroidTouchPlan, readAndroidGestureViewportReading } from './touch-executor.ts';
+import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
+
+export async function pressAndroid(device: DeviceInfo, x: number, y: number): Promise<void> {
+  try {
+    await runAndroidShell(device, ['input', 'tap', x, y]);
+  } catch (error) {
+    throw discloseAdbInputDispatch(error);
+  }
+}
+
+/** Two `input tap` sends; a failure of the second follows a tap that already landed. */
+export async function doubleTapAndroid(device: DeviceInfo, x: number, y: number): Promise<void> {
+  await pressAndroid(device, x, y);
+  try {
+    await pressAndroid(device, x, y);
+  } catch (error) {
+    throw discloseDispatchAfterSteps(error, 1);
+  }
+}
+
+export async function pressAndroidTvRemote(
+  device: DeviceInfo,
+  button: TvRemoteButton,
+  durationMs?: number,
+): Promise<void> {
+  const keyevent = toAndroidTvRemoteKeyevent(button);
+  const keyeventArgs = durationMs && durationMs > 0 ? ['keyevent', '--longpress'] : ['keyevent'];
+  await runAndroidShell(device, ['input', ...keyeventArgs, keyevent]);
+}
+
+export async function backAndroid(device: DeviceInfo): Promise<void> {
+  await runAndroidShell(device, ['input', 'keyevent', '4']);
+}
+
+export async function homeAndroid(device: DeviceInfo): Promise<void> {
+  await runAndroidShell(device, ['input', 'keyevent', '3']);
+}
+
+export async function pressAndroidEnter(device: DeviceInfo): Promise<void> {
+  await runAndroidShell(device, ['input', 'keyevent', 'ENTER']);
+}
+
+export async function setAndroidOrientation(
+  device: DeviceInfo,
+  orientation: DeviceRotation,
+): Promise<void> {
+  const userRotation = resolveAndroidUserRotation(orientation);
+  await runAndroidShell(device, ['settings', 'put', 'system', 'accelerometer_rotation', '0']);
+  await runAndroidShell(device, ['settings', 'put', 'system', 'user_rotation', userRotation]);
+  await settleAndroidOrientation(device, orientation, userRotation);
+}
+
+const ORIENTATION_SETTLE_TIMEOUT_MS = 15_000;
+const ORIENTATION_SETTLE_POLL_MS = 500;
+
+/**
+ * The display rotates some time after the setting lands; on a loaded emulator that takes
+ * seconds, during which accessibility reads hang. Returning once the display reports the
+ * requested rotation keeps the next command from paying for the transition. A display that never
+ * gets there is a fact the caller must see (a foreground app pinning its orientation, a device
+ * ignoring `user_rotation`); one that reports no rotation at all cannot be checked and is left to
+ * the setting.
+ */
+async function settleAndroidOrientation(
+  device: DeviceInfo,
+  orientation: DeviceRotation,
+  userRotation: string,
+): Promise<void> {
+  const deadline = Date.now() + ORIENTATION_SETTLE_TIMEOUT_MS;
+  let observed = await readAndroidDisplayRotation(device, orientation, deadline);
+  while (observed !== undefined && observed !== userRotation && Date.now() < deadline) {
+    await sleep(Math.min(ORIENTATION_SETTLE_POLL_MS, remainingMs(deadline)));
+    observed = await readAndroidDisplayRotation(device, orientation, deadline);
+  }
+  if (observed === undefined || observed === userRotation) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `orientation ${orientation} did not take effect: the display still reports rotation ${observed} after ${ORIENTATION_SETTLE_TIMEOUT_MS}ms`,
+    {
+      requestedRotation: Number(userRotation),
+      observedRotation: Number(observed),
+      hint: 'The foreground app may pin its orientation, or the device may ignore user_rotation. Check `adb shell dumpsys display | grep mCurrentOrientation` and the app manifest.',
+    },
+  );
+}
+
+/**
+ * One display read, bounded by what is left of the settle budget so a stuck probe ends the
+ * settle. A probe that fails (non-zero exit, timeout) is a failed settle, never "no field".
+ */
+async function readAndroidDisplayRotation(
+  device: DeviceInfo,
+  orientation: DeviceRotation,
+  deadline: number,
+): Promise<string | undefined> {
+  try {
+    return (
+      await readAndroidDisplayRotationIndices(device, { timeoutMs: remainingMs(deadline) })
+    )[0];
+  } catch (error) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `orientation ${orientation} could not confirm the display rotation: ${error instanceof Error ? error.message : String(error)}`,
+      { hint: 'The device did not answer `dumpsys display` within the orientation budget.' },
+    );
+  }
+}
+
+function remainingMs(deadline: number): number {
+  return Math.max(1, deadline - Date.now());
+}
+
+/**
+ * The one `dumpsys display` read both the orientation settle and the screenshot probe use: the
+ * `Surface.ROTATION_*` index of each logical display. A failed or aborted read throws; each caller
+ * decides what that means.
+ */
+async function readAndroidDisplayRotationIndices(
+  device: DeviceInfo,
+  options: { timeoutMs: number; signal?: AbortSignal },
+): Promise<string[]> {
+  // An executor may hand back a failed result instead of throwing, so the exit code is checked
+  // here rather than trusted to the transport.
+  const result = await runAndroidShell(device, ['dumpsys', 'display'], {
+    ...options,
+    allowFailure: true,
+  });
+  if (result.exitCode !== 0) {
+    throw androidAdbResultError(
+      `adb shell dumpsys display exited with code ${result.exitCode}`,
+      result,
+    );
+  }
+  return [...result.stdout.matchAll(/mCurrentOrientation=(\d)/g)].map((match) => match[1]!);
+}
+
+/**
+ * Best-effort read of the rotation the only display is rendering in. A device with more than one
+ * display yields none: `screencap` without a display id captures whichever display it finds
+ * first, so no single rotation is known to pair with the image. A probe that fails, is aborted,
+ * or reports no index also yields none rather than failing the operation it accompanies.
+ */
+export async function probeAndroidDisplayRotation(
+  device: DeviceInfo,
+  options: { timeoutMs: number; signal: AbortSignal },
+): Promise<DeviceRotation | undefined> {
+  try {
+    const indices = await readAndroidDisplayRotationIndices(device, options);
+    return indices.length === 1 ? deviceRotationFromSurfaceIndex(Number(indices[0])) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function appSwitcherAndroid(device: DeviceInfo): Promise<void> {
+  await runAndroidShell(device, ['input', 'keyevent', '187']);
+}
+
+export async function longPressAndroid(
+  device: DeviceInfo,
+  x: number,
+  y: number,
+  durationMs = 800,
+): Promise<Record<string, unknown>> {
+  const point = { x, y };
+  return await executeAndroidTouchPlan(device, {
+    topology: 'single',
+    intent: 'longPress',
+    durationMs,
+    pointers: [
+      {
+        pointerId: 0,
+        samples: [
+          { offsetMs: 0, point },
+          { offsetMs: durationMs, point },
+        ],
+      },
+    ],
+  });
+}
+
+export async function focusAndroid(device: DeviceInfo, x: number, y: number): Promise<void> {
+  await pressAndroid(device, x, y);
+}
+
+export async function scrollAndroid(
+  device: DeviceInfo,
+  direction: ScrollDirection,
+  options?: {
+    amount?: number;
+    pixels?: number;
+    durationMs?: number;
+    releaseBehavior?: ScrollReleaseBehavior;
+  } & AndroidHelperSessionOptions,
+): Promise<Record<string, unknown>> {
+  // The viewport read and the gesture are two helper calls one command apart: giving the read the
+  // command's session scope keeps both on the same instrumentation.
+  const { viewport, keyboard } = await readAndroidGestureViewportReading(device, {
+    helperSessionScope: options?.helperSessionScope,
+  });
+  const swipeSurface = resolveAndroidScrollSurface(direction, viewport, keyboard);
+  const relativePlan = buildScrollGesturePlan({
+    direction,
+    amount: options?.amount,
+    pixels: options?.pixels,
+    referenceWidth: swipeSurface.viewport.width,
+    referenceHeight: swipeSurface.viewport.height,
+  });
+  const scrollPlan = {
+    ...relativePlan,
+    // Injected coordinates are absolute, so their zero-origin reference frame
+    // must include the viewport offset as well as its dimensions.
+    referenceWidth: swipeSurface.viewport.x + swipeSurface.viewport.width,
+    referenceHeight: swipeSurface.viewport.y + swipeSurface.viewport.height,
+    x1: swipeSurface.viewport.x + relativePlan.x1,
+    y1: swipeSurface.viewport.y + relativePlan.y1,
+    x2: swipeSurface.viewport.x + relativePlan.x2,
+    y2: swipeSurface.viewport.y + relativePlan.y2,
+  };
+  const durationMs = Math.max(
+    options?.durationMs ?? DEFAULT_MOBILE_SCROLL_DURATION_MS,
+    GESTURE_DURATION_MIN_MS,
+  );
+  const backend = await executeAndroidTouchPlan(device, {
+    ...buildGesturePlan(
+      {
+        intent: 'pan',
+        origin: { x: scrollPlan.x1, y: scrollPlan.y1 },
+        delta: {
+          x: scrollPlan.x2 - scrollPlan.x1,
+          y: scrollPlan.y2 - scrollPlan.y1,
+        },
+        durationMs,
+      },
+      swipeSurface.viewport,
+      'android',
+    ),
+    releaseBehavior: options?.releaseBehavior ?? 'controlled',
+  });
+
+  return {
+    ...scrollPlan,
+    ...swipeSurface.evidence,
+    ...(options?.durationMs !== undefined ? { durationMs } : {}),
+    ...backend,
+  };
+}
+
+/**
+ * The band one Android scroll may swipe, refusing when the keyboard owns the window (#2500).
+ *
+ * The IME bounds come from this command's own window read, in absolute screen pixels like the
+ * application window beside them; they are never shared with another platform's space. Android is
+ * the case the clip exists for beyond iOS: an `adjustPan` or `adjustNothing` activity keeps a window
+ * whose recorded bounds already run under the IME, so a plan built from them aims at keys.
+ */
+type AndroidScrollSurface = Readonly<{
+  viewport: Rect;
+  evidence: Readonly<{ keyboardAvoided?: true; keyboardMinY?: number }>;
+}>;
+
+function resolveAndroidScrollSurface(
+  direction: ScrollDirection,
+  viewport: Rect,
+  keyboard: Rect | undefined,
+): AndroidScrollSurface {
+  if (keyboard === undefined) return { viewport, evidence: {} };
+  const clip = clipScrollViewportAboveKeyboard(viewport, keyboard);
+  if (clip.kind === 'occluded') {
+    throw scrollKeyboardOccludesSurfaceError(direction, {
+      keyboardMinY: clip.keyboardMinY,
+      visibleHeight: clip.visibleHeight,
+      viewportHeight: viewport.height,
+    });
+  }
+  if (clip.kind !== 'avoided') return { viewport, evidence: {} };
+  return {
+    viewport: clip.viewport,
+    evidence: { keyboardAvoided: true, keyboardMinY: clip.keyboardMinY },
+  };
+}
+
+function resolveAndroidUserRotation(orientation: DeviceRotation): string {
+  const index = DEVICE_ROTATION_SURFACE_INDEX[orientation];
+  if (index === undefined) {
+    throw new AppError('INVALID_ARGS', `Unsupported Android rotation: ${orientation}`);
+  }
+  return String(index);
+}
+
+export async function getAndroidScreenSize(
+  device: DeviceInfo,
+): Promise<{ width: number; height: number }> {
+  const result = await runAndroidShell(device, ['wm', 'size']);
+  const match = result.stdout.match(/Physical size:\s*(\d+)x(\d+)/);
+  if (!match) throw new AppError('COMMAND_FAILED', 'Unable to read screen size');
+  return { width: Number(match[1]), height: Number(match[2]) };
+}

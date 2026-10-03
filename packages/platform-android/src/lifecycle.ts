@@ -2,6 +2,7 @@ import {
   type ApplicationLifecycleRuntimeOperations,
   type OpenApplicationInput,
   type OpenApplicationOutcome,
+  type OpenApplicationTiming,
   hasRuntimeTransportHintValues,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
@@ -11,6 +12,8 @@ import {
   invokeApplicationClose,
   invokeApplicationOpen,
 } from '@agent-device/contracts/application-lifecycle-interaction';
+import { isDeepLinkTarget } from '@agent-device/contracts/command';
+import { observeAndroidLaunch } from './launch-observation.ts';
 import { ensureAndroidReady } from './readiness/runtime.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -51,8 +54,12 @@ export function bindAndroidApplicationLifecycle(
     resolveOpenTarget: async (input) =>
       await host.androidApplications.resolveOpenTarget(device, input),
     prepareApplicationOpen: async (input) => {
-      await ensureAndroidReady(host, device, { headless: false }, signal);
-      void input;
+      await ensureAndroidReady(
+        host,
+        device,
+        { headless: false, deadlineAtMs: input.execution.startupDeadlineAtMs },
+        signal,
+      );
     },
     openApplication: async (input) => await openAndroidApplication(host, binding, input),
     applyRuntimeHints: async (input) =>
@@ -164,8 +171,28 @@ async function openAndroidApplication(
   if (appBundleId) {
     await host.androidApplications.resetFramePerfStats(binding.device, appBundleId);
   }
-  timing.postOpenSettleDurationMs = 0;
+  const settleStartedAtMs = Date.now();
+  Object.assign(timing, await observeOpenedApp(binding, input, appBundleId));
+  timing.postOpenSettleDurationMs = elapsed(settleStartedAtMs);
   return { appBundleId, timing };
+}
+
+/** A URL or deep-link open has no launched app of its own to observe, so it reports nothing. */
+async function observeOpenedApp(
+  binding: ReturnType<typeof bindLocalApplicationLifecycleInteractor>,
+  input: OpenApplicationInput,
+  appBundleId: string | undefined,
+): Promise<Pick<OpenApplicationTiming, 'postOpenObservation' | 'postOpenObservationFailure'>> {
+  if (!input.target || isDeepLinkTarget(input.target)) return {};
+  if (!appBundleId) return { postOpenObservation: 'app-unidentified' };
+  const launch = await observeAndroidLaunch(
+    await binding.resolveInteractor(input.execution, appBundleId),
+    appBundleId,
+    binding.signal,
+  );
+  return launch.observation === 'probe-failed'
+    ? { postOpenObservation: 'probe-failed', postOpenObservationFailure: launch.failure }
+    : { postOpenObservation: launch.observation };
 }
 
 function elapsed(startedAtMs: number): number {

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { runCmdSync } from '../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
 
 // Every test run (Vitest via scripts/vitest-tmpdir-global-setup.ts, node --test
 // via scripts/node-test-tmpdir.ts) redirects TMPDIR into one disposable,

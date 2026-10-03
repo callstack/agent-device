@@ -1,5 +1,5 @@
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import { makeSnapshotState } from '../../../src/__tests__/test-utils/snapshot-builders.ts';
+import type { RawSnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 
 /**
  * The permanent contract fixture trees (ADR 0011 Layer 3): the real
@@ -335,38 +335,16 @@ export function dragEndpointsSnapshot(): SnapshotState {
   ]);
 }
 
+export function runnerPresentedDragEndpointsNodes(): RawSnapshotNode[] {
+  return dragEndpointsSnapshot()
+    .nodes.filter((node) => node.index !== 3)
+    .map(({ ref: _ref, ...node }) => node);
+}
+
 /**
  * Runner-side node payloads (the shape `ios.runner.snapshot` returns) for the
  * provider-transcript scenarios.
  */
-
-export const RUNNER_EQUIVALENT_WRAPPER_NODES = [
-  { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
-  {
-    index: 1,
-    parentIndex: 0,
-    type: 'Cell',
-    label: 'Chat',
-    rect: { x: 20, y: 740, width: 100, height: 50 },
-    hittable: false,
-  },
-  {
-    index: 2,
-    parentIndex: 1,
-    type: 'Button',
-    label: 'Chat',
-    rect: { x: 20, y: 740, width: 100, height: 50 },
-    hittable: true,
-  },
-  {
-    index: 3,
-    parentIndex: 2,
-    type: 'StaticText',
-    label: 'Chat',
-    rect: { x: 20, y: 740, width: 100, height: 50 },
-    hittable: false,
-  },
-];
 
 export const RUNNER_CONTINUE_NODES = [
   {
@@ -382,82 +360,6 @@ export const RUNNER_CONTINUE_NODES = [
     label: 'Continue',
     hittable: true,
     rect: { x: 100, y: 300, width: 200, height: 44 },
-  },
-] as const;
-
-export const RUNNER_CHANGED_NODES = [
-  {
-    index: 0,
-    type: 'Application',
-    label: 'Example',
-    rect: { x: 0, y: 0, width: 400, height: 800 },
-  },
-  {
-    index: 1,
-    parentIndex: 0,
-    type: 'StaticText',
-    label: 'Welcome!',
-    rect: { x: 100, y: 300, width: 200, height: 44 },
-  },
-] as const;
-
-// Runner-side closed drawer: the only match is off-screen, so the runtime
-// fallback path must refuse it instead of tapping out-of-viewport coordinates.
-export const RUNNER_CLOSED_DRAWER_NODES = [
-  {
-    index: 0,
-    type: 'Application',
-    label: 'Example',
-    rect: { x: 0, y: 0, width: 400, height: 800 },
-  },
-  {
-    index: 1,
-    parentIndex: 0,
-    type: 'Button',
-    label: 'Explore',
-    hittable: true,
-    rect: { x: -320, y: 240, width: 300, height: 50 },
-  },
-] as const;
-
-// Runner-side covered control (#1091 delegation): the runner skips it as
-// non-hittable (ELEMENT_NOT_FOUND) and the runtime fallback must refuse with
-// the covered shape instead of tapping through the overlay.
-export const RUNNER_COVERED_NODES = [
-  {
-    index: 0,
-    type: 'Application',
-    label: 'Example',
-    rect: { x: 0, y: 0, width: 400, height: 800 },
-  },
-  {
-    index: 1,
-    parentIndex: 0,
-    type: 'Button',
-    label: 'Save draft',
-    hittable: false,
-    interactionBlocked: 'covered',
-    rect: { x: 16, y: 700, width: 140, height: 44 },
-  },
-] as const;
-
-// Runner-side visible-but-non-hittable cell (#1037 shape): the runner reports
-// ELEMENT_NOT_FOUND, the runtime fallback proceeds by coordinates and
-// annotates the result instead of failing.
-export const RUNNER_NON_HITTABLE_NODES = [
-  {
-    index: 0,
-    type: 'Application',
-    label: 'Example',
-    rect: { x: 0, y: 0, width: 400, height: 800 },
-  },
-  {
-    index: 1,
-    parentIndex: 0,
-    type: 'Cell',
-    label: 'Recents row',
-    hittable: false,
-    rect: { x: 20, y: 300, width: 360, height: 60 },
   },
 ] as const;
 
@@ -477,3 +379,74 @@ export const RUNNER_NON_HITTABLE_TEXT_INPUT_NODES = [
     rect: { x: 20, y: 40, width: 160, height: 40 },
   },
 ] as const;
+
+// #2589 shape, recorded from the iOS repro: the bottom tab bar sits behind the system keyboard.
+// The keyboard is its own system surface, so it is never a covering sibling of app content here
+// (`occlusion` stays silent) and the tab bar is still inside the app's own window rect
+// (`offscreen` passes) — the tap used to report success while the key ate the touch.
+// The key rects are the bottom row measured on iPhone 17 Pro (26.2): a keyboard the guard will
+// measure has to report one unbroken run of columns, so a reduced layout cannot stop at two keys.
+export function keyboardCoveredTabBarSnapshot(): SnapshotState {
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 2,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Form',
+      rect: { x: 148, y: 791, width: 104, height: 83 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Keyboard',
+      rect: { x: 0, y: 583, width: 402, height: 291 },
+      hittable: false,
+    },
+    {
+      index: 3,
+      depth: 2,
+      parentIndex: 2,
+      type: 'Key',
+      label: 'globe',
+      rect: { x: 4.67, y: 752, width: 49.33, height: 54 },
+      hittable: true,
+    },
+    {
+      index: 4,
+      depth: 2,
+      parentIndex: 2,
+      type: 'Key',
+      label: '.?123',
+      rect: { x: 54, y: 752, width: 49.33, height: 54 },
+      hittable: true,
+    },
+    {
+      index: 5,
+      depth: 2,
+      parentIndex: 2,
+      type: 'Key',
+      label: 'space',
+      rect: { x: 103.33, y: 752, width: 197.33, height: 54 },
+      hittable: true,
+    },
+    {
+      index: 6,
+      depth: 2,
+      parentIndex: 2,
+      type: 'Key',
+      label: 'return',
+      rect: { x: 300.67, y: 752, width: 99, height: 54 },
+      hittable: true,
+    },
+  ]);
+}

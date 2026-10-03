@@ -17,6 +17,7 @@ import {
   createAppLogLiveHandleFromFinish,
   createAppLogStartResult,
 } from '@agent-device/capture-kit';
+import { scopeSimctlArgsForDevice } from '../core/simctl.ts';
 import { APPLE_XCTEST_LOGS_HINT, backendForAppleDevice } from './backend.ts';
 import {
   checkCoreDeviceConsoleCaptureSupport,
@@ -158,12 +159,7 @@ async function commandForAppleAppLogs(
   const executableName = await resolveSimulatorExecutable(host, device, appBundleId, signal);
   return {
     executable: 'xcrun',
-    args: buildIosSimulatorLogStreamArgs({
-      deviceId: device.id,
-      appBundleId,
-      executableName,
-      simulatorSetPath: device.simulatorSetPath,
-    }),
+    args: buildIosSimulatorLogStreamArgs(device, { appBundleId, executableName }),
     allowFailure: true,
   } as const;
 }
@@ -174,11 +170,10 @@ async function resolveSimulatorExecutable(
   appBundleId: string,
   signal?: AbortSignal,
 ): Promise<string | undefined> {
-  const prefix = device.simulatorSetPath ? ['--set', device.simulatorSetPath] : [];
   const container = await host.appleTools.run(
     {
       tool: 'simctl',
-      args: [...prefix, 'get_app_container', device.id, appBundleId, 'app'],
+      args: scopeSimctlArgsForDevice(device, ['get_app_container', device.id, appBundleId, 'app']),
       allowFailure: true,
       timeoutMs: 4_000,
     },

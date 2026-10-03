@@ -1,7 +1,8 @@
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { AgentDeviceClient } from '../../agent-device-client.ts';
-import type { CliCommandName } from '../../command-catalog.ts';
-import type { ReplayTestReporterRuntime } from '../../replay/test/reporting.ts';
+import type { CliCommandName } from '@agent-device/command-registry/catalog';
+import type { CommandProgressState } from '../../commands/command-progress.ts';
+import type { ReplayTestReporterRuntime } from '../replay-test/reporting.ts';
 
 export type ClientCommandParams = {
   positionals: string[];
@@ -9,6 +10,8 @@ export type ClientCommandParams = {
   client: AgentDeviceClient;
   debug?: boolean;
   replayTestReporterRuntime?: ReplayTestReporterRuntime;
+  /** Progress this run's transport already rendered to stderr, read by the output formatters. */
+  commandProgress?: CommandProgressState;
 };
 
 /**

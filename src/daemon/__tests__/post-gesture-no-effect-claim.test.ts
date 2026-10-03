@@ -2,30 +2,36 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { countDiagnosticEventsByPhase, withDiagnosticsScope } from '../../utils/diagnostics.ts';
+import {
+  countDiagnosticEventsByPhase,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
 import {
   buildInteractionSurfaceSignature,
   summarizeDiscriminatingSurfaceDivergence,
-} from '../interaction-outcome-policy.ts';
+} from '../interaction-surface-signature.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   capturePostGestureStabilizedResult,
   markDeferredInteractionOutcome,
 } from '../deferred-interaction-outcome.ts';
-import { formatGestureNoEffectWarning } from '../gesture-no-effect.ts';
-import type { SessionState } from '../types.ts';
+import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
+import type { PostGestureAction } from '@agent-device/kernel/snapshot';
+import type { SessionState } from '../session-state.ts';
 import {
   chromeWithListSnapshot,
   makeSession,
   pickupSnapshot,
 } from './post-gesture-stabilization-fixtures.ts';
 
-// When the agent-facing gestureNoEffect claim may and may not surface — split
-// by subject from post-gesture-stabilization.test.ts (the capture loop), the
-// same #1563 convention that keeps test files under the repo's 500-line
-// tripwire. Loop mechanics (rebase, distrust budget, timeouts) stay in the
+const noEffectWarning = (gesture: PostGestureAction) =>
+  formatPostGestureOutcomeWarning({ kind: 'no-effect', gesture });
+
+// When the agent-facing no-effect claim may and may not surface — split
+// by subject from post-gesture-stabilization.test.ts (the capture loop), per
+// #1563. Loop mechanics (rebase, distrust budget, timeouts) stay in the
 // loop file; everything here is about the claim and its veto instrumentation.
 
 afterEach(() => {
@@ -127,7 +133,7 @@ test('a backend flip mid-poll withholds the no-effect claim, and records the rea
 
   assert.equal(rebased, 1);
   assert.equal(staleAccepts, 1, 'the loop still accepts the stale read after the distrust budget');
-  assert.equal(result.gestureNoEffect, undefined);
+  assert.equal(result.postGestureOutcome, undefined);
   assert.equal(vetoed, 1, 'the withheld claim must be observable');
   // The reason is the point: a rebase means the corroboration pair is
   // cross-backend, which is a categorically different answer from "the
@@ -163,7 +169,7 @@ test('a successful scroll that flips the capture backend must not claim no-effec
 
   assert.equal(rebased, 1);
   assert.equal(
-    result.gestureNoEffect,
+    result.postGestureOutcome,
     undefined,
     'the scroll swapped every list cell — a no-effect claim here is a false positive',
   );
@@ -202,7 +208,7 @@ test('no pre-gesture snapshot means no baseline, no rebase, and no no-effect cla
   assert.equal(rebased, 0);
   assert.equal(vetoed, 0);
   assert.equal(
-    result.gestureNoEffect,
+    result.postGestureOutcome,
     undefined,
     'a no-effect claim needs a real pre-gesture baseline, never one the loop invented for itself',
   );
@@ -232,7 +238,7 @@ test('scope drift accepts stale but is vetoed from claiming no-effect, observabl
   );
 
   assert.equal(staleAccepts, 1);
-  assert.equal(result.gestureNoEffect, undefined);
+  assert.equal(result.postGestureOutcome, undefined);
   assert.equal(vetoed, 1);
   // Scope drift reads as one-sided membership, never as movement: both cells
   // are missing from the narrowed capture, the shared chrome button has not
@@ -290,7 +296,7 @@ test('same-backend membership drift vetoes the claim and records the divergence 
 
   assert.equal(rebased, 0, 'same backend throughout: this is drift, not a flip');
   assert.equal(staleAccepts, 1);
-  assert.equal(result.gestureNoEffect, undefined);
+  assert.equal(result.postGestureOutcome, undefined);
   assert.equal(vetoed, 1);
   // The counts are what distinguish this from the scope-drift case above:
   // one extra key on the CURRENT side, everything shared unmoved. Same veto,
@@ -357,22 +363,31 @@ test('summarizeDiscriminatingSurfaceDivergence counts one-sided keys and moved r
   });
 });
 
-test('formatGestureNoEffectWarning names the gesture and the raw-drag escape hatch', () => {
+test('the no-effect warning names the gesture and the raw-drag escape hatch', () => {
   // Positionals echo verbatim: the warning names the gesture the agent issued,
   // and `scroll down 1` is what they issued.
-  const scrollWarning = formatGestureNoEffectWarning('scroll', ['down', '1']);
+  const scrollWarning = noEffectWarning({
+    action: 'scroll',
+    positionals: ['down', '1'],
+  });
   assert.match(scrollWarning, /scroll down 1 produced no visible change/);
   assert.match(scrollWarning, /swipe x1 y1 x2 y2/);
   assert.match(scrollWarning, /already at its edge/);
 
-  const gestureWarning = formatGestureNoEffectWarning('gesture', ['swipe', 'left']);
+  const gestureWarning = noEffectWarning({
+    action: 'gesture',
+    positionals: ['swipe', 'left'],
+  });
   assert.match(gestureWarning, /gesture swipe left produced no visible change/);
 
-  const bareWarning = formatGestureNoEffectWarning('swipe', []);
+  const bareWarning = noEffectWarning({ action: 'swipe', positionals: [] });
   assert.match(bareWarning, /swipe produced no visible change/);
 
   // The regression the deleted heuristic caused: every positional of a swipe is
   // a coordinate, so "drop anything numeric-looking" left a contentless "swipe".
-  const swipeWarning = formatGestureNoEffectWarning('swipe', ['10', '20', '30', '40']);
+  const swipeWarning = noEffectWarning({
+    action: 'swipe',
+    positionals: ['10', '20', '30', '40'],
+  });
   assert.match(swipeWarning, /^swipe 10 20 30 40 produced no visible change/);
 });

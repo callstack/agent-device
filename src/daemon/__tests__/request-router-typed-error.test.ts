@@ -2,16 +2,16 @@ import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/de
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 
-vi.mock('../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
+vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../platforms/apple/core/runner-client.ts')>();
+    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
   return { ...actual, stopIosRunnerSession: vi.fn(async () => {}) };
 });
 
-vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
 import { dispatchApplicationLifecycleEffect } from './application-lifecycle-runtime-fixture.ts';
 import {
@@ -19,7 +19,8 @@ import {
   lifecycleDeviceRuntimeGateway,
   systemRuntimeSpies,
 } from './test-device-runtime-gateway.ts';
-import type { DaemonRequest, SessionState } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import {
@@ -29,6 +30,7 @@ import {
 } from '../../__tests__/test-utils/session-factories.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, retriableForErrorCode } from '@agent-device/kernel/errors';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const mockLifecycleEffect = vi.mocked(dispatchApplicationLifecycleEffect);
 
@@ -57,7 +59,7 @@ function makeHandler(sessionStore = makeSessionStore('agent-device-router-typed-
   return {
     sessionStore,
     handler: createRequestHandler({
-      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       token: 'test-token',
       sessionStore,
       leaseRegistry: new LeaseRegistry(),
@@ -205,7 +207,7 @@ test('#1391: an ordinary close-time script-save failure surfaces details.reason/
   const { sessionStore, handler } = makeHandler();
   const session = makeAuthoringSession('typed-error', TENANT_SESSION_DEFAULTS);
   const targetPath = path.join(
-    os.tmpdir(),
+    mkdtempForTestSync('agent-device-router-typed-error'),
     `agent-device-router-typed-error-${Date.now()}-${Math.random().toString(36).slice(2)}.ad`,
   );
   fs.writeFileSync(targetPath, 'pre-existing\n');

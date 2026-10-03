@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const TSC_BIN = path.join(repoRoot, 'node_modules/.bin/tsc');

@@ -36,7 +36,7 @@ export async function withMockedAdb(
       '  shift',
       '  shift',
       'fi',
-      'printf "%s\\n" "$*" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
+      String.raw`printf "%s\n" "$*" >> "$AGENT_DEVICE_TEST_ARGS_FILE"`,
       'if [ "$1" = "shell" ] && [ "$2" = "run-as" ] && [ "$4" = "cat" ]; then',
       '  key=$(printf "%s" "$5" | tr "/" "_")',
       '  if [ -f "$AGENT_DEVICE_TEST_SEED_DIR/$key" ]; then',
@@ -49,7 +49,7 @@ export async function withMockedAdb(
       '  if [ -n "$AGENT_DEVICE_TEST_RUN_AS_ID_STDOUT" ]; then',
       '    printf "%s" "$AGENT_DEVICE_TEST_RUN_AS_ID_STDOUT"',
       '  else',
-      '    printf "%s\\n" "uid=10162(u0_a162) gid=10162(u0_a162) groups=10162(u0_a162)"',
+      String.raw`    printf "%s\n" "uid=10162(u0_a162) gid=10162(u0_a162) groups=10162(u0_a162)"`,
       '  fi',
       '  if [ -n "$AGENT_DEVICE_TEST_RUN_AS_ID_STDERR" ]; then',
       '    printf "%s" "$AGENT_DEVICE_TEST_RUN_AS_ID_STDERR" >&2',
@@ -144,7 +144,12 @@ export async function withMockedXcrun(
   const argsLogPath = path.join(tmpDir, 'args.log');
   await fs.writeFile(
     xcrunPath,
-    ['#!/bin/sh', 'printf "%s\\n" "$*" >> "$AGENT_DEVICE_TEST_ARGS_FILE"', 'exit 0', ''].join('\n'),
+    [
+      '#!/bin/sh',
+      String.raw`printf "%s\n" "$*" >> "$AGENT_DEVICE_TEST_ARGS_FILE"`,
+      'exit 0',
+      '',
+    ].join('\n'),
     'utf8',
   );
   await fs.chmod(xcrunPath, 0o755);

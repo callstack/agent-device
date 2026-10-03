@@ -1,10 +1,19 @@
 import crypto from 'node:crypto';
 import { asAppError, AppError } from '@agent-device/kernel/errors';
-import { resolveSessionRequestLogPath, SessionStore } from '../session-store.ts';
-import { resolveDaemonPaths, resolveDaemonServerMode } from '../config.ts';
+import { SessionStore } from '../session-store.ts';
+import { resolveSessionRequestLogPath } from '../session-artifact-paths.ts';
+import { resolveDaemonPaths, resolveDaemonServerMode } from '../../daemon-resolution.ts';
 import { createDaemonHttpServer } from './http-server.ts';
 import { trackDownloadableArtifact } from '../artifact-tracking.ts';
-import { createProviderDeviceRuntimeRequestProviders } from '../../provider-device-runtime.ts';
+import {
+  createProviderDeviceRuntimeRequestProviders,
+  isActiveProviderDevice,
+} from '../../provider-device-runtime.ts';
+import { installProviderDeviceAdmission } from '../provider-device-admission.ts';
+import { assertDaemonPolicyAllowsCapability } from '../daemon-policy.ts';
+import { loadDaemonPolicy, type DaemonPolicy } from '../../daemon-policy-file.ts';
+import { getInteractor } from '../../core/interactors.ts';
+import { installInteractorResolution } from '../interactor-resolution.ts';
 import {
   androidObservation,
   createPlatformRuntimeGateway,
@@ -13,96 +22,87 @@ import {
 } from '../../platform-runtime.ts';
 import { createHostDiagnostics } from '../../platform-runtime-host-diagnostics.ts';
 import {
-  createDefaultProviderRuntimeComposition,
+  createDaemonProviderRuntimeComposition,
   DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS,
 } from '../../provider-device-runtimes.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { clearDaemonShutdownReport, writeDaemonShutdownReport } from '../daemon-shutdown-report.ts';
 import { createRequestHandler } from '../request-router.ts';
+import { getLeaseRegistryExecutionLocks } from '../request-execution-scope.ts';
 import { stopSessionAppLog, teardownSessionResources } from '../session-teardown.ts';
+import { resolveDaemonSessionTeardownTimeoutMs } from '../session-teardown-budget.ts';
 import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecycle-recovery.ts';
-import { runtimeHintValues } from '../handlers/session-runtime.ts';
+import { runtimeHintValues } from '../session-runtime.ts';
 import { closeDaemonServers } from './server-shutdown.ts';
-import type { DaemonInvokeFn, SessionState } from '../types.ts';
+import type { DaemonInvokeFn } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
+import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
+import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
 import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts';
-import { reconcileOrphanedDeviceClaims, type DeviceClaimReconciler } from '../device-claims.ts';
-import { createDeviceClaimReconciler } from '../device-claim-reconciliation.ts';
+import {
+  processOwnsActiveDeviceClaim,
+  reconcileOrphanedDeviceClaims,
+  type DeviceClaimReconciler,
+} from '../device/device-claims.ts';
+import { createOwnerScopedDeviceClaimReconciler } from '../device/device-claim-owner-recovery.ts';
 import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
-import { createPerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
+import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
+import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
+import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,
-} from '../../utils/diagnostics.ts';
-import { isEnvTruthy } from '../../utils/retry.ts';
+  type ResourceDiagnostic,
+} from '@agent-device/host-kit/diagnostics';
+import {
+  createOwnedProcessRecordStore,
+  type OwnedProcessRecordStore,
+  readCurrentOwnerIdentity,
+  reapOwnedProcessRecordsAtStartup,
+  type OwnerIdentity,
+} from '@agent-device/host-kit/process';
+import { isEnvTruthy, sleep } from '@agent-device/host-kit/retry';
+
 import {
   acquireDaemonLock,
   parseIntegerEnv,
-  readProcessStartTime,
   readVersion,
   releaseDaemonLock,
-  removeInfo,
+  removeInfoOwnedBy,
+  resolveDaemonCodeOrigin,
   resolveDaemonCodeSignature,
   writeInfo,
 } from './server-lifecycle.ts';
+import { watchDaemonMetadataLoss, type DaemonMetadataLoss } from './daemon-metadata-loss.ts';
 import {
   createSocketServer,
   listenHttpServer,
   listenNetServer,
   type DaemonServer,
 } from './transport.ts';
-import { prewarmPngWorker, terminatePngWorker } from '../../utils/png-worker-client.ts';
-import { sleep } from '../../utils/timeouts.ts';
-import { configureAppleRunnerLeaseOwnerStateDir } from '../../platform-runtime-apple-runner-owner.ts';
-import {
-  cleanupManagedWebRuntimeOrphans,
-  platformResourceCleanup,
-  resetAndroidSnapshotHelperRuntime,
-} from '../../platform-runtime-resource-cleanup.ts';
-import { isWebSession, openWebSessionNames } from '../web-session-names.ts';
-import {
-  recoverAppLogResourcesAfterDaemonLock,
-  type AppLogRecoveryDiagnostic,
-} from '../app-log-resource-recovery.ts';
+import { prewarmPngWorker, terminatePngWorker } from '@agent-device/capture-kit/png-worker-client';
+
+import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
+import { platformDaemonLifecycleOwners } from '../../platform-runtime-daemon-lifecycle.ts';
+import { openWebSessionNames } from '../web-session-names.ts';
+import { recoverAppLogResourcesAfterDaemonLock } from '../app-log-resource-recovery.ts';
 import { createDaemonRecoveryPlatformScope } from '../platform-request-scope.ts';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
-import { createAudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
-import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
-import {
-  createOwnedProcessRecordStore,
-  type OwnedProcessRecordStore,
-} from '../../utils/owned-process-record.ts';
-import { reapOwnedProcessRecordsAtStartup } from '../../utils/owned-process-reaper.ts';
 
-const DAEMON_SESSION_TEARDOWN_TIMEOUT_MS = 5_000;
-export const SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS = 11_000;
-// Mirrors AGENT_BROWSER_TIMEOUT_MS in platforms/web/agent-browser-provider.ts: the ceiling that
-// module already places on one `agent-browser` CLI call, so the race below never gives up on the
-// web-close step while the close it started is still running within its own enforced limit.
-export const WEB_BROWSER_SESSION_TEARDOWN_BUDGET_MS = 30_000;
 const DAEMON_SESSION_LEASE_RELEASE_TIMEOUT_MS = 1_000;
 const DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS = 1_000;
 const DAEMON_PROVIDER_RELEASE_DRAIN_TIMEOUT_MS = 2_000;
+// An orphaned `simctl recordVideo` releases the host-wide recording lock only after it finishes
+// finalizing on SIGINT; force-killing it sooner leaves every later recording failing with EBUSY
+// (#2170). Bound the grace to the recorder purpose, so daemon startup stays under the client budget.
+const DAEMON_RECORDING_REAP_TERM_TIMEOUT_MS = 5_000;
 
 type WritableOutput = {
   write: (chunk: string) => unknown;
 };
-
-/**
- * Per-session teardown budget for daemon shutdown. The base budget covers ordinary resources; an
- * active durable recording or an open web session gets an additional owner-finalization budget so
- * the daemon cannot exit while its runtime handle is still producing the terminal media artifact,
- * or while agent-browser is still closing its Chrome fleet. The base portion remains available to
- * cleanup steps that follow recording finalization or the web close.
- */
-export function resolveDaemonSessionTeardownTimeoutMs(session: SessionState): number {
-  let timeoutMs = DAEMON_SESSION_TEARDOWN_TIMEOUT_MS;
-  if (session.screenRecording) timeoutMs += SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS;
-  if (isWebSession(session)) timeoutMs += WEB_BROWSER_SESSION_TEARDOWN_BUDGET_MS;
-  return timeoutMs;
-}
 
 async function settleDaemonTeardownStep(params: {
   session: SessionState;
@@ -222,7 +222,7 @@ export type DaemonRuntimeController = {
 
 export async function flushDaemonStartupDiagnostics(
   logPath: string,
-  diagnostics: readonly AppLogRecoveryDiagnostic[],
+  diagnostics: readonly ResourceDiagnostic[],
 ): Promise<void> {
   if (diagnostics.length === 0) return;
   await withDiagnosticsScope(
@@ -240,6 +240,74 @@ export async function flushDaemonStartupDiagnostics(
   );
 }
 
+/**
+ * Records one daemon-level event. These run outside any request, so there is no request scope and no
+ * resolved debug level to inherit; debug is forced on for the same reason the #2681 handoff forces it —
+ * the event is the point of the record and must not be dropped by a level that was never set for it.
+ */
+async function emitDaemonDiagnostic(
+  logPath: string,
+  phase: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  await withDiagnosticsScope(
+    { command: 'daemon', session: 'daemon', logPath, debug: true },
+    async () => {
+      emitDiagnostic({ level: 'warn', phase, data });
+      flushDiagnosticsToSessionFile({ force: true });
+    },
+  );
+}
+
+/**
+ * Removes this daemon's `daemon.json` at exit, and only while the record still names it: a shutdown
+ * that unlinked whatever file was present took the metadata of the daemon now serving clients (#3087).
+ * An absent record is not a decline worth logging, because client cleanup removes it routinely and a
+ * startup that failed before publication must not leave a `daemon.log` behind.
+ */
+async function removeOwnDaemonInfo(params: {
+  infoPath: string;
+  logPath: string;
+  owner: OwnerIdentity;
+}): Promise<void> {
+  const removal = removeInfoOwnedBy(params.infoPath, params.owner);
+  if (removal.removed || removal.reason === 'absent') return;
+  await emitDaemonDiagnostic(params.logPath, 'daemon_info_removal_declined', {
+    infoPath: params.infoPath,
+    ...removal,
+  });
+}
+
+async function noteDaemonMetadataLoss(params: {
+  infoPath: string;
+  logPath: string;
+  loss: DaemonMetadataLoss;
+}): Promise<void> {
+  await emitDaemonDiagnostic(params.logPath, 'daemon_metadata_lost', {
+    infoPath: params.infoPath,
+    ...params.loss,
+  });
+}
+
+/**
+ * Starts the watch that reports this daemon's registration being taken over, and returns the handle
+ * that stops it. It is armed only once this process has published its own record: before publication
+ * the file legitimately describes a predecessor, and losing that is not this daemon's event.
+ */
+function armDaemonMetadataLossWatch(
+  stateDir: string,
+  infoPath: string,
+  logPath: string,
+  owner: OwnerIdentity,
+): () => void {
+  return watchDaemonMetadataLoss({
+    infoPath,
+    stateDir,
+    owner,
+    onLoss: (loss) => void noteDaemonMetadataLoss({ infoPath, logPath, loss }).catch(() => {}),
+  });
+}
+
 export async function startDaemonRuntime(
   options: DaemonRuntimeOptions = {},
 ): Promise<DaemonRuntimeController | null> {
@@ -251,7 +319,16 @@ export async function startDaemonRuntime(
   const { baseDir, infoPath, lockPath, logPath, sessionsDir } = daemonPaths;
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
-  await configureAppleRunnerLeaseOwnerStateDir(baseDir);
+  // ADR 0029: a policy that cannot be read or validated stops startup; the daemon never runs
+  // with a weaker policy than its operator named.
+  let daemonPolicy: DaemonPolicy | undefined;
+  try {
+    daemonPolicy = loadDaemonPolicy(env);
+  } catch (error) {
+    stderr.write(`Daemon error: ${asAppError(error).message}\n`);
+    exit(1);
+    return null;
+  }
 
   const sessionStore = new SessionStore(sessionsDir);
   const ownedProcessRecords = createOwnedProcessRecordStore({
@@ -266,11 +343,16 @@ export async function startDaemonRuntime(
   const screenRecordingAdmissionLedger = createScreenRecordingAdmissionLedger();
   const version = readVersion();
   const token = crypto.randomBytes(24).toString('hex');
-  const daemonProcessStartTime = readProcessStartTime(process.pid) ?? undefined;
+  const daemonIdentity = readCurrentOwnerIdentity();
+  const daemonProcessStartTime = daemonIdentity.startTime ?? undefined;
+  const daemonCodeOrigin = resolveDaemonCodeOrigin();
   const daemonCodeSignature = resolveDaemonCodeSignature();
-  const providerComposition = await createDefaultProviderRuntimeComposition(env);
+  const providerComposition = await createDaemonProviderRuntimeComposition(env);
   const providerDeviceRuntimes = [...providerComposition.runtimes];
   const deviceRuntimeGateway = createPlatformRuntimeGateway({
+    assertShutdownAllowed: daemonPolicy
+      ? () => assertDaemonPolicyAllowsCapability(daemonPolicy, 'device-shutdown')
+      : undefined,
     providerRuntimes: providerDeviceRuntimes,
     providerModules: providerComposition.platformModules,
     sessionsDir,
@@ -290,6 +372,8 @@ export async function startDaemonRuntime(
     providerDeviceRuntimes,
     { providerRuntimeRequiredIds: DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS },
   );
+  installProviderDeviceAdmission({ isActive: (device) => isActiveProviderDevice(device) });
+  installInteractorResolution({ resolve: getInteractor });
   const requestPlatformProviders = createRequestPlatformProviders({
     providers: {
       appleRunnerProvider: providerRuntimeProviders.appleRunnerProvider,
@@ -320,6 +404,7 @@ export async function startDaemonRuntime(
     },
   });
   const cloudArtifactProvider = providerRuntimeProviders.cloudArtifactProvider;
+  const providerAppCatalog = providerRuntimeProviders.providerAppCatalog;
   const deviceInventoryGateways = createPlatformDeviceInventoryGateways(
     providerRuntimeProviders.deviceInventorySource,
   );
@@ -331,6 +416,7 @@ export async function startDaemonRuntime(
     leaseRegistry,
     leaseLifecycleProvider: providerRuntimeProviders.leaseLifecycleProvider,
     cloudArtifactProvider,
+    providerAppCatalog,
     deviceInventoryGateways,
     deviceRuntimeGateway,
     appLogAdmissionLedger,
@@ -345,7 +431,10 @@ export async function startDaemonRuntime(
     providerRuntimeRequiredIds: providerRuntimeProviders.providerRuntimeRequiredIds,
     providerDeviceRuntimeScope: providerRuntimeProviders.providerDeviceRuntimeScope,
     trackDownloadableArtifact,
+    daemonPolicy,
   });
+
+  let stopMetadataLossWatch: () => void = () => {};
 
   const emitFatalDiagnostic = async (error: unknown): Promise<void> => {
     await withDiagnosticsScope(
@@ -399,6 +488,73 @@ export async function startDaemonRuntime(
     await Promise.all(sessionsToStop.map(teardownDaemonSession));
   };
 
+  // #2833: settles the resources of a session this daemon expires for idleness. Deliberately NOT
+  // `teardownDaemonSession`: that one exists for a daemon that is leaving, so it hands a healthy
+  // execution host to its successor, finalizes a remote lease, and deletes the session whether the
+  // bounded teardown finished or not. An idle expiry is the opposite situation — the daemon is
+  // staying alive, there is no successor, and a session whose resources would not release has to
+  // survive so the next pass can retry rather than leave a claim owned by a process that no longer
+  // knows what it holds. So: resources, then the platform finalization that stops the execution host
+  // and releases its lease, then the claim, cleared last, by the reaper.
+  const settleIdleExpiredSession = async (
+    session: SessionState,
+    sessionName: string,
+  ): Promise<void> => {
+    await teardownSessionResources({
+      appLog: 'run',
+      session,
+      sessionName,
+      sessionStore,
+      stateDir: baseDir,
+      platformCleanup: platformResourceCleanup,
+    });
+    await finalizeDaemonSessionApplicationLifecycle({
+      gateway: deviceRuntimeGateway,
+      scope: createDaemonRecoveryPlatformScope(),
+      session,
+      stateDir: baseDir,
+      runtimeHints: runtimeHintValues(sessionStore.getRuntimeHints(sessionName)),
+      // The one caller that must say so: this daemon is staying alive, so there is no shutdown
+      // phase a healthy runner could be deferred to. Taking the ordinary-close path stops the
+      // runner and releases its lease instead of parking it until process exit.
+      daemonLeaving: false,
+    });
+    // ADR 0012 R7 binds this teardown too — the healed `.ad` is committed by
+    // `SessionStore.finalizeRepairTeardown` — but NOT from in here. That call publishes the script
+    // and stamps COMMITTED onto the record it is handed, which makes it part of ENDING the session
+    // rather than part of releasing its resources, and a settle that cannot confirm its claim gone
+    // holds the session back to retry. The reaper runs it once the expiry is committed to.
+  };
+
+  const sessionIdleExpiry = createSessionIdleExpiry({
+    sessionStore,
+    idleExpiryMs: resolveSessionIdleExpiryMs(env),
+    executionLocks: getLeaseRegistryExecutionLocks(leaseRegistry),
+    settleSession: settleIdleExpiredSession,
+    // The same bounded teardown budget every other session teardown gets. It bounds only how long a
+    // sweep waits, never the settle itself, so a stuck recorder cannot make a sweep hang but also
+    // cannot make an expiry give up on a device that does come free.
+    settleBudgetMs: (session) => resolveDaemonSessionTeardownTimeoutMs(session),
+    // A sweep is out-of-request work, so it has no request scope and `emitDiagnostic` would drop
+    // everything it reports — including the record of what was reclaimed and why a reclaim failed.
+    withinDiagnosticsScope: async (run) =>
+      await withDiagnosticsScope(
+        { command: 'daemon', session: 'daemon', logPath, debug: true },
+        async () => {
+          try {
+            return await run();
+          } finally {
+            flushDiagnosticsToSessionFile({ force: true });
+          }
+        },
+      ),
+    // An expiry can be the event that makes this daemon fully idle, and no request follows it to
+    // arm the process-level reap.
+    onSessionExpired: () => {
+      idleReap.noteActivity();
+    },
+  });
+
   // Reaps this daemon process when it sits fully idle (no open sessions, no
   // in-flight requests, no active recording) past AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS.
   // `shutdown` is defined below but only invoked asynchronously by the timer,
@@ -421,6 +577,11 @@ export async function startDaemonRuntime(
     } finally {
       inFlightRequestCount--;
       idleReap.noteActivity();
+      // One hook covers every way a deadline changes: an `open` has added one, a `close` has removed
+      // one, and any other command has just re-stamped the session it ran on. Reading the session set
+      // here — after the request's own session stamp landed inside its execution lock — is what keeps
+      // the reaper's view of a session's deadline identical to the lock-guarded one.
+      sessionIdleExpiry.noteSessionsChanged();
     }
   };
 
@@ -443,8 +604,10 @@ export async function startDaemonRuntime(
     if (startHttpServer) {
       const httpServer = await createDaemonHttpServer({
         handleRequest,
+        leaseRegistry,
         token,
         retainArtifacts,
+        env,
         // #1801: the same record `DaemonError.logPath` names, addressed by its
         // locator so a remote caller can fetch what it cannot read by path.
         resolveRequestDiagnosticsPath: (ref) =>
@@ -462,8 +625,10 @@ export async function startDaemonRuntime(
       httpPort,
       token,
       version,
+      codeOrigin: daemonCodeOrigin,
       codeSignature: daemonCodeSignature,
       processStartTime: daemonProcessStartTime,
+      policyDigest: daemonPolicy?.digest,
     });
     if (socketPort) stdout.write(`AGENT_DEVICE_DAEMON_PORT=${socketPort}\n`);
     if (httpPort) stdout.write(`AGENT_DEVICE_DAEMON_HTTP_PORT=${httpPort}\n`);
@@ -484,8 +649,10 @@ export async function startDaemonRuntime(
     processStartTime: daemonProcessStartTime,
   };
   if (!acquireDaemonLock(baseDir, lockPath, lockData)) {
+    await Promise.allSettled(
+      providerDeviceRuntimes.map(async (runtime) => await runtime.shutdown()),
+    );
     stderr.write('Daemon lock is held by another process; exiting.\n');
-    await configureAppleRunnerLeaseOwnerStateDir(undefined);
     exit(0);
     return null;
   }
@@ -494,21 +661,25 @@ export async function startDaemonRuntime(
   let servers: DaemonServer[] = [];
   let socketPort: number | undefined;
   let httpPort: number | undefined;
-  const startupAppLogDiagnostics: AppLogRecoveryDiagnostic[] = [];
+  const startupDiagnostics: ResourceDiagnostic[] = [];
   try {
-    const { recoverLegacyAppLogMarkersAfterDaemonLock } =
-      await import('../../platform-runtime-operation-host.ts');
-    const legacyMarkerRecovery = await recoverLegacyAppLogMarkersAfterDaemonLock(sessionsDir);
+    await platformDaemonLifecycleOwners.configureForDaemonLock({
+      stateDir: baseDir,
+      hasDeviceClaimAuthority: processOwnsActiveDeviceClaim,
+      onDiagnostic: (diagnostic) => startupDiagnostics.push(diagnostic),
+    });
+    const legacyMarkerRecovery =
+      await platformDaemonLifecycleOwners.recoverLegacyAppLogMarkers(sessionsDir);
     appLogAdmissionLedger.retainLegacyMarkers(legacyMarkerRecovery.retained);
     for (const markerPath of legacyMarkerRecovery.recovered) {
-      startupAppLogDiagnostics.push({
+      startupDiagnostics.push({
         phase: 'app_log_legacy_marker_recovered',
         resourcePath: markerPath,
         data: {},
       });
     }
     for (const retained of legacyMarkerRecovery.retained) {
-      startupAppLogDiagnostics.push({
+      startupDiagnostics.push({
         phase: 'app_log_legacy_marker_retained',
         resourcePath: retained.markerPath,
         data: {
@@ -521,11 +692,12 @@ export async function startDaemonRuntime(
       sessionsDir,
       gateway: deviceRuntimeGateway,
       scope: createDaemonRecoveryPlatformScope(),
-      onDiagnostic: (diagnostic) => startupAppLogDiagnostics.push(diagnostic),
+      onDiagnostic: (diagnostic) => startupDiagnostics.push(diagnostic),
     });
     await reapOwnedProcessRecordsAtStartup(ownedProcessRecords, {
       openWebSessionNames: openWebSessionNames(sessionStore),
       purposes: ['simctl-screen-recording'],
+      termTimeoutMs: DAEMON_RECORDING_REAP_TERM_TIMEOUT_MS,
     });
     await cleanupWebBrowserOrphansForDaemonStartup({
       stateDir: baseDir,
@@ -546,27 +718,31 @@ export async function startDaemonRuntime(
     socketPort = opened.socketPort;
     httpPort = opened.httpPort;
     publishDaemonInfo(socketPort, httpPort);
-    await flushDaemonStartupDiagnostics(logPath, startupAppLogDiagnostics);
+    stopMetadataLossWatch = armDaemonMetadataLossWatch(baseDir, infoPath, logPath, daemonIdentity);
+    await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
     // After publication: publishDaemonInfo truncates daemon.log, so anything
     // written before it is lost — including reconciliation diagnostics.
     await reconcileDeviceClaimsForDaemonStartup(
       logPath,
-      createDeviceClaimReconciler({
-        gateway: deviceRuntimeGateway,
-        scope: createDaemonRecoveryPlatformScope(),
-      }),
+      createOwnerScopedDeviceClaimReconciler(createDaemonRecoveryPlatformScope()),
       baseDir,
     );
     // Arms the initial idle-reap timer: a daemon that starts and never
     // receives a request must still be able to reap itself.
     idleReap.noteActivity();
+    // The #2833 deadline needs no equivalent arm: the store is empty until a request puts a session
+    // in it, and that request's own completion re-arms the reaper.
   } catch (error) {
     const appErr = asAppError(error);
     stderr.write(`Daemon error: ${appErr.message}\n`);
     closeServersBestEffort(servers);
-    removeInfo(infoPath);
+    stopMetadataLossWatch();
+    await removeOwnDaemonInfo({ infoPath, logPath, owner: daemonIdentity });
+    await Promise.allSettled(
+      providerDeviceRuntimes.map(async (runtime) => await runtime.shutdown()),
+    );
     releaseDaemonLock(lockPath);
-    await configureAppleRunnerLeaseOwnerStateDir(undefined);
+    await platformDaemonLifecycleOwners.clearDaemonLockConfiguration();
     exit(1);
     return null;
   }
@@ -579,21 +755,34 @@ export async function startDaemonRuntime(
   let shuttingDown = false;
   const shutdown = async (shutdownOptions: { exitCode?: number; cause?: unknown } = {}) => {
     idleReap.cancel();
+    sessionIdleExpiry.cancel();
     if (shuttingDown) return;
     shuttingDown = true;
+    stopMetadataLossWatch();
     if (shutdownOptions.cause) {
       await emitFatalDiagnostic(shutdownOptions.cause);
     }
     await closeDaemonServers(servers);
-    // Hand healthy simulator runners off before durable session teardown. The lifecycle gateway
-    // later terminates only still-owned generations once all resources have finalized.
+    // Hand healthy runners off before durable session teardown. The lifecycle gateway later
+    // terminates only still-owned generations once all resources have finalized.
+    //
+    // The scope is what makes this step observable: a SIGTERM shutdown has no request, and therefore
+    // no diagnostics scope, so `emitDiagnostic` would drop every detach reason. Daemon debug level is
+    // forced on here because the declines are the point of the record — a handoff that silently
+    // skipped is indistinguishable from a rebuild (#2681).
     try {
-      await applicationLifecycle.detachForDaemonShutdown();
+      await withDiagnosticsScope(
+        { command: 'daemon', session: 'daemon', logPath, debug: true },
+        async () => {
+          await applicationLifecycle.detachForDaemonShutdown();
+          flushDiagnosticsToSessionFile({ force: true });
+        },
+      );
     } catch {}
     expiredProviderLeaseReleaser.beginShutdown();
     await teardownDaemonSessions();
     try {
-      await resetAndroidSnapshotHelperRuntime();
+      await platformDaemonLifecycleOwners.resetAndroidSnapshotHelper();
     } catch (error) {
       emitDiagnostic({
         level: 'warn',
@@ -629,9 +818,9 @@ export async function startDaemonRuntime(
       terminatePngWorker().catch(() => {}),
       sleep(DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS),
     ]);
-    removeInfo(infoPath);
+    await removeOwnDaemonInfo({ infoPath, logPath, owner: daemonIdentity });
     releaseDaemonLock(lockPath);
-    await configureAppleRunnerLeaseOwnerStateDir(undefined);
+    await platformDaemonLifecycleOwners.clearDaemonLockConfiguration();
     exit(shutdownOptions.exitCode ?? 0);
   };
 
@@ -700,7 +889,7 @@ export async function cleanupWebBrowserOrphansForDaemonStartup(params: {
   ownedProcessRecords?: OwnedProcessRecordStore;
 }): Promise<void> {
   try {
-    await cleanupManagedWebRuntimeOrphans({
+    await platformDaemonLifecycleOwners.cleanupManagedWebOrphans({
       stateDir: params.stateDir,
       openWebSessionNames: openWebSessionNames(params.sessionStore),
       ...(params.ownedProcessRecords === undefined

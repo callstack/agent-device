@@ -55,7 +55,19 @@ describe('command platform execution declaration', () => {
     ).not.toThrow();
   });
 
+  test('accepts a step selector next to input-dependent runtime uses', () => {
+    expect(() =>
+      assertCommandPlatformExecution({
+        kind: 'device-runtime',
+        uses: appLogRuntimePlanUses,
+        selectUses: () => appLogRuntimePlanUses,
+      }),
+    ).not.toThrow();
+  });
+
   test.each([
+    { kind: 'device-runtime', uses: appLogRuntimePlanUses, selectUses: 'not-a-function' },
+    { kind: 'device-runtime', use: appLogRuntimePlanUses[0], selectUses: () => [] },
     { kind: 'device-runtime', uses: [] },
     { kind: 'device-runtime', use: appLogRuntimePlanUses[0], uses: appLogRuntimePlanUses },
     { kind: 'device-runtime', uses: [appLogRuntimePlanUses[0], appLogRuntimePlanUses[0]] },

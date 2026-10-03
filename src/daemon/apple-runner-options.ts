@@ -1,5 +1,5 @@
 import type { AppleRunnerRequestOptions } from '@agent-device/contracts/apple-runner-request';
-import type { DaemonRequest } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
 
 export type { AppleRunnerRequestOptions } from '@agent-device/contracts/apple-runner-request';
 

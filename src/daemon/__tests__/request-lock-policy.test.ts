@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { applyRequestLockPolicy } from '../request-lock-policy.ts';
-import type { SessionRef, SessionState } from '../types.ts';
+import type { SessionRef, SessionState } from '../session-state.ts';
 
 const IOS_SESSION: SessionState = {
   name: 'qa-ios',
@@ -142,7 +142,7 @@ test('rejects existing-session selector conflicts under request lock policy', ()
         },
         ref(IOS_SESSION),
       ),
-    /--serial=emulator-5554/i,
+    /Session "qa-ios" is already bound to apple device "iPhone 16" \(SIM-001\), but snapshot selected --serial=emulator-5554/i,
   );
 });
 

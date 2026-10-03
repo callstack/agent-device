@@ -52,6 +52,109 @@ test('parseImports distinguishes value, type-only, dynamic, and value re-export 
   );
 });
 
+test('parseImports detects multiline dynamic imports', () => {
+  const edges = parseImports(['void import(', "  '../multiline.ts'", ');'].join('\n'));
+
+  assert.deepEqual(edges, [
+    {
+      spec: '../multiline.ts',
+      dynamic: true,
+      typeOnly: false,
+      line: 1,
+      symbols: [],
+      bindingResidue: false,
+    },
+  ]);
+});
+
+test('parseImports resolves constant-template dynamic imports', () => {
+  const edges = parseImports('void import(`../template.ts`);');
+
+  assert.deepEqual(edges, [
+    {
+      spec: '../template.ts',
+      dynamic: true,
+      typeOnly: false,
+      line: 1,
+      symbols: [],
+      bindingResidue: false,
+    },
+  ]);
+});
+
+test('parseImports captures destructured named bindings of dynamic imports, keyed by export name', () => {
+  const edges = parseImports(
+    [
+      "const { a, 'b': c } = await import('./dyn.ts');",
+      "const mod = await import('./dyn.ts');",
+      "const wrapped = (await import('./dyn.ts')) as Mod;",
+      'const { a, ...rest } = await import("./dyn.ts");',
+      'const { [keyExpr]: named } = await import("./dyn.ts");',
+    ].join('\n'),
+  );
+
+  assert.deepEqual(
+    edges.map(({ spec, symbols, bindingResidue }) => ({ spec, symbols, bindingResidue })),
+    [
+      { spec: './dyn.ts', symbols: ['a', 'b'], bindingResidue: false },
+      { spec: './dyn.ts', symbols: [], bindingResidue: false },
+      { spec: './dyn.ts', symbols: [], bindingResidue: false },
+      { spec: './dyn.ts', symbols: ['a'], bindingResidue: true },
+      { spec: './dyn.ts', symbols: [], bindingResidue: true },
+    ],
+  );
+});
+
+test('parseImports retains named source symbols without changing edge-kind detection', () => {
+  const edges = parseImports(
+    [
+      "import { value as localValue, type TypeA } from './named.ts';",
+      "import type { TypeB as RenamedType } from './types.ts';",
+      "export { reExport as publicName } from './re-export.ts';",
+      "export type { ExportedType } from './exported-types.ts';",
+      "import * as namespace from './namespace.ts';",
+      "void import('./dynamic.ts');",
+    ].join('\n'),
+  );
+
+  assert.deepEqual(
+    edges.map(({ spec, dynamic, typeOnly, symbols }) => ({ spec, dynamic, typeOnly, symbols })),
+    [
+      {
+        spec: './named.ts',
+        dynamic: false,
+        typeOnly: false,
+        symbols: ['value', 'TypeA'],
+      },
+      { spec: './types.ts', dynamic: false, typeOnly: true, symbols: ['TypeB'] },
+      { spec: './re-export.ts', dynamic: false, typeOnly: false, symbols: ['reExport'] },
+      { spec: './exported-types.ts', dynamic: false, typeOnly: true, symbols: ['ExportedType'] },
+      { spec: './namespace.ts', dynamic: false, typeOnly: false, symbols: [] },
+      { spec: './dynamic.ts', dynamic: true, typeOnly: false, symbols: [] },
+    ],
+  );
+});
+
+test('parseImports ignores comments inside named bindings', () => {
+  const edges = parseImports(
+    [
+      "import { /* exact, declared */ SessionStore /* authority */ } from './store.ts';",
+      'import /* shape */ {',
+      '  // exact declaration',
+      '  type SessionState as State,',
+      "} from './types.ts';",
+    ].join('\n'),
+  );
+
+  assert.deepEqual(
+    edges.map(({ spec, typeOnly, symbols }) => ({ spec, typeOnly, symbols })),
+    [
+      { spec: './store.ts', typeOnly: false, symbols: ['SessionStore'] },
+      { spec: './types.ts', typeOnly: true, symbols: ['SessionState'] },
+    ],
+  );
+});
+
 test('value cycles fail while type-only and dynamic cycles stay outside the graph', () => {
   const valueCycle = resolveImportEdges(
     new Map([
@@ -75,7 +178,7 @@ test('value cycles fail while type-only and dynamic cycles stay outside the grap
 test('back-edge identities follow the documented target spine', () => {
   const edges = resolveImportEdges(
     new Map([
-      ['src/platforms/apple.ts', "import '../core/platform-plugin.ts';"],
+      ['src/contracts/result.ts', "import '../core/platform-plugin.ts';"],
       ['src/core/platform-plugin.ts', 'export const plugin = true;'],
       ['src/commands/help.ts', "import '../cli/parser.ts';"],
       ['src/cli/parser.ts', 'export const parser = true;'],
@@ -85,7 +188,7 @@ test('back-edge identities follow the documented target spine', () => {
   const actual = collectBackEdges(edges);
   assert.deepEqual(actual, {
     'commands -> cli': ['src/commands/help.ts -> src/cli/parser.ts'],
-    'platforms -> core': ['src/platforms/apple.ts -> src/core/platform-plugin.ts'],
+    'contracts -> core': ['src/contracts/result.ts -> src/core/platform-plugin.ts'],
   });
 });
 
@@ -94,19 +197,21 @@ test('neutral ownership zones reject value imports into higher layers', () => {
     new Map([
       ['src/contracts/result.ts', "import '../core/result.ts';"],
       ['src/core/result.ts', 'export const result = true;'],
-      ['src/request/cancel.ts', "import '../commands/cancel.ts';"],
+      ['packages/device-selection/src/selection.ts', "import '@agent-device/commands/cancel';"],
       ['src/commands/cancel.ts', 'export const cancel = true;'],
       ['packages/selectors/src/internal/parse.ts', "import '../../../../src/client/client.ts';"],
       ['src/client/client.ts', 'export const client = true;'],
-      ['src/cli-schema/schema.ts', "import '../cli/parser.ts';"],
+      ['src/mcp/schema.ts', "import '../cli/parser.ts';"],
       ['src/cli/parser.ts', 'export const parser = true;'],
     ]),
   );
 
   assert.deepEqual(collectBackEdges(edges), {
-    'cli-schema -> cli': ['src/cli-schema/schema.ts -> src/cli/parser.ts'],
+    'mcp -> cli': ['src/mcp/schema.ts -> src/cli/parser.ts'],
     'contracts -> core': ['src/contracts/result.ts -> src/core/result.ts'],
-    'request -> commands': ['src/request/cancel.ts -> src/commands/cancel.ts'],
+    'device-selection -> commands': [
+      'packages/device-selection/src/selection.ts -> src/commands/cancel.ts',
+    ],
     'selectors -> client': ['packages/selectors/src/internal/parse.ts -> src/client/client.ts'],
   });
 });
@@ -182,12 +287,12 @@ test('classifyZone separates the ranked spine from intentionally-unranked zones'
   assert.equal(classifyZone('daemon-server'), 'ranked');
   assert.equal(classifyZone('(root)'), 'unranked');
   assert.equal(classifyZone('platform-runtime'), 'unranked');
-  assert.equal(classifyZone('utils'), 'ranked');
+  assert.equal(classifyZone('platforms'), 'unclassified');
+  assert.equal(classifyZone('utils'), 'unclassified');
   // Every satellite zone joined the spine; only the composition root stays out, because R2
   // forbids daemon/ from importing commands/ so the files that wire them cannot be ranked.
   assert.equal(classifyZone('mcp'), 'ranked');
-  assert.equal(classifyZone('snapshot'), 'ranked');
-  assert.equal(classifyZone('snapshot-quality'), 'ranked');
+  assert.equal(classifyZone('screenshot-diff'), 'ranked');
   // A zone that is neither ranked nor listed peripheral must be flagged, never
   // silently treated as back-edge-free.
   assert.equal(classifyZone('not-a-real-zone'), 'unclassified');
@@ -198,7 +303,8 @@ test('every production zone is deliberately classified as ranked or unranked', (
   // deliberate ranked-vs-peripheral decision here instead of silently escaping
   // spine back-edge detection. If this fails, add the new zone to TARGET_DAG_RANK
   // (ranked spine) or UNRANKED_ZONES (root/peripheral) in model.ts.
-  assert.deepEqual(unclassifiedZones(listSourceFiles()), []);
+  const productionFiles = listSourceFiles();
+  assert.deepEqual(unclassifiedZones(productionFiles), []);
 
   // The classification must also stay honest to the tree: every zone the model
   // names is a real production zone, so the docs cannot list a spine or peripheral
@@ -211,7 +317,7 @@ test('every production zone is deliberately classified as ranked or unranked', (
 
 test('listSourceFiles includes root-level src/*.ts production files', () => {
   const files = new Set(listSourceFiles());
-  for (const rootFile of ['src/cli.ts', 'src/command-catalog.ts', 'src/backend.ts']) {
+  for (const rootFile of ['src/cli.ts', 'src/runtime.ts', 'src/backend.ts']) {
     assert.ok(files.has(rootFile), `expected ${rootFile} in analyzed source files`);
   }
   assert.ok(![...files].some((file) => file.endsWith('.test.ts')));
@@ -226,40 +332,40 @@ test('SessionState field names come from the declaration, not a hand-kept list',
       "    kind: 'cwd';",
       '    id: string;',
       '  };',
-      '  refFrameState?: RefFrameState;',
+      '  refFrame?: RefFrame;',
       '};',
       '',
       'export type Other = { notAField: string };',
     ].join('\n'),
   );
   // Nested object members are not session fields, and neighbouring types are not scanned.
-  assert.deepEqual(fields, ['name', 'sessionScope', 'refFrameState']);
+  assert.deepEqual(fields, ['name', 'sessionScope', 'refFrame']);
 });
 
 test('session-state writes are found by field, and non-daemon or undeclared names are not', () => {
   const writes = findSessionStateWrites(
     new Map([
-      ['src/daemon/ref-frame.ts', "session.refFrameState = 'active';"],
+      ['src/daemon/ref-frame.ts', "session.refFrame = 'active';"],
       ['src/daemon/session-snapshot.ts', 'session.snapshotGeneration += 1;'],
       // the store owns the record and may write anything on it
-      ['src/daemon/session-store.ts', "session.refFrameState = 'expired';"],
+      ['src/daemon/session-store.ts', "session.refFrame = 'expired';"],
       // a runner session outside the daemon is a different type that happens to share a name
-      ['src/platforms/apple/runner-session.ts', 'session.refFrameState = 1;'],
+      ['src/platforms/apple/runner-session.ts', 'session.refFrame = 1;'],
       // a local that is not a declared SessionState field
-      ['src/daemon/handlers/session-audio.ts', 'session.somethingElse = 1;'],
+      ['src/daemon/session-observability/internal/session-audio.ts', 'session.somethingElse = 1;'],
       // reads and comparisons are not writes
-      ['src/daemon/handlers/find.ts', "if (session.refFrameState === 'active') return;"],
+      ['src/daemon/interaction/internal/find.ts', "if (session.refFrame === 'active') return;"],
       // a write into a sub-object is not a write to the field itself
-      ['src/daemon/handlers/session-open.ts', 'session.refFrameState.inner = 1;'],
+      ['src/daemon/handlers/session-probe.ts', 'session.refFrame.inner = 1;'],
       // a different binding that happens to have a matching property
-      ['src/daemon/handlers/session-close.ts', "other.refFrameState = 'expired';"],
+      ['src/daemon/session-lifecycle/internal/session-close.ts', "other.refFrame = 'expired';"],
     ]),
-    ['refFrameState', 'snapshotGeneration'],
+    ['refFrame', 'snapshotGeneration'],
   );
 
   assert.deepEqual(
     writes.map(({ file, field }) => `${file}:${field}`),
-    ['src/daemon/ref-frame.ts:refFrameState', 'src/daemon/session-snapshot.ts:snapshotGeneration'],
+    ['src/daemon/ref-frame.ts:refFrame', 'src/daemon/session-snapshot.ts:snapshotGeneration'],
   );
 });
 
@@ -267,23 +373,21 @@ test('every assignment form is a write, including the ones a regex forgets', () 
   // A line-based matcher has to enumerate operators, and the ones it misses are the natural
   // ways to write these: `??=` for a default on an optional field, `||=`/`&&=` for a flag.
   const forms = [
-    'session.refFrameState = 1;',
-    'session.refFrameState ??= 1;',
-    'session.refFrameState ||= 1;',
-    'session.refFrameState &&= 1;',
-    'session.refFrameState += 1;',
-    'session.refFrameState -= 1;',
-    'session.refFrameState++;',
-    '--session.refFrameState;',
-    'session\n  .refFrameState = 1;',
+    'session.refFrame = 1;',
+    'session.refFrame ??= 1;',
+    'session.refFrame ||= 1;',
+    'session.refFrame &&= 1;',
+    'session.refFrame += 1;',
+    'session.refFrame -= 1;',
+    'session.refFrame++;',
+    '--session.refFrame;',
+    'session\n  .refFrame = 1;',
   ];
   for (const form of forms) {
-    const writes = findSessionStateWrites(new Map([['src/daemon/probe.ts', form]]), [
-      'refFrameState',
-    ]);
+    const writes = findSessionStateWrites(new Map([['src/daemon/probe.ts', form]]), ['refFrame']);
     assert.deepEqual(
       writes.map(({ field }) => field),
-      ['refFrameState'],
+      ['refFrame'],
       `expected ${JSON.stringify(form)} to count as a write`,
     );
   }
@@ -291,8 +395,8 @@ test('every assignment form is a write, including the ones a regex forgets', () 
 
 test('a computed session write is reported rather than silently unattributed', () => {
   const writes = findSessionStateWrites(
-    new Map([['src/daemon/probe.ts', 'session[key] = 1;\nsession[`refFrameState`] = 2;']]),
-    ['refFrameState'],
+    new Map([['src/daemon/probe.ts', 'session[key] = 1;\nsession[`refFrame`] = 2;']]),
+    ['refFrame'],
   );
   // `[computed]` has no entry in SESSION_STATE_FIELD_OWNERS, so R7 fails on it by
   // construction — a computed write can never pass as an owned one.
@@ -328,19 +432,19 @@ test('a session write counts through an aliased binding, not only one named `ses
         'src/daemon/probe.ts',
         [
           'nextSession.snapshotGeneration = 3;',
-          'preEntrySession.refFrameState = "active";',
+          'preEntrySession.refFrame = "active";',
           'completedSession.saveScriptComplete = true;',
           // Not a session binding, and not a session write.
           'result.snapshotGeneration = 9;',
-          'flags.refFrameState = "x";',
+          'flags.refFrame = "x";',
         ].join('\n'),
       ],
     ]),
-    ['snapshotGeneration', 'refFrameState', 'saveScriptComplete'],
+    ['snapshotGeneration', 'refFrame', 'saveScriptComplete'],
   );
   assert.deepEqual(
     writes.map(({ field, line }) => `${line}:${field}`),
-    ['1:snapshotGeneration', '2:refFrameState', '3:saveScriptComplete'],
+    ['1:snapshotGeneration', '2:refFrame', '3:saveScriptComplete'],
   );
 });
 
@@ -349,7 +453,7 @@ test('every SessionState field is classified exactly once', () => {
   // R7 by being invisible to the scan, and the rule would silently stop covering part of the
   // type it claims to cover.
   const fields = sessionStateFields(
-    readFileSync(path.resolve(import.meta.dirname, '../../src/daemon/types.ts'), 'utf8'),
+    readFileSync(path.resolve(import.meta.dirname, '../../src/daemon/session-state.ts'), 'utf8'),
   );
   assert.deepEqual(fieldClassificationDrift(fields), []);
   assert.equal(
@@ -360,7 +464,7 @@ test('every SessionState field is classified exactly once', () => {
 
 test('classification drift is reported in all three directions', () => {
   const declared = sessionStateFields(
-    readFileSync(path.resolve(import.meta.dirname, '../../src/daemon/types.ts'), 'utf8'),
+    readFileSync(path.resolve(import.meta.dirname, '../../src/daemon/session-state.ts'), 'utf8'),
   );
 
   // Unclassified: a field added to SessionState and to neither table. This is the case the
@@ -416,7 +520,7 @@ test('largestTypeCycleSize counts type-only cycles and ignores dynamic ones', ()
   ]);
 
   // A loop closed through a DYNAMIC import is excluded on purpose: a lazy seam is not a
-  // comprehension barrier, and R3 relies on dynamic imports existing. With no non-dynamic edge at
+  // comprehension barrier. With no non-dynamic edge at
   // all no file enters the walk, so the floor here is 0 rather than 1 — specified, not incidental.
   const dynamicCycle = resolveImportEdges(
     new Map(

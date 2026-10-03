@@ -1,0 +1,401 @@
+import path from 'node:path';
+
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
+import { type ExecResult, execFailureDetails } from '@agent-device/host-kit/command';
+import {
+  hostTemporaryDirectory,
+  readHostTextFile,
+  unlinkHostFile,
+} from '@agent-device/host-kit/host-file';
+import { hostProcessId } from '@agent-device/host-kit/process';
+
+import { IOS_DEVICECTL_TIMEOUT_MS } from './config.ts';
+import { runXcrun } from './tool-provider.ts';
+import type { IosAppInfo, IosDeviceAppProcesses, IosDeviceProcessInfo } from './app-info.ts';
+import { filterAppleAppsByBundlePrefix } from './app-filter.ts';
+
+type IosDeviceAppsPayload = {
+  result?: {
+    apps?: Array<{
+      bundleIdentifier?: unknown;
+      name?: unknown;
+      url?: unknown;
+    }>;
+  };
+};
+
+type IosDeviceProcessesPayload = {
+  result?: {
+    runningProcesses?: Array<{
+      executable?: unknown;
+      processIdentifier?: unknown;
+    }>;
+  };
+};
+
+type IosDevicectlErrorPayload = {
+  error?: {
+    userInfo?: {
+      NSUnderlyingError?: {
+        error?: {
+          code?: unknown;
+          domain?: unknown;
+        };
+      };
+    };
+  };
+};
+
+export async function runIosDevicectl(
+  args: string[],
+  context: { action: string; deviceId: string },
+  options: {
+    signal?: AbortSignal;
+    timeoutMs?: number;
+    /**
+     * Treat a non-zero exit as success when its output matches — e.g. an
+     * uninstall of an app that is already gone.
+     */
+    tolerateOutput?: (stdout: string, stderr: string) => boolean;
+  } = {},
+): Promise<void> {
+  const fullArgs: ['devicectl', ...string[]] = ['devicectl', ...args];
+  const result = await runXcrun(fullArgs, {
+    allowFailure: true,
+    signal: options.signal,
+    timeoutMs: options.timeoutMs ?? IOS_DEVICECTL_TIMEOUT_MS,
+  });
+  if (result.exitCode === 0) return;
+  const { stdout, stderr } = result;
+  if (options.tolerateOutput?.(stdout, stderr)) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Failed to ${context.action}`,
+    execFailureDetails(result, {
+      cmd: 'xcrun',
+      args: fullArgs,
+      stdout,
+      stderr,
+      deviceId: context.deviceId,
+      hint: resolveIosDevicectlHint(stdout, stderr) ?? IOS_DEVICECTL_DEFAULT_HINT,
+    }),
+  );
+}
+
+export async function listIosDeviceApps(
+  device: DeviceInfo,
+  filter: 'user-installed' | 'all',
+): Promise<IosAppInfo[]> {
+  const payload = await runIosDevicectlJsonCommand(device, {
+    jsonPrefix: 'agent-device-ios-apps',
+    args: ['devicectl', 'device', 'info', 'apps', '--device', device.id, '--include-all-apps'],
+    failureMessage: 'Failed to list iOS apps',
+    parseFailureMessage: 'Failed to parse iOS apps list',
+  });
+  return filterIosDeviceApps(parseIosDeviceAppsPayload(payload), filter);
+}
+
+async function listIosDeviceProcesses(device: DeviceInfo): Promise<IosDeviceProcessInfo[]> {
+  const payload = await runIosDevicectlJsonCommand(device, {
+    jsonPrefix: 'agent-device-ios-processes',
+    args: ['devicectl', 'device', 'info', 'processes', '--device', device.id],
+    failureMessage: 'Failed to list iOS processes',
+    parseFailureMessage: 'Failed to parse iOS process list',
+    fallbackHint: IOS_DEVICE_PROCESS_LIST_HINT,
+  });
+  if (!isIosDeviceProcessesPayload(payload)) {
+    throw new AppError('COMMAND_FAILED', 'Unsupported iOS process list response', {
+      deviceId: device.id,
+      hint: IOS_DEVICE_PROCESS_LIST_HINT,
+    });
+  }
+  return parseIosDeviceProcessesPayload(payload);
+}
+
+export async function terminateIosDeviceApp(device: DeviceInfo, bundleId: string): Promise<void> {
+  const { appBundleUrl, processes } = await resolveIosDeviceAppProcesses(device, bundleId);
+  // Extensions share the app bundle URL, but closing the app targets its shallowest main process.
+  const processInfo = processes.sort(
+    (left, right) => processPathDepth(left, appBundleUrl) - processPathDepth(right, appBundleUrl),
+  )[0];
+  // No match means the installed app is already closed.
+  if (!processInfo) return;
+
+  await runIosDevicectlJsonCommand(device, {
+    jsonPrefix: 'agent-device-ios-process-terminate',
+    args: [
+      'devicectl',
+      'device',
+      'process',
+      'terminate',
+      '--device',
+      device.id,
+      '--pid',
+      String(processInfo.pid),
+      '--kill',
+    ],
+    failureMessage: 'Failed to terminate iOS app',
+    parseFailureMessage: 'Failed to parse iOS process termination response',
+    // The process may exit after discovery but before CoreDevice sends the signal.
+    tolerateFailurePayload: isMissingIosDeviceProcessPayload,
+  });
+}
+
+export async function resolveIosDeviceAppProcesses(
+  device: DeviceInfo,
+  bundleId: string,
+): Promise<IosDeviceAppProcesses> {
+  const app = (await listIosDeviceApps(device, 'all')).find(
+    (candidate) => candidate.bundleId === bundleId,
+  );
+  if (!app) {
+    throw new AppError('APP_NOT_INSTALLED', `No iOS device app found for ${bundleId}`, {
+      appBundleId: bundleId,
+      deviceId: device.id,
+    });
+  }
+  if (!app.url) {
+    throw new AppError('COMMAND_FAILED', `Missing app bundle URL for ${bundleId}`, {
+      appBundleId: bundleId,
+      deviceId: device.id,
+      hint: 'Installed-app metadata from devicectl did not include the bundle URL required to match running processes. Use an Xcode/CoreDevice toolchain that reports app URLs.',
+    });
+  }
+
+  const appBundleUrl = app.url.replace(/\/+$/, '');
+  // CoreDevice reports app URLs and process executables in the same file-URL form.
+  const processes = (await listIosDeviceProcesses(device)).filter((processInfo) =>
+    processInfo.executable.startsWith(`${appBundleUrl}/`),
+  );
+  return { appBundleUrl, processes };
+}
+
+/**
+ * Why a devicectl JSON command produced no usable payload while `devicectl` itself
+ * stayed reachable. A command that never returned is not reported here: exec owns
+ * that classification and raises a typed timeout or cancellation error instead.
+ */
+export type IosDevicectlJsonFailureReason = 'command-failed' | 'unreadable-json';
+
+export type IosDevicectlJsonOutcome =
+  | { ok: true; payload: unknown }
+  | {
+      ok: false;
+      reason: IosDevicectlJsonFailureReason;
+      args: string[];
+      result: ExecResult;
+      /** The JSON a failed command still wrote, when it was readable. */
+      payload?: unknown;
+      cause?: string;
+    };
+
+/**
+ * Runs one `devicectl` command with `--json-output` and reads the payload back,
+ * reporting an unusable answer as a typed outcome instead of throwing.
+ *
+ * This is the only implementation of the temp-path + `--json-output` + read +
+ * cleanup protocol. Callers that must fail the user go through
+ * {@link runIosDevicectlJsonCommand}, which adds the curated message and hint;
+ * callers that own a fallback path — a probe, for example — consume the outcome
+ * and keep their own diagnostics.
+ */
+export async function runIosDevicectlJsonRequest(options: {
+  jsonPrefix: string;
+  args: ['devicectl', ...string[]];
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  tolerateFailurePayload?: (payload: unknown) => boolean;
+}): Promise<IosDevicectlJsonOutcome> {
+  const jsonPath = path.join(
+    hostTemporaryDirectory(),
+    `${options.jsonPrefix}-${hostProcessId()}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`,
+  );
+  const args: ['devicectl', ...string[]] = [...options.args, '--json-output', jsonPath];
+  try {
+    const result = await runXcrun(args, {
+      allowFailure: true,
+      signal: options.signal,
+      timeoutMs: options.timeoutMs ?? IOS_DEVICECTL_TIMEOUT_MS,
+    });
+    if (result.exitCode !== 0) {
+      const failurePayload = await readJsonFile(jsonPath).catch(() => undefined);
+      if (failurePayload !== undefined && options.tolerateFailurePayload?.(failurePayload)) {
+        return { ok: true, payload: failurePayload };
+      }
+      return { ok: false, reason: 'command-failed', args, result, payload: failurePayload };
+    }
+    return await readIosDevicectlJsonPayload(jsonPath, args, result);
+  } finally {
+    await unlinkHostFile(jsonPath).catch(() => {});
+  }
+}
+
+async function readIosDevicectlJsonPayload(
+  jsonPath: string,
+  args: string[],
+  result: ExecResult,
+): Promise<IosDevicectlJsonOutcome> {
+  try {
+    return { ok: true, payload: await readJsonFile(jsonPath) };
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    return { ok: false, reason: 'unreadable-json', args, result, cause: String(error) };
+  }
+}
+
+async function runIosDevicectlJsonCommand(
+  device: DeviceInfo,
+  options: {
+    jsonPrefix: string;
+    args: ['devicectl', ...string[]];
+    failureMessage: string;
+    parseFailureMessage: string;
+    fallbackHint?: string;
+    tolerateFailurePayload?: (payload: unknown) => boolean;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+  },
+): Promise<unknown> {
+  const outcome = await runIosDevicectlJsonRequest(options);
+  if (outcome.ok) return outcome.payload;
+
+  if (outcome.reason === 'command-failed') {
+    const { stdout, stderr } = outcome.result;
+    throw new AppError(
+      'COMMAND_FAILED',
+      options.failureMessage,
+      execFailureDetails(outcome.result, {
+        cmd: 'xcrun',
+        args: outcome.args,
+        stdout,
+        stderr,
+        deviceId: device.id,
+        hint:
+          resolveIosDevicectlHint(stdout, stderr) ??
+          options.fallbackHint ??
+          IOS_DEVICECTL_DEFAULT_HINT,
+      }),
+    );
+  }
+  throw new AppError('COMMAND_FAILED', options.parseFailureMessage, {
+    deviceId: device.id,
+    cause: outcome.cause,
+  });
+}
+
+async function readJsonFile(jsonPath: string): Promise<unknown> {
+  return JSON.parse(await readHostTextFile(jsonPath));
+}
+
+function processPathDepth(processInfo: IosDeviceProcessInfo, appBundleUrl: string): number {
+  return processInfo.executable.slice(appBundleUrl.length + 1).split('/').length;
+}
+
+function isIosDeviceProcessesPayload(payload: unknown): payload is IosDeviceProcessesPayload {
+  return Array.isArray(
+    (payload as IosDeviceProcessesPayload | null | undefined)?.result?.runningProcesses,
+  );
+}
+
+function isMissingIosDeviceProcessPayload(payload: unknown): boolean {
+  const underlyingError = (payload as IosDevicectlErrorPayload | null | undefined)?.error?.userInfo
+    ?.NSUnderlyingError?.error;
+  return underlyingError?.domain === 'NSPOSIXErrorDomain' && underlyingError.code === 3;
+}
+
+export function parseIosDeviceAppsPayload(payload: unknown): IosAppInfo[] {
+  const apps = (payload as IosDeviceAppsPayload | null | undefined)?.result?.apps;
+  if (!Array.isArray(apps)) return [];
+
+  const parsed: IosAppInfo[] = [];
+  for (const entry of apps) {
+    if (!entry || typeof entry !== 'object') continue;
+    const bundleId =
+      typeof entry.bundleIdentifier === 'string' ? entry.bundleIdentifier.trim() : '';
+    if (!bundleId) continue;
+    const name =
+      typeof entry.name === 'string' && entry.name.trim().length > 0 ? entry.name.trim() : bundleId;
+    const url =
+      typeof entry.url === 'string' && entry.url.trim().length > 0 ? entry.url.trim() : undefined;
+    parsed.push({ bundleId, name, url });
+  }
+  return parsed;
+}
+
+export function parseIosDeviceProcessesPayload(payload: unknown): IosDeviceProcessInfo[] {
+  const processes = (payload as IosDeviceProcessesPayload | null | undefined)?.result
+    ?.runningProcesses;
+  if (!Array.isArray(processes)) return [];
+
+  const parsed: IosDeviceProcessInfo[] = [];
+  for (const entry of processes) {
+    if (!entry || typeof entry !== 'object') continue;
+    const executable = typeof entry.executable === 'string' ? entry.executable.trim() : '';
+    const pid =
+      typeof entry.processIdentifier === 'number' && Number.isFinite(entry.processIdentifier)
+        ? entry.processIdentifier
+        : Number.NaN;
+    if (!executable || !Number.isFinite(pid)) continue;
+    parsed.push({ executable, pid });
+  }
+  return parsed;
+}
+
+function filterIosDeviceApps(apps: IosAppInfo[], filter: 'user-installed' | 'all'): IosAppInfo[] {
+  return filterAppleAppsByBundlePrefix(apps, filter);
+}
+
+export const IOS_DEVICECTL_DEFAULT_HINT =
+  'Ensure the iOS device is unlocked, trusted, and available in Xcode > Devices, then retry.';
+
+const IOS_DEVICE_PROCESS_LIST_HINT =
+  "This Xcode/CoreDevice toolchain must support 'devicectl device info processes' with JSON runningProcesses so agent-device can resolve app process IDs. Inspect diagnostics for the exact devicectl API failure.";
+
+/**
+ * What to tell a caller whose device reports its own Developer Mode toggle off (#2683). This is the
+ * one owner of that remedy: the device-readiness fact publishes these two strings as the `remedies`
+ * of the report it reads, so the runner preflight and this tool-output path cannot carry two
+ * wordings of one fix. `core/physical-device-coredevice.ts` imports them rather than restating them.
+ */
+export const IOS_DEVICE_DEVELOPER_MODE_OFF_HINT =
+  'Enable Developer Mode on the iOS device (Settings > Privacy & Security > Developer Mode), restart it when prompted, unlock it, then retry.';
+
+/**
+ * What to tell a caller whose developer disk image is the only thing down (#2683). Deliberately not a
+ * Developer Mode answer, and it never names that setting: this path only has tool text, which cannot
+ * say where the toggle is, and sending someone to a setting that is already correct loses the actual
+ * cause. The device-fact path is where both states are known, and it publishes them as fields rather
+ * than as prose. Owned by the same pair as {@link IOS_DEVICE_DEVELOPER_MODE_OFF_HINT}.
+ */
+export const IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT =
+  'Let Xcode finish preparing this device: keep it unlocked and connected by cable, open Xcode > Settings > Platforms (or Window > Devices and Simulators), wait for device support to install, then retry.';
+
+export function resolveIosDevicectlHint(stdout: string, stderr: string): string | null {
+  const text = `${stdout}\n${stderr}`.toLowerCase();
+  if (text.includes('device is busy') && text.includes('connecting')) {
+    return 'iOS device is still connecting. Keep it unlocked and connected by cable until it is fully available in Xcode Devices, then retry.';
+  }
+  if (text.includes('coredeviceservice') && text.includes('timed out')) {
+    return 'CoreDevice service timed out. Reconnect the device and retry; if it persists restart Xcode and the iOS device.';
+  }
+  // A device that is unlocked, trusted and `available (paired)` still cannot
+  // mount its developer disk image while Developer Mode is off, which is the
+  // usual state of a phone that has never been used for development. The
+  // default hint sends people to check trust and Xcode, none of which is wrong
+  // yet none of which is the cause.
+  //
+  // The two complaints are answered apart (#2683): an image line by itself is not evidence that the
+  // toggle is off, and the device reports both states directly, so the name of one is never used as
+  // the name of the other.
+  if (text.includes('developer mode is disabled')) {
+    return IOS_DEVICE_DEVELOPER_MODE_OFF_HINT;
+  }
+  if (text.includes('developer disk image')) {
+    return IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT;
+  }
+  if (text.includes('must be paired')) {
+    return 'Pair the iOS device with this Mac: connect it by cable, unlock it, accept the Trust prompt, and enter the device passcode, then retry.';
+  }
+  return null;
+}

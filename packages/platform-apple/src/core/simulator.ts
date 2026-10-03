@@ -1,0 +1,241 @@
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
+import { execFailureDetails, requireExecSuccess } from '@agent-device/host-kit/command';
+import { Deadline, retryWithPolicy } from '@agent-device/host-kit/retry';
+
+import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
+import { bootFailureHint, classifyBootFailure } from '@agent-device/provision-kit/boot-diagnostics';
+import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
+
+import {
+  IOS_BOOT_TIMEOUT_MS,
+  IOS_SIMCTL_LIST_TIMEOUT_MS,
+  IOS_SIMULATOR_FOCUS_TIMEOUT_MS,
+} from './config.ts';
+import { buildSimctlArgsForDevice, readSimctlDeviceState } from './simctl.ts';
+import { runAppleToolCommand, runXcrun } from './tool-provider.ts';
+
+const simulatorReadiness = createScopedProvider<
+  ((device: DeviceInfo) => Promise<void>) | undefined
+>(undefined);
+
+export async function withSimulatorReadiness<T>(
+  ensureReady: (device: DeviceInfo) => Promise<void>,
+  task: () => Promise<T>,
+): Promise<T> {
+  return await simulatorReadiness.run(ensureReady, task);
+}
+
+type SimulatorCommandOptions = {
+  signal?: AbortSignal;
+};
+
+// Recently-observed-Booted memo. `simctl list devices -j` costs ~0.7s per
+// spawn, and a single open --relaunch used to pay it three times (resolve,
+// close, launch). Mirrors the DEVICE_READY_CACHE_TTL_MS tradeoff at the daemon
+// layer: a simulator shut down externally inside the window surfaces the raw
+// simctl error instead of an auto-boot. Transitions we own update the memo.
+// Exported so unit tests can assert TTL behavior without duplicating the value.
+export const SIMULATOR_BOOTED_MEMO_TTL_MS = 5_000;
+const simulatorBootedMemo = createTtlMemo<string, true>({ ttlMs: SIMULATOR_BOOTED_MEMO_TTL_MS });
+
+function simulatorBootedMemoKey(device: DeviceInfo): string {
+  return `${device.id}|${device.simulatorSetPath ?? ''}`;
+}
+
+export function wasSimulatorRecentlyObservedBooted(device: DeviceInfo): boolean {
+  return simulatorBootedMemo.get(simulatorBootedMemoKey(device)) === true;
+}
+
+// Also called by the device-inventory parser: a `simctl list` that reports a
+// simulator Booted is the same observation ensureBootedSimulator would make,
+// so resolving a device seeds the memo and the boot checks that follow in the
+// same request cost nothing. Callers must only pass FRESH observations —
+// seeding from a cached or persisted device listing would poison the memo.
+export function markSimulatorBooted(device: DeviceInfo): void {
+  simulatorBootedMemo.set(simulatorBootedMemoKey(device), true);
+}
+
+function clearSimulatorBootedMemo(device: DeviceInfo): void {
+  simulatorBootedMemo.delete(simulatorBootedMemoKey(device));
+}
+
+export function requireSimulatorDevice(device: DeviceInfo, command: string): void {
+  if (device.kind !== 'simulator') {
+    throw new AppError('UNSUPPORTED_OPERATION', `${command} is only supported on iOS simulators`);
+  }
+}
+
+export async function openIosSimulatorApp(options: SimulatorCommandOptions = {}): Promise<void> {
+  await runAppleToolCommand('open', ['-a', 'Simulator'], {
+    allowFailure: true,
+    signal: options.signal,
+    timeoutMs: IOS_SIMULATOR_FOCUS_TIMEOUT_MS,
+  });
+}
+
+export async function ensureBootedSimulator(
+  device: DeviceInfo,
+  options: SimulatorCommandOptions = {},
+): Promise<void> {
+  if (device.kind !== 'simulator') return;
+  options.signal?.throwIfAborted();
+  const ensureReady = simulatorReadiness.resolve();
+  if (ensureReady) {
+    await ensureReady(device);
+    options.signal?.throwIfAborted();
+    return;
+  }
+
+  const state = wasSimulatorRecentlyObservedBooted(device)
+    ? 'Booted'
+    : await getSimulatorState(device, options.signal);
+  if (state === 'Booted') {
+    markSimulatorBooted(device);
+    return;
+  }
+
+  const deadline = Deadline.fromTimeoutMs(IOS_BOOT_TIMEOUT_MS);
+  let bootResult:
+    | {
+        stdout: string;
+        stderr: string;
+        exitCode: number;
+      }
+    | undefined;
+  let bootStatusResult:
+    | {
+        stdout: string;
+        stderr: string;
+        exitCode: number;
+      }
+    | undefined;
+
+  try {
+    await retryWithPolicy(
+      async ({ deadline: attemptDeadline }) => {
+        if (attemptDeadline?.isExpired()) {
+          throw new AppError('COMMAND_FAILED', 'iOS simulator boot deadline exceeded', {
+            timeoutMs: IOS_BOOT_TIMEOUT_MS,
+          });
+        }
+
+        const remainingMs = Math.max(1_000, attemptDeadline?.remainingMs() ?? IOS_BOOT_TIMEOUT_MS);
+        const boot = await runXcrun(buildSimctlArgsForDevice(device, ['boot', device.id]), {
+          allowFailure: true,
+          signal: options.signal,
+          timeoutMs: remainingMs,
+        });
+        bootResult = boot;
+
+        const bootOutput = `${bootResult.stdout}\n${bootResult.stderr}`.toLowerCase();
+        const bootAlreadyDone =
+          bootOutput.includes('already booted') || bootOutput.includes('current state: booted');
+
+        if (bootResult.exitCode !== 0 && !bootAlreadyDone) {
+          throw new AppError(
+            'COMMAND_FAILED',
+            'simctl boot failed',
+            execFailureDetails(bootResult),
+          );
+        }
+
+        const bootStatus = await runXcrun(
+          buildSimctlArgsForDevice(device, ['bootstatus', device.id, '-b']),
+          {
+            allowFailure: true,
+            signal: options.signal,
+            timeoutMs: remainingMs,
+          },
+        );
+        bootStatusResult = bootStatus;
+
+        requireExecSuccess(bootStatusResult, 'simctl bootstatus failed');
+
+        const nextState = await getSimulatorState(device, options.signal);
+        if (nextState !== 'Booted') {
+          throw new AppError('COMMAND_FAILED', 'Simulator is still booting', { state: nextState });
+        }
+      },
+      {
+        maxAttempts: 3,
+        baseDelayMs: 500,
+        maxDelayMs: 2000,
+        jitter: 0.2,
+        shouldRetry: (error) => {
+          const reason = classifyBootFailure({
+            error,
+            stdout: bootStatusResult?.stdout ?? bootResult?.stdout,
+            stderr: bootStatusResult?.stderr ?? bootResult?.stderr,
+            context: { platform: 'ios', phase: 'boot' },
+          });
+          return reason !== 'IOS_BOOT_TIMEOUT' && reason !== 'CI_RESOURCE_STARVATION_SUSPECTED';
+        },
+      },
+      {
+        deadline,
+        phase: 'boot',
+        signal: options.signal,
+        classifyReason: (error) =>
+          classifyBootFailure({
+            error,
+            stdout: bootStatusResult?.stdout ?? bootResult?.stdout,
+            stderr: bootStatusResult?.stderr ?? bootResult?.stderr,
+            context: { platform: 'ios', phase: 'boot' },
+          }),
+      },
+    );
+  } catch (error) {
+    const reason = classifyBootFailure({
+      error,
+      stdout: bootStatusResult?.stdout ?? bootResult?.stdout,
+      stderr: bootStatusResult?.stderr ?? bootResult?.stderr,
+      context: { platform: 'ios', phase: 'boot' },
+    });
+
+    throw new AppError('COMMAND_FAILED', 'iOS simulator failed to boot', {
+      platform: 'ios',
+      deviceId: device.id,
+      timeoutMs: IOS_BOOT_TIMEOUT_MS,
+      elapsedMs: deadline.elapsedMs(),
+      reason,
+      hint: bootFailureHint(reason),
+      boot: bootResult,
+      bootstatus: bootStatusResult,
+    });
+  }
+
+  markSimulatorBooted(device);
+  await openIosSimulatorApp({ signal: options.signal });
+}
+
+export async function shutdownSimulator(
+  device: DeviceInfo,
+  signal?: AbortSignal,
+): Promise<{
+  success: boolean;
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}> {
+  clearSimulatorBootedMemo(device);
+  const args = buildSimctlArgsForDevice(device, ['shutdown', device.id]);
+  const result = await runXcrun(args, { allowFailure: true, timeoutMs: 15_000, signal });
+  return {
+    success: result.exitCode === 0,
+    exitCode: result.exitCode,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
+}
+
+async function getSimulatorState(device: DeviceInfo, signal?: AbortSignal): Promise<string | null> {
+  const simctlArgs = buildSimctlArgsForDevice(device, ['list', 'devices', '-j']);
+  const result = await runXcrun(simctlArgs, {
+    allowFailure: true,
+    signal,
+    timeoutMs: IOS_SIMCTL_LIST_TIMEOUT_MS,
+  });
+  if (result.exitCode !== 0) return null;
+  return readSimctlDeviceState(result.stdout, device.id);
+}

@@ -16,6 +16,7 @@ export function readCloudDeviceFeatureProfileFields(
   | 'providerDeviceOrientation'
   | 'providerGeoLocation'
   | 'providerTimezone'
+  | 'providerAppiumVersion'
   | 'providerLanguage'
   | 'providerLocale'
   | 'providerNetworkProfile'
@@ -26,6 +27,7 @@ export function readCloudDeviceFeatureProfileFields(
     providerDeviceOrientation: flags.providerDeviceOrientation,
     providerGeoLocation: flags.providerGeoLocation,
     providerTimezone: flags.providerTimezone,
+    providerAppiumVersion: flags.providerAppiumVersion,
     providerLanguage: flags.providerLanguage,
     providerLocale: flags.providerLocale,
     providerNetworkProfile: flags.providerNetworkProfile,

@@ -1,9 +1,8 @@
-import path from 'node:path';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import type {
-  ScreenRecordingChunk,
-  ScreenRecordingStartInput,
-} from '@agent-device/contracts/screen-recording-runtime';
+import { provesAndroidScreenRecordTermination } from '@agent-device/contracts/screen-recording-runtime-host';
+import type { NativePathDisposition } from '@agent-device/contracts/recording-native-path';
+import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
+import { chunkPathAt } from './chunk-path.ts';
 import type { NativeChunk } from './manifest.ts';
 
 type Transport = Awaited<ReturnType<PlatformRuntimeHost['screenRecording']['android']['resolve']>>;
@@ -79,21 +78,27 @@ function validProcessIdentity(
   );
 }
 
+/**
+ * Resolves whether the active (last) chunk's recorder had already exited, i.e. the video ends before
+ * record stop. Earlier chunks always end before stop because rotation replaced them.
+ */
 export async function stopOwnedChunks(
   transport: Transport,
   chunks: readonly NativeChunk[],
 ): Promise<boolean> {
-  let reachedLimit = false;
+  const active = chunks.at(-1);
+  let activeAlreadyExited = false;
   let failure: unknown;
   for (const chunk of [...chunks].reverse()) {
     try {
-      reachedLimit = (await stopChunk(transport, chunk)) || reachedLimit;
+      const alreadyExited = await stopChunk(transport, chunk);
+      if (chunk === active) activeAlreadyExited = alreadyExited;
     } catch (error) {
       failure ??= error;
     }
   }
   if (failure) throw failure;
-  return reachedLimit;
+  return activeAlreadyExited;
 }
 
 export async function waitForStableArtifacts(
@@ -113,27 +118,15 @@ export async function waitForStableArtifacts(
   }
 }
 
+/** Pulls each device chunk to its host path under `outputPath`, retrying until the host copy plays. */
 export async function pullChunks(
   transport: Transport,
   chunks: readonly NativeChunk[],
   outputPath: string,
-  clientOutputPath?: string,
-): Promise<readonly ScreenRecordingChunk[]> {
-  const results: ScreenRecordingChunk[] = [];
+): Promise<void> {
   for (const [offset, chunk] of chunks.entries()) {
-    const pathForChunk = offset === 0 ? outputPath : chunkOutputPath(outputPath, offset + 1);
-    await pullPlayableChunk(transport, chunk.remotePath, pathForChunk);
-    const clientPath =
-      offset === 0 || clientOutputPath === undefined
-        ? clientOutputPath
-        : chunkOutputPath(clientOutputPath, offset + 1);
-    results.push({
-      index: offset + 1,
-      path: pathForChunk,
-      ...(clientPath === undefined ? {} : { clientOutPath: clientPath }),
-    });
+    await pullPlayableChunk(transport, chunk.remotePath, chunkPathAt(outputPath, offset + 1));
   }
-  return Object.freeze(results);
 }
 
 export async function cleanupChunks(
@@ -150,6 +143,23 @@ export async function cleanupChunks(
     }
   }
   if (failure) throw failure;
+}
+
+/**
+ * Whether this recording's own files still sit on the device (ADR 0024 2.3). This is the only place
+ * a disposition is decided: the answer is read from the device, so a value a marker froze before a
+ * removal cannot survive as the claim after one, and a removal the device reported but did not
+ * perform is still seen as owed. `retired` needs a probe that answered "gone" for every chunk, so a
+ * probe that could not run leaves the path owed rather than crediting a removal nobody observed.
+ */
+export async function nativeChunksDisposition(
+  transport: Transport,
+  chunks: readonly NativeChunk[],
+): Promise<NativePathDisposition> {
+  for (const chunk of chunks) {
+    if ((await transport.exists(chunk.remotePath)) !== false) return 'retirable';
+  }
+  return 'retired';
 }
 
 export async function rollbackChunks(
@@ -235,7 +245,7 @@ async function waitForStopped(
   for (let elapsed = 0; elapsed <= GRACEFUL_STOP_TIMEOUT_MS; elapsed += STOP_POLL_INTERVAL_MS) {
     const state = await transport.inspect(processIdentity);
     if (state === 'missing') return true;
-    if (state === 'ownership-lost') {
+    if (provesAndroidScreenRecordTermination(state)) {
       throw new Error(
         `Android screenrecord ownership could not be confirmed for pid ${processIdentity.pid}`,
       );
@@ -247,12 +257,4 @@ async function waitForStopped(
 
 function delay(ms: number): Promise<void> {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
-}
-
-function chunkOutputPath(outputPath: string, index: number): string {
-  const parsed = path.parse(outputPath);
-  return path.join(
-    parsed.dir,
-    `${parsed.name}.part-${String(index).padStart(3, '0')}${parsed.ext || '.mp4'}`,
-  );
 }

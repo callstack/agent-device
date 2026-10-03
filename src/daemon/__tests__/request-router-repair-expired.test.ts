@@ -8,26 +8,27 @@ import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/de
  */
 import { test, expect, vi } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
-import type { DaemonRequest, SessionState } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { inspectAdReplay } from '@agent-device/ad-replay';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 
 function makeHandler(prefix: string) {
   const sessionStore = makeSessionStore(prefix);
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -135,7 +136,7 @@ test('a replay --from continuation on a reaped repair session gets REPAIR_SESSIO
   const scriptPath = path.join(root, 'flow.ad');
   fs.writeFileSync(scriptPath, 'open "Demo"\nclick id="a"\n');
 
-  // Compute the plan digest exactly as runReplayScriptSource does (a real agent
+  // Compute the plan digest exactly as runReplayCommand does (a real agent
   // takes it from the divergence report's resume.planDigest).
   const flags = { platform: 'ios' as const };
   const digest = inspectAdReplay(fs.readFileSync(scriptPath, 'utf8'), {

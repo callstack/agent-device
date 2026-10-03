@@ -41,13 +41,13 @@ export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
     'Error-code vocabulary is carried as a plain string in DaemonError.code; adding a code cannot change the envelope a peer parses.',
   'packages/kernel/src/errors.ts#AppErrorDetails':
     'Local detail bag behind AppError; the wire form is DaemonError.details, typed as Record<string, unknown> and listed.',
-  'src/daemon/client/daemon-client-metadata.ts#DaemonInfo':
+  'src/daemon-client/daemon-client-metadata.ts#DaemonInfo':
     'Client-side record of where a daemon is listening (pid, ports, state dir). Never serialized into a request or response.',
-  'src/daemon/types.ts#DaemonRequest':
-    'Re-export alias of the listed kernel DaemonRequest; the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
-  'src/daemon/types.ts#DaemonResponse':
+  'src/daemon/daemon-request.ts#DaemonRequest':
+    'Server-side narrowing of the listed kernel DaemonRequest; the declaration that fixes the shape is packages/kernel/src/contracts.ts#DaemonRequest.',
+  'src/daemon/daemon-request.ts#DaemonResponse':
     'Re-export alias of the listed kernel DaemonResponse; the shape is fixed by packages/kernel/src/contracts.ts#DaemonResponse.',
-  'src/daemon/types.ts#DaemonArtifact':
+  'src/daemon/daemon-request.ts#DaemonArtifact':
     'Re-export alias of the listed kernel DaemonArtifact; the shape is fixed by packages/kernel/src/contracts.ts#DaemonArtifact.',
   'src/remote/upload-stream.ts#UploadStreamProgressOptions':
     'Byte-progress callback options for local upload rendering. The bytes counted are digested through the request/response declarations; these options never cross the wire.',
@@ -73,10 +73,10 @@ export const WIRE_CLOSURE_WAIVERS: Readonly<Record<string, string>> = {
   // If a flag ever becomes a typed field on DaemonRequest, that changes
   // DaemonRequest's own digest, and the right fix is to list the type here
   // rather than widen this waiver.
-  'packages/contracts/src/client-request.ts#InternalRequestOptions':
+  'packages/contracts/src/request-envelope.ts#InternalRequestOptions':
     'CLI-side option projection; reaches the peer inside DaemonRequest.input/flags (Record<string, unknown>, both listed), and ADR 0006 calls new flags additive.',
   'packages/contracts/src/command-flags.ts#CommandFlags':
-    'CLI-side flag vocabulary; reaches the peer inside DaemonRequest.flags (Record<string, unknown>, listed), and ADR 0006 calls new flags additive.',
+    'CLI-side flag vocabulary; reaches the peer inside DaemonRequest.flags (Record<string, unknown>, listed), and ADR 0006 calls new flags additive. Removing a flag is covered too: flags travel as an untyped record, so an older peer ignores or rejects an unknown key.',
 };
 
 export function isExternalWireSpecifier(specifier: string): boolean {

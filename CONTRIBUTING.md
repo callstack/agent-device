@@ -7,7 +7,8 @@ reviewable change. Detailed testing and device procedures live in the linked foc
 
 Requirements:
 
-- Node.js 22 or newer
+- Node.js 22.13 or newer — the pinned pnpm requires it. The published package keeps a lower
+  `engines.node` floor of 22.12, which CI verifies separately on the installed tarball.
 - pnpm at the version pinned in `package.json`
 - Android SDK tools (`adb`) for Android work
 - Xcode (`simctl`/`devicectl`) for Apple-platform work
@@ -68,6 +69,10 @@ builds the TypeScript distribution and all four Apple runner targets, clean-buil
 packages the Apple runner source, and rebuilds both Android helper APKs. Any failed build stops
 packaging. It deliberately does not stop the worktree's development daemon; use `pnpm rebuild:cli`
 when a running daemon needs to pick up a new TypeScript build.
+
+That Android leg needs `AGENT_DEVICE_ANDROID_BUILD_TOOLS` naming the build-tools version to compile
+with. An unpinned build takes the newest version installed on the machine, which CI refuses to do,
+so name the version the CI lanes install and the published helper matches the CI-built one.
 
 `pnpm package:npm` is a release guard, not a routine development command. Use the specific commands
 above while iterating.

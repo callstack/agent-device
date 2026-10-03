@@ -279,14 +279,19 @@ A recorded `id` never matches a node without that id.
 >   verify against the live tree's real value at replay time, so the evidence is dropped rather than
 >   published unverified. See ADR 0017's session-scoped echo protection amendment for the mechanism.
 > - **`get` — unchanged**; already covered by the pre-dispatch path and the post-resolution guard.
-> - **`is` (all predicates except `exists`) — covered, `pre-dispatch`, the `get` pattern end-to-end.**
+> - **`is` (all predicates except `exists` and `absent`) — covered, `pre-dispatch`, the `get` pattern end-to-end.**
 >   `is` resolves a unique node immediately, so pre-action verification is semantically valid; the
 >   resolved node/tree feed record-time evidence, and dispatch threads `replayTargetGuard` into
 >   `assertExpectedResolvedTarget` exactly like `get`. The direct-iOS `is`/`wait` fast paths are gated
 >   off during recording and guarded replays, mirroring `get`'s existing recording gate.
 > - **Intentionally deferred, with tests proving no annotation is recorded and no identity check runs:**
 >   `is exists` (existence assertion with no unique winner; wait-like semantics without the
->   guard-critical role), every read-only `find` variant (fuzzy-locator resolution has no
+>   guard-critical role), `is absent` (a strict one-capture absence observation has no resolved
+>   winner; it records as an ordinary observation and its `predicate_failed` failure is always an
+>   action-failure, never an identity mismatch), `wait absent` (strict zero-candidate polling has no
+>   resolved winner; its no-match success carries no `target-v1` or landmark annotation, and a
+>   `wait_target_present` deadline is an ordinary action-failure, never an identity mismatch or an
+>   ADR 0016 destination guard), every read-only `find` variant (fuzzy-locator resolution has no
 >   selector-chain identity token for the classifier, and publication already refuses mutating `find`
 >   as non-verifiable), and `wait text`/`wait stable`/duration waits/`wait @ref` (no element target, or
 >   a session-local ref that ADR 0016 already refuses to publish; `wait @ref` is rejected rather than
@@ -407,10 +412,10 @@ target-binding divergences reported before the device action. This is not genera
 > for the wait keep-poll loop (`isUnreadableCaptureContentError`): the non-throwing `sparse-snapshot`
 > verdict always retries (it is already a content-quality signal), but a thrown `capture-failed` only
 > retries when the underlying error's `androidSnapshotHelperFailureReason` is one of the three literal
-> codes `rejectAndroidHelperContentUnavailable` (`platforms/android/snapshot.ts`) attaches to a
+> codes `rejectAndroidHelperContentUnavailable` (`packages/platform-android/src/snapshot.ts`) attaches to a
 > content-poor/system-window-only rejection — `empty-helper-output`, `system-window-only`,
 > `content-poor-app-window` (mirroring `AndroidHelperContentRecoveryDecision['reason']`,
-> `platforms/android/snapshot-content-recovery.ts`). This is deliberately narrower than the error's own
+> `packages/platform-android/src/snapshot-content-recovery.ts`). This is deliberately narrower than the error's own
 > generic `retriable` flag: Android's adb layer separately marks true mechanism failures retriable too
 > (`connection_dropped`, `device_offline`, `server_version_mismatch` — an unchanged retry of the SAME adb
 > command can succeed there), and a helper artifact permanently missing
@@ -761,7 +766,7 @@ works" and "healed scripts are always valid":
   steps are re-executed during the repair replay; only if recording is armed from the start do they land
   in `session.actions` with fresh `target-v1` evidence. Arming late yields a hybrid healed script (an
   annotated corrective step glued to a bare, unannotated prefix) that re-diverges on its own next replay
-  (`src/daemon/handlers/interaction-common.ts:64-65` attaches evidence only when `recordSession` was
+  (`src/daemon/interaction/internal/interaction-common.ts:64-65` attaches evidence only when `recordSession` was
   true when the step ran).
 - **R2 — `--from` continuation only; never re-run the full replay on the same session.** After a
   divergence at step N and the corrective action, the agent must continue with `replay --from k
@@ -803,7 +808,7 @@ works" and "healed scripts are always valid":
   instead of leaving it to agent judgment.
 - **R4 — corrective actions must materialize to selector form; the writer fails loudly on a bare `@ref`
   cross-session export.** A `press @e12` normally resolves a `selectorChain` at runtime
-  (`src/daemon/handlers/interaction-touch-targets.ts`), which `buildOptimizedActions`
+  (`src/daemon/interaction/internal/interaction-touch-targets.ts`), which `buildOptimizedActions`
   (`src/daemon/session-script-writer.ts:69-83`) rewrites to a selector line. If no `selectorChain` was
   captured, the writer must refuse to emit a bare `@ref` line into a persisted `.ad` — a session-bound
   ref will not resolve in a fresh run. It **fails loudly**: an error surfaced to the user with a non-zero
@@ -881,7 +886,7 @@ by construction. The healed `.ad` is written only when the repair ends (below) a
 `--save-script` vocabulary and the precedented close-time write:
 
 - `replay <file>.ad --save-script[=<out>]` arms the repair loop at invocation, before step 1: it sets
-  `session.recordSession = true` (mirroring `session-close.ts:122-124`'s existing `saveScript` handling)
+  `session.recordSession = true` (mirroring the existing `saveScript` handling in `session-lifecycle/internal/session-close.ts`)
   **and** records the repair-run boundary watermark `session.actions.length` (R6). Absent this flag,
   replay behaves exactly as today: no recording, no heal. The heal is opt-in, preserving decision 1's "no
   silent rewrite."
@@ -1251,7 +1256,7 @@ both `.ad` and Maestro paths) grounds the same conclusions from the caller's sea
   `--json`. Structurally: replay's success payload (`{ replayed, healed, session, artifactPaths }`,
   `session-replay-runtime.ts:186-195`) has no `message` field, so the generic CLI success path prints
   nothing (`writeGenericCliOutput` → `readCommandMessage` → `writeCommandOutput`,
-  `src/cli/commands/generic.ts:68-71`, `src/utils/success-text.ts:12-14`,
+  `src/cli/commands/generic.ts:68-71`, `packages/kernel/src/success-text.ts:12-14`,
   `src/cli/commands/shared.ts:4-15`). An agent pays a verification turn just to learn what happened.
 - **Failure output today is step + action + selector + a generic hint — no screen evidence.** The live
   divergence hit was pure app state: the RN example app persists navigation state, so relaunch+deeplink

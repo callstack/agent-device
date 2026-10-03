@@ -3,10 +3,10 @@ import type {
   PlatformProgressUpdate,
   PlatformRequestScope,
 } from '@agent-device/contracts/platform-runtime-host';
-import { getRequestSignal } from '../request/cancel.ts';
-import { emitRequestProgress } from '../request/progress.ts';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
-import type { DaemonRequest } from './types.ts';
+import { getRequestSignal, emitRequestProgress } from '@agent-device/host-kit/request';
+
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { DaemonRequest } from './daemon-request.ts';
 
 const processLifetimeSignal = new AbortController().signal;
 

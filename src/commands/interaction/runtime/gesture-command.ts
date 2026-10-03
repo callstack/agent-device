@@ -7,7 +7,7 @@ import type {
 import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import type { Point } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
-import { successText } from '../../../utils/success-text.ts';
+import { successText } from '@agent-device/kernel/success-text';
 import { toBackendContext } from '../../runtime-common.ts';
 import {
   toBackendResult,

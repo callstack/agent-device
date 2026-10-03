@@ -1,6 +1,9 @@
 import path from 'node:path';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
-import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
+import type {
+  ScreenRecordingCompletion,
+  ScreenRecordingStartInput,
+} from '@agent-device/contracts/screen-recording-runtime';
 import {
   resolveScreenRecordingRuntimePlan,
   screenRecordingAdmissionUse,
@@ -8,35 +11,48 @@ import {
   screenRecordingStartUse,
 } from '@agent-device/contracts/screen-recording-runtime-plan';
 import { isWholeScreenRecordingScope } from '@agent-device/contracts/recording';
-import { deviceIdentity, sameDeviceIdentity } from '@agent-device/kernel/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { resolveTargetDevice } from '../../core/dispatch-resolve.ts';
-import { ensureDeviceReady } from '../device-ready.ts';
-import type { ScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
+import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
+import { ensureBoundDeviceReady } from '../request-runtime-binding.ts';
+import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
+import { createScreenRecordingRecoveryControl } from '@agent-device/capture-kit/screen-recording-recovery';
 import {
   adoptStartedScreenRecording,
   finishLiveScreenRecording,
   finishRecoveredScreenRecording,
   screenRecordingDurableResource,
-} from '../screen-recording-session-resource.ts';
-import { createScreenRecordingRecoveryControl } from '../screen-recording-resource-recovery.ts';
-import { resolveImplicitSessionScope } from '../session-routing.ts';
+} from '@agent-device/capture-kit/screen-recording-session-resource';
+import {
+  resolveScreenRecordingStopRecovery,
+  screenRecordingManifestIsTerminal,
+} from '@agent-device/capture-kit/screen-recording-stop-recovery';
+import { resolveSessionScope } from '../session-routing.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { recordSessionAction } from './handler-utils.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
+import { recordSessionAction } from '../session-action-recorder.ts';
 import {
   missingAppSessionResponse,
   prepareRecordingRequest,
   readRecordingScope,
 } from './record-runtime-request.ts';
-import { resolveRecordingOutputPaths } from '../../recording/output-path.ts';
+import { resolveRecordingOutputPaths } from '@agent-device/capture-kit/recording-output-path';
 import {
   buildRecordingStartResponse,
   buildRecordingStartedAction,
   buildRecordingStopResponse,
   buildRecordingUnsupportedResponse,
 } from './record-runtime-response.ts';
+
+/**
+ * A stop either finishes the live export or reports one the daemon already finished. Only the
+ * first owes a session action: the request that terminalized the recording already recorded it.
+ */
+type ScreenRecordingStop = Readonly<{
+  completion: ScreenRecordingCompletion;
+  recordsSessionAction: boolean;
+}>;
 
 export type RecordRuntimeHandlerParams = Readonly<{
   req: DaemonRequest;
@@ -69,11 +85,18 @@ async function handleRecordCommandUnsafe(
   if (plan.kind === 'start' && !isWholeScreenRecordingScope(scope) && !existingSession) {
     return missingAppSessionResponse(req);
   }
-  const session = await resolveRecordingSession(params, existingSession);
+  const resolvedSession = await resolveRecordingSession(params, existingSession);
+  const { session } = resolvedSession;
   if (plan.kind === 'start') {
-    return await startRecording(params, session, prepareRecordingRequest(req), plan.use);
+    return await startRecording(
+      params,
+      session,
+      prepareRecordingRequest(req),
+      plan.use,
+      resolvedSession.needsReadiness,
+    );
   }
-  return await stopRecording(params, session, plan.kind);
+  return await stopRecording(params, session, plan.kind, resolvedSession.needsReadiness);
 }
 
 function resolveRecordPlan(req: DaemonRequest, session: SessionState | undefined) {
@@ -91,12 +114,11 @@ function resolveRecordPlan(req: DaemonRequest, session: SessionState | undefined
 async function resolveRecordingSession(
   params: RecordRuntimeHandlerParams,
   existing: SessionState | undefined,
-): Promise<SessionState> {
+): Promise<Readonly<{ session: SessionState; needsReadiness: boolean }>> {
   const device = existing?.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
   await params.retainDeviceExecutionLock(device.id);
-  if (existing) return existing;
-  await ensureDeviceReady(device);
-  return createRecordOnlySession(params, device);
+  if (existing) return { session: existing, needsReadiness: false };
+  return { session: createRecordOnlySession(params, device), needsReadiness: true };
 }
 
 async function startRecording(
@@ -104,11 +126,13 @@ async function startRecording(
   session: SessionState,
   prepared: ReturnType<typeof prepareRecordingRequest>,
   use: typeof screenRecordingStartUse,
+  needsReadiness: boolean,
 ): Promise<DaemonResponse> {
   if (session.screenRecording) {
     return { ok: false, error: { code: 'INVALID_ARGS', message: 'recording already in progress' } };
   }
   const admission = await params.bindDevice(session.device, screenRecordingAdmissionUse);
+  if (needsReadiness) await ensureBoundDeviceReady(admission);
   const startFact = admission.facts.screenRecordingStart;
   if (!startFact.available) return buildRecordingUnsupportedResponse(startFact);
   const runtime = await params.bindDevice(session.device, use);
@@ -145,8 +169,9 @@ async function startRecording(
 }
 
 function prepareRecordingStart(params: RecordRuntimeHandlerParams, session: SessionState) {
-  const resourcePath = screenRecordingDurableResource.store.resolvePath(
-    params.sessionStore.resolveSessionDir(params.sessionName),
+  const resourcePath = screenRecordingDurableResource.resourcePath(
+    params.sessionStore,
+    params.sessionName,
   );
   return {
     fence: screenRecordingDurableResource.createNextFence({
@@ -195,30 +220,38 @@ async function stopRecording(
   params: RecordRuntimeHandlerParams,
   session: SessionState,
   kind: 'stop-live' | 'stop-recovery',
+  needsReadiness: boolean,
 ): Promise<DaemonResponse> {
-  let completion;
+  let stopped: ScreenRecordingStop;
   try {
-    completion =
+    stopped =
       kind === 'stop-live'
-        ? await finishLiveScreenRecording({
-            session,
-            sessionName: params.sessionName,
-            sessionStore: params.sessionStore,
-          })
-        : await finishRecovered(params, session);
+        ? {
+            completion: await finishLiveScreenRecording({
+              intent: 'capture',
+              session,
+              sessionName: params.sessionName,
+              sessionStore: params.sessionStore,
+            }),
+            recordsSessionAction: true,
+          }
+        : await finishRecovered(params, session, needsReadiness);
   } catch (error) {
     deleteTerminalRecordOnlySession(params, session);
     throw error;
   }
+  const completion = stopped.completion;
   const response = buildRecordingStopResponse(completion);
-  recordSessionAction(params.sessionStore, session, params.req, params.req.command, {
-    action: 'stop',
-    outPath: completion.outPath,
-    ...(completion.clientOutPath
-      ? { requestedFileName: path.basename(completion.clientOutPath) }
-      : {}),
-    showTouches: completion.showTouches,
-  });
+  if (stopped.recordsSessionAction) {
+    recordSessionAction(params.sessionStore, session, params.req, params.req.command, {
+      action: 'stop',
+      outPath: completion.outPath,
+      ...(completion.clientOutPath
+        ? { requestedFileName: path.basename(completion.clientOutPath) }
+        : {}),
+      showTouches: completion.showTouches,
+    });
+  }
   if (session.recordOnlySession) params.sessionStore.delete(params.sessionName);
   return response;
 }
@@ -228,39 +261,27 @@ function deleteTerminalRecordOnlySession(
   session: SessionState,
 ): void {
   if (!session.recordOnlySession) return;
-  const resourcePath = screenRecordingDurableResource.store.resolvePath(
-    params.sessionStore.resolveSessionDir(params.sessionName),
-  );
-  const record = screenRecordingDurableResource.store.read(resourcePath);
-  if (record.status === 'decoded' && record.envelope.lifecycle === 'completed') {
-    params.sessionStore.delete(params.sessionName);
-  }
+  if (screenRecordingManifestIsTerminal(params)) params.sessionStore.delete(params.sessionName);
 }
 
-async function finishRecovered(params: RecordRuntimeHandlerParams, session: SessionState) {
-  const resourcePath = screenRecordingDurableResource.store.resolvePath(
-    params.sessionStore.resolveSessionDir(params.sessionName),
-  );
-  const record = screenRecordingDurableResource.store.read(resourcePath);
-  if (record.status !== 'decoded' || record.envelope.lifecycle !== 'open') {
+async function finishRecovered(
+  params: RecordRuntimeHandlerParams,
+  session: SessionState,
+  needsReadiness: boolean,
+): Promise<ScreenRecordingStop> {
+  const recovery = resolveScreenRecordingStopRecovery({
+    sessionName: params.sessionName,
+    sessionStore: params.sessionStore,
+    device: session.device,
+  });
+  if (recovery.kind === 'completed') {
+    return { completion: recovery.completion, recordsSessionAction: false };
+  }
+  if (recovery.kind === 'none') {
     throw new AppError('INVALID_ARGS', 'no active recording');
   }
-  if (record.envelope.sessionId !== params.sessionName) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Screen recording recovery record does not belong to the requested session',
-      { reason: 'runtime-contract-invalid' },
-    );
-  }
-  if (!sameDeviceIdentity(record.envelope.device, deviceIdentity(session.device))) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Screen recording recovery device does not match the selected device',
-      { reason: 'runtime-contract-invalid' },
-    );
-  }
-  return await finishRecoveredScreenRecording({
-    resourcePath,
+  const completion = await finishRecoveredScreenRecording({
+    resourcePath: recovery.resourcePath,
     scope: params.requestScope,
     acquireControl: async (envelope, recoveryScope) => {
       const runtime = await params.bindExactDevice(
@@ -270,9 +291,11 @@ async function finishRecovered(params: RecordRuntimeHandlerParams, session: Sess
         screenRecordingRecoveryUse,
         recoveryScope,
       );
+      if (needsReadiness) await ensureBoundDeviceReady(runtime);
       return createScreenRecordingRecoveryControl({ runtime, dispose: async () => {} });
     },
   });
+  return { completion, recordsSessionAction: true };
 }
 
 function createRecordOnlySession(
@@ -281,7 +304,7 @@ function createRecordOnlySession(
 ): SessionState {
   return {
     name: params.sessionName,
-    sessionScope: resolveImplicitSessionScope(params.req),
+    sessionScope: resolveSessionScope(params.req),
     device,
     createdAt: Date.now(),
     recordOnlySession: true,

@@ -5,13 +5,13 @@ import type {
 } from '@agent-device/contracts/type-text-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { successText } from '../utils/success-text.ts';
-import { findMistargetedTypeRefToken } from '../utils/type-target-warning.ts';
-import { requireIntInRange } from '../utils/validation.ts';
+import { successText } from '@agent-device/kernel/success-text';
+import { findMistargetedTypeRefToken } from './type-target-warning.ts';
+import { requireIntInRange } from '@agent-device/kernel/validation';
 import type { DaemonCommandContext } from './context.ts';
-import type { DaemonFailureResponse } from './handlers/response.ts';
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
+import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
 
 /** What the executor needs: only the bound operation, however broad the bind that carried it. */
 type BoundTypeTextOperations = Readonly<{

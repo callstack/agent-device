@@ -56,22 +56,22 @@ export const BOUNDARY_FAULT_MATRIX = {
   timeout: {
     mutation: {
       kind: 'covered',
-      evidence: ['src/daemon/client/__tests__/boundary-fault-transport.test.ts:timeout'],
+      evidence: ['src/daemon-client/__tests__/boundary-fault-transport.test.ts:timeout'],
       invariants: ['bounded-deadline', 'typed-error-identity'],
     },
     read: {
       kind: 'covered',
-      evidence: ['src/daemon/client/__tests__/daemon-client-timeout-route.test.ts:http timeout'],
+      evidence: ['src/daemon-client/__tests__/daemon-client-timeout-route.test.ts:http timeout'],
       invariants: ['bounded-deadline', 'typed-error-identity'],
     },
     'artifact-producing': {
       kind: 'covered',
-      evidence: ['src/daemon/client/__tests__/boundary-fault-transport.test.ts:timeout'],
+      evidence: ['src/daemon-client/__tests__/boundary-fault-transport.test.ts:timeout'],
       invariants: ['bounded-deadline', 'typed-error-identity'],
     },
     'session-lifecycle': {
       kind: 'covered',
-      evidence: ['src/daemon/client/__tests__/boundary-fault-transport.test.ts:timeout'],
+      evidence: ['src/daemon-client/__tests__/boundary-fault-transport.test.ts:timeout'],
       invariants: ['bounded-deadline', 'typed-error-identity'],
     },
   },
@@ -100,44 +100,44 @@ export const BOUNDARY_FAULT_MATRIX = {
   'response-framing': {
     mutation: {
       kind: 'covered',
-      evidence: ['src/daemon/client/__tests__/boundary-fault-transport.test.ts:response framing'],
+      evidence: ['src/daemon-client/__tests__/boundary-fault-transport.test.ts:response framing'],
       invariants: ['typed-error-identity', 'no-mutation-replay'],
     },
     read: {
       kind: 'covered',
-      evidence: ['src/daemon/client/__tests__/boundary-fault-transport.test.ts:response framing'],
+      evidence: ['src/daemon-client/__tests__/boundary-fault-transport.test.ts:response framing'],
       invariants: ['typed-error-identity'],
     },
     'artifact-producing': {
       kind: 'covered',
-      evidence: ['src/daemon/client/__tests__/boundary-fault-transport.test.ts:response framing'],
+      evidence: ['src/daemon-client/__tests__/boundary-fault-transport.test.ts:response framing'],
       invariants: ['typed-error-identity'],
     },
     'session-lifecycle': {
       kind: 'covered',
-      evidence: ['src/daemon/client/__tests__/boundary-fault-transport.test.ts:response framing'],
+      evidence: ['src/daemon-client/__tests__/boundary-fault-transport.test.ts:response framing'],
       invariants: ['typed-error-identity'],
     },
   },
   'process-death': {
     mutation: {
       kind: 'covered',
-      evidence: ['src/daemon/client/__tests__/boundary-fault-acceptance.test.ts'],
+      evidence: ['src/daemon-client/__tests__/boundary-fault-acceptance.test.ts'],
       invariants: ['bounded-deadline', 'no-mutation-replay'],
     },
     read: {
       kind: 'covered',
-      evidence: ['src/daemon/client/__tests__/boundary-fault-acceptance.test.ts'],
+      evidence: ['src/daemon-client/__tests__/boundary-fault-acceptance.test.ts'],
       invariants: ['bounded-deadline'],
     },
     'artifact-producing': {
       kind: 'covered',
-      evidence: ['src/daemon/client/__tests__/boundary-fault-acceptance.test.ts'],
+      evidence: ['src/daemon-client/__tests__/boundary-fault-acceptance.test.ts'],
       invariants: ['bounded-deadline'],
     },
     'session-lifecycle': {
       kind: 'covered',
-      evidence: ['src/daemon/client/__tests__/boundary-fault-acceptance.test.ts'],
+      evidence: ['src/daemon-client/__tests__/boundary-fault-acceptance.test.ts'],
       invariants: ['bounded-deadline'],
     },
   },
@@ -193,22 +193,22 @@ export const BOUNDARY_FAULT_MATRIX = {
   'optional-optimization-failure': {
     mutation: {
       kind: 'covered',
-      evidence: ['src/daemon/handlers/__tests__/interaction-touch-direct-ios.test.ts'],
+      evidence: ['src/daemon/interaction/internal/__tests__/interaction-touch-direct-ios.test.ts'],
       invariants: ['best-effort-degradation'],
     },
     read: {
       kind: 'covered',
-      evidence: ['src/core/__tests__/dispatch-resolve.test.ts'],
+      evidence: ['packages/device-selection/src/__tests__/dispatch-resolve.test.ts'],
       invariants: ['best-effort-degradation'],
     },
     'artifact-producing': {
       kind: 'covered',
-      evidence: ['src/platforms/apple/core/__tests__/screenshot.test.ts'],
+      evidence: ['packages/platform-apple/src/core/__tests__/screenshot.test.ts'],
       invariants: ['best-effort-degradation'],
     },
     'session-lifecycle': {
       kind: 'covered',
-      evidence: ['src/platforms/web/agent-browser-provider.test.ts'],
+      evidence: ['packages/platform-web/src/agent-browser-provider.test.ts'],
       invariants: ['best-effort-degradation'],
     },
   },

@@ -4,7 +4,8 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { TVOS_SIMULATOR } from '../../src/__tests__/test-utils/device-fixtures.ts';
-import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { assertCoverageClassificationSummaryWiredToManifest } from './support/coverage-classification.ts';
 import { createPlatformRuntimeGateway } from '../../src/platform-runtime.ts';
 import { gestureRefusalMessage } from '@agent-device/contracts/gesture-admission';
 import {
@@ -14,7 +15,7 @@ import {
   TVOS_REMOTE_EVIDENCE,
   TVOS_REMOTE_SCENARIO_COMMANDS,
   TVOS_REMOTE_TEST_NAME,
-} from './tvos-e2e/coverage-manifest.ts';
+} from './tvos-e2e/coverage.ts';
 
 const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
 
@@ -39,12 +40,12 @@ test('tvOS coverage exhaustively classifies the public catalog', () => {
 });
 
 test('tvOS coverage report has the expected classification counts', () => {
-  assert.deepEqual(TVOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
-    contract: 16,
-    gap: 38,
-    live: 0,
-    total: 54,
-  });
+  assertCoverageClassificationSummaryWiredToManifest(
+    'tvOS',
+    TVOS_PLATFORM_COVERAGE,
+    TVOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY,
+    publicCommands,
+  );
 });
 
 test('tvOS contract claims name existing executable evidence', () => {

@@ -1,3 +1,4 @@
+// oxlint-disable-next-line no-restricted-imports -- exercises the TMPDIR mechanism and os.availableParallelism
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';

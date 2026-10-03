@@ -188,12 +188,14 @@ test.each([
       });
       expect(binding.operations[operation]).toBeUndefined();
     }
-    expect(binding.facts.operations.appSwitcher).toMatchObject({
-      available: false,
-      reason: 'unsupported-platform-leaf',
-      hint: 'app-switcher is not supported on Vega OS.',
-    });
-    expect(binding.operations.appSwitcher).toBeUndefined();
+    for (const button of ['appSwitcher', 'actionButton'] as const) {
+      expect(binding.facts.operations[button]).toMatchObject({
+        available: false,
+        reason: 'unsupported-platform-leaf',
+        hint: 'System buttons other than home are not supported on Vega OS.',
+      });
+      expect(binding.operations[button]).toBeUndefined();
+    }
     expect(binding.facts.operations.triggerAppEvent).toMatchObject({
       available: false,
       reason: 'unsupported-platform-leaf',

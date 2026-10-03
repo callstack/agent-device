@@ -1,7 +1,9 @@
 import { test, expect } from 'vitest';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { finalizeDaemonResponse } from '../request-finalization.ts';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { DaemonArtifactType } from '@agent-device/kernel/contracts';
+import type { DownloadableArtifactRegistration } from '../artifact-tracking.ts';
 
 test('finalizeDaemonResponse preserves handler error hints from details', () => {
   const req: DaemonRequest = {
@@ -28,6 +30,38 @@ test('finalizeDaemonResponse preserves handler error hints from details', () => 
   expect(finalized.ok).toBe(false);
   if (!finalized.ok) {
     expect(finalized.error.hint).toBe('Run agent-device session list and reuse --session default.');
+  }
+});
+
+test('finalizeDaemonResponse keeps a network error code without the cause message', () => {
+  const req: DaemonRequest = {
+    token: 'token',
+    session: 'default',
+    command: 'install-from-source',
+    positionals: ['https://example.com/app.apk'],
+    flags: {},
+  };
+  const response: DaemonResponse = {
+    ok: false,
+    error: normalizeError(
+      new AppError(
+        'COMMAND_FAILED',
+        'The daemon failed to fetch the app source (network error code: ECONNREFUSED)',
+        { networkErrorCode: 'ECONNREFUSED' },
+        Object.assign(new Error('connect ECONNREFUSED 10.0.0.1:443'), { code: 'ECONNREFUSED' }),
+      ),
+    ),
+  };
+
+  const finalized = finalizeDaemonResponse(req, response, () => 'artifact-id');
+
+  expect(finalized.ok).toBe(false);
+  if (!finalized.ok) {
+    expect(finalized.error.message).toBe(
+      'The daemon failed to fetch the app source (network error code: ECONNREFUSED)',
+    );
+    expect(finalized.error.details).toMatchObject({ networkErrorCode: 'ECONNREFUSED' });
+    expect(JSON.stringify(finalized.error)).not.toContain('10.0.0.1');
   }
 });
 
@@ -239,4 +273,114 @@ test('finalizeDaemonResponse keeps screenshot path fallback as screenshot artifa
       fileName: 'screenshot.png',
     },
   ]);
+});
+
+test('finalizeDaemonResponse registers the screenshot display rotation with its artifact', () => {
+  const req: DaemonRequest = {
+    token: 'token',
+    session: 'default',
+    command: 'screenshot',
+    positionals: [],
+    meta: { tenantId: 'tenant-a', clientArtifactPaths: { path: '/client/shot.png' } },
+  };
+  const tracked: DownloadableArtifactRegistration[] = [];
+
+  finalizeDaemonResponse(
+    req,
+    { ok: true, data: { path: '/tmp/shot.png', displayRotation: 'landscape-left' } },
+    (registration) => {
+      tracked.push(registration);
+      return 'artifact-id';
+    },
+  );
+
+  expect(tracked).toEqual([
+    {
+      artifactPath: '/tmp/shot.png',
+      tenantId: 'tenant-a',
+      artifactType: 'screenshot',
+      fileName: 'shot.png',
+      displayRotation: 'landscape-left',
+    },
+  ]);
+});
+
+test('finalizeDaemonResponse registers no display rotation for a value outside the rotation vocabulary', () => {
+  const req: DaemonRequest = {
+    token: 'token',
+    session: 'default',
+    command: 'screenshot',
+    positionals: [],
+    meta: { clientArtifactPaths: { path: '/client/shot.png' } },
+  };
+  const tracked: DownloadableArtifactRegistration[] = [];
+
+  finalizeDaemonResponse(
+    req,
+    { ok: true, data: { path: '/tmp/shot.png', displayRotation: 'sideways' } },
+    (registration) => {
+      tracked.push(registration);
+      return 'artifact-id';
+    },
+  );
+
+  expect(tracked).toHaveLength(1);
+  expect(tracked[0]).not.toHaveProperty('displayRotation');
+});
+
+test('finalizeDaemonResponse registers the display rotation a handler put on its own artifact', () => {
+  const req: DaemonRequest = {
+    token: 'token',
+    session: 'default',
+    command: 'snapshot',
+    positionals: [],
+  };
+  const tracked: DownloadableArtifactRegistration[] = [];
+  const fallbackArtifact = {
+    field: 'fallbackScreenshotPath',
+    artifactType: 'screenshot' as const,
+    path: '/tmp/snapshot-fallback.png',
+    fileName: 'snapshot-fallback.png',
+    displayRotation: 'landscape-right' as const,
+  };
+
+  finalizeDaemonResponse(
+    req,
+    { ok: true, data: { artifacts: [fallbackArtifact] } },
+    (registration) => {
+      tracked.push(registration);
+      return 'artifact-id';
+    },
+  );
+
+  expect(tracked[0]?.displayRotation).toBe('landscape-right');
+});
+
+test('finalizeDaemonResponse registers no display rotation outside the vocabulary on a handler artifact', () => {
+  const req: DaemonRequest = {
+    token: 'token',
+    session: 'default',
+    command: 'snapshot',
+    positionals: [],
+  };
+  const tracked: DownloadableArtifactRegistration[] = [];
+  const fallbackArtifact = {
+    field: 'fallbackScreenshotPath',
+    artifactType: 'screenshot' as const,
+    path: '/tmp/snapshot-fallback.png',
+    fileName: 'snapshot-fallback.png',
+    displayRotation: 'sideways',
+  };
+
+  finalizeDaemonResponse(
+    req,
+    { ok: true, data: { artifacts: [fallbackArtifact] } },
+    (registration) => {
+      tracked.push(registration);
+      return 'artifact-id';
+    },
+  );
+
+  expect(tracked).toHaveLength(1);
+  expect(tracked[0]).not.toHaveProperty('displayRotation');
 });

@@ -1,10 +1,22 @@
+// Catches: packages/command-registry/src/registry.ts's record command descriptor missing the
+//   runtime-descriptor join assertion — a wiring gap where record's registry entry silently
+//   stops being checked against the request-bound runtime it must join, invisible to a type
+//   check because the assertion's absence is not a type error, just a missing call.
+// Evidence: 03c3984066 (#1969) granularized contracts entry surfaces the registry imports from,
+//   which this join assertion depends on staying wired correctly.
+// Cost: 137 LOC (106 rule + 31 test); shares rule id R16 with record-runtime-mechanics-policy.ts
+//   (165 LOC).
+// Kill criterion: none enforced today; retire only by maintainer decision that the record
+//   descriptor's runtime-descriptor join assertion no longer matters. Nothing in the registry's
+//   types requires the join call, so its absence is not a compile error.
+
 import { parseSync } from 'oxc-parser';
 import { memberName, type ProductionSource, visitAst } from './layering-ast.ts';
 
 export function recordRuntimeRegistryJoinViolations(
   sources: readonly ProductionSource[],
 ): string[] {
-  const file = sources.find(({ path }) => path === 'src/core/command-descriptor/registry.ts');
+  const file = sources.find(({ path }) => path === 'packages/command-registry/src/registry.ts');
   if (!file) return [missingRecordRuntimeRegistryJoin()];
   const parsed = parseSync(file.path, file.source);
   const assertionName = importedRecordRuntimeAssertionName(parsed.program);
@@ -23,7 +35,7 @@ export function recordRuntimeRegistryJoinViolations(
 }
 
 function missingRecordRuntimeRegistryJoin(): string {
-  return 'src/core/command-descriptor/registry.ts: missing record runtime descriptor join assertion';
+  return 'packages/command-registry/src/registry.ts: missing record runtime descriptor join assertion';
 }
 
 function importedRecordRuntimeAssertionName(node: unknown): string | undefined {

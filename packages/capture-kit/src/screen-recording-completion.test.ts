@@ -16,7 +16,10 @@ test('builds the common terminal recording result without dropping finalizer met
         gestureEvents: [],
       },
       { telemetryPath: '/tmp/capture.telemetry.json' },
-      false,
+      {
+        stopObservation: { recorder: 'unconfirmed', why: 'no-exit-in-budget' },
+        showTouches: false,
+      },
     ),
   ).toEqual({
     status: 'completed',
@@ -26,6 +29,7 @@ test('builds the common terminal recording result without dropping finalizer met
       clientOutPath: '/client/capture.mp4',
       startedAt: 100,
       completedAt: 200,
+      stopObservation: { recorder: 'unconfirmed', why: 'no-exit-in-budget' },
       scope: 'device',
       showTouches: false,
       recordOnlySession: false,
@@ -33,4 +37,30 @@ test('builds the common terminal recording result without dropping finalizer met
     },
   });
   vi.useRealTimers();
+});
+
+test('records a native-path disposition only when the backend states one', () => {
+  const snapshot = {
+    backend: 'backend',
+    outPath: '/tmp/capture.mp4',
+    startedAt: 100,
+    scope: 'device' as const,
+    showTouches: false,
+    recordOnlySession: false,
+    gestureEvents: [],
+  };
+  expect(
+    createScreenRecordingCompletion(snapshot, {}, { stopObservation: { recorder: 'confirmed' } })
+      .result,
+  ).not.toHaveProperty('nativePathDisposition');
+  expect(
+    createScreenRecordingCompletion(
+      snapshot,
+      {},
+      {
+        stopObservation: { recorder: 'confirmed' },
+        nativePathDisposition: 'retirable',
+      },
+    ).result,
+  ).toMatchObject({ nativePathDisposition: 'retirable' });
 });

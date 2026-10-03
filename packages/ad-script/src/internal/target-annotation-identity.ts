@@ -2,10 +2,9 @@
  * ADR 0012 decision 3: the record/replay-shared local-identity + ancestry-
  * prefix matching over versioned `.ad` target-binding evidence, plus the
  * bounded diagnostic diffs built on top of it. Both the writer (over
- * `SnapshotNode`-derived values, `src/daemon/session-target-evidence.ts`) and
- * replay-time verification (`src/daemon/handlers/session-replay-target-classification.ts`,
- * `src/commands/interaction/runtime/selector-wait.ts`, and the shared
- * replay-zone tree helpers in `src/replay/`) share this verbatim so both
+ * `SnapshotNode`-derived values, `@agent-device/selectors/target-evidence`) and
+ * replay-time verification (`packages/replay-port/src/daemon-port/target-classification.ts` and
+ * `src/commands/interaction/runtime/selector-wait.ts`) share this verbatim so both
  * sides compute the SAME identity/ancestry match by construction (#1478 P5
  * review, "genuinely shared recording vocabulary" relocated to its owner).
  *
@@ -50,10 +49,10 @@ type IdentityTreeNode = Pick<RawSnapshotNode, 'type' | 'identifier' | 'label'>;
  * ADR 0012 decision 3: the ONE snapshot-node local-identity reader —
  * normalized (NFC, label whitespace collapse, `normalizeType` role) AND
  * 256-byte field-capped, on every path. Shared by the record-time writer
- * (`src/daemon/session-target-evidence.ts`), replay-time verification
- * (`src/daemon/handlers/session-replay-target-verification.ts`), and the
+ * (`@agent-device/selectors/target-evidence`), replay-time verification
+ * (`packages/replay-port/src/daemon-port/session-replay-target-verification.ts`), and the
  * dispatch-side post-resolution guard
- * (`src/commands/interaction/runtime/resolution.ts`), so all three compute
+ * (`src/commands/interaction/runtime/replay-target-guard.ts`), so all three compute
  * a node's identity with byte-identical semantics.
  */
 export function readNodeLocalIdentity(
@@ -106,7 +105,7 @@ export function idMatchCountInTree(nodes: readonly IdentityTreeNode[], id: strin
  * `idMatchCountInTree` predicate `buildSelectorChainForNode`'s
  * `selectableId` keys off directly. `computeTargetEvidence` uses this
  * whole-identity form; extracted so a third call site (#1280's
- * press-retarget identity-empty check, `src/core/press-retarget.ts`)
+ * press-retarget identity-empty check, `packages/selectors/src/press-retarget.ts`)
  * shares it rather than re-deriving the rule a third way. A demoted id
  * falls back to role+label, the same shape an unrecorded id already
  * computes.
@@ -200,7 +199,7 @@ export function matchesAncestryPrefix(
 // Diagnostic diffs (decision 3): bounded, best-effort mismatch descriptions
 // shared by the record-time classification core and replay-time verification
 // (#1478 P5 stage C2a) — moved here verbatim from
-// `src/daemon/handlers/session-replay-target-classification.ts` so both
+// `packages/replay-port/src/daemon-port/target-classification.ts` so both
 // callers depend on one definition instead of two copies.
 // ---------------------------------------------------------------------------
 

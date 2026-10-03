@@ -1,68 +1,25 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import { findNodeByRef, normalizeRef, type SnapshotNode } from '@agent-device/kernel/snapshot';
-import { annotationLocalIdentity, readNodeLocalIdentity } from '@agent-device/ad-script';
-import {
-  WAIT_LANDMARK_MISMATCH_REASON,
-  type TargetAnnotationV1,
-  type WaitLandmarkMismatchEvidence,
-} from '@agent-device/contracts/replay';
-import {
-  buildAncestryChain,
-  buildIndexMap,
-  filterIdentitySet,
-} from '../../../replay/target-evidence-tree.ts';
+import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import type { PublicPlatform } from '@agent-device/kernel/device';
-import { checkWaitText, type SelectorChainMatchList } from '@agent-device/selectors';
-import {
-  resolveSelectorPipeline,
-  type SelectorPipelineOutcome,
-} from '../../../core/selector-pipeline.ts';
-import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
-import { deriveSelectorCapturePolicy } from './selector-capture-policy.ts';
-import { findNodeByLabel, resolveRefLabel } from './selector-read-utils.ts';
-import {
-  createWaitPolling,
-  DEFAULT_WAIT_TIMEOUT_MS,
-  sleepWithWaitCancellation,
-  type WaitPollDeadline,
-  waitTimeoutError,
-} from './wait-polling.ts';
+import type { CapturedSnapshot } from './selector-read-shared.ts';
+import { checkWaitText, STALE_REF_HINT } from '@agent-device/selectors';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
+import { resolveRefLabel } from './selector-read-utils.ts';
+import { sleepWithWaitCancellation } from './wait-polling.ts';
+import { waitForAbsent } from './wait-absent.ts';
+import { waitForSelector } from './wait-selector.ts';
+import { waitForStable } from './wait-stable.ts';
+import { waitForText } from './wait-text.ts';
 
-/**
- * The landmark check (#1349) needs the full candidate set, which the pipeline
- * outcome carries in either shape. Wait's row never refuses, so this only ever
- * adapts — it does not re-decide anything.
- */
-function policyMatchList(outcome: SelectorPipelineOutcome): SelectorChainMatchList | undefined {
-  if (outcome.kind === 'ambiguous') {
-    return {
-      selector: outcome.selector,
-      selectorIndex: outcome.selectorIndex,
-      matchedNodes: outcome.matchedNodes,
-    };
-  }
-  if (outcome.kind === 'target') {
-    return {
-      selector: outcome.selector,
-      selectorIndex: outcome.selectorIndex,
-      // Every candidate, not just the winner: the landmark check is satisfied
-      // when SOME match carries the recorded identity, so a first impostor
-      // must not hide a later genuine landmark (#1349).
-      matchedNodes: outcome.matchedNodes,
-    };
-  }
-  return undefined;
-}
-
-type WaitCommandContext = {
+export type WaitCommandContext = {
   session?: string;
   requestId?: string;
   signal?: AbortSignal;
   metadata?: Record<string, unknown>;
 };
 
-type SelectorSnapshotOptions = {
+export type SelectorSnapshotOptions = {
   depth?: number;
   scope?: string;
   raw?: boolean;
@@ -87,6 +44,7 @@ export type WaitCommandOptions = WaitCommandContext &
            */
           recordedLandmark?: TargetAnnotationV1;
         }
+      | { kind: 'absent'; selector: string; timeoutMs?: number | null }
       | { kind: 'stable'; quietMs?: number | null; timeoutMs?: number | null };
   };
 
@@ -101,6 +59,7 @@ export type WaitCommandResult =
       node?: SnapshotNode;
       preActionNodes?: SnapshotNode[];
     }
+  | { kind: 'absent'; waitedMs: number }
   | {
       kind: 'stable';
       waitedMs: number;
@@ -115,7 +74,7 @@ export type WaitForTextCommandOptions = WaitCommandContext &
     timeoutMs?: number | null;
   };
 
-type SelectorWaitRuntime = {
+export type SelectorWaitRuntime = {
   backend: {
     platform: PublicPlatform;
     /**
@@ -151,7 +110,7 @@ export type SelectorWaitOperations<Runtime extends SelectorWaitRuntime> = {
       interactiveOnly?: boolean;
       includeHiddenContentHints?: boolean;
     },
-  ) => Promise<{ snapshot: { nodes: SnapshotNode[] } }>;
+  ) => Promise<CapturedSnapshot>;
   requireSnapshot: (
     runtime: Runtime,
     requestedName: string | undefined,
@@ -181,49 +140,54 @@ export function createSelectorWaitCommands<Runtime extends SelectorWaitRuntime>(
     runtime: Runtime,
     options: WaitCommandOptions,
   ): Promise<WaitCommandResult> => {
-    if (options.target.kind === 'sleep') {
-      await sleepWithWaitCancellation(runtime, options, options.target.durationMs);
-      return { kind: 'sleep', waitedMs: options.target.durationMs };
+    switch (options.target.kind) {
+      case 'sleep':
+        await sleepWithWaitCancellation(runtime, options, options.target.durationMs);
+        return { kind: 'sleep', waitedMs: options.target.durationMs };
+      case 'ref':
+        return await waitForRef(
+          operations,
+          runtime,
+          options,
+          options.target.ref,
+          options.target.timeoutMs,
+        );
+      case 'selector':
+        return await waitForSelector(
+          operations,
+          runtime,
+          options,
+          options.target.selector,
+          options.target.timeoutMs,
+          options.target.recordedLandmark,
+        );
+      case 'absent':
+        return await waitForAbsent(
+          operations,
+          runtime,
+          options,
+          options.target.selector,
+          options.target.timeoutMs,
+        );
+      case 'stable':
+        return await waitForStable(
+          operations,
+          runtime,
+          options,
+          options.target.quietMs,
+          options.target.timeoutMs,
+        );
+      case 'text':
+        return await waitForTextTarget(
+          operations,
+          runtime,
+          options,
+          options.target.text,
+          options.target.timeoutMs,
+        );
+      default:
+        return assertNever(options.target);
     }
-    if (options.target.kind === 'ref') {
-      const capture = await operations.requireSnapshot(runtime, options.session);
-      const ref = normalizeRef(options.target.ref);
-      if (!ref) throw new AppError('INVALID_ARGS', `Invalid ref: ${options.target.ref}`);
-      const node = findNodeByRef(capture.snapshot.nodes, ref);
-      const text = node ? resolveRefLabel(node, capture.snapshot.nodes) : undefined;
-      if (!text) {
-        throw new AppError('COMMAND_FAILED', `Ref ${options.target.ref} not found or has no label`);
-      }
-      return await waitForText(operations, runtime, options, text, options.target.timeoutMs);
-    }
-    if (options.target.kind === 'selector') {
-      return await waitForSelector(
-        operations,
-        runtime,
-        options,
-        options.target.selector,
-        options.target.timeoutMs,
-        options.target.recordedLandmark,
-      );
-    }
-    if (options.target.kind === 'stable') {
-      return await waitForStable(
-        operations,
-        runtime,
-        options,
-        options.target.quietMs,
-        options.target.timeoutMs,
-      );
-    }
-    const waitText = checkWaitText(options.target.text);
-    if (!waitText.ok) throw new AppError(waitText.code, waitText.message);
-    return await waitForText(
-      operations,
-      runtime,
-      options,
-      options.target.text,
-      options.target.timeoutMs,
-    );
   };
 
   const waitForTextCommand = async (
@@ -243,236 +207,46 @@ export function createSelectorWaitCommands<Runtime extends SelectorWaitRuntime>(
   return { waitCommand, waitForTextCommand };
 }
 
-async function waitForSelector<Runtime extends SelectorWaitRuntime>(
+async function waitForRef<Runtime extends SelectorWaitRuntime>(
   operations: SelectorWaitOperations<Runtime>,
   runtime: Runtime,
   options: WaitCommandOptions,
-  selectorExpression: string,
+  rawRef: string,
   timeoutMs: number | null | undefined,
-  recordedLandmark: TargetAnnotationV1 | undefined,
-): Promise<WaitCommandResult> {
-  const polling = createWaitPolling(runtime, options, timeoutMs, SELECTOR_PIPELINE_POLICIES.wait);
-  const capturePolicy = deriveSelectorCapturePolicy();
-  // ADR 0012 / #1349: the LAST poll whose capture matched the recorded
-  // selector without any match carrying the recorded landmark identity. A
-  // transient same-selector impostor (the previous screen mid-transition)
-  // must not abort a wait whose job is to wait through it, so the loop keeps
-  // polling; only the deadline turns this into the fail-closed refusal.
-  let landmarkMismatch: WaitLandmarkMismatchEvidence | undefined;
-  let deadline: WaitPollDeadline | undefined;
-  while (polling.hasTimeRemaining()) {
-    // Presence-only poll: skip scroll-hint derivation (#1270), same as waitForFindMatch.
-    const poll = await polling.capture(
-      async (signal) =>
-        await operations.captureSnapshot(
-          runtime,
-          { ...options, signal },
-          {
-            updateSession: true,
-            includeHiddenContentHints: false,
-            ...capturePolicy,
-          },
-        ),
-    );
-    if (poll.timedOut) {
-      deadline = poll.deadline;
-      break;
-    }
-    const capture = poll.value;
-    if (capture) {
-      const nodes = capture.snapshot.nodes;
-      // The wait row ignores occlusion and off-screen: a covered or scrolled-out
-      // element is present, and presence is the question this loop asks.
-      const outcome = await resolveSelectorPipeline(
-        SELECTOR_PIPELINE_POLICIES.wait,
-        nodes,
-        selectorExpression,
-        { platform: runtime.backend.platform },
-      );
-      // The wait row is `first-match`, so a multi-match screen resolves rather
-      // than refusing; the landmark check below is what decides satisfaction.
-      const matchList = policyMatchList(outcome);
-      if (matchList) {
-        const landmark = resolveLandmarkMatch(nodes, matchList, recordedLandmark);
-        if (landmark.kind === 'satisfied') {
-          return {
-            kind: 'selector',
-            selector: matchList.selector,
-            waitedMs: polling.waitedMs(),
-            node: landmark.node,
-            preActionNodes: nodes,
-          };
-        }
-        landmarkMismatch = landmark.evidence;
-      }
-    }
-    await polling.sleepUntilNextPoll();
-  }
-  if (deadline !== 'capture-stalled' && landmarkMismatch) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `wait matched selector ${selectorExpression} but no candidate carried the recorded landmark identity`,
-      { reason: WAIT_LANDMARK_MISMATCH_REASON, ...landmarkMismatch },
-    );
-  }
-  throw waitTimeoutError(`wait timed out for selector: ${selectorExpression}`, polling, deadline);
-}
-
-type LandmarkMatchOutcome =
-  | { kind: 'satisfied'; node: SnapshotNode }
-  | { kind: 'identity-mismatch'; evidence: WaitLandmarkMismatchEvidence };
-
-/**
- * #1349 landmark check: the wait is satisfied when SOME selector match
- * carries the recorded identity (local identity + leaf-anchored ancestry
- * prefix). Positional disambiguation signals are deliberately not consulted —
- * a destination guard proves the landmark exists on the ready screen, not
- * that it kept its list position.
- */
-function resolveLandmarkMatch(
-  nodes: SnapshotNode[],
-  matchList: SelectorChainMatchList,
-  recorded: TargetAnnotationV1 | undefined,
-): LandmarkMatchOutcome {
-  const firstMatch = matchList.matchedNodes[0]!;
-  if (!recorded) return { kind: 'satisfied', node: firstMatch };
-  const byIndex = buildIndexMap(nodes);
-  const identitySet = filterIdentitySet(
-    matchList.matchedNodes,
-    byIndex,
-    annotationLocalIdentity(recorded),
-    recorded.ancestry,
-  );
-  const member = identitySet[0];
-  if (member) return { kind: 'satisfied', node: member };
-  return {
-    kind: 'identity-mismatch',
-    evidence: {
-      matchCount: matchList.matchedNodes.length,
-      observed: readNodeLocalIdentity(firstMatch),
-      observedAncestry: buildAncestryChain(
-        firstMatch,
-        byIndex,
-        Math.max(recorded.ancestry.length, 1),
-      ).chain,
-    },
-  };
-}
-
-async function waitForText<Runtime extends SelectorWaitRuntime>(
-  operations: SelectorWaitOperations<Runtime>,
-  runtime: Runtime,
-  options: WaitCommandOptions,
-  text: string,
-  timeoutMs: number | null | undefined,
-): Promise<WaitCommandResult> {
-  const polling = createWaitPolling(runtime, options, timeoutMs, SELECTOR_PIPELINE_POLICIES.wait);
-  let deadline: WaitPollDeadline | undefined;
-  while (polling.hasTimeRemaining()) {
-    const poll = await polling.capture(
-      async (signal) => await observeText(operations, runtime, { ...options, signal }, text),
-    );
-    if (poll.timedOut) {
-      deadline = poll.deadline;
-      break;
-    }
-    const found = poll.value;
-    if (found) return { kind: 'text', text, waitedMs: polling.waitedMs() };
-    await polling.sleepUntilNextPoll();
-  }
-  throw waitTimeoutError(`wait timed out for text: ${text}`, polling, deadline);
-}
-
-/**
- * One poll's answer to "is this text on screen", from two sources with deliberately asymmetric
- * authority:
- *
- * 1. the owner's native reading, when the bound runtime advertised it — a `true` here short-
- *    circuits the poll and skips the capture entirely, which is the whole benefit of the
- *    preferred operation; and
- * 2. the canonical tree, always consulted when (1) did not answer `true`.
- *
- * So the fast path can only ever make a satisfied wait return sooner. It can never make a wait
- * that the tree would satisfy fail, and it is never the reason a wait times out — the required
- * tree path below it is complete on its own.
- */
-async function observeText<Runtime extends SelectorWaitRuntime>(
-  operations: SelectorWaitOperations<Runtime>,
-  runtime: Runtime,
-  options: WaitCommandOptions,
-  text: string,
-): Promise<boolean> {
-  if (runtime.backend.findText) {
-    const native = await runtime.backend.findText(backendContext(runtime, options), text);
-    if (native.found) return true;
-  }
-  return await snapshotContainsText(operations, runtime, options, text);
-}
-
-async function snapshotContainsText<Runtime extends SelectorWaitRuntime>(
-  operations: SelectorWaitOperations<Runtime>,
-  runtime: Runtime,
-  options: WaitCommandOptions,
-  text: string,
-): Promise<boolean> {
-  // Presence-only poll: skip scroll-hint derivation (#1270), same as waitForFindMatch.
-  const capture = await operations.captureSnapshot(runtime, options, {
-    updateSession: true,
-    includeHiddenContentHints: false,
-  });
-  return Boolean(findNodeByLabel(capture.snapshot.nodes, text));
-}
-
-// The quiet-window loop itself lives in stable-capture.ts and is shared with
-// the interaction `--settle` flag (#1101); this wrapper maps the loop outcome
-// to wait's throwing semantics.
-async function waitForStable<Runtime extends SelectorWaitRuntime>(
-  operations: SelectorWaitOperations<Runtime>,
-  runtime: Runtime,
-  options: WaitCommandOptions,
-  quietMs: number | null | undefined,
-  timeoutMs: number | null | undefined,
-): Promise<Extract<WaitCommandResult, { kind: 'stable' }>> {
-  const timeout = timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
-  const quiet = quietMs ?? operations.stable.defaultQuietMs;
-  const outcome = await operations.stable.capture(runtime, options, {
-    quietMs: quiet,
-    timeoutMs: timeout,
-  });
-  if (!outcome.settled) {
-    throw new AppError('COMMAND_FAILED', 'wait timed out waiting for a stable UI', {
-      reason: WAIT_REASONS.stableTimeout,
-      ...(outcome.stalled ? { captureStalled: true } : {}),
-      quietMs: quiet,
-      timeoutMs: timeout,
-      captures: outcome.captures,
-      nodeCount: outcome.nodeCount,
-      ...(outcome.stalled
-        ? {
-            hint: 'A snapshot capture stalled past the wait timeout, so no settle verdict is available. The UI may still be readable: retry, or use screenshot to inspect the surface.',
-          }
-        : {}),
+): Promise<Extract<WaitCommandResult, { kind: 'text' }>> {
+  const capture = await operations.requireSnapshot(runtime, options.session);
+  const ref = normalizeRef(rawRef);
+  if (!ref) throw new AppError('INVALID_ARGS', `Invalid ref: ${rawRef}`);
+  const node = findNodeByRef(capture.snapshot.nodes, ref);
+  if (!node) {
+    throw new AppError('COMMAND_FAILED', `Ref ${rawRef} not found`, {
+      reason: INTERACTION_ERROR_REASONS.refNotFound,
+      ref,
+      hint: STALE_REF_HINT,
     });
   }
-  return {
-    kind: 'stable',
-    waitedMs: outcome.waitedMs,
-    captures: outcome.captures,
-    nodeCount: outcome.nodeCount,
-    ...(outcome.nodeCount < operations.stable.tinyTreeNodeCount
-      ? { hint: operations.stable.tinyTreeHint }
-      : {}),
-  };
+  const text = resolveRefLabel(node, capture.snapshot.nodes);
+  if (!text) {
+    throw new AppError('COMMAND_FAILED', `Ref ${rawRef} has no label to wait for`, {
+      reason: INTERACTION_ERROR_REASONS.refUnlabeled,
+      ref,
+    });
+  }
+  return await waitForText(operations, runtime, options, text, timeoutMs);
 }
 
-function backendContext(
-  runtime: SelectorWaitRuntime,
-  options: WaitCommandContext,
-): WaitCommandContext {
-  return {
-    session: options.session,
-    requestId: options.requestId,
-    signal: options.signal ?? runtime.signal,
-    metadata: options.metadata,
-  };
+async function waitForTextTarget<Runtime extends SelectorWaitRuntime>(
+  operations: SelectorWaitOperations<Runtime>,
+  runtime: Runtime,
+  options: WaitCommandOptions,
+  text: string,
+  timeoutMs: number | null | undefined,
+): Promise<Extract<WaitCommandResult, { kind: 'text' }>> {
+  const waitText = checkWaitText(text);
+  if (!waitText.ok) throw new AppError(waitText.code, waitText.message);
+  return await waitForText(operations, runtime, options, waitText.text, timeoutMs);
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unsupported wait target: ${String(value)}`);
 }

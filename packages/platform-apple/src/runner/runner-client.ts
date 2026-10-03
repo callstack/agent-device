@@ -1,24 +1,29 @@
 import { retryWithPolicy, emitDiagnostic } from './host.ts';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import {
+  ensureRunnerSession,
+  readRunnerSessionLiveness,
   stopIosRunnerSession,
-  type RunnerSessionOptions,
   validateRunnerDevice,
+  releaseSpeculativeIosRunnerSession,
 } from './runner-session.ts';
 import {
   assertRunnerRequestActive,
-  isRetryableRunnerError,
+  callerDeadlineExpired,
+  resolveRunnerRequestSignal,
   withRunnerCommandId,
   type RunnerCommand,
 } from './runner-contract.ts';
+import { isRetryableRunnerError, isRunnerBusyError } from './runner-error-classification.ts';
 import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';
 import {
   createLocalAppleRunnerProvider,
   resolveAppleRunnerProvider,
   type AppleRunnerCommandOptions,
+  type AppleRunnerPrewarmOptions,
   type AppleRunnerProvider,
 } from './runner-provider.ts';
-import { ensureXctestrunArtifact } from './runner-xctestrun.ts';
+import { createRunnerPhaseBudget, ensureXctestrunArtifact } from './runner-xctestrun.ts';
 import {
   executeRunnerCommand,
   prepareLocalIosRunner,
@@ -29,6 +34,30 @@ import { RUNNER_COMMAND_TIMEOUT_MS } from './runner-transport.ts';
 
 // --- Runner command execution ---
 
+/**
+ * Attempts a read-only command may spend on one error class; 1 means no resend. A `RUNNER_BUSY`
+ * refusal is the runner refusing fast on purpose while it drains abandoned XCTest work (#1105), so
+ * that budget has to outlast the drain. The window is a heuristic, not a measurement: 200ms doubling
+ * to a 1s cap, no jitter, is 5.4s of delay across eight attempts before round trips, and a drain
+ * that outlives it still surfaces as `RUNNER_BUSY` (the runner's own `abandonedForSeconds=` marker
+ * in runner.log is the evidence for tuning it). Transport failures keep the pre-existing three
+ * attempts. The budget is positional: the error on each attempt sets how many attempts the loop may
+ * reach in total, so three busy refusals followed by a transport failure resend no further.
+ */
+const RUNNER_BUSY_RESEND_ATTEMPTS = 8;
+const TRANSPORT_RESEND_ATTEMPTS = 3;
+const READ_ONLY_RESEND_POLICY = {
+  maxAttempts: RUNNER_BUSY_RESEND_ATTEMPTS,
+  baseDelayMs: 200,
+  maxDelayMs: 1_000,
+  jitter: 0,
+};
+
+function readOnlyResendBudget(error: unknown): number {
+  if (isRunnerBusyError(error)) return RUNNER_BUSY_RESEND_ATTEMPTS;
+  return isRetryableRunnerError(error) ? TRANSPORT_RESEND_ATTEMPTS : 1;
+}
+
 export async function runAppleRunnerCommand(
   device: DeviceInfo,
   command: RunnerCommand,
@@ -38,21 +67,35 @@ export async function runAppleRunnerCommand(
   assertRunnerRequestActive(options.requestId);
   const runnerCommand = withRunnerCommandId(command);
   const provider = resolveAppleRunnerRuntime(device, options);
-  if (isReadOnlyRunnerCommand(runnerCommand.command)) {
-    return retryWithPolicy(
+  if (!isReadOnlyRunnerCommand(runnerCommand)) {
+    return provider.runCommand(device, runnerCommand, options);
+  }
+  let lastBusyRefusal: unknown;
+  try {
+    return await retryWithPolicy(
       () => {
         assertRunnerRequestActive(options.requestId);
         return provider.runCommand(device, runnerCommand, options);
       },
       {
-        shouldRetry: (error) => {
+        ...READ_ONLY_RESEND_POLICY,
+        shouldRetry: (error, attempt) => {
           assertRunnerRequestActive(options.requestId);
-          return isRetryableRunnerError(error);
+          if (isRunnerBusyError(error)) lastBusyRefusal = error;
+          return attempt < readOnlyResendBudget(error);
         },
       },
+      // The busy window is seconds long, so an abort must wake the delay instead of sleeping it
+      // out and sending one more attempt.
+      { signal: resolveRunnerRequestSignal(options) },
     );
+  } catch (error) {
+    // A caller's deadline (a `wait` poll bounding this capture) that lands mid-window still has an
+    // answer: the runner refused, and that typed refusal is what the caller can act on. Only a
+    // cancelled request reports as a bare cancellation.
+    if (lastBusyRefusal && callerDeadlineExpired(options)) throw lastBusyRefusal;
+    throw error;
   }
-  return provider.runCommand(device, runnerCommand, options);
 }
 
 export async function notifyIosRunnerAppRelaunched(
@@ -72,7 +115,7 @@ export async function notifyIosRunnerAppRelaunched(
   }
 }
 
-type PrewarmIosRunnerOptions = RunnerSessionOptions & {
+type PrewarmIosRunnerOptions = AppleRunnerPrewarmOptions & {
   propagateError?: boolean;
 };
 
@@ -88,7 +131,12 @@ export function prewarmAppleRunnerCache(
     options,
     failurePhase: 'ios_runner_cache_prewarm_failed',
     task: async (runnerOptions) => {
-      await ensureXctestrunArtifact(device, runnerOptions);
+      // A cache prewarm owns the build phase it starts: one budget for the cache
+      // decision's toolchain probes and the `xcodebuild` that may follow them.
+      await ensureXctestrunArtifact(device, {
+        ...runnerOptions,
+        budget: createRunnerPhaseBudget(runnerOptions.buildTimeoutMs, runnerOptions.signal),
+      });
     },
   });
 }
@@ -124,7 +172,7 @@ function runBestEffortIosRunnerPrewarm(params: {
   device: DeviceInfo;
   options: PrewarmIosRunnerOptions;
   failurePhase: 'ios_runner_cache_prewarm_failed' | 'ios_runner_session_prewarm_failed';
-  task: (options: RunnerSessionOptions) => Promise<void>;
+  task: (options: AppleRunnerPrewarmOptions) => Promise<void>;
 }): Promise<void> {
   const { device, options, failurePhase, task } = params;
   const { propagateError = false, ...runnerOptions } = options;
@@ -170,16 +218,49 @@ function resolveAppleRunnerRuntime(
   device: DeviceInfo,
   options: { requestId?: string },
 ): AppleRunnerProvider {
-  return resolveAppleRunnerProvider(device, LOCAL_APPLE_RUNNER_RUNTIME, undefined, {
+  return resolveAppleRunnerProvider(device, LOCAL_APPLE_RUNNER_RUNTIME, {
     requestId: options.requestId,
   });
 }
 
+/**
+ * Whether asking this device's runner now would be answered without a startup wait. Only a
+ * session in the `ready` state counts: one that is registered but has not answered yet is still
+ * starting, so sending it a command would queue behind its connection retries, and one already
+ * going away would be asked to work while it is being taken down. Observation paths use this to
+ * stay runner-free until the runner is ready.
+ */
+export function hasLiveIosRunnerSession(
+  device: DeviceInfo,
+  options: { requestId?: string } = {},
+): boolean {
+  if (!isIosFamily(device)) return false;
+  return resolveAppleRunnerRuntime(device, options).hasLiveSession(device);
+}
+
+/** Releases the runner a prewarm started for `device` if no command has used it; false otherwise. */
+export async function releaseSpeculativeIosRunnerSessionFor(
+  device: DeviceInfo,
+  options: { requestId?: string } = {},
+): Promise<boolean> {
+  if (!isIosFamily(device)) return false;
+  const release = resolveAppleRunnerRuntime(device, options).releaseSpeculativeSession;
+  return release ? await release(device) : false;
+}
+
 const LOCAL_APPLE_RUNNER_RUNTIME = createLocalAppleRunnerProvider(executeRunnerCommand, {
   prepare: prepareLocalIosRunner,
+  hasLiveSession: (device) => readRunnerSessionLiveness(device.id)?.liveness === 'ready',
+  releaseSpeculativeSession: async (device) => await releaseSpeculativeIosRunnerSession(device.id),
   prewarm: async (device, options) => {
+    const { healthCheck, ...runnerOptions } = options;
+    if (healthCheck === false) {
+      await ensureRunnerSession(device, { ...runnerOptions, speculative: true });
+      return;
+    }
     await prepareLocalIosRunner(device, {
-      ...options,
+      ...runnerOptions,
+      speculative: true,
       healthTimeoutMs: RUNNER_COMMAND_TIMEOUT_MS,
     });
   },

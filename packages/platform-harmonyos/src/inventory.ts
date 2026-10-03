@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
   DeviceInventoryHostFor,
@@ -83,10 +84,24 @@ async function probeHarmonyDevice(
   target: string,
   scope: PlatformRequestScope,
 ): Promise<DeviceInfo> {
-  const prefix = ['-t', target, 'shell', 'param', 'get'];
   const [nameResult, characteristicsResult] = await Promise.all([
-    runHdc(host, hdc, [...prefix, 'const.product.name'], scope),
-    runHdc(host, hdc, [...prefix, 'const.build.characteristics'], scope),
+    runHdc(
+      host,
+      hdc,
+      deviceShellArgv('hdc', 'shell', ['param', 'get', 'const.product.name'], ['-t', target]),
+      scope,
+    ),
+    runHdc(
+      host,
+      hdc,
+      deviceShellArgv(
+        'hdc',
+        'shell',
+        ['param', 'get', 'const.build.characteristics'],
+        ['-t', target],
+      ),
+      scope,
+    ),
   ]);
   const name = nameResult.exitCode === 0 ? nameResult.stdout.trim() : '';
   const emulator = name.toLowerCase() === 'emulator';

@@ -8,7 +8,9 @@ import {
   type SnapshotDiagnosticsSummary,
 } from '@agent-device/contracts/capture';
 import { AppError } from '@agent-device/kernel/errors';
+import { normalizeType } from '@agent-device/contracts/snapshot';
 import type {
+  SnapshotKeyboardBandFact,
   SnapshotNode,
   SnapshotState,
   SnapshotUnchanged,
@@ -19,12 +21,17 @@ import type { AgentDeviceRuntime, CommandSessionRecord } from '../../../runtime-
 import {
   buildSnapshotDiff,
   countSnapshotComparableLines,
-} from '../../../snapshot/snapshot-diff.ts';
-import { renderSnapshotQualityWarnings } from '../../../snapshot-quality/warnings.ts';
-import { buildSnapshotVisibility } from '../../../snapshot/snapshot-visibility.ts';
-import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '../../../core/android-system-surface-disclosure.ts';
+} from '@agent-device/capture-kit/snapshot-diff';
+import {
+  renderSnapshotQualityWarnings,
+  truncatedCaptureWarning,
+} from '@agent-device/capture-kit/quality-warnings';
+import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
+import { buildSnapshotVisibility } from '@agent-device/capture-kit/snapshot-visibility';
+import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/android-system-surface-disclosure';
 import { formatReactNativeOverlayWarning } from '../../react-native/overlay.ts';
 import { now } from '../../runtime-common.ts';
+import { iosSnapshotTruncationEvidence } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import type {
   DiffSnapshotCommandOptions,
   RuntimeCommand,
@@ -37,12 +44,18 @@ import {
 
 export type SnapshotCommandResult = {
   nodes: SnapshotNode[];
-  truncated: boolean;
+  truncated?: boolean;
   appName?: string;
   appBundleId?: string;
   visibility?: SnapshotVisibility;
   unchanged?: SnapshotUnchanged;
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
+  /**
+   * The keyboard band this capture's producer measured (#2660). The acting commands read it off the
+   * session state they act with; it is published here so a caller can see why a tap behind the
+   * keyboard was refused without reconstructing the band from the tree.
+   */
+  keyboard?: SnapshotKeyboardBandFact;
 } & PublicSnapshotCaptureAnnotations;
 
 type SnapshotCapture = {
@@ -68,9 +81,10 @@ export const snapshotCommand: RuntimeCommand<
     },
   });
   await runtime.sessions.set(nextSnapshotSession(options.session, capture));
+  const truncated = snapshotTruncationForResult(capture.snapshot);
   return copySnapshotClickabilityEvidence(capture.snapshot, {
     nodes: capture.snapshot.nodes,
-    truncated: capture.snapshot.truncated ?? false,
+    ...(truncated === undefined ? {} : { truncated }),
     visibility: buildSnapshotVisibility({
       nodes: capture.snapshot.nodes,
       backend: capture.snapshot.backend,
@@ -84,6 +98,7 @@ export const snapshotCommand: RuntimeCommand<
     ...(capture.result.snapshotDiagnostics
       ? { snapshotDiagnostics: capture.result.snapshotDiagnostics }
       : {}),
+    ...(capture.snapshot.keyboard ? { keyboard: capture.snapshot.keyboard } : {}),
     ...snapshotAppFields(capture),
   });
 };
@@ -189,6 +204,7 @@ function normalizeBackendSnapshot(
     truncated: result.truncated,
     backend: result.backend as SnapshotState['backend'],
     createdAt: now(runtime),
+    ...(result.keyboard ? { keyboard: result.keyboard } : {}),
   };
 }
 
@@ -218,6 +234,17 @@ function snapshotAppFields(capture: SnapshotCapture): {
   };
 }
 
+/**
+ * A capture that reported nothing about truncation is only "not truncated" when its producer
+ * actually observes truncation. Producers that do not (Appium page source, the Limrun element
+ * tree) leave it unknown rather than having the absence upgraded to `false` (#2188 invariant 5).
+ */
+function snapshotTruncationForResult(snapshot: SnapshotState): boolean | undefined {
+  if (snapshot.truncated !== undefined) return snapshot.truncated;
+  if (snapshot.backend !== 'xctest' || snapshot.producer === undefined) return false;
+  return iosSnapshotTruncationEvidence(snapshot.producer) === 'unavailable' ? undefined : false;
+}
+
 function buildSnapshotWarnings(params: {
   result: BackendSnapshotResult;
   annotations: SnapshotCaptureAnnotations;
@@ -232,6 +259,10 @@ function buildSnapshotWarnings(params: {
     warnings.push(
       ...renderSnapshotQualityWarnings(params.annotations.quality, params.snapshot.nodes),
     );
+  }
+  warnings.push(...truncatedCaptureWarning(snapshotTruncationForResult(params.snapshot)));
+  if (params.snapshot.postGestureOutcome) {
+    warnings.push(formatPostGestureOutcomeWarning(params.snapshot.postGestureOutcome));
   }
   warnings.push(...buildEmptyAndroidInteractiveWarnings(params));
   if (!params.annotations.quality) {
@@ -273,11 +304,25 @@ function buildSparseIosInteractiveWarnings(params: {
   }
 
   const root = params.snapshot.nodes[0];
-  if (root?.type !== 'Application') return [];
+  if (!isApplicationRoot(root)) return [];
+
+  if (params.snapshot.producer === 'appium-source') {
+    return [
+      'Appium page source exposed only the application root. Descendants may be absent from the acquired hierarchy; use snapshot --raw to inspect the source and verify the app accessibility tree.',
+    ];
+  }
+  if (params.snapshot.producer !== undefined && params.snapshot.producer !== 'apple-runner') {
+    return [];
+  }
 
   return [
     'iOS interactive snapshot exposed only the application root. XCTest accessibility queries can fail to enumerate some simulator UI trees even when screenshots and direct gestures still work. Use screenshot as visual truth, try a scoped/full snapshot for diagnostics, and prefer direct selectors when known.',
   ];
+}
+
+function isApplicationRoot(node: SnapshotNode | undefined): boolean {
+  if (!node) return false;
+  return normalizeType(node.type ?? '') === 'application';
 }
 
 const MERGED_LEAF_MIN_SEGMENTS = 10;

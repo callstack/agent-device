@@ -1,9 +1,10 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SettleObservation } from '@agent-device/contracts/interaction';
-import { commandSupportsSettleObservation } from '../core/command-descriptor/registry.ts';
+import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonCommandContext } from './context.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
+import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 import {
   ensureAndroidBlockingSystemDialogReady,
   recoverAndroidBlockingSystemDialog,
@@ -19,8 +20,8 @@ import {
   resolveRefFrameEffect,
   shouldGuardAndroidBlockingDialog,
 } from './daemon-command-registry.ts';
-import { isActiveProviderDevice } from '../provider-device-runtime.ts';
-import { buildActionEventResult } from './session-event-action-presentation.ts';
+import { isActiveProviderDevice } from './provider-device-admission.ts';
+import { buildActionEventResult } from '@agent-device/session-journal/session-event-action-presentation';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 
 export type GenericPlatformExecutionParams = {

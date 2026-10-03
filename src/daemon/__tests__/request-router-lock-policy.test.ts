@@ -4,16 +4,15 @@ import {
 } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
-import os from 'node:os';
 import path from 'node:path';
 
-vi.mock('../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
+vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../platforms/apple/core/runner-client.ts')>();
+    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
   return { ...actual, stopIosRunnerSession: vi.fn(async () => {}) };
 });
 
-vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
 import {
   createRequestHandler,
@@ -21,7 +20,7 @@ import {
   systemRuntimeSpies,
 } from './test-device-runtime-gateway.ts';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
@@ -29,6 +28,7 @@ import {
   type PlatformRuntimeOperations,
   snapshotRuntimePlanUses,
 } from '@agent-device/contracts/platform-runtime-operations';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function snapshotDeviceRuntimeGateway(): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   const runtime = snapshotRuntimeFixture();
@@ -125,7 +125,7 @@ test('direct daemon requests cannot bypass reject lock policy for existing sessi
   sessionStore.set('qa-ios', makeIosSession('qa-ios'));
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -161,7 +161,7 @@ test('fresh named sessions with matching explicit serial bind and serialize on t
   const dispatchGate = installGatedDispatch();
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -239,7 +239,7 @@ test('fresh named sessions with the same name serialize first binding before rej
   const dispatchGate = installGatedDispatch();
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -312,7 +312,7 @@ test('fresh named sessions with only lock platform default serialize on the sele
   const dispatchGate = installGatedDispatch();
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -420,7 +420,7 @@ test('fresh named sessions reject incompatible selector combinations before bind
   for (const testCase of cases) {
     const sessionStore = makeSessionStore('agent-device-router-lock-');
     const handler = createRequestHandler({
-      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       token: 'test-token',
       sessionStore,
       leaseRegistry: new LeaseRegistry(),
@@ -458,7 +458,7 @@ test('batch steps cannot bypass reject lock policy on nested direct requests', a
   sessionStore.set('qa-ios', makeIosSession('qa-ios'));
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -503,7 +503,7 @@ test('direct daemon requests apply strip lock policy for existing sessions befor
   systemRuntimeSpies.appSwitcher.mockClear();
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -546,7 +546,7 @@ test('strip lock policy still refuses a request naming a different device, befor
   });
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -584,7 +584,7 @@ test('batch preserves tenant-scoped session names across nested requests', async
   systemRuntimeSpies.appSwitcher.mockClear();
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry,

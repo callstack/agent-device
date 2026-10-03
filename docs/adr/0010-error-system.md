@@ -28,7 +28,8 @@ agent failures (selector/ref misses), and consumers that drop fields (MCP tool e
    `err instanceof AppError ? err : new AppError(...)`.
 2. **Code selection.** Use the most specific `KnownAppErrorCode`; `COMMAND_FAILED` is for genuine
    runtime failures of a well-formed request, never a catch-all for capability gaps
-   (`UNSUPPORTED_OPERATION`), contention (`DEVICE_IN_USE`, the only retriable code), or ambiguity
+   (`UNSUPPORTED_OPERATION`), contention (`DEVICE_IN_USE`, the only code retriable by default;
+   the cross-worktree device-claim path overrides it to `retriable: false`), or ambiguity
    (`AMBIGUOUS_MATCH`). New codes are added to the union deliberately; machine-dispatchable
    sub-classification rides in `details.reason` (the lease registry is the model).
 3. **Hints answer "what should the agent run next".** A hint is required wherever the per-code

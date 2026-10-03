@@ -24,13 +24,21 @@ extension RunnerTests {
     private var isStopping = false
     private var startedSession = false
     private var startError: Error?
+    #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+    private var appendedFramesForTesting: [RunnerImage] = []
+    #endif
 
     init(outputPath: String, fps: Int32?) {
       self.outputPath = outputPath
       self.fps = fps
     }
 
-    func start(captureFrame: @escaping () -> RunnerImage?) throws {
+    /// `bootstrap` must produce the frame that sizes the writer and runs on the caller's thread.
+    /// `frame` answers each tick with an image, or `nil` to drop the tick.
+    func start(
+      bootstrap: () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>,
+      frame: @escaping @Sendable () -> RunnerImage?
+    ) throws {
       let url = URL(fileURLWithPath: outputPath)
       let directory = url.deletingLastPathComponent()
       try FileManager.default.createDirectory(
@@ -44,21 +52,34 @@ extension RunnerTests {
 
       var dimensions: CGSize = .zero
       var bootstrapImage: RunnerImage?
+      var lastFailure: RunnerAppScreenCaptureFailure?
       let bootstrapDeadline = Date().addingTimeInterval(2.0)
       while Date() < bootstrapDeadline {
-        if let image = captureFrame(), let cgImage = runnerCGImage(from: image) {
-          bootstrapImage = image
-          dimensions = CGSize(width: cgImage.width, height: cgImage.height)
+        switch bootstrap() {
+        case .success(let captured):
+          bootstrapImage = captured.image
+          dimensions = CGSize(width: captured.pixelWidth, height: captured.pixelHeight)
+        case .failure(let failure):
+          lastFailure = failure
+        }
+        if dimensions.width > 0, dimensions.height > 0 {
           break
         }
         Thread.sleep(forTimeInterval: 0.05)
       }
       guard dimensions.width > 0, dimensions.height > 0 else {
-        throw NSError(
-          domain: "AgentDeviceRunner.Record",
-          code: 1,
-          userInfo: [NSLocalizedDescriptionKey: "failed to capture initial frame"]
-        )
+        // The bootstrap frame is required: the writer is sized from it. A capture that refused names
+        // why (no window, no display, unencodable image) so the host sees a typed reason rather than
+        // the generic "no frame" it used to collapse every refusal into (#2728). macOS keeps its
+        // host-display behavior and its original error, because nothing here is a panel question.
+        #if os(iOS)
+        throw RunnerTests.recordingBootstrapError(from: lastFailure)
+        #else
+        // macOS/tvOS preserve their original untyped record error regardless of why the host capture
+        // refused; the reason is read here only so the shared bootstrap loop carries no dead write.
+        _ = lastFailure
+        throw RunnerTests.recordingBootstrapError(from: nil)
+        #endif
       }
 
       let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
@@ -111,10 +132,10 @@ extension RunnerTests {
 
       let timer = DispatchSource.makeTimerSource(queue: queue)
       timer.schedule(deadline: .now() + frameInterval, repeating: frameInterval)
-      timer.setEventHandler { [weak self] in
+      timer.setEventHandler { @Sendable [weak self] in
         guard let self else { return }
         if self.shouldStop() { return }
-        guard let image = captureFrame() else { return }
+        guard let image = frame() else { return }
         self.append(image: image)
       }
       self.timer = timer
@@ -212,6 +233,9 @@ extension RunnerTests {
         return
       }
       lastTimestampValue = timestampValue
+      #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+      appendedFramesForTesting.append(image)
+      #endif
     }
 
     private func timestampCandidateValue(for nowUptime: TimeInterval) -> Int64 {
@@ -269,6 +293,53 @@ extension RunnerTests {
   }
 }
 
+extension RunnerTests {
+  /// Starts `recorder` on the frames `capture` produces. The bootstrap frame is taken on the calling
+  /// thread, which is main for `record start`. Each later tick is optional work: it hops to main only
+  /// while no other main-thread work is in flight, so it never queues behind a command.
+  /// A capture still running after `recordingFrameCaptureTimeout` is abandoned and its frame dropped;
+  /// its late result is never returned.
+  @MainActor
+  func startRecording(
+    _ recorder: ScreenRecorder,
+    capture: @escaping @MainActor () -> Result<CapturedAppScreen, RunnerAppScreenCaptureFailure>
+  ) throws {
+    try recorder.start(bootstrap: capture) { [weak self] in
+      guard let self else { return nil }
+      return try? self.runMainThreadWorkIfIdle(
+        "recording_frame",
+        timeout: self.recordingFrameCaptureTimeout,
+        timeoutError: Self.mainThreadExecutionTimeoutError
+      ) {
+        try capture().get().image
+      }
+    }
+  }
+
+  /// The error a `record start` bootstrap raises when no initial frame arrived. On iOS the last capture
+  /// refusal (if any) is the honest reason and travels as its own typed code; only when nothing
+  /// refused — a macOS host capture, or a deadline that elapsed before any answer — does it fall back
+  /// to the original untyped record error, which keeps pre-panel behavior intact (#2728).
+  static func recordingBootstrapError(from lastFailure: RunnerAppScreenCaptureFailure?) -> Error {
+    lastFailure
+      ?? NSError(
+        domain: "AgentDeviceRunner.Record",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "failed to capture initial frame"]
+      )
+  }
+
+  /// Maps a `record start` failure to the wire payload. A capture that refused carries a typed
+  /// `APP_SCREEN_*` reason, so a no-window bootstrap reaches the host as that code rather than the
+  /// generic record error it used to collapse into; a genuine writer failure keeps its message.
+  static func recordingStartErrorPayload(for error: Error) -> ErrorPayload {
+    if let failure = error as? RunnerAppScreenCaptureFailure {
+      return ErrorPayload(code: failure.rawValue, message: failure.message, hint: failure.hint)
+    }
+    return ErrorPayload(message: "failed to start recording: \(error.localizedDescription)")
+  }
+}
+
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests.ScreenRecorder {
   @discardableResult
@@ -278,6 +349,12 @@ extension RunnerTests.ScreenRecorder {
     let allocatedTimestamp = monotonicTimestampValue(for: candidateTimestampValue)
     lastTimestampValue = allocatedTimestamp
     return allocatedTimestamp
+  }
+
+  func appendedFrameSnapshotForTesting() -> [RunnerImage] {
+    lock.lock()
+    defer { lock.unlock() }
+    return appendedFramesForTesting
   }
 }
 #endif

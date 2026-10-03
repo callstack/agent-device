@@ -1,3 +1,17 @@
+// Catches: packages/contracts production source calling host, process, or timer mechanics
+//   directly — contracts owns vocabulary only, and a mechanic call there means an adapter's
+//   concern leaked into the shared-vocabulary package every zone imports, invisible to
+//   consumers because the call itself is fully typed and legal Node code.
+// Evidence: 8f98d23f14 (#1750) gave R18 its own number after an id collision; 057ab1c82d (#1746)
+//   fixed double-reporting in this same authority check.
+// Cost: 337 LOC (206 rule + 131 test).
+// Kill criterion: none enforced today; retire only by maintainer decision that contracts owning
+//   vocabulary only no longer matters. package.json cannot replace it: node: built-ins are not
+//   dependencies and timer globals need no import. The A4 spike found `types: []` would break
+//   contracts' AbortSignal/URL/Buffer/process uses while every lib that supplies them also
+//   supplies setTimeout, and the file-level bans (interaction-outcome, snapshot-quality-warnings,
+//   network-traffic and ios-snapshot type-only statements, kernel-only imports) have no tsc form.
+
 import { parseSync } from 'oxc-parser';
 import type { LayeringViolation } from './model.ts';
 
@@ -13,6 +27,7 @@ const FORBIDDEN_TIMER_CALLS = new Set([
   'setInterval',
   'setTimeout',
 ]);
+const IOS_SNAPSHOT_CONTRACT = 'packages/contracts/src/ios-snapshot.ts';
 
 /** Contracts owns vocabulary. Host/process/timer mechanics belong in capture-kit or an adapter. */
 export function contractsImplementationAuthorityViolations(
@@ -27,7 +42,27 @@ export function contractsImplementationAuthorityViolations(
       file.source,
       parsed.program.body,
     );
+    if (file.path === 'packages/contracts/src/interaction-outcome.ts') {
+      violations.push(
+        violation(
+          file.path,
+          1,
+          'contracts may not own mutable interaction-outcome lifecycle; that WeakMap identity map belongs in src/core',
+        ),
+      );
+    }
+    if (file.path === 'packages/contracts/src/snapshot-quality-warnings.ts') {
+      violations.push(
+        violation(
+          file.path,
+          1,
+          'contracts may not own snapshot quality warning rendering; that presentation policy belongs in packages/capture-kit/src/snapshot/snapshot-presentation',
+        ),
+      );
+    }
     if (networkTrafficViolation) violations.push(networkTrafficViolation);
+    const iosSnapshotViolation = iosSnapshotContractViolation(file.path, file.source, parsed);
+    if (iosSnapshotViolation) violations.push(iosSnapshotViolation);
     for (const site of moduleSpecifiers(parsed.module, file.source)) {
       if (!FORBIDDEN_HOST_MODULES.test(site.spec)) continue;
       violations.push(
@@ -52,6 +87,31 @@ export function contractsImplementationAuthorityViolations(
     });
   }
   return violations;
+}
+
+function iosSnapshotContractViolation(
+  file: string,
+  source: string,
+  parsed: ReturnType<typeof parseSync>,
+): LayeringViolation | undefined {
+  if (file !== IOS_SNAPSHOT_CONTRACT) return undefined;
+  const implementation = parsed.program.body.find((statement) => !isTypeOnlyStatement(statement));
+  if (implementation && typeof implementation === 'object') {
+    return violation(
+      file,
+      lineAt(source, Number((implementation as Record<string, unknown>).start ?? 0)),
+      'iOS snapshot contracts own typed vocabulary only; planning algorithms and provider/lifecycle implementations cannot enter contracts',
+    );
+  }
+  const disallowedImport = moduleSpecifiers(parsed.module, source).find(
+    ({ spec }) => !spec.startsWith('@agent-device/kernel/'),
+  );
+  if (!disallowedImport) return undefined;
+  return violation(
+    file,
+    disallowedImport.line,
+    `iOS snapshot contracts may import only kernel vocabulary; '${disallowedImport.spec}' would bring planning algorithms or provider/lifecycle implementation into contracts`,
+  );
 }
 
 function networkTrafficImplementationViolation(

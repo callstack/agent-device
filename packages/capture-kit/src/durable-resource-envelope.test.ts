@@ -127,3 +127,42 @@ test('neutral envelope canonicalizes persisted provider owner identity', () => {
     instance: 'tenant-a',
   });
 });
+
+test('neutral envelope canonicalizes persisted managed local owner identity on any family', () => {
+  const android = decodeDurableResourceEnvelope({
+    ...APP_LOG_ENVELOPE_FIXTURE,
+    owner: { kind: 'managed-local', instance: ' sim-a ' },
+  });
+  assert.equal(android.status, 'decoded');
+  if (android.status !== 'decoded') return;
+  assert.deepEqual(android.envelope.owner, { kind: 'managed-local', instance: 'sim-a' });
+  assert.ok(Object.isFrozen(android.envelope.owner));
+
+  // A managed owner carries no family, so the local-family coherence check does not apply.
+  const apple = decodeDurableResourceEnvelope({
+    ...APP_LOG_ENVELOPE_FIXTURE,
+    device: {
+      id: 'simulator-1',
+      family: 'apple',
+      appleOs: 'ios',
+      kind: 'simulator',
+      target: 'mobile',
+    },
+    owner: { kind: 'managed-local', instance: 'sim-a' },
+  });
+  assert.equal(apple.status, 'decoded');
+});
+
+test('neutral envelope rejects a managed local owner without an allocator instance', () => {
+  assert.deepEqual(
+    decodeDurableResourceEnvelope({
+      ...APP_LOG_ENVELOPE_FIXTURE,
+      owner: { kind: 'managed-local', instance: '   ' },
+    }),
+    {
+      status: 'unreattachable',
+      reason: 'descriptor-invalid',
+      message: 'Durable resource owner reference is invalid',
+    },
+  );
+});

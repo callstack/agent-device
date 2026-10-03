@@ -15,16 +15,4 @@ enum RunnerEnv {
     }
     return 0
   }
-
-  static func isTruthy(_ name: String) -> Bool {
-    guard let raw = ProcessInfo.processInfo.environment[name] else {
-      return false
-    }
-    switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-    case "1", "true", "yes", "on":
-      return true
-    default:
-      return false
-    }
-  }
 }

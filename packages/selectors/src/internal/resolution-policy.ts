@@ -12,7 +12,10 @@ import type { SelectorResolutionOptions } from './public-resolution-types.ts';
  * - `disambiguate` — unique match required, but the engine's visible→deepest→
  *   smallest-area tiebreak may pick a winner from an ambiguous set (`get text`).
  * - `fail-closed` — unique match required, ties reject (by design: `is`
- *   predicates and `get attrs` must never guess).
+ *   predicates and `get attrs` must never guess). A set that is one control
+ *   reported through its own accessibility wrapper is not a tie and nothing
+ *   guesses when it resolves to the control; the pipeline applies that
+ *   structural collapse after this door refuses (#2498).
  * - `first-match` — any match count accepted, first wins (existence reads and
  *   the wait loop, where presence is the question).
  * - `reject-candidates` — multiple matches stay visible to the caller, which
@@ -29,7 +32,7 @@ import type { SelectorResolutionOptions } from './public-resolution-types.ts';
  *
  * The surrounding pipeline stages — occlusion, the off-screen guard,
  * hittable-ancestor promotion, and the wait poll budget — are declared in the
- * companion structural table, `src/core/selector-pipeline-policy.ts` (#1656),
+ * companion structural table, `packages/selectors/src/selector-pipeline-policy.ts` (#1656),
  * whose rows each name one row of this matrix. They live there rather than
  * here because this package is deliberately blind to snapshot occlusion
  * annotations, backend visibility probes, and the wait clock: a column here
@@ -61,12 +64,12 @@ export const SELECTOR_RESOLUTION_POLICIES = {
     ambiguity: 'disambiguate',
     requireRect: false,
   },
-  /** `is` non-exists predicates and `get attrs` — ties reject, never guess. */
+  /** `is` predicates other than `exists`/`absent`, and `get attrs` — ties reject, never guess. */
   readUnique: {
     ambiguity: 'fail-closed',
     requireRect: false,
   },
-  /** `exists` and find's read-only actions — presence is the question. */
+  /** `exists`/`absent` and find's read-only actions — presence is the question. */
   readAny: {
     ambiguity: 'first-match',
     requireRect: false,
@@ -88,6 +91,11 @@ export const SELECTOR_RESOLUTION_POLICIES = {
   readList: {
     ambiguity: 'reject-candidates',
     requireRect: false,
+  },
+  /** `screenshot --crop-on` — crops the capture to the resolved node's frame. */
+  cropTarget: {
+    ambiguity: 'fail-closed',
+    requireRect: true,
   },
 } as const satisfies Record<string, SelectorResolutionPolicy>;
 

@@ -9,7 +9,7 @@ import {
   releaseSessionLease,
   resolveSessionLeaseForRequest,
 } from '../lease-lifecycle.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 
 test('admitRequestLeaseForLockedScope heartbeats and stores admitted lease on the request', () => {
   let now = 1_000;
@@ -48,7 +48,9 @@ test('admitRequestLeaseForLockedScope heartbeats and stores admitted lease on th
 
   expect(req.internal?.admittedLease?.leaseId).toBe(lease.leaseId);
   expect(req.internal?.admittedLease?.heartbeatAt).toBe(2_000);
-  expect(sessionStore.get('default')?.lease?.expiresAt).toBe(302_000);
+  // Renewal is for the window the lease carries — the registry default here, since this client
+  // named none — not the proxy-specific default admission used to name on every request (#2946).
+  expect(sessionStore.get('default')?.lease?.expiresAt).toBe(62_000);
 });
 
 test('cleanupExpiredLeasedSession consumes expired lease and deletes the session after teardown', async () => {
@@ -118,6 +120,41 @@ test('releaseSessionLease releases with the stored session owner scope', async (
 
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
   expect(provider).toEqual({ provider: 'proxy' });
+});
+
+test('releaseSessionLease retains provider session ownership for artifact lookup', async () => {
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseBackend: 'android-instance',
+    leaseProvider: 'browserstack',
+  });
+  const session = makeIosSession('default', {
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      leaseProvider: lease.leaseProvider,
+    },
+  });
+
+  await releaseSessionLease({
+    session,
+    leaseRegistry,
+    leaseLifecycleProvider: {
+      release: async () => ({ providerSessionId: 'bs-session-1' }),
+    },
+  });
+
+  expect(
+    leaseRegistry.resolveProviderSession({
+      provider: 'browserstack',
+      providerSessionId: 'bs-session-1',
+      tenantId: 'tenant-a',
+    }),
+  ).toMatchObject({ leaseId: lease.leaseId, tenantId: 'tenant-a' });
 });
 
 test('releaseExpiredProviderLease releases a provider-owned lease without a session', async () => {

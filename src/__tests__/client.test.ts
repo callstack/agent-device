@@ -10,7 +10,6 @@ import type {
 import {
   createAgentDeviceClient,
   type AgentDeviceClient,
-  type AgentDeviceClientConfig,
   type DiffSnapshotCommandResult,
   type DoctorCommandResult,
   type PrepareCommandResult,
@@ -23,19 +22,13 @@ import {
   type WaitCommandResult,
 } from '../agent-device-client.ts';
 import { runCommand } from '../commands/command-surface.ts';
-import type { CommandResult } from '../core/command-descriptor/command-result.ts';
-import type {
-  DaemonRequest,
-  DaemonResponse,
-  DaemonResponseData,
-} from '@agent-device/kernel/contracts';
+import type { CommandResult } from '@agent-device/command-registry/command-result';
+import type { DaemonResponse, DaemonResponseData } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import fs from 'node:fs';
 import nodePath from 'node:path';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
-
-// Isolated so open/close metro-session-hint file writes never touch the real state dir.
-const TEST_STATE_DIR = mkdtempForTestSync('agent-device-client-test-');
+import { createTransport } from './client-transport-fixture.ts';
 
 // #1802: replay/test requests carry the script text the CLIENT read, so these cases need real
 // files. `cwd` is what the writer resolves the caller's relative path against.
@@ -95,37 +88,6 @@ const closedProjectionResponses: Record<string, DaemonResponseData> = {
     message: 'Triggered app event: screenshot_taken',
   },
 };
-
-function createTransport(
-  handler: (req: Omit<DaemonRequest, 'token'>) => Promise<DaemonResponse> | DaemonResponse,
-): {
-  calls: Array<Omit<DaemonRequest, 'token'>>;
-  config: AgentDeviceClientConfig;
-  transport: (req: Omit<DaemonRequest, 'token'>) => Promise<DaemonResponse>;
-} {
-  const calls: Array<Omit<DaemonRequest, 'token'>> = [];
-  const config: AgentDeviceClientConfig = {
-    session: 'qa',
-    stateDir: TEST_STATE_DIR,
-    cwd: '/tmp/agent-device',
-    debug: true,
-    daemonBaseUrl: 'http://daemon.example.test',
-    daemonAuthToken: 'secret',
-    daemonTransport: 'http',
-    tenant: 'acme',
-    sessionIsolation: 'tenant',
-    runId: 'run-123',
-    leaseId: 'lease-123',
-  };
-  return {
-    calls,
-    config,
-    transport: async (req) => {
-      calls.push(req);
-      return await handler(req);
-    },
-  };
-}
 
 test('client exposes narrowed result types for closed daemon projections', async () => {
   const setup = createTransport(async (req) => closedProjectionResponse(req.command));
@@ -213,169 +175,6 @@ function closedProjectionResponse(command: string): DaemonResponse {
   if (!data) throw new Error(`Unexpected command: ${command}`);
   return { ok: true, data };
 }
-
-test('apps.open resolves session device identifiers from open response', async () => {
-  const setup = createTransport(async (req) => {
-    if (req.command === 'open') {
-      return {
-        ok: true,
-        data: {
-          session: 'qa',
-          sessionStateDir: '/tmp/agent-device/sessions/qa',
-          runnerLogPath: '/tmp/agent-device/sessions/qa/runner.log',
-          requestLogPath: '/tmp/agent-device/sessions/qa/requests/open.ndjson',
-          eventLogPath: '/tmp/agent-device/sessions/qa/events.ndjson',
-          appName: 'Settings',
-          appBundleId: 'com.apple.Preferences',
-          platform: 'ios',
-          target: 'mobile',
-          device: 'iPhone 16',
-          id: 'SIM-001',
-          kind: 'simulator',
-          device_udid: 'SIM-001',
-          ios_simulator_device_set: '/tmp/sim-set',
-          warnings: ['Script publication was aborted by a second successful open.', 42],
-          startup: {
-            durationMs: 1234,
-            measuredAt: '2026-03-13T10:00:00.000Z',
-            method: 'open-command-roundtrip',
-          },
-        },
-      };
-    }
-    throw new Error(`Unexpected command: ${req.command}`);
-  });
-  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
-
-  const result = await client.apps.open({
-    app: 'Settings',
-    platform: 'ios',
-    relaunch: true,
-    deviceHub: true,
-  });
-
-  assert.equal(setup.calls.length, 1);
-  assert.equal(setup.calls[0]?.command, 'open');
-  assert.deepEqual(setup.calls[0]?.positionals, ['Settings']);
-  assert.equal(setup.calls[0]?.flags?.deviceHub, true);
-  assert.equal(result.identifiers.session, 'qa');
-  assert.equal(result.identifiers.deviceId, 'SIM-001');
-  assert.equal(result.identifiers.udid, 'SIM-001');
-  assert.equal(result.identifiers.appId, 'com.apple.Preferences');
-  assert.equal(result.sessionStateDir, '/tmp/agent-device/sessions/qa');
-  assert.equal(result.runnerLogPath, '/tmp/agent-device/sessions/qa/runner.log');
-  assert.equal(result.requestLogPath, '/tmp/agent-device/sessions/qa/requests/open.ndjson');
-  assert.equal(result.eventLogPath, '/tmp/agent-device/sessions/qa/events.ndjson');
-  assert.equal(result.device?.name, 'iPhone 16');
-  assert.equal(result.device?.ios?.simulatorSetPath, '/tmp/sim-set');
-  assert.deepEqual(result.warnings, [
-    'Script publication was aborted by a second successful open.',
-  ]);
-});
-
-test('apps.open preserves the full initialSnapshotError shape through client normalization', async () => {
-  // open --foreground: open succeeded, composed snapshot did not. The public
-  // client result must carry the FULL daemon error — dropping the boundary
-  // normalization (or truncating to code+message) must fail here.
-  const initialSnapshotError = {
-    code: 'COMMAND_FAILED',
-    message: 'capture failed',
-    hint: 'Run: agent-device snapshot -i',
-    details: { reason: 'runner_capture_failed' },
-    diagnosticId: 'ms-diag-1234',
-    logPath: '/tmp/agent-device/sessions/qa/requests/snap.ndjson',
-    retriable: true,
-  };
-  const setup = createTransport(async (req) => {
-    if (req.command === 'open') {
-      return {
-        ok: true,
-        data: {
-          session: 'qa',
-          appName: 'Settings',
-          appBundleId: 'com.apple.Preferences',
-          platform: 'ios',
-          target: 'mobile',
-          device: 'iPhone 16',
-          id: 'SIM-001',
-          kind: 'simulator',
-          device_udid: 'SIM-001',
-          warnings: ['The session is open, but the initial interactive snapshot failed.'],
-          initialSnapshotError,
-        },
-      };
-    }
-    throw new Error(`Unexpected command: ${req.command}`);
-  });
-  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
-
-  const result = await client.apps.open({ app: 'Settings', platform: 'ios', foreground: true });
-
-  assert.deepEqual(result.initialSnapshotError, initialSnapshotError);
-  assert.equal(result.snapshot, undefined);
-});
-
-test('apps.open drops a malformed initialSnapshotError instead of projecting garbage', async () => {
-  const setup = createTransport(async () => ({
-    ok: true,
-    data: {
-      session: 'qa',
-      appName: 'Settings',
-      appBundleId: 'com.apple.Preferences',
-      platform: 'ios',
-      target: 'mobile',
-      device: 'iPhone 16',
-      id: 'SIM-001',
-      kind: 'simulator',
-      device_udid: 'SIM-001',
-      initialSnapshotError: { code: 'COMMAND_FAILED' },
-    },
-  }));
-  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
-
-  const result = await client.apps.open({ app: 'Settings', platform: 'ios' });
-
-  assert.equal(result.initialSnapshotError, undefined);
-});
-
-test('apps.open forwards explicit runtime hints through the daemon request', async () => {
-  const setup = createTransport(async () => ({
-    ok: true,
-    data: {
-      session: 'qa',
-      appName: 'Demo',
-      appBundleId: 'com.example.demo',
-      runtime: {
-        platform: 'ios',
-        metroHost: '127.0.0.1',
-        metroPort: 8081,
-      },
-    },
-  }));
-  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
-
-  const result = await client.apps.open({
-    app: 'Demo',
-    platform: 'ios',
-    runtime: {
-      metroHost: '127.0.0.1',
-      metroPort: 8081,
-    },
-  });
-
-  assert.equal(setup.calls.length, 1);
-  assert.deepEqual(setup.calls[0]?.runtime, {
-    metroHost: '127.0.0.1',
-    metroPort: 8081,
-  });
-  assert.deepEqual(result.runtime, {
-    platform: 'ios',
-    metroHost: '127.0.0.1',
-    metroPort: 8081,
-    bundleUrl: undefined,
-    launchUrl: undefined,
-  });
-});
 
 test('client close normalizes target shutdown results', async () => {
   const setup = createTransport(async () => ({
@@ -623,126 +422,6 @@ test('structured interaction input keeps UI target separate from deviceTarget', 
   assert.equal(setup.calls[1]?.command, 'longpress');
   assert.deepEqual(setup.calls[1]?.positionals, ['@e2', '800']);
   assert.equal(setup.calls[1]?.flags?.target, 'mobile');
-});
-
-test('apps.installFromSource forwards source payload and normalizes launch identity', async () => {
-  const setup = createTransport(async () => ({
-    ok: true,
-    data: {
-      packageName: 'com.example.demo',
-      appName: 'Demo',
-      launchTarget: 'com.example.demo',
-      installablePath: '/tmp/materialized/installable/demo.apk',
-      archivePath: '/tmp/materialized/archive/demo.zip',
-      materializationId: 'materialized-123',
-      materializationExpiresAt: '2026-03-13T12:00:00.000Z',
-    },
-  }));
-  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
-
-  const result = await client.apps.installFromSource({
-    platform: 'android',
-    retainPaths: true,
-    retentionMs: 60_000,
-    source: {
-      kind: 'url',
-      url: 'https://example.com/demo.apk',
-      headers: { authorization: 'Bearer token' },
-    },
-  });
-
-  assert.equal(setup.calls.length, 1);
-  assert.equal(setup.calls[0]?.command, 'install_source');
-  assert.deepEqual(setup.calls[0]?.meta?.installSource, {
-    kind: 'url',
-    url: 'https://example.com/demo.apk',
-    headers: { authorization: 'Bearer token' },
-  });
-  assert.equal(setup.calls[0]?.meta?.retainMaterializedPaths, true);
-  assert.equal(setup.calls[0]?.meta?.materializedPathRetentionMs, 60_000);
-  assert.deepEqual(result, {
-    appName: 'Demo',
-    appId: 'com.example.demo',
-    bundleId: undefined,
-    packageName: 'com.example.demo',
-    launchTarget: 'com.example.demo',
-    installablePath: '/tmp/materialized/installable/demo.apk',
-    archivePath: '/tmp/materialized/archive/demo.zip',
-    materializationId: 'materialized-123',
-    materializationExpiresAt: '2026-03-13T12:00:00.000Z',
-    identifiers: {
-      session: 'qa',
-      appId: 'com.example.demo',
-      appBundleId: undefined,
-      package: 'com.example.demo',
-    },
-  });
-});
-
-test('apps.installFromSource derives Android launchTarget from packageName when daemon omits it', async () => {
-  const setup = createTransport(async () => ({
-    ok: true,
-    data: {
-      packageName: 'com.example.package-name-only',
-      appName: 'PackageNameOnly',
-    },
-  }));
-  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
-
-  const result = await client.apps.installFromSource({
-    platform: 'android',
-    source: {
-      kind: 'url',
-      url: 'https://example.com/package-name-only.apk',
-      headers: {},
-    },
-  });
-
-  assert.deepEqual(result, {
-    appName: 'PackageNameOnly',
-    appId: 'com.example.package-name-only',
-    bundleId: undefined,
-    packageName: 'com.example.package-name-only',
-    launchTarget: 'com.example.package-name-only',
-    installablePath: undefined,
-    archivePath: undefined,
-    materializationId: undefined,
-    materializationExpiresAt: undefined,
-    identifiers: {
-      session: 'qa',
-      appId: 'com.example.package-name-only',
-      appBundleId: undefined,
-      package: 'com.example.package-name-only',
-    },
-  });
-});
-
-test('apps.installFromSource forwards GitHub Actions artifact sources unchanged', async () => {
-  const setup = createTransport(async () => ({
-    ok: true,
-    data: {
-      packageName: 'com.example.ci',
-    },
-  }));
-  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
-
-  await client.apps.installFromSource({
-    platform: 'android',
-    source: {
-      kind: 'github-actions-artifact',
-      owner: 'acme',
-      repo: 'mobile',
-      artifactId: 1234567890,
-    },
-  });
-
-  assert.equal(setup.calls.length, 1);
-  assert.deepEqual(setup.calls[0]?.meta?.installSource, {
-    kind: 'github-actions-artifact',
-    owner: 'acme',
-    repo: 'mobile',
-    artifactId: 1234567890,
-  });
 });
 
 test('interactions.rotateGesture rejects partial centers on the client side', async () => {

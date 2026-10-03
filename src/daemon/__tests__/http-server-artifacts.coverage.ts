@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS as C } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS as C } from '@agent-device/command-registry/catalog';
 
 export const ANDROID_ARTIFACTS_CONTRACT_EVIDENCE = {
   commands: [C.artifacts],

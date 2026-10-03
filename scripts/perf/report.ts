@@ -12,7 +12,7 @@ function wallCells(s: Stat | null): string {
 }
 
 function stampName(platform: string, startedAt: string): string {
-  return `perf-${platform}-${startedAt.replace(/[:.]/g, '-')}`;
+  return `perf-${platform}-${startedAt.replaceAll(/[:.]/g, '-')}`;
 }
 
 function measurementRow(m: Measurement): string {

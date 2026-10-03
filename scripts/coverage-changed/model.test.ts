@@ -16,7 +16,7 @@ test('normalizePath strips root, b/ and ./ prefixes and posixifies', () => {
   assert.equal(normalizePath('/repo/src/a.ts', '/repo'), 'src/a.ts');
   assert.equal(normalizePath('b/src/a.ts'), 'src/a.ts');
   assert.equal(normalizePath('./src/a.ts'), 'src/a.ts');
-  assert.equal(normalizePath('src\\a.ts'), 'src/a.ts');
+  assert.equal(normalizePath(String.raw`src\a.ts`), 'src/a.ts');
 });
 
 test('parseLcov reads DA hits and BRDA taken, treating "-" as not taken', () => {
@@ -238,4 +238,75 @@ test('changed line suppressed by an ignore directive is tallied, not gated', () 
 
 test('threshold constant is the single source of truth', () => {
   assert.equal(CHANGED_LINE_COVERAGE_THRESHOLD, 70);
+});
+
+// Shape of `git diff --unified=0 --find-renames=90%` for a move PR: a pure
+// move carries no hunks, an edited move carries only the hunks that differ from
+// its source, and an ordinary edit is unaffected.
+const MOVE_PR_DIFF = [
+  'diff --git a/src/mod.ts b/src/mod.ts',
+  'index 57ee600..9fe64ef 100644',
+  '--- a/src/mod.ts',
+  '+++ b/src/mod.ts',
+  '@@ -2 +2,2 @@ export const m1 = 1;',
+  '-export const m2 = 2;',
+  '+export const m2 = 22;',
+  '+export const m3 = 3;',
+  'diff --git a/src/edited.ts b/src/moved-edited.ts',
+  'similarity index 90%',
+  'rename from src/edited.ts',
+  'rename to src/moved-edited.ts',
+  'index a3d7378..fe85380 100644',
+  '--- a/src/edited.ts',
+  '+++ b/src/moved-edited.ts',
+  '@@ -3 +3 @@ export const b2 = 2;',
+  '-export const b3 = 3;',
+  '+export const b3 = 33;',
+  '@@ -7 +7 @@ export const b6 = 6;',
+  '-export const b7 = 7;',
+  '+export const b7 = 77;',
+  '@@ -9 +9 @@ export const b8 = 8;',
+  '-export const b9 = 9;',
+  '+export const b9 = 99;',
+  'diff --git a/src/pure.ts b/src/moved-pure.ts',
+  'similarity index 100%',
+  'rename from src/pure.ts',
+  'rename to src/moved-pure.ts',
+].join('\n');
+
+function uncoveredRecord(file: string, lineCount: number): string {
+  const da = Array.from({ length: lineCount }, (_, i) => `DA:${i + 1},0`);
+  return [`SF:${file}`, ...da, 'end_of_record'].join('\n');
+}
+
+test('rename-only hunks owe no changed-line coverage; edited moves owe their edits', () => {
+  const diffs = parseUnifiedDiff(MOVE_PR_DIFF);
+  assert.deepEqual(
+    diffs.map((d) => [d.path, d.added]),
+    [
+      ['src/mod.ts', [2, 3]],
+      ['src/moved-edited.ts', [3, 7, 9]],
+      ['src/moved-pure.ts', []],
+    ],
+  );
+  const result = computeChangedCoverage({
+    diffs,
+    coverage: parseLcov(
+      [
+        uncoveredRecord('src/mod.ts', 3),
+        uncoveredRecord('src/moved-edited.ts', 30),
+        uncoveredRecord('src/moved-pure.ts', 30),
+      ].join('\n'),
+    ),
+    fileLines: () => null,
+  });
+  // 2 ordinary edits + 3 edited move lines; the 30-line pure move owes nothing.
+  assert.equal(result.totalLines, 5);
+  assert.deepEqual(
+    result.offenders.map((f) => [f.path, f.uncoveredLines]),
+    [
+      ['src/mod.ts', [2, 3]],
+      ['src/moved-edited.ts', [3, 7, 9]],
+    ],
+  );
 });

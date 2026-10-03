@@ -6,12 +6,20 @@ import type {
   MaterializeAppSourceInput,
   PushNotificationInput,
 } from '@agent-device/contracts/app-deployment-runtime';
+import type {
+  AppleToolRequest,
+  HostCommandResult,
+} from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { requireExecSuccess } from '@agent-device/host-kit/command';
+import { isMissingAppErrorOutput } from '../core/physical-device-apps.ts';
+import { IOS_DEVICE_INSTALL_TIMEOUT_MS } from '../core/config.ts';
+import { IOS_DEVICECTL_DEFAULT_HINT, resolveIosDevicectlHint } from '../core/devicectl.ts';
 import { ensureAppleReady } from '../readiness/runtime.ts';
-import { simctlArgs } from '../simulator-state.ts';
+import { scopeSimctlArgsForDevice } from '../core/simctl.ts';
 
 const available = Object.freeze({ available: true } as const);
 const coreDeviceRequired = Object.freeze({
@@ -135,17 +143,21 @@ async function installAppleApp(
   signal: AbortSignal,
 ): Promise<void> {
   await ensureAppleReady(host, device, signal);
-  const result = await host.appleTools.run(
+  await runAppleTool(
+    host,
     device.kind === 'simulator'
-      ? { tool: 'simctl', args: simctlArgs(device, ['install', device.id, installablePath]) }
+      ? {
+          tool: 'simctl',
+          args: scopeSimctlArgsForDevice(device, ['install', device.id, installablePath]),
+        }
       : {
           tool: 'devicectl',
           args: ['device', 'install', 'app', '--device', device.id, installablePath],
-          timeoutMs: 120_000,
+          timeoutMs: IOS_DEVICE_INSTALL_TIMEOUT_MS,
         },
     signal,
+    'Apple app install failed',
   );
-  assertAppleToolSuccess(result, 'Apple app install failed');
 }
 
 async function uninstallAppleApp(
@@ -155,22 +167,24 @@ async function uninstallAppleApp(
   signal: AbortSignal,
 ): Promise<void> {
   await ensureAppleReady(host, device, signal);
-  const result = await host.appleTools.run(
+  await runAppleTool(
+    host,
     device.kind === 'simulator'
       ? {
           tool: 'simctl',
-          args: simctlArgs(device, ['uninstall', device.id, bundleId]),
-          allowFailure: true,
+          args: scopeSimctlArgsForDevice(device, ['uninstall', device.id, bundleId]),
         }
       : {
           tool: 'devicectl',
           args: ['device', 'uninstall', 'app', '--device', device.id, bundleId],
-          allowFailure: true,
         },
     signal,
+    `Apple app uninstall failed for ${bundleId}`,
+    {
+      tolerate: (result) =>
+        isMissingAppErrorOutput(`${result.stdout}\n${result.stderr}`.toLowerCase()),
+    },
   );
-  if (result.exitCode === 0 || isMissingAppOutput(`${result.stdout}\n${result.stderr}`)) return;
-  assertAppleToolSuccess(result, `Apple app uninstall failed for ${bundleId}`);
 }
 
 async function pushAppleNotification(
@@ -189,38 +203,47 @@ async function pushAppleNotification(
   });
   try {
     await payload.writeText(`${JSON.stringify(input.payload)}\n`);
-    const result = await host.appleTools.run(
+    await runAppleTool(
+      host,
       {
         tool: 'simctl',
-        args: simctlArgs(device, ['push', device.id, input.appId, payload.path]),
+        args: scopeSimctlArgsForDevice(device, ['push', device.id, input.appId, payload.path]),
       },
       signal,
+      'Apple push notification failed',
     );
-    assertAppleToolSuccess(result, 'Apple push notification failed');
   } finally {
     await payload[Symbol.asyncDispose]();
   }
 }
 
-function isMissingAppOutput(output: string): boolean {
-  const normalized = output.toLowerCase();
-  return (
-    normalized.includes('not installed') ||
-    normalized.includes('not found') ||
-    normalized.includes('no such file')
-  );
-}
-
-function assertAppleToolSuccess(
-  result: Readonly<{ stdout: string; stderr: string; exitCode: number | null }>,
+/**
+ * The one request path this module uses to run a tolerated Apple tool call: it forces
+ * `allowFailure`, then guards the result itself through `requireExecSuccess` so a non-zero
+ * exit always throws the same COMMAND_FAILED shape as every other exec call site, with the
+ * caller's curated message. A devicectl failure gets the same Developer Mode,
+ * developer-disk-image, and pairing hints the other devicectl call sites attach. `tolerate`
+ * lets a caller accept a specific non-zero result (uninstall's "already missing" case)
+ * without losing that guard for every other outcome.
+ */
+async function runAppleTool(
+  host: PlatformRuntimeHost,
+  request: AppleToolRequest,
+  signal: AbortSignal,
   message: string,
-): void {
-  if (result.exitCode === 0) return;
-  throw new AppError('COMMAND_FAILED', message, {
-    stdout: result.stdout,
-    stderr: result.stderr,
-    exitCode: result.exitCode,
-  });
+  options?: Readonly<{ tolerate?: (result: HostCommandResult) => boolean }>,
+): Promise<HostCommandResult> {
+  const result = await host.appleTools.run({ ...request, allowFailure: true }, signal);
+  if (options?.tolerate?.(result)) return result;
+  return requireExecSuccess(result, message, (failed) => ({
+    cmd: 'xcrun',
+    args: [request.tool, ...request.args],
+    ...(request.tool === 'devicectl'
+      ? {
+          hint: resolveIosDevicectlHint(failed.stdout, failed.stderr) ?? IOS_DEVICECTL_DEFAULT_HINT,
+        }
+      : {}),
+  }));
 }
 
 function appleDeployFact(device: DeviceInfo): RuntimeOperationFact {

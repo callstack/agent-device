@@ -45,13 +45,12 @@ import {
 } from '@agent-device/contracts/touch-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
-import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
-import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
+import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import {
@@ -114,6 +113,18 @@ const prepareUnavailable = Object.freeze({
 const nativeRefUnavailable = Object.freeze({
   available: false,
   reason: 'owner-capability-missing',
+} as const);
+/**
+ * The web click affordance is one immediate pointer press, which is everything `press` needs for a
+ * repeated `--count` series. Timed actions are a policy this owner declines rather than a missing
+ * primitive: the browser could compose a raw pointer down/up pair around a wait and does not, so the
+ * cell denies the hold rather than borrowing the tap cell that admits the series. The fused
+ * double-click is declined one level down, by the interactor member the browser never supplies.
+ */
+const holdUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'A web click is one immediate pointer press; the browser backend has no timed hold.',
 } as const);
 const audioCaptureUnavailable = Object.freeze({
   available: false,
@@ -377,7 +388,6 @@ function webRuntimeFacts(
       // No native text reading: every text wait on this owner polls the canonical tree.
       ...selectorObservationRuntimeOperationFacts({
         findText: openTargetKindUnavailable,
-        findSelector: openTargetKindUnavailable,
       }),
       ...screenshotRuntimeOperationFacts({ capture: browserDevice }),
       ...focusRuntimeOperationFacts({ focus: browserDevice }),
@@ -385,14 +395,14 @@ function webRuntimeFacts(
       // interactor to drive (parity with the retired `type` overlay membership).
       ...typeTextRuntimeOperationFacts({ type: browserDevice }),
       ...touchRuntimeOperationFacts({
+        unsupported: readinessUnavailable,
         tap: browserDevice,
         tapRef: webOptionalOperationFact(interactor?.tapRef, browserDevice),
-        longPress: readinessUnavailable,
+        longPress: holdUnavailable,
         hover: webOptionalOperationFact(interactor?.hover, browserDevice),
         hoverRef: webOptionalOperationFact(interactor?.hoverRef, browserDevice),
         fill: browserDevice,
         fillRef: webOptionalOperationFact(interactor?.fillRef, browserDevice),
-        tapElementSelector: readinessUnavailable,
       }),
       // `scroll` is the one gesture-family command the web overlay admitted
       // (`WEB_INTERACTION_COMMANDS`), so it shares focus's `{ device: true }` cell. `gesture` and
@@ -400,31 +410,20 @@ function webRuntimeFacts(
       // outright. Drag is the exception it checked FIRST, by naming the phases an adapter needs.
       ...scrollRuntimeOperationFacts({ scroll: browserDevice }),
       ...gestureRuntimeOperationFacts({
-        plan: gestureUnavailable,
-        directionalFling: gestureUnavailable,
-        multiTouch: gestureUnavailable,
+        unsupported: gestureUnavailable,
         targetAuthoredDrag: targetAuthoredDragUnavailable,
-        viewport: gestureUnavailable,
       }),
       ...viewportRuntimeOperationFacts({ setViewport: browserDevice }),
       // The web backend has no point-addressed read: `get` answers from the captured DOM tree,
       // which is what the legacy dispatch already did once its Apple-runner attempt failed.
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
       ...backRuntimeOperationFacts({ back: navigationUnavailable }),
-      ...homeRuntimeOperationFacts({ home: navigationUnavailable }),
       ...orientationRuntimeOperationFacts({ orientation: navigationUnavailable }),
       ...tvRemoteRuntimeOperationFacts({ tvRemote: navigationUnavailable }),
-      ...keyboardRuntimeOperationFacts({
-        status: navigationUnavailable,
-        dismiss: navigationUnavailable,
-        enter: navigationUnavailable,
-      }),
+      ...keyboardRuntimeOperationFacts({ unsupported: navigationUnavailable }),
       // The web backend never carried a `clipboard` capability bucket (`WEB_QUERY_COMMANDS`
       // lists `audio` alone), so no clipboard cell was ever admitted here.
-      ...clipboardRuntimeOperationFacts({
-        read: navigationUnavailable,
-        write: navigationUnavailable,
-      }),
+      ...clipboardRuntimeOperationFacts({ unsupported: navigationUnavailable }),
       // Parity with the retired `WEB_QUERY_COMMANDS` graft, which admitted `audio` on every web
       // device; the provider that carries no probe transport still refuses at execution.
       ...audioProbeRuntimeOperationFacts({ capture: audioCaptureUnavailable, query: available }),
@@ -435,9 +434,13 @@ function webRuntimeFacts(
         nativeCapture: navigationUnavailable,
         profileReport: navigationUnavailable,
       }),
-      ...appSwitcherRuntimeOperationFacts({ appSwitcher: navigationUnavailable }),
+      ...systemButtonRuntimeOperationFacts({ unsupported: navigationUnavailable }),
+      setFoldPose: navigationUnavailable,
       ...appEventRuntimeOperationFacts({ triggerAppEvent: navigationUnavailable }),
-      ...settingsRuntimeOperationFacts({ setSetting: navigationUnavailable }),
+      ...settingsRuntimeOperationFacts({
+        setSetting: navigationUnavailable,
+        readSetting: navigationUnavailable,
+      }),
       ...alertRuntimeOperationFacts({
         read: navigationUnavailable,
         wait: navigationUnavailable,

@@ -86,6 +86,33 @@ test('MCP refuses every explicit operator-owned argument with guidance', async (
   assert.deepEqual(calls, [], 'a refused operator input must never reach the command route');
 });
 
+test('MCP neither advertises nor admits the operator-only readiness budget', async () => {
+  for (const tool of listCommandTools()) {
+    const properties = tool.inputSchema.properties ?? {};
+    assert.equal('readinessTimeoutMs' in properties, false, `${tool.name} advertises it`);
+  }
+  const calls: unknown[] = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      calls.push({ name, input });
+      return {};
+    },
+  });
+
+  const result = await executor.execute('press', {
+    target: { kind: 'selector', selector: 'label=Continue' },
+    readinessTimeoutMs: 2_000,
+  });
+
+  assert.equal(result.isError, true);
+  assert.match(
+    result.content[0]?.text ?? '',
+    /readinessTimeoutMs is not accepted as a tool argument/,
+  );
+  assert.deepEqual(calls, [], 'a refused operator input must never reach the command route');
+});
+
 test('MCP refuses an explicit daemonAuthToken argument with env guidance', async () => {
   const calls: unknown[] = [];
   const executor = createCommandToolExecutor({

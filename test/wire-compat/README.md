@@ -14,7 +14,7 @@ ledger honest from opposite sides.
 
 ## Why this boundary and not the local daemon
 
-A local daemon cannot skew. `isReusableDaemonInfo` (`src/daemon/client/daemon-client-lifecycle.ts`)
+A local daemon cannot skew. `isReusableDaemonInfo` (`src/daemon-client/daemon-client-lifecycle.ts`)
 takes over any daemon whose package version differs from the client's, so the two are always the
 same build.
 
@@ -60,7 +60,7 @@ It names the declaration and prints the digest to paste. Decide which ADR 0006 c
 clearly. Removing wire surface is always this case; an ack cannot cover a removal, because a
 released peer can still send it.
 
-1. Bump `DAEMON_RPC_PROTOCOL_VERSION` (`src/daemon/http-health.ts`).
+1. Bump `DAEMON_RPC_PROTOCOL_VERSION` (`packages/contracts/src/daemon-http.ts`).
 2. Set `ledger.json`'s `protocolVersion` to match, and paste the new digests.
 3. ADR 0006 also wants a remote-client regression test proving mismatched protocols fail before
    command RPC.

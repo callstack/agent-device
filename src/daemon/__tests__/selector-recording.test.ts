@@ -12,7 +12,7 @@ import path from 'node:path';
 import { recordIfSession } from '../selector-recording.ts';
 import { SessionStore } from '../session-store.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function makeStore(): SessionStore {
@@ -22,6 +22,13 @@ function makeStore(): SessionStore {
 
 function req(command: string, flags: DaemonRequest['flags'] = {}): DaemonRequest {
   return { token: 't', session: 'default', command, positionals: [], flags };
+}
+
+function waitAbsentReq(): DaemonRequest {
+  return {
+    ...req('wait'),
+    positionals: ['absent', 'label="Removed"', '5000'],
+  };
 }
 
 /** A request as the replay runtime dispatches it: authored provenance stamped on `internal`. */
@@ -109,4 +116,18 @@ test('outside a repair-armed session, get/is/find/wait all record normally', () 
     'find',
     'wait',
   ]);
+});
+
+test('wait absent records positionals without target-v1 annotation', () => {
+  const store = makeStore();
+  store.set('default', makeIosSession('default'));
+
+  recordIfSession(store, 'default', waitAbsentReq(), { waitedMs: 0 });
+
+  expect(store.get('default')!.actions[0]).toMatchObject({
+    command: 'wait',
+    positionals: ['absent', 'label="Removed"', '5000'],
+    result: { waitedMs: 0 },
+  });
+  expect(store.get('default')!.actions[0]?.targetEvidence).toBeUndefined();
 });

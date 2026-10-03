@@ -1,21 +1,28 @@
 import assert from 'node:assert/strict';
+import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
 import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
-import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import {
+  assertCoverageClassificationSummaryWiredToManifest,
+  assertLiveCoverageMatchesEvidence,
+} from './support/coverage-classification.ts';
+import type { MacOsLiveScenario } from './macos-e2e/live-scenarios.ts';
 import {
   MACOS_COVERAGE_GAP_ISSUE,
   MACOS_LIVE_SCENARIOS,
   MACOS_PLATFORM_COVERAGE,
   MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY,
   liveCommandsForScenario,
-} from './macos-e2e/coverage-manifest.ts';
+} from './macos-e2e/coverage.ts';
 import { writeCoverageReport } from './macos-e2e/coverage-report.ts';
 
+const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
+
 test('macOS coverage exhaustively classifies the public catalog', () => {
-  const publicCommands = Object.values(PUBLIC_COMMANDS).sort();
   assert.deepEqual(Object.keys(MACOS_PLATFORM_COVERAGE).sort(), publicCommands);
 
   for (const command of publicCommands) {
@@ -38,17 +45,22 @@ test('macOS coverage exhaustively classifies the public catalog', () => {
 });
 
 test('macOS coverage report counts every manifest classification', () => {
-  assert.deepEqual(MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY, {
-    contract: 21,
-    gap: 15,
-    live: 18,
-    total: 54,
-  });
-  assert.equal(
-    MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY.live +
-      MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY.contract +
-      MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY.gap,
-    MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY.total,
+  assertCoverageClassificationSummaryWiredToManifest(
+    'macOS',
+    MACOS_PLATFORM_COVERAGE,
+    MACOS_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY,
+    publicCommands,
+  );
+});
+
+// The scenario sources say which commands macOS actually runs, independent of what the manifest
+// labels them. Provider scenarios run commands whose live claim is attributed to the replay
+// scenario, so this closes the platform's live bucket rather than each scenario's partition of it.
+test('macOS live claims are exactly the commands its live scenarios execute', () => {
+  assertLiveCoverageMatchesEvidence(
+    'macOS',
+    MACOS_PLATFORM_COVERAGE,
+    commandsExecutedByMacOsLiveScenarios(),
   );
 });
 
@@ -122,6 +134,40 @@ test('macOS coverage report persists the manifest rollup and live command list',
     MACOS_LIVE_SCENARIOS.map(({ id }) => id),
   );
 });
+
+function commandsExecutedByMacOsLiveScenarios(): string[] {
+  const catalogCommands: ReadonlySet<string> = new Set(publicCommands);
+  const executed = new Set<string>();
+  for (const scenario of MACOS_LIVE_SCENARIOS) {
+    for (const command of commandsExecutedInScenarioSource(
+      readEvidence(scenario.owner),
+      scenario.syntax,
+    )) {
+      if (catalogCommands.has(command)) {
+        executed.add(command);
+      }
+    }
+  }
+  return [...executed];
+}
+
+function commandsExecutedInScenarioSource(
+  source: string,
+  syntax: MacOsLiveScenario['syntax'],
+): string[] {
+  const group = (pattern: RegExp): string[] =>
+    [...source.matchAll(pattern)]
+      .map((match) => match[1])
+      .filter((command): command is string => command !== undefined);
+  switch (syntax) {
+    case 'replay':
+      return parseReplayScriptDetailed(source).actions.map((action) => action.command);
+    case 'provider-command':
+      return group(/command:\s*'([a-z][a-z-]*)'/g);
+    case 'provider-call-command':
+      return group(/callCommand\(\s*'([a-z][a-z-]*)'/g);
+  }
+}
 
 function readEvidence(owner: { path: string; test: string }): string {
   const evidencePath = path.resolve(owner.path);

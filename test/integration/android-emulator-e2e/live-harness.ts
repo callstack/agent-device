@@ -8,7 +8,8 @@ import {
   type LiveDeviceContext,
 } from '../live-device-e2e/runtime.ts';
 import type { AndroidEmulatorBehaviorId } from './behavior-coverage.ts';
-import { liveCommandsForScenario } from './coverage-manifest.ts';
+import { liveCommandsForScenario } from './coverage.ts';
+import { readAndroidDeviceEvidence } from './device-evidence.ts';
 import { liveBehaviorsForScenario, writeCoverageReport } from './live-coverage-report.ts';
 
 export { assertCoverageComplete, writeCoverageReport } from './live-coverage-report.ts';
@@ -40,6 +41,10 @@ export function createContext(): LiveContext {
 const harness = createLiveDeviceHarness<LiveContext, AndroidEmulatorBehaviorId>({
   behaviorsForScenario: liveBehaviorsForScenario,
   commandsForScenario: liveCommandsForScenario,
+  deviceEvidence: (context) => readAndroidDeviceEvidence(context),
+  // Seven adb reads, two of them dumpsys: the default bound would drop the whole file,
+  // including the crash stack, on a loaded runner.
+  deviceEvidenceTimeoutMs: 25_000,
   commonFlags: (context, args) => [
     ...args,
     '--platform',

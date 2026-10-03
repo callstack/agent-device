@@ -1,10 +1,23 @@
 import path from 'node:path';
+import { PLATFORMS } from '@agent-device/kernel/device';
+import { parseSync } from 'oxc-parser';
+import { destructuredDynamicImportBindings, visitAst } from './layering-ast.ts';
 
 export type ImportEdge = {
   spec: string;
   dynamic: boolean;
   typeOnly: boolean;
   line: number;
+  /**
+   * Named symbols imported from the target; empty for side-effect and namespace imports, and for
+   * dynamic imports that do not destructure named bindings.
+   */
+  symbols: readonly string[];
+  /**
+   * True when a dynamic-import destructure holds a binding the scanner cannot name (a rest element
+   * or a computed key); `symbols` then does not enumerate the full imported surface.
+   */
+  bindingResidue: boolean;
 };
 
 export type ResolvedImportEdge = ImportEdge & {
@@ -33,29 +46,25 @@ export type BackEdgeMap = Record<string, string[]>;
 const TARGET_DAG_RANK = new Map([
   ['ad-replay', 1],
   ['ad-script', 1],
+  ['command-registry', 1],
   ['contracts', 1],
+  ['device-selection', 1],
   ['maestro', 1],
-  ['platforms', 1],
-  ['recording', 1],
-  ['replay', 1],
+  ['replay-port', 1],
   ['replay-test', 1],
-  ['request', 1],
   ['screenshot-diff', 1],
   ['selectors', 1],
-  ['snapshot', 1],
-  ['snapshot-quality', 1],
-  ['utils', 1],
+  ['session-journal', 1],
   ['core', 2],
-  ['cli-schema', 3],
   ['commands', 3],
   ['mcp', 3],
   ['ai-sdk', 4],
   ['client', 4],
-  ['compat', 4],
   ['daemon-server', 4],
   ['metro', 4],
   ['remote', 4],
   ['sdk', 4],
+  ['plugins', 4],
   ['daemon-client', 5],
   ['cli', 6],
 ]);
@@ -77,25 +86,26 @@ export function zoneRank(zone: string): number | null {
 // and the no-root-back-import rule instead of their former src folder rank.
 //
 // The satellite zones used to be listed here too, on the grounds that ranking them would
-// invent an order the architecture had not committed to. Once `utils` joined the spine and
-// `(root)` was emptied of shared contracts, every one of them turned out to have a
-// consistent rank already — so the order was there, just unasserted.
+// invent an order the architecture had not committed to. Once `(root)` was emptied of shared
+// contracts, every one of them turned out to have a consistent rank already — so the order was
+// there, just unasserted. The former `utils` zone was retired into owning modules and packages.
 // Extracted workspace packages are not src/ zones: R11 owns their physical seams, and their zone
 // names only appear in workspace-aware graphs. The platform packages additionally carry R13's
 // exact-family/composition/laziness policy.
 export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   '(root)',
+  // Stand-ins the bundler resolves in place of a dependency it deliberately omits. Nothing in
+  // the production graph imports them, so ranking them would claim an edge the alias replaces.
+  'vendor',
   // Private implementation submodules of the canonical root composition. R13 owns their exact
   // importer and concrete-platform authority; giving them a spine rank would duplicate that seam.
   'platform-runtime',
   'kernel',
+  'host-kit',
   'capture-kit',
-  'platform-apple',
-  'platform-android',
-  'platform-harmonyos',
-  'platform-vega',
-  'platform-linux',
-  'platform-web',
+  'managed-allocation',
+  'provision-kit',
+  ...PLATFORMS.map((family) => `platform-${family}`),
   'provider-webdriver',
   'provider-limrun',
   'provider-doublespeed',
@@ -110,37 +120,123 @@ export function classifyZone(zone: string): ZoneClassification {
   return 'unclassified';
 }
 
-function scanDynamicImports(line: string, lineNo: number): ImportEdge[] {
-  const edges: ImportEdge[] = [];
-  const re = /import\s*\(\s*['"]([^'"]+)['"]/g;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(line))) {
-    edges.push({ spec: match[1]!, dynamic: true, typeOnly: false, line: lineNo });
+function sourceLine(source: string, offset: number | null | undefined): number {
+  const start = typeof offset === 'number' && offset >= 0 ? offset : 0;
+  return source.slice(0, start).split('\n').length;
+}
+
+function literalSpecifier(node: unknown): string | undefined {
+  if (node === null || typeof node !== 'object') return undefined;
+  const record = node as Record<string, unknown>;
+  if (record.type === 'Literal' && typeof record.value === 'string') return record.value;
+  if (record.type === 'TemplateLiteral') {
+    const expressions = record.expressions;
+    const quasis = record.quasis;
+    if (!Array.isArray(expressions) || expressions.length > 0 || !Array.isArray(quasis)) {
+      return undefined;
+    }
+    const quasi = quasis[0];
+    if (quasi === null || typeof quasi !== 'object') return undefined;
+    const value = (quasi as Record<string, unknown>).value;
+    if (value === null || typeof value !== 'object') return undefined;
+    const cooked = (value as Record<string, unknown>).cooked;
+    return typeof cooked === 'string' ? cooked : undefined;
   }
+  if (
+    record.type === 'ParenthesizedExpression' ||
+    record.type === 'TSAsExpression' ||
+    record.type === 'TSTypeAssertion' ||
+    record.type === 'TSSatisfiesExpression' ||
+    record.type === 'TSNonNullExpression'
+  ) {
+    return literalSpecifier(record.expression);
+  }
+  if (record.type === 'BinaryExpression' && record.operator === '+') {
+    const left = literalSpecifier(record.left);
+    const right = literalSpecifier(record.right);
+    return left === undefined || right === undefined ? undefined : left + right;
+  }
+  return undefined;
+}
+
+function scanDynamicImports(source: string): ImportEdge[] {
+  const edges: ImportEdge[] = [];
+  const parsed = parseSync('layering-imports.ts', source);
+  const destructured = destructuredDynamicImportBindings(parsed.program);
+  visitAst(parsed.program, (node) => {
+    if (node.type !== 'ImportExpression') return;
+    const spec = literalSpecifier(node.source);
+    if (spec === undefined) return;
+    const start = node.start as number | undefined;
+    const capture = typeof start === 'number' ? destructured.get(start) : undefined;
+    edges.push({
+      spec,
+      dynamic: true,
+      typeOnly: false,
+      line: sourceLine(source, start),
+      symbols: capture ? [...capture.symbols] : [],
+      bindingResidue: capture?.residue ?? false,
+    });
+  });
   return edges;
 }
 
 function scanSideEffectImport(line: string, lineNo: number): ImportEdge | null {
   const match = /^\s*import\s+['"]([^'"]+)['"]/.exec(line);
-  return match ? { spec: match[1]!, dynamic: false, typeOnly: false, line: lineNo } : null;
+  return match
+    ? {
+        spec: match[1]!,
+        dynamic: false,
+        typeOnly: false,
+        line: lineNo,
+        symbols: [],
+        bindingResidue: false,
+      }
+    : null;
+}
+
+function withoutImportComments(statement: string): string {
+  return statement.replaceAll(
+    /(["'])(?:\\.|(?!\1)[^\\\r\n])*?\1|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g,
+    (match) => (match.startsWith('/*') ? ' ' : match.startsWith('//') ? '\n' : match),
+  );
+}
+
+type NamedSpecifier = { name: string; typeOnly: boolean };
+type ParsedNamedSpecifiers = { index: number; specifiers: NamedSpecifier[] };
+
+function parseNamedSpecifiers(statement: string): ParsedNamedSpecifiers | null {
+  const named = /\{([\s\S]*?)\}/.exec(statement);
+  if (!named) return null;
+
+  const specifiers: NamedSpecifier[] = [];
+  for (const specifier of named[1]!.split(',')) {
+    const trimmed = specifier.trim();
+    const typeOnly = /^type\b/.test(trimmed);
+    const sourceName = trimmed.replace(/^type\s+/, '');
+    const name = /^[A-Za-z_$][\w$]*/.exec(sourceName)?.[0];
+    if (name) specifiers.push({ name, typeOnly });
+  }
+  return { index: named.index, specifiers };
+}
+
+function importedSymbols(statement: string): string[] {
+  const parsed = parseNamedSpecifiers(statement);
+  return [...new Set(parsed?.specifiers.map(({ name }) => name) ?? [])];
 }
 
 function statementIsTypeOnly(statement: string): boolean {
   if (/^\s*(?:import|export)\s+type\b/.test(statement)) return true;
-  const named = /\{([\s\S]*?)\}/.exec(statement);
-  if (!named) return false;
+  const parsed = parseNamedSpecifiers(statement);
+  if (!parsed) return false;
   const prefix = statement
-    .slice(0, named.index)
+    .slice(0, parsed.index)
     .replace(/^\s*(?:import|export)\s+/, '')
     .trim()
     .replace(/,$/, '')
     .trim();
   if (prefix.length > 0) return false;
-  const specifiers = named[1]!
-    .split(',')
-    .map((specifier) => specifier.trim())
-    .filter(Boolean);
-  return specifiers.length > 0 && specifiers.every((specifier) => /^type\b/.test(specifier));
+  return parsed.specifiers.length > 0 && parsed.specifiers.every(({ typeOnly }) => typeOnly);
 }
 
 function scanFromImport(lines: string[], index: number): ImportEdge | null {
@@ -152,19 +248,29 @@ function scanFromImport(lines: string[], index: number): ImportEdge | null {
   if (start < 0) return null;
 
   const statement = lines.slice(start, index + 1).join('\n');
+  const normalizedStatement = withoutImportComments(statement);
   return {
     spec: fromMatch[1]!,
     dynamic: false,
-    typeOnly: statementIsTypeOnly(statement),
+    typeOnly: statementIsTypeOnly(normalizedStatement),
     line: start + 1,
+    symbols: importedSymbols(normalizedStatement),
+    bindingResidue: false,
   };
 }
 
 export function parseImports(source: string): ImportEdge[] {
   const lines = source.split('\n');
+  const dynamicImports = scanDynamicImports(source);
+  const dynamicImportsByLine = new Map<number, ImportEdge[]>();
+  for (const edge of dynamicImports) {
+    const lineEdges = dynamicImportsByLine.get(edge.line) ?? [];
+    lineEdges.push(edge);
+    dynamicImportsByLine.set(edge.line, lineEdges);
+  }
   const edges: ImportEdge[] = [];
   for (let index = 0; index < lines.length; index++) {
-    edges.push(...scanDynamicImports(lines[index]!, index + 1));
+    edges.push(...(dynamicImportsByLine.get(index + 1) ?? []));
     const sideEffect = scanSideEffectImport(lines[index]!, index + 1);
     if (sideEffect) {
       edges.push(sideEffect);
@@ -184,7 +290,8 @@ export function topFolder(file: string): string {
 }
 
 export function targetDagZone(file: string): string {
-  if (file.startsWith('src/daemon/client/')) return 'daemon-client';
+  // #2342 relocated the daemon client to its own `src/daemon-client/` folder, so the
+  // client zone now falls out of the folder itself; `src/daemon/` is server-only.
   if (file.startsWith('src/daemon/')) return 'daemon-server';
   return topFolder(file);
 }
@@ -245,14 +352,33 @@ function resolveTargetFile(
   return candidates.find((candidate) => sourceFiles.has(candidate)) ?? null;
 }
 
+export type ImportParser = (source: string) => ImportEdge[];
+
+/**
+ * `parseImports` memoized by source text. A ratchet parses two trees that share almost every
+ * file, so the second tree costs a parse only where its text differs from the first.
+ */
+export function memoizedImportParser(): ImportParser {
+  const edgesBySource = new Map<string, ImportEdge[]>();
+  return (source) => {
+    let edges = edgesBySource.get(source);
+    if (!edges) {
+      edges = parseImports(source);
+      edgesBySource.set(source, edges);
+    }
+    return edges;
+  };
+}
+
 export function resolveImportEdges(
   sources: ReadonlyMap<string, string>,
   workspaceExportTargets?: ReadonlyMap<string, string>,
+  parse: ImportParser = parseImports,
 ): ResolvedImportEdge[] {
   const sourceFiles = new Set(sources.keys());
   const edges: ResolvedImportEdge[] = [];
   for (const [file, source] of sources) {
-    for (const edge of parseImports(source)) {
+    for (const edge of parse(source)) {
       const target = resolveTargetFile(file, edge.spec, sourceFiles, workspaceExportTargets);
       if (!target) continue;
       edges.push({
@@ -372,10 +498,32 @@ export function backEdgePair(edge: ResolvedImportEdge): string | null {
 // a type-only import costs nothing at runtime and does not affect cold start — but a
 // type-only edge still says "this zone is declared in terms of that one", and that IS a
 // boundary claim. Ranking them found 61 inversions the gate had never seen, which is why
-// they are ratcheted rather than merely reported: see `TYPE_INVERSION_BASELINE`.
+// they are ratcheted rather than merely reported against the merge-base with origin/main: see
+// `typeInversionCounts` and scripts/layering/type-inversion-ratchet.ts.
 export function typeInversionPair(edge: ResolvedImportEdge): string | null {
   if (edge.dynamic || !edge.typeOnly) return null;
   return spineInversionPair(edge);
+}
+
+/**
+ * R6's measurement: distinct type-only spine inversions per zone pair, keyed `from -> to` and
+ * sorted by pair. The ratchet compares this record across two trees, so it is a pure function of
+ * the edge set rather than a count taken inside the rule.
+ */
+export function typeInversionCounts(
+  edges: readonly ResolvedImportEdge[],
+): Readonly<Record<string, number>> {
+  const seen = new Set<string>();
+  const counts = new Map<string, number>();
+  for (const edge of edges) {
+    const pair = typeInversionPair(edge);
+    if (!pair) continue;
+    const identity = `${edge.file} -> ${edge.target}`;
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    counts.set(pair, (counts.get(pair) ?? 0) + 1);
+  }
+  return Object.fromEntries([...counts].sort(([left], [right]) => left.localeCompare(right)));
 }
 
 export function collectBackEdges(edges: readonly ResolvedImportEdge[]): BackEdgeMap {

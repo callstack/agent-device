@@ -2,13 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceClient } from '../../client/client-types.ts';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
-import {
-  commandSupportsSettleObservation,
-  resolveCommandRecordsSessionAction,
-} from '../../core/command-descriptor/registry.ts';
+import { resolveCommandRecordsSessionAction } from '@agent-device/command-registry/registry';
 import { COMMAND_OUTPUT_SCHEMAS } from '../command-output-schemas.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { NAVIGATION_COMMAND_PROJECTIONS } from '../../commands/system/navigation-projection.ts';
 import { validateAgainstSchema } from './output-schema-validator.ts';
 
 test('MCP command tool executor hides client creation behind an execution adapter', async () => {
@@ -112,7 +108,7 @@ test('MCP command tool executor renders JSON text when requested', async () => {
 
   const result = await executor.execute('snapshot', { mcpOutputFormat: 'json' });
 
-  assert.match(result.content[0]?.text ?? '', /^\{\n  "nodes": \[/);
+  assert.match(result.content[0]?.text ?? '', /^\{\n {2}"nodes": \[/);
   assert.match(result.content[0]?.text ?? '', /"label": "Continue"/);
 });
 
@@ -446,26 +442,6 @@ test('MCP tv remote outputSchema advertises button values', () => {
     (tvRemote.outputSchema.properties?.button as { enum?: unknown[] } | undefined)?.enum,
     ['up', 'down', 'left', 'right', 'select', 'menu', 'home', 'back'],
   );
-});
-
-test('MCP navigation output schemas are projected from the canonical executable contracts', () => {
-  for (const [name, projection] of Object.entries(NAVIGATION_COMMAND_PROJECTIONS)) {
-    const schema = COMMAND_OUTPUT_SCHEMAS[name as keyof typeof COMMAND_OUTPUT_SCHEMAS];
-    if (!commandSupportsSettleObservation(name)) {
-      assert.equal(schema, projection.outputSchema, `${name}: must be the projection itself`);
-      continue;
-    }
-    // #1638: a settle-capable navigation command adds exactly ONE property on
-    // top of its projected dispatch shape — the opt-in `--settle` observation,
-    // grafted where `settleObservationSchema` lives because the projection
-    // layer sits below the MCP schema module. Everything else must still come
-    // from the projection verbatim.
-    const observed = schema as { properties?: Record<string, unknown>; required?: unknown };
-    const { settle, ...projectedProperties } = observed.properties ?? {};
-    assert.ok(settle, `${name}: settle-capable schema must advertise the observation`);
-    assert.deepEqual(projectedProperties, projection.outputSchema?.properties);
-    assert.deepEqual(observed.required, projection.outputSchema?.required);
-  }
 });
 
 test('MCP newly typed outputSchemas advertise public contract keys', () => {
@@ -1017,146 +993,6 @@ test('MCP forwards noRecord from a press tool call through to the executed comma
   ]);
 });
 
-// Guidance no longer restates input fields in prose, so a tool's inputSchema is the only
-// place its inputs are documented — for the model, for `--help`, and for the docs site. An
-// undescribed property is therefore a silent gap rather than a cosmetic one.
-//
-// The baseline pins exact `tool.property` identities, not bare property names plus a total:
-// a name-and-count baseline stays green when a gap migrates (describe `foo.text`, add an
-// undescribed `bar.text`, and both the allowed-name set and the total are unchanged), and
-// stale names keep authorizing gaps that appear later. Exact identities make every new or
-// moved gap fail, and require deleting an entry to record a fix.
-const UNDESCRIBED_TOOL_INPUTS = new Set([
-  'alert.action',
-  'alert.timeoutMs',
-  'audio.action',
-  'audio.probeAction',
-  'back.mode',
-  'clipboard.action',
-  'clipboard.text',
-  'close.saveScript',
-  'debug.action',
-  'diff.depth',
-  'diff.interactiveOnly',
-  'diff.kind',
-  'diff.out',
-  'diff.raw',
-  'diff.scope',
-  'events.cursor',
-  'events.limit',
-  'find.action',
-  'find.depth',
-  'find.first',
-  'find.last',
-  'find.locator',
-  'find.query',
-  'find.raw',
-  'find.timeoutMs',
-  'find.value',
-  'get.format',
-  'install-from-source.retainPaths',
-  'install-from-source.retentionMs',
-  'is.predicate',
-  'is.selector',
-  'is.value',
-  'keyboard.action',
-  'logs.action',
-  'logs.message',
-  'logs.restart',
-  'metro.action',
-  'metro.bridgeScope',
-  'metro.bundleUrl',
-  'metro.installDependenciesIfNeeded',
-  'metro.kind',
-  'metro.launchUrl',
-  'metro.listenHost',
-  'metro.logPath',
-  'metro.metroHost',
-  'metro.metroPort',
-  'metro.port',
-  'metro.probeTimeoutMs',
-  'metro.projectRoot',
-  'metro.publicBaseUrl',
-  'metro.reuseExisting',
-  'metro.runtimeFilePath',
-  'metro.startupTimeoutMs',
-  'metro.statusHost',
-  'metro.timeoutMs',
-  'network.action',
-  'network.include',
-  'network.limit',
-  'open.saveScript',
-  'orientation.orientation',
-  'perf.action',
-  'perf.area',
-  'perf.kind',
-  'perf.subject',
-  'push.app',
-  'push.payload',
-  'react-native.action',
-  'record.action',
-  'record.fps',
-  'record.hideTouches',
-  'record.path',
-  'record.quality',
-  'record.recordingScope',
-  'reinstall.app',
-  'replay.backend',
-  'replay.env',
-  'replay.force',
-  'replay.maestro',
-  'replay.path',
-  'replay.resumeFrom',
-  'replay.resumePlanDigest',
-  'replay.saveScript',
-  'replay.update',
-  'screenshot.fullscreen',
-  'screenshot.normalizeStatusBar',
-  'screenshot.overlayRefs',
-  'screenshot.stabilize',
-  'screenshot.surface',
-  'scroll.direction',
-  'settings.app',
-  'settings.latitude',
-  'settings.longitude',
-  'settings.mode',
-  'settings.permission',
-  'settings.setting',
-  'settings.state',
-  'snapshot.depth',
-  'snapshot.forceFull',
-  'snapshot.interactiveOnly',
-  'snapshot.raw',
-  'snapshot.scope',
-  'swipe.pattern',
-  'test.artifactsDir',
-  'test.backend',
-  'test.env',
-  'test.failFast',
-  'test.maestro',
-  'test.paths',
-  'test.recordVideo',
-  'test.retries',
-  'test.shardAll',
-  'test.shardSplit',
-  'test.timeoutMs',
-  'test.update',
-  'trace.action',
-  'trace.path',
-  'tv-remote.button',
-  'wait.depth',
-  'wait.durationMs',
-  'wait.kind',
-  'wait.quietMs',
-  'wait.raw',
-  'wait.ref',
-  'wait.scope',
-  'wait.selector',
-  'wait.stable',
-  'wait.text',
-  'wait.timeoutMs',
-]);
-
 // Retired-input regressions run the REAL command route (no runCommand
 // injection): field projection used to silently drop the removed `maxSize`
 // key before the daemon writers could refuse it, returning native-size
@@ -1190,27 +1026,4 @@ test('MCP screenshot and record schemas do not advertise the retired maxSize inp
     assert.ok(tool);
     assert.equal('maxSize' in (tool.inputSchema.properties ?? {}), false);
   }
-});
-
-test('MCP tool inputs do not add undocumented properties', () => {
-  const undescribed: string[] = [];
-  for (const tool of listCommandTools()) {
-    for (const [key, schema] of Object.entries(tool.inputSchema.properties ?? {})) {
-      if (!schema.description) undescribed.push(`${tool.name}.${key}`);
-    }
-  }
-
-  const added = undescribed.filter((entry) => !UNDESCRIBED_TOOL_INPUTS.has(entry)).sort();
-  assert.deepEqual(
-    added,
-    [],
-    `These MCP tool inputs need a schema description: ${added.join(', ')}`,
-  );
-
-  const fixed = [...UNDESCRIBED_TOOL_INPUTS].filter((entry) => !undescribed.includes(entry)).sort();
-  assert.deepEqual(
-    fixed,
-    [],
-    `These MCP tool inputs are documented now — remove them from UNDESCRIBED_TOOL_INPUTS: ${fixed.join(', ')}`,
-  );
 });

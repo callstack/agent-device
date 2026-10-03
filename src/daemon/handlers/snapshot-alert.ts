@@ -12,16 +12,17 @@ import {
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { contextFromFlags } from '../context.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import { SessionStore } from '../session-store.ts';
-import { recordIfSession } from './snapshot-session.ts';
-import { parseTimeout } from '../../utils/parse-timeout.ts';
+import { recordIfSession } from '../snapshot-session.ts';
+import { parseTimeout } from '@agent-device/command-registry/parse-timeout';
 import { resolveRefFrameEffect } from '../daemon-command-registry.ts';
 import { expireRefFrame } from '../ref-frame.ts';
-import type { DaemonFailureResponse } from './response.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from '../runtime-admission.ts';
 import { runtimeExecutionFromContext } from '../snapshot-runtime-capture-input.ts';
+import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
 
 type HandleAlertCommandParams = {
   req: DaemonRequest;
@@ -47,10 +48,21 @@ type ResolvedAlertExecution =
  * that wording is parity-pinned.
  */
 async function resolveBoundAlertRuntime(
-  params: Readonly<{ device: DeviceInfo; action: AlertAction }> & RuntimeAdmissionBindings,
+  params: Readonly<{
+    device: DeviceInfo;
+    action: AlertAction;
+    session: SessionState | undefined;
+  }> &
+    RuntimeAdmissionBindings,
 ): Promise<ResolvedAlertExecution> {
   const { device, action, inspectFacts, bindDevice } = params;
-  const shared = { command: 'alert', device, inspectFacts, bindDevice };
+  const shared = {
+    command: 'alert',
+    device,
+    inspectFacts,
+    bindDevice,
+    readiness: !params.session,
+  };
   if (action === 'wait') {
     const admission = await admitRuntimeUse({ ...shared, use: alertWaitUse });
     if (admission.type === 'response') return { ok: false, response: admission.response };
@@ -108,7 +120,13 @@ export async function handleAlertCommand(
 ): Promise<DaemonResponse> {
   const { req, logPath, sessionStore, session, device, inspectFacts, bindDevice } = params;
   const action = normalizeAlertAction(req.positionals?.[0]);
-  const bound = await resolveBoundAlertRuntime({ device, action, inspectFacts, bindDevice });
+  const bound = await resolveBoundAlertRuntime({
+    device,
+    action,
+    session,
+    inspectFacts,
+    bindDevice,
+  });
   if (!bound.ok) return bound.response;
   // ADR 0014 side-effect seam: alert accept/dismiss act on the device; get/wait are read-only.
   // The alert resolver returns `may-invalidate` only for the acting subactions, so this covers

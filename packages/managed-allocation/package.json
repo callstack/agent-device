@@ -1,0 +1,47 @@
+{
+  "name": "@agent-device/managed-allocation",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private managed-device allocation-operation mechanics composed by the daemon: durable allocation-operation store, recovery journal, decision policy, and record codec for the Simlock-backed lease handoff (ADR 0021).",
+  "dependencies": {
+    "@agent-device/capture-kit": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*"
+  },
+  "exports": {
+    "./decision": {
+      "types": "./src/decision.ts",
+      "default": "./src/decision.ts"
+    },
+    "./fence": {
+      "types": "./src/fence.ts",
+      "default": "./src/fence.ts"
+    },
+    "./journal": {
+      "types": "./src/journal.ts",
+      "default": "./src/journal.ts"
+    },
+    "./record": {
+      "types": "./src/record.ts",
+      "default": "./src/record.ts"
+    },
+    "./schema": {
+      "types": "./src/schema.ts",
+      "default": "./src/schema.ts"
+    },
+    "./status": {
+      "types": "./src/status.ts",
+      "default": "./src/status.ts"
+    },
+    "./store": {
+      "types": "./src/store.ts",
+      "default": "./src/store.ts"
+    },
+    "./transitions": {
+      "types": "./src/transitions.ts",
+      "default": "./src/transitions.ts"
+    }
+  }
+}

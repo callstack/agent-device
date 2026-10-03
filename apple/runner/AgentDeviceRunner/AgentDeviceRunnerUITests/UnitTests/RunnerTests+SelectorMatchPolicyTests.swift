@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
@@ -83,6 +84,7 @@ extension RunnerTests {
   }
 
 #if os(iOS)
+  @MainActor
   func testQuerySelectorPrefersHittableMatchOverNonHittableDuplicate() throws {
     let duplicateIdentifier = "agent-device-selector-read-duplicate"
     app.launchArguments = ["--agent-device-selector-read-regression"]

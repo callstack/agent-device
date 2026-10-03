@@ -1,3 +1,17 @@
+// Catches: a package reaching back into root src/, a root file tunnelling into packages/*/src
+//   with a relative path, an undeclared workspace import, or a subpath the exports map does not
+//   name — bypasses Node's own resolution error cannot see, because a relative route resolves
+//   fine even though it duplicates the module under its specifier form.
+// Evidence: 76453add71 (#1494, #1490 W0) established the workspace split this rule protects;
+//   83322a3f2f (#1574) pinned exact facade symbols for every workspace package.
+// Cost: 1239 LOC (363 rule + 876 test).
+// Kill criterion: none enforced today; retire only by maintainer decision that the workspace
+//   boundary no longer matters. `pnpm typecheck` already covers two branches for src/ and
+//   packages/ importers (NodeNext rejects a non-exported subpath with TS2307; composite rootDir
+//   rejects a package→root relative escape with TS6059), but the A4 spike found no compiler
+//   mechanism for an undeclared workspace:* dependency, a root→packages/*/src relative tunnel,
+//   or any scripts/ import: project references are a build-cache mechanism, not a boundary.
+//
 // R11 package-boundaries: the workspace rules of #1490, as data the gate walks.
 //
 // Package resolution already makes a deep `@agent-device/*` specifier a runtime
@@ -66,11 +80,24 @@ export function specifierSites(file: string, source: string): SpecifierSite[] {
  * filtering the output.
  */
 export function readWorkspacePackages(repoRoot: string): WorkspacePackage[] {
+  return workspacePackagesFromManifests(
+    new Map(
+      listTrackedPackageManifests(repoRoot).map((manifestFile) => [
+        manifestFile,
+        fs.readFileSync(path.join(repoRoot, manifestFile), 'utf8'),
+      ]),
+    ),
+  );
+}
+
+/** The same package model over manifest sources already in hand, e.g. read from a git ref. */
+export function workspacePackagesFromManifests(
+  manifests: ReadonlyMap<string, string>,
+): WorkspacePackage[] {
   const packages: WorkspacePackage[] = [];
-  for (const manifestFile of listTrackedPackageManifests(repoRoot).sort()) {
+  for (const manifestFile of [...manifests.keys()].sort()) {
     const entry = path.posix.basename(path.posix.dirname(manifestFile));
-    const manifestPath = path.join(repoRoot, manifestFile);
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
+    const manifest = JSON.parse(manifests.get(manifestFile)!) as {
       name?: string;
       private?: boolean;
       exports?: Record<string, { default?: string } | string>;
@@ -270,7 +297,7 @@ export function rootExternalDependencyRanges(repoRoot: string): Map<string, stri
  * directory.
  *
  * The single owner of that question. R11's façade gates and the ADR-0019 eager-closure budget
- * table (`src/__tests__/eager-closure-budgets.ts`) both consume this, so the two cannot drift
+ * table (`scripts/__tests__/eager-closure-budgets.ts`) both consume this, so the two cannot drift
  * into disagreeing about what counts as a façade — a gate that scanned a narrower set would
  * silently exempt files the other one covers, which is exactly the hole #1960 review found (a
  * one-level `readdir` missed both nested façade files and the six `packages/platform-*`
@@ -320,8 +347,19 @@ function walkTsFiles(repoRoot: string, relativeDir: string): string[] {
 
 /** Flat `specifier -> repo-relative source` map across all workspace packages. */
 export function workspaceSpecifierTargets(repoRoot: string): Map<string, string> {
+  return specifierTargetsOf(readWorkspacePackages(repoRoot));
+}
+
+/** The same flat map for a manifest set read elsewhere, e.g. at a git ref. */
+export function workspaceSpecifierTargetsFromManifests(
+  manifests: ReadonlyMap<string, string>,
+): Map<string, string> {
+  return specifierTargetsOf(workspacePackagesFromManifests(manifests));
+}
+
+function specifierTargetsOf(packages: readonly WorkspacePackage[]): Map<string, string> {
   const targets = new Map<string, string>();
-  for (const pkg of readWorkspacePackages(repoRoot)) {
+  for (const pkg of packages) {
     for (const [specifier, target] of pkg.exportTargets) targets.set(specifier, target);
   }
   return targets;

@@ -8,10 +8,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import { STALE_NODE_MODULES_MESSAGE } from './lockfile-install-sync.ts';
 import { CHECK_CATALOG } from './checks.ts';
-import { DEFAULT_VITEST_MAX_WORKERS } from '../lib/vitest-concurrency.ts';
 import { selectChecks } from './model.ts';
 import { type CommandExecutor, readChangedFiles, runChecks } from './run.ts';
 
@@ -140,7 +139,7 @@ test('runChecks runs local checks in order and stops on the first failure', asyn
   assert.equal(code, 1);
   // format then lint, then it stops — nothing after the failing check runs.
   assert.deepEqual(
-    executed.map((command) => command[command.length - 1]),
+    executed.map((command) => command.at(-1)),
     ['format:check', 'lint'],
   );
 });
@@ -161,16 +160,7 @@ test('runChecks passes the selector change set to Vitest related', async () => {
   assert.equal(code, 0);
   assert.deepEqual(
     executed.find((command) => command.includes('related')),
-    [
-      'pnpm',
-      'exec',
-      'vitest',
-      'related',
-      '--run',
-      '--passWithNoTests',
-      `--maxWorkers=${DEFAULT_VITEST_MAX_WORKERS}`,
-      ...changedFiles,
-    ],
+    ['pnpm', 'exec', 'vitest', 'related', '--run', '--passWithNoTests', ...changedFiles],
   );
 });
 
@@ -188,7 +178,7 @@ test('runChecks skips GitHub-authoritative checks and passes when locals succeed
   assert.equal(plan.failOpen, true);
   const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, { execute, cwd: '.' });
   assert.equal(code, 0);
-  const ran = executed.map((command) => command[command.length - 1]);
+  const ran = executed.map((command) => command.at(-1));
   // Derived from the catalog rather than hand-listed. A hand-written name goes vacuous the
   // moment a check is repointed: this list still asserted `build:android-snapshot-helper`
   // after `android-helpers` moved to `build:android`, so it could not have failed however
@@ -205,7 +195,7 @@ test('runChecks skips GitHub-authoritative checks and passes when locals succeed
   }
 });
 
-test('runChecks leaves coverage to CI and runs capped related tests once', async () => {
+test('runChecks leaves coverage to CI and runs related tests once through Vitest config', async () => {
   const executed: string[][] = [];
   const execute: CommandExecutor = async (command) => {
     executed.push(command);
@@ -222,7 +212,11 @@ test('runChecks leaves coverage to CI and runs capped related tests once', async
     !related[0]?.includes('--coverage'),
     'coverage instrumentation stays GitHub-authoritative; the local run must not add it',
   );
-  assert.ok(related[0]?.includes(`--maxWorkers=${DEFAULT_VITEST_MAX_WORKERS}`));
+  assert.equal(
+    related[0]?.some((arg) => arg.startsWith('--maxWorkers=')),
+    false,
+    'worker sizing belongs to vitest.config.ts',
+  );
   assert.ok(
     executed.findIndex((command) => command.includes('test:integration:node')) <
       executed.findIndex((command) => command.includes('related')),

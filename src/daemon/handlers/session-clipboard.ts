@@ -9,17 +9,20 @@ import {
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { contextFromFlags, type DaemonCommandContext } from '../context.ts';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from '../runtime-admission.ts';
 import { runtimeExecutionFromContext } from '../snapshot-runtime-capture-input.ts';
-import { successText } from '../../utils/success-text.ts';
-import { errorResponse, type DaemonFailureResponse } from './response.ts';
-import { recordSessionAction } from './handler-utils.ts';
-import { requireSessionOrExplicitSelector, resolveCommandDevice } from './session-device-utils.ts';
+import { successText } from '@agent-device/kernel/success-text';
+import { recordSessionAction } from '../session-action-recorder.ts';
+import {
+  requireSessionOrExplicitSelector,
+  resolveCommandDevice,
+} from '../session-device-resolution.ts';
+import { type DaemonFailureResponse, errorResponse } from '@agent-device/kernel/contracts';
 
 type ClipboardAction = 'read' | 'write';
 
@@ -112,6 +115,7 @@ async function resolveBoundClipboardRuntime(
       use: clipboardReadUse,
       inspectFacts,
       bindDevice,
+      readiness: true,
     });
     if (admission.type === 'response') return { ok: false, response: admission.response };
     const runtime = admission.runtime;
@@ -123,6 +127,7 @@ async function resolveBoundClipboardRuntime(
     use: clipboardWriteUse,
     inspectFacts,
     bindDevice,
+    readiness: true,
   });
   if (admission.type === 'response') return { ok: false, response: admission.response };
   const runtime = admission.runtime;
@@ -149,7 +154,7 @@ export async function handleSessionClipboardCommand(params: {
     return errorResponse('INVALID_ARGS', 'clipboard requires a subcommand: read or write');
   }
 
-  const device = await resolveCommandDevice({ session, flags, ensureReady: true });
+  const device = await resolveCommandDevice({ session, flags });
   const bound = await resolveBoundClipboardRuntime({
     device,
     action,

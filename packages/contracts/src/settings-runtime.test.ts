@@ -1,7 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import { bindSetSetting, settingsRuntimeOperationFacts } from './settings-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
-import { localInteractorSource, providerInteractorSource } from './interactor-operation-binding.ts';
+import { localInteractorSource } from './interactor-operation-binding.ts';
 
 const device = {
   platform: 'apple',
@@ -12,18 +12,16 @@ const device = {
   booted: true,
 } as const;
 
-const bindSetSettingLocal = (
-  params: Parameters<typeof localInteractorSource>[0] & { signal: AbortSignal },
-) => bindSetSetting(params.signal, localInteractorSource(params));
-const bindSetSettingProvider = (
-  params: Parameters<typeof providerInteractorSource>[0] extends infer P
-    ? Omit<P, 'operation'> & { signal: AbortSignal }
-    : never,
-) => bindSetSetting(params.signal, providerInteractorSource({ ...params, operation: 'settings' }));
-
 test('builds the exact settings operation fact catalog', () => {
   const setSetting = { available: true } as const;
-  expect(settingsRuntimeOperationFacts({ setSetting })).toEqual({ setSetting });
+  const readSetting = {
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  } as const;
+  expect(settingsRuntimeOperationFacts({ setSetting, readSetting })).toEqual({
+    setSetting,
+    readSetting,
+  });
 });
 
 // The daemon has already parsed the CLI form, resolved the target app, and typed the coordinates
@@ -33,7 +31,7 @@ test('a local binding forwards the neutral mutation to its owner', async () => {
   const resolveInteractor = vi.fn(async () => ({ setSetting }) as unknown as Interactor);
   const signal = new AbortController().signal;
 
-  const operations = bindSetSettingLocal({ device, signal, resolveInteractor });
+  const operations = bindSetSetting(signal, localInteractorSource({ device, resolveInteractor }));
   const result = await operations.setSetting({
     setting: 'location',
     state: 'set',
@@ -53,36 +51,4 @@ test('a local binding forwards the neutral mutation to its owner', async () => {
     longitude: -122.03,
   });
   expect(result).toEqual({ message: 'Location updated' });
-});
-
-test('a provider binding fails closed when its exact owner exposes no interactor', async () => {
-  const operations = bindSetSettingProvider({
-    device,
-    signal: new AbortController().signal,
-    resolveInteractor: () => undefined,
-  });
-
-  await expect(
-    operations.setSetting({ setting: 'appearance', state: 'dark' }),
-  ).rejects.toMatchObject({
-    code: 'UNSUPPORTED_OPERATION',
-    details: { reason: 'provider-runtime-interactor-missing', deviceId: device.id },
-  });
-});
-
-test('an already-cancelled request never resolves an interactor', async () => {
-  const controller = new AbortController();
-  controller.abort();
-  const setSetting = vi.fn(async () => undefined);
-  const resolveInteractor = vi.fn(async () => ({ setSetting }) as unknown as Interactor);
-
-  const operations = bindSetSettingLocal({
-    device,
-    signal: controller.signal,
-    resolveInteractor,
-  });
-
-  await expect(operations.setSetting({ setting: 'appearance', state: 'dark' })).rejects.toThrow();
-  expect(resolveInteractor).not.toHaveBeenCalled();
-  expect(setSetting).not.toHaveBeenCalled();
 });

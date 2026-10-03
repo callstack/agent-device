@@ -14,7 +14,10 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
 import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
+import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
+import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
+import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
@@ -29,7 +32,8 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../request-runtime-binding.ts';
 import { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest, SessionState } from '../../types.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { handleInstallFromSourceDeploymentCommand } from '../session-app-source-deployment.ts';
 
 type SourceRuntimeOptions = Readonly<{
@@ -48,13 +52,16 @@ function makeSession(device: DeviceInfo): SessionState {
   return { name: 'default', createdAt: Date.now(), actions: [], device };
 }
 
-function makeRequest(source: NonNullable<DaemonRequest['meta']>['installSource']): DaemonRequest {
+function makeRequest(
+  source: NonNullable<DaemonRequest['meta']>['installSource'],
+  flags?: DaemonRequest['flags'],
+): DaemonRequest {
   return {
     token: 't',
     session: 'default',
     command: 'install_source',
     positionals: [],
-    flags: {},
+    flags: flags ?? {},
     meta: { installSource: source },
   };
 }
@@ -303,6 +310,75 @@ test('install_source returns the typed iOS artifact identity supplied by its run
   });
 });
 
+// The session's device carries the INTERNAL `apple` platform while `--platform` names the PUBLIC
+// leaf, and a remote command's device resolution writes that leaf into the flags of every install
+// it dispatches (#2962). Comparing the two axes by string equality refused the install of the very
+// session it targeted, and printed the internal `apple` token the public axis is not allowed to
+// emit (ADR 0009).
+test('install_source accepts the public leaf selector of an Apple session it is bound to', async () => {
+  const store = makeStore();
+  const session = makeSession({
+    platform: 'apple',
+    appleOs: 'ios',
+    id: 'sim-1',
+    name: 'iPhone',
+    kind: 'simulator',
+    booted: true,
+  });
+  store.set(session.name, session);
+  const runtime = createSourceRuntime(
+    session.device,
+    async () => ({
+      installablePath: '/tmp/App.app',
+      bundleId: 'com.example.app',
+      appName: 'App',
+      cleanup: async () => {},
+    }),
+    async () => ({}) as never,
+  );
+
+  const response = await handleInstallFromSourceDeploymentCommand({
+    req: makeRequest({ kind: 'path', path: '/tmp/App.app' }, { platform: 'ios' }),
+    sessionName: session.name,
+    sessionStore: store,
+    inspectFacts: runtime.inspectFacts,
+    bindDevice: runtime.bindDevice,
+  });
+
+  expect(response.ok).toBe(true);
+});
+
+test('install_source still refuses a leaf selector that names a different platform than the session', async () => {
+  const store = makeStore();
+  const session = makeSession({
+    platform: 'apple',
+    appleOs: 'ios',
+    id: 'sim-1',
+    name: 'iPhone',
+    kind: 'simulator',
+    booted: true,
+  });
+  store.set(session.name, session);
+  const runtime = createSourceRuntime(
+    session.device,
+    async () => ({ installablePath: '/tmp/App.app', cleanup: async () => {} }),
+    async () => ({}) as never,
+  );
+
+  const response = await handleInstallFromSourceDeploymentCommand({
+    req: makeRequest({ kind: 'path', path: '/tmp/App.app' }, { platform: 'android' }),
+    sessionName: session.name,
+    sessionStore: store,
+    inspectFacts: runtime.inspectFacts,
+    bindDevice: runtime.bindDevice,
+  });
+
+  expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_ARGS' } });
+  if (response.ok) return;
+  expect(response.error.message).toContain('bound to ios');
+  expect(response.error.message).not.toContain('apple');
+});
+
 function createSourceRuntime(
   device: DeviceInfo,
   materializeAppSource: PlatformRuntimeOperations['materializeAppSource'],
@@ -358,38 +434,28 @@ function sourceRuntimeFacts(
       }),
       ...screenshotRuntimeOperationFacts({ capture: unavailable }),
       findText: unavailable,
-      findSelector: unavailable,
       setViewport: unavailable,
       focusPoint: unavailable,
       typeText: unavailable,
       ...touchRuntimeOperationFacts({
+        unsupported: unavailable,
         tap: unavailable,
         longPress: unavailable,
-        hover: unavailable,
         fill: unavailable,
-        tapElementSelector: unavailable,
       }),
-      ...gestureRuntimeOperationFacts({
-        plan: unavailable,
-        directionalFling: unavailable,
-        multiTouch: unavailable,
-        targetAuthoredDrag: unavailable,
-        viewport: unavailable,
-      }),
+      ...gestureRuntimeOperationFacts({ unsupported: unavailable }),
       ...scrollRuntimeOperationFacts({ scroll: unavailable }),
       readTextAtPoint: unavailable,
       back: unavailable,
-      home: unavailable,
       setOrientation: unavailable,
       tvRemote: unavailable,
-      keyboardStatus: unavailable,
-      keyboardDismiss: unavailable,
-      keyboardEnter: unavailable,
-      readClipboard: unavailable,
-      writeClipboard: unavailable,
-      appSwitcher: unavailable,
+      ...keyboardRuntimeOperationFacts({ unsupported: unavailable }),
+      ...clipboardRuntimeOperationFacts({ unsupported: unavailable }),
+      ...systemButtonRuntimeOperationFacts({ unsupported: unavailable }),
+      setFoldPose: unavailable,
       triggerAppEvent: unavailable,
       setSetting: unavailable,
+      readSetting: unavailable,
       readAlert: unavailable,
       awaitAlert: unavailable,
       acceptAlert: unavailable,

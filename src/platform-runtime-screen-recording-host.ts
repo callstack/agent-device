@@ -27,8 +27,23 @@ export function createScreenRecordingRuntimeHost(
         await import('./platform-runtime-screen-recording-output-host.ts');
       await createScreenRecordingOutputHost().prepare(outputPath);
     },
+    copy: async (input) => {
+      const { createScreenRecordingOutputHost } =
+        await import('./platform-runtime-screen-recording-output-host.ts');
+      await createScreenRecordingOutputHost().copy(input);
+    },
+    remove: async (filePath) => {
+      const { createScreenRecordingOutputHost } =
+        await import('./platform-runtime-screen-recording-output-host.ts');
+      return await createScreenRecordingOutputHost().remove(filePath);
+    },
   });
   const finalize: ScreenRecordingRuntimeHost['finalize'] = Object.freeze({
+    sniff: async (input) => {
+      const { createScreenRecordingFinalizer } =
+        await import('./platform-runtime-screen-recording-finalizer-host.ts');
+      await createScreenRecordingFinalizer().sniff(input);
+    },
     complete: async (input, signal) => {
       const { createScreenRecordingFinalizer } =
         await import('./platform-runtime-screen-recording-finalizer-host.ts');

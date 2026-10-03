@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SnapshotResult } from '@agent-device/contracts/interactor-types';
-import type { captureSnapshotWithInteractor } from '../handlers/snapshot-interactor-capture.ts';
+import type { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 
 type CaptureParams = Parameters<typeof captureSnapshotWithInteractor>[0];
 

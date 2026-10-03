@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { parseSelectorChain } from './parse.ts';
 import { resolveSelectorChain } from './resolve.ts';
+import { formatRole } from '@agent-device/kernel/snapshot';
 
 test('resolveSelectorChain disambiguates to deeper/smaller matching node when enabled', () => {
   const disambiguationNodes: SnapshotState['nodes'] = [
@@ -13,6 +14,7 @@ test('resolveSelectorChain disambiguates to deeper/smaller matching node when en
       ref: 'e1',
       index: 0,
       type: 'Other',
+      kind: formatRole('Other'),
       label: 'Press me',
       rect: { x: 0, y: 0, width: 300, height: 300 },
       depth: 1,
@@ -23,6 +25,7 @@ test('resolveSelectorChain disambiguates to deeper/smaller matching node when en
       ref: 'e2',
       index: 1,
       type: 'Other',
+      kind: formatRole('Other'),
       label: 'Press me',
       rect: { x: 10, y: 10, width: 100, height: 20 },
       depth: 2,
@@ -56,6 +59,7 @@ test('resolveSelectorChain disambiguation records the smallest-area tiebreak whe
       ref: 'e1',
       index: 0,
       type: 'Other',
+      kind: formatRole('Other'),
       label: 'Press me',
       rect: { x: 0, y: 0, width: 300, height: 300 },
       depth: 2,
@@ -66,6 +70,7 @@ test('resolveSelectorChain disambiguation records the smallest-area tiebreak whe
       ref: 'e2',
       index: 1,
       type: 'Other',
+      kind: formatRole('Other'),
       label: 'Press me',
       rect: { x: 10, y: 10, width: 20, height: 20 },
       depth: 2,
@@ -98,6 +103,7 @@ test('resolveSelectorChain discloses the winner versus its closest challenger, n
       ref: 'e1',
       index: 0,
       type: 'Application',
+      kind: formatRole('Application'),
       rect: { x: 0, y: 0, width: 400, height: 800 },
       depth: 0,
       enabled: true,
@@ -108,6 +114,7 @@ test('resolveSelectorChain discloses the winner versus its closest challenger, n
       index: 1,
       parentIndex: 0,
       type: 'Button',
+      kind: formatRole('Button'),
       label: 'Profile',
       rect: { x: 20, y: 700, width: 200, height: 50 },
       depth: 3,
@@ -119,6 +126,7 @@ test('resolveSelectorChain discloses the winner versus its closest challenger, n
       index: 2,
       parentIndex: 0,
       type: 'Button',
+      kind: formatRole('Button'),
       label: 'Profile',
       rect: { x: -320, y: 240, width: 100, height: 20 },
       depth: 8,
@@ -130,6 +138,7 @@ test('resolveSelectorChain discloses the winner versus its closest challenger, n
       index: 3,
       parentIndex: 0,
       type: 'Button',
+      kind: formatRole('Button'),
       label: 'Profile',
       rect: { x: 20, y: 620, width: 200, height: 50 },
       depth: 2,
@@ -156,6 +165,7 @@ test('resolveSelectorChain disambiguation tie falls back to next selector', () =
       ref: 'e1',
       index: 0,
       type: 'Other',
+      kind: formatRole('Other'),
       label: 'Press me',
       rect: { x: 0, y: 0, width: 100, height: 20 },
       depth: 2,
@@ -166,6 +176,7 @@ test('resolveSelectorChain disambiguation tie falls back to next selector', () =
       ref: 'e2',
       index: 1,
       type: 'Other',
+      kind: formatRole('Other'),
       label: 'Press me',
       rect: { x: 0, y: 40, width: 100, height: 20 },
       depth: 2,
@@ -176,6 +187,7 @@ test('resolveSelectorChain disambiguation tie falls back to next selector', () =
       ref: 'e3',
       index: 2,
       type: 'Other',
+      kind: formatRole('Other'),
       label: 'Press me',
       identifier: 'press_me_unique',
       rect: { x: 0, y: 80, width: 100, height: 20 },

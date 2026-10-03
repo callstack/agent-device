@@ -4,6 +4,7 @@ import type {
   HostDiagnostics,
   HostDiagnosticsContext,
 } from '@agent-device/contracts/host-diagnostics';
+import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 /**
  * Composes each family's host-scoped diagnostics behind the neutral surface (ADR 0019 host
@@ -17,19 +18,19 @@ export function createHostDiagnostics(): HostDiagnostics {
       context: HostDiagnosticsContext,
     ): Promise<DoctorCheck | undefined> => {
       if (platform === 'android') {
-        const { androidToolchainCheck } = await import('./platforms/android/doctor.ts');
-        return await androidToolchainCheck();
+        const { androidToolchainCheck } = await loadAndroidMechanics();
+        return await androidToolchainCheck(process.env);
       }
       if (platform === 'vega') {
-        const { vegaToolchainCheck } = await import('./platforms/vega/doctor.ts');
+        const { vegaToolchainCheck } = await import('@agent-device/platform-vega');
         return await vegaToolchainCheck(context);
       }
       if (platform === 'harmonyos') {
-        const { harmonyToolchainCheck } = await import('./platforms/harmonyos/doctor.ts');
+        const { harmonyToolchainCheck } = await import('@agent-device/platform-harmonyos');
         return await harmonyToolchainCheck();
       }
       if (platform === 'ios' || platform === 'macos' || platform === 'apple') {
-        const { appleToolchainCheck } = await import('./platforms/apple/doctor.ts');
+        const { appleToolchainCheck } = await import('@agent-device/platform-apple/doctor');
         return await appleToolchainCheck();
       }
       return undefined;
@@ -39,11 +40,11 @@ export function createHostDiagnostics(): HostDiagnostics {
       context: HostDiagnosticsContext,
     ): Promise<readonly DoctorCheck[]> => {
       if (device.platform !== 'android') return [];
-      const { androidDeviceChecks } = await import('./platforms/android/doctor.ts');
+      const { androidDeviceChecks } = await loadAndroidMechanics();
       return await androidDeviceChecks(device, context);
     },
     ambientChecks: async (context: HostDiagnosticsContext): Promise<readonly DoctorCheck[]> => {
-      const { webBrowserLifecycleCheck } = await import('./platforms/web/doctor.ts');
+      const { webBrowserLifecycleCheck } = await import('@agent-device/platform-web');
       return [await webBrowserLifecycleCheck(context.stateDir)];
     },
     warmupCheck: async (
@@ -51,7 +52,7 @@ export function createHostDiagnostics(): HostDiagnostics {
       context: HostDiagnosticsContext,
     ): Promise<DoctorCheck | undefined> => {
       if (device.platform !== 'apple') return undefined;
-      const { appleRunnerWarmupCheck } = await import('./platforms/apple/doctor.ts');
+      const { appleRunnerWarmupCheck } = await import('@agent-device/platform-apple/doctor');
       return await appleRunnerWarmupCheck(device, context);
     },
   });

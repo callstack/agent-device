@@ -1,0 +1,246 @@
+import { createHash } from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { trimEdgeDashes } from '@agent-device/kernel/collections';
+import { AppError } from '@agent-device/kernel/errors';
+import { runCmd } from '@agent-device/host-kit/command';
+import { readProcessStartTime } from '@agent-device/host-kit/process';
+import {
+  acquireProcessLock,
+  withProcessLock,
+  type ProcessLockRelease,
+} from '@agent-device/host-kit/file';
+
+const SWIFT_CACHE_VERSION = '2';
+const LOCK_RETRY_DELAY_MS = 25;
+const RECORDING_SCRIPT_SUBDIRECTORY = 'apple/runner/AgentDeviceRunner/RecordingScripts';
+
+/**
+ * Where a recording helper script can live, in the order a checkout, a source build, and a
+ * published package each answer from.
+ */
+export function buildRecordingScriptPathCandidates(
+  scriptName: string,
+  moduleDir: string,
+  projectRoot: string,
+  cwd: string,
+): string[] {
+  const sourceScriptPath = `${RECORDING_SCRIPT_SUBDIRECTORY}/${scriptName}`;
+  const packagedScriptPath = `dist/${sourceScriptPath}`;
+  return [
+    path.resolve(moduleDir, scriptName),
+    path.resolve(projectRoot, sourceScriptPath),
+    path.resolve(moduleDir, `../${sourceScriptPath}`),
+    path.resolve(moduleDir, `../../${sourceScriptPath}`),
+    path.resolve(moduleDir, `../../../${sourceScriptPath}`),
+    path.resolve(projectRoot, packagedScriptPath),
+    path.resolve(cwd, sourceScriptPath),
+  ];
+}
+
+/**
+ * Resolves one recording helper script: checkout, built package, or working-directory fallback.
+ * The caller names the project root it trusts, so this module stays free of host metadata lookup.
+ */
+export function resolveRecordingScriptPath(
+  scriptName: string,
+  projectRoot: string,
+  moduleDir = path.dirname(fileURLToPath(import.meta.url)),
+  cwd = process.cwd(),
+): string {
+  const scriptCandidates = buildRecordingScriptPathCandidates(
+    scriptName,
+    moduleDir,
+    projectRoot,
+    cwd,
+  );
+  for (const candidate of scriptCandidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new AppError('COMMAND_FAILED', `Missing recording helper script: ${scriptName}`, {
+    hint: `Ensure ${RECORDING_SCRIPT_SUBDIRECTORY} is present in this checkout or bundled under dist/${RECORDING_SCRIPT_SUBDIRECTORY} in the package.`,
+    scriptName,
+    searchedPaths: scriptCandidates,
+  });
+}
+
+export function buildSwiftToolEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const root = getSwiftCacheRoot();
+  const homePath = path.join(root, 'home');
+  const moduleCachePath = path.join(root, 'module-cache');
+  fs.mkdirSync(homePath, { recursive: true });
+  fs.mkdirSync(moduleCachePath, { recursive: true });
+  return {
+    ...env,
+    HOME: homePath,
+    CLANG_MODULE_CACHE_PATH: moduleCachePath,
+  };
+}
+
+export async function compileSwiftSourceFile(params: {
+  sourcePath: string;
+  /** Additional compilation units (shared helpers) compiled into the same executable. */
+  extraSourcePaths?: string[];
+  cacheName?: string;
+  timeoutMs?: number;
+}): Promise<string> {
+  const sourcePaths = [params.sourcePath, ...(params.extraSourcePaths ?? [])];
+  const sources = sourcePaths.map((sourcePath) => ({
+    sourcePath,
+    stat: fs.statSync(sourcePath),
+    source: fs.readFileSync(sourcePath),
+  }));
+  const cacheName = sanitizeCacheName(
+    params.cacheName ?? path.basename(params.sourcePath, path.extname(params.sourcePath)),
+  );
+  const key = hashParts([
+    SWIFT_CACHE_VERSION,
+    process.platform,
+    process.arch,
+    ...sources.flatMap(({ sourcePath, stat, source }) => [
+      path.resolve(sourcePath),
+      stat.size,
+      source,
+    ]),
+  ]);
+  const executablePath = path.join(getSwiftCacheRoot(), 'bin', `${cacheName}-${key}`);
+  await ensureSwiftExecutable({
+    sourcePaths,
+    executablePath,
+    timeoutMs: params.timeoutMs,
+  });
+  return executablePath;
+}
+
+export async function compileSwiftSourceText(params: {
+  source: string;
+  cacheName: string;
+  timeoutMs?: number;
+}): Promise<string> {
+  const cacheName = sanitizeCacheName(params.cacheName);
+  const key = hashParts([SWIFT_CACHE_VERSION, process.platform, process.arch, params.source]);
+  const sourcePath = path.join(getSwiftCacheRoot(), 'sources', `${cacheName}-${key}.swift`);
+  const executablePath = path.join(getSwiftCacheRoot(), 'bin', `${cacheName}-${key}`);
+
+  await ensureSwiftExecutable({
+    sourcePaths: [sourcePath],
+    executablePath,
+    sourceText: params.source,
+    timeoutMs: params.timeoutMs,
+  });
+  return executablePath;
+}
+
+function getSwiftCacheRoot(): string {
+  const configured = process.env.AGENT_DEVICE_SWIFT_CACHE_DIR?.trim();
+  if (configured) {
+    return path.resolve(configured);
+  }
+  return path.join(os.tmpdir(), 'agent-device-swift-cache');
+}
+
+async function ensureSwiftExecutable(params: {
+  sourcePaths: string[];
+  executablePath: string;
+  sourceText?: string;
+  timeoutMs?: number;
+}): Promise<void> {
+  if (isExecutableFile(params.executablePath)) {
+    return;
+  }
+
+  const executableDir = path.dirname(params.executablePath);
+  fs.mkdirSync(executableDir, { recursive: true });
+  const timeoutMs = params.timeoutMs ?? 120_000;
+  await withProcessLock({
+    acquire: () => acquireSwiftCacheLock(`${params.executablePath}.lock`, timeoutMs),
+    task: async () => {
+      // Another process may have published the executable while this one waited for the lock.
+      if (isExecutableFile(params.executablePath)) {
+        return;
+      }
+      const tempDir = fs.mkdtempSync(
+        path.join(executableDir, `.${path.basename(params.executablePath)}.${process.pid}.`),
+      );
+      const tempExecutablePath = path.join(tempDir, path.basename(params.executablePath));
+      try {
+        const [primarySourcePath] = params.sourcePaths;
+        if (
+          params.sourceText !== undefined &&
+          primarySourcePath &&
+          !fs.existsSync(primarySourcePath)
+        ) {
+          fs.mkdirSync(path.dirname(primarySourcePath), { recursive: true });
+          fs.writeFileSync(primarySourcePath, params.sourceText);
+        }
+        await runCmd('xcrun', ['swiftc', ...params.sourcePaths, '-o', tempExecutablePath], {
+          timeoutMs,
+          env: buildSwiftToolEnv(),
+        });
+        fs.renameSync(tempExecutablePath, params.executablePath);
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    },
+  });
+}
+
+async function acquireSwiftCacheLock(
+  lockDir: string,
+  timeoutMs: number,
+): Promise<ProcessLockRelease> {
+  try {
+    return await acquireProcessLock({
+      lockDirPath: lockDir,
+      owner: {
+        pid: process.pid,
+        startTime: readProcessStartTime(process.pid),
+        acquiredAtMs: Date.now(),
+      },
+      timeoutMs,
+      pollMs: LOCK_RETRY_DELAY_MS,
+      ownerGraceMs: timeoutMs,
+      description: `Swift cache lock: ${lockDir} (${timeoutMs}ms)`,
+    });
+  } catch (error) {
+    if (
+      error instanceof AppError &&
+      error.message.startsWith('Timed out waiting for Swift cache lock:')
+    ) {
+      throw new AppError('COMMAND_FAILED', error.message, {
+        ...error.details,
+        lockDir,
+        timeoutMs,
+        hint: `Another agent-device process may still be compiling this Swift helper. Retry shortly; if no agent-device process is active, remove "${lockDir}" and retry.`,
+      });
+    }
+    throw error;
+  }
+}
+
+function isExecutableFile(filePath: string): boolean {
+  try {
+    fs.accessSync(filePath, fs.constants.X_OK);
+    return fs.statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function sanitizeCacheName(value: string): string {
+  return trimEdgeDashes(value.replaceAll(/[^A-Za-z0-9._-]/g, '-')) || 'swift-helper';
+}
+
+function hashParts(parts: Array<string | number | Buffer>): string {
+  const hash = createHash('sha256');
+  for (const part of parts) {
+    hash.update(Buffer.isBuffer(part) ? part : String(part));
+    hash.update('\0');
+  }
+  return hash.digest('hex').slice(0, 16);
+}

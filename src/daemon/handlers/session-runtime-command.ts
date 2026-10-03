@@ -1,8 +1,7 @@
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { clearRuntimeHintsRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import { SessionStore } from '../session-store.ts';
-import { errorResponse } from './response.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import { admitRuntimeUse } from '../runtime-admission.ts';
 import {
@@ -12,11 +11,12 @@ import {
   mergeRuntimeHints,
   runtimeHintValues,
   toRuntimePlatform,
-} from './session-runtime.ts';
+} from '../session-runtime.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { handlePortReverseCommand } from './session-runtime-port-reverse.ts';
 import { contextFromFlags } from '../context.ts';
 import { resolveBoundGestureViewportRuntime } from '../gesture-runtime.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 type RuntimeAction = 'set' | 'show' | 'clear';
 type RuntimeCommandDevice = NonNullable<ReturnType<SessionStore['get']>>['device'];
@@ -178,7 +178,7 @@ function setRuntimeCommand(params: {
   if (!platform) {
     return errorResponse(
       'INVALID_ARGS',
-      'runtime set only supports iOS and Android sessions. Pass --platform ios|android or open an iOS/Android session first.',
+      'runtime set only supports iOS, Android, and HarmonyOS sessions. Pass --platform ios|android|harmonyos or open a supported session first.',
     );
   }
   if (sessionLeaf !== undefined && sessionLeaf !== platform) {

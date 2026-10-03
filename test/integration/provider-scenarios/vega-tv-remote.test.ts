@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { VegaTvRemoteKey } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { VegaToolProvider } from '../../../src/platforms/vega/tool-provider.ts';
+import type { VegaToolProvider } from '@agent-device/platform-vega';
 import { assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 

@@ -7,7 +7,6 @@ on:
       - 'website/**'
       - 'README.md'
       - 'AGENTS.md'
-      - 'CHANGELOG.md'
       - 'CONTEXT.md'
       - 'CONTRIBUTING.md'
       - 'LICENSE'
@@ -70,6 +69,18 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: macos-coverage }
 
+      # The npm package ships apple/runner/** as rewritten Swift source, and nothing in the repo
+      # compiles the result — the first consumer is a user's xcodebuild. This lane is the only one
+      # with a Swift toolchain, so it is where `swiftc -parse` over the packaged files runs; the
+      # line-parity half of the same gate needs no toolchain. Seconds, no simulator (#2461).
+      - name: Check the packaged runner Swift parses and keeps its line numbering
+        uses: ./.github/actions/run-gate
+        with: { gate: packaged-runner-swift }
+
+      - name: Run iOS snapshot Swift/TypeScript differential
+        uses: ./.github/actions/run-gate
+        with: { gate: ios-snapshot-differential }
+
       - name: Restore and build macOS XCTest runner
         uses: ./.github/actions/setup-apple-runner-build
         with:
@@ -126,7 +137,7 @@ jobs:
           path: .tmp/xctest-host
           if-no-files-found: warn
 
-      - name: Build macOS helper
+      - name: macOS helper build and tests
         uses: ./.github/actions/run-gate
         with: { gate: macos-helper }
 
@@ -139,6 +150,27 @@ jobs:
             2
             --report-junit
             test/artifacts/replays-macos.junit.xml
+
+      # Clean-install verification may raise macOS local-network permission UI; keep it after replay.
+      - name: Select Apple bridge proof
+        if: github.event_name == 'pull_request'
+        id: bridge-impact
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch origin "$BASE_SHA" --depth=1 || echo 'Base fetch failed; bridge proof selection will fail open.'
+          node --experimental-strip-types scripts/apple-ci-impact.ts bridge
+
+      - name: Verify the darwin-only native source proofs (snapshot bridge, fold-helper -Werror, recording scripts)
+        if: github.event_name == 'pull_request' && steps.bridge-impact.outputs.run != 'false'
+        run: |
+          pnpm build
+          pnpm exec vitest run \
+            packages/platform-apple/src/snapshot-source/native-runtime.test.ts \
+            packages/platform-apple/src/foldable/fold-helper-cache.test.ts \
+            packages/platform-apple/src/foldable/simulator-hid-native.test.ts \
+            packages/capture-kit/src/recording/__tests__/recording-scripts.test.ts
+          pnpm check:package -- --verify-snapshot-bridge-preparation
 
       - name: Upload macOS artifacts
         if: always()

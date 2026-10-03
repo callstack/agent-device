@@ -4,7 +4,7 @@ import { exportReplayActionsToMaestro, MAESTRO_SELECTOR_PROJECTION } from '@agen
 import { AppError } from '@agent-device/kernel/errors';
 import { parseReplayScriptDetailed, readReplayScriptMetadata } from '@agent-device/ad-script';
 import { projectSelectorExpression } from '@agent-device/selectors';
-import { resolveUserPath } from '../../utils/path-resolution.ts';
+import { resolveUserPath } from '@agent-device/host-kit/file';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
@@ -56,7 +56,7 @@ async function handleReplayExportCommand({
     process.stderr.write(`Warning: line ${warning.line}: ${warning.message}\n`);
   }
 
-  writeCommandOutput(
+  await writeCommandOutput(
     flags,
     {
       format: 'maestro',

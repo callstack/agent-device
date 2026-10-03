@@ -1,4 +1,5 @@
 import { expect, test, vi } from 'vitest';
+import { scopeSimctlArgsForDevice } from '../core/simctl.ts';
 import { doctorAppleAppLogs } from './doctor.ts';
 import { appleDevice, hostFixture } from './runtime.fixtures.ts';
 
@@ -15,6 +16,19 @@ test('simulator doctor routes the exact simctl probe through appleTools', async 
   await expect(
     doctorAppleAppLogs(fixture.host, appleDevice(), 'com.example.app'),
   ).resolves.toMatchObject({ checks: { simctlAvailable: true } });
+  expect(appleToolRun).toHaveBeenCalledWith(
+    { tool: 'simctl', args: ['help'], allowFailure: true },
+    undefined,
+  );
+});
+
+test('simulator doctor probes simctl without a set, even for a scoped-set simulator', async () => {
+  const appleToolRun = vi.fn(async () => ({ stdout: 'simctl help', stderr: '', exitCode: 0 }));
+  const fixture = hostFixture({ appleToolRun });
+  const device = appleDevice({ simulatorSetPath: '/tmp/scoped-set' });
+  expect(scopeSimctlArgsForDevice(device, ['help'])).toEqual(['--set', '/tmp/scoped-set', 'help']);
+
+  await doctorAppleAppLogs(fixture.host, device, 'com.example.app');
   expect(appleToolRun).toHaveBeenCalledWith(
     { tool: 'simctl', args: ['help'], allowFailure: true },
     undefined,

@@ -4,7 +4,7 @@ import type {
   DaemonRequest,
   DaemonResponse,
   sendToDaemon,
-} from '../daemon/client/daemon-client.ts';
+} from '../daemon-client/daemon-client.ts';
 import { installIsolatedCliTestEnv } from './cli-test-env.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 

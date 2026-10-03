@@ -1,5 +1,5 @@
-import { buildDeviceInventoryRequestFromFlags } from '../../core/dispatch-resolve.ts';
-import { listDeviceInventory } from '../../request/device-inventory-context.ts';
+import { buildDeviceInventoryRequestFromFlags } from '@agent-device/device-selection/dispatch-resolve';
+import { listDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
 import {
   countDeviceInventoryByGroup,
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
@@ -15,7 +15,8 @@ import {
   type PublicPlatform,
 } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
-import type { DaemonRequest, SessionState } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import { appendDoctorCheck } from './session-doctor-output.ts';
 

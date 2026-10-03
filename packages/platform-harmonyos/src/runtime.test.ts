@@ -1,4 +1,8 @@
 import { expect, test, vi } from 'vitest';
+
+vi.mock('./hdc.ts', () => ({ runHarmonyShell: vi.fn() }));
+
+import { runHarmonyShell } from './hdc.ts';
 import type { DeviceBinding } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
@@ -25,19 +29,17 @@ test.each([
   ['device', device],
   ['emulator', { ...device, kind: 'emulator' as const }],
 ])('classifies the HarmonyOS %s runtime denominator', async (_name, runtimeDevice) => {
-  const listApps = vi.fn(async () => [{ id: 'com.example.application', name: 'application' }]);
+  const hdc = vi.mocked(runHarmonyShell);
+  hdc.mockReset();
+  hdc.mockImplementation(async (_device, args) => ({
+    exitCode: 0,
+    stderr: '',
+    stdout: args.includes('bm')
+      ? 'com.example.application\n'
+      : 'Mission ID #76  mission name #[#com.example.harmony:entry:MainAbility]\nstate #FOREGROUND',
+  }));
   const host = {
     processTransports: { resolve: async () => ({ mode: 'local' as const }) },
-    appInventory: { harmonyos: { listApps } },
-    appState: {
-      android: { run: async () => ({ stdout: '' }) },
-      harmonyos: {
-        run: async () => ({
-          stdout:
-            'Mission ID #76  mission name #[#com.example.harmony:entry:MainAbility]\nstate #FOREGROUND',
-        }),
-      },
-    },
     localInteractors: { resolve: async () => ({}) },
   } as unknown as PlatformRuntimeHost;
   const binding = await createHarmonyPlatformRuntime(host).bind({
@@ -93,6 +95,12 @@ test.each([
     expect(facts.operations[operation]).toEqual({ available: true });
     expect(binding.operations[operation]).toBeTypeOf('function');
   }
+  // The Action Button is iPhone/iPad hardware with no HarmonyOS control behind it, so it refuses
+  // even on the kinds the hdc-driven navigation gate admits.
+  expect(facts.operations.actionButton).toMatchObject({ available: false });
+  expect(binding.operations.actionButton).toBeUndefined();
+  expect(facts.operations.setFoldPose).toMatchObject({ available: false });
+  expect(binding.operations.setFoldPose).toBeUndefined();
   // Public orientation and TV-remote operations remain unavailable unconditionally.
   expect(facts.operations.setOrientation).toEqual({
     available: false,
@@ -134,7 +142,11 @@ test.each([
   await expect(
     binding.operations.listApps?.({ device: runtimeDevice, filter: 'all' }),
   ).resolves.toEqual([{ id: 'com.example.application', name: 'application' }]);
-  expect(listApps).toHaveBeenCalledWith(runtimeDevice, 'all', expect.any(AbortSignal));
+  expect(hdc).toHaveBeenCalledWith(
+    runtimeDevice,
+    ['bm', 'dump', '-a'],
+    expect.objectContaining({ timeoutMs: 15_000 }),
+  );
   await expect(binding.operations.appState?.()).resolves.toEqual({
     package: 'com.example.harmony',
     activity: 'MainAbility',
@@ -146,10 +158,6 @@ test('rejects the non-discovered HarmonyOS simulator cell for appstate', async (
   const host = {
     processTransports: { resolve: async () => ({ mode: 'local' as const }) },
     localInteractors: { resolve: async () => ({}) },
-    appState: {
-      android: { run: async () => ({ stdout: '' }) },
-      harmonyos: { run: async () => ({ stdout: '' }) },
-    },
   } as unknown as PlatformRuntimeHost;
   const binding = await createHarmonyPlatformRuntime(host).bind({
     device: runtimeDevice,
@@ -241,7 +249,6 @@ test.each([
   async ({ device: runtimeDevice, legacy }) => {
     const host = {
       processTransports: { resolve: async () => ({ mode: 'local' as const }) },
-      appInventory: { harmonyos: { listApps: async () => [] } },
       localInteractors: { resolve: async () => ({}) },
     } as unknown as PlatformRuntimeHost;
     const binding = await createHarmonyPlatformRuntime(host).bind({
@@ -344,8 +351,6 @@ test('binds the HarmonyOS gesture tiers it admitted and omits the rest', async (
 function gestureHost(): PlatformRuntimeHost {
   return {
     processTransports: { resolve: async () => ({ mode: 'local' as const }) },
-    appInventory: { harmonyos: { listApps: async () => [] } },
-    appState: { harmonyos: { run: async () => ({ stdout: '' }) } },
     localInteractors: { resolve: async () => ({}) },
   } as unknown as PlatformRuntimeHost;
 }

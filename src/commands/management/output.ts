@@ -15,35 +15,25 @@ import type {
   CloudArtifactsResult,
   DaemonArtifactsResult,
 } from '@agent-device/contracts/observability';
-import {
-  consumeDoctorProgressRendered,
-  formatDoctorCheckDetailLines,
-  formatDoctorCheckSummaryLine,
-} from '../../utils/doctor-progress.ts';
-import {
-  serializeCloseResult,
-  serializeDeployResult,
-  serializeDevice,
-  serializeInstallFromSourceResult,
-  serializeOpenResult,
-  serializeSessionListEntry,
-} from '../../utils/result-serialization.ts';
-import { readCommandMessage } from '../../utils/success-text.ts';
+import { readCommandMessage } from '@agent-device/kernel/success-text';
 import { snapshotCliOutput } from '../capture/output.ts';
+import type { CommandProgressState } from '../command-progress.ts';
 import type { CliOutput } from '../command-contract.ts';
 import {
+  type CliOutputFormatter,
   messageCliOutput,
   messageOutput,
   resultOutput,
-  type CliOutputFormatter,
 } from '../output-common.ts';
 
-function devicesCliOutput(result: AgentDeviceDevice[]): CliOutput {
+async function devicesCliOutput(result: AgentDeviceDevice[]): Promise<CliOutput> {
+  const { serializeDevice } = await import('../output/result-serialization.ts');
   const data = { devices: result.map(serializeDevice) };
   return { data, text: result.map(formatDeviceLine).join('\n') };
 }
 
-function capabilitiesCliOutput(result: AgentDeviceCapabilitiesResult): CliOutput {
+async function capabilitiesCliOutput(result: AgentDeviceCapabilitiesResult): Promise<CliOutput> {
+  const { serializeDevice } = await import('../output/result-serialization.ts');
   const data = {
     device: serializeDevice(result.device),
     availableCommands: result.availableCommands,
@@ -67,19 +57,19 @@ function appsCliOutput(params: {
     stderr:
       params.appsFilter === 'all'
         ? 'Showing all apps, including system apps.\n'
-        : 'Showing user-installed apps. Use --all to include system apps.\n',
+        : 'Showing user-installed apps or deferred provider app assets. Use --all to include system apps on a live device.\n',
     text:
       params.result.length > 0
         ? params.result.join('\n')
         : params.appsFilter === 'all'
           ? 'No apps found.'
-          : 'No user-installed apps found.',
+          : 'No user apps or provider app assets found.',
   };
 }
 
-function sessionCliOutput(
+async function sessionCliOutput(
   result: { sessions: AgentDeviceSession[] } | { stateDir: string } | SessionSaveScriptResult,
-): CliOutput {
+): Promise<CliOutput> {
   if ('savedScript' in result) {
     return {
       data: result,
@@ -89,11 +79,13 @@ function sessionCliOutput(
   if ('stateDir' in result) {
     return { data: result, text: result.stateDir };
   }
+  const { serializeSessionListEntry } = await import('../output/result-serialization.ts');
   const data = { sessions: result.sessions.map(serializeSessionListEntry) };
   return { data, text: JSON.stringify(data, null, 2) };
 }
 
-export function openCliOutput(result: AppOpenResult): CliOutput {
+export async function openCliOutput(result: AppOpenResult): Promise<CliOutput> {
+  const { serializeOpenResult } = await import('../output/result-serialization.ts');
   const data = serializeOpenResult(result);
   const lines = [readCommandMessage(data)].filter((line): line is string => Boolean(line));
   if (typeof data.sessionStateDir === 'string') {
@@ -106,7 +98,7 @@ export function openCliOutput(result: AppOpenResult): CliOutput {
   // path `snapshot -i` uses (label dedupe + interactive tree text), after the
   // open confirmation — the one-call promise holds on default stdout, not just
   // --json. The composed capture is interactive-only by construction.
-  const snapshotOutput = buildOpenInitialSnapshotOutput(result.snapshot);
+  const snapshotOutput = await buildOpenInitialSnapshotOutput(result.snapshot);
   if (snapshotOutput) {
     data.snapshot = snapshotOutput.jsonData ?? snapshotOutput.data;
     if (snapshotOutput.text) lines.push(snapshotOutput.text);
@@ -118,15 +110,18 @@ export function openCliOutput(result: AppOpenResult): CliOutput {
   };
 }
 
-function buildOpenInitialSnapshotOutput(snapshot: AppOpenResult['snapshot']): CliOutput | null {
+async function buildOpenInitialSnapshotOutput(
+  snapshot: AppOpenResult['snapshot'],
+): Promise<CliOutput | null> {
   if (!snapshot || !Array.isArray(snapshot.nodes)) return null;
-  return snapshotCliOutput({
+  return await snapshotCliOutput({
     result: snapshot as unknown as Parameters<typeof snapshotCliOutput>[0]['result'],
     interactiveOnly: true,
   });
 }
 
-function closeCliOutput(result: AppCloseResult | SessionCloseResult): CliOutput {
+async function closeCliOutput(result: AppCloseResult | SessionCloseResult): Promise<CliOutput> {
+  const { serializeCloseResult } = await import('../output/result-serialization.ts');
   return messageCliOutput(serializeCloseResult(result));
 }
 
@@ -157,11 +152,13 @@ function isDaemonArtifactsResult(result: AgentArtifactsResult): result is Daemon
   return 'source' in result && result.source === 'daemon';
 }
 
-function deployCliOutput(result: AppDeployResult): CliOutput {
+async function deployCliOutput(result: AppDeployResult): Promise<CliOutput> {
+  const { serializeDeployResult } = await import('../output/result-serialization.ts');
   return messageCliOutput(serializeDeployResult(result));
 }
 
-function installFromSourceCliOutput(result: AppInstallFromSourceResult): CliOutput {
+async function installFromSourceCliOutput(result: AppInstallFromSourceResult): Promise<CliOutput> {
+  const { serializeInstallFromSourceResult } = await import('../output/result-serialization.ts');
   return messageCliOutput(serializeInstallFromSourceResult(result));
 }
 
@@ -185,13 +182,20 @@ function shutdownCliOutput(result: CommandRequestResult): CliOutput {
   return { data, text: `${status}: ${device} (${platform})` };
 }
 
-export function doctorCliOutput(result: CommandRequestResult): CliOutput {
+export async function doctorCliOutput(
+  result: CommandRequestResult,
+  progress?: CommandProgressState,
+): Promise<CliOutput> {
+  const { formatDoctorCheckDetailLines, formatDoctorCheckSummaryLine } =
+    await import('../../core/doctor-output.ts');
   const data = result as Record<string, unknown>;
   const status = typeof data.status === 'string' ? data.status : 'unknown';
   const lines = [`Doctor: ${status}`];
   const checks = readDoctorChecks(data.checks);
 
-  if (consumeDoctorProgressRendered()) {
+  // Progress streamed the per-check lines to stderr already; repeating them
+  // below the summary would print every check twice.
+  if (progress?.renderedToStderr) {
     const summary = typeof data.summary === 'string' ? data.summary : undefined;
     if (summary) lines.push(summary);
   } else if (checks.length === 0) {
@@ -211,7 +215,7 @@ export const managementCliOutputFormatters = {
   shutdown: resultOutput(shutdownCliOutput),
   devices: resultOutput(devicesCliOutput),
   capabilities: resultOutput(capabilitiesCliOutput),
-  doctor: resultOutput(doctorCliOutput),
+  doctor: ({ result, progress }) => doctorCliOutput(result as CommandRequestResult, progress),
   apps: ({ input, result }) =>
     appsCliOutput({
       result: result as Parameters<typeof appsCliOutput>[0]['result'],
@@ -231,8 +235,13 @@ export const managementCliOutputFormatters = {
 function formatDeviceLine(device: AgentDeviceDevice): string {
   const kind = device.kind ? ` ${device.kind}` : '';
   const target = device.target ? ` target=${device.target}` : '';
+  const model = device.model ? ` model=${JSON.stringify(device.model)}` : '';
+  const osVersion = device.osVersion ? ` os=${device.osVersion}` : '';
   const booted = typeof device.booted === 'boolean' ? ` booted=${device.booted}` : '';
-  return `${device.name} (${device.platform}${kind}${target})${booted}`;
+  const claimed = device.claimedBy
+    ? ` claimed by session "${device.claimedBy.session}" in ${device.claimedBy.workspace}`
+    : '';
+  return `${device.name} (${device.platform}${kind}${target}${model}${osVersion})${booted}${claimed}`;
 }
 
 function formatCloudArtifactLine(artifact: CloudArtifactsResult['cloudArtifacts'][number]): string {

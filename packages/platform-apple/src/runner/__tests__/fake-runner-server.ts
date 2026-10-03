@@ -13,7 +13,11 @@ import type { AddressInfo } from 'node:net';
 export type FakeRunnerResponse =
   | { kind: 'ok'; data: Record<string, unknown> }
   | { kind: 'runnerError'; code: string; message: string }
-  | { kind: 'hangUp' };
+  | { kind: 'hangUp' }
+  /** Hangs up on this request and every later one for the command: the entry is never consumed. */
+  | { kind: 'hangUpAlways' }
+  /** Hangs up and stops listening, as a runner process that died mid-command. */
+  | { kind: 'exit' };
 
 export type FakeRunnerRequest = {
   command: string;
@@ -44,6 +48,7 @@ export async function startFakeRunnerServer(
     : Object.fromEntries(Object.entries(script).map(([key, list]) => [key, [...list]]));
   const remaining = sequential ?? [];
   const requests: FakeRunnerRequest[] = [];
+  let stopped: Promise<void> | undefined;
   const server = http.createServer((req, res) => {
     let raw = '';
     req.on('data', (chunk) => {
@@ -53,24 +58,18 @@ export async function startFakeRunnerServer(
       const body = parseBody(raw);
       requests.push({ command: String(body.command ?? ''), body });
       const next = byCommand
-        ? (byCommand[String(body.command ?? '')]?.shift() ?? { kind: 'ok' as const, data: {} })
-        : remaining.shift();
-      if (!next) {
-        res.statusCode = 500;
-        res.end(JSON.stringify({ ok: false, error: { message: 'fake runner script exhausted' } }));
-        return;
-      }
-      if (next.kind === 'hangUp') {
+        ? (takeScriptedResponse(byCommand[String(body.command ?? '')]) ?? {
+            kind: 'ok' as const,
+            data: {},
+          })
+        : takeScriptedResponse(remaining);
+      if (next?.kind === 'exit') {
         res.destroy();
+        stopped ??= new Promise<void>((resolve) => server.close(() => resolve()));
+        server.closeAllConnections();
         return;
       }
-      if (next.kind === 'runnerError') {
-        res.setHeader('content-type', 'application/json');
-        res.end(JSON.stringify({ ok: false, error: { code: next.code, message: next.message } }));
-        return;
-      }
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ ok: true, data: next.data }));
+      writeFakeRunnerResponse(res, next);
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -79,10 +78,39 @@ export async function startFakeRunnerServer(
     port,
     requests,
     close: () =>
+      stopped ??
       new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
       ),
   };
+}
+
+/** The next scripted reply; a `hangUpAlways` entry stays at the head of its queue. */
+function takeScriptedResponse(
+  queue: FakeRunnerResponse[] | undefined,
+): FakeRunnerResponse | undefined {
+  return queue?.[0]?.kind === 'hangUpAlways' ? queue[0] : queue?.shift();
+}
+
+function writeFakeRunnerResponse(
+  res: http.ServerResponse,
+  next: Exclude<FakeRunnerResponse, { kind: 'exit' }> | undefined,
+): void {
+  if (!next) {
+    res.statusCode = 500;
+    res.end(JSON.stringify({ ok: false, error: { message: 'fake runner script exhausted' } }));
+    return;
+  }
+  if (next.kind === 'hangUp' || next.kind === 'hangUpAlways') {
+    res.destroy();
+    return;
+  }
+  res.setHeader('content-type', 'application/json');
+  if (next.kind === 'runnerError') {
+    res.end(JSON.stringify({ ok: false, error: { code: next.code, message: next.message } }));
+    return;
+  }
+  res.end(JSON.stringify({ ok: true, data: next.data }));
 }
 
 function parseBody(raw: string): Record<string, unknown> {

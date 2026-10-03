@@ -1,13 +1,13 @@
 import type { SettleObservation } from '@agent-device/contracts/interaction';
+import { readElementMatchCandidateRefs } from '@agent-device/kernel/errors';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isCommandName, type CommandName } from '../commands/command-metadata.ts';
 import type { CommandExecutionResult } from '../commands/command-surface.ts';
 import {
   commandDescriptors,
   commandSupportsSettleObservation,
-} from '../core/command-descriptor/registry.ts';
-import { asOptionalRecord } from '../utils/parsing.ts';
-import { readElementMatchCandidateRefs } from '../utils/error-candidates.ts';
+} from '@agent-device/command-registry/registry';
+import { asOptionalRecord } from '@agent-device/kernel/record';
 
 export type ToolRefPinStore = {
   pinInput(

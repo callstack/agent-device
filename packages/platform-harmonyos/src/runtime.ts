@@ -23,12 +23,11 @@ import {
   bindLocalScrollInteractor,
   scrollRuntimeOperationFacts,
 } from '@agent-device/contracts/scroll-runtime';
-import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
-import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
+import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
@@ -246,13 +245,13 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // No native text reading: every text wait on this owner polls the canonical tree.
         ...selectorObservationRuntimeOperationFacts({
           findText: snapshotKindUnavailable,
-          findSelector: snapshotKindUnavailable,
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...focusRuntimeOperationFacts({ focus: harmonyFocusFact(device) }),
         // Gestures share focus's HDC-driven kind cell; only the two tiers HDC cannot synthesize
         // are refused.
         ...gestureRuntimeOperationFacts({
+          unsupported: gestureKindUnavailable,
           plan: harmonyGestureFact(device),
           directionalFling: harmonyGestureFact(device),
           multiTouch: multiTouchUnavailable,
@@ -263,26 +262,32 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // Text entry shares focus's cell: hdc drives both on the same two kinds.
         ...typeTextRuntimeOperationFacts({ type: harmonyFocusFact(device) }),
         ...touchRuntimeOperationFacts({
+          unsupported: unavailable,
           tap: harmonyFocusFact(device),
-          tapRef: unavailable,
           longPress: harmonyFocusFact(device),
-          hover: unavailable,
-          hoverRef: unavailable,
           fill: harmonyFocusFact(device),
-          fillRef: unavailable,
-          tapElementSelector: unavailable,
         }),
         // HarmonyOS has no point-read tool: `get` answers from the captured tree, which is what
         // the legacy dispatch already did after its Apple-runner attempt failed.
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
         ...backRuntimeOperationFacts({ back: harmonyFocusFact(device) }),
-        ...homeRuntimeOperationFacts({ home: harmonyFocusFact(device) }),
-        // App switcher rides the same HDC-driven key input as home, so it shares that cell.
-        ...appSwitcherRuntimeOperationFacts({ appSwitcher: harmonyFocusFact(device) }),
+        // Home and the app switcher ride the same HDC-driven key input; no other system button
+        // has a HarmonyOS control for HDC to press.
+        ...systemButtonRuntimeOperationFacts({
+          unsupported: harmonyPlatformLeafUnavailable,
+          home: harmonyFocusFact(device),
+          appSwitcher: harmonyFocusFact(device),
+        }),
+        // HarmonyOS devices have no foldable hinge control for HDC to pose.
+        setFoldPose: harmonyPlatformLeafUnavailable,
         // HarmonyOS has no trigger-app-event implementation.
         ...appEventRuntimeOperationFacts({ triggerAppEvent: harmonyPlatformLeafUnavailable }),
-        // The HDC-driven settings surface shares the interaction kind gate.
-        ...settingsRuntimeOperationFacts({ setSetting: harmonyFocusFact(device) }),
+        // The HDC-driven settings surface shares the interaction kind gate. No HDC leaf reads a
+        // setting back, so the read half states the platform-leaf denial it would otherwise throw.
+        ...settingsRuntimeOperationFacts({
+          setSetting: harmonyFocusFact(device),
+          readSetting: harmonyPlatformLeafUnavailable,
+        }),
         // HarmonyOS exposes no alert automation operation.
         ...alertRuntimeOperationFacts({
           read: harmonyPlatformLeafUnavailable,
@@ -292,16 +297,15 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         }),
         ...orientationRuntimeOperationFacts({ orientation: harmonyPlatformLeafUnavailable }),
         ...tvRemoteRuntimeOperationFacts({ tvRemote: harmonyPlatformLeafUnavailable }),
+        // HDC drives dismissal and the enter key; any other keyboard operation is a leaf gap.
         ...keyboardRuntimeOperationFacts({
+          unsupported: harmonyPlatformLeafUnavailable,
           status: harmonyKeyboardStatusUnavailable,
           dismiss: harmonyFocusFact(device),
           enter: harmonyFocusFact(device),
         }),
         // HarmonyOS exposes no clipboard automation operation.
-        ...clipboardRuntimeOperationFacts({
-          read: harmonyPlatformLeafUnavailable,
-          write: harmonyPlatformLeafUnavailable,
-        }),
+        ...clipboardRuntimeOperationFacts({ unsupported: harmonyPlatformLeafUnavailable }),
         ...audioProbeRuntimeOperationFacts({
           capture: audioProbeUnavailable,
           query: audioProbeUnavailable,
@@ -344,11 +348,7 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
           ...(facts.operations.appState.available
             ? {
                 appState: async () =>
-                  await readHarmonyAppState(
-                    host.appState.harmonyos,
-                    request.device,
-                    request.scope.signal,
-                  ),
+                  await readHarmonyAppState(request.device, request.scope.signal),
               }
             : {}),
           ensureReady: async () => ({ ...request.device, booted: true }),
@@ -423,12 +423,13 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
                 await host.clock.sleep(milliseconds, request.scope.signal),
             }),
           ),
-          listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) =>
-            await host.appInventory.harmonyos.listApps(
-              input.device,
-              input.filter,
-              request.scope.signal,
-            ),
+          listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) => {
+            request.scope.signal.throwIfAborted();
+            const { listHarmonyApps } = await import('./app-lifecycle.ts');
+            return (
+              await listHarmonyApps(input.device, input.filter, { signal: request.scope.signal })
+            ).map((app) => ({ id: app.package, name: app.name }));
+          },
           ...availableApplicationLifecycleOperations(
             bindHarmonyApplicationLifecycle({
               host: host.localInteractors,

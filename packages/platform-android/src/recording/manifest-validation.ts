@@ -1,7 +1,11 @@
+import { isNativePathDisposition } from '@agent-device/contracts/recording-native-path';
+import { recordingFactsAreValid } from '@agent-device/capture-kit/recording-facts';
+import { isStopObservation } from '@agent-device/contracts/recording-stop-observation';
 import type {
   ScreenRecordingChunk,
   ScreenRecordingCompletion,
 } from '@agent-device/contracts/screen-recording-runtime';
+import { chunkPathAt } from './chunk-path.ts';
 import type { AndroidRecordingDescriptor, NativeChunk, NativeManifest } from './manifest.ts';
 
 const nativeRecordingPath =
@@ -50,20 +54,11 @@ function descriptorIdentityIsValid(value: Record<string, unknown>): boolean {
 }
 
 function descriptorRecordingIsValid(value: Record<string, unknown>): boolean {
-  return (
-    (value.clientOutputPath === undefined || typeof value.clientOutputPath === 'string') &&
-    isScope(value.scope) &&
-    typeof value.showTouches === 'boolean' &&
-    typeof value.recordOnlySession === 'boolean'
-  );
+  return isOptionalText(value.clientOutputPath) && recordingFactsAreValid(value);
 }
 
 function descriptorOptionsAreValid(value: Record<string, unknown>): boolean {
-  return (
-    isTransportMode(value.transportMode) &&
-    isOptionalQuality(value.exportQuality) &&
-    isOptionalApp(value.activeSessionApp)
-  );
+  return isTransportMode(value.transportMode);
 }
 
 function manifestIdentityIsValid(candidate: Partial<NativeManifest>): boolean {
@@ -81,17 +76,13 @@ function manifestIdentityIsValid(candidate: Partial<NativeManifest>): boolean {
 function manifestRecordingIsValid(candidate: Partial<NativeManifest>): boolean {
   return (
     typeof candidate.outputPath === 'string' &&
-    (candidate.clientOutputPath === undefined || typeof candidate.clientOutputPath === 'string') &&
-    isScope(candidate.scope) &&
-    typeof candidate.showTouches === 'boolean' &&
-    typeof candidate.recordOnlySession === 'boolean'
+    isOptionalText(candidate.clientOutputPath) &&
+    recordingFactsAreValid(candidate)
   );
 }
 
 function manifestOptionsAreValid(candidate: Partial<NativeManifest>): boolean {
   return (
-    isOptionalApp(candidate.activeSessionApp) &&
-    isOptionalQuality(candidate.exportQuality) &&
     isTransportMode(candidate.transportMode) &&
     (candidate.pendingRemotePath === undefined ||
       isNativeRecordingPath(candidate.pendingRemotePath))
@@ -124,7 +115,17 @@ function isValidCompletion(value: unknown): value is ScreenRecordingCompletion {
   return (
     completionIdentityIsValid(candidate) &&
     completionRecordingIsValid(candidate) &&
+    completionFactsAreValid(candidate) &&
     (candidate.chunks === undefined || candidate.chunks.every(isValidCompletionChunk))
+  );
+}
+
+/** A marker written by an older daemon carries neither field; one with a word no backend reports is not a completion. */
+function completionFactsAreValid(candidate: Partial<ScreenRecordingCompletion>): boolean {
+  return (
+    (candidate.stopObservation === undefined || isStopObservation(candidate.stopObservation)) &&
+    (candidate.nativePathDisposition === undefined ||
+      isNativePathDisposition(candidate.nativePathDisposition))
   );
 }
 
@@ -134,17 +135,13 @@ function completionIdentityIsValid(candidate: Partial<ScreenRecordingCompletion>
     typeof candidate.outPath === 'string' &&
     (candidate.clientOutPath === undefined || typeof candidate.clientOutPath === 'string') &&
     Number.isFinite(candidate.startedAt) &&
-    Number.isFinite(candidate.completedAt)
+    Number.isFinite(candidate.completedAt) &&
+    (candidate.capturedDurationMs === undefined || Number.isFinite(candidate.capturedDurationMs))
   );
 }
 
 function completionRecordingIsValid(candidate: Partial<ScreenRecordingCompletion>): boolean {
-  return (
-    isScope(candidate.scope) &&
-    typeof candidate.showTouches === 'boolean' &&
-    typeof candidate.recordOnlySession === 'boolean' &&
-    isOptionalApp(candidate.activeSessionApp)
-  );
+  return recordingFactsAreValid(candidate);
 }
 
 function isValidCompletionChunk(chunk: ScreenRecordingChunk, index: number): boolean {
@@ -204,9 +201,9 @@ function completionChunksMatch(
     completion.chunks?.length === expectedChunks &&
     completion.chunks.every(
       (chunk, index) =>
-        chunk.path === chunkPath(outputPath, index + 1) &&
+        chunk.path === chunkPathAt(outputPath, index + 1) &&
         chunk.clientOutPath ===
-          (clientOutputPath === undefined ? undefined : chunkPath(clientOutputPath, index + 1)),
+          (clientOutputPath === undefined ? undefined : chunkPathAt(clientOutputPath, index + 1)),
     )
   );
 }
@@ -215,25 +212,12 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function isScope(value: unknown): value is 'app' | 'device' | 'system' {
-  return value === 'app' || value === 'device' || value === 'system';
-}
-
 function isTransportMode(value: unknown): value is AndroidRecordingDescriptor['transportMode'] {
   return value === 'local' || value === 'transport-composed';
 }
 
-function isOptionalQuality(value: unknown): boolean {
-  return value === undefined || value === 'medium' || value === 'high';
-}
-
-function isOptionalApp(value: unknown): boolean {
-  return (
-    value === undefined ||
-    (isObject(value) &&
-      typeof value.bundleId === 'string' &&
-      (value.name === undefined || typeof value.name === 'string'))
-  );
+function isOptionalText(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === 'string';
 }
 
 function isNativeRecordingPath(value: unknown): value is string {
@@ -249,13 +233,4 @@ function sameApp(
   right: AndroidRecordingDescriptor['activeSessionApp'],
 ): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function chunkPath(outputPath: string, index: number): string {
-  if (index === 1) return outputPath;
-  const extension = outputPath.lastIndexOf('.');
-  const base =
-    extension > outputPath.lastIndexOf('/') ? outputPath.slice(0, extension) : outputPath;
-  const suffix = extension > outputPath.lastIndexOf('/') ? outputPath.slice(extension) : '.mp4';
-  return `${base}.part-${String(index).padStart(3, '0')}${suffix}`;
 }

@@ -4,8 +4,10 @@ import path from 'node:path';
 import { once } from 'node:events';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
-import { MAX_ARTIFACT_COMPRESSED_BYTES } from '../utils/artifact-limits.ts';
-import { createByteLimitStream } from '../utils/byte-limit-stream.ts';
+import {
+  MAX_ARTIFACT_COMPRESSED_BYTES,
+  createByteLimitStream,
+} from '@agent-device/host-kit/archive';
 
 const TEMP_PREFIX = 'agent-device-artifact-';
 const REQUEST_IDLE_TIMEOUT_MS = 60_000;
@@ -115,6 +117,6 @@ async function removePartialFile(output: fs.WriteStream, destPath: string): Prom
 function sanitizeRequestId(raw: string | undefined): string {
   const trimmed = raw?.trim();
   if (!trimmed) return 'request';
-  const normalized = trimmed.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  const normalized = trimmed.replaceAll(/[^a-zA-Z0-9._-]+/g, '-').replaceAll(/^-+|-+$/g, '');
   return normalized.length > 0 ? normalized.slice(0, 48) : 'request';
 }

@@ -1,0 +1,179 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
+import path from 'node:path';
+import type {
+  MaestroObservation,
+  MaestroPlatform,
+  MaestroRuntimeOperationContext,
+  MaestroTargetMatch,
+  MaestroTargetQuery,
+} from '@agent-device/maestro';
+import type { DaemonResponse, DaemonResponseData } from '@agent-device/kernel/contracts';
+import { AppError } from '@agent-device/kernel/errors';
+import type { Rect } from '@agent-device/kernel/snapshot';
+import type { DaemonMaestroRuntimeDependencies } from './daemon-runtime-port-observation.ts';
+import { stripUndefined } from '@agent-device/kernel/record';
+import {
+  projectMaestroPublicOperation,
+  type MaestroDaemonOperationRequest,
+  type MaestroPublicOperation,
+} from './daemon-runtime-public-operation.ts';
+
+export type MaestroDaemonOperationInvoke = (
+  request: MaestroDaemonOperationRequest,
+) => Promise<DaemonResponse>;
+
+export type CreateDaemonMaestroRuntimeOperationsOptions = {
+  readonly invoke: MaestroDaemonOperationInvoke;
+  /** The runtime envelope every operation carries: platform, target, device, and recording flags. */
+  readonly flags?: CommandFlags;
+  /**
+   * Whether the flow arrived over the daemon's public network surface, in which case `runScript`
+   * HTTP calls may not reach private addresses.
+   */
+  readonly publicNetworkOnly: boolean;
+  readonly dependencies: DaemonMaestroRuntimeDependencies;
+  readonly sourcePath?: string;
+  readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
+};
+
+type MaestroPublicOperationResult<Operation extends MaestroPublicOperation> = Operation extends {
+  kind: 'gestureViewport';
+}
+  ? Rect
+  : DaemonResponseData | undefined;
+
+export async function invokeMaestroPublicOperation<Operation extends MaestroPublicOperation>(
+  options: CreateDaemonMaestroRuntimeOperationsOptions,
+  operation: Operation,
+): Promise<MaestroPublicOperationResult<Operation>> {
+  const projected = projectMaestroPublicOperation(operation);
+  const response = await options.invoke(
+    stripUndefined({ ...projected, flags: flagsWith(options.flags, projected.flags ?? {}) }),
+  );
+  if (!response.ok) throw daemonResponseError(response);
+  if (operation.kind === 'gestureViewport') {
+    const viewport = response.data?.viewport;
+    if (
+      typeof viewport !== 'object' ||
+      viewport === null ||
+      !['x', 'y', 'width', 'height'].every(
+        (key) => typeof (viewport as Record<string, unknown>)[key] === 'number',
+      )
+    ) {
+      throw new AppError('COMMAND_FAILED', 'runtime gesture-viewport returned no valid viewport.');
+    }
+    return viewport as MaestroPublicOperationResult<Operation>;
+  }
+  return response.data as MaestroPublicOperationResult<Operation>;
+}
+
+function flagsWith(
+  base: CommandFlags | undefined,
+  extra: Partial<CommandFlags>,
+): CommandFlags | undefined {
+  const maestro =
+    base?.maestro === undefined && extra.maestro === undefined
+      ? undefined
+      : { ...base?.maestro, ...extra.maestro };
+  const flags = stripUndefined({
+    ...base,
+    ...extra,
+    maestro,
+  });
+  return Object.keys(flags).length > 0 ? flags : undefined;
+}
+
+export function launchArgumentValues(
+  value:
+    | { kind: 'scalar'; value: string | number | boolean }
+    | { kind: 'list'; values: Array<string | number | boolean> }
+    | { kind: 'map'; values: Record<string, string | number | boolean> }
+    | undefined,
+): string[] {
+  if (!value) return [];
+  if (value.kind === 'scalar') return [String(value.value)];
+  if (value.kind === 'list') return value.values.map(String);
+  return Object.entries(value.values).flatMap(([key, entry]) => [key, String(entry)]);
+}
+
+export function observationFromMatch(
+  selector: MaestroTargetQuery['selector'],
+  match: MaestroTargetMatch,
+): MaestroObservation {
+  return {
+    generation: match.generation,
+    matched: match.matched && match.visible,
+    candidateCount: match.candidateCount,
+    evidence: {
+      kind: 'selector',
+      selector,
+      visible: match.visible,
+      candidateCount: match.candidateCount,
+      ...(match.ref ? { ref: match.ref } : {}),
+    },
+  };
+}
+
+export function artifactPathsFromData(data: DaemonResponseData | undefined): string[] {
+  if (!data) return [];
+  const paths: string[] = [];
+  if (typeof data.path === 'string') paths.push(data.path);
+  if (Array.isArray(data.artifactPaths)) {
+    paths.push(...data.artifactPaths.filter((value): value is string => typeof value === 'string'));
+  }
+  if (Array.isArray(data.artifacts)) {
+    for (const artifact of data.artifacts) {
+      if (typeof artifact.localPath === 'string') paths.push(artifact.localPath);
+      else if (typeof artifact.path === 'string') paths.push(artifact.path);
+    }
+  }
+  return [...new Set(paths)];
+}
+
+export function resolveScriptPath(
+  file: string,
+  context: MaestroRuntimeOperationContext,
+  sourcePath: string | undefined,
+): string {
+  if (path.isAbsolute(file)) return file;
+  const parent = context.source?.path ?? sourcePath;
+  if (!parent) {
+    throw new AppError('INVALID_ARGS', 'Maestro runScript file paths require a source path.');
+  }
+  return path.resolve(path.dirname(parent), file);
+}
+
+export function stringifyEnvironment(
+  env: Record<string, string | number | boolean>,
+): Record<string, string> {
+  return Object.fromEntries(Object.entries(env).map(([key, value]) => [key, String(value)]));
+}
+
+function daemonResponseError(response: Extract<DaemonResponse, { ok: false }>): AppError {
+  const error = response.error;
+  const details = stripUndefined({
+    ...(error.details ?? {}),
+    hint: error.hint ?? stringErrorDetail(error.details, 'hint'),
+    diagnosticId: error.diagnosticId ?? stringErrorDetail(error.details, 'diagnosticId'),
+    logPath: error.logPath ?? stringErrorDetail(error.details, 'logPath'),
+    retriable: error.retriable ?? booleanErrorDetail(error.details, 'retriable'),
+    supportedOn: error.supportedOn ?? stringErrorDetail(error.details, 'supportedOn'),
+  });
+  return new AppError(error.code, error.message, Object.keys(details).length ? details : undefined);
+}
+
+function stringErrorDetail(
+  details: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const value = details?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function booleanErrorDetail(
+  details: Record<string, unknown> | undefined,
+  key: string,
+): boolean | undefined {
+  const value = details?.[key];
+  return typeof value === 'boolean' ? value : undefined;
+}

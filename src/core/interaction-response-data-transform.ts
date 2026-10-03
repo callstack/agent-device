@@ -1,8 +1,8 @@
 import {
   listCommandResponseDataTransformFieldNames,
   resolveCommandResponseDataTransform,
-} from './command-descriptor/registry.ts';
-import type { ResponseDataFieldTransform } from './command-descriptor/types.ts';
+} from '@agent-device/command-registry/registry';
+import type { ResponseDataFieldTransform } from '@agent-device/command-registry/types';
 
 export type InteractionResponseDataTransformCommand = 'click' | 'press' | 'fill';
 

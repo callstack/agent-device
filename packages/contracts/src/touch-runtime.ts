@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 import type { Point } from '@agent-device/kernel/snapshot';
 import {
   localInteractorSource,
@@ -14,7 +14,7 @@ import type {
   PressPointOptions,
   RunnerContext,
 } from './interactor-types.ts';
-import type { RuntimeOperationFact } from './platform-runtime.ts';
+import type { RuntimeOperationFact, RuntimeOperationUnavailability } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
 type TouchExecutionInput = Readonly<{
@@ -74,42 +74,52 @@ export type TouchRuntimeOperationFacts = Readonly<{
 export const HOVER_UNAVAILABLE_HINT =
   'hover raises pointer hover state and is available on web targets only. On touch platforms use longpress for hold gestures.';
 
+/**
+ * What an owner declares about the touch family. `tap`, `longPress` and `fill` are universally
+ * implemented, so they stay required cells — a compile-time guard against an owner silently
+ * dropping one. Every other operation is optional, and `unsupported` names the denial an omitted
+ * cell reports: an owner that does not implement one of those already classified it, by the same
+ * `unsupported` cell, with the same reason and hint it would have written out by hand. Adding a new
+ * touch operation therefore costs an edit only in the owner that gained it.
+ *
+ * Omission is a classified denial, never an unclassified cell and never an implied success: the
+ * type refuses a call that does not carry `unsupported`, so no owner can leave the family blank.
+ */
+export type TouchRuntimeOperationFactsInput = Readonly<{
+  unsupported: RuntimeOperationUnavailability;
+  tap: RuntimeOperationFact;
+  tapRef?: RuntimeOperationFact;
+  longPress: RuntimeOperationFact;
+  hover?: RuntimeOperationFact;
+  hoverRef?: RuntimeOperationFact;
+  fill: RuntimeOperationFact;
+  fillRef?: RuntimeOperationFact;
+  tapElementSelector?: RuntimeOperationFact;
+}>;
+
 export function touchRuntimeOperationFacts(
-  input: Readonly<{
-    tap: RuntimeOperationFact;
-    tapRef?: RuntimeOperationFact;
-    longPress: RuntimeOperationFact;
-    hover: RuntimeOperationFact;
-    hoverRef?: RuntimeOperationFact;
-    fill: RuntimeOperationFact;
-    fillRef?: RuntimeOperationFact;
-    tapElementSelector: RuntimeOperationFact;
-  }>,
+  input: TouchRuntimeOperationFactsInput,
 ): TouchRuntimeOperationFacts {
-  const hoverRef: RuntimeOperationFact = input.hoverRef ?? NATIVE_REF_UNAVAILABLE;
+  const declared = (fact: RuntimeOperationFact | undefined): RuntimeOperationFact =>
+    fact ?? input.unsupported;
   return Object.freeze({
     tapPoint: input.tap,
-    tapRef: input.tapRef ?? NATIVE_REF_UNAVAILABLE,
+    tapRef: declared(input.tapRef),
     longPressPoint: input.longPress,
-    hoverPoint: input.hover.available
-      ? input.hover
-      : Object.freeze({ ...input.hover, hint: input.hover.hint ?? HOVER_UNAVAILABLE_HINT }),
-    hoverRef: hoverRef.available
-      ? hoverRef
-      : Object.freeze({
-          ...hoverRef,
-          hint: hoverRef.hint ?? HOVER_UNAVAILABLE_HINT,
-        }),
+    hoverPoint: withHoverRefusalHint(declared(input.hover)),
+    hoverRef: withHoverRefusalHint(declared(input.hoverRef)),
     fillPoint: input.fill,
-    fillRef: input.fillRef ?? NATIVE_REF_UNAVAILABLE,
-    tapElementSelector: input.tapElementSelector,
+    fillRef: declared(input.fillRef),
+    tapElementSelector: declared(input.tapElementSelector),
   });
 }
 
-const NATIVE_REF_UNAVAILABLE = Object.freeze({
-  available: false,
-  reason: 'owner-capability-missing',
-} as const);
+/** Both hover legs answer with the same redirection to longpress when they are refused. */
+function withHoverRefusalHint(fact: RuntimeOperationFact): RuntimeOperationFact {
+  return fact.available
+    ? fact
+    : Object.freeze({ ...fact, hint: fact.hint ?? HOVER_UNAVAILABLE_HINT });
+}
 
 function runnerContext(input: TouchExecutionInput, signal: AbortSignal): RunnerContext {
   return { ...input.execution, appBundleId: input.appBundleId, signal };
@@ -126,6 +136,8 @@ function bindTouch(
     return await resolveInteractor(runnerContext(input, signal));
   };
   const tapPoint = async (input: TapPointInput) => {
+    signal.throwIfAborted();
+    requireAdmittedHold(input.options, facts.longPressPoint);
     const interactor = await interactorFor(input);
     if (input.options.button !== 'primary' && interactor.alternateClick) {
       return await interactor.alternateClick(input.point, input.options.button);
@@ -211,6 +223,33 @@ function missingAdvertisedOperation(name: string): never {
   );
 }
 
+/**
+ * Two shapes of a point press ask for more than the shared series can compose. A hold is a capability
+ * an owner states with its `longPressPoint` cell, so `press --hold` is refused by the same fact that
+ * refuses `longpress`, carrying the owner's reason and hint.
+ */
+function requireAdmittedHold(options: PressPointOptions, fact: RuntimeOperationFact): void {
+  if (options.holdMs <= 0 || fact.available) return;
+  throw new AppError('UNSUPPORTED_OPERATION', 'press-and-hold is not supported by this runtime.', {
+    reason: fact.reason,
+    ...(fact.hint === undefined ? {} : { hint: fact.hint }),
+  });
+}
+
+/**
+ * A fused double-click is the one press shape no fact can state: facts speak per operation, and no
+ * command names a double-tap operation. The interactor member is the owner's only claim, so an absent
+ * one is a capability it declines — where an absent alert member is an ownership bug, because the
+ * alert leg's operation was admitted and this shape never was.
+ */
+function requireDoubleTapMechanic(interactor: Interactor): NonNullable<Interactor['doubleTap']> {
+  if (interactor.doubleTap) return interactor.doubleTap;
+  throw new AppError('UNSUPPORTED_OPERATION', 'double-tap is not supported by this runtime.', {
+    reason: 'owner-capability-missing',
+    hint: 'This runtime drives single presses; use --count to repeat them.',
+  });
+}
+
 async function executeGenericPress(
   interactor: Interactor,
   point: Point,
@@ -223,20 +262,35 @@ async function executeGenericPress(
       `Bound runtime does not implement ${options.button} click.`,
     );
   }
+  const doubleTap = options.doubleTap ? requireDoubleTapMechanic(interactor) : undefined;
   let first: Record<string, unknown> | void = undefined;
-  for (let index = 0; index < options.count; index += 1) {
-    const [dx, dy] = pressJitter(index, options.jitterPx);
-    const result = options.doubleTap
-      ? await interactor.doubleTap(point.x + dx, point.y + dy)
-      : options.holdMs > 0
-        ? await interactor.longPress(point.x + dx, point.y + dy, options.holdMs)
-        : await interactor.tap(point.x + dx, point.y + dy);
-    first ??= result;
-    if (index < options.count - 1 && options.intervalMs > 0) {
-      await pause(options.intervalMs);
+  let dispatchedPresses = 0;
+  try {
+    for (let index = 0; index < options.count; index += 1) {
+      const [dx, dy] = pressJitter(index, options.jitterPx);
+      const result = await pressOnce(interactor, doubleTap, point.x + dx, point.y + dy, options);
+      dispatchedPresses += 1;
+      first ??= result;
+      if (index < options.count - 1 && options.intervalMs > 0) {
+        await pause(options.intervalMs);
+      }
     }
+  } catch (error) {
+    throw discloseDispatchAfterSteps(error, dispatchedPresses);
   }
   return first;
+}
+
+async function pressOnce(
+  interactor: Interactor,
+  doubleTap: NonNullable<Interactor['doubleTap']> | undefined,
+  x: number,
+  y: number,
+  options: PressPointOptions,
+): Promise<Record<string, unknown> | void> {
+  if (doubleTap) return await doubleTap.call(interactor, x, y);
+  if (options.holdMs > 0) return await interactor.longPress(x, y, options.holdMs);
+  return await interactor.tap(x, y);
 }
 
 const PRESS_JITTER = [

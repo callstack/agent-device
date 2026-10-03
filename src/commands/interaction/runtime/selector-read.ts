@@ -4,10 +4,6 @@ import {
   formatSelectorFailure,
   selectorFailureHint,
   buildSelectorChainForNode,
-  checkIsPredicate,
-  evaluateIsPredicate,
-  IS_TEXT_VALUE_REQUIRED_MESSAGE,
-  readSelectorAlternatives,
   parseFindSelectorExpression,
   type FindAction,
   type FindLocator,
@@ -16,21 +12,20 @@ import {
   listSelectorPipelineMatches,
   resolveSelectorPipeline,
   type SelectorPipelineHooks,
-} from '../../../core/selector-pipeline.ts';
-import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
+} from '@agent-device/selectors/selector-pipeline';
+import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { isSparseSnapshotQualityVerdict } from '../../../snapshot-quality/verdict.ts';
+import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
   ElementTarget,
   FindReadResult,
   ResolvedTarget,
-  SelectorTarget,
 } from '@agent-device/contracts/interaction';
-import { INTERACTION_ERROR_REASONS } from '@agent-device/contracts/interaction-error';
 import type { RuntimeCommand } from '../../runtime-types.ts';
-import { assertExpectedResolvedTarget, type ExpectedResolvedTarget } from './resolution.ts';
+import { assertExpectedResolvedTarget } from './replay-target-guard.ts';
+import type { ExpectedResolvedTarget } from './interaction-resolution-request.ts';
 import {
   type CapturedSnapshot,
   type SelectorSnapshotOptions,
@@ -61,7 +56,7 @@ export type {
   WaitCommandResult,
   WaitForTextCommandOptions,
 } from './selector-wait.ts';
-export type { ElementTarget, ResolvedTarget, SelectorTarget };
+export type { ElementTarget, ResolvedTarget };
 
 export type FindReadCommandOptions = CommandContext & {
   locator?: FindLocator;
@@ -107,32 +102,6 @@ export type GetTextCommandOptions = CommandContext &
 export type GetAttrsCommandOptions = CommandContext &
   SelectorSnapshotOptions & {
     target: ElementTarget;
-  };
-
-export type IsCommandOptions = CommandContext &
-  SelectorSnapshotOptions & {
-    predicate: 'visible' | 'hidden' | 'exists' | 'editable' | 'selected' | 'focused' | 'text';
-    selector: string;
-    expectedText?: string;
-    /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
-    expectedResolvedTarget?: ExpectedResolvedTarget;
-  };
-
-export type IsCommandResult = {
-  predicate: IsCommandOptions['predicate'];
-  pass: true;
-  selector: string;
-  matches?: number;
-  text?: string;
-  selectorChain?: string[];
-  /** ADR 0012 decision 3 / #1349: the resolved node and its tree, for record-time evidence (absent for `exists`). */
-  node?: SnapshotNode;
-  preActionNodes?: SnapshotNode[];
-};
-
-export type IsSelectorCommandOptions = CommandContext &
-  SelectorSnapshotOptions & {
-    target: SelectorTarget;
   };
 
 const selectorWaitCommands = createSelectorWaitCommands<AgentDeviceRuntime>({
@@ -278,133 +247,6 @@ export const getAttrsCommand: RuntimeCommand<
   }
   return result;
 };
-
-export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = async (
-  runtime,
-  options,
-): Promise<IsCommandResult> => {
-  const admitted = checkIsPredicate(options.predicate);
-  if (!admitted.ok) throw new AppError(admitted.code, admitted.message, { hint: admitted.hint });
-  // Admission normalizes case, so every decision below reads the ADMITTED value: the raw
-  // option would send an uppercase predicate past the gate and then evaluate it against
-  // lower-case branches, admitting `EXISTS`/`TEXT` and returning the wrong answer.
-  const predicate = admitted.predicate;
-  if (predicate === 'text' && !options.expectedText) {
-    throw new AppError('INVALID_ARGS', IS_TEXT_VALUE_REQUIRED_MESSAGE);
-  }
-  const selectorExpression = options.selector;
-  const capture = await captureSelectorSnapshot(runtime, options, {
-    updateSession: true,
-    ...deriveSelectorCapturePolicy(predicate),
-  });
-
-  if (predicate === 'exists') {
-    // `readAny`, the same row find's read actions use: presence is the
-    // question, so any match count passes and the first one answers. The row
-    // already documented itself as serving `exists`, but this branch used to
-    // reach the engine directly — the claim was true of the docs and not of
-    // the code (#1630).
-    const matched = await resolveSelectorPipeline(
-      SELECTOR_PIPELINE_POLICIES.readAny,
-      capture.snapshot.nodes,
-      selectorExpression,
-      { platform: runtime.backend.platform },
-    );
-    if (matched.kind !== 'target') {
-      throw new AppError(
-        'COMMAND_FAILED',
-        formatSelectorFailure(selectorExpression, [], { unique: false }),
-        {
-          hint: selectorFailureHint([]),
-        },
-      );
-    }
-    return {
-      predicate: predicate,
-      pass: true,
-      selector: matched.selector,
-      matches: matched.matches,
-      selectorChain: readSelectorAlternatives(selectorExpression),
-    };
-  }
-
-  // `readUnique` is the fail-closed row: an ambiguous screen reports the same
-  // refusal as no match at all, because `is` must never guess which duplicate
-  // it answered about.
-  const outcome = await resolveSelectorPipeline(
-    SELECTOR_PIPELINE_POLICIES.readUnique,
-    capture.snapshot.nodes,
-    selectorExpression,
-    { platform: runtime.backend.platform },
-    {
-      onResolved: (node, nodes) =>
-        assertExpectedResolvedTarget(node, nodes, options.expectedResolvedTarget, 'is'),
-    },
-  );
-  if (outcome.kind !== 'target') {
-    throw new AppError(
-      'COMMAND_FAILED',
-      formatSelectorFailure(selectorExpression, [], { unique: true }),
-      {
-        command: 'is',
-        reason: INTERACTION_ERROR_REASONS.selectorNotFound,
-        predicate: predicate,
-        selector: selectorExpression,
-        hint: selectorFailureHint([]),
-      },
-    );
-  }
-  const resolved = outcome;
-  const result = evaluateIsPredicate({
-    predicate: predicate,
-    node: resolved.node,
-    nodes: capture.snapshot.nodes,
-    expectedText: options.expectedText,
-    platform: runtime.backend.platform,
-  });
-  if (!result.pass) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `is ${predicate} failed for selector ${resolved.selector}: ${result.details}`,
-      {
-        command: 'is',
-        reason: 'predicate_failed',
-        predicate: predicate,
-        selector: resolved.selector,
-        predicateDetails: result.details,
-      },
-    );
-  }
-  return {
-    predicate: predicate,
-    pass: true,
-    selector: resolved.selector,
-    ...(predicate === 'text' ? { text: result.actualText } : {}),
-    selectorChain: readSelectorAlternatives(selectorExpression),
-    node: resolved.node,
-    preActionNodes: capture.snapshot.nodes,
-  };
-};
-
-export const isVisibleCommand: RuntimeCommand<IsSelectorCommandOptions, IsCommandResult> = async (
-  runtime,
-  options,
-): Promise<IsCommandResult> =>
-  await isCommand(runtime, {
-    ...options,
-    predicate: 'visible',
-    selector: options.target.selector,
-  });
-
-export const isHiddenCommand: RuntimeCommand<IsSelectorCommandOptions, IsCommandResult> = async (
-  runtime,
-  options,
-): Promise<IsCommandResult> =>
-  await isCommand(runtime, {
-    ...options,
-    predicate: 'hidden',
-    selector: options.target.selector,
-  });
 
 async function waitForFindMatch(
   runtime: AgentDeviceRuntime,

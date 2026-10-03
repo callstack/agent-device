@@ -20,13 +20,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DaemonError, DiagnosticsRecordRef } from '@agent-device/kernel/errors';
-import { loadNodeHttpRequester } from '../utils/node-http.ts';
+import { loadNodeHttpRequester } from '@agent-device/host-kit/transport';
 import {
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpTenantHeaders,
   buildDaemonHttpUrl,
-} from '../daemon/http-contract.ts';
-import { resolveRemoteRequestDiagnosticsPath } from '../daemon/session-store.ts';
+} from '@agent-device/contracts/daemon-http';
+import { resolveRemoteRequestDiagnosticsPath } from '../daemon/session-artifact-paths.ts';
 
 const REMOTE_DIAGNOSTICS_FETCH_TIMEOUT_MS = 10_000;
 const REMOTE_DIAGNOSTICS_MAX_BYTES = 8 * 1024 * 1024;

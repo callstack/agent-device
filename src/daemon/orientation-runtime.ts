@@ -3,7 +3,7 @@ import { parseDeviceRotation, type DeviceRotation } from '@agent-device/contract
 import { orientationRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { successText } from '../utils/success-text.ts';
+import { successText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from './context.ts';
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
 import { resolveBoundGenericRuntime, type RuntimeAdmissionBindings } from './runtime-admission.ts';
@@ -63,6 +63,21 @@ async function executeSetOrientation(
   const result = await runtime.operations.setOrientation(
     setOrientationInput(requestedRotation, context),
   );
-  const orientation = result?.orientation ?? requestedRotation;
-  return { action: 'orientation', orientation, ...successText(`Rotated to ${orientation}`) };
+  const reported = result?.orientation;
+  if (reported) {
+    return {
+      action: 'orientation',
+      orientation: reported,
+      ...successText(`Rotated to ${reported}`),
+    };
+  }
+  // An owner that reports no resulting rotation is not evidence the device rotated: keep the
+  // requested rotation for compatibility, but disclose the unconfirmed claim instead of asserting it.
+  return {
+    action: 'orientation',
+    orientation: requestedRotation,
+    confirmed: false,
+    warning: `Requested ${requestedRotation}; the device owner reported no resulting orientation, so the rotation is unconfirmed.`,
+    ...successText(`Rotation requested: ${requestedRotation} (unconfirmed)`),
+  };
 }

@@ -2,15 +2,15 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Rect } from '@agent-device/kernel/snapshot';
-import { PNG } from '../utils/png.ts';
+import { PNG } from '@agent-device/capture-kit/png';
 import {
   computeScreenshotDiffPixelsAsync,
-  decodePngAsync,
+  decodeScreenshotImageAsync,
   encodePngAsync,
-} from '../utils/png-worker-client.ts';
+} from '@agent-device/capture-kit/png-worker-client';
 import { annotateDiffRegions } from './screenshot-diff-region-overlay.ts';
 import { summarizeDiffRegions, type ScreenshotDiffRegion } from './screenshot-diff-regions.ts';
-import type { ImageDimensions } from '../utils/screenshot-geometry.ts';
+import type { ImageDimensions } from '@agent-device/kernel/screenshot-geometry';
 
 export type ScreenshotDimensionMismatch = {
   expected: ImageDimensions;
@@ -72,8 +72,14 @@ export type ScreenshotDiffOptions = {
 // white (255,255,255): √(255² + 255² + 255²) = 255√3 ≈ 441.67.
 // We use this as the denominator so threshold 0–1 maps linearly to the full
 // color distance range: 0 = exact match only, 1 = everything matches.
-const COLOR_DISTANCE_SCALE = 255 * Math.sqrt(3);
+// Match the per-pixel square-root rounding so the maximum stays inclusive.
+const COLOR_DISTANCE_SCALE = Math.sqrt(3 * 255 ** 2);
 
+/**
+ * Compares two screenshots pixel by pixel. Each input may be PNG or JPEG: the container is sniffed
+ * from the bytes rather than the file name, so a baseline exported by any tool that writes JPEG
+ * still compares. The diff image itself is always PNG.
+ */
 export async function compareScreenshots(
   baselinePath: string,
   currentPath: string,
@@ -90,8 +96,8 @@ export async function compareScreenshots(
   ]);
 
   const [baseline, current] = await Promise.all([
-    decodePngAsync(baselineBuffer, 'baseline screenshot'),
-    decodePngAsync(currentBuffer, 'current screenshot'),
+    decodeScreenshotImageAsync(baselineBuffer, 'baseline screenshot'),
+    decodeScreenshotImageAsync(currentBuffer, 'current screenshot'),
   ]);
   validateMaxPixels(baseline.width, baseline.height, 'baseline screenshot', options.maxPixels);
   validateMaxPixels(current.width, current.height, 'current screenshot', options.maxPixels);

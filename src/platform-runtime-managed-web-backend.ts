@@ -4,11 +4,11 @@ import type { ManagedWebBackend } from '@agent-device/contracts/managed-web-back
 export function createManagedWebBackend(): ManagedWebBackend {
   return Object.freeze({
     setup: async (options) => {
-      const { setupManagedAgentBrowser } = await import('./platforms/web/agent-browser-tool.ts');
+      const { setupManagedAgentBrowser } = await import('@agent-device/platform-web');
       return await setupManagedAgentBrowser(options);
     },
     doctor: async (options) => {
-      const { doctorManagedAgentBrowser } = await import('./platforms/web/agent-browser-tool.ts');
+      const { doctorManagedAgentBrowser } = await import('@agent-device/platform-web');
       return await doctorManagedAgentBrowser(options);
     },
   });

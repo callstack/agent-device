@@ -1,12 +1,11 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { buildInPageSwipeGesturePlan } from '@agent-device/contracts/scroll-gesture';
-import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
+import { isPositiveFiniteRect, pickLargestRect } from '@agent-device/kernel/rect';
 import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import { pointInsideRect } from './shared.ts';
 import {
   findNearestScrollableAncestor,
   isScrollableNodeLike,
-  isViewportRootNode,
 } from '@agent-device/contracts/snapshot';
 import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
 import { resolveNumeric } from './engine-flow.ts';
@@ -20,7 +19,9 @@ import type {
 import { operationContext } from './runtime-port-context.ts';
 import { resolveMaestroTarget } from './runtime-port-observation.ts';
 import { filterVisibleMaestroMatches, type MaestroPlatform } from './runtime-target-policy.ts';
-import { selectMaestroSnapshotMatches } from './runtime-target-ranking.ts';
+import { createMaestroResolver } from './runtime-target-ranking.ts';
+import { resolveMaestroClickability } from './runtime-clickability.ts';
+import type { MaestroResolutionProbe } from './runtime-selector-resolution.ts';
 import type {
   MaestroRuntimeOperations,
   MaestroSinglePointerGestureInput,
@@ -40,8 +41,9 @@ export function resolveMaestroScrollableGesture(
   direction: MaestroDirection,
   durationMs: number,
   platform: MaestroPlatform,
+  probe: MaestroResolutionProbe = {},
 ): { gesture: MaestroSinglePointerGestureInput; viewport: Rect } | undefined {
-  const viewport = selectMaestroScrollableViewport(snapshot, selector, direction, platform);
+  const viewport = selectMaestroScrollableViewport(snapshot, selector, direction, platform, probe);
   if (!viewport) return undefined;
   const { start, end } = maestroScrollUntilVisibleEndpoints(viewport, direction);
   return {
@@ -59,15 +61,22 @@ function selectMaestroScrollableViewport(
   selector: MaestroSelector,
   direction: MaestroDirection,
   platform: MaestroPlatform,
+  probe: MaestroResolutionProbe,
 ): Rect | undefined {
   const vertical = direction === 'up' || direction === 'down';
+  const resolver = createMaestroResolver(
+    snapshot,
+    resolveMaestroClickability(snapshot, platform),
+    probe,
+  );
+  const visibility = resolver.visibility;
   const scrollable = filterVisibleMaestroMatches({
-    nodes: snapshot.nodes,
+    visibility,
     matches: snapshot.nodes.filter((node) => isScrollableNodeLike(node)),
     platform,
   });
   const applicationViewport =
-    findLargestViewportRect(snapshot.nodes) ?? findLargestPositiveRect(scrollable);
+    pickLargestRect(visibility.viewportRects) ?? findLargestPositiveRect(scrollable);
   if (!applicationViewport || !isPositiveFiniteRect(applicationViewport)) return undefined;
   const candidates = scrollable.flatMap((node) => {
     if (!isPositiveFiniteRect(node.rect)) return [];
@@ -80,12 +89,11 @@ function selectMaestroScrollableViewport(
     }
     return [{ node, viewport }];
   });
-  const byIndex = new Map(snapshot.nodes.map((node) => [node.index, node]));
   const candidateByIndex = new Map(
     candidates.map((candidate) => [candidate.node.index, candidate]),
   );
-  for (const target of selectMaestroSnapshotMatches(snapshot, selector, platform)) {
-    const container = findScrollContainer(target, byIndex);
+  for (const target of resolver.resolve(selector).indexed) {
+    const container = findScrollContainer(target, visibility.nodeByIndex);
     const candidate = container ? candidateByIndex.get(container.index) : undefined;
     if (candidate) return candidate.viewport;
   }
@@ -98,17 +106,6 @@ function findScrollContainer(
   byIndex: ReadonlyMap<number, SnapshotState['nodes'][number]>,
 ): SnapshotState['nodes'][number] | null {
   return isScrollableNodeLike(node) ? node : findNearestScrollableAncestor(node, byIndex);
-}
-
-function findLargestViewportRect(nodes: SnapshotState['nodes']): Rect | undefined {
-  return nodes
-    .filter((node) => {
-      return isPositiveFiniteRect(node.rect) && isViewportRootNode(node);
-    })
-    .sort(
-      (left, right) =>
-        right.rect!.width * right.rect!.height - left.rect!.width * left.rect!.height,
-    )[0]?.rect;
 }
 
 function findLargestPositiveRect(

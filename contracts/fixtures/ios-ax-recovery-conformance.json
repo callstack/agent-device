@@ -1,0 +1,1018 @@
+{
+  "version": 1,
+  "description": "Shared, executable recovery contract for the two iOS Simulator accessibility producers: the host AX bridge (apple/snapshot-bridge) and the XCTest runner's private AX bridge (apple/runner). Each producer runs every case through its own adapter and interprets the synthetic native world in its own model; expectations are recorded per producer so intentional differences stay visible instead of being averaged away.",
+  "nativeModel": {
+    "tree": "A chain of `chain` nodes at levels 0..chain-1 (labels are the level number). An optional `fan` gives the last chain node `count` children at level `at + 1`, each heading a further chain of `chain` nodes; fan labels are `<level>.<branch>`.",
+    "request": "A native request rooted at level r for L node levels returns levels r..r+L-1 that exist. `rejectLevelsAbove` rejects any request asking for more node levels than that with the producer's depth-rejection code.",
+    "frontierEvidence": "`counted` gives every returned node its true child count (host only; the runner has no counts). `unknown` omits the count on the deepest level of every returned fragment.",
+    "vanishAtFrontier": "The deepest level of every returned fragment has no live accessibility element, so no continuation can be rooted there.",
+    "ownerChangesAfterRequests": "The primary foreground owner changes after that many native requests (host only).",
+    "deadlineAfterRequests": "The capture deadline is spent after that many native requests (runner only; the host deadline is the guest watchdog and the host request timeout).",
+    "signature": "`tree` is the delivered tree in preorder: every node's identity, with `<parent` appended when its parent is not the canonical one (the previous level on the same branch, or the fan's last chain node for a branch head); runs of consecutive levels on one branch collapse to `first-last` (`0-44`, `30.1-49.1`). `nodes` is the retained node count. Dropped, duplicated, reordered, or re-parented nodes change the signature.",
+    "hintSteps": "Each hint step is one capture of a target generation: the adapter builds a chain that fits the accepted rung when `complete` is true and a longer chain under a node budget of the accepted rung when it is false, rejects native requests above `acceptedLevels`, runs the producer's real ladder, and checks `rejected` requests, the accepted rung, boundedness, and the remembered depth before and after the producer's own learning step. A step with `failure` is rejected at every depth: the capture fails, nothing is learned, and the remembered depth is untouched. `expire` spends the producer's hint lifetime."
+  },
+  "producers": {
+    "host-bridge": {
+      "recoveryOwner": "apple/snapshot-bridge/SnapshotBridgeCapture.m",
+      "hintOwner": "packages/platform-apple/src/snapshot-source/depth-hints.ts",
+      "adapters": [
+        "packages/platform-apple/src/snapshot-source/fixtures/recovery-conformance.m",
+        "packages/platform-apple/src/snapshot-source/adapter.test.ts (hint cases through the source adapter)"
+      ],
+      "nativeLevelsForTraversalDepth": "depth + 1 (delivers exactly `depth` edges below the root)",
+      "frontierEvidence": "native child count at every fragment boundary; an absent or invalid count fails closed",
+      "hintIdentity": "targetId + generation + producer, owned by the host source",
+      "hintExpiry": "count-based probe-back after 8 hinted captures; hinted successes never renew",
+      "hintLearning": "any recovery that observed a rejection and then finished; a depth- or node-bounded tree still teaches"
+    },
+    "runner": {
+      "recoveryOwner": "apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerAXSnapshotBridge.m and RunnerTests+AXSnapshotFallback.swift",
+      "hintOwner": "apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+AXSnapshotFallback.swift",
+      "adapters": [
+        "apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/UnitTests/RunnerTests+AXRecoveryConformanceTests.swift"
+      ],
+      "nativeLevelsForTraversalDepth": "depth (node levels; delivers `depth - 1` edges below the root)",
+      "frontierEvidence": "childless nodes at the deepest observed level of a capped capture; no child counts",
+      "hintIdentity": "bundle id + process id, owned by the runner process",
+      "hintExpiry": "120 s wall clock; hinted successes never renew",
+      "hintLearning": "any lower-rung success, complete or not"
+    }
+  },
+  "differences": [
+    "Depth vocabulary: the host asks for depth + 1 native levels and delivers `depth` edges; the runner passes `depth` as native node levels and delivers `depth - 1` edges (zero-based-depth-levels, explicit-depth-honored).",
+    "Recovery ladder: the host halves the rejected depth at most twice per request; the runner walks 56/40/24/12 and has no rung below 12. A rejection at depth 8 recovers on the host and fails on the runner.",
+    "Completeness evidence: the host trusts native child counts and fails closed when a boundary count is missing; the runner infers frontiers from the deepest childless level and pays one extra call to verify a natural leaf that sits at the cap (unknown-frontier-evidence, hint-rejected-then-lower).",
+    "Delivered depth: host continuations keep the requested traversal depth and disclose deeper content as truncated; runner extension re-roots with the same native depth, so the delivered tree can exceed the requested depth and an explicit depth is not disclosed as truncated (deeper-than-requested, explicit-depth-honored).",
+    "Budgets: the host spends one continuation per withheld parent inside a 32-request budget; the runner spends one extension call per frontier node inside an 8-call budget (host-request-budget, runner-extension-budget).",
+    "Ownership and deadlines: only the host checks the foreground owner on every native request; only the runner consults the capture deadline between rungs and extension calls (owner-change-during-continuation, deadline-before-retry).",
+    "Hints: both producers learn from any finished lower-depth recovery, bounded trees included (bounded-recovery-still-learned); the host keys on the resolved target generation and expires by hinted-capture count, while the runner keys on bundle id + pid and expires by wall clock (probe-back-after-expiry)."
+  ],
+  "recoveryCases": [
+    {
+      "name": "healthy-shallow",
+      "request": {
+        "traversalDepth": 64,
+        "explicitDepth": false,
+        "nodeBudget": 1500
+      },
+      "native": {
+        "tree": {
+          "chain": 5
+        },
+        "rejectLevelsAbove": null,
+        "frontierEvidence": "counted"
+      },
+      "expected": {
+        "host-bridge": {
+          "outcome": "complete",
+          "requests": 1,
+          "rejected": 0,
+          "continuations": 0,
+          "deepestLevel": 4,
+          "tree": "0-4",
+          "nodes": 5
+        },
+        "runner": {
+          "outcome": "complete",
+          "requests": 1,
+          "rejected": 0,
+          "continuations": 0,
+          "deepestLevel": 4,
+          "tree": "0-4",
+          "nodes": 5
+        }
+      }
+    },
+    {
+      "name": "rejected-then-recovered",
+      "request": {
+        "traversalDepth": 64,
+        "explicitDepth": false,
+        "nodeBudget": 1500
+      },
+      "native": {
+        "tree": {
+          "chain": 45
+        },
+        "rejectLevelsAbove": 48,
+        "frontierEvidence": "counted"
+      },
+      "expected": {
+        "host-bridge": {
+          "outcome": "complete",
+          "requests": 3,
+          "rejected": 1,
+          "continuations": 1,
+          "deepestLevel": 44,
+          "tree": "0-44",
+          "nodes": 45
+        },
+        "runner": {
+          "outcome": "complete",
+          "requests": 4,
+          "rejected": 2,
+          "continuations": 1,
+          "deepestLevel": 44,
+          "tree": "0-44",
+          "nodes": 45
+        }
+      }
+    },
+    {
+      "name": "multi-branch-recovery",
+      "request": {
+        "traversalDepth": 64,
+        "explicitDepth": false,
+        "nodeBudget": 1500
+      },
+      "native": {
+        "tree": {
+          "chain": 30,
+          "fan": {
+            "at": 29,
+            "count": 3,
+            "chain": 19
+          }
+        },
+        "rejectLevelsAbove": 48,
+        "frontierEvidence": "counted"
+      },
+      "expected": {
+        "host-bridge": {
+          "outcome": "complete",
+          "requests": 5,
+          "rejected": 1,
+          "continuations": 3,
+          "deepestLevel": 49,
+          "tree": "0-29,30.0-49.0,30.1-49.1,30.2-49.2",
+          "nodes": 90
+        },
+        "runner": {
+          "outcome": "complete",
+          "requests": 6,
+          "rejected": 2,
+          "continuations": 3,
+          "deepestLevel": 49,
+          "tree": "0-29,30.0-49.0,30.1-49.1,30.2-49.2",
+          "nodes": 90
+        }
+      }
+    },
+    {
+      "name": "deeper-than-requested",
+      "request": {
+        "traversalDepth": 64,
+        "explicitDepth": false,
+        "nodeBudget": 1500
+      },
+      "native": {
+        "tree": {
+          "chain": 70
+        },
+        "rejectLevelsAbove": 48,
+        "frontierEvidence": "counted"
+      },
+      "expected": {
+        "host-bridge": {
+          "outcome": "incomplete",
+          "requests": 4,
+          "rejected": 1,
+          "continuations": 2,
+          "deepestLevel": 64,
+          "tree": "0-64",
+          "nodes": 65
+        },
+        "runner": {
+          "outcome": "complete",
+          "requests": 4,
+          "rejected": 2,
+          "continuations": 1,
+          "deepestLevel": 69,
+          "tree": "0-69",
+          "nodes": 70
+        }
+      }
+    },
+    {
+      "name": "zero-based-depth-levels",
+      "request": {
+        "traversalDepth": 2,
+        "explicitDepth": true,
+        "nodeBudget": 1500
+      },
+      "native": {
+        "tree": {
+          "chain": 3
+        },
+        "rejectLevelsAbove": null,
+        "frontierEvidence": "counted"
+      },
+      "expected": {
+        "host-bridge": {
+          "outcome": "complete",
+          "requests": 1,
+          "rejected": 0,
+          "continuations": 0,
+          "deepestLevel": 2,
+          "tree": "0-2",
+          "nodes": 3
+        },
+        "runner": {
+          "outcome": "complete",
+          "requests": 1,
+          "rejected": 0,
+          "continuations": 0,
+          "deepestLevel": 1,
+          "tree": "0-1",
+          "nodes": 2
+        }
+      }
+    },
+    {
+      "name": "node-budget",
+      "request": {
+        "traversalDepth": 64,
+        "explicitDepth": false,
+        "nodeBudget": 4
+      },
+      "native": {
+        "tree": {
+          "chain": 10
+        },
+        "rejectLevelsAbove": null,
+        "frontierEvidence": "counted"
+      },
+      "expected": {
+        "host-bridge": {
+          "outcome": "incomplete",
+          "requests": 1,
+          "rejected": 0,
+          "continuations": 0,
+          "deepestLevel": 3,
+          "tree": "0-3",
+          "nodes": 4
+        },
+        "runner": {
+          "outcome": "incomplete",
+          "requests": 1,
+          "rejected": 0,
+          "continuations": 0,
+          "deepestLevel": 3,
+          "tree": "0-3",
+          "nodes": 4
+        }
+      }
+    },
+    {
+      "name": "unknown-frontier-evidence",
+      "request": {
+        "traversalDepth": 64,
+        "explicitDepth": false,
+        "nodeBudget": 1500
+      },
+      "native": {
+        "tree": {
+          "chain": 45
+        },
+        "rejectLevelsAbove": 48,
+        "frontierEvidence": "unknown"
+      },
+      "expected": {
+        "host-bridge": {
+          "outcome": "failed",
+          "failure": "boundary-evidence-missing",
+          "requests": 2,
+          "rejected": 1,
+          "continuations": 0
+        },
+        "runner": {
+          "outcome": "complete",
+          "requests": 4,
+          "rejected": 2,
+          "continuations": 1,
+          "deepestLevel": 44,
+          "tree": "0-44",
+          "nodes": 45
+        }
+      }
+    },
+    {
+      "name": "missing-live-element",
+      "request": {
+        "traversalDepth": 64,
+        "explicitDepth": false,
+        "nodeBudget": 1500
+      },
+      "native": {
+        "tree": {
+          "chain": 45
+        },
+        "rejectLevelsAbove": 48,
+        "frontierEvidence": "counted",
+        "vanishAtFrontier": true
+      },
+      "expected": {
+        "host-bridge": {
+          "outcome": "failed",
+          "failure": "continuation-element-missing",
+          "requests": 2,
+          "rejected": 1,
+          "continuations": 0
+        },
+        "runner": {
+          "outcome": "incomplete",
+          "requests": 3,
+          "rejected": 2,
+          "continuations": 0,
+          "deepestLevel": 39,
+          "tree": "0-39",
+          "nodes": 40
+        }
+      }
+    },
+    {
+      "name": "owner-change-during-continuation",
+      "request": {
+        "traversalDepth": 64,
+        "explicitDepth": false,
+        "nodeBudget": 1500
+      },
+      "native": {
+        "tree": {
+          "chain": 45
+        },
+        "rejectLevelsAbove": 48,
+        "frontierEvidence": "counted",
+        "ownerChangesAfterRequests": 2
+      },
+      "expected": {
+        "host-bridge": {
+          "outcome": "failed",
+          "failure": "owner-changed",
+          "requests": 3,
+          "rejected": 1,
+          "continuations": 1
+        },
+        "runner": {
+          "outcome": "not-applicable",
+          "reason": "the runner has no foreground-owner check inside acquisition; XCTest owns system-modal resolution"
+        }
+      }
+    },
+    {
+      "name": "host-request-budget",
+      "request": {
+        "traversalDepth": 64,
+        "explicitDepth": false,
+        "nodeBudget": 1500
+      },
+      "native": {
+        "tree": {
+          "chain": 15,
+          "fan": {
+            "at": 14,
+            "count": 40,
+            "chain": 1
+          }
+        },
+        "rejectLevelsAbove": 16,
+        "frontierEvidence": "counted"
+      },
+      "expected": {
+        "host-bridge": {
+          "outcome": "failed",
+          "failure": "request-budget-exhausted",
+          "requests": 32,
+          "rejected": 2,
+          "continuations": 29
+        },
+        "runner": {
+          "outcome": "complete",
+          "requests": 6,
+          "rejected": 4,
+          "continuations": 1,
+          "deepestLevel": 16,
+          "tree": "0-14,15.0-16.0,15.1-16.1,15.2-16.2,15.3-16.3,15.4-16.4,15.5-16.5,15.6-16.6,15.7-16.7,15.8-16.8,15.9-16.9,15.10-16.10,15.11-16.11,15.12-16.12,15.13-16.13,15.14-16.14,15.15-16.15,15.16-16.16,15.17-16.17,15.18-16.18,15.19-16.19,15.20-16.20,15.21-16.21,15.22-16.22,15.23-16.23,15.24-16.24,15.25-16.25,15.26-16.26,15.27-16.27,15.28-16.28,15.29-16.29,15.30-16.30,15.31-16.31,15.32-16.32,15.33-16.33,15.34-16.34,15.35-16.35,15.36-16.36,15.37-16.37,15.38-16.38,15.39-16.39",
+          "nodes": 95
+        }
+      }
+    },
+    {
+      "name": "runner-extension-budget",
+      "request": {
+        "traversalDepth": 64,
+        "explicitDepth": false,
+        "nodeBudget": 1500
+      },
+      "native": {
+        "tree": {
+          "chain": 39,
+          "fan": {
+            "at": 38,
+            "count": 12,
+            "chain": 1
+          }
+        },
+        "rejectLevelsAbove": 48,
+        "frontierEvidence": "counted"
+      },
+      "expected": {
+        "host-bridge": {
+          "outcome": "complete",
+          "requests": 3,
+          "rejected": 1,
+          "continuations": 1,
+          "deepestLevel": 40,
+          "tree": "0-38,39.0-40.0,39.1-40.1,39.2-40.2,39.3-40.3,39.4-40.4,39.5-40.5,39.6-40.6,39.7-40.7,39.8-40.8,39.9-40.9,39.10-40.10,39.11-40.11",
+          "nodes": 63
+        },
+        "runner": {
+          "outcome": "incomplete",
+          "requests": 11,
+          "rejected": 2,
+          "continuations": 8,
+          "deepestLevel": 40,
+          "tree": "0-38,39.0-40.0,39.1-40.1,39.2-40.2,39.3-40.3,39.4-40.4,39.5-40.5,39.6-40.6,39.7-40.7,39.8,39.9,39.10,39.11",
+          "nodes": 59
+        }
+      }
+    },
+    {
+      "name": "deadline-before-retry",
+      "request": {
+        "traversalDepth": 64,
+        "explicitDepth": false,
+        "nodeBudget": 1500
+      },
+      "native": {
+        "tree": {
+          "chain": 45
+        },
+        "rejectLevelsAbove": 48,
+        "frontierEvidence": "counted",
+        "deadlineAfterRequests": 1
+      },
+      "expected": {
+        "host-bridge": {
+          "outcome": "not-applicable",
+          "reason": "the host deadline is the guest watchdog and the host request timeout, not a capture decision"
+        },
+        "runner": {
+          "outcome": "failed",
+          "failure": "deadline",
+          "requests": 1,
+          "rejected": 1,
+          "continuations": 0
+        }
+      }
+    },
+    {
+      "name": "explicit-depth-honored",
+      "request": {
+        "traversalDepth": 8,
+        "explicitDepth": true,
+        "nodeBudget": 1500
+      },
+      "native": {
+        "tree": {
+          "chain": 45
+        },
+        "rejectLevelsAbove": 48,
+        "frontierEvidence": "counted"
+      },
+      "expected": {
+        "host-bridge": {
+          "outcome": "incomplete",
+          "requests": 1,
+          "rejected": 0,
+          "continuations": 0,
+          "deepestLevel": 8,
+          "tree": "0-8",
+          "nodes": 9
+        },
+        "runner": {
+          "outcome": "complete",
+          "requests": 1,
+          "rejected": 0,
+          "continuations": 0,
+          "deepestLevel": 7,
+          "tree": "0-7",
+          "nodes": 8
+        }
+      }
+    },
+    {
+      "name": "hinted-first-request",
+      "request": {
+        "traversalDepth": 64,
+        "explicitDepth": false,
+        "nodeBudget": 1500,
+        "hint": {
+          "runner": 40,
+          "host-bridge": 32
+        }
+      },
+      "native": {
+        "tree": {
+          "chain": 45
+        },
+        "rejectLevelsAbove": 48,
+        "frontierEvidence": "counted"
+      },
+      "expected": {
+        "host-bridge": {
+          "outcome": "complete",
+          "requests": 2,
+          "rejected": 0,
+          "continuations": 1,
+          "deepestLevel": 44,
+          "tree": "0-44",
+          "nodes": 45
+        },
+        "runner": {
+          "outcome": "complete",
+          "requests": 2,
+          "rejected": 0,
+          "continuations": 1,
+          "deepestLevel": 44,
+          "tree": "0-44",
+          "nodes": 45
+        }
+      }
+    },
+    {
+      "name": "hint-rejected-then-lower",
+      "request": {
+        "traversalDepth": 64,
+        "explicitDepth": false,
+        "nodeBudget": 1500,
+        "hint": {
+          "runner": 40,
+          "host-bridge": 32
+        }
+      },
+      "native": {
+        "tree": {
+          "chain": 45
+        },
+        "rejectLevelsAbove": 20,
+        "frontierEvidence": "counted"
+      },
+      "expected": {
+        "host-bridge": {
+          "outcome": "complete",
+          "requests": 4,
+          "rejected": 1,
+          "continuations": 2,
+          "deepestLevel": 44,
+          "tree": "0-44",
+          "nodes": 45
+        },
+        "runner": {
+          "outcome": "complete",
+          "requests": 7,
+          "rejected": 2,
+          "continuations": 4,
+          "deepestLevel": 44,
+          "tree": "0-44",
+          "nodes": 45
+        }
+      }
+    }
+  ],
+  "hintCases": [
+    {
+      "name": "learn-from-complete-recovery",
+      "steps": [
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null,
+            "host-bridge": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 2,
+              "host-bridge": 1
+            },
+            "acceptedLevels": {
+              "runner": 40,
+              "host-bridge": 32
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 40,
+            "host-bridge": 32
+          }
+        },
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": 40,
+            "host-bridge": 32
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 0,
+              "host-bridge": 0
+            },
+            "acceptedLevels": {
+              "runner": 40,
+              "host-bridge": 32
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 40,
+            "host-bridge": 32
+          },
+          "expectRenewed": false
+        }
+      ]
+    },
+    {
+      "name": "never-across-generations",
+      "steps": [
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null,
+            "host-bridge": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 2,
+              "host-bridge": 1
+            },
+            "acceptedLevels": {
+              "runner": 40,
+              "host-bridge": 32
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 40,
+            "host-bridge": 32
+          }
+        },
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g2"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null,
+            "host-bridge": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 0,
+              "host-bridge": 0
+            },
+            "acceptedLevels": {
+              "runner": 64,
+              "host-bridge": 65
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": null,
+            "host-bridge": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "never-across-apps",
+      "steps": [
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null,
+            "host-bridge": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 2,
+              "host-bridge": 1
+            },
+            "acceptedLevels": {
+              "runner": 40,
+              "host-bridge": 32
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 40,
+            "host-bridge": 32
+          }
+        },
+        {
+          "target": {
+            "id": "app-b",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null,
+            "host-bridge": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 0,
+              "host-bridge": 0
+            },
+            "acceptedLevels": {
+              "runner": 64,
+              "host-bridge": 65
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": null,
+            "host-bridge": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "probe-back-after-expiry",
+      "steps": [
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null,
+            "host-bridge": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 2,
+              "host-bridge": 1
+            },
+            "acceptedLevels": {
+              "runner": 40,
+              "host-bridge": 32
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 40,
+            "host-bridge": 32
+          }
+        },
+        {
+          "expire": true
+        },
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null,
+            "host-bridge": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 0,
+              "host-bridge": 0
+            },
+            "acceptedLevels": {
+              "runner": 64,
+              "host-bridge": 65
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": null,
+            "host-bridge": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "expired-probe-relearns-when-still-rejected",
+      "steps": [
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null,
+            "host-bridge": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 2,
+              "host-bridge": 1
+            },
+            "acceptedLevels": {
+              "runner": 40,
+              "host-bridge": 32
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 40,
+            "host-bridge": 32
+          }
+        },
+        {
+          "expire": true
+        },
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null,
+            "host-bridge": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 3,
+              "host-bridge": 2
+            },
+            "acceptedLevels": {
+              "runner": 24,
+              "host-bridge": 16
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 24,
+            "host-bridge": 16
+          }
+        }
+      ]
+    },
+    {
+      "name": "bounded-recovery-still-learned",
+      "steps": [
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null,
+            "host-bridge": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 2,
+              "host-bridge": 1
+            },
+            "acceptedLevels": {
+              "runner": 40,
+              "host-bridge": 32
+            },
+            "complete": false
+          },
+          "expectHintAfter": {
+            "runner": 40,
+            "host-bridge": 32
+          }
+        }
+      ]
+    },
+    {
+      "name": "explicit-depth-ignores-hints",
+      "steps": [
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null,
+            "host-bridge": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 2,
+              "host-bridge": 1
+            },
+            "acceptedLevels": {
+              "runner": 40,
+              "host-bridge": 32
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 40,
+            "host-bridge": 32
+          }
+        },
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": true,
+          "expectHintBefore": {
+            "runner": null,
+            "host-bridge": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 3,
+              "host-bridge": 2
+            },
+            "acceptedLevels": {
+              "runner": 24,
+              "host-bridge": 16
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 40,
+            "host-bridge": 32
+          }
+        }
+      ]
+    },
+    {
+      "name": "rejected-at-every-depth-keeps-the-hint",
+      "steps": [
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": null,
+            "host-bridge": null
+          },
+          "outcome": {
+            "rejected": {
+              "runner": 2,
+              "host-bridge": 1
+            },
+            "acceptedLevels": {
+              "runner": 40,
+              "host-bridge": 32
+            },
+            "complete": true
+          },
+          "expectHintAfter": {
+            "runner": 40,
+            "host-bridge": 32
+          }
+        },
+        {
+          "target": {
+            "id": "app-a",
+            "generation": "g1"
+          },
+          "explicitDepth": false,
+          "expectHintBefore": {
+            "runner": 40,
+            "host-bridge": 32
+          },
+          "outcome": {
+            "failure": "rejected",
+            "rejected": {
+              "runner": 3,
+              "host-bridge": 3
+            }
+          },
+          "expectHintAfter": {
+            "runner": 40,
+            "host-bridge": 32
+          }
+        }
+      ]
+    }
+  ]
+}

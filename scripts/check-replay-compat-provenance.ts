@@ -16,20 +16,14 @@ import {
   REPLAY_COMPAT_RELEASED_TAGS,
 } from '../test/replay-compat/manifest.ts';
 import { findProvenanceKindViolations } from '../test/replay-compat/provenance-rules.ts';
-import { runCmdSync } from '../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
+import { repoGit, requireUnshallowHistory } from './lib/repo-git.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const corpusRoot = path.join(repoRoot, 'test', 'replay-compat');
 
-function git(args: string[]): string {
-  return runCmdSync('git', args, { cwd: repoRoot, allowFailure: true }).stdout.trim();
-}
-
-if (git(['rev-parse', '--is-shallow-repository']) === 'true') {
-  throw new Error(
-    'Corpus provenance needs full history and tags. Run `git fetch --unshallow --tags` first.',
-  );
-}
+const git = repoGit(repoRoot);
+requireUnshallowHistory(git, 'Corpus provenance');
 
 // An entry that escaped `mined` would also escape the history check below, so
 // the area rule is enforced here as well as in the unit lane.

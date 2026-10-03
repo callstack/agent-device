@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { runCmdSync } from '../../src/utils/exec.ts';
-import { readProcessCommand, readProcessStartTime } from '../../src/utils/host-process.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
+import { readProcessCommand, readProcessStartTime } from '@agent-device/host-kit/process';
 
 // #1781 B1: the oracle's `after-close` checkpoint is only meaningful when it can
 // name the sessions that closed — without them it would accept every unfinalized

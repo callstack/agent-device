@@ -1,7 +1,10 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppsFilter, ProviderPortReverseOptions } from '@agent-device/contracts/device';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
-import { bindLimrunInteractionOperations } from './interaction-operations.ts';
+import {
+  LIMRUN_FOLD_UNAVAILABLE,
+  bindLimrunInteractionOperations,
+} from './interaction-operations.ts';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { AppError } from '@agent-device/kernel/errors';
 import { isSupportedLimrunAppLogDevice, parseLimrunDeviceId } from './device.ts';
@@ -38,6 +41,10 @@ import {
 } from './deployment-runtime.ts';
 import { createLimrunRequestOperationDrain } from './request-cancellation.ts';
 import {
+  createLimrunScreenRecordingOperations,
+  type LimrunScreenRecordingSession,
+} from './recording-runtime.ts';
+import {
   deploymentOptions,
   limrunAppLogFacts,
   limrunAppLogRecoveryFacts,
@@ -59,6 +66,8 @@ export type LimrunPlatformRuntimeOwnerOptions = Omit<
     runtimeInstance: string;
     ownsDevice(device: DeviceInfo): boolean;
     getInteractor(device: DeviceInfo, runner?: RunnerContext): Interactor | undefined;
+    getDeviceSession(device: DeviceInfo): LimrunScreenRecordingSession | undefined;
+    resolveAppReference?(device: DeviceInfo, app: string): string;
     openCurrent(device: DeviceInfo): Promise<LimrunAppLogReader | undefined>;
     hasLiveSession(device: DeviceInfo): boolean;
     reconnect(
@@ -104,17 +113,14 @@ export function createLimrunPlatformRuntimeOwner(
             touch: liveSessionUnavailable,
             elementText: liveSessionUnavailable,
             back: liveSessionUnavailable,
-            home: liveSessionUnavailable,
             orientation: liveSessionUnavailable,
             tvRemote: liveSessionUnavailable,
-            keyboardStatus: liveSessionUnavailable,
-            keyboardDismiss: liveSessionUnavailable,
-            keyboardEnter: liveSessionUnavailable,
-            readClipboard: liveSessionUnavailable,
-            writeClipboard: liveSessionUnavailable,
-            appSwitcher: liveSessionUnavailable,
+            keyboard: liveSessionUnavailable,
+            clipboard: liveSessionUnavailable,
+            systemButton: liveSessionUnavailable,
+            fold: LIMRUN_FOLD_UNAVAILABLE,
             triggerAppEvent: liveSessionUnavailable,
-            setSetting: liveSessionUnavailable,
+            settings: liveSessionUnavailable,
             readAlert: liveSessionUnavailable,
             awaitAlert: liveSessionUnavailable,
             acceptAlert: liveSessionUnavailable,
@@ -254,7 +260,7 @@ function bindLimrunAppLogs(
     networkDump: async (input) => {
       const recent = await options.host.appLogs.readRecent(input.sessionId, input.maxScanLines);
       const backend = backendForDevice(device);
-      const dump = readRecentNetworkTrafficFromText(recent.text, {
+      const { dump } = readRecentNetworkTrafficFromText(recent.text, {
         ...input,
         path: recent.path,
         exists: recent.exists,
@@ -280,11 +286,17 @@ function bindLimrunAppLogs(
         device,
         signal,
         getInteractor: options.getInteractor,
+        resolveAppReference: (app) => options.resolveAppReference?.(device, app) ?? app,
         configurePortReverse: options.configurePortReverse,
       }),
       runtimeFacts.operations,
     ),
-    ...bindLimrunInteractionOperations({ device, signal, getInteractor: options.getInteractor }),
+    ...bindLimrunInteractionOperations({
+      device,
+      signal,
+      getInteractor: options.getInteractor,
+      presentIosAcquisition: options.host.snapshot.presentIosAcquisition,
+    }),
     ...bindAdmittedProviderInteractorOperations({
       device,
       signal,
@@ -297,6 +309,13 @@ function bindLimrunAppLogs(
       signal,
       deploymentOperationDrain,
     ),
+    ...createLimrunScreenRecordingOperations({
+      host: options.host,
+      device,
+      owner,
+      signal,
+      getDeviceSession: options.getDeviceSession,
+    }),
   } satisfies DeviceBinding<PlatformRuntimeOperations>['operations'];
   return Object.freeze({
     device,

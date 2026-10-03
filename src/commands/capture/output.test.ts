@@ -2,6 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
+import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 import { snapshotCliOutput } from './output.ts';
 
 function buildResult(raw: RawSnapshotNode[]): CaptureSnapshotResult {
@@ -37,8 +38,8 @@ const REPEATED_CHAIN: RawSnapshotNode[] = [
   },
 ];
 
-test('default (non-raw) output dedups repeated ancestor labels in both text and json', () => {
-  const output = snapshotCliOutput({ result: buildResult(REPEATED_CHAIN) });
+test('default (non-raw) output dedups repeated ancestor labels in both text and json', async () => {
+  const output = await snapshotCliOutput({ result: buildResult(REPEATED_CHAIN) });
 
   const jsonNodes = (output.jsonData as { nodes: Array<Record<string, unknown>> }).nodes;
   assert.equal(jsonNodes[0]!.label, 'Anthropic - Headquarters, 548 Market St');
@@ -52,8 +53,8 @@ test('default (non-raw) output dedups repeated ancestor labels in both text and 
   assert.match(output.text!, /same label as parent/);
 });
 
-test('--raw preserves the original repeated labels byte-for-byte', () => {
-  const output = snapshotCliOutput({ result: buildResult(REPEATED_CHAIN), raw: true });
+test('--raw preserves the original repeated labels byte-for-byte', async () => {
+  const output = await snapshotCliOutput({ result: buildResult(REPEATED_CHAIN), raw: true });
 
   const jsonNodes = (output.jsonData as { nodes: Array<Record<string, unknown>> }).nodes;
   for (const node of jsonNodes) {
@@ -64,8 +65,8 @@ test('--raw preserves the original repeated labels byte-for-byte', () => {
   assert.equal(occurrences, 4);
 });
 
-test('distinct labels across the chain are all preserved', () => {
-  const output = snapshotCliOutput({
+test('distinct labels across the chain are all preserved', async () => {
+  const output = await snapshotCliOutput({
     result: buildResult([
       { index: 0, type: 'ScrollView', label: 'Map', depth: 0 },
       { index: 1, type: 'Button', label: 'Anthropic HQ', depth: 1, parentIndex: 0 },
@@ -77,13 +78,13 @@ test('distinct labels across the chain are all preserved', () => {
   assert.equal(jsonNodes[1]!.label, 'Anthropic HQ');
 });
 
-test('snapshot output presents the materialized fallback screenshot path', () => {
+test('snapshot output presents the materialized fallback screenshot path', async () => {
   const result = {
     ...buildResult([]),
     fallbackScreenshotPath: '/client/artifacts/snapshot-fallback.png',
   };
 
-  const output = snapshotCliOutput({ result });
+  const output = await snapshotCliOutput({ result });
 
   assert.equal(
     (output.jsonData as Record<string, unknown>).fallbackScreenshotPath,
@@ -93,4 +94,32 @@ test('snapshot output presents the materialized fallback screenshot path', () =>
     output.text ?? '',
     /Captured a screenshot of this screen automatically as visual truth: \/client\/artifacts\/snapshot-fallback\.png/,
   );
+});
+
+/**
+ * The rendered surface an agent actually reads after the runner repaired foreground (#2682): the
+ * disclosure is printed, and the structured fact survives the JSON projection so a scripted caller
+ * never has to parse the sentence.
+ */
+test('a repaired capture renders the disclosure and keeps the structured fact', async () => {
+  const fact = {
+    reason: 'stale_target',
+    priorState: 'runningBackground',
+    otherActiveApplicationPid: 4562,
+  } as const;
+  const output = await snapshotCliOutput({
+    result: {
+      ...buildResult(REPEATED_CHAIN),
+      warnings: [iosTargetActivationDisclosure(fact)],
+      targetActivation: fact,
+    } as CaptureSnapshotResult,
+  });
+
+  assert.match(String(output.text), /prior state runningBackground/);
+  assert.match(String(output.text), /drive the other app in its own session/);
+  assert.deepEqual((output.jsonData as { targetActivation?: unknown }).targetActivation, {
+    reason: 'stale_target',
+    priorState: 'runningBackground',
+    otherActiveApplicationPid: 4562,
+  });
 });

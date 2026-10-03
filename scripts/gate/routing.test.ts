@@ -34,6 +34,13 @@ test('the live ios.yml paths-ignore agrees with the selector over every tracked 
   assert.deepEqual(messages(base), []);
 });
 
+test('the live iOS route carries no filters for the retired src/platforms tree', () => {
+  assert.deepEqual(
+    iosLane.pathsIgnore.filter((pattern) => pattern.startsWith('src/platforms/')),
+    [],
+  );
+});
+
 test('the routed lane derives its needs from its declared gate plus the sampled checks', () => {
   assert.ok(iosLane.gates.includes('swift-runner-ios'), 'ios.yml still declares the runner build');
   assert.deepEqual([...IOS.sampled], ['replay-ios', 'replay-ios-device']);
@@ -42,14 +49,14 @@ test('the routed lane derives its needs from its declared gate plus the sampled 
 test('ignoring an Apple-owned tree is reported with the checks the selector routes it to', () => {
   const model = withIos((lane) => ({
     ...lane,
-    pathsIgnore: [...lane.pathsIgnore, 'src/platforms/apple/**'],
+    pathsIgnore: [...lane.pathsIgnore, 'packages/platform-apple/src/**'],
   }));
   const found = messages(model);
   assert.ok(found.length > 0);
   assert.ok(
     found.some(
       (message) =>
-        /ignores src\/platforms\/apple\//.test(message) &&
+        /ignores packages\/platform-apple\/src\//.test(message) &&
         /routes it to "replay-ios"/.test(message),
     ),
     found.slice(0, 3).join('\n'),
@@ -134,14 +141,14 @@ test('the exemption cannot name a support file of an action the lane runs', () =
 // remedy is not "remove the ignore entry" — that would un-route every sibling `.ts` in the
 // tree. The selector gap is the fix, and the message has to say so.
 test('an unowned path under an ignored root asks for an owner, not for the entry’s removal', () => {
-  const planted = 'src/platforms/android/probe-fixture.json';
+  const planted = 'packages/platform-android/src/probe-fixture.json';
   const model = {
     ...base,
     trackedFiles: new Set([...base.trackedFiles, planted]),
   };
   const found = routing(model, ROUTED_LANES).map((failure) => failure.message);
   assert.equal(found.length, 1, found.join('\n'));
-  assert.match(found[0] ?? '', /fails open on it \(ambiguous-path\)/);
+  assert.match(found[0] ?? '', /fails open on it \(unknown-path\)/);
   assert.match(found[0] ?? '', /Give it an owning check in scripts\/check-affected\//);
   assert.ok(!/Remove the ignore entry/.test(found[0] ?? ''));
 });
@@ -149,13 +156,15 @@ test('an unowned path under an ignored root asks for an owner, not for the entry
 test('dropping a family root from the ignore list fails the routing claim for that tree', () => {
   const model = withIos((lane) => ({
     ...lane,
-    pathsIgnore: lane.pathsIgnore.filter((pattern) => pattern !== 'src/platforms/android/**'),
+    pathsIgnore: lane.pathsIgnore.filter(
+      (pattern) => pattern !== 'packages/platform-android/src/**',
+    ),
   }));
   const found = messages(model);
   assert.ok(
     found.some(
       (message) =>
-        /starts on src\/platforms\/android\//.test(message) &&
+        /starts on packages\/platform-android\/src\//.test(message) &&
         /android-owned \(lanes: replay-android\)/.test(message),
     ),
     found.slice(0, 3).join('\n'),

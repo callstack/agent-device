@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest';
 import { RESPONSE_VIEWS } from '../response-views.ts';
-import type { DaemonResponseData } from '../types.ts';
+import type { DaemonResponseData } from '../daemon-request.ts';
 
 const snapshotView = RESPONSE_VIEWS.snapshot;
 const screenshotView = RESPONSE_VIEWS.screenshot;
@@ -19,10 +19,6 @@ const SNAPSHOT_DATA: DaemonResponseData = {
   snapshotQuality: { state: 'healthy', backend: 'tree' },
   appName: 'Demo', // a non-cheap field that the digest intentionally drops
 };
-
-test('snapshot view is registered', () => {
-  expect(typeof snapshotView).toBe('function');
-});
 
 test('digest collapses the node tree to count + actionable refs + cheap signals', () => {
   const digest = snapshotView!(SNAPSHOT_DATA, 'digest');
@@ -44,6 +40,20 @@ test('digest collapses the node tree to count + actionable refs + cheap signals'
 test('default and full return today’s shape unchanged (same reference)', () => {
   expect(snapshotView!(SNAPSHOT_DATA, 'default')).toBe(SNAPSHOT_DATA);
   expect(snapshotView!(SNAPSHOT_DATA, 'full')).toBe(SNAPSHOT_DATA);
+});
+
+/**
+ * A digest is what an agent keeps reading after the tree collapses. A foreground repair that dropped
+ * out of it would leave a repaired capture looking like every earlier one (#2682).
+ */
+test('digest carries the foreground repair of the tree it collapsed', () => {
+  const repair = {
+    reason: 'stale_target',
+    priorState: 'runningBackground',
+    otherActiveApplicationPid: 4562,
+  };
+  const digest = snapshotView!({ ...SNAPSHOT_DATA, targetActivation: repair }, 'digest');
+  expect(digest.targetActivation).toEqual(repair);
 });
 
 test('digest tolerates missing/empty node trees', () => {
@@ -108,10 +118,6 @@ const SCREENSHOT_DATA: DaemonResponseData = {
   ], // cheap retrieval handle — preserved
 };
 
-test('screenshot view is registered', () => {
-  expect(typeof screenshotView).toBe('function');
-});
-
 test('digest collapses overlay geometry to count + leveled refs, keeps cheap fields', () => {
   const digest = screenshotView!(SCREENSHOT_DATA, 'digest');
   expect(digest).toEqual({
@@ -158,6 +164,28 @@ test('screenshot digest tolerates a path-only result with no overlay refs', () =
   expect(digest).toEqual({ path: '/tmp/s.png', overlayCount: 0, overlayRefs: [] });
 });
 
+test('screenshot digest keeps response-level warnings emitted once', () => {
+  const digest = screenshotView!(
+    {
+      path: '/tmp/s.png',
+      width: 40,
+      height: 20,
+      warnings: [
+        'CROP_PARTIAL_INTERSECTION: the selector frame extends past the captured image; the crop was clipped to the image frame',
+      ],
+    },
+    'digest',
+  );
+  expect(digest).toMatchObject({
+    path: '/tmp/s.png',
+    width: 40,
+    height: 20,
+    warnings: [
+      'CROP_PARTIAL_INTERSECTION: the selector frame extends past the captured image; the crop was clipped to the image frame',
+    ],
+  });
+});
+
 // A verbose matched node as it appears on the `find`/`get` wire: the semantic
 // attributes (kept) plus the geometry/index/process plumbing (the token sink).
 const MATCHED_NODE = {
@@ -167,6 +195,7 @@ const MATCHED_NODE = {
   label: 'Sign in',
   value: 'enabled',
   identifier: 'login-button',
+  contentDescription: 'Sign in to Demo',
   enabled: true,
   selected: false,
   focused: false,
@@ -191,15 +220,14 @@ const COMPACT_NODE = {
   label: 'Sign in',
   value: 'enabled',
   identifier: 'login-button',
+  contentDescription: 'Sign in to Demo',
   enabled: true,
   selected: false,
   focused: false,
   hittable: true,
 };
 
-test('find and get views are registered (shared selector-read view)', () => {
-  expect(typeof findView).toBe('function');
-  expect(typeof getView).toBe('function');
+test('find and get share one selector-read view', () => {
   expect(findView).toBe(getView);
 });
 
@@ -278,6 +306,40 @@ test('get attrs digest compacts the node under a ref target', () => {
   expect(digest).toEqual({ ref: 'e7', node: COMPACT_NODE });
 });
 
+test('attrs digest keeps explicit false/zero/empty field facts; unavailable ones stay absent (#2288)', () => {
+  const fieldFacts = {
+    value: '',
+    editable: false,
+    password: false,
+    hintShowing: false,
+    placeholder: 'Key echo',
+    selectionStart: 0,
+    selectionEnd: 0,
+  };
+  const digest = getView!({ ref: 'e7', node: { ...MATCHED_NODE, ...fieldFacts } }, 'digest');
+  expect(digest.node).toEqual({ ...COMPACT_NODE, ...fieldFacts });
+  // MATCHED_NODE carries none of the field facts: the digest must not invent them.
+  const unavailable = getView!({ ref: 'e7', node: MATCHED_NODE }, 'digest').node as Record<
+    string,
+    unknown
+  >;
+  for (const field of Object.keys(fieldFacts)) {
+    if (field !== 'value') expect(field in unavailable).toBe(false);
+  }
+});
+
+test('attrs digest carries both checked answers, and none for a node that cannot be checked', () => {
+  for (const checked of [true, false]) {
+    const digest = getView!({ ref: 'e7', node: { ...MATCHED_NODE, checked } }, 'digest');
+    expect(digest.node).toEqual({ ...COMPACT_NODE, checked });
+  }
+  const plain = getView!({ ref: 'e7', node: MATCHED_NODE }, 'digest').node as Record<
+    string,
+    unknown
+  >;
+  expect('checked' in plain).toBe(false);
+});
+
 test('find/get default and full return today’s shape unchanged (same reference)', () => {
   const data: DaemonResponseData = { ref: '@e7', text: 'Sign in', node: MATCHED_NODE };
   expect(findView!(data, 'default')).toBe(data);
@@ -316,7 +378,6 @@ const SETTLE_DATA: DaemonResponseData = {
 };
 
 test('interaction settle views are registered for all four touch commands', () => {
-  expect(typeof RESPONSE_VIEWS.press).toBe('function');
   expect(RESPONSE_VIEWS.press).toBe(RESPONSE_VIEWS.click);
   expect(RESPONSE_VIEWS.press).toBe(RESPONSE_VIEWS.fill);
   expect(RESPONSE_VIEWS.press).toBe(RESPONSE_VIEWS.longpress);
@@ -499,10 +560,6 @@ const NETWORK_DATA: DaemonResponseData = {
   artifacts: [{ field: 'path', artifactType: 'app-log', artifactId: 'artifact-network-log' }],
 };
 
-test('network view is registered', () => {
-  expect(typeof networkView).toBe('function');
-});
-
 test('network digest keeps the whole dump + every entry identity, dropping only payload material', () => {
   const digest = networkView!(NETWORK_DATA, 'digest');
   // Top-level dump is preserved verbatim.
@@ -561,4 +618,12 @@ test('network digest tolerates a missing/empty entries list', () => {
   expect(networkView!(empty, 'digest')).toBe(empty);
   const emptyList: DaemonResponseData = { path: '/tmp/app.log', entries: [] };
   expect(networkView!(emptyList, 'digest')).toEqual({ path: '/tmp/app.log', entries: [] });
+});
+
+test('screenshot digest keeps the capture display rotation', () => {
+  const digest = screenshotView!(
+    { path: '/tmp/s.png', displayRotation: 'landscape-left' },
+    'digest',
+  );
+  expect(digest.displayRotation).toBe('landscape-left');
 });

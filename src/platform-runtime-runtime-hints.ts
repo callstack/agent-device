@@ -1,9 +1,11 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { escapeXmlTextAndAttribute } from '@agent-device/xml';
 import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
-import { execFailureDetails, type ExecResult } from './utils/exec.ts';
-import { type ResolvedRuntimeTransport } from './utils/runtime-transport.ts';
+import { execFailureDetails, type ExecResult } from '@agent-device/host-kit/command';
+import { type ResolvedRuntimeTransport } from '@agent-device/host-kit/runtime-transport-hints';
+import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 // React Native's PackagerConnectionSettings/DevInternalSettings read debug_http_host via
 // PreferenceManager.getDefaultSharedPreferences(context), which resolves to
@@ -159,10 +161,10 @@ async function clearAndroidRuntimeHints(device: DeviceInfo, packageName: string)
 /** Android mechanics stay implementation-lazy until an admitted Android hint operation runs. */
 async function runRuntimeHintsAndroidAdb(
   device: DeviceInfo,
-  args: string[],
+  args: readonly string[],
   options?: Readonly<{ allowFailure?: boolean; stdin?: string }>,
 ): Promise<ExecResult> {
-  const { runAndroidAdb } = await import('./platforms/android/adb.ts');
+  const { runAndroidAdb } = await loadAndroidMechanics();
   return await runAndroidAdb(device, args, options);
 }
 
@@ -173,7 +175,7 @@ async function readAndroidDevPrefs(
 ): Promise<string> {
   const result = await runRuntimeHintsAndroidAdb(
     device,
-    ['shell', 'run-as', packageName, 'cat', prefsPath],
+    deviceShellArgv('adb', 'shell', ['run-as', packageName, 'cat', prefsPath]),
     { allowFailure: true },
   );
   if (result.exitCode !== 0) return DEFAULT_ANDROID_PREFS_XML;
@@ -197,7 +199,7 @@ async function assertAndroidAppSandboxAccessible(
   device: DeviceInfo,
   packageName: string,
 ): Promise<void> {
-  const probeArgs = ['shell', 'run-as', packageName, 'id'];
+  const probeArgs = deviceShellArgv('adb', 'shell', ['run-as', packageName, 'id']);
   const probeResult = await runRuntimeHintsAndroidAdb(device, probeArgs, { allowFailure: true });
   if (probeResult.exitCode === 0) return;
   throw androidRuntimeHintsProbeError(probeResult, packageName, probeArgs);
@@ -206,7 +208,7 @@ async function assertAndroidAppSandboxAccessible(
 function androidRuntimeHintsProbeError(
   result: ExecResult,
   packageName: string,
-  args: string[],
+  args: readonly string[],
 ): AppError {
   const runAsDenied = isAndroidRunAsDeniedOutput(result.stdout, result.stderr);
   return new AppError(
@@ -228,18 +230,16 @@ async function writeAndroidDevPrefsFiles(
   packageName: string,
   files: Array<{ path: string; xml: string }>,
 ): Promise<void> {
-  await runRuntimeHintsAndroidAdb(device, [
-    'shell',
-    'run-as',
-    packageName,
-    'mkdir',
-    '-p',
-    'shared_prefs',
-  ]);
+  await runRuntimeHintsAndroidAdb(
+    device,
+    deviceShellArgv('adb', 'shell', ['run-as', packageName, 'mkdir', '-p', 'shared_prefs']),
+  );
   for (const file of files) {
-    await runRuntimeHintsAndroidAdb(device, ['shell', 'run-as', packageName, 'tee', file.path], {
-      stdin: file.xml.trimEnd(),
-    });
+    await runRuntimeHintsAndroidAdb(
+      device,
+      deviceShellArgv('adb', 'shell', ['run-as', packageName, 'tee', file.path]),
+      { stdin: file.xml.trimEnd() },
+    );
   }
 }
 
@@ -312,8 +312,8 @@ async function runIosSimulatorRuntimeHintCommand(
   options?: Readonly<{ allowFailure?: boolean }>,
 ): Promise<void> {
   const [{ buildSimctlArgsForDevice }, { runXcrun }] = await Promise.all([
-    import('./platforms/apple/core/simctl.ts'),
-    import('./platforms/apple/core/tool-provider.ts'),
+    import('@agent-device/platform-apple/simctl'),
+    import('@agent-device/platform-apple/tool-provider'),
   ]);
   await runXcrun(buildSimctlArgsForDevice(device, args), options);
 }
@@ -353,7 +353,7 @@ function removeAndroidPrefEntry(xml: string, key: string): string {
 
 async function assertAndroidRuntimePackageName(packageName: string): Promise<void> {
   const { classifyAndroidAppTarget, formatAndroidInstalledPackageRequiredMessage } =
-    await import('./platforms/android/open-target.ts');
+    await loadAndroidMechanics();
   if (classifyAndroidAppTarget(packageName) !== 'binary') return;
   const message = formatAndroidInstalledPackageRequiredMessage(packageName);
   throw new AppError('INVALID_ARGS', message, {
@@ -363,7 +363,7 @@ async function assertAndroidRuntimePackageName(packageName: string): Promise<voi
 }
 
 function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 function isAndroidRunAsDeniedOutput(stdout: string, stderr: string): boolean {

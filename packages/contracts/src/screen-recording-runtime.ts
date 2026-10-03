@@ -1,5 +1,7 @@
 import type { GestureReferenceFrame, ScrollDirection } from './scroll-gesture.ts';
 import type { RecordingAppIdentity } from './recording.ts';
+import type { StopObservation } from './recording-stop-observation.ts';
+import type { NativePathDisposition } from './recording-native-path.ts';
 import type { RecordingExportQuality } from './recording-export-quality.ts';
 import type { RecordingScope } from './recording-scope.ts';
 import type { CleanupOutcome, LiveResourceHandle, ReattachOutcome } from './durable-resource.ts';
@@ -8,6 +10,9 @@ import type { PendingTransferGuard } from './async-lifecycle.ts';
 import type { ResourceOwnershipFence } from './platform-runtime.ts';
 
 export const SCREEN_RECORDING_RESOURCE_KIND = 'screen-recording' as const;
+
+/** The recording's file exists and is not a video, which only a still-finalizing recorder can undo. */
+export const RECORDING_OUTPUT_UNPLAYABLE_REASON = 'recording-output-unplayable';
 
 type RecordingTelemetryBase = Readonly<{
   tMs: number;
@@ -72,7 +77,6 @@ export type ScreenRecordingLiveSnapshot = Readonly<{
   gestureClockOriginAtMs?: number;
   gestureClockOriginUptimeMs?: number;
   runnerStartedAtUptimeMs?: number;
-  targetAppReadyUptimeMs?: number;
   runnerSessionId?: string;
   invalidatedReason?: string;
 }>;
@@ -84,6 +88,24 @@ export type ScreenRecordingCompletion = Readonly<{
   clientOutPath?: string;
   startedAt: number;
   completedAt: number;
+  /**
+   * Duration the finished video timelines actually cover, when the backend can measure them. A
+   * backend that encodes only on screen changes can capture less video than the `startedAt` to
+   * `completedAt` window reports as the recording duration; a chunked recording sums its chunk
+   * timelines, which excludes whatever a chunk handover cost.
+   */
+  capturedDurationMs?: number;
+  /**
+   * What the backend observed about its recorder when it was asked to stop (ADR 0024 2.2). The
+   * public response serves only its `recorder` word; the reason stays here, beside the export it
+   * explains, where recovery and diagnostics read it.
+   */
+  stopObservation?: StopObservation;
+  /**
+   * What became of the recorder's own artifact path (ADR 0024 2.3). Recorded at commit, and the
+   * manifest keeps its native path and recorder identity until this reaches `retired`.
+   */
+  nativePathDisposition?: NativePathDisposition;
   scope: RecordingScope;
   showTouches: boolean;
   recordOnlySession: boolean;

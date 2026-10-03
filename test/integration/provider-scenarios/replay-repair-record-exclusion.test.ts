@@ -15,7 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/android-snapshot-helper.ts';
-import type { AndroidAdbProvider } from '../../../src/platforms/android/adb-executor.ts';
+import type { AndroidAdbProvider } from '@agent-device/platform-android/mechanics';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { androidSettingsXml, androidSnapshotHelperOutput } from './android-world.ts';
 import {
@@ -199,7 +199,7 @@ function healedLines(script: string, command: string): string[] {
 }
 
 function androidRepairAdbResult(
-  args: string[],
+  args: readonly string[],
   shellState: ReturnType<typeof createAndroidProviderShellState>,
 ): {
   stdout: string;

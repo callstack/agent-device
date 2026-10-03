@@ -129,8 +129,8 @@ export function AudioScreen() {
       <ScreenTitle
         badge="Media"
         subtitle="A short generated audio sample with a visible playback state."
-        title="Audio"
         testID="audio-title"
+        title="Audio"
       />
 
       <SectionCard subtitle="Generated 440 Hz beep, 6 seconds." title="Audio sample">

@@ -9,7 +9,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   createDurableCaptureAdmissionLedger,
   type DurableCaptureAdmissionLedger,
-} from './durable-capture-admission-ledger.ts';
+} from '@agent-device/capture-kit/durable-capture-admission-ledger';
 
 export type RetainedLegacyAppLogMarker = Readonly<{
   markerPath: string;

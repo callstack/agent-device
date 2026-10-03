@@ -1,3 +1,4 @@
+import type { AndroidAdbInvocation } from '@agent-device/platform-android/mechanics';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { AndroidInputOwner } from '@agent-device/contracts/android-input-ownership';
@@ -20,7 +21,7 @@ export type LimrunAdbCommandResult = {
 };
 
 export type LimrunAdbExecutor = (
-  args: string[],
+  args: readonly string[],
   options?: LimrunAdbCommandOptions,
 ) => Promise<LimrunAdbCommandResult>;
 
@@ -88,20 +89,48 @@ export type LimrunAndroidRuntimeAdapter = {
   getKeyboardState(adb: LimrunAdbExecutor): Promise<LimrunAndroidKeyboardState>;
   dismissKeyboard(adb: LimrunAdbExecutor): Promise<LimrunAndroidKeyboardDismissResult>;
   readLogs(adb: LimrunAdbExecutor, lineLimit: number): Promise<string>;
+  /** Stops the app so an install cannot inherit a running process. Tolerates a device that says no. */
+  forceStopApp(adb: LimrunAdbExecutor, packageName: string, signal?: AbortSignal): Promise<void>;
+  /**
+   * Addresses one device command at `serial`, the tunnel this provider opened. The serial is the
+   * provider's own addressing decision and belongs to the target, so the command array the Android
+   * cluster handed over reaches the host unchanged. The builders come from the composition root
+   * rather than an import: ADR-0019 keeps a provider's eager closure off the platform
+   * implementation, and an invocation is built by the platform's typed grammar.
+   */
+  deviceAdbInvocation(serial: string, command: readonly string[]): AndroidAdbInvocation;
+  /** Addresses one server-level command, which selects no device. */
+  hostAdbInvocation(command: readonly string[]): AndroidAdbInvocation;
+  /**
+   * Builds the failure an ADB command answered with. The invocation is what was asked of adb; how
+   * it is named in the error belongs to whoever renders it, not to this provider.
+   */
   adbError(
     message: string,
     result: LimrunAdbCommandResult,
-    details?: Record<string, unknown>,
+    invocation?: AndroidAdbInvocation,
   ): Promise<AppError>;
 };
 
+/** One authenticated HTTP download the host performs on the provider's behalf, bounded by `timeoutMs`. */
+export type LimrunFileDownload = Readonly<{
+  url: string;
+  headers: Readonly<Record<string, string>>;
+  destinationPath: string;
+  timeoutMs: number;
+}>;
+
 export type LimrunHostAdapter = {
-  runAdb(args: string[], options?: LimrunAdbCommandOptions): Promise<LimrunAdbCommandResult>;
+  runAdb(
+    invocation: AndroidAdbInvocation,
+    options?: LimrunAdbCommandOptions,
+  ): Promise<LimrunAdbCommandResult>;
   archiveDirectory(options: {
     sourceDirectory: string;
     entryName: string;
     archivePath: string;
   }): Promise<void>;
+  downloadFile(options: LimrunFileDownload): Promise<void>;
 };
 
 export type LimrunIosRuntimeAdapter = {

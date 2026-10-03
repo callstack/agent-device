@@ -1,11 +1,6 @@
+import type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
+import { buildCloudWebDriverBaseCapabilities } from './runtime.ts';
 import {
-  createCloudWebDriverCapabilities,
-  type CloudWebDriverCapabilityOverrides,
-  type CloudWebDriverProviderCapabilities,
-} from './capabilities.ts';
-import { buildCloudWebDriverBaseCapabilities, createCloudWebDriverRuntime } from './runtime.ts';
-import {
-  listAwsDeviceFarmCloudArtifacts,
   readAwsArtifacts,
   type AwsDeviceFarmArtifact,
   type AwsDeviceFarmArtifactGroup,
@@ -15,18 +10,12 @@ import type {
   CloudWebDriverRuntimeOptions,
   CloudWebDriverPrepareSession,
 } from './runtime.ts';
-import type {
-  DeviceLease,
-  LeaseLifecycleContext,
-  ProviderDeviceRuntime,
-} from '@agent-device/contracts/device';
+import type { DeviceLease, LeaseLifecycleContext } from '@agent-device/contracts/device';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RunHostCommand } from './dependencies.ts';
-import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
 import { releaseOnFailure, resolveLeaseValue, type LeaseValue } from './webdriver-utils.ts';
 
-const AWS_DEVICE_FARM_PROVIDER = CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm;
 export const AWS_DEVICE_FARM_CAPABILITY_OVERRIDES = {
   install: {
     support: 'unsupported',
@@ -103,57 +92,6 @@ export type AwsDeviceFarmWebDriverRuntimeOptions = {
   requestPolicy?: CloudWebDriverRuntimeOptions['requestPolicy'];
   prepareSession?: CloudWebDriverRuntimeOptions['prepareSession'];
 };
-
-/**
- * @internal AWS Device Farm capability builder used by integration tests.
- */
-export function getAwsDeviceFarmWebDriverCapabilities(
-  platform: CloudWebDriverPlatform,
-): CloudWebDriverProviderCapabilities {
-  return createCloudWebDriverCapabilities({
-    provider: AWS_DEVICE_FARM_PROVIDER,
-    platform,
-    overrides: AWS_DEVICE_FARM_CAPABILITY_OVERRIDES,
-  });
-}
-
-/**
- * @internal AWS Device Farm runtime factory used by integration tests.
- */
-export function createAwsDeviceFarmWebDriverRuntime(
-  options: AwsDeviceFarmWebDriverRuntimeOptions,
-): ProviderDeviceRuntime {
-  if (!options.client) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'AWS Device Farm runtime construction requires a client from the package facade.',
-    );
-  }
-  const client = options.client;
-  const platform = options.platform ?? 'android';
-  const deviceName = options.deviceName ?? 'AWS Device Farm device';
-  return createCloudWebDriverRuntime({
-    clientVersion: options.clientVersion,
-    provider: AWS_DEVICE_FARM_PROVIDER,
-    endpoint: 'http://127.0.0.1/',
-    platform,
-    deviceName,
-    webdriverCapabilities: options.webdriverCapabilities,
-    prepareSession:
-      options.prepareSession ??
-      createAwsDeviceFarmPrepareSession({
-        ...options,
-        platform,
-        deviceName,
-        client,
-      }),
-    listArtifacts: async ({ provider, providerSessionId }) =>
-      await listAwsDeviceFarmCloudArtifacts(provider, providerSessionId, client),
-    deviceId: options.deviceId,
-    requestPolicy: options.requestPolicy,
-    capabilityOverrides: AWS_DEVICE_FARM_CAPABILITY_OVERRIDES,
-  });
-}
 
 export type AwsCliDeviceFarmClientOptions = {
   runHostCommand: RunHostCommand;
@@ -239,16 +177,16 @@ export function createAwsDeviceFarmPrepareSession(
       typeof options.webdriverCapabilities === 'function'
         ? options.webdriverCapabilities(lease)
         : (options.webdriverCapabilities ?? {});
+    const awsDefaults = options.platform === 'android' ? { 'appium:autoLaunch': false } : {};
     return {
       ...base,
       endpoint,
       platform: options.platform,
       deviceName,
-      webdriverCapabilities: buildCloudWebDriverBaseCapabilities(
-        options.platform,
-        deviceName,
-        configured,
-      ),
+      webdriverCapabilities: buildCloudWebDriverBaseCapabilities(options.platform, deviceName, {
+        ...awsDefaults,
+        ...configured,
+      }),
       cleanup: async () => {
         await options.client.stopRemoteAccessSession(running.arn);
         return { awsDeviceFarmSessionArn: running.arn };

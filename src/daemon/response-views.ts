@@ -1,6 +1,7 @@
+import { isDeviceRotation } from '@agent-device/contracts/device';
 import type { ResponseLevel } from '@agent-device/kernel/contracts';
 import type { ScreenshotOverlayRef, SnapshotNode } from '@agent-device/kernel/snapshot';
-import type { DaemonResponseData } from './types.ts';
+import type { DaemonResponseData } from './daemon-request.ts';
 
 /**
  * Phase 4 leveled response views. A view maps a command's `default` result data
@@ -28,20 +29,28 @@ function snapshotView(data: DaemonResponseData, level: ResponseLevel): DaemonRes
     .filter((node) => node.hittable === true && node.interactionBlocked !== 'covered')
     .slice(0, DIGEST_REF_LIMIT)
     .map((node) => ({ ref: node.ref, label: node.label ?? node.value ?? node.identifier }));
+  // Everything here is negotiable except the tree's own size and refs, so the optional signals are
+  // carried by name rather than by one spread per field (#1076 refs generation, #2682 target
+  // activation, and the occlusion/quality/visibility warnings a digest still has to surface).
+  const carriedFields = [
+    'visibility',
+    'snapshotQuality',
+    'targetActivation',
+    'warnings',
+    'fallbackScreenshotPath',
+    'artifacts',
+    'refsGeneration',
+  ] as const satisfies readonly (keyof DaemonResponseData)[];
+  const carried = Object.fromEntries(
+    carriedFields
+      .filter((field) => data[field] !== undefined)
+      .map((field) => [field, data[field]] as const),
+  );
   return {
     nodeCount: nodes.length,
     refs,
     truncated: data.truncated,
-    ...(data.visibility !== undefined ? { visibility: data.visibility } : {}),
-    ...(data.snapshotQuality !== undefined ? { snapshotQuality: data.snapshotQuality } : {}),
-    ...(data.warnings !== undefined ? { warnings: data.warnings } : {}),
-    ...(data.fallbackScreenshotPath !== undefined
-      ? { fallbackScreenshotPath: data.fallbackScreenshotPath }
-      : {}),
-    ...(data.artifacts !== undefined ? { artifacts: data.artifacts } : {}),
-    // #1076 versioned refs: the one-number generation is the pinning signal for
-    // the refs above — cheap, and dropping it would strand auto-pinning clients.
-    ...(data.refsGeneration !== undefined ? { refsGeneration: data.refsGeneration } : {}),
+    ...carried,
   };
 }
 
@@ -76,6 +85,7 @@ function screenshotView(data: DaemonResponseData, level: ResponseLevel): DaemonR
     ...pickScreenshotDigestMetadata(data),
     overlayCount: overlays.length,
     overlayRefs,
+    ...(data.warnings !== undefined ? { warnings: data.warnings } : {}),
     ...(data.artifacts !== undefined ? { artifacts: data.artifacts } : {}),
   };
 }
@@ -83,26 +93,39 @@ function screenshotView(data: DaemonResponseData, level: ResponseLevel): DaemonR
 function pickScreenshotDigestMetadata(data: DaemonResponseData): DaemonResponseData {
   const metadata: DaemonResponseData = {};
   if (typeof data.path === 'string') metadata.path = data.path;
+  if (isDeviceRotation(data.displayRotation)) metadata.displayRotation = data.displayRotation;
   for (const field of SCREENSHOT_DIGEST_NUMBER_FIELDS) {
     if (typeof data[field] === 'number') metadata[field] = data[field];
   }
   return metadata;
 }
 
-// The semantic attributes of a single matched node an agent reasons about. The
-// verbose framing a digest drops — geometry (`rect`), tree indices
-// (`index`/`parentIndex`/`depth`), and process/app plumbing
-// (`pid`/`bundleId`/`appName`/`windowTitle`/`surface`/…) — is intentionally absent.
+// The semantic attributes of a single matched node an agent reasons about,
+// including the field facts whose explicit false/zero/empty is the signal (#2288:
+// absent means unavailable). The verbose framing a digest drops — geometry
+// (`rect`), tree indices (`index`/`parentIndex`/`depth`), and process/app
+// plumbing (`pid`/`bundleId`/`appName`/`windowTitle`/`surface`/…) — is
+// intentionally absent.
 const SELECTOR_DIGEST_NODE_FIELDS = [
   'role',
   'type',
   'subrole',
   'label',
   'value',
+  'contentDescription',
   'identifier',
   'enabled',
   'selected',
+  'checked',
   'focused',
+  'heading',
+  'roleDescription',
+  'editable',
+  'password',
+  'hintShowing',
+  'placeholder',
+  'selectionStart',
+  'selectionEnd',
   'hittable',
 ] as const;
 

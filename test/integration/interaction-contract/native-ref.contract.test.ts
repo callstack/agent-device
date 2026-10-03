@@ -4,13 +4,14 @@ import type { InteractionGuarantee } from '@agent-device/contracts/interaction-g
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { ref } from '../../../src/commands/interaction/runtime/selector-read-utils.ts';
 import { scenarioName } from './coverage-manifest.ts';
-import { buildInteractionResponseData } from '../../../src/daemon/handlers/interaction-touch-response.ts';
+import { buildInteractionResponseData } from '../../../src/daemon/interaction/internal/interaction-touch-response.ts';
 import { NATIVE_REF_COVERAGE } from './native-ref.coverage.ts';
 import {
   closedDrawerSnapshot,
   continueButtonSnapshot,
   settledWelcomeSnapshot,
   coveredButtonSnapshot,
+  keyboardCoveredTabBarSnapshot,
   nonHittableCellSnapshot,
 } from './fixtures.ts';
 import { createContractDevice } from './runtime-harness.ts';
@@ -51,6 +52,24 @@ test(scenario('occlusion'), async () => {
       assert.match(error.message, /Ref @e2 is covered by another visible element/);
       const details = (error as { details?: Record<string, unknown> }).details;
       assert.equal(details?.interactionBlocked, 'covered');
+      return true;
+    },
+  );
+  assert.deepEqual(calls, []);
+});
+
+test(scenario('keyboardOcclusion'), async () => {
+  const calls: string[] = [];
+  const device = createNativeRefDevice(keyboardCoveredTabBarSnapshot(), calls);
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e2'), { session: 'default' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /Ref @e2 is behind the visible keyboard/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'tap_keyboard_occludes_target');
+      assert.equal(details?.ref, '@e2');
       return true;
     },
   );
@@ -173,7 +192,7 @@ test(scenario('responseConstruction'), async () => {
   // ADR 0012 decision 3: the preflight's guard lookup supplies the
   // record-time evidence node on the runtime result.
   assert.equal(result.node?.ref, 'e1');
-  assert.ok(Array.isArray(result.preActionNodes));
+  assert.ok(Array.isArray(result.preAction?.nodes));
 
   const {
     result: visualization,
@@ -188,7 +207,7 @@ test(scenario('responseConstruction'), async () => {
   assert.equal(recordedTarget?.node.ref, 'e1');
   for (const payload of [visualization, responseData]) {
     assert.equal('node' in payload, false);
-    assert.equal('preActionNodes' in payload, false);
+    assert.equal('preAction' in payload, false);
     assert.equal('targetEvidence' in payload, false);
   }
 });

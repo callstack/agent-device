@@ -1,7 +1,7 @@
 /**
  * ADR 0012 decision 3: versioned `.ad` target-binding evidence — the
  * comment-line SERDE half shared by the writer
- * (`src/daemon/session-target-evidence.ts`) and the parser
+ * (`@agent-device/selectors/target-evidence`) and the parser
  * (`packages/ad-script/src/internal/script.ts`). Owns the wire type,
  * canonical field order, normalization, size caps, and payload
  * parsing/validation.
@@ -82,7 +82,7 @@ export function normalizeRoleField(value: string): string {
 /** label fields: NFC, trim, collapse internal whitespace runs to one space. */
 export function normalizeLabelField(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
-  const collapsed = nfc(value).trim().replace(/\s+/g, ' ');
+  const collapsed = nfc(value).trim().replaceAll(/\s+/g, ' ');
   return collapsed.length > 0 ? collapsed : undefined;
 }
 

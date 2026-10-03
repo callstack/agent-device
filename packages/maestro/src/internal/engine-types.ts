@@ -105,6 +105,8 @@ export type MaestroRuntimeMetrics = {
   hierarchyCaptures: number;
   screenshotCaptures: number;
   tapRetries: number;
+  settleLatches: number;
+  settleTimeouts: number;
 };
 
 export type MaestroRuntimePort = {
@@ -136,6 +138,8 @@ export type MaestroEngineObserver = {
       runtimeMetrics?: MaestroRuntimeMetrics;
       error: unknown;
       artifactPaths: readonly string[];
+      /** Warnings accumulated before this failure, including skipped `optional` steps. */
+      warnings: readonly string[];
     },
   ): void;
 };
@@ -160,6 +164,14 @@ export type MaestroEngineOptions = {
   signal?: AbortSignal;
   observer?: MaestroEngineObserver;
   now?: () => number;
+  /**
+   * False for a flow accepted over the daemon's remote HTTP surface. `evalScript`
+   * runs the caller's expression through `node:vm`, which Node documents as not a
+   * security boundary — the bound context's prototype chain still resolves to host
+   * `Object`/`Function`, so an untrusted expression can escape. Undefined/true is
+   * trusted: CLI-invoked and daemon-local flows never carry this as false.
+   */
+  trustedScripts?: boolean;
 };
 
 export type MaestroEngineResult = {

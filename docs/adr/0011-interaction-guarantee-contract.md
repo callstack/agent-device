@@ -150,6 +150,70 @@ Parity is enforced by **golden fixture tables**: JSON files under
 Drift between TS and Swift then turns CI red on whichever side changed,
 without needing a simulator.
 
+`contracts/fixtures/dispatch-disclosure.json` is the table for
+`AppErrorDetails.dispatched` on interaction failures: one row per producer
+event, each with the value it must leave. The field has two values: `no` (the
+operation never reached the device, or the command is a read, so a resend is
+safe) and `unknown` (it may have landed, so observe before resending). Only a
+producer that refuses before dispatch (target resolution, admission, a runner
+pre-send refusal) may say `no`; no producer can prove execution on its failure
+path, so there is no third value.
+
+Each request owns one dispatch ledger. Every bound runtime operation declares
+its effect once, in `RUNTIME_OPERATION_EFFECTS`, a record over the runtime
+operation keys, so an operation cannot bind without one. The request binding
+records each `mutates` operation in the request's ledger when its send
+returns, so no bound runtime operation sends a mutation outside the ledger.
+Android ANR and blocking-dialog recovery is outside the ledger: its
+`AndroidObservationAdapter.tap` and `openApp` calls reach the device without a
+record. A nested request (a
+batch step, a replay action, a delegated `find` click or fill) records into a
+ledger of its own and moves its sends into its parent's.
+
+The request router discloses around every routed command. Once the ledger
+holds a sent mutation, a failure is `unknown` with the sent count in
+`details.dispatchedSteps`, whatever produced it and whatever the command
+declares: a wrong `no` makes a consumer resend an action that already ran,
+while a wrong `unknown` only costs an observation. Before that, the registry's
+`recordingEffect` decides. For `'mutates-app'` the router keeps a producer's
+value and fills `unknown` for a failure no producer classified. For
+`'observes-app'` it sets `no` over any producer value. A command with no
+declared effect passes through.
+
+`no` for a read means that a resend repeats no app-visible action. The
+registry declares `record`, `trace`, and `perf` as `'observes-app'`, although
+their recorder and profiler controls reach the device: no registry trait
+separates a pure read from a device control, and those controls are declared
+`repeatable` at the operation level, because the device refuses or ignores a
+repeat. A producer that runs several device inputs inside one bound operation
+(an Android double tap, an iOS press series) counts them in
+`details.dispatchedSteps` itself, because the ledger sees one operation.
+
+Each row names its driver file by id prefix, and that file drives the real
+producer.
+
+The Apple runner does not resend a mutating command whose first send may have
+run: a restart resends only a command the first attempt provably did not write,
+or a read-only one. A mutation whose reply stays lost (the runner dies
+mid-command, or status recovery finds neither a retained result nor a runner
+answer) fails with `reason: runner_reply_lost` and `dispatched: unknown` (rows
+`ios-runner.transport.written-then-lost`,
+`ios-runner.status.completed-without-retained-reply`,
+`ios-runner.status.accepted`, `ios-runner.status.started`,
+`ios-runner.status.notAccepted`, `ios-runner.status.probe-failed`, and
+`ios-runner.status.unavailable`). The `ios-runner.status.failed*` rows carry the
+runner's own answer instead. A read keeps its transport error and is resent.
+
+Remaining gaps: a failure before the router's locked scope (session
+resolution, lock acquisition, lease and daemon-policy admission) never reaches
+the disclosure and carries no `dispatched`. It sends nothing, but a consumer
+must read the absent field as `unknown`.
+
+`runBatch` reports `no` only when every executed step is a command declared
+`observes-app` (a read); any other executed step, including one with no
+declared `recordingEffect`, makes the batch failure `unknown` for every caller,
+including one that supplies its own `invoke`.
+
 For `responseFields`, one `buildInteractionResponseData(...)` becomes the only
 construction site for interaction response payloads (this deletes the class of
 bug where `fill @ref` rebuilt its response by hand and dropped `evidence`). A
@@ -163,6 +227,10 @@ tree × command × forced path. The fixture trees are the real shapes that found
 this week's bugs, kept permanently:
 
 - closed drawer (all candidates off-screen) → `offscreen_selector`/`offscreen_ref`;
+- stale or unknown `@ref` (errorTaxonomy) → `ref_not_found` beside the stale-ref hint; a listed
+  `@ref` whose node has no usable centre (missing, non-finite, or negative bounds), or a selector
+  target without one → `target_bounds_invalid`; a listed `@ref` with no label to wait on or scope
+  by → `ref_unlabeled`;
 - drawer item + visible twin (ambiguous on/off-screen) → visible candidate wins;
 - edge-grazing container (0.07 px viewport overlap, center off-screen) → still refused;
 - covered node → occlusion refusal;
@@ -260,6 +328,36 @@ classifier. Reads (`querySelector`, and so `get`/`is`/`wait`) keep the prior rul
 decorative duplicate into an error. Maestro's explicit expected-point /
 non-hittable compatibility path remains intentionally separate.
 
+### 2026-09-11 amendment: one collapse for one control, at both doors
+
+Two clauses of the amendment above went stale as the read paths moved, and the
+structural rule never reached the read door.
+
+- `querySelector` no longer backs `get`/`is`/`wait`. Those reads resolve against a
+  capture, through the `readUnique`/`readAny`/`readText` rows of
+  `packages/selectors/src/selector-pipeline.ts`, so the runner's hittable-preference
+  rule governs only the direct XCTest paths that still query it: the direct-iOS
+  touch fast path and the off-screen target probe.
+- A control reported through its own accessibility wrapper answers a selector
+  twice. A regular iOS snapshot omits unverified hittability, so the ladder that
+  relates a wrapper to its control cannot fire, and #2482 collapsed that chain for
+  mutating resolution only: `is visible` and `get attrs` refused the same screen
+  as ambiguous while `press` tapped it. The collapse now sits beside the
+  classification that asks for it (`resolveUnverifiedWrapperControl`) and applies
+  where a refusal was the answer: the uniqueness rows — `is <predicate>`,
+  `get attrs`, `screenshot --crop-on` — resolve the control instead of reporting
+  no match. A row that resolves before any refusal is untouched by it, and a
+  wrapper chain always resolves before one: depth separates a wrapper from its
+  control, so `get text` ranks onto the control and `wait`/`is exists` answer from
+  the document-order head without asking which element was meant. A candidate set
+  the rule does not recognize as one control — a cell and the button inside it, or
+  matches in distinct subtrees — still refuses.
+- Replay verifies a recorded target by resolving its recorded selector again under
+  the same row's refusal rules, so the screen dispatch had resolved read as an
+  identity mismatch on the step's first replay. Verification names the collapsed
+  control too, which is the node dispatch acted on and the node the recorded
+  identity carries.
+
 ### Synthesized iOS gesture policy
 
 Synthesized iOS gestures (`scroll`, synthesized coordinate `tap`, synthesized
@@ -271,13 +369,14 @@ XCTest-coordinate fallback rules stay runner-local in
 `RunnerTests+SynthesizedGesturePolicy.swift`. That Swift policy is the source of
 truth because the current table has only three behaviors:
 
-- coordinate synthesized tap never probes keyboards and may use the coordinate
-  fallback;
+- coordinate synthesized tap, standalone, as a `sequence` step, or as the
+  in-app `back` top-leading tap, never probes keyboards and may use the
+  coordinate fallback;
 - default iOS scroll probes keyboards only after AX is known healthy and must
   not fall back to `XCUICoordinate`;
-- explicit synthesized drag, including synthesized sequence tap/drag steps, may
-  still use the coordinate fallback before AX health is known, but stops using
-  it once a snapshot stamps AX unavailable.
+- synthesized one-contact `gesture` plans may still use the coordinate fallback
+  before AX health is known, but stop using it once a snapshot stamps AX
+  unavailable.
 
 The non-obvious parts are covered by gated XCTest policy tests instead of a
 cross-language mirror. A future sibling registry should only be introduced once
@@ -326,3 +425,24 @@ Each step lands green and independently useful:
 - **More integration tests without the registry**: this is the status quo
   plus effort. Without the matrix as code, nothing forces a new path to
   acquire the existing suite, which is exactly how this week's bugs happened.
+
+### Optional observation before an iOS coordinate tap
+
+A coordinate tap must not depend on a preceding XCTest snapshot failure. Its
+optional text-input lookup may establish a concrete identity for a later bare
+`type`; an absent or unavailable lookup establishes no typing witness. A runner
+snapshot penalty can skip this work, but is only a performance optimization.
+
+The lookup owns a thread-bound issue scope in the runner recorder and returns a
+typed result. Any recorded issue, including one otherwise handled by AX suppression,
+discards partial candidates. The scope excludes gesture dispatch and required
+text-entry reads. Those failures retain the existing mutation-outcome rules.
+
+The iOS PR lane exercises a fresh runner with an unavailable probe, a suppressed
+AX issue with a matching candidate, healthy coordinate tap followed by typing,
+and failures outside the optional observation scope. These tests must not seed a
+snapshot penalty to make the first tap safe.
+
+The recorder consumes optional-read issues before forwarding to XCTest. XCTest's
+expected-failure API must not own this scope: in a long-lived command test it can
+complete the enclosing test even when the command response succeeds.

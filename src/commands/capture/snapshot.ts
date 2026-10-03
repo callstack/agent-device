@@ -1,8 +1,11 @@
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { SNAPSHOT_BACKEND_CAPABILITIES } from '../../snapshot-quality/backend-capabilities.ts';
-import { SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
-import { booleanField, integerField, stringField } from '../command-input.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { SNAPSHOT_BACKEND_CAPABILITIES } from '@agent-device/capture-kit/snapshot-quality-backend-capabilities';
+import {
+  SNAPSHOT_COMMAND_OPTION_KEYS,
+  snapshotOptionsFromFlags,
+} from '@agent-device/kernel/snapshot';
+import { SNAPSHOT_FLAGS } from '@agent-device/command-registry/flag-groups';
+import { booleanField, integerField, optionField, stringField } from '../command-input.ts';
 import {
   commonInputFromFlags,
   direct,
@@ -33,9 +36,7 @@ const snapshotCommandMetadata = defineFieldCommandMetadata(
     depth: integerField(),
     scope: stringField(),
     raw: booleanField(),
-    customActions: booleanField(
-      'Name the affordances an element merged away (iOS UIAccessibilityCustomAction, React Native accessibilityActions) — a card whose reply/options controls are not separate elements still lists them here. The names are for PLANNING, not invocation: there is no API to trigger them, so reach the affordance through the element detail screen, through the same control exposed as a labeled element elsewhere, or by coordinates from its rect. iOS simulator only; costs one accessibility round trip per merged element.',
-    ),
+    customActions: optionField('snapshotCustomActions'),
     forceFull: booleanField(),
     timeoutMs: integerField('Maximum wall-clock time for the snapshot command.'),
     // #1271 stage 2: `snapshot` is observation-only, so a repair-armed heal
@@ -49,14 +50,7 @@ const snapshotCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-const snapshotCommandDefinition = defineExecutableCommand(
-  snapshotCommandMetadata,
-  (client, input) => client.capture.snapshot(input),
-);
-
 const snapshotCliSchema = {
-  usageOverride:
-    'snapshot [--diff] [-i] [-d <depth>] [-s <scope>] [--raw] [--actions] [--force-full] [--timeout <ms>]',
   allowedFlags: [
     'snapshotDiff',
     ...SNAPSHOT_FLAGS,
@@ -70,12 +64,7 @@ const snapshotCliSchema = {
 export const snapshotCliReader: CliReader = (_positionals, flags) => ({
   ...commonInputFromFlags(flags),
   ...observationRecordInputFromFlags(flags),
-  interactiveOnly: flags.snapshotInteractiveOnly,
-  depth: flags.snapshotDepth,
-  scope: flags.snapshotScope,
-  raw: flags.snapshotRaw,
-  customActions: flags.snapshotCustomActions,
-  forceFull: flags.snapshotForceFull,
+  ...snapshotOptionsFromFlags(flags, SNAPSHOT_COMMAND_OPTION_KEYS),
   timeoutMs: flags.timeoutMs,
 });
 
@@ -85,10 +74,10 @@ export const snapshotCommandFacet = defineCommandFacet({
   name: SNAPSHOT_COMMAND_NAME,
   text: {
     summary: 'Capture or diff the accessibility tree',
-    cliDetail: `For iOS raw-coordinate fallback after a no-op ref press, inspect rects with snapshot -i --json, press the rect center, then verify with diff snapshot -i or snapshot --diff. iOS backend capability contract: ${snapshotBackendCapabilityHelp}.`,
+    cliDetail: `Repeated equivalent unfiltered Android snapshots return a compact unchanged acknowledgement. Use --force-full to re-emit the tree; --json and --raw retain full output. For iOS raw-coordinate fallback after a no-op ref press, inspect rects with snapshot -i --json, press the rect center, then verify with diff snapshot -i or snapshot --diff. iOS backend capability contract: ${snapshotBackendCapabilityHelp}.`,
   },
   metadata: snapshotCommandMetadata,
-  definition: snapshotCommandDefinition,
+  run: (client, input) => client.capture.snapshot(input),
   cliSchema: snapshotCliSchema,
   cliReader: snapshotCliReader,
   daemonWriter: snapshotDaemonWriter,

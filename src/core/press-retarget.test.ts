@@ -2,10 +2,10 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { buildNodes } from '../__tests__/test-utils/snapshot-builders.ts';
-import { computeTargetEvidence } from '../daemon/session-target-evidence.ts';
+import { computeTargetEvidence } from '@agent-device/selectors/target-evidence';
 import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';
 import { readNodeLocalIdentity } from '@agent-device/ad-script';
-import { resolvePressRecordingTarget } from './press-retarget.ts';
+import { resolvePressRecordingTarget } from '@agent-device/selectors/press-retarget';
 
 function findByLabel(nodes: SnapshotNode[], label: string): SnapshotNode {
   const found = nodes.find((node) => node.label === label);
@@ -397,7 +397,7 @@ test('resolvePressRecordingTarget P2a contrast: a container with a UNIQUE id kee
 
 // ---------------------------------------------------------------------------
 // P2b (#1280 re-review): the guard is built from the canonical interactive
-// classification (`isSemanticTouchTarget`, core/touch-semantics.ts),
+// classification (`isSemanticTouchTarget`, @agent-device/selectors/touch-semantics),
 // not a parallel list — roles the old private fragment list missed must
 // block. And a geometry condition: the selected descendant's rect center
 // must lie INSIDE the container's rect, else the replay tap point is not

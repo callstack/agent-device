@@ -4,7 +4,7 @@ import path from 'node:path';
 import {
   WEB_PLATFORM_COVERAGE_CLASSIFICATION_SUMMARY,
   liveCommandsForWebSmoke,
-} from './coverage-manifest.ts';
+} from './coverage.ts';
 
 export type WebSmokeStep = {
   command: string;

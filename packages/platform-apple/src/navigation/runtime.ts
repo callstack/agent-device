@@ -1,13 +1,17 @@
-import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
-import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
+import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
-import { isTvOsDevice, resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  hasAppleActionButton,
+  isTvOsDevice,
+  resolveDeviceAppleOs,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 
 const available = Object.freeze({ available: true } as const);
 
@@ -101,8 +105,11 @@ function appleTvRemoteFact(device: DeviceInfo): RuntimeOperationFact {
     : tvRemoteUnavailable;
 }
 
-/** The outer keyboard cell: unavailable with no hint, matching the retired `supportsKeyboard`
- * capability-bucket-level rejection (which carried no hint text of its own). */
+/**
+ * The outer keyboard cell, and this owner's keyboard-family refusal: unavailable with no hint,
+ * matching the retired `supportsKeyboard` capability-bucket-level rejection (which carried no hint
+ * text of its own).
+ */
 const keyboardCellUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
@@ -124,20 +131,51 @@ function appleKeyboardEnterFact(device: DeviceInfo): RuntimeOperationFact {
   return appleMobileInputEligible(device) ? available : keyboardCellUnavailable;
 }
 
+/** Every system button this owner knows is named below; the family denial covers none today. */
+const systemButtonUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'No Apple leaf carries this system button.',
+} as const);
+const actionButtonKindUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-device-kind',
+  hint: 'action-button is supported on iPhone and iPad simulators and physical devices.',
+} as const);
+const actionButtonOsUnavailable = Object.freeze({
+  available: false,
+  reason: 'unsupported-platform-leaf',
+  hint: 'The Action Button is iPhone and iPad hardware; tvOS, macOS, watchOS and visionOS have no such control.',
+} as const);
 /**
- * The navigation cells: back, home, app-switcher, orientation, tv-remote, and keyboard
- * status/dismiss/enter.
+ * The leaf reading is {@link hasAppleActionButton}, the same rule a provider owner reads; what this
+ * owner adds is its kind gate. The leaf is the whole claim: which model inside it carries the button
+ * is a hardware question the runner answers with `hasHardwareButton(.action)`, never a guess here.
+ * iPhone and iPad is deliberately not {@link appleMobileInputEligible}, which is `orientation`'s
+ * reading and admits visionOS — a headset has a Digital Crown and no Action Button.
+ */
+function appleActionButtonFact(device: DeviceInfo): RuntimeOperationFact {
+  if (device.kind !== 'simulator' && device.kind !== 'device') return actionButtonKindUnavailable;
+  return hasAppleActionButton(device) ? available : actionButtonOsUnavailable;
+}
+
+/**
+ * The navigation cells: back, home, app-switcher, action-button, orientation, tv-remote, and
+ * keyboard status/dismiss/enter.
  */
 export function appleNavigationFacts(device: DeviceInfo) {
   return Object.freeze({
     ...backRuntimeOperationFacts({ back: appleBackFact(device) }),
-    ...homeRuntimeOperationFacts({ home: appleSpringboardFact(device, homeKindUnavailable) }),
-    ...appSwitcherRuntimeOperationFacts({
+    ...systemButtonRuntimeOperationFacts({
+      unsupported: systemButtonUnavailable,
+      home: appleSpringboardFact(device, homeKindUnavailable),
       appSwitcher: appleSpringboardFact(device, appSwitcherKindUnavailable),
+      actionButton: appleActionButtonFact(device),
     }),
     ...orientationRuntimeOperationFacts({ orientation: appleOrientationFact(device) }),
     ...tvRemoteRuntimeOperationFacts({ tvRemote: appleTvRemoteFact(device) }),
     ...keyboardRuntimeOperationFacts({
+      unsupported: keyboardCellUnavailable,
       status: appleKeyboardStatusFact(device),
       dismiss: appleKeyboardDismissFact(device),
       enter: appleKeyboardEnterFact(device),

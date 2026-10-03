@@ -5,14 +5,14 @@ import type {
   ApplePlistProvider,
   AppleToolProvider,
   AppleToolSubcommandExecutor,
-} from '../../../src/platforms/apple/core/tool-provider.ts';
-import type { ExecResult } from '../../../src/utils/exec.ts';
+} from '@agent-device/platform-apple/tool-provider';
+import { type ExecOptions, type ExecResult } from '@agent-device/host-kit/command';
 import type { ProviderScenarioTranscript } from './transcript.ts';
 
 export type FlatToolCall = [string, ...string[]];
 
 type RecordingAppleToolHandlers = {
-  simctl?: AppleToolSubcommandExecutor;
+  simctl?: AppleToolProvider['simctl']['run'];
   devicectl?: AppleToolSubcommandExecutor;
   macosHelper?: AppleToolSubcommandExecutor;
   macosHost?: AppleMacOsHostProvider;
@@ -29,6 +29,8 @@ export function createAppleRunnerProviderFromTranscript(
         deviceId: device.id,
         platform: device.platform,
       }) as Record<string, unknown>,
+    // A scripted runner has no startup: the transcript answers every command directly.
+    hasLiveSession: () => true,
   };
 }
 
@@ -151,15 +153,8 @@ export function createRecordingAppleToolProvider(handlers: RecordingAppleToolHan
   };
 }
 
-const SIMULATOR_HOST_OPEN_COMMANDS = new Set([
-  '-a Device Hub',
-  '-a Simulator',
-  '-g -a Device Hub',
-  '-g -a Simulator',
-]);
-
-function isSimulatorHostOpenCommand(cmd: string, args: string[]): boolean {
-  return cmd === 'open' && SIMULATOR_HOST_OPEN_COMMANDS.has(args.join(' '));
+function isSimulatorHostOpenCommand(cmd: string, args: readonly string[]): boolean {
+  return cmd === 'open' && args.join(' ') === '-a Simulator';
 }
 
 function createRecordingMacOsHostProvider(
@@ -220,7 +215,7 @@ function simctlListDevicesJson(
 export function simctlDeviceLifecycleHandler(
   runtime: string,
   devices: Array<{ name: string; udid: string; state?: string; isAvailable?: boolean }>,
-): AppleToolSubcommandExecutor {
+): (args: readonly string[], options?: ExecOptions) => Promise<ExecResult> {
   return async (args) => {
     const result = simctlListDevicesResult(args, runtime, devices);
     if (result) return result;
@@ -242,11 +237,12 @@ export function unexpectedProviderCall(platform: string, command: readonly strin
 }
 
 export function simctlListDevicesResult(
-  args: string[],
+  args: readonly string[],
   runtime: string,
   devices: Array<{ name: string; udid: string; state?: string; isAvailable?: boolean }>,
 ): ExecResult | undefined {
-  if (args.join(' ') !== 'list devices -j') {
+  const listing = args.join(' ');
+  if (listing !== 'list devices -j' && listing !== 'list -j') {
     return undefined;
   }
   return simctlListDevicesJson(runtime, devices);

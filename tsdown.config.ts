@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { defineConfig } from 'tsdown';
+import { defineConfig, type TsdownPluginOption } from 'tsdown';
 
 const typeScriptPackageJsonUrl = import.meta.resolve('typescript/package.json');
 const { default: getTypeScript7ExePath } = await import(
@@ -32,8 +32,16 @@ const publicSdkChunkGroups = [
     /packages[\\/]kernel[\\/]src[\\/]snapshot\.ts$/,
   ],
   ['sdk-io', /src[\\/]io\.d\.[cm]?ts$/, /src[\\/]io\.ts$/],
-  ['sdk-batch', /src[\\/]batch-policy\.d\.[cm]?ts$/, /src[\\/]batch-policy\.ts$/],
-  ['sdk-batch-runner', /src[\\/]core[\\/]batch\.d\.[cm]?ts$/, /src[\\/]core[\\/]batch\.ts$/],
+  [
+    'sdk-batch',
+    /packages[\\/]command-registry[\\/]src[\\/]batch-policy\.d\.[cm]?ts$/,
+    /packages[\\/]command-registry[\\/]src[\\/]batch-policy\.ts$/,
+  ],
+  [
+    'sdk-batch-runner',
+    /packages[\\/]command-registry[\\/]src[\\/]batch\.d\.[cm]?ts$/,
+    /packages[\\/]command-registry[\\/]src[\\/]batch\.ts$/,
+  ],
   ['sdk-finders', /src[\\/]finders\.d\.[cm]?ts$/, /src[\\/]finders\.ts$/],
   [
     'sdk-android-adb',
@@ -53,6 +61,35 @@ const publicSdkChunkGroups = [
   ['sdk-selectors', /src[\\/]sdk[\\/]selectors\.d\.[cm]?ts$/, /src[\\/]sdk[\\/]selectors\.ts$/],
 ] as const;
 
+/**
+ * Drops the ambient `import '...'` marker `deps.dts.neverBundle` leaves behind, which a
+ * published install cannot resolve. Safe only while the name appears nowhere else.
+ */
+function dropAmbientDeclarationImport(
+  fileName: string,
+  code: string,
+  packageName = '@limrun/api',
+): string | null {
+  const ambientImport = new RegExp(`^import ["']${packageName}["'];\\n`, 'm');
+  if (!ambientImport.test(code)) return null;
+  const declarationChunk = code.replace(ambientImport, '');
+  if (declarationChunk.includes(packageName)) {
+    throw new Error(
+      `${fileName} keeps a type reference to ${packageName}, which is dev-bundled and absent from a published install.`,
+    );
+  }
+  return declarationChunk;
+}
+
+const dropAmbientDeclarationImports: TsdownPluginOption = {
+  name: 'agent-device:drop-ambient-declaration-imports',
+  renderChunk(code, chunk) {
+    return chunk.fileName.endsWith('.d.ts')
+      ? dropAmbientDeclarationImport(chunk.fileName, code)
+      : null;
+  },
+};
+
 export default defineConfig({
   entry: {
     index: 'src/sdk/index.ts',
@@ -64,6 +101,7 @@ export default defineConfig({
     'install-source': 'src/sdk/install-source.ts',
     'android-adb': 'src/sdk/android-adb.ts',
     limrun: 'src/sdk/limrun.ts',
+    plugins: 'src/sdk/plugins.ts',
     contracts: 'src/sdk/contracts.ts',
     selectors: 'src/sdk/selectors.ts',
     finders: 'src/sdk/finders.ts',
@@ -71,12 +109,45 @@ export default defineConfig({
     'internal/bin': 'src/bin.ts',
     'internal/companion-tunnel': 'src/client/companion-tunnel.ts',
     'internal/daemon': 'src/daemon.ts',
-    'internal/png-worker': 'src/utils/png-worker.ts',
-    'internal/update-check-entry': 'src/utils/update-check-entry.ts',
+    'internal/run-script-http-child': 'packages/maestro/src/daemon-port/run-script-http-child.ts',
+    'internal/png-worker': 'packages/capture-kit/src/png-worker.ts',
+    'internal/update-check-entry': 'src/cli/update-check-entry.ts',
   },
   deps: {
-    alwaysBundle: [/^@agent-device\//, 'pngjs'],
-    onlyBundle: ['pngjs'],
+    alwaysBundle: [/^@agent-device\//],
+    onlyBundle: [
+      '@limrun/api',
+      'agent-base',
+      'b4a',
+      'debug',
+      'events-universal',
+      'eventsource-client',
+      'eventsource-parser',
+      'fast-fifo',
+      'has-flag',
+      'https-proxy-agent',
+      'ignore',
+      'ipaddr.js',
+      'jpeg-js',
+      'ms',
+      'pend',
+      'pngjs',
+      'proxy-from-env',
+      'streamx',
+      'supports-color',
+      'tar-stream',
+      'text-decoder',
+      'undici',
+      'undici-types',
+      'ws',
+      'yaml',
+      'yauzl',
+    ],
+    // The Limrun SDK is dev-bundled, so a published install has no `@limrun/api` to resolve:
+    // the limrun facade declares the session and runtime types consumers may use.
+    dts: {
+      neverBundle: ['@limrun/api'],
+    },
   },
   inputOptions: {
     // A build with missing workspace links resolves nothing under `alwaysBundle` and emits the
@@ -91,6 +162,14 @@ export default defineConfig({
       }
       handler(level, log);
     },
+  },
+  // Limrun loads `@limrun/xdelta3-wasm` only inside `client.syncApp`, which agent-device never
+  // calls, so 52 kB of base64 wasm would ship for a path nothing reaches. The alias resolves the
+  // specifier to a chunk that names the omission. Add the package to `deps.onlyBundle` and drop
+  // this alias to restore that path.
+  alias: {
+    '@limrun/xdelta3-wasm': new URL('./src/vendor/limrun-delta-sync-omitted.ts', import.meta.url)
+      .pathname,
   },
   format: 'esm',
   platform: 'node',
@@ -113,6 +192,7 @@ export default defineConfig({
   },
   outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
   minify: true,
+  plugins: [dropAmbientDeclarationImports],
   dts: {
     tsgo: {
       path: getTypeScript7ExePath(),

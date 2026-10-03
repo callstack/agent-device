@@ -1,6 +1,16 @@
-import type { SessionState } from './types.ts';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import {
+  expiredRefFrame,
+  issuedRefFrame,
+  PRISTINE_REF_FRAME,
+  type RefFrame,
+  type RefFrameScope,
+  type RefFrameState,
+} from './ref-frame-slot.ts';
+import type { SessionState } from './session-state.ts';
 
 const runtimeRevisions = new WeakMap<SessionState, number>();
+const outdatedObservations = new WeakSet<SnapshotState>();
 
 /**
  * ADR 0014 session ref-frame lifetime — the authorization model for mutation
@@ -8,8 +18,9 @@ const runtimeRevisions = new WeakMap<SessionState, number>();
  *
  * A session owns at most one **ref frame**: the namespace whose refs a caller
  * may use to target a mutation. This module is the single owner of the frame's
- * transitions and of the admission decision. The frame epoch reuses the existing
- * `snapshotGeneration`/`refsGeneration` counter and the `@e12~s42` pin grammar
+ * transitions and of the admission decision; the frame value itself is declared in
+ * `ref-frame-slot.ts`, below this module and the session record. The frame epoch reuses
+ * the existing `snapshotGeneration`/`refsGeneration` counter and the `@e12~s42` pin grammar
  * for wire compatibility.
  *
  * The frame is expired at the device side-effect seam, carries a non-`all`
@@ -19,16 +30,6 @@ const runtimeRevisions = new WeakMap<SessionState, number>();
  * warns; an active one does not) rather than a coarse client-stale marker, which
  * migration step 8 removed.
  */
-
-/**
- * Issuance scope of the current frame: `all` for a complete namespace (a full
- * interactive snapshot), or the bounded set of ref bodies a partial publication
- * (`find`, settled diff, replay divergence) actually returned.
- */
-export type RefFrameScope = 'all' | ReadonlySet<string>;
-
-/** Lifecycle state of the current frame. */
-export type RefFrameState = 'active' | 'expired';
 
 /**
  * Typed admission-failure reasons, evaluated in this order so the caller can
@@ -45,19 +46,38 @@ export type RefFrameAdmission =
   | { admitted: false; reason: RefFrameRejectReason };
 
 /**
- * The frame epoch exposed to clients as `refsGeneration`. Frozen at issuance
- * (`refFrameGeneration`) so a later read-only capture that advances the
- * observation counter (`snapshotGeneration`) does not shift the epoch a valid
- * pin is compared against. Falls back to `snapshotGeneration` for pre-frame
- * sessions.
+ * The session's current frame, as one comparable value. Identity changes on
+ * every transition and only on a transition, so a caller holding an earlier
+ * frame can tell whether authority moved with a single `===`.
  */
-export function refFrameEpoch(session: SessionState): number | undefined {
-  return session.refFrameGeneration ?? session.snapshotGeneration;
+export function refFrame(session: SessionState): RefFrame {
+  return session.refFrame ?? PRISTINE_REF_FRAME;
 }
 
 /**
- * Expire the current frame at a device side-effect seam (ADR 0014). Idempotent:
- * additional effects while already expired are a no-op. Call this SYNCHRONOUSLY,
+ * The frame epoch exposed to clients as `refsGeneration`. Frozen at issuance so
+ * a later read-only capture that advances the observation counter
+ * (`snapshotGeneration`) does not shift the epoch a valid pin is compared
+ * against. Falls back to `snapshotGeneration` for pre-frame sessions.
+ */
+export function refFrameEpoch(session: SessionState): number | undefined {
+  return refFrame(session).generation ?? session.snapshotGeneration;
+}
+
+/**
+ * The tree that minted the frame's refs, retained so a ref resolves to the node
+ * the caller was authorized against rather than to whatever now sits at that
+ * index in a newer observation. Undefined before any issuance.
+ */
+export function refFrameTree(session: SessionState): SnapshotState | undefined {
+  return refFrame(session).tree;
+}
+
+/**
+ * Expire the current frame at a device side-effect seam (ADR 0014). The frame
+ * transition is idempotent by identity: an effect crossed while already expired
+ * leaves the SAME frame in place (the runtime revision below still advances, one
+ * per effect, because that is what tracks effects). Call this SYNCHRONOUSLY,
  * immediately before awaiting the operation that may change device-visible
  * element identity, so that a post-dispatch failure (timeout, connection loss,
  * ambiguous error) still leaves the frame expired — there is no success-only
@@ -70,8 +90,23 @@ export function refFrameEpoch(session: SessionState): number | undefined {
  */
 export function expireRefFrame(session: SessionState): void {
   advanceSessionRuntimeRevision(session);
-  session.refFrameState = 'expired';
+  markSessionSnapshotOutdated(session);
+  session.refFrame = expiredRefFrame(refFrame(session));
   session.snapshotScopeSource = undefined;
+}
+
+/**
+ * Record that the device was observed or changed after the session's stored tree was
+ * captured: a side-effect seam above, or a native read that produces no tree (such as `wait
+ * text`'s owner text reading). An outdated tree stays the session's latest stored observation,
+ * but a selector read never reuses it in place of a capture.
+ */
+export function markSessionSnapshotOutdated(session: SessionState): void {
+  if (session.snapshot) outdatedObservations.add(session.snapshot);
+}
+
+export function isOutdatedObservation(snapshot: SnapshotState): boolean {
+  return outdatedObservations.has(snapshot);
 }
 
 /**
@@ -102,7 +137,7 @@ export function readSessionRuntimeRevision(session: SessionState): number {
  * {@link activateRefFrame}.
  */
 export function activateCompleteRefFrame(session: SessionState): void {
-  activateRefFrame(session, undefined);
+  activateRefFrame(session, 'all');
 }
 
 /**
@@ -119,29 +154,52 @@ export function activatePartialRefFrame(session: SessionState, scope: ReadonlySe
 }
 
 /**
- * The frame's four fields move together or the frame is incoherent: an `active` state with a
- * stale `refFrameTree` resolves refs against a namespace nobody authorized, and a frame
- * pinned to the wrong `refFrameGeneration` invalidates correct pins. Both issuance forms
- * therefore land here rather than each writing the four fields itself.
+ * Both issuance forms land here because they differ only in scope, and because the frame is
+ * one value: an `active` state paired with a stale tree resolves refs against a namespace
+ * nobody authorized, and a frame pinned to the wrong generation invalidates correct pins.
  *
  * Retains the just-published tree (`session.snapshot`) as the frame's immutable source by
  * SHARED reference — no deep copy (ADR 0014 performance). A later read-only capture advances
  * `session.snapshot` without disturbing this tree, so a ref keeps resolving against the
  * namespace that authorized it.
  */
-function activateRefFrame(session: SessionState, scope: ReadonlySet<string> | undefined): void {
-  session.refFrameState = 'active';
-  session.refFrameScope = scope;
-  session.refFrameTree = session.snapshot;
-  session.refFrameGeneration = session.snapshotGeneration;
+function activateRefFrame(session: SessionState, scope: RefFrameScope): void {
+  session.refFrame = issuedRefFrame({
+    scope,
+    tree: session.snapshot,
+    generation: session.snapshotGeneration,
+  });
 }
 
 export function refFrameState(session: SessionState): RefFrameState {
-  return session.refFrameState ?? 'active';
+  return refFrame(session).state;
 }
 
 export function refFrameScope(session: SessionState): RefFrameScope {
-  return session.refFrameScope ?? 'all';
+  return refFrame(session).scope;
+}
+
+export type RefMutationFrame = {
+  admission: RefFrameAdmission;
+  scope: RefFrameScope;
+  currentGeneration: number | undefined;
+};
+
+export function readRefMutationFrame(params: {
+  session: SessionState;
+  ref: string;
+  mintedGeneration: number | undefined;
+}): RefMutationFrame {
+  const refBody = params.ref.startsWith('@') ? params.ref.slice(1) : params.ref;
+  return {
+    admission: admitRefMutation({
+      session: params.session,
+      refBody,
+      mintedGeneration: params.mintedGeneration,
+    }),
+    scope: refFrameScope(params.session),
+    currentGeneration: refFrameEpoch(params.session),
+  };
 }
 
 /**

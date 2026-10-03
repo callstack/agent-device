@@ -2,6 +2,8 @@ import { definePathCoverage } from './coverage-manifest.ts';
 
 export const RUNTIME_REF_COVERAGE = definePathCoverage('runtime-ref', {
   occlusion: 'runtime-ref occlusion: covered ref is refused',
+  keyboardOcclusion:
+    'runtime-ref keyboardOcclusion: a ref behind the visible keyboard is refused with tap_keyboard_occludes_target',
   parentOwnedTouchPoint:
     'runtime-ref parentOwnedTouchPoint: a fully tiled parent ref refuses before dispatch',
   offscreen: 'runtime-ref offscreen: closed-drawer ref refused with offscreen_ref',

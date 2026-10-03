@@ -5,10 +5,11 @@ import {
   trySignalProcess,
   waitForDaemonExit,
   type DaemonProcessIdentity,
-} from './daemon-process.ts';
-import { isProcessAlive } from '../utils/host-process.ts';
-import { sleep } from '../utils/timeouts.ts';
-import type { DaemonPaths } from './config.ts';
+} from '../daemon-process.ts';
+import { isProcessAlive } from '@agent-device/host-kit/process';
+import { sleep } from '@agent-device/host-kit/retry';
+
+import type { DaemonPaths } from '../daemon-resolution.ts';
 import { readRegisteredDaemonIdentity } from './daemon-registration.ts';
 import type { DeviceClaimRecord, ProviderReleaseRecord } from './daemon-shutdown-report.ts';
 
@@ -29,6 +30,12 @@ export type DaemonStopResult = {
   claimsOrphaned: DeviceClaimRecord[];
   /** Claims another owner had already taken over; this daemon released nothing. */
   claimsSuperseded: DeviceClaimRecord[];
+  /**
+   * Claims whose on-disk record named no owner, so this daemon cannot say whether the device is
+   * still held. `device release --stale` cannot settle these — it proves staleness from a recorded
+   * owner — so they are reported apart from {@link DaemonStopResult.claimsOrphaned}.
+   */
+  claimsUnattributable: DeviceClaimRecord[];
   providerReleases: {
     status: 'completed' | 'unknown';
     released: ProviderReleaseRecord[];
@@ -75,6 +82,7 @@ export async function stopDaemon(params: {
       claimsReleased: [],
       claimsOrphaned: [],
       claimsSuperseded: [],
+      claimsUnattributable: [],
       providerReleases: { status: 'completed', released: [], pending: [] },
       warnings: [],
     };
@@ -98,6 +106,7 @@ export async function stopDaemon(params: {
     claimsReleased: [],
     claimsOrphaned: [],
     claimsSuperseded: [],
+    claimsUnattributable: [],
     providerReleases: { status: 'unknown', released: [], pending: null },
     warnings: [
       'The daemon was force-killed before provider lease state could be finalized. Provider allocations may remain active.',
@@ -138,6 +147,7 @@ function notRunningResult(): DaemonStopResult {
     claimsReleased: [],
     claimsOrphaned: [],
     claimsSuperseded: [],
+    claimsUnattributable: [],
     providerReleases: { status: 'completed', released: [], pending: [] },
     warnings: [],
   };

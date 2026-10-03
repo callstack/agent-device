@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../../__tests__/test-utils/device-inventory-gateways.ts';
-import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { commandDescriptors } from '@agent-device/command-registry/registry';
 import { isRequestCanceledError, type AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { getDaemonCommandRoute, type DaemonCommandRoute } from '../daemon-command-registry.ts';
@@ -16,19 +17,20 @@ import {
   clearRequestAbortRegistration,
   markRequestCanceled,
   registerRequestAbort,
-} from '../../request/cancel.ts';
+} from '@agent-device/host-kit/request';
 import {
   unavailableBindDevice,
   unavailableBindExactDevice,
   unavailableInspectFacts,
 } from './test-device-runtime-gateway.ts';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { createScreenRecordingAdmissionLedger } from '../screen-recording-admission-ledger.ts';
-import { createAudioProbeAdmissionLedger } from '../audio-probe-admission-ledger.ts';
-import { createPerfCaptureAdmissionLedger } from '../perf-capture-admission-ledger.ts';
+import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
+import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
+import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 
 const SPECIALIZED_ROUTES = [
+  'humanControl',
   'lease',
   'session',
   'snapshot',
@@ -51,25 +53,43 @@ test('specialized daemon routes are claimed by their handler chain', async () =>
   }
 });
 
+// The generic route is the router's fallthrough, so it has two ways in: a descriptor that declares
+// `daemon.route: 'generic'`, and a catalog command that declares no daemon facet at all and lands
+// on the `?? 'generic'` fallback. The first is a decision read from the declaration; the second is
+// what this test exists to keep rare, so it is enumerated alone and by name.
+const CATALOG_COMMANDS = [...Object.values(PUBLIC_COMMANDS), ...Object.values(INTERNAL_COMMANDS)];
+
+function declaredDaemonTraitCommands(): string[] {
+  return commandDescriptors
+    .filter((descriptor) => 'daemon' in descriptor && descriptor.daemon !== undefined)
+    .map((descriptor) => descriptor.name);
+}
+
+function genericByTraitCommands(): string[] {
+  return commandDescriptors
+    .filter((descriptor) => 'daemon' in descriptor && descriptor.daemon?.route === 'generic')
+    .map((descriptor) => descriptor.name);
+}
+
 test('catalog commands use generic routing only when intentionally passthrough or projected', () => {
+  // Local-CLI commands are excluded by construction: `CATALOG_COMMANDS` holds the public and
+  // internal groups, which a `catalog.group: 'local-cli'` descriptor is never projected into.
+  const genericByAbsence = CATALOG_COMMANDS.filter(
+    (command) => !declaredDaemonTraitCommands().includes(command),
+  );
+  assert.deepEqual(
+    genericByAbsence,
+    [PUBLIC_COMMANDS.installFromSource],
+    'a catalog command reaches the generic route by declaring no daemon facet; declare daemon.route instead',
+  );
+
   const intentionalGenericCatalogCommands = [
-    PUBLIC_COMMANDS.appSwitcher,
-    PUBLIC_COMMANDS.back,
-    PUBLIC_COMMANDS.focus,
-    PUBLIC_COMMANDS.home,
-    PUBLIC_COMMANDS.installFromSource,
-    PUBLIC_COMMANDS.orientation,
-    PUBLIC_COMMANDS.screenshot,
-    PUBLIC_COMMANDS.scroll,
-    PUBLIC_COMMANDS.tvRemote,
-    PUBLIC_COMMANDS.viewport,
+    ...genericByTraitCommands(),
+    ...genericByAbsence,
   ].sort();
-  const genericCatalogCommands = [
-    ...Object.values(PUBLIC_COMMANDS),
-    ...Object.values(INTERNAL_COMMANDS),
-  ]
-    .filter((command) => getDaemonCommandRoute(command) === 'generic')
-    .sort();
+  const genericCatalogCommands = CATALOG_COMMANDS.filter(
+    (command) => getDaemonCommandRoute(command) === 'generic',
+  ).sort();
 
   assert.deepEqual(genericCatalogCommands, intentionalGenericCatalogCommands);
 });
@@ -257,7 +277,14 @@ test('lease allocation hands the provider the request-bound signal and a deadlin
   const requestId = 'lease-alloc-cancel-req';
   const registration = registerRequestAbort(requestId);
   const before = Date.now();
-  let observed: { signal?: AbortSignal; deadline?: number } | undefined;
+  let observed:
+    | {
+        signal?: AbortSignal;
+        deadline?: number;
+        publicNetworkOnly?: boolean;
+        initialApp?: string;
+      }
+    | undefined;
 
   try {
     const response = await handleLeaseCommands({
@@ -272,6 +299,8 @@ test('lease allocation hands the provider the request-bound signal and a deadlin
           leaseBackend: 'android-instance',
           leaseProvider: 'fake-provider',
         },
+        flags: { providerApp: 'Example.apk' },
+        internal: { publicNetworkOnly: true },
         positionals: [],
       },
       sessionName: 'catalog-test',
@@ -279,7 +308,12 @@ test('lease allocation hands the provider the request-bound signal and a deadlin
       leaseRegistry,
       leaseLifecycleProvider: {
         allocate: async (_lease, context) => {
-          observed = { signal: context?.signal, deadline: context?.deadline };
+          observed = {
+            signal: context?.signal,
+            deadline: context?.deadline,
+            publicNetworkOnly: context?.publicNetworkOnly,
+            initialApp: context?.initialApp,
+          };
           return { provider: 'fake-provider' };
         },
       },
@@ -287,6 +321,8 @@ test('lease allocation hands the provider the request-bound signal and a deadlin
 
     assert.equal(response?.ok, true);
     assert.equal(observed?.signal?.aborted, false);
+    assert.equal(observed?.publicNetworkOnly, true);
+    assert.equal(observed?.initialApp, 'Example.apk');
     markRequestCanceled(requestId);
     assert.equal(observed?.signal?.aborted, true, 'the provider signal must track this request');
     assert.ok(

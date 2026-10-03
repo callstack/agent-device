@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { runCliCapture } from './cli-capture.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 

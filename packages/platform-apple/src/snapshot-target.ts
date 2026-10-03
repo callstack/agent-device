@@ -1,0 +1,203 @@
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import type { ReadinessPhase } from '@agent-device/contracts/wait';
+import { createDetachedAttempts, waitForDetachedAttempt } from './detached-attempt.ts';
+import {
+  readSimctlDevicesByRuntime,
+  runSimctlForDevice,
+  simulatorAddressFor,
+  type SimulatorAddress,
+} from './core/simctl.ts';
+import { readSnapshotTargetProcessStartTime } from './snapshot-process.ts';
+
+/** Identity re-check of a cached target: one local `ps`, never CoreSimulator IPC. */
+const TARGET_IDENTITY_TIMEOUT_MS = 3_000;
+/**
+ * How long one capture waits for an in-flight discovery before taking the XCTest fallback.
+ * Discovery spawns `simctl launchctl list` through xcrun: ~1s on an idle Mac, several seconds
+ * on a loaded CI host. The wait is per capture, so captures that keep arriving while the probe
+ * runs each spend up to this long; the probe itself is shared and outlives them.
+ */
+const TARGET_DISCOVERY_WAIT_MS = 1_500;
+/** Overall deadline of one discovery (both simctl probes and the `ps` identity read). */
+const TARGET_DISCOVERY_TIMEOUT_MS = 15_000;
+/** A caller's wait slice ran out while the discovery it joined is still running. */
+const TARGET_DISCOVERY_PENDING = 'simulator-target-discovery-pending';
+/** The discovery answered: the app has no running process on the Simulator. */
+const TARGET_NOT_RUNNING = 'simulator-target-unavailable';
+
+export type SimulatorSnapshotTarget = Readonly<{
+  simulator: SimulatorAddress;
+  runtime: string;
+  pid: number;
+  generation: string;
+  targetId: string;
+  processStartTime: string;
+}>;
+
+export type SimulatorSnapshotTargetResolver = (
+  device: DeviceInfo,
+  appBundleId: string,
+  signal: AbortSignal,
+  refresh?: 'refresh',
+) => Promise<SimulatorSnapshotTarget>;
+
+export function createSimulatorSnapshotTargetResolver(): SimulatorSnapshotTargetResolver {
+  const targets = new Map<string, SimulatorSnapshotTarget>();
+  const runtimeByDevice = new Map<string, Promise<string>>();
+  // One discovery per target at a time, detached from the caller's signal: a capture that gives up
+  // on it, or is cancelled, must not take it down. A discovery that fails is forgotten, so the next
+  // capture starts a new one.
+  const discoveries = createDetachedAttempts<SimulatorSnapshotTarget>({
+    waitMs: TARGET_DISCOVERY_WAIT_MS,
+  });
+  return async (device, appBundleId, signal, refresh) => {
+    signal.throwIfAborted();
+    const key = `${device.id}:${appBundleId}`;
+    const cached = targets.get(key);
+    if (cached && refresh !== 'refresh') {
+      const observed = await readSnapshotTargetProcessStartTime(cached.pid, {
+        signal,
+        timeoutMs: TARGET_IDENTITY_TIMEOUT_MS,
+      });
+      signal.throwIfAborted();
+      if (observed === cached.processStartTime) return cached;
+    }
+    targets.delete(key);
+    return await discoveries.value(key, {
+      start: async () => {
+        const target = await resolveSimulatorSnapshotTarget(device, appBundleId, runtimeByDevice);
+        targets.set(key, target);
+        return target;
+      },
+      wait: (waitMs, stop) =>
+        waitForDetachedAttempt({
+          waitMs,
+          signal,
+          stop,
+          cancelled: () => discoveryCancelled(signal),
+        }),
+      pending: () => targetError(TARGET_DISCOVERY_PENDING, device, appBundleId),
+    });
+  };
+}
+
+/** A caller cancelled while it waited on a running discovery: its time went to readiness work. */
+function discoveryCancelled(signal: AbortSignal): AppError {
+  return createRequestCanceledError(
+    { readinessPhase: 'target-discovery' satisfies ReadinessPhase },
+    signal.reason,
+  );
+}
+
+/**
+ * Whether a resolver failure only says the discovery is still running. The discovery keeps going
+ * under its own deadline, so asking again joins it rather than starting another.
+ */
+export function isSimulatorTargetDiscoveryPending(error: unknown): boolean {
+  return error instanceof AppError && error.details?.reason === TARGET_DISCOVERY_PENDING;
+}
+
+/** Whether a resolver failure says the app has no running process, not that discovery failed. */
+export function isSimulatorTargetNotRunning(error: unknown): boolean {
+  return error instanceof AppError && error.details?.reason === TARGET_NOT_RUNNING;
+}
+
+async function resolveSimulatorSnapshotTarget(
+  device: DeviceInfo,
+  appBundleId: string,
+  runtimeByDevice: Map<string, Promise<string>>,
+): Promise<SimulatorSnapshotTarget> {
+  const deadline = Date.now() + TARGET_DISCOVERY_TIMEOUT_MS;
+  // Both probes settle before this discovery does: a discovery that gave up on the first
+  // failure would release its single-flight slot while the other probe still runs, and every
+  // capture after it would start a probe of its own.
+  const [jobsProbe, runtimeProbe] = await Promise.allSettled([
+    runSimctlForDevice(device, ['spawn', device.id, 'launchctl', 'list'], {
+      allowFailure: true,
+      timeoutMs: remainingMs(deadline),
+    }),
+    readSimulatorRuntime(device, runtimeByDevice, deadline),
+  ]);
+  if (jobsProbe.status === 'rejected') throw jobsProbe.reason;
+  if (runtimeProbe.status === 'rejected') throw runtimeProbe.reason;
+  const jobs = jobsProbe.value;
+  const runtime = runtimeProbe.value;
+  if (jobs.exitCode !== 0) {
+    throw targetError('simulator-target-probe-failed', device, appBundleId);
+  }
+  const job = readApplicationJob(jobs.stdout, appBundleId);
+  if (!job) {
+    throw targetError(TARGET_NOT_RUNNING, device, appBundleId);
+  }
+  const processStartTime = await readSnapshotTargetProcessStartTime(job.pid, {
+    timeoutMs: Math.min(TARGET_IDENTITY_TIMEOUT_MS, remainingMs(deadline)),
+  });
+  if (!processStartTime) {
+    throw targetError('simulator-target-identity-unavailable', device, appBundleId);
+  }
+  return Object.freeze({
+    simulator: simulatorAddressFor(device),
+    runtime,
+    pid: job.pid,
+    generation: `${job.pid}:${job.label}:${processStartTime}`,
+    targetId: `${device.id}:${appBundleId}`,
+    processStartTime,
+  });
+}
+
+async function readSimulatorRuntime(
+  device: DeviceInfo,
+  runtimeByDevice: Map<string, Promise<string>>,
+  deadline: number,
+): Promise<string> {
+  const existing = runtimeByDevice.get(device.id);
+  if (existing) return await existing;
+  const pending = runSimctlForDevice(device, ['list', 'devices', '-j'], {
+    allowFailure: true,
+    timeoutMs: remainingMs(deadline),
+  }).then((result) => {
+    if (result.exitCode !== 0) throw targetError('simulator-runtime-probe-failed', device, '');
+    const runtime = Object.entries(readSimctlDevicesByRuntime(result.stdout)).find(([, devices]) =>
+      devices.some((candidate) => candidate.udid === device.id),
+    )?.[0];
+    if (!runtime) throw targetError('simulator-runtime-unavailable', device, '');
+    return runtime;
+  });
+  runtimeByDevice.set(device.id, pending);
+  try {
+    return await pending;
+  } catch (error) {
+    runtimeByDevice.delete(device.id);
+    throw error;
+  }
+}
+
+function readApplicationJob(
+  output: string,
+  appBundleId: string,
+): { pid: number; label: string } | undefined {
+  for (const line of output.split('\n')) {
+    const [pidText, , label] = line.trim().split(/\s+/);
+    if (!pidText || !label || !label.startsWith(`UIKitApplication:${appBundleId}[`)) continue;
+    const pid = Number(pidText);
+    if (Number.isSafeInteger(pid) && pid > 0) return { pid, label };
+  }
+  return undefined;
+}
+
+function remainingMs(deadline: number): number {
+  return Math.max(1, deadline - Date.now());
+}
+
+function targetError(reason: string, device: DeviceInfo, appBundleId: string): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `Unable to resolve the running iOS Simulator app (${reason}).`,
+    {
+      reason,
+      deviceId: device.id,
+      appBundleId,
+    },
+  );
+}

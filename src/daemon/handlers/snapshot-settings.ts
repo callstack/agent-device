@@ -1,25 +1,42 @@
-import { isMacOs } from '@agent-device/kernel/device';
 import {
+  isApplePlatform,
+  isHandheldAppleSimulator,
+  isMacOs,
+  resolveDeviceAppleOs,
+} from '@agent-device/kernel/device';
+import {
+  APPLE_TEXT_SIZE_LEAF_REFUSAL,
+  describeSettingRead,
+  describeSettingWrite,
   getUnsupportedMacOsSettingMessage,
   isMacOsSettingSupported,
+  invalidTextSizeMessage,
+  readTextSizeCategory,
   SETTINGS_INVALID_ARGS_MESSAGE,
+  type ReadableSetting,
+  type SettingOptions,
 } from '@agent-device/contracts/settings';
-import type { SettingOptions } from '@agent-device/contracts/settings';
 import type { SetSettingInput } from '@agent-device/contracts/settings-runtime';
-import { settingsRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
+import {
+  resolveSettingsRuntimePlan,
+  settingReadUse,
+  settingsRuntimeUse,
+} from '@agent-device/contracts/platform-runtime-operations';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import { contextFromFlags } from '../context.ts';
 import { SessionStore } from '../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { recordIfSession } from './snapshot-session.ts';
-import { errorResponse, type DaemonFailureResponse } from './response.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
+import { recordIfSession } from '../snapshot-session.ts';
 import { expireRefFrame } from '../ref-frame.ts';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { readLocationCoordinate } from '../../utils/location-coordinates.ts';
-import { successText, withSuccessText } from '../../utils/success-text.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { readLocationCoordinate } from '@agent-device/kernel/location-coordinates';
+import { successText, withSuccessText } from '@agent-device/kernel/success-text';
+
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { admitRuntimeUse } from '../runtime-admission.ts';
 import { runtimeExecutionFromContext } from '../snapshot-runtime-capture-input.ts';
+import { type DaemonFailureResponse, errorResponse } from '@agent-device/kernel/contracts';
 
 type ParsedSettingsArgs = {
   setting: string;
@@ -31,20 +48,30 @@ type ParsedSettingsArgs = {
   longitude?: string;
 };
 
+/**
+ * Which half of the settings surface a request asks for. A bare `settings <setting>` names a
+ * setting the command vocabulary declares readable and runs the owner's read leg; everything else
+ * is the mutation it has always been. The legs are separate because an owner admits one without the
+ * other — the macOS host sets an appearance it has no ladder to read back.
+ */
+export type ParsedSettingsRequest =
+  | Readonly<{ leg: 'read'; setting: ReadableSetting }>
+  | Readonly<{ leg: 'write'; args: ParsedSettingsArgs }>;
+
 type HandleSettingsCommandParams = {
   req: DaemonRequest;
   logPath: string;
   sessionStore: SessionStore;
   session: SessionState | undefined;
   device: SessionState['device'];
-  parsed: ParsedSettingsArgs;
+  parsed: ParsedSettingsRequest;
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
 };
 
 export function parseSettingsArgs(
   req: DaemonRequest,
-): { ok: true; parsed: ParsedSettingsArgs } | DaemonFailureResponse {
+): { ok: true; parsed: ParsedSettingsRequest } | DaemonFailureResponse {
   const setting = req.positionals?.[0]?.toLowerCase();
   const state = req.positionals?.[1]?.toLowerCase();
   const permissionTarget = req.positionals?.[2]?.toLowerCase();
@@ -53,29 +80,53 @@ export function parseSettingsArgs(
     return {
       ok: true,
       parsed: {
-        setting,
-        state: 'clear',
-        appBundleId,
+        leg: 'write',
+        args: {
+          setting,
+          state: 'clear',
+          appBundleId,
+        },
       },
     };
+  }
+  const plan = resolveSettingsRuntimePlan(req.positionals);
+  if (plan.kind === 'read') {
+    return { ok: true, parsed: { leg: 'read', setting: plan.setting } };
   }
   if (
     !setting ||
     !state ||
     (setting === 'permission' && !permissionTarget) ||
-    (setting === 'location' && state === 'set' && (!req.positionals?.[2] || !req.positionals?.[3]))
+    (setting === 'location' &&
+      state === 'set' &&
+      (!req.positionals?.[2] || !req.positionals?.[3])) ||
+    (setting === 'reset-keychain' && req.positionals?.[2] !== undefined)
   ) {
     return errorResponse('INVALID_ARGS', SETTINGS_INVALID_ARGS_MESSAGE);
+  }
+  // A text size that is not on the ladder is refused here, ahead of admission and of any device
+  // call: `simctl` answers an unknown category with exit 0, so a write that reached the tool with
+  // it would have reported success while changing nothing. The refusal carries the whole ladder.
+  let validatedState = state;
+  if (setting === 'text-size') {
+    const category = readTextSizeCategory(state);
+    if (category === undefined) {
+      return errorResponse('INVALID_ARGS', invalidTextSizeMessage(state));
+    }
+    validatedState = category;
   }
   return {
     ok: true,
     parsed: {
-      setting,
-      state,
-      permissionTarget,
-      permissionMode: req.positionals?.[3],
-      latitude: req.positionals?.[2],
-      longitude: req.positionals?.[3],
+      leg: 'write',
+      args: {
+        setting,
+        state: validatedState,
+        permissionTarget,
+        permissionMode: req.positionals?.[3],
+        latitude: req.positionals?.[2],
+        longitude: req.positionals?.[3],
+      },
     },
   };
 }
@@ -152,27 +203,76 @@ async function executeSetSetting(
 export async function handleSettingsCommand(
   params: HandleSettingsCommandParams,
 ): Promise<DaemonResponse> {
-  const { req, logPath, sessionStore, session, device, parsed, inspectFacts, bindDevice } = params;
+  if (params.parsed.leg === 'read') return await executeSettingsRead(params, params.parsed.setting);
+  return await executeSettingsWrite(params, params.parsed.args);
+}
+
+/**
+ * The ONE place `settings <setting>` reads a device (ADR 0019 §9). It admits the owner's read fact
+ * rather than its write fact, so a leaf that can change a value it cannot report — or the reverse —
+ * refuses with its own cell instead of running the wrong leg. Nothing here expires the session ref
+ * frame or mutates anything: the read is the reason that leg exists.
+ */
+async function executeSettingsRead(
+  params: HandleSettingsCommandParams,
+  setting: ReadableSetting,
+): Promise<DaemonResponse> {
+  const { req, logPath, sessionStore, session, device, inspectFacts, bindDevice } = params;
+  const refusal = settingsRequestRefusal(device, setting);
+  if (refusal !== undefined) return refusal;
+  const admission = await admitRuntimeUse({
+    command: `settings ${setting}`,
+    device,
+    use: settingReadUse,
+    inspectFacts,
+    bindDevice,
+    readiness: !session,
+  });
+  if (admission.type === 'response') return admission.response;
+
+  emitDiagnostic({
+    level: 'debug',
+    phase: 'settings_read',
+    data: { setting, platform: device.platform },
+  });
+  const context = contextFromFlags(
+    logPath,
+    req.flags,
+    session?.appBundleId,
+    session?.trace?.outPath,
+  );
+  const payload = await admission.runtime.operations.readSetting({
+    setting,
+    execution: runtimeExecutionFromContext(context),
+  });
+  const data = {
+    ...payload,
+    ...successText(describeSettingRead(payload)),
+  };
+  recordIfSession(sessionStore, session, req, data);
+  return { ok: true, data };
+}
+
+async function executeSettingsWrite(
+  params: HandleSettingsCommandParams,
+  parsed: ParsedSettingsArgs,
+): Promise<DaemonResponse> {
+  const { req, logPath, sessionStore, session, device, inspectFacts, bindDevice } = params;
   const { setting, state } = parsed;
+  const refusal = settingsRequestRefusal(device, setting);
+  if (refusal !== undefined) return refusal;
   const admission = await admitRuntimeUse({
     command: 'settings',
     device,
     use: settingsRuntimeUse,
     inspectFacts,
     bindDevice,
+    readiness: !session,
   });
+  const appBundleId = settingsWriteAppId(req, parsed, session);
   if (admission.type === 'response') return admission.response;
-  if (isMacOs(device) && !isMacOsSettingSupported(setting)) {
-    return errorResponse('INVALID_ARGS', getUnsupportedMacOsSettingMessage(setting));
-  }
-
-  const appBundleId = parsed.appBundleId ?? session?.appBundleId;
-  if (setting === 'clear-app-state' && !appBundleId) {
-    return errorResponse(
-      'INVALID_ARGS',
-      'settings clear-app-state requires an app id when no app is bound to the session',
-    );
-  }
+  const writeRefusal = settingsWriteRefusal(parsed, appBundleId);
+  if (writeRefusal !== undefined) return writeRefusal;
   // ADR 0014 side-effect seam: a settings mutation changes device state; expire the frame before
   // the bound call (settings is always classified may-invalidate). It runs here, ahead of the
   // diagnostic and the coordinate typing, because that is where the retired daemon route expired
@@ -183,21 +283,96 @@ export async function handleSettingsCommand(
     phase: 'settings_apply',
     data: settingsDiagnosticData(parsed, appBundleId, device.platform),
   });
-  const options = buildSettingOptions(parsed);
-  const context = contextFromFlags(logPath, req.flags, appBundleId, session?.trace?.outPath);
   const data = await executeSetSetting(
     admission.runtime,
-    {
-      setting,
-      state,
-      ...(appBundleId === undefined ? {} : { appBundleId }),
-      ...(options === undefined ? {} : { options }),
-      execution: runtimeExecutionFromContext(context),
-    },
-    setting === 'clear-app-state'
-      ? `Cleared user data for ${appBundleId}`
-      : `Updated setting: ${setting}`,
+    settingsWriteInput(
+      parsed,
+      appBundleId,
+      contextFromFlags(logPath, req.flags, appBundleId, session?.trace?.outPath),
+    ),
+    describeSettingWrite(setting, state, appBundleId),
   );
   recordIfSession(sessionStore, session, req, data);
   return { ok: true, data };
+}
+
+/**
+ * The refusals both legs make before a device is touched, so one target answers a read and a write of
+ * the same setting with the same code. They key on the requested setting, which an operation fact
+ * cannot express: macOS serves `settings` and still refuses `wifi`, and the Apple ladder needs a
+ * narrower leaf than the simulator-family write fact admits. Both are daemon-side stops ahead of
+ * admission — the mutation leg expires the session ref frame as soon as it is admitted, and a request
+ * this surface refuses must not expire it.
+ */
+function settingsRequestRefusal(
+  device: SessionState['device'],
+  setting: string,
+): DaemonResponse | undefined {
+  if (isMacOs(device) && !isMacOsSettingSupported(setting)) {
+    return errorResponse('INVALID_ARGS', getUnsupportedMacOsSettingMessage(setting));
+  }
+  // The Apple write fact is one claim covering every simulator, while the content-size ladder is
+  // confined to iPhone and iPad simulators. The refusal has to land before admission, because a
+  // settings mutation expires the session ref frame before the bound call, and a request that never
+  // reached a device must not take a live frame down with it.
+  if (
+    setting === 'text-size' &&
+    isApplePlatform(device.platform) &&
+    !isHandheldAppleSimulator(device)
+  ) {
+    return errorResponse(
+      'UNSUPPORTED_OPERATION',
+      APPLE_TEXT_SIZE_LEAF_REFUSAL.message,
+      {
+        deviceKind: device.kind,
+        appleOs: resolveDeviceAppleOs(device),
+        reason: APPLE_TEXT_SIZE_LEAF_REFUSAL.reason,
+      },
+      { hint: APPLE_TEXT_SIZE_LEAF_REFUSAL.hint },
+    );
+  }
+  return undefined;
+}
+
+/**
+ * The app a mutation targets: the explicit positional wins, then the Maestro adapter's daemon-internal
+ * `settingsAppBundleId`, which aims one request at another app than the session carries, and last the
+ * app the session is bound to.
+ */
+function settingsWriteAppId(
+  req: DaemonRequest,
+  parsed: ParsedSettingsArgs,
+  session: SessionState | undefined,
+): string | undefined {
+  return parsed.appBundleId ?? req.internal?.settingsAppBundleId ?? session?.appBundleId;
+}
+
+/** The refusal a mutation adds on top of the shared one: an app the session may not carry. */
+function settingsWriteRefusal(
+  parsed: ParsedSettingsArgs,
+  appBundleId: string | undefined,
+): DaemonResponse | undefined {
+  if (parsed.setting === 'clear-app-state' && !appBundleId) {
+    return errorResponse(
+      'INVALID_ARGS',
+      'settings clear-app-state requires an app id when no app is bound to the session',
+    );
+  }
+  return undefined;
+}
+
+/** The owner-facing input for one mutation: the named setting and state, plus only the extras it carries. */
+function settingsWriteInput(
+  parsed: ParsedSettingsArgs,
+  appBundleId: string | undefined,
+  context: Parameters<typeof runtimeExecutionFromContext>[0],
+): SetSettingInput {
+  const options = buildSettingOptions(parsed);
+  return {
+    setting: parsed.setting,
+    state: parsed.state,
+    ...(appBundleId === undefined ? {} : { appBundleId }),
+    ...(options === undefined ? {} : { options }),
+    execution: runtimeExecutionFromContext(context),
+  };
 }

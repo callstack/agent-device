@@ -33,7 +33,7 @@ query_artifact() {
   node "$TRUSTED_ARTIFACT" find "$REPOSITORY" "$NAME" "$EXPECTED_HEAD_SHA" 2>/dev/null
 }
 query_producer_state() {
-  node "$TRUSTED_ARTIFACT" producer-state "$REPOSITORY" "$EXPECTED_HEAD_SHA" 2>/dev/null
+  node "$TRUSTED_ARTIFACT" producer-state "$REPOSITORY" "$EXPECTED_HEAD_SHA" "$PLATFORM" 2>/dev/null
 }
 if ! ART_ID="$(query_artifact)"; then
   echo "::warning::Could not query the build cache for $NAME; building inline."
@@ -50,10 +50,6 @@ if [ -z "$ART_ID" ] && [ "$WAIT_SECONDS" -gt 0 ]; then
       break
     fi
     case "$PRODUCER_STATE" in
-      queued)
-        echo "Fixture producer is queued; building inline instead of waiting for a native runner."
-        break
-        ;;
       failed)
         echo "Fixture producer failed; building inline."
         break
@@ -69,7 +65,7 @@ if [ -z "$ART_ID" ] && [ "$WAIT_SECONDS" -gt 0 ]; then
           break
         fi
         ;;
-      in_progress)
+      queued | in_progress)
         MISSING_PRODUCER_POLLS=0
         ;;
       *)

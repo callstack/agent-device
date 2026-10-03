@@ -1,16 +1,18 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+// oxlint-disable-next-line no-restricted-imports -- asserts a path under os.homedir
 import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../session-store.ts';
-import type { SessionState } from '../types.ts';
-import { buildRequestFinishedEvent } from '../session-event-log.ts';
+import type { SessionState } from '../session-state.ts';
+import { buildRequestFinishedEvent } from '@agent-device/session-journal/session-event-log';
 import { HEAL_COMPLETE_SENTINEL } from '../session-script-writer.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { repairPublication } from '../../__tests__/test-utils/session-factories.ts';
+
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 type RecordActionEntry = Parameters<SessionStore['recordAction']>[1];
@@ -108,7 +110,9 @@ test('expandHome resolves tilde, relative-with-cwd, and absolute paths', () => {
 });
 
 test('defaultTracePath sanitizes session name', () => {
-  const store = new SessionStore(path.join(os.tmpdir(), 'agent-device-tests'));
+  const store = new SessionStore(
+    path.join(mkdtempForTestSync('agent-device-tests'), 'agent-device-tests'),
+  );
   const session = makeSession('session with spaces');
   const tracePath = store.defaultTracePath(session);
   assert.match(tracePath, /session_with_spaces/);
@@ -116,7 +120,11 @@ test('defaultTracePath sanitizes session name', () => {
 });
 
 test('resolveSessionDir keeps every session dir beneath the sessions dir', () => {
-  const sessionsDir = path.join(os.tmpdir(), 'agent-device-tests', 'sessions');
+  const sessionsDir = path.join(
+    mkdtempForTestSync('agent-device-tests'),
+    'agent-device-tests',
+    'sessions',
+  );
   const store = new SessionStore(sessionsDir);
   assert.equal(store.resolveSessionDir('a/b:c d'), path.join(sessionsDir, 'a_b_c_d'));
   // `.` and `..` survive `safeSessionName` unchanged, so without an explicit
@@ -640,7 +648,7 @@ test('writeSessionLog optimizes selector chains and scopes fallback snapshots', 
 
 test('writeSessionLog escapes device labels with quotes and backslashes', () => {
   const fixture = makeFixture('agent-device-session-log-device-label-');
-  fixture.session.device.name = 'QA "Lab" \\ Shelf';
+  fixture.session.device.name = String.raw`QA "Lab" \ Shelf`;
   recordOpen(fixture.store, fixture.session);
 
   const script = writeScript(fixture);
@@ -683,7 +691,7 @@ test('writeSessionLog preserves significant whitespace and empty string argument
 
   const script = writeScript(fixture);
   assertScriptMatches(script, [
-    /type "  leading\\ttrailing  "/,
+    /type " {2}leading\\ttrailing {2}"/,
     /fill @e5 "Search field" ""/,
     /screenshot " \.\/screens\/final\.png "/,
     /--metro-host " host\\t" --launch-url "myapp:\/\/dev "/,
@@ -871,4 +879,73 @@ test('BLOCKER 3: finalizeRepairTeardown auto-commit records a terminal close, pr
   assert.deepEqual(parsed.actions[2]?.positionals, []);
   const bareRefs = parsed.actions.flatMap((a) => a.positionals.filter((p) => p.startsWith('@')));
   assert.deepEqual(bareRefs, []);
+});
+
+// #2833: the store owns the activity signal the opt-in inactivity deadline is measured from, and the
+// bounded marker an expired session leaves. Both are the store's, so the request path never becomes a
+// `SessionState` writer to report either one.
+
+test('noteSessionActivity stamps the live record and ignores an unknown address', () => {
+  const { store, session } = makeFixture('agent-device-store-note-activity-');
+  store.set('default', session);
+  assert.equal(session.lastActivityAtMs, undefined);
+
+  store.noteSessionActivity('default', 5_000);
+  assert.equal(session.lastActivityAtMs, 5_000);
+
+  // A session this very command is creating is not what the command was using when it started.
+  store.noteSessionActivity('absent', 9_000);
+});
+
+test('the idle-expiry marker round-trips, and a fresh open clears it', () => {
+  const { store } = makeFixture('agent-device-store-idle-marker-');
+  const marker = {
+    owner: 'default',
+    expiredAtMs: Date.now(),
+    expiresAt: Date.now() + 60_000,
+    idleExpiryMs: 1_500_000,
+    deviceKey: 'ios:sim-1',
+  };
+
+  assert.equal(store.readIdleExpiryTombstone('default'), undefined);
+  store.writeIdleExpiryTombstone('default', marker);
+  assert.deepEqual(store.readIdleExpiryTombstone('default'), marker);
+
+  store.clearIdleExpiryTombstone('default');
+  assert.equal(store.readIdleExpiryTombstone('default'), undefined);
+  // Clearing a marker that was never there is not a failure: the caller is a successful `open`.
+  store.clearIdleExpiryTombstone('default');
+});
+
+test('an idle-expiry marker for an unsafe session name is neither written nor read', () => {
+  const { store } = makeFixture('agent-device-store-idle-marker-unsafe-');
+  store.writeIdleExpiryTombstone('..', {
+    owner: '..',
+    expiredAtMs: Date.now(),
+    expiresAt: Date.now() + 60_000,
+    idleExpiryMs: 1_000,
+  });
+  // The read is total, so its own answer proves nothing about where the write went: it declines `..`
+  // before touching the filesystem either way. The thing being guarded is the DIRECTORY ABOVE the
+  // sessions tree, so that is the path that has to be asserted empty.
+  assert.equal(store.readIdleExpiryTombstone('..'), undefined);
+  assert.equal(fs.existsSync(path.join(store.resolveDaemonStateDir(), 'idle-expiry.json')), false);
+});
+
+test('an idle-expiry marker never explains a different session key sharing its directory', () => {
+  const { store } = makeFixture('agent-device-store-idle-marker-owner-');
+  const marker = {
+    owner: 'ws/a',
+    expiredAtMs: Date.now(),
+    expiresAt: Date.now() + 60_000,
+    idleExpiryMs: 60_000,
+    deviceKey: 'ios:sim-shared',
+  };
+  // `safeSessionName` maps both of these names onto one session directory — it is the same encoding
+  // every other session artifact shares — which is why the marker also records the key that wrote it.
+  // Without that check, expiring `ws/a` would tell `ws:a`'s next command that IT had been expired,
+  // quoting another session's window and another session's device as the one this caller just lost.
+  store.writeIdleExpiryTombstone('ws/a', marker);
+  assert.equal(store.readIdleExpiryTombstone('ws:a'), undefined);
+  assert.deepEqual(store.readIdleExpiryTombstone('ws/a'), marker);
 });

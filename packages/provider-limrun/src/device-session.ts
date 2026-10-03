@@ -5,6 +5,7 @@ import type {
   LimrunAdbProvider,
   LimrunAndroidKeyboardDismissResult,
   LimrunAndroidKeyboardState,
+  LimrunHostAdapter,
 } from './runtime-dependencies.ts';
 import { createLimrunAndroidInteractor, type LimrunAndroidSession } from './android.ts';
 import {
@@ -59,13 +60,25 @@ type LimrunDeviceSessionBase = {
   listApps(filter?: AppsFilter): Promise<LimrunInstalledApp[]>;
   pressKey(key: string, modifiers?: string[]): Promise<void>;
   startRecording(options?: { quality?: LimrunRecordingQuality }): Promise<void>;
-  stopRecording(options: { outPath: string }): Promise<string>;
+  /** Stops the instance recorder and answers where the finished file is served; nothing is downloaded. */
+  stopRecording(): Promise<{ downloadUrl: string }>;
+  /** Fetches a served recording to `outPath` within a fixed deadline. Retriable while the instance lives. */
+  downloadRecording(input: { downloadUrl: string; outPath: string }): Promise<void>;
 };
 
 type LimrunRecordingClient = {
   startRecording(options?: { quality?: LimrunRecordingQuality }): Promise<void>;
-  stopRecording(options: { localPath: string }): Promise<string>;
+  stopRecording(saveTo: { localPath?: string }): Promise<string>;
 };
+
+/**
+ * The SDK's own inline download has no deadline, and the deadline given here may not outlive the
+ * `record stop` request that carries it: past that window the CLI resets a local daemon
+ * mid-transfer, which loses the memoized stop answer with the file. `record` runs on the default
+ * request envelope, so this cuts itself off inside it and the next `record stop` retries the
+ * served URL typed instead.
+ */
+const LIMRUN_RECORDING_DOWNLOAD_TIMEOUT_MS = 60_000;
 
 export type LimrunAndroidDeviceSession = LimrunDeviceSessionBase & {
   readonly platform: 'android';
@@ -115,7 +128,7 @@ function createAndroidDeviceSession(session: LimrunAndroidSession): LimrunAndroi
     getKeyboardState: async () => await session.dependencies.android.getKeyboardState(adb),
     dismissKeyboard: async () => await session.dependencies.android.dismissKeyboard(adb),
     readLogs: async (lineLimit) => await session.dependencies.android.readLogs(adb, lineLimit),
-    ...createRecordingOperations(session.client),
+    ...createRecordingOperations(session.client, session.token, session.dependencies.host),
     installRemoteApp: async (url) => {
       await session.client.sendAsset(url);
     },
@@ -144,19 +157,32 @@ function createIosDeviceSession(session: LimrunIosSession): LimrunIosDeviceSessi
       await session.client.pressKey(key, modifiers);
     },
     readLogs: async (appId, lineLimit) => await session.client.appLogTail(appId, lineLimit),
-    ...createRecordingOperations(session.client),
+    ...createRecordingOperations(session.client, session.token, session.dependencies.host),
     installRemoteApp: async (url, options) =>
       await installLimrunIosRemoteApp(session, url, options),
     runSimctl: (args): LimrunIosCommandExecution => session.client.simctl(args),
   };
 }
 
-function createRecordingOperations(client: LimrunRecordingClient) {
+function createRecordingOperations(
+  client: LimrunRecordingClient,
+  token: string,
+  host: Pick<LimrunHostAdapter, 'downloadFile'>,
+) {
   return {
     startRecording: async (options?: { quality?: LimrunRecordingQuality }) => {
       await client.startRecording(options);
     },
-    stopRecording: async ({ outPath }: { outPath: string }) =>
-      await client.stopRecording({ localPath: outPath }),
+    // Without `localPath` the SDK only stops the recorder and returns the served URL; a download
+    // tied to the one-shot stop could not be retried after a dropped transfer.
+    stopRecording: async () => ({ downloadUrl: await client.stopRecording({}) }),
+    downloadRecording: async (input: { downloadUrl: string; outPath: string }) => {
+      await host.downloadFile({
+        url: input.downloadUrl,
+        headers: { Authorization: `Bearer ${token}` },
+        destinationPath: input.outPath,
+        timeoutMs: LIMRUN_RECORDING_DOWNLOAD_TIMEOUT_MS,
+      });
+    },
   };
 }

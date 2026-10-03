@@ -4,9 +4,15 @@ import type { AppsFilter, DeviceLease } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import {
+  androidAdbHostTarget,
+  androidAdbInvocation,
+  androidAdbSerialTarget,
+} from '@agent-device/platform-android/mechanics';
 import type {
   LimrunAdbExecutor,
   LimrunAdbProvider,
+  LimrunFileDownload,
   LimrunRuntimeDependencies,
 } from './runtime-dependencies.ts';
 import type { LimrunAndroidSession } from './android.ts';
@@ -17,6 +23,8 @@ const IOS_APPS = [
   { bundleId: 'com.apple.Preferences', name: 'Settings', installType: 'System' },
   { bundleId: 'com.example.ios', name: 'Example', installType: 'User' },
 ];
+
+const downloadFile = vi.fn(async (_options: LimrunFileDownload) => undefined);
 
 const TEST_DEPENDENCIES = {
   clientVersion: 'test-version',
@@ -44,11 +52,16 @@ const TEST_DEPENDENCIES = {
       dismissed: false,
     }),
     readLogs: async () => 'log line\n',
+    forceStopApp: async () => {},
+    deviceAdbInvocation: (serial, command) =>
+      androidAdbInvocation(androidAdbSerialTarget(serial), command),
+    hostAdbInvocation: (command) => androidAdbInvocation(androidAdbHostTarget(), command),
     adbError: async (message) => new AppError('COMMAND_FAILED', message),
   },
   host: {
     runAdb: async () => adbResult(''),
     archiveDirectory: async () => undefined,
+    downloadFile,
   },
   ios: {
     resolveAppAlias: async (app: string) => app,
@@ -90,10 +103,11 @@ test('iOS device session exposes reusable capabilities without its raw client', 
   await session.pressKey('enter', ['command']);
   assert.equal(await session.readLogs('com.example.ios', 200), 'line one\nline two\n');
   await session.startRecording({ quality: 8 });
-  assert.equal(
-    await session.stopRecording({ outPath: '/tmp/ios-recording.mp4' }),
-    'https://ios.example/recording',
-  );
+  assert.deepEqual(await session.stopRecording(), { downloadUrl: 'https://ios.example/recording' });
+  await session.downloadRecording({
+    downloadUrl: 'https://ios.example/recording',
+    outPath: '/tmp/ios-recording.mp4',
+  });
   assert.deepEqual(await session.runSimctl(['listapps', 'booted']).wait(), {
     code: 0,
     stdout: 'ok',
@@ -103,7 +117,15 @@ test('iOS device session exposes reusable capabilities without its raw client', 
   assert.deepEqual(pressKey.mock.calls[0], ['enter', ['command']]);
   assert.deepEqual(readLogs.mock.calls[0], ['com.example.ios', 200]);
   assert.deepEqual(startRecording.mock.calls[0], [{ quality: 8 }]);
-  assert.deepEqual(stopRecording.mock.calls[0], [{ localPath: '/tmp/ios-recording.mp4' }]);
+  assert.deepEqual(stopRecording.mock.calls[0], [{}]);
+  assert.deepEqual(downloadFile.mock.calls.at(-1), [
+    {
+      url: 'https://ios.example/recording',
+      headers: { Authorization: 'Bearer ios-instance-token' },
+      destinationPath: '/tmp/ios-recording.mp4',
+      timeoutMs: 60_000,
+    },
+  ]);
   assert.deepEqual(simctl.mock.calls[0], [['listapps', 'booted']]);
   assert.equal('client' in session, false);
 });
@@ -173,16 +195,27 @@ test('Android device session exposes semantic ADB capabilities without its raw c
   assert.equal(await session.installRemoteApp('https://assets.example/android.apk'), undefined);
   await session.pressKey('KEYCODE_ENTER', ['shift']);
   await session.startRecording({ quality: 7 });
-  assert.equal(
-    await session.stopRecording({ outPath: '/tmp/android-recording.mp4' }),
-    'https://android.example/recording',
-  );
+  assert.deepEqual(await session.stopRecording(), {
+    downloadUrl: 'https://android.example/recording',
+  });
+  await session.downloadRecording({
+    downloadUrl: 'https://android.example/recording',
+    outPath: '/tmp/android-recording.mp4',
+  });
   await session.adb.reverse?.remove('tcp:8081');
 
   assert.deepEqual(sendAsset.mock.calls[0], ['https://assets.example/android.apk']);
   assert.deepEqual(pressKey.mock.calls[0], ['KEYCODE_ENTER', ['shift']]);
   assert.deepEqual(startRecording.mock.calls[0], [{ quality: 7 }]);
-  assert.deepEqual(stopRecording.mock.calls[0], [{ localPath: '/tmp/android-recording.mp4' }]);
+  assert.deepEqual(stopRecording.mock.calls[0], [{}]);
+  assert.deepEqual(downloadFile.mock.calls.at(-1), [
+    {
+      url: 'https://android.example/recording',
+      headers: { Authorization: 'Bearer android-instance-token' },
+      destinationPath: '/tmp/android-recording.mp4',
+      timeoutMs: 60_000,
+    },
+  ]);
   assert.deepEqual(removeReverse.mock.calls[0], ['tcp:8081']);
   assert.equal(session.adb, provider);
   assert.equal('client' in session, false);
@@ -195,6 +228,7 @@ function iosSession(client: Record<string, unknown>): LimrunIosSession {
     instanceId: 'ios-instance',
     device: device('ios'),
     client,
+    token: 'ios-instance-token',
     dependencies: TEST_DEPENDENCIES,
   } as unknown as LimrunIosSession;
 }
@@ -210,6 +244,7 @@ function androidSession(
     device: device('android'),
     client,
     adbProvider,
+    token: 'android-instance-token',
     dependencies: TEST_DEPENDENCIES,
   } as unknown as LimrunAndroidSession;
 }

@@ -309,7 +309,9 @@ function formatNetworkEntry(entry: NetworkCliEntry): string[] {
   const status = entry.status !== undefined ? ` status=${entry.status}` : '';
   const timestamp = entry.timestamp ? `${entry.timestamp} ` : '';
   const durationMs = entry.durationMs !== undefined ? ` durationMs=${entry.durationMs}` : '';
-  const lines = [`${timestamp}${method} ${url}${status}${durationMs}`];
+  const path =
+    'pathUnavailable' in entry && entry.pathUnavailable ? ' (request path not logged)' : '';
+  const lines = [`${timestamp}${method} ${url}${path}${status}${durationMs}`];
   if (entry.headers) {
     appendNetworkEntryBody(lines, 'headers', entry.headers);
   } else {

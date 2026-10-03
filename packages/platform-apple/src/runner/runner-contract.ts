@@ -1,5 +1,11 @@
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  toAppErrorCode,
+  type DispatchDisclosure,
+} from '@agent-device/kernel/errors';
 import crypto from 'node:crypto';
+import { ALERT_NOT_FOUND_RUNNER_CODE } from '@agent-device/contracts/alert-contract';
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
 import type { ClickButton } from '@agent-device/contracts/click-button';
@@ -7,17 +13,42 @@ import type { ElementSelectorKey } from '@agent-device/contracts/interactor-type
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
 import type { ScrollReleaseBehavior } from '@agent-device/contracts/scroll-command';
-import {
-  getRequestSignal,
-  isRequestCanceled,
-  bootFailureHint,
-  classifyBootFailure,
-  type BootFailureReason,
-} from './host.ts';
-import type { RunnerSession } from './runner-session-types.ts';
+import { getRequestSignal, isRequestCanceled } from './host.ts';
 
-const RUNNER_CACHE_RECOVERY_HINT =
-  'If runner build products look stale or corrupted, run `pnpm clean:xcuitest` in a local checkout, or remove ~/.agent-device/apple-runner/derived, then retry.';
+/**
+ * The runner's own code for "an earlier command exceeded the execution watchdog and its abandoned
+ * main-thread work is still draining" (#1105). It is transient by construction — past the wedge
+ * threshold the runner escalates to `RUNNER_WEDGED` instead — so every host path must publish it
+ * as retriable.
+ */
+export const RUNNER_BUSY_RUNNER_CODE = 'RUNNER_BUSY';
+
+/**
+ * The runner's own code for the command that just tripped the execution watchdog: its main-thread
+ * work was abandoned and the thread is now occupied (#2552). Unlike `RUNNER_BUSY` (a fast refusal
+ * of a *later* command), this is the error the *stalling* command itself returns, so it is the only
+ * typed signal available before any refusal happens. Not retriable: the wait already elapsed and an
+ * immediate retry would only meet `RUNNER_BUSY`.
+ */
+export const MAIN_THREAD_TIMEOUT_RUNNER_CODE = 'MAIN_THREAD_TIMEOUT';
+
+/**
+ * The runner's own code for a command it refused because abandoned main-thread work has occupied it
+ * past the wedge threshold (#1105). Like `RUNNER_BUSY`, the refused command never ran.
+ */
+export const RUNNER_WEDGED_RUNNER_CODE = 'RUNNER_WEDGED';
+
+/**
+ * The runner's own code for a read whose session app is not running. No runner read launches the
+ * app — a bare launch would drop the payload of a launch still pending, such as a deep link held
+ * behind SpringBoard's confirmation — so the runner refuses any command carrying its read-only
+ * trait, including a mutation's leading read (a gesture's viewport read, a selector's resolving
+ * capture). Only the iOS runner refuses (`#if os(iOS)`); the macOS, tvOS and visionOS runners keep the
+ * activate repair. The refusal describes one poll: the launch that confirmation releases may still be
+ * starting when the next read arrives, so it is retriable for a `wait`, while the transport reads
+ * it as a definite answer and never resends it.
+ */
+const APP_NOT_RUNNING_RUNNER_CODE = 'APP_NOT_RUNNING';
 
 export type RunnerCommand = {
   command:
@@ -40,7 +71,6 @@ export type RunnerCommand = {
     | 'readText'
     | 'snapshot'
     | 'screenshot'
-    | 'back'
     | 'backInApp'
     | 'backSystem'
     | 'home'
@@ -48,6 +78,7 @@ export type RunnerCommand = {
     | 'gesture'
     | 'gestureViewport'
     | 'appSwitcher'
+    | 'actionButton'
     | 'keyboardDismiss'
     | 'keyboardReturn'
     | 'alert'
@@ -56,6 +87,12 @@ export type RunnerCommand = {
     | 'recordStop'
     | 'status'
     | 'uptime'
+    // The session app's XCUIApplication.state by name. A lifecycle read: it skips the activation
+    // preflight, so it reports the state the app is in rather than the one a repair leaves.
+    | 'appState'
+    // Sets the device's general pasteboard from the runner's own process: a simulator's
+    // `simctl pbcopy` only promises its data from a process that exits before anything reads it.
+    | 'pasteboardWrite'
     | 'activate'
     | 'terminate'
     | 'targetReset'
@@ -134,279 +171,240 @@ export function resolveRunnerRequestSignal(options: {
   return AbortSignal.any([registeredSignal, options.signal]);
 }
 
-type RunnerErrorMatch = {
-  /** Required `AppError.code`; absent = any AppError. */
-  code?: string;
-  /** Every entry must appear in the lowercased message. */
-  messageIncludesAll?: readonly string[];
-  /** Required details evidence beyond code/message. */
-  details?: 'retriable' | 'usbmux-device-unattached';
-};
-
-type RunnerErrorVerdicts = {
-  /** isRetryableRunnerError: transport error worth a same-session resend. */
-  retryable?: boolean;
-  /** shouldRetryRunnerConnectError: connect loop may keep waiting for the runner. */
-  connectRetry?: boolean;
-  /** Session-fatal classification: invalidate the cached runner session with this reason. */
-  sessionFatalReason?: string;
-  /** Connect-shaped failure before the command was sent: restart the session and replay. */
-  restartBeforeSend?: boolean;
-};
-
-type RunnerErrorRule = {
-  /** Stable rule name for tests and diagnostics. */
-  reason: string;
-  match: RunnerErrorMatch;
-  verdicts: RunnerErrorVerdicts;
+type RunnerRequestSignalOptions = {
+  requestId?: string;
+  signal?: AbortSignal;
 };
 
 /**
- * The one declaration of runner error classes (#1631), mirroring
- * RUNNER_COMMAND_TRAIT_MANIFEST's role for commands: every recovery predicate
- * below derives from this table instead of keeping its own substring chain.
- * Per axis, the FIRST matching rule that defines the axis wins — which is why
- * `flagged_retriable` precedes the denials (an explicitly retriable error
- * stays retriable whatever its message says), and `usbmux_device_unattached`
- * sits first (retrying cannot attach a cable, and its typed verdict carries
- * the recovery hint a generic connect failure would replace).
+ * Whether an abort reason is a caller's own deadline rather than a cancelled request. A `wait`
+ * bounds each poll with an abort signal whose reason is a `TimeoutError` (`runWithinWaitDeadline`);
+ * a cancelled request aborts through the registered request signal or the cancellation registry.
+ * The typed reason decides, never the error text the transport threw on abort.
  */
-export const RUNNER_ERROR_RULES: readonly RunnerErrorRule[] = [
-  {
-    reason: 'usbmux_device_unattached',
-    match: { code: 'DEVICE_NOT_FOUND', details: 'usbmux-device-unattached' },
-    verdicts: { connectRetry: false },
-  },
-  {
-    reason: 'flagged_retriable',
-    match: { code: 'COMMAND_FAILED', details: 'retriable' },
-    verdicts: { retryable: true },
-  },
-  {
-    reason: 'xcodebuild_exited_early',
-    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['xcodebuild exited early'] },
-    verdicts: { retryable: false, connectRetry: false },
-  },
-  {
-    reason: 'device_busy_connecting',
-    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['device is busy', 'connecting'] },
-    verdicts: { retryable: false },
-  },
-  {
-    reason: 'runner_connect_refused',
-    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['runner did not accept connection'] },
-    verdicts: { retryable: true, restartBeforeSend: true },
-  },
-  {
-    reason: 'fetch_failed',
-    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['fetch failed'] },
-    verdicts: { retryable: true },
-  },
-  {
-    reason: 'econnrefused',
-    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['econnrefused'] },
-    verdicts: { retryable: true },
-  },
-  {
-    reason: 'socket_hang_up',
-    match: { code: 'COMMAND_FAILED', messageIncludesAll: ['socket hang up'] },
-    verdicts: { retryable: true },
-  },
-  {
-    reason: 'ax_snapshot_failure',
-    match: { code: 'IOS_AX_SNAPSHOT_FAILED' },
-    verdicts: { sessionFatalReason: 'ax_snapshot_failure' },
-  },
-  {
-    reason: 'xctest_recorded_failure',
-    match: { code: 'XCTEST_RECORDED_FAILURE' },
-    verdicts: { sessionFatalReason: 'xctest_recorded_failure' },
-  },
-  {
-    // The runner reported its main thread stuck in abandoned work past the wedge
-    // threshold (#1105): only a restart cures it. The per-request recycle budget
-    // still bounds how many boots one request pays for.
-    reason: 'runner_main_thread_wedged',
-    match: { code: 'RUNNER_WEDGED' },
-    verdicts: { sessionFatalReason: 'runner_main_thread_wedged' },
-  },
-];
-
-function matchesRunnerErrorRule(error: AppError, match: RunnerErrorMatch): boolean {
-  if (match.code !== undefined && error.code !== match.code) return false;
-  if (!matchesRunnerErrorDetails(error, match.details)) return false;
-  return matchesRunnerErrorMessage(error, match.messageIncludesAll);
+export function isCallerDeadlineAbortReason(reason: unknown): boolean {
+  return reason instanceof DOMException && reason.name === 'TimeoutError';
 }
 
-function matchesRunnerErrorDetails(error: AppError, details: RunnerErrorMatch['details']): boolean {
-  if (details === undefined) return true;
-  if (details === 'retriable') return error.details?.retriable === true;
-  return isUsbmuxDeviceUnattachedError(error);
-}
-
-function matchesRunnerErrorMessage(error: AppError, parts: readonly string[] | undefined): boolean {
-  if (!parts) return true;
-  const message = `${error.message ?? ''}`.toLowerCase();
-  return parts.every((part) => message.includes(part));
-}
-
-function runnerErrorVerdict<Axis extends keyof RunnerErrorVerdicts>(
-  error: unknown,
-  axis: Axis,
-): RunnerErrorVerdicts[Axis] | undefined {
-  if (!(error instanceof AppError)) return undefined;
-  for (const rule of RUNNER_ERROR_RULES) {
-    if (rule.verdicts[axis] === undefined) continue;
-    if (matchesRunnerErrorRule(error, rule.match)) return rule.verdicts[axis];
+/**
+ * Whether the caller's own deadline ended this command, as opposed to the request being cancelled.
+ * A deadline that lands mid-fetch (surfacing as whatever the transport threw on abort) is read the
+ * same way as one that wakes a delay.
+ */
+export function callerDeadlineExpired(options: RunnerRequestSignalOptions): boolean {
+  if (isRequestCanceled(options.requestId) || getRequestSignal(options.requestId)?.aborted) {
+    return false;
   }
-  return undefined;
-}
-
-export function isRetryableRunnerError(err: unknown): boolean {
-  if (!(err instanceof AppError)) return false;
-  if (err.code !== 'COMMAND_FAILED') return false;
-  return runnerErrorVerdict(err, 'retryable') ?? false;
+  return options.signal?.aborted === true && isCallerDeadlineAbortReason(options.signal.reason);
 }
 
 /**
- * True when usbmuxd answered and the device is simply not attached by cable.
- * A CoreDevice-backed device falls back to its network tunnel; an XCTest-backed
- * device has no second route, so this verdict is terminal rather than retryable.
- *
- * Lives here rather than beside the usbmux transport because the retry policy
- * below needs it, and that transport already depends on this module.
+ * The signal a runner start reacts to. A cancelled request (client disconnect) must kill the
+ * blocking xctestrun build and the runner launch instead of orphaning them, so the registered request
+ * signal passes through untouched. A caller's own deadline must not: the runner start it interrupts
+ * is the one the retry needs, and a start that pays itself again on every short-timeout poll never
+ * finishes on a slow host (#2894). The start keeps going on its own startup budget, and the caller's
+ * command is still cut off by its unfiltered signal once the runner answers.
  */
-export function isUsbmuxDeviceUnattachedError(error: unknown): boolean {
-  if (!(error instanceof AppError) || error.code !== 'DEVICE_NOT_FOUND') return false;
-  return (
-    (error.details as { usbmuxDeviceAttached?: unknown } | undefined)?.usbmuxDeviceAttached ===
-    false
-  );
-}
-
-export function shouldRetryRunnerConnectError(error: unknown): boolean {
-  return runnerErrorVerdict(error, 'connectRetry') ?? true;
+export function resolveRunnerStartupSignal(
+  options: RunnerRequestSignalOptions,
+): AbortSignal | undefined {
+  const registeredSignal = getRequestSignal(options.requestId);
+  const callerSignal = options.signal;
+  if (!callerSignal || callerSignal === registeredSignal) return registeredSignal;
+  // The caller signal is filtered through its own controller, so a deadline never reaches the
+  // start; the registered signal is composed with `AbortSignal.any`, which detaches its own
+  // listener once the composed signal settles, so a request that polls many times does not
+  // accumulate listeners on its long-lived cancellation signal.
+  const filtered = new AbortController();
+  const forward = () => {
+    if (!isCallerDeadlineAbortReason(callerSignal.reason)) filtered.abort(callerSignal.reason);
+  };
+  if (callerSignal.aborted) forward();
+  else callerSignal.addEventListener('abort', forward, { once: true });
+  return registeredSignal ? AbortSignal.any([registeredSignal, filtered.signal]) : filtered.signal;
 }
 
 /**
- * Session-fatal classification for a runner response error: when defined, the
- * cached runner session must be invalidated with this reason instead of being
- * reused (see ADR 0005 and docs/agents/selector-capture.md's
- * runnerFatal rule).
+ * The code the XCTest runner answers with when it declines to place a scroll gesture under the
+ * on-screen keyboard (#2500). It is the runner's own vocabulary, so it is declared here beside the
+ * set that keeps it off the wire, and the Apple scroll owner matches it on `details.runnerErrorCode`
+ * rather than on error text.
  */
-export function resolveRunnerFatalErrorReason(error: unknown): string | undefined {
-  return runnerErrorVerdict(error, 'sessionFatalReason');
-}
+export const SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE = 'SCROLL_KEYBOARD_OCCLUDES_SURFACE';
 
 /**
- * A connect-shaped failure that surfaced before the command was sent: restart
- * the runner session and replay the command, rather than probing a runner
- * that never accepted the connection. Composed with the connect-retry axis so
- * a terminal connect verdict (cable unattached, xcodebuild exited early)
- * still refuses the restart. Matching is table-driven and therefore
- * case-insensitive, unlike the raw-message check it replaced; the message is
- * our own transport literal, so no real error changes class.
+ * The codes the XCTest runner answers with when a resolved-display capture it was asked to make did
+ * not happen (#2728): no window resolved so no display could be named, the resolved window named no
+ * display, or the resolved display handed back an image it could not encode upright. The runner emits
+ * them from every consumer of that helper — the `screenshot` command's fallback, `record start`'s
+ * required first frame, and an optional visual check such as the `back` fallback's before/after
+ * sample. They are the runner's own vocabulary, so they are declared here beside the set that keeps
+ * them off the wire; a required capture fails closed on them rather than falling back to a screen
+ * nobody is on, and an optional one reports the refusal as an unknown. Only the `screenshot` route
+ * consumes the set for its own simctl-to-runner decision, but the set names the whole family.
  */
-export function shouldRestartRunnerBeforeCommandSend(error: unknown): boolean {
-  return (
-    (runnerErrorVerdict(error, 'restartBeforeSend') ?? false) &&
-    shouldRetryRunnerConnectError(error)
-  );
-}
+const RUNNER_SCREEN_WINDOW_UNRESOLVED_RUNNER_CODE = 'APP_SCREEN_WINDOW_UNRESOLVED';
+const RUNNER_SCREEN_UNRESOLVED_RUNNER_CODE = 'APP_SCREEN_UNRESOLVED';
+const RUNNER_SCREEN_CAPTURE_UNRENDERABLE_RUNNER_CODE = 'APP_SCREEN_CAPTURE_UNRENDERABLE';
 
-export function resolveRunnerEarlyExitHint(
-  message: string,
-  stdout: string,
-  stderr: string,
-  reason?: BootFailureReason,
-): string {
-  const haystack = `${message}\n${stdout}\n${stderr}`.toLowerCase();
-  if (haystack.includes('device is busy') && haystack.includes('connecting')) {
-    return 'Target iOS device is still connecting. Keep it unlocked, wait for device trust/connection to settle, then retry.';
-  }
-  const classified = reason ?? 'IOS_RUNNER_CONNECT_TIMEOUT';
-  // Clearing cached build products cannot put a device into a provisioning
-  // profile, so that recovery advice is withheld where it would only add noise
-  // to an already actionable instruction.
-  if (classified === 'IOS_RUNNER_DEVICE_NOT_PROVISIONED') return bootFailureHint(classified);
-  return `${bootFailureHint(classified)} ${RUNNER_CACHE_RECOVERY_HINT}`;
-}
+/** Every runner code meaning "this capture did not happen", covering the display and the image. */
+export const RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES: ReadonlySet<string> = new Set([
+  RUNNER_SCREEN_WINDOW_UNRESOLVED_RUNNER_CODE,
+  RUNNER_SCREEN_UNRESOLVED_RUNNER_CODE,
+  RUNNER_SCREEN_CAPTURE_UNRENDERABLE_RUNNER_CODE,
+]);
 
-export function buildRunnerConnectError(params: {
-  port: number;
-  endpoints: string[];
-  logPath?: string;
-  lastError: unknown;
-}): AppError {
-  const { port, endpoints, logPath, lastError } = params;
-  const message = 'Runner did not accept connection';
-  return new AppError('COMMAND_FAILED', message, {
-    port,
-    endpoints,
-    logPath,
-    lastError: lastError ? String(lastError) : undefined,
-    reason: classifyBootFailure({
-      error: lastError,
-      message,
-      context: { platform: 'ios', phase: 'connect' },
+/**
+ * Runner codes that classify a failure for the host without renaming it on the wire. They stay
+ * `COMMAND_FAILED` and survive as `details.runnerErrorCode`, which is what family policy reads:
+ * `RUNNER_BUSY` for retriable contention, `ALERT_NOT_FOUND` for an alert that is not there yet,
+ * the scroll keyboard refusal for a surface the runner declined to swipe under the keys, and the
+ * retriable `APP_NOT_RUNNING` for a read the runner refused rather than launch the session app.
+ */
+const DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES: ReadonlyMap<
+  string,
+  { retriable?: true; reason?: RunnerReportedErrorReason }
+> = new Map([
+  [RUNNER_BUSY_RUNNER_CODE, { retriable: true, reason: 'runner_busy' }],
+  [MAIN_THREAD_TIMEOUT_RUNNER_CODE, { reason: 'runner_main_thread_timeout' }],
+  [APP_NOT_RUNNING_RUNNER_CODE, { retriable: true }],
+  [ALERT_NOT_FOUND_RUNNER_CODE, {}],
+  [SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE, {}],
+  ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, {}] as const),
+]);
+
+/**
+ * Runner codes whose reply proves the command never reached the device. The refusals answer before
+ * the command runs, the selector refusals included: the runner resolves the element and refuses
+ * before any gesture. `INVALID_ARGS` comes only from request decoding and argument validation,
+ * each ahead of any gesture. Every other code, and a reply without one, is `unknown`:
+ * `UNSUPPORTED_OPERATION` is also what a synthesized gesture or element tap reports after it ran.
+ */
+const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new Map([
+  ['INVALID_ARGS', 'no'],
+  ['ELEMENT_NOT_FOUND', 'no'],
+  ['ELEMENT_OFFSCREEN', 'no'],
+  ['AMBIGUOUS_MATCH', 'no'],
+  [RUNNER_BUSY_RUNNER_CODE, 'no'],
+  [RUNNER_WEDGED_RUNNER_CODE, 'no'],
+  [APP_NOT_RUNNING_RUNNER_CODE, 'no'],
+  [SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE, 'no'],
+  [ALERT_NOT_FOUND_RUNNER_CODE, 'no'],
+  ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, 'no'] as const),
+]);
+
+/**
+ * `details.reason` for the runner codes a consumer acts on, so it reads one field instead of
+ * `details.runnerErrorCode`, which stays for the runner's own vocabulary.
+ */
+type RunnerReportedErrorReason = 'runner_busy' | 'runner_main_thread_timeout';
+
+/** Wire code plus the details every path must publish for one runner-reported error code. */
+export type RunnerReportedErrorClass = Readonly<{
+  code: AppError['code'];
+  details: Readonly<{
+    runnerErrorCode?: string;
+    retriable?: true;
+    reason?: RunnerReportedErrorReason;
+    dispatched: DispatchDisclosure;
+  }>;
+}>;
+
+/**
+ * The one reading of a runner-reported error code (#2484 follow-up). A runner failure reaches the
+ * host by two routes — the command's own response, and the lifecycle journal a status probe reads
+ * back after the transport response was lost — and both must classify it identically, or the same
+ * runner condition surfaces under two codes with only one of them marked retriable.
+ */
+export function classifyRunnerReportedError(
+  runnerErrorCode: string | undefined,
+): RunnerReportedErrorClass {
+  const diagnosticOnly =
+    runnerErrorCode === undefined
+      ? undefined
+      : DIAGNOSTIC_ONLY_RUNNER_ERROR_CODES.get(runnerErrorCode);
+  return Object.freeze({
+    code: diagnosticOnly ? 'COMMAND_FAILED' : toAppErrorCode(runnerErrorCode),
+    details: Object.freeze({
+      runnerErrorCode,
+      ...diagnosticOnly,
+      dispatched:
+        (runnerErrorCode === undefined
+          ? undefined
+          : RUNNER_ERROR_CODE_DISPATCH.get(runnerErrorCode)) ?? 'unknown',
     }),
-    hint: bootFailureHint('IOS_RUNNER_CONNECT_TIMEOUT'),
   });
 }
 
-export async function buildRunnerEarlyExitError(params: {
-  session: RunnerSession;
-  port: number;
-  logPath?: string;
-}): Promise<AppError> {
-  const { session, port, logPath } = params;
-  const result = await session.testPromise;
-  const message = 'Runner did not accept connection (xcodebuild exited early)';
-  const reason = classifyBootFailure({
-    message,
-    stdout: result.stdout,
-    stderr: result.stderr,
-    context: { platform: 'ios', phase: 'connect' },
-  });
-  // exec-guard-allow: xcodebuild can exit 0 and still count as an early exit;
-  // the trio is nested tool context under `xcodebuild`, classified into
-  // `reason`/`hint` above — not a process-exit wrap.
-  return new AppError('COMMAND_FAILED', message, {
-    port,
-    logPath,
+export type RunnerResponsePayload = {
+  ok?: unknown;
+  error?: { code?: unknown; message?: unknown; hint?: unknown };
+  data?: unknown;
+};
+
+/**
+ * The one decoding of a runner response body (#2662). The envelope arrives at three readers — a
+ * command's own response, the lifecycle journal a status probe reads back after the transport
+ * response was lost, and the adoption `uptime` probe — and all three must agree on what is
+ * readable, or a body one of them refuses becomes an answer for another.
+ *
+ * Only a JSON object can be an envelope. A body that is not JSON at all, and a JSON scalar or array
+ * that carries no `ok`, are both transport-shaped: neither is something the runner's encoder emits,
+ * and reading either as an empty reply would let a proxy page or a half-written body answer for a
+ * command the runner may still be executing.
+ */
+export function decodeRunnerResponseBody(text: string): RunnerResponsePayload {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new AppError('COMMAND_FAILED', 'Invalid runner response', { text });
+  }
+  if (!isRunnerEnvelopeObject(parsed)) {
+    throw new AppError('COMMAND_FAILED', 'Invalid runner response', { text });
+  }
+  return parsed;
+}
+
+function isRunnerEnvelopeObject(parsed: unknown): parsed is RunnerResponsePayload {
+  return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed);
+}
+
+/** The runner's `ok` is a Swift `Bool`, so only the literal `true` is an answer. */
+export function isRunnerResponseOk(payload: RunnerResponsePayload): boolean {
+  return payload.ok === true;
+}
+
+export function readRunnerResponseData(payload: RunnerResponsePayload): Record<string, unknown> {
+  if (!payload.data || typeof payload.data !== 'object' || Array.isArray(payload.data)) return {};
+  return payload.data as Record<string, unknown>;
+}
+
+export function buildRunnerResponseError(
+  payload: RunnerResponsePayload,
+  logPath?: string,
+): AppError {
+  const runnerErrorCode = readRunnerErrorCode(payload.error?.code);
+  const errorMessage =
+    typeof payload.error?.message === 'string' ? payload.error.message : undefined;
+  const hint = typeof payload.error?.hint === 'string' ? payload.error.hint : undefined;
+  const classification = classifyRunnerReportedError(runnerErrorCode);
+  return new AppError(classification.code, errorMessage ?? 'Runner error', {
+    runner: payload,
+    ...classification.details,
     xcodebuild: {
-      exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
+      exitCode: 1,
+      stdout: '',
+      stderr: '',
     },
-    reason,
-    hint: resolveRunnerEarlyExitHint(message, result.stdout, result.stderr, reason),
+    hint,
+    logPath,
   });
 }
 
-function resolveSigningFailureHint(error: AppError): string | undefined {
-  const details = error.details ? JSON.stringify(error.details) : '';
-  const combined = `${error.message}\n${details}`.toLowerCase();
-  if (
-    combined.includes('failed registering bundle identifier') ||
-    (combined.includes('app identifier') && combined.includes('not available'))
-  ) {
-    return 'Set AGENT_DEVICE_IOS_BUNDLE_ID to a unique reverse-DNS value (for example, com.yourname.agentdevice.runner), then retry.';
-  }
-  if (combined.includes('requires a development team')) {
-    return 'Configure signing in Xcode or set AGENT_DEVICE_IOS_TEAM_ID for physical-device runs.';
-  }
-  if (combined.includes('no profiles for') || combined.includes('provisioning profile')) {
-    return 'Install/select a valid iOS provisioning profile, or set AGENT_DEVICE_IOS_PROVISIONING_PROFILE.';
-  }
-  if (combined.includes('code signing')) {
-    return 'Enable Automatic Signing in Xcode or provide AGENT_DEVICE_IOS_TEAM_ID and optional AGENT_DEVICE_IOS_SIGNING_IDENTITY.';
-  }
-  return undefined;
-}
-
-export function resolveRunnerBuildFailureHint(error: AppError): string {
-  return resolveSigningFailureHint(error) ?? RUNNER_CACHE_RECOVERY_HINT;
+function readRunnerErrorCode(rawCode: unknown): string | undefined {
+  return typeof rawCode === 'string' && rawCode.trim().length > 0 ? rawCode.trim() : undefined;
 }
 
 export function withRunnerCommandId(command: RunnerCommand): RunnerCommand {

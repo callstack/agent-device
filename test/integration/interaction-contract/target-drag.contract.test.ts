@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
-import { makeSnapshotState } from '../../../src/__tests__/test-utils/snapshot-builders.ts';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { scenarioName } from './coverage-manifest.ts';
 import { assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
@@ -11,6 +11,8 @@ import {
   coveredButtonSnapshot,
   dragEndpointsSnapshot,
   fullyTiledParentSnapshot,
+  keyboardCoveredTabBarSnapshot,
+  runnerPresentedDragEndpointsNodes,
 } from './fixtures.ts';
 import { createContractDevice } from './runtime-harness.ts';
 import {
@@ -102,6 +104,42 @@ test(scenario('parentOwnedTouchPoint'), async () => {
   assert.equal(dispatches, 0);
 });
 
+test(scenario('keyboardOcclusion'), async () => {
+  let dispatches = 0;
+  const keyboard = keyboardCoveredTabBarSnapshot();
+  const source = {
+    index: 5,
+    depth: 1,
+    parentIndex: 0,
+    type: 'Button',
+    identifier: 'source',
+    rect: { x: 20, y: 100, width: 100, height: 44 },
+    hittable: true,
+  };
+  const device = createContractDevice(makeSnapshotState([...keyboard.nodes, source]), {
+    resolveGestureViewport: async () => ({ x: 0, y: 0, width: 402, height: 874 }),
+    performGesture: async () => {
+      dispatches += 1;
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      device.interactions.gesture({
+        session: 'default',
+        gesture: { intent: 'drag', source: 'id="source"', destination: 'label="Form"' },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /behind the visible keyboard/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'tap_keyboard_occludes_target');
+      return true;
+    },
+  );
+  assert.equal(dispatches, 0);
+});
+
 test(scenario('offscreen'), async () => {
   let dispatches = 0;
   const snapshot = dragEndpointsSnapshot();
@@ -146,7 +184,7 @@ test(scenario('errorTaxonomy'), async () => {
 test(
   scenario('responseConstruction'),
   async () => {
-    const nodes = dragEndpointsSnapshot().nodes;
+    const nodes = runnerPresentedDragEndpointsNodes();
     await withIosContractDaemon(
       [
         runnerGestureViewportEntry(),

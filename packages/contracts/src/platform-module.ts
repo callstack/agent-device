@@ -98,9 +98,20 @@ export type ProviderAwareDeviceInventoryGateway = DeviceInventoryGateway &
     ): Promise<DeviceInventoryDiscovery>;
   }>;
 
+export type InstalledAppProbe = (
+  device: DeviceInfo,
+  appTarget: string,
+) => Promise<string | undefined>;
+
 export type ComposedDeviceInventoryGateways = Readonly<{
   providerFirst: ProviderAwareDeviceInventoryGateway;
   localOnly: DeviceInventoryGateway;
+  /**
+   * Optional installed-app probe that device selection uses to narrow several
+   * booted simulators before committing to one. Absent where the host does not
+   * provide one; selection then falls back to the ordinary inventory rules.
+   */
+  findInstalledApp?: InstalledAppProbe;
 }>;
 
 /** A family module gains this interface only with an honest package-owned source. */

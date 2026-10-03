@@ -2,12 +2,12 @@ import type { AppEventInput } from '@agent-device/contracts/app-event-runtime';
 import { appEventRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { parseTriggerAppEventArgs, resolveAppEventUrl } from '../core/app-events.ts';
-import { successText } from '../utils/success-text.ts';
+import { parseTriggerAppEventArgs, resolveAppEventUrl } from './app-events.ts';
+import { successText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from './context.ts';
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
-import type { DaemonFailureResponse } from './handlers/response.ts';
+import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
 
 /**
  * What the admit-then-bind step reports: either the refusal an unadmitted cell produced, or the
@@ -55,16 +55,21 @@ async function executeAppEvent(
  * argument is read.
  */
 export async function resolveBoundAppEventRuntime(
-  params: Readonly<{ device: DeviceInfo; positionals: readonly string[] }> &
+  params: Readonly<{
+    device: DeviceInfo;
+    positionals: readonly string[];
+    readiness?: boolean;
+  }> &
     RuntimeAdmissionBindings,
 ): Promise<ResolvedAppEventExecution> {
-  const { device, positionals, inspectFacts, bindDevice } = params;
+  const { device, positionals, inspectFacts, bindDevice, readiness } = params;
   const admission = await admitRuntimeUse({
     command: 'trigger-app-event',
     device,
     use: appEventRuntimeUse,
     inspectFacts,
     bindDevice,
+    readiness,
   });
   if (admission.type === 'response') return { ok: false, response: admission.response };
   const runtime = admission.runtime;

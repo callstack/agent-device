@@ -24,11 +24,11 @@ enum SnapshotCapturePhase: Equatable {
 }
 
 struct SnapshotPhaseTimer {
-  private let now: () -> Date
+  private let now: @Sendable () -> Date
   private var acquisitionSeconds: TimeInterval = 0
   private var presentationSeconds: TimeInterval = 0
 
-  init(now: @escaping () -> Date = { Date() }) {
+  init(now: @escaping @Sendable () -> Date = { Date() }) {
     self.now = now
   }
 
@@ -57,6 +57,35 @@ struct SnapshotPhaseTimer {
   }
 }
 
+/// Keeps the first capture plan that runs against a fresh target process from penalizing the XCTest
+/// channel for a slow tier. Lifecycle code arms and disarms it on main; the capture plan consumes it
+/// on the command queue, so a snapshot that returns before running a plan leaves it pending.
+final class SnapshotXCTestPenaltyWarmupExemption {
+  private let lock = NSLock()
+  private var pending = false
+
+  var isPending: Bool {
+    get {
+      lock.lock()
+      defer { lock.unlock() }
+      return pending
+    }
+    set {
+      lock.lock()
+      pending = newValue
+      lock.unlock()
+    }
+  }
+
+  func consume() -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    let wasPending = pending
+    pending = false
+    return wasPending
+  }
+}
+
 extension RunnerTests {
   struct SnapshotBackendAttempt {
     enum Outcome {
@@ -69,11 +98,25 @@ extension RunnerTests {
     /// or error text.
     let outcome: Outcome
     let timing: SnapshotCaptureTiming
+    /// Whether the tier finished collecting or stopped at its own deadline. A tier that stopped at
+    /// its deadline timed out even when it handed back a payload, so penalty and recovery policy
+    /// read this instead of classifying the payload (#2781).
+    let tierOutcome: SnapshotTierOutcome
+
+    init(
+      outcome: Outcome,
+      timing: SnapshotCaptureTiming,
+      tierOutcome: SnapshotTierOutcome = .completed
+    ) {
+      self.outcome = outcome
+      self.timing = timing
+      self.tierOutcome = tierOutcome
+    }
   }
 
   /// The penalty breaker observes only acquisition facts. Presentation is a separate phase and
   /// cannot arm the breaker, even when it is slower than the acquisition that produced the tree.
-  private static func snapshotXCTestPenaltyReason(
+  static func snapshotXCTestPenaltyReason(
     kind: SnapshotBackendKind,
     attempt: SnapshotBackendAttempt,
     slowThresholdMs: Double
@@ -84,6 +127,9 @@ extension RunnerTests {
     {
       return "\(kind.rawValue)_backend_timeout"
     }
+    if attempt.tierOutcome == .deadlineExhausted {
+      return "\(kind.rawValue)_backend_timeout"
+    }
     guard attempt.timing.acquisitionMs > slowThresholdMs else { return nil }
     return "slow_\(kind.rawValue)_capture_\(Int(attempt.timing.acquisitionMs))ms"
   }
@@ -91,6 +137,7 @@ extension RunnerTests {
   func recordXCTestSnapshotBackendAttemptIfNeeded(
     _ kind: SnapshotBackendKind,
     attempt: SnapshotBackendAttempt,
+    bundleId: String?,
     penaltySuppressed: Bool
   ) {
     guard !penaltySuppressed else { return }
@@ -102,84 +149,8 @@ extension RunnerTests {
       )
     else { return }
     penalizeSnapshotXCTestChannel(
-      bundleId: currentBundleId,
+      bundleId: bundleId,
       reason: reason
     )
   }
 }
-
-#if AGENT_DEVICE_RUNNER_UNIT_TESTS
-extension RunnerTests {
-  func testXCTestPenaltyDecisionSeparatesAcquisitionAndPresentation() {
-    let slowPresentation = SnapshotBackendAttempt(
-      outcome: .noCapture,
-      timing: SnapshotCaptureTiming(acquisitionMs: 100, presentationMs: 4_000)
-    )
-    XCTAssertNil(
-      Self.snapshotXCTestPenaltyReason(
-        kind: .recursiveTree,
-        attempt: slowPresentation,
-        slowThresholdMs: 3_000
-      )
-    )
-
-    let slowAcquisition = SnapshotBackendAttempt(
-      outcome: .noCapture,
-      timing: SnapshotCaptureTiming(acquisitionMs: 3_001, presentationMs: 100)
-    )
-    XCTAssertEqual(
-      Self.snapshotXCTestPenaltyReason(
-        kind: .recursiveTree,
-        attempt: slowAcquisition,
-        slowThresholdMs: 3_000
-      ),
-      "slow_tree_capture_3001ms"
-    )
-
-    let timeout = SnapshotCaptureFailure(
-      code: Self.xCTestSnapshotTimeoutCode,
-      message: "test timeout",
-      hint: "test"
-    )
-    let acquisitionFailure = SnapshotBackendAttempt(
-      outcome: .failed(timeout, phase: .acquisition),
-      timing: SnapshotCaptureTiming(acquisitionMs: 100, presentationMs: 100)
-    )
-    XCTAssertEqual(
-      Self.snapshotXCTestPenaltyReason(
-        kind: .recursiveTree,
-        attempt: acquisitionFailure,
-        slowThresholdMs: 3_000
-      ),
-      "tree_backend_timeout"
-    )
-
-    let presentationFailure = SnapshotBackendAttempt(
-      outcome: .failed(timeout, phase: .presentation),
-      timing: SnapshotCaptureTiming(acquisitionMs: 100, presentationMs: 100)
-    )
-    XCTAssertNil(
-      Self.snapshotXCTestPenaltyReason(
-        kind: .recursiveTree,
-        attempt: presentationFailure,
-        slowThresholdMs: 3_000
-      )
-    )
-  }
-
-  func testSnapshotPhaseTimerReportsAcquisitionAndPresentationSeparately() {
-    var now = Date(timeIntervalSinceReferenceDate: 100)
-    var timer = SnapshotPhaseTimer(now: { now })
-
-    _ = timer.measure(.acquisition) {
-      now = now.addingTimeInterval(2)
-    }
-    _ = timer.measure(.presentation) {
-      now = now.addingTimeInterval(5)
-    }
-
-    XCTAssertEqual(timer.timing.acquisitionMs, 2_000, accuracy: 0.001)
-    XCTAssertEqual(timer.timing.presentationMs, 5_000, accuracy: 0.001)
-  }
-}
-#endif

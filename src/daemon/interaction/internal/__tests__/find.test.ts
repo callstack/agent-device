@@ -1,0 +1,601 @@
+import { test, expect, vi, beforeEach } from 'vitest';
+import { makeIosSession as makeSession } from '../../../../__tests__/test-utils/session-factories.ts';
+
+vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    resolveTargetDevice: actual.resolveTargetDevice,
+  };
+});
+vi.mock('../../../snapshot-interactor-capture.ts', async () => {
+  const fixture = await import('../../../__tests__/legacy-snapshot-capture-fixture.ts');
+  return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
+});
+
+import {
+  mockDispatch,
+  mockFocusPoint,
+  resetFindTouchRuntimeFixture,
+  runFindClickScenario,
+} from './find-touch-runtime-fixture.ts';
+import { refFrameState } from '../../../ref-frame.ts';
+
+beforeEach(() => {
+  resetFindTouchRuntimeFixture();
+});
+
+test('mutating find focus crosses the ADR 0014 side-effect seam and expires the ref frame', async () => {
+  // find focus/type dispatch the device command directly (they do NOT re-enter
+  // the interaction leaf like find click/fill), so the seam must live in find.
+  const node = {
+    index: 0,
+    type: 'Button',
+    label: 'Save',
+    hittable: true,
+    rect: { x: 10, y: 20, width: 100, height: 40 },
+  };
+  const { response, session } = await runFindClickScenario({
+    positionals: ['Save', 'focus'],
+    nodes: [node],
+  });
+  expect(response.ok).toBe(true);
+  expect(refFrameState(session)).toBe('expired');
+});
+
+test('handleFindCommands click returns deterministic metadata across locator variants', async () => {
+  const hittableParentNoRect = { index: 0, type: 'View', hittable: true, depth: 0 };
+  const nonHittableChildWithRect = {
+    index: 1,
+    type: 'StaticText',
+    label: 'Increment',
+    hittable: false,
+    rect: { x: 50, y: 0, width: 100, height: 100 },
+    depth: 1,
+    parentIndex: 0,
+  };
+
+  const scenarios = [
+    {
+      label: 'falls back to deterministic key set when resolved node has no rect',
+      positionals: ['Increment', 'click'],
+      nodes: [hittableParentNoRect, nonHittableChildWithRect],
+      invoke: async () => ({ platformSpecificRef: 'XCUIElementTypeView' }),
+      // ADR 0014: a mutating find (click) omits refsGeneration — its ref is
+      // diagnostic pre-action identity, never a pinnable issued ref.
+      expectedKeys: ['locator', 'message', 'query', 'ref', 'x', 'y'],
+      expectedLocator: 'any',
+      expectedQuery: 'Increment',
+      expectedCoordinates: { x: 100, y: 50 },
+      expectedRef: '@e2',
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const { response, invokeCalls } = await runFindClickScenario(scenario);
+    expect(response.ok, scenario.label).toBe(true);
+    if (!response.ok) return;
+    const data = response.data as Record<string, unknown>;
+    expect(Object.keys(data).sort()).toEqual(scenario.expectedKeys);
+    expect(data.ref).toBe(scenario.expectedRef);
+    expect(data.locator).toBe(scenario.expectedLocator);
+    expect(data.query).toBe(scenario.expectedQuery);
+
+    if (scenario.expectedCoordinates) {
+      expect(data.x).toBe(scenario.expectedCoordinates.x);
+      expect(data.y).toBe(scenario.expectedCoordinates.y);
+    } else {
+      expect(Object.hasOwn(data, 'x')).toBe(false);
+      expect(Object.hasOwn(data, 'y')).toBe(false);
+    }
+
+    expect(invokeCalls.length).toBe(1);
+    expect(invokeCalls[0]!.positionals?.[0]).toBe(scenario.expectedRef);
+  }
+});
+
+test('handleFindCommands click reports the same success message as a direct press', async () => {
+  const nodes = [
+    { index: 0, type: 'View', hittable: true, depth: 0 },
+    {
+      index: 1,
+      type: 'Button',
+      label: 'Catalog',
+      hittable: true,
+      rect: { x: 50, y: 0, width: 100, height: 100 },
+      depth: 1,
+      parentIndex: 0,
+    },
+  ];
+
+  // Default action (no explicit `click` token) must also confirm the tap.
+  const synthesized = await runFindClickScenario({ positionals: ['Catalog'], nodes });
+  expect(synthesized.response.ok).toBe(true);
+  const synthesizedData = (synthesized.response as { data: Record<string, unknown> }).data;
+  expect(synthesizedData.message).toBe('Tapped @e2 (100, 50)');
+
+  // When the delegated click supplies its own success message, it is passed through.
+  const delegated = await runFindClickScenario({
+    positionals: ['Catalog', 'click'],
+    nodes,
+    invoke: async () => ({ message: 'Tapped @e2 (100, 50)', x: 100, y: 50 }),
+  });
+  expect(delegated.response.ok).toBe(true);
+  const delegatedData = (delegated.response as { data: Record<string, unknown> }).data;
+  expect(delegatedData.message).toBe('Tapped @e2 (100, 50)');
+});
+
+test('handleFindCommands click prefers on-screen duplicate text matches', async () => {
+  const { response, invokeCalls } = await runFindClickScenario({
+    positionals: ['Sign in', 'click'],
+    nodes: [
+      {
+        index: 0,
+        ref: 'e1',
+        type: 'Application',
+        hittable: true,
+        rect: { x: 0, y: 0, width: 440, height: 956 },
+      },
+      {
+        index: 1,
+        ref: 'e2',
+        type: 'Button',
+        label: 'Sign in',
+        hittable: false,
+        rect: { x: -199, y: 186, width: 70, height: 33 },
+        parentIndex: 0,
+      },
+      {
+        index: 2,
+        ref: 'e3',
+        type: 'Button',
+        label: 'Sign in',
+        hittable: false,
+        rect: { x: 40, y: 870, width: 360, height: 44 },
+        parentIndex: 0,
+      },
+    ],
+  });
+
+  expect(response.ok).toBe(true);
+  expect(invokeCalls[0]!.positionals?.[0]).toBe('@e3');
+});
+
+test('handleFindCommands click tries query-scoped full retry before failing sparse verdict', async () => {
+  const session = makeSession('default');
+  session.snapshot = {
+    nodes: [
+      {
+        index: 0,
+        ref: 'e1',
+        type: 'Application',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+      },
+      {
+        index: 1,
+        ref: 'e2',
+        type: 'Button',
+        label: 'Previous Search',
+        rect: { x: 80, y: 792, width: 78, height: 48 },
+      },
+    ],
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command !== 'snapshot') return {};
+    return {
+      backend: 'xctest',
+      quality: {
+        state: 'sparse',
+        backend: 'private-ax',
+        reason: 'sparse tree',
+        reasonCode: 'sparse-tree',
+      },
+      nodes: [
+        {
+          index: 0,
+          type: 'Application',
+          rect: { x: 0, y: 0, width: 0, height: 0 },
+        },
+      ],
+    };
+  });
+
+  const previousSnapshot = session.snapshot;
+  const { response, invokeCalls } = await runFindClickScenario({
+    positionals: ['Search', 'click'],
+    session,
+  });
+
+  expect(response.ok).toBe(false);
+  expect(session.snapshot).toBe(previousSnapshot);
+  expect(invokeCalls).toHaveLength(0);
+  expect(!response.ok && response.error).toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'find could not read the current accessibility tree',
+    details: {
+      reason: 'sparse tree',
+      hint: expect.stringContaining('snapshot quality verdict is sparse'),
+    },
+  });
+  const snapshotCalls = mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot');
+  expect(snapshotCalls).toHaveLength(2);
+  expect(snapshotCalls[0]![4]).toMatchObject({
+    snapshotInteractiveOnly: true,
+  });
+  expect(snapshotCalls[1]![4]).toMatchObject({
+    snapshotInteractiveOnly: false,
+    snapshotScope: 'Search',
+  });
+});
+
+test('handleFindCommands click uses query-scoped full retry when sparse verdict recovers', async () => {
+  const snapshotResponses = [
+    {
+      backend: 'xctest',
+      quality: {
+        state: 'sparse',
+        backend: 'private-ax',
+        reason: 'sparse tree',
+        reasonCode: 'sparse-tree',
+      },
+      nodes: [
+        {
+          index: 0,
+          type: 'Application',
+          rect: { x: 0, y: 0, width: 0, height: 0 },
+        },
+      ],
+    },
+    {
+      backend: 'xctest',
+      quality: {
+        state: 'healthy',
+        backend: 'tree',
+      },
+      nodes: [
+        {
+          index: 0,
+          type: 'Button',
+          label: 'Search',
+          hittable: true,
+          rect: { x: 80, y: 792, width: 78, height: 48 },
+        },
+      ],
+    },
+  ];
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command !== 'snapshot') return {};
+    return snapshotResponses.shift() ?? { nodes: [] };
+  });
+
+  const { response, invokeCalls } = await runFindClickScenario({
+    positionals: ['Search', 'click'],
+  });
+
+  expect(response.ok).toBe(true);
+  expect(invokeCalls[0]!.positionals?.[0]).toBe('@e1');
+  expect(response.ok ? response.data : undefined).toMatchObject({ x: 119, y: 816 });
+  const snapshotCalls = mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot');
+  expect(snapshotCalls).toHaveLength(2);
+  expect(snapshotCalls[1]![4]).toMatchObject({
+    snapshotInteractiveOnly: false,
+    snapshotScope: 'Search',
+  });
+});
+
+test('handleFindCommands click retries full snapshot for legacy iOS sparse shape without verdict', async () => {
+  const snapshotResponses = [
+    {
+      backend: 'xctest',
+      nodes: [
+        {
+          index: 0,
+          type: 'Application',
+          rect: { x: 0, y: 0, width: 0, height: 0 },
+        },
+      ],
+    },
+    {
+      backend: 'xctest',
+      nodes: [
+        {
+          index: 0,
+          type: 'Application',
+          hittable: false,
+          rect: { x: 0, y: 0, width: 390, height: 844 },
+        },
+        {
+          index: 1,
+          type: 'Button',
+          label: 'Search',
+          hittable: true,
+          rect: { x: 80, y: 792, width: 78, height: 48 },
+          parentIndex: 0,
+        },
+      ],
+    },
+  ];
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'snapshot') return snapshotResponses.shift() ?? { nodes: [] };
+    return {};
+  });
+
+  const { response, invokeCalls } = await runFindClickScenario({
+    positionals: ['Search', 'click'],
+  });
+
+  expect(response.ok).toBe(true);
+  expect(invokeCalls[0]!.positionals?.[0]).toBe('@e2');
+  const snapshotCalls = mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot');
+  expect(snapshotCalls).toHaveLength(2);
+  expect(snapshotCalls[0]![4]).toMatchObject({
+    snapshotInteractiveOnly: true,
+  });
+  expect(snapshotCalls[1]![4]).toMatchObject({
+    snapshotInteractiveOnly: false,
+  });
+});
+
+test('handleFindCommands click scopes full retry for legacy sparse shape when unscoped fallback fails', async () => {
+  const snapshotResponses = [
+    {
+      backend: 'xctest',
+      nodes: [
+        {
+          index: 0,
+          type: 'Application',
+          rect: { x: 0, y: 0, width: 0, height: 0 },
+        },
+      ],
+    },
+    new Error('unscoped snapshot failed'),
+    {
+      backend: 'xctest',
+      nodes: [
+        {
+          index: 0,
+          type: 'Button',
+          label: 'Search',
+          hittable: true,
+          rect: { x: 80, y: 792, width: 78, height: 48 },
+        },
+      ],
+    },
+  ];
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command !== 'snapshot') return {};
+    const response = snapshotResponses.shift();
+    if (response instanceof Error) throw response;
+    return response ?? { nodes: [] };
+  });
+
+  const { response, invokeCalls } = await runFindClickScenario({
+    positionals: ['Search', 'click'],
+  });
+
+  expect(response.ok).toBe(true);
+  expect(invokeCalls[0]!.positionals?.[0]).toBe('@e1');
+  expect(response.ok ? response.data : undefined).toMatchObject({ x: 119, y: 816 });
+  const snapshotCalls = mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot');
+  expect(snapshotCalls).toHaveLength(3);
+  expect(snapshotCalls[2]![4]).toMatchObject({
+    snapshotInteractiveOnly: false,
+    snapshotScope: 'Search',
+  });
+});
+
+test('handleFindCommands click prefers semantic controls over matching containers', async () => {
+  const { response, invokeCalls } = await runFindClickScenario({
+    positionals: ['Later', 'click'],
+    flags: { findFirst: true },
+    nodes: [
+      {
+        index: 0,
+        ref: 'e1',
+        type: 'Application',
+        hittable: true,
+        rect: { x: 0, y: 0, width: 440, height: 956 },
+      },
+      {
+        index: 1,
+        ref: 'e2',
+        type: 'Element(5)',
+        label: 'Dialog',
+        hittable: true,
+        rect: { x: 60, y: 356, width: 320, height: 272 },
+        parentIndex: 0,
+      },
+      {
+        index: 2,
+        ref: 'e3',
+        type: 'ScrollView',
+        label: 'Later',
+        hittable: false,
+        rect: { x: 60, y: 548, width: 320, height: 80 },
+        parentIndex: 1,
+      },
+      {
+        index: 3,
+        ref: 'e4',
+        type: 'Other',
+        label: 'Later',
+        hittable: false,
+        rect: { x: 76, y: 564, width: 288, height: 48 },
+        parentIndex: 2,
+      },
+      {
+        index: 4,
+        ref: 'e5',
+        type: 'Button',
+        label: 'Later',
+        hittable: false,
+        rect: { x: 76, y: 564, width: 140, height: 48 },
+        parentIndex: 3,
+      },
+    ],
+  });
+
+  expect(response.ok).toBe(true);
+  expect(invokeCalls[0]!.positionals?.[0]).toBe('@e5');
+});
+
+test('handleFindCommands focus uses the promoted actionable node center', async () => {
+  const { response } = await runFindClickScenario({
+    positionals: ['Account', 'focus'],
+    nodes: [
+      {
+        index: 0,
+        ref: 'e1',
+        type: 'Application',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+      },
+      {
+        index: 1,
+        ref: 'e2',
+        type: 'Cell',
+        label: 'Account row',
+        hittable: true,
+        rect: { x: 16, y: 100, width: 320, height: 64 },
+        parentIndex: 0,
+      },
+      {
+        index: 2,
+        ref: 'e3',
+        type: 'StaticText',
+        label: 'Account',
+        hittable: false,
+        rect: { x: 32, y: 116, width: 80, height: 24 },
+        parentIndex: 1,
+      },
+    ],
+  });
+
+  expect(response.ok).toBe(true);
+  // R40: find's focus leg reaches the device through the bound `focusPoint`, not a dispatch.
+  expect(mockFocusPoint).toHaveBeenLastCalledWith(
+    expect.objectContaining({ point: { x: 176, y: 132 } }),
+  );
+});
+
+test('handleFindCommands focus rejects covered matches before dispatching coordinates', async () => {
+  const { response } = await runFindClickScenario({
+    positionals: ['Save draft', 'focus'],
+    nodes: [
+      {
+        index: 0,
+        ref: 'e1',
+        type: 'Application',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+      },
+      {
+        index: 1,
+        ref: 'e2',
+        type: 'Button',
+        label: 'Save draft',
+        hittable: false,
+        interactionBlocked: 'covered',
+        presentationHints: ['covered'],
+        rect: { x: 16, y: 790, width: 140, height: 44 },
+        parentIndex: 0,
+      },
+      {
+        index: 2,
+        ref: 'e3',
+        type: 'TabBar',
+        hittable: true,
+        rect: { x: 0, y: 760, width: 390, height: 84 },
+        parentIndex: 0,
+      },
+    ],
+  });
+
+  expect(response.ok).toBe(false);
+  if (!response.ok) {
+    expect(response.error.message).toContain('is covered by another visible element');
+    expect(response.error.details?.interactionBlocked).toBe('covered');
+  }
+  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'focus')).toEqual([]);
+});
+
+test('handleFindCommands forwards internal interaction flags only to delegated click', async () => {
+  const { response, invokeCalls, session } = await runFindClickScenario({
+    positionals: ['Continue', 'click'],
+    flags: {
+      findFirst: true,
+      postGestureStabilization: true,
+    },
+    nodes: [
+      {
+        index: 0,
+        ref: 'e1',
+        type: 'Application',
+        rect: { x: 0, y: 0, width: 440, height: 956 },
+      },
+      {
+        index: 1,
+        ref: 'e2',
+        type: 'Button',
+        label: 'Continue',
+        rect: { x: 40, y: 870, width: 360, height: 44 },
+        parentIndex: 0,
+      },
+    ],
+  });
+
+  expect(response.ok).toBe(true);
+  expect(invokeCalls[0]!.flags?.postGestureStabilization).toBe(true);
+  expect(session.actions.at(-1)?.flags).toEqual({});
+});
+
+test('handleFindCommands click omits refsGeneration — a mutating find never issues a pinnable ref (ADR 0014)', async () => {
+  const sessionName = 'default';
+  const session = makeSession(sessionName);
+  // Two earlier tree replacements happened in this session.
+  session.snapshotGeneration = 2;
+
+  const { response, session: storedSession } = await runFindClickScenario({
+    positionals: ['Increment', 'click'],
+    nodes: [
+      {
+        index: 0,
+        type: 'Button',
+        label: 'Increment',
+        hittable: true,
+        rect: { x: 50, y: 0, width: 100, height: 100 },
+        depth: 0,
+      },
+    ],
+    session,
+  });
+
+  expect(response.ok).toBe(true);
+  // The find capture still replaced the stored tree (generation 3)…
+  expect(storedSession.snapshotGeneration).toBe(3);
+  if (response.ok) {
+    // …but a mutating find must NOT report refsGeneration: its acted ref is
+    // diagnostic pre-action identity, so MCP cannot pin and reuse it after the
+    // action.
+    expect((response.data as Record<string, unknown>).refsGeneration).toBeUndefined();
+  }
+});
+
+// #1271 stage 2: `find`'s observe-vs-mutate split is a positional, so unlike
+// snapshot/get/is it cannot be settled by the CLI grammar's per-command
+// `allowedFlags`. A mutating find always records, so `--record` on one is
+// meaningless — refuse it loudly rather than accept and ignore it. Enforced
+// daemon-side so every surface (CLI/Node/MCP) inherits the same refusal.
+test('find rejects --record on a mutating action before any device work', async () => {
+  const { response, invokeCalls } = await runFindClickScenario({
+    positionals: ['label', 'Apps', 'click'],
+    flags: { record: true },
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('INVALID_ARGS');
+  expect(response.error.message).toMatch(/--record only applies to a read-only find/);
+  // Refused before the action dispatched.
+  expect(invokeCalls).toHaveLength(0);
+});

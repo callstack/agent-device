@@ -49,3 +49,24 @@ export type CloudArtifactsOptions = AgentDeviceRequestOverrides & {
   provider?: string;
   providerSessionId?: string;
 };
+
+export type HumanControlHoldScope = {
+  backend: LeaseBackend;
+  leaseProvider?: string;
+  deviceKey: string;
+};
+
+export type HumanControlHold = {
+  id: string;
+  scope: HumanControlHoldScope;
+  reason?: string;
+  state: 'activating' | 'active';
+  createdAt: number;
+  updatedAt: number;
+  expiresAt?: number;
+};
+
+export type HumanControlHoldOptions = {
+  reason?: string;
+  ttlMs?: number;
+};

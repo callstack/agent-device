@@ -1,26 +1,25 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { formatRole } from '@agent-device/kernel/snapshot';
 import type { RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   buildSnapshotNodeMap,
   collectViewportRects,
+  createSnapshotVisibility,
   extractNodeText,
   findNearestAncestor,
   findNearestScrollableAncestor,
   findSnapshotAncestor,
   isFillableType,
-  isNodeVisibleInEffectiveViewport,
-  isNodeVisibleOnScreen,
   isScrollableNodeLike,
   isScrollableType,
   isTapPointInsideViewport,
   normalizeType,
-  resolveEffectiveViewportRect,
   resolveViewportRect,
 } from './facades/snapshot.ts';
 
 function node(input: RawSnapshotNode): SnapshotNode {
-  return { ...input, ref: `@e${input.index}` };
+  return { ...input, ref: `@e${input.index}`, kind: formatRole(input.type ?? 'Element') };
 }
 
 test('snapshot text semantics normalize roles, identify fillable controls, and extract the first text field', () => {
@@ -40,9 +39,9 @@ test('snapshot text semantics normalize roles, identify fillable controls, and e
 
 test('findSnapshotAncestor walks non-contiguous parent indexes until resolver returns a value', () => {
   const nodes: SnapshotNode[] = [
-    { ref: 'e10', index: 10, type: 'Window' },
-    { ref: 'e30', index: 30, parentIndex: 20, type: 'Text' },
-    { ref: 'e20', index: 20, parentIndex: 10, type: 'Cell' },
+    { ref: 'e10', index: 10, type: 'Window', kind: formatRole('Window') },
+    { ref: 'e30', index: 30, parentIndex: 20, type: 'Text', kind: formatRole('Text') },
+    { ref: 'e20', index: 20, parentIndex: 10, type: 'Cell', kind: formatRole('Cell') },
   ];
   const visited: number[] = [];
 
@@ -57,8 +56,8 @@ test('findSnapshotAncestor walks non-contiguous parent indexes until resolver re
 
 test('findSnapshotAncestor terminates on a parent-linkage cycle without resolving', () => {
   const nodes: SnapshotNode[] = [
-    { ref: 'e1', index: 1, parentIndex: 2, type: 'Text' },
-    { ref: 'e2', index: 2, parentIndex: 1, type: 'Cell' },
+    { ref: 'e1', index: 1, parentIndex: 2, type: 'Text', kind: formatRole('Text') },
+    { ref: 'e2', index: 2, parentIndex: 1, type: 'Cell', kind: formatRole('Cell') },
   ];
 
   const ancestor = findSnapshotAncestor(nodes, nodes[0]!, buildSnapshotNodeMap(nodes), (n) =>
@@ -70,9 +69,9 @@ test('findSnapshotAncestor terminates on a parent-linkage cycle without resolvin
 
 test('findNearestAncestor adapts a predicate to the shared tree walk', () => {
   const nodes: SnapshotNode[] = [
-    { ref: 'e10', index: 10, type: 'Window' },
-    { ref: 'e30', index: 30, parentIndex: 20, type: 'Text' },
-    { ref: 'e20', index: 20, parentIndex: 10, type: 'Cell' },
+    { ref: 'e10', index: 10, type: 'Window', kind: formatRole('Window') },
+    { ref: 'e30', index: 30, parentIndex: 20, type: 'Text', kind: formatRole('Text') },
+    { ref: 'e20', index: 20, parentIndex: 10, type: 'Cell', kind: formatRole('Cell') },
   ];
 
   const isWindow = (ancestor: SnapshotNode) => ancestor.type === 'Window';
@@ -147,11 +146,11 @@ test('snapshot visibility uses the nearest scrollable viewport before applying t
       rect: { x: 80, y: 80, width: 50, height: 50 },
     }),
   ];
-  const byIndex = buildSnapshotNodeMap(nodes);
+  const visibility = createSnapshotVisibility(nodes);
 
-  assert.deepEqual(resolveEffectiveViewportRect(nodes[2]!, nodes, byIndex), nodes[1]!.rect);
-  assert.equal(isNodeVisibleInEffectiveViewport(nodes[2]!, nodes, byIndex), true);
-  assert.equal(isNodeVisibleOnScreen(nodes[2]!, nodes, byIndex), false);
+  assert.deepEqual(visibility.resolveEffectiveViewport(nodes[2]!), nodes[1]!.rect);
+  assert.equal(visibility.isVisibleInEffectiveViewport(nodes[2]!), true);
+  assert.equal(visibility.isVisibleOnScreen(nodes[2]!), false);
   assert.equal(isTapPointInsideViewport(nodes[2]!.rect!, nodes[0]!.rect!), false);
   assert.equal(isTapPointInsideViewport(nodes[2]!.rect!, null), true);
 });

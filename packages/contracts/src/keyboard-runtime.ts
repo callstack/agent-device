@@ -1,4 +1,3 @@
-import { AppError } from '@agent-device/kernel/errors';
 import type {
   Interactor,
   KeyboardDismissResult,
@@ -6,7 +5,7 @@ import type {
   KeyboardStatusResult,
   RunnerContext,
 } from './interactor-types.ts';
-import type { RuntimeOperationFact } from './platform-runtime.ts';
+import type { RuntimeOperationFact, RuntimeOperationUnavailability } from './platform-runtime.ts';
 import type { SnapshotRuntimeExecution } from './snapshot-runtime.ts';
 
 export type { KeyboardDismissResult, KeyboardEnterResult, KeyboardStatusResult };
@@ -43,36 +42,36 @@ export type KeyboardRuntimeOperationFacts = Readonly<{
   keyboardEnter: RuntimeOperationFact;
 }>;
 
-export function keyboardRuntimeOperationFacts(
-  input: Readonly<{
-    status: RuntimeOperationFact;
-    dismiss: RuntimeOperationFact;
-    enter: RuntimeOperationFact;
-  }>,
-): KeyboardRuntimeOperationFacts {
-  return Object.freeze({
-    keyboardStatus: input.status,
-    keyboardDismiss: input.dismiss,
-    keyboardEnter: input.enter,
-  });
-}
-
 /**
- * `Interactor.keyboardStatus`/`keyboardDismiss`/`keyboardEnter` are optional (parity with
- * `hover`): a platform with no keyboard concept for that action leaves it undefined. Facts admit
- * an operation only for owners whose interactor implements it, so a missing method at bind time
- * is a runtime-contract error, not a normal refusal.
+ * What an owner declares about the keyboard family. No operation here is one every owner serves,
+ * and several owners serve no keyboard operation at all, so every operation is optional and
+ * `unsupported` names the denial an omitted cell reports. An owner with no keyboard surface states
+ * that denial once instead of writing it out per operation, with the reason and hint it would
+ * otherwise repeat by hand.
+ *
+ * Omission is a classified denial, never an unclassified cell and never an implied success: the
+ * type refuses a call that does not carry `unsupported`, so no owner can leave the family blank.
+ * An owner that serves one operation names it — omission means "refuses", never "the same as the
+ * neighbour" — and its `unsupported` must refuse the family, not one operation of it, because
+ * whatever the owner leaves unnamed reports that cell verbatim.
  */
-function requireKeyboardMethod<Method>(
-  method: Method | undefined,
-  operation: string,
-): NonNullable<Method> {
-  if (method) return method as NonNullable<Method>;
-  throw new AppError(
-    'COMMAND_FAILED',
-    `${operation} was admitted but its bound interactor has no implementation.`,
-    { reason: 'interactor-method-missing' },
-  );
+export type KeyboardRuntimeOperationFactsInput = Readonly<{
+  unsupported: RuntimeOperationUnavailability;
+  status?: RuntimeOperationFact;
+  dismiss?: RuntimeOperationFact;
+  enter?: RuntimeOperationFact;
+}>;
+
+export function keyboardRuntimeOperationFacts(
+  input: KeyboardRuntimeOperationFactsInput,
+): KeyboardRuntimeOperationFacts {
+  const declared = (fact: RuntimeOperationFact | undefined): RuntimeOperationFact =>
+    fact ?? input.unsupported;
+  return Object.freeze({
+    keyboardStatus: declared(input.status),
+    keyboardDismiss: declared(input.dismiss),
+    keyboardEnter: declared(input.enter),
+  });
 }
 
 /**
@@ -111,7 +110,11 @@ export function bindKeyboardAction<Key extends keyof KeyboardRuntimeOperations>(
 ): Pick<KeyboardRuntimeOperations, Key> {
   const action = async (input: KeyboardActionInput) => {
     const interactor = await resolveKeyboardInteractor(signal, resolveInteractor, input);
-    const method = requireKeyboardMethod(interactor[key], KEYBOARD_ACTION_LABELS[key]);
+    // The guard every optional-member binder shares. Loaded on the call rather than at module
+    // evaluation because this facade's eager closure is held at its merge-base size
+    // (`eager-closure-budgets`); a static edge would grow it by one module.
+    const { requireInteractorMethod } = await import('./interactor-operation-binding.ts');
+    const method = requireInteractorMethod(interactor[key], KEYBOARD_ACTION_LABELS[key]);
     return await (method as () => Promise<unknown>).call(interactor);
   };
   return Object.freeze({ [key]: action }) as Pick<KeyboardRuntimeOperations, Key>;

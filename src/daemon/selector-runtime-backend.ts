@@ -3,20 +3,19 @@ import type {
   BackendCommandContext,
   BackendSnapshotResult,
 } from '../backend.ts';
-import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
-import { createAgentDevice } from '../runtime.ts';
+import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
+import { createCommandSurfaceAgentDevice } from '../runtime-command-surface.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
-import { noActiveSessionError } from './handlers/response.ts';
 import type { SnapshotState, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
-import { contextFromFlags } from './context.ts';
-import { ensureDeviceReady } from './device-ready.ts';
-import { readTextForNode } from './handlers/interaction-read.ts';
+import { contextFromFlags, type BoundContextFromFlags } from './context.ts';
+import { readTextForNode } from './selector-text-runtime.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
-import type { ContextFromFlags } from './handlers/interaction-common.ts';
+import { markSessionSnapshotOutdated } from './ref-frame.ts';
 import { SessionStore } from './session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
+import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 import { createSelectorCaptureRuntime } from './selector-capture-runtime.ts';
 import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
 import {
@@ -26,19 +25,24 @@ import {
 } from './selector-capture-binding.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
-import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
-import { getRequestSignal } from '../request/cancel.ts';
+import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
 import { snapshotOptionsToFlags } from '../backend-snapshot-options.ts';
+import type { RequestCaptureProof } from './capture-disclosure.ts';
+import { checkIsArgs } from '@agent-device/selectors';
+import { noActiveSessionError } from '@agent-device/kernel/contracts';
 
 export type SelectorRuntimeParams = {
   req: DaemonRequest;
   sessionName: string;
   logPath?: string;
   sessionStore: SessionStore;
-  contextFromFlags?: ContextFromFlags;
+  contextFromFlags?: BoundContextFromFlags;
   // Filled by the capture runtime with the snapshot each selector command actually consumed;
   // sessionless routes disclose from here because no session record stores the capture.
   consumedSnapshot?: { state?: SnapshotState };
+  /** The repair this request's own capture reported, when it captured at all (#2682). */
+  captureProof?: RequestCaptureProof;
   signal?: AbortSignal;
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
@@ -67,7 +71,7 @@ type ResolvedSelectorDevice =
   | { ok: false; response: DaemonResponse };
 
 export function createSelectorRuntimeForDevice(params: SelectorRuntimeDeviceParams) {
-  return createAgentDevice({
+  return createCommandSurfaceAgentDevice({
     backend: createSelectorBackend(params),
     ...createDaemonRuntimePolicy('selector commands', { plural: true }),
     sessions: createDaemonRuntimeSessionStore({
@@ -90,10 +94,10 @@ async function resolveSelectorRuntimeDevice(
   requireSession: boolean,
 ): Promise<ResolvedSelectorDevice> {
   params.consumedSnapshot ??= {};
+  params.captureProof ??= {};
   const session = params.sessionStore.get(params.sessionName);
   if (!session && requireSession) return { ok: false, response: noActiveSessionError() };
   const device = session?.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
-  if (!session) await ensureDeviceReady(device);
   return { ok: true, session, device };
 }
 
@@ -140,7 +144,7 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
   // `get text` and read-only `find … get text` — construct a bound backend, so there is no second
   // read path to choose between and nothing reaches the retired `read` dispatch.
   const { req, session, device, logPath, sessionName, sessionStore } = params;
-  const resolveContextFromFlags: ContextFromFlags =
+  const resolveContextFromFlags: BoundContextFromFlags =
     params.contextFromFlags ??
     ((flags, appBundleId, traceLogPath) =>
       contextFromFlags(logPath ?? '', flags, appBundleId, traceLogPath));
@@ -168,6 +172,7 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
           sessionName,
           req,
           consumedSnapshot: params.consumedSnapshot,
+          captureProof: params.captureProof,
           logPath,
           capture: boundOperations.capture,
         });
@@ -185,6 +190,7 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
         const needsFreshSnapshot =
           req.command === 'wait' ||
           req.command === 'find' ||
+          isAbsentPredicateRequest(req) ||
           (includeRects && device.platform === 'web');
         return await captureRuntime.capture({
           flags,
@@ -215,17 +221,23 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
     // reports `found: false` and the poll consults the canonical tree.
     ...(boundFindText
       ? {
-          findText: async (context: BackendCommandContext, text: string) => ({
-            found: (
-              await boundFindText({
-                text,
-                options: { appBundleId: session?.appBundleId, surface: session?.surface },
-                execution: runnerExecution,
-                ...(context.signal ? { signal: context.signal } : {}),
-              })
-            ).found,
-          }),
+          findText: async (context: BackendCommandContext, text: string) => {
+            const { found } = await boundFindText({
+              text,
+              options: { appBundleId: session?.appBundleId, surface: session?.surface },
+              execution: runnerExecution,
+              ...(context.signal ? { signal: context.signal } : {}),
+            });
+            if (session) markSessionSnapshotOutdated(session);
+            return { found };
+          },
         }
       : {}),
   };
+}
+
+function isAbsentPredicateRequest(req: DaemonRequest): boolean {
+  if (req.command !== 'is') return false;
+  const checked = checkIsArgs(req.positionals ?? []);
+  return checked.ok && checked.predicate === 'absent';
 }

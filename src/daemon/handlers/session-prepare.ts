@@ -1,15 +1,18 @@
 import { prepareAppleRunnerRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { PREPARE_REQUEST_TIMEOUT_MS } from '../../core/command-descriptor/timeout-policy.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { PREPARE_STARTUP_BUDGET_MS } from '@agent-device/command-registry/timeout-policy';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { resolveRunnerLogicalLeaseContext } from '../lease-context.ts';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { SessionStore } from '../session-store.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { admitRuntimeUse } from '../runtime-admission.ts';
-import { requireSessionOrExplicitSelector, resolveCommandDevice } from './session-device-utils.ts';
-import { errorResponse } from './response.ts';
+import {
+  requireSessionOrExplicitSelector,
+  resolveCommandDevice,
+} from '../session-device-resolution.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 const PREPARE_IOS_RUNNER_TIMING_NOTE =
   'Top-level prepare timing fields are diagnostic and may overlap; use timing.additiveParts for additive wall-clock phases.';
@@ -51,7 +54,7 @@ export async function handlePrepareCommand(params: {
 
   // Device selection is side-effect free enough for facts admission. The bound lifecycle owns
   // readiness, keeping provider-first facts as the sole support authority.
-  const device = await resolveCommandDevice({ session, flags, ensureReady: false });
+  const device = await resolveCommandDevice({ session, flags });
   const admission = await admitPrepareRuntime({
     device,
     inspectFacts: params.inspectFacts,
@@ -84,7 +87,7 @@ function readPrepareIosRunnerTimeoutMs(req: DaemonRequest): number {
   const value = req.flags?.timeoutMs;
   return typeof value === 'number' && Number.isFinite(value) && value > 0
     ? value
-    : PREPARE_REQUEST_TIMEOUT_MS;
+    : PREPARE_STARTUP_BUDGET_MS;
 }
 
 function prepareIosRunnerResponseData(

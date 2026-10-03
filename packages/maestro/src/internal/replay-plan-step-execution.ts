@@ -80,6 +80,9 @@ async function executeOptionalCommand(
   appId: string | undefined,
   state: MaestroReplayPlanExecutionState,
 ): Promise<MaestroRuntimeResult | undefined> {
+  if (rawCommand.kind === 'evalScript') {
+    return await executeEvalScript(rawCommand, state);
+  }
   const command = resolveCommand(rawCommand, state.context);
   try {
     return await executeResolvedCommand(command, appId, state);
@@ -102,6 +105,25 @@ function formatOptionalWarning(command: MaestroRuntimeCommand, error: unknown): 
 
 function isOptionalCommand(command: MaestroRuntimeCommand): boolean {
   return 'optional' in command && command.optional === true;
+}
+
+async function executeEvalScript(
+  command: Extract<MaestroRuntimeCommand, { kind: 'evalScript' }>,
+  state: MaestroReplayPlanExecutionState,
+): Promise<undefined> {
+  // ponytail: function-scoped import keeps engine-eval-script (and node:vm) out of the maestro eager closure.
+  const { evaluateMaestroEvalScript } = await import('./engine-eval-script.ts');
+  if (state.options.trustedScripts === false) {
+    throw new AppError(
+      'UNAUTHORIZED',
+      'Maestro evalScript is not permitted for flows received over the remote daemon surface: ' +
+        'node:vm is not a security sandbox, so an untrusted expression can escape to the host.',
+    );
+  }
+  const outputEnv = await evaluateMaestroEvalScript(command.script, state.context.values);
+  state.context.replaceOutput(outputEnv);
+  state.executed += 1;
+  return undefined;
 }
 
 async function executeResolvedCommand(

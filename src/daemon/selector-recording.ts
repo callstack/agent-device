@@ -1,4 +1,4 @@
-import type { DaemonRequest } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { FindReadResult } from '@agent-device/contracts/interaction';
 import { stripAndroidSystemChromeProvenanceFromNode } from '@agent-device/contracts/android-system-chrome';
@@ -9,7 +9,7 @@ import {
   computeTargetEvidence,
   type RecordedTargetCapture,
   type TargetEvidenceMode,
-} from './session-target-evidence.ts';
+} from '@agent-device/selectors/target-evidence';
 
 export function buildFindRecordResult(
   result: Record<string, unknown>,

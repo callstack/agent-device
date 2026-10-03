@@ -130,14 +130,14 @@ function matchRole(value: string | undefined, query: string): number {
 }
 
 export function normalizeText(value: string): string {
-  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+  return value.trim().toLowerCase().replaceAll(/\s+/g, ' ');
 }
 
 function normalizeRole(value: string): string {
   let normalized = value.trim();
   if (!normalized) return '';
   const lastSegment = normalized.split('.').pop() ?? normalized;
-  normalized = lastSegment.replace(/XCUIElementType/gi, '').toLowerCase();
+  normalized = lastSegment.replaceAll(/XCUIElementType/gi, '').toLowerCase();
   return normalized;
 }
 

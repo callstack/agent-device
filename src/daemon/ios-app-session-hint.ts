@@ -1,30 +1,10 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
-import { resolveSoleForegroundIosApp } from '../platform-runtime-open-target.ts';
-import { shellQuoteIfNeeded } from '../utils/shell-quote.ts';
+import { appleSessionObservation } from '../platform-runtime-apple-resources.ts';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 
-export { resolveSoleForegroundIosApp } from '../platform-runtime-open-target.ts';
-
-/**
- * The shared ambiguity-detection probe: exactly one booted iOS simulator with
- * exactly one app running on it, or `undefined`.
- *
- * Any ambiguity — no booted simulator, more than one, no running app, more
- * than one running app, or a probe failure — returns `undefined`. This must
- * never guess: a wrong-but-confident answer is worse than failing closed.
- *
- * Probe failures (including bounded timeout/spawn failures) are best-effort
- * and treated as inconclusive. Cancellation and missing request-context
- * wiring are control-flow/composition failures and must propagate.
- *
- * `buildIosOpenCommandHint` is its only command-facing consumer; the actual bare
- * `open --foreground` probe belongs to the admitted Apple lifecycle binding.
- */
 /**
  * Enriches the generic "Run open first" SESSION_NOT_FOUND hint with the exact
- * runnable command, but only when the environment is unambiguous (see
- * `resolveSoleForegroundIosApp`, which owns the never-guess and best-effort
- * probe contract). Ambiguity or a genuine probe failure returns
- * `undefined` so the caller keeps the generic hint.
+ * runnable command when the observation port reports an unambiguous environment.
  */
 // Wire-level details are redacted before send (packages/kernel/src/redaction.ts),
 // which silently truncates any string field over 400 chars — a truncated
@@ -37,7 +17,9 @@ const MAX_HINT_LENGTH = 350;
 export async function buildIosOpenCommandHint(device: DeviceInfo): Promise<string | undefined> {
   if (!isIosFamily(device) || device.kind !== 'simulator') return undefined;
 
-  const resolved = await resolveSoleForegroundIosApp({ simulatorSetPath: device.simulatorSetPath });
+  const resolved = await appleSessionObservation.resolveSoleForegroundApp({
+    simulatorSetPath: device.simulatorSetPath,
+  });
   if (!resolved) return undefined;
 
   const command = buildOpenCommand(resolved.device, resolved.app.bundleId);

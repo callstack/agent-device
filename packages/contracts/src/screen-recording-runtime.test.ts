@@ -26,17 +26,12 @@ test('the neutral live handle can seed runner identity after start', () => {
   assert.equal(observed, 'runner-after-start');
 });
 
-test('the live snapshot retains neutral runner timing anchors', () => {
-  const timing: Pick<
-    ScreenRecordingLiveSnapshot,
-    'runnerStartedAtUptimeMs' | 'targetAppReadyUptimeMs'
-  > = {
+test('the live snapshot retains the neutral runner gesture clock anchor', () => {
+  const timing: Pick<ScreenRecordingLiveSnapshot, 'runnerStartedAtUptimeMs'> = {
     runnerStartedAtUptimeMs: 120,
-    targetAppReadyUptimeMs: 180,
   };
   assert.deepEqual(timing, {
     runnerStartedAtUptimeMs: 120,
-    targetAppReadyUptimeMs: 180,
   });
 });
 

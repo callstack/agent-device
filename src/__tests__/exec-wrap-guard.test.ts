@@ -12,7 +12,7 @@ import { test } from 'vitest';
 // whose details carry `processExitError: true`. Before PR #1072 ~49 call sites
 // spread the trio by hand and silently missed the flag, so users saw
 // "<tool> exited with code N" with no cause. The fix is centralized in
-// `execFailureDetails` / `requireExecSuccess` (src/utils/exec.ts); this guard
+// `execFailureDetails` / `requireExecSuccess` (@agent-device/host-kit/command); this guard
 // keeps new call sites from drifting back to inline spreads.
 //
 // A site that intentionally rebuilds the trio WITHOUT the flag (reachable at
@@ -99,7 +99,7 @@ test('AppError details never rebuild the exec stdout/stderr/exitCode trio inline
     [],
     `Inline exec stdout/stderr/exitCode spreads in AppError details miss the processExitError flag, ` +
       `so normalizeError cannot surface the stderr excerpt. Build the details with ` +
-      `execFailureDetails()/requireExecSuccess() from src/utils/exec.ts, or — when the throw is ` +
+      `execFailureDetails()/requireExecSuccess() from @agent-device/host-kit/command, or — when the throw is ` +
       `reachable at exit 0 or the excerpt would degrade the message — opt out with a ` +
       `"// ${ALLOW_MARKER} <reason>" comment above the new AppError(...) call. Violations:\n` +
       violations.join('\n'),

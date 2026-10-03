@@ -129,7 +129,7 @@ function buildSnapshotTimingStats(samples: SnapshotTimingSample[]): SnapshotTimi
     count: durations.length,
     p50Ms: percentileNearestRank(durations, 50),
     p95Ms: percentileNearestRank(durations, 95),
-    maxMs: durations[durations.length - 1] ?? 0,
+    maxMs: durations.at(-1) ?? 0,
     slowThresholdMs: SLOW_SNAPSHOT_P95_WARNING_MS,
     ...singlePlatform(samples),
     ...backendCounts(samples),

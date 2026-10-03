@@ -6,8 +6,9 @@ import {
   limrunAppEventOperationFacts,
   limrunAlertOperationFacts,
   limrunSettingsOperationFacts,
-  limrunAppSwitcherOperationFacts,
+  limrunSystemButtonOperationFacts,
   limrunClipboardOperationFacts,
+  limrunInteractionOperationFacts,
   limrunNavigationOperationFacts,
 } from './interaction-operations.ts';
 
@@ -40,10 +41,9 @@ const liveSessionUnavailable = Object.freeze({
   hint: 'The Limrun provider session is no longer active for this device.',
 } as const);
 
-test('the Android leg admits back/home/orientation and gates tv-remote on a real TV target', () => {
+test('the Android leg admits back/orientation and gates tv-remote on a real TV target', () => {
   const mobile = limrunNavigationOperationFacts(androidMobileDevice);
   expect(mobile.back).toEqual({ available: true });
-  expect(mobile.home).toEqual({ available: true });
   expect(mobile.setOrientation).toEqual({ available: true });
   expect(mobile.tvRemote).toEqual({
     available: false,
@@ -77,19 +77,34 @@ test('clipboard follows the same Android-reuse / iOS-refusal split its siblings 
   expect(stale.writeClipboard).toEqual(liveSessionUnavailable);
 });
 
-// R56: same Android-reuse / iOS-refusal split.
-test('app-switcher rides the Android interactor and is refused on the iOS leg', () => {
-  expect(limrunAppSwitcherOperationFacts(androidMobileDevice).appSwitcher).toEqual({
-    available: true,
+// R56: the springboard buttons follow the same Android-reuse / iOS-refusal split; a hardware
+// button is refused on both legs, and a dead session closes the whole family.
+test('home and app-switcher ride the Android interactor and are refused on the iOS leg', () => {
+  const android = limrunSystemButtonOperationFacts(androidMobileDevice);
+  expect(android.home).toEqual({ available: true });
+  expect(android.appSwitcher).toEqual({ available: true });
+  expect(android.actionButton).toMatchObject({
+    available: false,
+    reason: 'unsupported-provider-mode',
   });
-  expect(limrunAppSwitcherOperationFacts(iosDevice).appSwitcher).toEqual({
+
+  const ios = limrunSystemButtonOperationFacts(iosDevice);
+  expect(ios.home).toEqual({
+    available: false,
+    reason: 'unsupported-provider-mode',
+    hint: 'Limrun iOS direct sessions do not expose home yet.',
+  });
+  expect(ios.appSwitcher).toEqual({
     available: false,
     reason: 'unsupported-provider-mode',
     hint: 'Limrun iOS direct sessions do not expose app switcher yet.',
   });
-  expect(
-    limrunAppSwitcherOperationFacts(androidMobileDevice, liveSessionUnavailable).appSwitcher,
-  ).toEqual(liveSessionUnavailable);
+  expect(ios.actionButton).toMatchObject({ available: false, reason: 'unsupported-provider-mode' });
+
+  const stale = limrunSystemButtonOperationFacts(androidMobileDevice, liveSessionUnavailable);
+  expect(stale.home).toEqual(liveSessionUnavailable);
+  expect(stale.appSwitcher).toEqual(liveSessionUnavailable);
+  expect(stale.actionButton).toEqual(liveSessionUnavailable);
 });
 
 // R57: app-event delivery is the one system leaf BOTH direct-session legs serve, because each
@@ -105,16 +120,28 @@ test('app-event delivery is admitted on both direct-session legs', () => {
 });
 
 // R58: back to the app-switcher split — the Android leg reuses the local family's interactor,
-// and the iOS direct session's own `setSetting` throws.
+// and the iOS direct session's own `setSetting` throws. Both cells are pinned: the Android leg
+// genuinely carries the read too (same `createAndroidInteractor`), and the iOS leg refuses it.
 test('settings ride the Android interactor and are refused on the iOS leg', () => {
   expect(limrunSettingsOperationFacts(androidMobileDevice).setSetting).toEqual({ available: true });
+  expect(limrunSettingsOperationFacts(androidMobileDevice).readSetting).toEqual({
+    available: true,
+  });
   expect(limrunSettingsOperationFacts(iosDevice).setSetting).toEqual({
+    available: false,
+    reason: 'unsupported-provider-mode',
+    hint: 'Limrun iOS direct sessions do not expose settings changes yet.',
+  });
+  expect(limrunSettingsOperationFacts(iosDevice).readSetting).toEqual({
     available: false,
     reason: 'unsupported-provider-mode',
     hint: 'Limrun iOS direct sessions do not expose settings changes yet.',
   });
   expect(
     limrunSettingsOperationFacts(androidMobileDevice, liveSessionUnavailable).setSetting,
+  ).toEqual(liveSessionUnavailable);
+  expect(
+    limrunSettingsOperationFacts(androidMobileDevice, liveSessionUnavailable).readSetting,
   ).toEqual(liveSessionUnavailable);
 });
 
@@ -134,15 +161,10 @@ test('alert legs ride the Android interactor and are refused on the iOS leg', ()
   }
 });
 
-test('the iOS leg admits back/orientation but explicitly refuses home and tv-remote', () => {
+test('the iOS leg admits back/orientation but explicitly refuses tv-remote', () => {
   const facts = limrunNavigationOperationFacts(iosDevice);
   expect(facts.back).toEqual({ available: true });
   expect(facts.setOrientation).toEqual({ available: true });
-  expect(facts.home).toEqual({
-    available: false,
-    reason: 'unsupported-provider-mode',
-    hint: 'Limrun iOS direct sessions do not expose home yet.',
-  });
   expect(facts.tvRemote).toEqual({
     available: false,
     reason: 'unsupported-provider-mode',
@@ -150,10 +172,9 @@ test('the iOS leg admits back/orientation but explicitly refuses home and tv-rem
   });
 });
 
-test('a dead session closes all four navigation cells with the same reason regardless of platform', () => {
+test('a dead session closes all three navigation cells with the same reason regardless of platform', () => {
   const facts = limrunNavigationOperationFacts(androidTvDevice, liveSessionUnavailable);
   expect(facts.back).toEqual(liveSessionUnavailable);
-  expect(facts.home).toEqual(liveSessionUnavailable);
   expect(facts.setOrientation).toEqual(liveSessionUnavailable);
   expect(facts.tvRemote).toEqual(liveSessionUnavailable);
 });
@@ -176,7 +197,10 @@ test('binds only the operations the facts admitted, driving the resolved interac
     },
   } as unknown as Interactor;
   const getInteractor = (_device: DeviceInfo, _runner?: RunnerContext) => interactor;
-  const facts = limrunNavigationOperationFacts(androidTvDevice);
+  const facts = {
+    ...limrunNavigationOperationFacts(androidTvDevice),
+    ...limrunSystemButtonOperationFacts(androidTvDevice),
+  };
 
   const operations = bindAdmittedProviderInteractorOperations({
     device: androidTvDevice,
@@ -199,7 +223,10 @@ test('binds only the operations the facts admitted, driving the resolved interac
 });
 
 test('binding omits every operation an unavailable fact refused', () => {
-  const facts = limrunNavigationOperationFacts(iosDevice);
+  const facts = {
+    ...limrunNavigationOperationFacts(iosDevice),
+    ...limrunSystemButtonOperationFacts(iosDevice),
+  };
   const operations = bindAdmittedProviderInteractorOperations({
     device: iosDevice,
     signal: new AbortController().signal,
@@ -211,4 +238,14 @@ test('binding omits every operation an unavailable fact refused', () => {
   expect(operations.setOrientation).toBeTypeOf('function');
   expect(operations.home).toBeUndefined();
   expect(operations.tvRemote).toBeUndefined();
+});
+
+test('long press is admitted on both direct-session legs and closed with a dead session', () => {
+  expect(limrunInteractionOperationFacts(iosDevice).longPressPoint).toEqual({ available: true });
+  expect(limrunInteractionOperationFacts(androidMobileDevice).longPressPoint).toEqual({
+    available: true,
+  });
+  expect(limrunInteractionOperationFacts(iosDevice, liveSessionUnavailable).longPressPoint).toEqual(
+    liveSessionUnavailable,
+  );
 });

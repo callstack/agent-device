@@ -3,7 +3,9 @@
 //
 // Reuses the lcov report that `pnpm test:coverage` already produced (never runs
 // coverage a second time), joins it with `git diff --unified=0 <base>...HEAD`,
-// and fails when changed-line coverage is below the threshold. A PR carrying
+// and fails when changed-line coverage is below the threshold. Renames are
+// detected at RENAME_SIMILARITY regardless of the host's `diff.renames`, so a
+// moved file owes only the hunks that differ from its source. A PR carrying
 // the `coverage-waiver` label skips the failure but still prints every number.
 // The same markdown report goes to stdout and to the GitHub job summary; it
 // includes changed-branch coverage and the count of changed executable lines
@@ -12,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import { parseScriptArgs } from '../lib/cli-args.ts';
 import {
   computeChangedCoverage,
@@ -23,6 +25,7 @@ import {
 
 const USAGE = 'Usage: pnpm check:coverage-changed [--base <ref>]\n';
 const LCOV_PATH = 'coverage/lcov.info';
+const RENAME_SIMILARITY = '90%';
 const GIT_DIFF_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
 
 function fmtPct(pct: number | null): string {
@@ -72,10 +75,11 @@ export function run(argv: readonly string[], cwd?: string): number {
     return 1;
   }
 
-  const diff = runCmdSync('git', ['diff', '--unified=0', '--no-color', `${base}...HEAD`], {
-    cwd: root,
-    maxBuffer: GIT_DIFF_MAX_BUFFER_BYTES,
-  }).stdout;
+  const diff = runCmdSync(
+    'git',
+    ['diff', '--unified=0', '--no-color', `--find-renames=${RENAME_SIMILARITY}`, `${base}...HEAD`],
+    { cwd: root, maxBuffer: GIT_DIFF_MAX_BUFFER_BYTES },
+  ).stdout;
   const result = computeChangedCoverage({
     diffs: parseUnifiedDiff(diff),
     coverage: parseLcov(fs.readFileSync(lcovPath, 'utf8'), root),

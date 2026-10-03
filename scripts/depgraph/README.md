@@ -13,7 +13,7 @@ productive artifact is the JSON, queried directly.
 ## Blast radius of one file
 
 ```sh
-pnpm depgraph affected src/utils/exec.ts        # bounded text
+pnpm depgraph affected packages/host-kit/src/command.ts # bounded text
 pnpm depgraph affected src/daemon/ref-frame.ts --json --limit 25
 ```
 
@@ -65,8 +65,7 @@ pnpm depgraph
 # Zone pairs that invert the ranked spine. Read `typeInversions` rather than deriving it from
 # `zoneEdges`: those counts come from the COLLAPSED edge list, where one edge per file pair
 # survives and `dynamic` outranks `type`, so a module imported both lazily and for its types
-# would drop out. `typeInversions` is counted by the gate's own rule and is what CI compares
-# against TYPE_INVERSION_BASELINE.
+# would drop out. `typeInversions` is counted by the gate's own rule.
 node -e "const j=require('./.tmp/depgraph/graph.json');
   Object.entries(j.typeInversions)
     .sort((a, b) => b[1] - a[1])
@@ -80,20 +79,16 @@ it returns an empty list, which is the gate passing, not a broken query.
 
 ## What is authoritative
 
-`pnpm check:layering` is. The viewer reads the same model, so the numbers should agree — and that
-agreement is now enforced rather than hoped for: the **Layering Guard job runs
-`scripts/depgraph/model.test.ts`**, whose last test asserts this report's inversion count reproduces
-`TYPE_INVERSION_BASELINE`. If the tree changes and only one side is updated, CI fails and names the
-difference. The two cannot be green independently.
+`pnpm check:layering` is. The report reads the same model (`scripts/layering/model.ts`) and applies
+the gate's own counting rule — `typeInversionsByPair` counts once per file pair over the raw edges,
+exactly as `typeInversionCounts` in `scripts/layering/model.ts` does — so `typeInversions` reproduces
+the gate's R6 measurement by construction, not by a second measurement. The gate compares that
+measurement with the merge-base's; CI used to assert the report agreed with a recorded baseline,
+which was a duplicate detector of the same code path and was removed. In particular the count
+does NOT come from the collapsed edge list, where `dynamic` outranks `type` and a module imported
+both lazily and for its types would drop out.
 
-What that check proves precisely: the report's graph build, over the real tree, agrees with the
-gate's baseline. It is a cross-check of the extraction and the baseline against reality, not two
-independent algorithms — `typeInversionsByPair` deliberately applies the gate's counting rule (once
-per file pair, over raw edges) so the numbers cannot diverge for a reason unrelated to layering. In
-particular it does NOT count from the collapsed edge list, where `dynamic` outranks `type` and a
-module imported both lazily and for its types would drop out.
-
-If they ever disagree, the gate is right and the baseline or the tree is wrong.
+If the report ever disagrees with the gate, the gate is right.
 
 ## Why it reuses the layering gate
 
@@ -116,6 +111,42 @@ modules and edges, plus 88 dynamic/type-only edges dependency-cruiser fails to r
   dynamic. Flags bitfield: `1` spine back-edge, `2` target also reachable at distance >= 2, `4` type-only
   inversion.
 - `cycles[]` — each with `kind` (`value` / `type` / `dynamic`) and its node path.
+
+## Declared-authority overlay
+
+The report also carries `edgeAuthorities[]`, aligned with `edges[]`. Each entry is a compact list
+of labels, so a collapsed edge may carry more than one label. The labels are derived from exact
+roots, exports, and named live-state symbols in `scripts/layering/architecture-ownership.ts`:
+
+- `vocabulary` — the target is a declared contract facade root.
+- `capability` — the target is a declared capability root and the import names a declared export.
+- `live-state-shape` — the edge names the exact `SessionState` type from `src/daemon/session-state.ts`.
+- `live-state-authority` — the edge names the exact `SessionStore` class from
+  `src/daemon/session-store.ts`.
+- `executable-policy` — the source is under a declared executable-policy root.
+- `ordinary` — no declared authority evidence matches the edge.
+
+`edges[][2]` remains the independent import-kind code (`0` value, `1` type-only, `2` dynamic), and
+`authorityCounts` reports stable counts of labels across the collapsed edges. This is a report-only
+overlay: it reports declared authority, not behavioral ownership quality, safe removability, or a
+composite score/pass threshold.
+
+For reproducible inspection outside the repository's `.tmp` directory:
+
+```sh
+pnpm depgraph --out /tmp/agent-device-2128-depgraph.json
+jq '{generated, authorityCounts}' /tmp/agent-device-2128-depgraph.json
+jq -r '
+  . as $graph
+  | range(0; ($graph.edges | length)) as $i
+  | select($graph.edgeAuthorities[$i] != ["ordinary"])
+  | [($graph.edgeAuthorities[$i] | join("+")),
+     $graph.nodes[$graph.edges[$i][0]].id,
+     $graph.nodes[$graph.edges[$i][1]].id,
+     ["value", "type", "dynamic"][$graph.edges[$i][2]]]
+  | @tsv
+' /tmp/agent-device-2128-depgraph.json
+```
 
 Bit `2` means the target is reachable from the source at distance >= 2 over value edges. That is
 module reachability, not removability — see the caveats above. Treat it as a question ("why is

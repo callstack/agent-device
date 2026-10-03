@@ -1,0 +1,44 @@
+{
+  "name": "@agent-device/session-journal",
+  "version": "0.0.0",
+  "private": true,
+  "sideEffects": false,
+  "type": "module",
+  "description": "The ADR 0018 unified request event journal: the append-only per-session event log, its rotation window and line scanner, and the presentation projections that turn a dispatched request or action into a journal entry.",
+  "dependencies": {
+    "@agent-device/command-registry": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*"
+  },
+  "exports": {
+    "./session-event-log": {
+      "types": "./src/session-event-log.ts",
+      "default": "./src/session-event-log.ts"
+    },
+    "./session-event-log-lines": {
+      "types": "./src/session-event-log-lines.ts",
+      "default": "./src/session-event-log-lines.ts"
+    },
+    "./session-event-log-window": {
+      "types": "./src/session-event-log-window.ts",
+      "default": "./src/session-event-log-window.ts"
+    },
+    "./session-event-request": {
+      "types": "./src/session-event-request.ts",
+      "default": "./src/session-event-request.ts"
+    },
+    "./session-event-action": {
+      "types": "./src/session-event-action.ts",
+      "default": "./src/session-event-action.ts"
+    },
+    "./session-event-action-presentation": {
+      "types": "./src/session-event-action-presentation.ts",
+      "default": "./src/session-event-action-presentation.ts"
+    },
+    "./keyboard-actions": {
+      "types": "./src/keyboard-actions.ts",
+      "default": "./src/keyboard-actions.ts"
+    }
+  }
+}

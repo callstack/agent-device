@@ -42,7 +42,7 @@ test('Limrun verification reads the selected instance service without creating a
     },
     app: {
       status: 'missing',
-      message: 'A new Limrun instance does not have your app yet.',
+      message: 'Run apps to choose an uploaded asset before allocation.',
     },
   });
   assert.deepEqual(mockState.androidList.mock.calls, [[{ limit: 1 }]]);

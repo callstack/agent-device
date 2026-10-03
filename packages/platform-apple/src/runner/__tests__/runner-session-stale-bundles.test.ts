@@ -6,11 +6,12 @@ import {
   makeBackgroundRunner,
   makeClassifyOwnerLivenessViaMocks,
   runnerResponse,
+  RUNNER_CACHE_METADATA_FIXTURE,
+  RUNNER_CACHE_KEY_FIXTURE,
 } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
 const {
-  mockAcquireXcodebuildSimulatorSetRedirect,
   mockCleanupTempFile,
   mockEnsureXctestrunArtifact,
   mockGetFreePort,
@@ -28,9 +29,7 @@ const {
   mockSignalPidsBestEffort,
   mockSignalProcessGroupBestEffort,
   mockWaitForRunner,
-  mockRedirectRelease,
 } = vi.hoisted(() => ({
-  mockAcquireXcodebuildSimulatorSetRedirect: vi.fn(),
   mockCleanupTempFile: vi.fn(),
   mockEnsureXctestrunArtifact: vi.fn(),
   mockGetFreePort: vi.fn(),
@@ -56,7 +55,6 @@ const {
   mockSignalPidsBestEffort: vi.fn(),
   mockSignalProcessGroupBestEffort: vi.fn(),
   mockWaitForRunner: vi.fn(),
-  mockRedirectRelease: vi.fn(),
 }));
 
 vi.mock('../runner-io.ts', async () => {
@@ -82,7 +80,6 @@ vi.mock('../runner-xctestrun.ts', async () => {
     await vi.importActual<typeof import('../runner-xctestrun.ts')>('../runner-xctestrun.ts');
   return {
     ...actual,
-    acquireXcodebuildSimulatorSetRedirect: mockAcquireXcodebuildSimulatorSetRedirect,
     ensureXctestrunArtifact: mockEnsureXctestrunArtifact,
     prepareXctestrunWithEnv: mockPrepareXctestrunWithEnv,
     resolveExpectedRunnerCacheMetadata: mockResolveExpectedRunnerCacheMetadata,
@@ -134,6 +131,7 @@ beforeEach(async () => {
   mockEnsureXctestrunArtifact.mockResolvedValue({
     xctestrunPath: '/tmp/base-runner.xctestrun',
     derived: '/tmp/derived',
+    cacheKey: RUNNER_CACHE_KEY_FIXTURE,
     cache: 'miss',
     artifact: 'rebuilt',
     buildMs: 12,
@@ -144,9 +142,8 @@ beforeEach(async () => {
     xctestrunPath: '/tmp/session-runner.xctestrun',
     jsonPath: '/tmp/session-runner.json',
   });
-  mockResolveExpectedRunnerCacheMetadata.mockReturnValue({ schemaVersion: 1 });
+  mockResolveExpectedRunnerCacheMetadata.mockReturnValue(RUNNER_CACHE_METADATA_FIXTURE);
   mockResolveRunnerDerivedPath.mockReturnValue('/tmp/derived');
-  mockAcquireXcodebuildSimulatorSetRedirect.mockResolvedValue({ release: mockRedirectRelease });
   mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
   mockRunAppleToolCommand.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   mockIsProcessAlive.mockReturnValue(true);

@@ -124,7 +124,7 @@ async function serveUsbmuxDevices(
     }
     const connectRequest = await readPacket(socket);
     const match = /<key>DeviceID<\/key><integer>(\d+)<\/integer>/.exec(
-      connectRequest.replace(/\s+/g, ''),
+      connectRequest.replaceAll(/\s+/g, ''),
     );
     connectedDeviceId = match ? Number(match[1]) : undefined;
     socket.end(

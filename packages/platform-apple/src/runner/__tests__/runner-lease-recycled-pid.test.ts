@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'vitest';
 import { mkdtempForTestSync } from './tmp-dir.ts';
-import { runCmdBackground, readProcessStartTime, type ExecBackgroundResult } from '../host.ts';
+import { runCmdBackground, readProcessStartTime } from '../host.ts';
+import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import {
   runnerOwnerToken,
   cleanupOwnedRunnerLease,
@@ -41,8 +42,8 @@ import {
  * pinning the read is the point rather than a workaround.
  */
 
-// Process execution goes through utils/exec.ts, never node:child_process
-// directly (AGENTS.md hard rule) — including in tests.
+// Process execution goes through @agent-device/host-kit/command, never node:child_process
+// directly — including in tests.
 let child: ExecBackgroundResult | undefined;
 let previousLeaseDir: string | undefined;
 

@@ -105,6 +105,7 @@ test('BrowserStack facade nests device-feature capabilities inside bstack:option
           providerDeviceOrientation: 'portrait',
           providerGeoLocation: 'US',
           providerTimezone: 'New_York',
+          providerAppiumVersion: '3.2.0',
           providerLanguage: 'Fr',
           providerLocale: 'Fr',
           providerNetworkProfile: '4g-lte-advanced-good',
@@ -127,12 +128,17 @@ test('BrowserStack facade nests device-feature capabilities inside bstack:option
       deviceOrientation: 'portrait',
       geoLocation: 'US',
       timezone: 'New_York',
+      appiumVersion: '3.2.0',
       language: 'Fr',
       locale: 'Fr',
       networkProfile: '4g-lte-advanced-good',
     });
-    // Vendor capabilities stay nested; only BrowserStack's legacy selectors sit at the top level.
+    // Vendor capabilities stay nested, and no legacy JSON Wire selector reaches the top level —
+    // the hub would otherwise treat the request as legacy and ignore bstack:options entirely.
     assert.equal(alwaysMatch?.deviceOrientation, undefined);
+    for (const legacyKey of ['device', 'os_version', 'app', 'project', 'build', 'name']) {
+      assert.equal(alwaysMatch?.[legacyKey], undefined, `legacy key ${legacyKey} leaked`);
+    }
   });
 }, 15_000);
 
@@ -390,9 +396,8 @@ function assertBrowserStackCalls(
       alwaysMatch: {
         platformName: 'Android',
         'appium:deviceName': 'Google Pixel 8',
-        device: 'Google Pixel 8',
-        os_version: '14.0',
-        app: 'bs://preuploaded',
+        'appium:platformVersion': '14.0',
+        'appium:app': 'bs://preuploaded',
         'bstack:options': {
           projectName: 'agent-device',
           buildName: `build-${lease.runId}`,

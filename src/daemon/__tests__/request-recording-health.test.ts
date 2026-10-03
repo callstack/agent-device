@@ -1,18 +1,19 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 
-vi.mock('../../platforms/apple/core/runner-client.ts', () => ({
-  getRunnerSessionSnapshot: vi.fn(),
+vi.mock('../../platform-runtime-apple-resources.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../platform-runtime-apple-resources.ts')>()),
+  appleSessionObservation: { observeRunnerSession: vi.fn() },
 }));
 
-import { getRunnerSessionSnapshot } from '../../platforms/apple/core/runner-client.ts';
+import { appleSessionObservation } from '../../platform-runtime-apple-resources.ts';
 import { refreshRecordingHealth } from '../request-recording-health.ts';
 
-const mockGetRunnerSessionSnapshot = vi.mocked(getRunnerSessionSnapshot);
+const mockObserveRunnerSession = vi.mocked(appleSessionObservation.observeRunnerSession);
 
 beforeEach(() => {
-  mockGetRunnerSessionSnapshot.mockReset();
+  mockObserveRunnerSession.mockReset();
 });
 
 function makeIosSimulatorSession(showTouches: boolean): SessionState {
@@ -48,15 +49,51 @@ test('runner-backed iOS recordings still invalidate on runner restarts', async (
     showTouches: true,
     runnerSessionId: 'runner-before',
   });
-  mockGetRunnerSessionSnapshot.mockReturnValue({
+  mockObserveRunnerSession.mockResolvedValue({
     alive: true,
     sessionId: 'runner-after',
   });
 
   await refreshRecordingHealth(session);
 
-  expect(mockGetRunnerSessionSnapshot).toHaveBeenCalledWith('sim-1');
+  expect(mockObserveRunnerSession).toHaveBeenCalledWith('sim-1');
   expect(session.screenRecording?.handle.inspect().invalidatedReason).toBe(
     'iOS runner session restarted during recording',
   );
+});
+
+test.each([
+  { snapshot: undefined, reason: 'iOS runner session exited during recording' },
+  {
+    snapshot: { alive: false, sessionId: 'runner-before' },
+    reason: 'iOS runner session exited during recording',
+  },
+  { snapshot: { alive: true, sessionId: 'runner-before' }, reason: undefined },
+])('recording health follows runner liveness: $snapshot', async ({ snapshot, reason }) => {
+  const session = makeIosSimulatorSession(true);
+  session.screenRecording = makeTestScreenRecordingResource(session, {
+    backend: 'runner AVAssetWriter',
+    showTouches: true,
+    runnerSessionId: 'runner-before',
+  });
+  mockObserveRunnerSession.mockResolvedValue(snapshot);
+
+  await refreshRecordingHealth(session);
+
+  expect(session.screenRecording.handle.inspect().invalidatedReason).toBe(reason);
+});
+
+test('a recording without a runner identity adopts the first live observation', async () => {
+  const session = makeIosSimulatorSession(true);
+  session.screenRecording = makeTestScreenRecordingResource(session, {
+    backend: 'runner AVAssetWriter',
+    showTouches: true,
+  });
+  mockObserveRunnerSession.mockResolvedValue({ alive: true, sessionId: 'runner-first' });
+
+  await refreshRecordingHealth(session);
+
+  const recording = session.screenRecording.handle.inspect();
+  expect(recording.runnerSessionId).toBe('runner-first');
+  expect(recording.invalidatedReason).toBeUndefined();
 });

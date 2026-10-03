@@ -8,12 +8,13 @@ import type { SnapshotResult } from '@agent-device/contracts/snapshot-runtime';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { AgentDeviceBackend, BackendSnapshotResult } from '../backend.ts';
-import { type CommandSessionRecord, createAgentDevice } from '../runtime.ts';
-import { getRequestSignal } from '../request/cancel.ts';
-import type { RuntimeAdmissionBindings } from './request-runtime-binding.ts';
+import type { CommandSessionRecord } from '../runtime-contract.ts';
+import { createCommandSurfaceAgentDevice } from '../runtime-command-surface.ts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
 import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-timeout-evidence.ts';
-import { captureSnapshot } from './handlers/snapshot-capture.ts';
-import { buildSnapshotSession, withSessionlessRunnerCleanup } from './handlers/snapshot-session.ts';
+import { captureSnapshot } from './snapshot-capture.ts';
+import { buildSnapshotSession, withSessionlessRunnerCleanup } from './snapshot-session.ts';
+import { resolveSessionScope } from './session-routing.ts';
 import { activateCompleteRefFrame } from './ref-frame.ts';
 import {
   applyRecoveredWarningLatch,
@@ -28,7 +29,9 @@ import {
   resolveBoundSnapshotCaptureRuntime,
   type SnapshotRuntimeRouteParams,
 } from './snapshot-runtime-binding.ts';
-import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from './types.ts';
+import type { DaemonRequest, DaemonResponse, DaemonResponseData } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
+import type { SessionScope } from '@agent-device/contracts/session';
 
 export type SnapshotRuntimeRecord =
   | { kind: 'snapshot'; nodes: number; truncated: boolean | undefined }
@@ -72,8 +75,6 @@ export async function dispatchSnapshotRuntimeCommand(
         snapshotScope,
         capturedQuality,
         captureSnapshotData: capture.captureSnapshot,
-        inspectFacts: params.inspectFacts,
-        bindDevice: params.bindDevice,
       });
       let result: Awaited<ReturnType<SnapshotRuntimeCommandParams['execute']>>;
       try {
@@ -112,21 +113,19 @@ export async function dispatchSnapshotRuntimeCommand(
   );
 }
 
-function createSnapshotRuntime(
-  params: {
-    req: DaemonRequest;
-    sessionName: string;
-    logPath: string;
-    sessionStore: SessionStore;
-    session: SessionState | undefined;
-    device: SessionState['device'];
-    snapshotScope: string | undefined;
-    capturedQuality: CapturedSnapshotQuality;
-    captureSnapshotData: () => Promise<SnapshotResult>;
-  } & RuntimeAdmissionBindings,
-) {
+function createSnapshotRuntime(params: {
+  req: DaemonRequest;
+  sessionName: string;
+  logPath: string;
+  sessionStore: SessionStore;
+  session: SessionState | undefined;
+  device: SessionState['device'];
+  snapshotScope: string | undefined;
+  capturedQuality: CapturedSnapshotQuality;
+  captureSnapshotData: () => Promise<SnapshotResult>;
+}) {
   const { req, sessionName, logPath, sessionStore, session, device, snapshotScope } = params;
-  return createAgentDevice({
+  return createCommandSurfaceAgentDevice({
     backend: createDaemonSnapshotBackend({
       req,
       logPath,
@@ -135,8 +134,6 @@ function createSnapshotRuntime(
       snapshotScope,
       capturedQuality: params.capturedQuality,
       captureSnapshotData: params.captureSnapshotData,
-      inspectFacts: params.inspectFacts,
-      bindDevice: params.bindDevice,
     }),
     ...createDaemonRuntimePolicy('snapshot'),
     signal: getRequestSignal(req.meta?.requestId),
@@ -152,6 +149,7 @@ function createSnapshotRuntime(
           buildNextSnapshotSession({
             current,
             sessionName,
+            sessionScope: resolveSessionScope(req),
             device,
             record: snapshotRecord,
             refScopedSnapshot: isRefScopedSnapshot(req),
@@ -169,17 +167,19 @@ function createSnapshotRuntime(
 function buildNextSnapshotSession(params: {
   current: SessionState | undefined;
   sessionName: string;
+  sessionScope: SessionScope;
   device: SessionState['device'];
   record: CommandSessionRecord & { snapshot: NonNullable<CommandSessionRecord['snapshot']> };
   refScopedSnapshot: boolean;
   issuesRefsToClient: boolean;
 }): SessionState {
-  const { current, sessionName, device, record, refScopedSnapshot } = params;
+  const { current, sessionName, sessionScope, device, record, refScopedSnapshot } = params;
   const keepCurrentSnapshot = shouldKeepCurrentSnapshot(current, record, refScopedSnapshot);
   const snapshot = keepCurrentSnapshot ? current.snapshot : record.snapshot;
   const nextSession = buildSnapshotSession({
     session: current,
     sessionName,
+    sessionScope,
     device,
     snapshot,
     appBundleId: record.appBundleId,
@@ -232,17 +232,15 @@ function resolveNextSnapshotScopeSource(params: {
   return current?.snapshotScopeSource ?? current?.snapshot;
 }
 
-function createDaemonSnapshotBackend(
-  params: {
-    req: DaemonRequest;
-    logPath: string;
-    session: SessionState | undefined;
-    device: SessionState['device'];
-    snapshotScope: string | undefined;
-    capturedQuality: CapturedSnapshotQuality;
-    captureSnapshotData: () => Promise<SnapshotResult>;
-  } & RuntimeAdmissionBindings,
-): AgentDeviceBackend {
+function createDaemonSnapshotBackend(params: {
+  req: DaemonRequest;
+  logPath: string;
+  session: SessionState | undefined;
+  device: SessionState['device'];
+  snapshotScope: string | undefined;
+  capturedQuality: CapturedSnapshotQuality;
+  captureSnapshotData: () => Promise<SnapshotResult>;
+}): AgentDeviceBackend {
   const { req, logPath, session, device, snapshotScope } = params;
   return {
     platform: publicPlatformString(device),
@@ -256,10 +254,6 @@ function createDaemonSnapshotBackend(
         snapshotScope,
         signal: context.signal,
         captureData: params.captureSnapshotData,
-        // R48's pending-outcome retry re-fires a bound `tapPoint`, so the `snapshot` that settles
-        // a deferred outcome carries the request's own bindings down to the capture.
-        inspectFacts: params.inspectFacts,
-        bindDevice: params.bindDevice,
       });
       const annotations = snapshotCaptureAnnotationsFrom(capture);
       params.capturedQuality.value = annotations.quality;

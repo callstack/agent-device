@@ -4,7 +4,10 @@ import {
   localRuntimeOwner,
   whenAdmitted,
 } from '@agent-device/contracts/platform-runtime';
+import { bindSimulatorReadiness } from './runtime-simulator-readiness.ts';
 import type { NetworkDumpInput } from '@agent-device/contracts/network-runtime';
+import type { AppStateRuntimeOperations } from '@agent-device/contracts/app-state-runtime';
+import { bindAppleAppStateRuntime } from './app-state-runtime.ts';
 import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
@@ -57,6 +60,7 @@ import {
   appleScreenRecordingFacts,
   createAppleScreenRecordingOperations,
 } from './recording/runtime.ts';
+import type { EnsureReadyInput } from '@agent-device/contracts/device-readiness-runtime';
 import { ensureAppleReady } from './readiness/runtime.ts';
 import { bindAppleApplicationLifecycle } from './lifecycle.ts';
 import {
@@ -65,11 +69,9 @@ import {
 } from './deployment/runtime.ts';
 import { appleNavigationFacts, createAppleNavigationOperations } from './navigation/runtime.ts';
 import { appleSystemFacts, createAppleSystemOperations } from './system/runtime.ts';
-import {
-  bindAppleFindSelectorRuntime,
-  bindAppleFindTextRuntime,
-  bindAppleSnapshotRuntime,
-} from './runtime-snapshot.ts';
+import { appleFoldableFacts, createAppleFoldableOperations } from './foldable/runtime.ts';
+import { bindAppleFindTextRuntime, bindAppleSnapshotRuntime } from './runtime-snapshot.ts';
+import { createAppleSnapshotRoute } from './snapshot-route.ts';
 
 const owner = localRuntimeOwner('apple');
 const available = Object.freeze({ available: true } as const);
@@ -105,8 +107,19 @@ const focusKindUnavailable = Object.freeze({
 const appStateUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
-  hint: 'Apple appstate reads the active session state; a sessionless runtime foreground probe is unavailable.',
+  hint: "Apple appstate is unavailable here: the runner reads the session app's XCUIApplication state on iOS-family simulators and physical devices only, and the Apple target answers no sessionless foreground probe. The per-command answer is the targetActivation disclosure, which a capture carries when its command had to re-activate the session app (#2682).",
 } as const);
+
+/**
+ * A live runner reads the session app's `XCUIApplication.state` on the kinds it drives; the read
+ * never starts one (see `bindAppleAppStateRuntime`). That is a fact about the session app, never a
+ * guess about the foreground (#2682): after `home` the app reports a background state, and which
+ * app took the screen stays nobody's to tell.
+ */
+function appleAppStateFact(device: DeviceInfo): RuntimeOperationFact {
+  if (!isIosFamily(device) || device.appleOs === 'watchos') return appStateUnavailable;
+  return device.kind === 'simulator' || device.kind === 'device' ? available : appStateUnavailable;
+}
 const headlessUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
@@ -182,12 +195,6 @@ const snapshotActiveAppRequired = Object.freeze({
   reason: 'owner-capability-missing',
   hint: 'Open the app under test before capturing its snapshot.',
 } as const);
-const nativeSelectorUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'Native selector observation is available only on the Apple touch family.',
-} as const);
-
 function unsupportedAppleDeviceKind(hint: string) {
   return Object.freeze({ available: false, reason: 'unsupported-device-kind', hint } as const);
 }
@@ -268,6 +275,7 @@ function appleFocusFact(device: DeviceInfo): RuntimeOperationFact {
 
 export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformRuntimeOwner {
   const appLogs = createAppleAppLogRuntime(host);
+  const snapshotRoute = createAppleSnapshotRoute(host);
   const inspectFacts = async (device: DeviceInfo) => {
     const logs = await appLogs.inspectFacts(device);
     const deployment = appleAppDeploymentFacts(device);
@@ -291,7 +299,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
       operations: {
         ...logs.operations,
         ...deployment,
-        appState: appStateUnavailable,
+        appState: appleAppStateFact(device),
         networkDump: available,
         screenRecordingStart: recordingFacts,
         screenRecordingReattach: recordingFacts,
@@ -300,7 +308,6 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         ...screenshotRuntimeOperationFacts({ capture: appleScreenshotFact(device) }),
         ...selectorObservationRuntimeOperationFacts({
           findText: appleSnapshotFact(device),
-          findSelector: appleFindSelectorFact(device),
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...focusRuntimeOperationFacts({ focus: appleFocusFact(device) }),
@@ -309,17 +316,15 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         // exact kind cell (parity with the retired `type` bucket, `{ simulator, device }`).
         ...typeTextRuntimeOperationFacts({ type: appleFocusFact(device) }),
         ...touchRuntimeOperationFacts({
+          unsupported: unavailable,
           tap: appleFocusFact(device),
-          tapRef: unavailable,
           longPress: appleFocusFact(device),
-          hover: unavailable,
-          hoverRef: unavailable,
           fill: appleFocusFact(device),
-          fillRef: unavailable,
-          tapElementSelector: isIosFamily(device) ? appleFocusFact(device) : unavailable,
+          ...(isIosFamily(device) ? { tapElementSelector: appleFocusFact(device) } : {}),
         }),
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: appleElementTextFact(device) }),
         ...appleNavigationFacts(device),
+        ...appleFoldableFacts(device),
         ...appleSystemFacts(device),
         ...audioProbeRuntimeOperationFacts({
           capture: appleAudioProbeCaptureFact(device),
@@ -343,7 +348,18 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
       const logs = await appLogs.bind(request);
       const facts = await inspectFacts(request.device);
       const recordingFacts = facts.operations.screenRecordingStart;
+      // Typed on its own so the operations literal below stays within what tsc can represent.
+      const appStateOperations: Partial<AppStateRuntimeOperations> = whenAdmitted(
+        facts.operations.appState,
+        () =>
+          bindAppleAppStateRuntime(host, {
+            device: request.device,
+            signal: request.scope.signal,
+            resolveInteractor: host.localInteractors.resolve,
+          }),
+      );
       const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = {
+        ...appStateOperations,
         ...logs.operations,
         ...createAppleAppDeploymentOperations({
           host,
@@ -375,10 +391,14 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
           }),
         ),
         ...whenAdmitted(facts.operations.captureSnapshot, () =>
-          bindAppleSnapshotRuntime(host, {
-            device: request.device,
-            signal: request.scope.signal,
-          }),
+          bindAppleSnapshotRuntime(
+            host,
+            {
+              device: request.device,
+              signal: request.scope.signal,
+            },
+            snapshotRoute,
+          ),
         ),
         ...whenAdmitted(facts.operations.captureScreenshot, () =>
           bindLocalScreenshotInteractor({
@@ -437,12 +457,6 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             signal: request.scope.signal,
           }),
         ),
-        ...whenAdmitted(facts.operations.findSelector, () =>
-          bindAppleFindSelectorRuntime(host, {
-            device: request.device,
-            signal: request.scope.signal,
-          }),
-        ),
         ...createAppleNavigationOperations({
           host,
           device: request.device,
@@ -453,27 +467,36 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
           device: request.device,
           signal: request.scope.signal,
         }),
+        ...createAppleFoldableOperations({
+          device: request.device,
+          signal: request.scope.signal,
+        }),
         ...whenAdmitted(facts.operations.ensureReady, () => ({
           ensureReady: async () =>
             await ensureAppleReady(host, request.device, request.scope.signal),
         })),
         ...whenAdmitted(facts.operations.bootTarget, () => ({
-          bootTarget: async () =>
-            await ensureAppleReady(host, request.device, request.scope.signal),
+          bootTarget: async (input: EnsureReadyInput) =>
+            await ensureAppleReady(host, request.device, request.scope.signal, {
+              deadlineAtMs: input.deadlineAtMs,
+            }),
         })),
         ...whenAdmitted(facts.operations.listApps, () => ({
-          listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) =>
-            await host.appInventory.apple.listApps(
-              input.device,
-              input.filter,
-              request.scope.signal,
-            ),
+          listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) => {
+            request.scope.signal.throwIfAborted();
+            const { listIosApps } = await import('./core/app-resolution.ts');
+            return (await listIosApps(input.device, input.filter)).map((app) => ({
+              id: app.bundleId,
+              name: app.name,
+            }));
+          },
         })),
         ...availableApplicationLifecycleOperations(
           bindAppleApplicationLifecycle({
             host,
             device: request.device,
             signal: request.scope.signal,
+            observation: snapshotRoute,
           }),
           facts.operations,
         ),
@@ -486,11 +509,13 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         device: logs.device,
         owner,
         facts,
-        operations: Object.freeze(operations),
+        operations: bindSimulatorReadiness(operations),
         [Symbol.asyncDispose]: async () => await logs[Symbol.asyncDispose](),
       }) satisfies DeviceBinding<PlatformRuntimeOperations>;
     },
-    shutdown: async () => await appLogs.shutdown(),
+    shutdown: async () => {
+      await Promise.all([appLogs.shutdown(), snapshotRoute.shutdown()]);
+    },
   });
 }
 
@@ -530,10 +555,6 @@ function appleSnapshotFact(device: DeviceInfo) {
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : snapshotKindUnavailable;
-}
-
-function appleFindSelectorFact(device: DeviceInfo) {
-  return isIosFamily(device) ? appleSnapshotFact(device) : nativeSelectorUnavailable;
 }
 
 /**

@@ -1,0 +1,451 @@
+import assert from 'node:assert/strict';
+import { test } from 'vitest';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import {
+  buildInteractionSurfaceSignature,
+  classifyBaselineSurfaceEvidence,
+  areInteractionSurfaceSignaturesStable,
+  discriminatingSurfaceChangedWithinRect,
+} from '../interaction-surface-signature.ts';
+
+test('areInteractionSurfaceSignaturesStable treats identical surfaces as stable', () => {
+  const before = buildInteractionSurfaceSignature(makeSnapshot('Inbox').nodes);
+  const after = buildInteractionSurfaceSignature(makeSnapshot('Inbox').nodes);
+
+  assert.equal(areInteractionSurfaceSignaturesStable(before, after), true);
+});
+
+test('areInteractionSurfaceSignaturesStable tolerates tiny rect drift', () => {
+  const before = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 100).nodes);
+  const after = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 100.4).nodes);
+
+  assert.equal(areInteractionSurfaceSignaturesStable(before, after), true);
+});
+
+test('areInteractionSurfaceSignaturesStable detects semantic screen changes', () => {
+  const before = buildInteractionSurfaceSignature(makeSnapshot('Inbox').nodes);
+  const after = buildInteractionSurfaceSignature(makeSnapshot('Article detail').nodes);
+
+  assert.equal(areInteractionSurfaceSignaturesStable(before, after), false);
+});
+
+test('areInteractionSurfaceSignaturesStable detects material layout movement', () => {
+  const before = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 100).nodes);
+  const after = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 180).nodes);
+
+  assert.equal(areInteractionSurfaceSignaturesStable(before, after), false);
+});
+
+// ---------------------------------------------------------------------------
+// classifyBaselineSurfaceEvidence (#1542 defect 2, #1563 review): subset-
+// tolerant, three-valued baseline comparison. Live evidence on
+// checkout-form.ad showed the pre-gesture baseline (captured by an earlier
+// `wait`, a broad query) and the post-gesture quiet signature (captured by
+// the click's interactive-only selector resolution) never line up as whole
+// arrays even when the target element never moved — the first version of
+// this check has to see through that scope drift.
+//
+// The #1563 review then caught a SECOND failure mode in that first version
+// (a plain "any shared entry frozen" boolean): the viewport root
+// (Application/Window) is always present and its rect is invariant under any
+// gesture, so a broad baseline and a narrow post-gesture capture can share
+// ONLY the root even after a real, successful scroll — and the boolean
+// predicate called that a match. `classifyBaselineSurfaceEvidence` requires
+// at least one DISCRIMINATING shared entry (excluding the viewport root and
+// keyboard chrome) before calling it `'unchanged'`; a root-only (or
+// no-discriminating-evidence) overlap is `'ambiguous'` instead.
+// ---------------------------------------------------------------------------
+
+test('classifyBaselineSurfaceEvidence reports unchanged for identical signatures', () => {
+  const baseline = buildInteractionSurfaceSignature(makeSnapshot('Inbox').nodes);
+  const current = buildInteractionSurfaceSignature(makeSnapshot('Inbox').nodes);
+
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'unchanged');
+});
+
+test('classifyBaselineSurfaceEvidence is ambiguous when either side is empty', () => {
+  const baseline = buildInteractionSurfaceSignature(makeSnapshot('Inbox').nodes);
+
+  assert.equal(classifyBaselineSurfaceEvidence([], baseline), 'ambiguous');
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, []), 'ambiguous');
+  assert.equal(classifyBaselineSurfaceEvidence([], []), 'ambiguous');
+});
+
+test('classifyBaselineSurfaceEvidence reports unchanged through a broader baseline scope when the shared discriminating element is frozen', () => {
+  // The exact live shape: the baseline came from a broader capture (extra
+  // "Loading" text node the interactive-only capture never sees), but the
+  // shared "primary-action" button never moved.
+  const baseline = buildInteractionSurfaceSignature(makeSnapshotWithExtraText('Inbox', 500).nodes);
+  const current = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 500).nodes);
+
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'unchanged');
+});
+
+test('classifyBaselineSurfaceEvidence reports unchanged through a broader current scope when the shared discriminating element is frozen', () => {
+  const baseline = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 500).nodes);
+  const current = buildInteractionSurfaceSignature(makeSnapshotWithExtraText('Inbox', 500).nodes);
+
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'unchanged');
+});
+
+test('classifyBaselineSurfaceEvidence detects real movement even through a scope difference', () => {
+  const baseline = buildInteractionSurfaceSignature(makeSnapshotWithExtraText('Inbox', 500).nodes);
+  const current = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 120).nodes);
+
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'changed');
+});
+
+test('classifyBaselineSurfaceEvidence is ambiguous when the signatures share no key at all', () => {
+  const baseline = buildInteractionSurfaceSignature([
+    {
+      ref: 'e1',
+      index: 0,
+      type: 'Button',
+      identifier: 'checkout-only-button',
+      label: 'Checkout',
+      rect: { x: 0, y: 0, width: 100, height: 40 },
+    },
+  ]);
+  const current = buildInteractionSurfaceSignature([
+    {
+      ref: 'e1',
+      index: 0,
+      type: 'Button',
+      identifier: 'settings-only-button',
+      label: 'Settings',
+      rect: { x: 0, y: 0, width: 100, height: 40 },
+    },
+  ]);
+
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'ambiguous');
+});
+
+test('classifyBaselineSurfaceEvidence tolerates tiny rect drift on the shared discriminating element', () => {
+  const baseline = buildInteractionSurfaceSignature(makeSnapshotWithExtraText('Inbox', 500).nodes);
+  const current = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 500.4).nodes);
+
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'unchanged');
+});
+
+// --- #1563 review regression: root-only overlap must NOT read as evidence ---
+
+test('classifyBaselineSurfaceEvidence is ambiguous (NOT unchanged) when a real scroll leaves only the application root shared — the reviewer-caught false-distrust shape', () => {
+  // baseline = {Application, Pickup@y=500}; current = {Application,
+  // OtherButton@...} — a genuine, successful scroll replaced every real
+  // element in view, so the only entry the two signatures still share is the
+  // always-present, always-identical viewport root. A boolean "any shared
+  // entry frozen" predicate calls this a baseline match (the root always
+  // "matches") and would extend the interaction to the 3.5s stale-read
+  // deadline on zero real evidence — exactly the bug this test pins.
+  const baseline = buildInteractionSurfaceSignature([
+    applicationRootNode(),
+    {
+      ref: 'e2',
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'shipping-pickup',
+      label: 'Pickup',
+      rect: { x: 20, y: 500, width: 200, height: 44 },
+    },
+  ]);
+  const current = buildInteractionSurfaceSignature([
+    applicationRootNode(),
+    {
+      ref: 'e2',
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'shipping-delivery',
+      label: 'Delivery',
+      rect: { x: 20, y: 120, width: 200, height: 44 },
+    },
+  ]);
+
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'ambiguous');
+});
+
+test('classifyBaselineSurfaceEvidence is ambiguous when the current capture is the application root alone', () => {
+  const baseline = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 500).nodes);
+  const current = buildInteractionSurfaceSignature([applicationRootNode()]);
+
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'ambiguous');
+});
+
+test('classifyBaselineSurfaceEvidence excludes the keyboard container from discriminating overlap', () => {
+  const keyboardNode = {
+    ref: 'e3',
+    index: 2,
+    parentIndex: 0,
+    type: 'Keyboard',
+    rect: { x: 0, y: 500, width: 390, height: 300 },
+  };
+  const baseline = buildInteractionSurfaceSignature([applicationRootNode(), keyboardNode]);
+  // The keyboard's own container rect never changes; only the app content
+  // does. A capture sharing just the root and the keyboard container (no
+  // real content) must not read as a baseline match.
+  const current = buildInteractionSurfaceSignature([applicationRootNode(), keyboardNode]);
+
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'ambiguous');
+});
+
+// #1563 review, finding 2: a container-only exclusion still misses keyboard
+// DESCENDANTS (individual keys) and SIBLINGS (assistant buttons like "Next
+// keyboard"/"Dictate", which live outside the container per
+// packages/capture-kit/src/snapshot-chrome.ts's collectKeyboardChrome doc comment — a
+// container-descendant walk alone provably misses them, hence the whole-
+// window classification that module reuses here via collectKeyboardChromeRefs).
+test('classifyBaselineSurfaceEvidence excludes keyboard DESCENDANTS and window SIBLINGS, not just the container, from discriminating overlap', () => {
+  const shared = keyboardWindowNodes(); // window + [Keyboard] container + a key + a sibling "Next keyboard" button
+  const baseline = buildInteractionSurfaceSignature([
+    applicationRootNode(),
+    {
+      ref: 'e-pickup',
+      index: 20,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'shipping-pickup',
+      label: 'Pickup',
+      rect: { x: 20, y: 500, width: 200, height: 44 },
+    },
+    ...shared,
+  ]);
+  // Real content changed (Pickup -> Delivery, a genuine successful scroll);
+  // the keyboard subtree is identical — a keyboard does not move when app
+  // content scrolls.
+  const current = buildInteractionSurfaceSignature([
+    applicationRootNode(),
+    {
+      ref: 'e-delivery',
+      index: 20,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: 'shipping-delivery',
+      label: 'Delivery',
+      rect: { x: 20, y: 120, width: 200, height: 44 },
+    },
+    ...shared,
+  ]);
+
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'ambiguous');
+});
+
+/**
+ * A keyboard-window subtree: a `[Keyboard]` container plus a SIBLING "Next
+ * keyboard" assistant button under the same window — matches the shape in
+ * `src/daemon/__tests__/post-gesture-stabilization-fixtures.ts`'s
+ * `keyboardWindowNodes` (kept local here rather than imported: this file's
+ * fixtures are raw node literals consumed directly by
+ * `buildInteractionSurfaceSignature`, not `SnapshotState`-wrapped like that
+ * module's).
+ */
+function keyboardWindowNodes() {
+  return [
+    {
+      ref: 'e-kb-window',
+      index: 10,
+      parentIndex: 0,
+      type: 'Window',
+      rect: { x: 0, y: 400, width: 390, height: 444 },
+    },
+    {
+      ref: 'e-kb-container',
+      index: 11,
+      parentIndex: 10,
+      type: 'Keyboard',
+      rect: { x: 0, y: 500, width: 390, height: 300 },
+    },
+    {
+      ref: 'e-kb-key-a',
+      index: 12,
+      parentIndex: 11, // descendant of the container
+      type: 'Key',
+      label: 'A',
+      rect: { x: 10, y: 520, width: 30, height: 40 },
+    },
+    {
+      ref: 'e-kb-next',
+      index: 13,
+      parentIndex: 10, // sibling of the container, NOT a descendant
+      type: 'Button',
+      label: 'Next keyboard',
+      rect: { x: 340, y: 520, width: 40, height: 40 },
+    },
+  ];
+}
+
+test('classifyBaselineSurfaceEvidence still reports unchanged when the root AND a real discriminating element both match (guards against over-excluding)', () => {
+  // Root-sharing alone is not disqualifying — it just cannot be the ONLY
+  // evidence. Once a real, frozen discriminating element is also shared
+  // (the ordinary "genuinely stuck" case), the verdict must still be
+  // 'unchanged', not swing to 'ambiguous' just because the root is present.
+  const snapshotNodes = makeSnapshot('Inbox', 500).nodes; // [Application, primary-action Button]
+  const baseline = buildInteractionSurfaceSignature(snapshotNodes);
+  const current = buildInteractionSurfaceSignature(snapshotNodes);
+
+  assert.equal(classifyBaselineSurfaceEvidence(baseline, current), 'unchanged');
+});
+
+function applicationRootNode() {
+  return {
+    ref: 'e1',
+    index: 0,
+    type: 'Application',
+    label: 'App',
+    rect: { x: 0, y: 0, width: 390, height: 844 },
+  };
+}
+
+function makeSnapshot(label: string, y = 100): SnapshotState {
+  return {
+    nodes: [
+      {
+        ref: 'e1',
+        index: 0,
+        type: 'Application',
+        label: 'App',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+      },
+      {
+        ref: 'e2',
+        index: 1,
+        parentIndex: 0,
+        type: 'Button',
+        identifier: 'primary-action',
+        label,
+        rect: { x: 120, y, width: 80, height: 40 },
+      },
+    ],
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+}
+
+// A broader-scope variant of makeSnapshot: the same Application + Button
+// entries, plus a non-interactive text node an interactive-only capture would
+// never return. Models the real shape mismatch between a pre-gesture baseline
+// snapshot and a post-gesture interactive-only selector-resolution capture.
+function makeSnapshotWithExtraText(label: string, y = 100): SnapshotState {
+  const base = makeSnapshot(label, y);
+  return {
+    ...base,
+    nodes: [
+      ...base.nodes,
+      {
+        ref: 'e3',
+        index: 2,
+        parentIndex: 0,
+        type: 'Text',
+        label: 'Loading',
+        rect: { x: 20, y: 20, width: 200, height: 20 },
+      },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// discriminatingSurfaceChangedWithinRect (#2714 review): a whole-surface
+// difference that lives outside the region a command acted on is not that
+// command's doing. Measured on the Android tester, the status bar changed on
+// its own over a list that never moved. The strict key-matched view stays
+// owned here; this only narrows the region it is asked about.
+// ---------------------------------------------------------------------------
+
+const LIST_RECT = { x: 0, y: 150, width: 390, height: 600 };
+
+function rowAt(index: number, y: number) {
+  return {
+    type: 'StaticText',
+    identifier: `row-${index}`,
+    label: `Row ${index}`,
+    rect: { x: 12, y, width: 300, height: 24 },
+  } as SnapshotState['nodes'][number];
+}
+
+function surfaceWithClock(clock: string, secondRowY: number) {
+  return [
+    {
+      type: 'Image',
+      identifier: 'status-clock',
+      label: clock,
+      rect: { x: 12, y: 12, width: 40, height: 18 },
+    } as SnapshotState['nodes'][number],
+    rowAt(1, 200),
+    rowAt(2, secondRowY),
+  ];
+}
+
+test('discriminatingSurfaceChangedWithinRect reads a movement inside the region', () => {
+  const before = buildInteractionSurfaceSignature(surfaceWithClock('2:40', 300));
+  const after = buildInteractionSurfaceSignature(surfaceWithClock('2:40', 420));
+
+  assert.equal(discriminatingSurfaceChangedWithinRect(before, after, LIST_RECT), true);
+});
+
+test('discriminatingSurfaceChangedWithinRect does not read a movement outside the region', () => {
+  const before = buildInteractionSurfaceSignature(surfaceWithClock('2:40', 300));
+  const after = buildInteractionSurfaceSignature(surfaceWithClock('2:41', 300));
+
+  // The whole surface did change — that is the trap this reader exists to refuse.
+  assert.equal(classifyBaselineSurfaceEvidence(before, after), 'changed');
+  assert.equal(discriminatingSurfaceChangedWithinRect(before, after, LIST_RECT), false);
+});
+
+test('discriminatingSurfaceChangedWithinRect counts content appearing inside the region', () => {
+  const before = buildInteractionSurfaceSignature(surfaceWithClock('2:40', 300));
+  const after = buildInteractionSurfaceSignature([...surfaceWithClock('2:40', 300), rowAt(3, 640)]);
+
+  assert.equal(discriminatingSurfaceChangedWithinRect(before, after, LIST_RECT), true);
+});
+
+// Android is the only producer of `checked`, and a tap whose only effect is a toggle changes nothing
+// else on a screen without a mirrored label. The flip has to read as a change, or a quiet window
+// that spans it reports a surface that never moved.
+test('areInteractionSurfaceSignaturesStable reads a checked-only flip as a change', () => {
+  const before = buildInteractionSurfaceSignature(makeToggleSnapshot(false).nodes);
+  const after = buildInteractionSurfaceSignature(makeToggleSnapshot(true).nodes);
+
+  assert.equal(areInteractionSurfaceSignaturesStable(before, after), false);
+});
+
+test.each([
+  { anonymous: false, label: 'a labelled switch' },
+  { anonymous: true, label: 'an anonymous switch' },
+])(
+  'discriminatingSurfaceChangedWithinRect reads a flip of $label at the same rect as no movement, and a moved one as movement',
+  ({ anonymous }) => {
+    const rect = { x: 0, y: 0, width: 390, height: 844 };
+    const signature = (checked: boolean, y?: number) =>
+      buildInteractionSurfaceSignature(makeToggleSnapshot(checked, y, anonymous).nodes);
+
+    assert.equal(
+      discriminatingSurfaceChangedWithinRect(signature(false), signature(true), rect),
+      false,
+    );
+    assert.equal(
+      discriminatingSurfaceChangedWithinRect(signature(false, 300), signature(false, 200), rect),
+      true,
+    );
+  },
+);
+
+// An anonymous switch has no identity, so its content is its type: the flip still changes only the
+// key, and a swipe that brushed it must not read as the list moving.
+function makeToggleSnapshot(checked: boolean, y = 300, anonymous = false): SnapshotState {
+  const base = makeSnapshot('Inbox');
+  return {
+    ...base,
+    nodes: [
+      ...base.nodes,
+      {
+        ref: 'e3',
+        index: 2,
+        parentIndex: 0,
+        type: 'android.widget.Switch',
+        ...(anonymous ? {} : { identifier: 'wifi-switch', label: 'Wi-Fi switch' }),
+        checked,
+        rect: { x: 300, y, width: 60, height: 40 },
+      },
+    ],
+  };
+}

@@ -2,23 +2,16 @@ import { defineConfig } from 'vitest/config';
 import { resolveVitestMaxWorkers } from './scripts/lib/vitest-concurrency.ts';
 import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 
-// Files that spawn a real subprocess per case. They used to run one at a time in
-// their own serialized `subprocess-stub` project so broad file parallelism couldn't
-// starve a spawn past its internal budget and turn it into a generic timeout.
-// #1823 is now running that project's own kill criterion: un-serialized here in
-// `unit-core`'s default forks pool, watched for 20 consecutive CI runs with no
-// timeout-shaped failure. Revert (restore the project, restore this list to
-// unit-core's exclude) the moment one appears. Still excluded from the mutation
-// lane via SERIALIZED_TESTS below regardless of this experiment's outcome —
-// thousands of mutant reruns times a real spawn per case is timeout noise either way.
-const SUBPROCESS_STUB_TESTS: readonly string[] = [
+// A real per-case spawn is timeout noise under thousands of mutant reruns, so the
+// mutation lane excludes these tests even though the unit lane runs them normally.
+const MUTATION_EXCLUDED_SUBPROCESS_TESTS: readonly string[] = [
   // Stubs npx plus the package managers and spawns a real Metro dev server per case.
   'src/__tests__/client-metro.test.ts',
   // The SUT is the subprocess watchdog: a node subprocess per case, one hangs on purpose (#1414).
   'scripts/fuzz/harness.test.ts',
   // The daemon takeover test launches a branch-named daemon per case to prove
   // that worktree identity does not strand the predecessor (#1545).
-  'src/daemon/__tests__/daemon-process-takeover.test.ts',
+  'src/__tests__/daemon-process-takeover.test.ts',
 ];
 
 // The fuzz corpus replay, which must not run under V8 coverage instrumentation.
@@ -36,7 +29,7 @@ const SUBPROCESS_STUB_TESTS: readonly string[] = [
 // instruments, so this file reports the same lines with or without it.
 //
 // Membership is by demonstrated failure, not by a property of the code. In particular it is
-// NOT "constructs a `node:worker_threads` Worker": `session-replay-runtime-maestro.test.ts`
+// NOT "constructs a `node:worker_threads` Worker": `session-replay-runtime-maestro-run-script.test.ts`
 // does exactly that and stays in `unit-core`, instrumented and green. The proximate cause was
 // never reproduced — what these entries share is an observed record of vanishing from the
 // Coverage lane, and that record is the only thing that admits a file here. A new entry needs
@@ -56,13 +49,14 @@ const FUZZ_WORKER_TESTS: readonly string[] = [
   'scripts/fuzz/corpus-replay.test.ts',
 ];
 /**
- * Every test the mutation lane must not collect: a real per-case subprocess spawn is
- * timeout noise under thousands of mutant reruns, independent of whether Vitest also
- * serializes it — `fuzz-worker` still does; `subprocess-stub`'s former members no
- * longer do (#1823). The two lists above stay module-local: this union is the whole
- * cross-file surface, and the mutation lane wants exactly it.
+ * Every test the mutation lane must not collect. The two lists above stay
+ * module-local: this union is the whole cross-file surface, and the mutation lane
+ * wants exactly it.
  */
-export const SERIALIZED_TESTS: readonly string[] = [...SUBPROCESS_STUB_TESTS, ...FUZZ_WORKER_TESTS];
+export const MUTATION_EXCLUDED_TESTS: readonly string[] = [
+  ...MUTATION_EXCLUDED_SUBPROCESS_TESTS,
+  ...FUZZ_WORKER_TESTS,
+];
 
 // Imported by vitest.mutation.config.ts so the two lanes cannot drift: a guard
 // added here must reach the Stryker sandbox too.
@@ -105,9 +99,8 @@ export default defineConfig({
           include: [
             'src/**/*.test.ts',
             'packages/*/src/**/*.test.ts',
-            // The subprocess watchdog self-check (#1823): spawns a real node subprocess per
-            // case, one hangs on purpose (#1414). Formerly a `subprocess-stub` member; see
-            // SUBPROCESS_STUB_TESTS above for the kill-criterion experiment this rides.
+            // The subprocess watchdog self-check: spawns a real node subprocess per case,
+            // and one hangs on purpose (#1414).
             'scripts/fuzz/harness.test.ts',
             // The validation fuzz generators' expectation gates (#1781 B2): in-process, no
             // subprocess or worker, so they ride the fast lane unlike their serialized siblings.
@@ -128,12 +121,15 @@ export default defineConfig({
             // by a classifier that has to recognise it — see KERNEL_TEST_FILE_RE in
             // scripts/mutation/modules.ts.
             'scripts/__tests__/test-file-size-ratchet.test.ts',
+            'scripts/__tests__/eager-closure-budgets.test.ts',
             'scripts/__tests__/agent-setup-startup-contract.test.ts',
             'scripts/__tests__/npm-skills-exclusion.test.ts',
             'scripts/__tests__/simulator-skills-contract.test.ts',
-            // Parses ios.yml and the runner's Swift sources: no Xcode, no simulator, and
-            // the check it guards is what keeps the PR lane's `-only-testing:` list honest.
+            // Parse Swift guards and declarations before deriving the simulator selection.
+            'scripts/__tests__/swift-conditional-compilation.test.ts',
+            'scripts/__tests__/xctest-declarations.test.ts',
             'scripts/__tests__/xctest-selection.test.ts',
+            'scripts/__tests__/apple-ci-impact.test.ts',
             // The nightly XCTest lane's reporter/liveness check, which otherwise only ever
             // executes on a macOS runner at 04:30.
             'scripts/__tests__/xctest-run-summary.test.ts',
@@ -147,9 +143,28 @@ export default defineConfig({
             // The Bundle Size lane's PR-comment path: spawns the real script against a
             // stubbed fetch, so it needs no network; pins retry/reconcile/fatal outcomes.
             'scripts/__tests__/size-report-post-comment.test.ts',
-            // Package attribution is a pure npm-pack manifest model. Keep it in the fast lane so
-            // every new package path remains accounted for without building an archive.
+            // Package attribution models npm-pack output. Keep it in the fast lane so every new
+            // package path remains accounted for.
             'scripts/__tests__/size-report-package.test.ts',
+            // Publish preparation spawns only fixture-owned scripts and proves both Android
+            // helper families are rebuilt through the shared release/size-report owner.
+            'scripts/__tests__/prepare-publish-assets.test.ts',
+            // The packager's Swift comment scanner: pure string transform, and the only place a
+            // literal that looks like a comment (a URL, a raw or multi-line literal) is proven
+            // to survive packaging before the npm package ships unbuildable Swift.
+            'scripts/__tests__/strip-swift-comments.test.ts',
+            // The line-parity comparison behind `pnpm check:packaged-runner-swift`. Pure text
+            // over two strings; the gate itself is what runs the packager and the Swift parse.
+            'scripts/__tests__/packaged-runner-swift.test.ts',
+            // The runner build's actor-isolation log scan, over synthetic logs and a fake
+            // `xcodebuild` on PATH.
+            'scripts/__tests__/runner-isolation-diagnostics.test.ts',
+            // Parse-only guard on the checked-in registry entry: the npm package must declare
+            // the fixed mcp subcommand, or registry-format launchers run the bare CLI.
+            'scripts/__tests__/mcp-metadata.test.ts',
+            'scripts/ios-snapshot-benchmark/*.test.ts',
+            'scripts/png-crop-benchmark/*.test.ts',
+            'scripts/ios-ax-bridge-spike/*.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',
             'test/ci/upload-artifact-hidden-paths.test.ts',
@@ -163,6 +178,9 @@ export default defineConfig({
             // decisions over fixture state-dir listings, so they need no daemon,
             // device, or subprocess.
             'test/integration/support/daemon-leak-model.test.ts',
+            // The Android failed-step evidence reader: it replays adb output through the probe
+            // seam, so the crash/process/activity selectors need no emulator to be pinned.
+            'test/integration/android-emulator-e2e/device-evidence.test.ts',
             // The frozen replay-compat corpus (#1417): parse-only, no device or
             // subprocess work, so it belongs in the fast lane next to the
             // grammar it guards.
@@ -187,13 +205,16 @@ export default defineConfig({
           // package from importing root utilities directly).
           name: 'apple-runner',
           include: ['packages/platform-apple/src/runner/**/*.test.ts'],
-          setupFiles: [...SETUP_FILES, 'scripts/vitest-apple-runner-host-setup.ts'],
+          setupFiles: [
+            ...SETUP_FILES,
+            'scripts/vitest-apple-runner-home-setup.ts',
+            'scripts/vitest-apple-runner-host-setup.ts',
+          ],
         },
       },
       {
         test: {
-          // Serialized for the same contention reason `subprocess-stub` used to be (#1823):
-          // the per-case watchdog budget is real wall clock. The project exists so the
+          // Serialized because the per-case watchdog budget is real wall clock. The project exists so the
           // coverage run can leave it out (see the comment above), not to run it differently.
           name: 'fuzz-worker',
           include: [...FUZZ_WORKER_TESTS],
@@ -236,6 +257,7 @@ export default defineConfig({
       exclude: [
         'src/**/*.test.ts',
         'src/**/__tests__/**',
+        '**/*.fixtures.ts',
         'src/**/*-types.ts',
         'src/**/types.ts',
         'src/sdk/**',

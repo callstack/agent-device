@@ -33,6 +33,8 @@ struct InspectionManifest: Encodable {
 
   let generatedAt: String
   let inputPath: String
+  let renderWidth: Int
+  let renderHeight: Int
   let items: [Item]
 }
 
@@ -131,6 +133,8 @@ func run() throws {
   let manifest = InspectionManifest(
     generatedAt: ISO8601DateFormatter().string(from: Date()),
     inputPath: inputURL.path,
+    renderWidth: Int(renderSize.width.rounded()),
+    renderHeight: Int(renderSize.height.rounded()),
     items: manifestItems
   )
   let manifestURL = outputDirURL.appendingPathComponent("manifest.json")

@@ -1,4 +1,4 @@
-const REGEX_SYNTAX = new Set('^$\\.*+?()[]{}|');
+const REGEX_SYNTAX = new Set(String.raw`^$\.*+?()[]{}|`);
 
 export function matchesMaestroRegex(value: string, pattern: string): boolean {
   try {

@@ -1,0 +1,998 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { constants } from 'node:fs';
+import { access, stat } from 'node:fs/promises';
+import path from 'node:path';
+import { spawn, spawnSync, type ChildProcess, type StdioOptions } from 'node:child_process';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import { emitDiagnostic, getDiagnosticsMeta, updateDiagnosticsScope } from './diagnostics.ts';
+import { parseBooleanLiteral } from '@agent-device/kernel/source-value';
+
+export type ExecResult = {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  stdoutBuffer?: Buffer;
+};
+
+export type ExecOptions = {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  allowFailure?: boolean;
+  binaryStdout?: boolean;
+  stdin?: string | Buffer;
+  timeoutMs?: number;
+  detached?: boolean;
+  signal?: AbortSignal;
+  /** Max stdout/stderr bytes for synchronous runs (default Node ~1MB). */
+  maxBuffer?: number;
+  /**
+   * How a deadline or a cancelled request stops the child. Without this it is SIGKILL at
+   * once. A child that has to undo something before it dies — the macOS helper releasing a
+   * mouse button it is holding — is sent `signal` first, and SIGKILL only once `graceMs`
+   * pass without it exiting.
+   */
+  kill?: { readonly signal: NodeJS.Signals; readonly graceMs: number };
+};
+
+export type ExecStreamOptions = ExecOptions & {
+  onStdoutChunk?: (chunk: string) => void;
+  onStderrChunk?: (chunk: string) => void;
+  onSpawn?: (child: ReturnType<typeof spawn>) => void;
+};
+
+export type ExecBackgroundResult = {
+  child: ReturnType<typeof spawn>;
+  wait: Promise<ExecResult>;
+};
+
+type ExecDetachedOptions = ExecOptions & {
+  stdio?: StdioOptions;
+};
+
+export type ExecDetachedExit = {
+  pid: number;
+  exitCode?: number;
+  signal?: NodeJS.Signals;
+  error?: string;
+};
+
+export type ExecDetachedProcess = {
+  pid: number;
+  exited: Promise<ExecDetachedExit>;
+};
+
+/**
+ * Background runs have no `timeoutMs`: the callers are long-lived sessions (the
+ * Android snapshot helper, the keep-hot xcodebuild runner, app-log capture), and
+ * a deadline field the spawn path never armed was one plumbing change away from
+ * killing them. A background deadline belongs to its caller, which cancels it with
+ * `signal`; a caller that kills the child directly still waits for the streams to
+ * drain, exactly as before.
+ */
+export type ExecBackgroundOptions = Omit<ExecOptions, 'timeoutMs'> & {
+  /**
+   * Capture stdout/stderr into the wait result when the child has piped stdio.
+   * Set false when the caller owns, ignores, or forwards the streams.
+   */
+  captureOutput?: boolean;
+  stdio?: StdioOptions;
+};
+
+const BARE_COMMAND_RE = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
+const WINDOWS_PATH_EXTENSIONS = ['.com', '.exe', '.bat', '.cmd'];
+const EXEC_DIAGNOSTIC_ARG_LIMIT = 6;
+export type CommandExecutorOverride = (
+  cmd: string,
+  args: readonly string[],
+  options: ExecOptions,
+) => Promise<ExecResult> | undefined;
+
+const commandExecutorOverrideScope = new AsyncLocalStorage<CommandExecutorOverride | undefined>();
+
+export async function withCommandExecutorOverride<T>(
+  override: CommandExecutorOverride | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (!override) return await fn();
+  return await commandExecutorOverrideScope.run(override, fn);
+}
+
+// Used by local executors to bypass the active override for intentional host command execution.
+export async function withoutCommandExecutorOverride<T>(fn: () => Promise<T>): Promise<T> {
+  return await commandExecutorOverrideScope.run(undefined, fn);
+}
+
+const requestCommandEnvScope = new AsyncLocalStorage<NodeJS.ProcessEnv>();
+
+/** Overlays request environment values on spawned commands without changing `process.env`. */
+export async function withRequestCommandEnv<T>(
+  env: NodeJS.ProcessEnv | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (!env) return await fn();
+  return await requestCommandEnvScope.run(env, fn);
+}
+
+/** Effective toolchain selection; an explicitly empty request value selects `xcode-select`. */
+export function commandDeveloperDir(): string | undefined {
+  const requestEnv = requestCommandEnvScope.getStore();
+  if (requestEnv && Object.hasOwn(requestEnv, 'DEVELOPER_DIR')) {
+    return requestEnv.DEVELOPER_DIR || undefined;
+  }
+  return process.env.DEVELOPER_DIR || undefined;
+}
+
+function resolveSpawnEnv(env: NodeJS.ProcessEnv | undefined): NodeJS.ProcessEnv | undefined {
+  const requestEnv = requestCommandEnvScope.getStore();
+  if (!requestEnv) return env;
+  return { ...(env ?? process.env), ...requestEnv };
+}
+
+export async function runCmd(
+  cmd: string,
+  args: readonly string[],
+  options: ExecOptions = {},
+): Promise<ExecResult> {
+  const overrideResult = commandExecutorOverrideScope.getStore()?.(cmd, args, options);
+  if (overrideResult) return coerceExecResult(await overrideResult);
+  return await runSpawnedCommand(cmd, args, options);
+}
+
+export async function runCmdStreaming(
+  cmd: string,
+  args: readonly string[],
+  options: ExecStreamOptions = {},
+): Promise<ExecResult> {
+  const overrideResult = commandExecutorOverrideScope.getStore()?.(cmd, args, options);
+  if (overrideResult) return coerceExecResult(await overrideResult);
+  return await runSpawnedCommand(cmd, args, options);
+}
+
+/**
+ * Normalize an exec result produced outside this module. Tool providers,
+ * executor overrides, and SDK-supplied adb executors are plain callbacks whose
+ * results cross an unchecked boundary; coercing once here lets downstream code
+ * trust the ExecResult types instead of re-wrapping fields defensively at every
+ * use. A non-number exitCode coerces to 1 — the same failure branch such a
+ * result already landed in at every `exitCode !== 0` guard.
+ */
+export function coerceExecResult<T extends Pick<ExecResult, 'stdout' | 'stderr' | 'exitCode'>>(
+  result: T,
+): T {
+  const stdout = typeof result.stdout === 'string' ? result.stdout : String(result.stdout ?? '');
+  const stderr = typeof result.stderr === 'string' ? result.stderr : String(result.stderr ?? '');
+  const exitCode = typeof result.exitCode === 'number' ? result.exitCode : 1;
+  if (stdout === result.stdout && stderr === result.stderr && exitCode === result.exitCode) {
+    return result;
+  }
+  return { ...result, stdout, stderr, exitCode };
+}
+
+function runSpawnedCommand(
+  cmd: string,
+  args: readonly string[],
+  options: ExecStreamOptions = {},
+): Promise<ExecResult> {
+  const executable = normalizeExecutableCommand(cmd);
+  const execTrace = createExecTraceContext();
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, args, {
+      cwd: options.cwd,
+      env: resolveSpawnEnv(options.env),
+      stdio: ['pipe', 'pipe', 'pipe'],
+      detached: options.detached,
+      windowsHide: true,
+      shell: false,
+    });
+    options.onSpawn?.(child);
+
+    let stdout = '';
+    const stdoutChunks: Buffer[] | undefined = options.binaryStdout ? [] : undefined;
+    let stderr = '';
+    let didTimeout = false;
+    const timeoutMs = normalizeTimeoutMs(options.timeoutMs);
+    let timeoutHandle: NodeJS.Timeout | null = null;
+    let settled = false;
+    function finish(): boolean {
+      if (settled) return false;
+      settled = true;
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      abort.dispose();
+      destroyCommandStreams(child);
+      execTrace.emitForegroundCompletion(cmd, args);
+      return true;
+    }
+    function fail(error: AppError): void {
+      if (finish()) reject(error);
+    }
+    function settle(code: number | null): void {
+      if (!finish()) return;
+      const finalExitCode = code ?? 1;
+      if (!abort.didAbort && didTimeout && timeoutMs) {
+        reject(createTimeoutError(executable, cmd, args, timeoutMs, finalExitCode, stdout, stderr));
+        return;
+      }
+      const failure = commandCloseFailure(
+        abort,
+        executable,
+        cmd,
+        args,
+        finalExitCode,
+        options.allowFailure,
+        stdout,
+        stderr,
+      );
+      if (failure) {
+        reject(failure);
+        return;
+      }
+      resolve({
+        stdout,
+        stderr,
+        exitCode: finalExitCode,
+        stdoutBuffer: stdoutChunks ? Buffer.concat(stdoutChunks) : undefined,
+      });
+    }
+    // A deadline that fires after the child exited on its own still has to settle: the
+    // group kill that would have ended the pipe holder can no longer run through a child
+    // Node already reaped.
+    const settlement = createCommandKillSettlement({
+      killProcessTree: () => killProcessTree(child, options),
+      settle,
+    });
+    const abort = watchCommandAbort(options, settlement.requestKill);
+    timeoutHandle = timeoutMs
+      ? setTimeout(() => {
+          didTimeout = true;
+          settlement.requestKill();
+        }, timeoutMs)
+      : null;
+
+    if (!options.binaryStdout) child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+
+    void writeChildStdin(child, options.stdin).catch((error: unknown) => {
+      if (abort.didAbort || didTimeout) return;
+      if (isEpipeError(error)) return;
+      fail(createStdinError(executable, cmd, args, error));
+      killProcessTree(child, options);
+    });
+
+    child.stdout.on('data', (chunk) => {
+      if (options.binaryStdout) {
+        stdoutChunks?.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        return;
+      }
+      const text = String(chunk);
+      stdout += text;
+      options.onStdoutChunk?.(text);
+    });
+
+    child.stderr.on('data', (chunk) => {
+      const text = String(chunk);
+      stderr += text;
+      options.onStderrChunk?.(text);
+    });
+
+    child.on('error', (err) => {
+      fail(spawnRejectionError(abort, executable, cmd, args, err));
+    });
+
+    child.once('exit', settlement.recordExit);
+    child.once('close', settle);
+  });
+}
+
+export async function whichCmd(cmd: string): Promise<boolean> {
+  const candidate = normalizeExecutableLookup(cmd);
+  if (!candidate) return false;
+
+  if (path.isAbsolute(candidate)) {
+    return isExecutablePath(candidate);
+  }
+
+  const pathValue = process.env.PATH;
+  if (!pathValue) return false;
+  const pathExtensions = resolvePathExtensions();
+  for (const directory of pathValue.split(path.delimiter)) {
+    const trimmedDirectory = directory.trim();
+    if (!trimmedDirectory) continue;
+    for (const entry of resolveExecutableCandidates(candidate, pathExtensions)) {
+      if (await isExecutablePath(path.join(trimmedDirectory, entry))) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+export async function resolveExecutableOverridePath(
+  rawPath: string | undefined,
+  envName: string,
+): Promise<string | undefined> {
+  const candidate = normalizeOverridePath(rawPath, envName, 'executable');
+  if (!candidate) return undefined;
+  if (!(await isExecutablePath(candidate))) {
+    throw new AppError(
+      'TOOL_MISSING',
+      `${envName} points to a missing or non-executable file: ${candidate}`,
+      { envName, path: candidate },
+    );
+  }
+  return candidate;
+}
+
+export async function resolveFileOverridePath(
+  rawPath: string | undefined,
+  envName: string,
+): Promise<string | undefined> {
+  const candidate = normalizeOverridePath(rawPath, envName, 'file');
+  if (!candidate) return undefined;
+  if (!(await isFilePath(candidate))) {
+    throw new AppError(
+      'TOOL_MISSING',
+      `${envName} points to a missing or non-file path: ${candidate}`,
+      { envName, path: candidate },
+    );
+  }
+  return candidate;
+}
+
+// fallow-ignore-next-line complexity
+export function runCmdSync(
+  cmd: string,
+  args: readonly string[],
+  options: ExecOptions = {},
+): ExecResult {
+  const executable = normalizeExecutableCommand(cmd);
+  const result = spawnSync(executable, args, {
+    cwd: options.cwd,
+    env: resolveSpawnEnv(options.env),
+    stdio: ['pipe', 'pipe', 'pipe'],
+    encoding: options.binaryStdout ? undefined : 'utf8',
+    input: options.stdin,
+    timeout: normalizeTimeoutMs(options.timeoutMs),
+    windowsHide: true,
+    shell: false,
+    ...(options.maxBuffer !== undefined ? { maxBuffer: options.maxBuffer } : {}),
+  });
+
+  if (result.error) {
+    const code = (result.error as NodeJS.ErrnoException).code;
+    if (code === 'ETIMEDOUT') {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `${executable} timed out after ${normalizeTimeoutMs(options.timeoutMs)}ms`,
+        {
+          cmd,
+          args,
+          timeoutMs: normalizeTimeoutMs(options.timeoutMs),
+        },
+        result.error,
+      );
+    }
+    if (code === 'ENOENT') {
+      throw createMissingToolError(executable, cmd, result.error);
+    }
+    throw createCommandFailedError(executable, cmd, args, result.error);
+  }
+
+  const stdoutBuffer = options.binaryStdout
+    ? Buffer.isBuffer(result.stdout)
+      ? result.stdout
+      : Buffer.from(result.stdout ?? '')
+    : undefined;
+  const stdout = options.binaryStdout
+    ? ''
+    : typeof result.stdout === 'string'
+      ? result.stdout
+      : (result.stdout ?? '').toString();
+  const stderr =
+    typeof result.stderr === 'string' ? result.stderr : (result.stderr ?? '').toString();
+  const exitCode = result.status ?? 1;
+
+  if (exitCode !== 0 && !options.allowFailure) {
+    throw createExitError(executable, cmd, args, exitCode, stdout, stderr);
+  }
+
+  return { stdout, stderr, exitCode, stdoutBuffer };
+}
+
+export function runCmdDetached(
+  cmd: string,
+  args: readonly string[],
+  options: ExecDetachedOptions = {},
+): number {
+  return runCmdDetachedMonitored(cmd, args, options).pid;
+}
+
+export function runCmdDetachedMonitored(
+  cmd: string,
+  args: readonly string[],
+  options: ExecDetachedOptions = {},
+): ExecDetachedProcess {
+  const executable = normalizeExecutableCommand(cmd);
+  const child = spawn(executable, args, {
+    cwd: options.cwd,
+    env: resolveSpawnEnv(options.env),
+    stdio: options.stdio ?? 'ignore',
+    detached: true,
+    windowsHide: true,
+    shell: false,
+  });
+  const pid = child.pid ?? 0;
+  const exited = new Promise<ExecDetachedExit>((resolve) => {
+    child.once('error', (err) => {
+      resolve({ pid, error: err.message });
+    });
+    child.once('exit', (code, signal) => {
+      resolve({
+        pid,
+        ...(typeof code === 'number' ? { exitCode: code } : {}),
+        ...(signal ? { signal } : {}),
+      });
+    });
+  });
+  child.unref();
+  return { pid, exited };
+}
+
+export function runCmdBackground(
+  cmd: string,
+  args: readonly string[],
+  options: ExecBackgroundOptions = {},
+): ExecBackgroundResult {
+  const executable = normalizeExecutableCommand(cmd);
+  const execTrace = createExecTraceContext();
+  const child = spawn(executable, args, {
+    cwd: options.cwd,
+    env: resolveSpawnEnv(options.env),
+    stdio: options.stdio ?? ['ignore', 'pipe', 'pipe'],
+    detached: options.detached,
+    windowsHide: true,
+    shell: false,
+  });
+  execTrace.emitBackgroundSpawn(cmd, args);
+
+  let stdout = '';
+  let stderr = '';
+  const captureOutput = options.captureOutput ?? true;
+
+  if (captureOutput) {
+    child.stdout?.setEncoding('utf8');
+    child.stderr?.setEncoding('utf8');
+
+    child.stdout?.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr?.on('data', (chunk) => {
+      stderr += chunk;
+    });
+  }
+
+  const wait = new Promise<ExecResult>((resolve, reject) => {
+    let settled = false;
+    function finish(event: 'error' | 'exit'): boolean {
+      if (settled) return false;
+      settled = true;
+      abort.dispose();
+      destroyCommandStreams(child);
+      execTrace.emitBackgroundCompletion(cmd, args, event);
+      return true;
+    }
+    function settle(code: number | null): void {
+      if (!finish('exit')) return;
+      const finalExitCode = code ?? 1;
+      const failure = commandCloseFailure(
+        abort,
+        executable,
+        cmd,
+        args,
+        finalExitCode,
+        options.allowFailure,
+        stdout,
+        stderr,
+      );
+      if (failure) {
+        reject(failure);
+        return;
+      }
+      resolve({ stdout, stderr, exitCode: finalExitCode });
+    }
+    const settlement = createCommandKillSettlement({
+      killProcessTree: () => killProcessTree(child, options),
+      settle,
+    });
+    const abort = watchCommandAbort(options, settlement.requestKill);
+    child.on('error', (err) => {
+      if (finish('error')) reject(spawnRejectionError(abort, executable, cmd, args, err));
+    });
+    child.once('exit', settlement.recordExit);
+    child.once('close', settle);
+  });
+
+  return { child, wait };
+}
+
+type ExecTraceContext = {
+  emitBackgroundCompletion: (cmd: string, args: readonly string[], event: 'error' | 'exit') => void;
+  emitBackgroundSpawn: (cmd: string, args: readonly string[]) => void;
+  emitForegroundCompletion: (cmd: string, args: readonly string[]) => void;
+};
+
+function createExecTraceContext(): ExecTraceContext {
+  const diagnosticsMeta = getDiagnosticsMeta();
+  const diagnosticsDebugEnabled = diagnosticsMeta.debug === true;
+  const envTraceEnabled = parseBooleanLiteral(process.env.AGENT_DEVICE_EXEC_TRACE ?? '') === true;
+  if (!diagnosticsDebugEnabled && !envTraceEnabled) {
+    return createDisabledExecTraceContext();
+  }
+  if (envTraceEnabled && diagnosticsMeta.flushOnSuccess !== true) {
+    updateDiagnosticsScope({ flushOnSuccess: true });
+  }
+  const startedAtMs = Date.now();
+  let completionEmitted = false;
+  return {
+    emitForegroundCompletion: (cmd, args) => {
+      if (completionEmitted) return;
+      completionEmitted = true;
+      emitExecCommandDiagnostic({
+        cmd,
+        args,
+        startedAtMs,
+      });
+    },
+    emitBackgroundSpawn: (cmd, args) => {
+      emitExecCommandDiagnostic({
+        cmd,
+        args,
+        data: { event: 'spawn' },
+      });
+    },
+    emitBackgroundCompletion: (cmd, args, event) => {
+      if (completionEmitted) return;
+      completionEmitted = true;
+      emitExecCommandDiagnostic({
+        cmd,
+        args,
+        startedAtMs,
+        data: { event },
+      });
+    },
+  };
+}
+
+function createDisabledExecTraceContext(): ExecTraceContext {
+  return {
+    emitForegroundCompletion: () => {},
+    emitBackgroundSpawn: () => {},
+    emitBackgroundCompletion: () => {},
+  };
+}
+
+function emitExecCommandDiagnostic(params: {
+  cmd: string;
+  args: readonly string[];
+  startedAtMs?: number;
+  data?: Record<string, unknown>;
+}): void {
+  const argsPrefix = params.args.slice(0, EXEC_DIAGNOSTIC_ARG_LIMIT);
+  emitDiagnostic({
+    level: 'debug',
+    phase: 'exec_command',
+    durationMs:
+      params.startedAtMs === undefined ? undefined : Math.max(0, Date.now() - params.startedAtMs),
+    data: {
+      command: params.cmd,
+      argsPrefix,
+      ...(params.args.length > argsPrefix.length
+        ? { omittedArgCount: params.args.length - argsPrefix.length }
+        : {}),
+      ...(params.data ?? {}),
+    },
+  });
+}
+
+function normalizeExecutableCommand(cmd: string): string {
+  const candidate = normalizeExecutableLookup(cmd);
+  if (!candidate) {
+    throw new AppError('INVALID_ARGS', `Invalid executable command: ${JSON.stringify(cmd)}`, {
+      cmd,
+      hint: 'Use a bare command name from PATH or an absolute executable path.',
+    });
+  }
+  return candidate;
+}
+
+function createSpawnError(
+  executable: string,
+  cmd: string,
+  args: readonly string[],
+  err: Error,
+): AppError {
+  const code = (err as NodeJS.ErrnoException).code;
+  if (code === 'ENOENT') {
+    return createMissingToolError(executable, cmd, err);
+  }
+  return createCommandFailedError(executable, cmd, args, err);
+}
+
+function createMissingToolError(executable: string, cmd: string, cause: Error): AppError {
+  return new AppError('TOOL_MISSING', `${executable} not found in PATH`, { cmd }, cause);
+}
+
+function createCommandFailedError(
+  executable: string,
+  cmd: string,
+  args: readonly string[],
+  cause: Error,
+): AppError {
+  return new AppError('COMMAND_FAILED', `Failed to run ${executable}`, { cmd, args }, cause);
+}
+
+function createStdinError(
+  executable: string,
+  cmd: string,
+  args: readonly string[],
+  cause: unknown,
+): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `Failed to write stdin for ${executable}`,
+    { cmd, args },
+    cause instanceof Error ? cause : undefined,
+  );
+}
+
+function createCommandCanceledError(
+  executable: string,
+  cmd: string,
+  args: readonly string[],
+): AppError {
+  return createRequestCanceledError({ cmd, args, executable });
+}
+
+function createTimeoutError(
+  executable: string,
+  cmd: string,
+  args: readonly string[],
+  timeoutMs: number,
+  exitCode: number,
+  stdout: string,
+  stderr: string,
+): AppError {
+  // exec-guard-allow: deliberately no processExitError — "timed out after Nms"
+  // beats whatever partial stderr the killed process left behind.
+  return new AppError('COMMAND_FAILED', `${executable} timed out after ${timeoutMs}ms`, {
+    cmd,
+    args,
+    stdout,
+    stderr,
+    exitCode,
+    timeoutMs,
+  });
+}
+
+/**
+ * True only for the COMMAND_FAILED error this module raises when it kills a command at
+ * its own `timeoutMs`. Callers classify with this rather than matching the message text,
+ * so a command whose own output says "timed out" is not mistaken for one exec killed.
+ */
+export function isCommandTimeoutError(error: unknown): error is AppError {
+  return (
+    error instanceof AppError &&
+    error.code === 'COMMAND_FAILED' &&
+    typeof error.details?.timeoutMs === 'number'
+  );
+}
+
+function createExitError(
+  executable: string,
+  cmd: string,
+  args: readonly string[],
+  exitCode: number,
+  stdout: string,
+  stderr: string,
+): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `${executable} exited with code ${exitCode}`,
+    execFailureDetails({ stdout, stderr, exitCode }, { cmd, args }),
+  );
+}
+
+// xcrun itself emits this line, including when the caller supplies no command metadata.
+const XCRUN_TOOL_NOT_FOUND_STDERR = /xcrun: error: unable to find utility "([^"]+)"/;
+
+function xcrunToolNotFoundDetails(stderr: string): Record<string, unknown> {
+  const tool = XCRUN_TOOL_NOT_FOUND_STDERR.exec(stderr)?.[1];
+  if (!tool) return {};
+  const developerDir = commandDeveloperDir();
+  const source = developerDir
+    ? `DEVELOPER_DIR ${developerDir}`
+    : 'the developer dir selected by xcode-select (see xcode-select -p)';
+  return {
+    reason: 'xcrun-tool-not-found',
+    developerDir: developerDir ?? null,
+    hint: `xcrun could not find ${tool} in ${source}. Export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer (or your Xcode's path) before running agent-device, or run sudo xcode-select -s /Applications/Xcode.app.`,
+  };
+}
+
+/**
+ * Raises COMMAND_FAILED for a non-zero result, preserving stderr for normalizeError.
+ * Passes successful results through unchanged and evaluates functional `extra` only on failure.
+ */
+export function requireExecSuccess<
+  R extends Pick<ExecResult, 'stdout' | 'stderr'> & Readonly<{ exitCode: number | null }>,
+>(
+  result: R,
+  message: string,
+  extra?: Record<string, unknown> | ((result: R) => Record<string, unknown>),
+): R {
+  if (result.exitCode === 0) return result;
+  throw new AppError(
+    'COMMAND_FAILED',
+    message,
+    execFailureDetails(result, typeof extra === 'function' ? extra(result) : extra),
+  );
+}
+
+/**
+ * Exit-failure details for normalizeError, including null exit codes from signalled processes.
+ */
+export function execFailureDetails(
+  result: Pick<ExecResult, 'stdout' | 'stderr'> & Readonly<{ exitCode: number | null }>,
+  extra?: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    exitCode: result.exitCode,
+    processExitError: true,
+    ...extra,
+    // Last: a missing tool makes a caller's hint about the device or app moot.
+    ...xcrunToolNotFoundDetails(result.stderr),
+  };
+}
+
+type CommandAbort = { readonly didAbort: boolean };
+
+function spawnRejectionError(
+  abort: CommandAbort,
+  executable: string,
+  cmd: string,
+  args: readonly string[],
+  err: Error,
+): AppError {
+  return abort.didAbort
+    ? createCommandCanceledError(executable, cmd, args)
+    : createSpawnError(executable, cmd, args, err);
+}
+
+function commandCloseFailure(
+  abort: CommandAbort,
+  executable: string,
+  cmd: string,
+  args: readonly string[],
+  exitCode: number,
+  allowFailure: boolean | undefined,
+  stdout: string,
+  stderr: string,
+): AppError | null {
+  if (abort.didAbort) return createCommandCanceledError(executable, cmd, args);
+  if (exitCode !== 0 && !allowFailure) {
+    return createExitError(executable, cmd, args, exitCode, stdout, stderr);
+  }
+  return null;
+}
+
+function normalizeOverridePath(
+  rawPath: string | undefined,
+  envName: string,
+  kind: 'executable' | 'file',
+): string | undefined {
+  const candidate = rawPath?.trim();
+  if (!candidate) return undefined;
+  if (!path.isAbsolute(candidate) || candidate.includes('\0')) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `${envName} must be an absolute ${kind} path, not ${JSON.stringify(rawPath)}`,
+      { envName, path: rawPath },
+    );
+  }
+  return candidate;
+}
+
+function normalizeExecutableLookup(cmd: string): string | null {
+  const candidate = cmd.trim();
+  if (!candidate || candidate.includes('\0')) return null;
+  if (path.isAbsolute(candidate)) return candidate;
+  if (candidate.includes('/') || candidate.includes('\\')) {
+    return null;
+  }
+  return BARE_COMMAND_RE.test(candidate) ? candidate : null;
+}
+
+function resolvePathExtensions(): string[] {
+  if (process.platform !== 'win32') return [''];
+  const rawPathExt = process.env.PATHEXT;
+  if (!rawPathExt) return WINDOWS_PATH_EXTENSIONS;
+  const extensions = rawPathExt
+    .split(';')
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => value.length > 0);
+  return extensions.length > 0 ? extensions : WINDOWS_PATH_EXTENSIONS;
+}
+
+function resolveExecutableCandidates(cmd: string, pathExtensions: string[]): string[] {
+  if (process.platform !== 'win32') return [cmd];
+  const lowered = cmd.toLowerCase();
+  if (pathExtensions.some((extension) => lowered.endsWith(extension))) {
+    return [cmd];
+  }
+  return pathExtensions.map((extension) => `${cmd}${extension}`);
+}
+
+export async function isExecutablePath(filePath: string): Promise<boolean> {
+  try {
+    if (!(await isFilePath(filePath))) return false;
+    await access(filePath, process.platform === 'win32' ? constants.F_OK : constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function isFilePath(filePath: string): Promise<boolean> {
+  try {
+    const fileStat = await stat(filePath);
+    return fileStat.isFile();
+  } catch {
+    return false;
+  }
+}
+
+function normalizeTimeoutMs(value: number | undefined): number | undefined {
+  if (!Number.isFinite(value)) return undefined;
+  const timeout = Math.floor(value as number);
+  if (timeout <= 0) return undefined;
+  return timeout;
+}
+
+/**
+ * A killed command settles when its direct child exits: descendants can keep inherited pipes
+ * open indefinitely. Both kill/exit orderings must settle once without waiting for `close`.
+ */
+type CommandKillSettlement = {
+  /** Signals the command's process tree, then settles the command if its child is gone. */
+  readonly requestKill: () => void;
+  /** Records the child's exit, then settles the command if a kill was already requested. */
+  readonly recordExit: (code: number | null) => void;
+};
+
+function createCommandKillSettlement(input: {
+  readonly killProcessTree: () => void;
+  readonly settle: (exitCode: number | null) => void;
+}): CommandKillSettlement {
+  let killRequested = false;
+  let exited = false;
+  let exitCode: number | null = null;
+  const settleIfKilledAndGone = (): void => {
+    if (killRequested && exited) input.settle(exitCode);
+  };
+  return {
+    requestKill: () => {
+      killRequested = true;
+      input.killProcessTree();
+      settleIfKilledAndGone();
+    },
+    recordExit: (code) => {
+      exited = true;
+      exitCode = code ?? 1;
+      settleIfKilledAndGone();
+    },
+  };
+}
+
+function watchCommandAbort(
+  options: Pick<ExecOptions, 'detached' | 'signal'>,
+  onKill: () => void,
+): { readonly didAbort: boolean; dispose: () => void } {
+  let didAbort = false;
+  const onAbort = () => {
+    didAbort = true;
+    onKill();
+  };
+  if (options.signal?.aborted) {
+    onAbort();
+  } else {
+    options.signal?.addEventListener('abort', onAbort, { once: true });
+  }
+  return {
+    get didAbort() {
+      return didAbort;
+    },
+    dispose: () => {
+      options.signal?.removeEventListener('abort', onAbort);
+    },
+  };
+}
+
+/**
+ * Best-effort process-group signalling, shared by host-kit callers. This lives below
+ * host-process.ts to avoid an import cycle. Only positive integer pids are accepted:
+ * zero targets this process's group, and negative values can target unrelated processes.
+ */
+export function signalProcessGroupBestEffort(pid: number, signal: NodeJS.Signals): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(-pid, signal);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Surviving descendants keep a detached process group reserved after its direct child exits.
+function killProcessTree(
+  child: ChildProcess,
+  options: Pick<ExecOptions, 'detached' | 'kill'>,
+): void {
+  if (!options.kill) {
+    signalProcessTree(child, options.detached, 'SIGKILL');
+    return;
+  }
+  // Escalation bounds graceful cleanup; the unref timer cannot keep a worker alive.
+  signalProcessTree(child, options.detached, options.kill.signal);
+  const escalation = setTimeout(
+    () => signalProcessTree(child, options.detached, 'SIGKILL'),
+    options.kill.graceMs,
+  );
+  escalation.unref();
+  child.once('exit', () => clearTimeout(escalation));
+}
+
+function signalProcessTree(
+  child: ChildProcess,
+  detached: boolean | undefined,
+  signal: NodeJS.Signals,
+): void {
+  if (detached && child.pid && process.platform !== 'win32') {
+    signalProcessGroupBestEffort(child.pid, signal);
+    return;
+  }
+  // A reaped, non-detached child can have its pid reassigned to an unrelated process.
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  child.kill(signal);
+}
+
+/**
+ * A kill that cannot reach an inherited-pipe holder must at least stop this process
+ * from holding the other end of those pipes open after it has settled.
+ */
+function destroyCommandStreams(child: ChildProcess): void {
+  child.stdin?.destroy();
+  child.stdout?.destroy();
+  child.stderr?.destroy();
+}
+
+async function writeChildStdin(
+  child: ChildProcess,
+  stdin: string | Buffer | undefined,
+): Promise<void> {
+  if (!child.stdin) return;
+  if (stdin === undefined) {
+    child.stdin?.end();
+    return;
+  }
+  await pipeline(Readable.from([stdin]), child.stdin);
+}
+
+function isEpipeError(error: unknown): boolean {
+  return (
+    error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'EPIPE'
+  );
+}

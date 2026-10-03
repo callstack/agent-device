@@ -509,7 +509,7 @@ function countPassingChecks(checks) {
 }
 
 function safeName(name) {
-  return basename(name).replace(/[^a-z0-9_.-]+/gi, '-');
+  return basename(name).replaceAll(/[^a-z0-9_.-]+/gi, '-');
 }
 
 function parsePositiveInteger(value, label) {

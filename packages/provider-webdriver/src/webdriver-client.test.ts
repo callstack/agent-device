@@ -106,6 +106,29 @@ test('installApp aborts an in-flight provider request when its binding is cancel
   }
 });
 
+// #2509: a page-source read that outlived its request was dropped by the client
+// while Appium kept walking the tree server-side. Providers serialize commands
+// per session, so every later request queued behind an orphan nobody was
+// waiting for. Cancellation must reach `/source` the way it reaches `/install_app`.
+test('source aborts an in-flight provider request when its binding is cancelled', async () => {
+  const controller = new AbortController();
+  let requestSignal: AbortSignal | undefined;
+  const client = await connectedClient(
+    async (_input, init) =>
+      await new Promise<Response>((_resolve, reject) => {
+        requestSignal = init?.signal ?? undefined;
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason as Error));
+      }),
+  );
+
+  const pending = client.source({ signal: controller.signal });
+  await Promise.resolve();
+  controller.abort(new Error('request cancelled'));
+
+  await assert.rejects(pending, /request cancelled/);
+  assert.equal(requestSignal?.aborted, true);
+});
+
 // #1774: `POST /session` is the one non-idempotent request, and a retry after a
 // failed create is a second billed device session. A 5xx that the transport
 // would retry on any other route must reach the caller unretried here.

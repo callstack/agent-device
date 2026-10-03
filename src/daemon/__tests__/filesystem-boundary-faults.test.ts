@@ -5,9 +5,9 @@ import { afterEach, vi } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { acquireDeviceClaim } from '../device-claims.ts';
-import { canonicalLocalDeviceKey } from '../device-claim-paths.ts';
-import { createDurableCaptureResourceStore } from '../durable-capture-resource-store.ts';
+import { acquireDeviceClaim } from '../device/device-claims.ts';
+import { canonicalLocalDeviceKey } from '../device/device-claim-paths.ts';
+import { createDurableCaptureResourceStore } from '@agent-device/capture-kit/durable-capture';
 import { writeDaemonShutdownReport } from '../daemon-shutdown-report.ts';
 import { SessionScriptWriter, type SessionScriptWriteResult } from '../session-script-writer.ts';
 import { SessionStore } from '../session-store.ts';
@@ -21,7 +21,7 @@ import {
   type FilesystemBoundaryFixture,
 } from '../../__tests__/test-utils/filesystem-boundary-faults.ts';
 
-vi.mock('../../utils/host-process.ts', async (importOriginal) =>
+vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
   (await import('../../__tests__/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(
     importOriginal,
   ),
@@ -138,7 +138,7 @@ function createShutdownReportFixture(root: string): FilesystemBoundaryFixture {
     run: async () =>
       writeDaemonShutdownReport(root, {
         providerReleases: { released: [], pending: [] },
-        claims: { released: [], orphaned: [], superseded: [] },
+        claims: { released: [], orphaned: [], superseded: [], unattributable: [] },
       }),
     expected: 'return',
   };

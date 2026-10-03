@@ -4,51 +4,169 @@ import os from 'node:os';
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import {
-  runCmdSync,
-  isEnvTruthy,
+  AppError,
+  createRequestCanceledError,
+  isRequestCanceledError,
+} from '@agent-device/kernel/errors';
+import {
+  commandDeveloperDir,
   createTtlMemo,
+  Deadline,
+  isCommandTimeoutError,
+  isEnvTruthy,
   findProjectRoot,
   readVersion,
-  type TtlMemo,
+  runCmdSync,
 } from './host.ts';
+import type { TtlMemo } from '@agent-device/kernel/ttl-memo';
 import {
+  COLD_TOOLCHAIN_PROBE_TIMEOUT_MS,
   resolveRunnerBuildDestinationFamily,
   resolveRunnerDerivedBaseName,
   resolveRunnerPlatformName,
   resolveRunnerSdkName,
 } from './apple-runner-platform.ts';
-import { resolveAppleRunnerSourceRoot } from './runner-source.ts';
+import { computeRunnerSourceFingerprint } from './runner-source.ts';
 
 const DEFAULT_IOS_RUNNER_APP_BUNDLE_ID = 'com.callstack.agentdevice.runner';
 const RUNNER_DERIVED_ROOT = path.join(os.homedir(), '.agent-device', 'apple-runner');
 export const RUNNER_CACHE_METADATA_FILE = '.agent-device-runner-cache.json';
-const RUNNER_CACHE_SCHEMA_VERSION = 2;
+const RUNNER_CACHE_SCHEMA_VERSION = 3;
+const RUNNER_CACHE_METADATA_VALUE_MAX_LENGTH = 300;
+
+/**
+ * Ceiling on the wall clock the whole toolchain fingerprint may spend, across all three
+ * probes and their retries, when the owning phase carries no shorter budget: one stalled
+ * probe, its warm retry, and the two probes still to run (#2422).
+ */
+const TOOLCHAIN_FINGERPRINT_BUDGET_MS = 45_000;
+const TOOLCHAIN_PROBE_MAX_BUFFER = 128 * 1024;
+const TOOLCHAIN_PROBE_DETAIL_MAX_LENGTH = 200;
+const TOOLCHAIN_PROBE_HINT =
+  'The Apple runner cache is keyed on the toolchain version, so a cache decision cannot be made without it. Retry once the host is less loaded, or check `xcode-select -p` and `xcodebuild -version`.';
 const RUNNER_SANDBOX_BUILD_ARGS = [
   '-IDEPackageSupportDisableManifestSandbox=1',
   '-IDEPackageSupportDisablePluginExecutionSandbox=1',
   'ENABLE_USER_SCRIPT_SANDBOXING=NO',
 ] as const;
-const RUNNER_RUNTIME_SWIFT_FLAGS = '$(inherited) -disable-sandbox';
-const RUNNER_UNIT_TEST_SWIFT_FLAGS =
-  '$(inherited) -disable-sandbox -D AGENT_DEVICE_RUNNER_UNIT_TESTS';
+/**
+ * The isolation-scan canary compiles in every runner build, whether a build came from
+ * `scripts/build-xcuitest-apple.sh` or from `ensureXctestrunArtifact`, so the metadata's
+ * recorded Swift flags describe what the compiler actually received on both paths.
+ */
+const RUNNER_RUNTIME_SWIFT_FLAGS =
+  '$(inherited) -disable-sandbox -D AGENT_DEVICE_RUNNER_ISOLATION_CANARY';
+const RUNNER_UNIT_TEST_SWIFT_FLAGS = `${RUNNER_RUNTIME_SWIFT_FLAGS} -D AGENT_DEVICE_RUNNER_UNIT_TESTS`;
 
-// Lazy: createTtlMemo is a host capability, and module evaluation happens
-// before the composition root binds the host.
-let lazyAppleToolFingerprintCache: TtlMemo<string, string> | undefined;
-function appleToolFingerprintCache(): TtlMemo<string, string> {
-  lazyAppleToolFingerprintCache ??= createTtlMemo<string, string>();
-  return lazyAppleToolFingerprintCache;
-}
-
-export type RunnerXctestrunCacheMetadata = {
-  schemaVersion: number;
-  packageVersion: string;
-  runnerSourceFingerprint: string;
+/** Toolchain half of the runner cache key. Every field is a probed value. */
+export type RunnerToolchainFingerprint = {
   xcodeVersion: string;
   xcodeBuildVersion: string;
   sdkName: string;
   sdkVersion: string;
   sdkBuildVersion: string;
+};
+
+type ToolchainProbeFailure = {
+  probe: string;
+  reason: 'probe_error' | 'nonzero_exit' | 'empty_output' | 'unparsable_output';
+  detail: string;
+};
+
+/**
+ * Everything one runner phase may spend: the single clock every step of the phase reads,
+ * and the owning request's cancellation. Created once, where the phase begins, and handed
+ * on as this object — no step below receives a timeout number it could open a second phase
+ * with, which is how a cold probe stall and the build each spent the same budget (#2422).
+ */
+export type RunnerPhaseBudget = Readonly<{
+  /** The phase's clock; absent when its owner carries no budget at all. */
+  deadline?: Deadline;
+  /** The owning request's cancellation signal, if it carries one. */
+  signal?: AbortSignal;
+}>;
+
+/**
+ * Opens a phase from the numeric timeout its public option carries: the one place a number
+ * becomes a budget, so every boundary below it takes the {@link RunnerPhaseBudget} instead.
+ */
+export function createRunnerPhaseBudget(
+  timeoutMs: number | undefined,
+  signal: AbortSignal | undefined,
+): RunnerPhaseBudget {
+  const bounded = timeoutMs !== undefined && Number.isFinite(timeoutMs);
+  return {
+    deadline: bounded ? Deadline.fromTimeoutMs(Math.max(0, timeoutMs)) : undefined,
+    signal,
+  };
+}
+
+/**
+ * What the phase has left for its next step, or `undefined` when it carries no deadline.
+ * Throws rather than returning zero, so a spent phase fails before it spawns.
+ */
+export function requireRunnerPhaseRemainingMs(
+  budget: RunnerPhaseBudget | undefined,
+  phase: string,
+): number | undefined {
+  const deadline = budget?.deadline;
+  if (!deadline) return undefined;
+  const remainingMs = Math.floor(deadline.remainingMs());
+  if (remainingMs <= 0) throw runnerPhaseBudgetExhaustedError(phase);
+  return remainingMs;
+}
+
+/** Says the phase budget ran out, not that the step it would have run is broken. */
+function runnerPhaseBudgetExhaustedError(phase: string): AppError {
+  return new AppError('COMMAND_FAILED', 'The Apple runner budget ran out before this step began', {
+    phase,
+    reason: 'runner_phase_budget_exhausted',
+    retriable: true,
+  });
+}
+
+/**
+ * The remaining-time and cancellation view the probes consult: one per fingerprint read,
+ * so the three probes and their retries share a single budget. A phase with no deadline
+ * still gets {@link TOOLCHAIN_FINGERPRINT_BUDGET_MS} as the ceiling.
+ *
+ * `spawnSync` cannot be interrupted once it has started, so cancellation is observed
+ * between attempts; the per-attempt cap is what bounds how long that takes.
+ */
+type ToolchainProbeClock = {
+  /** Milliseconds the next attempt may block for; 0 once the budget is spent. */
+  attemptTimeoutMs(): number;
+  /** Throws the owning request's cancellation error once it has aborted. */
+  throwIfCanceled(): void;
+};
+
+function createToolchainProbeClock(budget: RunnerPhaseBudget | undefined): ToolchainProbeClock {
+  const phaseDeadline = budget?.deadline;
+  const deadline = Deadline.fromTimeoutMs(
+    Math.min(
+      TOOLCHAIN_FINGERPRINT_BUDGET_MS,
+      phaseDeadline ? phaseDeadline.remainingMs() : Number.POSITIVE_INFINITY,
+    ),
+  );
+  return {
+    attemptTimeoutMs: () =>
+      Math.min(COLD_TOOLCHAIN_PROBE_TIMEOUT_MS, Math.floor(deadline.remainingMs())),
+    throwIfCanceled: () => {
+      if (budget?.signal?.aborted) {
+        throw createRequestCanceledError({ phase: 'apple_toolchain_probe' });
+      }
+    },
+  };
+}
+
+type ProbeResult<Value> =
+  | { ok: true; value: Value }
+  | { ok: false; failure: ToolchainProbeFailure };
+
+export type RunnerXctestrunCacheMetadata = RunnerToolchainFingerprint & {
+  schemaVersion: number;
+  packageVersion: string;
+  runnerSourceFingerprint: string;
   platformName: string;
   deviceKind: DeviceInfo['kind'];
   target: NonNullable<DeviceInfo['target']>;
@@ -56,22 +174,40 @@ export type RunnerXctestrunCacheMetadata = {
   runnerBundleBuildSettings: string[];
   runnerSigningBuildSettings: string[];
   runnerPerformanceBuildSettings: string[];
+  runnerArchBuildSettings: string[];
   runnerSandboxBuildArgs: string[];
   artifacts?: RunnerXctestrunCacheArtifacts;
 };
 
 export type RunnerXctestrunCacheArtifacts = {
   xctestrunPath: string;
-  xctestrunMtimeMs: number;
   xctestrunSize: number;
-  productPaths: RunnerXctestrunCacheProductArtifact[];
+  xctestrunDigest: string;
+  productPaths: string[];
+  /** Paths are relative to the cache root the manifest was written under. */
+  entries: RunnerCacheArtifactEntry[];
 };
 
-export type RunnerXctestrunCacheProductArtifact = {
+/**
+ * One file inside a cached product bundle: its bytes hashed, its permission bits, and the
+ * size that makes an equal-size rewrite with a stale mtime visible as a digest mismatch.
+ */
+export type RunnerCacheArtifactFileEntry = {
   path: string;
-  mtimeMs: number;
   size: number;
+  mode: number;
+  digest: string;
 };
+
+/** One symlink inside a cached product bundle, recorded as its raw target string. */
+export type RunnerCacheArtifactSymlinkEntry = {
+  path: string;
+  symlink: string;
+};
+
+export type RunnerCacheArtifactEntry =
+  | RunnerCacheArtifactFileEntry
+  | RunnerCacheArtifactSymlinkEntry;
 
 function normalizeBundleId(value: string | undefined): string {
   return value?.trim() ?? '';
@@ -113,13 +249,14 @@ export const IOS_RUNNER_CONTAINER_BUNDLE_IDS: string[] = resolveRunnerContainerB
 export function resolveExpectedRunnerCacheMetadata(
   device: DeviceInfo,
   projectRoot: string = findProjectRoot(),
+  budget?: RunnerPhaseBudget,
 ): RunnerXctestrunCacheMetadata {
   const platformName = resolveRunnerPlatformName(device);
   return {
     schemaVersion: RUNNER_CACHE_SCHEMA_VERSION,
     packageVersion: readVersion(projectRoot),
     runnerSourceFingerprint: computeRunnerSourceFingerprint(projectRoot),
-    ...resolveRunnerToolchainFingerprint(platformName, device.kind),
+    ...requireRunnerToolchainFingerprint(resolveRunnerSdkName(platformName, device.kind), budget),
     platformName,
     deviceKind: device.kind,
     target: device.target ?? 'mobile',
@@ -131,58 +268,214 @@ export function resolveExpectedRunnerCacheMetadata(
       device,
     ),
     runnerPerformanceBuildSettings: resolveRunnerPerformanceBuildSettings(),
+    runnerArchBuildSettings: resolveRunnerArchBuildSettings(process.env),
     runnerSandboxBuildArgs: resolveRunnerSandboxBuildArgs(),
   };
 }
 
-function resolveRunnerToolchainFingerprint(
-  platformName: ReturnType<typeof resolveRunnerPlatformName>,
-  deviceKind: DeviceInfo['kind'],
-): {
-  xcodeVersion: string;
-  xcodeBuildVersion: string;
-  sdkName: string;
-  sdkVersion: string;
-  sdkBuildVersion: string;
-} {
-  const xcode = parseXcodeVersionOutput(runAppleToolFingerprintCommand('xcodebuild', ['-version']));
-  const sdkName = resolveRunnerSdkName(platformName, deviceKind);
+// Lazy: createTtlMemo is a host capability, and module evaluation happens
+// before the composition root binds the host. Only a complete, parsed
+// fingerprint is ever memoized, so nothing unavailable can outlive the probe
+// that could not answer. The key carries a client-chosen DEVELOPER_DIR, so an
+// entry expires once no request has used it for TOOLCHAIN_FINGERPRINT_TTL_MS:
+// a dir no client uses any more must not stay for the daemon's lifetime. A hit
+// renews the entry, so a failure report can name the Xcode a decision read for
+// at least TOOLCHAIN_FINGERPRINT_TTL_MS after that read (the default start budget).
+const TOOLCHAIN_FINGERPRINT_TTL_MS = 10 * 60_000;
+let lazyToolchainFingerprintCache: TtlMemo<string, RunnerToolchainFingerprint> | undefined;
+function toolchainFingerprintCache(): TtlMemo<string, RunnerToolchainFingerprint> {
+  lazyToolchainFingerprintCache ??= createTtlMemo<string, RunnerToolchainFingerprint>({
+    ttlMs: TOOLCHAIN_FINGERPRINT_TTL_MS,
+    scheduleExpiry: true,
+  });
+  return lazyToolchainFingerprintCache;
+}
+
+/**
+ * The toolchain half of the cache key. It also names the derived-data directory, so an
+ * unreadable toolchain fails the cache decision instead of standing in for one.
+ */
+function requireRunnerToolchainFingerprint(
+  sdkName: string,
+  budget: RunnerPhaseBudget | undefined,
+): RunnerToolchainFingerprint {
+  // Before the cache, not just before the probes: a hit must not hide a cancellation.
+  const clock = createToolchainProbeClock(budget);
+  clock.throwIfCanceled();
+  const cacheKey = toolchainFingerprintCacheKey(sdkName);
+  const cached = toolchainFingerprintCache().get(cacheKey);
+  if (cached) {
+    toolchainFingerprintCache().set(cacheKey, cached);
+    return cached;
+  }
+  const fingerprint = readRunnerToolchainFingerprint(sdkName, clock);
+  if (!fingerprint.ok) throw unavailableToolchainError(fingerprint.failures);
+  toolchainFingerprintCache().set(cacheKey, fingerprint.value);
+  return fingerprint.value;
+}
+
+/**
+ * A daemon serves clients that select different Xcodes through `DEVELOPER_DIR`, so a fingerprint
+ * read under one developer dir answers only for that dir. An empty dir means xcode-select's.
+ */
+function toolchainFingerprintCacheKey(sdkName: string): string {
+  return `${commandDeveloperDir() ?? ''}\0${sdkName}`;
+}
+
+/**
+ * The selected Xcode's version as this process's runner cache decision memoized it, for a failure
+ * report that names it; undefined when no decision has read the toolchain in the last
+ * `TOOLCHAIN_FINGERPRINT_TTL_MS`. Never probes: a report must not wait on the toolchain it
+ * describes.
+ */
+export function memoizedRunnerXcodeVersion(device: DeviceInfo): string | undefined {
+  return toolchainFingerprintCache().get(
+    toolchainFingerprintCacheKey(
+      resolveRunnerSdkName(resolveRunnerPlatformName(device), device.kind),
+    ),
+  )?.xcodeVersion;
+}
+
+function readRunnerToolchainFingerprint(
+  sdkName: string,
+  clock: ToolchainProbeClock,
+):
+  | { ok: true; value: RunnerToolchainFingerprint }
+  | { ok: false; failures: readonly ToolchainProbeFailure[] } {
+  const xcode = parseXcodeVersionOutput(runToolchainProbe('xcodebuild', ['-version'], clock));
+  const sdkVersion = runToolchainProbe('xcrun', ['--sdk', sdkName, '--show-sdk-version'], clock);
+  const sdkBuildVersion = runToolchainProbe(
+    'xcrun',
+    ['--sdk', sdkName, '--show-sdk-build-version'],
+    clock,
+  );
+  if (!xcode.ok || !sdkVersion.ok || !sdkBuildVersion.ok) {
+    return {
+      ok: false,
+      failures: [xcode, sdkVersion, sdkBuildVersion].flatMap((probe) =>
+        probe.ok ? [] : [probe.failure],
+      ),
+    };
+  }
   return {
-    xcodeVersion: xcode.version,
-    xcodeBuildVersion: xcode.buildVersion,
-    sdkName,
-    sdkVersion: runAppleToolFingerprintCommand('xcrun', ['--sdk', sdkName, '--show-sdk-version']),
-    sdkBuildVersion: runAppleToolFingerprintCommand('xcrun', [
-      '--sdk',
+    ok: true,
+    value: {
+      xcodeVersion: xcode.value.version,
+      xcodeBuildVersion: xcode.value.buildVersion,
       sdkName,
-      '--show-sdk-build-version',
-    ]),
+      sdkVersion: sdkVersion.value,
+      sdkBuildVersion: sdkBuildVersion.value,
+    },
   };
 }
 
-function runAppleToolFingerprintCommand(cmd: string, args: string[]): string {
-  const cacheKey = JSON.stringify([cmd, args]);
-  const cached = appleToolFingerprintCache().get(cacheKey);
-  if (cached !== undefined) return cached;
+function unavailableToolchainError(failures: readonly ToolchainProbeFailure[]): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    `Could not read the Xcode toolchain versions the Apple runner cache is keyed on (${failures
+      .map((failure) => `${failure.probe}: ${failure.detail}`)
+      .join('; ')})`,
+    {
+      reason: 'apple_toolchain_probe_unavailable',
+      retriable: true,
+      probes: failures,
+      hint: TOOLCHAIN_PROBE_HINT,
+    },
+  );
+}
+
+function runToolchainProbe(
+  cmd: string,
+  args: string[],
+  clock: ToolchainProbeClock,
+): ProbeResult<string> {
+  const probe = [cmd, ...args].join(' ');
+  let output: { exitCode: number; stdout: string; stderr: string };
   try {
-    const result = runCmdSync(cmd, args, {
-      allowFailure: true,
-      timeoutMs: 5_000,
-      maxBuffer: 128 * 1024,
-    });
-    const value = result.exitCode === 0 ? result.stdout.trim() || 'unknown' : 'unknown';
-    appleToolFingerprintCache().set(cacheKey, value);
-    return value;
-  } catch {
-    appleToolFingerprintCache().set(cacheKey, 'unknown');
-    return 'unknown';
+    output = runToolchainProbeCommand(cmd, args, clock);
+  } catch (error) {
+    // A cancellation or a spent budget is the caller's error, not an unreadable toolchain.
+    clock.throwIfCanceled();
+    if (isRequestCanceledError(error) || isRunnerPhaseBudgetExhaustedError(error)) throw error;
+    return probeFailure(probe, 'probe_error', error instanceof Error ? error.message : `${error}`);
+  }
+  if (output.exitCode !== 0) {
+    return probeFailure(
+      probe,
+      'nonzero_exit',
+      `exit ${output.exitCode}${output.stderr.trim() ? `: ${output.stderr.trim()}` : ''}`,
+    );
+  }
+  const value = output.stdout.trim();
+  return value ? { ok: true, value } : probeFailure(probe, 'empty_output', 'no output');
+}
+
+/**
+ * Retries exactly once, and only the exec layer's structured timeout: the stall
+ * {@link COLD_TOOLCHAIN_PROBE_TIMEOUT_MS} names clears on the next exec of the same tool,
+ * while a tool that failed on its own and said "timed out" in its output is not it.
+ */
+function runToolchainProbeCommand(
+  cmd: string,
+  args: string[],
+  clock: ToolchainProbeClock,
+): { exitCode: number; stdout: string; stderr: string } {
+  try {
+    return attemptToolchainProbe(cmd, args, clock);
+  } catch (error) {
+    if (!isCommandTimeoutError(error)) throw error;
+    return attemptToolchainProbe(cmd, args, clock);
   }
 }
 
-function parseXcodeVersionOutput(output: string): { version: string; buildVersion: string } {
-  const version = output.match(/^Xcode\s+(.+)$/m)?.[1]?.trim() || 'unknown';
-  const buildVersion = output.match(/^Build version\s+(.+)$/m)?.[1]?.trim() || 'unknown';
-  return { version, buildVersion };
+/** The one guard site: cancellation and a spent budget both throw here, before any exec. */
+function attemptToolchainProbe(
+  cmd: string,
+  args: string[],
+  clock: ToolchainProbeClock,
+): { exitCode: number; stdout: string; stderr: string } {
+  clock.throwIfCanceled();
+  const timeoutMs = clock.attemptTimeoutMs();
+  if (timeoutMs <= 0) throw runnerPhaseBudgetExhaustedError('apple_toolchain_probe');
+  return runCmdSync(cmd, args, {
+    allowFailure: true,
+    timeoutMs,
+    maxBuffer: TOOLCHAIN_PROBE_MAX_BUFFER,
+  });
+}
+
+function isRunnerPhaseBudgetExhaustedError(error: unknown): boolean {
+  return error instanceof AppError && error.details?.reason === 'runner_phase_budget_exhausted';
+}
+
+function parseXcodeVersionOutput(
+  output: ProbeResult<string>,
+): ProbeResult<{ version: string; buildVersion: string }> {
+  if (!output.ok) {
+    return output;
+  }
+  const version = output.value.match(/^Xcode\s+(.+)$/m)?.[1]?.trim();
+  const buildVersion = output.value.match(/^Build version\s+(.+)$/m)?.[1]?.trim();
+  if (!version || !buildVersion) {
+    return probeFailure(
+      'xcodebuild -version',
+      'unparsable_output',
+      `unrecognized output: ${output.value.replaceAll('\n', ' ')}`,
+    );
+  }
+  return { ok: true, value: { version, buildVersion } };
+}
+
+function probeFailure(
+  probe: string,
+  reason: ToolchainProbeFailure['reason'],
+  detail: string,
+): { ok: false; failure: ToolchainProbeFailure } {
+  const bounded =
+    detail.length > TOOLCHAIN_PROBE_DETAIL_MAX_LENGTH
+      ? `${detail.slice(0, TOOLCHAIN_PROBE_DETAIL_MAX_LENGTH)}…`
+      : detail;
+  return { ok: false, failure: { probe, reason, detail: bounded } };
 }
 
 export function resolveRunnerDerivedPath(
@@ -193,7 +486,7 @@ export function resolveRunnerDerivedPath(
   if (override) {
     return path.resolve(override);
   }
-  const cacheKey = resolveRunnerDerivedCacheKey(metadata);
+  const cacheKey = resolveRunnerCacheKey(metadata);
   const base = resolveRunnerDerivedBasePath(device);
   return path.join(base, cacheKey);
 }
@@ -202,7 +495,7 @@ function resolveRunnerDerivedBasePath(device: DeviceInfo): string {
   return path.join(RUNNER_DERIVED_ROOT, 'derived', resolveRunnerDerivedBaseName(device));
 }
 
-function resolveRunnerDerivedCacheKey(metadata: RunnerXctestrunCacheMetadata): string {
+export function resolveRunnerCacheKey(metadata: RunnerXctestrunCacheMetadata): string {
   const hash = crypto
     .createHash('sha256')
     .update(stableJsonStringify(comparableRunnerCacheMetadata(metadata)))
@@ -215,6 +508,49 @@ export function comparableRunnerCacheMetadata(
 ): Omit<RunnerXctestrunCacheMetadata, 'artifacts' | 'packageVersion'> {
   const { artifacts: _artifacts, packageVersion: _packageVersion, ...comparable } = metadata;
   return comparable;
+}
+
+export type RunnerCacheMetadataDifference = {
+  key: string;
+  expected: string;
+  actual: string;
+};
+
+export function diffComparableRunnerCacheMetadata(
+  expected: RunnerXctestrunCacheMetadata,
+  actual: RunnerXctestrunCacheMetadata,
+): RunnerCacheMetadataDifference[] {
+  const expectedComparable: Record<string, unknown> = comparableRunnerCacheMetadata(expected);
+  const actualComparable: Record<string, unknown> = comparableRunnerCacheMetadata(actual);
+  return [...new Set([...Object.keys(expectedComparable), ...Object.keys(actualComparable)])]
+    .sort((left, right) => left.localeCompare(right))
+    .flatMap((key) => {
+      const expectedValue = renderRunnerCacheMetadataValue(expectedComparable[key]);
+      const actualValue = renderRunnerCacheMetadataValue(actualComparable[key]);
+      return expectedValue === actualValue
+        ? []
+        : [
+            {
+              key,
+              expected: elideRunnerCacheMetadataValue(expectedValue),
+              actual: elideRunnerCacheMetadataValue(actualValue),
+            },
+          ];
+    });
+}
+
+function renderRunnerCacheMetadataValue(value: unknown): string {
+  return value === undefined ? '(absent)' : stableJsonStringify(value);
+}
+
+// Elides the middle: build-setting lists differ in their last entry as often as
+// their first, and a head-only cut would render both sides identically.
+function elideRunnerCacheMetadataValue(value: string): string {
+  if (value.length <= RUNNER_CACHE_METADATA_VALUE_MAX_LENGTH) {
+    return value;
+  }
+  const half = Math.floor((RUNNER_CACHE_METADATA_VALUE_MAX_LENGTH - 1) / 2);
+  return `${value.slice(0, half)}…${value.slice(-half)}`;
 }
 
 export function stableJsonStringify(value: unknown): string {
@@ -233,95 +569,6 @@ function sortJsonKeys(value: unknown): unknown {
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([key, item]) => [key, sortJsonKeys(item)]),
   );
-}
-
-type RunnerSourceFingerprintCacheEntry = {
-  fileStatsFingerprint: string;
-  sourceFingerprint: string;
-};
-
-const runnerSourceFingerprintCache = new Map<string, RunnerSourceFingerprintCacheEntry>();
-
-function computeRunnerSourceFingerprint(projectRoot: string): string {
-  const runnerRoot = resolveAppleRunnerSourceRoot(projectRoot);
-  const files = collectRunnerSourceFiles(runnerRoot);
-  const fileStatsFingerprint = computeRunnerSourceFileStatsFingerprint(runnerRoot, files);
-  const cached = runnerSourceFingerprintCache.get(runnerRoot);
-  if (cached?.fileStatsFingerprint === fileStatsFingerprint) {
-    return cached.sourceFingerprint;
-  }
-  const hash = crypto.createHash('sha256');
-  for (const file of files) {
-    const relativePath = path.relative(runnerRoot, file);
-    hash.update(relativePath);
-    hash.update('\0');
-    hash.update(fs.readFileSync(file));
-    hash.update('\0');
-  }
-  const sourceFingerprint = hash.digest('hex');
-  runnerSourceFingerprintCache.set(runnerRoot, { fileStatsFingerprint, sourceFingerprint });
-  return sourceFingerprint;
-}
-
-function computeRunnerSourceFileStatsFingerprint(
-  runnerRoot: string,
-  files: readonly string[],
-): string {
-  const hash = crypto.createHash('sha256');
-  for (const file of files) {
-    const relativePath = path.relative(runnerRoot, file);
-    const stat = fs.statSync(file);
-    hash.update(relativePath);
-    hash.update('\0');
-    hash.update(String(stat.size));
-    hash.update('\0');
-    hash.update(String(Math.trunc(stat.mtimeMs)));
-    hash.update('\0');
-  }
-  return hash.digest('hex');
-}
-
-function collectRunnerSourceFiles(root: string): string[] {
-  if (!fs.existsSync(root)) {
-    return [];
-  }
-  const files: string[] = [];
-  const stack = [root];
-  while (stack.length > 0) {
-    const current = stack.pop() as string;
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      const fullPath = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        if (entry.name === 'xcuserdata') continue;
-        stack.push(fullPath);
-        continue;
-      }
-      if (entry.isFile() && isRunnerSourceFile(entry.name, fullPath)) {
-        files.push(fullPath);
-      }
-    }
-  }
-  return files.sort((a, b) => a.localeCompare(b));
-}
-
-function isRunnerSourceFile(fileName: string, filePath: string): boolean {
-  if (fileName === 'project.pbxproj') {
-    return filePath.includes(`${path.sep}.xcodeproj${path.sep}`);
-  }
-  return [
-    '.jpg',
-    '.json',
-    '.png',
-    '.swift',
-    '.m',
-    '.h',
-    '.plist',
-    '.entitlements',
-    '.xctestplan',
-    '.xcconfig',
-    '.storyboard',
-    '.xib',
-  ].includes(path.extname(fileName));
 }
 
 export function resolveRunnerMaxConcurrentDestinationsFlag(device: DeviceInfo): string {
@@ -352,7 +599,7 @@ export function resolveRunnerSigningBuildSettings(
   const teamId = env.AGENT_DEVICE_IOS_TEAM_ID?.trim() || '';
   const configuredIdentity = env.AGENT_DEVICE_IOS_SIGNING_IDENTITY?.trim() || '';
   const profile = env.AGENT_DEVICE_IOS_PROVISIONING_PROFILE?.trim() || '';
-  const args = ['CODE_SIGN_STYLE=Automatic'];
+  const args = [`CODE_SIGN_STYLE=${profile ? 'Manual' : 'Automatic'}`];
   if (teamId) {
     args.push(`DEVELOPMENT_TEAM=${teamId}`);
   }
@@ -382,6 +629,31 @@ export function resolveRunnerPerformanceBuildSettings(): string[] {
   ];
 }
 
+/**
+ * The architecture an explicit `AGENT_DEVICE_XCUITEST_ARCHS` pins. A generic simulator
+ * destination leaves the active arch undefined and Xcode picks one per version, so the
+ * override changes the bytes on disk and must reach both the `xcodebuild` arguments and the
+ * cache identity from this one resolver.
+ */
+export function resolveRunnerArchBuildSettings(env: NodeJS.ProcessEnv = process.env): string[] {
+  const archs = env.AGENT_DEVICE_XCUITEST_ARCHS?.trim();
+  return archs ? [`ARCHS=${archs}`] : [];
+}
+
+/**
+ * Pins the build roots to the default layout under `derived`. `-derivedDataPath` alone does not:
+ * a custom or legacy build location in the user's Xcode settings still redirects products and
+ * intermediates, so the `.xctestrun` would land outside the cache directory.
+ */
+export function resolveRunnerBuildLocationSettings(derived: string): string[] {
+  const intermediates = path.join(derived, 'Build', 'Intermediates.noindex');
+  return [
+    `SYMROOT=${path.join(derived, 'Build', 'Products')}`,
+    `OBJROOT=${intermediates}`,
+    `SHARED_PRECOMPS_DIR=${path.join(intermediates, 'PrecompiledHeaders')}`,
+  ];
+}
+
 export function resolveRunnerSandboxBuildArgs(): string[] {
   return [
     ...RUNNER_SANDBOX_BUILD_ARGS,
@@ -393,4 +665,155 @@ function resolveRunnerSwiftFlags(env: NodeJS.ProcessEnv): string {
   return isEnvTruthy(env.AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS)
     ? RUNNER_UNIT_TEST_SWIFT_FLAGS
     : RUNNER_RUNTIME_SWIFT_FLAGS;
+}
+
+const BUILD_SETTINGS_HEADER = /^\s*Build settings from command line:\s*$/;
+const BUILD_SETTING_LINE = /^\s+([A-Z][A-Z0-9_]*)\s*=\s*(.*)$/;
+const RECORDED_BUILD_SETTING = /^([A-Z][A-Z0-9_]*)=(.*)$/;
+const COMMAND_LINE_INVOCATION_HEADER = /^\s*Command line invocation:\s*$/;
+
+export type RunnerBuildSettingEvidence = {
+  key: string;
+  expected: string;
+  actual: string;
+};
+
+/**
+ * What one build log says it was handed: the settings block `xcodebuild` echoed, and the
+ * invocation line that carries every argument, including the ones that are not build settings.
+ * Null when the log holds no settings block at all.
+ */
+type RunnerBuildLogRecipe = {
+  settings: Map<string, string>;
+  invocationLine: string;
+};
+
+function readRunnerBuildLogRecipe(logPath: string): RunnerBuildLogRecipe | null {
+  let contents: string;
+  try {
+    contents = fs.readFileSync(logPath, 'utf8');
+  } catch {
+    return null;
+  }
+  const lines = contents.split('\n');
+  const settings = new Map<string, string>();
+  let inBlock = false;
+  let invocationLine = '';
+  for (const [index, line] of lines.entries()) {
+    if (COMMAND_LINE_INVOCATION_HEADER.test(line)) {
+      invocationLine = lines[index + 1] ?? '';
+      continue;
+    }
+    if (BUILD_SETTINGS_HEADER.test(line)) {
+      inBlock = true;
+      continue;
+    }
+    if (!inBlock) continue;
+    const setting = BUILD_SETTING_LINE.exec(line);
+    if (!setting) break;
+    settings.set(setting[1]!, setting[2]!.trimEnd());
+  }
+  return inBlock ? { settings, invocationLine } : null;
+}
+
+/** Every argument the cache identity records as a recipe, in the `xcodebuild` spelling. */
+function recordedRunnerBuildArguments(metadata: RunnerXctestrunCacheMetadata): string[] {
+  return [
+    ...metadata.runnerBundleBuildSettings,
+    ...metadata.runnerSigningBuildSettings,
+    ...metadata.runnerPerformanceBuildSettings,
+    ...metadata.runnerArchBuildSettings,
+    ...metadata.runnerSandboxBuildArgs,
+  ];
+}
+
+function recordedRunnerBuildSettings(
+  metadata: RunnerXctestrunCacheMetadata,
+): Record<string, string> {
+  const recorded: Record<string, string> = {};
+  for (const arg of recordedRunnerBuildArguments(metadata)) {
+    const setting = RECORDED_BUILD_SETTING.exec(arg);
+    if (setting) {
+      recorded[setting[1]!] = setting[2]!;
+    }
+  }
+  return recorded;
+}
+
+/**
+ * Recorded arguments `xcodebuild` echoes on the invocation line rather than in its settings block,
+ * which is where its whole recipe shows: `-I` user-default flags such as the package-sandbox
+ * disables. Without this the settings diff would call a recipe complete while ignoring them.
+ */
+function diffRunnerInvocationFlagsAgainstBuildLog(
+  metadata: RunnerXctestrunCacheMetadata,
+  invocationLine: string,
+): RunnerBuildSettingEvidence[] {
+  return recordedRunnerBuildArguments(metadata)
+    .filter((arg) => !RECORDED_BUILD_SETTING.test(arg))
+    .filter((arg) => !invocationLine.includes(arg))
+    .map((arg) => ({
+      key: '(invocation flag)',
+      expected: arg,
+      actual: 'absent from the "Command line invocation:" line',
+    }));
+}
+
+/**
+ * The recorded settings a build log shows `xcodebuild` did not receive exactly as recorded. An
+ * empty recorded value matches an absent report, which is how `CODE_SIGN_IDENTITY=` arrives.
+ */
+function diffRunnerBuildSettingsAgainstBuildLog(
+  metadata: RunnerXctestrunCacheMetadata,
+  logPath: string,
+): RunnerBuildSettingEvidence[] {
+  const reported = readRunnerBuildLogRecipe(logPath);
+  if (!reported) {
+    return [
+      {
+        key: '(build log)',
+        expected: 'a "Build settings from command line:" block',
+        actual: 'missing or unreadable log',
+      },
+    ];
+  }
+  const settingDifferences = Object.entries(recordedRunnerBuildSettings(metadata))
+    .filter(([key, expected]) => {
+      const actual = reported.settings.get(key);
+      return actual === undefined ? expected !== '' : actual !== expected;
+    })
+    .map(([key, expected]) => ({
+      key,
+      expected,
+      actual: reported.settings.get(key) ?? '(absent)',
+    }));
+  return [
+    ...settingDifferences,
+    ...diffRunnerInvocationFlagsAgainstBuildLog(metadata, reported.invocationLine),
+  ];
+}
+
+/**
+ * Fails when a build log shows a recipe other than the one `metadata` records — a setting whose
+ * value differs or went missing, or a recorded flag absent from the invocation — so a caller that
+ * drifted from this identity cannot have its products certified under it.
+ */
+export function requireRunnerBuildSettingsMatchBuildLog(
+  metadata: RunnerXctestrunCacheMetadata,
+  logPath: string,
+): void {
+  const differences = diffRunnerBuildSettingsAgainstBuildLog(metadata, logPath);
+  if (differences.length === 0) {
+    return;
+  }
+  throw new AppError(
+    'COMMAND_FAILED',
+    'The Apple runner build did not use the settings its cache identity records',
+    {
+      reason: 'runner_build_settings_mismatch',
+      buildLogPath: logPath,
+      differences,
+      hint: 'Align the build invocation with the runner cache identity resolvers, or rebuild without the cache.',
+    },
+  );
 }

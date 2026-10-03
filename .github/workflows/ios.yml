@@ -7,7 +7,6 @@ on:
       - 'website/**'
       - 'README.md'
       - 'AGENTS.md'
-      - 'CHANGELOG.md'
       - 'CONTEXT.md'
       - 'CONTRIBUTING.md'
       - 'LICENSE'
@@ -28,12 +27,8 @@ on:
       - 'src/**/__tests__/**/*.ts'
       - 'packages/*/src/**/*.test.ts'
       - 'packages/*/src/**/__tests__/**/*.ts'
-      - 'src/platforms/android/**'
-      - 'src/platforms/harmonyos/**'
-      - 'src/platforms/linux/**'
-      - 'src/platforms/vega/**'
-      - 'src/platforms/web/**'
       - 'packages/platform-android/src/**'
+      - 'packages/capture-kit/src/snapshot/snapshot-presentation/android/**'
       - 'packages/platform-harmonyos/src/**'
       - 'packages/platform-linux/src/**'
       - 'packages/platform-vega/src/**'
@@ -102,6 +97,16 @@ jobs:
             pnpm-lock.yaml
             examples/test-app/pnpm-lock.yaml
 
+      - name: Select iOS runner XCTests
+        id: xctest-impact
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "${{ github.event_name }}" = 'pull_request' ]; then
+            git fetch origin "$BASE_SHA" --depth=1 || echo 'Base fetch failed; XCTest selection will fail open.'
+          fi
+          node --experimental-strip-types scripts/apple-ci-impact.ts xctest
+
       - name: Establish host focus canary
         id: host-focus-canary
         run: |
@@ -131,95 +136,43 @@ jobs:
           preferred-device-name: iPhone 17 Pro
 
       - name: Run targeted iOS runner XCTest regressions
+        id: ios-xctest
+        if: steps.xctest-impact.outputs.run != 'false'
         run: |
+          set -euo pipefail
           XCTESTRUN_PATH="$(find "$AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH/Build/Products" -maxdepth 1 -name '*.xctestrun' -print -quit)"
           test -n "$XCTESTRUN_PATH"
+          IOS_PR_TEST_ARGS=()
+          IOS_PR_TEST_IDS="$(node --experimental-strip-types scripts/check-xctest-selection.ts --ios-pr-tests)"
+          while IFS= read -r test_id; do
+            IOS_PR_TEST_ARGS+=("-only-testing:$test_id")
+          done <<< "$IOS_PR_TEST_IDS"
+          test "${#IOS_PR_TEST_ARGS[@]}" -gt 0
           xcodebuild test-without-building \
             -xctestrun "$XCTESTRUN_PATH" \
             -destination "platform=iOS Simulator,id=${{ steps.ios-simulator.outputs.simulator-udid }}" \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSinglePointerFlingFallsBackToXCTestCoordinateDragWhenPrivateSynthesisFails \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTypeWithoutResolvedInputReturnsTypedFailureBeforeDispatchingText \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testHardwareKeyboardResponderConfirmsItsOwnKeyboardFocus \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPenalizedCoordinateTapOnNonTextControlDoesNotAuthorizeBareType \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBareDelayedTypeFailsWhenTappedInputDisappearsMidCommand \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSynthesizedTextCommitProgressWalksExpectedPrefixOnly \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testEmptyReplacementWithoutResolvableTargetFailsClosed \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testTextEntryTapWitnessIsBoundToTargetIdentity \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCoordinateTapTextInputProbeSkipsPenalizedXCTestChannel \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCoordinateTextInputCandidateMustBeEnabledAndContainTheTouchPoint \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testQuerySelectorPrefersHittableMatchOverNonHittableDuplicate \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testActivateTargetSkipsForegroundAndActivatesNonForegroundApplication \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testMissingBundleCommandInvalidatesCompleteCachedTargetState \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCachedTargetInvalidationClearsProcessBoundState \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertResolutionCannotBypassRequestedDeadline \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testAlertAcceptTreatsOpenAsAffirmative \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSystemModalProbeSliceSharesAndClampsToPlanDeadline \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testDispatchRecoverySkipsBookkeepingWhileXCTestChannelOccupied \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrainForSnapshotRaw \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotTraversalIdentityPreservesSameOriginNodesWithDifferentBounds \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationPreservesCurrentWireShape \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationKeepsNestedClipGeometryCumulative \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationKeepsFramelessSemanticCarriersNonActionableAndNonClipping \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRawPresentationKeepsReportedOffscreenAndFramelessFacts \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testFixedSeedRegularPresentationMaintainsCumulativeClipInvariant \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPresentationFailureKeepsItsNamedSnapshotQualityReason \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationPublishesEffectiveRectWhileRawKeepsReportedFrame \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationOwnsBackendNeutralEligibility \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotPresentationOwnsScopeAndRelativeDepth \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPresentationRefusesAnAcquisitionCapturedForTheOtherProjection \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCaptureHintIsTheOnlyAcquisitionViewOfARequest \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularDepthFrontierSurvivesStructuralWrapperCollapse \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularDepthFrontierKeepsVisibleIndependentChildPastClippedParent \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularFoldClipsScrollOverflowReparentsAndBooksHints \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularFoldKeepsWindowCarriersButNeverHittableOutsideClip \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularFoldDropsSubPixelContentlessDecorationOnEveryBackend \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPlainViewportPolicyFoldsWithoutAncestorCursor \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPlainViewportPolicyDoesNotClipToScrollAncestor \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testEffectiveGeometryIntersectsViewportAndAncestorClip \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testEffectiveGeometryKeepsReportedOriginWhenFullyClipped \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationRoutesThroughVisibilityFold \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRegularPresentationPublishesGeometricActionabilityWithoutOcclusionOrTypeGate \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotAcquisitionDoesNotReintroduceRunnerOcclusionScan \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotScopePolicyMatchesGoldenParityTable \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testScrollContainerTypeNamesMatchElementTypeSet \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXDepthLimitedRequiresEveryFrontierResolved \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testDeepExtensionCountsMissedFrontiers \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPreferredPrivateAXBackendPlansAsPenalized \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPreferredTreeBackendPinsRegularPlanAndLeavesStructuredEvidence \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRawDiagnosticPlanCarriesOnlyBackendsThatCanServeRaw \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSnapshotBackendDeclarationsMatchCapabilityFixture \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testProjectionMismatchFailureIsStructuredAndNotAnAxFailure \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXRegularPresentationProjectsToViewportAndKeepsScrollHint \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXRawProjectionKeepsEveryAcquiredNode \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXRawProjectionAppliesRequestedTraversalDepth \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXPresentationKeepsOffscreenSubtreeExcludedWhenChildFramesAreClamped \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXGeometrylessSemanticsAreNeverActionableOrScrollContexts \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXAcquisitionDoesNotInterpretScope \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXInteractiveFiltersLoginLikeHiddenDrawer \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testDecodedPreferredBackendReachesOptionsAndApplicablePlan \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testSparsePayloadReasonMatrix \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledNeedsEnoughSamples \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledTrueWhenWindowMatches \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledFalseOnMidWindowMismatch \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledFalseOnFailedCapture \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledOnlyLooksAtTheTrailingWindow \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRunnerScreenshotStabilitySettledRejectsDegenerateRequirement \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCustomActionsRequestPinsPrivateAXBackend \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPrivateAXNodesCarryAnnotatedCustomActions \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testRequestPinnedBackendReportsItsOwnReason \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testCustomActionCoverageParsesOnlyCompletePairs \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testPartialCustomActionPassIsDisclosedAndCompleteOneIsNot \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testActionNamesAreCappedPerElementAndReported \
-            -only-testing:AgentDeviceRunnerUITests/RunnerTests/testHungCustomActionReadIsContainedAndRecovers
+            "${IOS_PR_TEST_ARGS[@]}" 2>&1 | tee /tmp/agent-device-runner-regressions.log
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const log = readFileSync("/tmp/agent-device-runner-regressions.log", "utf8");
+            if (!/\] AGENT_DEVICE_RUNNER_OPTIONAL_PROBE_WAIT_COMPLETED$/m.test(log)) {
+              throw new Error("Optional observation ended the runner test before its wait completed");
+            }
+          '
 
+      # Preflight and every step below deliberately share one AGENT_DEVICE_STATE_DIR: the prepared
+      # runner lives in the daemon this step leaves running, and a per-step state dir would rebuild it
+      # per step. That also means this daemon outlives the step and can be superseded while it lives,
+      # which used to make its 5-minute idle reap delete the metadata of the daemon then serving
+      # clients (#3087). It now removes daemon.json only when the file names its own pid and process
+      # start time, so a recycled pid cannot be mistaken for the owner, and the reap costs nothing
+      # but a daemon.log line.
       - name: Preflight iOS runner through public CLI
         run: |
           pnpm clean:daemon
           node --experimental-strip-types src/bin.ts prepare ios-runner --platform ios --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --timeout "$AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS" --json
-          pnpm clean:daemon
 
+      # The replay reuses the prepared runner in the same daemon.
       - name: Run iOS Settings replay smoke test
         run: |
           node --experimental-strip-types src/bin.ts test test/integration/replays/ios/simulator/01-settings.ad --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --retries 2 --artifacts-dir test/artifacts/replays-ios-simulator-smoke --report-junit test/artifacts/replays-ios-simulator-smoke.junit.xml
@@ -235,6 +188,19 @@ jobs:
         run: |
           echo "Fixture app source: ${{ steps.fixture-app.outputs.source }}" >> "$GITHUB_STEP_SUMMARY"
 
+      # #1584: isolated, cheap automatic guard for the #1562 class of regression (iOS silently
+      # ignoring a `gesture pan` duration). Split out of gesture-lab.ad, which stays full-tier
+      # (dispatch-only via replays-manual.yml) because its multi-touch commands are a separate,
+      # heavier concern. This is the only automatic lane this assertion runs in today.
+      # --timeout raises the per-attempt budget past the script's own 60s: it absorbs an
+      # in-replay runner rebuild (measured 48-61s build + ~40s launch) on a runner cache miss;
+      # the normal path finishes in 21-34s.
+      - name: Run gesture pan-duration smoke replay
+        run: |
+          xcrun simctl install "${{ steps.ios-simulator.outputs.simulator-udid }}" "${{ steps.fixture-app.outputs.app-path }}"
+          node --experimental-strip-types src/bin.ts test examples/test-app/replays/gesture-pan-duration.ad --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --timeout 180000 --retries 2 --artifacts-dir test/artifacts/replays-ios-gesture-pan-duration --report-junit test/artifacts/replays-ios-gesture-pan-duration.junit.xml
+          pnpm clean:daemon
+
       - name: Run fixture-backed iOS simulator E2E smoke
         env:
           AGENT_DEVICE_FIXTURE_APP_ID: ${{ steps.fixture-app.outputs.app-id }}
@@ -245,17 +211,6 @@ jobs:
         run: |
           pnpm gate build
           node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-ios-simulator-coverage.test.ts test/integration/smoke-ios-simulator.test.ts
-
-      # #1584: isolated, cheap automatic guard for the #1562 class of regression (iOS silently
-      # ignoring a `gesture pan` duration). Split out of gesture-lab.ad, which stays full-tier
-      # (dispatch-only via replays-manual.yml) because its multi-touch commands are a separate,
-      # heavier concern. This is the only automatic lane this assertion runs in today.
-      - name: Run gesture pan-duration smoke replay
-        run: |
-          xcrun simctl install "${{ steps.ios-simulator.outputs.simulator-udid }}" "${{ steps.fixture-app.outputs.app-path }}"
-          pnpm clean:daemon
-          node --experimental-strip-types src/bin.ts test examples/test-app/replays/gesture-pan-duration.ad --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --retries 2 --artifacts-dir test/artifacts/replays-ios-gesture-pan-duration --report-junit test/artifacts/replays-ios-gesture-pan-duration.junit.xml
-          pnpm clean:daemon
 
       - name: Assert simulator automation preserved host focus
         if: ${{ always() }}
@@ -272,6 +227,17 @@ jobs:
         run: |
           pnpm clean:daemon
           node --experimental-strip-types src/bin.ts test test/integration/replays/ios/device/01-physical-lifecycle.ad --udid "$IOS_UDID" --retries 2 --artifacts-dir test/artifacts/replays-ios-device-smoke --report-junit test/artifacts/replays-ios-device-smoke.junit.xml
+
+      - name: Assert iOS XCTest selection was honored
+        if: always()
+        env:
+          SELECTED: ${{ steps.xctest-impact.outputs.run }}
+          OUTCOME: ${{ steps.ios-xctest.outcome }}
+        run: |
+          if [ "$SELECTED" = 'true' ] && [ "$OUTCOME" = 'skipped' ]; then
+            echo '::error::iOS runner XCTest was selected but its step was skipped.'
+            exit 1
+          fi
 
       - name: Upload iOS artifacts
         if: always()

@@ -5,6 +5,7 @@ import type {
 } from '@agent-device/contracts/platform-runtime-host';
 import { sortAppleDevicesForSelection, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { simctlListInventoryArgs } from './core/simctl.ts';
 import {
   isSupportedAppleRuntime,
   resolveAppleOs,
@@ -19,21 +20,19 @@ type SimctlDeviceRecord = {
   deviceTypeIdentifier?: string;
 };
 
-type SimctlListDevicesPayload = {
+type SimctlListPayload = {
   devices: Record<string, SimctlDeviceRecord[]>;
+  devicetypes?: Array<{ identifier: string; name: string }>;
+  runtimes?: Array<{ identifier: string; version: string }>;
 };
 
 const BOOTED_SIMULATOR_PROBE_TIMEOUT_MS = 3_000;
 
-export function buildSimctlListArgs(simulatorSetPath: string | undefined): string[] {
-  const path = simulatorSetPath?.trim();
-  return path ? ['--set', path, 'list', 'devices', '-j'] : ['list', 'devices', '-j'];
-}
-
 export function parseSimctlAppleDevices(
-  payload: SimctlListDevicesPayload,
+  payload: SimctlListPayload,
   simulatorSetPath: string | undefined,
 ): DeviceInfo[] {
+  const describe = simulatorDescriber(payload);
   const devices: DeviceInfo[] = [];
   for (const [runtime, runtimes] of Object.entries(payload.devices)) {
     if (!isSupportedAppleRuntime(runtime)) continue;
@@ -46,13 +45,30 @@ export function parseSimctlAppleDevices(
         name: device.name,
         kind: 'simulator',
         target,
-        appleOs: resolveAppleOs(target, [device.deviceTypeIdentifier ?? '', device.name]),
+        appleOs: resolveAppleOs(target, [runtime, device.deviceTypeIdentifier ?? '', device.name]),
+        ...describe(runtime, device),
         booted: device.state === 'Booted',
         ...(simulatorSetPath ? { simulatorSetPath } : {}),
       });
     }
   }
   return devices;
+}
+
+/** Resolves a simulator's model and OS version from the device types and runtimes in the listing. */
+function simulatorDescriber(
+  payload: SimctlListPayload,
+): (runtime: string, device: SimctlDeviceRecord) => Pick<DeviceInfo, 'model' | 'osVersion'> {
+  const models = new Map(payload.devicetypes?.map((type) => [type.identifier, type.name]));
+  const osVersions = new Map(payload.runtimes?.map((entry) => [entry.identifier, entry.version]));
+  return (runtime, device) => {
+    const model = models.get(device.deviceTypeIdentifier ?? '');
+    const osVersion = osVersions.get(runtime);
+    return {
+      ...(model ? { model } : {}),
+      ...(osVersion ? { osVersion } : {}),
+    };
+  };
 }
 
 export async function listAppleSimulators(
@@ -64,14 +80,14 @@ export async function listAppleSimulators(
   const result = await host.appleTools.run(
     {
       tool: 'simctl',
-      args: buildSimctlListArgs(simulatorSetPath),
+      args: simctlListInventoryArgs(simulatorSetPath),
       ...(request.booted === true ? { timeoutMs: BOOTED_SIMULATOR_PROBE_TIMEOUT_MS } : {}),
     },
     scope.signal,
   );
   let devices: DeviceInfo[];
   try {
-    const parsed = JSON.parse(result.stdout) as SimctlListDevicesPayload;
+    const parsed = JSON.parse(result.stdout) as SimctlListPayload;
     devices = parseSimctlAppleDevices(parsed, simulatorSetPath);
   } catch (error) {
     throw new AppError('COMMAND_FAILED', 'Failed to parse simctl devices JSON', undefined, error);

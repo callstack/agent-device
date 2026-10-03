@@ -1,8 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
+import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import { enumField, requiredField, stringField } from '../command-input.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { commonInputFromFlags } from '../cli-grammar/common.ts';
 import type { CliReader } from '../cli-grammar/types.ts';
@@ -26,14 +25,10 @@ export const debugCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-export const debugCommandDefinition = defineExecutableCommand(
-  debugCommandMetadata,
-  (client, input) => client.debug.symbols(input),
-);
-
 const debugCliSchema = {
   usageOverride:
     'debug symbols --artifact <crash.ips|crash.log> (--dsym <App.dSYM> | --search-path <dir>) [--out <symbolicated>]',
+  usageFlags: [],
   listUsageOverride: 'debug',
   positionalArgs: ['symbols'],
   allowedFlags: ['artifact', 'dsym', 'searchPath', 'out'],
@@ -48,13 +43,13 @@ export const debugCliReader: CliReader = (positionals, flags) => ({
   out: flags.out,
 });
 
-const debugCommandFacet = defineCommandFacet({
+export const debugCommandFacet = defineCommandFacet({
   name: DEBUG_COMMAND_NAME,
   text: {
     summary: 'Symbolicate Apple crash artifacts',
   },
   metadata: debugCommandMetadata,
-  definition: debugCommandDefinition,
+  run: (client, input) => client.debug.symbols(input),
   cliSchema: debugCliSchema,
   cliReader: debugCliReader,
   cliOutputFormatter: debuggingCliOutputFormatters.debug,

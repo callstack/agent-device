@@ -1,8 +1,9 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { DaemonResponse, SessionState } from './types.ts';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
+import type { DaemonResponse } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   snapshotTimeoutCaptureFailed,
@@ -11,10 +12,10 @@ import {
   snapshotTimeoutEvidenceWithOverlayRefs,
   snapshotTimeoutEvidenceWithoutOverlaySource,
   type SnapshotTimeoutEvidence,
-} from '@agent-device/contracts/snapshot-timeout-evidence';
-import { isAndroidSnapshotTimeoutError } from '../snapshot/snapshot-timeout-policy.ts';
+} from './snapshot-timeout-evidence.ts';
+import { isAndroidSnapshotTimeoutError } from '@agent-device/capture-kit/snapshot-timeout-policy';
 import { contextFromFlags } from './context.ts';
-import { annotateScreenshotWithRefs } from './screenshot-overlay.ts';
+import { annotateScreenshotWithRefs } from '@agent-device/capture-kit/screenshot-overlay';
 import { screenshotExecutionFromContext } from './screenshot-runtime.ts';
 import {
   resolveBoundScreenshotRuntime,
@@ -26,9 +27,9 @@ import {
  *
  * The two things that are not daemon assembly moved out: whether a failure is the
  * accessibility-timeout shape is a policy
- * (`src/snapshot/snapshot-timeout-policy.ts`), and the published evidence shape is
- * vocabulary (`@agent-device/contracts/snapshot-timeout-evidence`, which has its own subpath so
- * it stays out of the shared capture facade's eager closure). What remains here is the ordering that
+ * (`packages/capture-kit/src/snapshot/snapshot-timeout-policy.ts`), and the published evidence shape is
+ * vocabulary (`src/daemon/snapshot-timeout-evidence.ts`, whose only consumer is this
+ * module). What remains here is the ordering that
  * genuinely needs the daemon: resolving a bound screenshot runtime, writing the artifact,
  * annotating it from the stored observation, and emitting the diagnostics.
  */

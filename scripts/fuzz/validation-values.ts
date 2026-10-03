@@ -13,7 +13,7 @@ export const SAFE_VALUES = [
   'Ünïcøde',
   '😀 emoji',
   'say "hi"',
-  'a\\b',
+  String.raw`a\b`,
   '',
 ] as const;
 

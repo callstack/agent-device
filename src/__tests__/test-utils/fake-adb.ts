@@ -5,8 +5,9 @@ import {
   type AndroidAdbExecutorOptions,
   type AndroidAdbExecutorResult,
   type AndroidAdbProvider,
-} from '../../platforms/android/adb-executor.ts';
+} from '@agent-device/platform-android/mechanics';
 import { ANDROID_EMULATOR } from './device-fixtures.ts';
+import '../../platform-runtime-android-adb-host.ts';
 
 /**
  * A scripted response for one fake adb invocation: a string is shorthand for
@@ -36,8 +37,8 @@ export type FakeAdbProviderExtras = AndroidAdbProvider extends infer P
  * production {@link withAndroidAdbProvider} scope — the same seam the daemon
  * installs per request and the provider-scenario lane exercises. Prefer this
  * over PATH-stub subprocess helpers (`withMockedAdb`): no PATH
- * mutation, no spawns, no real subprocess waits, so converted files can leave
- * SUBPROCESS_STUB_TESTS in vitest.config.ts (#1823).
+ * mutation, no spawns, no real subprocess waits, so converted files do not need a
+ * mutation exclusion in vitest.config.ts.
  *
  * The fake `exec` receives device-scoped args without a leading
  * `-s <serial>`: scoped providers are per-device, and raw `runCmd('adb', …)`

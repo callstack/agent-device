@@ -1,4 +1,5 @@
-export { buildBundleUrl, normalizeBaseUrl } from '../utils/url.ts';
+export { normalizeBaseUrl } from '../client/base-url.ts';
+export { buildBundleUrl } from '../metro/bundle-url.ts';
 export type {
   MetroBridgeDescriptor,
   MetroTunnelRequestMessage,

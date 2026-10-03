@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseReplayInput } from '../../src/compat/replay-input.ts';
+import { parseReplayInput } from '@agent-device/ad-script';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   REPLAY_COMPAT_CORPUS,

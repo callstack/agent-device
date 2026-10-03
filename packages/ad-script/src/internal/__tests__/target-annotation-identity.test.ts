@@ -14,8 +14,8 @@ import {
 // `packages/ad-script/src/internal/__tests__/target-annotation-serde.test.ts`.
 // This file covers the local-identity + ancestry-prefix matching primitives.
 // The record/replay-shared CLASSIFICATION core built on top of them
-// (`classifyTargetBindingMatch`) is engine-owned policy and stays in
-// `@agent-device/ad-replay`'s `target-identity.ts` (#1478 P5 review).
+// (`classifyTargetBindingMatch`) is shared script vocabulary and stays in
+// `@agent-device/ad-script`'s `target-annotation-classification.ts` (#1478 P5 review).
 
 // ---------------------------------------------------------------------------
 // Leaf-anchored ancestry prefix matching: root-side truncation + inserted
@@ -70,7 +70,7 @@ test('matchesLocalIdentity: with no recorded id, role+label must both match, abs
 // ---------------------------------------------------------------------------
 // Shared id demotion. `idMatchCountInTree` / `demoteNonUniqueLocalIdentity`
 // are the ONE shared uniqueness predicate behind both id-demotion sites (the
-// `target-v1` identity tuple `session-target-evidence.ts` writes at record
+// `target-v1` identity tuple `@agent-device/selectors/target-evidence` writes at record
 // time, and the selector chain `buildSelectorChainForNode` builds — see
 // `src/__tests__/selectors-build.test.ts` for that consumer's own coverage). Neither
 // consumer test exercises the pair directly; these tests pin the shared

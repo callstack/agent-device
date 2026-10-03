@@ -10,8 +10,8 @@ import { expect, test, vi } from 'vitest';
 // The probe is owned by `window-state.ts`, which answers every window question from one dumpsys
 // read; a stub aimed at the module it used to live in is a silent no-op, because the spread only
 // adds a key nothing imports and the real spawn still runs.
-vi.mock('../../platforms/android/window-state.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/android/window-state.ts')>();
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
   return {
     ...actual,
     getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),
@@ -39,13 +39,14 @@ import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { activateCompleteRefFrame } from '../ref-frame.ts';
+import { activateCompleteRefFrame, refFrameState } from '../ref-frame.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { GenericPlatformExecutionParams } from '../request-generic-dispatch.ts';
 import {
   readRequestedOrientation,
   resolveBoundOrientationRuntime,
 } from '../orientation-runtime.ts';
+import { expectRefusesUnavailableExactOwnerFact } from './runtime-binding-conformance.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { androidObservationFixture } from './android-observation-fixture.ts';
 
@@ -141,7 +142,7 @@ test('resolves one admitted binding and reports the owner-observed rotation', as
   });
 });
 
-test('falls back to the requested rotation when the owner reports nothing', async () => {
+test('keeps the requested rotation but discloses that the owner reported nothing', async () => {
   const harness = runtimeHarness();
 
   const resolved = await resolveBoundOrientationRuntime({
@@ -155,7 +156,10 @@ test('falls back to the requested rotation when the owner reports nothing', asyn
   expect(await resolved.execute(orientationExecutionParams(['portrait']))).toEqual({
     action: 'orientation',
     orientation: 'portrait',
-    message: 'Rotated to portrait',
+    confirmed: false,
+    warning:
+      'Requested portrait; the device owner reported no resulting orientation, so the rotation is unconfirmed.',
+    message: 'Rotation requested: portrait (unconfirmed)',
   });
 });
 
@@ -175,26 +179,11 @@ test('rejects an invalid rotation before inspection or binding', async () => {
 });
 
 test('rejects an unavailable exact-owner fact before binding', async () => {
-  const harness = runtimeHarness(unavailable);
-
-  const resolved = await resolveBoundOrientationRuntime({
+  await expectRefusesUnavailableExactOwnerFact({
+    command: 'orientation',
     device: testDevice,
-    positionals: ['landscape-left'],
-    inspectFacts: harness.inspectFacts,
-    bindDevice: harness.bindDevice,
+    unavailable,
   });
-
-  expect(resolved).toEqual({
-    ok: false,
-    response: {
-      ok: false,
-      error: {
-        code: 'UNSUPPORTED_OPERATION',
-        message: 'orientation is not supported on this device',
-      },
-    },
-  });
-  expect(harness.bindDevice).not.toHaveBeenCalled();
 });
 
 test('request router joins orientation admission to execution and ref invalidation', async () => {
@@ -235,7 +224,7 @@ test('request router joins orientation admission to execution and ref invalidati
       message: 'Rotated to landscape-left',
     },
   });
-  expect(session.refFrameState).toBe('expired');
+  expect(refFrameState(session)).toBe('expired');
   expect(harness.bind).toHaveBeenCalledTimes(1);
   expect(setOrientation).toHaveBeenCalledTimes(1);
 });

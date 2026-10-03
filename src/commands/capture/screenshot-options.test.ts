@@ -11,12 +11,14 @@ import {
   screenshotOptionsFromFlags,
   validateNoRetiredScreenshotMaxSize,
   validateScreenshotScale,
+  type ScreenshotRequestFlags,
 } from '@agent-device/contracts/capture';
 
 test('screenshot flag projection maps CLI flags to runtime options', () => {
   assert.deepEqual(
     screenshotOptionsFromFlags({
       overlayRefs: true,
+      screenshotCropOn: 'role=button label=Save',
       screenshotPixelDensity: 2,
       screenshotFullscreen: true,
       screenshotScale: 0.3,
@@ -25,6 +27,7 @@ test('screenshot flag projection maps CLI flags to runtime options', () => {
     }),
     {
       overlayRefs: true,
+      cropOn: 'role=button label=Save',
       pixelDensity: 2,
       fullscreen: true,
       scale: 0.3,
@@ -38,6 +41,7 @@ test('screenshot flag projection maps public options to request flags', () => {
   assert.deepEqual(
     screenshotFlagsFromOptions({
       overlayRefs: true,
+      cropOn: 'label="Network & internet"',
       pixelDensity: 3,
       fullscreen: true,
       stabilize: false,
@@ -45,6 +49,7 @@ test('screenshot flag projection maps public options to request flags', () => {
     }),
     {
       overlayRefs: true,
+      screenshotCropOn: 'label="Network & internet"',
       screenshotPixelDensity: 3,
       screenshotFullscreen: true,
       screenshotNoStabilize: true,
@@ -84,7 +89,7 @@ test('retired max-size inputs are refused with migration guidance', () => {
 
 test('screenshot script flags use the shared recorded flag contract', () => {
   const parts: string[] = [];
-  const flags = {};
+  const flags: Partial<ScreenshotRequestFlags> = {};
 
   let result = readScreenshotScriptFlag({ args: ['--full'], index: 0, flags });
   assert.deepEqual(result, { handled: true, nextIndex: 0 });
@@ -100,6 +105,17 @@ test('screenshot script flags use the shared recorded flag contract', () => {
   assert.deepEqual(result, { handled: true, nextIndex: 0 });
   result = readScreenshotScriptFlag({ args: ['--pixel-density', '3'], index: 0, flags });
   assert.deepEqual(result, { handled: true, nextIndex: 1 });
+  result = readScreenshotScriptFlag({
+    args: ['--crop-on', 'role=cell label=General || role=button label=General'],
+    index: 0,
+    flags,
+  });
+  assert.deepEqual(result, { handled: true, nextIndex: 1 });
+  assert.equal(flags.screenshotCropOn, 'role=cell label=General || role=button label=General');
+  assert.throws(() => readScreenshotScriptFlag({ args: ['--crop-on'], index: 0, flags: {} }), {
+    code: 'INVALID_ARGS',
+    message: /requires a selector expression/,
+  });
 
   appendScreenshotScriptFlags(parts, flags);
 
@@ -113,6 +129,7 @@ test('screenshot script flags use the shared recorded flag contract', () => {
     '--normalize-status-bar',
   ]);
   assert.deepEqual(SCREENSHOT_ACTION_FLAG_KEYS, [
+    'screenshotCropOn',
     'screenshotPixelDensity',
     'screenshotFullscreen',
     'screenshotScale',
@@ -126,6 +143,7 @@ test('screenshot script flags use the shared recorded flag contract', () => {
   assert.deepEqual(SCREENSHOT_COMMAND_FLAG_KEYS, [
     'out',
     'overlayRefs',
+    'screenshotCropOn',
     'screenshotPixelDensity',
     'screenshotFullscreen',
     'screenshotScale',

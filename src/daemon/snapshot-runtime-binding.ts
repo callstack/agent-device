@@ -11,28 +11,32 @@ import type {
 } from '@agent-device/contracts/snapshot-runtime';
 import { buildIosOpenCommandHint } from './ios-app-session-hint.ts';
 import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
-import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
+import {
+  ensureBoundDeviceReady,
+  type BindDeviceRuntime,
+  type InspectDeviceRuntimeFacts,
+} from './request-runtime-binding.ts';
+import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import { SessionStore } from './session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
+import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 import {
   admitRuntimePlan,
   requireRuntimeBinding,
   unavailableRuntimeOperationResponse,
   unwrapAdmittedRuntimePlan,
   type AdmittedRuntimePlan,
-} from './handlers/session-runtime-admission.ts';
-import { errorResponse } from './handlers/response.ts';
-import { resolveSnapshotScope } from './handlers/snapshot-capture.ts';
-import { resolveSessionDevice } from './handlers/snapshot-session.ts';
+} from './session-runtime-admission.ts';
+import { resolveSnapshotScope } from './snapshot-capture.ts';
+import { resolveSessionDevice } from './snapshot-session.ts';
 import {
   selectElementTextOperation,
   selectFindMutatingOperations,
   selectWaitObservationOperations,
   type BoundElementRead,
-  type BoundNativeSelectorRead,
   type BoundNativeTextRead,
 } from './selector-operation-binding.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 export type SnapshotRuntimeRouteParams = {
   req: DaemonRequest;
@@ -72,7 +76,6 @@ export type AdmittedSnapshotCapture =
       /** A fact-conditional native text observation, present when the owner advertises it. */
       findText?: BoundNativeTextRead;
       /** A fact-conditional one-sided simple-selector observation. */
-      findSelector?: BoundNativeSelectorRead;
       /** find's directly-executed mutating legs, present for the find-focus / find-type plans. */
       focusPoint?: (
         input: import('@agent-device/contracts/focus-runtime').FocusPointInput,
@@ -97,6 +100,7 @@ export async function admitAndBindSnapshotCapture(
     plan: SnapshotRuntimePlan | SelectorCaptureRuntimePlan;
     inspectFacts?: InspectDeviceRuntimeFacts;
     bindDevice?: BindDeviceRuntime;
+    readiness?: boolean;
   }>,
 ): Promise<AdmittedSnapshotCapture> {
   const { command, device, session, plan } = params;
@@ -113,13 +117,12 @@ export async function admitAndBindSnapshotCapture(
       }),
     };
   }
-  const bound = await bindSnapshotCaptureRuntime(params.bindDevice, admission);
+  const bound = await bindSnapshotCaptureRuntime(params.bindDevice, admission, params.readiness);
   return Object.freeze({
     ok: true,
     capture: async (input: CaptureSnapshotInput) => await bound.captureSnapshot(input),
     ...(bound.readTextAtPoint ? { readTextAtPoint: bound.readTextAtPoint } : {}),
     ...(bound.findText ? { findText: bound.findText } : {}),
-    ...(bound.findSelector ? { findSelector: bound.findSelector } : {}),
     ...(bound.focusPoint ? { focusPoint: bound.focusPoint } : {}),
     ...(bound.typeText ? { typeText: bound.typeText } : {}),
   });
@@ -145,6 +148,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
     }),
     inspectFacts: params.inspectFacts,
     bindDevice: params.bindDevice,
+    readiness: !session,
   });
   if (!bound.ok) return bound;
 
@@ -172,12 +176,12 @@ export async function resolveBoundSnapshotCaptureRuntime(
 async function bindSnapshotCaptureRuntime(
   bindDevice: BindDeviceRuntime | undefined,
   admission: AdmittedRuntimePlan<SnapshotRuntimePlan | SelectorCaptureRuntimePlan>,
+  readiness: boolean | undefined,
 ): Promise<
   Readonly<{
     captureSnapshot(input: CaptureSnapshotInput): Promise<SnapshotResult>;
     readTextAtPoint?: BoundElementRead;
     findText?: BoundNativeTextRead;
-    findSelector?: BoundNativeSelectorRead;
     focusPoint?: (
       input: import('@agent-device/contracts/focus-runtime').FocusPointInput,
     ) => Promise<void>;
@@ -187,6 +191,11 @@ async function bindSnapshotCaptureRuntime(
   }>
 > {
   const bind = requireRuntimeBinding(bindDevice);
+  const bindReady: BindDeviceRuntime = async (device, use) => {
+    const runtime = await bind(device, use);
+    if (readiness) await ensureBoundDeviceReady(runtime);
+    return runtime;
+  };
   const { device, plan } = unwrapAdmittedRuntimePlan(admission);
   // One switch, one set of operation selectors. The selector arms reuse the SAME
   // `selectActiveAppSnapshot` / `selectSnapshotWithoutActiveApp` the snapshot arms use and only
@@ -194,25 +203,25 @@ async function bindSnapshotCaptureRuntime(
   // `plan.use` per family. No parallel plan-to-operation dispatch is introduced.
   switch (plan.kind) {
     case 'active-app': {
-      const runtime = await bind(device, plan.use);
+      const runtime = await bindReady(device, plan.use);
       return selectActiveAppSnapshot(runtime);
     }
     case 'selector-active-app': {
-      return await bindActiveAppSelectorRuntime(bind, device, plan);
+      return await bindActiveAppSelectorRuntime(bindReady, device, plan);
     }
     case 'custom-actions-active-app': {
-      const runtime = await bind(device, plan.use);
+      const runtime = await bindReady(device, plan.use);
       return selectCustomActionsSnapshot(runtime);
     }
     case 'without-active-app': {
-      const runtime = await bind(device, plan.use);
+      const runtime = await bindReady(device, plan.use);
       return selectSnapshotWithoutActiveApp(runtime);
     }
     case 'selector-without-active-app': {
-      return await bindSelectorRuntimeWithoutActiveApp(bind, device, plan);
+      return await bindSelectorRuntimeWithoutActiveApp(bindReady, device, plan);
     }
     case 'custom-actions-without-active-app': {
-      const runtime = await bind(device, plan.use);
+      const runtime = await bindReady(device, plan.use);
       return selectCustomActionsSnapshot(runtime);
     }
   }

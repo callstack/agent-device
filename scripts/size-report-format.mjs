@@ -13,7 +13,7 @@ export function formatBytes(value) {
   return `${(value / (1000 * 1000)).toFixed(2)} MB`;
 }
 
-export function formatSignedBytes(value) {
+function formatSignedBytes(value) {
   if (value === 0) return '0 B';
   const sign = value > 0 ? '+' : '-';
   return `${sign}${formatBytes(Math.abs(value))}`;

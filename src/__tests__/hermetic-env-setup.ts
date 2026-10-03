@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+// oxlint-disable-next-line no-restricted-imports -- sets the run's TMPDIR; must read the real tmpdir
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach } from 'vitest';

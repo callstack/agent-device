@@ -4,7 +4,11 @@ import type {
 } from '@agent-device/contracts/app-deployment-runtime';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { readyMaterializeAndDeployAppUse } from '@agent-device/contracts/app-deployment-runtime-plan';
-import { isIosFamily } from '@agent-device/kernel/device';
+import {
+  isIosFamily,
+  matchesPlatformSelector,
+  publicPlatformString,
+} from '@agent-device/kernel/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   cleanupRetainedMaterializedPaths,
@@ -15,16 +19,17 @@ import { expireRefFrame } from '../ref-frame.ts';
 import { resolveInstallSource } from '../install-source-resolution.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { SessionStore } from '../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { resolveInstallFromSourceResultTarget } from '../../utils/result-serialization.ts';
-import { withSuccessText } from '../../utils/success-text.ts';
-import { recordSessionAction } from './handler-utils.ts';
-import { resolveCommandDevice } from './session-device-utils.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
+import { resolveInstallFromSourceResultTarget } from '../../core/deploy-result-target.ts';
+import { withSuccessText } from '@agent-device/kernel/success-text';
+import { recordSessionAction } from '../session-action-recorder.ts';
+import { resolveCommandDevice } from '../session-device-resolution.ts';
 import {
   requireRuntimeBinding,
   requireRuntimeFacts,
   unavailableRuntimeOperationResponse,
-} from './session-runtime-admission.ts';
+} from '../session-runtime-admission.ts';
 
 type Retention = Readonly<{ enabled: boolean; ttlMs?: number }>;
 type InstallFromSourceResult = Readonly<{
@@ -126,10 +131,10 @@ async function resolveInstallDevice(
   flags: DaemonRequest['flags'] | undefined,
 ): Promise<SessionState['device']> {
   const requestedPlatform = normalizePlatform(flags?.platform);
-  if (session && requestedPlatform && session.device.platform !== requestedPlatform) {
+  if (session && requestedPlatform && !matchesPlatformSelector(session.device, requestedPlatform)) {
     throw new AppError(
       'INVALID_ARGS',
-      `install_from_source requested platform ${requestedPlatform}, but session is bound to ${session.device.platform}`,
+      `install_from_source requested platform ${requestedPlatform}, but session is bound to ${publicPlatformString(session.device)}`,
     );
   }
   if (!session && !requestedPlatform) {
@@ -144,7 +149,7 @@ async function resolveInstallDevice(
   if (session) {
     return session.device;
   }
-  return await resolveCommandDevice({ session, flags, ensureReady: false });
+  return await resolveCommandDevice({ session, flags });
 }
 
 function normalizePlatform(

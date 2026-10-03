@@ -6,7 +6,7 @@ const toolchains = vi.hoisted(() => ({
   appleRuns: [] as Array<{ args: string[]; signal?: AbortSignal }>,
 }));
 
-vi.mock('./platforms/apple/core/tool-provider.ts', () => {
+vi.mock('@agent-device/platform-apple/tool-provider', () => {
   toolchains.appleEvaluations += 1;
   return {
     resolveAppleToolProvider: () => ({

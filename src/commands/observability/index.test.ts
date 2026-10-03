@@ -2,19 +2,19 @@ import { describe, expect, test } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
 import {
   audioCliReader,
-  audioCommandDefinition,
+  audioCommandFacet,
   audioCommandMetadata,
   audioDaemonWriter,
   eventsCliReader,
-  eventsCommandDefinition,
+  eventsCommandFacet,
   eventsCommandMetadata,
   eventsDaemonWriter,
   logsCliReader,
-  logsCommandDefinition,
+  logsCommandFacet,
   logsCommandMetadata,
   logsDaemonWriter,
   networkCliReader,
-  networkCommandDefinition,
+  networkCommandFacet,
   networkCommandMetadata,
   networkDaemonWriter,
 } from './index.ts';
@@ -34,13 +34,13 @@ function expectInvalidArgs(fn: () => unknown, messageFragment: string) {
 describe('observability command interface', () => {
   test('owns logs and network public metadata', () => {
     expect(audioCommandMetadata.name).toBe('audio');
-    expect(audioCommandDefinition.name).toBe('audio');
+    expect(audioCommandFacet.definition.name).toBe('audio');
     expect(eventsCommandMetadata.name).toBe('events');
-    expect(eventsCommandDefinition.name).toBe('events');
+    expect(eventsCommandFacet.definition.name).toBe('events');
     expect(logsCommandMetadata.name).toBe('logs');
-    expect(logsCommandDefinition.name).toBe('logs');
+    expect(logsCommandFacet.definition.name).toBe('logs');
     expect(networkCommandMetadata.name).toBe('network');
-    expect(networkCommandDefinition.name).toBe('network');
+    expect(networkCommandFacet.definition.name).toBe('network');
   });
 
   test('reads audio probe timing as compact daemon positionals', () => {

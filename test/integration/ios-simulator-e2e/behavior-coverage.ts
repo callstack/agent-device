@@ -7,7 +7,8 @@ export type IosSimulatorBehaviorId =
   | 'modal-open-close'
   | 'permission-state-recovery'
   | 'regular-visible-depth-frontier'
-  | 'text-entry-keyboard-lifecycle';
+  | 'text-entry-keyboard-lifecycle'
+  | 'webview-remote-content';
 
 type BehaviorCoverageEntry =
   | {
@@ -23,8 +24,8 @@ type BehaviorCoverageEntry =
 
 /**
  * Cross-command mobile usage patterns requested by #320. Command ownership
- * remains exhaustive in coverage-manifest.ts; this table prevents that
- * command-level view from hiding missing end-to-end journeys.
+ * remains exhaustive in the command coverage declarations; this table prevents
+ * that command-level view from hiding missing end-to-end journeys.
  */
 export const IOS_SIMULATOR_BEHAVIOR_COVERAGE = {
   'cold-start-deep-link-navigation': {
@@ -60,6 +61,12 @@ export const IOS_SIMULATOR_BEHAVIOR_COVERAGE = {
       'regular depth 1 retains an independently projected child after its clipped structural parent is removed, while raw depth remains traversal-bounded',
     level: 'live',
     owner: 'smoke:regular-visible-depth-frontier',
+  },
+  'webview-remote-content': {
+    assertion:
+      'a WKWebView page keeps its link and field label in snapshots: the route refuses the bridge tree that ends at the remote element and discloses the XCTest fallback',
+    level: 'live',
+    owner: 'smoke:webview-remote-content',
   },
   'interrupted-system-ui-flow': {
     assertion: 'Home and app switcher expose distinct system pixels before fixture restoration',

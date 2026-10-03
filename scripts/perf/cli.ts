@@ -1,5 +1,5 @@
 import { performance } from 'node:perf_hooks';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import { resolveCliArgv, REPO_ROOT } from './config.ts';
 import type { BatchStepSpec } from './scenario.ts';
 import type { CliResult } from './types.ts';

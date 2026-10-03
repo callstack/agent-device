@@ -8,7 +8,7 @@ import type {
 } from '../../../backend.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { successText } from '../../../utils/success-text.ts';
+import { successText } from '@agent-device/kernel/success-text';
 import {
   toBackendResult,
   type BackendResultEnvelope,

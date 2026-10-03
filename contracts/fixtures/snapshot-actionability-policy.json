@@ -1,0 +1,234 @@
+{
+  "description": "Golden vector table for the shared `hittable` predicate (#1933, #2891), for input shapes the fixed 320x240 fold fixture in ios-snapshot-engine-conformance.json cannot reach. RULE: a node is actionable when it is enabled, its own rect passes the box guard below, and its center falls inside the viewport box, half-open on the right and bottom edges. BOX GUARD: a box is usable when all four components are finite, both extents (x+width, y+height) are finite, the size is positive, and it is not CGRect.infinite — whose components and extents are all finite, so only identity refuses it. SnapshotGeometry.isPositiveFinite (Swift) and isPositiveFiniteRect in packages/kernel/src/rect.ts are the twins that enforce exactly this, one per language. Implementations of the predicate: SnapshotGeometry.isGeometricallyActionable (Swift, replayed by ActionabilityPolicyTests) and isGeometricallyActionable in packages/kernel/src/rect.ts (replayed by scripts/ios-snapshot-differential.test.ts). The viewport is the declared fact `reported`, `derived`, or `missing` (IosViewportEvidence); a box the guard refuses never becomes `reported`. `hittable: null` is the absent bit: with no viewport box, containment is undecided, while a disabled or degenerate node is still a declared `false` because that half of the rule needs no box. Every row declares `swift` and `typescript` and at least one must run it; a row one side skips carries `asymmetry`.",
+  "cases": [
+    {
+      "name": "a center strictly inside the reported box is actionable",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": { "x": 100, "y": 100, "width": 40, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": true,
+      "nodeRectGuardPasses": true
+    },
+    {
+      "name": "a center one point short of the right edge is actionable",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": { "x": 239, "y": 110, "width": 160, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": true,
+      "nodeRectGuardPasses": true
+    },
+    {
+      "name": "a center landing exactly on the right edge is not actionable: the edge is half-open",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": { "x": 240, "y": 110, "width": 160, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": false,
+      "nodeRectGuardPasses": true
+    },
+    {
+      "name": "a center one point short of the bottom edge is actionable",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": { "x": 100, "y": 159, "width": 40, "height": 160 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": true,
+      "nodeRectGuardPasses": true
+    },
+    {
+      "name": "a center landing exactly on the bottom edge is not actionable: the edge is half-open",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": { "x": 100, "y": 160, "width": 40, "height": 160 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": false,
+      "nodeRectGuardPasses": true
+    },
+    {
+      "name": "a center landing exactly on the left edge is actionable: that edge is inclusive",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": { "x": -20, "y": 100, "width": 40, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": true,
+      "nodeRectGuardPasses": true
+    },
+    {
+      "name": "a center landing exactly on the top edge is actionable: that edge is inclusive",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": { "x": 100, "y": -10, "width": 40, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": true,
+      "nodeRectGuardPasses": true
+    },
+    {
+      "name": "a disabled node is not actionable even with its center inside the box",
+      "swift": true,
+      "typescript": true,
+      "enabled": false,
+      "node": { "x": 100, "y": 100, "width": 40, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": false,
+      "nodeRectGuardPasses": true
+    },
+    {
+      "name": "a center inside the box reached through a canonical box is actionable",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": { "x": 80, "y": 100, "width": 20, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": true,
+      "nodeRectGuardPasses": true
+    },
+    {
+      "name": "the same center reached through a negative width is not actionable: the node guard decides, and Swift used to answer actionable",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": { "x": 100, "y": 100, "width": -20, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": false,
+      "nodeRectGuardPasses": false
+    },
+    {
+      "name": "a center inside the box reached through a zero width is not actionable",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": { "x": 100, "y": 110, "width": 0, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": false,
+      "nodeRectGuardPasses": false
+    },
+    {
+      "name": "that zero-area box's center reached through a canonical box is actionable",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": { "x": 90, "y": 110, "width": 20, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": true,
+      "nodeRectGuardPasses": true
+    },
+    {
+      "name": "Apple's no-box sentinel is not actionable on either language: its components and extents are all finite and its center is (0,0), so the box guard refuses it by value in both",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": { "infinite": true },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": false,
+      "nodeRectGuardPasses": false
+    },
+    {
+      "name": "finite components can still spell an unmeasurable box: the box overflows its own right edge out to infinity, so the extent check refuses it",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": {
+        "x": 1.7976931348623157e308,
+        "y": 0,
+        "width": 1.7976931348623157e308,
+        "height": 1
+      },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": false,
+      "nodeRectGuardPasses": false
+    },
+    {
+      "name": "a node rect whose components are not finite is refused by the box guard before any center is computed; the bridge decoder refuses to decode such a frame earlier still, so this row pins the guard and not a producer",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": { "nonFinite": true },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": false,
+      "nodeRectGuardPasses": false
+    },
+    {
+      "name": "the center a box spelled infinite lands on is actionable when a real box reaches it",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": { "x": -10, "y": -10, "width": 20, "height": 20 },
+      "viewport": { "kind": "reported", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": true,
+      "nodeRectGuardPasses": true
+    },
+    {
+      "name": "the same node whose center sits inside a reported box has no hittable bit once the viewport goes missing",
+      "swift": true,
+      "typescript": false,
+      "asymmetry": "The TypeScript predicate takes a box. Without one, each host path withholds the bit before asking it: the bridge reader publishes derived hittability only for a reported viewport, and resolveViewportEvidence refuses to fold a regular presentation.",
+      "enabled": true,
+      "node": { "x": 100, "y": 100, "width": 40, "height": 20 },
+      "viewport": { "kind": "missing", "reason": "not-provided" },
+      "hittable": null,
+      "nodeRectGuardPasses": true
+    },
+    {
+      "name": "a viewport declared invalid leaves the bit absent the same way",
+      "swift": true,
+      "typescript": false,
+      "asymmetry": "The TypeScript predicate takes a box. Without one, each host path withholds the bit before asking it: the bridge reader publishes derived hittability only for a reported viewport, and resolveViewportEvidence refuses to fold a regular presentation.",
+      "enabled": true,
+      "node": { "x": 100, "y": 100, "width": 40, "height": 20 },
+      "viewport": { "kind": "missing", "reason": "invalid" },
+      "hittable": null,
+      "nodeRectGuardPasses": true
+    },
+    {
+      "name": "a disabled node is not actionable without a viewport: that half of the rule needs no box",
+      "swift": true,
+      "typescript": false,
+      "asymmetry": "The TypeScript predicate takes a box. Without one, each host path withholds the bit before asking it: the bridge reader publishes derived hittability only for a reported viewport, and resolveViewportEvidence refuses to fold a regular presentation.",
+      "enabled": false,
+      "node": { "x": 100, "y": 100, "width": 40, "height": 20 },
+      "viewport": { "kind": "missing", "reason": "not-provided" },
+      "hittable": false,
+      "nodeRectGuardPasses": true
+    },
+    {
+      "name": "a zero-area node is not actionable without a viewport: the node guard needs no box",
+      "swift": true,
+      "typescript": false,
+      "asymmetry": "The TypeScript predicate takes a box. Without one, each host path withholds the bit before asking it: the bridge reader publishes derived hittability only for a reported viewport, and resolveViewportEvidence refuses to fold a regular presentation.",
+      "enabled": true,
+      "node": { "x": 100, "y": 100, "width": 0, "height": 20 },
+      "viewport": { "kind": "missing", "reason": "not-provided" },
+      "hittable": false,
+      "nodeRectGuardPasses": false
+    },
+    {
+      "name": "a derived box the capture read from its own root still answers containment",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": { "x": 100, "y": 100, "width": 40, "height": 20 },
+      "viewport": { "kind": "derived", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": true,
+      "nodeRectGuardPasses": true
+    },
+    {
+      "name": "a derived box still refuses a node whose center is off that box",
+      "swift": true,
+      "typescript": true,
+      "enabled": true,
+      "node": { "x": 900, "y": 10, "width": 40, "height": 20 },
+      "viewport": { "kind": "derived", "rect": { "x": 0, "y": 0, "width": 320, "height": 240 } },
+      "hittable": false,
+      "nodeRectGuardPasses": true
+    }
+  ]
+}

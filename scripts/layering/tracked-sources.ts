@@ -1,4 +1,6 @@
-// The file list every layering scan reads: TRACKED production TypeScript, nothing else.
+// Layering scans read tracked repository paths only. Most rules consume production TypeScript;
+// the retired zones also consume every tracked path under their former roots so non-TS fixtures
+// cannot bypass the ownership boundary.
 //
 // A leaf module on purpose. `check.ts` owns the scan and imports `package-boundaries.ts`, so the
 // boundary rules cannot import `check.ts` back for its file list; without a shared leaf the two
@@ -18,7 +20,7 @@
 import { execFileSync } from 'node:child_process';
 
 // `src/**/*.ts` only matches NESTED files, so root-level `src/*.ts` (src/cli.ts,
-// src/command-catalog.ts) needs its own pathspec or it silently drops out of every scan.
+// src/backend.ts) needs its own pathspec or it silently drops out of every scan.
 // Workspace package sources are production files too (#1490 W0).
 const TRACKED_SOURCE_PATHSPECS = [
   'src/*.ts',
@@ -37,20 +39,34 @@ const TRACKED_SOURCE_PATHSPECS = [
  * enumeration widened to every workspace package.
  */
 export function listTrackedPackageManifests(repoRoot: string): string[] {
-  const out = execFileSync('git', ['ls-files', 'packages/*/package.json'], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  });
-  return out.split('\n').filter(Boolean);
+  return listTrackedFiles(repoRoot, ['packages/*/package.json']);
 }
 
 /** Every tracked `.ts` source file under the scanned roots, repo-root-relative. */
 export function listTrackedTypeScriptFiles(repoRoot: string): string[] {
-  const out = execFileSync('git', ['ls-files', ...TRACKED_SOURCE_PATHSPECS], {
+  return listTrackedFiles(repoRoot, TRACKED_SOURCE_PATHSPECS);
+}
+
+/** Every tracked file under the retired platform root, regardless of extension. */
+export function listTrackedPlatformZoneFiles(repoRoot: string): string[] {
+  return listTrackedFilesUnderRoot(repoRoot, 'src/platforms');
+}
+
+/** Every tracked path at or under the retired `src/utils` root, regardless of extension. */
+export function listTrackedSrcUtilsFiles(repoRoot: string): string[] {
+  return listTrackedFilesUnderRoot(repoRoot, 'src/utils');
+}
+
+function listTrackedFilesUnderRoot(repoRoot: string, root: string): string[] {
+  return listTrackedFiles(repoRoot, [root]);
+}
+
+function listTrackedFiles(repoRoot: string, pathspecs: readonly string[]): string[] {
+  const out = execFileSync('git', ['ls-files', '-z', '--', ...pathspecs], {
     cwd: repoRoot,
     encoding: 'utf8',
   });
-  return out.split('\n').filter(Boolean);
+  return out.split('\0').filter(Boolean);
 }
 
 /** Production sources only: test files and `__tests__/` trees are not layering subjects. */

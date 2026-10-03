@@ -12,6 +12,7 @@ const server = readJson(serverPath);
 const expectedName = pkg.mcpName;
 const expectedVersion = pkg.version;
 const registryDescriptionMaxLength = 100;
+const mcpPackageArguments = [{ type: 'positional', value: 'mcp' }];
 
 if (typeof expectedName !== 'string' || expectedName.length === 0) {
   fail('package.json must define mcpName.');
@@ -32,6 +33,7 @@ if (Array.isArray(server.packages)) {
   for (const packageEntry of server.packages) {
     if (packageEntry?.identifier === pkg.name) {
       packageEntry.version = expectedVersion;
+      packageEntry.packageArguments = mcpPackageArguments;
     }
   }
 }

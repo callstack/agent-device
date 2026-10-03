@@ -1,5 +1,6 @@
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
   func testSnapshotPresentationPreservesCurrentWireShape() throws {
@@ -11,6 +12,7 @@ extension RunnerTests {
       label: "Continue",
       identifier: "continue-button",
       value: "Ready",
+      placeholder: "Type here",
       rect: SnapshotRect(x: 10, y: 20, width: 100, height: 44),
       enabled: true,
       focused: true,
@@ -39,7 +41,7 @@ extension RunnerTests {
           truncated: 0,
           blocked: false
         ),
-        viewport: .infinite
+        viewport: .reported(box: CGRect(x: 0, y: 0, width: 100, height: 100))
       ),
       options: PresentationOptions(
         interactiveOnly: true,
@@ -48,17 +50,55 @@ extension RunnerTests {
         raw: true
       )
     ))
-    let nodes = try XCTUnwrap(capture.payload.nodes)
+    let nodes = capture.nodes
     let encoded = try encoder.encode(nodes)
 
     XCTAssertEqual(
       String(decoding: encoded, as: UTF8.self),
-      #"[{"actions":["Open menu"],"depth":2,"enabled":true,"focused":true,"hiddenContentAbove":true,"hiddenContentBelow":true,"hittable":true,"identifier":"continue-button","index":3,"label":"Continue","parentIndex":1,"rect":{"height":44,"width":100,"x":10,"y":20},"selected":true,"type":"Button","value":"Ready"}]"#
+      #"[{"actions":["Open menu"],"depth":2,"enabled":true,"focused":true,"hiddenContentAbove":true,"hiddenContentBelow":true,"hittable":true,"identifier":"continue-button","index":3,"label":"Continue","parentIndex":1,"placeholder":"Type here","rect":{"height":44,"width":100,"x":10,"y":20},"selected":true,"type":"Button","value":"Ready"}]"#
     )
-    XCTAssertEqual(capture.payload.truncated, true)
+    XCTAssertEqual(capture.truncated, true)
     XCTAssertEqual(capture.effectiveDepth, 4)
     XCTAssertEqual(capture.customActions?.read, 1)
     XCTAssertEqual(capture.customActions?.candidates, 2)
+  }
+
+  /// A node without a placeholder omits the key: the wire contract is "absent when empty", which
+  /// the synthesized `encodeIfPresent` provides today and a hand-written encoder must keep.
+  func testPresentedNodeOmitsAnAbsentPlaceholder() throws {
+    let raw = RawAXNode(
+      index: 0,
+      type: "Button",
+      label: "Save",
+      identifier: nil,
+      value: nil,
+      rect: SnapshotRect(x: 0, y: 0, width: 100, height: 44),
+      enabled: true,
+      focused: nil,
+      selected: nil,
+      hittable: true,
+      depth: 0,
+      parentIndex: nil,
+      hiddenContentAbove: nil,
+      hiddenContentBelow: nil
+    )
+    let capture = try XCTUnwrap(try SnapshotPresentation.present(
+      SnapshotAcquisition(
+        hint: CaptureHint(
+          projection: .raw, depth: nil, regularPresentedDepth: nil,
+          interactiveOnly: false, customActions: false),
+        nodes: [raw],
+        truncated: false,
+        effectiveDepth: nil,
+        customActions: nil,
+        viewport: .reported(box: CGRect(x: 0, y: 0, width: 100, height: 100))
+      ),
+      options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: true)
+    ))
+    let encoded = String(decoding: try JSONEncoder().encode(capture.nodes), as: UTF8.self)
+
+    XCTAssertNil(capture.nodes.first?.placeholder)
+    XCTAssertFalse(encoded.contains("placeholder"), encoded)
   }
 
   func testSnapshotPresentationOwnsBackendNeutralEligibility() throws {
@@ -112,9 +152,9 @@ extension RunnerTests {
             projection: .regular, depth: nil, regularPresentedDepth: nil,
             interactiveOnly: false, customActions: false),
           nodes: acquired, truncated: false, effectiveDepth: nil,
-          viewport: CGRect(x: 0, y: 0, width: 1_000, height: 1_000)),
+          viewport: .reported(box: CGRect(x: 0, y: 0, width: 1_000, height: 1_000))),
         options: PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)
-      ).payload.nodes
+      ).nodes
     )
     let interactive = try XCTUnwrap(
       try SnapshotPresentation.presentRegular(
@@ -123,9 +163,9 @@ extension RunnerTests {
             projection: .regular, depth: nil, regularPresentedDepth: nil,
             interactiveOnly: true, customActions: false),
           nodes: acquired, truncated: false, effectiveDepth: nil,
-          viewport: CGRect(x: 0, y: 0, width: 1_000, height: 1_000)),
+          viewport: .reported(box: CGRect(x: 0, y: 0, width: 1_000, height: 1_000))),
         options: PresentationOptions(interactiveOnly: true, depth: nil, scope: nil, raw: false)
-      ).payload.nodes
+      ).nodes
     )
 
     XCTAssertEqual(
@@ -146,9 +186,10 @@ extension RunnerTests {
           hint: CaptureHint(
             projection: .raw, depth: nil, regularPresentedDepth: nil,
             interactiveOnly: false, customActions: false),
-          nodes: acquired, truncated: false, effectiveDepth: nil, viewport: .infinite),
+          nodes: acquired, truncated: false, effectiveDepth: nil,
+          viewport: .reported(box: CGRect(x: 0, y: 0, width: 1_000, height: 1_000)) ),
         options: PresentationOptions(interactiveOnly: true, depth: nil, scope: nil, raw: true)
-      ).payload.nodes
+      ).nodes
     )
     XCTAssertEqual(raw.map(\.index), Array(0...10))
     XCTAssertEqual(raw.last?.depth, 2)
@@ -175,16 +216,16 @@ extension RunnerTests {
       nodes: nodes,
       truncated: false,
       effectiveDepth: nil,
-      viewport: CGRect(x: 0, y: 0, width: 100, height: 100)
+      viewport: .reported(box: CGRect(x: 0, y: 0, width: 100, height: 100))
     )
 
     let presented = try SnapshotPresentation.presentRegular(
       acquisition,
       options: PresentationOptions(
         interactiveOnly: false, depth: nil, scope: nil, raw: false)
-    ).payload.nodes
+    ).nodes
 
-    XCTAssertEqual(presented?.compactMap(\.label), ["App"])
+    XCTAssertEqual(presented.compactMap(\.label), ["App"])
   }
 
   func testRegularPresentationPublishesEffectiveRectWhileRawKeepsReportedFrame() throws {
@@ -210,10 +251,10 @@ extension RunnerTests {
           nodes: acquired,
           truncated: false,
           effectiveDepth: nil,
-          viewport: viewport
+          viewport: .reported(box: viewport)
         ),
         options: regularOptions
-      ).payload.nodes
+      ).nodes
     )
     let regularButton = try XCTUnwrap(regular.first { $0.label == "Partially clipped" })
     XCTAssertEqual(regularButton.rect.x, 350)
@@ -230,10 +271,10 @@ extension RunnerTests {
           nodes: acquired,
           truncated: false,
           effectiveDepth: nil,
-          viewport: .infinite
+          viewport: .reported(box: CGRect(x: 0, y: 0, width: 100, height: 100))
         ),
         options: rawOptions
-      ).payload.nodes
+      ).nodes
     )
     let rawButton = try XCTUnwrap(raw.first { $0.label == "Partially clipped" })
     XCTAssertEqual(rawButton.rect.x, 350)
@@ -285,7 +326,7 @@ extension RunnerTests {
       ],
       truncated: false,
       effectiveDepth: nil,
-      viewport: CGRect(x: 0, y: 0, width: 1_000, height: 1_000)
+      viewport: .reported(box: CGRect(x: 0, y: 0, width: 1_000, height: 1_000))
     )
     let options = PresentationOptions(
       interactiveOnly: true,
@@ -294,14 +335,14 @@ extension RunnerTests {
       raw: false
     )
     let capture = try XCTUnwrap(try SnapshotPresentation.present(acquisition, options: options))
-    let nodes = try XCTUnwrap(capture.payload.nodes)
+    let nodes = capture.nodes
 
     XCTAssertEqual(nodes.map(\.label), [nil, "Child"])
     XCTAssertEqual(nodes.map(\.identifier), ["scope-root", nil])
     XCTAssertEqual(nodes.map(\.index), [0, 1])
     XCTAssertEqual(nodes.map(\.depth), [0, 1])
     XCTAssertEqual(nodes.map(\.parentIndex), [nil, 0])
-    XCTAssertEqual(capture.qualityPayload?.nodes?.count, 6)
+    XCTAssertEqual(capture.qualityNodes?.count, 6)
 
     let raw = try XCTUnwrap(
       SnapshotPresentation.presentRaw(
@@ -312,7 +353,7 @@ extension RunnerTests {
           nodes: acquisition.nodes,
           truncated: false,
           effectiveDepth: nil,
-          viewport: .infinite
+          viewport: .reported(box: CGRect(x: 0, y: 0, width: 100, height: 100))
         ),
         options: PresentationOptions(
           interactiveOnly: true,
@@ -320,7 +361,7 @@ extension RunnerTests {
           scope: "scope-root",
           raw: true
         )
-      ).payload.nodes
+      ).nodes
     )
     XCTAssertEqual(raw.map(\.type), ["Other", "StaticText", "Image"])
     XCTAssertEqual(raw.map(\.depth), [0, 1, 1])
@@ -339,8 +380,12 @@ extension RunnerTests {
         raw: false
       )
     ))
-    XCTAssertEqual(missing.payload.nodes?.count, 0)
-    XCTAssertNil(RunnerTests.sparsePayloadReason(try XCTUnwrap(missing.qualityPayload)))
+    XCTAssertEqual(missing.nodes.count, 0)
+    XCTAssertNil(
+      RunnerTests.sparsePayloadReason(
+        DataPayload(nodes: missing.qualityNodes, truncated: missing.truncated)
+      )
+    )
   }
 
   /// #1797 D4: a backend that answers a `--raw` request with a regular capture (or the reverse)
@@ -369,10 +414,11 @@ extension RunnerTests {
     let regularAcquisition = SnapshotAcquisition(
       hint: SnapshotPresentation.captureHint(for: regularRequest),
       nodes: nodes, truncated: false, effectiveDepth: nil,
-      viewport: CGRect(x: 0, y: 0, width: 100, height: 100))
+      viewport: .reported(box: CGRect(x: 0, y: 0, width: 100, height: 100)))
     let rawAcquisition = SnapshotAcquisition(
       hint: SnapshotPresentation.captureHint(for: rawRequest),
-      nodes: nodes, truncated: false, effectiveDepth: nil, viewport: .infinite)
+      nodes: nodes, truncated: false, effectiveDepth: nil,
+      viewport: .reported(box: CGRect(x: 0, y: 0, width: 100, height: 100)))
 
     let regularCaptureForRawRequest = try SnapshotPresentation.present(
       regularAcquisition, options: rawRequest)
@@ -383,8 +429,8 @@ extension RunnerTests {
       regularAcquisition, options: regularRequest)
     XCTAssertNil(regularCaptureForRawRequest)
     XCTAssertNil(rawCaptureForRegularRequest)
-    XCTAssertEqual(rawCapture?.payload.nodes?.count, 2)
-    XCTAssertEqual(regularCapture?.payload.nodes?.count, 2)
+    XCTAssertEqual(rawCapture?.nodes.count, 2)
+    XCTAssertEqual(regularCapture?.nodes.count, 2)
   }
 
   /// The one derivation every backend reads. Non-vacuity: returning the request's own depth for a
@@ -410,12 +456,9 @@ extension RunnerTests {
     XCTAssertFalse(raw.interactiveOnly)
     XCTAssertEqual(raw.rawTraversalDepth, 3)
     XCTAssertNil(raw.regularPresentedDepth)
-    XCTAssertTrue(
-      SnapshotPresentation.shouldAcquireChildren(
-        for: raw, rawDepth: 0, regularPresentedDepth: 0))
-    XCTAssertFalse(
-      SnapshotPresentation.shouldAcquireChildren(
-        for: raw, rawDepth: 3, regularPresentedDepth: 0))
+    XCTAssertTrue(Self.canDescendAtRawDepth(0, hint: raw))
+    XCTAssertTrue(Self.canDescendAtRawDepth(2, hint: raw))
+    XCTAssertFalse(Self.canDescendAtRawDepth(3, hint: raw))
     XCTAssertTrue(raw.isRaw)
 
     let actions = SnapshotPresentation.captureHint(
@@ -424,11 +467,10 @@ extension RunnerTests {
     XCTAssertTrue(actions.customActions)
   }
 
-  /// #1797 visible-depth frontier: a regular depth is measured after structural
-  /// wrappers collapse, so the acquisition hint cannot present it as a raw
-  /// traversal cap. The root -> wrapper -> button fixture is the smallest tree
-  /// that distinguishes those two meanings at the public boundary.
-  func testRegularDepthFrontierSurvivesStructuralWrapperCollapse() throws {
+  /// #1797: a regular depth is measured after structural wrappers collapse, so it is a presentation
+  /// cut and never a raw traversal cap. The root -> wrapper -> button fixture is the smallest tree
+  /// where the two meanings diverge: acquisition descends freely, `present` stops at the cut.
+  func testRegularDepthCutsPresentationNotAcquisition() throws {
     func node(
       _ index: Int,
       type: String,
@@ -469,7 +511,7 @@ extension RunnerTests {
           ],
           truncated: false,
           effectiveDepth: nil,
-          viewport: CGRect(x: 0, y: 0, width: 100, height: 100)
+          viewport: .reported(box: CGRect(x: 0, y: 0, width: 100, height: 100))
         ),
         options: options
       )
@@ -477,23 +519,19 @@ extension RunnerTests {
 
     XCTAssertEqual(hint.regularPresentedDepth, 1)
     XCTAssertNil(hint.rawTraversalDepth)
-    XCTAssertTrue(
-      SnapshotPresentation.shouldAcquireChildren(
-        for: hint, rawDepth: 0, regularPresentedDepth: 0))
-    XCTAssertTrue(
-      SnapshotPresentation.shouldAcquireChildren(
-        for: hint, rawDepth: 1, regularPresentedDepth: 0))
-    XCTAssertFalse(
-      SnapshotPresentation.shouldAcquireChildren(
-        for: hint, rawDepth: 2, regularPresentedDepth: 1))
-    XCTAssertEqual(capture.payload.nodes?.map(\.label), ["App", "Save"])
-    XCTAssertEqual(capture.payload.nodes?.map(\.depth), [0, 1])
+    // A regular depth is a presentation cut, not an acquisition bound: the walk descends at every
+    // raw depth. What limits the presented tree is the depth applied inside `present` above.
+    XCTAssertTrue(Self.canDescendAtRawDepth(0, hint: hint))
+    XCTAssertTrue(Self.canDescendAtRawDepth(1, hint: hint))
+    XCTAssertTrue(Self.canDescendAtRawDepth(2, hint: hint))
+    XCTAssertEqual(capture.nodes.map(\.label), ["App", "Save"])
+    XCTAssertEqual(capture.nodes.map(\.depth), [0, 1])
   }
 
-  /// #1797 P1: an eligible parent outside the viewport is removed by the shared visibility fold,
-  /// while an independently projected child remains visible and must occupy the requested depth.
-  /// The public presentation/capture-hint boundary must not let the removed parent stop acquisition.
-  func testRegularDepthFrontierKeepsVisibleIndependentChildPastClippedParent() throws {
+  /// #1797 P1: the shared visibility fold, running inside `present`, drops an eligible parent
+  /// outside the viewport while an independently projected child stays visible and takes the
+  /// requested depth. Acquisition does not consult that parent's geometry, so it never prunes here.
+  func testVisibilityFoldKeepsIndependentChildPastClippedParent() throws {
     func node(
       _ index: Int,
       type: String,
@@ -555,53 +593,125 @@ extension RunnerTests {
       nodes: nodes,
       truncated: false,
       effectiveDepth: nil,
-      viewport: viewport
+      viewport: .reported(box: viewport)
     )
     let presented = try XCTUnwrap(
-      SnapshotPresentation.present(acquisition, options: options)?.payload.nodes)
+      SnapshotPresentation.present(acquisition, options: options)?.nodes)
 
     XCTAssertEqual(presented.map(\.label), ["App", "Projected child"])
     XCTAssertEqual(presented.map(\.depth), [0, 1])
     XCTAssertEqual(presented.map(\.parentIndex), [nil, 0])
 
-    let clippedParentTransition = SnapshotPresentation.regularTraversalTransition(
-      for: nodes[1],
-      parentPresentedDepth: 0,
-      parentTraversal: .root,
-      hint: hint,
-      rawDepth: 1,
-      viewport: viewport,
-      hasChildren: true,
-      isDuplicate: false,
-      policy: .cursorProjected
-    )
-    XCTAssertEqual(clippedParentTransition.presentedDepth, 0)
-    XCTAssertTrue(clippedParentTransition.traversal.descendantsMayBeVisible)
-    XCTAssertTrue(clippedParentTransition.shouldVisitChildren)
-
-    let childTransition = SnapshotPresentation.regularTraversalTransition(
-      for: nodes[2],
-      parentPresentedDepth: clippedParentTransition.presentedDepth,
-      parentTraversal: clippedParentTransition.traversal,
-      hint: hint,
-      rawDepth: 2,
-      viewport: viewport,
-      hasChildren: false,
-      isDuplicate: false,
-      policy: .cursorProjected
-    )
-    XCTAssertEqual(childTransition.presentedDepth, 1)
-    XCTAssertFalse(childTransition.shouldVisitChildren)
+    // The removed parent is dropped by the fold inside `present`, not by acquisition: the walk's only
+    // bound is the raw depth, which is nil for this regular capture, so a clipped parent never stops
+    // its children from being acquired (#2612, #2661).
+    XCTAssertTrue(Self.canDescendAtRawDepth(2, hint: hint))
 
     let rawHint = SnapshotPresentation.captureHint(
       for: PresentationOptions(interactiveOnly: false, depth: 1, scope: nil, raw: true))
-    XCTAssertFalse(
-      SnapshotPresentation.shouldAcquireChildren(
-        for: rawHint,
-        rawDepth: 1,
-        regularPresentedDepth: 0
+    XCTAssertFalse(Self.canDescendAtRawDepth(1, hint: rawHint))
+  }
+
+  /// #2661: a turned keyboard subtree reported in the device's native space survives a regular
+  /// `--depth N` capture. Acquisition never reads geometry, so it descends regardless of the reported
+  /// rect; `normalized` returns the band to the viewport and presentation keeps it at app-space rects.
+  func testRegularDepthKeepsTurnedKeyboardSubtreeAfterOneNormalizationPass() throws {
+    let viewport = CGRect(x: 0, y: 0, width: 874, height: 402)
+    func node(
+      _ index: Int, _ type: String, _ label: String, _ rect: CGRect, _ parent: Int?, _ depth: Int
+    ) -> RawAXNode {
+      RawAXNode(
+        index: index, type: type, label: label, identifier: nil, value: nil,
+        rect: SnapshotRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height),
+        enabled: true, focused: nil, selected: nil, hittable: false,
+        depth: depth, parentIndex: parent, hiddenContentAbove: nil, hiddenContentBelow: nil
+      )
+    }
+    // Reported (native) geometry: a quarter-turned host box with the plane and `q` inside it.
+    let acquired = [
+      node(0, "Application", "App", CGRect(x: 0, y: 0, width: 874, height: 402), nil, 0),
+      node(1, "Window", "Window", CGRect(x: 0, y: 0, width: 874, height: 402), 0, 1),
+      node(2, "Other", "Keyboard", CGRect(x: 0, y: 0, width: 402, height: 874), 1, 2),
+      node(3, "Key", "plane", CGRect(x: 2, y: 75, width: 202, height: 724), 2, 3),
+      node(4, "Key", "q", CGRect(x: 154, y: 77, width: 45, height: 72), 2, 3),
+    ]
+    let normalized = SnapshotGeometrySpace.normalized(
+      nodes: acquired,
+      viewport: .reported(
+        box: viewport,
+        interfaceOrientation: RunnerInterfaceOrientation.landscapeRight
       )
     )
+    let options = PresentationOptions(interactiveOnly: false, depth: 3, scope: nil, raw: false)
+    let hint = SnapshotPresentation.captureHint(for: options)
+    let presented = try XCTUnwrap(
+      SnapshotPresentation.present(
+        SnapshotAcquisition(
+          hint: hint,
+          nodes: normalized,
+          truncated: false,
+          effectiveDepth: nil,
+          viewport: .reported(box: viewport)
+        ),
+        options: options
+      )?.nodes
+    )
+    let band = presented.first { $0.rect == SnapshotRect(x: 75, y: 198, width: 724, height: 202) }
+    let keyQ = presented.first { $0.rect == SnapshotRect(x: 77, y: 203, width: 72, height: 45) }
+    XCTAssertNotNil(band, "keyboard plane must be presented under --depth \(options.depth ?? -1)")
+    XCTAssertNotNil(keyQ, "`q` key must be presented under --depth \(options.depth ?? -1)")
+  }
+
+  /// #2891: a capture whose viewport read failed publishes no `hittable` for a node whose answer is
+  /// containment, while a root and a disabled node stay a declared `false`. Pinned on the
+  /// encoded objects rather than on `capture.nodes`, because the promise is about the wire: a test
+  /// over the Swift values would still pass if a custom encoder started writing `"hittable":null`
+  /// for `nil`, which is a shape no host decoder is specified for. The #2638 wrapper verdict reads a
+  /// declared `false` as evidence that the wrapper is inert.
+  func testAMissingViewportOmitsTheHittableBitFromTheWire() throws {
+    func node(
+      _ index: Int, _ type: String, _ label: String,
+      enabled: Bool, parent: Int?, depth: Int
+    ) -> RawAXNode {
+      RawAXNode(
+        index: index, type: type, label: label, identifier: nil, value: nil,
+        rect: SnapshotRect(x: 10, y: Double(20 + index * 60), width: 100, height: 44),
+        enabled: enabled, focused: nil, selected: nil, hittable: false,
+        depth: depth, parentIndex: parent, hiddenContentAbove: nil, hiddenContentBelow: nil
+      )
+    }
+    let acquired = [
+      node(0, "Application", "App", enabled: true, parent: nil, depth: 0),
+      node(1, "Button", "Continue", enabled: true, parent: 0, depth: 1),
+      node(2, "Button", "Sold out", enabled: false, parent: 0, depth: 1),
+    ]
+    let viewport = SnapshotViewport.missing(reason: .notProvided)
+    let options = PresentationOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false)
+    let capture = try XCTUnwrap(try SnapshotPresentation.present(
+      SnapshotAcquisition(
+        hint: SnapshotPresentation.captureHint(for: options),
+        nodes: SnapshotGeometrySpace.normalized(nodes: acquired, viewport: viewport),
+        truncated: false,
+        effectiveDepth: nil,
+        viewport: viewport
+      ),
+      options: options
+    ))
+    let objects = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: JSONEncoder().encode(capture.nodes)) as? [[String: Any]]
+    )
+
+    // Containment is the one thing a capture with no box cannot decide, so the key is not there.
+    let undecided = try XCTUnwrap(objects.first { $0["label"] as? String == "Continue" })
+    XCTAssertFalse(
+      undecided.keys.contains("hittable"),
+      "an unknown viewport publishes no bit: \(undecided.keys.sorted())"
+    )
+    // Enablement and the root rule need no box, so those stay declared answers rather than gaps.
+    let disabled = try XCTUnwrap(objects.first { $0["label"] as? String == "Sold out" })
+    XCTAssertEqual(disabled["hittable"] as? Bool, false, "a disabled node is decided without a box")
+    let root = try XCTUnwrap(objects.first { $0["label"] as? String == "App" })
+    XCTAssertEqual(root["hittable"] as? Bool, false, "a root has nothing to hit through")
   }
 }
 #endif

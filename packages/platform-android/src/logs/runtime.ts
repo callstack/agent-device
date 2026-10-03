@@ -5,6 +5,7 @@ import {
   createPidScopedAppLogRuntimeOwner,
   resolveFirstNumericAppLogPid,
 } from '@agent-device/capture-kit';
+import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { assertAndroidLogPackageSafe } from './package-name.ts';
 import { androidAppLogDescriptorCodec, createAndroidAppLogEnvelope } from './descriptor.ts';
 
@@ -68,7 +69,7 @@ async function doctorAndroidAppLogs(
         await host.commands.run(
           {
             executable: 'adb',
-            args: ['-s', deviceId, 'shell', 'echo', 'ok'],
+            args: deviceShellArgv('adb', 'shell', ['echo', 'ok'], ['-s', deviceId]),
             allowFailure: true,
             timeoutMs: 1_000,
           },
@@ -102,7 +103,7 @@ async function doctorAndroidAppLogs(
 function androidPidRequest(deviceId: string, appBundleId: string) {
   return {
     executable: 'adb',
-    args: ['-s', deviceId, 'shell', 'pidof', appBundleId],
+    args: deviceShellArgv('adb', 'shell', ['pidof', appBundleId], ['-s', deviceId]),
     allowFailure: true,
     timeoutMs: 5_000,
   } as const;

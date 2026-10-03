@@ -27,7 +27,7 @@ test('round-trips provider release and device claim records without lease creden
   try {
     writeDaemonShutdownReport(stateDir, {
       providerReleases: { released: [lease], pending: [lease] },
-      claims: { released: [claim], orphaned: [], superseded: [claim] },
+      claims: { released: [claim], orphaned: [], superseded: [claim], unattributable: [] },
     });
 
     expect(readDaemonShutdownReport(stateDir)).toEqual({
@@ -35,7 +35,7 @@ test('round-trips provider release and device claim records without lease creden
         released: [{ leaseId: lease.leaseId, provider: 'limrun' }],
         pending: [{ leaseId: lease.leaseId, provider: 'limrun' }],
       },
-      claims: { released: [claim], orphaned: [], superseded: [claim] },
+      claims: { released: [claim], orphaned: [], superseded: [claim], unattributable: [] },
     });
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
@@ -54,7 +54,7 @@ test('a report written before claim reporting still reads its provider releases'
 
     expect(readDaemonShutdownReport(stateDir)).toEqual({
       providerReleases: { released: [], pending: [] },
-      claims: { released: [], orphaned: [], superseded: [] },
+      claims: { released: [], orphaned: [], superseded: [], unattributable: [] },
     });
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
@@ -78,6 +78,36 @@ test('ignores malformed shutdown reports and clear removes a prior report', () =
 
     clearDaemonShutdownReport(stateDir);
     expect(fs.existsSync(reportPath)).toBe(false);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('a report written before unattributable claims were separated still reads its three buckets', () => {
+  const stateDir = mkdtempForTestSync('agent-device-shutdown-report-');
+  const reportPath = path.join(stateDir, 'daemon-shutdown.json');
+  const claim = {
+    deviceKey: 'local:android:none:emulator-5554',
+    session: 'default',
+    platform: 'android',
+    deviceId: 'emulator-5554',
+  };
+
+  try {
+    // The shape a previous daemon writes. `unattributable` is additive, so a reader of a report from
+    // before it existed must still get every bucket it can describe rather than dropping the section.
+    fs.writeFileSync(
+      reportPath,
+      JSON.stringify({
+        providerReleases: { released: [], pending: [] },
+        claims: { released: [claim], orphaned: [claim], superseded: [claim] },
+      }),
+    );
+
+    expect(readDaemonShutdownReport(stateDir)).toEqual({
+      providerReleases: { released: [], pending: [] },
+      claims: { released: [claim], orphaned: [claim], superseded: [claim], unattributable: [] },
+    });
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

@@ -12,37 +12,36 @@ vi.mock('@limrun/api', () => ({
   default: class MockLimrun {},
 }));
 
-vi.mock('../platforms/android/app-helpers.ts', () => {
-  moduleLoads.androidAppHelpers += 1;
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
   return {
-    getAndroidAppStateWithAdb: vi.fn(async () => ({
-      package: 'com.example.app',
-      activity: '.MainActivity',
-    })),
-    listAndroidAppsWithAdb: vi.fn(async () => [{ package: 'com.example.app', name: 'Example' }]),
+    ...actual,
+    listAndroidAppsWithAdb: vi.fn(async () => {
+      moduleLoads.androidAppHelpers += 1;
+      return [{ package: 'com.example.app', name: 'Example' }];
+    }),
+    captureAndroidLogcatWithAdb: vi.fn(async () => {
+      moduleLoads.androidLogcat += 1;
+      return 'log line\n';
+    }),
   };
 });
 
-vi.mock('../platforms/android/logcat.ts', () => {
-  moduleLoads.androidLogcat += 1;
-  return {
-    captureAndroidLogcatWithAdb: vi.fn(async () => 'log line\n'),
-  };
-});
+vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/platform-apple/app-resolution')>()),
+  resolveIosAppAlias: vi.fn((app: string) => {
+    moduleLoads.appleAppResolution += 1;
+    return `resolved:${app}`;
+  }),
+}));
 
-vi.mock('../platforms/apple/core/app-resolution.ts', () => {
-  moduleLoads.appleAppResolution += 1;
-  return {
-    resolveIosAppAlias: vi.fn((app: string) => `resolved:${app}`),
-  };
-});
-
-vi.mock('../platforms/apple/core/install-artifact.ts', () => {
-  moduleLoads.appleInstallArtifact += 1;
-  return {
-    readIosBundleInfo: vi.fn(async () => ({ appName: 'Example' })),
-  };
-});
+vi.mock('@agent-device/platform-apple/install-artifact', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/platform-apple/install-artifact')>()),
+  readIosBundleInfo: vi.fn(async () => {
+    moduleLoads.appleInstallArtifact += 1;
+    return { appName: 'Example' };
+  }),
+}));
 
 test('Limrun construction defers operation and opposite-platform helper modules', async () => {
   const { LimrunRuntime } = await import('../provider-limrun-runtime.ts');
@@ -118,7 +117,7 @@ test('Limrun appstate forwards an in-flight abort through the provider ADB execu
   };
   const controller = new AbortController();
   let observedSignal: AbortSignal | undefined;
-  const adb = vi.fn(async (_args: string[], options?: { signal?: AbortSignal }) => {
+  const adb = vi.fn(async (_args: readonly string[], options?: { signal?: AbortSignal }) => {
     observedSignal = options?.signal;
     return await new Promise<never>((_resolve, reject) => {
       options?.signal?.addEventListener(
@@ -137,26 +136,106 @@ test('Limrun appstate forwards an in-flight abort through the provider ADB execu
   assert.equal(observedSignal, controller.signal);
 });
 
-test('host.runAdb keeps its exported shape and routes through the host transport', async () => {
+test('host.runAdb carries addressing apart from payload and routes through the host transport', async () => {
   const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
-  const { withAndroidHostAdbTransport } = await import('../platforms/android/adb-executor.ts');
+  const {
+    androidAdbInvocation,
+    androidAdbSerialTarget,
+    serializeAndroidAdbInvocation,
+    withAndroidHostAdbTransport,
+  } = await import('@agent-device/platform-android/mechanics');
   const dependencies = createLimrunRuntimeDependencies();
-  const seen: Array<{ args: string[]; options?: Record<string, unknown> }> = [];
+  const seen: Array<{
+    args: string[];
+    payload: readonly string[];
+    options?: Record<string, unknown>;
+  }> = [];
 
   const result = await withAndroidHostAdbTransport(
-    async (args, options) => {
-      seen.push({ args, ...(options ? { options } : {}) });
+    async (invocation, options) => {
+      seen.push({
+        args: serializeAndroidAdbInvocation(invocation),
+        payload: invocation.command,
+        ...(options ? { options } : {}),
+      });
       return { stdout: 'ok', stderr: '', exitCode: 0 };
     },
     async () =>
-      await dependencies.host.runAdb(['disconnect', 'emulator-5554'], {
-        allowFailure: true,
-        timeoutMs: 10_000,
-      }),
+      await dependencies.host.runAdb(
+        androidAdbInvocation(androidAdbSerialTarget('emulator-5554'), [
+          'disconnect',
+          'emulator-5554',
+        ]),
+        {
+          allowFailure: true,
+          timeoutMs: 10_000,
+        },
+      ),
   );
 
   assert.deepEqual(result, { stdout: 'ok', stderr: '', exitCode: 0 });
   assert.deepEqual(seen, [
-    { args: ['disconnect', 'emulator-5554'], options: { allowFailure: true, timeoutMs: 10_000 } },
+    {
+      args: ['-s', 'emulator-5554', 'disconnect', 'emulator-5554'],
+      payload: ['disconnect', 'emulator-5554'],
+      options: { allowFailure: true, timeoutMs: 10_000 },
+    },
   ]);
+});
+
+test('adbError names the failed command with the platform serializer', async () => {
+  const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
+  const { androidAdbInvocation, androidAdbSerialTarget } =
+    await import('@agent-device/platform-android/mechanics');
+  const dependencies = createLimrunRuntimeDependencies();
+
+  const failure = await dependencies.android.adbError(
+    'Limrun Android ADB command failed',
+    { exitCode: 1, stdout: '', stderr: 'device offline' },
+    androidAdbInvocation(androidAdbSerialTarget('127.0.0.1:62001'), ['reverse', 'tcp:8081']),
+  );
+
+  assert.equal(failure.details?.command, 'adb -s 127.0.0.1:62001 reverse tcp:8081');
+
+  const addressless = await dependencies.android.adbError('ADB failed', {
+    exitCode: 1,
+    stdout: '',
+    stderr: 'no device',
+  });
+  assert.equal(addressless.details?.command, undefined);
+});
+
+test('the adb invocation adapters address through the platform builders', async () => {
+  const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
+  const {
+    androidAdbHostTarget,
+    androidAdbInvocation,
+    androidAdbSerialTarget,
+    serializeAndroidAdbInvocation,
+  } = await import('@agent-device/platform-android/mechanics');
+  const dependencies = createLimrunRuntimeDependencies();
+
+  const device = dependencies.android.deviceAdbInvocation('127.0.0.1:62001', [
+    'shell',
+    'pm',
+    'list',
+    'packages',
+  ]);
+  assert.deepEqual(
+    device,
+    androidAdbInvocation(androidAdbSerialTarget('127.0.0.1:62001'), device.command),
+  );
+  assert.deepEqual(device.command, ['shell', 'pm', 'list', 'packages']);
+  assert.deepEqual(serializeAndroidAdbInvocation(device), [
+    '-s',
+    '127.0.0.1:62001',
+    'shell',
+    'pm',
+    'list',
+    'packages',
+  ]);
+
+  const host = dependencies.android.hostAdbInvocation(['disconnect', '127.0.0.1:62001']);
+  assert.deepEqual(host, androidAdbInvocation(androidAdbHostTarget(), host.command));
+  assert.deepEqual(serializeAndroidAdbInvocation(host), ['disconnect', '127.0.0.1:62001']);
 });

@@ -29,7 +29,16 @@ export type WireComparison = {
   changed: readonly string[];
   /** Declarations the baseline had and the current wire surface does not. */
   removed: readonly string[];
-  /** Declarations added since the baseline; additive, so never a failure. */
+  /**
+   * Baseline declarations that left their path but were re-declared unchanged
+   * (same name, same digest) at a single new path that no other left
+   * declaration also claims: a file move, never a failure.
+   */
+  moved: readonly string[];
+  /**
+   * Current keys the baseline never had (pure-move destinations excepted —
+   * their source is reported in `moved` instead). Additive, so never a failure.
+   */
   added: readonly string[];
   /** Whether the protocol version advanced since the baseline. */
   bumped: boolean;
@@ -43,12 +52,20 @@ export function compareWireLedgers(input: WireComparisonInput): WireComparison {
 
   const changed: string[] = [];
   const removed: string[] = [];
+  const moved: string[] = [];
+  const movedDestinations = new Set<string>();
+  const moveDestination = soleMoveDestinations(released.declarations, digests);
   for (const [key, releasedDigest] of Object.entries(released.declarations)) {
-    const digest = digests.get(key);
-    if (digest === undefined) removed.push(key);
-    else if (digest !== releasedDigest) changed.push(key);
+    const fate = baselineKeyFate(key, releasedDigest, digests, moveDestination);
+    if (fate.kind === 'changed') changed.push(fate.reportKey);
+    else if (fate.kind === 'moved') {
+      moved.push(key);
+      movedDestinations.add(fate.destination);
+    } else if (fate.kind === 'removed') removed.push(key);
   }
-  const added = Object.keys(current.declarations).filter((key) => !(key in released.declarations));
+  const added = Object.keys(current.declarations).filter(
+    (key) => !(key in released.declarations) && !movedDestinations.has(key),
+  );
 
   const failures: string[] = [];
   const stillAt = `still ${current.protocolVersion}`;
@@ -85,5 +102,84 @@ export function compareWireLedgers(input: WireComparisonInput): WireComparison {
     }
   }
 
-  return { changed, removed, added, bumped, failures };
+  return { changed, removed, moved, added, bumped, failures };
+}
+
+type BaselineFate =
+  | { kind: 'unchanged' }
+  | { kind: 'changed'; reportKey: string }
+  | { kind: 'moved'; destination: string }
+  | { kind: 'removed' };
+
+/** What a baseline declaration became in the current surface. */
+function baselineKeyFate(
+  key: string,
+  releasedDigest: string,
+  digests: ReadonlyMap<string, string>,
+  moveDestination: ReadonlyMap<string, string>,
+): BaselineFate {
+  const digest = digests.get(key);
+  if (digest !== undefined) {
+    return digest === releasedDigest ? { kind: 'unchanged' } : { kind: 'changed', reportKey: key };
+  }
+  const destination = moveDestination.get(key);
+  if (destination === undefined) return { kind: 'removed' };
+  return digests.get(destination) === releasedDigest
+    ? { kind: 'moved', destination }
+    : { kind: 'changed', reportKey: destination };
+}
+
+/**
+ * Displaced baseline declarations mapped to the single new path they may have
+ * moved to — or nothing when the move cannot be identified.
+ *
+ * A same-name re-declaration at exactly one new path is a file move, which a
+ * released peer still parses. One destination cannot be two declarations'
+ * moves, though: when two same-name baseline declarations left their paths and
+ * only one same-name new path exists, the other declaration's loss is real and
+ * only a bump covers it, so the contested destination resolves to removals. A
+ * same-name re-declaration whose digest MOVED is a change at the destination,
+ * ackable (digest-pinned, rationale required) rather than bump-forcing:
+ * textually it is indistinguishable from a removal plus a new same-named
+ * declaration, and that reading gets the ack escape hatch. Candidate paths are
+ * limited to ones absent from the baseline: names are not unique across files
+ * (two files both declare `sendJson`), and a name a baseline declaration still
+ * owns at its own path cannot identify a move.
+ */
+function soleMoveDestinations(
+  releasedDeclarations: Record<string, string>,
+  digests: ReadonlyMap<string, string>,
+): ReadonlyMap<string, string> {
+  const releasedKeys = new Set(Object.keys(releasedDeclarations));
+  const candidates = new Map<string, readonly string[]>();
+  for (const key of releasedKeys) {
+    if (digests.has(key)) continue;
+    const name = declarationName(key);
+    candidates.set(
+      key,
+      [...digests.keys()].filter(
+        (candidate) => declarationName(candidate) === name && !releasedKeys.has(candidate),
+      ),
+    );
+  }
+  const claimCount = new Map<string, number>();
+  for (const matches of candidates.values()) {
+    if (matches.length === 1) {
+      const destination = matches[0]!;
+      claimCount.set(destination, (claimCount.get(destination) ?? 0) + 1);
+    }
+  }
+  const sole = new Map<string, string>();
+  for (const [key, matches] of candidates) {
+    if (matches.length === 1 && claimCount.get(matches[0]!) === 1) {
+      sole.set(key, matches[0]!);
+    }
+  }
+  return sole;
+}
+
+/** The declaration name in a `<file>#<name>` key. */
+function declarationName(key: string): string {
+  const separator = key.lastIndexOf('#');
+  return separator >= 0 ? key.slice(separator + 1) : key;
 }

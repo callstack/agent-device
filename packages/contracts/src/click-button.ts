@@ -54,6 +54,6 @@ export function getClickButtonValidationError(options: {
   return null;
 }
 
-export function buttonTag(button: ClickButton): {} | { button: ClickButton } {
+export function buttonTag(button: ClickButton): Partial<{ button: ClickButton }> {
   return button === 'primary' ? {} : { button };
 }

@@ -1,5 +1,4 @@
 import { test, expect } from 'vitest';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -9,7 +8,7 @@ import {
   makeSession,
   noopInvoke,
 } from './session-test-harness.ts';
-import type { SessionState } from '../../types.ts';
+import type { SessionState } from '../../session-state.ts';
 import {
   handleSessionCommands,
   mockBindDeviceRuntime,
@@ -18,6 +17,7 @@ import {
   mockInspectDeviceRuntimeFacts,
   mockShutdownTargetRuntime,
 } from './session-command-harness.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 test('boot requires session or explicit selector', async () => {
   const sessionStore = makeSessionStore();
@@ -30,7 +30,7 @@ test('boot requires session or explicit selector', async () => {
       flags: {},
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -72,7 +72,7 @@ test('boot prefers explicit device selector over active session device', async (
       flags: { platform: 'ios', device: 'iPhone 17 Pro' },
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -93,6 +93,70 @@ test('boot prefers explicit device selector over active session device', async (
     expect(response.data?.platform).toBe('ios');
     expect(response.data?.id).toBe('sim-2');
   }
+});
+
+test('boot --timeout forwards a startup deadline to bootTarget (#3004)', async () => {
+  const sessionStore = makeSessionStore();
+  const selectedDevice: SessionState['device'] = {
+    platform: 'apple',
+    id: 'sim-timeout',
+    name: 'iPhone 17 Pro',
+    kind: 'simulator',
+    booted: false,
+  };
+  mockResolveTargetDevice.mockResolvedValue(selectedDevice);
+
+  const beforeMs = Date.now();
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'boot',
+      positionals: [],
+      flags: { platform: 'ios', device: 'iPhone 17 Pro', timeoutMs: 300_000 },
+    },
+    sessionName: 'default',
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+  const afterMs = Date.now();
+
+  expect(response?.ok, JSON.stringify(response)).toBe(true);
+  expect(mockEnsureReadyRuntime).toHaveBeenCalledOnce();
+  const deadlineAtMs = mockEnsureReadyRuntime.mock.calls[0]?.[0]?.deadlineAtMs;
+  expect(deadlineAtMs).toBeGreaterThanOrEqual(beforeMs + 300_000);
+  expect(deadlineAtMs).toBeLessThanOrEqual(afterMs + 300_000);
+});
+
+test('boot without --timeout leaves the startup deadline unset', async () => {
+  const sessionStore = makeSessionStore();
+  const selectedDevice: SessionState['device'] = {
+    platform: 'apple',
+    id: 'sim-no-timeout',
+    name: 'iPhone 17 Pro',
+    kind: 'simulator',
+    booted: false,
+  };
+  mockResolveTargetDevice.mockResolvedValue(selectedDevice);
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'boot',
+      positionals: [],
+      flags: { platform: 'ios', device: 'iPhone 17 Pro' },
+    },
+    sessionName: 'default',
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok, JSON.stringify(response)).toBe(true);
+  expect(mockEnsureReadyRuntime).toHaveBeenCalledOnce();
+  expect(mockEnsureReadyRuntime.mock.calls[0]?.[0]?.deadlineAtMs).toBeUndefined();
 });
 
 test('boot --headless admits a stopped Android emulator through facts and binds once', async () => {
@@ -120,7 +184,7 @@ test('boot --headless admits a stopped Android emulator through facts and binds 
       flags: { platform: 'android', device: 'Pixel_9_Pro_XL', headless: true },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -164,7 +228,7 @@ test('boot rejects the macOS host boot cell after one facts inspection and befor
       flags: { platform: 'macos' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -200,7 +264,7 @@ test('boot admits a stopped Android emulator through normal readiness', async ()
       flags: { platform: 'android', device: 'Pixel_9_Pro_XL' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -241,7 +305,7 @@ test('boot forwards Android serial admission policy to readiness', async () => {
       },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -271,7 +335,7 @@ test('boot --headless requires avd selector when device cannot be resolved', asy
       flags: { platform: 'android', serial: 'emulator-5554', headless: true },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -306,7 +370,7 @@ test('boot --headless rejects non-Android selectors', async () => {
       flags: { platform: 'ios', device: 'iPhone 17 Pro', headless: true },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -339,7 +403,7 @@ test('boot keeps --target validation before facts inspection', async () => {
       flags: { platform: 'android', target: 'tv', device: 'Pixel_9_Pro_XL' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -375,7 +439,7 @@ test('shutdown turns off selected iOS simulator', async () => {
       flags: { platform: 'ios', device: 'iPhone 17 Pro' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -421,7 +485,7 @@ test('shutdown rejects active session device and points to close --shutdown', as
       flags: { platform: 'ios', device: 'iPhone 17 Pro' },
     },
     sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -460,7 +524,7 @@ test('shutdown turns off selected Android emulator', async () => {
       flags: { platform: 'android', device: 'Pixel_9_Pro_XL' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -507,7 +571,7 @@ test('shutdown rejects unsupported physical devices', async () => {
       flags: { platform: 'ios', udid: 'device-1' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });
@@ -550,7 +614,7 @@ test('shutdown returns an error response when selected target shutdown fails', a
       flags: { platform: 'ios', device: 'iPhone 17 Pro' },
     },
     sessionName: 'default',
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
   });

@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { evaluateIsPredicate } from '@agent-device/selectors';
+import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 
 const viewportNode = {
   ref: 'e1',
@@ -28,13 +29,16 @@ test('evaluateIsPredicate visible and hidden', () => {
   const visible = evaluateIsPredicate({
     predicate: 'visible',
     node: baseNode,
-    nodes,
+    visibility: createSnapshotVisibility(nodes),
     platform: 'ios',
   });
   const hidden = evaluateIsPredicate({
     predicate: 'hidden',
     node: { ...baseNode, rect: { ...baseNode.rect, width: 0 }, hittable: false },
-    nodes: [viewportNode, { ...baseNode, rect: { ...baseNode.rect, width: 0 }, hittable: false }],
+    visibility: createSnapshotVisibility([
+      viewportNode,
+      { ...baseNode, rect: { ...baseNode.rect, width: 0 }, hittable: false },
+    ]),
     platform: 'ios',
   });
   assert.equal(visible.pass, true);
@@ -61,7 +65,7 @@ test('evaluateIsPredicate visible uses ancestor rect for visible list text', () 
   const visible = evaluateIsPredicate({
     predicate: 'visible',
     node: listText,
-    nodes: [viewportNode, listItem, listText],
+    visibility: createSnapshotVisibility([viewportNode, listItem, listText]),
     platform: 'ios',
   });
   assert.equal(visible.pass, true);
@@ -76,7 +80,7 @@ test('evaluateIsPredicate visible fails for off-screen nodes', () => {
   const visible = evaluateIsPredicate({
     predicate: 'visible',
     node: offscreenNode,
-    nodes: [viewportNode, offscreenNode],
+    visibility: createSnapshotVisibility([viewportNode, offscreenNode]),
     platform: 'ios',
   });
   assert.equal(visible.pass, false);
@@ -91,7 +95,7 @@ test('evaluateIsPredicate visible fails for zero-size nodes', () => {
   const visible = evaluateIsPredicate({
     predicate: 'visible',
     node: zeroRectNode,
-    nodes: [viewportNode, zeroRectNode],
+    visibility: createSnapshotVisibility([viewportNode, zeroRectNode]),
     platform: 'ios',
   });
   assert.equal(visible.pass, false);
@@ -124,7 +128,7 @@ test('evaluateIsPredicate visible does not inherit viewport visibility from gene
   const visible = evaluateIsPredicate({
     predicate: 'visible',
     node: listText,
-    nodes: [viewportNode, scrollView, wrapper, listText],
+    visibility: createSnapshotVisibility([viewportNode, scrollView, wrapper, listText]),
     platform: 'ios',
   });
   assert.equal(visible.pass, false);
@@ -150,7 +154,7 @@ test('evaluateIsPredicate visible resolves parent links by node index instead of
   const visible = evaluateIsPredicate({
     predicate: 'visible',
     node: listText,
-    nodes: [viewportNode, listText, listItem],
+    visibility: createSnapshotVisibility([viewportNode, listText, listItem]),
     platform: 'ios',
   });
   assert.equal(visible.pass, true);
@@ -160,13 +164,13 @@ test('evaluateIsPredicate editable and selected', () => {
   const editable = evaluateIsPredicate({
     predicate: 'editable',
     node: baseNode,
-    nodes: [viewportNode, baseNode],
+    visibility: createSnapshotVisibility([viewportNode, baseNode]),
     platform: 'ios',
   });
   const selected = evaluateIsPredicate({
     predicate: 'selected',
     node: { ...baseNode, selected: true },
-    nodes: [viewportNode, { ...baseNode, selected: true }],
+    visibility: createSnapshotVisibility([viewportNode, { ...baseNode, selected: true }]),
     platform: 'ios',
   });
   assert.equal(editable.pass, true);
@@ -177,14 +181,14 @@ test('evaluateIsPredicate text uses equality', () => {
   const match = evaluateIsPredicate({
     predicate: 'text',
     node: baseNode,
-    nodes: [viewportNode, baseNode],
+    visibility: createSnapshotVisibility([viewportNode, baseNode]),
     expectedText: 'Email',
     platform: 'ios',
   });
   const mismatch = evaluateIsPredicate({
     predicate: 'text',
     node: baseNode,
-    nodes: [viewportNode, baseNode],
+    visibility: createSnapshotVisibility([viewportNode, baseNode]),
     expectedText: 'email',
     platform: 'ios',
   });

@@ -1,38 +1,24 @@
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { AppleApplicationState } from '@agent-device/kernel/snapshot';
+import type { LocalInteractorOperationResolver } from './interactor-operation-binding.ts';
+
+/** Which app a session-scoped read is about; the Android foreground read needs nothing. */
+export type AppStateRuntimeInput = Readonly<{ appBundleId?: string }>;
 
 /** Neutral foreground identity returned by a selected platform/provider runtime. */
 export type AppStateRuntimeResult = Readonly<{
   package?: string;
   activity?: string;
-}>;
-
-export type AppStateRuntimeCommand = Readonly<{
-  args: readonly string[];
-  allowFailure?: boolean;
-  timeoutMs?: number;
-}>;
-
-export type AppStateRuntimeCommandResult = Readonly<{
-  stdout: string;
+  /**
+   * Apple: how the app named by the input is running, as a live runner reads it. It says nothing
+   * about which app is frontmost; a session app in a background state has left the foreground.
+   * Absent when no runner session is live to ask, so the read never starts one.
+   */
+  applicationState?: AppleApplicationState;
 }>;
 
 export type AppStateRuntimeOperations = Readonly<{
-  appState(): Promise<AppStateRuntimeResult>;
+  appState(input?: AppStateRuntimeInput): Promise<AppStateRuntimeResult>;
 }>;
 
-export type AppStateRuntimeHost = Readonly<{
-  android: Readonly<{
-    run(
-      device: DeviceInfo,
-      command: AppStateRuntimeCommand,
-      signal: AbortSignal,
-    ): Promise<AppStateRuntimeCommandResult>;
-  }>;
-  harmonyos: Readonly<{
-    run(
-      device: DeviceInfo,
-      command: AppStateRuntimeCommand,
-      signal: AbortSignal,
-    ): Promise<AppStateRuntimeCommandResult>;
-  }>;
-}>;
+/** Resolves the selected owner's interactor, as every other local interactor-backed read does. */
+export type AppStateInteractorResolver = LocalInteractorOperationResolver;

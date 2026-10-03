@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/android-snapshot-helper.ts';
-import type { AndroidAdbProvider } from '../../../src/platforms/android/adb-executor.ts';
+import type { AndroidAdbProvider } from '@agent-device/platform-android/mechanics';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 

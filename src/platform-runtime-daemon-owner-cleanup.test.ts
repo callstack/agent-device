@@ -1,21 +1,19 @@
 import { expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  adapter: { terminateProcess: vi.fn() },
   cleanupRunnerLeasesForOwner: vi.fn(async () => undefined),
 }));
 
-vi.mock('./platforms/apple/core/runner-client.ts', () => ({
+vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   cleanupRunnerLeasesForOwner: mocks.cleanupRunnerLeasesForOwner,
-  runnerLeaseCleanupAdapter: mocks.adapter,
 }));
 
 import { createDaemonOwnerCleanup } from './platform-runtime-daemon-owner-cleanup.ts';
 
-test('composes owner cleanup with the Apple runner lease adapter', async () => {
+test('composes owner cleanup with the Apple runner lease facade', async () => {
   const owner = { pid: 42, startTime: 'process-start' };
 
   await createDaemonOwnerCleanup().cleanup(owner);
 
-  expect(mocks.cleanupRunnerLeasesForOwner).toHaveBeenCalledWith(owner, mocks.adapter);
+  expect(mocks.cleanupRunnerLeasesForOwner).toHaveBeenCalledWith(owner);
 });

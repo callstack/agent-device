@@ -1,6 +1,7 @@
 // The public API vocabulary for app install, deploy, open, close and inventory.
 
 import type { AppsFilter } from './app-inventory.ts';
+import type { LaunchConfirmation } from './application-lifecycle-runtime.ts';
 import type { JsonObject } from './json.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { TargetShutdownResult } from './target-shutdown-contract.ts';
@@ -66,16 +67,30 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
     launchConsole?: string;
     launchArgs?: string[];
     relaunch?: boolean;
+    /** Startup budget in milliseconds: bounds the Simulator boot wait on a cold device. */
+    timeoutMs?: number;
     /**
-     * Include the initial interactive snapshot in a fresh open response. With
-     * no app argument, iOS can discover the sole running app on the sole booted
-     * simulator and fails closed when that environment is ambiguous.
+     * Block this open for up to n milliseconds (100-120000) while another session holds the device,
+     * then fail with DEVICE_IN_USE naming that session. Only session contention is waited for: a
+     * device claim held by another workspace is refused at once with its recovery command. A device
+     * that never frees, or is taken again while this open waits, costs the full budget, which
+     * extends this command's timeout envelope rather than eating into it.
+     */
+    waitMs?: number;
+    // Editor documentation for a public type: a `.d.ts` is read where no
+    // FlagDefinition resolves, and nothing generates these docs. It is not a second
+    // statement of what the option does — it is the option's ONE declaration (the
+    // `--foreground` FlagDefinition's `inputDescription`) verbatim, pinned to it by
+    // `commands/command-input-option-field.test.ts`.
+    /**
+     * Include an initial interactive snapshot in a fresh open response. With no
+     * app argument, discover the sole running app on the sole booted iOS
+     * simulator; ambiguous environments fail closed.
      */
     foreground?: boolean;
     saveScript?: boolean | string;
     /** #1258: overwrite an existing --save-script target instead of refusing. Alias: --overwrite. */
     force?: boolean;
-    deviceHub?: boolean;
     testIme?: boolean;
     noRecord?: boolean;
     runtime?: SessionRuntimeHints;
@@ -95,6 +110,11 @@ export type AppOpenResult = {
   runtime?: SessionRuntimeHints;
   selection?: DeviceSelectionMetadata;
   device?: AgentDeviceSessionDevice;
+  /**
+   * `accepted` when iOS held the launch URL behind an `Open in "<App>"?` confirmation naming the
+   * session app and the open answered it.
+   */
+  launchConfirmation?: LaunchConfirmation;
   /**
    * Initial interactive snapshot captured immediately after an open that
    * requested `foreground`, composed from the same snapshot-runtime dispatch

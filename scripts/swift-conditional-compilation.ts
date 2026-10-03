@@ -75,9 +75,15 @@ export function evaluateCondition(condition: string, platform: Platform): boolea
       expectToken(')');
       return call(token, argument);
     }
-    // Both are defined by every unit-test build: the compile flag by the build script, and
-    // DEBUG by the Debug configuration every lane builds.
-    if (token === 'AGENT_DEVICE_RUNNER_UNIT_TESTS' || token === 'DEBUG') return true;
+    // All three are defined by every unit-test build: the two compile flags by the build script,
+    // and DEBUG by the Debug configuration every lane builds.
+    if (
+      token === 'AGENT_DEVICE_RUNNER_UNIT_TESTS' ||
+      token === 'AGENT_DEVICE_RUNNER_ISOLATION_CANARY' ||
+      token === 'DEBUG'
+    ) {
+      return true;
+    }
     return fail(`unsupported ${token}`);
   };
   const unary = (): boolean => (peek() === '!' ? (take(), !unary()) : primary());
@@ -118,7 +124,7 @@ function applyDirective(
     frames.push({ parentActive: outer, active: outer && taken, taken });
     return;
   }
-  const frame = frames[frames.length - 1];
+  const frame = frames.at(-1);
   if (!frame) throw new UnsupportedConditionError(`#${keyword} without a matching #if`);
   if (keyword === 'endif') {
     frames.pop();

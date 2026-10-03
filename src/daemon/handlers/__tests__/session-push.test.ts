@@ -6,7 +6,7 @@ import type {
   BindDeviceRuntime,
 } from '../../request-runtime-binding.ts';
 
-import type { DaemonRequest, DaemonResponse } from '../../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import {

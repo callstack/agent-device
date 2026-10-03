@@ -7,7 +7,10 @@ import type {
 import {
   readOptionalInteger as optionalInteger,
   readOptionalNumber as optionalNumberValue,
+  type CliFlags,
 } from '@agent-device/contracts/command';
+import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-registry';
+import type { FlagDefinition, FlagKey } from '@agent-device/command-registry/flag-types';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RepeatedInput } from '@agent-device/contracts/interaction';
 import type { JsonSchema } from './command-contract.ts';
@@ -67,6 +70,25 @@ function commandInputSchema(
   };
 }
 
+/**
+ * A non-strict object shape, for what a command RETURNS. It deliberately omits
+ * `additionalProperties: false` and never injects the common device-selection fields, so
+ * additive response fields such as `cost` keep validating. An advertised INPUT object is
+ * built by `commandInputSchema` instead, which is strict and carries those fields.
+ */
+export function objectSchema(
+  properties: Record<string, JsonSchema>,
+  required: readonly string[] = [],
+  description?: string,
+): JsonSchema {
+  return {
+    type: 'object',
+    ...(description ? { description } : {}),
+    properties,
+    ...(required.length > 0 ? { required } : {}),
+  };
+}
+
 function pointSchema(description: string): JsonSchema {
   return {
     type: 'object',
@@ -80,15 +102,24 @@ function pointSchema(description: string): JsonSchema {
   };
 }
 
-function enumSchema(values: readonly string[], description?: string): JsonSchema {
+export function enumSchema(values: readonly string[], description?: string): JsonSchema {
   return { type: 'string', enum: values, ...(description ? { description } : {}) };
+}
+
+/** A single-valued string schema, for a discriminant field an output shape always fixes. */
+export function constSchema(value: string): JsonSchema {
+  return { type: 'string', const: value };
 }
 
 export function stringSchema(description?: string): JsonSchema {
   return { type: 'string', ...(description ? { description } : {}) };
 }
 
-function numberSchema(
+export function nullableStringSchema(description?: string): JsonSchema {
+  return { type: ['string', 'null'], ...(description ? { description } : {}) };
+}
+
+export function numberSchema(
   description?: string,
   options: { min?: number; max?: number } = {},
 ): JsonSchema {
@@ -108,7 +139,7 @@ export function booleanSchema(description?: string): JsonSchema {
   return { type: 'boolean', ...(description ? { description } : {}) };
 }
 
-function stringArraySchema(description?: string): JsonSchema {
+export function stringArraySchema(description?: string): JsonSchema {
   return {
     type: 'array',
     items: { type: 'string' },
@@ -224,6 +255,79 @@ export function booleanField(description?: string): CommandField<boolean> {
   return optionalField(booleanSchema(description), optionalBoolean);
 }
 
+/**
+ * Builds a command's input field from the option's ONE declaration.
+ *
+ * A hand-written field — `booleanField('Include an initial interactive
+ * snapshot…')` — restates two facts the option already declared: its value type
+ * (`type: 'boolean'` on the `FlagDefinition`) and its description, as a second,
+ * differently-worded copy of the same sentence. Neither copy decides anything
+ * and both drift: `open --foreground` had one description rewritten across four
+ * files at once because no file owned it.
+ *
+ * Derived here instead:
+ *  - the JSON schema shape and its bounds come from the declaration's `type`,
+ *    `enumValues`, `min` and `max`;
+ *  - the description comes from the declaration's `inputDescription`;
+ *  - the TypeScript value type comes from `CliFlags[key]`, which is already
+ *    where that flag's type is declared.
+ *
+ * So an option's description is one edit, and a command cannot advertise an
+ * input its own CLI flag does not parse.
+ */
+export function optionField<TKey extends FlagKey>(
+  key: TKey,
+): CommandField<NonNullable<CliFlags[TKey]>> {
+  return buildOptionField(optionDeclaration(key)) as CommandField<NonNullable<CliFlags[TKey]>>;
+}
+
+/**
+ * Fails closed: a command may derive a field only from an option that actually
+ * declares a tool/SDK audience, rather than publishing an undescribed input.
+ */
+function optionDeclaration(key: FlagKey): FlagDefinition {
+  const declared = getFlagDefinitionsForKey(key).filter(
+    (definition) => definition.inputDescription !== undefined,
+  );
+  const [definition, ...extra] = declared;
+  if (!definition) {
+    throw new Error(`Flag ${key} declares no inputDescription; optionField cannot derive a field`);
+  }
+  if (extra.length > 0) {
+    throw new Error(`Flag ${key} declares inputDescription more than once`);
+  }
+  return definition;
+}
+
+function buildOptionField(definition: FlagDefinition): CommandField<unknown> {
+  const description = definition.inputDescription;
+  const bounds = { min: definition.min, max: definition.max };
+  switch (definition.type) {
+    case 'boolean':
+      return booleanField(description) as CommandField<unknown>;
+    case 'int':
+      return integerField(description, bounds) as CommandField<unknown>;
+    case 'number':
+      return numberField(description, bounds) as CommandField<unknown>;
+    case 'string':
+      return stringField(description) as CommandField<unknown>;
+    case 'enum':
+      return enumField(optionEnumValues(definition), description) as CommandField<unknown>;
+    case 'booleanOrString':
+      throw new Error(
+        `Flag ${definition.key} is booleanOrString; declare its field shape explicitly with jsonSchemaField`,
+      );
+  }
+}
+
+function optionEnumValues(definition: FlagDefinition): readonly string[] {
+  const values = definition.enumValues;
+  if (!values) {
+    throw new Error(`Flag ${definition.key} is an enum with no enumValues`);
+  }
+  return values;
+}
+
 export function enumField<const TValues extends readonly string[]>(
   values: TValues,
   description?: string,
@@ -308,6 +412,7 @@ export function readFieldInput<TFields extends CommandFieldMap>(
   );
   const commonInput = readCommonInput(record, {
     readTargetAlias: !Object.hasOwn(fields, 'target'),
+    readinessBudgetDeclared: Object.hasOwn(fields, 'readinessTimeoutMs'),
   });
   return compactRecord({
     ...commonInput,

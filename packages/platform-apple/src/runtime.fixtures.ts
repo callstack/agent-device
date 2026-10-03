@@ -1,3 +1,4 @@
+import { inertAudioProbeHost } from '@agent-device/host-kit/audio-probe-fixtures';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { hostFixture } from './logs/runtime.fixtures.ts';
@@ -15,15 +16,6 @@ export function platformRuntimeHostFixture(): PlatformRuntimeHost {
       readProcessMarker: async () => ({ status: 'missing' }),
     },
     networkTransports: { resolve: async () => ({ mode: 'local' }) },
-    appInventory: {
-      apple: { listApps: async () => [] },
-      android: { listApps: async () => [] },
-      harmonyos: { listApps: async () => [] },
-    },
-    appState: {
-      android: { run: async () => ({ stdout: '' }) },
-      harmonyos: { run: async () => ({ stdout: '' }) },
-    },
     deviceReadiness: {
       applePhysical: { ensureConnected: async () => {} },
       appleAutomation: {
@@ -38,23 +30,7 @@ export function platformRuntimeHostFixture(): PlatformRuntimeHost {
       },
     },
     localInteractors: { resolve: async () => ({}) as Interactor },
-    audioProbe: {
-      hostCapture: {
-        info: {
-          source: 'system-audio',
-          backend: 'fixture',
-          sourceCount: 0,
-          notes: () => [],
-        },
-        start: async () => {
-          throw new Error('Audio probe is outside this runtime fixture.');
-        },
-        inspectProcess: async () => 'missing',
-        terminateProcess: async () => 'already-missing',
-      },
-      web: { resolve: async () => undefined },
-      ownedProcesses: { replace: () => {}, clear: () => {} },
-    },
+    audioProbe: inertAudioProbeHost(),
     applicationResources: {
       recoverStartupResources: async () => {},
       detachForDaemonShutdown: async () => {},
@@ -66,7 +42,9 @@ export function platformRuntimeHostFixture(): PlatformRuntimeHost {
       prewarmRunnerSession: async () => {},
       notifyRunnerAppRelaunched: async () => {},
       stopRunnerSession: async () => {},
-      scheduleRunnerIdleStop: () => {},
+      hasLiveRunnerSession: async () => false,
+      releaseSpeculativeRunner: async () => false,
+      releaseRunnerOnClose: async () => {},
       prepareRunner: async () => ({ runner: {}, connectMs: 0, healthCheckMs: 0 }),
       applyRuntimeHints: async () => {},
       clearRuntimeHints: async () => {},

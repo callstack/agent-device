@@ -12,9 +12,10 @@ import type {
   InspectDeviceRuntimeFacts,
   RuntimeAdmissionBindings,
 } from './request-runtime-binding.ts';
-import { errorResponse, type DaemonFailureResponse } from './handlers/response.ts';
+import { ensureBoundDeviceReady } from './request-runtime-binding.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
+import { type DaemonFailureResponse, errorResponse } from '@agent-device/kernel/contracts';
 
 /** Builds the failure a command reports when its exact device cell does not admit an operation. */
 export type UnavailableRuntimeResponse = (
@@ -36,9 +37,28 @@ export type RuntimeAdmissionRequest = RuntimeAdmissionBindings &
     device: DeviceInfo;
     required: readonly RuntimeOperationKey<PlatformRuntimeOperations>[];
     unavailableResponse?: UnavailableRuntimeResponse;
+    readiness?: boolean;
   }>;
 
 export type { RuntimeAdmissionBindings };
+
+/**
+ * The one refusal the daemon reports when a device's exact runtime owner did not admit an
+ * operation. Both seams — this generic route and the request-scoped session handlers — build their
+ * `UNSUPPORTED_OPERATION` here, so the `<command> is not supported on this device` sentence, the
+ * typed `details.reason`, and the hint have a single owner and one wire shape.
+ */
+export function unsupportedOperationResponse(
+  command: string,
+  unavailable: RuntimeOperationUnavailability,
+): DaemonFailureResponse {
+  return errorResponse(
+    'UNSUPPORTED_OPERATION',
+    `${command} is not supported on this device`,
+    { reason: unavailable.reason },
+    unavailable.hint ? { hint: unavailable.hint } : undefined,
+  );
+}
 
 /**
  * The one facts-admission seam every migrated command route shares. It performs exactly one
@@ -55,12 +75,7 @@ export async function admitRuntimeOperations(
     if (fact.available) continue;
     const response = request.unavailableResponse
       ? request.unavailableResponse(fact)
-      : errorResponse(
-          'UNSUPPORTED_OPERATION',
-          `${request.command} is not supported on this device`,
-          undefined,
-          fact.hint ? { hint: fact.hint } : undefined,
-        );
+      : unsupportedOperationResponse(request.command, fact);
     return { type: 'response', response };
   }
   return { type: 'admitted', bind: requireDeviceBinding(request.bindDevice) };
@@ -91,7 +106,9 @@ export async function admitRuntimeUse<
 > {
   const admitted = await admitRuntimeOperations({ ...request, required: request.use.required });
   if (admitted.type === 'response') return admitted;
-  return { type: 'runtime', runtime: await admitted.bind(request.device, request.use) };
+  const runtime = await admitted.bind(request.device, request.use);
+  if (request.readiness) await ensureBoundDeviceReady(runtime);
+  return { type: 'runtime', runtime };
 }
 
 /**

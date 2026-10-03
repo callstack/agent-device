@@ -1,0 +1,204 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
+import {
+  copySnapshotClickabilityEvidence,
+  recordSnapshotTiming,
+  snapshotCaptureAnnotationsFrom,
+  type SnapshotCaptureAnnotations,
+} from '@agent-device/contracts/capture';
+import { publicPlatformString } from '@agent-device/kernel/device';
+import {
+  findNodeByRef,
+  normalizeRef,
+  SNAPSHOT_CAPTURE_OPTION_KEYS,
+  snapshotOptionsFromFlags,
+  type RawSnapshotNode,
+  type SnapshotCaptureProvenance,
+  type SnapshotKeyboardBandFact,
+  type SnapshotState,
+} from '@agent-device/kernel/snapshot';
+import { resolveRefLabel } from '@agent-device/capture-kit/snapshot-node-lookup';
+import { STALE_REF_HINT } from '@agent-device/selectors';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
+import { captureSnapshotWithInteractor } from './snapshot-interactor-capture.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
+import { clearAndroidSnapshotFreshness } from './session-snapshot-freshness.ts';
+import type { SnapshotFreshnessMode } from '@agent-device/capture-kit/snapshot-freshness';
+import { contextFromFlags } from './context.ts';
+import { resolveDeferredInteractionOutcome } from './deferred-interaction-outcome.ts';
+import type { SessionState } from './session-state.ts';
+import { type DaemonFailureResponse, errorResponse } from '@agent-device/kernel/contracts';
+
+type CaptureSnapshotParams = {
+  device: SessionState['device'];
+  session: SessionState | undefined;
+  flags: CommandFlags | undefined;
+  includeRects?: boolean;
+  outPath?: string;
+  logPath: string;
+  snapshotScope?: string;
+  androidFreshnessMode?: SnapshotFreshnessMode;
+  signal?: AbortSignal;
+  /**
+   * Request-bound platform capture. Migrated callers inject the selected
+   * runtime operation; legacy consumers keep the existing interactor path
+   * until their own command descriptor cuts over.
+   */
+  captureData?: () => Promise<SnapshotData>;
+};
+
+type SnapshotData = {
+  nodes?: RawSnapshotNode[];
+  truncated?: boolean;
+  quality?: unknown;
+  /** The keyboard band the capture's producer measured (#2660), carried to the state guards read. */
+  keyboard?: SnapshotKeyboardBandFact;
+} & Omit<SnapshotCaptureAnnotations, 'quality'> &
+  SnapshotCaptureProvenance;
+
+type SnapshotAttempt = {
+  data: SnapshotData;
+  snapshot: SnapshotState;
+  annotations: SnapshotCaptureAnnotations;
+};
+
+type CaptureSnapshotResult = {
+  snapshot: SnapshotState;
+} & SnapshotCaptureAnnotations;
+
+export async function captureSnapshot(
+  params: CaptureSnapshotParams,
+): Promise<CaptureSnapshotResult> {
+  const deferred = await resolveDeferredInteractionOutcome({
+    session: params.session,
+    device: params.device,
+    interactiveOnly: params.flags?.snapshotInteractiveOnly === true,
+    androidFreshnessMode: params.androidFreshnessMode,
+    capture: () => captureSnapshotAttempt(params),
+  });
+  if (deferred) return deferred;
+
+  const latest = await captureSnapshotAttempt(params);
+  clearAndroidSnapshotFreshness(params.session);
+  return {
+    snapshot: latest.snapshot,
+    ...latest.annotations,
+  };
+}
+
+export async function captureSnapshotData(params: CaptureSnapshotParams): Promise<SnapshotData> {
+  if (params.captureData) return await params.captureData();
+  const { device, session, logPath } = params;
+  const context = contextFromFlags(
+    logPath,
+    resolveSnapshotStateFlags(params),
+    session?.appBundleId,
+    session?.trace?.outPath,
+  );
+  return await captureSnapshotWithInteractor({
+    device,
+    runnerContext: {
+      requestId: context.requestId,
+      signal: params.signal,
+      appBundleId: context.appBundleId,
+      verbose: context.verbose,
+      logPath: context.logPath,
+      traceLogPath: context.traceLogPath,
+      iosXctestrunFile: context.iosXctestrunFile,
+      iosXctestDerivedDataPath: context.iosXctestDerivedDataPath,
+      iosXctestEnvDir: context.iosXctestEnvDir,
+      runnerLeaseContext: context.runnerLeaseContext,
+    },
+    options: {
+      appBundleId: context.appBundleId,
+      signal: params.signal,
+      ...snapshotOptionsFromFlags(context, SNAPSHOT_CAPTURE_OPTION_KEYS),
+      includeRects: params.includeRects,
+      surface: session?.surface,
+    },
+  });
+}
+
+async function captureSnapshotAttempt(params: CaptureSnapshotParams): Promise<SnapshotAttempt> {
+  const startedAt = Date.now();
+  const data = await captureSnapshotData(params);
+  recordSnapshotTiming(params.session, {
+    durationMs: Date.now() - startedAt,
+    backend: data.backend,
+    // approach (b): emit the PUBLIC leaf platform (ios/macos), never the internal `apple`.
+    platform: publicPlatformString(params.device),
+  });
+  const annotations = snapshotCaptureAnnotationsFrom(data);
+  const snapshot = copySnapshotClickabilityEvidence(
+    data,
+    buildSnapshotState(data, resolveSnapshotStateFlags(params)),
+  );
+  // The one seam where snapshot state and capture annotations meet: consumers that only keep the
+  // SnapshotState (selector-backed find/wait, session-stored snapshots) must still learn that the
+  // capture is an occluding system surface, so the disclosure is not lost with the annotations.
+  if (annotations.androidSnapshot?.systemSurfaceOnly === true) {
+    snapshot.systemSurfaceOnly = true;
+  }
+  return { data, snapshot, annotations };
+}
+
+/**
+ * The ONE effective scope of a capture, handed to both the platform capture and
+ * `buildSnapshotState`. Backends that resolve scope inside their projection (android) get no
+ * post-wire pass, so the two sides must see the same value: an explicit `snapshotScope` param
+ * overrides the flag, an absent param must never erase it (#1832 C2).
+ */
+function resolveSnapshotStateFlags(
+  params: Pick<CaptureSnapshotParams, 'flags' | 'snapshotScope'>,
+): CaptureSnapshotParams['flags'] {
+  if (params.snapshotScope === undefined) {
+    return params.flags;
+  }
+  return {
+    ...params.flags,
+    snapshotScope: params.snapshotScope,
+  };
+}
+
+export function resolveSnapshotScope(
+  snapshotScope: string | undefined,
+  session: SessionState | undefined,
+): { ok: true; scope?: string } | DaemonFailureResponse {
+  if (!snapshotScope || !snapshotScope.trim().startsWith('@')) {
+    return { ok: true, scope: snapshotScope };
+  }
+  if (!session?.snapshot) {
+    return errorResponse('INVALID_ARGS', 'Ref scope requires an existing snapshot in session.');
+  }
+  const ref = normalizeRef(snapshotScope.trim());
+  if (!ref) {
+    return errorResponse('INVALID_ARGS', `Invalid ref scope: ${snapshotScope}`);
+  }
+  const candidates = [
+    session.snapshot,
+    ...(session.snapshotScopeSource ? [session.snapshotScopeSource] : []),
+  ];
+  let found = false;
+  let resolved: string | undefined;
+  for (const snapshot of candidates) {
+    const node = findNodeByRef(snapshot.nodes, ref);
+    if (!node) continue;
+    found = true;
+    resolved = resolveRefLabel(node, snapshot.nodes);
+    if (resolved) break;
+  }
+  if (!found) {
+    return errorResponse(
+      'COMMAND_FAILED',
+      `Ref ${snapshotScope} not found`,
+      { reason: INTERACTION_ERROR_REASONS.refNotFound, ref },
+      { hint: STALE_REF_HINT },
+    );
+  }
+  if (!resolved) {
+    return errorResponse('COMMAND_FAILED', `Ref ${snapshotScope} has no label to scope by`, {
+      reason: INTERACTION_ERROR_REASONS.refUnlabeled,
+      ref,
+    });
+  }
+  return { ok: true, scope: resolved };
+}

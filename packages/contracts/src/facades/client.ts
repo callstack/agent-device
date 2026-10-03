@@ -55,6 +55,7 @@ export type {
   PanOptions,
   PinchOptions,
   PressOptions,
+  ReadinessBudgetOptions,
   RepeatedPressOptions,
   RotateGestureOptions,
   ScrollOptions,
@@ -66,6 +67,9 @@ export type {
 } from '../client-gesture.ts';
 export type {
   CloudArtifactsOptions,
+  HumanControlHold,
+  HumanControlHoldOptions,
+  HumanControlHoldScope,
   Lease,
   LeaseAllocateOptions,
   LeaseOptions,
@@ -86,11 +90,7 @@ export type {
   ReplayRunOptions,
   ReplayTestOptions,
 } from '../client-replay.ts';
-export type {
-  CommandExecutionOptions,
-  CommandRequestResult,
-  InternalRequestOptions,
-} from '../client-request.ts';
+export type { CommandRequestResult } from '../client-request.ts';
 export type {
   FindBaseOptions,
   FindOptions,
@@ -109,11 +109,18 @@ export type { PermissionTarget, SettingsUpdateOptions } from '../client-settings
 export type {
   AlertCommandOptions,
   AppStateCommandOptions,
+  ActionButtonCommandOptions,
+  AppSwitcherCommandOptions,
+  BackCommandOptions,
   ClipboardCommandOptions,
+  FoldCommandOptions,
   DoctorCommandOptions,
+  HomeCommandOptions,
   KeyboardCommandOptions,
+  OrientationCommandOptions,
   PrepareCommandOptions,
   ReactNativeCommandOptions,
+  TvRemoteCommandOptions,
   ViewportCommandOptions,
   WaitCommandOptions,
   WaitCommandTarget,

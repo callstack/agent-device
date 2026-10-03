@@ -1,1 +1,1 @@
-export { runBatch } from '../core/batch.ts';
+export { runBatch } from '@agent-device/command-registry/batch';

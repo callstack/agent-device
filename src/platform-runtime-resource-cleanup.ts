@@ -1,20 +1,29 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isIosFamily } from '@agent-device/kernel/device';
-import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
-import { emitDiagnostic } from './utils/diagnostics.ts';
-import type { OwnedProcessRecordStore } from './utils/owned-process-record.ts';
+import type { PlatformResourceCleanup } from './daemon/platform-resource-cleanup.ts';
+import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
+import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
 /** Focused durable-resource cleanup composed above daemon policy and concrete platforms. */
 export async function resetAndroidSnapshotHelperRuntime(): Promise<void> {
-  const { resetAndroidSnapshotHelperSessions } =
-    await import('./platforms/android/snapshot-helper.ts');
+  const { resetAndroidSnapshotHelperSessions } = await loadAndroidMechanics();
   await resetAndroidSnapshotHelperSessions();
 }
 
 async function stopAndroidSnapshotHelperRuntimeForDevice(device: DeviceInfo): Promise<void> {
-  const { stopAndroidSnapshotHelperSessionForDevice } =
-    await import('./platforms/android/snapshot-helper.ts');
+  const { stopAndroidSnapshotHelperSessionForDevice } = await loadAndroidMechanics();
   await stopAndroidSnapshotHelperSessionForDevice(device);
+}
+
+/** Only a macOS host has an `XCTestDevices` an older agent-device could have redirected. */
+export async function restoreLegacyXctestDeviceSetRedirectRuntime(
+  onDiagnostic: (diagnostic: ResourceDiagnostic) => void,
+): Promise<void> {
+  if (process.platform !== 'darwin') return;
+  const { restoreLegacyXctestDeviceSetRedirect } =
+    await import('@agent-device/platform-apple/runner-owner');
+  await restoreLegacyXctestDeviceSetRedirect(onDiagnostic);
 }
 
 export async function cleanupManagedWebRuntimeOrphans(params: {
@@ -22,11 +31,10 @@ export async function cleanupManagedWebRuntimeOrphans(params: {
   openWebSessionNames: readonly string[];
   ownedProcessRecords?: OwnedProcessRecordStore;
 }): Promise<void> {
-  const { getManagedAgentBrowserStatus } = await import('./platforms/web/agent-browser-tool.ts');
-  const status = getManagedAgentBrowserStatus({ stateDir: params.stateDir });
+  const { getManagedAgentBrowserStatus } = await import('@agent-device/platform-web');
+  const status = await getManagedAgentBrowserStatus({ stateDir: params.stateDir });
   if (!status.installed) return;
-  const { cleanupManagedAgentBrowserOrphans } =
-    await import('./platforms/web/agent-browser-lifecycle.ts');
+  const { cleanupManagedAgentBrowserOrphans } = await import('@agent-device/platform-web');
   await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
     openWebSessionNames: params.openWebSessionNames,
     ...(params.ownedProcessRecords === undefined
@@ -40,13 +48,13 @@ async function closeManagedWebRuntimeSession(params: {
   stateDir: string;
   openWebSessionNames: () => readonly string[];
 }): Promise<void> {
-  const { createAgentBrowserWebProvider } =
-    await import('./platforms/web/agent-browser-provider.ts');
-  await createAgentBrowserWebProvider({
+  const { createAgentBrowserWebProvider } = await import('@agent-device/platform-web');
+  const provider = await createAgentBrowserWebProvider({
     session: params.sessionName,
     stateDir: params.stateDir,
     openWebSessionNames: params.openWebSessionNames,
-  }).close();
+  });
+  await provider.close();
 }
 
 export const platformResourceCleanup: PlatformResourceCleanup = Object.freeze({
@@ -65,10 +73,10 @@ export const platformResourceCleanup: PlatformResourceCleanup = Object.freeze({
   async cleanupSessionlessExecutionHost(device) {
     if (!isIosFamily(device)) return;
     const { resolveRunnerAppBundleId, stopIosRunnerSession } =
-      await import('./platforms/apple/core/runner-client.ts');
+      await import('@agent-device/platform-apple/runner/operations');
     await stopIosRunnerSession(device.id);
-    const bundleId = resolveRunnerAppBundleId();
-    const { closeIosApp } = await import('./platforms/apple/core/apps.ts');
+    const bundleId = await resolveRunnerAppBundleId();
+    const { closeIosApp } = await import('@agent-device/platform-apple/app-lifecycle');
     await closeIosApp(device, bundleId).catch((error) => {
       emitDiagnostic({
         level: 'debug',
@@ -87,8 +95,7 @@ export const platformResourceCleanup: PlatformResourceCleanup = Object.freeze({
       params.device.kind === 'simulator' &&
       !params.shutdownRequested &&
       !params.hasScreenRecording &&
-      !params.hasLease &&
-      !params.device.simulatorSetPath
+      !params.hasLease
     );
   },
 });

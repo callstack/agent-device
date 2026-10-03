@@ -1,5 +1,5 @@
 /** The normalized wait target, independent of the positional grammar that produced it. */
-export type WaitRuntimeTarget = 'sleep' | 'text' | 'ref' | 'selector' | 'stable';
+export type WaitRuntimeTarget = 'sleep' | 'text' | 'ref' | 'selector' | 'absent' | 'stable';
 
 /**
  * Which wait shapes reach a device at all. A duration wait observes nothing, so it never asks

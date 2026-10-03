@@ -76,7 +76,7 @@ export async function generateAndCheck(
  * The split is organizational only. It was first committed claiming it kept the CLI schema
  * registry out of corpus-replay's instrumented module graph; that claim was wrong.
  * `corpus-replay.test.ts` imports `targets.ts`, which imports `src/cli/parser/args.ts`, which
- * already pulls `command-schema`, `option-schema`, and `command-catalog`, and coverage instruments
+ * already pulls `command-schema`, `option-schema`, and the command catalog, and coverage instruments
  * `src/**` only — the instrumented set is identical either way. What actually fixed the
  * coverage-instrumented startup was deriving the CLI surface lazily in `validation-arbitraries.ts`;
  * `validationSurfaceBuildCount()` is the guard against that regressing.

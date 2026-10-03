@@ -1,14 +1,16 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { bindAlertLeg } from './alert-runtime.ts';
+import { ALERT_LEG_LABELS, bindAlertLeg } from './alert-runtime.ts';
 import { bindAppEvent } from './app-event-runtime.ts';
-import { bindAppSwitcher } from './app-switcher-runtime.ts';
 import { bindBack } from './back-runtime.ts';
-import { bindClipboardRead, bindClipboardWrite } from './clipboard-runtime.ts';
-import { bindHome } from './home-runtime.ts';
+import {
+  CLIPBOARD_LEG_LABELS,
+  bindClipboardRead,
+  bindClipboardWrite,
+} from './clipboard-runtime.ts';
 import { KEYBOARD_ACTION_LABELS, bindKeyboardAction } from './keyboard-runtime.ts';
 import { bindOrientation } from './orientation-runtime.ts';
-import { bindSetSetting } from './settings-runtime.ts';
-import { bindTvRemote } from './tv-remote-runtime.ts';
+import { bindReadSetting, bindSetSetting } from './settings-runtime.ts';
+import { TV_REMOTE_LABEL, bindTvRemote } from './tv-remote-runtime.ts';
 import {
   localInteractorSource,
   providerInteractorSource,
@@ -18,6 +20,7 @@ import {
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
+import { bindSystemButton, SYSTEM_BUTTON_LABELS } from './system-button-runtime.ts';
 
 /**
  * How a facet turns one resolved interactor into its own typed operations. Every catalog member
@@ -51,11 +54,15 @@ type InteractorOperationDefinition = Readonly<{
  * key the caller's facts never define is simply never available — which is how an owner with a
  * narrower, dedicated facts object (Limrun's keyboard-less navigation facts) opts a subset out.
  */
-const INTERACTOR_OPERATIONS = [
+export const INTERACTOR_OPERATIONS = [
   { operation: 'back', label: 'back', bind: bindBack },
-  { operation: 'home', label: 'home', bind: bindHome },
+  {
+    operation: 'home',
+    label: SYSTEM_BUTTON_LABELS.home,
+    bind: (signal, resolve) => bindSystemButton('home', signal, resolve),
+  },
   { operation: 'setOrientation', label: 'orientation', bind: bindOrientation },
-  { operation: 'tvRemote', label: 'tv-remote', bind: bindTvRemote },
+  { operation: 'tvRemote', label: TV_REMOTE_LABEL, bind: bindTvRemote },
   {
     operation: 'keyboardStatus',
     label: KEYBOARD_ACTION_LABELS.keyboardStatus,
@@ -71,29 +78,47 @@ const INTERACTOR_OPERATIONS = [
     label: KEYBOARD_ACTION_LABELS.keyboardEnter,
     bind: (signal, resolve) => bindKeyboardAction('keyboardEnter', signal, resolve),
   },
-  { operation: 'readClipboard', label: 'clipboard read', bind: bindClipboardRead },
-  { operation: 'writeClipboard', label: 'clipboard write', bind: bindClipboardWrite },
-  { operation: 'appSwitcher', label: 'app-switcher', bind: bindAppSwitcher },
+  {
+    operation: 'readClipboard',
+    label: CLIPBOARD_LEG_LABELS.readClipboard,
+    bind: bindClipboardRead,
+  },
+  {
+    operation: 'writeClipboard',
+    label: CLIPBOARD_LEG_LABELS.writeClipboard,
+    bind: bindClipboardWrite,
+  },
+  {
+    operation: 'appSwitcher',
+    label: SYSTEM_BUTTON_LABELS.appSwitcher,
+    bind: (signal, resolve) => bindSystemButton('appSwitcher', signal, resolve),
+  },
+  {
+    operation: 'actionButton',
+    label: SYSTEM_BUTTON_LABELS.actionButton,
+    bind: (signal, resolve) => bindSystemButton('actionButton', signal, resolve),
+  },
   { operation: 'triggerAppEvent', label: 'trigger-app-event', bind: bindAppEvent },
   { operation: 'setSetting', label: 'settings', bind: bindSetSetting },
+  { operation: 'readSetting', label: 'settings read', bind: bindReadSetting },
   {
     operation: 'readAlert',
-    label: 'alert get',
+    label: ALERT_LEG_LABELS.readAlert,
     bind: (signal, resolve) => bindAlertLeg('readAlert', signal, resolve),
   },
   {
     operation: 'awaitAlert',
-    label: 'alert wait',
+    label: ALERT_LEG_LABELS.awaitAlert,
     bind: (signal, resolve) => bindAlertLeg('awaitAlert', signal, resolve),
   },
   {
     operation: 'acceptAlert',
-    label: 'alert accept',
+    label: ALERT_LEG_LABELS.acceptAlert,
     bind: (signal, resolve) => bindAlertLeg('acceptAlert', signal, resolve),
   },
   {
     operation: 'dismissAlert',
-    label: 'alert dismiss',
+    label: ALERT_LEG_LABELS.dismissAlert,
     bind: (signal, resolve) => bindAlertLeg('dismissAlert', signal, resolve),
   },
 ] as const satisfies readonly InteractorOperationDefinition[];

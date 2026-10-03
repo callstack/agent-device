@@ -12,7 +12,7 @@ import {
   snapshotRuntimeOperationFacts,
 } from '@agent-device/contracts/snapshot-runtime';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
-import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
+import { isActiveProviderDevice } from '../provider-device-admission.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { unavailableDeviceRuntimeGateway } from './test-device-runtime-gateway.ts';
 

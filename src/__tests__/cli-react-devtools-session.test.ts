@@ -19,7 +19,7 @@ import type {
   DaemonRequest,
   DaemonResponse,
   sendToDaemon as SendToDaemon,
-} from '../daemon/client/daemon-client.ts';
+} from '../daemon-client/daemon-client.ts';
 
 afterEach(() => {
   vi.clearAllMocks();

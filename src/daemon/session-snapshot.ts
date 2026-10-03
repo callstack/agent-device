@@ -2,7 +2,7 @@ import { randomInt } from 'node:crypto';
 import type { SettleObservation } from '@agent-device/contracts/interaction';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { activatePartialRefFrame, refFrameEpoch, refFrameState } from './ref-frame.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 
 /**
  * Warning attached to a read of an `@ref` argument once the ref frame has

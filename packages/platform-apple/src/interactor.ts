@@ -1,0 +1,456 @@
+import { closeIosApp, openIosApp, openIosDevice } from './core/app-launch.ts';
+import { readIosClipboardText, writeIosClipboardText } from './core/app-device-io.ts';
+import { readIosSetting, setIosSetting } from './core/app-settings.ts';
+import { captureScreenshotViaRunner, screenshotIos } from './core/screenshot.ts';
+import { iosRunnerOverrides, resolveAppleBackRunnerCommand } from './interactions.ts';
+import { appleRemotePressCommand } from './os/tvos/remote.ts';
+import { runMacOsScreenshotAction } from './os/macos/helper.ts';
+import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from './alert.ts';
+import { runAppleRunnerCommand } from './core/runner-client.ts';
+import {
+  withAppleRunnerProvider,
+  type AppleRunnerCommandExecutor,
+  type AppleRunnerProvider,
+} from './runner/index.ts';
+import { toAppleTvRemoteButton } from '@agent-device/contracts/tv-remote';
+import { SCREENSHOT_FULLSCREEN_REASONS } from '@agent-device/contracts/capture';
+import { macOsHelperSurface, type MacOsHelperSurface } from '@agent-device/contracts/session';
+import { DEVICE_ROTATIONS, type DeviceRotation } from '@agent-device/contracts/device';
+import { normalizeSnapshotScope } from '@agent-device/contracts/snapshot';
+import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
+import { isMacOs, isTvOsDevice, type DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
+import { withMethodScope } from '@agent-device/kernel/scoped-provider';
+import type { Point, SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
+import type {
+  Interactor,
+  RunnerCallOptions,
+  RunnerContext,
+  ScreenshotCaptureFacts,
+  ScreenshotOptions,
+  SnapshotOptions,
+} from '@agent-device/contracts/interactor-types';
+import { captureMacOsSurfaceSnapshot } from './os/macos/surface-snapshot.ts';
+import {
+  presentAppleRunnerSnapshot,
+  readAppleSnapshotResult,
+} from './runner/snapshot-presentation.ts';
+import type { AppleRunnerSnapshotResult } from './runner/snapshot-presentation.ts';
+import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
+import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
+
+export function createAppleInteractor(
+  device: DeviceInfo,
+  runnerContext: RunnerContext,
+  runnerProvider?: AppleRunnerProvider | AppleRunnerCommandExecutor,
+): Interactor {
+  // watchOS unsupported sentinel: XCUITest cannot drive watchOS UI (no
+  // XCUIApplication), so a watchOS device has no runner backend. Reject it
+  // explicitly here rather than letting `appleOs: 'watchos'` silently fall
+  // through to the iOS runner profile (see resolveRunnerPlatformNameForAppleOs).
+  if (device.appleOs === 'watchos') {
+    throw new AppError(
+      'UNSUPPORTED_PLATFORM',
+      'watchOS is not supported: XCUITest cannot drive watchOS UI, so this device has no runner backend.',
+    );
+  }
+  const { overrides, runnerOpts } = iosRunnerOverrides(device, runnerContext);
+  const interactor: Interactor = {
+    open: (app, options) =>
+      openIosApp(device, app, {
+        appBundleId: options?.appBundleId,
+        launchConsole: options?.launchConsole,
+        launchArgs: options?.launchArgs,
+        terminateRunningApp: options?.terminateRunningApp,
+        url: options?.url,
+        runnerOptions: runnerOpts,
+      }),
+    openDevice: () => openIosDevice(device),
+    close: (app) => closeIosApp(device, app, runnerOpts),
+    screenshot: (outPath, options) => runAppleScreenshot(device, outPath, options, runnerOpts),
+    snapshot: async (options) => await captureAppleSnapshot(device, options, runnerOpts),
+    // The live text at a point: helper for a helper-routed macOS surface, XCTest runner for
+    // every other Apple leaf including a macOS app session.
+    readTextAtPoint: async (point, options) => {
+      const helper = isMacOs(device) ? macOsHelperSurface(options?.surface) : undefined;
+      return helper
+        ? await readMacOsSurfaceTextAtPoint(point, helper, options?.appBundleId)
+        : await readRunnerTextAtPoint(device, point, options, runnerOpts);
+    },
+    // The XCTest runner's own text reading: it observes the live accessibility hierarchy
+    // directly, so it answers without the cost — and without the pruning — of a tree capture.
+    // Only a positive answer is authoritative; see `FindTextResult`.
+    findText: async (text, options) => {
+      const result = (await runAppleRunnerCommand(
+        device,
+        { command: 'findText', text, appBundleId: options?.appBundleId },
+        options?.signal ? { ...runnerOpts, signal: options.signal } : runnerOpts,
+      )) as { found?: boolean };
+      return { found: result?.found === true };
+    },
+    back: async (mode) => {
+      if (isTvOsDevice(device)) {
+        // tvOS focus-only navigation: the Menu button pops focus, not a coordinate tap.
+        await runAppleRunnerCommand(
+          device,
+          appleRemotePressCommand('menu', runnerContext.appBundleId),
+          runnerOpts,
+        );
+        return;
+      }
+      await runAppleRunnerCommand(
+        device,
+        {
+          command: resolveAppleBackRunnerCommand(mode),
+          appBundleId: runnerContext.appBundleId,
+        },
+        runnerOpts,
+      );
+    },
+    home: async () => {
+      if (isTvOsDevice(device)) {
+        // tvOS focus-only navigation: the Home button drives the remote, not a tap.
+        await runAppleRunnerCommand(
+          device,
+          appleRemotePressCommand('home', runnerContext.appBundleId),
+          runnerOpts,
+        );
+        return;
+      }
+      await runAppleRunnerCommand(
+        device,
+        { command: 'home', appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+    },
+    setOrientation: async (orientation) => {
+      const result = await runAppleRunnerCommand(
+        device,
+        // `rotate` is the runner-protocol command name (its own namespace); the
+        // CLI-facing command/method is `orientation`.
+        { command: 'rotate', orientation, appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+      const observed = readRunnerOrientation(result);
+      if (observed !== orientation) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          `iOS runner observed ${observed} after requesting ${orientation}`,
+          { requestedOrientation: orientation, observedOrientation: observed },
+        );
+      }
+      return { orientation: observed };
+    },
+    appSwitcher: async () => {
+      await runAppleRunnerCommand(
+        device,
+        { command: 'appSwitcher', appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+    },
+    actionButton: async () => {
+      await runAppleRunnerCommand(
+        device,
+        { command: 'actionButton', appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+    },
+    tvRemote: async (button, durationMs) => {
+      await runAppleRunnerCommand(
+        device,
+        appleRemotePressCommand(
+          toAppleTvRemoteButton(button),
+          runnerContext.appBundleId,
+          durationMs,
+        ),
+        runnerOpts,
+      );
+    },
+    keyboardDismiss: async () => {
+      const result = await runAppleRunnerCommand(
+        device,
+        { command: 'keyboardDismiss', appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+      return {
+        kind: 'mechanism',
+        wasVisible: readRunnerBoolean(result, 'wasVisible'),
+        dismissed: readRunnerBoolean(result, 'dismissed'),
+        visible: readRunnerBoolean(result, 'visible'),
+        mechanism: readRunnerString(result, 'keyboardDismissMechanism'),
+      };
+    },
+    keyboardEnter: async () => {
+      const result = await runAppleRunnerCommand(
+        device,
+        { command: 'keyboardReturn', appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+      return {
+        kind: 'visibility-echo',
+        visible: readRunnerBoolean(result, 'visible'),
+        wasVisible: readRunnerBoolean(result, 'wasVisible'),
+      };
+    },
+    readClipboard: () => readIosClipboardText(device),
+    writeClipboard: (text) => writeIosClipboardText(device, text, runnerOpts),
+    setSetting: (setting, state, appId, options) =>
+      setIosSetting(device, setting, state, appId, options),
+    readSetting: (setting) => readIosSetting(device, setting),
+    readAlert: (options) => readAppleAlert(device, runnerOpts, options),
+    awaitAlert: (options) => awaitAppleAlert(device, runnerOpts, options),
+    acceptAlert: (options) => actOnAppleAlert(device, runnerOpts, 'accept', options),
+    dismissAlert: (options) => actOnAppleAlert(device, runnerOpts, 'dismiss', options),
+    ...overrides,
+  };
+  if (!runnerProvider) return interactor;
+  return withInjectedAppleRunnerTransport(device, runnerContext, interactor, runnerProvider);
+}
+
+async function captureAppleSnapshot(
+  device: DeviceInfo,
+  options: SnapshotOptions | undefined,
+  runnerOpts: RunnerCallOptions,
+) {
+  const helper = isMacOs(device) ? macOsHelperSurface(options?.surface) : undefined;
+  if (helper) {
+    return await captureMacOsSurfaceSnapshot({ ...options, surface: helper }, options?.signal);
+  }
+  return await captureAppleRunnerSnapshot(device, options, runnerOpts);
+}
+
+async function captureAppleRunnerSnapshot(
+  device: DeviceInfo,
+  options: SnapshotOptions | undefined,
+  runnerOpts: RunnerCallOptions,
+) {
+  const result = readAppleSnapshotResult(
+    await withDiagnosticTimer(
+      'snapshot_capture',
+      async () =>
+        await runAppleRunnerCommand(
+          device,
+          {
+            command: 'snapshot',
+            appBundleId: options?.appBundleId,
+            interactiveOnly: options?.interactiveOnly,
+            preferredBackend: options?.preferredBackend,
+            customActions: options?.customActions,
+            depth: options?.depth,
+            scope: options?.scope,
+            raw: options?.raw,
+          },
+          mergeRunnerCallSignal(runnerOpts, options?.signal),
+        ),
+      { backend: 'xctest' },
+    ),
+  );
+  assertReportedRunnerSnapshotNodes(device, options, result);
+  const warnings = runnerSnapshotWarnings(result);
+  return {
+    nodes: presentRunnerSnapshotForDevice(device, options, result),
+    truncated: result.truncated ?? false,
+    backend: 'xctest' as const,
+    producer: 'apple-runner' as const,
+    ...(result.quality ? { quality: result.quality } : {}),
+    ...(result.systemSurface ? { systemSurface: result.systemSurface } : {}),
+    ...(result.keyboard ? { keyboard: result.keyboard } : {}),
+    ...(result.targetActivation ? { targetActivation: result.targetActivation } : {}),
+    ...(warnings.length > 0 ? { warnings } : {}),
+  };
+}
+
+/**
+ * A runner capture reporting no nodes is a failure unless the caller's own scope justifies it: an
+ * empty scoped capture is what `--scope` asked for, and a sparse-quality capture already says so.
+ */
+function assertReportedRunnerSnapshotNodes(
+  device: DeviceInfo,
+  options: SnapshotOptions | undefined,
+  result: AppleRunnerSnapshotResult,
+) {
+  if ((result.nodes?.length ?? 0) > 0) return;
+  if (acceptsEmptyScopedSnapshot(options, result.quality)) return;
+  if (device.kind !== 'simulator') return;
+  throw new AppError('COMMAND_FAILED', 'XCTest snapshot returned 0 nodes on iOS simulator.');
+}
+
+/**
+ * Agent-facing warnings for a runner capture: a legacy runner's message text when it carried no
+ * quality verdict, the shared disclosure when the capture describes an in-place system surface
+ * (e.g. the web sign-in or Apple Pay sheet) rather than the app itself (#2438), and the disclosure
+ * when this capture's own command had to bring the session app back to the foreground (#2682).
+ */
+function runnerSnapshotWarnings(result: AppleRunnerSnapshotResult): string[] {
+  const warnings: string[] = [];
+  if (!result.quality && result.message) warnings.push(result.message);
+  if (result.systemSurface)
+    warnings.push(iosSystemSurfaceDisclosure(result.systemSurface.bundleId));
+  if (result.targetActivation)
+    warnings.push(iosTargetActivationDisclosure(result.targetActivation));
+  return warnings;
+}
+
+function presentRunnerSnapshotForDevice(
+  device: DeviceInfo,
+  options: SnapshotOptions | undefined,
+  result: AppleRunnerSnapshotResult,
+) {
+  if (isMacOs(device)) return result.nodes ?? [];
+  return presentAppleRunnerSnapshot(device.id, options, result);
+}
+
+function acceptsEmptyScopedSnapshot(
+  options: SnapshotOptions | undefined,
+  quality: SnapshotQualityVerdict | undefined,
+): boolean {
+  return (
+    normalizeSnapshotScope(options?.scope) !== null &&
+    quality !== undefined &&
+    quality.state !== 'sparse'
+  );
+}
+
+function mergeRunnerCallSignal(
+  options: RunnerCallOptions,
+  signal: AbortSignal | undefined,
+): RunnerCallOptions {
+  if (!signal) return options;
+  return {
+    ...options,
+    signal: options.signal ? AbortSignal.any([options.signal, signal]) : signal,
+  };
+}
+
+function readRunnerBoolean(result: Record<string, unknown>, key: string): boolean | undefined {
+  const value = result[key];
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function readRunnerString(result: Record<string, unknown>, key: string): string | undefined {
+  const value = result[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function readRunnerOrientation(result: Record<string, unknown>): DeviceRotation {
+  const orientation = result.orientation;
+  if (typeof orientation === 'string' && DEVICE_ROTATIONS.includes(orientation as DeviceRotation)) {
+    return orientation as DeviceRotation;
+  }
+  throw new AppError('COMMAND_FAILED', 'iOS runner returned an invalid orientation result', {
+    orientation,
+  });
+}
+
+/**
+ * Partitions the interactor for an injected provider transport. Its unique
+ * jobs are the local-tooling rejection and in-process scoping for interactors
+ * composed OUTSIDE a daemon request (on daemon requests the request-boundary
+ * `appleRunnerProvider` resolver scopes the same transport around everything):
+ * runner-command methods run inside the provider scope, while methods backed
+ * by local Apple tooling (simctl/devicectl) have no provider-neutral transport
+ * and fail fast until the provider session composes its own on top.
+ */
+function withInjectedAppleRunnerTransport(
+  device: DeviceInfo,
+  runnerContext: RunnerContext,
+  interactor: Interactor,
+  runnerProvider: AppleRunnerProvider | AppleRunnerCommandExecutor,
+): Interactor {
+  const providerInteractor: Interactor = {
+    ...interactor,
+    open: async () => rejectLocalAppleToolMethod('open'),
+    openDevice: async () => rejectLocalAppleToolMethod('openDevice'),
+    close: async () => rejectLocalAppleToolMethod('close'),
+    screenshot: async () => rejectLocalAppleToolMethod('screenshot'),
+    readClipboard: async () => rejectLocalAppleToolMethod('readClipboard'),
+    setSetting: async () => rejectLocalAppleToolMethod('setSetting'),
+    readSetting: async () => rejectLocalAppleToolMethod('readSetting'),
+  };
+  return withMethodScope(providerInteractor, (task) =>
+    withAppleRunnerProvider(
+      runnerProvider,
+      { deviceId: device.id, requestId: runnerContext.requestId },
+      task,
+    ),
+  );
+}
+
+function rejectLocalAppleToolMethod(method: string): never {
+  throw new AppError(
+    'UNSUPPORTED_OPERATION',
+    `${method} uses local Apple tooling (simctl/devicectl), which an injected runner transport cannot reach; the provider session must supply its own ${method} implementation.`,
+  );
+}
+
+async function runAppleScreenshot(
+  device: DeviceInfo,
+  outPath: string,
+  options: ScreenshotOptions = {},
+  runnerOpts: RunnerCallOptions,
+): Promise<ScreenshotCaptureFacts> {
+  const helper = isMacOs(device) ? macOsHelperSurface(options.surface) : undefined;
+  if (helper) {
+    if (options.fullscreen) {
+      throw new AppError(
+        'INVALID_ARGS',
+        `screenshot --fullscreen is not accepted on the macOS ${helper} surface: it always captures the main display`,
+        {
+          reason: SCREENSHOT_FULLSCREEN_REASONS.macOsHelperSurfaceFixedFrame,
+          surface: helper,
+        },
+      );
+    }
+    await runMacOsScreenshotAction(outPath, { surface: helper });
+    return {};
+  }
+  if (options.captureBackend === 'runner') {
+    // Runner capture returns the XCTest surface as-is; density and simulator
+    // status-bar normalization belong only to the simctl capture pipeline.
+    await captureScreenshotViaRunner(
+      device,
+      outPath,
+      options.appBundleId,
+      options.fullscreen,
+      runnerOpts,
+    );
+    return {};
+  }
+  return await screenshotIos(device, outPath, {
+    appBundleId: options.appBundleId,
+    pixelDensity: options.pixelDensity,
+    fullscreen: options.fullscreen,
+    runnerOptions: runnerOpts,
+    normalizeStatusBar: options.normalizeStatusBar,
+    skipIosSimulatorBootCheck: options.skipIosSimulatorBootCheck,
+  });
+}
+
+async function readMacOsSurfaceTextAtPoint(
+  point: Point,
+  surface: MacOsHelperSurface,
+  appBundleId: string | undefined,
+): Promise<string | undefined> {
+  const { runMacOsReadTextAction } = await import('./os/macos/helper.ts');
+  const result = await runMacOsReadTextAction(point.x, point.y, {
+    bundleId: appBundleId,
+    surface,
+  });
+  return result.text;
+}
+
+async function readRunnerTextAtPoint(
+  device: DeviceInfo,
+  point: Point,
+  options: { appBundleId?: string; signal?: AbortSignal } | undefined,
+  runnerOpts: RunnerCallOptions,
+): Promise<string | undefined> {
+  const result = await runAppleRunnerCommand(
+    device,
+    { command: 'readText', x: point.x, y: point.y, appBundleId: options?.appBundleId },
+    options?.signal ? { ...runnerOpts, signal: options.signal } : runnerOpts,
+  );
+  if (typeof result.text === 'string') return result.text;
+  // The runner answers `message` when it reached the element but rendered no readable text.
+  return typeof result.message === 'string' ? result.message : undefined;
+}

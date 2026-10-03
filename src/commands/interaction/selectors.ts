@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { FindOptions, IsOptions } from '@agent-device/contracts/client';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
@@ -139,6 +139,12 @@ function readIsOptionsFromPositionals(positionals: string[], flags: CliFlags): I
   // check this replaced compared the raw token, so the CLI used to be stricter than the
   // executor it hands the command to.
   const predicate = admitted.predicate;
+  if (predicate === 'absent') {
+    const refusedOption = absenceCaptureOptionRefusal(base);
+    if (refusedOption) {
+      throw absenceCaptureOptionError(refusedOption);
+    }
+  }
   const split = splitRequiredSelector(normalized.slice(1), {
     preferTrailingValue: predicate === 'text',
   });
@@ -146,6 +152,29 @@ function readIsOptionsFromPositionals(positionals: string[], flags: CliFlags): I
     return { ...base, predicate, selector: split.selectorExpression, value: split.rest.join(' ') };
   }
   return { ...base, predicate, selector: split.selectorExpression };
+}
+
+type AbsenceCaptureOption = 'depth' | 'scope';
+
+function absenceCaptureOptionRefusal(options: {
+  depth?: number;
+  scope?: string;
+}): AbsenceCaptureOption | undefined {
+  if (options.scope !== undefined) return 'scope';
+  if (options.depth !== undefined) return 'depth';
+  return undefined;
+}
+
+function absenceCaptureOptionError(option: AbsenceCaptureOption): AppError {
+  const message =
+    option === 'scope'
+      ? 'is absent does not support --scope; it requires an unscoped capture'
+      : 'is absent does not support --depth; it requires a full-depth capture';
+  return new AppError('INVALID_ARGS', message, {
+    command: 'is',
+    predicate: 'absent',
+    rejectedOption: option,
+  });
 }
 
 function readFindLocator(value: string | undefined): FindOptions['locator'] | undefined {

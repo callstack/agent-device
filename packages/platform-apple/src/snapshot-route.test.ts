@@ -1,0 +1,938 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { expect, test, vi } from 'vitest';
+import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { createRequestCanceledError } from '@agent-device/kernel/errors';
+
+// Keep the route tests hermetic: the default system-surface presence probe shells out to `ps`, which
+// never resolves under the fake timers these tests drive. Tests that exercise the bypass inject
+// their own probe through the `systemSurfacePresent` option.
+vi.mock('./system-surface-presence.ts', () => ({
+  createSystemSurfacePresenceProbe: () => async () => 'absent',
+}));
+import { areIosSnapshotComparisonIdentitiesEqual } from '@agent-device/capture-kit/ios-snapshot-planning';
+import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
+import { simulatorAddressFor } from './core/simctl.ts';
+import { mkdtempForTest } from './__tests__/tmp-dir.ts';
+import { createLocalAppleToolProvider, withAppleToolProvider } from './core/tool-provider.ts';
+import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
+import { createAppleSnapshotRoute } from './snapshot-route.ts';
+import { createSimulatorSnapshotTargetResolver } from './snapshot-target.ts';
+import type { SimulatorSnapshotSource, SnapshotSourceOutcome } from './snapshot-source-facade.ts';
+
+const ios = {
+  platform: 'apple',
+  appleOs: 'ios',
+  id: 'ios-1',
+  name: 'iPhone',
+  kind: 'simulator',
+  target: 'mobile',
+  booted: true,
+} as const satisfies DeviceInfo;
+
+const target = {
+  simulator: simulatorAddressFor(ios),
+  runtime: 'iOS 26.0',
+  pid: 42,
+  generation: '42:launch-a',
+  targetId: `${ios.id}:com.example.app`,
+  processStartTime: 'target-start',
+} as const;
+
+const input = { options: { appBundleId: 'com.example.app' } } as const;
+
+/** A proven-present surface as the probe reports it: the matched host travels with the verdict. */
+const presentSurface = { kind: 'present', host: IOS_SYSTEM_SURFACE_HOSTS[0]! } as const;
+
+test('eligible simulator capture publishes bridge acquisition without touching XCTest', async () => {
+  const acquired = bridgeAcquisition();
+  const source = sourceReturning(acquired);
+  const presentIosAcquisition = vi.fn(async () => ({
+    backend: 'xctest' as const,
+    producer: 'simulator-ax-bridge' as const,
+    nodes: [{ index: 0, type: 'Application' }],
+  }));
+  const fallback = vi.fn(async () => runnerResult());
+  const route = createAppleSnapshotRoute(
+    {
+      ...platformRuntimeHostFixture(),
+      snapshot: { captureSurface: vi.fn(), presentIosAcquisition },
+    },
+    { source, resolveTarget: vi.fn(async () => target) },
+  );
+
+  await expect(route.capture(ios, input, signal(), fallback)).resolves.toMatchObject({
+    producer: 'simulator-ax-bridge',
+  });
+  expect(presentIosAcquisition).toHaveBeenCalledWith(acquired, input.options);
+  expect(fallback).not.toHaveBeenCalled();
+});
+
+test.for([presentSurface, 'unknown'] as const)(
+  'an unabsent system surface routes the capture to the runner and never touches the bridge',
+  async (presence) => {
+    const source = sourceReturning(bridgeAcquisition());
+    const fallback = vi.fn(async () => runnerResult());
+    const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+      source,
+      resolveTarget: vi.fn(async () => target),
+      systemSurfacePresent: async () => presence,
+    });
+
+    await route.capture(ios, input, signal(), fallback);
+
+    // The host AX bridge cannot see the sheet, so the runner (fallback) must serve it and the bridge
+    // source must never be asked. `unknown` takes the same path: an unproven probe must not fall
+    // through to a bridge capture that would answer from the occluded app tree (#2438).
+    expect(fallback).toHaveBeenCalledOnce();
+    expect(source.acquire).not.toHaveBeenCalled();
+  },
+);
+
+// The structural guarantee every comparison site downstream relies on (#2438): a surface capture is
+// lineaged to the HOST, not to the app (`target.targetId` here), so its comparison key cannot equal
+// an app capture's and no comparison site needs its own surface check.
+test('a presented system surface captures under the host lineage, never the app lineage', async () => {
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source: sourceReturning(bridgeAcquisition()),
+    resolveTarget: vi.fn(async () => target),
+    systemSurfacePresent: async () => presentSurface,
+  });
+
+  const first = await route.capture(ios, input, signal(), async () => surfaceRunnerResult());
+  const second = await route.capture(ios, input, signal(), async () => surfaceRunnerResult());
+
+  expect(first.comparisonIdentity).toMatchObject({
+    producer: 'apple-runner',
+    lineage: { targetId: `${ios.id}:${presentSurface.host.bundleId}` },
+    // No `unknown-generation` residue: the surface is not an app generation, and a per-capture
+    // residue id would make two captures of the same sheet incomparable with each other too.
+    residue: [{ kind: 'fallback-source', producer: 'apple-runner' }],
+  });
+  expect(
+    areIosSnapshotComparisonIdentitiesEqual(first.comparisonIdentity!, second.comparisonIdentity!),
+  ).toBe(true);
+  // The bridge is healthy here and simply cannot see the surface, so the app's wording would lie.
+  expect(first.warnings).toEqual([
+    'Simulator AX snapshot inapplicable (system-surface-presented); used XCTest to read the system surface presented over the app.',
+  ]);
+});
+
+// The host-side probe answers about a host PROCESS, which stays positive while a dismissed host
+// lingers — a documented false positive. Only the runner answers about the screen, and it stamps the
+// surface it served on the capture. Reading the probe for identity instead would lineage the app
+// capture to the host, make it compare EQUAL to the preceding sheet capture, and let a post-gesture
+// poll read the dismissal as a stable surface (#2438).
+test('a lingering probe cannot make a sheet capture and an app capture compare equal', async () => {
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source: sourceReturning(bridgeAcquisition()),
+    resolveTarget: vi.fn(async () => target),
+    systemSurfacePresent: async () => presentSurface,
+  });
+
+  const sheet = await route.capture(ios, input, signal(), async () => surfaceRunnerResult());
+  const app = await route.capture(ios, input, signal(), async () => runnerResult());
+  const stillApp = await route.capture(ios, input, signal(), async () => runnerResult());
+
+  expect(sheet.comparisonIdentity?.lineage).toEqual({
+    targetId: `${ios.id}:${presentSurface.host.bundleId}`,
+  });
+  expect(app.comparisonIdentity?.lineage).toEqual({ targetId: target.targetId });
+  expect(
+    areIosSnapshotComparisonIdentitiesEqual(sheet.comparisonIdentity!, app.comparisonIdentity!),
+  ).toBe(false);
+  // Two app captures taken in the same lingering window still compare equal, so a poll can settle on
+  // app content: the capture decides the lineage, and nothing here carries a per-capture residue.
+  expect(
+    areIosSnapshotComparisonIdentitiesEqual(app.comparisonIdentity!, stillApp.comparisonIdentity!),
+  ).toBe(true);
+  expect(app.warnings).toEqual([
+    'Simulator AX snapshot inapplicable (system-surface-host-lingering); used XCTest, which read app content: the system surface host process was still running but no longer presenting.',
+  ]);
+});
+
+// The probe is a separate observation from the capture, so a sheet can appear in the gap between
+// them. With the bridge circuit already disabled for this generation the route takes the plain
+// fallback, which used to stamp the planned app lineage onto whatever came back — so the sheet
+// capture carried the app generation and could corroborate a tap against an app capture (#2438).
+test('a sheet that appears after an absent probe is identified by the surface, not the app', async () => {
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source: sourceReturning({
+      stage: 'failed',
+      failure: { kind: 'transport-failure', code: 'bridge-disconnected' },
+    }),
+    resolveTarget: vi.fn(async () => target),
+    systemSurfacePresent: async () => 'absent',
+  });
+
+  // The first capture disables the circuit for this generation; both later captures take the
+  // `circuit-disabled` path, where the route plans nothing about a surface.
+  const app = await route.capture(ios, input, signal(), async () => runnerResult());
+  const sheet = await route.capture(ios, input, signal(), async () => surfaceRunnerResult());
+  const sheetAgain = await route.capture(ios, input, signal(), async () => surfaceRunnerResult());
+
+  expect(sheet.comparisonIdentity).toMatchObject({
+    producer: 'apple-runner',
+    lineage: { targetId: `${ios.id}:${presentSurface.host.bundleId}` },
+    residue: [{ kind: 'fallback-source', producer: 'apple-runner' }],
+  });
+  expect(app.comparisonIdentity?.lineage).toEqual({
+    targetId: target.targetId,
+    generation: target.generation,
+  });
+  expect(
+    areIosSnapshotComparisonIdentitiesEqual(app.comparisonIdentity!, sheet.comparisonIdentity!),
+  ).toBe(false);
+  // Two captures of the same sheet still compare equal, so a poll can settle on the sheet.
+  expect(
+    areIosSnapshotComparisonIdentitiesEqual(
+      sheet.comparisonIdentity!,
+      sheetAgain.comparisonIdentity!,
+    ),
+  ).toBe(true);
+  // The reason the bridge was skipped survives — it is independent of what the runner found — but
+  // the sentence cannot claim an app generation this capture did not read.
+  expect(sheet.warnings).toEqual([
+    'Simulator AX snapshot unavailable (circuit-disabled); used XCTest, which read the system surface presented over the app.',
+  ]);
+});
+
+// Same gap, reached through the probe-unavailable arm: that arm adds a per-capture
+// `unknown-generation` residue for an app capture, and app-generation evidence must not ride along
+// on a capture of a surface — it would make two captures of the same sheet incomparable too.
+test('a surface capture drops the app-generation residue of the arm that reached it', async () => {
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source: sourceReturning(bridgeAcquisition()),
+    resolveTarget: vi.fn(async () => target),
+    systemSurfacePresent: async () => 'unknown',
+  });
+
+  const sheet = await route.capture(ios, input, signal(), async () => surfaceRunnerResult());
+  const sheetAgain = await route.capture(ios, input, signal(), async () => surfaceRunnerResult());
+
+  expect(sheet.comparisonIdentity).toMatchObject({
+    lineage: { targetId: `${ios.id}:${presentSurface.host.bundleId}` },
+    residue: [{ kind: 'fallback-source', producer: 'apple-runner' }],
+  });
+  expect(
+    areIosSnapshotComparisonIdentitiesEqual(
+      sheet.comparisonIdentity!,
+      sheetAgain.comparisonIdentity!,
+    ),
+  ).toBe(true);
+});
+
+// A pinned backend and a custom-actions read bypass the route's planning, but they still reach the
+// runner, and the runner serves the sheet there too. Without an identity that pair falls back to
+// legacy presentation matching, where a sheet and app content read as one presentation and could
+// corroborate a tap across the two (#2438).
+test.each([
+  ['a pinned backend', { preferredBackend: 'private-ax' }],
+  ['a custom-actions read', { customActions: true }],
+] as const)(
+  'a route-bypassing capture of a system surface is incomparable (%s)',
+  async (_label, bypass) => {
+    const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+      source: sourceReturning(bridgeAcquisition()),
+      resolveTarget: vi.fn(async () => target),
+    });
+    const bypassInput = { options: { ...input.options, ...bypass } };
+
+    const sheet = await route.capture(ios, bypassInput, signal(), async () =>
+      surfaceRunnerResult(),
+    );
+    const app = await route.capture(ios, bypassInput, signal(), async () => runnerResult());
+
+    expect(sheet.comparisonIdentity).toMatchObject({
+      producer: 'apple-runner',
+      lineage: { targetId: `${ios.id}:${presentSurface.host.bundleId}` },
+      // Nothing fell back here: the runner is the requested producer, not a replacement for the bridge.
+      residue: [],
+    });
+    // An app capture off the route is untouched — identity included, as before.
+    expect(app).toEqual(runnerResult());
+  },
+);
+
+// Losing the bridge fast path must never be silent: an unprovable probe still owes the caller a
+// warning and an identity that cannot be compared against a bridge publication.
+test('a probe that cannot answer discloses the skipped bridge and stays incomparable', async () => {
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source: sourceReturning(bridgeAcquisition()),
+    resolveTarget: vi.fn(async () => target),
+    systemSurfacePresent: async () => 'unknown',
+  });
+
+  const result = await route.capture(ios, input, signal(), async () => runnerResult());
+
+  expect(result.warnings).toEqual([
+    'Simulator AX snapshot unavailable (system-surface-probe-unavailable); used XCTest for an unverified app generation.',
+  ]);
+  expect(result.comparisonIdentity).toMatchObject({
+    producer: 'apple-runner',
+    residue: [
+      { kind: 'unknown-generation', captureId: expect.any(String) },
+      { kind: 'fallback-source', producer: 'apple-runner' },
+    ],
+  });
+});
+
+test('typed bridge failure falls back once and disables retries for that app generation', async () => {
+  const source = sourceReturning({
+    stage: 'failed',
+    failure: { kind: 'transport-failure', code: 'bridge-disconnected' },
+  });
+  const fallback = vi.fn(async () => runnerResult());
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source,
+    resolveTarget: vi.fn(async () => target),
+  });
+
+  const logPath = path.join(await mkdtempForTest('ios-route-'), 'request.ndjson');
+  const [first, second] = await withDiagnosticsScope(
+    { command: 'snapshot', debug: true, logPath },
+    async () => {
+      const first = await route.capture(ios, input, signal(), fallback);
+      const second = await route.capture(ios, input, signal(), fallback);
+      return [first, second] as const;
+    },
+  );
+
+  expect(
+    fs
+      .readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+      .filter((event) => event.phase === 'ios_snapshot_route_fallback')
+      .map((event) => event.data),
+  ).toEqual([
+    { reason: 'bridge-disconnected', deviceId: ios.id, generation: target.generation },
+    { reason: 'circuit-disabled', deviceId: ios.id, generation: target.generation },
+  ]);
+
+  expect(source.acquire).toHaveBeenCalledOnce();
+  expect(fallback).toHaveBeenCalledTimes(2);
+  expect(first.warnings).toEqual([
+    'Simulator AX snapshot unavailable (bridge-disconnected); used XCTest for this app generation.',
+  ]);
+  expect(first.comparisonIdentity).toMatchObject({
+    producer: 'apple-runner',
+    lineage: { generation: target.generation },
+    residue: [{ kind: 'fallback-source', producer: 'apple-runner' }],
+  });
+  expect(second.comparisonIdentity).toMatchObject({
+    producer: 'apple-runner',
+    lineage: { generation: target.generation },
+  });
+});
+
+test('a bridge still being prepared sends only that capture to the runner', async () => {
+  const source = sourceReturning({
+    stage: 'failed',
+    failure: { kind: 'preparing', code: 'bridge-preparation-pending' },
+  });
+  const fallback = vi.fn(async () => runnerResult());
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source,
+    resolveTarget: vi.fn(async () => target),
+  });
+
+  const first = await route.capture(ios, input, signal(), fallback);
+  const second = await route.capture(ios, input, signal(), fallback);
+
+  // An attempt in flight says nothing about this app generation, so unlike a failed bridge it must
+  // not close the circuit: a stable screen would never use the finished preparation.
+  expect(source.acquire).toHaveBeenCalledTimes(2);
+  expect(fallback).toHaveBeenCalledTimes(2);
+  const pending = [
+    'Simulator AX snapshot unavailable (bridge-preparation-pending); used XCTest for this capture while the bridge is still being prepared.',
+  ];
+  expect(first.warnings).toEqual(pending);
+  // The circuit-disabled sentence would mean the route gave up on the bridge for this generation,
+  // and the app-generation sentence would mean the same; only this capture moved to the runner.
+  expect(second.warnings).toEqual(pending);
+});
+
+test('a window in an unresolved coordinate space sends only that capture to the runner', async () => {
+  const source = sourceReturning({
+    stage: 'failed',
+    failure: {
+      kind: 'unsupported',
+      code: 'window-coordinate-space-unresolved',
+      details: { windows: 1 },
+    },
+  });
+  const fallback = vi.fn(async () => runnerResult());
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source,
+    resolveTarget: vi.fn(async () => target),
+  });
+
+  const first = await route.capture(ios, input, signal(), fallback);
+  const second = await route.capture(ios, input, signal(), fallback);
+
+  // A rotated system surface is on screen now and gone after the next keystroke, so unlike a failed
+  // bridge this says nothing about the app generation: retiring it would move every later capture of a
+  // healthy app to the runner to work around one screen (#2612).
+  expect(source.acquire).toHaveBeenCalledTimes(2);
+  expect(fallback).toHaveBeenCalledTimes(2);
+  const refused = [
+    "Simulator AX snapshot unavailable (window-coordinate-space-unresolved); used XCTest for this capture, which reports captured geometry in the app's own orientation space.",
+  ];
+  expect(first.warnings).toEqual(refused);
+  expect(second.warnings).toEqual(refused);
+});
+
+test('a new app generation re-enables the bridge', async () => {
+  const source = sourceReturning({
+    stage: 'failed',
+    failure: { kind: 'transport-failure', code: 'bridge-disconnected' },
+  });
+  const resolveTarget = vi
+    .fn()
+    .mockResolvedValueOnce(target)
+    .mockResolvedValueOnce(target)
+    .mockResolvedValueOnce({ ...target, pid: 84, generation: '84:launch-b' });
+  const fallback = vi.fn(async () => runnerResult());
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source,
+    resolveTarget,
+  });
+
+  await route.capture(ios, input, signal(), fallback);
+  await route.capture(ios, input, signal(), fallback);
+  await route.capture(ios, input, signal(), fallback);
+
+  expect(source.acquire).toHaveBeenCalledTimes(2);
+});
+
+test('stale bridge acquisition resolves the current generation before XCTest fallback', async () => {
+  const currentTarget = { ...target, pid: 84, generation: '84:launch-b' };
+  const source = sourceReturning({
+    stage: 'failed',
+    failure: { kind: 'stale-target', code: 'target-generation-changed' },
+  });
+  const resolveTarget = vi.fn().mockResolvedValueOnce(target).mockResolvedValueOnce(currentTarget);
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source,
+    resolveTarget,
+  });
+
+  const result = await route.capture(ios, input, signal(), async () => runnerResult());
+
+  expect(resolveTarget).toHaveBeenCalledTimes(2);
+  expect(resolveTarget).toHaveBeenLastCalledWith(
+    ios,
+    input.options.appBundleId,
+    expect.any(AbortSignal),
+    'refresh',
+  );
+  expect(result.comparisonIdentity?.lineage).toEqual({
+    targetId: currentTarget.targetId,
+    generation: currentTarget.generation,
+  });
+});
+
+test('target-resolution fallback remains incomparable with a bridge publication', async () => {
+  const source = sourceReturning(bridgeAcquisition());
+  const fallback = vi.fn(async () => runnerResult());
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source,
+    resolveTarget: vi.fn(async () => {
+      throw new Error('launch job unavailable');
+    }),
+  });
+
+  const result = await route.capture(ios, input, signal(), fallback);
+
+  expect(source.acquire).not.toHaveBeenCalled();
+  expect(result.comparisonIdentity).toMatchObject({
+    producer: 'apple-runner',
+    lineage: { targetId: target.targetId },
+    residue: [
+      { kind: 'unknown-generation', captureId: expect.any(String) },
+      { kind: 'fallback-source', producer: 'apple-runner' },
+    ],
+  });
+});
+
+test('two target-resolution fallbacks cannot share comparison identity', async () => {
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source: sourceReturning(bridgeAcquisition()),
+    resolveTarget: vi.fn(async () => {
+      throw new Error('launch job unavailable');
+    }),
+  });
+
+  const first = await route.capture(ios, input, signal(), async () => runnerResult());
+  const second = await route.capture(ios, input, signal(), async () => runnerResult());
+
+  expect(first.comparisonIdentity).toBeDefined();
+  expect(second.comparisonIdentity).toBeDefined();
+  expect(
+    areIosSnapshotComparisonIdentitiesEqual(first.comparisonIdentity!, second.comparisonIdentity!),
+  ).toBe(false);
+});
+
+test('runtime shutdown closes the process-owned bridge source', async () => {
+  const source = sourceReturning(bridgeAcquisition());
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), { source });
+
+  await route.shutdown();
+
+  expect(source.close).toHaveBeenCalledOnce();
+});
+
+test('cancelled acquisition does not start a fallback after the request aborts', async () => {
+  const controller = new AbortController();
+  const source = sourceReturning({
+    stage: 'failed',
+    failure: { kind: 'cancelled', code: 'abort-signal' },
+  });
+  vi.mocked(source.acquire).mockImplementation(async () => {
+    controller.abort(new DOMException('request ended', 'AbortError'));
+    return { stage: 'failed', failure: { kind: 'cancelled', code: 'abort-signal' } };
+  });
+  const fallback = vi.fn(async () => runnerResult());
+  const route = createAppleSnapshotRoute(platformRuntimeHostFixture(), {
+    source,
+    resolveTarget: vi.fn(async () => target),
+  });
+
+  await expect(route.capture(ios, input, controller.signal, fallback)).rejects.toThrow(
+    'request ended',
+  );
+  expect(fallback).not.toHaveBeenCalled();
+});
+
+test('a slow app discovery yields to a live runner within its wait slice, then serves the bridge', async () => {
+  // The production resolver over a simctl whose `launchctl list` answers only when released,
+  // the shape of a loaded CI host: with a runner that can answer at once, the first capture
+  // must not sit on that probe.
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const run = vi.fn(async (args: readonly string[]) => {
+    if (args[0] === 'spawn') await released;
+    return {
+      stdout:
+        args[0] === 'spawn'
+          ? `42\t0\tUIKitApplication:${input.options.appBundleId}[launch-a][rb-legacy]`
+          : JSON.stringify({
+              devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
+            }),
+      stderr: '',
+      exitCode: 0,
+    };
+  });
+  const runCommand = vi.fn(async () => ({ stdout: 'start-a', stderr: '', exitCode: 0 }));
+  const fallback = vi.fn(async () => runnerResult());
+  const source = sourceReturning(bridgeAcquisition());
+  const presentIosAcquisition = vi.fn(async () => ({
+    backend: 'xctest' as const,
+    producer: 'simulator-ax-bridge' as const,
+    nodes: [{ index: 0, type: 'Application' }],
+  }));
+  const baseHost = platformRuntimeHostFixture();
+  const route = createAppleSnapshotRoute(
+    {
+      ...baseHost,
+      appleApplications: { ...baseHost.appleApplications, hasLiveRunnerSession: async () => true },
+      snapshot: { captureSurface: vi.fn(), presentIosAcquisition },
+    },
+    { source, resolveTarget: createSimulatorSnapshotTargetResolver() },
+  );
+  vi.useFakeTimers();
+  try {
+    await withAppleToolProvider(
+      createLocalAppleToolProvider({ simctl: { run }, runCommand }),
+      async () => {
+        const first = route.capture(ios, input, signal(), fallback);
+        await vi.advanceTimersByTimeAsync(1_500);
+        const result = await first;
+        expect(fallback).toHaveBeenCalledOnce();
+        expect(result.warnings).toEqual([
+          'Simulator AX snapshot unavailable (target-resolution-failed); used XCTest for an unverified app generation.',
+        ]);
+        expect(source.acquire).not.toHaveBeenCalled();
+
+        release();
+        await vi.advanceTimersByTimeAsync(0);
+        const second = await route.capture(ios, input, signal(), fallback);
+        expect(second.producer).toBe('simulator-ax-bridge');
+        expect(fallback).toHaveBeenCalledOnce();
+        expect(run.mock.calls.filter(([args]) => args[0] === 'spawn')).toHaveLength(1);
+      },
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('an open waits out a slow app discovery, so the first capture after it starts warm', async () => {
+  // iOS smoke `wait for Agent Device Tester` right after `open --relaunch`: `launchctl list`
+  // outlasted one discovery slice on CI, the open read that as an unobservable app and returned,
+  // and the wait's first poll paid the discovery, the bridge preparation and the first bridge
+  // connection behind a runner findText until its 10 s budget ran out.
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const run = vi.fn(async (args: readonly string[]) => {
+    if (args[0] === 'spawn') await released;
+    return {
+      stdout:
+        args[0] === 'spawn'
+          ? `42\t0\tUIKitApplication:${input.options.appBundleId}[launch-a][rb-legacy]`
+          : JSON.stringify({
+              devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
+            }),
+      stderr: '',
+      exitCode: 0,
+    };
+  });
+  const runCommand = vi.fn(async () => ({ stdout: 'start-a', stderr: '', exitCode: 0 }));
+  const fallback = vi.fn(async () => runnerResult());
+  const source = sourceReturning(bridgeAcquisition());
+  const presentIosAcquisition = vi.fn(async () => ({
+    backend: 'xctest' as const,
+    producer: 'simulator-ax-bridge' as const,
+    nodes: [{ index: 0, type: 'Application' }],
+  }));
+  const baseHost = platformRuntimeHostFixture();
+  const route = createAppleSnapshotRoute(
+    {
+      ...baseHost,
+      appleApplications: { ...baseHost.appleApplications, hasLiveRunnerSession: async () => true },
+      snapshot: { captureSurface: vi.fn(), presentIosAcquisition },
+    },
+    { source, resolveTarget: createSimulatorSnapshotTargetResolver() },
+  );
+  vi.useFakeTimers();
+  try {
+    await withAppleToolProvider(
+      createLocalAppleToolProvider({ simctl: { run }, runCommand }),
+      async () => {
+        let verdict: string | undefined;
+        const observed = route
+          .awaitObservable(ios, input.options.appBundleId, signal())
+          .then((value) => (verdict = value.observation));
+        await vi.advanceTimersByTimeAsync(4_500);
+        expect(verdict).toBeUndefined();
+        expect(source.acquire).not.toHaveBeenCalled();
+
+        release();
+        await vi.advanceTimersByTimeAsync(0);
+        await expect(observed).resolves.toBe('observable');
+        expect(source.acquire).toHaveBeenCalledOnce();
+
+        const first = await route.capture(ios, input, signal(), fallback);
+        expect(first.producer).toBe('simulator-ax-bridge');
+        expect(fallback).not.toHaveBeenCalled();
+        expect(run.mock.calls.filter(([args]) => args[0] === 'spawn')).toHaveLength(1);
+      },
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test.each([
+  'application-server-unavailable',
+  'continuation-budget-exhausted',
+  'snapshot-tree-malformed',
+])('an open whose generation failed with %s skips the launch-observation poll', async (code) => {
+  // #2199: `application-server-unavailable` is a launch-transition code, so an ungated probe would
+  // re-read the bridge every 150 ms for its whole 5 s window on a generation the circuit already
+  // gave up on — ~33 acquisitions per `open`, each a fresh connect.
+  const source = sourceReturning({
+    stage: 'failed',
+    failure: { kind: 'transport-failure', code },
+  });
+  const route = createAppleSnapshotRoute(
+    { ...platformRuntimeHostFixture(), clock: steppingClock() },
+    { source, resolveTarget: vi.fn(async () => target) },
+  );
+
+  await route.capture(ios, input, signal(), async () => runnerResult());
+  expect(source.acquire).toHaveBeenCalledOnce();
+
+  await expect(route.awaitObservable(ios, input.options.appBundleId, signal())).resolves.toEqual({
+    observation: 'probe-failed',
+    failure: { source: 'circuit' },
+  });
+  expect(source.acquire).toHaveBeenCalledOnce();
+});
+
+test('a relaunched generation rebaselines the circuit and observes the launch', async () => {
+  const outcomes: SnapshotSourceOutcome[] = [
+    { stage: 'failed', failure: { kind: 'transport-failure', code: 'bridge-disconnected' } },
+    bridgeAcquisition(),
+  ];
+  let acquisitions = 0;
+  const source = {
+    acquire: vi.fn(async () => outcomes[Math.min(acquisitions++, outcomes.length - 1)]!),
+    close: vi.fn(async () => {}),
+  };
+  const relaunched = { ...target, pid: 84, generation: '84:launch-b' };
+  const resolveTarget = vi.fn().mockResolvedValueOnce(target).mockResolvedValue(relaunched);
+  const route = createAppleSnapshotRoute(
+    { ...platformRuntimeHostFixture(), clock: steppingClock() },
+    { source, resolveTarget },
+  );
+
+  await route.capture(ios, input, signal(), async () => runnerResult());
+
+  await expect(route.awaitObservable(ios, input.options.appBundleId, signal())).resolves.toEqual({
+    observation: 'observable',
+  });
+  expect(source.acquire).toHaveBeenCalledTimes(2);
+});
+
+/** A clock the launch-observation loop can run to its deadline instead of spinning forever. */
+function steppingClock() {
+  let now = 0;
+  return {
+    now: () => now,
+    sleep: async (ms: number) => {
+      now += ms;
+    },
+  };
+}
+
+function bridgeAcquisition(): Extract<SnapshotSourceOutcome, { stage: 'acquired' }> {
+  return {
+    stage: 'acquired',
+    acquisition: {
+      producer: 'simulator-ax-bridge',
+      intent: 'full',
+      hint: {
+        projection: 'regular',
+        rawTraversalDepth: null,
+        regularPresentedDepth: null,
+        interactiveOnly: false,
+        customActions: false,
+        acquisitionIntent: 'full',
+      },
+      nodes: [{ index: 0, type: 'Application' }],
+      truncated: false,
+      viewport: { kind: 'reported', rect: { x: 0, y: 0, width: 100, height: 200 } },
+      lineage: { targetId: target.targetId, generation: target.generation },
+      residue: [],
+    },
+  };
+}
+
+function sourceReturning(
+  outcome: Awaited<ReturnType<SimulatorSnapshotSource['acquire']>>,
+): SimulatorSnapshotSource {
+  return { acquire: vi.fn(async () => outcome), close: vi.fn(async () => {}) };
+}
+
+function runnerResult() {
+  return { backend: 'xctest' as const, producer: 'apple-runner' as const, nodes: [] };
+}
+
+/** The runner's capture OF the sheet: it stamps the surface it actually served onto the result. */
+function surfaceRunnerResult() {
+  return {
+    ...runnerResult(),
+    systemSurface: { bundleId: presentSurface.host.bundleId, kind: presentSurface.host.kind },
+  };
+}
+
+function signal(): AbortSignal {
+  return new AbortController().signal;
+}
+
+test('a slow app discovery keeps observation on the bridge while no runner can answer', async () => {
+  // #2198: the open no longer awaits the runner, so right after a relaunch the fallback would
+  // wait for a cold runner start. A capture with no live runner rides the single-flight
+  // discovery instead, however many wait slices that takes.
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const run = vi.fn(async (args: readonly string[]) => {
+    if (args[0] === 'spawn') await released;
+    return {
+      stdout:
+        args[0] === 'spawn'
+          ? `42\t0\tUIKitApplication:${input.options.appBundleId}[launch-a][rb-legacy]`
+          : JSON.stringify({
+              devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
+            }),
+      stderr: '',
+      exitCode: 0,
+    };
+  });
+  const runCommand = vi.fn(async () => ({ stdout: 'start-a', stderr: '', exitCode: 0 }));
+  const fallback = vi.fn(async () => runnerResult());
+  const source = sourceReturning(bridgeAcquisition());
+  const presentIosAcquisition = vi.fn(async () => ({
+    backend: 'xctest' as const,
+    producer: 'simulator-ax-bridge' as const,
+    nodes: [{ index: 0, type: 'Application' }],
+  }));
+  const hasLiveRunnerSession = vi.fn(async () => false);
+  const baseHost = platformRuntimeHostFixture();
+  const route = createAppleSnapshotRoute(
+    {
+      ...baseHost,
+      appleApplications: { ...baseHost.appleApplications, hasLiveRunnerSession },
+      snapshot: { captureSurface: vi.fn(), presentIosAcquisition },
+    },
+    { source, resolveTarget: createSimulatorSnapshotTargetResolver() },
+  );
+  vi.useFakeTimers();
+  try {
+    await withAppleToolProvider(
+      createLocalAppleToolProvider({ simctl: { run }, runCommand }),
+      async () => {
+        const capture = route.capture(ios, input, signal(), fallback);
+        await vi.advanceTimersByTimeAsync(4_500);
+        expect(fallback).not.toHaveBeenCalled();
+        expect(hasLiveRunnerSession).toHaveBeenCalled();
+
+        release();
+        await vi.advanceTimersByTimeAsync(0);
+        const result = await capture;
+        expect(result.producer).toBe('simulator-ax-bridge');
+        expect(fallback).not.toHaveBeenCalled();
+        expect(run.mock.calls.filter(([args]) => args[0] === 'spawn')).toHaveLength(1);
+      },
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test.for(['rejects', 'exits'] as const)(
+  'a deadline during the cached target re-check is not readiness work (ps %s)',
+  async (psOnAbort) => {
+    // A known target is re-checked with one `ps` per capture; no discovery runs. A deadline that
+    // lands there must stay a plain cancellation, or a wait would report readiness exhaustion over
+    // evidence its earlier polls already gathered (#2343 review).
+    const run = vi.fn(async (args: readonly string[]) => ({
+      stdout:
+        args[0] === 'spawn'
+          ? `42\t0\tUIKitApplication:${input.options.appBundleId}[launch-a][rb-legacy]`
+          : JSON.stringify({
+              devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
+            }),
+      stderr: '',
+      exitCode: 0,
+    }));
+    let recheckStarted!: () => void;
+    const recheck = new Promise<void>((resolve) => {
+      recheckStarted = resolve;
+    });
+    let psCalls = 0;
+    const runCommand = vi.fn(
+      async (cmd: string, args: readonly string[], options?: { signal?: AbortSignal }) => {
+        if (cmd !== 'ps' || ++psCalls === 1) return { stdout: 'start-a', stderr: '', exitCode: 0 };
+        recheckStarted();
+        return await new Promise<{ stdout: string; stderr: string; exitCode: number }>(
+          (resolve, reject) => {
+            options?.signal?.addEventListener(
+              'abort',
+              () =>
+                psOnAbort === 'rejects'
+                  ? reject(createRequestCanceledError({ cmd, args }))
+                  : resolve({ stdout: '', stderr: '', exitCode: 1 }),
+              { once: true },
+            );
+          },
+        );
+      },
+    );
+    const fallback = vi.fn(async () => runnerResult());
+    const baseHost = platformRuntimeHostFixture();
+    const route = createAppleSnapshotRoute(
+      {
+        ...baseHost,
+        appleApplications: {
+          ...baseHost.appleApplications,
+          hasLiveRunnerSession: async () => false,
+        },
+        snapshot: {
+          captureSurface: vi.fn(),
+          presentIosAcquisition: vi.fn(async () => ({
+            backend: 'xctest' as const,
+            producer: 'simulator-ax-bridge' as const,
+            nodes: [{ index: 0, type: 'Application' }],
+          })),
+        },
+      },
+      {
+        source: sourceReturning(bridgeAcquisition()),
+        resolveTarget: createSimulatorSnapshotTargetResolver(),
+      },
+    );
+    await withAppleToolProvider(
+      createLocalAppleToolProvider({ simctl: { run }, runCommand }),
+      async () => {
+        await route.capture(ios, input, signal(), fallback);
+        const deadline = new AbortController();
+        const capture = route.capture(ios, input, deadline.signal, fallback);
+        await recheck;
+        deadline.abort(new DOMException('Wait deadline exceeded', 'TimeoutError'));
+
+        await expect(capture).rejects.not.toHaveProperty('details.readinessPhase');
+        expect(run.mock.calls.filter(([args]) => args[0] === 'spawn')).toHaveLength(1);
+        expect(fallback).not.toHaveBeenCalled();
+      },
+    );
+  },
+);
+
+test('a deadline during a slow app discovery names the discovery as the readiness phase', async () => {
+  // The capture never reached the bridge or the runner: its whole cost was finding the target, so
+  // the cancellation says so instead of reading as a capture that produced nothing (#2343).
+  const run = vi.fn(async (args: readonly string[]) => {
+    if (args[0] === 'spawn') await new Promise<never>(() => {});
+    return {
+      stdout: JSON.stringify({
+        devices: { 'com.apple.CoreSimulator.SimRuntime.iOS-26-0': [{ udid: ios.id }] },
+      }),
+      stderr: '',
+      exitCode: 0,
+    };
+  });
+  const runCommand = vi.fn(async () => ({ stdout: 'start-a', stderr: '', exitCode: 0 }));
+  const fallback = vi.fn(async () => runnerResult());
+  const baseHost = platformRuntimeHostFixture();
+  const route = createAppleSnapshotRoute(
+    {
+      ...baseHost,
+      appleApplications: { ...baseHost.appleApplications, hasLiveRunnerSession: async () => false },
+    },
+    {
+      source: sourceReturning(bridgeAcquisition()),
+      resolveTarget: createSimulatorSnapshotTargetResolver(),
+    },
+  );
+  const deadline = new AbortController();
+  vi.useFakeTimers();
+  try {
+    await withAppleToolProvider(
+      createLocalAppleToolProvider({ simctl: { run }, runCommand }),
+      async () => {
+        const capture = route.capture(ios, input, deadline.signal, fallback);
+        const settled = expect(capture).rejects.toMatchObject({
+          code: 'COMMAND_FAILED',
+          details: { reason: 'request_canceled', readinessPhase: 'target-discovery' },
+        });
+        await vi.advanceTimersByTimeAsync(3_000);
+        deadline.abort(new DOMException('Wait deadline exceeded', 'TimeoutError'));
+        await settled;
+        expect(fallback).not.toHaveBeenCalled();
+      },
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});

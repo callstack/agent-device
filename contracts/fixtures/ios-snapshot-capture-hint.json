@@ -1,0 +1,211 @@
+[
+  {
+    "name": "regular-default-full",
+    "request": {
+      "projection": "regular",
+      "interactiveOnly": false,
+      "depth": null,
+      "scope": null,
+      "customActions": false,
+      "acquisitionIntent": "full"
+    },
+    "expected": {
+      "projection": "regular",
+      "rawTraversalDepth": null,
+      "regularPresentedDepth": null,
+      "interactiveOnly": false,
+      "customActions": false,
+      "acquisitionIntent": "full"
+    }
+  },
+  {
+    "name": "regular-presented-depth",
+    "request": {
+      "projection": "regular",
+      "interactiveOnly": false,
+      "depth": 2,
+      "scope": null,
+      "customActions": false,
+      "acquisitionIntent": "full"
+    },
+    "expected": {
+      "projection": "regular",
+      "rawTraversalDepth": null,
+      "regularPresentedDepth": 2,
+      "interactiveOnly": false,
+      "customActions": false,
+      "acquisitionIntent": "full"
+    }
+  },
+  {
+    "name": "regular-interactive-only",
+    "request": {
+      "projection": "regular",
+      "interactiveOnly": true,
+      "depth": null,
+      "scope": null,
+      "customActions": false,
+      "acquisitionIntent": "full"
+    },
+    "expected": {
+      "projection": "regular",
+      "rawTraversalDepth": null,
+      "regularPresentedDepth": null,
+      "interactiveOnly": true,
+      "customActions": false,
+      "acquisitionIntent": "full"
+    }
+  },
+  {
+    "name": "regular-scoped-depth-stays-broad",
+    "request": {
+      "projection": "regular",
+      "interactiveOnly": true,
+      "depth": 3,
+      "scope": "Card",
+      "customActions": false,
+      "acquisitionIntent": "full"
+    },
+    "expected": {
+      "projection": "regular",
+      "rawTraversalDepth": null,
+      "regularPresentedDepth": null,
+      "interactiveOnly": true,
+      "customActions": false,
+      "acquisitionIntent": "full"
+    }
+  },
+  {
+    "name": "regular-custom-actions",
+    "request": {
+      "projection": "regular",
+      "interactiveOnly": false,
+      "depth": null,
+      "scope": null,
+      "customActions": true,
+      "acquisitionIntent": "full"
+    },
+    "expected": {
+      "projection": "regular",
+      "rawTraversalDepth": null,
+      "regularPresentedDepth": null,
+      "interactiveOnly": false,
+      "customActions": true,
+      "acquisitionIntent": "full"
+    }
+  },
+  {
+    "name": "raw-default-full",
+    "request": {
+      "projection": "raw",
+      "interactiveOnly": false,
+      "depth": null,
+      "scope": null,
+      "customActions": false,
+      "acquisitionIntent": "full"
+    },
+    "expected": {
+      "projection": "raw",
+      "rawTraversalDepth": null,
+      "regularPresentedDepth": null,
+      "interactiveOnly": false,
+      "customActions": false,
+      "acquisitionIntent": "full"
+    }
+  },
+  {
+    "name": "raw-traversal-depth",
+    "request": {
+      "projection": "raw",
+      "interactiveOnly": false,
+      "depth": 4,
+      "scope": null,
+      "customActions": false,
+      "acquisitionIntent": "full"
+    },
+    "expected": {
+      "projection": "raw",
+      "rawTraversalDepth": 4,
+      "regularPresentedDepth": null,
+      "interactiveOnly": false,
+      "customActions": false,
+      "acquisitionIntent": "full"
+    }
+  },
+  {
+    "name": "raw-interactive-request-is-not-filtered",
+    "request": {
+      "projection": "raw",
+      "interactiveOnly": true,
+      "depth": null,
+      "scope": null,
+      "customActions": false,
+      "acquisitionIntent": "full"
+    },
+    "expected": {
+      "projection": "raw",
+      "rawTraversalDepth": null,
+      "regularPresentedDepth": null,
+      "interactiveOnly": false,
+      "customActions": false,
+      "acquisitionIntent": "full"
+    }
+  },
+  {
+    "name": "raw-scoped-depth-stays-broad",
+    "request": {
+      "projection": "raw",
+      "interactiveOnly": false,
+      "depth": 3,
+      "scope": "Panel",
+      "customActions": true,
+      "acquisitionIntent": "full"
+    },
+    "expected": {
+      "projection": "raw",
+      "rawTraversalDepth": null,
+      "regularPresentedDepth": null,
+      "interactiveOnly": false,
+      "customActions": true,
+      "acquisitionIntent": "full"
+    }
+  },
+  {
+    "name": "regular-surface-observation",
+    "request": {
+      "projection": "regular",
+      "interactiveOnly": false,
+      "depth": null,
+      "scope": null,
+      "customActions": false,
+      "acquisitionIntent": "surface-observation"
+    },
+    "expected": {
+      "projection": "regular",
+      "rawTraversalDepth": null,
+      "regularPresentedDepth": null,
+      "interactiveOnly": false,
+      "customActions": false,
+      "acquisitionIntent": "surface-observation"
+    }
+  },
+  {
+    "name": "raw-surface-observation-with-depth-and-actions",
+    "request": {
+      "projection": "raw",
+      "interactiveOnly": false,
+      "depth": 1,
+      "scope": null,
+      "customActions": true,
+      "acquisitionIntent": "surface-observation"
+    },
+    "expected": {
+      "projection": "raw",
+      "rawTraversalDepth": 1,
+      "regularPresentedDepth": null,
+      "interactiveOnly": false,
+      "customActions": true,
+      "acquisitionIntent": "surface-observation"
+    }
+  }
+]

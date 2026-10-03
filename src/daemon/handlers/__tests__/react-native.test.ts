@@ -1,17 +1,18 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import path from 'node:path';
 import { handleReactNativeCommands } from '../react-native.ts';
-import { captureSnapshot } from '../snapshot-capture.ts';
+import { captureSnapshot } from '../../snapshot-capture.ts';
 import { SessionStore } from '../../session-store.ts';
-import type { SessionState } from '../../types.ts';
+import type { SessionState } from '../../session-state.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import {
   getRuntimeBindings,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from './interaction-get-runtime-fixture.ts';
+} from '../../__tests__/interaction-get-runtime-fixture.ts';
+import { refFrameState } from '../../ref-frame.ts';
 
-vi.mock('../snapshot-capture.ts', () => ({
+vi.mock('../../snapshot-capture.ts', () => ({
   captureSnapshot: vi.fn(),
 }));
 
@@ -79,7 +80,7 @@ test('react-native dismiss-overlay taps collapsed warning close affordance inste
   expect(response?.ok).toBe(true);
   // ADR 0014 side-effect seam: overlay dismissal taps the device, so it expires
   // the ref frame.
-  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+  expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
   expect(mockDismissTap).toHaveBeenCalledWith(
     expect.objectContaining({ point: { x: 379, y: 820 } }),
   );

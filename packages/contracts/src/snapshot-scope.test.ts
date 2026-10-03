@@ -6,7 +6,7 @@ import { matchesSnapshotScope, normalizeSnapshotScope } from './facades/snapshot
 
 // Golden scope-policy table (#1797 / #1832 C2): the SAME JSON is asserted against every runtime
 // that resolves `--scope` — this predicate, the Android platform projection
-// (src/platforms/android/__tests__/ui-hierarchy-scope.test.ts), and the Swift runner twin.
+// (packages/platform-android/src/__tests__/ui-hierarchy-scope.test.ts), and the Swift runner twin.
 // This file proves the PREDICATE + first-document-order-match rule; subtree slicing is proved by
 // the runtime legs.
 

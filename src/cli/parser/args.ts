@@ -1,22 +1,22 @@
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
-import { mergeDefinedFlags } from '../../utils/merge-flags.ts';
+import { mergeDefinedFlags } from '../../commands/schema/merge-flags.ts';
 import {
-  applyCommandDefaults,
   assertCommandPositionalArity,
   getCommandSchema,
   getFlagDefinition,
   getFlagDefinitions,
   type FlagDefinition,
   type FlagKey,
-} from '../../cli-schema/command-schema.ts';
-import { isFlagSupportedForCommand } from '../../cli-schema/option-schema.ts';
-import { isKnownCliCommandName } from '../../command-catalog.ts';
+} from '../../commands/schema/command-schema.ts';
+import { isFlagSupportedForCommand } from '../../commands/schema/option-schema.ts';
+import { applyCommandDefaults } from '@agent-device/command-registry/registry';
+import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
 import {
   cliCommandAlias,
   normalizeCliCommandAlias,
   retiredCliCommandMessage,
-} from '../../commands/cli-command-aliases.ts';
+} from '@agent-device/command-registry/cli-command-aliases';
 import { formatUnknownFlagMessage, suggestCommandFor } from './command-suggestions.ts';
 
 type ParsedArgs = {
@@ -101,7 +101,7 @@ export function parseRawArgs(argv: string[]): RawParsedArgs {
         else positionals.push(arg);
         continue;
       }
-      throw new AppError('INVALID_ARGS', formatUnknownFlagMessage(token));
+      throw new AppError('INVALID_ARGS', formatUnknownFlagMessage(token, command));
     }
 
     const parsed = parseFlagValue(definition, token, inlineValue, argv[i + 1]);
@@ -194,6 +194,18 @@ export function finalizeParsedArgs(
     }
     warnings.push(message);
     for (const entry of disallowed) {
+      delete (flags as Record<string, unknown>)[entry.key];
+    }
+  }
+
+  const unread = findFlagsTheActionCannotRead(parsed);
+  if (unread.length > 0) {
+    const message = formatUnreadActionFlagMessage(parsed.command, parsed.positionals[0]!, unread);
+    if (strictFlags) {
+      throw new AppError('INVALID_ARGS', message);
+    }
+    warnings.push(message);
+    for (const entry of unread) {
       delete (flags as Record<string, unknown>)[entry.key];
     }
   }
@@ -373,6 +385,38 @@ function normalizeParsedCommandAliases(parsed: ParsedArgs): ParsedArgs {
   return parsed;
 }
 
+/**
+ * The typed options the selected action of a command cannot read.
+ *
+ * Only the options the table splits across actions are its business: a global flag such as `--json`
+ * or `--no-record` is read by every action, and refusing one would refuse the command itself. A
+ * command without the table, or an action it does not list, is left to the rest of the parser.
+ *
+ * Config, env, and remote-config defaults never appear in `providedFlags`, which is why
+ * `AGENT_DEVICE_FPS=30` does not fail `record stop`: a default the action ignores was never requested.
+ */
+function findFlagsTheActionCannotRead(parsed: RawParsedArgs): ParsedFlagRecord[] {
+  const flagsByAction = getCommandSchema(parsed.command)?.flagsByAction;
+  const action = parsed.positionals[0];
+  if (flagsByAction === undefined || action === undefined) return [];
+  if (!Object.hasOwn(flagsByAction, action)) return [];
+  const reads = flagsByAction[action];
+  if (reads === undefined) return [];
+  const actionScoped = new Set(Object.values(flagsByAction).flat());
+  return parsed.providedFlags.filter(
+    (entry) => actionScoped.has(entry.key) && !reads.includes(entry.key),
+  );
+}
+
+function formatUnreadActionFlagMessage(
+  command: string | null,
+  action: string,
+  unread: ParsedFlagRecord[],
+): string {
+  const tokens = unread.map((entry) => entry.token).join(', ');
+  return `${command} ${action} does not read ${tokens}. Run \`${command} ${action} --help\` for the options it reads.`;
+}
+
 function formatUnsupportedFlagMessage(command: string | null, unsupported: string[]): string {
   if (!command) {
     return unsupported.length === 1
@@ -387,12 +431,12 @@ function formatUnsupportedFlagMessage(command: string | null, unsupported: strin
 // Usage text lives in cli-help.ts, which pulls the full command schema surface.
 // Callers load it lazily so plain command invocations never parse the help text.
 export async function usage(): Promise<string> {
-  const { buildUsageText } = await import('../../cli-schema/cli-help.ts');
+  const { buildUsageText } = await import('../../commands/schema/cli-help.ts');
   return buildUsageText();
 }
 
 export async function usageForCommand(command: string): Promise<string | null> {
-  const { buildCommandUsageText } = await import('../../cli-schema/cli-help.ts');
+  const { buildCommandUsageText } = await import('../../commands/schema/cli-help.ts');
   return buildCommandUsageText(normalizeCommandAlias(command));
 }
 

@@ -201,7 +201,7 @@ test('defaultHintForCode falls back to the generic retry hint for a daemon/runne
 });
 
 test('defaultHintForCode never returns a falsy hint for any known code — printHumanError silently drops a falsy hint', () => {
-  // src/utils/output.ts's printHumanError only prints "Hint: ..." when
+  // src/commands/output/error.ts's printHumanError only prints "Hint: ..." when
   // `normalized.hint` is truthy, so an empty-string hint would silently vanish
   // from CLI output rather than fail loudly.
   for (const code of KNOWN_APP_ERROR_CODES) {

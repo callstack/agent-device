@@ -21,7 +21,8 @@ import {
   limrunAppEventOperationFacts,
   limrunSettingsOperationFacts,
   limrunAlertOperationFacts,
-  limrunAppSwitcherOperationFacts,
+  limrunSystemButtonOperationFacts,
+  limrunFoldOperationFacts,
   limrunClipboardOperationFacts,
   limrunNavigationOperationFacts,
 } from './interaction-operations.ts';
@@ -46,11 +47,6 @@ const elementTextUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
   hint: 'Limrun-owned devices read element text from the captured tree only.',
-} as const);
-const recordingUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun does not expose an exact-owner screen-recording runtime.',
 } as const);
 const headlessUnavailable = Object.freeze({
   available: false,
@@ -176,9 +172,9 @@ export function limrunAppLogFacts(
       ...deployment,
       appState: isAndroid ? available : iosAppStateUnavailable,
       networkDump: available,
-      screenRecordingStart: recordingUnavailable,
-      screenRecordingReattach: recordingUnavailable,
-      screenRecordingCleanup: recordingUnavailable,
+      screenRecordingStart: available,
+      screenRecordingReattach: available,
+      screenRecordingCleanup: available,
       ...snapshotRuntimeOperationFacts({
         capture: available,
         customActions: customSnapshotFact,
@@ -189,7 +185,6 @@ export function limrunAppLogFacts(
       // on a Limrun-owned device poll the canonical tree rather than borrowing Apple's.
       ...selectorObservationRuntimeOperationFacts({
         findText: customSnapshotUnavailable,
-        findSelector: customSnapshotUnavailable,
       }),
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       // Focus rides the same provider interactor the captures do, and a live-session Limrun
@@ -199,7 +194,8 @@ export function limrunAppLogFacts(
       ...limrunNavigationOperationFacts(device),
       ...limrunKeyboardOperationFacts(device),
       ...limrunClipboardOperationFacts(device),
-      ...limrunAppSwitcherOperationFacts(device),
+      ...limrunSystemButtonOperationFacts(device),
+      ...limrunFoldOperationFacts(),
       ...limrunAppEventOperationFacts(device),
       ...limrunSettingsOperationFacts(device),
       ...limrunAlertOperationFacts(device),
@@ -255,14 +251,14 @@ export function limrunAppLogRecoveryFacts(
       ...screenshotRuntimeOperationFacts({ capture: liveSessionUnavailable }),
       ...selectorObservationRuntimeOperationFacts({
         findText: liveSessionUnavailable,
-        findSelector: liveSessionUnavailable,
       }),
       ...viewportRuntimeOperationFacts({ setViewport: liveSessionUnavailable }),
       ...limrunInteractionOperationFacts(device, liveSessionUnavailable),
       ...limrunNavigationOperationFacts(device, liveSessionUnavailable),
       ...limrunKeyboardOperationFacts(device, liveSessionUnavailable),
       ...limrunClipboardOperationFacts(device, liveSessionUnavailable),
-      ...limrunAppSwitcherOperationFacts(device, liveSessionUnavailable),
+      ...limrunSystemButtonOperationFacts(device, liveSessionUnavailable),
+      ...limrunFoldOperationFacts(),
       ...limrunAppEventOperationFacts(device, liveSessionUnavailable),
       ...limrunSettingsOperationFacts(device, liveSessionUnavailable),
       ...limrunAlertOperationFacts(device, liveSessionUnavailable),

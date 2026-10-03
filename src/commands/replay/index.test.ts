@@ -5,11 +5,11 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import {
   replayCliReader,
-  replayCommandDefinition,
+  replayCommandFacet,
   replayCommandMetadata,
   replayDaemonWriter,
   testCliReader,
-  testCommandDefinition,
+  testCommandFacet,
   testCommandMetadata,
   testDaemonWriter,
 } from './index.ts';
@@ -51,9 +51,9 @@ afterEach(() => {
 describe('replay command interface', () => {
   test('owns replay and test public metadata', () => {
     expect(replayCommandMetadata.name).toBe('replay');
-    expect(replayCommandDefinition.name).toBe('replay');
+    expect(replayCommandFacet.definition.name).toBe('replay');
     expect(testCommandMetadata.name).toBe('test');
-    expect(testCommandDefinition.name).toBe('test');
+    expect(testCommandFacet.definition.name).toBe('test');
   });
 
   test('reads replay CLI input', () => {
@@ -195,8 +195,11 @@ describe('replay command interface', () => {
       bundleUrl: 'http://127.0.0.1:8083/index.bundle',
     });
 
-    await replayCommandDefinition.invoke(client, replayCliReader(['./flow.ad'], runtimeFlags));
-    await testCommandDefinition.invoke(client, testCliReader(['./suite'], runtimeFlags));
+    await replayCommandFacet.definition.invoke(
+      client,
+      replayCliReader(['./flow.ad'], runtimeFlags),
+    );
+    await testCommandFacet.definition.invoke(client, testCliReader(['./suite'], runtimeFlags));
 
     const runtime = {
       metroHost: '127.0.0.1',

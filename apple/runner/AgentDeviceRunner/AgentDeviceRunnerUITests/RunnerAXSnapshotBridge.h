@@ -49,6 +49,18 @@ FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsBlockedKey;
                                            customActionLimit:(NSInteger)customActionLimit
                                                     deadline:(nullable NSDate *)deadline;
 
+/// The capture behind `snapshotTreeForApplication:`, for an AX client and target
+/// application element that are already resolved. Every request, extension, and
+/// custom-action decision happens here; the application entry point only resolves
+/// the two identities.
++ (NSDictionary<NSString *, id> *)snapshotTreeWithClient:(id)axClient
+                                                  target:(id)target
+                                                maxDepth:(NSInteger)maxDepth
+                                                maxNodes:(NSInteger)maxNodes
+                                  deepExtensionCallLimit:(NSInteger)deepExtensionCallLimit
+                                       customActionLimit:(NSInteger)customActionLimit
+                                                deadline:(nullable NSDate *)deadline;
+
 /// Names of the element's UIAccessibilityCustomActions, or nil when it has
 /// none.
 ///
@@ -105,6 +117,10 @@ FOUNDATION_EXPORT NSString *const RunnerAXSnapshotCustomActionsBlockedKey;
 + (nullable id)accessibilityClient;
 
 + (NSInteger)processIdentifierForApplication:(XCUIApplication *)application;
+
+/// Pids of the applications the AX client currently reports as active. Same private accessor the
+/// snapshot target match uses; pids only — the client resolves no bundle id for an arbitrary app.
++ (NSArray<NSNumber *> *)activeApplicationProcessIdentifiers;
 
 /// The frontier-extension loop, exposed for the runner unit bundle: a frontier
 /// whose element vanished or whose re-rooted request fails must count as

@@ -5,6 +5,11 @@
 
 static NSString *const RunnerTextSynthesisSurface = @"text";
 
+// The pace (`typingSpeed:`) is a caller argument, not a constant here: TextEntryTiming owns it so
+// the synthesized delivery budget charges the pace the app actually sees (#2955). XCTest's
+// `typingSpeed:` is characters per second, and it spaces them unevenly — two characters of a paced
+// burst can reach the app a few milliseconds apart at any pace.
+
 typedef id (*RunnerTextMsgSendInit)(id, SEL, NSString *);
 typedef id (*RunnerTextMsgSendInitPath)(id, SEL);
 typedef void (*RunnerTextMsgSendType)(id, SEL, NSString *, NSTimeInterval, NSUInteger, BOOL);
@@ -35,6 +40,7 @@ static RunnerSynthesizedTextEntryResult *RunnerTextEntryFailed(NSString *message
 static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
   id application,
   NSString *text,
+  NSUInteger charactersPerSecond,
   BOOL replace
 );
 
@@ -52,13 +58,15 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
 @implementation RunnerSynthesizedTextEntry
 
 + (RunnerSynthesizedTextEntryResult *)synthesizeTextWithApplication:(id)application
-                                                               text:(NSString *)text {
-  return RunnerSynthesizeTextWithMode(application, text, NO);
+                                                               text:(NSString *)text
+                                                  charactersPerSecond:(NSUInteger)charactersPerSecond {
+  return RunnerSynthesizeTextWithMode(application, text, charactersPerSecond, NO);
 }
 
 + (RunnerSynthesizedTextEntryResult *)replaceTextWithApplication:(id)application
-                                                           text:(NSString *)text {
-  return RunnerSynthesizeTextWithMode(application, text, YES);
+                                                           text:(NSString *)text
+                                              charactersPerSecond:(NSUInteger)charactersPerSecond {
+  return RunnerSynthesizeTextWithMode(application, text, charactersPerSecond, YES);
 }
 
 @end
@@ -66,6 +74,7 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
 static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
   id application,
   NSString *text,
+  NSUInteger charactersPerSecond,
   BOOL replace
 ) {
   @try {
@@ -128,7 +137,14 @@ static RunnerSynthesizedTextEntryResult *RunnerSynthesizeTextWithMode(
       );
     }
     ((RunnerMsgSendSetInteger)objc_msgSend)(record, bridge.core.setTargetProcessIDSelector, targetProcessID);
-    ((RunnerTextMsgSendType)objc_msgSend)(path, bridge.typeTextSelector, text, 0.0, 60, YES);
+    ((RunnerTextMsgSendType)objc_msgSend)(
+      path,
+      bridge.typeTextSelector,
+      text,
+      0.0,
+      charactersPerSecond,
+      YES
+    );
     ((RunnerMsgSendAddPath)objc_msgSend)(record, bridge.core.addPathSelector, path);
 
     NSError *error = nil;

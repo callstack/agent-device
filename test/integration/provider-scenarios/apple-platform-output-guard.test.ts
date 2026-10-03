@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import type { AppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import type { AppleSimulatorScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
-import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR, PROVIDER_SCENARIO_MACOS } from './fixtures.ts';
 import {
   createProviderIosSimulatorRecordingProcess,
@@ -126,6 +126,8 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
   [PUBLIC_COMMANDS.swipe]: () => one(['up']),
   [PUBLIC_COMMANDS.tvRemote]: () => one(['select']),
   [PUBLIC_COMMANDS.appSwitcher]: () => one(),
+  [PUBLIC_COMMANDS.actionButton]: () => one(),
+  [PUBLIC_COMMANDS.fold]: () => one(['open']),
 
   // -- orchestration (drive to an error response; still scanned) --
   [PUBLIC_COMMANDS.artifacts]: () => one(),
@@ -235,6 +237,7 @@ function richNodes() {
 
 function permissiveRunner(): AppleRunnerProvider {
   return {
+    hasLiveSession: () => true,
     runCommand: async (_device, command) => {
       switch (command.command) {
         case 'uptime':
@@ -257,16 +260,12 @@ function permissiveTool(world: World) {
   let clipboard = '';
   let darkMode = false;
   return createRecordingAppleToolProvider({
-    simctl: async (args, options) => {
+    simctl: async (args) => {
       const joined = args.join(' ');
       const list = simctlListDevicesResult(args, 'com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
         { name: 'iPhone 15', udid: 'sim-1' },
       ]);
       if (list) return list;
-      if (joined === 'pbcopy sim-1') {
-        clipboard = String(options?.stdin ?? '');
-        return { stdout: '', stderr: '', exitCode: 0 };
-      }
       if (joined === 'pbpaste sim-1') return { stdout: `${clipboard}\n`, stderr: '', exitCode: 0 };
       if (joined === 'listapps sim-1') {
         return {

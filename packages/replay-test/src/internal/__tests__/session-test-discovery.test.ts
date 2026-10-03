@@ -6,7 +6,8 @@ import {
   buildReplayTestSessionName,
   discoverReplayTestEntries,
 } from '../session-test-discovery.ts';
-import { buildReplayTestArtifactSlug, trimEdgeDashes } from '../session-test-artifacts.ts';
+import { trimEdgeDashes } from '@agent-device/kernel/collections';
+import { buildReplayTestArtifactSlug } from '../session-test-artifacts.ts';
 import type { ReplayTestManifest, ReplayTestSource } from '../session-test-types.ts';
 
 // Scheduler-owned discovery policy (#1478 P3b): which sources a --platform filter runs, which

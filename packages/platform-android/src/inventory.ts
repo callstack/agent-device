@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { deviceShellArgv, shellFragment, type ShellWord } from '@agent-device/kernel/device-shell';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 import type {
   DeviceInventoryHostFor,
@@ -15,6 +16,7 @@ import {
   isAndroidEmulatorSerial,
   normalizeAndroidDeviceName,
   parseAndroidAvdList,
+  parseAndroidDeviceDescription,
   parseAndroidDeviceEntries,
   parseAndroidEmulatorAvdNameOutput,
   parseAndroidFeatureListForTv,
@@ -23,6 +25,10 @@ import {
 } from './inventory-parsers.ts';
 
 const PROBE_TIMEOUT_MS = 10_000;
+const DEVICE_DESCRIPTION_TIMEOUT_MS = 2_000;
+const DEVICE_DESCRIPTION_PROBE = shellFragment(
+  'getprop ro.product.model; getprop ro.build.version.release',
+);
 const TV_FEATURES = [
   'android.software.leanback',
   'android.software.leanback_only',
@@ -118,10 +124,11 @@ async function probeRunningDevice(
   context: AndroidInventoryContext,
   entry: AndroidDeviceEntry,
 ): Promise<DeviceInfo> {
-  const [name, booted, target] = await Promise.all([
+  const [name, booted, target, description] = await Promise.all([
     resolveDeviceName(context, entry),
     isBooted(context, entry.serial),
     resolveTarget(context, entry.serial),
+    readDeviceDescription(context, entry.serial),
   ]);
   return {
     platform: 'android',
@@ -129,18 +136,38 @@ async function probeRunningDevice(
     name,
     kind: isAndroidEmulatorSerial(entry.serial) ? 'emulator' : 'device',
     target,
+    ...description,
     booted,
   };
+}
+
+/** Best-effort model and OS version read in one shell call; a failed probe leaves both unset. */
+async function readDeviceDescription(
+  context: AndroidInventoryContext,
+  serial: string,
+): Promise<Pick<DeviceInfo, 'model' | 'osVersion'>> {
+  try {
+    const result = await runAdbShell(
+      context,
+      serial,
+      [DEVICE_DESCRIPTION_PROBE],
+      DEVICE_DESCRIPTION_TIMEOUT_MS,
+    );
+    return result.exitCode === 0 ? parseAndroidDeviceDescription(result.stdout) : {};
+  } catch (error) {
+    if (context.scope.signal.aborted) throw error;
+    return {};
+  }
 }
 
 async function resolveDeviceName(
   context: AndroidInventoryContext,
   entry: AndroidDeviceEntry,
 ): Promise<string> {
-  const model = entry.rawModel.replace(/_/g, ' ').trim();
+  const model = entry.rawModel.replaceAll('_', ' ').trim();
   if (!isAndroidEmulatorSerial(entry.serial)) return model || entry.serial;
   const avdName = await resolveEmulatorAvdName(context, entry.serial);
-  return avdName?.replace(/_/g, ' ') || model || entry.serial;
+  return avdName?.replaceAll('_', ' ') || model || entry.serial;
 }
 
 async function resolveEmulatorAvdName(
@@ -148,22 +175,21 @@ async function resolveEmulatorAvdName(
   serial: string,
 ): Promise<string | undefined> {
   for (const prop of ['ro.boot.qemu.avd_name', 'persist.sys.avd_name']) {
-    const result = await runBestEffortNameProbe(context, serial, ['shell', 'getprop', prop]);
+    const result = await runBestEffortNameProbe(context, adbShellArgv(serial, ['getprop', prop]));
     const value = result?.stdout.trim();
     if (result?.exitCode === 0 && value) return value;
   }
-  const result = await runBestEffortNameProbe(context, serial, ['emu', 'avd', 'name']);
+  const result = await runBestEffortNameProbe(context, ['-s', serial, 'emu', 'avd', 'name']);
   const value = result && parseAndroidEmulatorAvdNameOutput(result.stdout);
   return result?.exitCode === 0 ? value : undefined;
 }
 
 async function runBestEffortNameProbe(
   context: AndroidInventoryContext,
-  serial: string,
-  args: string[],
+  args: readonly string[],
 ): Promise<HostCommandResult | undefined> {
   try {
-    return await runAdb(context, serial, args);
+    return await run(context, context.adb, args);
   } catch (error) {
     const appError = asAppError(error);
     if (appError.code === 'COMMAND_FAILED' && typeof appError.details?.timeoutMs === 'number') {
@@ -176,8 +202,7 @@ async function runBestEffortNameProbe(
 async function isBooted(context: AndroidInventoryContext, serial: string): Promise<boolean> {
   try {
     return (
-      (await runAdb(context, serial, ['shell', 'getprop', 'sys.boot_completed'])).stdout.trim() ===
-      '1'
+      (await runAdbShell(context, serial, ['getprop', 'sys.boot_completed'])).stdout.trim() === '1'
     );
   } catch (error) {
     if (context.scope.signal.aborted) throw error;
@@ -189,8 +214,7 @@ async function resolveTarget(
   context: AndroidInventoryContext,
   serial: string,
 ): Promise<'mobile' | 'tv'> {
-  const characteristics = await runAdb(context, serial, [
-    'shell',
+  const characteristics = await runAdbShell(context, serial, [
     'getprop',
     'ro.build.characteristics',
   ]);
@@ -199,12 +223,12 @@ async function resolveTarget(
     TV_FEATURES,
     2,
     async (feature) =>
-      await runAdb(context, serial, ['shell', 'cmd', 'package', 'has-feature', feature]),
+      await runAdbShell(context, serial, ['cmd', 'package', 'has-feature', feature]),
   );
   if (featureResults.some((result) => commandOutput(result).toLowerCase().includes('true'))) {
     return 'tv';
   }
-  const featureList = await runAdb(context, serial, ['shell', 'pm', 'list', 'features']);
+  const featureList = await runAdbShell(context, serial, ['pm', 'list', 'features']);
   return parseAndroidFeatureListForTv(commandOutput(featureList)) ? 'tv' : 'mobile';
 }
 
@@ -238,18 +262,24 @@ async function listStoppedAvds(
     }));
 }
 
-async function runAdb(
+function adbShellArgv(serial: string, words: readonly ShellWord[]): readonly string[] {
+  return deviceShellArgv('adb', 'shell', words, ['-s', serial]);
+}
+
+async function runAdbShell(
   context: AndroidInventoryContext,
   serial: string,
-  args: string[],
+  words: readonly ShellWord[],
+  timeoutMs = PROBE_TIMEOUT_MS,
 ): Promise<HostCommandResult> {
-  return await run(context, context.adb, ['-s', serial, ...args]);
+  return await run(context, context.adb, adbShellArgv(serial, words), timeoutMs);
 }
 
 async function run(
   context: AndroidInventoryContext,
   executable: string,
   args: readonly string[],
+  timeoutMs = PROBE_TIMEOUT_MS,
 ): Promise<HostCommandResult> {
   try {
     return await context.host.commands.run(
@@ -257,7 +287,7 @@ async function run(
         executable,
         args,
         allowFailure: true,
-        timeoutMs: PROBE_TIMEOUT_MS,
+        timeoutMs,
       },
       context.scope.signal,
     );

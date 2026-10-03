@@ -8,9 +8,9 @@
  * deviations"): this used to live in `@agent-device/ad-replay`'s
  * `target-identity.ts`, reasoning that it was engine-owned policy rather
  * than script vocabulary. In practice its only real consumers were the
- * daemon's RECORD-time self-check (`src/daemon/session-target-evidence.ts`)
+ * daemon's RECORD-time self-check (`@agent-device/selectors/target-evidence`)
  * and its REPLAY-time classification wrapper
- * (`src/daemon/handlers/session-replay-target-classification.ts`) — both
+ * (`packages/replay-port/src/daemon-port/target-classification.ts`) — both
  * daemon files, neither reachable through `inspectAdReplay`/`runAdReplay`.
  * It interprets `TargetAnnotationV1` evidence semantics shared beyond the
  * engine (record-time AND replay-time both need the SAME verdict by

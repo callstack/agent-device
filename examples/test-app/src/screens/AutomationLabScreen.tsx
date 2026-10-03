@@ -8,15 +8,24 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   useColorScheme,
   useWindowDimensions,
   View,
+  type AppStateStatus,
 } from 'react-native';
 import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from 'expo-audio';
 import { requireOptionalNativeModule } from 'expo-modules-core';
+import * as SecureStore from 'expo-secure-store';
 
 import { ActionButton, ScreenTitle, SectionCard } from '../components';
 import { useAppColors, type AppColors } from '../theme';
+
+// A fixed key/value pair standing in for a real login token: this screen only
+// needs to prove keychain-backed state survives `clear-app-state` but not
+// `reset-keychain`, not to model an actual auth flow.
+const KEYCHAIN_AUTH_KEY = 'automation-keychain-auth-token';
+const KEYCHAIN_AUTH_VALUE = 'demo-auth-token';
 
 type PushBroadcastLabModule = {
   lastPushBroadcast(): string;
@@ -27,6 +36,19 @@ const pushBroadcastLab =
     ? requireOptionalNativeModule<PushBroadcastLabModule>('PushBroadcastLab')
     : null;
 
+type ApplePayLabModule = {
+  canMakePayments(): boolean;
+  presentPaymentSheetAsync(): Promise<string>;
+};
+
+const applePayLab =
+  Platform.OS === 'ios' ? requireOptionalNativeModule<ApplePayLabModule>('ApplePayLab') : null;
+
+function initialApplePayResult(): string {
+  if (!applePayLab) return 'unavailable';
+  return applePayLab.canMakePayments() ? 'ready' : 'unsupported';
+}
+
 export function AutomationLabScreen(props: {
   eventName: string;
   eventPayload: string;
@@ -36,7 +58,15 @@ export function AutomationLabScreen(props: {
   const styles = createStyles(colors);
   const colorScheme = useColorScheme() ?? 'light';
   const dimensions = useWindowDimensions();
-  const [appState, setAppState] = useState(AppState.currentState);
+  const [appState, setAppState] = useState<AppStateStatus>(() => {
+    // RN types `currentState` as a plain string, so narrow it instead of casting.
+    const current = AppState.currentState;
+    return current === 'inactive' || current === 'background' || current === 'active'
+      ? current
+      : current === 'extension'
+        ? current
+        : 'unknown';
+  });
   const [lastNonActiveState, setLastNonActiveState] = useState('none');
   const [alertResult, setAlertResult] = useState('none');
   const [lastInput, setLastInput] = useState('none');
@@ -45,6 +75,9 @@ export function AutomationLabScreen(props: {
   const [microphonePermission, setMicrophonePermission] = useState('checking');
   const [lastPushBroadcast, setLastPushBroadcast] = useState('none');
   const [sheetVisible, setSheetVisible] = useState(false);
+  const [keychainAuthStatus, setKeychainAuthStatus] = useState('checking');
+  const [applePayResult, setApplePayResult] = useState(initialApplePayResult);
+  const [flattenedInput, setFlattenedInput] = useState('');
   const permissionReadGeneration = useRef(0);
   const windowMode = dimensions.width > dimensions.height ? 'landscape' : 'portrait';
 
@@ -125,13 +158,43 @@ export function AutomationLabScreen(props: {
     setLastPushBroadcast(pushBroadcastLab?.lastPushBroadcast() ?? 'unavailable');
   }
 
+  useEffect(() => {
+    let mounted = true;
+    void SecureStore.getItemAsync(KEYCHAIN_AUTH_KEY)
+      .then((value) => {
+        if (mounted)
+          setKeychainAuthStatus(value === KEYCHAIN_AUTH_VALUE ? 'signed-in' : 'signed-out');
+      })
+      .catch(() => {
+        if (mounted) setKeychainAuthStatus('error');
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  async function signInWithKeychain() {
+    await SecureStore.setItemAsync(KEYCHAIN_AUTH_KEY, KEYCHAIN_AUTH_VALUE);
+    setKeychainAuthStatus('signed-in');
+  }
+
+  async function presentApplePaySheet() {
+    if (!applePayLab) return;
+    setApplePayResult('presented');
+    try {
+      setApplePayResult(await applePayLab.presentPaymentSheetAsync());
+    } catch {
+      setApplePayResult('error');
+    }
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <ScreenTitle
         badge="E2E"
         subtitle="Durable outcomes for simulator commands that need app-visible evidence."
-        title="Automation lab"
         testID="automation-title"
+        title="Automation lab"
       />
       <SectionCard title="Runtime state">
         <StateRow label="Window" testID="automation-window" value={windowMode} />
@@ -211,6 +274,47 @@ export function AutomationLabScreen(props: {
         </Text>
       </SectionCard>
 
+      <SectionCard
+        subtitle="accessible={true} hides the field from the accessibility tree; only the keyboard proves focus."
+        title="Flattened input"
+      >
+        <View
+          accessibilityLabel="Flattened input group"
+          accessible
+          style={styles.flattenedGroup}
+          testID="automation-flattened-group"
+        >
+          <Text style={styles.label}>Nickname</Text>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            onChangeText={setFlattenedInput}
+            placeholder="Tap here, then type"
+            placeholderTextColor={colors.textSoft}
+            style={styles.flattenedInput}
+            testID="automation-flattened-input"
+            value={flattenedInput}
+          />
+        </View>
+        <Text style={styles.value} testID="automation-flattened-value">
+          Flattened value: {flattenedInput === '' ? 'none' : flattenedInput}
+        </Text>
+      </SectionCard>
+
+      {Platform.OS === 'ios' ? (
+        <SectionCard
+          subtitle="The sheet and its billing address form live in com.apple.PassbookUIService, not in this app."
+          title="Apple Pay sheet"
+        >
+          <ActionButton
+            label="Open Apple Pay sheet"
+            onPress={() => void presentApplePaySheet()}
+            testID="automation-open-apple-pay"
+          />
+          <StateRow label="Apple Pay" testID="automation-apple-pay-result" value={applePayResult} />
+        </SectionCard>
+      ) : null}
+
       <SectionCard title="Native alert">
         <ActionButton
           label="Open automation alert"
@@ -232,6 +336,19 @@ export function AutomationLabScreen(props: {
           label="Microphone permission"
           testID="automation-microphone-permission"
           value={microphonePermission}
+        />
+      </SectionCard>
+
+      <SectionCard title="Keychain-backed auth">
+        <ActionButton
+          label="Sign in (write keychain)"
+          onPress={() => void signInWithKeychain()}
+          testID="automation-keychain-signin"
+        />
+        <StateRow
+          label="Auth status"
+          testID="automation-keychain-status"
+          value={keychainAuthStatus}
         />
       </SectionCard>
 
@@ -288,6 +405,22 @@ function createStyles(colors: AppColors) {
   return StyleSheet.create({
     content: {
       paddingBottom: 28,
+    },
+    flattenedGroup: {
+      borderColor: colors.lineStrong,
+      borderRadius: 4,
+      borderWidth: StyleSheet.hairlineWidth,
+      gap: 8,
+      padding: 12,
+    },
+    flattenedInput: {
+      borderColor: colors.lineStrong,
+      borderRadius: 4,
+      borderWidth: StyleSheet.hairlineWidth,
+      color: colors.text,
+      fontSize: 15,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
     },
     label: {
       color: colors.text,

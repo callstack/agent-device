@@ -9,6 +9,7 @@ import type {
   RuntimeFacts,
   RuntimeOperationUnavailability,
   RuntimeOwnerRef,
+  RuntimeProviderMode,
 } from './platform-runtime.ts';
 import { screenshotRuntimeOperationFacts } from './screenshot-runtime.ts';
 import { snapshotRuntimeOperationFacts } from './snapshot-runtime.ts';
@@ -20,12 +21,11 @@ import { scrollRuntimeOperationFacts } from './scroll-runtime.ts';
 import { typeTextRuntimeOperationFacts } from './type-text-runtime.ts';
 import { elementTextRuntimeOperationFacts } from './element-text-runtime.ts';
 import { backRuntimeOperationFacts } from './back-runtime.ts';
-import { homeRuntimeOperationFacts } from './home-runtime.ts';
 import { orientationRuntimeOperationFacts } from './orientation-runtime.ts';
 import { tvRemoteRuntimeOperationFacts } from './tv-remote-runtime.ts';
 import { keyboardRuntimeOperationFacts } from './keyboard-runtime.ts';
 import { clipboardRuntimeOperationFacts } from './clipboard-runtime.ts';
-import { appSwitcherRuntimeOperationFacts } from './app-switcher-runtime.ts';
+import { systemButtonRuntimeOperationFacts } from './system-button-runtime.ts';
 import { appEventRuntimeOperationFacts } from './app-event-runtime.ts';
 import { settingsRuntimeOperationFacts } from './settings-runtime.ts';
 import { alertRuntimeOperationFacts } from './alert-runtime.ts';
@@ -36,6 +36,9 @@ import { touchRuntimeOperationFacts } from './touch-runtime.ts';
 /**
  * A runtime-contract helper for provider ownership gaps. It never assigns lifecycle semantics:
  * the selected package/provider must classify every lifecycle operation for its exact cell.
+ *
+ * A family is one cell where all of its operations share one reason, and one cell per operation
+ * only where the reasons genuinely differ per operation.
  */
 export type UnavailablePlatformRuntimeFacts = Readonly<{
   appLog: RuntimeOperationUnavailability;
@@ -54,17 +57,20 @@ export type UnavailablePlatformRuntimeFacts = Readonly<{
   touch: RuntimeOperationUnavailability;
   elementText: RuntimeOperationUnavailability;
   back: RuntimeOperationUnavailability;
-  home: RuntimeOperationUnavailability;
   orientation: RuntimeOperationUnavailability;
+  fold: RuntimeOperationUnavailability;
   tvRemote: RuntimeOperationUnavailability;
-  keyboardStatus: RuntimeOperationUnavailability;
-  keyboardDismiss: RuntimeOperationUnavailability;
-  keyboardEnter: RuntimeOperationUnavailability;
-  readClipboard: RuntimeOperationUnavailability;
-  writeClipboard: RuntimeOperationUnavailability;
-  appSwitcher: RuntimeOperationUnavailability;
+  keyboard: RuntimeOperationUnavailability;
+  clipboard: RuntimeOperationUnavailability;
+  systemButton: RuntimeOperationUnavailability;
   triggerAppEvent: RuntimeOperationUnavailability;
-  setSetting: RuntimeOperationUnavailability;
+  /**
+   * One cell for both settings halves: an owner that names no settings surface here refuses the
+   * write and the read alike, and an owner whose two halves genuinely differ (the Apple leaf, whose
+   * host can set an appearance it cannot read back) states them directly through
+   * `settingsRuntimeOperationFacts` instead of routing both through this denial.
+   */
+  settings: RuntimeOperationUnavailability;
   readAlert: RuntimeOperationUnavailability;
   awaitAlert: RuntimeOperationUnavailability;
   acceptAlert: RuntimeOperationUnavailability;
@@ -86,6 +92,86 @@ type FrozenUnavailablePlatformRuntimeFacts = Readonly<
     Readonly<{ lifecycle: ApplicationLifecycleOperationFacts }>
 >;
 
+type UnavailableCellKey = keyof Omit<UnavailablePlatformRuntimeFacts, 'lifecycle'>;
+
+/**
+ * Every cell name, for iteration. Whether a cell left unclassified by its owner falls back to the
+ * caller's network gap, or must be stated by the owner itself, is decided by
+ * `UnavailablePlatformRuntimeFacts` alone: an optional property inherits `network`, a required one
+ * is owner-stated (#1873) and always present. No second table restates that split — a misclassified
+ * cell there would fail to type-check rather than silently produce a malformed fact.
+ */
+const UNAVAILABLE_CELLS = {
+  appLog: true,
+  apps: true,
+  appDeployment: true,
+  appState: true,
+  network: true,
+  screenRecording: true,
+  screenshot: true,
+  snapshot: true,
+  viewport: true,
+  focus: true,
+  gesture: true,
+  scroll: true,
+  typeText: true,
+  touch: true,
+  elementText: true,
+  back: true,
+  orientation: true,
+  fold: true,
+  tvRemote: true,
+  keyboard: true,
+  clipboard: true,
+  systemButton: true,
+  triggerAppEvent: true,
+  settings: true,
+  readAlert: true,
+  awaitAlert: true,
+  acceptAlert: true,
+  dismissAlert: true,
+  audioProbeCapture: true,
+  audioProbeQuery: true,
+  perf: true,
+  readiness: true,
+  shutdown: true,
+} satisfies Record<UnavailableCellKey, true>;
+
+/** Fills every cell name through `fn`, in the one place a cell record is assembled by key. */
+function mapUnavailableCells<Value>(
+  fn: (cell: UnavailableCellKey) => Value,
+): Record<UnavailableCellKey, Value> {
+  const result = {} as Record<UnavailableCellKey, Value>;
+  for (const cell of Object.keys(UNAVAILABLE_CELLS) as UnavailableCellKey[]) {
+    result[cell] = fn(cell);
+  }
+  return result;
+}
+
+/**
+ * A complete facts value for one unavailability reason, for owners with no runtime module at all:
+ * every cell, lifecycle included, reports the same reason, so a missing owner cannot leave a cell
+ * unclassified by omission.
+ */
+export function createFullyUnavailablePlatformRuntimeFacts(
+  unavailable: RuntimeOperationUnavailability,
+): UnavailablePlatformRuntimeFacts {
+  return Object.freeze({
+    ...mapUnavailableCells(() => unavailable),
+    lifecycle: applicationLifecycleOperationFacts({
+      resolveOpenTarget: unavailable,
+      prepareApplicationOpen: unavailable,
+      openApplication: unavailable,
+      applyRuntimeHints: unavailable,
+      clearRuntimeHints: unavailable,
+      closeApplication: unavailable,
+      finalizeApplicationClose: unavailable,
+      prepareAppleRunner: unavailable,
+      configureProviderPortReverse: unavailable,
+    }),
+  });
+}
+
 export function createUnavailablePlatformRuntimeBinding(
   device: DeviceInfo,
   owner: RuntimeOwnerRef,
@@ -105,203 +191,110 @@ export function createUnavailablePlatformRuntimeFacts(
   owner: RuntimeOwnerRef,
   unavailable: UnavailablePlatformRuntimeFacts,
 ): RuntimeFacts<PlatformRuntimeOperations> {
-  const {
-    appLog,
-    apps,
-    appDeployment,
-    appState,
-    network,
-    screenRecording,
-    screenshot,
-    snapshot,
-    viewport,
-    focus,
-    gesture,
-    scroll,
-    typeText,
-    touch,
-    elementText,
-    back,
-    home,
-    orientation,
-    tvRemote,
-    keyboardStatus,
-    keyboardDismiss,
-    keyboardEnter,
-    readClipboard,
-    writeClipboard,
-    appSwitcher,
-    triggerAppEvent,
-    setSetting,
-    readAlert,
-    awaitAlert,
-    acceptAlert,
-    dismissAlert,
-    audioProbeCapture,
-    audioProbeQuery,
-    perf,
-    readiness,
-    shutdown,
-    lifecycle,
-  } = freezeUnavailableFacts(unavailable);
+  const frozen = freezeUnavailableFacts(unavailable);
   return Object.freeze({
     device: {
       ...deviceShape(device),
-      providerMode: owner.kind === 'local-family' ? 'local' : 'provider-runtime',
+      providerMode: providerModeForOwner(owner),
     },
     operations: {
-      appLogInspect: appLog,
-      appLogDoctor: appLog,
-      appLogStart: appLog,
-      appLogReattach: appLog,
-      appLogCleanup: appLog,
-      listApps: apps,
-      deployApp: appDeployment,
-      materializeAppSource: appDeployment,
-      deployMaterializedApp: appDeployment,
-      sendPushNotification: appDeployment,
-      appState,
-      networkDump: network,
-      screenRecordingStart: screenRecording,
-      screenRecordingReattach: screenRecording,
-      screenRecordingCleanup: screenRecording,
-      ...screenshotRuntimeOperationFacts({ capture: screenshot }),
+      appLogInspect: frozen.appLog,
+      appLogDoctor: frozen.appLog,
+      appLogStart: frozen.appLog,
+      appLogReattach: frozen.appLog,
+      appLogCleanup: frozen.appLog,
+      listApps: frozen.apps,
+      deployApp: frozen.appDeployment,
+      materializeAppSource: frozen.appDeployment,
+      deployMaterializedApp: frozen.appDeployment,
+      sendPushNotification: frozen.appDeployment,
+      appState: frozen.appState,
+      networkDump: frozen.network,
+      screenRecordingStart: frozen.screenRecording,
+      screenRecordingReattach: frozen.screenRecording,
+      screenRecordingCleanup: frozen.screenRecording,
+      ...screenshotRuntimeOperationFacts({ capture: frozen.screenshot }),
       ...snapshotRuntimeOperationFacts({
-        capture: snapshot,
-        customActions: snapshot,
-        withoutActiveApp: snapshot,
+        capture: frozen.snapshot,
+        customActions: frozen.snapshot,
+        withoutActiveApp: frozen.snapshot,
       }),
       // The preferred text reading starts unavailable for every family, on the same sentinel as
       // capture: an owner that has a native reading declares it explicitly, and one that does not
       // sends every text wait to the canonical tree.
       ...selectorObservationRuntimeOperationFacts({
-        findText: snapshot,
-        findSelector: snapshot,
+        findText: frozen.snapshot,
       }),
-      ...viewportRuntimeOperationFacts({ setViewport: viewport }),
-      ...focusRuntimeOperationFacts({ focus }),
-      ...gestureRuntimeOperationFacts({
-        plan: gesture,
-        directionalFling: gesture,
-        multiTouch: gesture,
-        targetAuthoredDrag: gesture,
-        viewport: gesture,
-      }),
-      ...scrollRuntimeOperationFacts({ scroll }),
-      ...typeTextRuntimeOperationFacts({ type: typeText }),
+      ...viewportRuntimeOperationFacts({ setViewport: frozen.viewport }),
+      ...focusRuntimeOperationFacts({ focus: frozen.focus }),
+      ...gestureRuntimeOperationFacts({ unsupported: frozen.gesture }),
+      ...scrollRuntimeOperationFacts({ scroll: frozen.scroll }),
+      ...typeTextRuntimeOperationFacts({ type: frozen.typeText }),
       ...touchRuntimeOperationFacts({
-        tap: touch,
-        tapRef: touch,
-        longPress: touch,
-        hover: touch,
-        hoverRef: touch,
-        fill: touch,
-        fillRef: touch,
-        tapElementSelector: touch,
+        unsupported: frozen.touch,
+        tap: frozen.touch,
+        longPress: frozen.touch,
+        fill: frozen.touch,
       }),
-      ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementText }),
-      ...backRuntimeOperationFacts({ back }),
-      ...homeRuntimeOperationFacts({ home }),
-      ...orientationRuntimeOperationFacts({ orientation }),
-      ...tvRemoteRuntimeOperationFacts({ tvRemote }),
-      ...keyboardRuntimeOperationFacts({
-        status: keyboardStatus,
-        dismiss: keyboardDismiss,
-        enter: keyboardEnter,
+      ...elementTextRuntimeOperationFacts({ readTextAtPoint: frozen.elementText }),
+      ...backRuntimeOperationFacts({ back: frozen.back }),
+      ...orientationRuntimeOperationFacts({ orientation: frozen.orientation }),
+      // Stated directly rather than through `foldRuntimeOperationFacts`, so this hub does not
+      // evaluate the fold contract for owners that never pose a hinge (eager-closure budgets).
+      setFoldPose: frozen.fold,
+      ...tvRemoteRuntimeOperationFacts({ tvRemote: frozen.tvRemote }),
+      ...keyboardRuntimeOperationFacts({ unsupported: frozen.keyboard }),
+      ...clipboardRuntimeOperationFacts({ unsupported: frozen.clipboard }),
+      ...systemButtonRuntimeOperationFacts({ unsupported: frozen.systemButton }),
+      ...appEventRuntimeOperationFacts({ triggerAppEvent: frozen.triggerAppEvent }),
+      ...settingsRuntimeOperationFacts({
+        setSetting: frozen.settings,
+        readSetting: frozen.settings,
       }),
-      ...clipboardRuntimeOperationFacts({ read: readClipboard, write: writeClipboard }),
-      ...appSwitcherRuntimeOperationFacts({ appSwitcher }),
-      ...appEventRuntimeOperationFacts({ triggerAppEvent }),
-      ...settingsRuntimeOperationFacts({ setSetting }),
       ...alertRuntimeOperationFacts({
-        read: readAlert,
-        wait: awaitAlert,
-        accept: acceptAlert,
-        dismiss: dismissAlert,
+        read: frozen.readAlert,
+        wait: frozen.awaitAlert,
+        accept: frozen.acceptAlert,
+        dismiss: frozen.dismissAlert,
       }),
       ...audioProbeRuntimeOperationFacts({
-        capture: audioProbeCapture,
-        query: audioProbeQuery,
+        capture: frozen.audioProbeCapture,
+        query: frozen.audioProbeQuery,
       }),
       ...perfRuntimeOperationFacts({
-        frames: perf,
-        memorySample: perf,
-        memorySnapshot: perf,
-        nativeCapture: perf,
-        profileReport: perf,
+        frames: frozen.perf,
+        memorySample: frozen.perf,
+        memorySnapshot: frozen.perf,
+        nativeCapture: frozen.perf,
+        profileReport: frozen.perf,
       }),
-      ensureReady: readiness,
-      bootTarget: readiness,
-      bootTargetHeadless: readiness,
-      shutdownTarget: shutdown,
-      ...lifecycle,
+      ensureReady: frozen.readiness,
+      bootTarget: frozen.readiness,
+      bootTargetHeadless: frozen.readiness,
+      shutdownTarget: frozen.shutdown,
+      ...frozen.lifecycle,
     },
   });
+}
+
+/** A managed local owner executes through its local family, so it reports the local mode. */
+function providerModeForOwner(owner: RuntimeOwnerRef): RuntimeProviderMode {
+  switch (owner.kind) {
+    case 'local-family':
+    case 'managed-local':
+      return 'local';
+    case 'provider-runtime':
+      return 'provider-runtime';
+  }
 }
 
 function freezeUnavailableFacts(
   unavailable: UnavailablePlatformRuntimeFacts,
 ): FrozenUnavailablePlatformRuntimeFacts {
-  // Every optional cell falls back to the caller's network gap: an owner that did not classify a
-  // family has, by construction, the same reason its transport does.
-  const orNetwork = (fact: RuntimeOperationUnavailability | undefined) =>
-    Object.freeze({ ...(fact ?? unavailable.network) });
   return Object.freeze({
-    appLog: Object.freeze({ ...unavailable.appLog }),
-    apps: orNetwork(unavailable.apps),
-    appDeployment: orNetwork(unavailable.appDeployment),
-    appState: orNetwork(unavailable.appState),
-    network: Object.freeze({ ...unavailable.network }),
-    screenRecording: orNetwork(unavailable.screenRecording),
-    // Capture cells are stated by their owner, never inherited from the transport gap (#1873).
-    screenshot: Object.freeze({ ...unavailable.screenshot }),
-    snapshot: orNetwork(unavailable.snapshot),
-    viewport: Object.freeze({ ...unavailable.viewport }),
-    // Interaction cells are stated by their owner: a family that can drive touch says so for its
-    // exact kinds, and one that cannot must say why rather than inherit a transport gap.
-    focus: Object.freeze({ ...unavailable.focus }),
-    gesture: Object.freeze({ ...unavailable.gesture }),
-    scroll: Object.freeze({ ...unavailable.scroll }),
-    typeText: Object.freeze({ ...unavailable.typeText }),
-    touch: Object.freeze({ ...unavailable.touch }),
-    readiness: orNetwork(unavailable.readiness),
-    shutdown: orNetwork(unavailable.shutdown),
-    elementText: Object.freeze({ ...unavailable.elementText }),
-    // Navigation and keyboard cells are stated by their owner too: each differs by family
-    // (harmonyos drives back/home but not orientation/tvRemote; android alone answers a keyboard
-    // status read), so none of them may inherit a sibling's gap.
-    back: Object.freeze({ ...unavailable.back }),
-    home: Object.freeze({ ...unavailable.home }),
-    orientation: Object.freeze({ ...unavailable.orientation }),
-    tvRemote: Object.freeze({ ...unavailable.tvRemote }),
-    keyboardStatus: Object.freeze({ ...unavailable.keyboardStatus }),
-    keyboardDismiss: Object.freeze({ ...unavailable.keyboardDismiss }),
-    keyboardEnter: Object.freeze({ ...unavailable.keyboardEnter }),
-    // Clipboard cells are stated by their owner for the same reason: the surface differs by leaf
-    // and kind (an Apple simulator has one, a physical non-macOS Apple device does not), and read
-    // and write can diverge on a provider whose extension exposes only one half.
-    readClipboard: Object.freeze({ ...unavailable.readClipboard }),
-    writeClipboard: Object.freeze({ ...unavailable.writeClipboard }),
-    // The app switcher is the springboard surface `home` drives, and differs by owner the same
-    // way: an owner states it for its exact leaf rather than inheriting a sibling's gap.
-    appSwitcher: Object.freeze({ ...unavailable.appSwitcher }),
-    // App-event delivery opens a URL on the device, which is not something a transport gap can
-    // speak for: each owner states whether it can open one at all.
-    triggerAppEvent: Object.freeze({ ...unavailable.triggerAppEvent }),
-    // Device settings differ by leaf and kind the way the pasteboard does, and a provider can
-    // own a device without exposing any settings API at all, so each owner states its own cell.
-    setSetting: Object.freeze({ ...unavailable.setSetting }),
-    readAlert: Object.freeze({ ...unavailable.readAlert }),
-    awaitAlert: Object.freeze({ ...unavailable.awaitAlert }),
-    acceptAlert: Object.freeze({ ...unavailable.acceptAlert }),
-    dismissAlert: Object.freeze({ ...unavailable.dismissAlert }),
-    // Audio cells are stated by their owner (#1873): host capture and the page probe live on
-    // different families entirely, so neither may inherit a transport gap.
-    audioProbeCapture: Object.freeze({ ...unavailable.audioProbeCapture }),
-    audioProbeQuery: Object.freeze({ ...unavailable.audioProbeQuery }),
-    // Perf starts native tools and may create a durable capture. Every exact owner states the
-    // gap rather than inheriting a transport failure that could imply local-tool fallthrough.
-    perf: orNetwork(unavailable.perf),
+    ...mapUnavailableCells((cell) =>
+      Object.freeze({ ...(unavailable[cell] ?? unavailable.network) }),
+    ),
     lifecycle: applicationLifecycleOperationFacts(unavailable.lifecycle),
   });
 }

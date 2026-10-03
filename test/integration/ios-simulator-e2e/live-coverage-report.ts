@@ -7,7 +7,7 @@ import {
   IOS_SIMULATOR_BEHAVIOR_COVERAGE,
   type IosSimulatorBehaviorId,
 } from './behavior-coverage.ts';
-import { liveCommandsForScenario } from './coverage-manifest.ts';
+import { liveCommandsForScenario } from './coverage.ts';
 import type { LiveContext, Tier } from './live-harness.ts';
 import { IOS_SIMULATOR_LIVE_SCENARIOS, type IosSimulatorScenario } from './scenarios.ts';
 

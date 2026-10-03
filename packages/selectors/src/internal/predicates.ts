@@ -1,35 +1,26 @@
 import { refuse, type SelectorArgumentRefusal } from './argument-refusal.ts';
 
+import { IS_PREDICATES, type IsPredicate } from '@agent-device/contracts/is-predicate';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import {
-  isUsefulVisibilityAnchor,
-  buildSnapshotNodeMap,
   extractNodeText,
-  findSnapshotAncestor,
-  isNodeVisibleInEffectiveViewport,
+  isUsefulVisibilityAnchor,
+  type SnapshotVisibility,
 } from '@agent-device/contracts/snapshot';
 import { isNodeEditable, isNodeVisible } from './node.ts';
 import { tryParseSelectorChain } from './parse.ts';
 
-export type IsPredicate =
-  | 'visible'
-  | 'hidden'
-  | 'exists'
-  | 'editable'
-  | 'selected'
-  | 'focused'
-  | 'text';
+export type { IsPredicate } from '@agent-device/contracts/is-predicate';
 
 // Module-private since `checkIsPredicate` became the admission API: a caller that tests the
 // vocabulary without going through admission is how the case-normalization drift started.
 function isSupportedPredicate(input: string): input is IsPredicate {
-  return ['visible', 'hidden', 'exists', 'editable', 'selected', 'focused', 'text'].includes(input);
+  return (IS_PREDICATES as readonly string[]).includes(input);
 }
 
-export const IS_PREDICATE_REQUIRED_MESSAGE =
-  'is requires predicate: visible|hidden|exists|editable|selected|focused|text';
+export const IS_PREDICATE_REQUIRED_MESSAGE = `is requires predicate: ${IS_PREDICATES.join('|')}`;
 
 /**
  * The one `is` predicate admission check. Three call sites used to state this rule
@@ -68,19 +59,25 @@ export function normalizeIsPositionals(positionals: string[]): string[] {
 }
 
 export function evaluateIsPredicate(params: {
-  predicate: Exclude<IsPredicate, 'exists'>;
+  predicate: Exclude<IsPredicate, 'exists' | 'absent'>;
   node: SnapshotState['nodes'][number];
-  nodes: SnapshotState['nodes'];
+  /**
+   * The visibility index of the tree `node` belongs to — same `index`/`parentIndex` space, so the
+   * ancestor walk and viewport roots it resolves against are that tree's. A caller that asks about
+   * several nodes of one capture passes the SAME index to every call, so the tree is indexed once
+   * instead of once per candidate (#1970).
+   */
+  visibility: SnapshotVisibility;
   expectedText?: string;
   platform: Platform | PublicPlatform;
 }): { pass: boolean; actualText: string; details: string } {
-  const { predicate, node, nodes, expectedText, platform } = params;
+  const { predicate, node, visibility, expectedText, platform } = params;
   const actualText = extractNodeText(node);
   const editable = isNodeEditable(node, platform);
   const selected = node.selected === true;
   const focused = node.focused === true;
   const visible =
-    predicate === 'text' ? isNodeVisible(node) : isAssertionVisible(node, nodes, platform);
+    predicate === 'text' ? isNodeVisible(node) : isAssertionVisible(node, visibility, platform);
   let pass = false;
   switch (predicate) {
     case 'visible':
@@ -101,6 +98,8 @@ export function evaluateIsPredicate(params: {
     case 'text':
       pass = actualText === (expectedText ?? '');
       break;
+    default:
+      return assertNever(predicate);
   }
   const details =
     predicate === 'text'
@@ -114,35 +113,31 @@ export function evaluateIsPredicate(params: {
   return { pass, actualText, details };
 }
 
+function assertNever(value: never): never {
+  throw new Error(`Unhandled is predicate: ${String(value)}`);
+}
+
 function isAssertionVisible(
   node: SnapshotState['nodes'][number],
-  nodes: SnapshotState['nodes'],
+  visibility: SnapshotVisibility,
   platform: Platform | PublicPlatform,
 ): boolean {
   if (platform === 'android' && node.visibleToUser === false) return false;
-  if (isPositiveFiniteRect(node.rect)) return isRectVisibleInViewport(node, nodes);
+  if (isPositiveFiniteRect(node.rect)) return visibility.isVisibleInEffectiveViewport(node);
   if (node.rect) return false;
   if (platform !== 'android' && node.hittable === true) return true;
-  const anchor = resolveVisibilityAnchor(node, nodes, platform);
+  const anchor = resolveVisibilityAnchor(node, visibility, platform);
   if (!anchor) return false;
   if (!isPositiveFiniteRect(anchor.rect)) return platform !== 'android' && anchor.hittable === true;
-  return isRectVisibleInViewport(anchor, nodes);
-}
-
-function isRectVisibleInViewport(
-  node: SnapshotState['nodes'][number],
-  nodes: SnapshotState['nodes'],
-): boolean {
-  return isNodeVisibleInEffectiveViewport(node, nodes);
+  return visibility.isVisibleInEffectiveViewport(anchor);
 }
 
 function resolveVisibilityAnchor(
   node: SnapshotState['nodes'][number],
-  nodes: SnapshotState['nodes'],
+  visibility: SnapshotVisibility,
   platform: Platform | PublicPlatform,
 ): SnapshotState['nodes'][number] | null {
-  const nodesByIndex = buildSnapshotNodeMap(nodes);
-  return findSnapshotAncestor(nodes, node, nodesByIndex, (parent) =>
+  return visibility.findAncestor(node, (parent) =>
     isUsefulVisibilityAnchor(parent, platform) ? parent : null,
   );
 }

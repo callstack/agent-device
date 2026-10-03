@@ -21,6 +21,7 @@ private final class RunnerTargetActivationStub: NSObject {
 
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+  @MainActor
   func testActivateTargetSkipsForegroundAndActivatesNonForegroundApplication() {
     let stateSelector = #selector(getter: XCUIApplication.state)
     let activateSelector = #selector(XCUIApplication.activate)
@@ -54,13 +55,27 @@ extension RunnerTests {
       bundleId: "com.example.previous",
       processIdentifier: 41
     )
+    // The happy path owes two things: no activation work at all, and no fact to disclose. Clearing
+    // first makes the nil below a claim about THIS call rather than whatever an earlier test left.
+    pendingTargetActivation = nil
     _ = activateTarget(bundleId: "com.example.foreground", reason: "unit_test")
     XCTAssertEqual(RunnerTargetActivationSpy.activationCount, 0)
     XCTAssertNil(textEntryTapWitness)
+    XCTAssertNil(
+      pendingTargetActivation,
+      "an already-foreground command performed no repair and must stamp nothing (#2682)"
+    )
 
     RunnerTargetActivationSpy.state = .runningBackground
     _ = activateTarget(bundleId: "com.example.background", reason: "unit_test")
     XCTAssertEqual(RunnerTargetActivationSpy.activationCount, 1)
+    // The stamped state is the one read BEFORE `activate()` ran, so the fact describes what was
+    // repaired. A value read after the repair would report `.runningForeground` here (#2682).
+    XCTAssertEqual(
+      pendingTargetActivation?.priorState,
+      Int(XCUIApplication.State.runningBackground.rawValue)
+    )
+    XCTAssertEqual(pendingTargetActivation?.reason, "unit_test")
   }
 #endif
 
@@ -87,10 +102,10 @@ extension RunnerTests {
   }
 
   func testSnapshotPenaltyWarmupExemptionIsConsumedOnce() {
-    snapshotXCTestPenaltyWarmupExemptionPending = true
+    snapshotXCTestPenaltyWarmupExemption.isPending = true
 
-    XCTAssertTrue(consumeSnapshotXCTestPenaltyWarmupExemption())
-    XCTAssertFalse(consumeSnapshotXCTestPenaltyWarmupExemption())
+    XCTAssertTrue(snapshotXCTestPenaltyWarmupExemption.consume())
+    XCTAssertFalse(snapshotXCTestPenaltyWarmupExemption.consume())
   }
 
   func testSnapshotPenaltyCanBeClearedAcrossTargetProcessReplacement() {
@@ -102,18 +117,19 @@ extension RunnerTests {
     XCTAssertFalse(isSnapshotXCTestChannelPenalized(bundleId: "com.example.app"))
   }
 
+  @MainActor
   func testCachedTargetInvalidationClearsProcessBoundState() {
-    currentApp = app
-    currentBundleId = "com.example.app"
-    currentAppProcessIdentifier = 42
-    snapshotXCTestPenaltyWarmupExemptionPending = true
+    mainOwned.app = app
+    mainOwned.bundleId = "com.example.app"
+    mainOwned.processIdentifier = 42
+    snapshotXCTestPenaltyWarmupExemption.isPending = true
 
     invalidateCachedTarget(reason: "unit_test")
 
-    XCTAssertNil(currentApp)
-    XCTAssertNil(currentBundleId)
-    XCTAssertNil(currentAppProcessIdentifier)
-    XCTAssertFalse(snapshotXCTestPenaltyWarmupExemptionPending)
+    XCTAssertNil(mainOwned.app)
+    XCTAssertNil(mainOwned.bundleId)
+    XCTAssertNil(mainOwned.processIdentifier)
+    XCTAssertFalse(snapshotXCTestPenaltyWarmupExemption.isPending)
   }
 
   func testTextEntryTapWitnessIsBoundToTargetIdentity() {
@@ -128,24 +144,55 @@ extension RunnerTests {
     XCTAssertFalse(witness.matches(bundleId: "com.example.app", processIdentifier: 43))
   }
 
+  @MainActor
   func testTargetResetInvalidatesProcessBoundStateWithoutRestartingRunner() {
-    currentApp = app
-    currentBundleId = "com.example.app"
-    currentAppProcessIdentifier = 42
-    snapshotXCTestPenaltyWarmupExemptionPending = true
-    needsFirstInteractionDelay = false
+    mainOwned.app = app
+    mainOwned.bundleId = "com.example.app"
+    mainOwned.processIdentifier = 42
+    snapshotXCTestPenaltyWarmupExemption.isPending = true
+    firstInteractionReadyUptime = nil
     penalizeSnapshotXCTestChannel(bundleId: "com.example.app", reason: "test")
     XCTAssertTrue(isSnapshotXCTestChannelPenalized(bundleId: "com.example.app"))
 
     let response = resetTargetAfterExternalRelaunch()
 
     XCTAssertTrue(response.ok)
-    XCTAssertNil(currentApp)
-    XCTAssertNil(currentBundleId)
-    XCTAssertNil(currentAppProcessIdentifier)
-    XCTAssertFalse(snapshotXCTestPenaltyWarmupExemptionPending)
+    XCTAssertNil(mainOwned.app)
+    XCTAssertNil(mainOwned.bundleId)
+    XCTAssertNil(mainOwned.processIdentifier)
+    XCTAssertFalse(snapshotXCTestPenaltyWarmupExemption.isPending)
     XCTAssertFalse(isSnapshotXCTestChannelPenalized(bundleId: "com.example.app"))
-    XCTAssertTrue(needsFirstInteractionDelay)
+    XCTAssertNotNil(firstInteractionReadyUptime)
+  }
+
+  /// The settling window is a deadline measured from the activation, not a pause charged at the
+  /// interaction. A caller that already spent the window elsewhere waits for nothing; one that
+  /// arrives immediately still waits. Without the deadline both cases sleep the full delay.
+  @MainActor
+  func testFirstInteractionStabilizationWaitsOnlyForTheRemainderOfTheWindow() {
+    mainOwned.needsPostSnapshotInteractionDelay = false
+
+    // An activation whose window has already elapsed: the caller spent it getting back to us.
+    firstInteractionReadyUptime = ProcessInfo.processInfo.systemUptime - 1
+    let elapsedAfterSatisfiedWindow = measureStabilizationDuration()
+    XCTAssertLessThan(elapsedAfterSatisfiedWindow, firstInteractionAfterActivateDelay / 2)
+    XCTAssertNil(firstInteractionReadyUptime)
+
+    // A fresh activation still gets the whole guard.
+    beginFirstInteractionStabilization()
+    let elapsedAfterFreshActivation = measureStabilizationDuration()
+    XCTAssertGreaterThanOrEqual(
+      elapsedAfterFreshActivation,
+      firstInteractionAfterActivateDelay * 0.8
+    )
+    XCTAssertNil(firstInteractionReadyUptime)
+  }
+
+  @MainActor
+  private func measureStabilizationDuration() -> TimeInterval {
+    let startedAt = ProcessInfo.processInfo.systemUptime
+    applyInteractionStabilizationIfNeeded()
+    return ProcessInfo.processInfo.systemUptime - startedAt
   }
 #endif
 }

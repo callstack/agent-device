@@ -124,10 +124,15 @@ export async function runReplayTestSuite(
       );
     }
 
-    const data = summarizeReplayTestResults(plan.total, results, Date.now() - suiteStartedAt);
+    const data = summarizeReplayTestResults(
+      plan.total,
+      results,
+      Date.now() - suiteStartedAt,
+      plan.suiteArtifactsDir,
+    );
     return { status: 'completed', data };
-  } catch (err) {
-    const appErr = asAppError(err);
+  } catch (error) {
+    const appErr = asAppError(error);
     return { status: 'failed', error: { code: appErr.code, message: appErr.message } };
   }
 }
@@ -467,6 +472,7 @@ function summarizeReplayTestResults(
   total: number,
   results: ReplaySuiteTestResult[],
   durationMs: number,
+  artifactsDir: string,
 ): ReplaySuiteResult {
   const passed = results.filter((result) => result.status === 'passed').length;
   const failedResults = results.filter(
@@ -488,6 +494,7 @@ function summarizeReplayTestResults(
     durationMs,
     failures: failedResults,
     tests: results,
+    artifactsDir,
     ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
   };
 }

@@ -40,7 +40,7 @@ Request provider scoping is descriptor-driven inside the request router layer. A
 
 Synchronous host-tool calls are intentionally not part of the provider seam. Any remaining sync Apple helper is local-only and must be converted before a remote/cloud provider can own that path.
 
-Remaining generic Apple host-tool calls are intentionally local-only unless a new adapter creates pressure to promote them: perf process discovery/sampling (`mdfind`, `ps`), launch diagnostics (`plutil`, `otool`), local runner product build/signing (`swift`, `codesign`, sync `plutil`), local simulator UI launch (`open -a "Device Hub"` or `open -a Simulator`), plist compatibility fallbacks, and fallback implementations behind semantic macOS providers. Provider-backed integration scenarios should avoid scripting those host commands for user workflows; a user-facing workflow that depends on one of them is naming pressure for a semantic provider method.
+Remaining generic Apple host-tool calls are intentionally local-only unless a new adapter creates pressure to promote them: perf process discovery/sampling (`mdfind`, `ps`), launch diagnostics (`plutil`, `otool`), local runner product build/signing (`swift`, `codesign`, sync `plutil`), local simulator UI launch (`open -a Simulator`), plist compatibility fallbacks, and fallback implementations behind semantic macOS providers. Provider-backed integration scenarios should avoid scripting those host commands for user workflows; a user-facing workflow that depends on one of them is naming pressure for a semantic provider method.
 
 ## Alternatives Considered
 

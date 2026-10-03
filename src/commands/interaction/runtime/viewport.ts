@@ -1,13 +1,14 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
-import { isNodeVisibleInEffectiveViewport } from '@agent-device/contracts/snapshot';
+import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 
 export function resolveVisibleSnapshotViewport(
   nodes: SnapshotState['nodes'],
   action: string,
 ): Rect {
+  const visibility = createSnapshotVisibility(nodes);
   const visibleRects = nodes
-    .filter((node) => isNodeVisibleInEffectiveViewport(node, nodes))
+    .filter(visibility.isVisibleInEffectiveViewport)
     .map((node) => node.rect)
     .filter(isUsableRect);
   const rects =

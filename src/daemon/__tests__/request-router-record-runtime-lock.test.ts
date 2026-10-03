@@ -25,12 +25,13 @@ const DEVICE: DeviceInfo = {
   kind: 'emulator',
 };
 
-vi.mock('../../core/dispatch-resolve.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../core/dispatch-resolve.ts')>();
+vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
   return { ...actual, resolveTargetDevice: vi.fn(async () => DEVICE) };
 });
 
-vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
 test('fresh default-device recording starts serialize before durable admission', async () => {
   let releaseFirstStart: () => void = () => {};

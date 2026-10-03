@@ -60,8 +60,8 @@ function main(): void {
     };
     const { jsonPath, mdPath } = writeReports(run, cfg.outDir);
     process.stderr.write(`\n[perf] report: ${mdPath}\n[perf] json:   ${jsonPath}\n`);
-  } catch (e) {
-    process.stderr.write(`[perf] error: ${(e as Error).stack ?? String(e)}\n`);
+  } catch (error) {
+    process.stderr.write(`[perf] error: ${(error as Error).stack ?? String(error)}\n`);
     exitCode = 1;
   } finally {
     cleanup();

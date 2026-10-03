@@ -74,8 +74,11 @@ Platform adapters consume the canonical plan:
 - Android's `executeAndroidTouchPlan` adapter seam sends planned touch, including gesture plans plus
   the physical movement for scroll and long-press, to provider-native touch injection when
   available, otherwise to the bundled instrumentation helper. One-contact endpoint plans lower in
-  `src/platforms/android/touch-plan.ts` to 16 ms linear transport samples before either injection
-  path; two-contact plans retain their exact planned samples. Transport samples are typed as
+  `packages/platform-android/src/touch-plan-lowering.ts` to approximately 16 ms transport samples before
+  either injection path. Controlled directional scrolls accelerate for one frame, then decelerate
+  through release within the requested duration, without an appended tail. Inertial scrolls and
+  general one-contact plans retain linear interpolation; two-contact plans retain their exact
+  planned samples. Easing reduces release momentum but does not guarantee an exact content offset. Transport samples are typed as
   strictly denser than the canonical endpoint pair, so skipping that lowering is a type error at
   the injection seams instead of a silently sparse gesture. A stationary long-press needs no
   viewport on the helper path; the executor adds the paired provider-owned viewport only for
@@ -110,21 +113,23 @@ Platform adapters consume the canonical plan:
   The three schedules shape that velocity differently. `endpoint-hold` moves quickly for 100 ms and
   becomes stationary before lift. `timed-pan` and target-authored drag submit the authored samples
   unchanged, preserving piecewise-linear movement plus explicit source and destination holds. The
-  runner's coordinate `drag` and fused `scroll` compatibility path instead expands the movement to
-  roughly 16 ms samples using smoothstep `s(t) = 3t² - 2t³`. A linear segment has constant movement
-  velocity through its endpoint unless a destination hold follows it; smoothstep has zero slope at
-  both endpoints and a peak velocity 1.5 times its average. Identical endpoints and total durations
-  can consequently produce different recognizer and deceleration outcomes. Neither a destination
-  hold nor an analytically zero endpoint slope proves a controlled release by itself: XCTest event
-  sampling and app recognizer thresholds can still leave observable post-lift motion, so live
-  evidence must measure the resulting content offset after pointer-up.
+  runner's fused `scroll` reuses `endpoint-hold` for inertial release; controlled release instead
+  expands the movement to evenly spaced samples, one per roughly 16 ms capped at 30, using cubic
+  ease-out `s(t) = 1 - (1 - t)³`. A linear segment has constant movement velocity through its
+  endpoint unless a destination hold follows it; cubic ease-out decelerates from the first movement
+  and has zero slope at lift, with a starting velocity three times its average. Identical endpoints
+  and total durations can consequently produce different recognizer and deceleration outcomes.
+  Neither a destination hold nor an analytically zero endpoint slope proves a controlled release by
+  itself: XCTest event sampling and app recognizer thresholds can still leave observable post-lift
+  motion, so live evidence must measure the resulting content offset after pointer-up.
 
-  Live iOS characterization in [issue #1586](https://github.com/callstack/agent-device/issues/1586)
-  confirmed that distinction: the schedules crossed the same fling-recognizer thresholds in the
-  tested range but produced materially different post-release ScrollView positions and
-  long-duration recognition behavior. The distinction is intentional policy at the Apple adapter
-  boundary, not a second interpretation of a `GesturePlan`; changes require live evidence for both
-  recognizer activation and post-release content movement.
+  Live iOS characterization of an eased sampled schedule against the linear ones in
+  [issue #1586](https://github.com/callstack/agent-device/issues/1586) confirmed that distinction:
+  the schedules crossed the same fling-recognizer thresholds in the tested range but produced
+  materially different post-release ScrollView positions and long-duration recognition behavior. The
+  distinction is intentional policy at the Apple adapter boundary, not a second interpretation of a
+  `GesturePlan`; changes require live evidence for both recognizer activation and post-release
+  content movement.
 - WebDriver lowers a supported plan to synchronized W3C pointer action sources. A one-contact
   endpoint plan becomes pointer down, one timed W3C `pointerMove` from start to end, and pointer up;
   the driver owns interpolation across that W3C tick. Multi-touch remains capability-gated until a

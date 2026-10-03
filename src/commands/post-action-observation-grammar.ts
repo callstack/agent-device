@@ -1,12 +1,12 @@
 import type { CliFlags } from '@agent-device/contracts/command';
-import type { PostActionObservationSupportFor } from '../core/command-descriptor/post-action-observation.ts';
+import type { PostActionObservationSupportFor } from '@agent-device/command-registry/post-action-observation';
 import {
   commandSupportsSettleObservation,
   commandSupportsVerifyEvidence,
-} from '../core/command-descriptor/registry.ts';
+} from '@agent-device/command-registry/registry';
 import { settleInputFromFlags } from './cli-grammar/common.ts';
-import { SETTLE_FLAGS } from './cli-grammar/flag-groups.ts';
-import type { FlagKey } from './cli-grammar/flag-types.ts';
+import { SETTLE_FLAGS } from '@agent-device/command-registry/flag-groups';
+import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import { booleanField, integerField } from './command-input.ts';
 
 /**
@@ -45,7 +45,7 @@ export type PostActionObservationFields<TName extends string> =
     ? VerifyFieldMap & SettleFieldMap
     : PostActionObservationSupportFor<TName> extends 'settle'
       ? SettleFieldMap
-      : {};
+      : Record<never, never>;
 
 export function postActionObservationFields<const TName extends string>(
   command: TName,

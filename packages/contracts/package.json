@@ -7,9 +7,6 @@
   "dependencies": {
     "@agent-device/kernel": "workspace:*"
   },
-  "devDependencies": {
-    "fast-check": "^4.9.0"
-  },
   "exports": {
     "./alert-contract": {
       "types": "./src/alert-contract.ts",
@@ -39,6 +36,10 @@
       "types": "./src/android-system-chrome.ts",
       "default": "./src/android-system-chrome.ts"
     },
+    "./android-system-surface-disclosure": {
+      "types": "./src/android-system-surface-disclosure.ts",
+      "default": "./src/android-system-surface-disclosure.ts"
+    },
     "./app-deployment-runtime": {
       "types": "./src/app-deployment-runtime.ts",
       "default": "./src/app-deployment-runtime.ts"
@@ -63,17 +64,13 @@
       "types": "./src/app-state-runtime.ts",
       "default": "./src/app-state-runtime.ts"
     },
-    "./app-switcher-runtime": {
-      "types": "./src/app-switcher-runtime.ts",
-      "default": "./src/app-switcher-runtime.ts"
-    },
-    "./apple-multitouch-support": {
-      "types": "./src/apple-multitouch-support.ts",
-      "default": "./src/apple-multitouch-support.ts"
-    },
     "./apple-runner-request": {
       "types": "./src/apple-runner-request.ts",
       "default": "./src/apple-runner-request.ts"
+    },
+    "./apple-session-observation": {
+      "types": "./src/apple-session-observation.ts",
+      "default": "./src/apple-session-observation.ts"
     },
     "./application-lifecycle-interaction": {
       "types": "./src/application-lifecycle-interaction.ts",
@@ -119,6 +116,10 @@
       "types": "./src/back-runtime.ts",
       "default": "./src/back-runtime.ts"
     },
+    "./backend-diagnostics": {
+      "types": "./src/backend-diagnostics.ts",
+      "default": "./src/backend-diagnostics.ts"
+    },
     "./boot-failure": {
       "types": "./src/boot-failure.ts",
       "default": "./src/boot-failure.ts"
@@ -151,9 +152,17 @@
       "types": "./src/command-platform-execution.ts",
       "default": "./src/command-platform-execution.ts"
     },
+    "./daemon-http": {
+      "types": "./src/daemon-http.ts",
+      "default": "./src/daemon-http.ts"
+    },
     "./device": {
       "types": "./src/facades/device.ts",
       "default": "./src/facades/device.ts"
+    },
+    "./device-boot": {
+      "types": "./src/device-boot.ts",
+      "default": "./src/device-boot.ts"
     },
     "./device-readiness-runtime": {
       "types": "./src/device-readiness-runtime.ts",
@@ -162,6 +171,10 @@
     "./device-shutdown-runtime": {
       "types": "./src/device-shutdown-runtime.ts",
       "default": "./src/device-shutdown-runtime.ts"
+    },
+    "./dispatch-disclosure-fixtures": {
+      "types": "./src/dispatch-disclosure.fixtures.ts",
+      "default": "./src/dispatch-disclosure.fixtures.ts"
     },
     "./divergence": {
       "types": "./src/facades/divergence.ts",
@@ -178,6 +191,14 @@
     "./element-text-runtime": {
       "types": "./src/element-text-runtime.ts",
       "default": "./src/element-text-runtime.ts"
+    },
+    "./fill-evidence": {
+      "types": "./src/fill-evidence.ts",
+      "default": "./src/fill-evidence.ts"
+    },
+    "./fold-runtime": {
+      "types": "./src/fold-runtime.ts",
+      "default": "./src/fold-runtime.ts"
     },
     "./focus-runtime": {
       "types": "./src/focus-runtime.ts",
@@ -199,18 +220,6 @@
       "types": "./src/gesture-plan.ts",
       "default": "./src/gesture-plan.ts"
     },
-    "./host-diagnostics": {
-      "types": "./src/host-diagnostics.ts",
-      "default": "./src/host-diagnostics.ts"
-    },
-    "./daemon-owner-cleanup": {
-      "types": "./src/daemon-owner-cleanup.ts",
-      "default": "./src/daemon-owner-cleanup.ts"
-    },
-    "./managed-web-backend": {
-      "types": "./src/managed-web-backend.ts",
-      "default": "./src/managed-web-backend.ts"
-    },
     "./gesture-plan-types": {
       "types": "./src/gesture-plan-types.ts",
       "default": "./src/gesture-plan-types.ts"
@@ -219,21 +228,33 @@
       "types": "./src/gesture-runtime.ts",
       "default": "./src/gesture-runtime.ts"
     },
-    "./home-runtime": {
-      "types": "./src/home-runtime.ts",
-      "default": "./src/home-runtime.ts"
+    "./host-diagnostics": {
+      "types": "./src/host-diagnostics.ts",
+      "default": "./src/host-diagnostics.ts"
     },
     "./interaction": {
       "types": "./src/interaction.ts",
       "default": "./src/interaction.ts"
     },
-    "./interaction-error": {
-      "types": "./src/interaction-error.ts",
-      "default": "./src/interaction-error.ts"
+    "./is-predicate": {
+      "types": "./src/is-predicate.ts",
+      "default": "./src/is-predicate.ts"
     },
     "./interaction-guarantees": {
       "types": "./src/interaction-guarantees.ts",
       "default": "./src/interaction-guarantees.ts"
+    },
+    "./ios-snapshot": {
+      "types": "./src/ios-snapshot.ts",
+      "default": "./src/ios-snapshot.ts"
+    },
+    "./ios-system-surface": {
+      "types": "./src/ios-system-surface.ts",
+      "default": "./src/ios-system-surface.ts"
+    },
+    "./ios-target-activation": {
+      "types": "./src/ios-target-activation.ts",
+      "default": "./src/ios-target-activation.ts"
     },
     "./interactor-operation-catalog": {
       "types": "./src/interactor-operation-catalog.ts",
@@ -251,6 +272,10 @@
       "types": "./src/keyboard-runtime.ts",
       "default": "./src/keyboard-runtime.ts"
     },
+    "./lease-scope": {
+      "types": "./src/lease-scope.ts",
+      "default": "./src/lease-scope.ts"
+    },
     "./local-interactor-operation-set": {
       "types": "./src/local-interactor-operation-set.ts",
       "default": "./src/local-interactor-operation-set.ts"
@@ -258,6 +283,14 @@
     "./logs-runtime-plan": {
       "types": "./src/logs-runtime-plan.ts",
       "default": "./src/logs-runtime-plan.ts"
+    },
+    "./managed-device-allocation": {
+      "types": "./src/managed-device-allocation.ts",
+      "default": "./src/managed-device-allocation.ts"
+    },
+    "./managed-web-backend": {
+      "types": "./src/managed-web-backend.ts",
+      "default": "./src/managed-web-backend.ts"
     },
     "./navigation": {
       "types": "./src/navigation.ts",
@@ -283,6 +316,18 @@
       "types": "./src/orientation-runtime.ts",
       "default": "./src/orientation-runtime.ts"
     },
+    "./perf-runtime": {
+      "types": "./src/perf-runtime.ts",
+      "default": "./src/perf-runtime.ts"
+    },
+    "./perf-runtime-host": {
+      "types": "./src/perf-runtime-host.ts",
+      "default": "./src/perf-runtime-host.ts"
+    },
+    "./perf-runtime-operation-builder": {
+      "types": "./src/perf-runtime-operation-builder.ts",
+      "default": "./src/perf-runtime-operation-builder.ts"
+    },
     "./platform-module": {
       "types": "./src/platform-module.ts",
       "default": "./src/platform-module.ts"
@@ -307,33 +352,25 @@
       "types": "./src/platform-runtime-operations.ts",
       "default": "./src/platform-runtime-operations.ts"
     },
-    "./platform-resource-cleanup": {
-      "types": "./src/platform-resource-cleanup.ts",
-      "default": "./src/platform-resource-cleanup.ts"
-    },
     "./platform-runtime-unavailable": {
       "types": "./src/platform-runtime-unavailable.ts",
       "default": "./src/platform-runtime-unavailable.ts"
     },
-    "./perf-runtime": {
-      "types": "./src/perf-runtime.ts",
-      "default": "./src/perf-runtime.ts"
+    "./runtime-contract-error": {
+      "types": "./src/runtime-contract-error.ts",
+      "default": "./src/runtime-contract-error.ts"
     },
-    "./perf-runtime-host": {
-      "types": "./src/perf-runtime-host.ts",
-      "default": "./src/perf-runtime-host.ts"
-    },
-    "./perf-runtime-operation-builder": {
-      "types": "./src/perf-runtime-operation-builder.ts",
-      "default": "./src/perf-runtime-operation-builder.ts"
-    },
-    "./perf-runtime-plan": {
-      "types": "./src/perf-runtime-plan.ts",
-      "default": "./src/perf-runtime-plan.ts"
+    "./runtime-operation-names": {
+      "types": "./src/runtime-operation-names.ts",
+      "default": "./src/runtime-operation-names.ts"
     },
     "./progress": {
       "types": "./src/facades/progress.ts",
       "default": "./src/facades/progress.ts"
+    },
+    "./react-native-overlay": {
+      "types": "./src/react-native-overlay.ts",
+      "default": "./src/react-native-overlay.ts"
     },
     "./record-runtime-execution": {
       "types": "./src/record-runtime-execution.ts",
@@ -343,6 +380,18 @@
       "types": "./src/facades/recording.ts",
       "default": "./src/facades/recording.ts"
     },
+    "./recording-native-path": {
+      "types": "./src/recording-native-path.ts",
+      "default": "./src/recording-native-path.ts"
+    },
+    "./recording-stop-progress": {
+      "types": "./src/recording-stop-progress.ts",
+      "default": "./src/recording-stop-progress.ts"
+    },
+    "./recording-stop-observation": {
+      "types": "./src/recording-stop-observation.ts",
+      "default": "./src/recording-stop-observation.ts"
+    },
     "./remote": {
       "types": "./src/facades/remote.ts",
       "default": "./src/facades/remote.ts"
@@ -351,13 +400,13 @@
       "types": "./src/facades/replay.ts",
       "default": "./src/facades/replay.ts"
     },
-    "./react-native-overlay": {
-      "types": "./src/react-native-overlay.ts",
-      "default": "./src/react-native-overlay.ts"
-    },
     "./runner-lease-context": {
       "types": "./src/runner-lease-context.ts",
       "default": "./src/runner-lease-context.ts"
+    },
+    "./screen-capture-contract": {
+      "types": "./src/screen-capture-contract.ts",
+      "default": "./src/screen-capture-contract.ts"
     },
     "./screen-recording-runtime": {
       "types": "./src/screen-recording-runtime.ts",
@@ -407,21 +456,29 @@
       "types": "./src/facades/snapshot.ts",
       "default": "./src/facades/snapshot.ts"
     },
-    "./snapshot-presentation": {
-      "types": "./src/snapshot-presentation.ts",
-      "default": "./src/snapshot-presentation.ts"
-    },
     "./snapshot-runtime": {
       "types": "./src/snapshot-runtime.ts",
       "default": "./src/snapshot-runtime.ts"
     },
-    "./snapshot-timeout-evidence": {
-      "types": "./src/snapshot-timeout-evidence.ts",
-      "default": "./src/snapshot-timeout-evidence.ts"
+    "./snapshot-scope": {
+      "types": "./src/snapshot-scope.ts",
+      "default": "./src/snapshot-scope.ts"
     },
     "./startup-recovery-fence": {
       "types": "./src/startup-recovery-fence.ts",
       "default": "./src/startup-recovery-fence.ts"
+    },
+    "./system-button-runtime": {
+      "types": "./src/system-button-runtime.ts",
+      "default": "./src/system-button-runtime.ts"
+    },
+    "./tap-keyboard-occlusion": {
+      "types": "./src/tap-keyboard-occlusion.ts",
+      "default": "./src/tap-keyboard-occlusion.ts"
+    },
+    "./touch-runtime": {
+      "types": "./src/touch-runtime.ts",
+      "default": "./src/touch-runtime.ts"
     },
     "./tv-remote": {
       "types": "./src/tv-remote.ts",
@@ -435,10 +492,6 @@
       "types": "./src/type-text-runtime.ts",
       "default": "./src/type-text-runtime.ts"
     },
-    "./touch-runtime": {
-      "types": "./src/touch-runtime.ts",
-      "default": "./src/touch-runtime.ts"
-    },
     "./viewport-runtime": {
       "types": "./src/viewport-runtime.ts",
       "default": "./src/viewport-runtime.ts"
@@ -450,14 +503,9 @@
     "./wait-runtime-plan": {
       "types": "./src/wait-runtime-plan.ts",
       "default": "./src/wait-runtime-plan.ts"
-    },
-    "./android-helper-artifacts": {
-      "types": "./src/android-helper-artifacts.ts",
-      "default": "./src/android-helper-artifacts.ts"
-    },
-    "./android-touch-plan": {
-      "types": "./src/android-touch-plan.ts",
-      "default": "./src/android-touch-plan.ts"
     }
+  },
+  "devDependencies": {
+    "fast-check": "^4.9.0"
   }
 }

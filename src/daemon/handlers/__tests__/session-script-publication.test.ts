@@ -2,7 +2,7 @@ import { isSessionRecording } from '../../session-script-publication-capability.
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, test } from 'vitest';
-import { INTERNAL_COMMANDS } from '../../../command-catalog.ts';
+import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   makeIosSession,
   makeAuthoringSession,
@@ -11,7 +11,8 @@ import {
 } from '../../../__tests__/test-utils/session-factories.ts';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest, SessionState } from '../../types.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { handleSessionScriptPublication } from '../session-script-publication.ts';
 import {
   NO_SCRIPT_PUBLICATION,
@@ -98,7 +99,7 @@ test('publishes without close, returns the path/count, and leaves a terminal liv
     ok: true,
     data: { session: 'authoring', savedScript: outputPath, actionCount: 3 },
   });
-  expect(fs.readFileSync(outputPath, 'utf8')).toContain('wait "id=\\"screen-x\\""');
+  expect(fs.readFileSync(outputPath, 'utf8')).toContain(String.raw`wait "id=\"screen-x\""`);
   expect(fs.readFileSync(outputPath, 'utf8')).not.toContain('\nclose');
   expect(store.get('authoring')).toBe(session);
   expect(session.scriptPublication).toMatchObject({ kind: 'authoring', status: 'published' });

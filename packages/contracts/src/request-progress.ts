@@ -1,7 +1,7 @@
 /**
  * Progress events the daemon streams to a connected client while a request runs.
  *
- * These are wire values: `src/daemon/request-progress-protocol.ts` serializes them onto the
+ * These are wire values: `src/request-progress-protocol.ts` serializes them onto the
  * response stream and the CLI reconstructs them before handing them to the replay-test
  * reporter registry. They therefore belong to neither side — the daemon's request-global
  * progress plumbing carries them, and the replay-test scheduler produces and interprets

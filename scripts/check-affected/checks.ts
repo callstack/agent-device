@@ -10,7 +10,6 @@
 // agent reads before skipping a check locally cannot go stale.
 
 import { ALL_CHECKS, type CheckId } from './model.ts';
-import { DEFAULT_VITEST_MAX_WORKERS } from '../lib/vitest-concurrency.ts';
 
 export type CheckKind =
   | { readonly type: 'script'; readonly script: string }
@@ -38,6 +37,12 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   // The test app intentionally owns a separate Expo dependency graph. Do not
   // make every root-checkout validation install it implicitly.
   gate('test-app-typecheck', 'Expo test app typecheck', 'test-app:typecheck', false),
+  gate(
+    'test-app-security',
+    'Expo test app image-size parser security test',
+    'test-app:security',
+    false,
+  ),
   gate('layering', 'Import-direction layering guard', 'check:layering'),
   gate('di-seams', 'Test-only DI seam guard', 'check:di-seams'),
   gate('fallow', 'Fallow code-quality audit', 'check:fallow'),
@@ -46,6 +51,12 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('package', 'Published package (publint, attw, clean-install resolution)', 'check:package'),
   gate('integration-node', 'Node integration smoke', 'test:integration:node'),
   gate('macos-coverage', 'macOS command coverage manifest', 'test:integration:macos-coverage'),
+  gate(
+    'ios-snapshot-differential',
+    'iOS snapshot Swift/TypeScript differential',
+    'test:ios-snapshot-differential',
+    false,
+  ),
   {
     id: 'vitest-related',
     label: 'Tests related by Vitest module graph',
@@ -67,7 +78,7 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   // helpers packaged into `android/*/dist` (what the replay host verifies), where the
   // build script writes only the snapshot helper into `.tmp/`.
   gate('android-helpers', 'Android helper builds (snapshot + IME)', 'build:android', false),
-  gate('macos-helper', 'macOS helper build', 'build:macos-helper', false),
+  gate('macos-helper', 'macOS helper build and tests', 'check:macos-helper', false),
   gate('web-smoke', 'Live web platform smoke', 'test:smoke:web', false),
   // Needs full history and tags, so it runs in the shared fetch-depth: 0 job
   // rather than inside the shallow-clone-safe unit lane.
@@ -89,7 +100,7 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('affected-selector', 'Affected-check selector model', 'check:affected:test'),
   gate('gate-manifest', 'Gate manifest — every gate owned and wired', 'check:gate-manifest'),
   gate('gate-manifest-model', 'Gate manifest model', 'check:gate-manifest:test'),
-  gate('depgraph', 'Dependency graph report agrees with the gate', 'depgraph:test'),
+  gate('depgraph', 'Dependency graph report model', 'depgraph:test'),
   gate('tmpdir-leaks', 'Leaked test tmpdir detector', 'check:tmpdir-leaks'),
   gate('tmpdir-leaks-model', 'TMPDIR redirection model', 'check:tmpdir-leaks:test'),
   gate('coverage-model', 'Changed-line coverage model', 'check:coverage-changed:test'),
@@ -109,6 +120,13 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     'xctest-selection',
     'Runner XCTest selection and package-source boundary',
     'check:xctest-selection',
+  ),
+  // Line parity needs no toolchain; the `swiftc -parse` half reports itself skipped on a host
+  // without Swift, so the gate is declared on the macOS lane where both halves run.
+  gate(
+    'packaged-runner-swift',
+    'Packaged runner Swift parses and keeps checkout line numbering',
+    'check:packaged-runner-swift',
   ),
 
   // --- Gates that drive their own runner -------------------------------------
@@ -171,16 +189,7 @@ export function resolveCommand(
   changedFiles: readonly string[] = [],
 ): string[] {
   if (spec.kind.type === 'vitest-related') {
-    return [
-      'pnpm',
-      'exec',
-      'vitest',
-      'related',
-      '--run',
-      '--passWithNoTests',
-      `--maxWorkers=${DEFAULT_VITEST_MAX_WORKERS}`,
-      ...changedFiles,
-    ];
+    return ['pnpm', 'exec', 'vitest', 'related', '--run', '--passWithNoTests', ...changedFiles];
   }
   const { script } = spec.kind;
   if (!(script in scripts)) {

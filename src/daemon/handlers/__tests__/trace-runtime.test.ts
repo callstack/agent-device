@@ -3,7 +3,8 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest, SessionState } from '../../types.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
+import type { SessionState } from '../../session-state.ts';
 import { handleTraceCommand } from '../trace-runtime.ts';
 
 function fixture() {

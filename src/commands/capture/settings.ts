@@ -1,11 +1,20 @@
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { SettingsUpdateOptions } from '@agent-device/contracts/client';
-import { SETTINGS_USAGE_OVERRIDE } from '@agent-device/contracts/settings';
-import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
+import {
+  APPEARANCE_ACTIONS,
+  MACOS_PERMISSION_TARGETS,
+  MOBILE_PERMISSION_TARGETS,
+  parseTextSizeCategory,
+  PERMISSION_ACTIONS,
+  PERMISSION_MODES,
+  SETTINGS_MACOS_PERMISSION_USAGE,
+  SETTINGS_USAGE_OVERRIDE,
+  type PermissionMode,
+} from '@agent-device/contracts/settings';
+import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
-import { readLocationCoordinate } from '../../utils/location-coordinates.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
+import { readLocationCoordinate } from '@agent-device/kernel/location-coordinates';
 import { enumField, numberField, requiredField, stringField } from '../command-input.ts';
 import {
   direct,
@@ -17,35 +26,33 @@ import {
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
-import { messageWithWarningsOutput } from '../output-common.ts';
+import { messageOutput } from '../output-common.ts';
 
 const SETTINGS_COMMAND_NAME = 'settings';
 const settingsCommandDescription =
-  'Change supported operating-system settings, animation scales, appearance, or app permissions on the selected target. Platform support varies by setting and action.';
+  'Read or change supported operating-system settings, animation scales, appearance, or app permissions on the selected target. Platform support varies by setting and action.';
 
 const settingsCommandMetadata = defineFieldCommandMetadata(
   SETTINGS_COMMAND_NAME,
   settingsCommandDescription,
   {
     setting: requiredField(stringField()),
-    state: requiredField(stringField()),
+    // Optional because a readable setting answers with no state: `settings text-size` asks for the
+    // value the target holds. Every other setting still requires one, which the command's own parse
+    // and the daemon enforce per setting rather than the shared field map.
+    state: stringField(),
     app: stringField(),
     latitude: numberField(),
     longitude: numberField(),
     permission: stringField(),
-    mode: enumField(['full', 'limited']),
+    mode: enumField([...PERMISSION_MODES]),
   },
-);
-
-const settingsCommandDefinition = defineExecutableCommand(
-  settingsCommandMetadata,
-  (client, input) => client.settings.update(input as SettingsUpdateOptions),
 );
 
 const settingsCliSchema = {
   usageOverride: SETTINGS_USAGE_OVERRIDE,
   listUsageOverride: 'settings [area] [options]',
-  positionalArgs: ['setting', 'state', 'target?', 'mode?'],
+  positionalArgs: ['setting', 'state?', 'target?', 'mode?'],
 } as const satisfies CommandSchemaOverride;
 
 export const settingsCliReader: CliReader = (positionals, flags) =>
@@ -59,16 +66,15 @@ export const settingsCommandFacet = defineCommandFacet({
   name: SETTINGS_COMMAND_NAME,
   text: {
     summary: 'Change OS settings and app permissions',
-    cliDetail:
-      'macOS supports only settings appearance <light|dark|toggle> and settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>; wifi|airplane|location|animations remain unsupported on macOS. Mobile permission actions use the active session app. On Android, deny|reset of a permission the app currently holds kills a running app; the response reports priorGrantState (granted|not_granted|unknown) and warns for granted and unknown, with open <app> --relaunch to restore it. Permission changes require a resolvable foreground user and fail without mutating if adb cannot report one.',
+    cliDetail: `macOS supports only settings appearance <light|dark|toggle> and settings ${SETTINGS_MACOS_PERMISSION_USAGE}; wifi|airplane|location|animations|text-size remain unsupported on macOS. Mobile permission actions use the active session app. On Android, deny|reset of a permission the app currently holds kills a running app; the response reports priorGrantState (granted|not_granted|unknown) and warns for granted and unknown, with open <app> --relaunch to restore it. Permission changes require a resolvable foreground user and fail without mutating if adb cannot report one. Android settings airplane on|off is applied by the connectivity service (Android 11+) and reports the airplaneMode that service holds; older builds fail without changing device state. settings reset-keychain clear is iOS-simulator-only and resets the whole simulator keychain, not just the selected app: simctl exposes no per-app keychain reset, so every app on that simulator loses its keychain-backed credentials (e.g. Firebase auth). clear-app-state does not touch the keychain, so a full fresh-install reset needs both; relaunch the app afterward to observe the signed-out state. settings text-size reads the preferred text size the target holds and settings text-size <category> applies one, on iPhone and iPad simulators (simctl content size) and on Android targets (system font_scale); tvOS and visionOS simulators, physical Apple devices, and the macOS host refuse it. Android has no category ladder of its own, so the read names the nearest rung and reports the exact multiplier as platformValue; an already-running app adopts a changed size at its next configuration change, so relaunch the app under test to observe it.`,
   },
   metadata: settingsCommandMetadata,
-  definition: settingsCommandDefinition,
+  run: (client, input) => client.settings.update(input as SettingsUpdateOptions),
   cliSchema: settingsCliSchema,
   cliReader: settingsCliReader,
   daemonWriter: settingsDaemonWriter,
   // Android permission revokes append a relaunch warning (#1796); render it for humans too.
-  cliOutputFormatter: messageWithWarningsOutput,
+  cliOutputFormatter: messageOutput,
 });
 
 // fallow-ignore-next-line complexity
@@ -94,6 +100,14 @@ function readSettingsOptionsFromPositionals(
   if (setting === 'appearance' && isOneOf(state, APPEARANCE_STATES)) {
     return { ...base, setting, state };
   }
+  // A bare `settings text-size` reads the category the target holds; a category applies it. The
+  // category is parsed here rather than handed to the tool, which answers an unknown one with
+  // success, and the refusal lists the whole ladder.
+  if (setting === 'text-size') {
+    return state === undefined
+      ? { ...base, setting }
+      : { ...base, setting, state: parseTextSizeCategory(state) };
+  }
   if (isOneOf(setting, BIOMETRIC_SETTINGS) && isOneOf(state, BIOMETRIC_STATES)) {
     return { ...base, setting, state };
   }
@@ -113,12 +127,19 @@ function readSettingsOptionsFromPositionals(
     const app = state === 'clear' ? positionals[2] : state;
     return { ...base, setting, state: 'clear', app };
   }
+  if (setting === 'reset-keychain' && state === 'clear' && positionals.length === 2) {
+    return { ...base, setting, state };
+  }
   throw new AppError('INVALID_ARGS', 'Invalid settings arguments.');
 }
 
 function settingsPositionals(input: SettingsUpdateOptions): string[] {
   if (input.setting === 'clear-app-state') {
     return [input.setting, ...optionalString(input.app)];
+  }
+  // No state is the read leg: the daemon admits the owner's read fact for a lone positional.
+  if (input.setting === 'text-size') {
+    return [input.setting, ...optionalString(input.state)];
   }
   if (input.setting === 'location' && input.state === 'set') {
     return [input.setting, input.state, String(input.latitude), String(input.longitude)];
@@ -134,8 +155,8 @@ function readPermission(value: string | undefined): PermissionTarget {
   throw new AppError('INVALID_ARGS', 'settings permission requires a permission target.');
 }
 
-function readPermissionMode(value: string | undefined): 'full' | 'limited' | undefined {
-  if (value === undefined || value === 'full' || value === 'limited') return value;
+function readPermissionMode(value: string | undefined): PermissionMode | undefined {
+  if (value === undefined || isOneOf(value, PERMISSION_MODE_VALUES)) return value;
   throw new AppError('INVALID_ARGS', 'settings permission mode must be full or limited.');
 }
 
@@ -149,30 +170,13 @@ type BiometricSetting = Extract<
 type BiometricState = Extract<SettingsUpdateOptions, { setting: 'faceid' | 'touchid' }>['state'];
 type FingerprintState = Extract<SettingsUpdateOptions, { setting: 'fingerprint' }>['state'];
 type AppearanceState = Extract<SettingsUpdateOptions, { setting: 'appearance' }>['state'];
-type PermissionState = Extract<SettingsUpdateOptions, { setting: 'permission' }>['state'];
 
 const ON_OFF_SETTINGS = setOf<OnOffSetting>('wifi', 'airplane', 'location', 'animations');
 const ON_OFF_STATES = setOf<OnOffState>('on', 'off');
-const APPEARANCE_STATES = setOf<AppearanceState>('light', 'dark', 'toggle');
+const APPEARANCE_STATES = setOf<AppearanceState>(...APPEARANCE_ACTIONS);
 const BIOMETRIC_SETTINGS = setOf<BiometricSetting>('faceid', 'touchid');
 const BIOMETRIC_STATES = setOf<BiometricState>('match', 'nonmatch', 'enroll', 'unenroll');
 const FINGERPRINT_STATES = setOf<FingerprintState>('match', 'nonmatch');
-const PERMISSION_STATES = setOf<PermissionState>('grant', 'deny', 'reset');
-const PERMISSION_TARGETS = setOf<PermissionTarget>(
-  'camera',
-  'microphone',
-  'photos',
-  'contacts',
-  'contacts-limited',
-  'notifications',
-  'calendar',
-  'location',
-  'location-always',
-  'media-library',
-  'motion',
-  'reminders',
-  'siri',
-  'accessibility',
-  'screen-recording',
-  'input-monitoring',
-);
+const PERMISSION_MODE_VALUES = setOf(...PERMISSION_MODES);
+const PERMISSION_STATES = setOf(...PERMISSION_ACTIONS);
+const PERMISSION_TARGETS = setOf(...MOBILE_PERMISSION_TARGETS, ...MACOS_PERMISSION_TARGETS);

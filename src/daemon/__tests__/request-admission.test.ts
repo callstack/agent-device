@@ -3,7 +3,13 @@ import assert from 'node:assert/strict';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { assertRequestLeaseAdmission } from '../request-admission.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
+import type { ProviderAppCatalog } from '@agent-device/contracts/device';
+
+const limrunAppCatalog: ProviderAppCatalog = {
+  supports: (provider) => provider === 'limrun',
+  list: async () => [],
+};
 
 function makeRequest(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
   return {
@@ -118,6 +124,123 @@ test('non-close commands on a tenant-isolated session still require a lease id',
       ),
     /tenant isolation requires lease id/,
   );
+});
+
+test.each(['bogus', 'proxy', 'browserstack'])(
+  'sessionless apps for non-catalog provider %s still requires a tenant lease',
+  (leaseProvider) => {
+    const registry = new LeaseRegistry();
+
+    assert.throws(
+      () =>
+        assertRequestLeaseAdmission(
+          makeRequest({
+            command: 'apps',
+            flags: { platform: 'ios', leaseProvider },
+            meta: { tenantId: 'tenant-a', runId: 'run-1', sessionIsolation: 'tenant' },
+          }),
+          registry,
+          undefined,
+        ),
+      /tenant isolation requires lease id/,
+    );
+  },
+);
+
+test('sessionless apps admits a provider declared by the runtime app catalog', () => {
+  const registry = new LeaseRegistry();
+
+  const result = assertRequestLeaseAdmission(
+    makeRequest({
+      command: 'apps',
+      flags: { platform: 'ios', leaseProvider: 'limrun' },
+      meta: { tenantId: 'tenant-a', runId: 'run-1', sessionIsolation: 'tenant' },
+    }),
+    registry,
+    undefined,
+    { providerAppCatalog: limrunAppCatalog },
+  );
+
+  assert.equal(result, undefined);
+});
+
+// #2946 (the other half): a proxy client that allocated a lease with a window longer than the old
+// synthetic admission default used to lose that window on the next admitted command — admission
+// re-renewed every proxy lease at its own default instead of the window the lease carries. Admission
+// now renews for the lease's window (ADR 0007); only a request that names a window changes it.
+test('admitting a command does not shorten a proxy lease allocated above the old admission default', () => {
+  let now = 1_000;
+  const registry = new LeaseRegistry({ now: () => now });
+  const lease = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'proxy',
+    deviceKey: 'ios:mobile:SIM-001',
+    clientId: 'client-a',
+    ttlMs: 600_000,
+  });
+  now = 2_000;
+
+  const result = assertRequestLeaseAdmission(
+    makeRequest({
+      command: 'snapshot',
+      meta: {
+        tenantId: 'tenant-a',
+        runId: 'run-1',
+        sessionIsolation: 'tenant',
+        leaseId: lease.leaseId,
+        leaseProvider: 'proxy',
+        deviceKey: 'ios:mobile:SIM-001',
+        clientId: 'client-a',
+      },
+    }),
+    registry,
+    undefined,
+  );
+
+  assert.equal(result?.leaseId, lease.leaseId);
+  // Without this, a lease handed back untouched would pass: allocation already leaves a 600_000
+  // difference between these two stamps, so the delta alone cannot prove admission renewed anything.
+  assert.equal(result!.heartbeatAt, 2_000, 'admission renewed at admission time');
+  assert.equal(
+    result!.expiresAt - result!.heartbeatAt,
+    600_000,
+    'the window the lease carries, not a smaller default',
+  );
+});
+
+test('a command that names its own window renews the lease onto it', () => {
+  let now = 1_000;
+  const registry = new LeaseRegistry({ now: () => now });
+  const lease = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'proxy',
+    deviceKey: 'ios:mobile:SIM-001',
+    clientId: 'client-a',
+    ttlMs: 600_000,
+  });
+  now = 2_000;
+
+  const result = assertRequestLeaseAdmission(
+    makeRequest({
+      command: 'snapshot',
+      meta: {
+        tenantId: 'tenant-a',
+        runId: 'run-1',
+        sessionIsolation: 'tenant',
+        leaseId: lease.leaseId,
+        leaseProvider: 'proxy',
+        deviceKey: 'ios:mobile:SIM-001',
+        clientId: 'client-a',
+        leaseTtlMs: 90_000,
+      },
+    }),
+    registry,
+    undefined,
+  );
+
+  assert.equal(result!.expiresAt - result!.heartbeatAt, 90_000);
 });
 
 test('close still admits and heartbeats a real active lease', () => {

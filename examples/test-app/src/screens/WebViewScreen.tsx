@@ -89,7 +89,7 @@ export function WebViewScreen(props: { onClose: () => void }) {
         })}
       </ScrollView>
 
-      <View style={styles.status} accessibilityLiveRegion="polite">
+      <View accessibilityLiveRegion="polite" style={styles.status}>
         <Text style={styles.statusText} testID="webview-status">
           {formatLoadStatus(site.label, loadState)}
         </Text>

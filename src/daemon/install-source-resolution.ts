@@ -1,7 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { LocalInstallSource } from '@agent-device/kernel/contracts';
+import type { DaemonInstallSource, LocalInstallSource } from '@agent-device/kernel/contracts';
 import { cleanupUploadedArtifact, prepareUploadedArtifact } from './artifact-tracking.ts';
-import type { DaemonInstallSource, DaemonRequest } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
 
 function assertUnsupportedInstallSource(source: never): never {
   throw new AppError(

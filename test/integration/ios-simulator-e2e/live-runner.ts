@@ -4,8 +4,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import type { AgentDeviceDaemonTransport } from '@agent-device/contracts/client';
-import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
-import { sendToDaemon } from '../../../src/daemon/client/daemon-client.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { sendToDaemon } from '../../../src/daemon-client/daemon-client.ts';
 import { assertPngFile } from '../provider-scenarios/assertions.ts';
 import {
   assertFilesDiffer,
@@ -17,6 +17,7 @@ import {
 import { assertAutomationInput } from './live-automation-scenario.ts';
 import { assertDeviceLifecycle } from './live-device-lifecycle.ts';
 import { assertRegularVisibleDepthFrontier } from './live-snapshot-depth-frontier.ts';
+import { assertWebViewRemoteContent } from './live-webview-remote-content.ts';
 import {
   assertLifecycleAndSystem,
   assertObservabilityAndArtifacts,
@@ -77,6 +78,7 @@ const LIVE_SCENARIOS = bindIosSimulatorScenarios<LiveContext>({
   lifecycleSystem: assertLifecycleAndSystem,
   observabilityArtifacts: assertObservabilityAndArtifacts,
   snapshotDepthFrontier: assertRegularVisibleDepthFrontier,
+  webviewRemoteContent: assertWebViewRemoteContent,
 });
 
 export async function runIosSimulatorE2E(): Promise<void> {
@@ -92,9 +94,15 @@ export async function runIosSimulatorE2E(): Promise<void> {
 }
 
 async function executeLiveScenarios(context: LiveContext): Promise<void> {
+  let assertionCaptureVerified = false;
   for (const scenario of LIVE_SCENARIOS.filter((candidate) => candidate.tier === 'smoke')) {
     await runScenario(context, scenario);
+    if (!assertionCaptureVerified && context.sessionOpen) {
+      await assertLiveAssertionCapture(context);
+      assertionCaptureVerified = true;
+    }
   }
+  assert.ok(assertionCaptureVerified, 'iOS smoke did not open a session for assertion capture');
   if (context.tier === 'full') {
     await runStep(context, 'reopen fixture for full tier', ['open', context.appId, '--relaunch']);
     for (const scenario of LIVE_SCENARIOS.filter((candidate) => candidate.tier === 'full')) {
@@ -102,6 +110,33 @@ async function executeLiveScenarios(context: LiveContext): Promise<void> {
     }
   }
   assertCoverageComplete(context);
+}
+
+async function assertLiveAssertionCapture(context: LiveContext): Promise<void> {
+  const startedAt = Date.now();
+  const stem = `failed-step-${context.stepHistory.length}`;
+  const failure = new assert.AssertionError({ message: 'deliberate live assertion capture' });
+  await assert.rejects(
+    runScenario(context, {
+      id: 'smoke:failure-evidence-canary',
+      run: async () => {
+        throw failure;
+      },
+    }),
+    (error: unknown) => error === failure,
+  );
+
+  const screenshotPath = path.join(context.artifactDir, `${stem}.png`);
+  const snapshotPath = path.join(context.artifactDir, `${stem}-snapshot.json`);
+  const reportPath = path.join(context.artifactDir, 'failed-step.txt');
+  assertPngFile(screenshotPath);
+  const snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf8')) as { success?: unknown };
+  assert.equal(snapshot.success, true);
+  const report = fs.readFileSync(reportPath, 'utf8');
+  assert.match(report, /deliberate live assertion capture/);
+  assert.ok(report.includes(screenshotPath));
+  assert.ok(report.includes(snapshotPath));
+  console.log(`iOS live assertion capture: ${Date.now() - startedAt}ms; ${context.artifactDir}`);
 }
 
 async function finalizeLiveRun(context: LiveContext): Promise<unknown> {
@@ -254,7 +289,11 @@ async function assertFormInput(context: LiveContext): Promise<void> {
     'seeded email should survive keyboard dismiss, before any refocus or further typing',
   );
 
-  const formSnapshot = await runStep(context, 'locate email coordinates', ['snapshot', '-i']);
+  const formSnapshot = await runStep(context, 'locate email coordinates', [
+    'snapshot',
+    '-i',
+    '--debug',
+  ]);
   const emailRect = requireNodeRect(formSnapshot, 'field-email');
   await runStep(context, 'focus email by snapshot-derived coordinates', [
     'focus',

@@ -5,13 +5,9 @@ import type {
   ProviderDeviceInstallOptions,
   ProviderDeviceInstallResult,
 } from '@agent-device/contracts/device';
-import type {
-  Interactor,
-  SnapshotOptions,
-  SnapshotResult,
-} from '@agent-device/contracts/interactor-types';
+import type { FillBackendResult, Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 import type Limrun from '@limrun/api';
 import {
   createInstanceClient as createIosInstanceClient,
@@ -21,7 +17,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { flattenIosTree, toIosSelector, writeBase64File, type IosTreeNode } from './snapshot.ts';
+import { toIosSelector } from './snapshot.ts';
 import { normalizeOptionalString } from './strings.ts';
 import {
   awaitLimrunDeploymentOperation,
@@ -35,6 +31,8 @@ export type LimrunIosSession = {
   instanceId: string;
   device: DeviceInfo;
   client: LimrunIosClient;
+  /** Instance bearer token; the recording download the SDK would run inline is done by the host instead. */
+  readonly token: string;
   readonly dependencies: Pick<LimrunRuntimeDependencies, 'host' | 'ios'>;
 };
 
@@ -71,6 +69,7 @@ export async function createLimrunIosSession(
     instanceId: options.instanceId,
     device: options.device,
     client,
+    token: options.token,
     dependencies,
   };
 }
@@ -216,13 +215,30 @@ class LimrunIosInteractor implements Interactor {
     await this.session.client.tapElement(toIosSelector(selector));
   }
 
+  /**
+   * Both taps travel in one `performActions` batch so the inter-tap gap is enforced on the
+   * device. Two separate `tap` requests put a network round trip between the taps, which
+   * exceeds the double-tap recognition window and registers as two slow single taps.
+   */
   async doubleTap(x: number, y: number): Promise<void> {
-    await this.tap(x, y);
-    await this.tap(x, y);
+    await this.session.client.performActions([
+      { type: 'tap', x, y },
+      { type: 'wait', durationMs: DOUBLE_TAP_INTERVAL_MS },
+      { type: 'tap', x, y },
+    ]);
   }
 
-  async longPress(): Promise<never> {
-    throw unsupported('longpress', 'Limrun iOS direct sessions do not expose long press yet.');
+  /** One held touch as HID primitives; the hold runs on the device, not across the wire. */
+  async longPress(
+    x: number,
+    y: number,
+    durationMs = DEFAULT_LONG_PRESS_DURATION_MS,
+  ): Promise<void> {
+    await this.session.client.performActions([
+      { type: 'touchDown', x, y },
+      { type: 'wait', durationMs },
+      { type: 'touchUp', x, y },
+    ]);
   }
 
   async focus(x: number, y: number): Promise<void> {
@@ -230,42 +246,86 @@ class LimrunIosInteractor implements Interactor {
   }
 
   async type(text: string, delayMs?: number): Promise<void> {
+    await this.enterText(text, delayMs);
+  }
+
+  async fill(x: number, y: number, text: string, delayMs?: number): Promise<FillBackendResult> {
+    // Loaded on the fill path to keep this provider's declared import-time closure budget.
+    const { awaitLimrunTextEntryFocus, readLimrunUnambiguousTapTargets, readLimrunTextEntryFocus } =
+      await import('./text-entry-focus.ts');
+    // Read before the tap: the witness needs to know what was under this point.
+    const targetsAtPoint = readLimrunUnambiguousTapTargets(
+      await this.session.client.elementTree(),
+      x,
+      y,
+    );
+    await this.tap(x, y);
+    const textEntryReadiness = await awaitLimrunTextEntryFocus({
+      targetsAtPoint,
+      readFocus: async () => readLimrunTextEntryFocus(await this.session.client.elementTree()),
+      sleep: (milliseconds) => sleep(milliseconds),
+      x,
+      y,
+    });
+    // Select first: iOS replaces a selection on the next key, so `fill` replaces and
+    // an empty fill clears.
+    await this.session.client.pressKey('a', ['command']);
+    if (text.length === 0) {
+      await this.session.client.pressKey('delete');
+      return { textEntryReadiness };
+    }
+    await this.enterText(text, delayMs);
+    return { textEntryReadiness };
+  }
+
+  /**
+   * Types into whatever holds text-entry focus, character by character when a delay is
+   * asked for. Focus targeting belongs to the caller, so the provider's own scan for a
+   * globally focused element is skipped: an app can expose fields that take keys without
+   * ever reporting one.
+   */
+  private async enterText(text: string, delayMs?: number): Promise<void> {
     if (delayMs && delayMs > 0) {
-      for (const char of Array.from(text)) {
-        await this.session.client.typeText(char);
-        await sleep(delayMs);
+      let dispatchedChars = 0;
+      try {
+        for (const char of Array.from(text)) {
+          await this.session.client.typeText(char, false, { requireFocus: false });
+          dispatchedChars += 1;
+          await sleep(delayMs);
+        }
+      } catch (error) {
+        throw discloseDispatchAfterSteps(error, dispatchedChars);
       }
       return;
     }
-    await this.session.client.typeText(text);
-  }
-
-  async fill(x: number, y: number, text: string): Promise<void> {
-    await this.tap(x, y);
-    await this.session.client.typeText(text);
+    await this.session.client.typeText(text, false, { requireFocus: false });
   }
 
   async scroll(direction: 'up' | 'down' | 'left' | 'right', options?: { pixels?: number }) {
     await this.session.client.scroll(direction, options?.pixels ?? 300);
   }
 
+  /** Limrun serves its capture as JPEG; the PNG-only readers behind `outPath` get a PNG. */
   async screenshot(outPath: string): Promise<void> {
+    // Loaded on the screenshot path to keep this provider's declared import-time closure budget.
+    const { transcodeScreenshotToPngAsync } =
+      await import('@agent-device/capture-kit/png-worker-client');
     const screenshot = await this.session.client.screenshot();
-    await writeBase64File(outPath, screenshot.base64);
+    const png = await transcodeScreenshotToPngAsync(
+      Buffer.from(screenshot.base64, 'base64'),
+      'Limrun iOS screenshot',
+    );
+    fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    await fs.promises.writeFile(outPath, png);
   }
 
-  async snapshot(_options?: SnapshotOptions): Promise<SnapshotResult> {
-    const treeJson = await this.session.client.elementTree();
-    const parsed = JSON.parse(treeJson) as IosTreeNode | IosTreeNode[];
-    return { nodes: flattenIosTree(parsed), backend: 'xctest', producer: 'limrun-ios-tree' };
+  async snapshot() {
+    const { captureLimrunIosSnapshot } = await import('./ios-snapshot-adapter.ts');
+    return await captureLimrunIosSnapshot(this.session);
   }
 
   async back(): Promise<void> {
     await this.session.client.pressKey('escape');
-  }
-
-  async home(): Promise<never> {
-    throw unsupported('home', 'Limrun iOS direct sessions do not expose home yet.');
   }
 
   async setOrientation(orientation: DeviceRotation): Promise<void> {
@@ -276,45 +336,6 @@ class LimrunIosInteractor implements Interactor {
       );
     }
     await this.session.client.setOrientation(orientation === 'portrait' ? 'Portrait' : 'Landscape');
-  }
-
-  async performGesture(): Promise<never> {
-    throw unsupported(
-      'gesture',
-      'Limrun iOS direct sessions do not expose portable gesture execution yet.',
-    );
-  }
-
-  async appSwitcher(): Promise<never> {
-    throw unsupported('app-switcher', 'Limrun iOS direct sessions do not expose app switcher yet.');
-  }
-
-  async tvRemote(): Promise<never> {
-    throw unsupported('tv-remote', 'Limrun iOS direct sessions do not expose tv remote control.');
-  }
-
-  async readAlert(): Promise<never> {
-    throw unsupported('alert', LIMRUN_IOS_ALERT_UNSUPPORTED);
-  }
-
-  async awaitAlert(): Promise<never> {
-    throw unsupported('alert', LIMRUN_IOS_ALERT_UNSUPPORTED);
-  }
-
-  async acceptAlert(): Promise<never> {
-    throw unsupported('alert', LIMRUN_IOS_ALERT_UNSUPPORTED);
-  }
-
-  async dismissAlert(): Promise<never> {
-    throw unsupported('alert', LIMRUN_IOS_ALERT_UNSUPPORTED);
-  }
-
-  async readClipboard(): Promise<never> {
-    throw unsupported('clipboard', 'Limrun iOS direct sessions do not expose clipboard read yet.');
-  }
-
-  async writeClipboard(): Promise<never> {
-    throw unsupported('clipboard', 'Limrun iOS direct sessions do not expose clipboard write yet.');
   }
 
   async setSetting(): Promise<never> {
@@ -372,6 +393,11 @@ function inferAppNameFromPath(appPath: string): string | undefined {
 
 const IOS_APP_INVENTORY_RETRY_DELAYS_MS = [0, 250] as const;
 
+/** Hold applied when the caller names no duration; matches the Android and Linux interactors. */
+const DEFAULT_LONG_PRESS_DURATION_MS = 800;
+/** On-device pause between the two taps of a double tap; well inside the recognizer's window. */
+const DOUBLE_TAP_INTERVAL_MS = 80;
+
 function resolveInstalledIosAppId(params: {
   resultBundleId?: string;
   requestedBundleId?: string;
@@ -407,10 +433,6 @@ export function isUserInstalledIosApp(app: LimrunIosApp): boolean {
     !app.bundleId.startsWith('com.apple.') && !app.installType.toLowerCase().includes('system')
   );
 }
-
-/** One sentence for all four alert legs: this session has no XCUITest runner to read a sheet. */
-const LIMRUN_IOS_ALERT_UNSUPPORTED =
-  'Limrun iOS direct sessions do not expose alert inspection yet.';
 
 function unsupported(command: string, message: string): never {
   throw new AppError('UNSUPPORTED_OPERATION', message, { command });

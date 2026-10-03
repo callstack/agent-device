@@ -1,21 +1,20 @@
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
-import os from 'node:os';
+
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
-vi.mock('../../utils/host-process.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../utils/host-process.ts')>();
+vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
   return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
 });
 // Opening a session runs owned-lease cleanup, which pattern-kills stale xcodebuild runners with a
 // real `pkill -f`; the session ids here are fabricated, so stub the tool seam (#1824).
-vi.mock('../../platforms/apple/core/tool-provider.ts', async (importOriginal) => {
+vi.mock('@agent-device/platform-apple/tool-provider', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../platforms/apple/core/tool-provider.ts')>();
+    await importOriginal<typeof import('@agent-device/platform-apple/tool-provider')>();
   return {
     ...actual,
     runAppleToolCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
@@ -27,11 +26,12 @@ import {
   lifecycleDeviceRuntimeGateway,
 } from './test-device-runtime-gateway.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { ensureDeviceReady } from '../device-ready.ts';
+import { ensureDeviceReady } from '../device/device-ready.ts';
 import { awaitFixtureReadiness } from './application-lifecycle-runtime-fixture.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 /**
  * The production route for the #2031/#1394 defect: a request without `--session` resolves the
@@ -61,7 +61,7 @@ function makeIosDevice(id: string): DeviceInfo {
 
 function createHandler(sessionStore: ReturnType<typeof makeSessionStore>) {
   return createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -198,7 +198,7 @@ test('lock-policy conflict on an implicit session names its store key, not "defa
   expect(response.ok).toBe(false);
   if (response.ok) return;
   expect(response.error.code).toBe('INVALID_ARGS');
-  expect(response.error.message).toContain(`session "${address}"`);
+  expect(response.error.message).toContain(`Session "${address}"`);
   expect(response.error.details?.session).toBe(address);
   expectAddressableRecovery(errorHint(response), address);
 });
@@ -221,4 +221,8 @@ test('session list reports the address an implicit session answers to alongside 
   expect(sessions?.[0]?.name).toBe('default');
   expect(sessions?.[0]?.address).toBe(address);
   expect(sessions?.[0]?.address).toMatch(SCOPED_ADDRESS_PATTERN);
+  expect(sessionStore.get(address)?.sessionScope).toEqual({
+    kind: 'cwd',
+    id: address.split(':')[1],
+  });
 });

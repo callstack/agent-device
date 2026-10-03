@@ -2,6 +2,8 @@ import { definePathCoverage } from './coverage-manifest.ts';
 
 export const NATIVE_REF_COVERAGE = definePathCoverage('native-ref', {
   occlusion: 'native-ref occlusion: preflight refuses a covered ref before the backend call',
+  keyboardOcclusion:
+    'native-ref keyboardOcclusion: preflight refuses a ref behind the visible keyboard before the backend call',
   offscreen: 'native-ref offscreen: preflight refuses an off-screen ref before the backend call',
   nonHittable:
     'native-ref nonHittable: preflight annotates a non-hittable ref and still calls the backend',

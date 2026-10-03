@@ -11,10 +11,10 @@ import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
  * terminal-close suppression) is engine-private — never re-exported by the
  * façade (`packages/ad-replay/src/index.ts`) — so these tests exercise it
  * only through `runAdReplay` itself, the same way the daemon's own
- * `session-replay-runtime.ts` (`runReplayScriptSource`) does. The equivalent
- * daemon-level assertions (full `SessionStore`/`runReplayScriptSource` round
+ * `packages/replay-port/src/daemon-port/native-command.ts` (`runReplayCommand`) does. The equivalent
+ * daemon-level assertions (full `SessionStore`/`runReplayCommand` round
  * trip, including the `--keep-session` live-session postcondition) live in
- * `src/daemon/handlers/__tests__/session-replay-runtime-keep-session.test.ts`
+ * `src/daemon/__tests__/replay-runtime/session-replay-runtime-keep-session.test.ts`
  * (renamed from `session-replay-terminal-lifecycle.test.ts` by the #1555
  * structural-quality review — see that file's own header for the rationale);
  * this file covers the SAME suppression decision at the cheaper,
@@ -63,11 +63,8 @@ function createFakeRuntime(params: { isRepairArmed?: () => boolean } = {}): {
   let armCount = 0;
   const runtime: AdReplayStepRuntime = {
     beginTargetVerification: () => ({ kind: 'inactive' }),
-    captureObservation: async () => {
-      throw new Error('captureObservation: not used by this fixture (no targetEvidence)');
-    },
-    classifyTarget: () => {
-      throw new Error('classifyTarget: not used by this fixture (no targetEvidence)');
+    observeTarget: async () => {
+      throw new Error('observeTarget: not used by this fixture (no targetEvidence)');
     },
     async dispatchStep(dispatchedAction, _resolvedAction, _index, artifactPaths) {
       dispatched.push(dispatchedAction.command);
@@ -175,13 +172,8 @@ test("a post-dispatch target-binding mismatch reports the pre-step artifact snap
     // called for it — routed to the #1349 deferred-landmark path, which
     // dispatches with a guard WITHOUT any capture/classify round trip.
     beginTargetVerification: () => ({ kind: 'post-resolution', isSelectorWait: true }),
-    captureObservation: async () => {
-      throw new Error(
-        'captureObservation: not used — deferred-landmark skips straight to dispatch',
-      );
-    },
-    classifyTarget: () => {
-      throw new Error('classifyTarget: not used — deferred-landmark skips straight to dispatch');
+    observeTarget: async () => {
+      throw new Error('observeTarget: not used — deferred-landmark skips straight to dispatch');
     },
     async dispatchStep(dispatchedAction, _resolvedAction, _index, artifactPaths, _guard) {
       if (dispatchedAction.command === 'open') {

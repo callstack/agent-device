@@ -104,7 +104,27 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     if (nil == target) {
       return [self failure:@"Could not match active AX application for XCTest application"];
     }
+    return [self snapshotTreeWithClient:axClient
+                                 target:target
+                               maxDepth:maxDepth
+                               maxNodes:maxNodes
+                 deepExtensionCallLimit:deepExtensionCallLimit
+                      customActionLimit:customActionLimit
+                               deadline:deadline];
+  } @catch (NSException *exception) {
+    return [self failure:exception.reason ?: exception.name ?: @"AX snapshot bridge exception"];
+  }
+}
 
++ (NSDictionary<NSString *, id> *)snapshotTreeWithClient:(id)axClient
+                                                  target:(id)target
+                                                maxDepth:(NSInteger)maxDepth
+                                                maxNodes:(NSInteger)maxNodes
+                                  deepExtensionCallLimit:(NSInteger)deepExtensionCallLimit
+                                       customActionLimit:(NSInteger)customActionLimit
+                                                deadline:(nullable NSDate *)deadline
+{
+  @try {
     NSArray *attributes = [self snapshotAttributes];
     NSError *error = nil;
     id root = [self requestSnapshotFromClient:axClient
@@ -345,6 +365,7 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
     @"identifier",
     @"label",
     @"value",
+    @"placeholderValue",
     @"frame",
     @"enabled",
     @"selected",
@@ -368,8 +389,8 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
       // The mapper expands keypaths with extra attributes (automation type, window display
       // id, base type) that are disproportionately expensive for the AX server to compute
       // on large React Native trees. Keep only the attributes we actually consume.
-      NSArray *needed = @[ @"ElementType", @"Identifier", @"Label", @"Value", @"Frame",
-                           @"Enabled", @"Selected", @"Focus" ];
+      NSArray *needed = @[ @"ElementType", @"Identifier", @"Label", @"Value", @"PlaceholderValue",
+                           @"Frame", @"Enabled", @"Selected", @"Focus" ];
       NSMutableArray *filtered = [NSMutableArray array];
       for (id attribute in (NSArray *)mapped) {
         NSString *name = [attribute description];
@@ -687,6 +708,26 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
   return [self integerFrom:application selectorName:@"processID"];
 }
 
++ (NSArray<NSNumber *> *)activeApplicationProcessIdentifiers
+{
+  id axClient = [self accessibilityClient];
+  if (nil == axClient) {
+    return @[];
+  }
+  id activeApplications = [self objectFrom:axClient selectorName:@"activeApplications"];
+  if (![activeApplications isKindOfClass:NSArray.class]) {
+    return @[];
+  }
+  NSMutableArray<NSNumber *> *processIdentifiers = [NSMutableArray array];
+  for (id candidate in (NSArray *)activeApplications) {
+    NSInteger processIdentifier = [self integerFrom:candidate selectorName:@"processIdentifier"];
+    if (processIdentifier > 0) {
+      [processIdentifiers addObject:@(processIdentifier)];
+    }
+  }
+  return processIdentifiers;
+}
+
 + (id)accessibilityApplicationForApplication:(XCUIApplication *)application axClient:(id)axClient
 {
   NSInteger targetProcessID = [self integerFrom:application selectorName:@"processID"];
@@ -724,6 +765,7 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
   result[@"identifier"] = [self stringValueForKey:@"identifier" snapshot:snapshot] ?: @"";
   result[@"label"] = [self stringValueForKey:@"label" snapshot:snapshot] ?: @"";
   result[@"value"] = [self stringValueForKey:@"value" snapshot:snapshot] ?: @"";
+  result[@"placeholder"] = [self stringValueForKey:@"placeholderValue" snapshot:snapshot] ?: @"";
   result[@"frame"] = [self frameValueForSnapshot:snapshot];
   result[@"enabled"] = [self boolNumberForKey:@"enabled" snapshot:snapshot defaultValue:YES];
   result[@"selected"] = [self boolNumberForKey:@"selected" snapshot:snapshot defaultValue:NO];

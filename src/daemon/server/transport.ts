@@ -1,22 +1,23 @@
 import { AppError, normalizeError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import net from 'node:net';
 import type { Server as HttpServer } from 'node:http';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import {
   clearRequestAbortRegistration,
   isRequestCanceled,
   markRequestCanceled,
   registerRequestAbort,
   resolveRequestTrackingId,
-} from '../../request/cancel.ts';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { consumeTextLines } from '../../utils/line-stream.ts';
-import { withRequestProgressSink } from '../../request/progress.ts';
+  withRequestProgressSink,
+} from '@agent-device/host-kit/request';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { consumeTextLines } from '@agent-device/host-kit/transport';
+
 import {
   serializeDaemonProgressEnvelope,
   serializeDaemonResponseEnvelope,
   shouldStreamRequestProgress,
-} from '../request-progress-protocol.ts';
+} from '../../request-progress-protocol.ts';
 
 export type DaemonServer = (net.Server | HttpServer) & {
   destroyConnections?: () => void;
@@ -84,8 +85,8 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
               : undefined,
             async () => await handleRequest(req),
           );
-        } catch (err) {
-          response = { ok: false, error: normalizeError(err) };
+        } catch (error) {
+          response = { ok: false, error: normalizeError(error) };
         } finally {
           inFlightRequests -= 1;
           if (requestAbortRegistration) {

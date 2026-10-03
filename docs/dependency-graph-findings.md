@@ -22,8 +22,8 @@ const files = listSourceFiles();
 const sources = new Map(files.map((f) => [f, fs.readFileSync(f, 'utf8')]));
 const edges = resolveImportEdges(sources);
 
-// e.g. R6 inversions per zone pair, deduplicated by file pair — reproduces
-// TYPE_INVERSION_BASELINE, so a mismatch means one of the two is stale.
+// e.g. R6 inversions per zone pair, deduplicated by file pair — the same count the gate
+// ratchets against the merge-base with origin/main.
 const seen = new Set<string>();
 const byPair = new Map<string, number>();
 for (const edge of edges) {
@@ -56,8 +56,9 @@ raw edge count reads higher.
 
 What moved: the platform-plugin contract and its four facet tags, `NetworkEntry`, the
 click-button / recording-export-quality / interactor-types / runner-lease-context vocabularies,
-and 16 internal modules out of `(root)`; `utils` joined the spine at rank 1 after its two upward
-files moved to the zones they were reaching for. Three new gate scopes keep it: R6 ratchets
+and 16 internal modules out of `(root)`; the historical audit reported that `utils` joined the
+spine at rank 1 after its two upward files moved to the zones they were reaching for. Three new
+gate scopes keep it: R6 ratchets
 type-only inversions, R7 pins SessionState field ownership, and the shared selector checks in
 `selectors/` are covered by their own tests.
 
@@ -70,15 +71,15 @@ type-only inversions, R7 pins SessionState field ownership, and the shared selec
   gates for the next major.
 - The **ADR 0017 parameterization boundary is exactly where the ADR says it is**:
   `daemon/parameterized-recorded-fill.ts` has precisely two dependents — the response boundary
-  (`handlers/interaction-common.ts`, step 3) and the recorder boundary
+  (`daemon/interaction/internal/interaction-common.ts`, step 3) and the recorder boundary
   (`session-action-recorder.ts`, step 4). The two-pass structure is two call sites, not a scattered
   concern.
 - Still outside every rule: **dynamic** import direction (0 inversions today, nothing watching),
   and anything inside a zone.
 
-## 0. Where the inversions ended up (and why 7 is the floor for now)
+## 0. Where the inversions ended up (and why 5 is the floor for now)
 
-61 → 7. The last pass moved four keystones, each of which was pinning a much larger set:
+The last pass moved four keystones, each of which was pinning a much larger set:
 
 | Keystone moved to `contracts/` | Unblocked |
 |---|---|
@@ -110,29 +111,26 @@ with `command`/`positionals` `Pick`ed from the wire so they cannot drift from it
 resolver already read only those three, in two spellings (the full type and a `Pick` of it); one
 narrow name replaced both.
 
-**The remaining 7 are positions, not debt** — each for a mechanical reason, not an appeal to an ADR:
+**The remaining 4 are positions, not debt** — each for a mechanical reason, not an appeal to an ADR:
 
 - **4 × `AgentDeviceClient`** (`commands/command-contract.ts`, `commands/command-surface.ts`,
-  `commands/family/types.ts`, `mcp/command-tools.ts`). The facade cannot move below `commands/`
-  because it is *built from* the command surface: `client/client-types.ts` imports
-  `ProjectedNavigationCommandClient` from `commands/system/navigation-projection.ts`. That is a real
-  zone-level type cycle, and breaking it means deciding where the projection registry belongs — a
-  design call, not a file move. A narrower port does not exist either: 4 files *name* the facade,
-  but 26 call sites use methods across 13 of its namespaces, so any port would re-declare it.
-- **2 × `DaemonCommandDescriptor`** (`core/command-descriptor/derive.ts`, `.../types.ts`). It is
-  *stated in terms of* the server-private `daemon/types.ts` `DaemonRequest` —
-  `refFrameEffect?: (req: DaemonRequest) => RefFrameEffect`,
-  `allowSessionlessDefaultDevice?: (req: DaemonRequest) => boolean` — so it cannot be declared below
-  the daemon. Having `core/` re-declare a parallel 13-field shape instead would trade one erased
-  edge for a second source of truth.
-- **1 × `DaemonCommandRoute`** (`commands/command-explain.ts`). It is
-  `keyof typeof DAEMON_ROUTE_HANDLERS` — *computed from* the daemon's handler table, so it cannot
-  exist below that table. `command-explain.ts` uses it to key an exhaustive
-  `Record<DaemonCommandRoute, string>` of owner files; a hand-written union in `contracts/` would
-  drop exactly that exhaustiveness.
+  `commands/family/types.ts`, `mcp/command-tools.ts`). The zone-level type cycle this bullet used to
+  cite is gone: retiring the navigation projection left `client/client-types.ts` with no import from
+  `commands/` at all, and the facade now declares its 14 command methods directly. What keeps the
+  facade above `commands/` is the remaining argument: a narrower port does not exist — 4 files
+  *name* the facade, but 26 call sites use methods across 13 of its namespaces, so any port would
+  re-declare it.
 
-All three are argued at `TYPE_INVERSION_BASELINE` in `scripts/layering/check.ts`, next to the
-numbers they explain.
+Retired by #2543: the **1 × `DaemonCommandRoute`** inversion whose only commands-zone consumer was
+`command-explain.ts`. The union lives in core so descriptors can name a route without importing the
+daemon; the explainer only type-imported the `daemon-command-registry.ts` re-export to key an
+exhaustive owner-file map. #2543 relocated `command-explain.ts` to the `cli/` zone — above
+`daemon-server` — so that consumer's type import no longer outranks its target, and the
+`commands -> daemon-server` R6 pair fell to zero.
+
+All remaining inversions are argued here. R6 (`scripts/layering/type-inversion-ratchet.ts`) records
+no numbers of its own: its reference is the same count taken at the merge-base with `origin/main`,
+so a zone pair can only shrink.
 
 ## 0b. The biggest structural finding is not an inversion
 
@@ -161,13 +159,13 @@ but it is a comprehension one, and it is the single largest obstacle to reading 
 isolation. At the current measured commit it spans `commands` (33), `daemon-server` (30),
 `platforms` (19), `core` (12), root composition (5), `contracts` (2), and `client` (1).
 
-Now ratcheted for growth by **R9** (`TYPE_CYCLE_BASELINE`, derived from the zone ceilings in
-`scripts/layering/daemon-modularity.ts`), so it cannot get worse
+Now ratcheted for growth by **R9** (`scripts/layering/daemon-modularity.ts`), so it cannot get worse
 while nobody is looking — a type-only import that closes a new loop fails the gate, verified by
 adding one type-only import that closes a loop and watching the gate reject it. It was growth-only
-here; #1781 A6 made it an equality pin, so a baseline left above the measured size fails too and a
-shrink is banked by the change that earns it. The refactor itself is still deliberately not
-attempted; it starts at those four hubs.
+here; #1781 A6 made it an equality pin, and the pin is now the merge-base's own measurement
+(`scripts/layering/ratchet-reference.ts`), so a shrink is banked the moment it merges and there is
+no slack left to spend. The refactor itself is still deliberately not attempted; it starts at those
+four hubs.
 
 ### The facade cycle: investigated, no narrower port exists
 
@@ -188,13 +186,15 @@ duplicate the public API shape — a second source of truth for it — or derive
 carry the same dependency.
 
 Those four files are therefore the minimum number of naming sites, not an accident: they are the
-choke point. Accepted as a position, argued at `TYPE_INVERSION_BASELINE`. The remaining option is
-the one that was always the real question — whether `NAVIGATION_COMMAND_PROJECTIONS` belongs in
-`commands/` — and that is a design decision about the command surface, not a dependency cleanup.
+choke point. Accepted as a position, argued in §0 above. The option this section
+used to hold open — moving `NAVIGATION_COMMAND_PROJECTIONS` out of `commands/` — was answered by
+deleting it: five direct signatures replaced the registry, so there is no longer a projection
+registry whose home is in question.
 
 ## 1. The two remaining type-inversion clusters
 
-`TYPE_INVERSION_BASELINE` in `scripts/layering/check.ts` holds both, with the reasoning inline.
+§0 above holds both, with the reasoning inline; the gate measures them against the merge-base
+rather than recording them.
 
 **28 + 1 edges → `client/client-types.ts`** — *done, mostly.* Now 5 edges. The vocabulary moved into
 the `contracts/client-*.ts` family files — one file per command/domain family, largest 137 LOC —
@@ -206,13 +206,13 @@ changed). `index.d.ts` in fact got *smaller* — 1,726 → 1,682 lines — becau
 `main` duplicated into it (the Metro option/result shapes, `ScrollInputDirection`) now resolve
 through a shared chunk once the vocabulary sits below both its consumers.
 
-The mutual coupling this section already warned about is what set the floor. Eight shapes could NOT
-move down, because each is stated in terms of a HIGHER-ranked zone:
+The mutual coupling this section already warned about is what set the floor. Eight shapes could not
+move down at the time; three still cannot, because each is stated in terms of a HIGHER-ranked zone:
 
 | Shape(s) | Blocked by |
 |---|---|
 | `ScrollOptions` | `ScrollInputDirection` (`commands/interaction/runtime/gestures.ts`) |
-| `BackCommandOptions`, `OrientationCommandOptions`, `AppSwitcherCommandOptions`, `TvRemoteCommandOptions`, `AgentDeviceCommandClient` | `NavigationCommandOptions` / `ProjectedNavigationCommandClient` (`commands/system/navigation-projection.ts`) |
+| ~~`BackCommandOptions`, `OrientationCommandOptions`, `AppSwitcherCommandOptions`, `TvRemoteCommandOptions`, `AgentDeviceCommandClient`~~ | ~~`NavigationCommandOptions` / `ProjectedNavigationCommandClient` (`commands/system/navigation-projection.ts`)~~ — unblocked: the projection was retired, the four Options types (plus a new `HomeCommandOptions`) now live in `contracts/client-system.ts`, and the facade declares its methods directly |
 | `MetroPrepareResult`, `MetroReloadResult` | `PrepareMetroRuntimeResult` / `ReloadMetroResult` (`metro/client-metro.ts`) |
 
 Declaring those in `contracts/` would have traded 28 `commands -> client` inversions for
@@ -231,11 +231,11 @@ Two keystone moves made the other 84 shapes movable, and both are worth noting a
   `SessionRuntimeHints` — the same type, three zones lower.
 
 **Remaining `commands -> client` (5) needs the upstream declarations to come down first**: move
-`ScrollInputDirection` and the navigation-projection types out of `commands/`, and the Metro
-prepare/reload result payloads out of `metro/`. Each is small; the sequencing is the point. The
-`mcp -> client` edge is different in kind — it is the `AgentDeviceClient` facade itself, i.e. the
-question of whether a command surface should know the client type. That is a design decision, not a
-misplaced declaration.
+`ScrollInputDirection` out of `commands/`, and the Metro prepare/reload result payloads out of
+`metro/`. The navigation-projection leg of this list is done. Each is small; the sequencing is the
+point. The `mcp -> client` edge is different in kind — it is the `AgentDeviceClient` facade itself,
+i.e. the question of whether a command surface should know the client type. That is a design
+decision, not a misplaced declaration.
 
 **5 + 1 edges → `daemon/daemon-command-registry.ts` and `daemon/types.ts`.** `core`'s descriptor
 registry composes the ADR 0003 daemon facet, whose shape the daemon declares. ADR 0003's
@@ -248,8 +248,9 @@ becomes generic over the request type, or the request shape itself moves down.
 
 > **Status after #1435:** the inventory below is historical. `SessionAction`, replay-suite results,
 > `DaemonLockPolicy`, and the public daemon response/artifact/runtime-hint shapes now live below
-> daemon. Four production files outside daemon still import `daemon/types.ts`; two are
-> daemon-specific Maestro adapters scheduled to move back under daemon. `DaemonRequest` itself
+> daemon. Four production files outside daemon still import `daemon/types.ts`; two were
+> the daemon-side Maestro adapters, since moved into `packages/maestro` (#2544) behind a
+> package-owned operation request that the daemon folds into `DaemonRequest`. `DaemonRequest` itself
 > intentionally remains server-private because it carries admitted leases, callbacks, replay
 > guards, and narrowed flags. Remove the remaining external imports through neutral caller-specific
 > contracts; do not move `DaemonRequest` wholesale.
@@ -340,7 +341,9 @@ of 27 fields already have exactly one writer**. The sharp case was ADR 0014's re
 `refFrameState`, `refFrameScope`, `refFrameTree`, `refFrameGeneration` must move together or the
 frame is incoherent, yet complete issuance wrote them in `ref-frame.ts` and partial issuance
 wrote the same four in `session-snapshot.ts`, even though `ref-frame.ts` claims in its header to
-be "the single owner of the frame's transitions". Both forms now go through `activateRefFrame`.
+be "the single owner of the frame's transitions". Both forms now go through `activateRefFrame`,
+and the four fields have since been replaced by one `refFrame` value whose type only
+`ref-frame.ts` can construct — so that ownership no longer rests on the R7 table alone.
 
 `recordSession` deliberately moves alone in two paths (recording without arming a publication),
 so the save-script cluster got no invented abstraction. It got ownership: **R7** records every
@@ -364,7 +367,7 @@ candidate facet, and each facet retired is a branch deleted in every command tha
 **This is not a defect list** — importing `kernel/errors.ts` directly is clearer than inheriting it
 through a sibling. It earns its keep per file: `daemon/server/daemon-runtime.ts` gets 18 of its 32
 imports from one neighbour, `handlers/session-open.ts` 17 of 30, `handlers/session.ts` 17 of 32,
-`handlers/find.ts` 16 of 20. A file whose neighbour already provides two-thirds of what it imports
+`daemon/interaction/internal/find.ts` 16 of 20. A file whose neighbour already provides two-thirds of what it imports
 is usually doing its neighbour's job too — the same orchestrator smell as §5, from the other side.
 
 ## 6. R2 is right, and the duplication it forces now has a home
@@ -449,14 +452,25 @@ declarative syntax gains, and `ZONE_POLICIES` gets that syntax anyway:
 Worth re-evaluating if the monorepo migration happens — per-package ESLint configs change the
 calculus — or once `jsPlugins` is stable and the ratchet gap is addressable.
 
+## Terminal current-state note
+
+The measurements and R3 experiment above are historical audit evidence, not the current layering
+contract. After #2082, `src/platforms/` is retired: family implementations and family-owned tests
+live in their workspace packages, while the shared install-source tests live under
+`src/__tests__/`. Package-level R13 owns platform exports and consumer seams, R65 owns the daemon's
+complete concrete-platform ban, and `retired-platforms-zone` rejects every tracked file under the
+old path. Legacy `src/platforms` spellings remain only in deliberate negative fixtures and
+implementation-pattern checks so reintroduction fails closed.
+
 ## Suggested order from here
 
 1. ~~**Move the 10 outward-facing `daemon/types.ts` types into `contracts/`** (§2).~~ Mostly
    completed by #1435. Eliminate the four remaining external production importers with
    caller-specific public contracts or daemon-owned adapters; keep `DaemonRequest` private.
 2. ~~**Split `client/client-types.ts`** (§1).~~ Done — 42 → 18 total inversions. The follow-up is
-   the upstream moves that unblock the last 5 (§1): `ScrollInputDirection` and the
-   navigation-projection types out of `commands/`, Metro result payloads out of `metro/`.
+   the upstream moves that unblock the last 5 (§1): `ScrollInputDirection` out of `commands/`,
+   Metro result payloads out of `metro/`. The navigation-projection move is done — the projection
+   was retired rather than relocated.
 3. **Retire platform branches into plugin facets** (§5b), highest-count files first.
 4. **Share the remaining duplicated validators** (§6), following the `checkIsArgs` shape.
 5. Optional: give `daemon/handlers/` the directory structure its filenames already imply (§5).

@@ -118,6 +118,27 @@ test('the CLI startup import closure never evaluates the Maestro engine', () => 
   ).toEqual([]);
 });
 
+test('the replay command source closure keeps Maestro behind flow selection', () => {
+  const replayEntry = path.join(srcRoot, 'commands/replay/index.ts');
+  const replayClosure = eagerClosureOf(replayEntry);
+  const sourceBundle = path.join(srcRoot, 'commands/replay/script-source-bundle.ts');
+  const offenders: string[] = [];
+
+  expect(replayClosure).toContain(sourceBundle);
+  for (const file of replayClosure) {
+    if (
+      eagerlyEvaluatedModules(file, fs.readFileSync(file, 'utf8')).includes('@agent-device/maestro')
+    ) {
+      offenders.push(path.relative(srcRoot, file));
+    }
+  }
+
+  expect(
+    offenders,
+    'The replay command may evaluate @agent-device/maestro only inside flow source collection.',
+  ).toEqual([]);
+});
+
 test('the CLI startup import closure is reachable and crosses the package boundary', () => {
   // Guards the test above from silently passing because the walk found nothing:
   // a resolver that returned null for everything would leave both the src side

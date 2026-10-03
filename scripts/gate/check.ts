@@ -8,7 +8,7 @@
 // launder a new step past review by regenerating it.
 
 import { pathToFileURL } from 'node:url';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import { audit, formatFailures } from './audit.ts';
 import { MANUAL_ONLY_OWNERS, UNPROVABLE_OWNERS } from './declarations.ts';
 import { loadModel } from './model.ts';

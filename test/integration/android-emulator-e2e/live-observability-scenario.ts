@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
-import { readDaemonInfo } from '../../../src/daemon/client/daemon-client-metadata.ts';
-import { resolveDaemonPaths } from '../../../src/daemon/config.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { readDaemonInfo } from '../../../src/daemon-client/daemon-client-metadata.ts';
+import { resolveDaemonPaths } from '../../../src/daemon-resolution.ts';
 import {
   collectPagedEventTimeline,
   type EventTimelinePage,

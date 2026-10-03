@@ -21,6 +21,7 @@ import {
   invokeApplicationClose,
   invokeApplicationOpen,
 } from '@agent-device/contracts/application-lifecycle-interaction';
+import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { bindProviderSnapshotInteractor } from '@agent-device/contracts/snapshot-runtime';
 import {
   bindProviderTouchInteractor,
@@ -44,8 +45,8 @@ import type {
 } from '@agent-device/contracts/platform-runtime-operations';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../src/__tests__/test-utils/runtime-operation-facts.ts';
-import type { DaemonRequest } from '../../../src/daemon/types.ts';
-import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
+import type { DaemonRequest } from '../../../src/daemon/daemon-request.ts';
+import { deviceShape, hasAppleActionButton, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { createProviderScenarioHarness } from './harness.ts';
 
@@ -265,16 +266,25 @@ function providerScenarioRuntimeFacts(
       listApps: fakeProviderUnavailable,
       ...unavailableDeploymentSnapshotAndShutdownOperationFacts,
       captureSnapshot: fakeProviderAvailable,
+      // The press rides the same interactor transport as every other catalog operation, but the
+      // hardware exists on the iPhone/iPad leaf only, so the fixture reads the same kernel rule the
+      // Apple owner's fact reads instead of restating it (#2699).
+      actionButton: hasAppleActionButton(device) ? fakeProviderAvailable : fakeProviderUnavailable,
+      // A provider session has no host simulator for the fold HID helper, so no fixture leg poses
+      // a hinge.
+      setFoldPose: fakeProviderUnavailable,
       // Provider-owned iOS keyboard actions ride the same runner transport the shared interactor
       // does (#1297): a fixture scenario that can drive the interactor at all can drive these.
-      keyboardDismiss: fakeProviderAvailable,
-      keyboardEnter: fakeProviderAvailable,
+      ...keyboardRuntimeOperationFacts({
+        unsupported: fakeProviderUnavailable,
+        dismiss: fakeProviderAvailable,
+        enter: fakeProviderAvailable,
+      }),
       ...touchRuntimeOperationFacts({
+        unsupported: fakeProviderUnavailable,
         tap: fakeProviderAvailable,
         longPress: fakeProviderAvailable,
-        hover: fakeProviderUnavailable,
         fill: fakeProviderAvailable,
-        tapElementSelector: fakeProviderUnavailable,
       }),
       deployApp: runtime.installApp ? fakeProviderAvailable : fakeProviderUnavailable,
       ...applicationLifecycleOperationFacts({

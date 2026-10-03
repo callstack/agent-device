@@ -1,12 +1,18 @@
-import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { bindInternalObservationAuthority } from '../internal-observation.ts';
-import { expireRefFrame } from '../ref-frame.ts';
+import {
+  expireRefFrame,
+  refFrame,
+  refFrameScope,
+  refFrameState,
+  refFrameTree,
+} from '../ref-frame.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from '../session-snapshot.ts';
 import { SessionStore } from '../session-store.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function snapshot(ref: string, label = ref): SnapshotState {
   return {
@@ -26,7 +32,10 @@ function snapshot(ref: string, label = ref): SnapshotState {
 }
 
 function scenario() {
-  const root = path.join(os.tmpdir(), `agent-device-internal-observation-${crypto.randomUUID()}`);
+  const root = path.join(
+    mkdtempForTestSync('agent-device-internal-observation'),
+    `agent-device-internal-observation-${crypto.randomUUID()}`,
+  );
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });
@@ -35,23 +44,33 @@ function scenario() {
   markSessionPartialRefsIssued(session, ['e1']);
   sessionStore.set(sessionName, session);
   const captured = snapshot('e2', 'Internal capture');
-  const authority = bindInternalObservationAuthority({
-    sessionStore,
-    sessionName,
-  });
+  const authority = bindAuthority(sessionStore, sessionName);
   const stored = authority.store(captured);
   return { sessionStore, sessionName, session, prior, captured, authority, ...stored };
 }
 
 function publishCurrent(input: ReturnType<typeof scenario>, signal?: AbortSignal) {
-  const authority = bindInternalObservationAuthority({
-    sessionStore: input.sessionStore,
-    sessionName: input.sessionName,
-    ...(signal ? { signal } : {}),
-  });
+  const authority = bindAuthority(input.sessionStore, input.sessionName, signal);
   return authority.finalize(input.evidence, {
     refsGeneration: input.refsGeneration,
     refs: ['@e2'],
+  });
+}
+
+function bindAuthority(sessionStore: SessionStore, sessionName: string, signal?: AbortSignal) {
+  return bindInternalObservationAuthority({
+    sessionStore: {
+      get: () => sessionStore.get(sessionName),
+      update: (mutate) => {
+        const session = sessionStore.get(sessionName);
+        if (!session) return false;
+        mutate(session);
+        sessionStore.set(sessionName, session);
+        return true;
+      },
+    },
+    sessionName,
+    ...(signal ? { signal } : {}),
   });
 }
 
@@ -63,10 +82,10 @@ test('publishes exactly the validated outward refs from a current internal captu
     refsGeneration: input.refsGeneration,
     refCount: 1,
   });
-  expect(input.session.refFrameState).toBe('active');
-  expect(input.session.refFrameScope).toEqual(new Set(['e2']));
-  expect(input.session.refFrameTree).toBe(input.captured);
-  expect(input.session.refFrameGeneration).toBe(input.refsGeneration);
+  expect(refFrameState(input.session)).toBe('active');
+  expect(refFrameScope(input.session)).toEqual(new Set(['e2']));
+  expect(refFrameTree(input.session)).toBe(input.captured);
+  expect(refFrame(input.session).generation).toBe(input.refsGeneration);
   expect(publishCurrent(input)).toEqual({ published: false, reason: 'stale-capture' });
 });
 
@@ -79,8 +98,8 @@ test('empty publication never supersedes prior client authority', () => {
   });
 
   expect(result).toEqual({ published: false, reason: 'empty' });
-  expect(input.session.refFrameScope).toEqual(new Set(['e1']));
-  expect(input.session.refFrameTree).toBe(input.prior);
+  expect(refFrameScope(input.session)).toEqual(new Set(['e1']));
+  expect(refFrameTree(input.session)).toBe(input.prior);
 });
 
 test('an empty finalization consumes its evidence and cannot later publish', () => {
@@ -93,7 +112,7 @@ test('an empty finalization consumes its evidence and cannot later publish', () 
 
   expect(first).toEqual({ published: false, reason: 'empty' });
   expect(publishCurrent(input)).toEqual({ published: false, reason: 'stale-capture' });
-  expect(input.session.refFrameScope).toEqual(new Set(['e1']));
+  expect(refFrameScope(input.session)).toEqual(new Set(['e1']));
 });
 
 test('cancelled publication leaves prior client authority intact', () => {
@@ -106,8 +125,8 @@ test('cancelled publication leaves prior client authority intact', () => {
     reason: 'cancelled',
   });
   expect(publishCurrent(input)).toEqual({ published: false, reason: 'stale-capture' });
-  expect(input.session.refFrameScope).toEqual(new Set(['e1']));
-  expect(input.session.refFrameTree).toBe(input.prior);
+  expect(refFrameScope(input.session)).toEqual(new Set(['e1']));
+  expect(refFrameTree(input.session)).toBe(input.prior);
 });
 
 test('a newer capture makes older capture evidence stale', () => {
@@ -115,16 +134,16 @@ test('a newer capture makes older capture evidence stale', () => {
   setSessionSnapshot(input.session, snapshot('e3', 'Later capture'));
 
   expect(publishCurrent(input)).toEqual({ published: false, reason: 'stale-capture' });
-  expect(input.session.refFrameScope).toEqual(new Set(['e1']));
+  expect(refFrameScope(input.session)).toEqual(new Set(['e1']));
 });
 
 test('a later ref publication prevents an older capture from superseding it', () => {
   const input = scenario();
   markSessionPartialRefsIssued(input.session, ['e2']);
-  const laterTree = input.session.refFrameTree;
+  const laterTree = refFrameTree(input.session);
 
   expect(publishCurrent(input)).toEqual({ published: false, reason: 'stale-capture' });
-  expect(input.session.refFrameTree).toBe(laterTree);
+  expect(refFrameTree(input.session)).toBe(laterTree);
 });
 
 test('a runtime side effect invalidates capture evidence without rolling authority back', () => {
@@ -132,8 +151,8 @@ test('a runtime side effect invalidates capture evidence without rolling authori
   expireRefFrame(input.session);
 
   expect(publishCurrent(input)).toEqual({ published: false, reason: 'stale-capture' });
-  expect(input.session.refFrameState).toBe('expired');
-  expect(input.session.refFrameTree).toBe(input.prior);
+  expect(refFrameState(input.session)).toBe('expired');
+  expect(refFrameTree(input.session)).toBe(input.prior);
 });
 
 test('runtime revision invalidates evidence even when the ref frame was already expired', () => {
@@ -148,8 +167,8 @@ test('runtime revision invalidates evidence even when the ref frame was already 
   });
 
   expect(result).toEqual({ published: false, reason: 'stale-capture' });
-  expect(input.session.refFrameState).toBe('expired');
-  expect(input.session.refFrameTree).toBe(input.prior);
+  expect(refFrameState(input.session)).toBe('expired');
+  expect(refFrameTree(input.session)).toBe(input.prior);
 });
 
 test('session close invalidates capture evidence', () => {
@@ -161,7 +180,7 @@ test('session close invalidates capture evidence', () => {
   // a stale finalization attempt already consumed.
   input.sessionStore.set(input.sessionName, input.session);
   expect(publishCurrent(input)).toEqual({ published: false, reason: 'stale-capture' });
-  expect(input.session.refFrameScope).toEqual(new Set(['e1']));
+  expect(refFrameScope(input.session)).toEqual(new Set(['e1']));
 });
 
 test('same-name session replacement cannot inherit capture evidence', () => {
@@ -170,7 +189,7 @@ test('same-name session replacement cannot inherit capture evidence', () => {
   input.sessionStore.set(input.sessionName, replacement);
 
   expect(publishCurrent(input)).toEqual({ published: false, reason: 'stale-capture' });
-  expect(replacement.refFrameTree).toBeUndefined();
+  expect(refFrameTree(replacement)).toBeUndefined();
 });
 
 test('generation and ref projection must match the exact captured tree', () => {
@@ -192,6 +211,6 @@ test('generation and ref projection must match the exact captured tree', () => {
   });
   expect(refResult).toEqual({ published: false, reason: 'invalid-projection' });
   expect(publishCurrent(wrongRef)).toEqual({ published: false, reason: 'stale-capture' });
-  expect(wrongGeneration.session.refFrameScope).toEqual(new Set(['e1']));
-  expect(wrongRef.session.refFrameScope).toEqual(new Set(['e1']));
+  expect(refFrameScope(wrongGeneration.session)).toEqual(new Set(['e1']));
+  expect(refFrameScope(wrongRef.session)).toEqual(new Set(['e1']));
 });

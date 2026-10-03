@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { defaultHintForCode, retriableForErrorCode } from '@agent-device/kernel/errors';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import {
   findEconomyBudgetIncreases,
   formatEconomyBudgetIncreases,

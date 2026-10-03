@@ -1,8 +1,22 @@
-import type { ChildProcess } from 'node:child_process';
-import type { RequestProgressEvent } from '@agent-device/contracts/progress';
+import type * as HostCommand from '@agent-device/host-kit/command';
+import type * as HostDiagnostics from '@agent-device/host-kit/diagnostics';
+import type * as HostFile from '@agent-device/host-kit/file';
+import type * as HostProcess from '@agent-device/host-kit/process';
+import type * as HostRequest from '@agent-device/host-kit/request';
+import type * as HostRetry from '@agent-device/host-kit/retry';
+import type * as HostVersion from '@agent-device/host-kit/version';
+import type * as KernelDeviceShell from '@agent-device/kernel/device-shell';
+import type * as KernelKeyedLock from '@agent-device/kernel/keyed-lock';
+import type * as KernelRecord from '@agent-device/kernel/record';
+import type * as KernelSourceValue from '@agent-device/kernel/source-value';
+import type * as KernelTtlMemo from '@agent-device/kernel/ttl-memo';
+import type * as BootDiagnostics from '@agent-device/provision-kit/boot-diagnostics';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { InfrastructureBootFailureReason } from '@agent-device/contracts/boot-failure';
-import type { XmlNode } from '@agent-device/xml';
+import type { IosPhysicalDeviceRunnerControl } from '../core/physical-device-routing.ts';
+import type * as ApplePlistXml from '../core/plist-xml.ts';
+import type * as AppleRunnerOwnerState from '../core/runner-owner-state.ts';
+import type * as AppleSimctl from '../core/simctl.ts';
+import type * as AppleToolProvider from '../core/tool-provider.ts';
 
 /**
  * The host-capability port for the Apple runner client. Every effectful or
@@ -10,237 +24,102 @@ import type { XmlNode } from '@agent-device/xml';
  * enters through this object: process execution, diagnostics, retry, process
  * probes, locks, Apple foreground tooling, and physical-device control. The
  * package never imports root implementation files; the composition root
- * (`src/platforms/apple/core/runner-client.ts`) constructs the client with the
- * real implementations exactly once per process.
+ * (`packages/platform-apple/src/core/runner-client.ts`) binds the real
+ * implementations exactly once per process.
  *
- * Signatures mirror the root utilities structurally, narrowed to what the
- * runner uses; the composition-root assignment is the conformance check, so a
- * root signature drifting incompatibly fails typecheck there rather than at
- * runtime.
+ * The port is DERIVED from the modules it fronts, never re-typed: the `Pick`
+ * lists below are the one place that says which symbol of which module the
+ * runner may reach, and every signature comes from the owning module. A
+ * host-kit signature change reaches the runner with no edit here; a new capability costs one
+ * name in the matching `Pick`, one `delegate` line, and its binding in `core/runner-host.ts`.
+ *
+ * A host-kit symbol the runner needs is added HERE -- never imported directly from a `runner/*`
+ * module. The reason:
+ * `packages/platform-apple/src/runner/` sits in the eager import closure of seven Apple facade
+ * entries (`app-lifecycle-facade.ts`, `app-resolution-facade.ts`, `doctor-facade.ts`,
+ * `perf-facade.ts`, `physical-device-facade.ts`, `runner-operations-facade.ts`,
+ * `runner/index.ts`) that `scripts/__tests__/eager-closure-budgets.ts` holds at a fixed size (no
+ * growth against the merge-base); a static `@agent-device/host-kit/*` value import from a runner
+ * module adds every module on its own import path to all seven closures at once (#2423 measured
+ * one candidate import adding 5 modules to `runner/index.ts`'s closure, 13 -> 18).
+ * `scripts/layering/` enforces the port at the import-graph
+ * level (R77 apple-runner-host-port): a `runner/**` file may hold a type-only
+ * `@agent-device/host-kit/*` import, which evaluates nothing, but never a value one -- the
+ * `import type * as` declarations above are exactly that, and so are the type imports the runner
+ * modules take straight from the owning package. A pure constant that both the runner and another
+ * package need is not a host-kit exception to this -- it belongs in a runner module already inside
+ * every facade closure (e.g. `runner/apple-runner-platform.ts`), imported directly from there.
  */
+export type AppleRunnerHost = Pick<
+  typeof HostCommand,
+  | 'runCmdStreaming'
+  | 'runCmdSync'
+  | 'runCmdBackground'
+  | 'requireExecSuccess'
+  | 'isCommandTimeoutError'
+  | 'commandDeveloperDir'
+> &
+  Pick<typeof HostDiagnostics, 'emitDiagnostic' | 'withDiagnosticTimer'> &
+  Pick<typeof HostRetry, 'retryWithPolicy' | 'isEnvTruthy'> &
+  Pick<
+    typeof HostProcess,
+    | 'isProcessAlive'
+    | 'isProcessGroupAlive'
+    | 'readProcessStartTime'
+    | 'readProcessCommand'
+    | 'signalPidsBestEffort'
+    | 'signalProcessGroupBestEffort'
+    | 'classifyOwnerLiveness'
+    | 'readHostCpuArchSync'
+  > &
+  Pick<typeof HostVersion, 'findProjectRoot' | 'readVersion'> &
+  Pick<typeof HostFile, 'acquireProcessLock' | 'withProcessLock' | 'publishFileSync'> &
+  Pick<typeof HostRequest, 'emitRequestProgress' | 'getRequestSignal' | 'isRequestCanceled'> &
+  Pick<typeof KernelKeyedLock, 'withKeyedLock'> &
+  Pick<typeof KernelTtlMemo, 'createTtlMemo'> &
+  Pick<typeof KernelRecord, 'isRecord'> &
+  Pick<typeof KernelSourceValue, 'parseBooleanLiteral'> &
+  Pick<typeof KernelDeviceShell, 'shellQuote'> &
+  Pick<typeof BootDiagnostics, 'classifyBootFailure' | 'bootFailureHint'> &
+  Pick<typeof AppleToolProvider, 'runAppleToolCommand' | 'runXcrun' | 'readApplePlistJson'> &
+  Pick<typeof AppleSimctl, 'buildSimctlArgsForDevice' | 'simulatorAddressFor'> &
+  Pick<typeof ApplePlistXml, 'visitXmlPlistEntries'> & {
+    /**
+     * The `Deadline` constructor is a class static, so the port carries the factory alone, typed
+     * to the read side: a test host substitutes its own clock.
+     */
+    deadlineFromTimeoutMs: (
+      ...args: Parameters<typeof HostRetry.Deadline.fromTimeoutMs>
+    ) => HostRetry.DeadlineClock;
+    resolveIosPhysicalDeviceControl: (device: DeviceInfo) => IosPhysicalDeviceRunnerControl;
+    /** Daemon-owned lease owner state directory. */
+    leaseOwnerStateDir: typeof AppleRunnerOwnerState.getRunnerLeaseOwnerStateDir;
+    /**
+     * Daemon-owned device-claim arbitration probe: true only while the embedding process holds
+     * the host-global local device claim for exactly this device (matched by canonical
+     * family/OS/id, never a bare id). Embedders without a claim store answer false.
+     */
+    hasDeviceClaimAuthority: AppleRunnerOwnerState.RunnerDeviceClaimAuthorityProbe;
+  };
 
-export type ExecResult = {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-  stdoutBuffer?: Buffer;
-};
+/** The runner's deadline type is the host's read side; the {@link Deadline} shim below builds them. */
+export type Deadline = HostRetry.DeadlineClock;
 
-/** Narrowed to the option fields the runner actually passes. */
-export type ExecOptions = {
-  env?: NodeJS.ProcessEnv;
-  allowFailure?: boolean;
-  timeoutMs?: number;
-  detached?: boolean;
-  signal?: AbortSignal;
-  maxBuffer?: number;
-};
-
-export type ExecStreamOptions = ExecOptions & {
-  onStdoutChunk?: (chunk: string) => void;
-  onStderrChunk?: (chunk: string) => void;
-  onSpawn?: (child: ChildProcess) => void;
-};
-
-export type ExecBackgroundResult = {
-  child: ChildProcess;
-  wait: Promise<ExecResult>;
-};
-
-export type ExecBackgroundOptions = ExecOptions;
-
-export type Deadline = {
-  remainingMs(nowMs?: number): number;
-  elapsedMs(nowMs?: number): number;
-  isExpired(nowMs?: number): boolean;
-};
-
-export type RetryAttemptContext = {
-  attempt: number;
-  maxAttempts: number;
-  deadline?: Deadline;
-};
-
-export type RetryPolicy = {
-  maxAttempts?: number;
-  baseDelayMs?: number;
-  maxDelayMs?: number;
-  jitter?: number;
-  shouldRetry?: (error: unknown, attempt: number) => boolean;
-};
-
-export type RetryTelemetryEvent = {
-  phase?: string;
-  event: 'attempt_failed' | 'retry_scheduled' | 'succeeded' | 'exhausted';
-  attempt: number;
-  maxAttempts: number;
-  delayMs?: number;
-  elapsedMs?: number;
-  remainingMs?: number;
-  reason?: string;
-};
-
-export type RetryOptions = {
-  deadline?: Deadline;
-  phase?: string;
-  signal?: AbortSignal;
-  classifyReason?: (error: unknown) => string | undefined;
-  onEvent?: (event: RetryTelemetryEvent) => void;
-  retryWakeSignal?: AbortSignal;
-};
-
-export type DiagnosticLevel = 'debug' | 'info' | 'warn' | 'error';
-
-export type DiagnosticEventInput = {
-  level?: DiagnosticLevel;
-  phase: string;
-  durationMs?: number;
-  data?: Record<string, unknown>;
-};
-
-export type ProcessLockOwner = {
-  pid: number;
-  startTime: string | null;
-  acquiredAtMs: number;
-};
-
-export type OwnerLiveness =
-  | 'live'
-  | 'owner-process-dead'
-  | 'owner-process-reused'
-  | 'owner-state-dir-gone'
-  | 'unknown';
-
-/** Narrowed to the members the runner's fingerprint cache consumes. */
-export type TtlMemo<Key, Value> = {
-  get: (key: Key) => Value | undefined;
-  set: (key: Key, value: Value) => void;
-};
-
-export type TtlMemoOptions = {
-  ttlMs?: number;
-};
-
-export type DefinedEnvMap = Record<string, string>;
-
-export type BootFailureReason =
-  | InfrastructureBootFailureReason
-  | 'IOS_RUNNER_DEVICE_NOT_PROVISIONED'
-  | 'BOOT_COMMAND_FAILED'
-  | 'UNKNOWN';
-
-/** The slice of physical-device control the runner's command routing consults. */
-export type IosPhysicalDeviceRunnerControl = {
-  backend: string;
-  resolveTunnel(device: DeviceInfo, timeoutBudgetMs?: number): Promise<{ tunnelIp: string | null }>;
-};
-
-export type AppleRunnerHost = {
-  // Process execution (src/utils/exec.ts)
-  runCmdStreaming(cmd: string, args: string[], options?: ExecStreamOptions): Promise<ExecResult>;
-  runCmdSync(cmd: string, args: string[], options?: ExecOptions): ExecResult;
-  runCmdBackground(
-    cmd: string,
-    args: string[],
-    options?: ExecBackgroundOptions,
-  ): ExecBackgroundResult;
-  requireExecSuccess(
-    result: ExecResult,
-    message: string,
-    extra?: Record<string, unknown> | ((result: ExecResult) => Record<string, unknown>),
-  ): ExecResult;
-  // Diagnostics (src/utils/diagnostics.ts)
-  emitDiagnostic(event: DiagnosticEventInput): void;
-  withDiagnosticTimer<T>(
-    phase: string,
-    fn: () => Promise<T> | T,
-    data?: Record<string, unknown>,
-  ): Promise<T>;
-  // Retry (src/utils/retry.ts)
-  retryWithPolicy<T>(
-    fn: (context: RetryAttemptContext) => Promise<T>,
-    policy?: RetryPolicy,
-    options?: RetryOptions,
-  ): Promise<T>;
-  isEnvTruthy(value: string | undefined): boolean;
-  deadlineFromTimeoutMs(timeoutMs: number, nowMs?: number): Deadline;
-  // Host process probes and signals (src/utils/host-process.ts)
-  isProcessAlive(pid: number): boolean;
-  isProcessGroupAlive(pid: number): boolean;
-  readProcessStartTime(pid: number): string | null;
-  readProcessCommand(pid: number): string | null;
-  signalPidsBestEffort(pidsToSignal: readonly number[], signal: NodeJS.Signals): number;
-  signalProcessGroupBestEffort(pid: number, signal: NodeJS.Signals): boolean;
-  // Project identity (src/utils/version.ts)
-  findProjectRoot(): string;
-  readVersion(root?: string): string;
-  // Locks (src/utils/process-lock.ts, src/utils/keyed-lock.ts)
-  acquireProcessLock(params: {
-    lockDirPath: string;
-    owner: ProcessLockOwner;
-    timeoutMs?: number;
-    pollMs?: number;
-    ownerGraceMs?: number;
-    description?: string;
-  }): Promise<() => Promise<void>>;
-  withKeyedLock<T>(
-    locks: Map<string, Promise<unknown>>,
-    key: string,
-    task: () => Promise<T>,
-  ): Promise<T>;
-  // Atomic publish (src/utils/atomic-file.ts)
-  publishFileSync(options: {
-    destination: string;
-    contents: string;
-    mode?: number;
-    publish?: 'replace' | 'link-exclusive';
-  }): void;
-  // Owner liveness (src/utils/owner-identity.ts)
-  classifyOwnerLiveness(params: {
-    owner: { pid: number; startTime: string | null };
-    stateDir?: string;
-  }): OwnerLiveness;
-  // Memoization (src/utils/ttl-memo.ts)
-  createTtlMemo<Key, Value>(options?: TtlMemoOptions): TtlMemo<Key, Value>;
-  // Parsing helpers (src/utils/source-value.ts, src/utils/parsing.ts)
-  parseBooleanLiteral(value: string): boolean | undefined;
-  isRecord(value: unknown): value is Record<string, unknown>;
-  // Simulator device-set isolation (src/utils/device-isolation.ts)
-  resolveIosSimulatorDeviceSetPath(flagValue: string | undefined): string | undefined;
-  // Request progress and cancellation (src/request/progress.ts, src/request/cancel.ts)
-  emitRequestProgress(event: RequestProgressEvent): void;
-  getRequestSignal(requestId: string | undefined): AbortSignal | undefined;
-  isRequestCanceled(requestId: string | undefined): boolean;
-  // Boot-failure classification (src/platforms/boot-diagnostics.ts)
-  classifyBootFailure(input: {
-    error?: unknown;
-    message?: string;
-    stdout?: string;
-    stderr?: string;
-    context?: { platform?: 'ios' | 'android'; phase?: 'boot' | 'connect' | 'transport' };
-  }): BootFailureReason;
-  bootFailureHint(reason: BootFailureReason): string;
-  // Apple foreground tooling (src/platforms/apple/core/tool-provider.ts)
-  runAppleToolCommand(cmd: string, args: string[], options?: ExecOptions): Promise<ExecResult>;
-  runXcrun(args: string[], options?: ExecOptions): Promise<ExecResult>;
-  readApplePlistJson(
-    plistPath: string,
-    signal?: AbortSignal,
-  ): Promise<Record<string, unknown> | null>;
-  // simctl argument shaping (src/platforms/apple/core/simctl.ts)
-  buildSimctlArgsForDevice(device: DeviceInfo, args: string[]): string[];
-  // Physical-device control routing (src/platforms/apple/core/physical-device-control.ts)
-  resolveIosPhysicalDeviceControl(device: DeviceInfo): IosPhysicalDeviceRunnerControl;
-  // XML plist traversal (src/platforms/apple/core/plist-xml.ts)
-  visitXmlPlistEntries(nodes: XmlNode[], visitor: (key: string, valueNode: XmlNode) => void): void;
-  // Daemon-owned lease owner state directory (src/platforms/apple/core/runner-owner-state.ts)
-  leaseOwnerStateDir(): string | undefined;
-};
+/**
+ * What an iPhone reports about its own fitness to host development tooling (#2683), under the name the
+ * module that reads it owns. Re-exported rather than restated or re-derived, so the runner, its tests,
+ * and the core reader all speak one type for one device report.
+ */
+export type {
+  IosDeveloperDiskImageState,
+  IosDeveloperModeState,
+  IosDeviceReadiness,
+} from '../core/physical-device-coredevice.ts';
 
 let boundHost: AppleRunnerHost | undefined;
 
 /**
- * Binds the process-wide host. Called by `createAppleRunnerClient`; binding a
+ * Binds the process-wide host. Called by the composition root; binding a
  * different host after one is bound throws, because the runner keeps
  * process-wide state (sessions, leases, provider scopes) that cannot serve two
  * hosts. Rebinding the same reference is a no-op.
@@ -255,108 +134,68 @@ export function bindAppleRunnerHost(host: AppleRunnerHost): void {
 function requireHost(): AppleRunnerHost {
   if (!boundHost) {
     throw new Error(
-      'Apple runner host is not bound. Construct the client via createAppleRunnerClient() before using runner operations.',
+      'Apple runner host is not bound. Production binds it in core/runner-client.ts; package tests bind it through runner/test-host.ts.',
     );
   }
   return boundHost;
 }
 
-// Delegators keep the original root-utility names so runner modules only swap
-// import specifiers; every call resolves the bound host lazily.
+/**
+ * Delegators keep the owning module's export name so runner modules only swap
+ * import specifiers; every call resolves the bound host lazily.
+ */
+function delegate<Name extends keyof AppleRunnerHost>(name: Name): AppleRunnerHost[Name] {
+  return ((...args: unknown[]) =>
+    (requireHost()[name] as (...callArgs: unknown[]) => unknown)(...args)) as AppleRunnerHost[Name];
+}
 
-export const runCmdStreaming: AppleRunnerHost['runCmdStreaming'] = (cmd, args, options) =>
-  requireHost().runCmdStreaming(cmd, args, options);
-export const runCmdSync: AppleRunnerHost['runCmdSync'] = (cmd, args, options) =>
-  requireHost().runCmdSync(cmd, args, options);
-export const runCmdBackground: AppleRunnerHost['runCmdBackground'] = (cmd, args, options) =>
-  requireHost().runCmdBackground(cmd, args, options);
-export const requireExecSuccess: AppleRunnerHost['requireExecSuccess'] = (result, message, extra) =>
-  requireHost().requireExecSuccess(result, message, extra);
-export const emitDiagnostic: AppleRunnerHost['emitDiagnostic'] = (event) =>
-  requireHost().emitDiagnostic(event);
-export const withDiagnosticTimer = <T>(
-  phase: string,
-  fn: () => Promise<T> | T,
-  data?: Record<string, unknown>,
-): Promise<T> => requireHost().withDiagnosticTimer(phase, fn, data);
-export const retryWithPolicy = <T>(
-  fn: (context: RetryAttemptContext) => Promise<T>,
-  policy?: RetryPolicy,
-  options?: RetryOptions,
-): Promise<T> => requireHost().retryWithPolicy(fn, policy, options);
-export const isEnvTruthy: AppleRunnerHost['isEnvTruthy'] = (value) =>
-  requireHost().isEnvTruthy(value);
-export const isProcessAlive: AppleRunnerHost['isProcessAlive'] = (pid) =>
-  requireHost().isProcessAlive(pid);
-export const isProcessGroupAlive: AppleRunnerHost['isProcessGroupAlive'] = (pid) =>
-  requireHost().isProcessGroupAlive(pid);
-export const readProcessStartTime: AppleRunnerHost['readProcessStartTime'] = (pid) =>
-  requireHost().readProcessStartTime(pid);
-export const readProcessCommand: AppleRunnerHost['readProcessCommand'] = (pid) =>
-  requireHost().readProcessCommand(pid);
-export const signalPidsBestEffort: AppleRunnerHost['signalPidsBestEffort'] = (pids, signal) =>
-  requireHost().signalPidsBestEffort(pids, signal);
-export const signalProcessGroupBestEffort: AppleRunnerHost['signalProcessGroupBestEffort'] = (
-  pid,
-  signal,
-) => requireHost().signalProcessGroupBestEffort(pid, signal);
-export const findProjectRoot: AppleRunnerHost['findProjectRoot'] = () =>
-  requireHost().findProjectRoot();
-export const readVersion: AppleRunnerHost['readVersion'] = (root) =>
-  requireHost().readVersion(root);
-export const acquireProcessLock: AppleRunnerHost['acquireProcessLock'] = (params) =>
-  requireHost().acquireProcessLock(params);
-export const withKeyedLock = <T>(
-  locks: Map<string, Promise<unknown>>,
-  key: string,
-  task: () => Promise<T>,
-): Promise<T> => requireHost().withKeyedLock(locks, key, task);
-export const publishFileSync: AppleRunnerHost['publishFileSync'] = (options) =>
-  requireHost().publishFileSync(options);
-export const classifyOwnerLiveness: AppleRunnerHost['classifyOwnerLiveness'] = (params) =>
-  requireHost().classifyOwnerLiveness(params);
-export const createTtlMemo = <Key, Value>(options?: TtlMemoOptions): TtlMemo<Key, Value> =>
-  requireHost().createTtlMemo(options);
-export const parseBooleanLiteral: AppleRunnerHost['parseBooleanLiteral'] = (value) =>
-  requireHost().parseBooleanLiteral(value);
-export const isRecord: AppleRunnerHost['isRecord'] = (value): value is Record<string, unknown> =>
-  requireHost().isRecord(value);
-export const resolveIosSimulatorDeviceSetPath: AppleRunnerHost['resolveIosSimulatorDeviceSetPath'] =
-  (flagValue) => requireHost().resolveIosSimulatorDeviceSetPath(flagValue);
-export const emitRequestProgress: AppleRunnerHost['emitRequestProgress'] = (event) =>
-  requireHost().emitRequestProgress(event);
-export const getRequestSignal: AppleRunnerHost['getRequestSignal'] = (requestId) =>
-  requireHost().getRequestSignal(requestId);
-export const isRequestCanceled: AppleRunnerHost['isRequestCanceled'] = (requestId) =>
-  requireHost().isRequestCanceled(requestId);
-export const classifyBootFailure: AppleRunnerHost['classifyBootFailure'] = (input) =>
-  requireHost().classifyBootFailure(input);
-export const bootFailureHint: AppleRunnerHost['bootFailureHint'] = (reason) =>
-  requireHost().bootFailureHint(reason);
-export const runAppleToolCommand: AppleRunnerHost['runAppleToolCommand'] = (cmd, args, options) =>
-  requireHost().runAppleToolCommand(cmd, args, options);
-export const runXcrun: AppleRunnerHost['runXcrun'] = (args, options) =>
-  requireHost().runXcrun(args, options);
-export const readApplePlistJson: AppleRunnerHost['readApplePlistJson'] = (plistPath, signal) =>
-  requireHost().readApplePlistJson(plistPath, signal);
-export const buildSimctlArgsForDevice: AppleRunnerHost['buildSimctlArgsForDevice'] = (
-  device,
-  args,
-) => requireHost().buildSimctlArgsForDevice(device, args);
-export const resolveIosPhysicalDeviceControl: AppleRunnerHost['resolveIosPhysicalDeviceControl'] = (
-  device,
-) => requireHost().resolveIosPhysicalDeviceControl(device);
-export const visitXmlPlistEntries: AppleRunnerHost['visitXmlPlistEntries'] = (nodes, visitor) =>
-  requireHost().visitXmlPlistEntries(nodes, visitor);
-export const leaseOwnerStateDir: AppleRunnerHost['leaseOwnerStateDir'] = () =>
-  requireHost().leaseOwnerStateDir();
+export const runCmdStreaming = delegate('runCmdStreaming');
+export const runCmdSync = delegate('runCmdSync');
+export const runCmdBackground = delegate('runCmdBackground');
+export const requireExecSuccess = delegate('requireExecSuccess');
+export const isCommandTimeoutError = delegate('isCommandTimeoutError');
+export const commandDeveloperDir = delegate('commandDeveloperDir');
+export const shellQuote = delegate('shellQuote');
+export const emitDiagnostic = delegate('emitDiagnostic');
+export const withDiagnosticTimer = delegate('withDiagnosticTimer');
+export const retryWithPolicy = delegate('retryWithPolicy');
+export const isEnvTruthy = delegate('isEnvTruthy');
+export const isProcessAlive = delegate('isProcessAlive');
+export const isProcessGroupAlive = delegate('isProcessGroupAlive');
+export const readProcessStartTime = delegate('readProcessStartTime');
+export const readProcessCommand = delegate('readProcessCommand');
+export const signalPidsBestEffort = delegate('signalPidsBestEffort');
+export const signalProcessGroupBestEffort = delegate('signalProcessGroupBestEffort');
+export const classifyOwnerLiveness = delegate('classifyOwnerLiveness');
+export const readHostCpuArchSync = delegate('readHostCpuArchSync');
+export const findProjectRoot = delegate('findProjectRoot');
+export const readVersion = delegate('readVersion');
+export const acquireProcessLock = delegate('acquireProcessLock');
+export const withProcessLock = delegate('withProcessLock');
+export const publishFileSync = delegate('publishFileSync');
+export const emitRequestProgress = delegate('emitRequestProgress');
+export const getRequestSignal = delegate('getRequestSignal');
+export const isRequestCanceled = delegate('isRequestCanceled');
+export const withKeyedLock = delegate('withKeyedLock');
+export const createTtlMemo = delegate('createTtlMemo');
+export const isRecord = delegate('isRecord');
+export const parseBooleanLiteral = delegate('parseBooleanLiteral');
+export const classifyBootFailure = delegate('classifyBootFailure');
+export const bootFailureHint = delegate('bootFailureHint');
+export const runAppleToolCommand = delegate('runAppleToolCommand');
+export const runXcrun = delegate('runXcrun');
+export const readApplePlistJson = delegate('readApplePlistJson');
+export const buildSimctlArgsForDevice = delegate('buildSimctlArgsForDevice');
+export const simulatorAddressFor = delegate('simulatorAddressFor');
+export const visitXmlPlistEntries = delegate('visitXmlPlistEntries');
+export const resolveIosPhysicalDeviceControl = delegate('resolveIosPhysicalDeviceControl');
+export const leaseOwnerStateDir = delegate('leaseOwnerStateDir');
+export const hasDeviceClaimAuthority = delegate('hasDeviceClaimAuthority');
 
 /**
  * Deadline keeps its root call-site shape (`Deadline.fromTimeoutMs(...)`);
  * instances come from the host so package and root share one clock model.
  */
 export const Deadline = {
-  fromTimeoutMs(timeoutMs: number, nowMs?: number): Deadline {
-    return requireHost().deadlineFromTimeoutMs(timeoutMs, nowMs);
-  },
+  fromTimeoutMs: delegate('deadlineFromTimeoutMs'),
 };

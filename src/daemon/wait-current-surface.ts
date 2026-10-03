@@ -1,11 +1,14 @@
 import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
-import { captureSnapshot } from './handlers/snapshot-capture.ts';
-import { errorResponse } from './handlers/response.ts';
+import { recordCaptureProof } from './capture-disclosure.ts';
+import type { RequestCaptureProof } from './capture-disclosure.ts';
+import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
+import { captureSnapshot } from './snapshot-capture.ts';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
 import type { BoundSelectorCapture } from './selector-capture-binding.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 type WaitCurrentSurfaceParams = {
   req: DaemonRequest;
@@ -17,6 +20,12 @@ type WaitCurrentSurfaceParams = {
    * it reuses the single admitted binding rather than reaching a second capture owner.
    */
   capture: BoundSelectorCapture;
+  /**
+   * Filled when the decoration capture is the one that had to re-activate the session app (#2682).
+   * A timed-out wait still consumed that capture to describe its surface, so the repair it paid for
+   * belongs to the response this module decorates.
+   */
+  captureProof?: RequestCaptureProof;
 };
 
 type CurrentSurfaceDetails = {
@@ -80,6 +89,7 @@ async function inspectCurrentSurface(
         }),
       ),
   });
+  recordCaptureProof(params.captureProof, capture.snapshot);
   const orderedNodes = [...capture.snapshot.nodes].sort(compareSurfacePriority);
   const labels = topSurfaceTexts(orderedNodes, 6, { includeIdentifiers: true });
   if (labels.length === 0) return null;
@@ -139,7 +149,7 @@ function extractSurfaceText(node: SnapshotNode, options: { includeIdentifiers: b
   const value = candidates
     .map((candidate) => (typeof candidate === 'string' ? candidate.trim() : ''))
     .find((candidate) => candidate.length > 0);
-  return value ? value.replace(/\s+/g, ' ').slice(0, 80) : '';
+  return value ? value.replaceAll(/\s+/g, ' ').slice(0, 80) : '';
 }
 
 function isChromeLikeNode(node: SnapshotNode): boolean {

@@ -9,7 +9,3 @@ export function isHostSystemAudioProbeDevice(device: DeviceInfo): boolean {
       (device.platform === 'android' && device.kind === 'emulator'))
   );
 }
-
-export function isAudioProbeSupportedDevice(device: DeviceInfo): boolean {
-  return device.platform === 'web' || isHostSystemAudioProbeDevice(device);
-}

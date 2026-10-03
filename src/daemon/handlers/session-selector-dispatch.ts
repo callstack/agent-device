@@ -1,21 +1,22 @@
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import type { SessionStore } from '../session-store.ts';
 import { contextFromFlags } from '../context.ts';
-import { requireSessionOrExplicitSelector, resolveCommandDevice } from './session-device-utils.ts';
-import { errorResponse } from './response.ts';
-import { recordSessionAction } from './handler-utils.ts';
+import {
+  requireSessionOrExplicitSelector,
+  resolveCommandDevice,
+} from '../session-device-resolution.ts';
+import { recordSessionAction } from '../session-action-recorder.ts';
 import { resolveBoundAppEventRuntime } from '../app-event-runtime.ts';
 import { resolveBoundKeyboardRuntime } from '../keyboard-runtime.ts';
 import { resolveRefFrameEffect } from '../daemon-command-registry.ts';
 import { expireRefFrame } from '../ref-frame.ts';
-import {
-  resolveAndroidPackageForOpen,
-  resolveSessionAppBundleIdForTarget,
-} from '../../platform-runtime-open-target.ts';
+import { resolveSessionAppBundleIdForTarget } from '../../platform-runtime-open-target.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { DaemonCommandContext } from '../context.ts';
+import { errorResponse } from '@agent-device/kernel/contracts';
 
 /**
  * What `runSessionOrSelectorDispatch`'s `prepare` thunk reports: either the early-exit response an
@@ -73,7 +74,6 @@ async function runSessionOrSelectorDispatch(params: {
   const device = await resolveCommandDevice({
     session,
     flags,
-    ensureReady: true,
   });
   const prepared = await prepare(device, session);
   if (!prepared.ok) return prepared.response;
@@ -135,6 +135,7 @@ type SessionRouteRuntimeResolver = (
   params: Readonly<{
     device: DeviceInfo;
     positionals: string[];
+    readiness?: boolean;
     inspectFacts?: InspectDeviceRuntimeFacts;
     bindDevice?: BindDeviceRuntime;
   }>,
@@ -179,6 +180,7 @@ async function runBoundSessionRoute(
       const bound = await params.resolveRuntime({
         device,
         positionals,
+        readiness: true,
         inspectFacts,
         bindDevice,
       });
@@ -222,7 +224,6 @@ export async function handleAppEventCommand(
             session.device,
             eventUrl,
             session.appBundleId,
-            resolveAndroidPackageForOpen,
           )) ?? session.appBundleId)
         : session.appBundleId;
       return {

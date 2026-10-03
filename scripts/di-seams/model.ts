@@ -129,7 +129,7 @@ export function findSeamMatches(files: readonly SourceFile[]): SeamMatch[] {
           line: lineOf(source, start),
           field,
           target,
-          text: source.slice(start, end).replace(/\s+/g, ' ').trim(),
+          text: source.slice(start, end).replaceAll(/\s+/g, ' ').trim(),
           approvalReason: approvalReason(source, comments, start),
         });
       }

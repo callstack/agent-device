@@ -13,12 +13,15 @@ const dedicatedCliCommandHandlerLoaders = {
   disconnect: async () => (await import('./connection.ts')).disconnectCommand,
   connection: async () => (await import('./connection.ts')).connectionCommand,
   auth: async () => (await import('./auth.ts')).authCommand,
+  plugins: async () => (await import('./plugins.ts')).pluginsCommand,
   daemon: async () => (await import('./daemon.ts')).daemonCommand,
   device: async () => (await import('./device.ts')).deviceCommand,
   proxy: async () => (await import('./proxy.ts')).proxyCommand,
+  takeover: async () => (await import('./takeover.ts')).takeoverCommand,
   replay: async () => (await import('./replay.ts')).replayCommand,
   screenshot: async () => (await import('./screenshot.ts')).screenshotCommand,
   diff: async () => (await import('./screenshot.ts')).diffCommand,
+  record: async () => (await import('./recording.ts')).recordingCommand,
 } satisfies ClientCommandHandlerMap;
 
 export async function tryRunClientBackedCommand(params: {
@@ -28,6 +31,7 @@ export async function tryRunClientBackedCommand(params: {
   client: AgentDeviceClient;
   debug?: boolean;
   replayTestReporterRuntime?: ClientCommandParams['replayTestReporterRuntime'];
+  commandProgress?: ClientCommandParams['commandProgress'];
 }): Promise<boolean> {
   const flags = { ...params.flags };
   const loadDedicatedHandler =

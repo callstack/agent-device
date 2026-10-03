@@ -4,31 +4,30 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { createServer, type Server } from 'node:http';
 import path from 'node:path';
 import test from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import { type CliJsonResult, formatResultDebug, runBuiltCliJson } from './cli-json.ts';
 import { assertPngDimensions, assertPngFile } from './provider-scenarios/assertions.ts';
 import { runCleanupWithCoverageReport } from './web-e2e/coverage-report.ts';
 import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import {
+  getManagedAgentBrowserStatus,
   inspectManagedAgentBrowserProcesses,
   summarizeAgentBrowserProcesses,
   type AgentBrowserProcessSummary,
-} from '../../src/platforms/web/agent-browser-lifecycle.ts';
-import {
-  getManagedAgentBrowserStatus,
   type AgentBrowserToolStatus,
-} from '../../src/platforms/web/agent-browser-tool.ts';
+} from '@agent-device/platform-web';
 import {
   stopProcessForTakeover,
   waitForDaemonExit,
   type DaemonProcessIdentity,
-} from '../../src/daemon/daemon-process.ts';
+} from '../../src/daemon-process.ts';
 import {
   expandProcessTree,
   isProcessAlive,
   listHostProcesses,
   readProcessStartTime,
   stopPidsWithEscalation,
-} from '../../src/utils/host-process.ts';
+} from '@agent-device/host-kit/process';
 
 const TEST_NAME = 'live web platform e2e smoke';
 const SHUTDOWN_TEST_NAME = 'live web platform e2e daemon-shutdown browser cleanup';
@@ -80,6 +79,7 @@ test('web shutdown cleanup reaps the exact daemon that survived graceful shutdow
   child.on('message', (message) => {
     if (message === 'sigterm-ignored') ignoredSigterm = true;
   });
+  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
 
   const daemonStartTime = readProcessStartTime(daemonPid);
   assert.ok(daemonStartTime, 'expected the fake daemon to report a start time');
@@ -103,6 +103,13 @@ test('web shutdown cleanup reaps the exact daemon that survived graceful shutdow
     true,
     'expected cleanup to escalate after the child ignored SIGTERM',
   );
+  // The killed child stays a zombie, alive to kill(pid, 0), until this process reaps it on exit.
+  const bound = new AbortController();
+  await Promise.race([
+    exited,
+    delay(5_000, undefined, { signal: bound.signal }).catch(() => undefined),
+  ]);
+  bound.abort();
   assert.equal(isProcessAlive(daemonPid), false);
 });
 
@@ -175,7 +182,7 @@ async function runWebShutdownSmoke(context: WebSmokeContext): Promise<void> {
 
     const stateDir = context.env.AGENT_DEVICE_STATE_DIR;
     assert.ok(stateDir, 'expected the smoke context to configure a state dir');
-    status = getManagedAgentBrowserStatus({ stateDir });
+    status = await getManagedAgentBrowserStatus({ stateDir });
 
     const before = await inspectManagedAgentBrowserProcesses(status);
     assert.ok(
@@ -271,7 +278,7 @@ async function cleanupWebShutdownSmoke(
 // regression exploits.
 async function forceKillManagedBrowserProcesses(status: AgentBrowserToolStatus): Promise<void> {
   const processes = await listHostProcesses({ timeoutMs: WEB_SHUTDOWN_CLEANUP_TIMEOUT_MS });
-  const summary = summarizeAgentBrowserProcesses(processes, status);
+  const summary = await summarizeAgentBrowserProcesses(processes, status);
   if (summary.count === 0) return;
   const signalPids = expandProcessTree(summary.pids, processes).map(
     (processInfo) => processInfo.pid,

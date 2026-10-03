@@ -8,7 +8,7 @@ test('R16 rejects native mechanics in the daemon record owner without scanning p
       path: 'src/daemon/handlers/record-runtime.ts',
       source: `
         import fs from 'node:fs';
-        import { runCmdBackground } from '../../utils/exec.ts';
+        import { runCmdBackground } from '@agent-device/host-kit/command';
         // setTimeout and runCmd are mechanics only when executable.
         const prose = 'spawn xcrun';
         setTimeout(() => runCmdBackground('xcrun', []), 1);
@@ -21,7 +21,7 @@ test('R16 rejects native mechanics in the daemon record owner without scanning p
   ]);
   assert.deepEqual(violations, [
     'src/daemon/handlers/record-runtime.ts: daemon record owner imports native mechanic node:fs',
-    'src/daemon/handlers/record-runtime.ts: daemon record owner imports native mechanic ../../utils/exec.ts',
+    'src/daemon/handlers/record-runtime.ts: daemon record owner imports native mechanic @agent-device/host-kit/command',
     'src/daemon/handlers/record-runtime.ts: daemon record owner calls native mechanic setTimeout',
     'src/daemon/handlers/record-runtime.ts: daemon record owner calls native mechanic runCmdBackground',
   ]);

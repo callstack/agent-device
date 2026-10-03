@@ -1,30 +1,28 @@
-import type { CommandFlags } from '@agent-device/contracts/command';
+import { snapshotFlagsFromOptions } from '@agent-device/kernel/snapshot';
 import type { BackendSnapshotOptions } from './backend.ts';
 
 type RoutedSnapshotOption = keyof Omit<BackendSnapshotOptions, 'includeRects' | 'outPath'>;
 
-const SNAPSHOT_OPTION_FLAGS = {
-  interactiveOnly: 'snapshotInteractiveOnly',
-  scope: 'snapshotScope',
-  depth: 'snapshotDepth',
-  raw: 'snapshotRaw',
-  customActions: 'snapshotCustomActions',
-  includeHiddenContentHints: 'snapshotIncludeHiddenContentHints',
-  preferredBackend: 'snapshotPreferredBackend',
-} as const satisfies Record<RoutedSnapshotOption, keyof CommandFlags>;
+/**
+ * Which backend snapshot options route as request flags. Still pinned to
+ * `BackendSnapshotOptions`, so a new backend option must decide whether it
+ * routes; the option→flag pairing itself is declared once in the kernel and is
+ * no longer restated here.
+ */
+const ROUTED_SNAPSHOT_OPTIONS = {
+  interactiveOnly: true,
+  scope: true,
+  depth: true,
+  raw: true,
+  customActions: true,
+  includeHiddenContentHints: true,
+  preferredBackend: true,
+} as const satisfies Record<RoutedSnapshotOption, true>;
 
-type SnapshotFlagOverrides = Partial<
-  Pick<CommandFlags, (typeof SNAPSHOT_OPTION_FLAGS)[RoutedSnapshotOption]>
+const ROUTED_SNAPSHOT_OPTION_KEYS = Object.keys(ROUTED_SNAPSHOT_OPTIONS) as ReadonlyArray<
+  keyof typeof ROUTED_SNAPSHOT_OPTIONS
 >;
 
-export function snapshotOptionsToFlags(
-  options: BackendSnapshotOptions | undefined,
-): SnapshotFlagOverrides {
-  if (!options) return {};
-  return Object.fromEntries(
-    Object.entries(SNAPSHOT_OPTION_FLAGS).flatMap(([optionKey, flagKey]) => {
-      const value = options[optionKey as RoutedSnapshotOption];
-      return value === undefined ? [] : [[flagKey, value]];
-    }),
-  ) as SnapshotFlagOverrides;
+export function snapshotOptionsToFlags(options: BackendSnapshotOptions | undefined) {
+  return snapshotFlagsFromOptions(options, ROUTED_SNAPSHOT_OPTION_KEYS);
 }

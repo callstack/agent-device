@@ -11,17 +11,21 @@ const mocks = vi.hoisted(() => ({
   waitForDaemonExit: vi.fn(),
 }));
 
-vi.mock('../daemon-process.ts', () => ({
+vi.mock('../../daemon-process.ts', () => ({
   isAgentDeviceDaemonProcess: mocks.isAgentDeviceDaemonProcess,
   trySignalProcess: mocks.trySignalProcess,
   waitForDaemonExit: mocks.waitForDaemonExit,
 }));
-vi.mock('../../utils/host-process.ts', () => ({
+vi.mock('@agent-device/host-kit/process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/process')>()),
   isProcessAlive: mocks.isProcessAlive,
 }));
-vi.mock('../../utils/timeouts.ts', () => ({ sleep: mocks.sleep }));
+vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/retry')>()),
+  sleep: mocks.sleep,
+}));
 
-import { resolveDaemonPaths } from '../config.ts';
+import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { stopDaemon } from '../daemon-stop.ts';
 
 afterEach(() => {

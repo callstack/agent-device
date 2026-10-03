@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
@@ -11,6 +11,7 @@ import {
   harmonyRecordingHost as harmonyHost,
   harmonyRecordingInput as input,
 } from './runtime.fixtures.ts';
+import { mkdtempForTestSync } from '../__tests__/tmp-dir.ts';
 
 test('runs whole-screen capture and finalizes through the closed Harmony host', async () => {
   const operations = createHarmonyScreenRecordingOperations({
@@ -195,6 +196,10 @@ test('reports unconfirmed completed-artifact cleanup without clobbering finalize
   await expect(started.pendingHandle.transfer().finish()).resolves.toMatchObject({
     status: 'completed',
     result: {
+      stopObservation: { recorder: 'confirmed' },
+      // The recorder confirmed, so the two artifacts the device refused to remove are owed a
+      // disposal rather than forbidden from one.
+      nativePathDisposition: 'retirable',
       warning:
         'finalizer warning. HarmonyOS recording completed, but cleanup was not confirmed for the staging artifact and media-library artifact.',
     },
@@ -267,7 +272,7 @@ test('Harmony start rejection after cancellation preserves the exact reason', as
 });
 
 test('invalid Harmony options leave an existing output untouched', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-harmony-output-'));
+  const root = mkdtempForTestSync('agent-device-harmony-output-');
   const outputPath = path.join(root, 'capture.mp4');
   fs.writeFileSync(outputPath, 'keep me');
   const prepare = vi.fn(async (pathname: string) => fs.rmSync(pathname, { force: true }));

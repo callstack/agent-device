@@ -17,10 +17,11 @@ import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { activateCompleteRefFrame } from '../ref-frame.ts';
+import { activateCompleteRefFrame, refFrameState } from '../ref-frame.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { GenericPlatformExecutionParams } from '../request-generic-dispatch.ts';
 import { resolveBoundViewportRuntime } from '../viewport-runtime.ts';
+import { expectRefusesUnavailableExactOwnerFact } from './runtime-binding-conformance.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 
 const webDevice = {
@@ -140,58 +141,23 @@ test('rejects invalid dimensions before inspection or binding', async () => {
 });
 
 test('rejects an unavailable exact-owner fact before binding', async () => {
-  const harness = runtimeHarness(unavailable);
-
-  const resolved = await resolveBoundViewportRuntime({
+  await expectRefusesUnavailableExactOwnerFact({
+    command: 'viewport',
     device: webDevice,
-    positionals: ['1280', '900'],
-    inspectFacts: harness.inspectFacts,
-    bindDevice: harness.bindDevice,
+    unavailable,
   });
-
-  expect(resolved).toEqual({
-    ok: false,
-    response: {
-      ok: false,
-      error: {
-        code: 'UNSUPPORTED_OPERATION',
-        message: 'viewport is not supported on this device',
-        hint: unavailable.hint,
-      },
-    },
-  });
-  expect(harness.inspectFacts).toHaveBeenCalledTimes(1);
-  expect(harness.bindDevice).not.toHaveBeenCalled();
 });
 
 test('preserves the Apple viewport recovery hint through admission', async () => {
-  const hint =
-    'viewport resizes web targets only (--platform web). Apple screen geometry is fixed by the selected simulator or device type — open a different simulator to test another screen size.';
-  const harness = runtimeHarness(
-    { available: false, reason: 'unsupported-platform-leaf', hint },
-    appleDevice,
-  );
-
-  const resolved = await resolveBoundViewportRuntime({
+  await expectRefusesUnavailableExactOwnerFact({
+    command: 'viewport',
     device: appleDevice,
-    positionals: ['1280', '900'],
-    inspectFacts: harness.inspectFacts,
-    bindDevice: harness.bindDevice,
-  });
-
-  expect(resolved).toEqual({
-    ok: false,
-    response: {
-      ok: false,
-      error: {
-        code: 'UNSUPPORTED_OPERATION',
-        message: 'viewport is not supported on this device',
-        hint,
-      },
+    unavailable: {
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: 'viewport resizes web targets only (--platform web). Apple screen geometry is fixed by the selected simulator or device type — open a different simulator to test another screen size.',
     },
   });
-  expect(harness.inspectFacts).toHaveBeenCalledOnce();
-  expect(harness.bindDevice).not.toHaveBeenCalled();
 });
 
 test('request router joins viewport admission to execution, recording, and ref invalidation', async () => {
@@ -223,7 +189,7 @@ test('request router joins viewport admission to execution, recording, and ref i
     ok: true,
     data: { width: 1280, height: 900, message: 'Viewport set: 1280x900' },
   });
-  expect(session.refFrameState).toBe('expired');
+  expect(refFrameState(session)).toBe('expired');
   expect(session.actions.at(-1)).toMatchObject({
     command: 'viewport',
     positionals: ['1280', '900'],

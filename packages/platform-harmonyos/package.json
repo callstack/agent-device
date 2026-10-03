@@ -7,7 +7,9 @@
   "dependencies": {
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
-    "@agent-device/kernel": "workspace:*"
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/provision-kit": "workspace:*"
   },
   "exports": {
     ".": {

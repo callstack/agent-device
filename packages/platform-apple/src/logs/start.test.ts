@@ -55,3 +55,39 @@ test('simulator start resolves its app container through appleTools and keeps pl
     'log',
   ]);
 });
+
+test('simulator log stream takes the set of the device it streams from', async () => {
+  const appleToolRun = vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 1 }));
+  const fixture = hostFixture({ appleToolRun, failProcessStart: true });
+
+  await expect(
+    startAppleAppLogs(
+      fixture.host,
+      appleDevice({ simulatorSetPath: '/tmp/scoped-set' }),
+      {
+        sessionId: 'session',
+        appBundleId: 'com.example.app',
+        outputPath: '/tmp/app.log',
+        fence: { token: 'fence', generation: 1 },
+      },
+      localRuntimeOwner('apple'),
+    ),
+  ).rejects.toThrow('start failed');
+
+  expect(appleToolRun).toHaveBeenCalledWith(
+    expect.objectContaining({
+      args: ['--set', '/tmp/scoped-set', 'get_app_container', 'apple-1', 'com.example.app', 'app'],
+    }),
+    undefined,
+  );
+  expect(fixture.backgroundCommands[0]?.slice(0, 8)).toEqual([
+    'xcrun',
+    'simctl',
+    '--set',
+    '/tmp/scoped-set',
+    'spawn',
+    'apple-1',
+    'log',
+    'stream',
+  ]);
+});

@@ -1,0 +1,318 @@
+import assert from 'node:assert/strict';
+import { test } from 'vitest';
+import { STRUCTURED_BATCH_COMMAND_NAMES } from '@agent-device/command-registry/batch-policy';
+import {
+  INTERNAL_COMMANDS,
+  listCliCommandNames,
+  PUBLIC_COMMANDS,
+} from '@agent-device/command-registry/catalog';
+import { canRunReplayScopedAction } from '../daemon/daemon-command-registry.ts';
+import {
+  deriveDaemonCommandDescriptors,
+  deriveStructuredBatchCommandNames,
+} from '@agent-device/command-registry/derive';
+import {
+  commandDescriptors,
+  listDescriptorCatalogCommandNames,
+  resolveCommandFrameworkTier,
+  resolveCommandRecordsSessionAction,
+  resolveCommandRecordingEffect,
+  resolveTargetIdentityVerification,
+  RAW_COMMAND_DESCRIPTORS,
+} from '@agent-device/command-registry/registry';
+
+// Public commands that intentionally have no daemon route — they live only in the
+// capability/batch tables, so the daemon registry has never covered them.
+// `install-from-source` projects to the daemon via the `install_source` internal
+// command (its daemon writer), never by its own name, so the daemon registry has
+// never covered it. (`app-switcher` gained a daemon facet under ADR 0014 so its
+// device mutation could be classified, so it is no longer unrouted.)
+const UNROUTED_PUBLIC_COMMANDS = new Set<string>([PUBLIC_COMMANDS.installFromSource]);
+
+type TestCommandDescriptor = (typeof commandDescriptors)[number];
+
+function hasDaemonFacet(descriptor: TestCommandDescriptor): boolean {
+  return 'daemon' in descriptor && descriptor.daemon !== undefined;
+}
+
+function readCatalogGroupForTest(descriptor: TestCommandDescriptor): string {
+  return descriptor.catalog.group;
+}
+
+function isDescriptorOnlyCommand(descriptor: TestCommandDescriptor): boolean {
+  return !hasDaemonFacet(descriptor) && !descriptor.batchable;
+}
+
+test('derived daemon registry holds its routing invariants', () => {
+  // The daemon registry is now BUILT from these derived descriptors (the
+  // hand-authored literal was deleted after #906 proved byte-equality), so a
+  // derived-vs-DAEMON_COMMAND_DESCRIPTORS comparison would be a tautology.
+  // Instead assert the structural invariants the daemon depends on: every
+  // descriptor has a route, command names are unique, and the command set still
+  // covers every public command (the prior coverage floor).
+  const derived = deriveDaemonCommandDescriptors(commandDescriptors);
+  assert.ok(derived.length > 0, 'derived descriptors present');
+
+  const names = derived.map((descriptor) => descriptor.command);
+  assert.equal(new Set(names).size, names.length, 'no duplicate daemon command names');
+
+  for (const descriptor of derived) {
+    assert.ok(descriptor.route, `${descriptor.command} has a route`);
+  }
+
+  const nameSet = new Set(names);
+  for (const command of Object.values(PUBLIC_COMMANDS)) {
+    if (UNROUTED_PUBLIC_COMMANDS.has(command)) continue;
+    assert.ok(nameSet.has(command), `daemon registry covers public command ${command}`);
+  }
+});
+
+test('command catalog projections are built from descriptor catalog facets', () => {
+  const publicCommands = listDescriptorCatalogCommandNames('public');
+  const internalCommands = listDescriptorCatalogCommandNames('internal');
+  const localCliCommands = listDescriptorCatalogCommandNames('local-cli');
+
+  assert.deepEqual(Object.values(PUBLIC_COMMANDS).sort(), publicCommands);
+  assert.deepEqual(Object.values(INTERNAL_COMMANDS).sort(), internalCommands);
+  assert.deepEqual(listCliCommandNames(), [...publicCommands, ...localCliCommands].sort());
+
+  assert.equal(PUBLIC_COMMANDS.appState, 'appstate');
+  assert.equal(PUBLIC_COMMANDS.longPress, 'longpress');
+  assert.equal(INTERNAL_COMMANDS.leaseAllocate, 'lease_allocate');
+});
+
+test('descriptor-only commands explicitly declare a non-public catalog group', () => {
+  const publicCommands = new Set<string>(listDescriptorCatalogCommandNames('public'));
+
+  for (const descriptor of commandDescriptors) {
+    if (!isDescriptorOnlyCommand(descriptor)) continue;
+
+    const group = readCatalogGroupForTest(descriptor);
+    assert.notEqual(group, 'public', `${descriptor.name} declares a non-public catalog group`);
+    assert.equal(publicCommands.has(descriptor.name), false, `${descriptor.name} is not public`);
+  }
+});
+
+// Control-plane / non-batchable commands that must never enter the allowlist.
+const NON_BATCHABLE_COMMANDS = [
+  PUBLIC_COMMANDS.batch,
+  PUBLIC_COMMANDS.replay,
+  PUBLIC_COMMANDS.prepare,
+  'viewport',
+];
+
+test('structured-batch allowlist is built from descriptors', () => {
+  const derived = deriveStructuredBatchCommandNames(commandDescriptors);
+
+  // No duplicates in the derived allowlist.
+  assert.equal(new Set(derived).size, derived.length, 'no duplicate batchable names');
+
+  // The exported allowlist is now BUILT from these derived descriptors, so it is
+  // the derived list (order included) — guards the wiring. (The narrow
+  // StructuredBatchCommandName union now DERIVES from the same `batchable: true`
+  // entries via Extract, so an exhaustive-union membership check would be a
+  // tautology; `tsc` enforces the type, this guards the value.)
+  assert.deepEqual(
+    [...STRUCTURED_BATCH_COMMAND_NAMES],
+    derived,
+    'exported allowlist is built from the descriptors',
+  );
+
+  // Every batchable command is a real public command (no internal/control name leaks in).
+  const publicCommands = new Set<string>(Object.values(PUBLIC_COMMANDS));
+  for (const name of derived) {
+    assert.ok(publicCommands.has(name), `batchable command ${name} is a public command`);
+  }
+
+  // Control-plane commands stay out of the allowlist.
+  const batchable = new Set(derived);
+  for (const excluded of NON_BATCHABLE_COMMANDS) {
+    assert.ok(!batchable.has(excluded), `${excluded} is not batchable`);
+  }
+});
+
+// #1310: every raw descriptor explicitly decides recording; the daemon
+// replayScopedAction trait and MCP schema projection are both derived from it.
+test('recordsSessionAction is explicit on every raw descriptor and drives daemon replay policy', () => {
+  for (const descriptor of RAW_COMMAND_DESCRIPTORS) {
+    assert.equal(
+      typeof descriptor.recordsSessionAction,
+      'boolean',
+      `${descriptor.name} declares an explicit recordsSessionAction boolean`,
+    );
+    assert.equal(
+      'recordingEffect' in descriptor,
+      descriptor.recordsSessionAction,
+      `${descriptor.name} classifies app-state effect iff it records session actions`,
+    );
+    const daemon = ('daemon' in descriptor ? descriptor.daemon : undefined) as
+      | { replayScopedAction?: boolean }
+      | undefined;
+    assert.equal(
+      'replayScopedAction' in (daemon ?? {}),
+      false,
+      `${descriptor.name} does not set replayScopedAction on the daemon trait (it is derived)`,
+    );
+  }
+
+  for (const descriptor of commandDescriptors) {
+    assert.equal(
+      typeof resolveCommandRecordsSessionAction(descriptor.name),
+      'boolean',
+      `${descriptor.name} has a resolved recordsSessionAction boolean`,
+    );
+    // replayScopedAction only exists for daemon-routed commands; the MCP schema
+    // projection uses recordsSessionAction directly and covers commands whose
+    // public surface maps to an internal daemon command (e.g. install-from-source).
+    if (!('daemon' in descriptor)) continue;
+    assert.equal(
+      resolveCommandRecordsSessionAction(descriptor.name),
+      canRunReplayScopedAction(descriptor.name),
+      `${descriptor.name} recordsSessionAction matches daemon replayScopedAction`,
+    );
+  }
+
+  const recordable = commandDescriptors
+    .filter((descriptor) => resolveCommandRecordsSessionAction(descriptor.name))
+    .map((descriptor) => descriptor.name)
+    .sort();
+  assert.ok(recordable.includes('press'), 'press is classified as recordable');
+  assert.ok(recordable.includes('click'), 'click is classified as recordable');
+  assert.ok(recordable.includes('close'), 'close is classified as recordable');
+  assert.ok(recordable.includes('open'), 'open is classified as recordable');
+  assert.ok(
+    recordable.includes('install-from-source'),
+    'install-from-source is classified as recordable',
+  );
+  assert.ok(!recordable.includes('devices'), 'devices is not classified as recordable');
+});
+
+test('recordingEffect resolves request-sensitive observation and mutation subcommands', () => {
+  assert.equal(
+    resolveCommandRecordingEffect({ command: 'clipboard', positionals: ['read'], flags: {} }),
+    'observes-app',
+  );
+  assert.equal(
+    resolveCommandRecordingEffect({
+      command: 'clipboard',
+      positionals: ['write', 'text'],
+      flags: {},
+    }),
+    'mutates-app',
+  );
+  assert.equal(
+    resolveCommandRecordingEffect({ command: 'keyboard', positionals: ['status'], flags: {} }),
+    'observes-app',
+  );
+  assert.equal(
+    resolveCommandRecordingEffect({ command: 'keyboard', positionals: ['dismiss'], flags: {} }),
+    'mutates-app',
+  );
+  assert.equal(
+    resolveCommandRecordingEffect({ command: 'alert', positionals: ['get'], flags: {} }),
+    'observes-app',
+  );
+  assert.equal(
+    resolveCommandRecordingEffect({ command: 'alert', positionals: ['accept'], flags: {} }),
+    'mutates-app',
+  );
+  assert.equal(
+    resolveCommandRecordingEffect({
+      command: 'find',
+      positionals: ['text', 'Ready', 'exists'],
+      flags: {},
+    }),
+    'observes-app',
+  );
+  assert.equal(
+    resolveCommandRecordingEffect({
+      command: 'find',
+      positionals: ['text', 'Continue', 'click'],
+      flags: {},
+    }),
+    'mutates-app',
+  );
+  // settings: the read leg observes, and the same word with a category mutates. Both legs come from
+  // the one vocabulary rule, so this is where the two halves of `text-size` are pinned apart.
+  assert.equal(
+    resolveCommandRecordingEffect({ command: 'settings', positionals: ['text-size'], flags: {} }),
+    'observes-app',
+  );
+  assert.equal(
+    resolveCommandRecordingEffect({
+      command: 'settings',
+      positionals: ['text-size', 'large'],
+      flags: {},
+    }),
+    'mutates-app',
+  );
+});
+
+test('frameworkTier is declared iff a command is public, and never elsewhere', () => {
+  for (const descriptor of RAW_COMMAND_DESCRIPTORS) {
+    const isPublic = descriptor.catalog.group === 'public';
+    assert.equal(
+      'frameworkTier' in descriptor,
+      isPublic,
+      `${descriptor.name} declares frameworkTier iff it is a public command`,
+    );
+  }
+});
+
+// Pins the default tool set framework adapters (agent-device/ai-sdk,
+// @agent-device/eve) build from `set: 'core'`: the perceive/act loop a
+// typical tool-calling agent needs without being handed dozens of
+// device-management, observability, or recording tools up front. A new public
+// command lands in 'extended' unless this test is updated deliberately —
+// widening 'core' should be a reviewed decision, not a silent side effect of
+// adding a command.
+test("frameworkTier pins exactly the 'core' command set", () => {
+  const core = commandDescriptors
+    .filter((descriptor) => resolveCommandFrameworkTier(descriptor.name) === 'core')
+    .map((descriptor) => descriptor.name)
+    .sort();
+
+  assert.deepEqual(core, [
+    'alert',
+    'back',
+    'click',
+    'close',
+    'fill',
+    'find',
+    'get',
+    'is',
+    'open',
+    'press',
+    'screenshot',
+    'scroll',
+    'snapshot',
+    'swipe',
+    'type',
+    'wait',
+  ]);
+});
+
+test('targetIdentityVerification pins exactly the evidence-carrying command set (ADR 0012 / #1349)', () => {
+  const declared = RAW_COMMAND_DESCRIPTORS.flatMap((descriptor) => {
+    const phase = resolveTargetIdentityVerification(descriptor.name);
+    return phase ? [[descriptor.name, phase] as const] : [];
+  });
+  // A new evidence-carrying command must choose its replay verification phase
+  // here explicitly instead of silently entering the generic pre-dispatch
+  // path — wait is the only command whose target may legitimately be absent
+  // when its step starts.
+  assert.deepEqual(
+    [...declared].sort(([a], [b]) => a.localeCompare(b)),
+    [
+      ['click', 'pre-dispatch'],
+      ['fill', 'pre-dispatch'],
+      ['gesture', 'pre-dispatch'],
+      ['get', 'pre-dispatch'],
+      ['hover', 'pre-dispatch'],
+      ['is', 'pre-dispatch'],
+      ['longpress', 'pre-dispatch'],
+      ['press', 'pre-dispatch'],
+      ['wait', 'post-resolution'],
+    ],
+  );
+});

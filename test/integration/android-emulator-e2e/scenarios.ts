@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { AndroidEmulatorBehaviorId } from './behavior-coverage.ts';
 import { assertAutomationSystem } from './live-automation-scenario.ts';
 import { installCachedFixture } from './live-bootstrap.ts';

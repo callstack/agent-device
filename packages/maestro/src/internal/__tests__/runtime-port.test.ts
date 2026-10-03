@@ -10,6 +10,40 @@ import {
 } from './runtime-port-fixtures.ts';
 
 describe('MaestroRuntimePort', () => {
+  test('dispatches setPermissions with the flow appId and resolved values', async () => {
+    const calls: RecordedCall[] = [];
+    const operations = makeOperations({
+      setPermissions: vi.fn(async (input, context) =>
+        record(calls, 'setPermissions', input, context),
+      ),
+    });
+    const program = parseMaestroProgram(
+      [
+        'appId: com.example.checkout',
+        'env:',
+        '  CAMERA_STATE: allow',
+        '---',
+        '- setPermissions:',
+        '    permissions:',
+        '      all: deny',
+        '      camera: ${CAMERA_STATE}',
+      ].join('\n'),
+    );
+
+    const result = await executeMaestroProgram(program, createMaestroRuntimePort(operations));
+
+    expect(result).toMatchObject({ executed: 1, skipped: 0 });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      kind: 'setPermissions',
+      input: {
+        appId: 'com.example.checkout',
+        permissions: { all: 'deny', camera: 'allow' },
+      },
+      appId: 'com.example.checkout',
+    });
+  });
+
   test('delegates typed lifecycle, input, keyboard, screenshot, and script operations', async () => {
     const calls: RecordedCall[] = [];
     const operations = makeOperations({
@@ -120,6 +154,28 @@ describe('MaestroRuntimePort', () => {
       input: { file: 'setup.js', env: { SEED: 7 } },
       generation: 9,
     });
+  });
+
+  test('dispatches standalone clearState with an explicit or config app id', async () => {
+    const calls: RecordedCall[] = [];
+    const operations = makeOperations({
+      clearState: vi.fn(async (input, context) => record(calls, 'clearState', input, context)),
+    });
+    const program = parseMaestroProgram(
+      [
+        'appId: com.example.checkout',
+        '---',
+        '- clearState: com.example.checkout',
+        '- clearState',
+      ].join('\n'),
+    );
+
+    const result = await executeMaestroProgram(program, createMaestroRuntimePort(operations));
+
+    expect(result).toMatchObject({ executed: 2, skipped: 0 });
+    expect(calls.map(({ kind }) => kind)).toEqual(['clearState', 'clearState']);
+    expect(calls[0]).toMatchObject({ input: { appId: 'com.example.checkout' } });
+    expect(calls[1]).toMatchObject({ input: { appId: 'com.example.checkout' } });
   });
 
   test('preserves observation validity after visual waits and scripts', async () => {

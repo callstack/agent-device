@@ -66,6 +66,52 @@ test('returns secondary client paths, split/180s warnings, and skips chunked tou
   }
 });
 
+async function finishedWarning(params: {
+  rotate: boolean;
+  exitedBeforeStop: readonly string[];
+}): Promise<string | undefined> {
+  vi.useFakeTimers();
+  try {
+    let nextPid = 41;
+    const exited = new Set(params.exitedBeforeStop);
+    const runtime = await start({
+      start: async () => recordingProcess(String(++nextPid)),
+      inspect: async ({ pid }: { pid: string }) => (exited.has(pid) ? 'missing' : 'owned-alive'),
+      stop: async ({ pid }: { pid: string }) => {
+        if (exited.has(pid)) return 'already-missing' as const;
+        exited.add(pid);
+        return 'stopped' as const;
+      },
+    });
+    const started = await runtime.screenRecordingStart(recordingInput());
+    const handle = started.pendingHandle.transfer();
+    if (params.rotate) await vi.advanceTimersByTimeAsync(170_000);
+    const finishing = handle.finish();
+    await vi.advanceTimersByTimeAsync(1_000);
+    const outcome = await finishing;
+    expect(outcome.status).toBe('completed');
+    return outcome.status === 'completed' ? outcome.result.warning : undefined;
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
+test('omits the 180s limit warning when only a rotated-out chunk exited before record stop', async () => {
+  // Rotation stops chunk 42, so it is already missing at record stop; chunk 43 is still recording.
+  const warning = await finishedWarning({ rotate: true, exitedBeforeStop: [] });
+  expect(warning).toContain('split into multiple MP4 chunks');
+  expect(warning).not.toContain('likely after reaching the 180s platform limit');
+});
+
+test('warns about the 180s limit when the last chunk exited before record stop', async () => {
+  await expect(finishedWarning({ rotate: false, exitedBeforeStop: ['42'] })).resolves.toContain(
+    'likely after reaching the 180s platform limit',
+  );
+  await expect(finishedWarning({ rotate: true, exitedBeforeStop: ['43'] })).resolves.toContain(
+    'likely after reaching the 180s platform limit',
+  );
+});
+
 test('continues through every owned chunk after a stop or removal failure', async () => {
   const chunks = [
     {
@@ -221,7 +267,7 @@ test('retries a pulled MP4 until its moov is playable and retains remote evidenc
       '/tmp/capture.mp4',
     );
     await vi.advanceTimersByTimeAsync(2_000);
-    await expect(becomingPlayable).resolves.toEqual([{ index: 1, path: '/tmp/capture.mp4' }]);
+    await expect(becomingPlayable).resolves.toBeUndefined();
     expect(pulls).toBe(3);
 
     pulls = 0;

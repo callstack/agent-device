@@ -1,5 +1,6 @@
 import {
   type ApplicationLifecycleRuntimeOperations,
+  type AppleRunnerSessionPrewarmOptions,
   type CloseApplicationFinalizationInput,
   type CloseApplicationInput,
   type OpenApplicationInput,
@@ -14,13 +15,24 @@ import {
   invokeApplicationClose,
   invokeApplicationOpen,
 } from '@agent-device/contracts/application-lifecycle-interaction';
-import { isDeepLinkTarget } from '@agent-device/contracts/command';
+import { isDeepLinkTarget, isWebUrl } from '@agent-device/contracts/command';
 import { ensureAppleReady } from './readiness/runtime.ts';
+import {
+  resolveRunnerPrewarmPolicy,
+  settleAppleOpen,
+  type MutableOpenTiming,
+  releaseSpeculativeRunner,
+} from './open-policy.ts';
+import type { LaunchObservationPort } from './snapshot-observability.ts';
+import type { LaunchConfirmationAttempt, LaunchConfirmationTarget } from './launch-confirmation.ts';
 import { isApplePlatform, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 
 const POST_CLOSE_SETTLE_MS = 300;
-const POST_OPEN_SETTLE_MS = 300;
+
+let launchConfirmationModule: Promise<typeof import('./launch-confirmation.ts')> | undefined;
+const loadLaunchConfirmation = () =>
+  (launchConfirmationModule ??= import('./launch-confirmation.ts'));
 
 /** The Apple package receives only the lazy tools and readiness ports it owns. */
 type AppleLifecycleHost = Pick<
@@ -34,14 +46,12 @@ type AppleLifecycleHost = Pick<
   | 'localInteractors'
 >;
 
-type MutableOpenTiming = {
-  -readonly [Key in keyof OpenApplicationOutcome['timing']]: OpenApplicationOutcome['timing'][Key];
-};
-
 type AppleLifecycleParams = Readonly<{
   host: AppleLifecycleHost;
   device: DeviceInfo;
   signal: AbortSignal;
+  /** The Simulator bridge's launch observation, when the runtime binds one (local Simulators). */
+  observation?: LaunchObservationPort;
 }>;
 
 /** Apple owns its lifecycle ordering; the root host exposes only lazy runner/tool ports. */
@@ -58,6 +68,7 @@ export function bindAppleApplicationLifecycle(
       await params.host.appleApplications.resolveOpenTarget(params.device, input),
     prepareApplicationOpen: async (input) => {
       await ensureAppleReady(params.host, params.device, params.signal, {
+        deadlineAtMs: input.execution.startupDeadlineAtMs,
         onColdBootStart: input.prewarmRunnerOnColdBoot
           ? () => {
               void params.host.appleApplications
@@ -67,7 +78,8 @@ export function bindAppleApplicationLifecycle(
           : undefined,
       });
     },
-    openApplication: async (input) => await openAppleApplication(params.host, binding, input),
+    openApplication: async (input) =>
+      await openAppleApplication(params.host, binding, input, params.observation),
     applyRuntimeHints: async (input) =>
       await params.host.appleApplications.applyRuntimeHints(params.device, input),
     clearRuntimeHints: async (input) =>
@@ -87,31 +99,67 @@ async function openAppleApplication(
   host: AppleLifecycleHost,
   binding: BoundAppleInteractor,
   input: OpenApplicationInput,
+  observation: LaunchObservationPort | undefined,
 ): Promise<OpenApplicationOutcome> {
   const timing: MutableOpenTiming = {};
   const localIosSimulator = isIosSimulator(binding.device);
+  const launch = openLaunchPlan(binding.device, input, localIosSimulator);
   const runner = createRunnerPrewarm(host, binding, input, timing);
-  const shouldPrewarmRunner =
-    isIosFamily(binding.device) &&
-    input.surface === 'app' &&
-    input.positionals.length > 0 &&
-    Boolean(input.appBundleId);
-  if (localIosSimulator && shouldPrewarmRunner && !input.prewarmRunnerBeforeOpen) runner.schedule();
-  await closeAppleApplicationForRelaunch(host, binding, input, localIosSimulator, timing);
-  await applyAppleOpenRuntimeHints(input, timing);
-  await prewarmAppleRunnerBeforeOpen(runner, shouldPrewarmRunner, input.prewarmRunnerBeforeOpen);
-  const runnerTargetPredatesOpen = runner.wasAwaited();
-  await dispatchAppleOpen(binding, input, localIosSimulator, timing);
-  await finishAppleRunnerPrewarm(runner, shouldPrewarmRunner, input.relaunch);
-  await notifyAppleRunnerRelaunch(
-    host,
-    binding,
+  const policy = resolveRunnerPrewarmPolicy(binding.device, input, localIosSimulator);
+  if (policy.runnerDemand) timing.runnerDemand = policy.runnerDemand;
+  releaseSpeculativeRunner(host, binding, input, policy);
+  const { shouldPrewarmRunner } = policy;
+  const retainRunnerForRelaunch = shouldRetainRunnerForRelaunch(
+    binding.device,
     input,
     localIosSimulator,
-    runnerTargetPredatesOpen,
   );
-  await settleAppleOpen(host, binding, localIosSimulator, timing);
-  return { appBundleId: input.appBundleId, timing };
+  if (localIosSimulator && shouldPrewarmRunner && !input.prewarmRunnerBeforeOpen) runner.schedule();
+  try {
+    await closeAppleApplicationForRelaunch(
+      host,
+      binding,
+      input,
+      localIosSimulator,
+      retainRunnerForRelaunch,
+      timing,
+    );
+    await applyAppleOpenRuntimeHints(input, timing);
+    await prewarmAppleRunnerBeforeOpen(runner, shouldPrewarmRunner, input.prewarmRunnerBeforeOpen);
+    const runnerTargetPredatesOpen = runner.wasAwaited();
+    await dispatchAppleOpen(binding, input, launch, localIosSimulator, timing);
+    await finishAppleRunnerPrewarm(runner, shouldPrewarmRunner, policy.awaitPrewarmAfterOpen);
+    await notifyAppleRunnerRelaunch(
+      host,
+      binding,
+      input,
+      localIosSimulator,
+      runnerTargetPredatesOpen,
+      retainRunnerForRelaunch,
+    );
+    const launchConfirmation = await settleAppleOpen(
+      host,
+      binding,
+      input,
+      localIosSimulator,
+      {
+        observation,
+        answerConfirmation: confirmationAnswer(binding, input, launch),
+        redispatchLaunchUrl: confirmationRedispatch(binding, input, launch),
+      },
+      timing,
+    );
+    return {
+      appBundleId: input.appBundleId,
+      timing,
+      ...(launchConfirmation ? { launchConfirmation } : {}),
+    };
+  } catch (error) {
+    if (retainRunnerForRelaunch) {
+      await host.appleApplications.stopRunnerSession(binding.device.id).catch(() => {});
+    }
+    throw error;
+  }
 }
 
 async function closeAppleApplicationForRelaunch(
@@ -119,11 +167,12 @@ async function closeAppleApplicationForRelaunch(
   binding: BoundAppleInteractor,
   input: OpenApplicationInput,
   localIosSimulator: boolean,
+  retainRunnerForRelaunch: boolean,
   timing: MutableOpenTiming,
 ): Promise<void> {
   if (!shouldCloseForAppleRelaunch(input, localIosSimulator) || !input.target) return;
   const startedAtMs = Date.now();
-  if (isApplePlatform(binding.device.platform) && !localIosSimulator) {
+  if (isApplePlatform(binding.device.platform) && !localIosSimulator && !retainRunnerForRelaunch) {
     await host.appleApplications.stopRunnerSession(binding.device.id);
   }
   await invokeApplicationClose({
@@ -163,10 +212,10 @@ async function prewarmAppleRunnerBeforeOpen(
 async function dispatchAppleOpen(
   binding: BoundAppleInteractor,
   input: OpenApplicationInput,
+  launch: AppleLaunchPlan,
   localIosSimulator: boolean,
   timing: MutableOpenTiming,
 ): Promise<void> {
-  const launch = openLaunchPlan(input, localIosSimulator);
   const startedAtMs = Date.now();
   await invokeApplicationOpen({
     device: binding.device,
@@ -192,21 +241,70 @@ async function dispatchAppleLaunchUrl(
     timing.launchUrlDurationMs = 0;
     return;
   }
+  const startedAtMs = Date.now();
+  await openLaunchUrl(binding, input, followUpUrl);
+  timing.launchUrlDurationMs = elapsed(startedAtMs);
+}
+
+/** Hands one URL to the device on its own, whatever the open's launch sequencing was. */
+async function openLaunchUrl(
+  binding: BoundAppleInteractor,
+  input: OpenApplicationInput,
+  url: string,
+): Promise<void> {
   const execution = {
     ...input.execution,
     clearAppState: undefined,
     launchConsole: undefined,
     launchArgs: undefined,
   };
-  const startedAtMs = Date.now();
   await invokeApplicationOpen({
     device: binding.device,
     interactor: await binding.resolveInteractor(execution, input.appBundleId),
-    positionals: [followUpUrl],
+    positionals: [url],
     appBundleId: input.appBundleId,
     execution,
   });
-  timing.launchUrlDurationMs = elapsed(startedAtMs);
+}
+
+/**
+ * How the settle answers a launch confirmation, present only when the launch handed SpringBoard a
+ * custom-scheme URL it may hold for the session app. The settle spends it on any launch the host AX
+ * bridge cannot read as up: a system surface over the app, or a target discovery that never
+ * answered.
+ */
+function confirmationAnswer(
+  binding: BoundAppleInteractor,
+  input: OpenApplicationInput,
+  { confirmation }: AppleLaunchPlan,
+): (() => Promise<LaunchConfirmationAttempt>) | undefined {
+  if (!confirmation) return undefined;
+  return async () => {
+    const { answerSimulatorLaunchConfirmation } = await loadLaunchConfirmation();
+    return await answerSimulatorLaunchConfirmation(
+      binding.device,
+      confirmation,
+      binding.resolveInteractor(input.execution, confirmation.appBundleId),
+      binding.signal,
+    );
+  };
+}
+
+/**
+ * Hands a confirmable launch URL to the device again. Only the settle calls it, and only once the
+ * bridge proves no process is running: an accept that died with the runner session that raised it
+ * leaves SpringBoard holding an URL whose answer is gone, and the device drops an URL it never
+ * delivered. Both are answered by the same `simctl openurl` the open already used.
+ */
+function confirmationRedispatch(
+  binding: BoundAppleInteractor,
+  input: OpenApplicationInput,
+  { confirmation }: AppleLaunchPlan,
+): (() => Promise<void>) | undefined {
+  if (!confirmation) return undefined;
+  return async () => {
+    await openLaunchUrl(binding, input, confirmation.url);
+  };
 }
 
 async function finishAppleRunnerPrewarm(
@@ -225,24 +323,30 @@ async function notifyAppleRunnerRelaunch(
   input: OpenApplicationInput,
   localIosSimulator: boolean,
   runnerTargetPredatesOpen: boolean,
+  retainRunnerForRelaunch: boolean,
 ): Promise<void> {
-  if (!localIosSimulator || (!input.relaunch && !runnerTargetPredatesOpen)) return;
+  if (
+    !isIosFamily(binding.device) ||
+    (!localIosSimulator && !retainRunnerForRelaunch) ||
+    (!input.relaunch && !runnerTargetPredatesOpen)
+  ) {
+    return;
+  }
+  // Only a runner that is already alive can hold a stale cached target. A starting runner has
+  // none, and asking it would await its startup; a fresh one re-resolves the target on first use.
+  // An awaited prewarm proved liveness already.
+  if (
+    localIosSimulator &&
+    !runnerTargetPredatesOpen &&
+    !(await host.appleApplications.hasLiveRunnerSession(binding.device, input.execution))
+  ) {
+    return;
+  }
   await host.appleApplications.notifyRunnerAppRelaunched(
     binding.device,
     input.execution,
     binding.signal,
   );
-}
-
-async function settleAppleOpen(
-  host: AppleLifecycleHost,
-  binding: BoundAppleInteractor,
-  localIosSimulator: boolean,
-  timing: MutableOpenTiming,
-): Promise<void> {
-  const startedAtMs = Date.now();
-  if (localIosSimulator) await host.clock.sleep(POST_OPEN_SETTLE_MS, binding.signal);
-  timing.postOpenSettleDurationMs = elapsed(startedAtMs);
 }
 
 function shouldCloseForAppleRelaunch(
@@ -252,6 +356,18 @@ function shouldCloseForAppleRelaunch(
   return (
     Boolean(input.relaunch && input.target) &&
     !(localIosSimulator && !input.execution.clearAppState)
+  );
+}
+
+function shouldRetainRunnerForRelaunch(
+  device: DeviceInfo,
+  input: OpenApplicationInput,
+  localIosSimulator: boolean,
+): boolean {
+  return (
+    device.kind === 'device' &&
+    device.appleOs === 'ios' &&
+    shouldCloseForAppleRelaunch(input, localIosSimulator)
   );
 }
 
@@ -282,11 +398,11 @@ async function finalizeAppleApplicationClose(
 ) {
   if (input.daemonShutdown) {
     await host.appleApplications.dismissCloseAlerts(device, input).catch(() => {});
-  } else if (input.retainRunner) {
-    host.appleApplications.scheduleRunnerIdleStop(device.id);
-    await host.appleApplications.dismissCloseAlerts(device, input).catch(() => {});
   } else {
-    await host.appleApplications.stopRunnerSession(device.id);
+    // The runner module owns the retain-vs-stop decision: it keeps warm reuse for an idle runner and
+    // stops one whose last exchange reported main-thread work still draining, so `close` never pools
+    // a stalled process back out to the next `open` (#2552). Awaited so the lease is released first.
+    await host.appleApplications.releaseRunnerOnClose(device.id, { retain: input.retainRunner });
     await host.appleApplications.dismissCloseAlerts(device, input).catch(() => {});
   }
   const shutdown =
@@ -302,8 +418,12 @@ async function prepareAppleRunner(
   signal: AbortSignal,
   input: PrepareAppleRunnerInput,
 ): Promise<PrepareAppleRunnerResult> {
-  await ensureAppleReady(host, device, signal);
-  return await host.appleApplications.prepareRunner(device, input, signal);
+  // One budget covers the boot and the runner: a cold Simulator's boot spends part of it, and
+  // the runner preparation gets what is left rather than the full budget again.
+  const deadlineAtMs = Date.now() + input.timeoutMs;
+  await ensureAppleReady(host, device, signal, { deadlineAtMs });
+  const timeoutMs = Math.max(1, deadlineAtMs - Date.now());
+  return await host.appleApplications.prepareRunner(device, { ...input, timeoutMs }, signal);
 }
 
 type RunnerPrewarm = Readonly<{
@@ -322,17 +442,31 @@ function createRunnerPrewarm(
 ): RunnerPrewarm {
   let pending: Promise<void> | undefined;
   let awaited = false;
+  const options: AppleRunnerSessionPrewarmOptions | undefined = isUnawaitedPhysicalIosOpen(
+    binding.device,
+    input,
+  )
+    ? { healthCheck: false }
+    : undefined;
   return {
     schedule: (propagateError = false) => {
       if (pending) return;
       timing.runnerPrewarmKind = 'session';
       timing.runnerPrewarmScheduled = true;
-      pending = host.appleApplications.prewarmRunnerSession(
-        binding.device,
-        input.execution,
-        binding.signal,
-        propagateError,
-      );
+      pending = options
+        ? host.appleApplications.prewarmRunnerSession(
+            binding.device,
+            input.execution,
+            binding.signal,
+            propagateError,
+            options,
+          )
+        : host.appleApplications.prewarmRunnerSession(
+            binding.device,
+            input.execution,
+            binding.signal,
+            propagateError,
+          );
     },
     wait: async () => {
       if (!pending || awaited) return;
@@ -350,15 +484,52 @@ function createRunnerPrewarm(
   };
 }
 
+function isUnawaitedPhysicalIosOpen(device: DeviceInfo, input: OpenApplicationInput): boolean {
+  return (
+    device.kind === 'device' &&
+    device.appleOs === 'ios' &&
+    !input.hasExistingSession &&
+    !input.relaunch &&
+    !input.prewarmRunnerBeforeOpen
+  );
+}
+
+/**
+ * How the open dispatches its app and launch URL. `followUpUrl` is how the URL is dispatched;
+ * `confirmation` is whether SpringBoard may hold it, so a direct Simulator launch carries both.
+ * `confirmation`: the custom-scheme launch URL an iOS Simulator hands to SpringBoard for the
+ * session app, which may hold the launch behind an `Open in "<App>"?` confirmation.
+ */
+type AppleLaunchPlan = Readonly<{
+  positionals: readonly string[];
+  followUpUrl?: string;
+  confirmation?: LaunchConfirmationTarget;
+}>;
+
 function openLaunchPlan(
+  device: DeviceInfo,
   input: OpenApplicationInput,
   foldLaunchUrl: boolean,
-): Readonly<{ positionals: readonly string[]; followUpUrl?: string }> {
+): AppleLaunchPlan {
   const url = input.runtimeLaunchUrl?.trim();
   const target = input.positionals.length === 1 ? input.positionals[0]?.trim() : undefined;
   if (!url || !target || isDeepLinkTarget(target)) return { positionals: input.positionals };
-  if (foldLaunchUrl && !isDirectAppLaunch(input)) return { positionals: [target, url] };
-  return { positionals: input.positionals, followUpUrl: url };
+  const confirmation = confirmableLaunchUrl(device, input.appBundleId, url);
+  const confirmable = confirmation ? { confirmation } : {};
+  if (foldLaunchUrl && !isDirectAppLaunch(input)) {
+    return { positionals: [target, url], ...confirmable };
+  }
+  return { positionals: input.positionals, followUpUrl: url, ...confirmable };
+}
+
+function confirmableLaunchUrl(
+  device: DeviceInfo,
+  appBundleId: string | undefined,
+  url: string,
+): LaunchConfirmationTarget | undefined {
+  if (device.appleOs !== 'ios' || device.kind !== 'simulator') return undefined;
+  if (appBundleId === undefined || isWebUrl(url)) return undefined;
+  return { url, appBundleId };
 }
 
 function isDirectAppLaunch(input: OpenApplicationInput): boolean {

@@ -12,6 +12,7 @@ export function statusCodeForNormalizedError(code: string): number {
     case 'SESSION_NOT_FOUND':
     // ADR 0012 R7 (C5a): a reaped repair session is a gone-session state, like
     // SESSION_NOT_FOUND — not an internal error.
+    // fallthrough
     case 'REPAIR_SESSION_EXPIRED':
       return 404;
     default:

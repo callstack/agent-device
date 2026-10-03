@@ -2,26 +2,26 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import type { ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-live-handle.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import {
-  recoverAppLogResourcesAfterDaemonLock,
-  type AppLogRecoveryDiagnostic,
-} from '../app-log-resource-recovery.ts';
+import { recoverAppLogResourcesAfterDaemonLock } from '../app-log-resource-recovery.ts';
 import { appLogResourceStore } from '../app-log-resource-store.ts';
 import {
   flushDaemonStartupDiagnostics,
   teardownDaemonSessionForShutdown,
 } from '../server/daemon-runtime.ts';
-import type { SessionState } from '../types.ts';
+import type { SessionState } from '../session-state.ts';
 import { unavailableDeviceRuntimeGateway } from './test-device-runtime-gateway.ts';
 
 test('daemon startup awaits app-log recovery after acquiring the lock and before opening servers', () => {
   const source = fs.readFileSync(new URL('../server/daemon-runtime.ts', import.meta.url), 'utf8');
   const acquiredLock = source.indexOf('if (!acquireDaemonLock(');
-  const legacyRecovery = source.indexOf('await recoverLegacyAppLogMarkersAfterDaemonLock(');
+  const legacyRecovery = source.indexOf(
+    'await platformDaemonLifecycleOwners.recoverLegacyAppLogMarkers(',
+  );
   const recovery = source.indexOf('await recoverAppLogResourcesAfterDaemonLock(');
   const openedServers = source.indexOf('const opened = await openDaemonServers()');
 
@@ -31,13 +31,32 @@ test('daemon startup awaits app-log recovery after acquiring the lock and before
   expect(openedServers).toBeGreaterThan(recovery);
 });
 
+test('daemon startup configures the Apple runner owner after acquiring the lock, not before', () => {
+  // #2333/#2415 review: the daemon-owned lease-owner state dir and claim-authority probe must
+  // publish only once this process actually holds the daemon lock, so a losing process never
+  // configures a global platform owner it does not own.
+  const source = fs.readFileSync(new URL('../server/daemon-runtime.ts', import.meta.url), 'utf8');
+  const acquiredLock = source.indexOf('if (!acquireDaemonLock(');
+  const runnerOwnerConfigured = source.indexOf(
+    'await platformDaemonLifecycleOwners.configureForDaemonLock(',
+  );
+  const lockFailureExit = source.indexOf("stderr.write('Daemon lock is held by another process");
+
+  expect(acquiredLock).toBeGreaterThanOrEqual(0);
+  expect(lockFailureExit).toBeGreaterThan(acquiredLock);
+  expect(runnerOwnerConfigured).toBeGreaterThan(acquiredLock);
+  // The configure call sits inside the post-lock try block, after the failure branch that exits
+  // for a lock held by another process.
+  expect(runnerOwnerConfigured).toBeGreaterThan(lockFailureExit);
+});
+
 test('retained startup recovery evidence is flushed after daemon.log publication', async () => {
   const root = mkdtempForTestSync('daemon-runtime-app-log-recovery-diagnostics-');
   const sessionsDir = path.join(root, 'sessions');
   const resourcePath = path.join(sessionsDir, 'session', 'app-log.resource.json');
   fs.mkdirSync(path.dirname(resourcePath), { recursive: true });
   fs.writeFileSync(resourcePath, '{');
-  const diagnostics: AppLogRecoveryDiagnostic[] = [];
+  const diagnostics: ResourceDiagnostic[] = [];
 
   await recoverAppLogResourcesAfterDaemonLock({
     sessionsDir,

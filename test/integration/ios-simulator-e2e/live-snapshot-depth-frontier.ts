@@ -1,19 +1,17 @@
 import assert from 'node:assert/strict';
 
-import { assertWaitSelector, assertWaitText } from './live-assertions.ts';
-import { acceptDeepLinkConfirmationIfPresent } from './live-automation-scenario.ts';
+import {
+  assertWaitText,
+  type LiveSnapshotNode as SnapshotNode,
+  snapshotNodes,
+} from './live-assertions.ts';
+import { waitForDeepLinkDestination } from './live-deep-link-destination.ts';
 import { type LiveContext, runStep, verifyBehavior } from './live-harness.ts';
 
 const VISIBLE_DEPTH_DEEP_LINK = 'agent-device-test-app:///snapshot-depth';
 const CHILD_ID = 'visible-depth-projected-child';
-
-type SnapshotNode = {
-  depth?: unknown;
-  identifier?: unknown;
-  index?: unknown;
-  label?: unknown;
-  parentIndex?: unknown;
-};
+const MISSING_HITTABILITY_WARNING =
+  'iOS snapshot acquisition does not provide hittability evidence; regular snapshots omit unverified hittability while raw snapshots preserve supplied facts.';
 
 export async function assertRegularVisibleDepthFrontier(context: LiveContext): Promise<void> {
   await runStep(context, 'open regular visible-depth fixture', [
@@ -22,17 +20,18 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     '--relaunch',
     '--launch-url',
     VISIBLE_DEPTH_DEEP_LINK,
+    '--debug',
   ]);
-  await acceptDeepLinkConfirmationIfPresent(context);
   // Wait for the target itself so the depth assertion is about the frontier, not route readiness.
-  await assertWaitSelector(context, `id="${CHILD_ID}"`);
+  await waitForDeepLinkDestination(context, [`id="${CHILD_ID}"`], { debug: true });
 
   const regular = await runStep(context, 'capture regular visible-depth frontier', [
     'snapshot',
     '--depth',
     '1',
+    '--debug',
   ]);
-  assertSnapshotBackend(regular, 'regular depth-1 snapshot');
+  assertSimulatorBridgeSnapshot(regular, 'regular depth-1 snapshot');
   const regularNodes = snapshotNodes(regular);
   const regularRoot = requireRoot(regularNodes, 'regular depth-1 snapshot');
   const projectedChild = requireIdentifier(regularNodes, CHILD_ID, 'regular depth-1 snapshot');
@@ -46,6 +45,11 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     regularRoot.index,
     `projected child should be reparented to the presented root: ${JSON.stringify(regular)}`,
   );
+  assert.equal(
+    projectedChild.hittable,
+    true,
+    `on-screen projected child should carry geometric hittability: ${JSON.stringify(regular)}`,
+  );
   assert.ok(
     regularNodes.every((node) => numericDepth(node) <= 1),
     `regular --depth 1 exceeded the presented frontier: ${JSON.stringify(regular)}`,
@@ -55,7 +59,7 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     'snapshot',
     '--raw',
   ]);
-  assertSnapshotBackend(rawFull, 'full raw visible-depth snapshot');
+  assertSimulatorBridgeSnapshot(rawFull, 'full raw visible-depth snapshot');
   const rawFullNodes = snapshotNodes(rawFull);
   const rawChild = requireIdentifier(rawFullNodes, CHILD_ID, 'full raw visible-depth snapshot');
   assert.ok(
@@ -69,7 +73,7 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     '--depth',
     '1',
   ]);
-  assertSnapshotBackend(rawDepthOne, 'raw depth-1 visible-depth snapshot');
+  assertSimulatorBridgeSnapshot(rawDepthOne, 'raw depth-1 visible-depth snapshot');
   const rawDepthOneNodes = snapshotNodes(rawDepthOne);
   assert.equal(
     rawDepthOneNodes.some((node) => node.identifier === CHILD_ID),
@@ -92,15 +96,6 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     'regular-visible-depth-frontier',
     'public regular depth 1 keeps a raw-deep visible child at presented depth 1 while raw depth remains traversal-bounded',
   );
-}
-
-function snapshotNodes(result: { json?: any }): SnapshotNode[] {
-  const nodes = result.json?.data?.nodes;
-  assert.ok(
-    Array.isArray(nodes),
-    `snapshot response did not contain nodes: ${JSON.stringify(result)}`,
-  );
-  return nodes as SnapshotNode[];
 }
 
 function requireIdentifier(nodes: SnapshotNode[], identifier: string, description: string) {
@@ -127,10 +122,15 @@ function numericDepth(node: SnapshotNode): number {
   return node.depth as number;
 }
 
-function assertSnapshotBackend(result: { json?: any }, description: string): void {
+function assertSimulatorBridgeSnapshot(result: { json?: any }, description: string): void {
   assert.equal(
     result.json?.data?.snapshotQuality?.backend,
-    'tree',
-    `${description} must exercise the recursive tree backend: ${JSON.stringify(result)}`,
+    undefined,
+    `${description} must not carry XCTest tree quality metadata: ${JSON.stringify(result)}`,
+  );
+  assert.equal(
+    result.json?.data?.warnings?.includes(MISSING_HITTABILITY_WARNING) ?? false,
+    false,
+    `${description} reported a viewport, so the AX bridge must derive hittability instead of disclosing it as missing: ${JSON.stringify(result)}`,
   );
 }

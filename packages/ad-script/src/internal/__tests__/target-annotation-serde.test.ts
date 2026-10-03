@@ -187,9 +187,9 @@ test('scrollRegion.label serializes and round trips like every other label field
 test('embedded quotes and backslashes in labels round trip losslessly', () => {
   const evidence = baseEvidence({ label: 'Say "hi" \\ backslash', id: undefined });
   const json = serializeTargetAnnotationV1(evidence);
-  assert.ok(json.includes('\\"hi\\"'));
+  assert.ok(json.includes(String.raw`\"hi\"`));
   const parsed = parseTargetAnnotationV1Payload(json);
-  assert.equal(parsed.label, 'Say "hi" \\ backslash');
+  assert.equal(parsed.label, String.raw`Say "hi" \ backslash`);
 });
 
 test('Unicode labels (including astral code points) round trip losslessly', () => {

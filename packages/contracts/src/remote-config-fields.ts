@@ -29,6 +29,7 @@ export type CloudProviderProfileFields = {
   providerDeviceOrientation?: ProviderDeviceOrientation;
   providerGeoLocation?: string;
   providerTimezone?: string;
+  providerAppiumVersion?: string;
   providerLanguage?: string;
   providerLocale?: string;
   providerNetworkProfile?: string;

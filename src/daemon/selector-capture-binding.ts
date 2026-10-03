@@ -1,16 +1,14 @@
 import type { ElementTextRuntimeOperations } from '@agent-device/contracts/element-text-runtime';
 import { resolveSelectorCaptureRuntimePlan } from '@agent-device/contracts/platform-runtime-operations';
-import type {
-  FindSelectorRuntimeOperations,
-  FindTextRuntimeOperations,
-} from '@agent-device/contracts/selector-observation-runtime';
+import type { FindTextRuntimeOperations } from '@agent-device/contracts/selector-observation-runtime';
 import type {
   CaptureSnapshotInput,
   SnapshotResult,
 } from '@agent-device/contracts/snapshot-runtime';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import { admitAndBindSnapshotCapture } from './snapshot-runtime-binding.ts';
-import type { DaemonResponse, SessionState } from './types.ts';
+import type { DaemonResponse } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 
 /** The selector commands that resolve their targets from the shared request-bound capture seam. */
 export type SelectorCaptureCommand = 'find' | 'get' | 'is' | 'wait';
@@ -31,13 +29,11 @@ export type BoundSelectorRead = ElementTextRuntimeOperations['readTextAtPoint'];
 
 /** Optional operations appear only for the command intent that declared them. */
 export type BoundSelectorFindText = FindTextRuntimeOperations['findText'];
-export type BoundSelectorFindSelector = FindSelectorRuntimeOperations['findSelector'];
 
 export type BoundSelectorOperations = Readonly<{
   capture: BoundSelectorCapture;
   readText?: BoundSelectorRead;
   findText?: BoundSelectorFindText;
-  findSelector?: BoundSelectorFindSelector;
 }>;
 
 export type ResolvedSelectorCapture =
@@ -64,6 +60,7 @@ export async function resolveBoundSelectorCapture(
       hasActiveApp: params.session?.appBundleId !== undefined,
       intent: selectorCaptureIntent(params.command),
     }),
+    readiness: !params.session,
   });
   if (!bound.ok) return bound;
   // The read is present only when the admitted owner advertised it; its absence is not a failure
@@ -74,7 +71,6 @@ export async function resolveBoundSelectorCapture(
       capture: bound.capture,
       ...(bound.readTextAtPoint ? { readText: bound.readTextAtPoint } : {}),
       ...(bound.findText ? { findText: bound.findText } : {}),
-      ...(bound.findSelector ? { findSelector: bound.findSelector } : {}),
     },
   };
 }

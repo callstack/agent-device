@@ -8,10 +8,10 @@ import {
 import type {
   AdReplayDispatchGuard,
   AdReplayDispatchOutcome,
-  AdReplayObservation,
   AdReplayScrubValue,
   AdReplayStepOutcome,
   AdReplayStepRuntime,
+  AdReplayTargetObservation,
   AdReplayVerifiedTargetGuard,
 } from './runtime-port-types.ts';
 
@@ -25,8 +25,8 @@ import type {
  * those four functions live here — engine-private, never re-exported by the
  * façade — and the daemon side is the narrow `AdReplayStepRuntime`
  * capabilities this function drives: routing (`beginTargetVerification`),
- * capture (`captureObservation`), classification (`classifyTarget`),
- * dispatch (`dispatchStep`), and wire-building the resulting divergence
+ * capture-and-classification (`observeTarget`), dispatch (`dispatchStep`),
+ * and wire-building the resulting divergence
  * (`buildRecordedUnverifiableFailure`, `buildTargetBindingFailure`,
  * `buildPostDispatchTargetBindingFailure`). `./step-loop.ts`'s `runAdReplay`
  * is this module's one caller.
@@ -121,11 +121,8 @@ export async function verifyAndDispatchStep(
   }
   const token = preDispatchPlan.token;
 
-  // #1385: this is the pre-dispatch gate a step right after `open --relaunch`
-  // can race — the app may still be launching/mounting when this capture
-  // lands. Bounded retry rides out that transition (`retryLaunchRace`).
-  const observation = await runtime.captureObservation(action, index, { retryLaunchRace: true });
-  if (observation.state !== 'available') {
+  const observation = await runtime.observeTarget({ action, index, token });
+  if (observation.state !== 'classified') {
     return {
       status: 'failed',
       failure: await runtime.buildTargetBindingFailure(
@@ -138,7 +135,7 @@ export async function verifyAndDispatchStep(
     };
   }
 
-  const classification = runtime.classifyTarget({ action, index, token, nodes: observation.nodes });
+  const { classification } = observation;
   if (classification.verified) {
     return dispatchWithGuard(runtime, scrubVars, action, resolvedAction, index, artifactPaths, {
       kind: 'target',
@@ -213,10 +210,12 @@ async function verifyAndDispatchMultiTargetStep(
       };
     }
 
-    const observation = await runtime.captureObservation(endpointAction, index, {
-      retryLaunchRace: true,
+    const observation = await runtime.observeTarget({
+      action: endpointAction,
+      index,
+      token: plan.token,
     });
-    if (observation.state !== 'available') {
+    if (observation.state !== 'classified') {
       return {
         status: 'failed',
         failure: await runtime.buildTargetBindingFailure(
@@ -229,12 +228,7 @@ async function verifyAndDispatchMultiTargetStep(
       };
     }
 
-    const classification = runtime.classifyTarget({
-      action: endpointAction,
-      index,
-      token: plan.token,
-      nodes: observation.nodes,
-    });
+    const { classification } = observation;
     if (!classification.verified) {
       return {
         status: 'failed',
@@ -268,7 +262,7 @@ async function verifyAndDispatchMultiTargetStep(
 }
 
 function captureUnavailableEvidence(
-  observation: Extract<AdReplayObservation, { state: 'unavailable' }>,
+  observation: Extract<AdReplayTargetObservation, { state: 'unavailable' }>,
 ) {
   return {
     kind: 'identity-unverifiable' as const,

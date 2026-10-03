@@ -27,16 +27,20 @@ test('the preserved size reporter keeps its entrypoint and relative modules toge
   const measureBase = workflowStep('Measure base size').run ?? '';
 
   expect(preserve).toContain(`mkdir -p ${preservedReportDir}`);
-  expect(preserve).toContain(`cp scripts/size-report*.mjs ${preservedReportDir}/`);
+  expect(preserve).toContain('cp scripts/size-report*.mjs');
   expect(measureBase).toContain(`node ${preservedReportDir}/size-report.mjs`);
 
   const reportSource = fs.readFileSync(path.join(repoRoot, 'scripts/size-report.mjs'), 'utf8');
-  const relativeModules = [...reportSource.matchAll(/from '\.\/(size-report-[^']+\.mjs)'/g)].map(
+  const relativeModules = [...reportSource.matchAll(/from '\.\/([^']+\.mjs)'/g)].map(
     (match) => match[1],
   );
   expect(relativeModules.length).toBeGreaterThan(0);
   for (const moduleName of relativeModules) {
     if (!moduleName) throw new Error('relative size-report import has no module name');
     expect(fs.existsSync(path.join(repoRoot, 'scripts', moduleName)), moduleName).toBe(true);
+    expect(
+      moduleName.startsWith('size-report-') || preserve.includes(`scripts/${moduleName}`),
+      `${moduleName} must be preserved for the base checkout`,
+    ).toBe(true);
   }
 });

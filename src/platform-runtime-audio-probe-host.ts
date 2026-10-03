@@ -43,8 +43,7 @@ export function createAudioProbeRuntimeHost(
         bucketMs: number;
         statusPath: string;
       }): Promise<HostAudioCaptureProcess> => {
-        const { startMacOsAudioProbeProcess } =
-          await import('./platforms/apple/os/macos/helper.ts');
+        const { startMacOsAudioProbeProcess } = await import('@agent-device/platform-apple/macos');
         const probe = await startMacOsAudioProbeProcess(input);
         const marker = await resolveManagedProcessIdentity(probe.child.pid ?? undefined);
         return Object.freeze({
@@ -63,8 +62,8 @@ export function createAudioProbeRuntimeHost(
     web: Object.freeze({
       resolve: async (device: DeviceInfo): Promise<WebAudioProbeTransport | undefined> => {
         if (device.platform !== 'web') return undefined;
-        const { resolveWebProvider } = await import('./platforms/web/provider.ts');
-        const provider = resolveWebProvider();
+        const { resolveWebProvider } = await import('@agent-device/platform-web');
+        const provider = await resolveWebProvider();
         const probeAudio = provider.probeAudio?.bind(provider);
         if (!probeAudio) return undefined;
         return Object.freeze({

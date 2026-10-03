@@ -15,11 +15,12 @@ import {
   makeRunnerSession,
   runnerError,
   runnerResponse,
+  RUNNER_CACHE_METADATA_FIXTURE,
+  RUNNER_CACHE_KEY_FIXTURE,
 } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
 const {
-  mockAcquireXcodebuildSimulatorSetRedirect,
   mockCleanupTempFile,
   mockEnsureXctestrunArtifact,
   mockGetFreePort,
@@ -37,9 +38,7 @@ const {
   mockSignalPidsBestEffort,
   mockSignalProcessGroupBestEffort,
   mockWaitForRunner,
-  mockRedirectRelease,
 } = vi.hoisted(() => ({
-  mockAcquireXcodebuildSimulatorSetRedirect: vi.fn(),
   mockCleanupTempFile: vi.fn(),
   mockEnsureXctestrunArtifact: vi.fn(),
   mockGetFreePort: vi.fn(),
@@ -67,7 +66,6 @@ const {
   mockSignalPidsBestEffort: vi.fn(),
   mockSignalProcessGroupBestEffort: vi.fn(),
   mockWaitForRunner: vi.fn(),
-  mockRedirectRelease: vi.fn(),
 }));
 
 // Fixed owner-identity value shared by the readProcessStartTime override
@@ -110,7 +108,6 @@ vi.mock('../runner-xctestrun.ts', async () => {
     await vi.importActual<typeof import('../runner-xctestrun.ts')>('../runner-xctestrun.ts');
   return {
     ...actual,
-    acquireXcodebuildSimulatorSetRedirect: mockAcquireXcodebuildSimulatorSetRedirect,
     ensureXctestrunArtifact: mockEnsureXctestrunArtifact,
     prepareXctestrunWithEnv: mockPrepareXctestrunWithEnv,
     resolveExpectedRunnerCacheMetadata: mockResolveExpectedRunnerCacheMetadata,
@@ -121,11 +118,10 @@ vi.mock('../runner-xctestrun.ts', async () => {
 import {
   abortAllIosRunnerSessions,
   cancelIosRunnerIdleStop,
-  detachIosSimulatorRunnerSessionsForShutdown,
   ensureRunnerSession,
   scheduleIosRunnerIdleStop,
   executeRunnerCommandWithSession,
-  getRunnerSessionSnapshot,
+  readRunnerSessionLiveness,
   invalidateRunnerSession,
   stopIosRunnerSession,
   validateRunnerDevice,
@@ -138,6 +134,7 @@ import {
   writeRunnerLease,
   type RunnerLease,
   type RunnerLeaseCleanupAdapter,
+  type RunnerXcodebuildCleanupTarget,
 } from '../runner-lease.ts';
 
 // Test-only stand-in for the daemon's own runtime lease-owner-state-dir
@@ -180,6 +177,7 @@ beforeEach(async () => {
   mockEnsureXctestrunArtifact.mockResolvedValue({
     xctestrunPath: '/tmp/base-runner.xctestrun',
     derived: '/tmp/derived',
+    cacheKey: RUNNER_CACHE_KEY_FIXTURE,
     cache: 'miss',
     artifact: 'rebuilt',
     buildMs: 12,
@@ -190,9 +188,8 @@ beforeEach(async () => {
     xctestrunPath: '/tmp/session-runner.xctestrun',
     jsonPath: '/tmp/session-runner.json',
   });
-  mockResolveExpectedRunnerCacheMetadata.mockReturnValue({ schemaVersion: 1 });
+  mockResolveExpectedRunnerCacheMetadata.mockReturnValue(RUNNER_CACHE_METADATA_FIXTURE);
   mockResolveRunnerDerivedPath.mockReturnValue('/tmp/derived');
-  mockAcquireXcodebuildSimulatorSetRedirect.mockResolvedValue({ release: mockRedirectRelease });
   mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
   mockRunAppleToolCommand.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   mockIsProcessAlive.mockReturnValue(true);
@@ -205,365 +202,6 @@ beforeEach(async () => {
     pid === process.pid ? TEST_OWNER_START_TIME : null,
   );
   mockWaitForRunner.mockResolvedValue(runnerResponse({ uptimeMs: 1 }));
-});
-
-test('runner session executes read-only commands without uptime preflight', async () => {
-  const session = makeRunnerSession({ ready: false });
-  mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ nodes: [], truncated: false }));
-
-  const result = await executeRunnerCommandWithSession(
-    IOS_SIMULATOR,
-    session,
-    { command: 'snapshot', appBundleId: 'com.example.demo' },
-    '/tmp/runner.log',
-    30_000,
-  );
-
-  assert.deepEqual(result, { nodes: [], truncated: false });
-  assert.equal(session.ready, true);
-  assert.equal(mockWaitForRunner.mock.calls.length, 1);
-  assertRunnerCommand(mockWaitForRunner.mock.calls[0]?.[2], {
-    command: 'snapshot',
-    appBundleId: 'com.example.demo',
-  });
-  assert.equal(mockSendRunnerCommandOnce.mock.calls.length, 0);
-});
-
-test('runner session probes readiness before ready read-only commands', async () => {
-  const session = makeRunnerSession({ ready: true });
-  mockWaitForRunner
-    .mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }))
-    .mockResolvedValueOnce(runnerResponse({ nodes: [], truncated: false }));
-
-  const result = await executeRunnerCommandWithSession(
-    IOS_SIMULATOR,
-    session,
-    { command: 'snapshot', appBundleId: 'com.example.demo' },
-    '/tmp/runner.log',
-    30_000,
-  );
-
-  assert.deepEqual(result, { nodes: [], truncated: false });
-  assert.equal(mockWaitForRunner.mock.calls.length, 2);
-  assertRunnerCommand(mockWaitForRunner.mock.calls[0]?.[2], { command: 'uptime' });
-  assert.equal(mockWaitForRunner.mock.calls[0]?.[4], 1_000);
-  assertRunnerCommand(mockWaitForRunner.mock.calls[1]?.[2], {
-    command: 'snapshot',
-    appBundleId: 'com.example.demo',
-  });
-  assert.equal(mockSendRunnerCommandOnce.mock.calls.length, 0);
-});
-
-test('runner session marks read-only readiness preflight failures before command send', async () => {
-  const session = makeRunnerSession({ ready: true });
-  mockWaitForRunner.mockRejectedValueOnce(new Error('fetch failed'));
-
-  await assert.rejects(
-    () =>
-      executeRunnerCommandWithSession(
-        IOS_SIMULATOR,
-        session,
-        { command: 'snapshot', appBundleId: 'com.example.demo' },
-        '/tmp/runner.log',
-        30_000,
-      ),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.details?.runnerReadinessPreflightFailed, true);
-      return true;
-    },
-  );
-
-  assert.equal(mockWaitForRunner.mock.calls.length, 1);
-  assertRunnerCommand(mockWaitForRunner.mock.calls[0]?.[2], { command: 'uptime' });
-  assert.equal(mockSendRunnerCommandOnce.mock.calls.length, 0);
-});
-
-test('runner session executes status command as read-only lifecycle command', async () => {
-  const session = makeRunnerSession({ ready: true });
-  mockWaitForRunner.mockResolvedValueOnce(
-    runnerResponse({
-      commandId: 'runner-command-1',
-      lifecycleState: 'completed',
-      lifecycleResponseOk: true,
-    }),
-  );
-
-  const result = await executeRunnerCommandWithSession(
-    IOS_SIMULATOR,
-    session,
-    { command: 'status', statusCommandId: 'runner-command-1' },
-    '/tmp/runner.log',
-    30_000,
-  );
-
-  assert.deepEqual(result, {
-    commandId: 'runner-command-1',
-    lifecycleState: 'completed',
-    lifecycleResponseOk: true,
-  });
-  assert.equal(mockWaitForRunner.mock.calls.length, 1);
-  assertRunnerCommand(
-    mockWaitForRunner.mock.calls[0]?.[2],
-    {
-      command: 'status',
-      statusCommandId: 'runner-command-1',
-    },
-    { commandId: false },
-  );
-  assert.equal(mockSendRunnerCommandOnce.mock.calls.length, 0);
-});
-
-test('runner session probes readiness before mutating commands', async () => {
-  const session = makeRunnerSession({ ready: false });
-  mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
-  mockSendRunnerCommandOnce.mockResolvedValueOnce(runnerResponse({ tapped: true }));
-
-  const result = await executeRunnerCommandWithSession(
-    IOS_SIMULATOR,
-    session,
-    { command: 'tap', x: 120, y: 240, appBundleId: 'com.example.demo' },
-    '/tmp/runner.log',
-    30_000,
-  );
-
-  assert.deepEqual(result, { tapped: true });
-  assert.equal(session.ready, true);
-  assert.equal(mockWaitForRunner.mock.calls.length, 1);
-  assertRunnerCommand(mockWaitForRunner.mock.calls[0]?.[2], { command: 'uptime' });
-  assert.equal(mockSendRunnerCommandOnce.mock.calls.length, 1);
-  assertRunnerCommand(mockSendRunnerCommandOnce.mock.calls[0]?.[2], {
-    command: 'tap',
-    x: 120,
-    y: 240,
-    appBundleId: 'com.example.demo',
-  });
-});
-
-test('runner session emits reason diagnostics when readiness preflight is used', async () => {
-  const session = makeRunnerSession({ ready: false });
-  mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
-  mockSendRunnerCommandOnce.mockResolvedValueOnce(runnerResponse({ tapped: true }));
-
-  const diagnostics = await captureDiagnostics(async () => {
-    await executeRunnerCommandWithSession(
-      IOS_SIMULATOR,
-      session,
-      { command: 'tap', x: 120, y: 240, appBundleId: 'com.example.demo' },
-      '/tmp/runner.log',
-      30_000,
-    );
-  });
-
-  assert.match(diagnostics, /"reason":"startup"/);
-  assert.match(diagnostics, /ios_runner_readiness_preflight/);
-});
-
-test('runner session probes readiness for ready tap commands', async () => {
-  const session = makeRunnerSession({ ready: true });
-  mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
-  mockSendRunnerCommandOnce.mockResolvedValueOnce(runnerResponse({ tapped: true }));
-
-  const result = await executeRunnerCommandWithSession(
-    IOS_SIMULATOR,
-    session,
-    { command: 'tap', x: 120, y: 240, appBundleId: 'com.example.demo' },
-    '/tmp/runner.log',
-    30_000,
-  );
-
-  assert.deepEqual(result, { tapped: true });
-  assert.equal(mockWaitForRunner.mock.calls.length, 1);
-  assertRunnerCommand(mockWaitForRunner.mock.calls[0]?.[2], { command: 'uptime' });
-  assert.equal(mockWaitForRunner.mock.calls[0]?.[4], 1_000);
-  assert.equal(mockSendRunnerCommandOnce.mock.calls.length, 1);
-});
-
-test('runner session emits explicit diagnostics when ready sessions are probed', async () => {
-  const session = makeRunnerSession({ ready: true });
-  mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
-  mockSendRunnerCommandOnce.mockResolvedValueOnce(runnerResponse({ tapped: true }));
-
-  const diagnostics = await captureDiagnostics(async () => {
-    await executeRunnerCommandWithSession(
-      IOS_SIMULATOR,
-      session,
-      { command: 'tap', x: 120, y: 240, appBundleId: 'com.example.demo' },
-      '/tmp/runner.log',
-      30_000,
-    );
-  });
-
-  assert.match(diagnostics, /ios_runner_readiness_preflight/);
-  assert.match(diagnostics, /"reason":"no_recent_healthy_mutation"/);
-  assert.doesNotMatch(diagnostics, /ios_runner_readiness_preflight_skipped/);
-});
-
-test('runner session marks preflight failures for ready mutating commands', async () => {
-  const session = makeRunnerSession({ ready: true });
-  mockWaitForRunner.mockRejectedValueOnce(new Error('fetch failed'));
-
-  await assert.rejects(
-    () =>
-      executeRunnerCommandWithSession(
-        IOS_SIMULATOR,
-        session,
-        { command: 'tap', x: 120, y: 240, appBundleId: 'com.example.demo' },
-        '/tmp/runner.log',
-        30_000,
-      ),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.details?.runnerReadinessPreflightFailed, true);
-      return true;
-    },
-  );
-  assert.equal(mockSendRunnerCommandOnce.mock.calls.length, 0);
-});
-
-test('runner session preserves runner response failures after successful readiness preflight', async () => {
-  const session = makeRunnerSession({ ready: true });
-  mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
-  mockSendRunnerCommandOnce.mockResolvedValueOnce(
-    runnerError({
-      code: 'COMMAND_FAILED',
-      message: 'Runner failed after receiving command',
-    }),
-  );
-
-  await assert.rejects(
-    () =>
-      executeRunnerCommandWithSession(
-        IOS_SIMULATOR,
-        session,
-        { command: 'tap', x: 120, y: 240, appBundleId: 'com.example.demo' },
-        '/tmp/runner.log',
-        30_000,
-      ),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.message, 'Runner failed after receiving command');
-      return true;
-    },
-  );
-});
-
-test('runner session probes readiness for ready selector taps', async () => {
-  const session = makeRunnerSession({ ready: true });
-  mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
-  mockSendRunnerCommandOnce.mockResolvedValueOnce(runnerResponse({ tapped: true }));
-
-  const result = await executeRunnerCommandWithSession(
-    IOS_SIMULATOR,
-    session,
-    {
-      command: 'tap',
-      selectorKey: 'label',
-      selectorValue: 'Navigate to article',
-      appBundleId: 'com.example.demo',
-    },
-    '/tmp/runner.log',
-    30_000,
-  );
-
-  assert.deepEqual(result, { tapped: true });
-  assert.equal(mockWaitForRunner.mock.calls.length, 1);
-  assertRunnerCommand(mockWaitForRunner.mock.calls[0]?.[2], { command: 'uptime' });
-  assert.equal(mockWaitForRunner.mock.calls[0]?.[4], 1_000);
-  assert.equal(mockSendRunnerCommandOnce.mock.calls.length, 1);
-});
-
-test('runner session probes readiness for ready sequence commands', async () => {
-  const session = makeRunnerSession({ ready: true });
-  mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
-  mockSendRunnerCommandOnce.mockResolvedValueOnce(runnerResponse({ tapped: true }));
-
-  const result = await executeRunnerCommandWithSession(
-    IOS_SIMULATOR,
-    session,
-    {
-      command: 'sequence',
-      steps: [
-        { kind: 'tap', x: 120, y: 240, pauseMs: 80 },
-        { kind: 'tap', x: 120, y: 240 },
-      ],
-      appBundleId: 'com.example.demo',
-    },
-    '/tmp/runner.log',
-    30_000,
-  );
-
-  assert.deepEqual(result, { tapped: true });
-  assert.equal(mockWaitForRunner.mock.calls.length, 1);
-  assertRunnerCommand(mockWaitForRunner.mock.calls[0]?.[2], { command: 'uptime' });
-  assert.equal(mockWaitForRunner.mock.calls[0]?.[4], 1_000);
-  assert.equal(mockSendRunnerCommandOnce.mock.calls.length, 1);
-});
-
-test('runner session keeps readiness preflight for ready tap commands without prior command state', async () => {
-  const session = makeRunnerSession({ ready: true });
-  mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
-  mockSendRunnerCommandOnce.mockResolvedValueOnce(runnerResponse({ tapped: true }));
-
-  const result = await executeRunnerCommandWithSession(
-    IOS_SIMULATOR,
-    session,
-    { command: 'tap', x: 120, y: 240, appBundleId: 'com.example.demo' },
-    '/tmp/runner.log',
-    30_000,
-  );
-
-  assert.deepEqual(result, { tapped: true });
-  assert.equal(mockWaitForRunner.mock.calls.length, 1);
-  assertRunnerCommand(mockWaitForRunner.mock.calls[0]?.[2], { command: 'uptime' });
-  assert.equal(mockSendRunnerCommandOnce.mock.calls.length, 1);
-});
-
-test('runner session keeps readiness preflight for non-tap mutating commands when marked ready', async () => {
-  const session = makeRunnerSession({ ready: true });
-  mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
-  mockSendRunnerCommandOnce.mockResolvedValueOnce(runnerResponse({ pressed: true }));
-
-  const result = await executeRunnerCommandWithSession(
-    IOS_SIMULATOR,
-    session,
-    { command: 'longPress', x: 120, y: 240, appBundleId: 'com.example.demo' },
-    '/tmp/runner.log',
-    30_000,
-  );
-
-  assert.deepEqual(result, { pressed: true });
-  assert.equal(mockWaitForRunner.mock.calls.length, 1);
-  assertRunnerCommand(mockWaitForRunner.mock.calls[0]?.[2], { command: 'uptime' });
-  assert.equal(mockSendRunnerCommandOnce.mock.calls.length, 1);
-});
-
-test('runner session preserves structured runner failures', async () => {
-  const session = makeRunnerSession({ ready: true });
-  mockWaitForRunner.mockResolvedValueOnce(
-    runnerError({
-      code: 'COMMAND_FAILED',
-      message: 'Runner crashed while reading snapshot',
-    }),
-  );
-
-  await assert.rejects(
-    () =>
-      executeRunnerCommandWithSession(
-        IOS_SIMULATOR,
-        session,
-        { command: 'snapshot', appBundleId: 'com.example.demo' },
-        '/tmp/runner.log',
-        30_000,
-      ),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.code, 'COMMAND_FAILED');
-      assert.equal(error.message, 'Runner crashed while reading snapshot');
-      assert.equal(error.details?.logPath, '/tmp/runner.log');
-      return true;
-    },
-  );
 });
 
 test('runner session invalidates after runner-fatal ok payloads', async () => {
@@ -590,7 +228,7 @@ test('runner session invalidates after runner-fatal ok payloads', async () => {
 
   assert.equal(result.runnerFatal, true);
   assert.equal(result.runnerFatalReason, 'ax_snapshot_unavailable');
-  assert.equal(getRunnerSessionSnapshot(device.id), null);
+  assert.equal(readRunnerSessionLiveness(device.id), null);
   assert.equal(
     mockRunAppleToolCommand.mock.calls.some((call) => call[0] === 'pkill'),
     true,
@@ -626,7 +264,7 @@ test('runner session invalidates after XCTest recorded mutation failures', async
       return true;
     },
   );
-  assert.equal(getRunnerSessionSnapshot(device.id), null);
+  assert.equal(readRunnerSessionLiveness(device.id), null);
   assert.equal(
     mockRunAppleToolCommand.mock.calls.some((call) => call[0] === 'pkill'),
     true,
@@ -666,10 +304,8 @@ test('runner session starts xcodebuild through provider seams and reuses an aliv
     mockRunXcrun.mock.calls.some((call) => call[0]?.includes('uninstall')),
     false,
   );
-  assert.deepEqual(getRunnerSessionSnapshot(device.id), {
-    sessionId: session.sessionId,
-    alive: true,
-  });
+  // Registered and launched, but nothing has answered yet.
+  assert.equal(readRunnerSessionLiveness(device.id)?.liveness, 'starting');
 });
 
 test('runner session emits XCTest startup progress only after a runner rebuild', async () => {
@@ -692,6 +328,7 @@ test('runner session emits XCTest startup progress only after a runner rebuild',
   mockEnsureXctestrunArtifact.mockResolvedValue({
     xctestrunPath: '/tmp/cached-runner.xctestrun',
     derived: '/tmp/derived',
+    cacheKey: RUNNER_CACHE_KEY_FIXTURE,
     cache: 'hit',
     artifact: 'valid',
     buildMs: 0,
@@ -702,7 +339,6 @@ test('runner session emits XCTest startup progress only after a runner rebuild',
     xctestrunPath: '/tmp/session-runner.xctestrun',
     jsonPath: '/tmp/session-runner.json',
   });
-  mockAcquireXcodebuildSimulatorSetRedirect.mockResolvedValue({ release: mockRedirectRelease });
   mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
   mockWaitForRunner.mockResolvedValue(runnerResponse({ uptimeMs: 1 }));
 
@@ -777,7 +413,7 @@ test('idle stop tears down a retained runner after the idle window', async () =>
     scheduleIosRunnerIdleStop(device.id);
 
     await new Promise((resolve) => setTimeout(resolve, 150));
-    assert.equal(getRunnerSessionSnapshot(device.id), null);
+    assert.equal(readRunnerSessionLiveness(device.id), null);
   } finally {
     cancelIosRunnerIdleStop(device.id);
     if (previousIdleMs === undefined) delete process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS;
@@ -795,7 +431,7 @@ test('any runner use cancels a pending idle stop', async () => {
     await ensureRunnerSession(device, {});
 
     await new Promise((resolve) => setTimeout(resolve, 150));
-    assert.ok(getRunnerSessionSnapshot(device.id));
+    assert.ok(readRunnerSessionLiveness(device.id));
   } finally {
     cancelIosRunnerIdleStop(device.id);
     if (previousIdleMs === undefined) delete process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS;
@@ -812,48 +448,12 @@ test('idle stop is disabled when the window is zero', async () => {
     scheduleIosRunnerIdleStop(device.id);
 
     await new Promise((resolve) => setTimeout(resolve, 100));
-    assert.ok(getRunnerSessionSnapshot(device.id));
+    assert.ok(readRunnerSessionLiveness(device.id));
   } finally {
     cancelIosRunnerIdleStop(device.id);
     if (previousIdleMs === undefined) delete process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS;
     else process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS = previousIdleMs;
   }
-});
-
-test('shutdown detach hands off default-set simulator runner sessions', async () => {
-  const device = { ...IOS_SIMULATOR, id: 'runner-session-detach-default-sim' };
-  // Default simulator set: no XCTestDevices redirect is held.
-  mockAcquireXcodebuildSimulatorSetRedirect.mockResolvedValue(null);
-  await ensureRunnerSession(device, {});
-
-  const detached = await detachIosSimulatorRunnerSessionsForShutdown();
-
-  assert.equal(detached, 1);
-  assert.equal(getRunnerSessionSnapshot(device.id), null);
-  const leaseRaw = fs.readFileSync(
-    path.join(process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR ?? '', `${device.id}.json`),
-    'utf8',
-  );
-  const lease = JSON.parse(leaseRaw) as { ownerToken: string };
-  assert.match(lease.ownerToken, /^detached-owner-/);
-});
-
-test('shutdown detach keeps scoped simulator-set runner sessions for the kill path', async () => {
-  const device = {
-    ...IOS_SIMULATOR,
-    id: 'runner-session-detach-scoped-sim',
-    simulatorSetPath: '/tmp/custom-device-set',
-  };
-  await ensureRunnerSession(device, {});
-  assert.equal(mockAcquireXcodebuildSimulatorSetRedirect.mock.calls.length, 1);
-
-  const detached = await detachIosSimulatorRunnerSessionsForShutdown();
-
-  // The redirect-holding session must stay for disposal, which restores the
-  // XCTestDevices symlink; detach never releases the redirect itself.
-  assert.equal(detached, 0);
-  assert.ok(getRunnerSessionSnapshot(device.id));
-  assert.equal(mockRedirectRelease.mock.calls.length, 0);
 });
 
 test('runner session startup kills legacy ownerless xcodebuild before launching a new runner', async () => {
@@ -1146,13 +746,13 @@ test('runner session startup reclaims dead foreign runner lease before launching
 // separate adapter call and must keep running either way.
 function makeRecordingCleanupAdapter() {
   const treeKills: Array<{ pid: number | undefined; signal: string }> = [];
-  const xcodebuildCleanups: Array<{ deviceId: string; ownerToken: string | undefined }> = [];
+  const xcodebuildCleanups: RunnerXcodebuildCleanupTarget[] = [];
   const adapter: RunnerLeaseCleanupAdapter = {
     async cleanupRunnerProcessTree(pid, signal) {
       treeKills.push({ pid, signal });
     },
-    async cleanupRunnerXcodebuildProcesses(deviceId, ownerToken) {
-      xcodebuildCleanups.push({ deviceId, ownerToken });
+    async cleanupRunnerXcodebuildProcesses(target) {
+      xcodebuildCleanups.push(target);
     },
     cleanupTempFile() {},
   };
@@ -1182,15 +782,14 @@ test('stale-lease cleanup does not signal a recycled runner pid (start time mism
   );
   const { adapter, treeKills, xcodebuildCleanups } = makeRecordingCleanupAdapter();
 
-  await prepareRunnerLeaseForStartup(device.id, adapter);
+  await prepareRunnerLeaseForStartup(device, adapter);
 
   assert.deepEqual(treeKills, [
     { pid: undefined, signal: 'SIGTERM' },
     { pid: undefined, signal: 'SIGKILL' },
   ]);
-  assert.deepEqual(xcodebuildCleanups, [
-    { deviceId: device.id, ownerToken: 'owner-dead-recycled' },
-  ]);
+  const sweptDeviceIds = xcodebuildCleanups.map((target) => target.deviceId);
+  assert.deepEqual(sweptDeviceIds, [device.id]);
 });
 
 test('stale-lease cleanup signals the runner pid when its start time still matches', async () => {
@@ -1201,7 +800,7 @@ test('stale-lease cleanup signals the runner pid when its start time still match
   );
   const { adapter, treeKills } = makeRecordingCleanupAdapter();
 
-  await prepareRunnerLeaseForStartup(device.id, adapter);
+  await prepareRunnerLeaseForStartup(device, adapter);
 
   assert.deepEqual(treeKills, [
     { pid: 55_555, signal: 'SIGTERM' },
@@ -1221,7 +820,7 @@ test('stale-lease cleanup re-verifies the pid before the SIGKILL escalation', as
   );
   const { adapter, treeKills } = makeRecordingCleanupAdapter();
 
-  await prepareRunnerLeaseForStartup(device.id, adapter);
+  await prepareRunnerLeaseForStartup(device, adapter);
 
   assert.deepEqual(treeKills, [
     { pid: 55_555, signal: 'SIGTERM' },
@@ -1237,7 +836,7 @@ test('stale-lease cleanup without a recorded start time trusts only runner-shape
     pid === 55_555 ? 'node /usr/local/bin/opencode run --model gpt-high' : null,
   );
   const foreign = makeRecordingCleanupAdapter();
-  await prepareRunnerLeaseForStartup(device.id, foreign.adapter);
+  await prepareRunnerLeaseForStartup(device, foreign.adapter);
   assert.deepEqual(foreign.treeKills, [
     { pid: undefined, signal: 'SIGTERM' },
     { pid: undefined, signal: 'SIGKILL' },
@@ -1250,7 +849,7 @@ test('stale-lease cleanup without a recorded start time trusts only runner-shape
       : null,
   );
   const runner = makeRecordingCleanupAdapter();
-  await prepareRunnerLeaseForStartup(device.id, runner.adapter);
+  await prepareRunnerLeaseForStartup(device, runner.adapter);
   assert.deepEqual(runner.treeKills, [
     { pid: 55_555, signal: 'SIGTERM' },
     { pid: 55_555, signal: 'SIGKILL' },
@@ -1263,7 +862,7 @@ test('stale-lease cleanup skips a dead runner pid entirely', async () => {
   mockIsProcessAlive.mockImplementation((pid) => pid !== 999_999_999 && pid !== 55_555);
   const { adapter, treeKills } = makeRecordingCleanupAdapter();
 
-  await prepareRunnerLeaseForStartup(device.id, adapter);
+  await prepareRunnerLeaseForStartup(device, adapter);
 
   assert.deepEqual(treeKills, [
     { pid: undefined, signal: 'SIGTERM' },
@@ -1401,36 +1000,6 @@ test('runner lease cleanup reclaims only leases owned by the stopped daemon', as
   assert.deepEqual(mockCleanupTempFile.mock.calls, [[owned.xctestrunPath], [owned.jsonPath]]);
 });
 
-test('runner session restarts alive runner when expected xctestrun artifact changes', async () => {
-  const device = { ...IOS_SIMULATOR, id: 'runner-session-stale-artifact-sim' };
-
-  mockEnsureXctestrunArtifact
-    .mockResolvedValueOnce({
-      xctestrunPath: '/tmp/base-runner.xctestrun',
-      derived: '/tmp/derived',
-      cache: 'miss',
-      artifact: 'rebuilt',
-      buildMs: 12,
-      xctestrunPathSource: 'build',
-    })
-    .mockResolvedValueOnce({
-      xctestrunPath: '/tmp/base-runner-next.xctestrun',
-      derived: '/tmp/derived-next',
-      cache: 'miss',
-      artifact: 'rebuilt',
-      buildMs: 13,
-      xctestrunPathSource: 'build',
-    });
-
-  const session = await ensureRunnerSession(device, {});
-  mockResolveRunnerDerivedPath.mockReturnValue('/tmp/derived-next');
-  const restarted = await ensureRunnerSession(device, {});
-
-  assert.notEqual(restarted, session);
-  assert.equal(restarted.xctestrunArtifact?.derived, '/tmp/derived-next');
-  assert.equal(mockRunCmdBackground.mock.calls.length, 2);
-});
-
 test('runner session reuses external xctestrun artifact without cache-derived comparison', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-session-external-artifact-sim' };
   mockEnsureXctestrunArtifact.mockResolvedValueOnce({
@@ -1467,7 +1036,6 @@ test('runner session restarts dead runner without graceful shutdown', async () =
     ['/tmp/session-runner.xctestrun'],
     ['/tmp/session-runner.json'],
   ]);
-  assert.equal(mockRedirectRelease.mock.calls.length, 1);
 });
 
 test('runner session stop kills only owned stale xcodebuild runner processes without in-memory session', async () => {
@@ -1501,12 +1069,11 @@ test('runner session abort removes owned lease for in-memory sessions', async ()
   await abortAllIosRunnerSessions();
 
   assert.equal(fs.existsSync(leasePath), false);
-  assert.equal(getRunnerSessionSnapshot(session.deviceId), null);
+  assert.equal(readRunnerSessionLiveness(session.deviceId), null);
   assert.deepEqual(mockCleanupTempFile.mock.calls, [
     ['/tmp/session-runner.xctestrun'],
     ['/tmp/session-runner.json'],
   ]);
-  assert.equal(mockRedirectRelease.mock.calls.length, 1);
 });
 
 function isXcodebuildPkillCall(call: unknown[]): boolean {
@@ -1548,8 +1115,7 @@ test('runner session invalidation skips graceful shutdown and removes stale sess
     ['/tmp/session-runner.xctestrun'],
     ['/tmp/session-runner.json'],
   ]);
-  assert.equal(mockRedirectRelease.mock.calls.length, 1);
-  assert.equal(getRunnerSessionSnapshot(device.id), null);
+  assert.equal(readRunnerSessionLiveness(device.id), null);
 });
 
 test('runner session validates supported Apple runner devices', () => {
@@ -1595,7 +1161,7 @@ for (const { name, command } of ALLOWLISTED_MUTATIONS) {
     vi.setSystemTime(new Date('2026-06-11T00:00:00Z'));
     try {
       const session = makeRunnerSession({
-        ready: true,
+        state: 'ready',
         lastHealthyMutation: { atMs: Date.now() - 1_500, appBundleId: 'com.example.demo' },
       });
       mockSendRunnerCommandOnce.mockResolvedValueOnce(runnerResponse({ acted: true }));
@@ -1624,7 +1190,7 @@ for (const { name, command } of ALLOWLISTED_MUTATIONS) {
 }
 
 test('runner session records recency only from allowlisted healthy mutations', async () => {
-  const session = makeRunnerSession({ ready: true });
+  const session = makeRunnerSession({ state: 'ready' });
   mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
   mockSendRunnerCommandOnce.mockResolvedValueOnce(runnerResponse({ tapped: true }));
 
@@ -1653,7 +1219,7 @@ test('runner session records recency only from allowlisted healthy mutations', a
 });
 
 test('runner session does not record recency from successful read-only responses', async () => {
-  const session = makeRunnerSession({ ready: true });
+  const session = makeRunnerSession({ state: 'ready' });
   mockWaitForRunner
     .mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }))
     .mockResolvedValueOnce(runnerResponse({ nodes: [], truncated: false }));
@@ -1684,7 +1250,7 @@ test('runner session does not record recency from successful read-only responses
 });
 
 test('runner session does not record recency from runnerFatal ok payloads', async () => {
-  const session = makeRunnerSession({ ready: true });
+  const session = makeRunnerSession({ state: 'ready' });
   mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
   mockSendRunnerCommandOnce.mockResolvedValueOnce(
     runnerResponse({
@@ -1707,7 +1273,7 @@ test('runner session does not record recency from runnerFatal ok payloads', asyn
 
 test('runner session preflights with conservative_command for non-allowlisted mutations', async () => {
   const session = makeRunnerSession({
-    ready: true,
+    state: 'ready',
     lastHealthyMutation: { atMs: Date.now(), appBundleId: 'com.example.demo' },
   });
   mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
@@ -1728,7 +1294,7 @@ test('runner session preflights with conservative_command for non-allowlisted mu
 });
 
 test('runner session sends targetReset without a readiness preflight', async () => {
-  const session = makeRunnerSession({ ready: true });
+  const session = makeRunnerSession({ state: 'ready' });
   mockSendRunnerCommandOnce.mockResolvedValueOnce(runnerResponse({ targetReset: true }));
 
   const diagnostics = await captureDiagnostics(async () => {
@@ -1747,7 +1313,7 @@ test('runner session sends targetReset without a readiness preflight', async () 
 });
 
 test('runner session preflights with no_recent_healthy_mutation when ready without a record', async () => {
-  const session = makeRunnerSession({ ready: true });
+  const session = makeRunnerSession({ state: 'ready' });
   mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
   mockSendRunnerCommandOnce.mockResolvedValueOnce(runnerResponse({ tapped: true }));
 
@@ -1767,7 +1333,7 @@ test('runner session preflights with no_recent_healthy_mutation when ready witho
 
 test('runner session preflights with healthy_mutation_stale when the record is older than 5s', async () => {
   const session = makeRunnerSession({
-    ready: true,
+    state: 'ready',
     lastHealthyMutation: { atMs: Date.now() - 6_000, appBundleId: 'com.example.demo' },
   });
   mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
@@ -1789,7 +1355,7 @@ test('runner session preflights with healthy_mutation_stale when the record is o
 
 test('runner session preflights with app_activation_uncertain on a differing bundle', async () => {
   const session = makeRunnerSession({
-    ready: true,
+    state: 'ready',
     lastHealthyMutation: { atMs: Date.now(), appBundleId: 'com.example.demo' },
   });
   mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
@@ -1811,7 +1377,7 @@ test('runner session preflights with app_activation_uncertain on a differing bun
 
 test('runner session preflights with startup reason for the first command on a fresh session', async () => {
   const session = makeRunnerSession({
-    ready: false,
+    state: 'starting',
     lastHealthyMutation: { atMs: Date.now(), appBundleId: 'com.example.demo' },
   });
   mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
@@ -1833,7 +1399,7 @@ test('runner session preflights with startup reason for the first command on a f
 
 test('runner session clears recency and marks the error when a skipped-preflight send fails', async () => {
   const session = makeRunnerSession({
-    ready: true,
+    state: 'ready',
     lastHealthyMutation: { atMs: Date.now() - 1_000, appBundleId: 'com.example.demo' },
   });
   mockSendRunnerCommandOnce.mockRejectedValueOnce(new Error('fetch failed'));
@@ -1863,7 +1429,7 @@ test('runner session clears recency and marks the error when a skipped-preflight
 
 test('runner session does not mark structured runner failures after a skip as skipped-preflight', async () => {
   const session = makeRunnerSession({
-    ready: true,
+    state: 'ready',
     lastHealthyMutation: { atMs: Date.now() - 1_000, appBundleId: 'com.example.demo' },
   });
   mockSendRunnerCommandOnce.mockResolvedValueOnce(
@@ -1894,7 +1460,7 @@ test('runner session does not mark structured runner failures after a skip as sk
 test('runner session clears recency when an allowlisted command returns XCTest recorded failure', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-session-skip-xctest-failure-sim' };
   const session = await ensureRunnerSession(device, {});
-  session.ready = true;
+  session.state = 'ready';
   session.lastHealthyMutation = { atMs: Date.now() - 1_000, appBundleId: 'com.example.demo' };
   mockWaitForRunner.mockClear();
   mockSendRunnerCommandOnce.mockResolvedValueOnce(
@@ -1921,13 +1487,13 @@ test('runner session clears recency when an allowlisted command returns XCTest r
   );
 
   assert.equal(session.lastHealthyMutation, undefined);
-  assert.equal(getRunnerSessionSnapshot(device.id), null);
+  assert.equal(readRunnerSessionLiveness(device.id), null);
 });
 
 test('runner session invalidates when the runner reports abandoned main-thread work is wedged', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-session-wedged-sim' };
   const session = await ensureRunnerSession(device, {});
-  session.ready = true;
+  session.state = 'ready';
   mockWaitForRunner.mockClear();
   mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
   mockSendRunnerCommandOnce.mockResolvedValueOnce(
@@ -1953,5 +1519,5 @@ test('runner session invalidates when the runner reports abandoned main-thread w
     },
   );
 
-  assert.equal(getRunnerSessionSnapshot(device.id), null);
+  assert.equal(readRunnerSessionLiveness(device.id), null);
 });

@@ -13,8 +13,8 @@
  */
 import { test, expect, vi, beforeEach } from 'vitest';
 import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
-import { dispatchWaitViaRuntime } from '../../selector-runtime.ts';
-import type { DaemonRequest } from '../../types.ts';
+import { dispatchWaitViaRuntime } from '../../wait-runtime.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 import { WAIT_LANDMARK_MISMATCH_REASON } from '@agent-device/contracts/replay';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { snapshotRuntimeFixture } from '../../__tests__/snapshot-runtime-fixture.ts';
@@ -24,20 +24,21 @@ import {
   authoringPublication,
 } from '../../../__tests__/test-utils/session-factories.ts';
 
-vi.mock('../../../core/dispatch-resolve.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../core/dispatch-resolve.ts')>();
+vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
   return {
     ...actual,
     resolveTargetDevice: vi.fn(actual.resolveTargetDevice),
   };
 });
 
-vi.mock('../snapshot-interactor-capture.ts', async () => {
+vi.mock('../../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../__tests__/legacy-snapshot-capture-fixture.ts');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
-vi.mock('../../device-ready.ts', () => ({
+vi.mock('../../device/device-ready.ts', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 
@@ -84,9 +85,10 @@ function waitReq(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
 
 async function runWait(options: { recording?: boolean; req?: DaemonRequest } = {}) {
   const sessionStore = makeSessionStore();
-  const session = makeAndroidSession('default', {
-    ...(options.recording ? { scriptPublication: authoringPublication('armed') } : {}),
-  });
+  const session = makeAndroidSession(
+    'default',
+    options.recording ? { scriptPublication: authoringPublication('armed') } : {},
+  );
   sessionStore.set('default', session);
   const response = await dispatchWaitViaRuntime({
     req: options.req ?? waitReq(),

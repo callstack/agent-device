@@ -1,4 +1,4 @@
-import { runCmdStreaming } from '../../utils/exec.ts';
+import { runCmdStreaming } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { isRemoteBridgeBackend } from './remote-bridge.ts';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';

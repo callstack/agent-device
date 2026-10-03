@@ -6,5 +6,5 @@ if (!derivedPath) {
 }
 
 const { applyXctestRunnerAppIconFromDerivedPath } =
-  await import('../src/platforms/apple/core/runner-client.ts');
+  await import('@agent-device/platform-apple/runner/operations');
 await applyXctestRunnerAppIconFromDerivedPath(derivedPath);

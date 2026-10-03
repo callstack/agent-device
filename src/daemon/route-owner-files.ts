@@ -8,7 +8,7 @@ import type { DaemonCommandRoute } from './request-handler-chain.ts';
  * {@link DAEMON_ROUTE_HANDLERS}; the owner-file path is pure tooling metadata
  * that only `explain:command` consumes. Keeping it inline on the route object
  * shipped these strings in `dist/src/internal/daemon.js`, so — like the
- * per-command claims in `command-descriptor/owner-files.ts` — they live here in
+ * per-command claims in `@agent-device/command-registry/owner-files` — they live here in
  * a module the production import graph never reaches, and the bundler drops them.
  *
  * `satisfies Record<DaemonCommandRoute, string>` keeps the map complete: adding
@@ -17,13 +17,14 @@ import type { DaemonCommandRoute } from './request-handler-chain.ts';
  * each path still points at the module that route's loader imports.
  */
 const DAEMON_ROUTE_OWNER_FILES = {
+  humanControl: 'src/daemon/handlers/human-control.ts',
   lease: 'src/daemon/handlers/lease.ts',
   session: 'src/daemon/handlers/session.ts',
   snapshot: 'src/daemon/handlers/snapshot.ts',
   reactNative: 'src/daemon/handlers/react-native.ts',
   recordTrace: 'src/daemon/handlers/record-trace.ts',
-  find: 'src/daemon/handlers/find.ts',
-  interaction: 'src/daemon/handlers/interaction.ts',
+  find: 'src/daemon/interaction/index.ts',
+  interaction: 'src/daemon/interaction/index.ts',
   generic: 'src/daemon/request-generic-dispatch.ts',
 } as const satisfies Record<DaemonCommandRoute, string>;
 

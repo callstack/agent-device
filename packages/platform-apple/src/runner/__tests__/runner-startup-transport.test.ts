@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import type { ExecBackgroundResult } from '../host.ts';
+import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import type { RunnerSession } from '../runner-session-types.ts';
+import { RunnerCommandAccounting, type RunnerSession } from '../runner-session-types.ts';
 import {
   iosDevice,
   iosSimulator,
@@ -27,8 +27,12 @@ vi.mock('../runner-usbmux.ts', async (importOriginal) => {
   };
 });
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { clearDeviceTunnelIpCache } from '../runner-command-route.ts';
-import { waitForRunner } from '../runner-startup-transport.ts';
+import { readRunnerLogTail } from '../runner-io.ts';
+import { resolveRunnerEarlyExitHint, waitForRunner } from '../runner-startup-transport.ts';
+import { mkdtempForTestSync } from './tmp-dir.ts';
 
 beforeEach(() => {
   clearDeviceTunnelIpCache();
@@ -138,12 +142,65 @@ test('waitForRunner uses simulator fallback within the attempt for ready session
   ]);
 });
 
+test('waitForRunner types a failed simulator fallback as a refused connection', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
+  mockRunCmd.mockResolvedValue({ exitCode: 7, stdout: '', stderr: 'curl: (7) Failed to connect' });
+
+  await assert.rejects(
+    () => waitForRunner(iosSimulator, 8100, { command: 'uptime' }, undefined, 100),
+    (error: unknown) => {
+      const appError = error as AppError;
+      assert.equal(appError.message, 'Runner did not accept connection (simctl spawn)');
+      assert.equal(appError.details?.runnerConnectFailureReason, 'runner_connect_refused');
+      return true;
+    },
+  );
+  assert.equal(mockRunCmd.mock.calls.length, 1);
+});
+
+test('waitForRunner discloses no when the runner exited before any attempt could write', async () => {
+  const session: RunnerSession = {
+    ...makeReadyRunnerSession(),
+    device: iosDevice,
+    deviceId: iosDevice.id,
+    child: { pid: 1234, exitCode: 65 } as ExecBackgroundResult['child'],
+  };
+  await assert.rejects(
+    () => waitForRunner(iosDevice, 8100, { command: 'tap', x: 1, y: 1 }, undefined, 100, session),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.message, 'Runner did not accept connection (xcodebuild exited early)');
+      assert.equal(error.details?.dispatched, 'no');
+      return true;
+    },
+  );
+  assert.equal(mockUsbmuxPostCommand.mock.calls.length, 0);
+});
+
+test('waitForRunner discloses unknown when an attempt may have written before a refused fallback', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockRejectedValue(new AppError('COMMAND_FAILED', 'Runner command deadline exceeded')),
+  );
+  mockRunCmd.mockResolvedValue({ exitCode: 7, stdout: '', stderr: 'curl: (7) Failed to connect' });
+
+  await assert.rejects(
+    () => waitForRunner(iosSimulator, 8100, { command: 'tap', x: 1, y: 1 }, undefined, 100),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.dispatched, 'unknown');
+      return true;
+    },
+  );
+  assert.equal(mockRunCmd.mock.calls.length, 1);
+});
+
 test('waitForRunner wakes a simulator startup retry when the listener reports ready', async () => {
   vi.useFakeTimers();
   const readiness = new AbortController();
   const session: RunnerSession = {
     ...makeReadyRunnerSession(),
-    ready: false,
+    state: 'starting',
     startupRetryWake: readiness.signal,
   };
   let fetchAttempts = 0;
@@ -211,6 +268,13 @@ test('waitForRunner invalidates cached tunnel IP when localhost fallback succeed
 });
 
 test('waitForRunner preserves xcodebuild diagnostics when the runner exits during the final probe', async () => {
+  // Production shape since #2681: xcodebuild appends its own output to the session log, and the
+  // exec result carries nothing, so the log is what the early-exit error can quote.
+  const runnerLogPath = path.join(mkdtempForTestSync('runner-early-exit-'), 'runner.log');
+  fs.writeFileSync(
+    runnerLogPath,
+    'The application could not be launched because the Developer App Certificate is not trusted.\n',
+  );
   const session: RunnerSession = {
     sessionId: 'starting-device-session',
     device: xctestIosDevice,
@@ -218,14 +282,13 @@ test('waitForRunner preserves xcodebuild diagnostics when the runner exits durin
     port: 8100,
     xctestrunPath: '/tmp/runner.xctestrun',
     jsonPath: '/tmp/runner.json',
-    testPromise: Promise.resolve({
-      exitCode: 65,
-      stdout: '',
-      stderr:
-        'The application could not be launched because the Developer App Certificate is not trusted.',
-    }),
+    runnerLogPath,
+    readLogTail: (maxBytes) =>
+      readRunnerLogTail({ logPath: runnerLogPath, startOffset: 0 }, maxBytes),
+    testPromise: Promise.resolve({ exitCode: 65, stdout: '', stderr: '' }),
     child: { pid: 1234, exitCode: null } as ExecBackgroundResult['child'],
-    ready: false,
+    state: 'starting',
+    commandCharges: new RunnerCommandAccounting(),
   };
   mockUsbmuxPostCommand.mockImplementation(async () => {
     (session.child as { exitCode: number | null }).exitCode = 65;
@@ -238,6 +301,7 @@ test('waitForRunner preserves xcodebuild diagnostics when the runner exits durin
     (error: unknown) => {
       const appError = error as AppError;
       assert.equal(appError.message, 'Runner did not accept connection (xcodebuild exited early)');
+      assert.equal(appError.details?.runnerConnectFailureReason, 'xcodebuild_exited_early');
       assert.equal(
         (appError.details?.xcodebuild as { exitCode?: number } | undefined)?.exitCode,
         65,
@@ -251,6 +315,44 @@ test('waitForRunner preserves xcodebuild diagnostics when the runner exits durin
   );
 
   assert.equal(mockUsbmuxPostCommand.mock.calls.length, 1);
+});
+
+test('waitForRunner carries the disk-image state when the runner is still alive at the connect deadline (#2683)', async () => {
+  // The alive-child twin of the early exit: `xcodebuild` never exits, the runner never answers, and
+  // the failure a locked phone produces this way must still say what the phone reported.
+  const session: RunnerSession = {
+    sessionId: 'starting-device-session',
+    device: xctestIosDevice,
+    deviceId: xctestIosDevice.id,
+    port: 8100,
+    xctestrunPath: '/tmp/runner.xctestrun',
+    jsonPath: '/tmp/runner.json',
+    testPromise: new Promise(() => {}),
+    child: { pid: 1234, exitCode: null } as ExecBackgroundResult['child'],
+    state: 'starting',
+    commandCharges: new RunnerCommandAccounting(),
+    startupDeviceStates: {
+      developerMode: 'enabled',
+      developerDiskImage: 'unavailable',
+      developerDiskImageHint: 'Unlock the iPhone so it can mount the developer disk image.',
+    },
+  };
+  mockUsbmuxPostCommand.mockRejectedValue(new Error('ECONNREFUSED'));
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
+
+  await assert.rejects(
+    () =>
+      waitForRunner(xctestIosDevice, 8100, { command: 'uptime' }, '/tmp/runner.log', 100, session),
+    (error: unknown) => {
+      const appError = error as AppError;
+      assert.equal(appError.message, 'Runner did not accept connection');
+      assert.equal(appError.details?.runnerConnectFailureReason, 'runner_connect_refused');
+      assert.equal(appError.details?.developerDiskImage, 'unavailable');
+      assert.equal(appError.details?.reason, 'IOS_RUNNER_CONNECT_TIMEOUT');
+      assert.doesNotMatch(String(appError.details?.hint), /Unlock the iPhone/);
+      return true;
+    },
+  );
 });
 
 test('waitForRunner reports the usbmux verdict for xctest devices without retrying', async () => {
@@ -311,6 +413,26 @@ function makeReadyRunnerSession(): RunnerSession {
     jsonPath: '/tmp/runner.json',
     testPromise: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
     child: { pid: 1234, exitCode: null } as ExecBackgroundResult['child'],
-    ready: true,
+    state: 'ready',
+    commandCharges: new RunnerCommandAccounting(),
   };
 }
+
+test('resolveRunnerEarlyExitHint surfaces busy-connecting guidance', () => {
+  const hint = resolveRunnerEarlyExitHint(
+    'Runner did not accept connection (xcodebuild exited early)',
+    'Ineligible destinations for the "AgentDeviceRunner" scheme:\n{ error:Device is busy (Connecting to iPhone) }',
+    '',
+  );
+  assert.match(hint, /still connecting/i);
+});
+
+test('resolveRunnerEarlyExitHint falls back to runner connect timeout hint', () => {
+  const hint = resolveRunnerEarlyExitHint(
+    'Runner did not accept connection (xcodebuild exited early)',
+    '',
+    'xcodebuild failed unexpectedly',
+  );
+  assert.match(hint, /retry runner startup/i);
+  assert.match(hint, /pnpm clean:xcuitest/i);
+});

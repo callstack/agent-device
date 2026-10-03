@@ -2,26 +2,26 @@ import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/de
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
 vi.mock('../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../platform-runtime-runtime-hints.ts')>();
   return { ...actual, applyRuntimeHintValues: vi.fn(async () => {}) };
 });
 
-vi.mock('../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
+vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../platforms/apple/core/runner-client.ts')>();
+    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
   return { ...actual, prewarmIosRunnerSession: vi.fn() };
 });
 
-vi.mock('../../platforms/apple/core/apps.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/apple/core/apps.ts')>();
+vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/platform-apple/app-resolution')>();
   return {
     ...actual,
     resolveIosApp: vi.fn(async () => 'com.example.app'),
@@ -39,10 +39,11 @@ import {
   lifecycleDeviceRuntimeGateway,
   systemRuntimeSpies,
 } from './test-device-runtime-gateway.ts';
-import { ensureDeviceReady } from '../device-ready.ts';
+import { ensureDeviceReady } from '../device/device-ready.ts';
 // Readiness is package-owned; hold the open at the fixture's platform-neutral readiness gate.
 import { awaitFixtureReadiness } from './application-lifecycle-runtime-fixture.ts';
 import { createRequestPlatformProviders } from '../../platform-runtime.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
@@ -70,7 +71,7 @@ test('replay runs active-session actions inside the parent request provider scop
   const appleRunnerProvider = vi.fn(() => undefined);
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -108,7 +109,7 @@ test('replay routes session-changing actions through the full request path', asy
   const appleRunnerProvider = vi.fn(() => undefined);
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -143,7 +144,7 @@ test('session list includes a cwd-scoped session opened by replay', async () => 
   const sessionStore = makeSessionStore('agent-device-replay-open-scope-');
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -178,7 +179,8 @@ test('session list includes a cwd-scoped session opened by replay', async () => 
     data: {
       sessions: [
         expect.objectContaining({
-          name: expect.stringMatching(/^cwd:[a-f0-9]+:default$/),
+          // A platform-selecting request addresses that platform's own implicit session (#2580).
+          name: expect.stringMatching(/^cwd:[a-f0-9]+:ios$/),
         }),
       ],
     },
@@ -208,7 +210,7 @@ test('fresh replay retains a dynamically selected device through finalization', 
   });
 
   const handler = createRequestHandler({
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry,

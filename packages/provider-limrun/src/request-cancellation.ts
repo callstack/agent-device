@@ -62,10 +62,12 @@ export function createLimrunRequestOperationDrain(): LimrunRequestOperationDrain
     wait: async <Value>(source: Promise<Value>, signal?: AbortSignal, abortMessage?: string) => {
       let settled!: () => void;
       const completion = new Promise<void>((resolve) => {
-        settled = resolve;
+        settled = () => {
+          pending.delete(completion);
+          resolve();
+        };
       });
       pending.add(completion);
-      void completion.then(() => pending.delete(completion));
       return await awaitLimrunOperation(source, signal, abortMessage, settled);
     },
     [Symbol.asyncDispose]: async () => {

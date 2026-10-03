@@ -1,8 +1,8 @@
-import { emitRequestProgress } from '../../request/progress.ts';
+import { emitRequestProgress } from '@agent-device/host-kit/request';
 import {
   formatDoctorCheckDetailLines,
   formatDoctorCheckSummaryLine,
-} from '../../utils/doctor-output.ts';
+} from '../../core/doctor-output.ts';
 import type { DoctorCheck, DoctorStatus } from '@agent-device/contracts/observability';
 
 export function summarizeDoctorStatus(checks: DoctorCheck[]): 'pass' | 'warn' | 'fail' {

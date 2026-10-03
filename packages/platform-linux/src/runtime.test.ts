@@ -5,6 +5,7 @@ import type {
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { SnapshotRuntimeHost } from '@agent-device/contracts/snapshot-runtime';
+import { HOVER_UNAVAILABLE_HINT } from '@agent-device/contracts/touch-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createLinuxPlatformRuntime } from './runtime.ts';
 
@@ -217,6 +218,10 @@ function expectLinuxNavigationAndKeyboardFacts(
     // R56: the Linux interactor's own `appSwitcher` throws, and the retired descriptor declared
     // `linux: {}`, so no Linux cell was ever admitted.
     'appSwitcher',
+    // The Action Button is iPhone/iPad hardware; the Linux desktop has no equivalent control.
+    'actionButton',
+    // Nor does it have a foldable hinge to pose.
+    'setFoldPose',
     // R57: the retired `trigger-app-event` descriptor declared `linux: {}` too.
     'triggerAppEvent',
     // R58/R59: and so did `settings` and `alert`.
@@ -304,6 +309,24 @@ test.each([
     hint: expect.stringContaining('source hold, timed movement, and destination hold'),
   });
   expect(facts.operations.gestureViewport.available).toBe(false);
+});
+
+test('hover has no Linux interactor route; the touch family reports its typed denial', async () => {
+  const facts = await createLinuxPlatformRuntime(lifecycleHost()).inspectFacts({
+    platform: 'linux',
+    id: 'linux',
+    name: 'Linux',
+    kind: 'device',
+    target: 'desktop',
+    booted: true,
+  });
+  const hoverDenial = {
+    available: false,
+    reason: 'unsupported-platform-leaf',
+    hint: HOVER_UNAVAILABLE_HINT,
+  };
+  expect(facts.operations.hoverPoint).toEqual(hoverDenial);
+  expect(facts.operations.hoverRef).toEqual(hoverDenial);
 });
 
 test('binds the Linux coordinate-fling tier without a frame read', async () => {

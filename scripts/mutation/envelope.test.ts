@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdSync } from '@agent-device/host-kit/command';
 import { laneEnvelope, LANE_ENVELOPE_SCHEMA_VERSION } from '../lib/lane-envelope.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');

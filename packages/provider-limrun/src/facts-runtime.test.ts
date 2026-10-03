@@ -74,3 +74,15 @@ test('limrunLifecycleFacts gates port reverse to a live Android session', () => 
     hint: 'Limrun port reverse requires an active Android Limrun session.',
   });
 });
+
+test('screen recording rides the provider recorder on a live session and closes with it', () => {
+  const live = limrunAppLogFacts(limrunOwnerOptions(), device).operations;
+  expect(live.screenRecordingStart).toEqual({ available: true });
+  expect(live.screenRecordingReattach).toEqual({ available: true });
+  expect(live.screenRecordingCleanup).toEqual({ available: true });
+
+  const recovery = limrunAppLogRecoveryFacts(limrunOwnerOptions(), device).operations;
+  expect(recovery.screenRecordingStart).toEqual(liveSessionUnavailable);
+  expect(recovery.screenRecordingReattach).toEqual(liveSessionUnavailable);
+  expect(recovery.screenRecordingCleanup).toEqual(liveSessionUnavailable);
+});

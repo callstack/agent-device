@@ -5,11 +5,18 @@ import type {
   OwnedProcessRecordWriter,
 } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
+import { macOsHelperSurface } from '@agent-device/contracts/session';
+import type {
+  CaptureSnapshotInput,
+  SnapshotResult,
+  SnapshotRuntimeHost,
+} from '@agent-device/contracts/snapshot-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { createAppleToolHost } from './platform-runtime-apple-tool-host.ts';
 import { createHostToolchainPreparer } from './platform-runtime-toolchain-host.ts';
-import { runCmd, whichCmd } from './utils/exec.ts';
+import { runCmd, whichCmd } from '@agent-device/host-kit/command';
+import { guardedHostCommandArgv } from './platform-runtime-host-device-shell.ts';
 import { openAppLogOutput, readAppLogOutputTail } from './platform-runtime-app-log-output.ts';
 import { createManagedAppLogProcesses } from './platform-runtime-app-log-process.ts';
 import { createNetworkRuntimeHost } from './platform-runtime-network-host.ts';
@@ -19,8 +26,6 @@ import { createPerfRuntimeHost } from './platform-runtime-perf-host.ts';
 import { createApplePhysicalReadinessHost } from './platform-runtime-apple-physical-readiness.ts';
 import { createAppleAutomationKeepHotHost } from './platform-runtime-apple-automation-keep-hot.ts';
 import { createAndroidEmulatorHost } from './platform-runtime-android-emulator-host.ts';
-import { createAppInventoryRuntimeHost } from './platform-runtime-app-inventory-host.ts';
-import { createAppStateRuntimeHost } from './platform-runtime-app-state-host.ts';
 import { createDeviceShutdownRuntimeHost } from './platform-runtime-device-shutdown-host.ts';
 import { createAppleAppDeploymentExecutor } from './platform-runtime-apple-deployment-executor.ts';
 import { createAndroidAppDeploymentExecutor } from './platform-runtime-android-deployment-executor.ts';
@@ -30,12 +35,27 @@ import { createAppleApplicationTools } from './platform-runtime-apple-applicatio
 import { createAndroidApplicationTools } from './platform-runtime-android-application-tools.ts';
 import { createLocalApplicationInteractorHost } from './platform-runtime-local-application-interactors.ts';
 import { createApplicationResourceLifecycle } from './platform-runtime-application-resources.ts';
-import { createSnapshotRuntimeHost } from './snapshot/snapshot-desktop-surface.ts';
+
+export { createSnapshotRuntimeHost } from '@agent-device/capture-kit/snapshot-desktop-surface';
+
+export async function loadMacOsSurfaceSnapshot(
+  options: CaptureSnapshotInput['options'],
+  signal?: AbortSignal,
+): Promise<SnapshotResult> {
+  const surface = macOsHelperSurface(options?.surface);
+  if (!surface) {
+    throw new TypeError('Apple surface capture requires a helper-routed macOS surface');
+  }
+  const { captureMacOsSurfaceSnapshot } = await import('@agent-device/platform-apple/macos');
+  return await captureMacOsSurfaceSnapshot({ ...options, surface }, signal);
+}
 
 export function createPlatformRuntimeHost(options: {
   sessionsDir: string;
   resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
   shutdownLoaders: DeviceShutdownRuntimeLoaders;
+  assertShutdownAllowed?: () => void;
+  snapshot: SnapshotRuntimeHost;
   ownedProcesses?: OwnedProcessRecordWriter;
 }): PlatformRuntimeHost {
   const processes = createManagedAppLogProcesses(options.sessionsDir);
@@ -44,7 +64,7 @@ export function createPlatformRuntimeHost(options: {
   const commands = Object.freeze({
     which: async (executable: string) => ((await whichCmd(executable)) ? executable : undefined),
     run: async (request: HostCommandRequest, signal?: AbortSignal) => {
-      const result = await runCmd(request.executable, [...request.args], {
+      const result = await runCmd(request.executable, guardedHostCommandArgv(request), {
         allowFailure: request.allowFailure,
         cwd: request.cwd,
         env: request.env ? { ...process.env, ...request.env } : undefined,
@@ -90,8 +110,6 @@ export function createPlatformRuntimeHost(options: {
       },
     }),
     ...network,
-    appInventory: createAppInventoryRuntimeHost(),
-    appState: createAppStateRuntimeHost(),
     appleDeployment: createAppleAppDeploymentExecutor(),
     androidDeployment: createAndroidAppDeploymentExecutor(),
     androidTools: createAndroidToolHost(),
@@ -107,11 +125,12 @@ export function createPlatformRuntimeHost(options: {
     deviceShutdown: createDeviceShutdownRuntimeHost(
       { appleTools, commands },
       options.shutdownLoaders,
+      options.assertShutdownAllowed,
     ),
     screenRecording: createScreenRecordingRuntimeHost({ ownedProcesses: options.ownedProcesses }),
     audioProbe: createAudioProbeRuntimeHost({ ownedProcesses: options.ownedProcesses }),
     perf: createPerfRuntimeHost(),
-    snapshot: createSnapshotRuntimeHost(),
+    snapshot: options.snapshot,
     localInteractors: createLocalApplicationInteractorHost(),
     appleApplications,
     androidApplications,

@@ -34,6 +34,12 @@ Supported public entry points for Node consumers:
   - `createLocalArtifactAdapter(options?)`
   - `AppError`, `isAgentDeviceError(error)`, `normalizeAgentDeviceError(error)`
   - `centerOfRect(rect)`
+  - types: `AgentDeviceClient`, `AgentDeviceClientConfig`, `AgentDeviceDevice`
+  - types: every option and result type of the client's methods, among them `AppOpenOptions`,
+    `AppOpenResult`, `CaptureSnapshotOptions`, `CaptureSnapshotResult`, `CaptureScreenshotResult`,
+    `PressOptions`
+  - types: `SnapshotNode`, `RawSnapshotNode`, `SnapshotState`, `Rect`, `Point`
+  - types: `NormalizedError`, `AppErrorCode`, `KnownAppErrorCode`, `AppErrorDetails`, `ErrorCause`
 - `agent-device/io`
   - `createLocalArtifactAdapter(options?)`
   - types: `ArtifactAdapter`, `ArtifactDescriptor`, `CreateTempFileOptions`, `FileInputRef`,
@@ -70,7 +76,7 @@ Supported public entry points for Node consumers:
   - types: `FindMatchOptions`
 - `agent-device/install-source`
   - `ARCHIVE_EXTENSIONS`
-  - `isTrustedInstallSourceUrl(sourceUrl)`
+  - `isTrustedInstallSourceUrl(sourceUrl)` (deprecated; install sources are not gated on it)
   - `validateDownloadSourceUrl(url)`
   - types: `MaterializeInstallSource`
 - `agent-device/artifacts`
@@ -91,6 +97,8 @@ Supported public entry points for Node consumers:
   - `runtime.getDeviceSession(device)`
   - types: `LimrunRuntimeOptions`, `LimrunDeviceSession`, `LimrunAndroidDeviceSession`,
     `LimrunIosDeviceSession`, `LimrunIosCommandExecution`
+- `agent-device/plugins`
+  - experimental factory context: `ProviderPluginHost`; see [provider plugins](./plugins.md).
 - `agent-device/ai-sdk`
   - `createAgentDeviceTools(options)`
   - types: `AgentDeviceToolSet`, `AgentDeviceTools`, `CreateAgentDeviceToolsOptions`
@@ -106,9 +114,6 @@ The canonical client example is embedded below. It is also runnable from [`examp
 
 For direct iOS simulator app launches, `client.apps.open({ app, platform: 'ios', launchConsole: './artifacts/app.console.log' })` captures launch-time
 stdout/stderr. The option mirrors `open --launch-console` and is not valid for URL opens or non-simulator targets.
-
-When surfacing Apple simulators, `client.apps.open({ deviceHub: true })` mirrors `open --device-hub` and uses Xcode Device Hub instead of the
-standalone Simulator app.
 
 `client.sessions.stateDir()` mirrors `session state-dir` and returns the resolved daemon state directory as a pure local resolution — it never starts
 or contacts the daemon. Pass `{ stateDir }` to resolve an explicit override the same way the CLI resolves `--state-dir`.
@@ -201,12 +206,23 @@ advertise reverse support automatically; call `createAndroidPortReverseManager(p
 only when the provider supports `adb reverse` argument semantics. The manager makes duplicate setup
 idempotent for the same owner and rejects conflicting owners for the same local endpoint.
 
+The device shell re-parses whatever follows `shell` or `exec-out`, so those commands are built for you:
+every dynamic word is rendered for the quoting its transport applies before it reaches the device. `adb`
+forwards words verbatim, so a word is single-quoted; `hdc` wraps each element it sends in double quotes,
+where `$`, a backquote, and `"` stay live, so a word is escaped for that context instead. An array that
+begins with `shell` or `exec-out` and did not come from those builders is refused with `INVALID_ARGS` and
+`details.reason: 'unguarded-device-shell-argv'` instead of being dispatched. A bridge that composes its
+own device commands calls `runAdbShell(executor, words, options?)` or
+`runAdbExecOut(executor, words, options?)` from `agent-device/android-adb`, passing each value as its
+own word; `runAndroidShell(device, words, options?)` and `runAndroidExecOut(device, words, options?)`
+resolve the executor from a device instead.
+
 ```ts
 import { getAndroidAppStateWithAdb, listAndroidAppsWithAdb } from 'agent-device/android-adb';
 import type { AndroidAdbExecutorOptions } from 'agent-device/android-adb';
 
 const provider = {
-  exec: async (args: string[], options?: AndroidAdbExecutorOptions) =>
+  exec: async (args: readonly string[], options?: AndroidAdbExecutorOptions) =>
     await runAdbThroughRemoteTunnel(args, options),
 };
 
@@ -219,6 +235,8 @@ const foreground = await getAndroidAppStateWithAdb(provider.exec);
 Use `client.command.<method>()` for command-level device actions. It uses the same daemon transport path as the higher-level client methods, including session metadata, tenant/run/lease fields, normalized daemon errors, and remote artifact handling.
 
 Results are daemon-shaped objects with typed known fields, so command semantics stay aligned with the CLI.
+
+A failed interaction rejects with the same error the CLI prints. Read `error.details.dispatched` before you retry; [Commands](./commands.md) explains the two values.
 
 ```ts
 await client.command.wait({
@@ -260,7 +278,30 @@ await client.command.tvRemote({
 });
 
 await client.command.appSwitcher();
+await client.command.actionButton();
+await client.command.fold({ pose: 'open' });
+await client.command.fold({
+  keyframes: [
+    { atMs: 0, angle: 0 },
+    { atMs: 1667, angle: 160 },
+    { atMs: 3333, angle: 100 },
+    { atMs: 5000, angle: 180 },
+  ],
+});
 ```
+
+`fold` accepts either `pose` or `keyframes`. Keyframes use linear interpolation at roughly 60 updates per second; repeat an angle to hold it. Timestamps must start at zero and increase strictly, with 2–64 frames and a final timestamp no greater than 60,000ms. Angles must be finite and between 0° and 180°. The final timestamp bounds motion, excluding helper preparation and final hinge verification. A custom final angle is verified within 0.5°; interior angles must also settle. Cancellation stops the motion at its current angle. Re-snapshot afterwards, including after interrupted motion.
+
+`press`, `click`, and `longpress` take `readinessTimeoutMs`. With it, the command waits up to that many milliseconds for a target that is not on screen yet, then performs the requested interaction. Without it, the command looks once and fails at once, which is the right choice for an agent that most often misses because the selector is wrong. Use it in scripted flows, where a step can land a render early:
+
+```ts
+await client.interactions.press({
+  selector: 'label="Continue"',
+  readinessTimeoutMs: 2_000,
+});
+```
+
+The wait is capped at 2 seconds and covers only a target that has not appeared. When the target is still missing after the wait, the error carries `error.details.readiness` with `waitedMs`, `polls`, and `end` (`expired` or `stalled`). A capture that shows an empty accessibility tree ends the wait at once with `capture_sparse` and `readiness.end: sparse`. When the command had to wait and then succeeded, the result carries `data.readiness` with `polls` and `waitedMs`. A command that found its target on the first look has no `readiness` field. A covered, off-screen, or ambiguous target fails at once, and a screen that stays unreadable for the whole wait fails with its own error; neither carries `readiness`. `readinessTimeoutMs` is not an MCP tool argument and has no CLI flag.
 
 Vega OS client support is currently VVD-only and covers device discovery, app open/close, `back`, `home`, and `tvRemote`. Physical Fire TV, capture, selector, install, logging, and performance methods report unsupported for Vega targets.
 
@@ -273,6 +314,8 @@ Supported command methods:
 - `home`
 - `orientation`
 - `appSwitcher`
+- `actionButton`
+- `fold`
 - `keyboard`
 - `clipboard`
 - `tvRemote`
@@ -299,6 +342,8 @@ The complete domain-client method map is:
 - `client.debug.symbols()`
 - `client.recording.record()` and `client.recording.trace()`
 - `client.settings.update()`
+
+`client.devices.list()` returns `AgentDeviceDevice` entries. Their optional `model` and `osVersion` fields describe the hardware and OS when discovery reports them; see [Device discovery](/docs/commands#device-discovery) for the sources.
 
 `client.observability.events({ cursor, limit })` reads the session event timeline as paged JSON entries. Use `nextCursor` from the previous page to continue from the daemon-owned `events.ndjson` file without replaying already uploaded/displayed events. Cursors are absolute and survive the file's size rotation; a cursor older than the retained window rejects with `COMMAND_FAILED`, `details.reason: "EVENT_LOG_CURSOR_EXPIRED"`, and `details.earliestCursor` to resume from.
 The event timeline keeps operational context such as command/status/timing, paths, session/device/app identifiers, refs/selectors, and coordinates. Typed text, clipboard writes, push/event payloads, raw unknown command arguments, and matching raw message fragments are replaced with length-only placeholders.
@@ -388,7 +433,7 @@ If the daemon cannot determine installed app identity, the request fails instead
 `installFromSource()` URL sources are intentionally limited:
 
 - Private and loopback hosts are blocked by default.
-- Archive-backed URL installs are only supported for trusted artifact services, currently GitHub Actions and EAS.
+- URL sources from any public host may point directly to an installable, including a bare iOS `.ipa`, or to a `.zip`, `.tar`, `.tar.gz`, or `.tgz` archive containing exactly one.
 - For existing reachable artifact URLs, use `source: { kind: 'url', url: ... }`.
 - For local artifacts, use `source: { kind: 'path', path: ... }` or the CLI `install`/`reinstall` commands.
 - For compatible remote daemons that resolve CI artifacts server-side, pass a GitHub Actions artifact source:
@@ -407,7 +452,7 @@ await client.apps.installFromSource({
 
 Remote daemons may also support `{ kind: 'github-actions-artifact', owner, repo, artifactName }` or `{ kind: 'github-actions-artifact', owner, repo, runId, artifactName }`. The local client preserves these payloads and does not perform GitHub authentication or artifact download.
 
-Direct Android `.apk` and `.aab` URL sources can still resolve package identity from the downloaded install artifact. Trusted GitHub Actions and EAS archive URLs may contain one installable `.apk`, `.aab`, `.ipa`, or iOS `.app` tar archive.
+Android `.apk` and `.aab` URL sources resolve package identity from the downloaded install artifact. Archive URLs may contain one installable `.apk`, `.aab`, `.ipa`, or iOS `.app`, including inside nested archives.
 
 ## Remote Metro helpers
 

@@ -13,7 +13,7 @@ test('semantic provider methods win over the exec fallback and escape the overri
       return await fn();
     },
   });
-  const pulls: string[][] = [];
+  const pulls: (readonly string[])[] = [];
   const installs: string[] = [];
   const provider: AndroidAdbProvider = {
     exec: async () => {
@@ -37,9 +37,9 @@ test('semantic provider methods win over the exec fallback and escape the overri
   expect(escaped).toBe(2);
 });
 
-test('the exec fallback lowers semantic install options into adb flags', async () => {
+test('the exec fallback lowers the semantic replace option into adb flags', async () => {
   bindAndroidAdbHostStub();
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const provider: AndroidAdbProvider = {
     exec: async (args) => {
       calls.push(args);
@@ -47,17 +47,11 @@ test('the exec fallback lowers semantic install options into adb flags', async (
     },
   };
 
-  await installAndroidAdbPackage('/tmp/a.apk', {
-    provider,
-    replace: true,
-    allowTestPackages: true,
-    allowDowngrade: true,
-    grantPermissions: true,
-  });
+  await installAndroidAdbPackage('/tmp/a.apk', { provider, replace: true });
   await pullAndroidAdbFile('/device/a.apk', '/tmp/a.apk', { provider });
 
   expect(calls).toEqual([
-    ['install', '-r', '-t', '-d', '-g', '/tmp/a.apk'],
+    ['install', '-r', '/tmp/a.apk'],
     ['pull', '/device/a.apk', '/tmp/a.apk'],
   ]);
 });

@@ -257,6 +257,7 @@ test('a live Limrun lifecycle binding relaunches with its selected provider inte
         localInteractors: { resolve: localInteractor },
       },
       getInteractor: () => ({ close: providerClose, open: providerOpen }) as unknown as Interactor,
+      resolveAppReference: (_device, app) => (app === 'Example.app.zip' ? 'com.example.app' : app),
     }),
   );
 
@@ -270,10 +271,13 @@ test('a live Limrun lifecycle binding relaunches with its selected provider inte
     scope,
   });
 
+  await expect(
+    binding.operations.resolveOpenTarget?.({ target: 'Example.app.zip', surface: 'app' }),
+  ).resolves.toEqual({ appBundleId: 'com.example.app', appName: 'com.example.app' });
   await binding.operations.openApplication?.({
-    target: 'com.example.app',
-    positionals: ['com.example.app'],
-    appBundleId: 'com.example.app',
+    target: 'Example.app.zip',
+    positionals: ['Example.app.zip'],
+    appBundleId: 'Example.app.zip',
     surface: 'app',
     hasExistingSession: true,
     relaunch: true,
@@ -288,6 +292,13 @@ test('a live Limrun lifecycle binding relaunches with its selected provider inte
     'com.example.app',
     expect.objectContaining({ appBundleId: 'com.example.app' }),
   );
+  await binding.operations.closeApplication?.({
+    positionals: ['Example.app.zip'],
+    appBundleId: 'Example.app.zip',
+    surface: 'app',
+    execution: {},
+  });
+  expect(providerClose).toHaveBeenLastCalledWith('com.example.app');
   expect(localInteractor).not.toHaveBeenCalled();
 });
 

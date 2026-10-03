@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { renderProxyStartup } from '../cli/commands/proxy.ts';
-import { colorize } from '../utils/output.ts';
+import { colorize } from '../commands/output/color.ts';
 
 const STARTUP = {
   proxyBaseUrl: 'http://127.0.0.1:4310',

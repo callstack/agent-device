@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { commandDescriptors } from '../../core/command-descriptor/registry.ts';
+import { commandDescriptors } from '@agent-device/command-registry/registry';
 import { resolveGenericRuntimeExecution } from '../generic-runtime-execution.ts';
 
 /**

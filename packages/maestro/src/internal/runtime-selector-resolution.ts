@@ -1,4 +1,7 @@
-import { buildSnapshotNodeMap } from '@agent-device/contracts/snapshot';
+import {
+  createSnapshotVisibility,
+  type SnapshotVisibility,
+} from '@agent-device/contracts/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import type { MaestroSelector } from './program-ir.ts';
@@ -17,7 +20,10 @@ export type MaestroSelectorResolution = {
 };
 
 export type MaestroResolutionProbe = {
+  onVisibilityContextCreated?: () => void;
   onNodeMapBuilt?: () => void;
+  onViewportRectsCollected?: () => void;
+  onContainingRectFallback?: () => void;
   onSelectorComputed?: (selector: MaestroSelector) => void;
   onPositionComputed?: (relation: MaestroPositionRelation, anchor: MaestroSelector) => void;
 };
@@ -27,7 +33,7 @@ export type MaestroResolutionOptions = {
 };
 
 export type MaestroSnapshotResolver = {
-  readonly nodeByIndex: ReadonlyMap<number, SnapshotNode>;
+  readonly visibility: SnapshotVisibility;
   resolve(selector: MaestroSelector): MaestroSelectorResolution;
   resolvePosition(relation: MaestroPositionRelation, anchor: MaestroSelector): SnapshotNode[];
 };
@@ -43,8 +49,8 @@ export function createMaestroSnapshotResolver(
   probe: MaestroResolutionProbe = {},
   options: MaestroResolutionOptions = {},
 ): MaestroSnapshotResolver {
-  const nodeByIndex = buildSnapshotNodeMap(snapshot.nodes);
-  probe.onNodeMapBuilt?.();
+  const visibility = createSnapshotVisibility(snapshot.nodes, probe);
+  probe.onVisibilityContextCreated?.();
   const selectorCache = new WeakMap<MaestroSelector, MaestroSelectorResolution>();
   const resolving = new WeakSet<MaestroSelector>();
   const ancestorIndexesByNode = new WeakMap<SnapshotNode, ReadonlySet<number>>();
@@ -56,7 +62,7 @@ export function createMaestroSnapshotResolver(
   const parentOf = (node: SnapshotNode): SnapshotNode | undefined =>
     node.parentIndex === undefined
       ? undefined
-      : (nodeByIndex.get(node.parentIndex) ?? snapshot.nodes[node.parentIndex]);
+      : (visibility.nodeByIndex.get(node.parentIndex) ?? snapshot.nodes[node.parentIndex]);
   const ancestorIndexes = (node: SnapshotNode): ReadonlySet<number> => {
     const cached = ancestorIndexesByNode.get(node);
     if (cached) return cached;
@@ -131,7 +137,7 @@ export function createMaestroSnapshotResolver(
     }
   };
 
-  return { nodeByIndex, resolve, resolvePosition };
+  return { visibility, resolve, resolvePosition };
 }
 
 type ResolveSelector = (selector: MaestroSelector) => MaestroSelectorResolution;

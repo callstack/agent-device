@@ -3,9 +3,9 @@ import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,
-} from '../utils/diagnostics.ts';
+} from '@agent-device/host-kit/diagnostics';
 import { listSaveScriptFlagOwnerCommands, ownsSaveScriptFlag } from './daemon-command-registry.ts';
-import type { DaemonRequest, DaemonResponse } from './types.ts';
+import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
 
 /**
  * #1478: the released `--save-script` flag owners, read from the command

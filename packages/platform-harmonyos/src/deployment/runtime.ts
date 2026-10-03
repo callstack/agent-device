@@ -6,6 +6,7 @@ import type {
 import type { HostCommandRunner } from '@agent-device/contracts/platform-runtime-host';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { deviceShellArgv, type ShellWord } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import { setTimeout as sleep } from 'node:timers/promises';
 
@@ -98,7 +99,7 @@ async function openHarmonyApp(
   bundleId: string,
   signal: AbortSignal,
 ): Promise<void> {
-  const dump = await runHdc(commands, device, ['shell', 'bm', 'dump', '-n', bundleId], signal);
+  const dump = await runHdcShell(commands, device, ['bm', 'dump', '-n', bundleId], signal);
   const target = parseLaunchTarget(dump.stdout);
   if (!target) {
     throw new AppError(
@@ -109,11 +110,10 @@ async function openHarmonyApp(
       },
     );
   }
-  await runHdc(
+  await runHdcShell(
     commands,
     device,
     [
-      'shell',
       'aa',
       'start',
       '-b',
@@ -154,6 +154,23 @@ async function runHdc(
 ) {
   return await commands.run(
     { executable: 'hdc', args: ['-t', device.id, ...args], timeoutMs },
+    signal,
+  );
+}
+
+async function runHdcShell(
+  commands: HostCommandRunner,
+  device: DeviceInfo,
+  words: readonly ShellWord[],
+  signal: AbortSignal,
+  timeoutMs = 15_000,
+) {
+  return await commands.run(
+    {
+      executable: 'hdc',
+      args: deviceShellArgv('hdc', 'shell', words, ['-t', device.id]),
+      timeoutMs,
+    },
     signal,
   );
 }

@@ -1,0 +1,83 @@
+{
+  "name": "@agent-device/host-kit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private host-mechanics package: each export is one narrow capability port over the host machine \u2014 running commands, observing and owning processes, diagnostics, retry/deadline, archive extraction, durable files and locks, request-scoped plumbing, and the installed version.",
+  "dependencies": {
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/tar-stream": "^3.1.4",
+    "@types/yauzl": "^3.4.0",
+    "tar-stream": "^3.2.0",
+    "yauzl": "^3.4.0"
+  },
+  "exports": {
+    "./archive": {
+      "types": "./src/archive.ts",
+      "default": "./src/archive.ts"
+    },
+    "./audio-probe-fixtures": {
+      "types": "./src/audio-probe.fixtures.ts",
+      "default": "./src/audio-probe.fixtures.ts"
+    },
+    "./code-signature": {
+      "types": "./src/code-signature.ts",
+      "default": "./src/code-signature.ts"
+    },
+    "./code-signature-cache": {
+      "types": "./src/code-signature-cache.ts",
+      "default": "./src/code-signature-cache.ts"
+    },
+    "./command": {
+      "types": "./src/command.ts",
+      "default": "./src/command.ts"
+    },
+    "./diagnostics": {
+      "types": "./src/diagnostics.ts",
+      "default": "./src/diagnostics.ts"
+    },
+    "./file": {
+      "types": "./src/file.ts",
+      "default": "./src/file.ts"
+    },
+    "./host-file": {
+      "types": "./src/host-file.ts",
+      "default": "./src/host-file.ts"
+    },
+    "./process": {
+      "types": "./src/process.ts",
+      "default": "./src/process.ts"
+    },
+    "./project-runtime": {
+      "types": "./src/project-runtime.ts",
+      "default": "./src/project-runtime.ts"
+    },
+    "./request": {
+      "types": "./src/request.ts",
+      "default": "./src/request.ts"
+    },
+    "./retry": {
+      "types": "./src/retry.ts",
+      "default": "./src/retry.ts"
+    },
+    "./runtime-transport-hints": {
+      "types": "./src/runtime-transport-hints.ts",
+      "default": "./src/runtime-transport-hints.ts"
+    },
+    "./session-paths": {
+      "types": "./src/session-paths.ts",
+      "default": "./src/session-paths.ts"
+    },
+    "./transport": {
+      "types": "./src/transport.ts",
+      "default": "./src/transport.ts"
+    },
+    "./version": {
+      "types": "./src/version.ts",
+      "default": "./src/version.ts"
+    }
+  }
+}

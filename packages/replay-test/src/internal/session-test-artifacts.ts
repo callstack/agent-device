@@ -1,8 +1,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { trimEdgeDashes } from '@agent-device/kernel/collections';
 import type { ReplayTestAttemptOutcome } from '@agent-device/replay-test';
 
-const DEFAULT_TEST_ARTIFACTS_ROOT = '.agent-device/test-artifacts';
+/**
+ * `test`'s default artifacts root when `--artifacts-dir` is not given. `src/remote/daemon-artifacts.ts`
+ * keeps its own copy of this literal (to redirect a remote request without resolving anything
+ * against the daemon's `cwd`, #2246): pulling it from `@agent-device/contracts` instead grew this
+ * package's eager import closure by 3 modules for one string, past its pinned budget
+ * (`scripts/__tests__/eager-closure-budgets.test.ts`) — not worth it for a value that changes
+ * only if this line does.
+ */
+export const DEFAULT_TEST_ARTIFACTS_ROOT = '.agent-device/test-artifacts';
 
 export function resolveReplayTestArtifactsDir(params: {
   artifactsDir?: string;
@@ -26,8 +35,8 @@ export function buildReplayTestArtifactSlug(filePath: string, cwd?: string): str
     trimEdgeDashes(
       value
         .toLowerCase()
-        .replace(/[\\/]+/g, '__')
-        .replace(/[^a-z0-9._-]+/g, '-'),
+        .replaceAll(/[\\/]+/g, '__')
+        .replaceAll(/[^a-z0-9._-]+/g, '-'),
     ) || 'test'
   );
 }
@@ -50,11 +59,16 @@ export function materializeReplayTestAttemptArtifacts(params: {
 }): void {
   const { outcome, filePath, sessionName, attempts, maxAttempts, attemptArtifactsDir } = params;
   const passed = outcome.status === 'passed';
-  const sourcePaths = [...new Set(outcome.artifactPaths)];
+  const sourcePaths = new Set(outcome.artifactPaths);
   if (outcome.status === 'failed' && typeof outcome.error.logPath === 'string') {
-    sourcePaths.push(outcome.error.logPath);
+    sourcePaths.add(outcome.error.logPath);
   }
-  const copiedArtifacts = copyReplayTestArtifacts(sourcePaths, attemptArtifactsDir);
+  const resultPath = path.join(attemptArtifactsDir, 'result.txt');
+  const failurePath = path.join(attemptArtifactsDir, 'failure.txt');
+  const copiedArtifacts = copyReplayTestArtifacts([...sourcePaths], attemptArtifactsDir, [
+    resultPath,
+    failurePath,
+  ]);
 
   const lines = [
     `file: ${filePath}`,
@@ -81,24 +95,33 @@ export function materializeReplayTestAttemptArtifacts(params: {
     );
   }
 
-  const resultPath = path.join(attemptArtifactsDir, 'result.txt');
   const output = `${lines.join('\n')}\n`;
   fs.writeFileSync(resultPath, output);
   if (!passed) {
-    fs.writeFileSync(path.join(attemptArtifactsDir, 'failure.txt'), output);
+    fs.writeFileSync(failurePath, output);
   }
 }
 
-function copyReplayTestArtifacts(paths: string[], attemptArtifactsDir: string): string[] {
+function copyReplayTestArtifacts(
+  paths: string[],
+  attemptArtifactsDir: string,
+  manifestPaths: string[],
+): string[] {
   const copiedPaths: string[] = [];
-  const usedNames = new Map<string, number>();
+  const reservedNames = new Set(manifestPaths.map((entry) => path.basename(entry).toLowerCase()));
   for (const sourcePath of paths) {
     if (!isExistingFile(sourcePath)) continue;
-    const fileName = buildUniqueArtifactFileName(path.basename(sourcePath), usedNames);
-    const destinationPath = path.join(attemptArtifactsDir, fileName);
-    if (path.resolve(sourcePath) !== path.resolve(destinationPath)) {
-      fs.copyFileSync(sourcePath, destinationPath);
+    const sourceName = path.basename(sourcePath);
+    if (
+      path.resolve(sourcePath) === path.resolve(attemptArtifactsDir, sourceName) &&
+      !reservedNames.has(sourceName.toLowerCase())
+    ) {
+      copiedPaths.push(sourcePath);
+      continue;
     }
+    const fileName = buildUniqueArtifactFileName(sourceName, attemptArtifactsDir, reservedNames);
+    const destinationPath = path.join(attemptArtifactsDir, fileName);
+    fs.copyFileSync(sourcePath, destinationPath);
     copiedPaths.push(destinationPath);
   }
   return copiedPaths;
@@ -120,13 +143,22 @@ function copyReplaySourceFile(filePath: string, attemptArtifactsDir: string): vo
   }
 }
 
-function buildUniqueArtifactFileName(fileName: string, usedNames: Map<string, number>): string {
+function buildUniqueArtifactFileName(
+  fileName: string,
+  attemptArtifactsDir: string,
+  reservedNames: ReadonlySet<string>,
+): string {
   const extension = path.extname(fileName);
   const stem = extension ? fileName.slice(0, -extension.length) : fileName;
-  const current = usedNames.get(fileName) ?? 0;
-  usedNames.set(fileName, current + 1);
-  if (current === 0) return fileName;
-  return `${stem}-${current + 1}${extension}`;
+  let candidate = fileName;
+  let suffix = 2;
+  while (
+    reservedNames.has(candidate.toLowerCase()) ||
+    fs.existsSync(path.join(attemptArtifactsDir, candidate))
+  ) {
+    candidate = `${stem}-${suffix++}${extension}`;
+  }
+  return candidate;
 }
 
 function isExistingFile(filePath: string): boolean {
@@ -135,17 +167,4 @@ function isExistingFile(filePath: string): boolean {
   } catch {
     return false;
   }
-}
-
-/**
- * Linear-time edge trim. The regex form (`/^-+|-+$/g`) backtracks
- * polynomially on long dash runs (CodeQL js/polynomial-redos #27/#28), and
- * these slugs are built from caller-supplied file paths.
- */
-export function trimEdgeDashes(value: string): string {
-  let start = 0;
-  let end = value.length;
-  while (start < end && value[start] === '-') start += 1;
-  while (end > start && value[end - 1] === '-') end -= 1;
-  return value.slice(start, end);
 }

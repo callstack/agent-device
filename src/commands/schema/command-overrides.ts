@@ -1,0 +1,219 @@
+import type { CommandName } from '../command-metadata.ts';
+import { listCommandFamilyCliSchemas } from '../family/registry.ts';
+import type { LocalCliCommandName } from '@agent-device/command-registry/catalog';
+import type { CommandSchema } from '@agent-device/command-registry/command-schema';
+import {
+  COMMON_COMMAND_SUPPORTED_FLAG_KEYS,
+  METRO_PREPARE_FLAGS,
+} from '@agent-device/command-registry/flag-groups';
+
+type SchemaOnlyCliCommandName = Exclude<LocalCliCommandName, CommandName>;
+
+const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
+  plugins: {
+    text: {
+      summary: 'Manage installed provider plugins',
+      description:
+        'Install, list, update, or remove npm provider plugins in AGENT_DEVICE_HOME (default ~/.agent-device). Changes take effect after restarting the local daemon. Use --json for structured results.',
+    },
+    usageOverride: 'plugins list|add <package[@version]>|update <package>|remove <package>',
+    listUsageOverride: 'plugins',
+    positionalArgs: ['list|add|update|remove', 'package?'],
+    supportedFlags: [],
+  },
+  cdp: {
+    text: {
+      summary: 'Inspect CDP targets, JS heap, and leaks',
+      description:
+        'Run CDP commands for React Native diagnostics, JS heap usage, heap snapshots, and leak analysis',
+    },
+    usageOverride: 'cdp [...args]',
+    listUsageOverride: 'cdp',
+    positionalArgs: ['args?'],
+    allowsExtraPositionals: true,
+    supportedFlags: COMMON_COMMAND_SUPPORTED_FLAG_KEYS,
+  },
+  auth: {
+    text: {
+      summary: 'Manage cloud login state',
+      description: 'Manage cloud login state used by remote daemon and cloud device workflows.',
+    },
+    usageOverride: 'auth status|login|logout',
+    listUsageOverride: 'auth',
+    positionalArgs: ['status|login|logout'],
+    supportedFlags: ['remoteConfig', 'stateDir'],
+  },
+  daemon: {
+    text: {
+      summary: 'Stop a local daemon and clean up resources',
+      description:
+        'Stop a local daemon after verifying its PID/start-time identity. Use --clean to remove retained Apple runner processes and leases owned by that daemon.',
+    },
+    usageOverride: 'daemon stop [--state-dir <path>]',
+    listUsageOverride: 'daemon stop',
+    positionalArgs: ['stop'],
+    allowedFlags: ['clean'],
+    supportedFlags: ['stateDir'],
+  },
+  device: {
+    text: {
+      summary: 'Inspect and recover enforced local device ownership without a daemon',
+      description:
+        'Inspect enforced host-local device ownership claims without starting or contacting a daemon; status --stale only inspects proven-stale claims. release --stale settles a provably dead owner through exact-owner resource reconciliation and clears its claim last — live and uncertain owners always fail closed. Automatic reclamation still occurs during open and daemon startup.',
+    },
+    usageOverride:
+      'device status|release [--platform <platform>] [--udid <udid>] [--serial <serial>]',
+    listUsageOverride: 'device status',
+    positionalArgs: ['status|release'],
+    allowedFlags: ['stale'],
+    supportedFlags: ['platform', 'device', 'udid', 'serial'],
+  },
+  connect: {
+    text: {
+      summary: 'Configure remote or provider state',
+      description:
+        'Configure remote access without allocating a device. Direct providers validate credentials/resources before saving state and print the exact device/app preparation needed before open. AGENT_DEVICE_CLOUD_BASE_URL is the bridge/control-plane API origin; use AGENT_DEVICE_DAEMON_AUTH_TOKEN=adc_live_... for CI/service-token automation.',
+    },
+    usageOverride:
+      'connect [cloud|proxy|limrun|doublespeed|browserstack|aws-device-farm] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]',
+    usageFlags: [],
+    listUsageOverride: 'connect',
+    positionalArgs: ['provider?'],
+    allowedFlags: [
+      'remoteConfig',
+      'daemonBaseUrl',
+      'tenant',
+      'runId',
+      'leaseId',
+      'leaseBackend',
+      'providerApp',
+      'providerOsVersion',
+      'providerProject',
+      'providerBuild',
+      'providerSessionName',
+      'providerDeviceOrientation',
+      'providerGeoLocation',
+      'providerTimezone',
+      'providerAppiumVersion',
+      'providerLanguage',
+      'providerLocale',
+      'providerNetworkProfile',
+      'providerCustomNetwork',
+      'providerNoResignApp',
+      'awsProjectArn',
+      'awsDeviceArn',
+      'awsAppArn',
+      'awsRegion',
+      'awsInteractionMode',
+      'force',
+      'noLogin',
+    ],
+    supportedFlags: [
+      'stateDir',
+      'daemonAuthToken',
+      'session',
+      'platform',
+      'device',
+      ...METRO_PREPARE_FLAGS,
+      'launchUrl',
+    ],
+  },
+  connection: {
+    text: {
+      summary: 'Inspect the saved remote connection',
+      description: 'Inspect active remote connection state',
+    },
+    usageOverride: 'connection status',
+    listUsageOverride: 'connection',
+    positionalArgs: ['status'],
+    supportedFlags: ['remoteConfig', 'stateDir', 'session'],
+  },
+  disconnect: {
+    text: {
+      summary: 'Clear remote connection state and release leases',
+      description: 'Disconnect remote daemon state, stop owned Metro companion, and release lease',
+    },
+    listUsageOverride: 'disconnect',
+    allowedFlags: ['shutdown'],
+    supportedFlags: ['remoteConfig', 'stateDir', 'session'],
+  },
+  mcp: {
+    text: {
+      summary: 'Start MCP server',
+      description:
+        'Start the official stdio MCP server. It exposes structured command tools backed by the agent-device client.',
+    },
+  },
+  proxy: {
+    text: {
+      summary: 'Expose a local daemon through an HTTP tunnel',
+      description:
+        'Expose the local daemon HTTP contract through a tunnel-friendly reverse proxy.\n\nRun this on the host that has access to simulators/devices, expose the printed local proxy URL through a tunnel, then point another machine at the tunnel URL with connect proxy.\n\nThe proxy starts or reuses a local HTTP daemon, accepts /health, /rpc, /upload and resumable /upload/* routes, and /artifacts plus /artifacts/*, and also accepts the same routes under /agent-device/*. Health is unauthenticated for reachability probes. Other routes require the generated bearer token printed at startup, or the explicit --daemon-auth-token value when provided. The proxy rewrites authorized client requests to the upstream daemon token instead of exposing the local daemon token.\n\nUse the /agent-device base path when connecting through cloudflared, ngrok, or another shared origin. Treat the bearer token as a secret; anyone with it can control the proxied daemon. This direct proxy flow does not use agent-device auth.\n\nExamples:\n  agent-device proxy --port 4310\n  cloudflared tunnel --url http://127.0.0.1:4310\n  agent-device connect proxy --daemon-base-url https://example.trycloudflare.com/agent-device --daemon-auth-token <token>',
+    },
+    listUsageOverride: 'proxy',
+    allowedFlags: ['proxyHost', 'proxyPort', 'daemonAuthToken', 'stateDir'],
+  },
+  takeover: {
+    text: {
+      summary: 'Pause agent interactions while a person controls a device',
+      description:
+        'Temporarily hand control of the active remote lease device to a person. The foreground command pauses state-changing agent commands, renews the hold until Ctrl+C, and then releases it. Read-only diagnostics remain available. Uses the active connection and --session, with normal tenant and lease admission. status lists holds on that device; release removes a hold owned by the admitted lease. The host-only /admin/human-control/holds API uses the separate local daemon token. Holds do not survive daemon restart. Local takeover without a remote device lease is not supported.',
+    },
+    usageOverride: 'takeover [status | release <hold-id>] [--session <name>]',
+    listUsageOverride: 'takeover [status|release]',
+    positionalArgs: ['status|release?', 'hold-id?'],
+    supportedFlags: [
+      'stateDir',
+      'session',
+      'remoteConfig',
+      'daemonBaseUrl',
+      'daemonAuthToken',
+      'daemonTransport',
+      'tenant',
+      'runId',
+      'leaseId',
+      'leaseBackend',
+      'sessionIsolation',
+    ],
+  },
+  'react-devtools': {
+    text: {
+      summary: 'Inspect components, hooks, and render profiles',
+      description:
+        'Run pinned agent-react-devtools commands for React Native performance profiling, component trees, props/state/hooks, and render analysis',
+    },
+    usageOverride: 'react-devtools [...args]',
+    listUsageOverride: 'react-devtools',
+    positionalArgs: ['args?'],
+    allowsExtraPositionals: true,
+    supportedFlags: COMMON_COMMAND_SUPPORTED_FLAG_KEYS,
+  },
+  web: {
+    text: {
+      summary: 'Manage web automation backend',
+      description:
+        'Install and inspect the managed web automation backend used by --platform web.\n\nFirst-run flow:\n  agent-device web setup\n  agent-device open "https://example.com" --platform web\n  agent-device snapshot -i --platform web\n  agent-device close --platform web\n\nRuntime web commands do not install the backend implicitly. If the managed backend is missing, run agent-device web setup. The backend is resolved only from the managed install in the effective agent-device state dir.\n\nUse web setup to install or reuse the pinned backend. Use web doctor after setup to verify browser backend health.',
+    },
+    usageOverride: 'web setup | web doctor',
+    listUsageOverride: 'web setup|doctor',
+    positionalArgs: ['setup|doctor'],
+    supportedFlags: ['stateDir'],
+  },
+} as const satisfies Record<SchemaOnlyCliCommandName, CommandSchema>;
+
+// Facet schemas are complete: `defineCommandFacet` attaches the resolved text to every one.
+const CLI_COMMAND_OVERRIDES = listCommandFamilyCliSchemas() as Partial<
+  Record<CommandName, CommandSchema>
+>;
+
+export function getSchemaOnlyCliCommandSchema(command: string): CommandSchema | undefined {
+  return Object.hasOwn(SCHEMA_ONLY_CLI_COMMAND_SCHEMAS, command)
+    ? SCHEMA_ONLY_CLI_COMMAND_SCHEMAS[command as keyof typeof SCHEMA_ONLY_CLI_COMMAND_SCHEMAS]
+    : undefined;
+}
+
+export function getCliCommandOverride(command: string): CommandSchema | undefined {
+  return Object.hasOwn(CLI_COMMAND_OVERRIDES, command)
+    ? CLI_COMMAND_OVERRIDES[command as keyof typeof CLI_COMMAND_OVERRIDES]
+    : undefined;
+}

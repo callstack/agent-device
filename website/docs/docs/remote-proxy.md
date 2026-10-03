@@ -45,7 +45,7 @@ agent-device disconnect
 
 Passing `--daemon-auth-token <token>` instead of exporting the environment variable also works, but only authenticates the single command it is passed to; subsequent commands need the token again through the env var, a `daemonAuthToken` entry in your remote config profile, or a repeated `--daemon-auth-token` flag.
 
-`connect proxy` stores the proxy profile and client identity. Device leases are automatic on `open` and expire after five minutes without commands. `close` releases the active session and device lease; `disconnect` clears local connection state.
+`connect proxy` stores the proxy profile and client identity. Device leases are automatic on `open` and expire after five minutes without commands. That five minutes is the window `open` asks for; a lease allocated directly over the RPC without `ttlMs` keeps the daemon's one-minute inactivity default instead. `close` releases the active session and device lease; `disconnect` clears local connection state.
 
 Multiple agents can share one proxy when each uses the normal `connect proxy`, `open`, commands, `close`, and `disconnect` flow. A busy device error means another agent owns the device until it closes or its inactivity lease expires.
 
@@ -53,15 +53,114 @@ Do not put proxy endpoint, token, tenant, or provider fields in `./agent-device.
 configuration is intentionally limited to project-safe automation defaults. Use `connect proxy`, user
 config, an explicit `--config` file, or protected CI environment variables for the endpoint and token.
 
+## Human Takeover
+
+With a remote device already leased by `open`, pause mutations through the same connection:
+
+```bash
+agent-device takeover --session remote-session
+```
+
+The foreground command renews its hold until Ctrl+C. Read-only diagnostics remain available, the
+agent session stays open, and its lease is protected from inactivity expiry. Activation waits for
+already-admitted mutations to finish. Status and recovery use `takeover status` and
+`takeover release <hold-id>` with the same session.
+
+If the requesting connection disconnects while activation is waiting for mutations to finish, its
+pending hold is removed and cannot activate later. This applies to both tenant RPCs and host PUTs.
+Once active, holds follow their configured TTL or explicit release lifecycle.
+
+Lease-owner operations use ordinary `agent_device.command` RPCs at `POST /rpc`, with command
+`human_control` and positionals `["list"]`, `["put", "<hold-id>", "{\"ttlMs\":15000}"]`, or
+`["remove", "<hold-id>"]`. Supply the same tenant, run, client, lease, backend, provider, and device
+metadata as other requests. The PUT payload contains only `reason` and `ttlMs`; the server derives
+the target from the admitted lease. It rejects caller-supplied `scope`.
+
+### Host administration
+
+VM-side automation can manage holds independently of a tenant. Read the daemon's `httpPort` and
+`token` from `daemon.json` in its effective state directory, then use the loopback listener with
+`Authorization: Bearer <daemon-token>` or `X-Agent-Device-Token: <daemon-token>`. An HTTP listener
+is required. A tenant credential does not grant this capability.
+
+```text
+PUT    /admin/human-control/holds/<hold-id>
+GET    /admin/human-control/holds
+DELETE /admin/human-control/holds/<hold-id>
+```
+
+The host PUT body names the exact lease contention identity, including its backend and provider.
+Use the lease's `deviceKey`, not a bare device ID or a display name:
+
+```json
+{
+  "scope": {
+    "backend": "ios-instance",
+    "leaseProvider": "proxy",
+    "deviceKey": "ios:mobile:<simulator-udid>"
+  },
+  "reason": "Human is using the VM console.",
+  "ttlMs": 15000
+}
+```
+
+Repeated PUT renews the hold. Omitting `ttlMs` keeps it until explicit release or daemon shutdown.
+Tenant RPCs cannot modify host holds. Multiple holds can coexist; mutations resume only when all
+holds on the device end.
+
+Holds do not survive daemon restart, matching lease state. Reconnect and re-establish the hold
+before continuing human interaction. Local takeover without a device-scoped remote lease is
+deferred; this does not provide a host-global fence across local daemons.
+
+## Restricting What Clients Can Do
+
+Start the proxy with a daemon policy to confine every client to named devices and commands. The
+daemon enforces it for every request, including `batch` steps and `replay` actions:
+
+```json
+{
+  "version": 1,
+  "devices": { "allow": [{ "udid": "<simulator-udid>" }] },
+  "commands": { "deny": ["boot", "shutdown"] },
+  "capabilities": { "deny": ["device-shutdown"] }
+}
+```
+
+```bash
+AGENT_DEVICE_DAEMON_POLICY=./policy.json agent-device proxy
+```
+
+- `devices.allow` lists the only devices clients can see (`devices`) or use. Use `udid` for Apple
+  devices and `serial` for Android.
+- `commands` takes either `allow` or `deny`, not both. With `allow`, commands a later release adds
+  stay denied. Client-side tools reach the daemon through internal commands: allow `runtime` for
+  `react-devtools` and Maestro flows, and `install-from-source` for remote installs.
+- `capabilities.deny: ["device-shutdown"]` blocks `shutdown`, `close --shutdown`, and any other path
+  that would shut the device down.
+
+The daemon reads the file once at start and refuses to start if it is invalid. If a daemon is
+already running for the state directory with a different policy, the proxy refuses to reuse it;
+stop that daemon first. A denied request fails with `UNAUTHORIZED` and
+`details.reason: "DAEMON_POLICY_DENIED"`.
+
 ## What Is Exposed
 
 The proxy allows only the daemon HTTP contract: `/health`, `/rpc`, `/upload` plus resumable `/upload/*` routes, and `/artifacts/*`, with the same routes also available under `/agent-device/*`. Health checks are unauthenticated; command, upload, and artifact routes require the bearer token.
 
 The proxy validates the client token and rewrites authorized upstream requests to the local daemon token. The local daemon still validates its own token, so the daemon token is not exposed to remote clients.
 
+The proxy deliberately does not forward `/admin/*`, including human-control holds. A caller inside
+the device-host VM must use the daemon's loopback port and local daemon token.
+
 ## Compatibility
 
 Remote clients read `/health` before issuing commands and compare the daemon RPC protocol version. Keep the client and proxy versions reasonably close; patch-level differences should normally work, but incompatible RPC protocol versions fail before commands run.
+
+`/health` also reports `hostArch`, the native CPU architecture of the machine serving it: the one its simulators run by default, even when Node itself runs under Rosetta. Macs report `arm64` or `x86_64`; other hosts report `x86_64` for x64 and Node's `process.arch` name otherwise (for example `arm64`). The top-level value describes the proxy's own machine, so a client behind a proxy reads `upstream.hostArch` for the host that runs the simulators, for example to build only that slice of a simulator app. Older daemons omit the field.
+
+```json
+{"ok":true,"service":"agent-device-proxy","version":"0.21.17","rpcProtocolVersion":2,"instanceId":"5f0c2d7e-8a41-4b7e-9c3a-2e6d1f4b8a90","hostArch":"arm64","upstream":{"ok":true,"service":"agent-device-daemon","version":"0.21.17","rpcProtocolVersion":2,"instanceId":"b3e9a6c1-4d2f-4f8e-a0b7-7c5d9e1f2a34","hostArch":"arm64"}}
+```
 
 ## Cleanup
 

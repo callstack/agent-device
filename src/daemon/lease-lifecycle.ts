@@ -1,15 +1,21 @@
-import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { leaseScopeToReleaseRequest } from '../core/lease-scope.ts';
-import { clearDeviceClaim } from './device-claims.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { leaseScopeToReleaseRequest } from '@agent-device/contracts/lease-scope';
+import { clearDeviceClaim } from './device/device-claims.ts';
 import type { LeaseRegistry } from './lease-registry.ts';
-import type { DeviceLease, LeaseLifecycleProvider } from '@agent-device/contracts/device';
+import type {
+  DeviceLease,
+  LeaseLifecycleProvider,
+  ProviderAppCatalog,
+} from '@agent-device/contracts/device';
 import { buildSessionLeaseFromRequest, type SessionLease } from './lease-context.ts';
 import {
   assertRequestLeaseAdmission,
   assertRequestLeaseAdmissionPreflight,
 } from './request-admission.ts';
 import type { SessionStore } from './session-store.ts';
-import type { DaemonRequest, SessionState } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
+import { providerSessionIdFromData } from './provider-session-ownership.ts';
 
 export type ExpiredProviderLeaseRecovery = (lease: DeviceLease) => Promise<void>;
 
@@ -103,10 +109,13 @@ export function admitRequestLeaseForLockedScope(params: {
   sessionName: string;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
+  providerAppCatalog?: ProviderAppCatalog;
 }): DaemonRequest {
   const { sessionName, sessionStore, leaseRegistry } = params;
   const existingSession = sessionStore.get(sessionName);
-  const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, existingSession);
+  const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, existingSession, {
+    providerAppCatalog: params.providerAppCatalog,
+  });
   if (!activeLease) return params.req;
 
   const nextReq = {
@@ -159,6 +168,10 @@ export async function releaseSessionLease(params: {
   const providerData = activeLease
     ? await params.leaseLifecycleProvider?.release?.(activeLease)
     : undefined;
+  const providerSessionId = providerSessionIdFromData(providerData);
+  if (activeLease && providerSessionId) {
+    params.leaseRegistry.recordProviderSession(activeLease, providerSessionId);
+  }
   const result = params.leaseRegistry.releaseLease(releaseRequest);
   emitDiagnostic({
     level: 'info',

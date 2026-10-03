@@ -1,19 +1,33 @@
 import { expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
-const { invalidateHarmonyGestureViewport, runHarmonyHdc } = vi.hoisted(() => ({
-  invalidateHarmonyGestureViewport: vi.fn(),
-  runHarmonyHdc: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
-}));
-
-vi.mock('../../platforms/harmonyos/hdc.ts', () => ({ runHarmonyHdc }));
-vi.mock('../../platforms/harmonyos/snapshot.ts', () => ({
+const { pressHarmonyKeyboardKey, snapshotHarmony } = vi.hoisted(() => ({
+  pressHarmonyKeyboardKey: vi.fn(async () => undefined),
   snapshotHarmony: vi.fn(async () => ({
     nodes: [{ index: 0, type: 'Button', label: 'Continue' }],
     truncated: false,
   })),
+}));
+
+vi.mock('@agent-device/platform-harmonyos', () => ({
+  appSwitcherHarmony: vi.fn(),
+  backHarmony: vi.fn(),
+  closeHarmonyApp: vi.fn(),
+  doubleClickHarmony: vi.fn(),
+  fillHarmony: vi.fn(),
+  homeHarmony: vi.fn(),
+  longPressHarmony: vi.fn(),
+  openHarmonyApp: vi.fn(),
+  performHarmonyGesture: vi.fn(),
+  pressHarmony: vi.fn(),
+  pressHarmonyKeyboardKey,
   readHarmonyGestureViewport: vi.fn(),
-  invalidateHarmonyGestureViewport,
+  screenshotHarmony: vi.fn(),
+  scrollHarmony: vi.fn(),
+  setHarmonyOrientation: vi.fn(),
+  setHarmonySetting: vi.fn(),
+  snapshotHarmony,
+  typeHarmony: vi.fn(),
 }));
 
 import { createHarmonyInteractor } from '../interactors/harmonyos.ts';
@@ -29,6 +43,7 @@ const device: DeviceInfo = {
 test('harmonyos snapshot stamps its channel and producer', async () => {
   const result = await createHarmonyInteractor(device).snapshot();
 
+  if ('stage' in result) throw new Error('HarmonyOS snapshot must be presented');
   expect(result.backend).toBe('harmonyos-arkui');
   expect(result.producer).toBe('harmonyos-uitest');
   expect(result.nodes).toEqual([{ index: 0, type: 'Button', label: 'Continue' }]);
@@ -39,12 +54,5 @@ test('harmonyos keyboard dismiss invalidates gesture viewport through the Back r
     kind: 'acknowledged',
   });
 
-  expect(runHarmonyHdc).toHaveBeenCalledWith(device, [
-    'shell',
-    'uitest',
-    'uiInput',
-    'keyEvent',
-    'Back',
-  ]);
-  expect(invalidateHarmonyGestureViewport).toHaveBeenCalledWith(device);
+  expect(pressHarmonyKeyboardKey).toHaveBeenCalledWith(device, 'Back');
 });

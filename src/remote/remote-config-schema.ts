@@ -7,7 +7,7 @@ import {
 // Declared in contracts/ so zones below remote/ can be stated in terms of the field vocabulary;
 // re-exported here because this module is where consumers already import it from.
 export type { RemoteConnectionProfileFields } from '@agent-device/contracts/remote';
-import { buildPrimaryEnvVarName } from '../utils/source-value.ts';
+import { buildPrimaryEnvVarName } from '@agent-device/kernel/source-value';
 import {
   PLATFORM_SELECTORS,
   type DeviceTarget,
@@ -61,7 +61,7 @@ export const REMOTE_CONFIG_FIELD_SPECS = [
   {
     key: 'leaseBackend',
     type: 'enum',
-    enumValues: ['ios-simulator', 'ios-instance', 'android-instance'],
+    enumValues: ['ios-simulator', 'ios-instance', 'android-instance', 'harmonyos-instance'],
   },
   { key: 'platform', type: 'enum', enumValues: PLATFORM_SELECTORS },
   { key: 'target', type: 'enum', enumValues: ['mobile', 'tv', 'desktop'] },
@@ -88,6 +88,7 @@ export const REMOTE_CONFIG_FIELD_SPECS = [
   },
   { key: 'providerGeoLocation', type: 'string' },
   { key: 'providerTimezone', type: 'string' },
+  { key: 'providerAppiumVersion', type: 'string' },
   { key: 'providerLanguage', type: 'string' },
   { key: 'providerLocale', type: 'string' },
   { key: 'providerNetworkProfile', type: 'string' },

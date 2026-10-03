@@ -11,7 +11,7 @@
 //   - REAL: `SessionStore` (session map/consistency) and `LeaseRegistry` (lease
 //     allocation, per-device exclusivity, release, scope checks).
 //   - REAL lock PLAN: every operation's lock keys come from the production
-//     router primitive `resolveRequestExecutionLockKeys` (see bindings.ts),
+//     router primitive `resolveRequestExecutionLockPlan` (see bindings.ts),
 //     driven with a fake device inventory. Only the mutex GRANT is modeled by
 //     the scheduler, because `withKeyedLock`'s native microtask hand-off cannot
 //     be reproduced from a seed. Reverting the router's same-device
@@ -28,7 +28,7 @@ import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { LeaseRegistry } from '../../../../src/daemon/lease-registry.ts';
 import { SessionStore } from '../../../../src/daemon/session-store.ts';
-import type { SessionState } from '../../../../src/daemon/types.ts';
+import type { SessionState } from '../../../../src/daemon/session-state.ts';
 import { AppError } from '@agent-device/kernel/errors';
 
 import { makePrng, type Prng } from './prng.ts';

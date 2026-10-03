@@ -10,7 +10,7 @@
 import { pathToFileURL } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
-import { runCmdStreaming, runCmdSync } from '../../src/utils/exec.ts';
+import { runCmdStreaming, runCmdSync } from '@agent-device/host-kit/command';
 import { runEntrypoint } from '../lib/cli-entrypoint.ts';
 import { CHECK_CATALOG, resolveCommand } from '../check-affected/checks.ts';
 

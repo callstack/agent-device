@@ -7,7 +7,7 @@ const ok = (stdout = ''): AndroidAdbExecutorResult => ({ exitCode: 0, stdout, st
 
 test('the manager enforces per-owner mapping ownership and dedupes identical ensures', async () => {
   bindAndroidAdbHostStub();
-  const calls: string[][] = [];
+  const calls: (readonly string[])[] = [];
   const manager = createAndroidPortReverseManager(async (args) => {
     calls.push(args);
     return ok();

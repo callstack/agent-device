@@ -1,24 +1,25 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { SCREENSHOT_ACTION_FLAG_KEYS } from '@agent-device/contracts/capture';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
-import type { DaemonRequest, SessionRuntimeHints, SessionState } from './types.ts';
+import { recordedFlagKeys } from '@agent-device/command-registry/flag-registry';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { DaemonRequest } from './daemon-request.ts';
+import type { SessionRuntimeHints, SessionState } from './session-state.ts';
 import { applyRecordedSaveScriptFlags } from './session-script-publication-capability.ts';
 import { repairSessionBoundary } from './session-replay-transaction.ts';
 import type { MultiTargetAnnotationV1, TargetAnnotationV1 } from '@agent-device/contracts/replay';
-import { inferFillText } from './action-utils.ts';
 import {
+  inferFillText,
   recordedInputPlaceholder,
   validateRecordedInputVariableName,
-} from '../replay/recorded-input.ts';
+} from '@agent-device/ad-script';
 import {
   parameterizeRecordedFillPayload,
   parameterizeRecordedFillTargetEvidence,
   parameterizeRecordedResultEcho,
   parameterizeTargetEvidenceEcho,
   targetEvidenceCarriesAnyLiteral,
-} from './parameterized-recorded-fill.ts';
-import type { TargetEvidenceMode } from './session-target-evidence.ts';
+} from '@agent-device/selectors/parameterized-recorded-fill';
+import type { TargetEvidenceMode } from '@agent-device/selectors/target-evidence';
 
 export type RecordActionEntry = {
   command: string;
@@ -95,6 +96,31 @@ export function recordActionEntry(
     },
   });
   return action;
+}
+
+type SessionActionStore = { recordAction(session: SessionState, entry: RecordActionEntry): void };
+
+/**
+ * Record a session action if a session is active. No-op when session is undefined.
+ *
+ * By default the recorded positionals/flags mirror the request; pass `overrides` to
+ * record a different set (e.g. resolved positionals or stripped public flags).
+ */
+export function recordSessionAction(
+  sessionStore: SessionActionStore,
+  session: SessionState | undefined,
+  req: DaemonRequest,
+  command: string,
+  result: Record<string, unknown> | undefined,
+  overrides?: { positionals?: string[]; flags?: CommandFlags },
+): void {
+  if (!session) return;
+  sessionStore.recordAction(session, {
+    command,
+    positionals: overrides?.positionals ?? req.positionals ?? [],
+    flags: overrides?.flags ?? ((req.flags ?? {}) as CommandFlags),
+    result: result ?? {},
+  });
 }
 
 type FillLiteral = { literal: string; placeholder: string };
@@ -269,7 +295,7 @@ function replaceFillText(positionals: string[], placeholder: string): string[] {
  * absent: it is flow timing/synchronisation, not observation, so it always
  * records. A mutating `find … click|fill|focus|type` never reaches a caller of
  * `isInteractiveObservation` (it records through `recordSessionAction`,
- * `handlers/handler-utils.ts`), so `find` here always means a read-only
+ * `session-action-recorder.ts`), so `find` here always means a read-only
  * sub-action; `diff` is likewise absent because only `snapshot` is classified
  * at the snapshot-runtime call site.
  */
@@ -282,7 +308,7 @@ const OBSERVATION_ONLY_COMMANDS: ReadonlySet<string> = new Set(['snapshot', 'get
  * Two facts, ANDed, and the second is the one that matters:
  *  1. the command is observation-only (above); and
  *  2. it is NOT a replay plan step (`internal.replayPlanStep`, stamped by
- *     `invokeResolvedReplayAction`, `handlers/session-replay-action-runtime.ts`).
+ *     `invokeResolvedReplayAction`, `packages/replay-port/src/daemon-port/session-replay-action-runtime.ts`).
  *
  * (2) is why this is a PROVENANCE rule, not a command-class rule. Replayed
  * plan steps dispatch through the ordinary request path and land in
@@ -331,49 +357,18 @@ function isExcludedRepairSegmentObservation(
   return entry.flags?.record !== true;
 }
 
-const SANITIZED_FLAG_KEYS = [
-  'platform',
-  'device',
-  'udid',
-  'serial',
-  'out',
-  'verbose',
-  'metroHost',
-  'metroPort',
-  'bundleUrl',
-  'launchUrl',
-  'snapshotInteractiveOnly',
-  'snapshotDepth',
-  'snapshotScope',
-  'snapshotRaw',
-  'snapshotCustomActions',
-  ...SCREENSHOT_ACTION_FLAG_KEYS,
-  'relaunch',
-  'saveScript',
-  'force',
-  'noRecord',
-  'record',
-  'fps',
-  'quality',
-  'hideTouches',
-  'count',
-  'pointerCount',
-  'intervalMs',
-  'delayMs',
-  'holdMs',
-  'jitterPx',
-  'doubleTap',
-  'clickButton',
-  'pauseMs',
-  'pattern',
-] as const satisfies readonly (keyof CommandFlags)[];
+// The keys a recorded action carries derive from each flag declaration's `recorded`
+// field, never from a list maintained here; opting a flag into recording edits the
+// declaration, not this file.
+const RECORDED_FLAG_KEYS = recordedFlagKeys();
 
 function sanitizeFlags(flags: CommandFlags | undefined): SessionAction['flags'] {
   if (!flags) return {};
   const result: Record<string, unknown> = {};
-  for (const key of SANITIZED_FLAG_KEYS) {
-    if (flags[key] !== undefined) {
-      result[key] = flags[key];
+  for (const key of RECORDED_FLAG_KEYS) {
+    const value = flags[key];
+    if (value !== undefined) {
+      result[key] = value;
     }
   }
   return result as SessionAction['flags'];

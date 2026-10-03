@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationDir": "./dist-types",
+    "rootDir": "./src"
+  },
+  // The command-registry sources this package imports read the `__OWNER_FILES__` build-time flag
+  // declared beside them. The root and examples projects already carry that declaration for the
+  // same reason; a package program that reaches registry.ts needs it too.
+  "include": ["src", "../command-registry/src/global.d.ts"]
+}

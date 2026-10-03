@@ -4,6 +4,7 @@ import {
   screenshotFlagsFromOptions,
   screenshotOptionsFromFlags,
 } from '@agent-device/contracts/capture';
+import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { ScreenshotRuntimeExecution } from '@agent-device/contracts/screenshot-runtime';
 import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -13,21 +14,24 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AgentDeviceBackend } from '../backend.ts';
 import type { ArtifactAdapter } from '../io.ts';
-import { createAgentDevice, localCommandPolicy } from '../runtime.ts';
+import { localCommandPolicy } from '../runtime-factory.ts';
+import { createCommandSurfaceAgentDevice } from '../runtime-command-surface.ts';
 import {
   assertSupportedScreenshotPixelDensity,
   readScreenshotResultMetadata,
-} from '../utils/screenshot-density.ts';
+} from '@agent-device/capture-kit/screenshot-density';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
 import type { DaemonCommandContext } from './context.ts';
-import { captureSnapshotData } from './handlers/snapshot-capture.ts';
-import { buildSnapshotState } from '../core/snapshot-state.ts';
+import { captureSnapshotData } from './snapshot-capture.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import type {
   RecordedGenericRequest,
   ResolvedGenericExecution,
 } from './request-generic-dispatch.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
-import { annotateScreenshotWithRefs } from './screenshot-overlay.ts';
+import { assertScreenshotCropPolicy } from './screenshot-crop-target.ts';
+import { buildScreenshotCropWarnings, cropScreenshotToSelector } from './screenshot-crop.ts';
+import { annotateScreenshotWithRefs } from '@agent-device/capture-kit/screenshot-overlay';
 import {
   resolveBoundScreenshotRuntime,
   type BoundScreenshotRuntime,
@@ -35,7 +39,8 @@ import {
 } from './screenshot-runtime-binding.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
 import { SessionStore } from './session-store.ts';
-import type { DaemonRequest, SessionState } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 
 /**
  * The `screenshot` leaf of the generic route. Argument policy is answered before any device work,
@@ -55,15 +60,30 @@ export async function resolveScreenshotGenericExecution(
   assertSupportedScreenshotPixelDensity(session.device, req.flags?.screenshotPixelDensity);
 
   const request = readScreenshotRequest(req);
+  const cropOn =
+    typeof req.flags?.screenshotCropOn === 'string' && req.flags.screenshotCropOn.length > 0
+      ? req.flags.screenshotCropOn
+      : undefined;
+  if (cropOn !== undefined) {
+    assertScreenshotCropPolicy({
+      device: session.device,
+      surface: session.surface,
+      cropOn,
+      overlayRefs: req.flags?.overlayRefs === true,
+      fullscreen: req.flags?.screenshotFullscreen === true,
+    });
+  }
   const resolved = await resolveBoundScreenshotRuntime({
     device: session.device,
     overlayRefs: req.flags?.overlayRefs === true,
+    cropOn,
     inspectFacts: params.inspectFacts,
     bindDevice: params.bindDevice,
   });
   if (!resolved.ok) return resolved;
 
   const runtime = resolved.runtime;
+  const cropRun: ScreenshotCropRun = { warnings: [] };
   return {
     ok: true,
     recorded: request.recorded,
@@ -76,6 +96,8 @@ export async function resolveScreenshotGenericExecution(
         flags: execution.request.flags,
         outPath: request.outPath,
         runtime,
+        cropOn,
+        cropRun,
       }),
   };
 }
@@ -92,10 +114,11 @@ export async function captureScreenshotArtifact(
     outPath?: string;
     dispatchContext: DaemonCommandContext;
     captureScreenshot: BoundScreenshotRuntime['captureScreenshot'];
+    crop?: ScreenshotCropBinding;
   }>,
 ): Promise<CapturedScreenshot> {
   const { session, sessionName, outPath, dispatchContext } = params;
-  const runtime = createAgentDevice({
+  const runtime = createCommandSurfaceAgentDevice({
     backend: createBoundScreenshotBackend(params),
     artifacts: createDaemonScreenshotArtifactAdapter(),
     sessions: createDaemonRuntimeSessionStore({
@@ -120,9 +143,26 @@ export async function captureScreenshotArtifact(
 /**
  * What the shared capture command hands back. Restated here rather than imported from
  * `commands/`: the daemon sits below the command surface (R2), and this adapter's artifact
- * publisher emits no descriptors, so the destination and its message are the whole result.
+ * publisher emits no descriptors, so the destination, the capture's display rotation, and the
+ * message are the whole result.
  */
-type CapturedScreenshot = Readonly<{ path: string; message?: string }>;
+type CapturedScreenshot = Readonly<{
+  path: string;
+  displayRotation?: DeviceRotation;
+  message?: string;
+  warnings?: string[];
+}>;
+
+/** One request's crop state: the backend closure appends, the result record reads. */
+type ScreenshotCropRun = { warnings: string[] };
+
+/** The crop orchestration the backend closure runs after the platform write, before scale. */
+type ScreenshotCropBinding = Readonly<{
+  cropOn: string;
+  captureSnapshot: NonNullable<BoundScreenshotRuntime['captureSnapshot']>;
+  run: ScreenshotCropRun;
+  logPath: string;
+}>;
 
 /**
  * Runner metadata the capture needs; cancellation comes from the request binding, not from here.
@@ -146,30 +186,37 @@ async function executeScreenshot(
     flags: CommandFlags | undefined;
     outPath: string | undefined;
     runtime: BoundScreenshotRuntime;
+    cropOn?: string;
+    cropRun?: ScreenshotCropRun;
   }>,
 ): Promise<Record<string, unknown>> {
   const { session, runtime, flags } = params;
+  const crop = buildScreenshotCropBinding({
+    cropOn: params.cropOn,
+    captureSnapshot: runtime.captureSnapshot,
+    cropRun: params.cropRun,
+    logPath: params.logPath,
+  });
   const captured = await captureScreenshotArtifact({
     session,
     sessionName: params.sessionName,
     outPath: params.outPath,
     dispatchContext: params.dispatchContext,
     captureScreenshot: runtime.captureScreenshot,
+    ...(crop ? { crop } : {}),
   });
-  const captureSnapshot = runtime.captureSnapshot;
+  const warnings = [...(captured.warnings ?? []), ...(crop?.run?.warnings ?? [])];
   return {
     ...captured,
-    ...(captureSnapshot
-      ? {
-          overlayRefs: await annotateScreenshotWithSessionRefs({
-            session,
-            logPath: params.logPath,
-            screenshotPath: captured.path,
-            dispatchContext: params.dispatchContext,
-            captureSnapshot,
-          }),
-        }
-      : {}),
+    ...(warnings.length > 0 ? { warnings } : {}),
+    ...(await screenshotOverlayRefsField({
+      session,
+      cropOn: params.cropOn,
+      captureSnapshot: runtime.captureSnapshot,
+      screenshotPath: captured.path,
+      logPath: params.logPath,
+      dispatchContext: params.dispatchContext,
+    })),
     ...(await readScreenshotResultMetadata({
       device: session.device,
       path: captured.path,
@@ -179,10 +226,54 @@ async function executeScreenshot(
   };
 }
 
+/** Present exactly when the admitted plan carries a crop and the snapshot binding to serve it. */
+function buildScreenshotCropBinding(
+  params: Readonly<{
+    cropOn: string | undefined;
+    captureSnapshot: BoundScreenshotRuntime['captureSnapshot'];
+    cropRun: ScreenshotCropRun | undefined;
+    logPath: string;
+  }>,
+): ScreenshotCropBinding | undefined {
+  const { cropOn, captureSnapshot, cropRun } = params;
+  if (cropOn === undefined || captureSnapshot === undefined || cropRun === undefined) {
+    return undefined;
+  }
+  return { cropOn, captureSnapshot, run: cropRun, logPath: params.logPath };
+}
+
 /**
  * `--overlay-refs` republishes the annotated tree as the session's snapshot, so the refs it drew
  * are the refs a following interaction resolves. The tree comes from the same admitted binding as
- * the capture — the plan required both operations before either ran.
+ * the capture — the plan required both operations before either ran. The crop plan binds the
+ * snapshot for the crop alone, so a crop request never annotates or republishes.
+ */
+async function screenshotOverlayRefsField(
+  params: Readonly<{
+    session: SessionState;
+    cropOn: string | undefined;
+    captureSnapshot: BoundScreenshotRuntime['captureSnapshot'];
+    screenshotPath: string;
+    logPath: string;
+    dispatchContext: DaemonCommandContext;
+  }>,
+): Promise<Readonly<Record<string, unknown>>> {
+  const { session, cropOn, captureSnapshot } = params;
+  if (cropOn !== undefined || captureSnapshot === undefined) return {};
+  return {
+    overlayRefs: await annotateScreenshotWithSessionRefs({
+      session,
+      logPath: params.logPath,
+      screenshotPath: params.screenshotPath,
+      dispatchContext: params.dispatchContext,
+      captureSnapshot,
+    }),
+  };
+}
+
+/**
+ * The overlay-refs tree capture: interactive-only, through the same admitted binding as the
+ * screenshot, stored as the session snapshot so the burned-in refs stay the authorized frame.
  */
 async function annotateScreenshotWithSessionRefs(
   params: Readonly<{
@@ -247,9 +338,10 @@ function createBoundScreenshotBackend(
     session: SessionState;
     dispatchContext: DaemonCommandContext;
     captureScreenshot: BoundScreenshotRuntime['captureScreenshot'];
+    crop?: ScreenshotCropBinding;
   }>,
 ): AgentDeviceBackend {
-  const { session, dispatchContext, captureScreenshot } = params;
+  const { session, dispatchContext, captureScreenshot, crop } = params;
   return {
     platform: publicPlatformString(session.device),
     captureScreenshot: async (_context, outPath, options) => {
@@ -257,7 +349,7 @@ function createBoundScreenshotBackend(
         ...dispatchContext,
         ...screenshotFlagsFromOptions(options),
       });
-      await captureScreenshot({
+      const facts = await captureScreenshot({
         outPath,
         options: {
           appBundleId: dispatchContext.appBundleId,
@@ -275,6 +367,20 @@ function createBoundScreenshotBackend(
         },
         execution: screenshotExecutionFromContext(dispatchContext),
       });
+      if (crop) {
+        const outcome = await cropScreenshotToSelector({
+          device: session.device,
+          session,
+          surface: session.surface,
+          cropOn: crop.cropOn,
+          screenshotPath: outPath,
+          logPath: crop.logPath,
+          dispatchContext,
+          captureSnapshot: crop.captureSnapshot,
+        });
+        crop.run.warnings.push(...buildScreenshotCropWarnings(outcome));
+      }
+      return facts.displayRotation ? { displayRotation: facts.displayRotation } : undefined;
     },
   };
 }

@@ -1,3 +1,7 @@
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { buildSimctlArgsForDevice } from '../core/simctl.ts';
+import type { ScopedSimctlCommand } from '../core/tool-provider.ts';
+
 export function buildAppleLogPredicate(appBundleId: string, executableName?: string): string {
   const escapedBundleId = escapePredicateString(appBundleId);
   const clauses = [
@@ -19,19 +23,13 @@ export function buildAppleLogPredicate(appBundleId: string, executableName?: str
   return clauses.join(' OR ');
 }
 
-export function buildIosSimulatorLogStreamArgs(params: {
-  deviceId: string;
-  appBundleId: string;
-  executableName?: string;
-  simulatorSetPath?: string;
-}): string[] {
-  const simctlPrefix = params.simulatorSetPath
-    ? ['simctl', '--set', params.simulatorSetPath]
-    : ['simctl'];
-  return [
-    ...simctlPrefix,
+export function buildIosSimulatorLogStreamArgs(
+  device: DeviceInfo,
+  params: { appBundleId: string; executableName?: string },
+): ScopedSimctlCommand {
+  return buildSimctlArgsForDevice(device, [
     'spawn',
-    params.deviceId,
+    device.id,
     'log',
     'stream',
     '--style',
@@ -40,7 +38,7 @@ export function buildIosSimulatorLogStreamArgs(params: {
     'info',
     '--predicate',
     buildAppleLogPredicate(params.appBundleId, params.executableName),
-  ];
+  ]);
 }
 
 export function buildIosDeviceConsoleLaunchArgs(deviceId: string, appBundleId: string): string[] {
@@ -58,5 +56,5 @@ export function buildIosDeviceConsoleLaunchArgs(deviceId: string, appBundleId: s
 }
 
 function escapePredicateString(value: string): string {
-  return value.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+  return value.replaceAll('\\', String.raw`\\`).replaceAll('"', String.raw`\"`);
 }

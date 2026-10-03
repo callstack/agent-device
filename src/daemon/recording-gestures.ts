@@ -1,13 +1,13 @@
 import { isIosFamily } from '@agent-device/kernel/device';
 import type { RecordingGestureEvent } from '@agent-device/contracts/screen-recording-runtime';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import {
   resolveGestureDurationMs,
   resolveGestureOffsetMs,
   resolveTapVisualizationOffsetMs,
 } from './recording-timing.ts';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { DEFAULT_MOBILE_SCROLL_DURATION_MS } from '@agent-device/contracts/scroll-command';
 import {
   type ScrollDirection,
@@ -17,7 +17,7 @@ import {
 import {
   getSnapshotReferenceFrame,
   type TouchReferenceFrame as ReferenceFrame,
-} from './touch-reference-frame.ts';
+} from '@agent-device/capture-kit/touch-reference-frame';
 import { buildCanonicalGestureEvents, buildSwipeTravelEvent } from './recording-gesture-events.ts';
 import { readRecordingNumber, resolveRecordingDurationMs } from './recording-values.ts';
 

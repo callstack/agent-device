@@ -388,13 +388,21 @@ function buildReplayTestFailedResult(
     attempts: outcome.attempts,
     artifactsDir: context.testArtifactsDir,
     error,
-    ...(attemptOutcome?.status === 'failed' && attemptOutcome.infrastructure
-      ? { infrastructure: true as const }
-      : {}),
+    ...replayTestFailedAttemptFields(attemptOutcome),
+    ...replayTestShardResultMetadata(shard),
+  };
+}
+
+function replayTestFailedAttemptFields(
+  attemptOutcome: ReplayTestCaseOutcome['finalOutcome'],
+): Pick<ReplaySuiteTestFailed, 'warnings' | 'infrastructure' | 'snapshotDiagnostics'> {
+  const failed = attemptOutcome?.status === 'failed' ? attemptOutcome : undefined;
+  return {
+    ...(failed && failed.warnings.length > 0 ? { warnings: [...failed.warnings] } : {}),
+    ...(failed?.infrastructure ? { infrastructure: true as const } : {}),
     ...(attemptOutcome?.snapshotDiagnostics
       ? { snapshotDiagnostics: attemptOutcome.snapshotDiagnostics }
       : {}),
-    ...replayTestShardResultMetadata(shard),
   };
 }
 

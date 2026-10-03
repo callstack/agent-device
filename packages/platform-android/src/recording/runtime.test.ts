@@ -116,7 +116,7 @@ test('waits for a SIGINT-accepted recorder to exit before sizing or pulling its 
   }
 });
 
-test('retains native evidence when finalization fails, then cleans it through compensation', async () => {
+test('retains native evidence when finalization fails and cleans it only on requested disposal', async () => {
   const calls: string[] = [];
   const stopped = new Set<string>();
   let manifest = '';
@@ -141,9 +141,10 @@ test('retains native evidence when finalization fails, then cleans it through co
       return true;
     },
   });
-  (host.screenRecording.finalize as { complete: () => Promise<never> }).complete = async () => {
-    throw new Error('finalizer failed');
-  };
+  (host.screenRecording.finalize as unknown as { complete: () => Promise<never> }).complete =
+    async () => {
+      throw new Error('finalizer failed');
+    };
   const runtime = await bindAndroidScreenRecordingRuntime({
     host,
     device: androidRecordingDevice,

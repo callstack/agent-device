@@ -1,7 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
+import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
 import { booleanField, enumField, stringField } from '../command-input.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
 import { commonInputFromFlags } from '../cli-grammar/common.ts';
 import type { CliReader } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
@@ -21,23 +20,9 @@ const sessionCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-const sessionCommandDefinition = defineExecutableCommand(
-  sessionCommandMetadata,
-  async (client, { action, path, force, ...input }) => {
-    const effectiveAction = action ?? 'list';
-    assertSessionActionOptions(effectiveAction, path, force);
-    if (effectiveAction === 'state-dir') {
-      return { stateDir: await client.sessions.stateDir(input) };
-    }
-    if (effectiveAction === 'save-script') {
-      return await client.sessions.saveScript({ ...input, path, force });
-    }
-    return { sessions: await client.sessions.list(input) };
-  },
-);
-
 const sessionCliSchema = {
   usageOverride: 'session list | session state-dir | session save-script [path] [--force]',
+  usageFlags: [],
   listUsageOverride: 'session',
   positionalArgs: ['list|state-dir|save-script?', 'path?'],
   allowedFlags: ['force'],
@@ -56,7 +41,17 @@ export const sessionCommandFacet = defineCommandFacet({
     summary: 'List sessions, show the state dir, or publish a script',
   },
   metadata: sessionCommandMetadata,
-  definition: sessionCommandDefinition,
+  run: async (client, { action, path, force, ...input }) => {
+    const effectiveAction = action ?? 'list';
+    assertSessionActionOptions(effectiveAction, path, force);
+    if (effectiveAction === 'state-dir') {
+      return { stateDir: await client.sessions.stateDir(input) };
+    }
+    if (effectiveAction === 'save-script') {
+      return await client.sessions.saveScript({ ...input, path, force });
+    }
+    return { sessions: await client.sessions.list(input) };
+  },
   cliSchema: sessionCliSchema,
   cliReader: sessionCliReader,
   cliOutputFormatter: managementCliOutputFormatters.session,

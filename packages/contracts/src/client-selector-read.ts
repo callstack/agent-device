@@ -7,6 +7,7 @@ import type {
 } from './client-capture.ts';
 import type { DeviceCommandBaseOptions } from './client-connection.ts';
 import type { ElementTarget } from './client-target.ts';
+import type { IsPredicate } from './is-predicate.ts';
 
 /**
  * #1271 stage 2 (ADR 0012 amendment): `get`/`is`/`find` are observation-only
@@ -29,7 +30,7 @@ export type GetOptions = DeviceCommandBaseOptions &
 export type IsTextPredicateOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions &
   RecordControlOptions & {
-    predicate: 'text';
+    predicate: Extract<IsPredicate, 'text'>;
     selector: string;
     value: string;
   };
@@ -37,7 +38,7 @@ export type IsTextPredicateOptions = DeviceCommandBaseOptions &
 export type IsStatePredicateOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions &
   RecordControlOptions & {
-    predicate: 'visible' | 'hidden' | 'exists' | 'editable' | 'selected' | 'focused';
+    predicate: Exclude<IsPredicate, 'text'>;
     selector: string;
     value?: never;
   };

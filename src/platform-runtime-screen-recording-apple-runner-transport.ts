@@ -1,8 +1,8 @@
 import path from 'node:path';
 import type { ManagedProcessOwnership } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { createScopedProvider } from './utils/scoped-provider.ts';
-import { isProcessAlive } from './utils/host-process.ts';
+import { createScopedProvider } from '@agent-device/kernel/scoped-provider';
+import { isProcessAlive } from '@agent-device/host-kit/process';
 
 type AppleRunnerScreenRecordingStartRequest = Readonly<{
   device: DeviceInfo;
@@ -16,7 +16,6 @@ type AppleRunnerScreenRecordingStartResult = Readonly<{
   runnerSessionId: string;
   remotePath?: string;
   recorderStartUptimeMs?: number;
-  targetAppReadyUptimeMs?: number;
 }>;
 
 export type AppleRunnerScreenRecordingTransport = Readonly<{
@@ -42,7 +41,8 @@ const localTransport: AppleRunnerScreenRecordingTransport = Object.freeze({
   start: startLocalAppleRunnerRecording,
   inspect: async (device, runnerSessionId) => await inspectLocalRunner(device, runnerSessionId),
   stop: async ({ device, runnerSessionId, appBundleId, signal }) => {
-    const { runAppleRunnerCommand } = await import('./platforms/apple/core/runner-client.ts');
+    const { runAppleRunnerCommand } =
+      await import('@agent-device/platform-apple/runner/operations');
     await runAppleRunnerCommand(
       device,
       { command: 'recordStop', appBundleId },
@@ -58,8 +58,8 @@ async function startLocalAppleRunnerRecording({
   fps,
   signal,
 }: AppleRunnerScreenRecordingStartRequest): Promise<AppleRunnerScreenRecordingStartResult> {
-  const { getRunnerSessionSnapshot, runAppleRunnerCommand } =
-    await import('./platforms/apple/core/runner-client.ts');
+  const { readRunnerSessionLiveness, runAppleRunnerCommand } =
+    await import('@agent-device/platform-apple/runner/operations');
   const recordingFileName = `agent-device-recording-${Date.now()}.mp4`;
   const remotePath =
     device.appleOs === 'macos' || device.kind !== 'device' ? undefined : `tmp/${recordingFileName}`;
@@ -73,8 +73,8 @@ async function startLocalAppleRunnerRecording({
     },
     { signal },
   );
-  const session = getRunnerSessionSnapshot(device.id);
-  if (!session?.alive) {
+  const session = readRunnerSessionLiveness(device.id);
+  if (!session || session.liveness !== 'ready') {
     throw new Error('Apple runner recording did not expose a durable runner session identity');
   }
   try {
@@ -103,16 +103,13 @@ function runnerOutputPath(
 function freezeRunnerStartResult(
   runnerSessionId: string,
   remotePath: string | undefined,
-  timing: Readonly<{ recorderStartUptimeMs?: unknown; targetAppReadyUptimeMs?: unknown }>,
+  timing: Readonly<{ recorderStartUptimeMs?: unknown }>,
 ): AppleRunnerScreenRecordingStartResult {
   return Object.freeze({
     runnerSessionId,
     ...(remotePath === undefined ? {} : { remotePath }),
     ...(typeof timing.recorderStartUptimeMs === 'number'
       ? { recorderStartUptimeMs: timing.recorderStartUptimeMs }
-      : {}),
-    ...(typeof timing.targetAppReadyUptimeMs === 'number'
-      ? { targetAppReadyUptimeMs: timing.targetAppReadyUptimeMs }
       : {}),
   });
 }
@@ -146,16 +143,18 @@ async function inspectLocalRunner(
   device: DeviceInfo,
   runnerSessionId: string,
 ): Promise<ManagedProcessOwnership> {
-  const { getRunnerSessionSnapshot, readStaleRunnerLease, verifyLeaseRunnerPidIdentity } =
-    await import('./platforms/apple/core/runner-client.ts');
-  const active = getRunnerSessionSnapshot(device.id);
+  const { readRunnerSessionLiveness, readStaleRunnerLease, verifyLeaseRunnerPidIdentity } =
+    await import('@agent-device/platform-apple/runner/operations');
+  const active = readRunnerSessionLiveness(device.id);
   if (active) {
-    if (!active.alive) return 'missing';
+    if (active.liveness === 'gone') return 'missing';
     return active.sessionId === runnerSessionId ? 'owned-alive' : 'ownership-lost';
   }
-  const lease = readStaleRunnerLease(device.id);
+  const lease = await readStaleRunnerLease(device.id);
   if (!lease) return 'missing';
   if (lease.sessionId !== runnerSessionId) return 'ownership-lost';
   if (lease.runnerPid === null || !isProcessAlive(lease.runnerPid)) return 'missing';
-  return verifyLeaseRunnerPidIdentity(lease, lease.runnerPid) ? 'owned-alive' : 'ownership-lost';
+  return (await verifyLeaseRunnerPidIdentity(lease, lease.runnerPid))
+    ? 'owned-alive'
+    : 'ownership-lost';
 }

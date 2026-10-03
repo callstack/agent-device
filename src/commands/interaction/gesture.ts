@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { compactRecord } from '../input-readers.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { commonInputFromFlags, request } from '../cli-grammar/common.ts';

@@ -7,14 +7,14 @@ import { useAppColors, type AppColors } from '../theme';
 export interface ProductScreenProps {
   detailNote: string;
   isFavorite: boolean;
-  product: LabProduct;
-  quantity: number;
   onBack: () => void;
   onChangeDetailNote: (value: string) => void;
   onDecreaseQuantity: () => void;
   onIncreaseQuantity: () => void;
   onSave: () => void;
   onToggleFavorite: () => void;
+  product: LabProduct;
+  quantity: number;
 }
 
 export function ProductScreen(props: ProductScreenProps) {
@@ -26,8 +26,8 @@ export function ProductScreen(props: ProductScreenProps) {
       <ScreenTitle
         badge={props.product.badge}
         subtitle="A focused detail page for back navigation, quantity edits, notes, and save actions."
-        title={props.product.name}
         testID="product-title"
+        title={props.product.name}
       />
 
       <SectionCard subtitle={props.product.subtitle} title="Product detail">

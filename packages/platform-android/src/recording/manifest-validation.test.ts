@@ -62,3 +62,41 @@ test('rejects terminal evidence whose result coordinates diverge from its manife
     }),
   ).toBe(false);
 });
+
+test('accepts a measured clip length in terminal evidence and refuses an uncountable one', () => {
+  const input = recordingInput();
+  const active = createNativeManifest(
+    androidRecordingDevice,
+    input,
+    1,
+    [
+      {
+        index: 1,
+        remotePath: '/sdcard/agent-device-recording-1.mp4',
+        remotePid: '41',
+        remoteStartTime: '7',
+      },
+    ],
+    undefined,
+    'local',
+  );
+  const complete = createCompletedNativeManifest(active, {
+    backend: 'adb screenrecord',
+    outPath: input.outputPath,
+    startedAt: 1,
+    completedAt: 2,
+    capturedDurationMs: 7_000,
+    scope: input.scope,
+    showTouches: input.showTouches,
+    recordOnlySession: input.recordOnlySession,
+  });
+  expect(isValidNativeManifest(complete)).toBe(true);
+  for (const capturedDurationMs of ['7000', Number.NaN]) {
+    expect(
+      isValidNativeManifest({
+        ...complete,
+        completion: { ...complete.completion!, capturedDurationMs },
+      }),
+    ).toBe(false);
+  }
+});

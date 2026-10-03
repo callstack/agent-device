@@ -18,8 +18,11 @@ import {
   isAgentDeviceError,
   normalizeAgentDeviceError,
 } from 'agent-device';
+import type { AgentDeviceClient, AgentDeviceDevice } from 'agent-device';
 
-async function resolveSnapshotCapableIosDevice(client: ReturnType<typeof createAgentDeviceClient>) {
+async function resolveSnapshotCapableIosDevice(
+  client: AgentDeviceClient,
+): Promise<AgentDeviceDevice> {
   const devices = await client.devices.list({ platform: 'ios' });
   const device = devices[0];
   if (!device) {

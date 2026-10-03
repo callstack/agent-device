@@ -1,0 +1,238 @@
+import { isSystemScrollIndicatorLabel } from '@agent-device/kernel/scroll-indicator';
+import { formatRole } from '@agent-device/kernel/snapshot';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import {
+  buildTextPreview,
+  describeTextSurface,
+  trimText,
+} from './snapshot-presentation/text-surface.ts';
+
+// `formatRole` is owned by kernel now (`attachRefs` publishes its answer as every node's `kind`,
+// #2656); re-exported here so this module's existing callers are unaffected.
+export { formatRole };
+
+type SnapshotDisplayLine = {
+  node: SnapshotNode;
+  depth: number;
+  type: string;
+  text: string;
+};
+
+type SnapshotLineFormatOptions = {
+  summarizeTextSurfaces?: boolean;
+};
+
+export function buildSnapshotDisplayLines(
+  nodes: SnapshotNode[],
+  options: SnapshotLineFormatOptions = {},
+): SnapshotDisplayLine[] {
+  const visibleDepths: number[] = [];
+  const lines: SnapshotDisplayLine[] = [];
+  for (const node of nodes) {
+    const depth = node.depth ?? 0;
+    const label = node.label?.trim() || node.value?.trim() || node.identifier?.trim() || '';
+    const type = formatRole(node.type ?? 'Element');
+    const hasInheritedLabel = node.inheritsLabel === true || node.inheritsIdentifier === true;
+    if (type === 'group' && !label && !hasInheritedLabel) {
+      continue;
+    }
+    while (visibleDepths.length > 0 && depth <= visibleDepths.at(-1)!) {
+      visibleDepths.pop();
+    }
+    const adjustedDepth = visibleDepths.length;
+    visibleDepths.push(depth);
+    lines.push({
+      node,
+      depth: adjustedDepth,
+      type,
+      text: formatSnapshotLine(node, adjustedDepth, false, type, options),
+    });
+  }
+  return lines;
+}
+
+export function formatSnapshotLine(
+  node: SnapshotNode,
+  depth: number,
+  hiddenGroup: boolean,
+  normalizedType?: string,
+  options: SnapshotLineFormatOptions = {},
+): string {
+  const type = normalizedType ?? formatRole(node.type ?? 'Element');
+  const textSurface = describeTextSurface(node, type);
+  const label = resolveDisplayLabel(node, type, options, textSurface);
+  const indent = '  '.repeat(depth);
+  const ref = node.ref ? `@${node.ref}` : '';
+  const metadata = buildLineMetadata(node, type, options, textSurface);
+  if (!label && (node.inheritsLabel === true || node.inheritsIdentifier === true)) {
+    metadata.push('same label as parent');
+  }
+  const metadataText = metadata.map((entry) => ` [${entry}]`).join('');
+  const textPart = label ? ` "${label}"` : '';
+  const actionsText = formatCustomActions(node);
+  if (hiddenGroup) {
+    return `${indent}${ref} [${type}]${metadataText}${actionsText}`.trimEnd();
+  }
+  return `${indent}${ref} [${type}]${textPart}${metadataText}${actionsText}`.trimEnd();
+}
+
+/**
+ * Accessibility custom actions render as a named list rather than bracketed
+ * metadata: they are the element's hidden affordances, and an agent reading the
+ * line needs the exact names it would have to match. Names only — activation
+ * points and identifiers are not actionable through any API we have.
+ */
+function formatCustomActions(node: SnapshotNode): string {
+  const actions = node.actions?.filter((action) => action.trim().length > 0);
+  if (!actions || actions.length === 0) {
+    return '';
+  }
+  // App-authored strings on a one-line-per-node surface: quotes and backslashes
+  // get the same escaping as text previews, and control characters collapse to
+  // spaces so a name containing a newline cannot split one node across lines.
+  return ` actions: [${actions
+    .map((action) => `"${escapePreviewText(collapseControlCharacters(action))}"`)
+    .join(', ')}]`;
+}
+
+function collapseControlCharacters(value: string): string {
+  return (
+    value
+      // Whitespace folds the way text previews already fold it (newlines, tabs).
+      .replaceAll(/\s+/g, ' ')
+      // Remaining C0/C1 controls are zero-width but can still corrupt a terminal.
+      // eslint-disable-next-line no-control-regex
+      .replaceAll(/[\u0000-\u001f\u007f-\u009f]/g, '')
+      .trim()
+  );
+}
+
+export function displayLabel(node: SnapshotNode, type: string): string {
+  const label = node.label?.trim();
+  if (label && shouldSuppressScrollContainerLabel(type, label)) {
+    return '';
+  }
+  const value = node.value?.trim();
+  if (isEditableRole(type)) {
+    if (value) return value;
+    if (label) return label;
+  } else if (label) {
+    return label;
+  }
+  if (value) return value;
+  const identifier = node.identifier?.trim();
+  if (!identifier) return '';
+  if (
+    isGenericResourceId(identifier) &&
+    (type === 'group' || type === 'image' || type === 'list' || type === 'collection')
+  ) {
+    return '';
+  }
+  return identifier;
+}
+
+/**
+ * The state markers every rendering path prints, and the states a snapshot diff compares: the diff
+ * renders its lines without text-surface summarizing, and a fact it weighs has to be visible in the
+ * line it prints, or a flip reads as a changed pair whose two lines look identical. Both checked
+ * answers render, since a checkable control shown plain would hide that it toggles; a node that
+ * cannot be checked carries neither.
+ */
+export function stateMarkers(node: SnapshotNode): string[] {
+  const markers: string[] = [];
+  if (node.enabled === false) markers.push('disabled');
+  if (node.selected === true) markers.push('selected');
+  if (node.checked !== undefined) markers.push(node.checked ? 'checked' : 'unchecked');
+  return markers;
+}
+
+function isEditableRole(type: string): boolean {
+  return type === 'text-field' || type === 'text-view' || type === 'search';
+}
+
+function shouldSuppressScrollContainerLabel(type: string, label: string): boolean {
+  if (type !== 'scroll-area' && type !== 'list' && type !== 'collection' && type !== 'table') {
+    return false;
+  }
+  return isSystemScrollIndicatorLabel(label);
+}
+
+function isGenericResourceId(value: string): boolean {
+  return /^[\w.]+:id\/[\w.-]+$/i.test(value);
+}
+
+function resolveDisplayLabel(
+  node: SnapshotNode,
+  type: string,
+  options: SnapshotLineFormatOptions,
+  textSurface: { text: string; isLargeSurface: boolean; shouldSummarize: boolean },
+): string {
+  if (!options.summarizeTextSurfaces) {
+    return displayLabel(node, type);
+  }
+  if (!textSurface.shouldSummarize) {
+    return displayLabel(node, type);
+  }
+  const semanticLabel = semanticSurfaceLabel(node, type, textSurface.text);
+  return semanticLabel || displayLabel(node, type);
+}
+
+function buildLineMetadata(
+  node: SnapshotNode,
+  type: string,
+  options: SnapshotLineFormatOptions,
+  textSurface: { text: string; isLargeSurface: boolean; shouldSummarize: boolean },
+): string[] {
+  const metadata = [...stateMarkers(node), ...(node.presentationHints ?? [])];
+  if (!options.summarizeTextSurfaces) {
+    return uniqueMetadata(metadata);
+  }
+  if (node.focused === true) metadata.push('focused');
+  if (isEditableRole(type)) metadata.push('editable');
+  if (looksScrollable(node, type)) metadata.push('scrollable');
+  if (!textSurface.shouldSummarize) {
+    return uniqueMetadata(metadata);
+  }
+  metadata.push(`preview:"${escapePreviewText(buildTextPreview(textSurface.text))}"`);
+  metadata.push('truncated');
+  return uniqueMetadata(metadata);
+}
+
+function semanticSurfaceLabel(node: SnapshotNode, type: string, text: string): string {
+  const label = trimText(node.label);
+  if (label && label !== text) {
+    return label;
+  }
+  const identifier = trimText(node.identifier);
+  if (identifier && !isGenericResourceId(identifier) && identifier !== text) {
+    return identifier;
+  }
+  switch (type) {
+    case 'text':
+    case 'text-view':
+      return 'Text view';
+    case 'text-field':
+      return 'Text field';
+    case 'search':
+      return 'Search field';
+    default:
+      return '';
+  }
+}
+
+function looksScrollable(node: SnapshotNode, type: string): boolean {
+  if (type === 'scroll-area') {
+    return true;
+  }
+  const rawType = (node.type ?? '').toLowerCase();
+  const rawRole = `${node.role ?? ''} ${node.subrole ?? ''}`.toLowerCase();
+  return rawType.includes('scroll') || rawRole.includes('scroll');
+}
+
+function escapePreviewText(value: string): string {
+  return value.replaceAll('\\', String.raw`\\`).replaceAll('"', String.raw`\"`);
+}
+
+function uniqueMetadata(values: string[]): string[] {
+  return [...new Set(values)];
+}

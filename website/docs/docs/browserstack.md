@@ -44,6 +44,7 @@ Optional device features:
 --provider-device-orientation portrait   # or landscape        (alias --device-orientation)
 --provider-geo-location US                                   # (alias --geo-location)
 --provider-timezone New_York                                 # (alias --timezone)
+--provider-appium-version 3.2.0                              # (alias --appium-version)
 --provider-language Fr                                       # (alias --language)
 --provider-locale Fr                                         # (alias --locale)
 --provider-network-profile 4g-lte-advanced-good              # (alias --network-profile)
@@ -54,6 +55,7 @@ Optional device features:
 BrowserStack receives these values in `bstack:options` when it creates the hosted session.
 
 - The orientation applies when the session starts. An activity without a fixed orientation, such as a Chrome Custom Tab hosting OAuth, can still open in landscape. Run `agent-device orientation portrait` after launching it when needed.
+- `--provider-appium-version` pins the Appium server BrowserStack runs for the session. Unset, BrowserStack falls back to its default Appium 1.x; `mobile:` commands such as `deepLink` and `pressButton` need a 2.x or newer server.
 - `--provider-network-profile` and `--provider-custom-network` are mutually exclusive.
 - `--provider-no-resign-app` applies to iOS only. BrowserStack re-signs uploaded iOS apps with its provisioning profile, which strips entitlements; opt out when testing entitlement-dependent features such as push notifications.
 

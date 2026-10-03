@@ -53,6 +53,7 @@ describe('ADR 0016 active publication contract', () => {
     ['stable', ['stable']],
     ['ref', ['@e7']],
     ['text', ['text', 'Screen X']],
+    ['absent', ['absent', 'label="Screen X"']],
   ])('rejects %s wait as the destination guard', (_kind, waitPositionals) => {
     expect(() =>
       validateActivePublicationActions([action('open', ['Demo']), action('wait', waitPositionals)]),

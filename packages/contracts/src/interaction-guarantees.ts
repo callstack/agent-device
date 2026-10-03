@@ -34,6 +34,9 @@ export const INTERACTION_GUARANTEES = [
   'disambiguation',
   // Targets covered by another visible element are refused.
   'occlusion',
+  // Targets whose tap point sits behind the visible software keyboard are refused. The keyboard is
+  // its own system surface, so `occlusion` cannot see it and `offscreen` passes it (#2589).
+  'keyboardOcclusion',
   // Element-targeted coordinate paths keep the resolved parent identity while
   // choosing a point outside independently interactive descendants. A parent
   // whose safe region is fully tiled fails closed instead of activating a child.
@@ -70,6 +73,16 @@ export const INTERACTION_GUARANTEES = [
   // unique/disambiguated/exact/label-fallback/not-observed provenance,
   // pre-action diagnostics only — never ref-issued or MCP-pinned.
   'resolutionDisclosure',
+  // How the path waits for the target to exist and become actionable before acting: a declared
+  // budget under which a plain no-match keeps retrying, versus a target that must already exist at
+  // dispatch time. Distinct from occlusion/offscreen/nonHittable, which judge a target already
+  // found; this is about whether one is found at all.
+  'targetReadiness',
+  // What the path observes after dispatch to back its success claim, and whether that observation
+  // is advisory (a hint the caller may ignore) or can change the response (a corroborated failure,
+  // a settled diff). Distinct from the opt-in verifyEvidence/settleObservation features; this is the
+  // path's baseline, always-on claim.
+  'outcomeObservation',
 ] as const;
 
 export type InteractionGuarantee = (typeof INTERACTION_GUARANTEES)[number];
@@ -143,7 +156,41 @@ const PARENT_OWNED_TOUCH_POINT_GAP_ISSUE = 'https://github.com/callstack/agent-d
 // (interaction-response-construction-guard.test.ts) keeps new branches on it.
 const SHARED_RESPONSE_CONSTRUCTION: GuaranteeEnforcement = {
   kind: 'runtime',
-  via: 'src/daemon/handlers/interaction-touch-response.ts#buildInteractionResponseData',
+  via: 'src/daemon/interaction/internal/interaction-touch-response.ts#buildInteractionResponseData',
+};
+
+// runtime-selector, runtime-ref, and coordinate share this waiver: all three finalize through
+// finalizeTouchInteraction, which calls markDeferredInteractionOutcome with the tap point, and none
+// observes the outcome in its own response.
+const TAP_OUTCOME_NOT_OBSERVED_GAP: GuaranteeEnforcement = {
+  kind: 'waived',
+  reason:
+    'gap: the response reports the dispatch only; only opt-in --verify/--settle capture post-action evidence into it. The deferred marks set after dispatch (Android snapshot freshness after press/click, post-gesture stabilization when the request sets postGestureStabilization) are judged by the next capture, never in this response, and the iOS ambiguous-failure corroboration reconsiders only a thrown runner error.',
+  trackingIssue: GAPS_UMBRELLA_ISSUE,
+};
+
+// Both Maestro-compatible fast paths (src/daemon/interaction/internal/interaction-touch-direct-ios.ts)
+// dispatch ONE fused XCTest runner request (`command: 'tap'` with a selectorKey/selectorValue) built
+// in packages/platform-apple/src/interactions.ts#tapElementSelector — not the separate
+// packages/maestro/ flow-script engine, which drives standalone `.yaml` Maestro flows and never
+// participates in an ordinary daemon click.
+const DIRECT_IOS_SINGLE_QUERY_READINESS: GuaranteeEnforcement = {
+  kind: 'waived',
+  reason:
+    "Intentional: the fused runner request performs a single XCTest selector/frame query per dispatch and does not itself retry for an as-yet-nonexistent target; a miss is a runner failure (see errorTaxonomy) rather than a wait, and delegation-on-error (ADR 0011) is a different path's guarantee, not a retry of this one.",
+};
+
+// Shares the SAME reasoning as TAP_OUTCOME_NOT_OBSERVED_GAP: the tap outcome is not observed on the
+// success path here either. The shared ambiguous-XCTest-failure corroboration
+// (src/daemon/interaction/internal/interaction-ios-tap-outcome.ts#corroborateIosTapFailure) is
+// invoked identically from this fast path and from the tree-based runtime dispatch, but only ever
+// reconsiders a THROWN error — it never validates a call that returned success, so it is not a
+// baseline outcome claim for either path.
+const DIRECT_IOS_OUTCOME_NOT_OBSERVED_GAP: GuaranteeEnforcement = {
+  kind: 'waived',
+  reason:
+    "gap: this replay-only route observes no outcome beyond the runner's own report; --verify/--settle do not apply here (see the inapplicable cells on this row), and the shared ambiguous-failure corroboration only reconsiders a thrown error, never a successful dispatch.",
+  trackingIssue: GAPS_UMBRELLA_ISSUE,
 };
 
 // The two runtime tree paths (selector and ref resolution) run the SAME shared
@@ -155,35 +202,54 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   // predicate it applies (and the annotation contract it reads).
   occlusion: {
     kind: 'runtime',
-    via: 'src/core/selector-pipeline.ts#runNodePipelineStages',
+    via: 'packages/selectors/src/selector-pipeline.ts#runNodePipelineStages',
   },
   parentOwnedTouchPoint: {
     kind: 'runtime',
-    via: 'src/core/interaction-touch-point.ts#resolveInteractionTouchPoint',
+    via: 'packages/selectors/src/interaction-touch-point.ts#resolveInteractionTouchPoint',
   },
-  // #1542: the base decision is isNodeVisibleOnScreen (bulk accessibility
+  // #2589: one guard for every acting node path, run at the shared pipeline door
+  // (`runInteractionPipelineStages`), so the native-ref fast path cannot succeed on a target the
+  // shared rule refuses. Its band is the one the capture's producer measured, or the one derived
+  // from the tree the path already holds when the producer measured none (#2660): the keyboard is
+  // never a covering sibling of app content and never leaves the app window rect, so neither
+  // `occlusion` nor `offscreen` can reach it.
+  keyboardOcclusion: {
+    kind: 'runtime',
+    via: 'src/commands/interaction/runtime/keyboard-occlusion.ts#assertTapTargetClearOfVisibleKeyboard',
+  },
+  // #1542: the base decision is the contracts-owned snapshot visibility resolver (bulk accessibility
   // tree), but throwIfOffscreenInteractionTarget is the actual end-to-end
   // enforcement point — on iOS (local, non-provider sessions only) a would-be
   // refusal is re-checked against a live, tree-independent read via the
   // optional AgentDeviceBackend.confirmOffscreenTargetVisible hook before
   // erroring, and a confirmed rescue re-targets the action at the LIVE rect,
   // not the bulk one. Every other platform, and any backend that omits the
-  // hook, refuses on isNodeVisibleOnScreen's verdict unchanged — this is a
+  // hook, refuses on the visibility resolver's verdict unchanged — this is a
   // rescue-only override, never a way to relax a genuine refusal.
+  // The live read is a SEPARATE runner request (the direct querySelector), so
+  // it shares the runner's prepareActiveCommandContext surface policy only with
+  // a RUNNER-ROUTED capture: eligible simulator captures go to the host AX
+  // bridge (packages/platform-apple/src/snapshot-route.ts), and a bridge-served
+  // capture never reaches that seam. #2448 puts the system-surface case (the
+  // web sign-in sheet) back on the runner, where both reads do share it. Either
+  // way this is not a same-instant guarantee — no captured surface identity
+  // crosses the two requests, so a surface that appears or dismisses between
+  // them is undetected.
   offscreen: {
     kind: 'runtime',
-    via: 'src/commands/interaction/runtime/resolution.ts#throwIfOffscreenInteractionTarget',
+    via: 'src/commands/interaction/runtime/target-visibility-stages.ts#throwIfOffscreenInteractionTarget',
   },
   // Promotion runs only for rows that declare it (#1656); the retarget itself
   // is still resolveActionableTouchResolution.
   nonHittable: {
     kind: 'runtime',
-    via: 'src/core/selector-pipeline.ts#runNodePipelineStages',
+    via: 'packages/selectors/src/selector-pipeline.ts#runNodePipelineStages',
   },
   responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
   responseIdentity: {
     kind: 'runtime',
-    via: 'src/daemon/handlers/interaction-touch-targets.ts#interactionResultExtra',
+    via: 'src/daemon/interaction/internal/interaction-touch-targets.ts#interactionResultExtra',
   },
   verifyEvidence: {
     kind: 'runtime',
@@ -216,6 +282,15 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/selector-action-resolution.ts#resolveActionSelector',
       },
+      // press/click/longpress poll the promotedTarget row's readiness budget only when the caller
+      // supplies readinessTimeoutMs (never model- or CLI-writable), capped at the row's
+      // maxTimeoutMs; fill/hover resolve against the resolvedTarget row, which declares no poll budget.
+      targetReadiness: {
+        kind: 'runtime',
+        via: 'src/commands/interaction/runtime/selector-readiness.ts#pollForSelectorReadiness',
+        appliesTo: ['press', 'click', 'longpress'],
+      },
+      outcomeObservation: TAP_OUTCOME_NOT_OBSERVED_GAP,
     },
   },
   'runtime-ref': {
@@ -239,8 +314,14 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       // provenance before it can claim exact.
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/resolution.ts#buildRefResolution',
+        via: 'src/commands/interaction/runtime/resolution-disclosure.ts#buildRefResolution',
       },
+      targetReadiness: {
+        kind: 'inapplicable',
+        reason:
+          'A resolved @ref names exactly one node in its authorized frame; ADR 0014 fails a stale or unusable ref at once instead of waiting for a fresher observation to authorize it, so there is no existence budget to poll under.',
+      },
+      outcomeObservation: TAP_OUTCOME_NOT_OBSERVED_GAP,
     },
   },
   'target-drag': {
@@ -254,24 +335,28 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       occlusion: {
         kind: 'runtime',
-        via: 'src/core/selector-pipeline.ts#runNodePipelineStages',
+        via: 'packages/selectors/src/selector-pipeline.ts#runNodePipelineStages',
       },
       parentOwnedTouchPoint: {
         kind: 'runtime',
-        via: 'src/core/interaction-touch-point.ts#resolveInteractionTouchPoint',
+        via: 'packages/selectors/src/interaction-touch-point.ts#resolveInteractionTouchPoint',
+      },
+      keyboardOcclusion: {
+        kind: 'runtime',
+        via: 'src/commands/interaction/runtime/keyboard-occlusion.ts#assertTapTargetClearOfVisibleKeyboard',
       },
       offscreen: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/resolution.ts#throwIfOffscreenInteractionTarget',
+        via: 'src/commands/interaction/runtime/target-visibility-stages.ts#throwIfOffscreenInteractionTarget',
       },
       nonHittable: {
         kind: 'inapplicable',
         reason:
-          'Drag endpoints name contact coordinates and intentionally need not be independently tappable controls; covered and off-screen endpoints are still refused.',
+          'Drag endpoints name contact coordinates and intentionally need not be independently tappable controls; covered, keyboard-occluded, and off-screen endpoints are still refused.',
       },
       responseConstruction: {
         kind: 'runtime',
-        via: 'src/daemon/handlers/interaction-gesture-response.ts#gestureResponseData',
+        via: 'src/daemon/interaction/internal/interaction-gesture-response.ts#gestureResponseData',
       },
       responseIdentity: {
         kind: 'runtime',
@@ -294,6 +379,17 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/gestures.ts#dragCommand',
       },
+      targetReadiness: {
+        kind: 'inapplicable',
+        reason:
+          'Both endpoints resolve through the resolvedTarget row, which declares no poll budget; only the promotedTarget row carries a readiness budget.',
+      },
+      outcomeObservation: {
+        kind: 'waived',
+        reason:
+          'gap: target-authored drag has no --settle/--verify observation of the destination; the tap-shaped runtime paths are the only ones with an opt-in evidence route today.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
+      },
     },
   },
   'native-ref': {
@@ -312,7 +408,14 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       occlusion: {
         kind: 'runtime',
-        via: 'src/core/selector-pipeline.ts#runNodePipelineStages',
+        via: 'packages/selectors/src/selector-pipeline.ts#runNodePipelineStages',
+      },
+      // Same door as the runtime tree paths: the preflight IS `runInteractionPipelineStages`, so
+      // the keyboard guard runs before the backend call even though `occlusion` above is served by
+      // the snapshot annotation the pipeline reads.
+      keyboardOcclusion: {
+        kind: 'runtime',
+        via: 'src/commands/interaction/runtime/keyboard-occlusion.ts#assertTapTargetClearOfVisibleKeyboard',
       },
       parentOwnedTouchPoint: {
         kind: 'inapplicable',
@@ -328,19 +431,19 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       // practice, but the code path is identical.
       offscreen: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/resolution.ts#throwIfOffscreenInteractionTarget',
+        via: 'src/commands/interaction/runtime/target-visibility-stages.ts#throwIfOffscreenInteractionTarget',
       },
       // Annotation only (targetHittable/hint on the result): promotion to a
       // hittable ancestor stays a runtime-path behavior — the preflight never
       // changes which element the backend acts on.
       nonHittable: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/resolution.ts#preflightNativeRefInteraction',
+        via: 'src/commands/interaction/runtime/native-ref-interaction.ts#preflightNativeRefInteraction',
       },
       responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
       responseIdentity: {
         kind: 'runtime',
-        via: 'src/daemon/handlers/interaction-touch-targets.ts#interactionResultExtra',
+        via: 'src/daemon/interaction/internal/interaction-touch-targets.ts#interactionResultExtra',
       },
       verifyEvidence: {
         kind: 'delegated',
@@ -359,7 +462,18 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       // An @ref names exactly one node by construction (same cell as runtime-ref).
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/resolution.ts#EXACT_REF_RESOLUTION',
+        via: 'src/commands/interaction/runtime/resolution-disclosure.ts#EXACT_REF_RESOLUTION',
+      },
+      targetReadiness: {
+        kind: 'waived',
+        reason:
+          "Intentional: the fast path dispatches to the web provider's own element handle (clickRef/fillRef/hoverRef), which owns its own auto-wait/actionability semantics outside this repo. The shared preflight still refuses an already-resolved node that fails occlusion/offscreen/keyboard; it does not wait for one to first exist.",
+      },
+      outcomeObservation: {
+        kind: 'waived',
+        reason:
+          'gap: the fast path observes no post-action outcome by default; --settle/--verify disable it and delegate to runtime-ref instead of running here.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
     },
   },
@@ -378,6 +492,15 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       parentOwnedTouchPoint: {
         kind: 'inapplicable',
         reason: 'Coordinates name the exact point to activate; no parent element is resolved.',
+      },
+      // The classifier runs, and the refusal reason reaches the response as a warning instead of an
+      // error: coordinates are the escape hatch that still reaches a keyboard's own control, and
+      // this path never captures the tree the band is measured against, so a refusal would trust an
+      // arbitrarily stale snapshot. See `describeKeyboardOccludedPointWarning`.
+      keyboardOcclusion: {
+        kind: 'waived',
+        reason:
+          'Intentional: a raw point carries no element identity to excuse a deliberate keyboard tap, and the point is checked against the last-known tree rather than one captured for this action. The shared decision still runs and publishes `tap_keyboard_occludes_target` in the response warning.',
       },
       offscreen: {
         kind: 'runtime',
@@ -409,6 +532,12 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'inapplicable',
         reason: 'Coordinates name a point; no element was resolved to disclose.',
       },
+      targetReadiness: {
+        kind: 'inapplicable',
+        reason:
+          'Coordinates name a point, not an element; there is no target existence to wait for.',
+      },
+      outcomeObservation: TAP_OUTCOME_NOT_OBSERVED_GAP,
     },
   },
   'maestro-direct-selector': {
@@ -425,6 +554,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'waived',
         reason:
           'Intentional: the direct element-tap outcome relies on XCTest hittability instead of the daemon snapshot occlusion classifier.',
+      },
+      keyboardOcclusion: {
+        kind: 'waived',
+        reason:
+          'Intentional: the fused runner element tap never sees a daemon tree, so no band can be derived; the daemon-resolved sibling paths refuse the same target.',
       },
       parentOwnedTouchPoint: {
         kind: 'waived',
@@ -464,8 +598,10 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'src/daemon/handlers/interaction-touch-response.ts#buildInteractionResponseData',
+        via: 'src/daemon/interaction/internal/interaction-touch-response.ts#buildInteractionResponseData',
       },
+      targetReadiness: DIRECT_IOS_SINGLE_QUERY_READINESS,
+      outcomeObservation: DIRECT_IOS_OUTCOME_NOT_OBSERVED_GAP,
     },
   },
   'maestro-non-hittable-fallback': {
@@ -481,6 +617,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       occlusion: {
         kind: 'waived',
         reason: 'Intentional: Maestro taps resolved bounds regardless of overlay state.',
+      },
+      keyboardOcclusion: {
+        kind: 'waived',
+        reason:
+          'Intentional: shares the occlusion waiver above — Maestro taps resolved bounds regardless of what overlays them.',
       },
       parentOwnedTouchPoint: {
         kind: 'waived',
@@ -523,6 +664,8 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         reason:
           'Maestro owns matching; the fallback is coordinate execution. Cell membership is usage-based: only a dispatch whose runner actually executed the coordinate fallback is this path — allowed-but-not-taken is the direct path and discloses not-observed.',
       },
+      targetReadiness: DIRECT_IOS_SINGLE_QUERY_READINESS,
+      outcomeObservation: DIRECT_IOS_OUTCOME_NOT_OBSERVED_GAP,
     },
   },
 };

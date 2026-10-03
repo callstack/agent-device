@@ -17,10 +17,11 @@ import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { activateCompleteRefFrame } from '../ref-frame.ts';
+import { activateCompleteRefFrame, refFrameState } from '../ref-frame.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { GenericPlatformExecutionParams } from '../request-generic-dispatch.ts';
 import { resolveBoundTvRemoteRuntime } from '../tv-remote-runtime.ts';
+import { expectRefusesUnavailableExactOwnerFact } from './runtime-binding-conformance.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 
 const vegaVvd = {
@@ -158,27 +159,11 @@ test('rejects a missing button before inspection or binding', async () => {
 });
 
 test('rejects an unavailable exact-owner fact before binding', async () => {
-  const harness = runtimeHarness(unavailable);
-
-  const resolved = await resolveBoundTvRemoteRuntime({
+  await expectRefusesUnavailableExactOwnerFact({
+    command: 'tv-remote',
     device: vegaVvd,
-    positionals: ['down'],
-    inspectFacts: harness.inspectFacts,
-    bindDevice: harness.bindDevice,
+    unavailable,
   });
-
-  expect(resolved).toEqual({
-    ok: false,
-    response: {
-      ok: false,
-      error: {
-        code: 'UNSUPPORTED_OPERATION',
-        message: 'tv-remote is not supported on this device',
-        hint: unavailable.hint,
-      },
-    },
-  });
-  expect(harness.bindDevice).not.toHaveBeenCalled();
 });
 
 // Pins the wire response for a non-TV target on the two platforms that keep their own capability
@@ -216,37 +201,11 @@ test.each([
 ])(
   'rejects %s with its owner-specific hint, generic message preserved',
   async (_name, device, hint) => {
-    const fact: RuntimeOperationFact = Object.freeze({
-      available: false,
-      reason: 'unsupported-device-kind',
-      hint,
-    });
-    const facts: RuntimeFacts<PlatformRuntimeOperations> = {
-      device: { ...deviceShape(device), providerMode: 'local' },
-      operations: { tvRemote: fact } as RuntimeFacts<PlatformRuntimeOperations>['operations'],
-    };
-    const inspectFacts: InspectDeviceRuntimeFacts = vi.fn(async () => facts);
-    const bindDevice = vi.fn() as unknown as BindDeviceRuntime;
-
-    const resolved = await resolveBoundTvRemoteRuntime({
+    await expectRefusesUnavailableExactOwnerFact({
+      command: 'tv-remote',
       device,
-      positionals: ['down'],
-      inspectFacts,
-      bindDevice,
+      unavailable: { available: false, reason: 'unsupported-device-kind', hint },
     });
-
-    expect(resolved).toEqual({
-      ok: false,
-      response: {
-        ok: false,
-        error: {
-          code: 'UNSUPPORTED_OPERATION',
-          message: 'tv-remote is not supported on this device',
-          hint,
-        },
-      },
-    });
-    expect(bindDevice).not.toHaveBeenCalled();
   },
 );
 
@@ -279,7 +238,7 @@ test('request router joins tv-remote admission to execution and ref invalidation
     ok: true,
     data: { action: 'tv-remote', button: 'down', message: 'Pressed TV remote down' },
   });
-  expect(session.refFrameState).toBe('expired');
+  expect(refFrameState(session)).toBe('expired');
   expect(harness.bind).toHaveBeenCalledTimes(1);
   expect(harness.tvRemote).toHaveBeenCalledTimes(1);
 });

@@ -7,15 +7,21 @@
     "url": "https://github.com/callstack/agent-device",
     "source": "github"
   },
-  "version": "0.20.11-dev",
+  "version": "0.21.18",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "agent-device",
-      "version": "0.20.11-dev",
+      "version": "0.21.18",
       "transport": {
         "type": "stdio"
-      }
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        }
+      ]
     }
   ]
 }

@@ -1,4 +1,4 @@
-import type { DaemonOwnerCleanup } from '@agent-device/contracts/daemon-owner-cleanup';
+import type { DaemonOwnerCleanup } from './daemon-owner-cleanup.ts';
 
 /**
  * Root composition for owner-scoped host cleanup. The CLI names only the neutral service; Apple
@@ -7,9 +7,9 @@ import type { DaemonOwnerCleanup } from '@agent-device/contracts/daemon-owner-cl
 export function createDaemonOwnerCleanup(): DaemonOwnerCleanup {
   return Object.freeze({
     cleanup: async (owner) => {
-      const { cleanupRunnerLeasesForOwner, runnerLeaseCleanupAdapter } =
-        await import('./platforms/apple/core/runner-client.ts');
-      await cleanupRunnerLeasesForOwner(owner, runnerLeaseCleanupAdapter);
+      const { cleanupRunnerLeasesForOwner } =
+        await import('@agent-device/platform-apple/runner/operations');
+      await cleanupRunnerLeasesForOwner(owner);
     },
   });
 }

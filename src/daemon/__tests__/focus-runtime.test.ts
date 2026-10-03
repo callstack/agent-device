@@ -17,10 +17,11 @@ import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { activateCompleteRefFrame } from '../ref-frame.ts';
+import { activateCompleteRefFrame, refFrameState } from '../ref-frame.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { GenericPlatformExecutionParams } from '../request-generic-dispatch.ts';
 import { readFocusPoint, resolveBoundFocusRuntime } from '../focus-runtime.ts';
+import { expectRefusesUnavailableExactOwnerFact } from './runtime-binding-conformance.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 
 const appleDevice = {
@@ -176,28 +177,11 @@ test('parses coordinates exactly as the retired leaf did', () => {
 });
 
 test('rejects an unavailable exact-owner fact before binding', async () => {
-  const harness = runtimeHarness(unavailable);
-
-  const resolved = await resolveBoundFocusRuntime({
+  await expectRefusesUnavailableExactOwnerFact({
+    command: 'focus',
     device: appleDevice,
-    positionals: ['40', '90'],
-    inspectFacts: harness.inspectFacts,
-    bindDevice: harness.bindDevice,
+    unavailable,
   });
-
-  expect(resolved).toEqual({
-    ok: false,
-    response: {
-      ok: false,
-      error: {
-        code: 'UNSUPPORTED_OPERATION',
-        message: 'focus is not supported on this device',
-        hint: unavailable.hint,
-      },
-    },
-  });
-  expect(harness.inspectFacts).toHaveBeenCalledTimes(1);
-  expect(harness.bindDevice).not.toHaveBeenCalled();
 });
 
 test('request router joins focus admission to execution, recording, and ref invalidation', async () => {
@@ -229,7 +213,7 @@ test('request router joins focus admission to execution, recording, and ref inva
     ok: true,
     data: { x: 40, y: 90, message: 'Focused (40, 90)' },
   });
-  expect(session.refFrameState).toBe('expired');
+  expect(refFrameState(session)).toBe('expired');
   expect(session.actions.at(-1)).toMatchObject({
     command: 'focus',
     positionals: ['40', '90'],

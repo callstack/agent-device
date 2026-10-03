@@ -1,0 +1,3997 @@
+{
+  "description": "Golden table for keyboard occlusion on interaction tap points (#2589), consumed by packages/contracts/src/tap-keyboard-occlusion.ts. A visible software keyboard is its own system surface: it is never a covering sibling of app content, so the same-window occlusion classifier cannot see it, and it leaves the app window rect intact, so the viewport rule passes a covered tab bar. The band runs from the topmost keyboard node down to the bottom of the viewport, across the keyboard's own columns; the tap point is the point the interaction dispatches: the rect center the platform aims at for a ref handed over by name, or the touch point a parent with interactive descendants resolves instead. `nodes` are captured snapshot nodes as they appear in the projection the interaction resolved against — note that regular and interactive projections prune the keyboard's own container, leaving Key nodes beside app chrome. Three rules decide whether reported geometry may be measured at all. Docking: the band is derived only where the keyboard's own reported geometry reaches the viewport's bottom edge within 80 units — measured on iPhone 17 Pro (26.2) the reported key plane stops 58 pt short of an 874 pt portrait viewport and lands exactly on a 402 pt landscape one, and on iPad Pro 11-inch (M4) 3 pt short of a 1210 pt viewport — so an iPad floating keyboard, an app-drawn keypad, or an IME that stops above its own navigation bar stays unmeasured and fails open. The budget is counted in the same units as the rects it guards, which is what a measured Android IME asks for rather than what a dp table would give: with three-button navigation on Pixel 7 (Android 16, 1080x2400 at 420 dpi), Gboard's reported region runs to the physical display bottom at 2400 while the 126 px navigation bar occupies 2274..2400 inside it, so no Android keyboard measured so far needs slack for the bar. Width: geometry that comes back taller than it is wide did not arrive in the app's orientation space, i.e. it came from a capture that normalized no space — the producers that can name the app's interface orientation either turn it back (the runner's tree tiers) or refuse the capture (the Simulator AX bridge) — and is refused measurement for the same reason. Tiling: the keys themselves must form one unbroken run of columns, because a split iPad keyboard docks both clusters at the bottom edge while its surface container still spans the whole screen, and the app content between the clusters is visible and tappable. Reported seams are zero on every measured tree — iPhone 17 Pro's reported row adjoins across 395 pt, iPad Pro 11-inch's across 743.5 pt, and Gboard's across 1070 px — so the allowance covers rounding rather than layout, and a gapped band is refused measurement like the two above. That rule is deliberately blunt in both directions, and the last two cases name the trade: a sparse layout such as the iOS emoji panel reports corner keys over a wide container, does not tile, and reads `undetermined` — the guard abstains there rather than inventing which gaps are app content; and a projection that reports the container with no keys at all has nothing left to check, so the band is the container's own claim. Every captured iOS and Android keyboard measured so far reports its keys, so the second shape is the harness's, not a captured one. `target` names either a resolved node index or a bare coordinate point; both paths read one decision and choose their own consequence. A case that reaches a band declares its whole shape — the frame the refusal and the disclosure both quote, and the control rects that excuse a bare coordinate, which is where plane exclusion shows up.",
+  "constants": {
+    "occlusionReason": "tap_keyboard_occludes_target"
+  },
+  "cases": [
+    {
+      "name": "iPhone tab-bar item whose center is under the key plane is refused",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "TabBar",
+          "label": "Tab Bar",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 791,
+            "width": 402,
+            "height": 83
+          }
+        },
+        {
+          "index": 2,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 1,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 0,
+          "rect": {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "W",
+          "parentIndex": 0,
+          "rect": {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "E",
+          "parentIndex": 0,
+          "rect": {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "R",
+          "parentIndex": 0,
+          "rect": {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "T",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 8,
+          "type": "Key",
+          "label": "Y",
+          "parentIndex": 0,
+          "rect": {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 9,
+          "type": "Key",
+          "label": "U",
+          "parentIndex": 0,
+          "rect": {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 10,
+          "type": "Key",
+          "label": "I",
+          "parentIndex": 0,
+          "rect": {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 11,
+          "type": "Key",
+          "label": "O",
+          "parentIndex": 0,
+          "rect": {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 12,
+          "type": "Key",
+          "label": "P",
+          "parentIndex": 0,
+          "rect": {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 13,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 2
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 4.67,
+          "y": 590,
+          "width": 395,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        ]
+      }
+    },
+    {
+      "name": "the band reaches the viewport bottom, so a target in the unreported home-indicator strip is refused too",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Checkout",
+          "parentIndex": 0,
+          "rect": {
+            "x": 140,
+            "y": 820,
+            "width": 120,
+            "height": 44
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "space",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 752,
+            "width": 402,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 752,
+          "width": 402,
+          "height": 122
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 752,
+            "width": 402,
+            "height": 54
+          }
+        ]
+      }
+    },
+    {
+      "name": "an element only partly under the keyboard keeps tapping: the rule is the center, not the overlap",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "SearchField",
+          "label": "Search",
+          "parentIndex": 0,
+          "rect": {
+            "x": 17,
+            "y": 500,
+            "width": 308,
+            "height": 120
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 0,
+          "rect": {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "W",
+          "parentIndex": 0,
+          "rect": {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "E",
+          "parentIndex": 0,
+          "rect": {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "R",
+          "parentIndex": 0,
+          "rect": {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "T",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "Y",
+          "parentIndex": 0,
+          "rect": {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 8,
+          "type": "Key",
+          "label": "U",
+          "parentIndex": 0,
+          "rect": {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 9,
+          "type": "Key",
+          "label": "I",
+          "parentIndex": 0,
+          "rect": {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 10,
+          "type": "Key",
+          "label": "O",
+          "parentIndex": 0,
+          "rect": {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 11,
+          "type": "Key",
+          "label": "P",
+          "parentIndex": 0,
+          "rect": {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 12,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "clear",
+        "frame": {
+          "x": 4.67,
+          "y": 590,
+          "width": 395,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        ]
+      }
+    },
+    {
+      "name": "a tap point exactly on the band's top edge is on the keyboard, not above it",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Send",
+          "parentIndex": 0,
+          "rect": {
+            "x": 20,
+            "y": 563,
+            "width": 80,
+            "height": 54
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "space",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 590,
+            "width": 402,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 590,
+          "width": 402,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 590,
+            "width": 402,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        ]
+      }
+    },
+    {
+      "name": "a key the caller named is the tap they meant, so the keyboard never blocks its own keys",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Keyboard",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 583,
+            "width": 402,
+            "height": 233
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 1,
+          "rect": {
+            "x": 4,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 2
+      },
+      "expected": {
+        "kind": "clear",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        },
+        "controlRects": [
+          {
+            "x": 4,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
+        ]
+      }
+    },
+    {
+      "name": "the key plane itself is keyboard-owned as well",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Keyboard",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 583,
+            "width": 402,
+            "height": 233
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 1,
+          "rect": {
+            "x": 4,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "clear",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        },
+        "controlRects": [
+          {
+            "x": 4,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
+        ]
+      }
+    },
+    {
+      "name": "app chrome flattened to the same parent as the keys stays app content",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Other",
+          "label": "composer",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 700,
+            "width": 402,
+            "height": 60
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "space",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 590,
+            "width": 402,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 590,
+          "width": 402,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 590,
+            "width": 402,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        ]
+      }
+    },
+    {
+      "name": "Android input method window owns the band by package provenance",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 1080,
+        "height": 2400
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.example.app",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 2400
+          }
+        },
+        {
+          "index": 1,
+          "type": "android.widget.Button",
+          "label": "Submit",
+          "bundleId": "com.example.app",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 1900,
+            "width": 200,
+            "height": 120
+          }
+        },
+        {
+          "index": 2,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "rect": {
+            "x": 0,
+            "y": 1500,
+            "width": 1080,
+            "height": 900
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 1500,
+          "width": 1080,
+          "height": 900
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 1500,
+            "width": 1080,
+            "height": 900
+          }
+        ]
+      }
+    },
+    {
+      "name": "an IME-owned node the caller named is not occluded by its own window",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 1080,
+        "height": 2400
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.example.app",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 2400
+          }
+        },
+        {
+          "index": 1,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 1500,
+            "width": 1080,
+            "height": 900
+          }
+        },
+        {
+          "index": 2,
+          "type": "android.widget.Button",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "identifier": "com.google.android.inputmethod.latin:id/key_pos_enter",
+          "parentIndex": 1,
+          "rect": {
+            "x": 800,
+            "y": 2200,
+            "width": 240,
+            "height": 160
+          }
+        }
+      ],
+      "target": {
+        "index": 2
+      },
+      "expected": {
+        "kind": "clear",
+        "frame": {
+          "x": 0,
+          "y": 1500,
+          "width": 1080,
+          "height": 900
+        },
+        "controlRects": [
+          {
+            "x": 800,
+            "y": 2200,
+            "width": 240,
+            "height": 160
+          }
+        ]
+      }
+    },
+    {
+      "name": "a window offset below the display origin measures the band against its own bottom edge",
+      "viewport": {
+        "x": 0,
+        "y": 120,
+        "width": 1080,
+        "height": 2000
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "rect": {
+            "x": 0,
+            "y": 1600,
+            "width": 1080,
+            "height": 520
+          }
+        },
+        {
+          "index": 1,
+          "type": "android.widget.Button",
+          "label": "Submit",
+          "bundleId": "com.example.app",
+          "rect": {
+            "x": 400,
+            "y": 1950,
+            "width": 200,
+            "height": 100
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 1600,
+          "width": 1080,
+          "height": 520
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 1600,
+            "width": 1080,
+            "height": 520
+          }
+        ]
+      }
+    },
+    {
+      "name": "a narrow keyboard owns only its own columns, so app content beside it keeps tapping",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 834,
+        "height": 1112
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 834,
+            "height": 1112
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Side action",
+          "parentIndex": 0,
+          "rect": {
+            "x": 640,
+            "y": 1050,
+            "width": 150,
+            "height": 60
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 0,
+          "rect": {
+            "x": 257,
+            "y": 1058,
+            "width": 60,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "clear",
+        "frame": {
+          "x": 257,
+          "y": 1058,
+          "width": 60,
+          "height": 54
+        },
+        "controlRects": [
+          {
+            "x": 257,
+            "y": 1058,
+            "width": 60,
+            "height": 54
+          }
+        ]
+      }
+    },
+    {
+      "name": "a bare coordinate behind the keyboard reads the same decision the element path gets",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 0,
+          "rect": {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "W",
+          "parentIndex": 0,
+          "rect": {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "E",
+          "parentIndex": 0,
+          "rect": {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "R",
+          "parentIndex": 0,
+          "rect": {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "T",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "Y",
+          "parentIndex": 0,
+          "rect": {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "U",
+          "parentIndex": 0,
+          "rect": {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 8,
+          "type": "Key",
+          "label": "I",
+          "parentIndex": 0,
+          "rect": {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 9,
+          "type": "Key",
+          "label": "O",
+          "parentIndex": 0,
+          "rect": {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 10,
+          "type": "Key",
+          "label": "P",
+          "parentIndex": 0,
+          "rect": {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 11,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "point": {
+          "x": 340,
+          "y": 822
+        }
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 4.67,
+          "y": 590,
+          "width": 395,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        ]
+      }
+    },
+    {
+      "name": "a bare coordinate landing on a key is the keyboard the caller asked for",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 0,
+          "rect": {
+            "x": 100,
+            "y": 590,
+            "width": 200,
+            "height": 54
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "point": {
+          "x": 200,
+          "y": 610
+        }
+      },
+      "expected": {
+        "kind": "clear",
+        "frame": {
+          "x": 100,
+          "y": 590,
+          "width": 299,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 100,
+            "y": 590,
+            "width": 200,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        ]
+      }
+    },
+    {
+      "name": "a bare coordinate inside the reported key plane but on no key is still the keyboard, not app content",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Keyboard",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 583,
+            "width": 402,
+            "height": 291
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "space",
+          "parentIndex": 1,
+          "rect": {
+            "x": 40,
+            "y": 730,
+            "width": 240,
+            "height": 60
+          }
+        }
+      ],
+      "target": {
+        "point": {
+          "x": 200,
+          "y": 810
+        }
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        },
+        "controlRects": [
+          {
+            "x": 40,
+            "y": 730,
+            "width": 240,
+            "height": 60
+          }
+        ]
+      }
+    },
+    {
+      "name": "a bare coordinate below the reported key plane still lands on the keyboard",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 0,
+          "rect": {
+            "x": 100,
+            "y": 590,
+            "width": 200,
+            "height": 54
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "point": {
+          "x": 200,
+          "y": 830
+        }
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 100,
+          "y": 590,
+          "width": 299,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 100,
+            "y": 590,
+            "width": 200,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        ]
+      }
+    },
+    {
+      "name": "an element whose center sits on a key is refused even though that coordinate alone would pass",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Promo",
+          "parentIndex": 0,
+          "rect": {
+            "x": 100,
+            "y": 588,
+            "width": 40,
+            "height": 54
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 0,
+          "rect": {
+            "x": 100,
+            "y": 590,
+            "width": 200,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 100,
+          "y": 590,
+          "width": 299,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 100,
+            "y": 590,
+            "width": 200,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        ]
+      }
+    },
+    {
+      "name": "no keyboard in the tree means nothing to refuse",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "no-keyboard"
+      }
+    },
+    {
+      "name": "an app-drawn keypad that stops short of the bottom edge is not the system keyboard's band",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "7",
+          "parentIndex": 0,
+          "rect": {
+            "x": 20,
+            "y": 120,
+            "width": 60,
+            "height": 60
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "keyboard nodes with no usable rect leave the band unmeasurable, which fails open",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "Padding-Left",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 583,
+            "width": 0,
+            "height": 0
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "no viewport leaves the band's bottom edge unknowable, which fails open",
+      "viewport": null,
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application"
+        },
+        {
+          "index": 1,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 0,
+          "rect": {
+            "x": 4,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "point": {
+          "x": 200,
+          "y": 700
+        }
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "the keyboard dock's own button is the keyboard, not app content waiting behind it",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 0,
+          "rect": {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "W",
+          "parentIndex": 0,
+          "rect": {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "E",
+          "parentIndex": 0,
+          "rect": {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "R",
+          "parentIndex": 0,
+          "rect": {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "T",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "Y",
+          "parentIndex": 0,
+          "rect": {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "U",
+          "parentIndex": 0,
+          "rect": {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 8,
+          "type": "Key",
+          "label": "I",
+          "parentIndex": 0,
+          "rect": {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 9,
+          "type": "Key",
+          "label": "O",
+          "parentIndex": 0,
+          "rect": {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 10,
+          "type": "Key",
+          "label": "P",
+          "parentIndex": 0,
+          "rect": {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 11,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        },
+        {
+          "index": 12,
+          "type": "Button",
+          "role": "UIKeyboardDockItemButton",
+          "label": "Next keyboard",
+          "value": "Polski",
+          "parentIndex": 0,
+          "rect": {
+            "x": 8,
+            "y": 806,
+            "width": 68,
+            "height": 68
+          }
+        },
+        {
+          "index": 13,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 12
+      },
+      "expected": {
+        "kind": "clear",
+        "frame": {
+          "x": 4.67,
+          "y": 590,
+          "width": 395,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          },
+          {
+            "x": 8,
+            "y": 806,
+            "width": 68,
+            "height": 68
+          }
+        ]
+      }
+    },
+    {
+      "name": "an app control sharing the dock strip's band with the keyboard is still refused",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 0,
+          "rect": {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "W",
+          "parentIndex": 0,
+          "rect": {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "E",
+          "parentIndex": 0,
+          "rect": {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "R",
+          "parentIndex": 0,
+          "rect": {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "T",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "Y",
+          "parentIndex": 0,
+          "rect": {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "U",
+          "parentIndex": 0,
+          "rect": {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 8,
+          "type": "Key",
+          "label": "I",
+          "parentIndex": 0,
+          "rect": {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 9,
+          "type": "Key",
+          "label": "O",
+          "parentIndex": 0,
+          "rect": {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 10,
+          "type": "Key",
+          "label": "P",
+          "parentIndex": 0,
+          "rect": {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 11,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        },
+        {
+          "index": 12,
+          "type": "Button",
+          "role": "UIKeyboardDockItemButton",
+          "label": "Next keyboard",
+          "value": "Polski",
+          "parentIndex": 0,
+          "rect": {
+            "x": 8,
+            "y": 806,
+            "width": 68,
+            "height": 68
+          }
+        },
+        {
+          "index": 13,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 13
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 4.67,
+          "y": 590,
+          "width": 395,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          },
+          {
+            "x": 8,
+            "y": 806,
+            "width": 68,
+            "height": 68
+          }
+        ]
+      }
+    },
+    {
+      "name": "a bare coordinate landing on the keyboard dock's button is the keyboard the caller asked for",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 0,
+          "rect": {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "W",
+          "parentIndex": 0,
+          "rect": {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "E",
+          "parentIndex": 0,
+          "rect": {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "R",
+          "parentIndex": 0,
+          "rect": {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "T",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "Y",
+          "parentIndex": 0,
+          "rect": {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "U",
+          "parentIndex": 0,
+          "rect": {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 8,
+          "type": "Key",
+          "label": "I",
+          "parentIndex": 0,
+          "rect": {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 9,
+          "type": "Key",
+          "label": "O",
+          "parentIndex": 0,
+          "rect": {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 10,
+          "type": "Key",
+          "label": "P",
+          "parentIndex": 0,
+          "rect": {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 11,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 0,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        },
+        {
+          "index": 12,
+          "type": "Button",
+          "role": "UIKeyboardDockItemButton",
+          "label": "Next keyboard",
+          "value": "Polski",
+          "parentIndex": 0,
+          "rect": {
+            "x": 8,
+            "y": 806,
+            "width": 68,
+            "height": 68
+          }
+        },
+        {
+          "index": 13,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "point": {
+          "x": 40,
+          "y": 840
+        }
+      },
+      "expected": {
+        "kind": "clear",
+        "frame": {
+          "x": 4.67,
+          "y": 590,
+          "width": 395,
+          "height": 284
+        },
+        "controlRects": [
+          {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          },
+          {
+            "x": 8,
+            "y": 806,
+            "width": 68,
+            "height": 68
+          }
+        ]
+      }
+    },
+    {
+      "name": "a landscape keyboard from a capture that normalized no coordinate space cannot be measured",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 874,
+        "height": 402
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 874,
+            "height": 402
+          }
+        },
+        {
+          "index": 1,
+          "type": "TabBar",
+          "label": "Tab Bar",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 338,
+            "width": 874,
+            "height": 64
+          }
+        },
+        {
+          "index": 2,
+          "type": "Button",
+          "label": "Home",
+          "parentIndex": 1,
+          "rect": {
+            "x": 223,
+            "y": 342,
+            "width": 82,
+            "height": 36
+          }
+        },
+        {
+          "index": 3,
+          "type": "Button",
+          "role": "UIKeyboardDockItemButton",
+          "label": "Next keyboard",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 8,
+            "width": 65,
+            "height": 68
+          }
+        },
+        {
+          "index": 4,
+          "type": "Other",
+          "role": "UIKeyboardLayoutStar",
+          "parentIndex": 0,
+          "rect": {
+            "x": 2,
+            "y": 75,
+            "width": 162,
+            "height": 327
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "role": "UIAccessibilityElementKBKey",
+          "label": "q",
+          "parentIndex": 4,
+          "rect": {
+            "x": 124,
+            "y": 77,
+            "width": 35,
+            "height": 72
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "role": "UIAccessibilityElementKBKey",
+          "label": "t",
+          "parentIndex": 4,
+          "rect": {
+            "x": 124,
+            "y": 366,
+            "width": 35,
+            "height": 36
+          }
+        }
+      ],
+      "target": {
+        "index": 2
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "a landscape keyboard reported wide and docked is measured against the landscape viewport",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 2400,
+        "height": 1080
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.example.app",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 2400,
+            "height": 1080
+          }
+        },
+        {
+          "index": 1,
+          "type": "android.widget.Button",
+          "label": "Submit",
+          "bundleId": "com.example.app",
+          "rect": {
+            "x": 1100,
+            "y": 900,
+            "width": 200,
+            "height": 100
+          }
+        },
+        {
+          "index": 2,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "rect": {
+            "x": 0,
+            "y": 700,
+            "width": 2400,
+            "height": 380
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 700,
+          "width": 2400,
+          "height": 380
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 700,
+            "width": 2400,
+            "height": 380
+          }
+        ]
+      }
+    },
+    {
+      "name": "the reported key plane stops above the home-indicator strip and the band still owns that strip",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Keyboard",
+          "label": "Padding-Left",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 583,
+            "width": 402,
+            "height": 233
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 1,
+          "rect": {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "W",
+          "parentIndex": 1,
+          "rect": {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "E",
+          "parentIndex": 1,
+          "rect": {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "R",
+          "parentIndex": 1,
+          "rect": {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "T",
+          "parentIndex": 1,
+          "rect": {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "Y",
+          "parentIndex": 1,
+          "rect": {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 8,
+          "type": "Key",
+          "label": "U",
+          "parentIndex": 1,
+          "rect": {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 9,
+          "type": "Key",
+          "label": "I",
+          "parentIndex": 1,
+          "rect": {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 10,
+          "type": "Key",
+          "label": "O",
+          "parentIndex": 1,
+          "rect": {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          }
+        },
+        {
+          "index": 11,
+          "type": "Key",
+          "label": "P",
+          "parentIndex": 1,
+          "rect": {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          }
+        },
+        {
+          "index": 12,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 1,
+          "rect": {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        },
+        {
+          "index": 13,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 13
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        },
+        "controlRects": [
+          {
+            "x": 4.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 44,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 83.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 123,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 162.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 202,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 241.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 281,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 320.67,
+            "y": 590,
+            "width": 39.33,
+            "height": 54
+          },
+          {
+            "x": 360,
+            "y": 590,
+            "width": 39.67,
+            "height": 54
+          },
+          {
+            "x": 300,
+            "y": 752,
+            "width": 99,
+            "height": 54
+          }
+        ]
+      }
+    },
+    {
+      "name": "an iPad floating keyboard is not docked, so the band stays unmeasured and the tap fails open",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 1194,
+        "height": 834
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1194,
+            "height": 834
+          }
+        },
+        {
+          "index": 1,
+          "type": "Keyboard",
+          "label": "Keyboard",
+          "parentIndex": 0,
+          "rect": {
+            "x": 380,
+            "y": 480,
+            "width": 434,
+            "height": 200
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 1,
+          "rect": {
+            "x": 388,
+            "y": 486,
+            "width": 40,
+            "height": 60
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 1,
+          "rect": {
+            "x": 690,
+            "y": 620,
+            "width": 116,
+            "height": 60
+          }
+        },
+        {
+          "index": 4,
+          "type": "Button",
+          "label": "Save",
+          "parentIndex": 0,
+          "rect": {
+            "x": 520,
+            "y": 640,
+            "width": 120,
+            "height": 60
+          }
+        }
+      ],
+      "target": {
+        "index": 4
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "an iPad split keyboard whose clusters stop above the docking budget is refused measurement by the docking rule first",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 1194,
+        "height": 834
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1194,
+            "height": 834
+          }
+        },
+        {
+          "index": 1,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 0,
+          "rect": {
+            "x": 180,
+            "y": 630,
+            "width": 50,
+            "height": 60
+          }
+        },
+        {
+          "index": 2,
+          "type": "Key",
+          "label": "P",
+          "parentIndex": 0,
+          "rect": {
+            "x": 960,
+            "y": 630,
+            "width": 50,
+            "height": 60
+          }
+        },
+        {
+          "index": 3,
+          "type": "Button",
+          "label": "Save",
+          "parentIndex": 0,
+          "rect": {
+            "x": 537,
+            "y": 630,
+            "width": 120,
+            "height": 60
+          }
+        }
+      ],
+      "target": {
+        "index": 3
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "a bottom-anchored app keypad wearing the keyboard types owns its band, which is the rule's accepted trade-off",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Key",
+          "label": "0",
+          "parentIndex": 0,
+          "rect": {
+            "x": 20,
+            "y": 740,
+            "width": 362,
+            "height": 60
+          }
+        },
+        {
+          "index": 2,
+          "type": "Button",
+          "label": "Send",
+          "parentIndex": 0,
+          "rect": {
+            "x": 150,
+            "y": 760,
+            "width": 80,
+            "height": 40
+          }
+        }
+      ],
+      "target": {
+        "index": 2
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 20,
+          "y": 740,
+          "width": 362,
+          "height": 134
+        },
+        "controlRects": [
+          {
+            "x": 20,
+            "y": 740,
+            "width": 362,
+            "height": 60
+          }
+        ]
+      }
+    },
+    {
+      "name": "a zero-area viewport leaves the band bottom edge unknowable, which fails open",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Key",
+          "label": "Q",
+          "parentIndex": 0,
+          "rect": {
+            "x": 5,
+            "y": 590,
+            "width": 39,
+            "height": 54
+          }
+        },
+        {
+          "index": 2,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 2
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "a measured iPad keyboard docked at the bottom owns the strip below its reported keys",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 834,
+        "height": 1210
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 834,
+            "height": 1210
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Continue",
+          "parentIndex": 0,
+          "rect": {
+            "x": 297,
+            "y": 1000,
+            "width": 240,
+            "height": 60
+          }
+        },
+        {
+          "index": 2,
+          "type": "Keyboard",
+          "label": "Tab",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 925,
+            "width": 834,
+            "height": 282
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "q",
+          "parentIndex": 2,
+          "rect": {
+            "x": 88.5,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "w",
+          "parentIndex": 2,
+          "rect": {
+            "x": 154.5,
+            "y": 932,
+            "width": 66.5,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "e",
+          "parentIndex": 2,
+          "rect": {
+            "x": 221,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "r",
+          "parentIndex": 2,
+          "rect": {
+            "x": 287,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "t",
+          "parentIndex": 2,
+          "rect": {
+            "x": 353,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 8,
+          "type": "Key",
+          "label": "y",
+          "parentIndex": 2,
+          "rect": {
+            "x": 419,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 9,
+          "type": "Key",
+          "label": "u",
+          "parentIndex": 2,
+          "rect": {
+            "x": 485,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 10,
+          "type": "Key",
+          "label": "i",
+          "parentIndex": 2,
+          "rect": {
+            "x": 551,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 11,
+          "type": "Key",
+          "label": "o",
+          "parentIndex": 2,
+          "rect": {
+            "x": 617,
+            "y": 932,
+            "width": 66.5,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 12,
+          "type": "Key",
+          "label": "p",
+          "parentIndex": 2,
+          "rect": {
+            "x": 683.5,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 13,
+          "type": "Key",
+          "label": "delete",
+          "parentIndex": 2,
+          "rect": {
+            "x": 749.5,
+            "y": 932,
+            "width": 82.5,
+            "height": 64.5
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 925,
+          "width": 834,
+          "height": 285
+        },
+        "controlRects": [
+          {
+            "x": 88.5,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          },
+          {
+            "x": 154.5,
+            "y": 932,
+            "width": 66.5,
+            "height": 64.5
+          },
+          {
+            "x": 221,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          },
+          {
+            "x": 287,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          },
+          {
+            "x": 353,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          },
+          {
+            "x": 419,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          },
+          {
+            "x": 485,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          },
+          {
+            "x": 551,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          },
+          {
+            "x": 617,
+            "y": 932,
+            "width": 66.5,
+            "height": 64.5
+          },
+          {
+            "x": 683.5,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          },
+          {
+            "x": 749.5,
+            "y": 932,
+            "width": 82.5,
+            "height": 64.5
+          }
+        ]
+      }
+    },
+    {
+      "name": "a split iPad keyboard docked at the bottom reports two clusters, and the gap between them is not the keyboard's to measure",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 834,
+        "height": 1210
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 834,
+            "height": 1210
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Save",
+          "parentIndex": 0,
+          "rect": {
+            "x": 317,
+            "y": 1000,
+            "width": 200,
+            "height": 60
+          }
+        },
+        {
+          "index": 2,
+          "type": "Keyboard",
+          "label": "Tab",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 925,
+            "width": 834,
+            "height": 282
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "q",
+          "parentIndex": 2,
+          "rect": {
+            "x": 0,
+            "y": 932,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "w",
+          "parentIndex": 2,
+          "rect": {
+            "x": 66,
+            "y": 932,
+            "width": 66.5,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "z",
+          "parentIndex": 2,
+          "rect": {
+            "x": 0,
+            "y": 1142.5,
+            "width": 66,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 6,
+          "type": "Key",
+          "label": "delete",
+          "parentIndex": 2,
+          "rect": {
+            "x": 702,
+            "y": 932,
+            "width": 132,
+            "height": 64.5
+          }
+        },
+        {
+          "index": 7,
+          "type": "Key",
+          "label": "return",
+          "parentIndex": 2,
+          "rect": {
+            "x": 702,
+            "y": 1142.5,
+            "width": 132,
+            "height": 64.5
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "Gboard reports its region down to the physical display bottom, across a 126 px three-button navigation bar",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 1080,
+        "height": 2400
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.example.app",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 2400
+          }
+        },
+        {
+          "index": 1,
+          "type": "android.widget.Button",
+          "label": "Submit",
+          "bundleId": "com.example.app",
+          "parentIndex": 0,
+          "rect": {
+            "x": 440,
+            "y": 1800,
+            "width": 200,
+            "height": 120
+          }
+        },
+        {
+          "index": 2,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 1517,
+            "width": 1080,
+            "height": 883
+          }
+        },
+        {
+          "index": 3,
+          "type": "android.widget.Button",
+          "label": "q",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 2,
+          "rect": {
+            "x": 5,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          }
+        },
+        {
+          "index": 4,
+          "type": "android.widget.Button",
+          "label": "w",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 2,
+          "rect": {
+            "x": 112,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          }
+        },
+        {
+          "index": 5,
+          "type": "android.widget.Button",
+          "label": "e",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 2,
+          "rect": {
+            "x": 219,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          }
+        },
+        {
+          "index": 6,
+          "type": "android.widget.Button",
+          "label": "r",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 2,
+          "rect": {
+            "x": 326,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          }
+        },
+        {
+          "index": 7,
+          "type": "android.widget.Button",
+          "label": "t",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 2,
+          "rect": {
+            "x": 433,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          }
+        },
+        {
+          "index": 8,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 2,
+          "rect": {
+            "x": 0,
+            "y": 2274,
+            "width": 1080,
+            "height": 126
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 1517,
+          "width": 1080,
+          "height": 883
+        },
+        "controlRects": [
+          {
+            "x": 5,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          },
+          {
+            "x": 112,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          },
+          {
+            "x": 219,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          },
+          {
+            "x": 326,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          },
+          {
+            "x": 433,
+            "y": 1654,
+            "width": 107,
+            "height": 154
+          },
+          {
+            "x": 0,
+            "y": 2274,
+            "width": 1080,
+            "height": 126
+          }
+        ]
+      }
+    },
+    {
+      "name": "a sparse emoji layout is not one run of columns, so the guard abstains instead of guessing a band",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        },
+        {
+          "index": 2,
+          "type": "Keyboard",
+          "label": "Emoji",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 748,
+            "width": 402,
+            "height": 126
+          }
+        },
+        {
+          "index": 3,
+          "type": "Key",
+          "label": "smiley",
+          "parentIndex": 2,
+          "rect": {
+            "x": 8,
+            "y": 756,
+            "width": 44,
+            "height": 44
+          }
+        },
+        {
+          "index": 4,
+          "type": "Key",
+          "label": "heart",
+          "parentIndex": 2,
+          "rect": {
+            "x": 350,
+            "y": 756,
+            "width": 44,
+            "height": 44
+          }
+        },
+        {
+          "index": 5,
+          "type": "Key",
+          "label": "delete",
+          "parentIndex": 2,
+          "rect": {
+            "x": 300,
+            "y": 822,
+            "width": 94,
+            "height": 44
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "a projection that reports only the keyboard container falls back to the container width it claims",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 402,
+            "height": 874
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Form",
+          "parentIndex": 0,
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        },
+        {
+          "index": 2,
+          "type": "Keyboard",
+          "label": "Keyboard",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 583,
+            "width": 402,
+            "height": 233
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 583,
+            "width": 402,
+            "height": 233
+          }
+        ]
+      }
+    }
+  ]
+}

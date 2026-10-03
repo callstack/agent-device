@@ -13,11 +13,11 @@ test('quick serial listing keeps an unbound adb host port loud', async () => {
 
 test('quick serial listing routes its global devices call through the scoped transport', async () => {
   bindAndroidAdbHostStub();
-  const seenArgs: string[][] = [];
+  const seenArgs: Array<readonly string[]> = [];
 
   const serials = await withAndroidHostAdbTransport(
-    async (args) => {
-      seenArgs.push([...args]);
+    async (invocation) => {
+      seenArgs.push(invocation.command);
       return {
         stdout: 'List of devices attached\nemulator-5554\tdevice\n',
         stderr: '',

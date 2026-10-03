@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseImports, type ResolvedImportEdge } from './model.ts';
 import {
+  SELECTOR_ENGINE_FILE,
   SELECTOR_ENGINE_OWNER,
   SELECTOR_ENGINE_SPECIFIER,
   selectorPipelineOwnershipViolations,
@@ -56,7 +57,7 @@ test('the owner holds the engine, and the root façade stays open to everyone', 
       [
         "import { buildSelectorChainForNode, formatSelectorFailure } from '@agent-device/selectors';",
         "import type { SelectorChainMatchList } from '@agent-device/selectors';",
-        "import { resolveSelectorPipeline } from '../../core/selector-pipeline.ts';",
+        "import { resolveSelectorPipeline } from '@agent-device/selectors/selector-pipeline';",
       ].join('\n'),
     ),
     [],
@@ -66,6 +67,30 @@ test('the owner holds the engine, and the root façade stays open to everyone', 
     violations("import { parseSelectorChain } from '@agent-device/selectors/ast';"),
     [],
   );
+});
+
+test('an in-package relative route to the engine file is refused, except for the owner', () => {
+  // The owner now lives beside the engine, so a same-package relative import
+  // is a second door the specifier scan cannot see. The resolved target is the
+  // enforcement key for that route.
+  const relativeRoute = (file: string): ResolvedImportEdge[] => [
+    {
+      spec: './engine.ts',
+      dynamic: false,
+      typeOnly: false,
+      line: 1,
+      symbols: ['resolveSelectorChainWithPolicy'],
+      file,
+      target: SELECTOR_ENGINE_FILE,
+      fromZone: 'selectors',
+      toZone: 'selectors',
+    },
+  ];
+  const [message] = selectorPipelineOwnershipViolations(
+    relativeRoute('packages/selectors/src/internal/planted.ts'),
+  ).map((violation) => violation.message);
+  assert.ok(message?.includes(SELECTOR_ENGINE_OWNER), message);
+  assert.deepEqual(selectorPipelineOwnershipViolations(relativeRoute(SELECTOR_ENGINE_OWNER)), []);
 });
 
 test('a missing engine door fails the gate instead of silencing it', () => {

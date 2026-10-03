@@ -10,11 +10,11 @@ import {
   swipePayloadFromPositionals,
 } from '@agent-device/contracts/gesture-normalization';
 import { AppError } from '@agent-device/kernel/errors';
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   readFillTargetFromPositionals,
   readInteractionTargetFromPositionals,
-} from '../../core/interaction-positionals.ts';
+} from '@agent-device/selectors/interaction-positionals';
 import {
   commonInputFromFlags,
   direct,
@@ -33,7 +33,7 @@ import {
   targetInputFromClientTarget,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
-import type { ScrollInputDirection } from './runtime/gestures.ts';
+import type { ScrollInputDirection } from '@agent-device/contracts/scroll-gesture';
 
 export const interactionCliReaders = {
   click: (positionals, flags) => ({
@@ -101,6 +101,7 @@ export const interactionCliReaders = {
     amount: optionalCliNumber(positionals[1]),
     pixels: flags.pixels,
     durationMs: flags.durationMs,
+    until: flags.until,
   }),
   // The one observation-only reader in this file: `get` can be excluded from a
   // repair-armed heal by default, so it also takes the `--record` opt-in

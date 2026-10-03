@@ -8,7 +8,7 @@ import path from 'node:path';
 import type { Duplex } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { closeLoopbackServer, listenOnLoopback } from '../../src/__tests__/test-utils/loopback.ts';
-import { runCmd, runCmdSync } from '../../src/utils/exec.ts';
+import { runCmd, runCmdSync } from '@agent-device/host-kit/command';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SUBPROCESS_TIMEOUT_MS = 120_000;
@@ -226,6 +226,9 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       false,
     );
 
+    const pluginTypes = fs.readFileSync(path.join(installedPackageRoot, 'dist/src/plugins.d.ts'));
+    assert.ok(pluginTypes.length < 1024);
+    assert.match(pluginTypes.toString(), /export \{ ProviderPluginHost \}/);
     metroPort = await listenOnLoopback(metroServer);
     t.after(async () => {
       await closeLoopbackServer(metroServer);
@@ -323,6 +326,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
             return runtime.provider;
           },
           './metro': (mod) => mod.buildBundleUrl('https://public.example.test', 'ios'),
+          './plugins': (mod) => Object.keys(mod).length === 0,
           './remote-config': (mod) => typeof mod,
           './selectors': (mod) =>
             mod.isSelectorToken('||') && typeof mod.parseSelectorChain === 'function',
@@ -397,6 +401,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       './install-source': 'boolean',
       './io': 'function',
       './limrun': 'limrun',
+      './plugins': true,
       // Type-only subpath: resolving the module from the packed exports map is
       // the entire runtime check.
       './remote-config': 'object',

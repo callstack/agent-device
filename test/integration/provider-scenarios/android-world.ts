@@ -7,14 +7,15 @@ import { PassThrough } from 'node:stream';
 import type {
   AndroidAdbProcess,
   AndroidAdbProvider,
-} from '../../../src/platforms/android/adb-executor.ts';
-import type { DeviceInventoryRequest } from '../../../src/core/dispatch-resolve.ts';
+} from '@agent-device/platform-android/mechanics';
+import type { DeviceInventoryRequest } from '@agent-device/device-selection/dispatch-resolve';
 import { ANDROID_IME_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/android-ime-helper.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
   androidSnapshotHelperOutput,
 } from '../../../src/__tests__/test-utils/android-snapshot-helper.ts';
-import { runCmd, runCmdBackground } from '../../../src/utils/exec.ts';
+import { runCmd, runCmdBackground } from '@agent-device/host-kit/command';
+import { resetAndroidSnapshotHelperInstallCache } from '@agent-device/platform-android/mechanics';
 import { validPng } from './assertions.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
 import {
@@ -63,8 +64,11 @@ export async function createAndroidSettingsWorld(options?: {
   onTextInjection?: (request: AndroidSettingsWorld['textInjectionCalls'][number]) => void;
   snapshotXml?: () => string;
   dumpsysWindow?: () => string;
-  onAdbExec?: (args: string[]) => void;
+  onAdbExec?: (args: readonly string[]) => void;
 }): Promise<AndroidSettingsWorld> {
+  // The world's helper version probe always reports no helper, so no install may be remembered
+  // from an earlier world on the same serial.
+  resetAndroidSnapshotHelperInstallCache();
   const hostAdbGuard = installFakeHostAdbGuard();
   const adbCalls: string[][] = [];
   const textInjectionCalls: AndroidSettingsWorld['textInjectionCalls'] = [];
@@ -98,8 +102,9 @@ export async function createAndroidSettingsWorld(options?: {
       gestureViewportCalls += 1;
       return { x: 0, y: 0, width: 390, height: 600 };
     },
-    exec: async (args) => {
-      adbCalls.push([...args]);
+    exec: async (received) => {
+      const args = [...received];
+      adbCalls.push(args);
       options?.onAdbExec?.([...args]);
       updateAndroidProviderShellState(args, shellState);
       const stateResult = updateAndroidProviderAppState(args, appState);
@@ -190,7 +195,7 @@ export async function createAndroidSettingsWorld(options?: {
   };
 }
 
-function androidHeapDumpAdbResult(args: string[]): AndroidAdbResult | undefined {
+function androidHeapDumpAdbResult(args: readonly string[]): AndroidAdbResult | undefined {
   if (args.slice(0, 4).join(' ') === 'shell am dumpheap com.example.demo') {
     return { stdout: 'Dumping Java heap\n', stderr: '', exitCode: 0 };
   }
@@ -235,6 +240,7 @@ export function respondToAndroidSettingsAdbCommand(
 ): { stdout: string; stderr: string; exitCode: number; stdoutBuffer?: Buffer } {
   const key = args.join(' ');
   const result =
+    androidDisplayRotationAdbResult(key, options.ime) ??
     androidDeviceAvailabilityAdbResult(key, args, options.pidof) ??
     androidImeLifecycleAdbResult(key, args, options.ime) ??
     androidClipboardAdbResult(key, clipboardText) ??
@@ -253,7 +259,14 @@ type AndroidAdbResult = {
 
 const ANDROID_CLIPBOARD_SET_TEXT_PREFIX = ['shell', 'cmd', 'clipboard', 'set', 'text'];
 
-function updateAndroidProviderShellState(args: string[], state: AndroidProviderShellState): void {
+function updateAndroidProviderShellState(
+  args: readonly string[],
+  state: AndroidProviderShellState,
+): void {
+  if (argsStartWith(args, ['shell', 'settings', 'put', 'system', 'user_rotation'])) {
+    state.userRotation = String(args[5] ?? '0');
+    return;
+  }
   if (args[0] === 'shell' && args[1] === 'input' && args[2] === 'text') {
     state.searchText = String(args[3] ?? '').replaceAll('%s', ' ');
     return;
@@ -267,17 +280,17 @@ function updateAndroidProviderShellState(args: string[], state: AndroidProviderS
   updateAndroidProviderImeShellState(args, state);
 }
 
-function argsStartWith(args: string[], prefix: string[]): boolean {
+function argsStartWith(args: readonly string[], prefix: string[]): boolean {
   return prefix.every((value, index) => args[index] === value);
 }
 
 // The real device shell unwraps a single-quoted argument (and collapses the
 // `'\''` escape back to `'`) before `cmd` ever sees it, so this harness has
 // to mirror that unwrap to keep modelling what the device actually receives
-// — the inverse of the quoting in src/utils/shell-quote.ts.
+// — the inverse of the quoting in @agent-device/host-kit/command.
 function unquoteAndroidShellArg(value: string): string {
   if (!value.startsWith("'") || !value.endsWith("'") || value.length < 2) return value;
-  return value.slice(1, -1).replaceAll("'\\''", "'");
+  return value.slice(1, -1).replaceAll(String.raw`'\''`, "'");
 }
 
 function androidDeviceAvailabilityAdbResult(
@@ -361,7 +374,7 @@ function startAndroidProviderApp(
   return { stdout: '', stderr: '', exitCode: 0 };
 }
 
-function androidDeviceMutationAdbResult(args: string[]): AndroidAdbResult | undefined {
+function androidDeviceMutationAdbResult(args: readonly string[]): AndroidAdbResult | undefined {
   return (
     androidAppMutationAdbResult(args) ??
     androidInputMutationAdbResult(args) ??
@@ -370,7 +383,7 @@ function androidDeviceMutationAdbResult(args: string[]): AndroidAdbResult | unde
   );
 }
 
-function androidAppMutationAdbResult(args: string[]): AndroidAdbResult | undefined {
+function androidAppMutationAdbResult(args: readonly string[]): AndroidAdbResult | undefined {
   if (args[0] === 'uninstall' && args.length === 2) {
     return { stdout: 'Success\n', stderr: '', exitCode: 0 };
   }
@@ -386,7 +399,7 @@ function androidAppMutationAdbResult(args: string[]): AndroidAdbResult | undefin
   return undefined;
 }
 
-function androidInputMutationAdbResult(args: string[]): AndroidAdbResult | undefined {
+function androidInputMutationAdbResult(args: readonly string[]): AndroidAdbResult | undefined {
   return (
     androidShellInputAdbResult(args) ??
     androidClipboardMutationAdbResult(args) ??
@@ -394,7 +407,7 @@ function androidInputMutationAdbResult(args: string[]): AndroidAdbResult | undef
   );
 }
 
-function androidShellInputAdbResult(args: string[]): AndroidAdbResult | undefined {
+function androidShellInputAdbResult(args: readonly string[]): AndroidAdbResult | undefined {
   if (
     args[0] === 'shell' &&
     args[1] === 'input' &&
@@ -405,28 +418,28 @@ function androidShellInputAdbResult(args: string[]): AndroidAdbResult | undefine
   return undefined;
 }
 
-function androidClipboardMutationAdbResult(args: string[]): AndroidAdbResult | undefined {
+function androidClipboardMutationAdbResult(args: readonly string[]): AndroidAdbResult | undefined {
   if (argsStartWith(args, ANDROID_CLIPBOARD_SET_TEXT_PREFIX)) {
     return { stdout: '', stderr: '', exitCode: 0 };
   }
   return undefined;
 }
 
-function androidDoctorProbeAdbResult(args: string[]): AndroidAdbResult | undefined {
+function androidDoctorProbeAdbResult(args: readonly string[]): AndroidAdbResult | undefined {
   if (args.length === 3 && argsStartWith(args, ['shell', 'echo', 'ok'])) {
     return { stdout: 'ok\n', stderr: '', exitCode: 0 };
   }
   return undefined;
 }
 
-function androidScreenshotDemoAdbResult(args: string[]): AndroidAdbResult | undefined {
-  if (args.length === 2 && ANDROID_SCREENSHOT_DEMO_SHELL_COMMANDS.has(args[1] ?? '')) {
+function androidScreenshotDemoAdbResult(args: readonly string[]): AndroidAdbResult | undefined {
+  if (args[0] === 'shell' && ANDROID_SCREENSHOT_DEMO_SHELL_COMMANDS.has(args.slice(1).join(' '))) {
     return { stdout: '', stderr: '', exitCode: 0 };
   }
   return undefined;
 }
 
-function androidSettingsMutationAdbResult(args: string[]): AndroidAdbResult | undefined {
+function androidSettingsMutationAdbResult(args: readonly string[]): AndroidAdbResult | undefined {
   return (
     androidAppearanceMutationAdbResult(args) ??
     androidLocationMutationAdbResult(args) ??
@@ -436,7 +449,7 @@ function androidSettingsMutationAdbResult(args: string[]): AndroidAdbResult | un
   );
 }
 
-function androidAppearanceMutationAdbResult(args: string[]): AndroidAdbResult | undefined {
+function androidAppearanceMutationAdbResult(args: readonly string[]): AndroidAdbResult | undefined {
   if (
     args.length === 5 &&
     argsStartWith(args, ['shell', 'cmd', 'uimode', 'night']) &&
@@ -447,14 +460,16 @@ function androidAppearanceMutationAdbResult(args: string[]): AndroidAdbResult | 
   return undefined;
 }
 
-function androidLocationMutationAdbResult(args: string[]): AndroidAdbResult | undefined {
+function androidLocationMutationAdbResult(args: readonly string[]): AndroidAdbResult | undefined {
   if (args.length === 5 && argsStartWith(args, ['emu', 'geo', 'fix'])) {
     return { stdout: '', stderr: '', exitCode: 0 };
   }
   return undefined;
 }
 
-function androidFingerprintMutationAdbResult(args: string[]): AndroidAdbResult | undefined {
+function androidFingerprintMutationAdbResult(
+  args: readonly string[],
+): AndroidAdbResult | undefined {
   if (
     args.length === 5 &&
     argsStartWith(args, ['shell', 'cmd', 'fingerprint']) &&
@@ -465,7 +480,7 @@ function androidFingerprintMutationAdbResult(args: string[]): AndroidAdbResult |
   return undefined;
 }
 
-function androidPermissionMutationAdbResult(args: string[]): AndroidAdbResult | undefined {
+function androidPermissionMutationAdbResult(args: readonly string[]): AndroidAdbResult | undefined {
   // #1796: permission mutations name the acting user explicitly, because `pm` defaults
   // grant/revoke to user 0 rather than the foreground user. The scripted provider answers the
   // resolution and accepts the `--user <id>` form the production path now sends.
@@ -484,7 +499,20 @@ function androidPermissionMutationAdbResult(args: string[]): AndroidAdbResult | 
   return undefined;
 }
 
-function androidSettingsPutAdbResult(args: string[]): AndroidAdbResult | undefined {
+/** The scripted display rotates the moment `user_rotation` lands, the way the settle expects. */
+function androidDisplayRotationAdbResult(
+  key: string,
+  state: AndroidProviderShellState | undefined,
+): AndroidAdbResult | undefined {
+  if (key !== 'shell dumpsys display') return undefined;
+  return {
+    stdout: `    mCurrentOrientation=${state?.userRotation ?? '0'}\n`,
+    stderr: '',
+    exitCode: 0,
+  };
+}
+
+function androidSettingsPutAdbResult(args: readonly string[]): AndroidAdbResult | undefined {
   if (
     args.length === 6 &&
     argsStartWith(args, ['shell', 'settings', 'put']) &&
@@ -578,10 +606,36 @@ function androidPackageAdbResult(
 ): AndroidAdbResult | undefined {
   return (
     androidSnapshotHelperProbeAdbResult(key) ??
+    androidPackageDumpsysAdbResult(args) ??
     androidLaunchablePackagesAdbResult(args) ??
     androidInstalledPackagesAdbResult(key) ??
     androidForegroundReadAdbResult(key, dumpsysWindow)
   );
+}
+
+/**
+ * Named permission targets intersect the package's declared permissions (like `all` does),
+ * so even a single-id grant reads `dumpsys package` first. The scripted dump declares
+ * CAMERA, which is the only permission this harness grants.
+ */
+function androidPackageDumpsysAdbResult(args: string[]): AndroidAdbResult | undefined {
+  if (args[0] !== 'shell' || args[1] !== 'dumpsys' || args[2] !== 'package' || !args[3]) {
+    return undefined;
+  }
+  return {
+    stdout: [
+      'Packages:',
+      `  Package [${args[3]}] (abc):`,
+      '    requested permissions:',
+      '      android.permission.CAMERA',
+      '    User 0: ceDataInode=0 installed=true',
+      '      runtime permissions:',
+      '        android.permission.CAMERA: granted=false',
+      'Queries:',
+    ].join('\n'),
+    stderr: '',
+    exitCode: 0,
+  };
 }
 
 function androidSnapshotHelperProbeAdbResult(key: string): AndroidAdbResult | undefined {
@@ -594,7 +648,7 @@ function androidSnapshotHelperProbeAdbResult(key: string): AndroidAdbResult | un
   return undefined;
 }
 
-function androidLaunchablePackagesAdbResult(args: string[]): AndroidAdbResult | undefined {
+function androidLaunchablePackagesAdbResult(args: readonly string[]): AndroidAdbResult | undefined {
   if (
     args.slice(0, 7).join(' ') ===
     'shell cmd package query-activities --brief -a android.intent.action.MAIN'
@@ -705,8 +759,8 @@ function installFakeHostAdbGuard(): { argsLogPath: string; restore: () => void }
     adbPath,
     [
       '#!/bin/sh',
-      'printf "%s\\n" "$*" >> "$AGENT_DEVICE_TEST_ADB_ARGS_FILE"',
-      'printf "host adb must not be used in Provider scenario tests\\n" >&2',
+      String.raw`printf "%s\n" "$*" >> "$AGENT_DEVICE_TEST_ADB_ARGS_FILE"`,
+      String.raw`printf "host adb must not be used in Provider scenario tests\n" >&2`,
       'exit 99',
       '',
     ].join('\n'),
@@ -749,8 +803,8 @@ function escapeXml(value: string): string {
     .replaceAll('>', '&gt;');
 }
 
-function makeScriptedLogcatProcess(executable: string, args: string[]): AndroidAdbProcess {
-  const background = runCmdBackground(executable, args, {
+function makeScriptedLogcatProcess(executable: string, args: readonly string[]): AndroidAdbProcess {
+  const background = runCmdBackground(executable, [...args], {
     allowFailure: true,
     captureOutput: false,
   });
@@ -758,7 +812,7 @@ function makeScriptedLogcatProcess(executable: string, args: string[]): AndroidA
   return background.child;
 }
 
-function makeMockAdbProcess(args: string[]): EventEmitter & AndroidAdbProcess {
+function makeMockAdbProcess(args: readonly string[]): EventEmitter & AndroidAdbProcess {
   const child = new EventEmitter() as EventEmitter & AndroidAdbProcess;
   child.stdin = null;
   child.stdout = new PassThrough();
@@ -796,7 +850,7 @@ function createScriptedLogcatExecutable(tempRoot: string): string {
     executable,
     [
       '#!/bin/sh',
-      'printf "I/AgentDevice(4242): provider logcat\\n"',
+      String.raw`printf "I/AgentDevice(4242): provider logcat\n"`,
       `printf '%s\\n' '04-01 10:00:15.000 D/Network(4242): ${networkEntry}'`,
       'trap \'test -n "$child" && kill "$child" 2>/dev/null; exit 0\' INT TERM',
       'while :; do sleep 10 & child=$!; wait "$child"; done',

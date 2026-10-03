@@ -9,6 +9,15 @@ Accepted
 > preferred runtime use joined with leaf/device/provider-specific runtime facts; inventory commands
 > declare inventory use instead of fabricating a device binding. The descriptor's other derived
 > projections remain accepted.
+>
+> **Parity gate retired (2026-09).** The migration rule below — assert each derived table
+> byte-for-byte against its hand-authored table before deleting the hand table — was followed, and
+> completing it removed the gate's second operand. Each hand table went away as its projection was
+> inverted out: #907 daemon routes, #908 capability matrix, #909 batch allowlist, #1084
+> daemon-client timeout lists, #1137 MCP exposure list. No parity test exists. Do not add one or
+> look for one; the totality invariants are now carried by compile-time guards
+> (`CommandOwnerFileClaimsAreComplete`) and by literal pin-set tests that compare a name set rather
+> than two tables.
 
 ## Context
 
@@ -32,7 +41,7 @@ model must preserve. This ADR is that model.
 ## Decision
 
 Introduce one `CommandDescriptor` per command that **composes facets owned by their domains** and from which
-every consumer table is **derived** by pure, parity-tested projection:
+every consumer table is **derived** by pure projection:
 
 - The descriptor composes catalog identity, command-family surface projection hooks
   (`src/commands/**` remains the owner of CLI schema/reader and executable surface metadata), a
@@ -95,4 +104,4 @@ modules must move those contracts before their client methods can stop returning
 `CommandRequestResult`.
 
 This ADR owns the decision and its constraints; the roadmap that prototyped it has been retired, with
-the delivered end-state enforced by the descriptor projections and parity gates below.
+the delivered end-state enforced by the descriptor projections below.

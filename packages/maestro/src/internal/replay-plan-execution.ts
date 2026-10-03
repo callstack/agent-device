@@ -96,6 +96,7 @@ async function executeObservedStep(
         ...runtimeMetricsDelta(metricsBefore, state.port.readMetrics?.()),
         error: failure.error,
         artifactPaths: [...state.artifacts],
+        warnings: [...state.warnings],
       }),
     );
     throw failure;
@@ -112,6 +113,8 @@ function runtimeMetricsDelta(
       hierarchyCaptures: after.hierarchyCaptures - before.hierarchyCaptures,
       screenshotCaptures: after.screenshotCaptures - before.screenshotCaptures,
       tapRetries: after.tapRetries - before.tapRetries,
+      settleLatches: after.settleLatches - before.settleLatches,
+      settleTimeouts: after.settleTimeouts - before.settleTimeouts,
     },
   };
 }

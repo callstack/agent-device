@@ -1,8 +1,6 @@
 import fc from 'fast-check';
 import type { SelectorKey, SelectorTerm } from '../parse.ts';
 
-export const PROPERTY_RUNS = 100;
-
 const SELECTOR_KEY_VALUE_KINDS = {
   id: 'text',
   role: 'text',
@@ -36,8 +34,8 @@ const SELECTOR_VALUE_HAZARDS = [
   "it's",
   'say "hi"',
   '\\',
-  '\\"',
-  'a\\\\b',
+  String.raw`\"`,
+  String.raw`a\\b`,
   'a || b',
   'key=value',
   'line\nbreak',

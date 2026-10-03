@@ -3,14 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { onTestFinished, test } from 'vitest';
-import { runCmd } from '../utils/exec.ts';
+import { runCmd } from '@agent-device/host-kit/command';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const packageScript = path.join(repoRoot, 'scripts', 'package-apple-runner-source.mjs');
 const runnerSnapshotSwiftPath = path.join(
   repoRoot,
-  'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Snapshot.swift',
+  'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+SnapshotAcquisition.swift',
 );
 
 test('package apple runner source strips unit-test blocks without mutating checkout source', async () => {
@@ -36,11 +36,47 @@ test('package apple runner source strips unit-test blocks without mutating check
   assert.doesNotMatch(packagedSwift, /unitOnlyHelper/);
   assert.match(packagedSwift, /runtimeHelper/);
   assert.match(packagedSwift, /#if os\(macOS\)/);
+  assert.match(sourceSwift, /Doc comment/);
+  assert.doesNotMatch(packagedSwift, /Doc comment/);
+  assert.doesNotMatch(packagedSwift, /Packaged source carries no prose/);
+  assert.doesNotMatch(packagedSwift, /trailing note/);
+  assert.match(packagedSwift, /let endpoint = "https:\/\/example\.com\/path"\n/);
   assert.ok(
     fs.existsSync(
       path.join(root, 'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj'),
     ),
   );
+  const packagedRunnerRoot = path.join(root, 'dist/apple/runner/AgentDeviceRunner');
+  const packagedProject = fs.readFileSync(
+    path.join(packagedRunnerRoot, 'AgentDeviceRunner.xcodeproj/project.pbxproj'),
+    'utf8',
+  );
+  const sharedPackageRelativePath =
+    packagedProject.match(/relativePath = ([^;]+);/)?.[1]?.trim() ?? '';
+  assert.equal(sharedPackageRelativePath, '../../snapshot-presentation');
+  assert.ok(
+    fs.existsSync(path.resolve(packagedRunnerRoot, sharedPackageRelativePath, 'Package.swift')),
+  );
+  assert.ok(fs.existsSync(path.join(root, 'dist/apple/snapshot-presentation/Package.swift')));
+  assert.equal(
+    fs.readFileSync(path.join(root, 'dist/apple/snapshot-presentation/Package.swift'), 'utf8'),
+    'runner package\n',
+  );
+  assert.ok(
+    fs.existsSync(
+      path.join(
+        root,
+        'dist/apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/Package.swift',
+      ),
+    ),
+  );
+  assert.equal(
+    fs.existsSync(
+      path.join(root, 'dist/apple/snapshot-presentation/Sources/SnapshotPresentationConformance'),
+    ),
+    false,
+  );
+  assert.equal(fs.existsSync(path.join(root, 'dist/apple/snapshot-presentation/Tests')), false);
   assert.equal(fs.existsSync(path.join(root, 'dist/apple/runner/README.md')), false);
   assert.equal(fs.existsSync(path.join(root, 'dist/apple/runner/.build/cache.txt')), false);
   assert.equal(
@@ -54,9 +90,57 @@ test('package apple runner source strips unit-test blocks without mutating check
   );
 });
 
-test('package apple runner source skips the explicit unit-test directory', async () => {
+// `dist/apple/runner/**` is the source an `xcodebuild` or runner failure names a file and line in
+// (it lands in runner.log), so both rewriting passes empty the lines they remove instead of
+// deleting them: packaged line N is checkout line N. scripts/check-packaged-runner-swift.ts holds
+// the same property over every shipped file; this pins the shape one file at a time.
+test('package apple runner source empties removed lines so line numbers still match', async () => {
+  const root = mkdtempForTestSync('agent-device-runner-package-lines-');
+  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeStripFixtureTree(root);
+
+  await runCmd(process.execPath, [packageScript, '--root', root, '--quiet']);
+
+  const relativePath =
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift';
+  const sourceLines = fs.readFileSync(path.join(root, relativePath), 'utf8').split('\n');
+  const packagedLines = fs.readFileSync(path.join(root, 'dist', relativePath), 'utf8').split('\n');
+
+  assert.deepEqual(packagedLines, [
+    '', // // Packaged source carries no prose.
+    'extension RunnerTests {',
+    '', // /// Doc comment.
+    '  func runtimeHelper() {}',
+    '  let endpoint = "https://example.com/path"',
+    // The unit-test block and the platform guard nested inside it, seven lines of it.
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '  #if os(macOS)',
+    '  func macOnlyRuntimeHelper() {}',
+    '  #endif',
+    '}',
+    '',
+  ]);
+  assert.equal(packagedLines.length, sourceLines.length);
+  // The declarations that survive are the line they were written on, not an earlier one.
+  for (const name of ['runtimeHelper', 'macOnlyRuntimeHelper']) {
+    assert.equal(
+      packagedLines.findIndex((line) => line.includes(`func ${name}`)),
+      sourceLines.findIndex((line) => line.includes(`func ${name}`)),
+      name,
+    );
+  }
+});
+
+test('package apple runner source skips the unit-test directory and the isolation canary', async () => {
   const root = mkdtempForTestSync('agent-device-runner-package-unit-tests-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
   const uitestsDir = 'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests';
   writeFixtureFile(
     root,
@@ -77,6 +161,16 @@ test('package apple runner source skips the explicit unit-test directory', async
     `${uitestsDir}/RunnerTests+RuntimeSibling.swift`,
     ['extension RunnerTests {', '  func runtimeSiblingHelper() {}', '}', ''].join('\n'),
   );
+  writeFixtureFile(
+    root,
+    `${uitestsDir}/RunnerIsolationCanary.swift`,
+    [
+      '#if AGENT_DEVICE_RUNNER_ISOLATION_CANARY',
+      'enum RunnerIsolationCanary {}',
+      '#endif',
+      '',
+    ].join('\n'),
+  );
 
   await runCmd(process.execPath, [packageScript, '--root', root, '--quiet']);
 
@@ -88,6 +182,11 @@ test('package apple runner source skips the explicit unit-test directory', async
   assert.ok(
     fs.existsSync(path.join(root, `dist/${uitestsDir}/RunnerTests+RuntimeSibling.swift`)),
     'the skeleton skip must not drop files with shippable runtime content',
+  );
+  assert.equal(
+    fs.existsSync(path.join(root, `dist/${uitestsDir}/RunnerIsolationCanary.swift`)),
+    false,
+    'the isolation scan canary compiles only in scripts/build-xcuitest-apple.sh builds',
   );
 });
 
@@ -124,6 +223,7 @@ test('package apple runner source check rejects unit tests without writing dist'
 test('package apple runner source allows only the runner entrypoint test method', async () => {
   const root = mkdtempForTestSync('agent-device-runner-package-entry-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
 
   writeFixtureFile(
     root,
@@ -153,6 +253,76 @@ test('package apple runner source allows only the runner entrypoint test method'
   assert.match(rejected.stderr, /testExtraEntrypoint/);
 });
 
+test('package apple runner source ships regex literals whole and refuses ambiguous ones', async () => {
+  const root = mkdtempForTestSync('agent-device-runner-package-regex-');
+  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
+  const relativePath =
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift';
+
+  // An extended regex literal's contents are regex syntax, never comments, so they ship whole.
+  writeFixtureFile(
+    root,
+    relativePath,
+    ['extension RunnerTests {', '  let pattern = #/foo//bar/#  // note', '}', ''].join('\n'),
+  );
+
+  const allowed = await runCmd(process.execPath, [packageScript, '--root', root, '--quiet']);
+  assert.equal(allowed.exitCode, 0);
+  assert.equal(
+    fs.readFileSync(
+      path.join(
+        root,
+        'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift',
+      ),
+      'utf8',
+    ),
+    'extension RunnerTests {\n  let pattern = #/foo//bar/#\n}\n',
+  );
+
+  // A bare `/…/` is a regex literal, a division and a comment opener at once, so packaging fails
+  // by name and line instead of shipping Swift whose literal it silently truncated.
+  writeFixtureFile(
+    root,
+    relativePath,
+    ['extension RunnerTests {', '  let pattern = /foo//bar/', '}', ''].join('\n'),
+  );
+
+  const rejected = await runCmd(process.execPath, [packageScript, '--root', root, '--quiet'], {
+    allowFailure: true,
+  });
+  assert.notEqual(rejected.exitCode, 0);
+  assert.match(rejected.stderr, /Ambiguous bare regex literal or division/);
+  assert.match(rejected.stderr, /RunnerTests\+Feature\.swift:2/);
+});
+
+test('package apple runner source judges shipped test methods after comments are removed', async () => {
+  const root = mkdtempForTestSync('agent-device-runner-package-commented-test-');
+  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift',
+    ['extension RunnerTests {', '  // func testCommentedOut() {}', '}', ''].join('\n'),
+  );
+
+  // The guard asks what the npm package contains, so a method that only exists in prose is not
+  // a shipped test method — the prose does not reach the package either.
+  const result = await runCmd(process.execPath, [packageScript, '--root', root, '--quiet']);
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(
+    fs.readFileSync(
+      path.join(
+        root,
+        'dist/apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift',
+      ),
+      'utf8',
+    ),
+    'extension RunnerTests {\n\n}\n',
+  );
+});
+
 test('package apple runner source removes legacy dist/apple-runner output before shipping', async () => {
   const root = mkdtempForTestSync('agent-device-runner-package-legacy-');
   onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -163,6 +333,7 @@ test('package apple runner source removes legacy dist/apple-runner output before
     'apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/project.pbxproj',
     '',
   );
+  writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
   // Stale packaged trees left by builds/checkouts predating the apple-runner -> apple/runner
   // move. `dist` ships wholesale, so these must not survive packaging or they double-ship.
   writeFixtureFile(
@@ -183,6 +354,40 @@ test('package apple runner source removes legacy dist/apple-runner output before
   assert.ok(fs.existsSync(path.join(root, 'dist/apple/runner/AgentDeviceRunner')));
 });
 
+test('package apple runner source requires the shared snapshot presentation source', async () => {
+  const root = mkdtempForTestSync('agent-device-runner-package-missing-presentation-');
+  onTestFinished(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeFixtureFile(
+    root,
+    'apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/project.pbxproj',
+    '',
+  );
+
+  const result = await runCmd(process.execPath, [packageScript, '--root', root, '--quiet'], {
+    allowFailure: true,
+  });
+
+  assert.notEqual(result.exitCode, 0);
+  assert.match(result.stderr, /snapshot presentation source not found/);
+});
+
+test('snapshot presentation manifests keep their supported platform declarations in parity', () => {
+  const manifest = fs.readFileSync(
+    path.join(repoRoot, 'apple/snapshot-presentation/Package.swift'),
+    'utf8',
+  );
+  const runnerManifest = fs.readFileSync(
+    path.join(repoRoot, 'apple/snapshot-presentation/Package.runner.swift'),
+    'utf8',
+  );
+
+  for (const declaration of ['.iOS(.v15)', '.macOS(.v13)', '.tvOS(.v15)', '.visionOS(.v1)']) {
+    const escaped = declaration.replaceAll(/[.()]/g, String.raw`\$&`);
+    assert.match(manifest, new RegExp(escaped));
+    assert.match(runnerManifest, new RegExp(escaped));
+  }
+});
+
 test('apple runner tree snapshot capture stays on the main queue', () => {
   const source = fs.readFileSync(runnerSnapshotSwiftPath, 'utf8');
   const boundedCapture = extractSwiftFunction(source, 'captureSnapshotRootBounded');
@@ -192,25 +397,71 @@ test('apple runner tree snapshot capture stays on the main queue', () => {
   assert.match(boundedCapture, /captureSnapshotRoot\(element\)/);
 });
 
+test('runner uses the shared presenter without a local facade or model aliases', () => {
+  const runnerRoot = path.join(repoRoot, 'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests');
+  assert.equal(
+    fs.existsSync(path.join(runnerRoot, 'RunnerTests+SnapshotPresentation.swift')),
+    false,
+    'the runner must not recreate a local SnapshotPresentation facade',
+  );
+  assert.equal(
+    fs.existsSync(path.join(runnerRoot, 'RunnerTests+SnapshotPresentationModels.swift')),
+    false,
+    'the runner must not recreate shared presenter type aliases',
+  );
+
+  const sourceFiles = fs
+    .readdirSync(runnerRoot)
+    .filter((entry) => entry.endsWith('.swift'))
+    .map((entry) => fs.readFileSync(path.join(runnerRoot, entry), 'utf8'))
+    .join('\n');
+  assert.doesNotMatch(sourceFiles, /enum SnapshotPresentation\s*\{/);
+  assert.doesNotMatch(
+    sourceFiles,
+    /typealias (?:RawAXNode|CaptureHint|SnapshotAcquisition|PresentedNode)\s*=/,
+  );
+  assert.match(sourceFiles, /import AgentDeviceSnapshotPresentation/);
+});
+
 function writeStripFixtureTree(root: string): void {
   writeFixtureFile(root, 'apple/runner/README.md', 'developer docs\n');
   writeFixtureFile(root, 'apple/runner/.build/cache.txt', 'cache\n');
   writeFixtureFile(
     root,
     'apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/project.pbxproj',
-    '',
+    'relativePath = ../../snapshot-presentation;\n',
   );
   writeFixtureFile(
     root,
     'apple/runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj/xcuserdata/user.xcuserstate',
     'state\n',
   );
+  writeFixtureFile(root, 'apple/snapshot-presentation/Package.swift', 'package\n');
+  writeFixtureFile(root, 'apple/snapshot-presentation/Package.runner.swift', 'runner package\n');
+  writeFixtureFile(
+    root,
+    'apple/snapshot-presentation/Sources/AgentDeviceSnapshotPresentation/Package.swift',
+    'package source\n',
+  );
+  writeFixtureFile(
+    root,
+    'apple/snapshot-presentation/Sources/SnapshotPresentationConformance/main.swift',
+    'development harness\n',
+  );
+  writeFixtureFile(
+    root,
+    'apple/snapshot-presentation/Tests/AgentDeviceSnapshotPresentationTests/ConformanceTests.swift',
+    'development tests\n',
+  );
   writeFixtureFile(
     root,
     'apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Feature.swift',
     [
+      '// Packaged source carries no prose.',
       'extension RunnerTests {',
+      '  /// Doc comment.',
       '  func runtimeHelper() {}',
+      '  let endpoint = "https://example.com/path"  // trailing note',
       '#if AGENT_DEVICE_RUNNER_UNIT_TESTS',
       '  func unitOnlyHelper() {',
       '    #if os(iOS)',

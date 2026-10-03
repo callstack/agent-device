@@ -66,7 +66,7 @@ export async function createMacOsDesktopWorld(
   };
 }
 
-function runScriptedMacOsHelper(args: string[]): {
+function runScriptedMacOsHelper(args: readonly string[]): {
   stdout: string;
   stderr: string;
   exitCode: number;
@@ -181,7 +181,6 @@ function runScriptedMacOsHelper(args: string[]): {
     return helperOk({
       path: outPath,
       surface: args.includes('--surface') ? args[args.indexOf('--surface') + 1] : 'frontmost-app',
-      fullscreen: args.includes('--fullscreen'),
     });
   }
   if (args[0] === 'press') {

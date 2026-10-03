@@ -2,8 +2,8 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 
 /**
  * Android status-bar/navigation-bar chrome identity, shared by the settle-chrome
- * classifier (`core/snapshot-chrome.ts`) and the helper content classifier
- * (`platforms/android/snapshot-content-recovery.ts`). SystemUI also hosts actionable
+ * classifier (`packages/capture-kit/src/snapshot-chrome.ts`) and the helper content classifier
+ * (`packages/platform-android/src/snapshot-content-recovery.ts`). SystemUI also hosts actionable
  * overlays — volume panel, media pickers, the shade itself — so chrome is never a
  * package-level fact: only the status/nav-bar container's subtree is chrome.
  */

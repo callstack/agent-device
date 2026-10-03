@@ -10,7 +10,7 @@
 import { parseArgs } from '../../src/cli/parser/args.ts';
 import { validateSelectorExpression } from '@agent-device/selectors';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
-import { readCliBatchStepsJson } from '../../src/cli/batch-steps.ts';
+import { readCliBatchStepsJson } from '../../src/commands/batch/batch-steps.ts';
 import { inspectMaestroFlow } from '@agent-device/maestro';
 import type { FuzzTarget } from './target-types.ts';
 import { acceptCase, makeValidationCheck, rejectCase } from './validation-case.ts';
@@ -52,7 +52,7 @@ export const FUZZ_TARGETS: readonly FuzzTarget[] = [
       'id=com.example:id/button[2]',
       'role=button and is=enabled',
       'text~=partial',
-      'label="quoted \\"inner\\" value"',
+      String.raw`label="quoted \"inner\" value"`,
       '@e1',
       'text=🚀',
       'text=',

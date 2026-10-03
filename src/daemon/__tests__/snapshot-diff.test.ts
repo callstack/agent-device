@@ -1,7 +1,10 @@
 import fc from 'fast-check';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { buildSnapshotDiff, countSnapshotComparableLines } from '../../snapshot/snapshot-diff.ts';
+import {
+  buildSnapshotDiff,
+  countSnapshotComparableLines,
+} from '@agent-device/capture-kit/snapshot-diff';
 import { buildNodes as nodes } from '../../__tests__/test-utils/snapshot-builders.ts';
 import {
   PROPERTY_RUNS_SMALL,

@@ -1,9 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { AndroidHelperInstallDecision, AndroidImeHelperArtifact } from './helper-artifacts.ts';
 import type {
-  AndroidHelperInstallDecision,
-  AndroidImeHelperArtifact,
-} from '@agent-device/contracts/android-helper-artifacts';
-import type {
+  AndroidAdbInvocation,
   AndroidAdbExecutor,
   AndroidAdbExecutorOptions,
   AndroidAdbExecutorResult,
@@ -12,14 +10,9 @@ import type {
   AndroidAdbSpawnOptions,
 } from './adb-transport.ts';
 
-// R13 bars platform packages from raw process, fs, and ambient host authority; the adb/IME
-// cluster reaches those primitives only through this explicitly injected host port. The root
-// composition wiring (src/platforms/android/adb-host-binding.ts) binds it before any consumer
-// can call into the cluster.
-
 export type AndroidAdbCommandExecutorOverride = (
   cmd: string,
-  args: string[],
+  args: readonly string[],
   options: AndroidAdbExecutorOptions,
 ) => Promise<AndroidAdbExecutorResult> | undefined;
 
@@ -30,28 +23,41 @@ export type AndroidAdbDiagnosticEvent = {
   data?: Record<string, unknown>;
 };
 
+export type AndroidAdbFileHost = Readonly<{
+  access(path: string): Promise<void>;
+  ensureDirectory(path: string): Promise<void>;
+  isExecutable(path: string): Promise<boolean>;
+  makeTempDirectory(prefix: string): Promise<string>;
+  readBytes(path: string): Promise<Buffer>;
+  readDirectory(path: string): Promise<string[]>;
+  readText(path: string): Promise<string>;
+  remove(path: string, options?: Readonly<{ force?: boolean; recursive?: boolean }>): Promise<void>;
+  sha256(value: Buffer): string;
+  stat(path: string): Promise<Readonly<{ isFile: boolean; size: number }>>;
+  writeAtomicText(path: string, value: string, mode?: number): Promise<void>;
+  writeBytes(path: string, value: Buffer): Promise<void>;
+}>;
+
+export type AndroidAdbEnvironment = Record<string, string | undefined>;
+
 export type AndroidAdbHost = Readonly<{
+  /** Explicit process environment captured by the root composition boundary. */
+  environment: AndroidAdbEnvironment;
+  /** Narrow filesystem authority used by Android helper, SDK, and artifact mechanics. */
+  files: AndroidAdbFileHost;
   /**
-   * Device-scoped local adb execution for `serial`, escaping any active command-executor
-   * override (a tunnel-backed provider shelling out to adb must not route back into itself)
-   * and owning the host-side process-group/teardown semantics.
+   * Local adb execution for one addressing decision, visible to an installed command-executor
+   * override so a scoped transport can answer for it. A caller that must not be captured — the
+   * device-scoped executor a provider would otherwise re-enter — wraps this in
+   * `withoutAdbCommandExecutorOverride`. The invocation's command is appended verbatim; only
+   * `target` is lowered into adb global options.
    */
-  execSerialAdb(
-    serial: string,
-    args: string[],
+  execAdb(
+    invocation: AndroidAdbInvocation,
     options?: AndroidAdbExecutorOptions,
   ): Promise<AndroidAdbExecutorResult>;
-  /** Device-scoped local adb background spawn for `serial`; the host owns stream wiring. */
-  spawnSerialAdb(
-    serial: string,
-    args: string[],
-    options?: AndroidAdbSpawnOptions,
-  ): AndroidAdbProcess;
-  /** Host-global adb execution (no serial), e.g. `adb devices`. */
-  execHostAdb(
-    args: string[],
-    options?: AndroidAdbExecutorOptions,
-  ): Promise<AndroidAdbExecutorResult>;
+  /** Local adb background spawn for one addressing decision; the host owns stream wiring. */
+  spawnAdb(invocation: AndroidAdbInvocation, options?: AndroidAdbSpawnOptions): AndroidAdbProcess;
   /** Installs `override` as the host command-executor override for the duration of `fn`. */
   withAdbCommandExecutorOverride<T>(
     override: AndroidAdbCommandExecutorOverride,
@@ -96,9 +102,9 @@ export type AndroidAdbHost = Readonly<{
 
 let boundHost: AndroidAdbHost | undefined;
 
-/** Scoped override for host-global and explicitly serial-qualified adb argv. */
+/** Scoped override for host-global and explicitly serial-qualified adb invocations. */
 export type AndroidAdbHostTransport = (
-  args: string[],
+  invocation: AndroidAdbInvocation,
   options?: AndroidAdbExecutorOptions,
 ) => Promise<AndroidAdbExecutorResult>;
 
@@ -113,7 +119,7 @@ export function requireAndroidAdbHost(): AndroidAdbHost {
   if (!boundHost) {
     throw new Error(
       'Android adb host port is not bound; import the platform composition wiring ' +
-        '(src/platforms/android/adb-host-binding.ts) before using the adb/IME cluster.',
+        '(src/platform-runtime-android-adb-host.ts) before using the adb/IME cluster.',
     );
   }
   return boundHost;
@@ -125,20 +131,21 @@ export function requireAndroidAdbHost(): AndroidAdbHost {
  * innermost-first and restore automatically.
  */
 export async function runAndroidHostAdb(
-  args: string[],
+  invocation: AndroidAdbInvocation,
   options?: AndroidAdbExecutorOptions,
 ): Promise<AndroidAdbExecutorResult> {
   const host = requireAndroidAdbHost();
   const transport = androidAdbHostTransportScope.getStore();
   const result = host.coerceAdbResult(
     transport
-      ? await transport(args, options)
-      : await host.execHostAdb(args, { ...options, allowFailure: true }),
+      ? await transport(invocation, options)
+      : await host.execAdb(invocation, { ...options, allowFailure: true }),
   );
   if (!options?.allowFailure && result.exitCode !== 0) {
     const { androidAdbResultError } = await import('./adb-failure.ts');
+    const { serializeAndroidAdbInvocation } = await import('./adb-transport.ts');
     throw androidAdbResultError(
-      `adb ${args.join(' ')} exited with code ${result.exitCode}`,
+      `adb ${serializeAndroidAdbInvocation(invocation).join(' ')} exited with code ${result.exitCode}`,
       result,
     );
   }

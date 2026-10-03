@@ -1,5 +1,6 @@
 import type { BackMode } from './back-mode.ts';
-import type { DeviceRotation } from './device-rotation.ts';
+import type { DeviceRotation, FoldPose } from './device-rotation.ts';
+import type { FoldScreenReport } from './fold-runtime.ts';
 import type { SettleObservation } from './interaction.ts';
 import type { TvRemoteButton } from './tv-remote.ts';
 
@@ -31,16 +32,53 @@ export type BackCommandResult = {
   settle?: SettleObservation;
 };
 
-/** `orientation` — `{ action: 'orientation', orientation, message: 'Rotated to <orientation>' }`. */
+/**
+ * `orientation` — `{ action: 'orientation', orientation, message: 'Rotated to <orientation>' }`.
+ *
+ * An owner that reports no resulting rotation is not evidence that the device
+ * rotated. That case keeps the requested `orientation` for compatibility, but
+ * discloses `confirmed: false` plus a `warning`, and names the request in
+ * `message` (`Rotation requested: <orientation> (unconfirmed)`).
+ */
 export type OrientationCommandResult = {
   action: 'orientation';
   orientation: DeviceRotation;
+  message: string;
+  confirmed?: boolean;
+  warning?: string;
+};
+
+/**
+ * `fold` — `{ action: 'fold', pose, hingeAngleDegrees, screen?, message }`.
+ *
+ * Unlike `orientation`, there is no unconfirmed variant: the Apple owner reads the hinge angle
+ * back from CoreDevice after the simulator HID helper sends the pose, and reports a pose only when
+ * that reading agrees with the request. `screen` names the panel the device lights afterwards and
+ * that panel's native point size (ADR 0025); it is the panel's geometry, not the app viewport, so a
+ * caller must take a fresh snapshot before placing a tap.
+ */
+export type FoldCommandResult = {
+  action: 'fold';
+  pose: FoldPose;
+  hingeAngleDegrees: number;
+  screen?: FoldScreenReport;
   message: string;
 };
 
 /** `app-switcher` — `{ action: 'app-switcher', message: 'Opened app switcher' }`. */
 export type AppSwitcherCommandResult = {
   action: 'app-switcher';
+  message: string;
+};
+
+/**
+ * `action-button` — `{ action: 'action-button', message: 'Pressed Action Button' }`.
+ *
+ * Deliberately narrower than `tv-remote`: `XCUIDevice.press(.action)` takes no hold duration, so
+ * there is no `durationMs` to report and no button to name.
+ */
+export type ActionButtonCommandResult = {
+  action: 'action-button';
   message: string;
 };
 

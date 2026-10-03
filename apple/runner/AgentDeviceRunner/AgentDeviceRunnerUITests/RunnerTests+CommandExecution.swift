@@ -1,1727 +1,20 @@
 import XCTest
-
-#if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
-import ObjectiveC.runtime
-
-private final class RunnerSynthesizedSwipeFailureStub: NSObject {
-  @objc(synthesizeSwipeWithApplication:x:y:x2:y2:durationMs:)
-  class func synthesizeSwipe(
-    application: XCUIApplication,
-    x: Double,
-    y: Double,
-    x2: Double,
-    y2: Double,
-    durationMs: Double
-  ) -> String? {
-    "forced private synthesis failure"
-  }
-}
-
-private final class RunnerSynthesizedTapFailureStub: NSObject {
-  @objc(synthesizeTapWithApplication:x:y:)
-  class func synthesizeTap(application: XCUIApplication, x: Double, y: Double) -> String? {
-    "forced private synthesis failure"
-  }
-}
-#endif
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
-  // MARK: - Main Thread Dispatch
-
-  private func currentUptimeMs() -> Double {
-    ProcessInfo.processInfo.systemUptime * 1000
-  }
-
-  private func measureGesture(_ action: () -> Void) -> (gestureStartUptimeMs: Double, gestureEndUptimeMs: Double) {
-    let gestureStartUptimeMs = currentUptimeMs()
-    action()
-    return (gestureStartUptimeMs, currentUptimeMs())
-  }
-
-  func synthesizedSwipeFallbackHoldDuration(durationMs: Double) -> TimeInterval {
-    min(max((durationMs / 5.0) / 1000.0, 0.016), 0.120)
-  }
-
-  func coordinateDragHoldDuration() -> TimeInterval {
-    0.050
-  }
-
-  func unsupportedResponse(for outcome: RunnerInteractionOutcome) -> Response? {
-    switch outcome {
-    case .performed:
-      return nil
-    case .unsupported(let message, let hint):
-      return Response(
-        ok: false,
-        error: ErrorPayload(code: "UNSUPPORTED_OPERATION", message: message, hint: hint)
-      )
-    }
-  }
-
-  /// Optional visualization frame returned with a gesture response.
-  enum GestureFrame {
-    case none
-    case touch(TouchVisualizationFrame?)
-    case drag(DragVisualizationFrame)
-  }
-
-  struct GestureFallback {
-    let strategy: String
-    let message: String
-    let hint: String?
-  }
-
-  private func gestureFallback(strategy: String, from outcome: RunnerInteractionOutcome) -> GestureFallback? {
-    switch outcome {
-    case .performed:
-      return nil
-    case .unsupported(let message, let hint):
-      return GestureFallback(strategy: strategy, message: message, hint: hint)
-    }
-  }
-
-
-  /// Runs a gesture action with uniform timing capture. Touch gestures pass `idleTimeout: true`
-  /// (the default) to run inside the scroll idle-timeout + quiescence-skip wrapper; synthesis
-  /// pointer-plan gestures pass `false` because RunnerSynthesizedGesture governs their
-  /// own timing. Returns the captured timing and the action's outcome.
-  ///
-  /// NOTE: a new SYNTHESIS gesture must pass `idleTimeout: false` — the default `true` would wrap
-  /// it in the scroll idle-timeout/quiescence-skip path and change its runtime behavior.
-  func performGesture(
-    _ app: XCUIApplication,
-    idleTimeout: Bool = true,
-    _ action: () -> RunnerInteractionOutcome
-  ) -> (timing: (gestureStartUptimeMs: Double, gestureEndUptimeMs: Double), outcome: RunnerInteractionOutcome) {
-    var outcome = RunnerInteractionOutcome.performed
-    let timing = measureGesture {
-      if idleTimeout {
-        withTemporaryScrollIdleTimeoutIfSupported(app) { outcome = action() }
-      } else {
-        outcome = action()
-      }
-    }
-    return (timing, outcome)
-  }
-
-  /// Single factory for the success payload every gesture returns (message + gesture timing +
-  /// an optional touch/drag visualization frame), so the field shape lives in one place.
-  private func gestureResponse(
-    message: String,
-    timing: (gestureStartUptimeMs: Double, gestureEndUptimeMs: Double),
-    frame: GestureFrame = .none,
-    fallback: GestureFallback? = nil,
-    maestroNonHittableCoordinateFallbackUsed: Bool? = nil
-  ) -> Response {
-    let data: DataPayload
-    switch frame {
-    case .none:
-      data = DataPayload(
-        message: message,
-        gestureStartUptimeMs: timing.gestureStartUptimeMs,
-        gestureEndUptimeMs: timing.gestureEndUptimeMs,
-        gestureFallback: fallback?.strategy,
-        gestureFallbackMessage: fallback?.message,
-        gestureFallbackHint: fallback?.hint,
-        maestroNonHittableCoordinateFallbackUsed: maestroNonHittableCoordinateFallbackUsed
-      )
-    case .touch(let f):
-      data = DataPayload(
-        message: message,
-        gestureStartUptimeMs: timing.gestureStartUptimeMs,
-        gestureEndUptimeMs: timing.gestureEndUptimeMs,
-        x: f?.x,
-        y: f?.y,
-        referenceWidth: f?.referenceWidth,
-        referenceHeight: f?.referenceHeight,
-        gestureFallback: fallback?.strategy,
-        gestureFallbackMessage: fallback?.message,
-        gestureFallbackHint: fallback?.hint,
-        maestroNonHittableCoordinateFallbackUsed: maestroNonHittableCoordinateFallbackUsed
-      )
-    case .drag(let f):
-      data = DataPayload(
-        message: message,
-        gestureStartUptimeMs: timing.gestureStartUptimeMs,
-        gestureEndUptimeMs: timing.gestureEndUptimeMs,
-        x: f.x,
-        y: f.y,
-        x2: f.x2,
-        y2: f.y2,
-        referenceWidth: f.referenceWidth,
-        referenceHeight: f.referenceHeight,
-        gestureFallback: fallback?.strategy,
-        gestureFallbackMessage: fallback?.message,
-        gestureFallbackHint: fallback?.hint
-      )
-    }
-    return Response(ok: true, data: data)
-  }
-
-  /// Gesture plans already return canonical centroid endpoints from the portable runtime.
-  /// Keep runner timing/fallback diagnostics, but do not leak the coordinate-drag adapter's
-  /// visualization frame into only the fast-fling response shape.
-  private func canonicalPlannedGestureResponse(_ response: Response) -> Response {
-    guard response.ok, let data = response.data else { return response }
-    return Response(
-      ok: true,
-      data: DataPayload(
-        message: data.message,
-        gestureStartUptimeMs: data.gestureStartUptimeMs,
-        gestureEndUptimeMs: data.gestureEndUptimeMs,
-        gestureFallback: data.gestureFallback,
-        gestureFallbackMessage: data.gestureFallbackMessage,
-        gestureFallbackHint: data.gestureFallbackHint
-      )
-    )
-  }
-
-  private func plannedGestureResponse(
-    plan: RunnerGesturePlan,
-    timing: (gestureStartUptimeMs: Double, gestureEndUptimeMs: Double),
-    outcome: RunnerInteractionOutcome
-  ) -> Response {
-    if let response = unsupportedResponse(for: outcome) {
-      return response
-    }
-    return gestureResponse(message: plan.intent, timing: timing)
-  }
-
-#if AGENT_DEVICE_RUNNER_UNIT_TESTS
-  func testGestureResponseIncludesSynthesizedTapFallbackDiagnostics() {
-    let response = gestureResponse(
-      message: "tapped",
-      timing: (gestureStartUptimeMs: 1, gestureEndUptimeMs: 2),
-      fallback: GestureFallback(
-        strategy: "xctest-coordinate-tap",
-        message: "Runner synthesized coordinate tap is unavailable",
-        hint: "Using XCTest coordinate tap fallback."
-      )
-    )
-
-    XCTAssertEqual(response.ok, true)
-    XCTAssertEqual(response.data?.gestureFallback, "xctest-coordinate-tap")
-    XCTAssertEqual(
-      response.data?.gestureFallbackMessage,
-      "Runner synthesized coordinate tap is unavailable"
-    )
-    XCTAssertEqual(response.data?.gestureFallbackHint, "Using XCTest coordinate tap fallback.")
-  }
-
-  func testGestureResponseIncludesMaestroNonHittableFallbackUsage() {
-    let response = gestureResponse(
-      message: "tapped via non-hittable coordinate fallback",
-      timing: (gestureStartUptimeMs: 1, gestureEndUptimeMs: 2),
-      frame: .touch(nil),
-      maestroNonHittableCoordinateFallbackUsed: true
-    )
-
-    XCTAssertEqual(response.data?.maestroNonHittableCoordinateFallbackUsed, true)
-  }
-
-  func testCanonicalPlannedGestureResponseOmitsDragFrameAndPreservesDiagnostics() {
-    let response = gestureResponse(
-      message: "fling",
-      timing: (gestureStartUptimeMs: 1, gestureEndUptimeMs: 2),
-      frame: .drag(
-        DragVisualizationFrame(
-          x: 160,
-          y: 150,
-          x2: 40,
-          y2: 150,
-          referenceWidth: 200,
-          referenceHeight: 300
-        )
-      ),
-      fallback: GestureFallback(
-        strategy: "xctest-coordinate-drag",
-        message: "Private synthesis unavailable",
-        hint: "Using XCTest coordinate fallback."
-      )
-    )
-
-    let canonical = canonicalPlannedGestureResponse(response)
-
-    XCTAssertEqual(canonical.data?.gestureStartUptimeMs, 1)
-    XCTAssertEqual(canonical.data?.gestureEndUptimeMs, 2)
-    XCTAssertEqual(canonical.data?.gestureFallback, "xctest-coordinate-drag")
-    XCTAssertEqual(canonical.data?.gestureFallbackMessage, "Private synthesis unavailable")
-    XCTAssertEqual(canonical.data?.gestureFallbackHint, "Using XCTest coordinate fallback.")
-    XCTAssertNil(canonical.data?.x)
-    XCTAssertNil(canonical.data?.y)
-    XCTAssertNil(canonical.data?.x2)
-    XCTAssertNil(canonical.data?.y2)
-    XCTAssertNil(canonical.data?.referenceWidth)
-    XCTAssertNil(canonical.data?.referenceHeight)
-  }
-
-#if os(iOS)
-  func testSinglePointerFlingFallsBackToXCTestCoordinateDragWhenPrivateSynthesisFails() throws {
-    let selector = NSSelectorFromString(
-      "synthesizeSwipeWithApplication:x:y:x2:y2:durationMs:"
-    )
-    guard
-      let synthesizedSwipeMethod = class_getClassMethod(RunnerSynthesizedGesture.self, selector),
-      let failureStubMethod = class_getClassMethod(RunnerSynthesizedSwipeFailureStub.self, selector)
-    else {
-      XCTFail("unable to install synthesized swipe failure stub")
-      return
-    }
-    let originalImplementation = method_getImplementation(synthesizedSwipeMethod)
-    method_setImplementation(
-      synthesizedSwipeMethod,
-      method_getImplementation(failureStubMethod)
-    )
-    app.launch()
-    runnerAccessibilityHealth = .healthy
-    defer {
-      method_setImplementation(synthesizedSwipeMethod, originalImplementation)
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      app.terminate()
-    }
-    let command = try runnerCommandFixture(
-      """
-      {"command":"gesture","commandId":"gesture-fling-fallback","gesturePlan":{"topology":"single","intent":"fling","executionProfile":"endpoint-hold","durationMs":100,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":160,"y":150}},{"offsetMs":100,"point":{"x":40,"y":150}}]}]}}
-      """
-    )
-
-    let response = try executeOnMainPrepared(command: command, activeApp: app)
-
-    XCTAssertTrue(response.ok)
-    XCTAssertEqual(response.data?.message, "fling")
-    XCTAssertEqual(response.data?.gestureFallback, "xctest-coordinate-drag")
-    XCTAssertEqual(response.data?.gestureFallbackMessage, "forced private synthesis failure")
-    XCTAssertEqual(
-      response.data?.gestureFallbackHint,
-      "Private XCTest event synthesis is required for AX-free coordinate drag on iOS; update Xcode if this persists."
-    )
-    XCTAssertNil(response.data?.x)
-    XCTAssertNil(response.data?.y)
-    XCTAssertNil(response.data?.x2)
-    XCTAssertNil(response.data?.y2)
-  }
-
-  func testSelectorTapFallsBackToXCTestCoordinateWhenPrivateSynthesisFails() throws {
-    let selector = NSSelectorFromString("synthesizeTapWithApplication:x:y:")
-    guard
-      let synthesizedTapMethod = class_getClassMethod(RunnerSynthesizedGesture.self, selector),
-      let failureStubMethod = class_getClassMethod(RunnerSynthesizedTapFailureStub.self, selector)
-    else {
-      XCTFail("unable to install synthesized tap failure stub")
-      return
-    }
-    let originalImplementation = method_getImplementation(synthesizedTapMethod)
-    method_setImplementation(
-      synthesizedTapMethod,
-      method_getImplementation(failureStubMethod)
-    )
-    app.launch()
-    currentApp = app
-    runnerAccessibilityHealth = .healthy
-    defer {
-      method_setImplementation(synthesizedTapMethod, originalImplementation)
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      app.terminate()
-    }
-    let command = try runnerCommandFixture(
-      #"{"command":"tap","commandId":"selector-tap-fallback","selectorKey":"label","selectorValue":"Agent Device Runner","synthesized":true}"#
-    )
-
-    let response = try executeOnMainPrepared(command: command, activeApp: app)
-
-    XCTAssertTrue(response.ok)
-    XCTAssertEqual(response.data?.message, "tapped")
-    XCTAssertEqual(response.data?.gestureFallback, "xctest-coordinate-tap")
-    XCTAssertEqual(response.data?.gestureFallbackMessage, "forced private synthesis failure")
-    XCTAssertEqual(
-      response.data?.gestureFallbackHint,
-      "Falling back to XCTest coordinate tap may be slower and can still need a healthy accessibility tree."
-    )
-  }
-#endif
-
-#if os(iOS)
-  func testTypeWithoutResolvedInputReturnsTypedFailureBeforeDispatchingText() throws {
-    let command = try runnerCommandFixture(
-      #"{"command":"type","commandId":"type-without-focus","text":"hello"}"#
-    )
-
-    let response = executeTypeCommand(
-      activeApp: XCUIApplication(bundleIdentifier: "com.example.agentdevice.missing-input"),
-      command: command
-    )
-
-    XCTAssertFalse(response.ok)
-    XCTAssertEqual(response.error?.code, "TEXT_INPUT_NOT_FOCUSED")
-    XCTAssertEqual(
-      response.error?.hint,
-      "Focus a visible text input, then retry type or fill. If the input is not exposed by accessibility, use a coordinate focus command before typing."
-    )
-  }
-
-  func testBareTypeUsesTappedInputWhenSoftwareKeyboardIsHidden() throws {
-    // The fixture uses a real text responder with an empty input view to model hardware-keyboard input.
-    app.launchArguments = ["--agent-device-text-entry-regression"]
-    app.launch()
-    defer {
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      app.terminate()
-    }
-    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
-
-    let textField = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
-    let frame = textField.frame
-    XCTAssertFalse(frame.isEmpty)
-
-    let tapCommand = try runnerCommandFixture(
-      #"{"command":"tap","commandId":"tap-hardware-keyboard-input","selectorKey":"id","selectorValue":"agent-device-hardware-keyboard-input"}"#
-    )
-    let tapResponse = try executeOnMainPrepared(command: tapCommand, activeApp: app)
-    XCTAssertTrue(tapResponse.ok, String(describing: tapResponse.error))
-    // A precondition, not a product claim. The fixture's empty `inputView` is what keeps the
-    // keyboard down, but nothing in this bundle owns the simulator's own keyboard settings, so an
-    // ambient flip that raised one here would be an environment fact — and reporting it as a
-    // failed assertion is what made this read as a product regression on unrelated PRs (#1874).
-    try XCTSkipIf(
-      isKeyboardVisible(app: app),
-      "software keyboard is up: this simulator cannot exercise the hidden-keyboard responder path"
-    )
-
-    let failureCountBefore = currentXCTestFailureCount()
-    let typeCommand = try runnerCommandFixture(
-      #"{"command":"type","commandId":"type-hardware-keyboard","text":"hardware-keyboard"}"#
-    )
-    let typeResponse = executeTypeCommand(activeApp: app, command: typeCommand)
-
-    XCTAssertTrue(typeResponse.ok, String(describing: typeResponse.error))
-    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
-    XCTAssertEqual(typeResponse.data?.textEntryRoute, "synthesized-first-responder")
-    XCTAssertEqual(String(describing: textField.value ?? ""), "hardware-keyboard")
-
-    let secondFailureCountBefore = currentXCTestFailureCount()
-    let secondTypeCommand = try runnerCommandFixture(
-      #"{"command":"type","commandId":"type-hardware-keyboard-again","text":"-again"}"#
-    )
-    let secondTypeResponse = executeTypeCommand(activeApp: app, command: secondTypeCommand)
-
-    XCTAssertFalse(secondTypeResponse.ok)
-    XCTAssertEqual(secondTypeResponse.error?.code, "TEXT_INPUT_NOT_FOCUSED")
-    XCTAssertFalse(didRecordXCTestFailure(since: secondFailureCountBefore))
-    XCTAssertEqual(String(describing: textField.value ?? ""), "hardware-keyboard")
-  }
-
-  // `waitForTextEntryReadiness`'s hardware-keyboard fallback returns early only on confirmed
-  // focus (#1874), and `keyboardFocusConfirmed` reads that from the app-wide focus predicate this
-  // bundle otherwise refuses to trust. Two XCTest facts it rests on, neither a repository
-  // invariant: the predicate reports a responder that shows NO software keyboard at all, and it
-  // names the element well enough to tell the tapped field from another one. The fixture field is
-  // the exact shape the fallback exists for — a real responder with an empty `inputView` — so this
-  // is where both are observable. If either regressed, readiness would silently stop taking the
-  // fallback and spend the full readinessTimeout on every hardware-keyboard field, which no other
-  // assertion would notice.
-  func testHardwareKeyboardResponderConfirmsItsOwnKeyboardFocus() throws {
-    app.launchArguments = ["--agent-device-text-entry-regression"]
-    app.launch()
-    defer {
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      app.terminate()
-    }
-    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
-
-    let textField = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
-    let otherElement = app.staticTexts["Agent Device Runner"]
-    XCTAssertTrue(otherElement.waitForExistence(timeout: appExistenceTimeout))
-    XCTAssertFalse(
-      keyboardFocusConfirmed(app: app, element: textField),
-      "an untapped field must not confirm focus, or the fallback would fire immediately"
-    )
-
-    let tapCommand = try runnerCommandFixture(
-      #"{"command":"tap","commandId":"tap-focus-confirmation","selectorKey":"id","selectorValue":"agent-device-hardware-keyboard-input"}"#
-    )
-    let tapResponse = try executeOnMainPrepared(command: tapCommand, activeApp: app)
-    XCTAssertTrue(tapResponse.ok, String(describing: tapResponse.error))
-    try XCTSkipIf(
-      isKeyboardVisible(app: app),
-      "software keyboard is up: this simulator cannot exercise the hidden-keyboard responder path"
-    )
-
-    let deadline = Date().addingTimeInterval(TextEntryTiming.readinessTimeout)
-    var confirmed = keyboardFocusConfirmed(app: app, element: textField)
-    while !confirmed && Date() < deadline {
-      sleepFor(TextEntryTiming.pollInterval)
-      confirmed = keyboardFocusConfirmed(app: app, element: textField)
-    }
-    XCTAssertTrue(confirmed, "a tapped responder must confirm its own keyboard focus")
-    XCTAssertFalse(
-      keyboardFocusConfirmed(app: app, element: otherElement),
-      "focus held by another element must read as a refusal, never as this element's focus"
-    )
-  }
-
-  func testBareDelayedTypeFailsWhenTappedInputDisappearsMidCommand() throws {
-    app.launchArguments = [
-      "--agent-device-text-entry-regression",
-      "--agent-device-text-entry-disappear-after-input",
-    ]
-    app.launch()
-    defer {
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      app.terminate()
-    }
-    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
-
-    let textField = app.textFields["agent-device-hardware-keyboard-input"]
-    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
-    let tapCommand = try runnerCommandFixture(
-      #"{"command":"tap","commandId":"tap-disappearing-input","selectorKey":"id","selectorValue":"agent-device-hardware-keyboard-input"}"#
-    )
-    let tapResponse = try executeOnMainPrepared(command: tapCommand, activeApp: app)
-    XCTAssertTrue(tapResponse.ok, String(describing: tapResponse.error))
-
-    let failureCountBefore = currentXCTestFailureCount()
-    let typeCommand = try runnerCommandFixture(
-      #"{"command":"type","commandId":"type-disappearing-input","text":"ab","delayMs":50}"#
-    )
-    let typeResponse = executeTypeCommand(activeApp: app, command: typeCommand)
-
-    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
-    XCTAssertFalse(typeResponse.ok)
-    XCTAssertEqual(typeResponse.error?.code, "TEXT_INPUT_NOT_FOCUSED")
-    XCTAssertFalse(textField.exists)
-  }
-#endif
-
-  func testInjectedTapRecordedFailureGateIsTapOnlyAndCountGated() {
-    // The seam's recording side cannot run in-bundle (a real XCTIssue would
-    // fail this very test run — same constraint the record(_:) suppression
-    // tests document); the live daemon proof covers it. This pins the gate.
-    XCTAssertFalse(RunnerTests.shouldInjectTapRecordedFailure(command: .tap, remaining: 0))
-    XCTAssertTrue(RunnerTests.shouldInjectTapRecordedFailure(command: .tap, remaining: 1))
-    XCTAssertFalse(RunnerTests.shouldInjectTapRecordedFailure(command: .type, remaining: 1))
-    XCTAssertFalse(RunnerTests.shouldInjectTapRecordedFailure(command: .snapshot, remaining: 1))
-  }
-
-  func testXCTestRecordedFailureResponseFailsMutatingSuccesses() throws {
-    let command = try runnerCommandFixture(#"{"command":"tap","commandId":"tap-1"}"#)
-    let response = Response(ok: true, data: DataPayload(message: "tapped"))
-
-    let failureResponse = xctestRecordedFailureResponse(command: command, response: response)
-
-    XCTAssertEqual(failureResponse?.ok, false)
-    XCTAssertEqual(failureResponse?.error?.code, "XCTEST_RECORDED_FAILURE")
-    XCTAssertEqual(
-      failureResponse?.error?.message,
-      "XCTest recorded a failure while executing tap; the action may not have been performed."
-    )
-  }
-
-  func testXCTestRecordedFailureResponseDoesNotWrapReadOnlyOrRunnerFatalResponses() throws {
-    let snapshotCommand = try runnerCommandFixture(#"{"command":"snapshot","commandId":"snapshot-1"}"#)
-    let tapCommand = try runnerCommandFixture(#"{"command":"tap","commandId":"tap-1"}"#)
-    let runnerFatalResponse = Response(
-      ok: true,
-      data: DataPayload(runnerFatal: true, runnerFatalReason: "ax_snapshot_unavailable")
-    )
-
-    XCTAssertNil(
-      xctestRecordedFailureResponse(
-        command: snapshotCommand,
-        response: Response(ok: true, data: DataPayload(nodes: [], truncated: false))
-      )
-    )
-    XCTAssertNil(xctestRecordedFailureResponse(command: tapCommand, response: runnerFatalResponse))
-  }
-
-  // Simulator-only from here to the matching #endif: these launch the host app, route through
-  // SpringBoard, or assert the iOS-only alert/system-modal branches. Tests outside the
-  // `os(iOS)` regions in this file are pure runner decisions and also run on the macOS host
-  // lane (ci.yml) — see the classification convention in RunnerTests.swift.
-#if os(iOS)
-  func testMissingBundleCommandInvalidatesCompleteCachedTargetState() throws {
-    app.launch()
-    currentApp = app
-    currentBundleId = "com.example.stale-target"
-    currentAppProcessIdentifier = 42
-    snapshotXCTestPenaltyWarmupExemptionPending = true
-    defer {
-      invalidateCachedTarget(reason: "unit_test_cleanup")
-      app.terminate()
-    }
-    let command = try runnerCommandFixture(
-      #"{"command":"snapshot","commandId":"snapshot-without-bundle"}"#
-    )
-
-    _ = prepareActiveCommandContext(command: command)
-
-    XCTAssertNil(currentApp)
-    XCTAssertNil(currentBundleId)
-    XCTAssertNil(currentAppProcessIdentifier)
-    XCTAssertFalse(snapshotXCTestPenaltyWarmupExemptionPending)
-  }
-
-  func testSkipAppActivationPreflightIncludesForegroundCachedCoordinateOnlyTaps() throws {
-    app.launch()
-    currentApp = app
-    currentBundleId = nil
-    defer {
-      currentApp = nil
-      currentBundleId = nil
-      app.terminate()
-    }
-    let tap = try runnerCommandFixture(
-      #"{"command":"tap","commandId":"tap-1","x":10,"y":20}"#
-    )
-
-    XCTAssertTrue(shouldSkipAppActivationPreflight(tap))
-  }
-
-  func testSkipAppActivationPreflightRejectsMissingChangedAndBackgroundTargets() throws {
-    let coordinateTap = try runnerCommandFixture(
-      #"{"command":"tap","commandId":"tap-1","x":10,"y":20}"#
-    )
-    currentApp = nil
-    currentBundleId = nil
-    XCTAssertFalse(shouldSkipAppActivationPreflight(coordinateTap))
-
-    app.launch()
-    currentApp = app
-    currentBundleId = "com.example.current"
-    defer {
-      currentApp = nil
-      currentBundleId = nil
-      app.terminate()
-    }
-    let changedBundleTap = try runnerCommandFixture(
-      #"{"command":"tap","commandId":"tap-2","appBundleId":"com.example.other","x":10,"y":20}"#
-    )
-
-    XCTAssertFalse(shouldSkipAppActivationPreflight(changedBundleTap))
-
-    app.terminate()
-    currentApp = app
-    currentBundleId = nil
-
-    XCTAssertFalse(shouldSkipAppActivationPreflight(coordinateTap))
-  }
-
-  func testPrepareActiveCommandContextRoutesBlockingSystemModalToSpringboard() throws {
-    blockingSystemModalPresenceOverrideForTesting = true
-    currentApp = nil
-    currentBundleId = nil
-    defer {
-      blockingSystemModalPresenceOverrideForTesting = nil
-      currentApp = nil
-      currentBundleId = nil
-    }
-    let tap = try runnerCommandFixture(
-      #"{"command":"tap","commandId":"tap-1","x":10,"y":20}"#
-    )
-
-    let preparation = prepareActiveCommandContext(
-      command: tap,
-      routeToSpringboard: shouldRouteToSpringboardBlockingSystemModal(tap)
-    )
-
-    guard case .context(let context) = preparation else {
-      XCTFail("expected command context")
-      return
-    }
-    XCTAssertTrue(context.app === springboard)
-  }
-
-  func testExecuteDispatchedReturnsBusyBeforeBlockingSystemModalProbeDrains() throws {
-    app.launch()
-    currentApp = app
-    currentBundleId = nil
-    defer {
-      currentApp = nil
-      currentBundleId = nil
-      systemModalProbeOverrideForTesting = nil
-      clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
-      app.terminate()
-    }
-
-    final class ResultBox {
-      var response: Response?
-      var error: Error?
-      var commandRecoveredBeforeRelease = false
-      var wasBusyBeforeRelease = false
-      var hadAbandonedProbeBeforeRelease = false
-      var drained = false
-    }
-    let box = ResultBox()
-    let probeStarted = expectation(description: "system-modal routing probe started")
-    let verificationFinished = expectation(description: "command recovery and modal probe drain verified")
-    let probeReleaseGate = DispatchSemaphore(value: 0)
-    let commandFinishedGate = DispatchSemaphore(value: 0)
-    systemModalProbeOverrideForTesting = { _ in
-      probeStarted.fulfill()
-      _ = probeReleaseGate.wait(timeout: .now() + 15)
-      return DataPayload(message: "late system modal")
-    }
-
-    let command = try runnerCommandFixture(
-      #"{"command":"tap","commandId":"bounded-modal-routing","x":10,"y":20}"#
-    )
-    DispatchQueue(label: "agent-device.runner.tests.modal-routing-probe").async {
-      do {
-        box.response = try self.executeDispatched(command: command)
-      } catch {
-        box.error = error
-      }
-      commandFinishedGate.signal()
-    }
-    DispatchQueue(label: "agent-device.runner.tests.modal-routing-probe-verifier").async {
-      let commandWait = commandFinishedGate.wait(
-        timeout: .now() + self.systemModalProbeBudget + 3
-      )
-      box.commandRecoveredBeforeRelease = commandWait == .success
-        && box.error == nil
-        && box.response?.error?.code == "RUNNER_BUSY"
-      if case .busy = self.currentMainThreadBusyState() {
-        box.wasBusyBeforeRelease = true
-      }
-      box.hadAbandonedProbeBeforeRelease = self.hasAbandonedTreeCapture()
-
-      // The XCTest main thread is blocked inside the injected probe, so this verifier owns the
-      // ordered release after recording the command result and abandoned-work state above.
-      probeReleaseGate.signal()
-      let deadline = Date().addingTimeInterval(5)
-      while self.hasAbandonedTreeCapture(), Date() < deadline {
-        self.sleepFor(0.002)
-      }
-      box.drained = !self.hasAbandonedTreeCapture()
-      verificationFinished.fulfill()
-    }
-
-    wait(for: [probeStarted, verificationFinished], timeout: 15)
-    XCTAssertTrue(
-      box.commandRecoveredBeforeRelease,
-      "the public coordinate tap must return RUNNER_BUSY before the blocked modal probe drains"
-    )
-    XCTAssertTrue(box.wasBusyBeforeRelease)
-    XCTAssertTrue(box.hadAbandonedProbeBeforeRelease)
-    XCTAssertTrue(box.drained)
-    guard case .idle = currentMainThreadBusyState() else {
-      return XCTFail("expected the runner to become idle after the routing probe drained")
-    }
-    XCTAssertFalse(hasAbandonedTreeCapture())
-  }
-
-  func testSkipAppActivationPreflightRejectsSelectorAndMixedSequenceGestures() throws {
-    app.launch()
-    currentApp = app
-    currentBundleId = nil
-    defer {
-      currentApp = nil
-      currentBundleId = nil
-      app.terminate()
-    }
-    let selectorTap = try runnerCommandFixture(
-      #"{"command":"tap","commandId":"tap-1","selectorKey":"label","selectorValue":"Search","synthesized":true}"#
-    )
-    let standardDrag = try runnerCommandFixture(
-      #"{"command":"drag","commandId":"drag-1","x":10,"y":20,"x2":30,"y2":40}"#
-    )
-    let mixedSequence = try runnerCommandFixture(
-      """
-      {"command":"sequence","commandId":"seq-1","steps":[
-        {"kind":"tap","x":10,"y":20,"synthesized":true},
-        {"kind":"doubleTap","x":30,"y":40}
-      ]}
-      """
-    )
-
-    XCTAssertFalse(shouldSkipAppActivationPreflight(selectorTap))
-    XCTAssertFalse(shouldSkipAppActivationPreflight(standardDrag))
-    XCTAssertFalse(shouldSkipAppActivationPreflight(mixedSequence))
-  }
-
-  // Launches nothing, but still simulator-only: `shouldSkipAppActivationPreflight` is
-  // `#if os(iOS) …guards… #else return false #endif`, so on macOS this asserts a compile-time
-  // literal and no edit to the iOS body could make it red. Its five siblings above and below
-  // are gated for the same reason.
-  func testSkipAppActivationPreflightRequiresCachedForegroundTarget() throws {
-    currentApp = nil
-    currentBundleId = nil
-    let scroll = try runnerCommandFixture(
-      #"{"command":"scroll","commandId":"scroll-1","direction":"down","pixels":400}"#
-    )
-
-    XCTAssertFalse(shouldSkipAppActivationPreflight(scroll))
-  }
-
-  func testSkipAppActivationPreflightKeepsDragScrollAndSequenceOnForegroundGuard() throws {
-    app.launch()
-    currentApp = app
-    currentBundleId = nil
-    defer {
-      currentApp = nil
-      currentBundleId = nil
-      app.terminate()
-    }
-    let drag = try runnerCommandFixture(
-      #"{"command":"drag","commandId":"drag-1","x":10,"y":20,"x2":30,"y2":40,"synthesized":true}"#
-    )
-    let scroll = try runnerCommandFixture(
-      #"{"command":"scroll","commandId":"scroll-1","direction":"down","pixels":400}"#
-    )
-    let sequence = try runnerCommandFixture(
-      """
-      {"command":"sequence","commandId":"seq-1","steps":[
-        {"kind":"tap","x":10,"y":20,"synthesized":true},
-        {"kind":"longPress","x":10,"y":200,"durationMs":300}
-      ]}
-      """
-    )
-
-    XCTAssertFalse(shouldSkipAppActivationPreflight(drag))
-    XCTAssertFalse(shouldSkipAppActivationPreflight(scroll))
-    XCTAssertFalse(shouldSkipAppActivationPreflight(sequence))
-  }
-
-  func testSkipAppActivationPreflightIncludesAlertCommands() throws {
-    let alert = try runnerCommandFixture(
-      #"{"command":"alert","commandId":"alert-1","action":"get"}"#
-    )
-
-    XCTAssertTrue(shouldSkipAppActivationPreflight(alert))
-  }
-#endif
-
-  func testExecuteDispatchedReturnsBusyBeforeMainThreadFastPath() throws {
-    let command = try runnerCommandFixture(#"{"command":"snapshot","commandId":"snapshot-busy"}"#)
-    abandonedMainThreadWorkCount = 1
-    abandonedMainThreadWorkSince = Date(timeIntervalSinceNow: -2)
-    defer {
-      abandonedMainThreadWorkCount = 0
-      abandonedMainThreadWorkSince = nil
-    }
-
-    let response = try executeDispatched(command: command)
-
-    XCTAssertFalse(response.ok)
-    XCTAssertEqual(response.error?.code, "RUNNER_BUSY")
-    XCTAssertTrue(response.error?.message.contains("previous command") == true)
-  }
-
-  func testExecuteDispatchedReturnsWedgedBeforeMainThreadFastPath() throws {
-    let command = try runnerCommandFixture(#"{"command":"snapshot","commandId":"snapshot-wedged"}"#)
-    abandonedMainThreadWorkCount = 1
-    abandonedMainThreadWorkSince = Date(timeIntervalSinceNow: -(mainThreadWedgeThreshold + 1))
-    defer {
-      abandonedMainThreadWorkCount = 0
-      abandonedMainThreadWorkSince = nil
-    }
-
-    let response = try executeDispatched(command: command)
-
-    XCTAssertFalse(response.ok)
-    XCTAssertEqual(response.error?.code, "RUNNER_WEDGED")
-    XCTAssertTrue(response.error?.hint?.contains("runner session will be restarted") == true)
-  }
-
-#if os(iOS)
-  func testAlertResolutionCannotBypassRequestedDeadline() throws {
-    final class ResultBox {
-      var error: Error?
-      var probeDeadline: Date?
-      var observedDeadline: Date?
-      var commandStartedAt: Date?
-    }
-    let box = ResultBox()
-    let releaseResolution = DispatchSemaphore(value: 0)
-    let resolutionExited = expectation(description: "bounded alert resolution exited")
-    let commandFinished = expectation(description: "alert command respected its deadline")
-    let command = try runnerCommandFixture(
-      #"{"command":"alert","commandId":"alert-deadline","appBundleId":"com.apple.springboard","action":"get","timeoutMs":500}"#
-    )
-    currentApp = springboard
-    currentBundleId = Self.springboardBundleId
-    systemModalProbeOverrideForTesting = { deadline in
-      box.probeDeadline = deadline
-      return nil
-    }
-    alertResolutionOverrideForTesting = { deadline in
-      box.observedDeadline = deadline
-      _ = releaseResolution.wait(timeout: .now() + 1)
-      resolutionExited.fulfill()
-      return nil
-    }
-    defer {
-      releaseResolution.signal()
-      systemModalProbeOverrideForTesting = nil
-      alertResolutionOverrideForTesting = nil
-      currentApp = nil
-      currentBundleId = nil
-    }
-
-    DispatchQueue(label: "agent-device.runner.tests.alert-deadline").async {
-      box.commandStartedAt = Date()
-      do {
-        _ = try self.executeDispatched(command: command)
-      } catch {
-        box.error = error
-      }
-      commandFinished.fulfill()
-    }
-
-    wait(for: [commandFinished], timeout: 1)
-    let error = box.error as NSError?
-    XCTAssertEqual(error?.domain, RunnerErrorDomain.general)
-    XCTAssertEqual(error?.code, RunnerErrorCode.mainThreadExecutionTimedOut)
-    XCTAssertNotNil(box.probeDeadline)
-    XCTAssertNotNil(box.observedDeadline)
-    if let probeDeadline = box.probeDeadline,
-      let observedDeadline = box.observedDeadline,
-      let commandStartedAt = box.commandStartedAt
-    {
-      XCTAssertEqual(probeDeadline.timeIntervalSince(observedDeadline), 0, accuracy: 0.01)
-      XCTAssertEqual(observedDeadline.timeIntervalSince(commandStartedAt), 0.5, accuracy: 0.05)
-    }
-
-    releaseResolution.signal()
-    wait(for: [resolutionExited], timeout: 1)
-  }
-#endif
-
-  func testRunMainThreadWorkExecutesOffMainCallerOnMainThread() {
-    final class ResultBox {
-      var observedMainThread: Bool?
-      var error: Error?
-    }
-    let box = ResultBox()
-    let finished = expectation(description: "off-main caller finished")
-
-    DispatchQueue(label: "agent-device.runner.tests.off-main").async {
-      do {
-        box.observedMainThread = try self.runMainThreadWork(
-          timeout: 1,
-          timeoutError: self.mainThreadExecutionTimeoutError
-        ) {
-          Thread.isMainThread
-        }
-      } catch {
-        box.error = error
-      }
-      finished.fulfill()
-    }
-
-    wait(for: [finished], timeout: 2)
-    XCTAssertNil(box.error)
-    XCTAssertEqual(box.observedMainThread, true)
-  }
-
-  func testRunMainThreadWorkTimeoutMarksAbandonedUntilDrained() {
-    final class ResultBox {
-      var error: Error?
-      var abandonedCount: Int?
-      var abandonedSinceSet: Bool?
-      var drainedCount: Int?
-      var drainedSinceCleared: Bool?
-    }
-    let box = ResultBox()
-    let releaseWork = DispatchSemaphore(value: 0)
-    let observedAbandoned = DispatchSemaphore(value: 0)
-    let finished = expectation(description: "off-main caller timed out")
-    let drained = expectation(description: "abandoned main work drained")
-
-    DispatchQueue(label: "agent-device.runner.tests.timeout").async {
-      do {
-        _ = try self.runMainThreadWork(
-          timeout: 0,
-          timeoutError: self.mainThreadExecutionTimeoutError,
-          onAbandoned: {
-            box.abandonedCount = self.abandonedMainThreadWorkCount
-            box.abandonedSinceSet = self.abandonedMainThreadWorkSince != nil
-            observedAbandoned.signal()
-          },
-          onDrained: {
-            self.mainThreadWorkLock.lock()
-            box.drainedCount = self.abandonedMainThreadWorkCount
-            box.drainedSinceCleared = self.abandonedMainThreadWorkSince == nil
-            self.mainThreadWorkLock.unlock()
-            drained.fulfill()
-          }
-        ) {
-          _ = releaseWork.wait(timeout: .now() + 1)
-          return true
-        }
-      } catch {
-        box.error = error
-      }
-      finished.fulfill()
-    }
-
-    DispatchQueue(label: "agent-device.runner.tests.release-timeout").async {
-      _ = observedAbandoned.wait(timeout: .now() + 1)
-      releaseWork.signal()
-    }
-
-    wait(for: [finished, drained], timeout: 2)
-    XCTAssertEqual((box.error as NSError?)?.code, RunnerErrorCode.mainThreadExecutionTimedOut)
-    XCTAssertEqual(box.abandonedCount, 1)
-    XCTAssertEqual(box.abandonedSinceSet, true)
-    XCTAssertEqual(box.drainedCount, 0)
-    XCTAssertEqual(box.drainedSinceCleared, true)
-  }
-
-  func testPostSnapshotDelayMarkDoesNotQueueBehindAbandonedTreeCapture() {
-    abandonedTreeCaptureCount = 1
-    defer {
-      abandonedTreeCaptureCount = 0
-      needsPostSnapshotInteractionDelay = false
-    }
-
-    let finished = expectation(description: "off-main caller finished")
-    DispatchQueue(label: "agent-device.runner.tests.post-snapshot-delay").async {
-      self.setNeedsPostSnapshotInteractionDelay()
-      finished.fulfill()
-    }
-
-    wait(for: [finished], timeout: 1)
-    mainThreadWorkLock.lock()
-    let abandonedWorkCount = abandonedMainThreadWorkCount
-    mainThreadWorkLock.unlock()
-    XCTAssertEqual(abandonedWorkCount, 0)
-  }
-#endif
-
-#if AGENT_DEVICE_RUNNER_UNIT_TESTS
-  func execute(command: Command) throws -> Response {
-    if command.command == .status {
-      return executeStatus(command: command)
-    }
-    if command.command == .uptime {
-      return executeUptime()
-    }
-    commandJournal.accept(command: command)
-    return try executeAccepted(command: command)
-  }
-#endif
-
-  func executeAccepted(command: Command) throws -> Response {
-    commandJournal.start(command: command)
-    do {
-      let response = try executeDispatched(command: command)
-      commandJournal.finish(command: command, response: response)
-      return response
-    } catch {
-      commandJournal.fail(command: command, error: error)
-      throw error
-    }
-  }
-
-  func executeStatus(command: Command) -> Response {
-    guard
-      let statusCommandId = command.statusCommandId?.trimmedNonEmpty
-    else {
-      return Response(
-        ok: false,
-        error: ErrorPayload(
-          code: "INVALID_ARGS",
-          message: "status requires statusCommandId",
-          hint: "Set statusCommandId to the commandId of the runner command to inspect."
-        )
-      )
-    }
-    return Response(ok: true, data: commandJournal.status(normalizedCommandId: statusCommandId))
-  }
-
-  func executeUptime() -> Response {
-    // Placeholder value: the transport layer (jsonResponse) overwrites currentUptimeMs with a
-    // fresher send-time stamp on every ok response; kept so direct callers still get a value.
-    Response(
-      ok: true,
-      data: DataPayload(currentUptimeMs: currentUptimeMs())
-    )
-  }
-
-  /// Tracks one main-queue dispatch so the watchdog and the dispatched block can agree —
-  /// under `mainThreadWorkLock` — on exactly one of: finished in time, or abandoned.
-  private final class MainThreadWorkState {
-    var finished = false
-    var abandoned = false
-  }
-
-  struct ActiveCommandContext {
-    let app: XCUIApplication
-  }
-
-  enum ActiveCommandPreparation {
-    case response(Response)
-    case context(ActiveCommandContext)
-  }
-
-  enum MainThreadBusyState {
-    case idle
-    case busy(abandonedForSeconds: TimeInterval)
-    case wedged(abandonedForSeconds: TimeInterval)
-  }
-
-  func currentMainThreadBusyState() -> MainThreadBusyState {
-    mainThreadWorkLock.lock()
-    defer { mainThreadWorkLock.unlock() }
-    guard abandonedMainThreadWorkCount > 0 else { return .idle }
-    let abandonedFor = abandonedMainThreadWorkSince.map { Date().timeIntervalSince($0) } ?? 0
-    if abandonedFor > mainThreadWedgeThreshold {
-      return .wedged(abandonedForSeconds: abandonedFor)
-    }
-    return .busy(abandonedForSeconds: abandonedFor)
-  }
-
-  private func runnerBusyResponse(command: Command, abandonedForSeconds: TimeInterval) -> Response {
-    NSLog(
-      "AGENT_DEVICE_RUNNER_BUSY command=%@ commandId=%@ abandonedForSeconds=%.1f",
-      command.command.rawValue,
-      command.commandId ?? "",
-      abandonedForSeconds
-    )
-    return Response(
-      ok: false,
-      error: ErrorPayload(
-        code: "RUNNER_BUSY",
-        message:
-          "The iOS runner is still finishing a previous command that exceeded its execution watchdog (usually an accessibility capture on a heavy or animating screen).",
-        hint:
-          "Wait a few seconds and retry. If snapshots keep failing on this screen, use screenshot as visual truth and interact by coordinates, or navigate to another screen."
-      )
-    )
-  }
-
-  private func runnerWedgedResponse(command: Command, abandonedForSeconds: TimeInterval) -> Response {
-    NSLog(
-      "AGENT_DEVICE_RUNNER_WEDGED command=%@ commandId=%@ abandonedForSeconds=%.1f",
-      command.command.rawValue,
-      command.commandId ?? "",
-      abandonedForSeconds
-    )
-    return Response(
-      ok: false,
-      error: ErrorPayload(
-        code: "RUNNER_WEDGED",
-        message:
-          "The iOS runner main thread has been stuck in abandoned work for \(Int(abandonedForSeconds)) seconds and cannot recover on its own.",
-        hint:
-          "The runner session will be restarted. Retry the command after the restart; if this screen keeps wedging captures, use screenshot as visual truth and interact by coordinates."
-      )
-    )
-  }
-
-  private func runnerUnavailableResponse(command: Command) -> Response? {
-    switch currentMainThreadBusyState() {
-    case .idle:
-      return nil
-    case .busy(let abandonedForSeconds):
-      return runnerBusyResponse(command: command, abandonedForSeconds: abandonedForSeconds)
-    case .wedged(let abandonedForSeconds):
-      return runnerWedgedResponse(command: command, abandonedForSeconds: abandonedForSeconds)
-    }
-  }
-
-  private func executeDispatched(command: Command) throws -> Response {
-    // XCTest work cannot be cancelled mid-flight: once the watchdog abandons a main-queue
-    // block, queueing more main-thread commands behind it only buries the runner deeper.
-    // Refuse fast instead so the daemon backs off while the abandoned work drains; past the
-    // wedge threshold, escalate so the daemon recycles this runner (#1105).
-    if let unavailable = runnerUnavailableResponse(command: command) {
-      return unavailable
-    }
-    let alertDeadline = command.command == .alert
-      ? Date().addingTimeInterval(Self.alertCommandTimeout(timeoutMs: command.timeoutMs))
-      : nil
-    if Thread.isMainThread {
-      let routeToSpringboard = shouldRouteToSpringboardBlockingSystemModal(
-        command,
-        deadline: alertDeadline
-      )
-      return try executeOnMainSafely(
-        command: command,
-        alertDeadline: alertDeadline,
-        routeToSpringboard: routeToSpringboard
-      )
-    }
-    // Resolve this before the command's outer main-thread block. If the bounded probe abandons
-    // slow XCTest enumeration, return the established recoverable response instead of queueing
-    // command preparation behind work that may outlive the 30-second command watchdog.
-    let routeToSpringboard = shouldRouteToSpringboardBlockingSystemModal(
-      command,
-      deadline: alertDeadline
-    )
-    if let unavailable = runnerUnavailableResponse(command: command) {
-      return unavailable
-    }
-    if command.command == .snapshot {
-      return try executeSnapshotDispatched(command: command)
-    }
-    if command.command == .alert, let deadline = alertDeadline {
-      return try runMainThreadWork(
-        timeout: max(0.001, deadline.timeIntervalSinceNow),
-        timeoutError: mainThreadExecutionTimeoutError
-      ) {
-        try self.executeOnMainSafely(
-          command: command,
-          alertDeadline: deadline,
-          routeToSpringboard: routeToSpringboard
-        )
-      }
-    }
-    return try runMainThreadWork(
-      timeout: mainThreadExecutionTimeout,
-      timeoutError: mainThreadExecutionTimeoutError
-    ) {
-      try self.executeOnMainSafely(command: command, routeToSpringboard: routeToSpringboard)
-    }
-  }
-
-  func runMainThreadWork<T>(
-    timeout: TimeInterval,
-    timeoutError: @escaping () -> Error,
-    onAbandoned: (() -> Void)? = nil,
-    onDrained: (() -> Void)? = nil,
-    _ work: @escaping () throws -> T
-  ) throws -> T {
-    if Thread.isMainThread {
-      return try work()
-    }
-    var result: Result<T, Error>?
-    let semaphore = DispatchSemaphore(value: 0)
-    let workState = MainThreadWorkState()
-    DispatchQueue.main.async {
-      do {
-        result = .success(try work())
-      } catch {
-        result = .failure(error)
-      }
-      self.mainThreadWorkLock.lock()
-      if workState.abandoned {
-        self.abandonedMainThreadWorkCount -= 1
-        if self.abandonedMainThreadWorkCount == 0 {
-          self.abandonedMainThreadWorkSince = nil
-          NSLog("AGENT_DEVICE_RUNNER_ABANDONED_WORK_DRAINED")
-        }
-        self.mainThreadWorkLock.unlock()
-        onDrained?()
-      } else {
-        workState.finished = true
-        self.mainThreadWorkLock.unlock()
-      }
-      semaphore.signal()
-    }
-    let waitResult = semaphore.wait(timeout: .now() + timeout)
-    if waitResult == .timedOut {
-      mainThreadWorkLock.lock()
-      let stillRunning = !workState.finished
-      if stillRunning {
-        workState.abandoned = true
-        abandonedMainThreadWorkCount += 1
-        if abandonedMainThreadWorkSince == nil {
-          abandonedMainThreadWorkSince = Date()
-        }
-        onAbandoned?()
-      }
-      mainThreadWorkLock.unlock()
-      throw timeoutError()
-    }
-    switch result {
-    case .success(let value):
-      return value
-    case .failure(let error):
-      throw error
-    case .none:
-      throw NSError(
-        domain: RunnerErrorDomain.general,
-        code: RunnerErrorCode.noResponseFromMainThread,
-        userInfo: [NSLocalizedDescriptionKey: "no response from main thread"]
-      )
-    }
-  }
-
-  private func mainThreadExecutionTimeoutError() -> Error {
-    NSError(
-      domain: RunnerErrorDomain.general,
-      code: RunnerErrorCode.mainThreadExecutionTimedOut,
-      userInfo: [NSLocalizedDescriptionKey: "main thread execution timed out"]
-    )
-  }
-
-  // MARK: - Command Handling
-
-  private func executeOnMainSafely(
-    command: Command,
-    alertDeadline: Date? = nil,
-    routeToSpringboard: Bool
-  ) throws -> Response {
-    var hasRetried = false
-    while true {
-      var response: Response?
-      var swiftError: Error?
-      let failureCountBefore = currentXCTestFailureCount()
-      let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
-        do {
-          response = try self.executeOnMain(
-            command: command,
-            alertDeadline: alertDeadline,
-            routeToSpringboard: routeToSpringboard
-          )
-        } catch {
-          swiftError = error
-        }
-      })
-
-      if let exceptionMessage {
-        invalidateCachedTarget(reason: "objc_exception")
-        if !hasRetried, shouldRetryException(command, message: exceptionMessage) {
-          NSLog(
-            "AGENT_DEVICE_RUNNER_RETRY command=%@ reason=objc_exception",
-            command.command.rawValue
-          )
-          hasRetried = true
-          sleepFor(retryCooldown)
-          continue
-        }
-        throw NSError(
-          domain: RunnerErrorDomain.exception,
-          code: RunnerErrorCode.objcException,
-          userInfo: [NSLocalizedDescriptionKey: exceptionMessage]
-        )
-      }
-      if let swiftError {
-        throw swiftError
-      }
-      guard let response else {
-        throw NSError(
-          domain: RunnerErrorDomain.general,
-          code: RunnerErrorCode.commandReturnedNoResponse,
-          userInfo: [NSLocalizedDescriptionKey: "command returned no response"]
-        )
-      }
-#if AGENT_DEVICE_RUNNER_UNIT_TESTS
-      // #1605 merge gate: the REAL gesture already executed above; recording a
-      // production-shaped issue here makes the per-command failure-count
-      // conversion below fire exactly as in the field (bsky-24: activation
-      // lands, bookkeeping records a failure). Compiled out of production.
-      if consumeInjectedTapRecordedFailureForTesting(command: command.command) {
-        record(
-          XCTIssue(
-            type: .assertionFailure,
-            compactDescription: "Injected tap recorded-failure (#1605 corroboration merge gate)"
-          )
-        )
-      }
-#endif
-      if didRecordXCTestFailure(since: failureCountBefore),
-        let failureResponse = xctestRecordedFailureResponse(command: command, response: response)
-      {
-        invalidateCachedTarget(reason: "xctest_recorded_failure")
-        return failureResponse
-      }
-      if !hasRetried, shouldRetryCommand(command), shouldRetryResponse(response) {
-        NSLog(
-          "AGENT_DEVICE_RUNNER_RETRY command=%@ reason=response_unavailable",
-          command.command.rawValue
-        )
-        hasRetried = true
-        invalidateCachedTarget(reason: "response_unavailable")
-        sleepFor(retryCooldown)
-        continue
-      }
-      return response
-    }
-  }
-
-  private func executeSnapshotDispatched(command: Command) throws -> Response {
-    try executeDispatchedWithRecovery(command: command) {
-      try self.executeSnapshotDispatchedOnce(command: command)
-    }
-  }
-
-  /// The dispatched snapshot recovery loop: read-only retry + XCTest-recorded-failure invalidation,
-  /// matching what `executeOnMainSafely` gives the generic path. `perform` runs the capture and its
-  /// own bounded main-thread work.
-  func executeDispatchedWithRecovery(
-    command: Command,
-    perform: () throws -> Response
-  ) throws -> Response {
-    var hasRetried = false
-    while true {
-      let failureCountBefore = try runMainThreadWork(
-        timeout: mainThreadExecutionTimeout,
-        timeoutError: mainThreadExecutionTimeoutError
-      ) {
-        self.currentXCTestFailureCount()
-      }
-      let response = try perform()
-      // Recovered independently — re-entering main for bookkeeping would queue behind the still-
-      // abandoned XCTest query and re-stall the command (#1244), so skip it until that work drains.
-      if hasAbandonedTreeCapture() {
-        NSLog(
-          "AGENT_DEVICE_RUNNER_DISPATCH_RECOVERY_SKIPPED_XCTEST_OCCUPIED command=%@",
-          command.command.rawValue
-        )
-        return response
-      }
-      let recordedFailureResponse = try runMainThreadWork(
-        timeout: mainThreadExecutionTimeout,
-        timeoutError: mainThreadExecutionTimeoutError
-      ) {
-        self.didRecordXCTestFailure(since: failureCountBefore)
-          ? self.xctestRecordedFailureResponse(command: command, response: response)
-          : nil
-      }
-      if let recordedFailureResponse {
-        try runMainThreadWork(
-          timeout: mainThreadExecutionTimeout,
-          timeoutError: mainThreadExecutionTimeoutError
-        ) {
-          self.invalidateCachedTarget(reason: "xctest_recorded_failure")
-        }
-        return recordedFailureResponse
-      }
-      if !hasRetried, shouldRetryCommand(command), shouldRetryResponse(response) {
-        NSLog(
-          "AGENT_DEVICE_RUNNER_RETRY command=%@ reason=response_unavailable",
-          command.command.rawValue
-        )
-        hasRetried = true
-        try runMainThreadWork(
-          timeout: mainThreadExecutionTimeout,
-          timeoutError: mainThreadExecutionTimeoutError
-        ) {
-          self.invalidateCachedTarget(reason: "response_unavailable")
-          self.sleepFor(self.retryCooldown)
-        }
-        continue
-      }
-      return response
-    }
-  }
-
-  private func executeSnapshotDispatchedOnce(command: Command) throws -> Response {
-    let preparation = try runMainThreadWork(
-      timeout: mainThreadExecutionTimeout,
-      timeoutError: mainThreadExecutionTimeoutError
-    ) {
-      try self.prepareActiveCommandContextSafely(command: command, routeToSpringboard: false)
-    }
-    switch preparation {
-    case .response(let response):
-      return response
-    case .context(let context):
-      return try executeSnapshotPrepared(command: command, activeApp: context.app)
-    }
-  }
-
-  /// Pure command→options projection, extracted so the runner unit bundle can
-  /// prove the decoded wire field actually reaches presentation options (#1634 P2).
-  static func presentationOptions(from command: Command) -> PresentationOptions {
-    let customActions = command.customActions ?? false
-    return PresentationOptions(
-      interactiveOnly: command.interactiveOnly ?? false,
-      depth: command.depth,
-      scope: command.scope,
-      raw: command.raw ?? false,
-      // Custom actions are only readable through the private AX client, so
-      // asking for them pins that backend rather than silently returning a
-      // capture that structurally cannot carry them. An explicit pin wins.
-      preferredBackend: command.preferredBackend
-        ?? (customActions ? SnapshotBackendKind.privateAX.rawValue : nil),
-      customActions: customActions
-    )
-  }
-
-  private func executeSnapshotPrepared(command: Command, activeApp: XCUIApplication) throws -> Response {
-    let options = Self.presentationOptions(from: command)
-    do {
-      let payload: DataPayload
-      if options.raw {
-        payload = try snapshotRaw(app: activeApp, options: options)
-      } else {
-        payload = try snapshotFast(app: activeApp, options: options)
-      }
-      setNeedsPostSnapshotInteractionDelay()
-      return Response(ok: true, data: payload)
-    } catch let failure as SnapshotCaptureFailure {
-      invalidateCachedTargetAfterSnapshotFailure()
-      return Response(
-        ok: false,
-        error: ErrorPayload(
-          code: failure.code,
-          message: failure.message,
-          hint: failure.hint
-        )
-      )
-    }
-  }
-
-  private func setNeedsPostSnapshotInteractionDelay() {
-    if Thread.isMainThread {
-      needsPostSnapshotInteractionDelay = true
-      return
-    }
-    guard !hasAbandonedTreeCapture() else {
-      NSLog("AGENT_DEVICE_RUNNER_POST_SNAPSHOT_DELAY_MARK_SKIPPED_XCTEST_OCCUPIED")
-      return
-    }
-    do {
-      try runMainThreadWork(
-        timeout: 1,
-        timeoutError: mainThreadExecutionTimeoutError
-      ) {
-        self.needsPostSnapshotInteractionDelay = true
-      }
-    } catch {
-      NSLog("AGENT_DEVICE_RUNNER_POST_SNAPSHOT_DELAY_MARK_FAILED=%@", String(describing: error))
-    }
-  }
-
-  private func invalidateCachedTargetAfterSnapshotFailure() {
-    if Thread.isMainThread {
-      invalidateCachedTarget(reason: "ax_snapshot_failure")
-      return
-    }
-    do {
-      try runMainThreadWork(
-        timeout: 1,
-        timeoutError: mainThreadExecutionTimeoutError
-      ) {
-        self.invalidateCachedTarget(reason: "ax_snapshot_failure")
-      }
-    } catch {
-      NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_INVALIDATION_FAILED=%@", String(describing: error))
-    }
-  }
-
-  private func prepareActiveCommandContextSafely(
-    command: Command,
-    routeToSpringboard: Bool
-  ) throws -> ActiveCommandPreparation {
-    var preparation: ActiveCommandPreparation?
-    let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
-      preparation = self.prepareActiveCommandContext(
-        command: command,
-        routeToSpringboard: routeToSpringboard
-      )
-    })
-    if let exceptionMessage {
-      throw NSError(
-        domain: RunnerErrorDomain.exception,
-        code: RunnerErrorCode.objcException,
-        userInfo: [NSLocalizedDescriptionKey: exceptionMessage]
-      )
-    }
-    guard let preparation else {
-      throw NSError(
-        domain: RunnerErrorDomain.general,
-        code: RunnerErrorCode.commandReturnedNoResponse,
-        userInfo: [NSLocalizedDescriptionKey: "snapshot preflight returned no response"]
-      )
-    }
-    return preparation
-  }
-
-  private func executeOnMain(
-    command: Command,
-    alertDeadline: Date?,
-    routeToSpringboard: Bool
-  ) throws -> Response {
-    let preparation = prepareActiveCommandContext(
-      command: command,
-      routeToSpringboard: routeToSpringboard
-    )
-    let activeApp: XCUIApplication
-    switch preparation {
-    case .response(let response):
-      return response
-    case .context(let context):
-      activeApp = context.app
-    }
-
-    switch command.command {
-    case .status:
-      return executeStatus(command: command)
-    case .targetReset:
-      return resetTargetAfterExternalRelaunch()
-    case .shutdown:
-      stopRecordingIfNeeded()
-      return Response(ok: true, data: DataPayload(message: "shutdown"))
-    case .recordStart:
-      guard
-        let requestedOutPath = command.outPath?.trimmingCharacters(in: .whitespacesAndNewlines),
-        !requestedOutPath.isEmpty
-      else {
-        return Response(ok: false, error: ErrorPayload(message: "recordStart requires outPath"))
-      }
-      let hasAppBundleId = !(command.appBundleId?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-        .isEmpty ?? true)
-      guard hasAppBundleId else {
-        return Response(ok: false, error: ErrorPayload(message: "recordStart requires appBundleId"))
-      }
-      if activeRecording != nil {
-        return Response(ok: false, error: ErrorPayload(message: "recording already in progress"))
-      }
-      if let requestedFps = command.fps, (requestedFps < minRecordingFps || requestedFps > maxRecordingFps) {
-        return Response(ok: false, error: ErrorPayload(message: "recordStart fps must be between \(minRecordingFps) and \(maxRecordingFps)"))
-      }
-      do {
-        let resolvedOutPath = resolveRecordingOutPath(requestedOutPath)
-        let fpsLabel = command.fps.map(String.init) ?? String(RunnerTests.defaultRecordingFps)
-        NSLog(
-          "AGENT_DEVICE_RUNNER_RECORD_START requestedOutPath=%@ resolvedOutPath=%@ fps=%@",
-          requestedOutPath,
-          resolvedOutPath,
-          fpsLabel
-        )
-        let recorder = ScreenRecorder(
-          outputPath: resolvedOutPath,
-          fps: command.fps.map { Int32($0) }
-        )
-        try recorder.start { [weak self] in
-          return self?.captureRunnerFrame()
-        }
-        activeRecording = recorder
-        return Response(ok: true, data: DataPayload(message: "recording started"))
-      } catch {
-        activeRecording = nil
-        return Response(ok: false, error: ErrorPayload(message: "failed to start recording: \(error.localizedDescription)"))
-      }
-    case .recordStop:
-      guard let recorder = activeRecording else {
-        // The runner protocol is the durable cleanup primitive. A daemon may crash after the
-        // native stop succeeds but before it commits the resource transition, so exact-owner
-        // recovery must be able to repeat this command safely. Public `record stop` still owns
-        // its user-facing no-active validation through the daemon session manifest.
-        return Response(ok: true, data: DataPayload(message: "recording already stopped"))
-      }
-      do {
-        try recorder.stop()
-        activeRecording = nil
-        return Response(ok: true, data: DataPayload(message: "recording stopped"))
-      } catch {
-        activeRecording = nil
-        return Response(ok: false, error: ErrorPayload(message: "failed to stop recording: \(error.localizedDescription)"))
-      }
-    case .uptime:
-      return executeUptime()
-    case .activate:
-      guard
-        let bundleId = command.appBundleId?.trimmingCharacters(in: .whitespacesAndNewlines),
-        !bundleId.isEmpty
-      else {
-        return Response(ok: false, error: ErrorPayload(message: "activate requires appBundleId"))
-      }
-      // prepareActiveCommandContext already activated this bundle. Keep this case as the
-      // explicit acknowledgement after that preflight, not as a second activation.
-      return Response(ok: true, data: DataPayload(message: "app activated"))
-    case .terminate:
-      guard
-        let bundleId = command.appBundleId?.trimmingCharacters(in: .whitespacesAndNewlines),
-        !bundleId.isEmpty
-      else {
-        return Response(ok: false, error: ErrorPayload(message: "terminate requires appBundleId"))
-      }
-      XCUIApplication(bundleIdentifier: bundleId).terminate()
-      if currentBundleId == bundleId {
-        invalidateCachedTarget(reason: "target_terminated")
-      }
-      return Response(ok: true, data: DataPayload(message: "app terminated"))
-    default:
-      break
-    }
-    return try executeOnMainPrepared(
-      command: command,
-      activeApp: activeApp,
-      alertDeadline: alertDeadline
-    )
-  }
-
-  private func prepareActiveCommandContext(
-    command: Command,
-    routeToSpringboard: Bool = false
-  ) -> ActiveCommandPreparation {
-    var activeApp = currentApp ?? app
-    if routeToSpringboard {
-      activeApp = springboard
-    } else if shouldSkipAppActivationPreflight(command) {
-      activeApp = resolveAppWithoutActivation(command: command)
-    } else if !isRunnerLifecycleCommand(command.command) {
-      let normalizedBundleId = command.appBundleId?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-      let requestedBundleId = (normalizedBundleId?.isEmpty == true) ? nil : normalizedBundleId
-      if let bundleId = requestedBundleId {
-        if currentBundleId != bundleId || currentApp == nil {
-          _ = activateTarget(bundleId: bundleId, reason: "bundle_changed")
-        } else {
-          refreshCachedTargetIfProcessChanged(bundleId: bundleId)
-        }
-      } else {
-        // Do not reuse stale bundle targets when the caller does not explicitly request one.
-        invalidateCachedTarget(reason: "missing_app_bundle")
-      }
-
-      activeApp = currentApp ?? app
-      if let bundleId = requestedBundleId, targetNeedsActivation(activeApp) {
-        activeApp = activateTarget(bundleId: bundleId, reason: "stale_target")
-      } else if requestedBundleId == nil, targetNeedsActivation(activeApp) {
-        ensureRunnerHostAppActive(reason: "missing_app_bundle")
-        activeApp = app
-      }
-
-      let skipExistenceWait = canUseFastForegroundAppGuard(
-        activeApp: activeApp,
-        requestedBundleId: requestedBundleId,
-        command: command.command
-      )
-      if !skipExistenceWait && !activeApp.waitForExistence(timeout: appExistenceTimeout) {
-        if let bundleId = requestedBundleId {
-          activeApp = activateTarget(bundleId: bundleId, reason: "missing_after_wait")
-          guard activeApp.waitForExistence(timeout: appExistenceTimeout) else {
-            return .response(Response(ok: false, error: ErrorPayload(message: "app '\(bundleId)' is not available")))
-          }
-        } else {
-          return .response(Response(ok: false, error: ErrorPayload(message: "runner app is not available")))
-        }
-      }
-
-      if isInteractionCommand(command.command) {
-        if let bundleId = requestedBundleId, activeApp.state != .runningForeground {
-          activeApp = activateTarget(bundleId: bundleId, reason: "interaction_foreground_guard")
-        } else if requestedBundleId == nil, activeApp.state != .runningForeground {
-          ensureRunnerHostAppActive(reason: "interaction_missing_app_bundle")
-          activeApp = app
-        }
-        let skipInteractionExistenceWait = canUseFastForegroundAppGuard(
-          activeApp: activeApp,
-          requestedBundleId: requestedBundleId,
-          command: command.command
-        )
-        if !skipInteractionExistenceWait && !activeApp.waitForExistence(timeout: 2) {
-          if let bundleId = requestedBundleId {
-            return .response(Response(ok: false, error: ErrorPayload(message: "app '\(bundleId)' is not available")))
-          }
-          return .response(Response(ok: false, error: ErrorPayload(message: "runner app is not available")))
-        }
-        applyInteractionStabilizationIfNeeded()
-      }
-    }
-    return .context(ActiveCommandContext(app: activeApp))
-  }
-
+  @MainActor
   func executeOnMainPrepared(
     command: Command,
     activeApp: XCUIApplication,
     alertDeadline: Date? = nil
   ) throws -> Response {
     var activeApp = activeApp
-    if command.command != .tap && command.command != .type && !isReadOnlyCommand(command) {
+    if command.invalidatesRememberedTextEntryTap {
       clearRememberedTextEntryTap()
     }
     switch command.command {
-    case .status, .activate, .terminate, .targetReset, .shutdown, .recordStart, .recordStop, .uptime:
+    case .status, .activate, .terminate, .targetReset, .shutdown, .recordStart, .recordStop, .uptime,
+      .appState, .pasteboardWrite, .snapshot:
       return Response(
         ok: false,
         error: ErrorPayload(
@@ -1786,20 +79,15 @@ extension RunnerTests {
               app: activeApp,
               policy: synthesizedGesturePolicy(policyKind)
             )
-            let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
+            switch performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
               synthesizedTapAt(
                 app: activeApp,
                 x: touchPoint.x,
                 y: touchPoint.y,
                 context: context
               )
-            }
-            if case .performed = outcome {
-              logSynthesizedGesturePolicyDecision(
-                kind: policyKind,
-                context: context,
-                fallbackAttempted: false
-              )
+            }) {
+            case .performed(let timing):
               if isTextEntry {
                 waitForTextEntryReadinessAfterTap(app: activeApp, element: element)
               }
@@ -1815,13 +103,12 @@ extension RunnerTests {
                   ? match.usedNonHittableFallback
                   : nil
               )
+            case .xctestFallback(let message, let hint):
+              fallback = GestureFallback(strategy: "xctest-coordinate-tap", message: message, hint: hint)
+            case .refused(_, let message, let hint):
+              clearRememberedTextEntryTap()
+              return unsupportedResponse(message: message, hint: hint)
             }
-            logSynthesizedGesturePolicyDecision(
-              kind: policyKind,
-              context: context,
-              fallbackAttempted: true
-            )
-            fallback = gestureFallback(strategy: "xctest-coordinate-tap", from: outcome)
           }
           let (timing, outcome) = performGesture(activeApp) {
             if expectedPoint != nil || match.usedNonHittableFallback {
@@ -1857,20 +144,20 @@ extension RunnerTests {
       }
       if let x = command.x, let y = command.y {
         let xCTestChannelPenalized = isSnapshotXCTestChannelPenalized(
-          bundleId: currentBundleId
+          bundleId: mainOwned.bundleId
         )
         let xCTestTextInputProbeSkipped = !shouldProbeCoordinateTapTextInput(
           xCTestChannelPenalized: xCTestChannelPenalized
         )
         let textInput: XCUIElement?
         if !xCTestTextInputProbeSkipped {
-          textInput = textInputAt(app: activeApp, x: x, y: y)
+          textInput = coordinateTapTextInputAt(app: activeApp, x: x, y: y)
         } else {
           // A process-scoped tap cannot authorize later typing without concrete element identity.
           textInput = nil
           NSLog(
             "AGENT_DEVICE_RUNNER_COORDINATE_TAP_TEXT_INPUT_PROBE_SKIPPED bundle=%@",
-            currentBundleId ?? ""
+            mainOwned.bundleId ?? ""
           )
         }
         var fallback: GestureFallback?
@@ -1880,16 +167,18 @@ extension RunnerTests {
             app: activeApp,
             policy: synthesizedGesturePolicy(policyKind)
           )
-          let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
+          switch performSynthesizedGesture(activeApp, kind: policyKind, context: context, synthesize: {
             synthesizedTapAt(app: activeApp, x: x, y: y, context: context)
-          }
-          if case .performed = outcome {
-            logSynthesizedGesturePolicyDecision(kind: policyKind, context: context, fallbackAttempted: false)
+          }) {
+          case .performed(let timing):
             rememberTextEntryTap(textInput)
             return gestureResponse(message: "tapped", timing: timing)
+          case .xctestFallback(let message, let hint):
+            fallback = GestureFallback(strategy: "xctest-coordinate-tap", message: message, hint: hint)
+          case .refused(_, let message, let hint):
+            clearRememberedTextEntryTap()
+            return unsupportedResponse(message: message, hint: hint)
           }
-          logSynthesizedGesturePolicyDecision(kind: policyKind, context: context, fallbackAttempted: true)
-          fallback = gestureFallback(strategy: "xctest-coordinate-tap", from: outcome)
         }
         let touchFrame = resolvedTouchVisualizationFrame(app: activeApp, x: x, y: y)
         let (timing, outcome) = performGesture(activeApp) { tapAt(app: activeApp, x: x, y: y) }
@@ -1955,9 +244,7 @@ extension RunnerTests {
         x2: x2,
         y2: y2,
         durationMs: defaults.durationMs,
-        synthesized: command.synthesized == true,
-        message: "dragged",
-        synthesizedPolicyKind: .synthesizedDrag
+        message: "dragged"
       )
     case .scroll:
       // Fused frame-resolve + drag scroll for non-tvOS. On iOS this intentionally stays on the
@@ -1978,21 +265,25 @@ extension RunnerTests {
           error: ErrorPayload(message: "scroll could not resolve a usable interaction frame")
         )
       }
-      let frame = scrollReferenceFrame(app: activeApp, context: scrollContext)
-      guard frame.width > 0, frame.height > 0 else {
+      let viewport = resolvedScrollViewport(app: activeApp, context: scrollContext)
+      let defaults = runnerDragCommandDefaults(command)
+      switch viewport.gestureDispatch(
+        direction: direction,
+        amount: defaults.scrollAmount,
+        pixels: command.pixels
+      ) {
+      case .occluded(let occlusionKeyboardMinY, let visibleHeight):
+        return scrollKeyboardOccludedResponse(
+          direction: direction.rawValue,
+          keyboardMinY: occlusionKeyboardMinY,
+          visibleHeight: visibleHeight
+        )
+      case .unusableFrame:
         return Response(
           ok: false,
           error: ErrorPayload(message: "scroll could not resolve a usable interaction frame")
         )
-      }
-      let defaults = runnerDragCommandDefaults(command)
-      guard let plan = runnerScrollGesturePlan(
-        direction: direction,
-        amount: defaults.scrollAmount,
-        pixels: command.pixels,
-        referenceWidth: frame.width,
-        referenceHeight: frame.height
-      ) else {
+      case .unusablePlan:
         return Response(
           ok: false,
           error: ErrorPayload(
@@ -2000,21 +291,24 @@ extension RunnerTests {
             message: "scroll could not compute a gesture plan"
           )
         )
+      case .gesture(let gesture):
+        guard scrollDurationIsValid(command.durationMs) else {
+          return invalidScrollDurationResponse(commandName: "scroll")
+        }
+        return gesture.attachingEvidence(
+          to: executeScrollDragGesture(
+            activeApp: activeApp,
+            x: gesture.planFrame.minX + gesture.plan.x1,
+            y: gesture.planFrame.minY + gesture.plan.y1,
+            x2: gesture.planFrame.minX + gesture.plan.x2,
+            y2: gesture.planFrame.minY + gesture.plan.y2,
+            durationMs: defaults.durationMs,
+            message: "scrolled",
+            context: scrollContext.withReferenceFrame(gesture.coordinateFrame),
+            releaseBehavior: command.scrollReleaseBehavior
+          )
+        )
       }
-      guard scrollDurationIsValid(command.durationMs) else {
-        return invalidScrollDurationResponse(commandName: "scroll")
-      }
-      return executeScrollDragGesture(
-        activeApp: activeApp,
-        x: frame.minX + plan.x1,
-        y: frame.minY + plan.y1,
-        x2: frame.minX + plan.x2,
-        y2: frame.minY + plan.y2,
-        durationMs: defaults.durationMs,
-        message: "scrolled",
-        context: scrollContext.withReferenceFrame(frame),
-        releaseBehavior: command.scrollReleaseBehavior
-      )
     case .desktopScroll:
       guard let rawDirection = command.direction,
         let direction = RunnerScrollDirection(rawValue: rawDirection)
@@ -2093,7 +387,7 @@ extension RunnerTests {
       return Response(ok: true, data: DataPayload(message: "remote pressed"))
     case .type:
       var response: Response?
-      withTemporaryScrollIdleTimeoutIfSupported(activeApp) {
+      withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) {
         response = executeTypeCommand(activeApp: activeApp, command: command)
       }
       return response ?? Response(ok: false, error: ErrorPayload(message: "type produced no response"))
@@ -2105,7 +399,7 @@ extension RunnerTests {
       // keeps raw measureGesture and only routes the success payload through gestureResponse.
       var executedFrame: DragVisualizationFrame?
       let timing = measureGesture {
-        withTemporaryScrollIdleTimeoutIfSupported(activeApp) {
+        withBoundedInteractionIdleTimeoutIfSupported(activeApp, waits: .bothSkipped) {
           executedFrame = swipe(app: activeApp, direction: direction)
         }
       }
@@ -2132,10 +426,7 @@ extension RunnerTests {
         return Response(ok: false, error: ErrorPayload(message: "readText did not resolve text"))
       }
       return Response(ok: true, data: DataPayload(text: text))
-    case .snapshot:
-      return try executeSnapshotPrepared(command: command, activeApp: activeApp)
     case .screenshot:
-      let screenshot: XCUIScreenshot
 #if os(macOS)
       // macOS keeps the app-targeted capture behavior for window-level screenshots.
       if let bundleId = command.appBundleId, !bundleId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -2145,6 +436,7 @@ extension RunnerTests {
         // Brief wait for the app transition animation to complete
         sleepFor(0.5)
       }
+      let screenshot: XCUIScreenshot
       if command.fullscreen == true {
         screenshot = XCUIScreen.main.screenshot()
       } else if let bundleId = command.appBundleId, !bundleId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -2152,37 +444,67 @@ extension RunnerTests {
       } else {
         screenshot = XCUIScreen.main.screenshot()
       }
-#else
-      screenshot = XCUIScreen.main.screenshot()
-#endif
-      guard let pngData = runnerPngData(for: screenshot.image) else {
-        return Response(ok: false, error: ErrorPayload(message: "Failed to encode screenshot as PNG"))
-      }
-      if command.inlineScreenshot == true {
+      return screenshotResponse(
+        image: screenshot.image,
+        inlineScreenshot: command.inlineScreenshot == true
+      )
+    #elseif os(iOS)
+      // A foldable lights one panel at a time while `XCUIScreen.main` names one fixed panel, so an
+      // app on the other panel is captured as a valid PNG of nothing. The capture comes from the
+      // display owning a window, and a display that no window can name fails this required capture
+      // instead of answering with the main screen (#2728).
+      //
+      // `.screenshot` is a runner-lifecycle command, which skips the preflight that resolves the
+      // session app, so on a fresh runner process `activeApp` is still the runner host app. The
+      // requested bundle id is resolved here and never activated: an observation must not change
+      // which app is foregrounded in order to see which display it is on (#2728).
+      switch captureObservedScreen(app: resolveAppWithoutActivation(command: command)) {
+      case .failure(let failure):
         return Response(
-          ok: true,
-          data: DataPayload(imageBase64: pngData.base64EncodedString())
+          ok: false,
+          error: ErrorPayload(code: failure.rawValue, message: failure.message, hint: failure.hint)
+        )
+      case .success(let captured):
+        // The facts travel to the host in the response and to the operator in runner.log, because a
+        // capture whose density is in question is argued from what the capture itself measured.
+        NSLog(
+          "AGENT_DEVICE_RUNNER_SCREEN_CAPTURE display=%lu pixels=%ldx%ld pixelsPerPoint=%g",
+          captured.displayID,
+          captured.pixelWidth,
+          captured.pixelHeight,
+          captured.pixelsPerPoint
+        )
+        return screenshotResponse(
+          image: captured.image,
+          inlineScreenshot: command.inlineScreenshot == true,
+          metadata: ScreenshotMetadataPayload(
+            displayID: captured.displayID,
+            pixelWidth: captured.pixelWidth,
+            pixelHeight: captured.pixelHeight,
+            pixelsPerPoint: captured.pixelsPerPoint
+          )
         )
       }
-      let fileName = "screenshot-\(Int(Date().timeIntervalSince1970 * 1000)).png"
-      let filePath = (NSTemporaryDirectory() as NSString).appendingPathComponent(fileName)
-      do {
-        try pngData.write(to: URL(fileURLWithPath: filePath))
-      } catch {
-        return Response(ok: false, error: ErrorPayload(message: "Failed to write screenshot: \(error.localizedDescription)"))
-      }
-#if os(macOS)
-      return Response(ok: true, data: DataPayload(message: filePath))
 #else
-      // Return path relative to app container root (tmp/ maps to NSTemporaryDirectory)
-      return Response(ok: true, data: DataPayload(message: "tmp/\(fileName)"))
+      return screenshotResponse(
+        image: XCUIScreen.main.screenshot().image,
+        inlineScreenshot: command.inlineScreenshot == true
+      )
 #endif
-    case .back, .backInApp:
-      if tapInAppBackControl(app: activeApp) {
-        let message = command.command == .back ? "back" : "backInApp"
-        return Response(ok: true, data: DataPayload(message: message))
+    case .backInApp:
+      switch tapInAppBackControl(app: activeApp) {
+      case .performed:
+        return Response(ok: true, data: DataPayload(message: "backInApp"))
+      case .unavailable:
+        return Response(
+          ok: false,
+          error: ErrorPayload(message: "in-app back control is not available")
+        )
+      case .unverified(let error):
+        // The fallback gesture ran but the display refused to be sampled. Reporting the typed refusal
+        // keeps an unknown outcome from being laundered into a definitive "no back control" (#2728).
+        return Response(ok: false, error: error)
       }
-      return Response(ok: false, error: ErrorPayload(message: "in-app back control is not available"))
     case .backSystem:
       if performSystemBackAction(app: activeApp) {
         return Response(ok: true, data: DataPayload(message: "backSystem"))
@@ -2196,6 +518,18 @@ extension RunnerTests {
     case .appSwitcher:
       performAppSwitcherGesture(app: activeApp)
       return Response(ok: true, data: DataPayload(message: "appSwitcher"))
+    case .actionButton:
+      guard pressActionButton() else {
+        return Response(
+          ok: false,
+          error: ErrorPayload(
+            code: "UNSUPPORTED_OPERATION",
+            message: "actionButton requires a device model with an Action Button",
+            hint: "The Action Button is on iPhone 15 Pro and later and iPad Pro (M4) and later. Assign a Shortcut or App Intent to it in Settings > Action Button."
+          )
+        )
+      }
+      return Response(ok: true, data: DataPayload(message: "actionButton"))
     case .keyboardDismiss:
       let result = dismissKeyboard(app: activeApp)
       if result.wasVisible && !result.dismissed {
@@ -2205,7 +539,7 @@ extension RunnerTests {
             code: "UNSUPPORTED_OPERATION",
             message: "Unable to dismiss the iOS keyboard: the keyboard exposes no dismiss key, and background taps are never attempted (no tap outside the keyboard can be proven side-effect-free)",
             hint:
-              "The on-screen keyboard usually does not block agent-device interactions: press the next target directly instead of retrying dismiss. If that press fails or reports no visible effect, scroll the target into view, or use keyboard enter to press the return key when submission is wanted."
+              "An element whose center sits behind the on-screen keyboard is refused with tap_keyboard_occludes_target; one whose center stays above the keys presses normally. To end editing, tap the app's own Done/Cancel control, or use keyboard enter to press the return key when submission is wanted."
           )
         )
       }
@@ -2278,10 +612,8 @@ extension RunnerTests {
             x2: last.x,
             y2: last.y,
             durationMs: plan.durationMs,
-            synthesized: true,
             message: plan.intent,
-            synthesizedPolicyKind: .synthesizedDrag,
-            synthesizedProfile: .fastSwipe
+            synthesized: (profile: .fastSwipe, policyKind: .synthesizedDrag)
           )
         )
       case .sampled:
@@ -2299,580 +631,5 @@ extension RunnerTests {
     case .sequence:
       return executeSequence(command: command, activeApp: activeApp)
     }
-  }
-
-  private func invalidScrollDirectionResponse(commandName: String) -> Response {
-    Response(
-      ok: false,
-      error: ErrorPayload(
-        code: "INVALID_ARGS",
-        message: "\(commandName) requires direction up|down|left|right"
-      )
-    )
-  }
-
-  private func scrollDurationIsValid(_ durationMs: Double?) -> Bool {
-    guard let durationMs else { return true }
-    return durationMs.isFinite && durationMs >= 0 && durationMs <= 10000
-  }
-
-  private func invalidScrollDurationResponse(commandName: String) -> Response {
-    return Response(
-      ok: false,
-      error: ErrorPayload(
-        code: "INVALID_ARGS",
-        message: "\(commandName) durationMs must be between 0 and 10000"
-      )
-    )
-  }
-
-  private func executeScrollDragGesture(
-    activeApp: XCUIApplication,
-    x: Double,
-    y: Double,
-    x2: Double,
-    y2: Double,
-    durationMs: Double,
-    message: String,
-    context: SynthesizedCoordinateContext,
-    releaseBehavior: ScrollReleaseBehavior?
-  ) -> Response {
-#if os(iOS)
-    return executeDragGesture(
-      activeApp: activeApp,
-      x: x,
-      y: y,
-      x2: x2,
-      y2: y2,
-      durationMs: durationMs,
-      synthesized: true,
-      message: message,
-      synthesizedContext: context,
-      synthesizedPolicyKind: .scroll,
-      synthesizedProfile: scrollDragProfile(releaseBehavior: releaseBehavior)
-    )
-#else
-    return executeDragGesture(
-      activeApp: activeApp,
-      x: x,
-      y: y,
-      x2: x2,
-      y2: y2,
-      durationMs: durationMs,
-      synthesized: false,
-      message: message,
-      synthesizedPolicyKind: .scroll
-    )
-#endif
-  }
-
-  /// Shared drag execution for explicit drag commands. The iOS synthesized lane keeps its
-  /// fallback policy explicit; viewport scrolling owns a separate single drag specification.
-  private func executeDragGesture(
-    activeApp: XCUIApplication,
-    x: Double,
-    y: Double,
-    x2: Double,
-    y2: Double,
-    durationMs: Double?,
-    synthesized: Bool,
-    message: String,
-    synthesizedContext: SynthesizedCoordinateContext? = nil,
-    synthesizedPolicyKind: SynthesizedGesturePolicyKind,
-    synthesizedProfile: SynthesizedDragProfile = .continuous
-  ) -> Response {
-    let durationMs = durationMs ?? runnerDefaultDragDurationMs
-    let commandName = dragCommandName(message: message)
-    guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite else {
-      return Response(
-        ok: false,
-        error: ErrorPayload(code: "INVALID_ARGS", message: "\(commandName) requires finite coordinates")
-      )
-    }
-    if synthesized, let synthesizedResponse = executeSynthesizedDragGesture(
-      activeApp: activeApp,
-      x: x,
-      y: y,
-      x2: x2,
-      y2: y2,
-      durationMs: durationMs,
-      message: message,
-      context: synthesizedContext,
-      policyKind: synthesizedPolicyKind,
-      profile: synthesizedProfile
-    ) {
-      return synthesizedResponse
-    }
-    let dragPoints = keyboardAvoidingDragPoints(app: activeApp, x: x, y: y, x2: x2, y2: y2)
-    let dragFrame = resolvedDragVisualizationFrame(
-      app: activeApp,
-      x: dragPoints.x,
-      y: dragPoints.y,
-      x2: dragPoints.x2,
-      y2: dragPoints.y2
-    )
-    var fallback: GestureFallback?
-    if synthesized {
-      let durationMs = min(max(durationMs, 16), 10000)
-      let context = synthesizedCoordinateContext(
-        app: activeApp,
-        policy: synthesizedGesturePolicy(synthesizedPolicyKind)
-      )
-      let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
-        synthesizedDragAt(
-          app: activeApp,
-          x: dragPoints.x,
-          y: dragPoints.y,
-          x2: dragPoints.x2,
-          y2: dragPoints.y2,
-          durationMs: durationMs,
-          profile: synthesizedProfile,
-          context: context
-        )
-      }
-      if case .performed = outcome {
-        return gestureResponse(message: message, timing: timing, frame: .drag(dragFrame))
-      }
-      fallback = gestureFallback(strategy: "xctest-coordinate-drag", from: outcome)
-    }
-    let holdDuration = synthesized
-      ? synthesizedSwipeFallbackHoldDuration(durationMs: durationMs)
-      : coordinateDragHoldDuration()
-    let (timing, outcome) = performGesture(activeApp) {
-      dragAt(
-        app: activeApp,
-        x: dragPoints.x,
-        y: dragPoints.y,
-        x2: dragPoints.x2,
-        y2: dragPoints.y2,
-        holdDuration: holdDuration
-      )
-    }
-    if let response = unsupportedResponse(for: outcome) {
-      return response
-    }
-    return gestureResponse(
-      message: message,
-      timing: timing,
-      frame: .drag(dragFrame),
-      fallback: fallback
-    )
-  }
-
-  private func executeSynthesizedDragGesture(
-    activeApp: XCUIApplication,
-    x: Double,
-    y: Double,
-    x2: Double,
-    y2: Double,
-    durationMs: Double,
-    message: String,
-    context: SynthesizedCoordinateContext?,
-    policyKind: SynthesizedGesturePolicyKind,
-    profile: SynthesizedDragProfile
-  ) -> Response? {
-#if os(iOS)
-    let policy = synthesizedGesturePolicy(policyKind)
-    let context = context ?? synthesizedCoordinateContext(app: activeApp, policy: policy)
-    guard let plan = axFreeSynthesizedDragPlan(
-      app: activeApp,
-      x: x,
-      y: y,
-      x2: x2,
-      y2: y2,
-      context: context
-    )
-    else {
-      if context?.allowsXCTestCoordinateFallback == true {
-        logSynthesizedGesturePolicyDecision(kind: policyKind, context: context, fallbackAttempted: true)
-        return executeCoordinateDragFallback(
-          activeApp: activeApp,
-          x: x,
-          y: y,
-          x2: x2,
-          y2: y2,
-          durationMs: durationMs,
-          message: message,
-          fallback: nil
-        )
-      }
-      logSynthesizedGesturePolicyDecision(kind: policyKind, context: context, fallbackAttempted: false)
-      return Response(
-        ok: false,
-        error: ErrorPayload(
-          code: "INVALID_ARGS",
-          message: "\(dragCommandName(message: message)) could not resolve a finite synthesized coordinate frame"
-        )
-      )
-    }
-    let durationMs = min(max(durationMs, 16), 10000)
-    let dragFrame = axFreeDragVisualizationFrame(
-      x: plan.points.x,
-      y: plan.points.y,
-      x2: plan.points.x2,
-      y2: plan.points.y2,
-      referenceFrame: plan.referenceFrame
-    )
-    let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
-      synthesizedDragAt(
-        app: activeApp,
-        x: plan.points.x,
-        y: plan.points.y,
-        x2: plan.points.x2,
-        y2: plan.points.y2,
-        durationMs: durationMs,
-        profile: profile,
-        context: plan.context
-      )
-    }
-    if case .performed = outcome {
-      logSynthesizedGesturePolicyDecision(kind: policyKind, context: plan.context, fallbackAttempted: false)
-      return gestureResponse(message: message, timing: timing, frame: .drag(dragFrame))
-    }
-    if plan.context.allowsXCTestCoordinateFallback {
-      logSynthesizedGesturePolicyDecision(kind: policyKind, context: plan.context, fallbackAttempted: true)
-      return executeCoordinateDragFallback(
-        activeApp: activeApp,
-        x: plan.points.x,
-        y: plan.points.y,
-        x2: plan.points.x2,
-        y2: plan.points.y2,
-        durationMs: durationMs,
-        message: message,
-        fallback: gestureFallback(strategy: "xctest-coordinate-drag", from: outcome)
-      )
-    }
-    logSynthesizedGesturePolicyDecision(kind: policyKind, context: plan.context, fallbackAttempted: false)
-    return unsupportedResponse(for: outcome)
-#else
-    return nil
-#endif
-  }
-
-  private func executeCoordinateDragFallback(
-    activeApp: XCUIApplication,
-    x: Double,
-    y: Double,
-    x2: Double,
-    y2: Double,
-    durationMs: Double,
-    message: String,
-    fallback: GestureFallback?
-  ) -> Response {
-    let dragPoints = keyboardAvoidingDragPoints(app: activeApp, x: x, y: y, x2: x2, y2: y2)
-    let dragFrame = resolvedDragVisualizationFrame(
-      app: activeApp,
-      x: dragPoints.x,
-      y: dragPoints.y,
-      x2: dragPoints.x2,
-      y2: dragPoints.y2
-    )
-    let holdDuration = synthesizedSwipeFallbackHoldDuration(durationMs: durationMs)
-    let (timing, outcome) = performGesture(activeApp) {
-      dragAt(
-        app: activeApp,
-        x: dragPoints.x,
-        y: dragPoints.y,
-        x2: dragPoints.x2,
-        y2: dragPoints.y2,
-        holdDuration: holdDuration
-      )
-    }
-    if let response = unsupportedResponse(for: outcome) {
-      return response
-    }
-    return gestureResponse(
-      message: message,
-      timing: timing,
-      frame: .drag(dragFrame),
-      fallback: fallback
-    )
-  }
-
-  private func scrollReferenceFrame(app: XCUIApplication, context: SynthesizedCoordinateContext) -> CGRect {
-#if os(iOS)
-    return synthesizedFrameAvoidingKeyboardWhenAllowed(app: app, context: context)
-#else
-    return resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
-#endif
-  }
-
-  private func dragCommandName(message: String) -> String {
-    return message == "scrolled" ? "scroll" : "drag"
-  }
-
-  func currentXCTestFailureCount() -> Int {
-    return testRun?.failureCount ?? 0
-  }
-
-  func didRecordXCTestFailure(since failureCountBefore: Int) -> Bool {
-    return currentXCTestFailureCount() > failureCountBefore
-  }
-
-  private func xctestRecordedFailureResponse(command: Command, response: Response) -> Response? {
-    guard response.ok else { return nil }
-    if response.data?.runnerFatal == true {
-      return nil
-    }
-    guard !isReadOnlyCommand(command), !isRunnerLifecycleCommand(command.command) else {
-      return nil
-    }
-    return Response(
-      ok: false,
-      error: ErrorPayload(
-        code: "XCTEST_RECORDED_FAILURE",
-        message: "XCTest recorded a failure while executing \(command.command.rawValue); the action may not have been performed.",
-        hint: "The iOS runner session was invalidated. Re-observe with a fresh snapshot before retrying; if the accessibility tree is unavailable, use screenshot plus coordinate commands instead of retrying the tap blindly."
-      )
-    )
-  }
-
-#if AGENT_DEVICE_RUNNER_UNIT_TESTS
-  func runnerCommandFixture(_ json: String) throws -> Command {
-    try JSONDecoder().decode(Command.self, from: Data(json.utf8))
-  }
-#endif
-
-  private func shouldSkipAppActivationPreflight(_ command: Command) -> Bool {
-#if os(iOS)
-    if command.command == .alert {
-      return true
-    }
-    // Coordinate-only synthesized taps can run after an AX-fatal foreground screen because they do not
-    // need app activation, window lookup, keyboard lookup, or element resolution. Selector/text
-    // interactions intentionally stay on the normal AX path because they need an element query.
-    // Scroll/drag/sequence keep the normal foreground guard and stabilization path.
-    guard command.text == nil, command.selectorKey == nil else { return false }
-    guard hasCachedTargetForActivationSkip(command: command) else { return false }
-    return isCoordinateOnlyTap(command)
-#else
-    return false
-#endif
-  }
-
-  private func shouldRouteToSpringboardBlockingSystemModal(
-    _ command: Command,
-    deadline: Date? = nil
-  ) -> Bool {
-#if os(iOS)
-    guard command.command == .alert || isCoordinateOnlyTap(command) else {
-      return false
-    }
-    #if AGENT_DEVICE_RUNNER_UNIT_TESTS
-    if let override = blockingSystemModalPresenceOverrideForTesting {
-      return override
-    }
-    #endif
-    let budgetDeadline = Date().addingTimeInterval(systemModalProbeBudget)
-    let probeDeadline = deadline.map { min($0, budgetDeadline) } ?? budgetDeadline
-    // `runMainThreadWork` executes inline for a main-thread caller, so that path cannot use its
-    // timeout machinery. Direct main-thread dispatch keeps the prior synchronous modal check;
-    // normal off-main command dispatch uses the bounded probe and post-probe busy recovery.
-    if Thread.isMainThread {
-      return firstBlockingSystemModal(
-        in: springboard,
-        deadline: probeDeadline
-      ) != nil
-    }
-    return boundedBlockingSystemAlertSnapshot(
-      deadline: probeDeadline
-    ) != nil
-#else
-    return false
-#endif
-  }
-
-  private func isCoordinateOnlyTap(_ command: Command) -> Bool {
-    return command.command == .tap
-      && command.text == nil
-      && command.selectorKey == nil
-      && command.x != nil
-      && command.y != nil
-  }
-
-  private func hasCachedTargetForActivationSkip(command: Command) -> Bool {
-    guard let currentApp, currentApp.state == .runningForeground else { return false }
-    guard let bundleId = command.appBundleId?.trimmingCharacters(in: .whitespacesAndNewlines),
-      !bundleId.isEmpty
-    else {
-      return true
-    }
-    return currentBundleId == bundleId
-  }
-
-  private func resolveAppWithoutActivation(command: Command) -> XCUIApplication {
-    guard let bundleId = command.appBundleId?
-      .trimmingCharacters(in: .whitespacesAndNewlines),
-      !bundleId.isEmpty
-    else {
-      return currentApp ?? app
-    }
-    if currentBundleId == bundleId, let currentApp {
-      return currentApp
-    }
-    return XCUIApplication(bundleIdentifier: bundleId)
-  }
-
-  func executeTypeCommand(activeApp: XCUIApplication, command: Command) -> Response {
-    guard let text = command.text else {
-      return Response(ok: false, error: ErrorPayload(message: "type requires text"))
-    }
-    let delaySeconds = Double(max(command.delayMs ?? 0, 0)) / 1000.0
-    let textEntryMode = resolveTextEntryMode(command)
-    let target: TextEntryTarget
-    var resolvedCoordinateContext: SynthesizedCoordinateContext?
-    var maestroNonHittableCoordinateFallbackUsed: Bool?
-    if command.allowNonHittableCoordinateFallback == true,
-      command.x != nil,
-      command.y != nil
-    {
-      // The shared runtime has already resolved this node as non-hittable and
-      // deliberately selected Maestro's coordinate compatibility route.
-      maestroNonHittableCoordinateFallbackUsed = true
-    }
-    let focusStartedAt = Date()
-#if os(iOS)
-    let xCTestChannelPenalized = isSnapshotXCTestChannelPenalized(bundleId: currentBundleId)
-    var resolvedCoordinateTarget: TextEntryTarget?
-    if Self.shouldUseResolvedCoordinateTextEntryRoute(
-      repairMode: textEntryMode,
-      hasX: command.x != nil,
-      hasY: command.y != nil,
-      xCTestChannelPenalized: xCTestChannelPenalized
-    ), let x = command.x, let y = command.y {
-      let policyKind = SynthesizedGesturePolicyKind.coordinateTap
-      let context = synthesizedCoordinateContext(
-        app: activeApp,
-        policy: synthesizedGesturePolicy(policyKind)
-      )
-      let (_, outcome) = performGesture(activeApp, idleTimeout: false) {
-        synthesizedTapAt(app: activeApp, x: x, y: y, context: context)
-      }
-      if Self.shouldFallbackFromSynthesizedTextEntryFocus(outcome) {
-        logSynthesizedGesturePolicyDecision(
-          kind: policyKind,
-          context: context,
-          fallbackAttempted: true
-        )
-      } else {
-        logSynthesizedGesturePolicyDecision(
-          kind: policyKind,
-          context: context,
-          fallbackAttempted: false
-        )
-        resolvedCoordinateContext = context
-        resolvedCoordinateTarget = TextEntryTarget(
-          element: nil,
-          refreshPoint: CGPoint(x: x, y: y),
-          prefersFocusedElement: false
-        )
-      }
-    }
-#else
-    let xCTestChannelPenalized = false
-    let resolvedCoordinateTarget: TextEntryTarget? = nil
-#endif
-    if let resolvedCoordinateTarget {
-      target = resolvedCoordinateTarget
-    } else if let selectorKey = command.selectorKey, let selectorValue = command.selectorValue {
-      // Released daemons may still send selector-keyed type commands even though current
-      // daemons resolve fill selectors through the runtime tree before reaching the runner.
-      let match = findElement(
-        app: activeApp,
-        selectorKey: selectorKey,
-        selectorValue: selectorValue,
-        allowNonHittableFallback: command.allowNonHittableCoordinateFallback == true
-      )
-      if match.isAmbiguous {
-        return Response(ok: false, error: ErrorPayload(code: "AMBIGUOUS_MATCH", message: "selector matched multiple elements"))
-      }
-      guard let element = match.element else {
-        return Response(ok: false, error: ErrorPayload(code: "NO_MATCH", message: "selector did not match an element"))
-      }
-      guard isTextEntryElement(element) else {
-        return Response(ok: false, error: ErrorPayload(code: "INVALID_TARGET", message: "selector did not match a text input"))
-      }
-      if command.allowNonHittableCoordinateFallback == true {
-        maestroNonHittableCoordinateFallbackUsed = match.usedNonHittableFallback
-      }
-      target = focusTextInputForTextEntry(app: activeApp, element: element)
-    } else {
-      target = focusTextInputForTextEntry(app: activeApp, x: command.x, y: command.y)
-    }
-    NSLog(
-      "AGENT_DEVICE_RUNNER_TEXT_ENTRY_PHASE commandId=%@ phase=focus durationMs=%.1f chars=%d mode=%@",
-      command.commandId ?? "",
-      Date().timeIntervalSince(focusStartedAt) * 1000.0,
-      text.count,
-      textEntryModeName(textEntryMode)
-    )
-    if textEntryMode == .replacement {
-#if os(iOS)
-      let canReplaceResolvedFirstResponder = Self.shouldUseSynthesizedFirstResponderReplacement(
-        hasResolvedElement: target.element != nil,
-        hasRefreshPoint: target.refreshPoint != nil,
-        xCTestChannelPenalized: xCTestChannelPenalized
-      )
-#else
-      let canReplaceResolvedFirstResponder = false
-#endif
-      guard target.element != nil || canReplaceResolvedFirstResponder else {
-        let message =
-          (command.x != nil && command.y != nil)
-          ? "no text input found at the provided coordinates to clear"
-          : "no focused text input to clear"
-        return Response(ok: false, error: ErrorPayload(message: message))
-      }
-    }
-    let textResult = typeTextReliably(
-      app: activeApp,
-      target: target,
-      text: text,
-      delaySeconds: delaySeconds,
-      repairMode: textEntryMode,
-      xCTestChannelPenalized: xCTestChannelPenalized,
-      synthesizer: PrivateXCTestTextEntrySynthesizer(),
-      commandId: command.commandId
-    )
-    if let failure = textResult.failure {
-      return Response(
-        ok: false,
-        error: ErrorPayload(code: failure.rawValue, message: failure.message, hint: failure.hint)
-      )
-    }
-    if textResult.verified == false {
-      let expected = textResult.expectedText ?? ""
-      let observed = textResult.observedText ?? ""
-      return Response(
-        ok: false,
-        error: ErrorPayload(
-          code: "TEXT_ENTRY_MISMATCH",
-          message: "text entry verification failed: expected \"\(expected)\", observed \"\(observed)\""
-        )
-      )
-    }
-    let point = target.refreshPoint
-    let frame: CGRect
-    if let resolvedCoordinateContext {
-      frame = resolvedCoordinateContext.referenceFrame
-    } else if point != nil {
-      frame = activeApp.frame
-    } else {
-      // Bare `type` has no coordinate response to normalize. Avoid serializing the
-      // application AX tree only to emit unused reference dimensions.
-      frame = .zero
-    }
-    return Response(
-      ok: true,
-      data: DataPayload(
-        message: textResult.repaired ? "typed after repair" : "typed",
-        x: point.map { Double($0.x) },
-        y: point.map { Double($0.y) },
-        referenceWidth: frame.isEmpty ? nil : Double(frame.width),
-        referenceHeight: frame.isEmpty ? nil : Double(frame.height),
-        maestroNonHittableCoordinateFallbackUsed: maestroNonHittableCoordinateFallbackUsed,
-        textEntryRoute: textResult.textEntryRoute
-      )
-    )
   }
 }

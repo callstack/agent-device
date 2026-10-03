@@ -2,21 +2,31 @@ import XCTest
 
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+  /// The edit-acknowledge window the shipped pace is sized for: on average, a burst's characters
+  /// reach the app at least this far apart. XCTest spaces them unevenly, so an app with this window
+  /// can still lose a character that arrives early; the command then refuses the short value and
+  /// #2906 tracks preventing that. Nothing in the runner reads this — it is what the two pace tests
+  /// hold the pace against, and what the app-owned-value fixture is launched to model — so it lives
+  /// with the tests instead of in the shipped `TextEntryTiming`.
+  enum TextEntryTestAssumptions {
+    static let synthesizedAcknowledgeWindowSeconds: TimeInterval = 0.04
+  }
+
 #if os(iOS)
   final class RecordingTextEntrySynthesizer: TextEntrySynthesizing {
-    var steps: [SynthesizedReplacementStep] = []
+    struct Post: Equatable {
+      let text: String
+      let replacesExistingText: Bool
+    }
+
+    var posts: [Post] = []
 
     func enterText(
       app _: XCUIApplication,
       text: String,
       replacingExistingText: Bool
     ) -> SynthesizedTextEntryAction {
-      steps.append(
-        SynthesizedReplacementStep(
-          text: text,
-          replacesExistingText: replacingExistingText
-        )
-      )
+      posts.append(Post(text: text, replacesExistingText: replacingExistingText))
       return .continueTyping
     }
   }
@@ -41,155 +51,34 @@ extension RunnerTests {
     }
   }
 
-  func testSynthesizedFirstResponderTypeRequiresHiddenKeyboardTapWitness() {
-    let cases: [(TextTypingRepairMode, Bool, Bool, Bool)] = [
-      (.none, true, false, true),
-      (.none, true, true, false),
-      (.none, false, false, false),
-      (.append, true, false, false),
-      (.replacement, true, false, false),
+  func testSynthesizedFirstResponderTypeAdmitsOnlyTheBareSubmitKeyAfterAHiddenKeyboardTap() {
+    let cases: [(TextTypingRepairMode, String, Bool, Bool, Bool)] = [
+      (.none, "\n", true, false, true),
+      (.none, "\n", true, true, false),
+      (.none, "\n", false, false, false),
+      (.none, "hardware-keyboard", true, false, false),
+      (.none, "\r", true, false, false),
+      (.none, "search\n", true, false, false),
+      (.append, "\n", true, false, false),
+      (.append, "hardware-keyboard", true, false, false),
+      (.replacement, "\n", true, false, false),
     ]
-    for (mode, fromTapWitness, softwareKeyboardVisible, expected) in cases {
+    for (mode, text, fromTapWitness, softwareKeyboardVisible, expected) in cases {
       XCTAssertEqual(
         Self.shouldUseSynthesizedFirstResponderType(
           repairMode: mode,
+          text: text,
           fromTapWitness: fromTapWitness,
           softwareKeyboardVisible: softwareKeyboardVisible
         ),
-        expected
+        expected,
+        "mode: \(mode), text: \(text.debugDescription)"
       )
     }
-  }
-
-  func testSynthesizedTextCommitProgressWalksExpectedPrefixOnly() {
-    let expected = "hardware-keyboard"
-    XCTAssertEqual(
-      Self.synthesizedTextCommitProgress(observedText: "hardware-keyboard", expectedText: expected),
-      .committed
-    )
-    XCTAssertEqual(
-      Self.synthesizedTextCommitProgress(observedText: "", expectedText: expected),
-      .pending
-    )
-    XCTAssertEqual(
-      Self.synthesizedTextCommitProgress(observedText: "hardware-keyboa", expectedText: expected),
-      .pending
-    )
-    // Transformed input (formatter, mid-text caret, autocomplete) must stop the wait.
-    XCTAssertEqual(
-      Self.synthesizedTextCommitProgress(observedText: "hardwarX", expectedText: expected),
-      .diverged
-    )
-    XCTAssertEqual(
-      Self.synthesizedTextCommitProgress(observedText: "hardware-keyboards", expectedText: expected),
-      .diverged
-    )
-    XCTAssertEqual(
-      Self.synthesizedTextCommitProgress(observedText: nil, expectedText: expected),
-      .diverged
-    )
-  }
-
-  // The regression behind #1874/#1844: the wait used to return Void, so an expired deadline was
-  // indistinguishable from a commit and `type` reported ok over a partially committed field. The
-  // CI signature was a field holding "h" out of "hardware-keyboard" with the command successful.
-  func testSynthesizedCommitDeadlineIsNotReportedAsACommit() {
-    let clock = CommitWaitClock()
-    var observations = 0
-    let outcome = Self.awaitSynthesizedCommitOutcome(
-      expectedText: "hardware-keyboard",
-      placeholder: nil,
-      stallBudget: 3,
-      ceiling: 10,
-      now: clock.read,
-      observe: { "h" },
-      waitForNextObservation: {
-        observations += 1
-        clock.advance(1)
-      }
-    )
-    XCTAssertEqual(outcome, .notObserved)
-    XCTAssertEqual(observations, 3, "a pending prefix must keep polling until the deadline")
-  }
-
-  func testSynthesizedCommitStopsAtTheFirstSettledObservation() {
-    for observed in ["hardware-keyboard", "hardwarX", nil] {
-      var polls = 0
-      let outcome = Self.awaitSynthesizedCommitOutcome(
-        expectedText: "hardware-keyboard",
-        placeholder: nil,
-        observe: { observed },
-        waitForNextObservation: { polls += 1 }
-      )
-      // `.diverged` settles the wait too: the app transformed the input and the runner must not
-      // second-guess it. Only an outstanding strict prefix keeps waiting.
-      XCTAssertEqual(outcome, .settled, "observed: \(observed ?? "nil")")
-      XCTAssertEqual(polls, 0, "observed: \(observed ?? "nil")")
-    }
-  }
-
-  func testSynthesizedCommitWalksAPrefixToCompletion() {
-    let steps = ["", "hardware-", "hardware-keyboard"]
-    var index = 0
-    let outcome = Self.awaitSynthesizedCommitOutcome(
-      expectedText: "hardware-keyboard",
-      placeholder: nil,
-      observe: { steps[min(index, steps.count - 1)] },
-      waitForNextObservation: { index += 1 }
-    )
-    XCTAssertEqual(outcome, .settled)
-    XCTAssertEqual(index, 2)
-  }
-
-  // Adversarial-review finding: the deadline used to be checked BEFORE observing, so a commit
-  // landing during the final poll sleep was condemned as never observed — a false failure under
-  // exactly the loaded-host timing this wait exists for. Red against that ordering.
-  func testCommitLandingDuringTheFinalSleepIsStillObserved() {
-    let clock = CommitWaitClock()
-    var polls = 0
-    let outcome = Self.awaitSynthesizedCommitOutcome(
-      expectedText: "hardware-keyboard",
-      placeholder: nil,
-      stallBudget: 3,
-      ceiling: 10,
-      now: clock.read,
-      // The value lands during the sleep that takes the clock past the stall budget: the read
-      // happens first, so it is still observed.
-      observe: { polls == 0 ? "hardware-" : "hardware-keyboard" },
-      waitForNextObservation: {
-        polls += 1
-        clock.advance(9)
-      }
-    )
-    XCTAssertEqual(outcome, .settled)
-  }
-
-  // A pre-dispatch value cannot identify what a later placeholder-equal AX value represents.
-  // Here the field starts at "0", but its input handler clears it after `type ".00"`; the empty
-  // field then renders its "0.00" placeholder. Reporting success would describe an empty field as
-  // committed text.
-  func testClearAfterDispatchCannotTurnThePlaceholderIntoCommitEvidence() {
-    let textBeforeDispatch = "0"
-    let expectedText = textBeforeDispatch + ".00"
-    var observations = 0
-    let outcome = Self.awaitSynthesizedCommitOutcome(
-      expectedText: expectedText,
-      placeholder: "0.00",
-      observe: {
-        observations += 1
-        return "0.00"
-      },
-      waitForNextObservation: {}
-    )
-    XCTAssertEqual(
-      Self.textEntryFailure(forCommitOutcome: outcome)?.rawValue,
-      "TEXT_INPUT_COMMIT_NOT_OBSERVED"
-    )
-    XCTAssertEqual(observations, 0, "no post-dispatch read can resolve this collision")
   }
 
   // The guard must stay narrow: it fires only when the WHOLE expected value is the placeholder.
-  // Widening it would refuse ordinary typing into any placeheld field, which is most of them.
+  // Widening it would refuse ordinary entry into any placeheld field, which is most of them.
   func testPlaceholderGuardDoesNotFireOnOrdinaryTyping() {
     let cases: [(placeholder: String?, expectedText: String)] = [
       ("0.00", "0.005"),
@@ -199,7 +88,7 @@ extension RunnerTests {
       ("   ", ""),
     ]
     for testCase in cases {
-      let outcome = Self.awaitSynthesizedCommitOutcome(
+      let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
         expectedText: testCase.expectedText,
         placeholder: testCase.placeholder,
         observe: { testCase.expectedText },
@@ -209,32 +98,17 @@ extension RunnerTests {
     }
   }
 
-  // The bug this whole route exists to fix: `awaitSynthesizedCommitOutcome` (append/`type`) treats
-  // any non-prefix value as `.diverged` -> `.settled`, i.e. "trust the app, don't second-guess it."
-  // That rule is correct for `type` (an autocomplete/formatter can legitimately transform bare
-  // input) but silently swallows a dropped-character corruption in `.replacement` mode, because a
-  // value with a hole in the middle is neither a matching prefix nor an exact match — it still hits
-  // `.diverged`. These are the two corruption strings actually observed in CI on `fill`
+  // A value with a hole in the middle is neither a matching prefix nor an exact match, and must
+  // never settle. These are the two corruption strings actually observed in CI on `fill`
   // (id="field-name" "Ada Lovelace" -> "Avelace", id="field-email" "ada@example" -> "aexample";
-  // first character and tail survive, a middle run is missing). Confirms
-  // `awaitSynthesizedReplacementCommitOutcome` reports `.notObserved` for both, where
-  // `awaitSynthesizedCommitOutcome` (proven by the assertion inside the loop) reports `.settled`.
-  func testSynthesizedReplacementCommitCatchesDroppedMiddleCharacters() {
+  // first character and tail survive, a middle run is missing). The wait can refuse a value like
+  // this but not repair it: no later read distinguishes it from a field that has settled.
+  func testSynthesizedReplacementCommitCatchesMiddleRunMissingFromTheField() {
     let corruptions: [(expected: String, observedAfterDrop: String)] = [
       (expected: "Ada Lovelace", observedAfterDrop: "Avelace"),
       (expected: "ada@example", observedAfterDrop: "aexample"),
     ]
     for corruption in corruptions {
-      XCTAssertEqual(
-        Self.awaitSynthesizedCommitOutcome(
-          expectedText: corruption.expected,
-          placeholder: nil,
-          observe: { corruption.observedAfterDrop },
-          waitForNextObservation: {}
-        ),
-        .settled,
-        "append-mode's diverge-trusting outcome must stay unchanged by this fix"
-      )
       let clock = CommitWaitClock()
       var polls = 0
       let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
@@ -255,10 +129,7 @@ extension RunnerTests {
   }
 
   // The non-failure counterpart: replacement mode must still tolerate real commit lag (the value
-  // converges to an exact match over a few polls), not just instant matches. Mirrors
-  // `testSynthesizedCommitWalksAPrefixToCompletion`, but replacement mode has no "prefix" concept —
-  // every intermediate read here is deliberately NOT a prefix of the final value, to prove the wait
-  // does not depend on prefix-walking to keep polling.
+  // converges to an exact match over a few polls), not just instant matches.
   func testSynthesizedReplacementCommitToleratesLagUntilExactMatch() {
     let steps = ["", "ad", "ada@example"]
     var index = 0
@@ -272,8 +143,8 @@ extension RunnerTests {
     XCTAssertEqual(index, 2)
   }
 
-  // Same ordering guarantee as `testCommitLandingDuringTheFinalSleepIsStillObserved`: the deadline
-  // is checked AFTER an observation, so a match landing during the final poll sleep is still caught.
+  // The deadline is checked AFTER an observation, so a match landing during the final poll sleep
+  // is still caught.
   func testSynthesizedReplacementCommitLandingDuringTheFinalSleepIsStillObserved() {
     let clock = CommitWaitClock()
     var polls = 0
@@ -292,8 +163,9 @@ extension RunnerTests {
     XCTAssertEqual(outcome, .settled)
   }
 
-  // Same placeholder-collision guard as append mode, and for the same reason: a pre-dispatch value
-  // cannot identify what a later placeholder-equal AX value represents, so refuse before polling.
+  // A pre-dispatch value cannot identify what a later placeholder-equal AX value represents: an
+  // input handler may clear the field after dispatch and the empty field then renders the
+  // placeholder. Reporting success would describe an empty field as committed text.
   func testSynthesizedReplacementCommitPlaceholderGuardRefusesWithoutPolling() {
     var observations = 0
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
@@ -310,8 +182,7 @@ extension RunnerTests {
   }
 
   // The mapping the command actually refuses on. `.unobservable` must stay a success: it is the
-  // pre-existing contract for submit-key text and unreadable fields, so inverting it would fail
-  // every `type "...\n"`.
+  // contract for submit-key text, so inverting it would fail every `fill` ending in a submit key.
   func testOnlyAnUnobservedCommitBecomesACommandFailure() {
     XCTAssertNil(Self.textEntryFailure(forCommitOutcome: .settled))
     XCTAssertNil(Self.textEntryFailure(forCommitOutcome: .unobservable))
@@ -344,15 +215,6 @@ extension RunnerTests {
   }
 #endif
 
-  func testResolvedCoordinateTextEntryFallsBackWhenSynthesizedFocusIsUnavailable() {
-    XCTAssertFalse(Self.shouldFallbackFromSynthesizedTextEntryFocus(.performed))
-    XCTAssertTrue(
-      Self.shouldFallbackFromSynthesizedTextEntryFocus(
-        .unsupported(message: "private synthesis unavailable", hint: "use XCTest")
-      )
-    )
-  }
-
   func testResolvedCoordinateTextEntryRouteRequiresReplacementCoordinatesAndPenalizedXCTest() {
     let cases: [(TextTypingRepairMode, Bool, Bool, Bool, Bool)] = [
       (.replacement, true, true, false, false),
@@ -374,22 +236,280 @@ extension RunnerTests {
     }
   }
 
-  func testSynthesizedReplacementPacesCharactersAfterSelectingOnce() {
+  // The plan is the single source for both the cost and the posts: these cases name the array the
+  // replacement route will execute, character counts and all, because the budget below charges this
+  // same array rather than a second estimate of it (#2955).
+  func testSynthesizedReplacementPlanPacesCharactersAfterSelectingOnce() {
     XCTAssertEqual(
-      Self.synthesizedReplacementSteps(text: "abc", delaySeconds: 0.05),
-      [
-        SynthesizedReplacementStep(text: "a", replacesExistingText: true),
-        SynthesizedReplacementStep(text: "b", replacesExistingText: false),
-        SynthesizedReplacementStep(text: "c", replacesExistingText: false),
-      ]
+      Self.synthesizedTextPlan(characterCount: 3, delaySeconds: 0.05, selectsExistingText: true),
+      SynthesizedTextPlan(
+        steps: [
+          SynthesizedTextPlan.Step(characterCount: 1, replacesExistingText: true, pauseAfterSeconds: 0.05),
+          SynthesizedTextPlan.Step(characterCount: 1, pauseAfterSeconds: 0.05),
+          SynthesizedTextPlan.Step(characterCount: 1),
+        ]
+      )
     )
     XCTAssertEqual(
-      Self.synthesizedReplacementSteps(text: "abc", delaySeconds: 0),
-      [SynthesizedReplacementStep(text: "abc", replacesExistingText: true)]
+      Self.synthesizedTextPlan(characterCount: 3, delaySeconds: 0, selectsExistingText: true),
+      SynthesizedTextPlan(
+        steps: [SynthesizedTextPlan.Step(characterCount: 3, replacesExistingText: true)]
+      )
     )
   }
 
+  // A select-and-type post runs two synthesize records — the Command-A selection and the text — so a
+  // burst that replaces costs more than the characters it types. Charging one call per post is the
+  // projection defect this plan exists to remove, one level down.
+  func testSynthesizedPlanChargesAReplacingPostTwoSynthesizeCalls() {
+    let replacing = SynthesizedTextPlan.Step(characterCount: 1, replacesExistingText: true)
+    XCTAssertEqual(replacing.synthesizeCallCount, 2)
+    XCTAssertEqual(
+      SynthesizedTextPlan.Step(characterCount: 1).synthesizeCallCount,
+      1
+    )
+    XCTAssertEqual(
+      Self.synthesizedTextPlan(characterCount: 1, delaySeconds: 0, selectsExistingText: true).seconds,
+      TextEntryTiming.synthesizedCharacterInterval
+        + 2 * TextEntryTiming.synthesizeCallOverhead
+    )
+  }
+
+  // The pace is what keeps a field the app owns from losing most of a replacement (#2080), so it
+  // cannot drift on its own: one character interval has to leave that app at least twice the
+  // acknowledge window the route is sized for. The pace is declared once in TextEntryTiming and
+  // passed to the bridge that types, so the budget cannot charge a speed the app never sees. The
+  // host lane runs this on every PR; the iOS lane's app-owned-value test checks the spacing the app
+  // actually receives.
+  func testSynthesizedPaceLeavesRoomForAnAppToAcknowledgeEachEdit() {
+    XCTAssertGreaterThanOrEqual(
+      TextEntryTiming.synthesizedCharacterInterval,
+      2 * TextEntryTestAssumptions.synthesizedAcknowledgeWindowSeconds
+    )
+  }
+
+  // Characters are delivered while the private synthesize call is still running, so text longer
+  // than the delivery ceiling would still be arriving when the main-thread watchdog abandons the
+  // command. The budget turns that into a refusal decided up front, at the boundary and not after
+  // the first character is posted.
+  func testSynthesizedDeliveryBudgetRefusesTextThatOutrunsTheCommand() {
+    let fits = SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0)
+    XCTAssertGreaterThan(fits, 0)
+    XCTAssertFalse(
+      SynthesizedDeliveryBudget.exceeds(
+        Self.synthesizedTextPlan(characterCount: fits, delaySeconds: 0, selectsExistingText: true)
+      )
+    )
+    XCTAssertTrue(
+      SynthesizedDeliveryBudget.exceeds(
+        Self.synthesizedTextPlan(characterCount: fits + 1, delaySeconds: 0, selectsExistingText: true)
+      )
+    )
+  }
+
+  // A spaced plan posts each character in its own synthesize call and waits between two of them, so a
+  // character costs the pace, the call's overhead and the delay together, not the larger of pace and
+  // delay. The delay checked is the retry TEXT_INPUT_COMMIT_NOT_OBSERVED recommends.
+  func testSpacedDeliveryBudgetRefusesSoonerThanABurst() {
+    let delay = Double(TextEntryTiming.recoveryDelayMilliseconds) / 1000
+    let fits = SynthesizedDeliveryBudget.maxTextLength(delaySeconds: delay)
+    XCTAssertFalse(
+      SynthesizedDeliveryBudget.exceeds(
+        Self.synthesizedTextPlan(characterCount: fits, delaySeconds: delay, selectsExistingText: true)
+      )
+    )
+    XCTAssertTrue(
+      SynthesizedDeliveryBudget.exceeds(
+        Self.synthesizedTextPlan(characterCount: fits + 1, delaySeconds: delay, selectsExistingText: true)
+      )
+    )
+    XCTAssertLessThan(fits, SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0))
+    XCTAssertLessThan(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0.2), fits)
+    // Policy floor, not a formula copy: one more spaced character pays its pace, its own synthesize
+    // call AND the delay, so the gap between two adjacent lengths cannot come cheaper than all
+    // three. A builder that dropped `pauseAfterSeconds` (charge the delay nowhere, or sleep for
+    // nothing) lands under this floor. The epsilon only absorbs the float accumulation of the two
+    // sums being subtracted; a dropped charge is two orders of magnitude larger.
+    let cost = Self.synthesizedTextPlan(characterCount: 10, delaySeconds: delay, selectsExistingText: true).seconds
+      - Self.synthesizedTextPlan(characterCount: 9, delaySeconds: delay, selectsExistingText: true).seconds
+    XCTAssertGreaterThanOrEqual(
+      cost,
+      TextEntryTiming.synthesizedCharacterInterval + TextEntryTiming.synthesizeCallOverhead + delay - 1e-9
+    )
+  }
+
+  // Both builders must describe the SAME text the executor will slice: every step's characters
+  // accounted for, the spaced plan covering each character exactly once, and the peeled plan's
+  // rest posting what the warmup did not. An off-by-one here posts a character twice or never,
+  // and the charged seconds would describe a different command than the one run.
+  func testSynthesizedPlansCoverTheirTextExactlyOnce() {
+    for length in [2, 3, 11, 240] {
+      for delay in [0.0, 0.08] {
+        let replacement = Self.synthesizedTextPlan(
+          characterCount: length, delaySeconds: delay, selectsExistingText: true
+        )
+        XCTAssertEqual(replacement.steps.reduce(0) { $0 + $1.characterCount }, length)
+        let type = Self.synthesizedTextPlan(
+          characterCount: length, delaySeconds: delay, selectsExistingText: false, peelsWarmupCharacter: true
+        )
+        XCTAssertEqual(type.steps.reduce(0) { $0 + $1.characterCount }, length)
+        // A peel only exists on an unspaced burst, and its read-back is the one poll the budget
+        // route can afford: a spaced plan covers the same text with per-character posts instead.
+        XCTAssertEqual(type.pacesEveryCharacter, delay > 0)
+        if let warmup = type.steps.first, warmup.warmsUpField {
+          XCTAssertEqual(warmup.characterCount, 1)
+          XCTAssertEqual(warmup.pauseAfterSeconds, TextEntryTiming.pollInterval)
+        }
+      }
+    }
+  }
+
+  // The recovery tells the caller to fill ≤ N and append the rest with `type`. That only works if
+  // an appending command with the peeled warmup is admitted at exactly the same lengths a fill is;
+  // if the peel ever cost more, the hint would send the caller into a refusal on the second chunk.
+  func testAppendChunksAreAdmittedAtTheFillsOwnBudget() {
+    for delay in [0.0, Double(TextEntryTiming.recoveryDelayMilliseconds) / 1000] {
+      let fillFits = SynthesizedDeliveryBudget.maxTextLength(delaySeconds: delay)
+      XCTAssertFalse(
+        SynthesizedDeliveryBudget.exceeds(
+          Self.synthesizedTextPlan(
+            characterCount: fillFits,
+            delaySeconds: delay,
+            selectsExistingText: false,
+            peelsWarmupCharacter: true
+          )
+        ),
+        "delay \(delay): the hint's recovery refuses what its own number recommends"
+      )
+    }
+  }
+
+  // A `type` command peels one character as a warmup and posts the rest, so the same text costs one
+  // synthesize call and one read-back more than the single burst the replacement route posts. Without
+  // this the estimate charged a burst, which made the over-budget branch of the keyboard-visible route
+  // unreachable: 215 characters looked like 1 + 214, each inside the budget.
+  func testTypePlanPeelsAWarmupCharacterAndChargesItsReadBack() {
+    let length = 20
+    let warmup = TextEntryTiming.pollInterval
+    XCTAssertEqual(
+      Self.synthesizedTextPlan(characterCount: length, delaySeconds: 0, selectsExistingText: false, peelsWarmupCharacter: true),
+      SynthesizedTextPlan(
+        steps: [
+          SynthesizedTextPlan.Step(characterCount: 1, pauseAfterSeconds: warmup, warmsUpField: true),
+          SynthesizedTextPlan.Step(characterCount: length - 1),
+        ]
+      )
+    )
+    // Floor, not arithmetic copy: the peeled plan costs at least one synthesize call AND the
+    // one-poll read-back more than the same burst unpeeled. Dropping either charge falls under it.
+    XCTAssertGreaterThanOrEqual(
+      Self.synthesizedTextPlan(characterCount: length, delaySeconds: 0, selectsExistingText: false, peelsWarmupCharacter: true).seconds
+        - Self.synthesizedTextPlan(characterCount: length, delaySeconds: 0, selectsExistingText: false, peelsWarmupCharacter: false).seconds,
+      TextEntryTiming.synthesizeCallOverhead + TextEntryTiming.pollInterval
+    )
+    // A spaced `type` already posts per character, and a single character has no rest to post, so
+    // neither shape peels.
+    XCTAssertFalse(
+      Self.synthesizedTextPlan(characterCount: length, delaySeconds: 0.2, selectsExistingText: false, peelsWarmupCharacter: true)
+        .steps.contains(where: \.warmsUpField)
+    )
+    XCTAssertFalse(
+      Self.synthesizedTextPlan(characterCount: 1, delaySeconds: 0, selectsExistingText: false, peelsWarmupCharacter: true)
+        .steps.contains(where: \.warmsUpField)
+    )
+    XCTAssertEqual(
+      Self.synthesizedTextPlan(characterCount: length, delaySeconds: 0.2, selectsExistingText: false, peelsWarmupCharacter: true),
+      Self.synthesizedTextPlan(characterCount: length, delaySeconds: 0.2, selectsExistingText: false, peelsWarmupCharacter: false)
+    )
+  }
+
+  // The executor is where the charged plan and the posted text meet, so it owns the slicing contract:
+  // every step hands over the next slice in order, a warmup step gets the read-back with exactly its
+  // own characters instead of the charged pause, and a post that stops the plan reports only what
+  // arrived. A wrong slice here types a character twice or never, which is the same failure the
+  // charged-seconds tests above can only see as a number.
+  @MainActor
+  func testSynthesizedPlanExecutorSlicesTheTextItsChargedPlanPosts() {
+    let text = "abcdefgh"
+    let cases: [(Int, Double, Bool)] = [
+      (1, 0, false),
+      (8, 0, false),
+      (8, 0.001, false),
+      (8, 0, true),
+      (8, 0.001, true),
+    ]
+    for (length, delay, peels) in cases {
+      let plan = Self.synthesizedTextPlan(
+        characterCount: length,
+        delaySeconds: delay,
+        selectsExistingText: false,
+        peelsWarmupCharacter: peels
+      )
+      var slices: [String] = []
+      var reads: [String] = []
+      let run = runSynthesizedTextPlan(
+        plan,
+        text: String(text.prefix(length)),
+        post: { slice, _ in
+          slices.append(slice)
+          return .posted
+        },
+        waitAfterWarmupCharacter: { reads.append($0) }
+      )
+      XCTAssertEqual(slices.joined(), String(text.prefix(length)), "plan \(length)/\(delay)/peel=\(peels)")
+      XCTAssertEqual(slices.count, plan.steps.count)
+      XCTAssertEqual(run.postedCharacterCount, length)
+      XCTAssertFalse(run.stoppedEarly)
+      XCTAssertEqual(reads, plan.steps.contains(where: { $0.warmsUpField }) ? ["a"] : [])
+    }
+  }
+
+  @MainActor
+  func testSynthesizedPlanExecutorStopsAtThePostThatRefusesTheText() {
+    let plan = Self.synthesizedTextPlan(characterCount: 6, delaySeconds: 0.001, selectsExistingText: false)
+    var slices: [String] = []
+    let run = runSynthesizedTextPlan(
+      plan,
+      text: "abcdef",
+      post: { slice, _ in
+        slices.append(slice)
+        return slice == "c" ? .stop : .posted
+      },
+      waitAfterWarmupCharacter: { _ in }
+    )
+    XCTAssertEqual(slices, ["a", "b", "c"])
+    XCTAssertTrue(run.stoppedEarly)
+    // The refused post never delivered its character, so the caller learns two arrived.
+    XCTAssertEqual(run.postedCharacterCount, 2)
+  }
+
+  func testSynthesizedBudgetExceededCarriesItsOwnCodeAndRecovery() {
+    XCTAssertEqual(
+      TextEntryFailure.synthesisBudgetExceeded.rawValue,
+      "TEXT_INPUT_SYNTHESIS_BUDGET_EXCEEDED"
+    )
+    // The recovery has to tell the caller to split the text: waiting it out or raising a timeout
+    // does nothing, because the pace is what makes the burst long, not the host being slow. A
+    // delayed request fits fewer characters, so the hint names both budgets rather than promising
+    // the undelayed one to a caller retrying with --delay-ms. The numbers come from the same
+    // admission the route applied, so a hint can never promise a length it then refuses.
+    let hint = TextEntryFailure.synthesisBudgetExceeded.hint
+    XCTAssertTrue(
+      hint.contains("\(SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0)) characters per command"),
+      hint
+    )
+    let recoveryDelay = TextEntryTiming.recoveryDelayMilliseconds
+    let recoveryBudget = SynthesizedDeliveryBudget.maxTextLength(
+      delaySeconds: Double(recoveryDelay) / 1000
+    )
+    XCTAssertTrue(hint.contains("\(recoveryDelay) ms fits \(recoveryBudget)"), hint)
+    // The host redacts any diagnostic string past 400 characters, and a hint cut there reads as
+    // actionable but is not. This one carried 460 and silently lost its last sentence on the wire.
+    XCTAssertLessThanOrEqual(hint.count, 400, "hint outlives the host's diagnostic bound: \(hint.count)")
+  }
+
 #if os(iOS)
+  @MainActor
   func testTypeTextReliablyPacesSynthesizedReplacementThroughProductionCaller() {
     let synthesizer = RecordingTextEntrySynthesizer()
     // Springboard, not a bare `XCUIApplication()`: the commit wait now really polls (see below),
@@ -418,11 +538,11 @@ extension RunnerTests {
     )
 
     XCTAssertEqual(
-      synthesizer.steps,
+      synthesizer.posts,
       [
-        SynthesizedReplacementStep(text: "a", replacesExistingText: true),
-        SynthesizedReplacementStep(text: "b", replacesExistingText: false),
-        SynthesizedReplacementStep(text: "c", replacesExistingText: false),
+        RecordingTextEntrySynthesizer.Post(text: "a", replacesExistingText: true),
+        RecordingTextEntrySynthesizer.Post(text: "b", replacesExistingText: false),
+        RecordingTextEntrySynthesizer.Post(text: "c", replacesExistingText: false),
       ]
     )
     XCTAssertNil(result.verified)
@@ -433,8 +553,8 @@ extension RunnerTests {
     // landing as "aexample" CI signature). The fake synthesizer never actually writes into
     // Springboard, so the wait's `observe()` reads nil (no matching field at that point) on every
     // poll and the value never becomes "abc" — under the replacement-mode outcome function that is
-    // correctly a failure (see `testSynthesizedReplacementCommitCatchesDroppedMiddleCharacters` for
-    // why it must NOT be waved through as success), so this call runs the real 3-second deadline
+    // correctly a failure (see `testSynthesizedReplacementCommitCatchesMiddleRunMissingFromTheField`
+    // for why it must NOT be waved through as success), so this call runs the real 3-second deadline
     // (`TextEntryTiming.synthesizedCommitStallTimeout`; a nil read never advances the expected
     // prefix, so `SynthesizedCommitDeadline` grants it no extra time) before returning. That is
     // deliberate here, not a flake: this test only runs in the nightly XCUITest lane (see
@@ -449,6 +569,7 @@ extension RunnerTests {
   // Springboard's home screen has no focused text input — the empty-text replacement path must
   // fail closed: it used to fall through to the vacuous-typing early return and report
   // `verified: true` for a clear that never ran.
+  @MainActor
   func testEmptyReplacementWithoutResolvableTargetFailsClosed() {
     let result = typeTextReliably(
       app: springboard,
@@ -465,9 +586,8 @@ extension RunnerTests {
     XCTAssertNil(result.observedText)
   }
 
-  // Companion to the above: text carrying a submit key must skip the wait entirely, same as the
-  // append route (`awaitSynthesizedFirstResponderCommit`) — the app may clear or rewrite the field
-  // on submit, so there is nothing meaningful to poll toward.
+  // Companion to the above: text carrying a submit key must skip the wait entirely — the app may
+  // clear or rewrite the field on submit, so there is nothing meaningful to poll toward.
   func testSynthesizedReplacementCommitSkipsSubmitKeyText() {
     for expectedText in ["ada@example.test\n", "ada@example.test\r"] {
       XCTAssertEqual(

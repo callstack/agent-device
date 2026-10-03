@@ -8,7 +8,6 @@ import { mkdtempForTestSync } from './tmp-dir.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 
 const {
-  mockAcquireXcodebuildSimulatorSetRedirect,
   mockEnsureXctestrunArtifact,
   mockGetFreePort,
   mockIsProcessAlive,
@@ -22,9 +21,7 @@ const {
   mockSignalPidsBestEffort,
   mockSignalProcessGroupBestEffort,
   mockWaitForRunner,
-  mockRedirectRelease,
 } = vi.hoisted(() => ({
-  mockAcquireXcodebuildSimulatorSetRedirect: vi.fn(),
   mockEnsureXctestrunArtifact: vi.fn(),
   mockGetFreePort: vi.fn(),
   mockIsProcessAlive: vi.fn(),
@@ -39,7 +36,6 @@ const {
   mockSignalPidsBestEffort: vi.fn(),
   mockSignalProcessGroupBestEffort: vi.fn(),
   mockWaitForRunner: vi.fn(),
-  mockRedirectRelease: vi.fn(),
 }));
 
 vi.mock('../runner-io.ts', async () => {
@@ -65,7 +61,6 @@ vi.mock('../runner-xctestrun.ts', async () => {
     await vi.importActual<typeof import('../runner-xctestrun.ts')>('../runner-xctestrun.ts');
   return {
     ...actual,
-    acquireXcodebuildSimulatorSetRedirect: mockAcquireXcodebuildSimulatorSetRedirect,
     ensureXctestrunArtifact: mockEnsureXctestrunArtifact,
     prepareXctestrunWithEnv: mockPrepareXctestrunWithEnv,
     resolveExpectedRunnerCacheMetadata: mockResolveExpectedRunnerCacheMetadata,
@@ -73,10 +68,34 @@ vi.mock('../runner-xctestrun.ts', async () => {
   };
 });
 
-import { createRequestCanceledError, isRequestCanceledError } from '@agent-device/kernel/errors';
-import { abortAllIosRunnerSessions, getRunnerSessionSnapshot } from '../runner-session.ts';
+import {
+  AppError,
+  createRequestCanceledError,
+  isRequestCanceledError,
+} from '@agent-device/kernel/errors';
+import { abortAllIosRunnerSessions, readRunnerSessionLiveness } from '../runner-session.ts';
+import { DEFAULT_RUNNER_START_BUDGET_MS } from '../runner-start-budget.ts';
+import { RUNNER_STARTUP_TIMEOUT_MS } from '../runner-startup-transport.ts';
 import type { RunnerLease } from '../runner-lease.ts';
 import { executeRunnerCommand, prepareLocalIosRunner } from '../runner-lifecycle.ts';
+import {
+  captureDiagnostics,
+  RUNNER_CACHE_METADATA_FIXTURE,
+  RUNNER_CACHE_KEY_FIXTURE,
+} from './runner-session-fixtures.ts';
+
+const SNAPSHOT = { command: 'snapshot', appBundleId: 'com.example.demo' } as const;
+
+function callerDeadline(): DOMException {
+  return new DOMException('Wait deadline exceeded', 'TimeoutError');
+}
+
+function readinessCanceled(error: unknown): boolean {
+  return (
+    isRequestCanceledError(error) &&
+    (error as { details?: { readinessPhase?: string } }).details?.readinessPhase === 'runner-start'
+  );
+}
 
 // Root-registry writers (`request/cancel.ts`) are not visible to the package;
 // this reproduces the same canceled-set/AbortController-map model locally and
@@ -143,6 +162,7 @@ beforeEach(async () => {
   mockEnsureXctestrunArtifact.mockResolvedValue({
     xctestrunPath: '/tmp/base-runner.xctestrun',
     derived: '/tmp/derived',
+    cacheKey: RUNNER_CACHE_KEY_FIXTURE,
     cache: 'miss',
     artifact: 'rebuilt',
     buildMs: 12,
@@ -153,11 +173,8 @@ beforeEach(async () => {
     xctestrunPath: '/tmp/session-runner.xctestrun',
     jsonPath: '/tmp/session-runner.json',
   });
-  mockResolveExpectedRunnerCacheMetadata.mockReturnValue({ schemaVersion: 1 });
+  mockResolveExpectedRunnerCacheMetadata.mockReturnValue(RUNNER_CACHE_METADATA_FIXTURE);
   mockResolveRunnerDerivedPath.mockReturnValue('/tmp/derived');
-  mockAcquireXcodebuildSimulatorSetRedirect.mockResolvedValue({
-    release: mockRedirectRelease,
-  });
   mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
   mockRunAppleToolCommand.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   mockIsProcessAlive.mockReturnValue(true);
@@ -169,8 +186,9 @@ test('direct command cancellation reaches runner launch without a registered req
   const controller = new AbortController();
   const device = { ...IOS_SIMULATOR, id: 'runner-direct-signal-sim' };
   mockRunCmdBackground.mockImplementationOnce((_cmd, _args, options) => {
-    assert.equal(options?.signal, controller.signal);
-    controller.abort(new Error('wait deadline exceeded'));
+    assert.equal(options?.signal?.aborted, false);
+    controller.abort(new Error('client disconnected'));
+    assert.equal(options?.signal?.aborted, true);
     return makeBackgroundRunner(4141);
   });
 
@@ -183,7 +201,247 @@ test('direct command cancellation reaches runner launch without a registered req
     (error: unknown) => isRequestCanceledError(error),
   );
 
-  assert.equal(getRunnerSessionSnapshot(device.id), null);
+  assert.equal(readRunnerSessionLiveness(device.id), null);
+});
+
+/**
+ * A `wait` poll bounds each attempt with a `TimeoutError` deadline. When that deadline lands while the
+ * runner is still starting, the start it interrupts is the one the retry needs: the launch must not be
+ * killed and the session must stay registered as starting, so the next request joins it and spends
+ * what is left of the launch budget, not a fresh one (#2894).
+ */
+test('a caller deadline during runner start leaves the starting runner for the next request', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    const controller = new AbortController();
+    const device = { ...IOS_SIMULATOR, id: 'runner-caller-deadline-sim' };
+    let launchSignal: AbortSignal | undefined;
+    mockRunCmdBackground.mockImplementationOnce((_cmd, _args, options) => {
+      launchSignal = options?.signal;
+      return makeBackgroundRunner(4545);
+    });
+    mockWaitForRunner.mockImplementationOnce(async () => {
+      controller.abort(callerDeadline());
+      throw createRequestCanceledError();
+    });
+
+    await assert.rejects(
+      executeRunnerCommand(device, SNAPSHOT, {
+        signal: controller.signal,
+        logPath: '/tmp/runner.log',
+      }),
+      readinessCanceled,
+    );
+    assert.equal(launchSignal?.aborted, false, 'the launch outlives the caller deadline');
+    assert.equal(readRunnerSessionLiveness(device.id)?.liveness, 'starting');
+    assert.deepEqual(readRetainedLeaseDeviceIds(), [device.id]);
+
+    vi.setSystemTime(Date.now() + 10_000);
+    await executeRunnerCommand(device, SNAPSHOT, { logPath: '/tmp/runner.log' });
+
+    assert.equal(mockRunCmdBackground.mock.calls.length, 1, 'the retry did not launch again');
+    assert.equal(
+      mockWaitForRunner.mock.calls[1]?.[4],
+      RUNNER_STARTUP_TIMEOUT_MS - 10_000,
+      'the joiner measures readiness from the launch, not from its own arrival',
+    );
+    assert.equal(readRunnerSessionLiveness(device.id)?.liveness, 'ready');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+/**
+ * A runner whose process stays up but never answers must not be joined forever: once the launch
+ * budget recorded on the session is spent, the next request retires it and launches again, however
+ * the earlier joiners' waits ended (#2894).
+ */
+test('a request joining a start past its launch budget retires the runner and launches again', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    const first = new AbortController();
+    const device = { ...IOS_SIMULATOR, id: 'runner-launch-budget-sim' };
+    mockRunCmdBackground
+      .mockReturnValueOnce(makeBackgroundRunner(4646))
+      .mockReturnValueOnce(makeBackgroundRunner(4747));
+    mockWaitForRunner.mockImplementationOnce(async () => {
+      first.abort(callerDeadline());
+      throw createRequestCanceledError();
+    });
+
+    await assert.rejects(
+      executeRunnerCommand(device, SNAPSHOT, { signal: first.signal, logPath: '/tmp/runner.log' }),
+      readinessCanceled,
+    );
+    const hung = readRunnerSessionLiveness(device.id);
+    assert.equal(hung?.liveness, 'starting');
+
+    vi.setSystemTime(Date.now() + RUNNER_STARTUP_TIMEOUT_MS + 1);
+    const second = new AbortController();
+    const diagnostics = await captureDiagnostics(async () => {
+      await executeRunnerCommand(device, SNAPSHOT, {
+        signal: second.signal,
+        logPath: '/tmp/runner.log',
+      });
+    });
+
+    assert.match(diagnostics, /runner_launch_budget_exhausted/);
+    assert.equal(mockRunCmdBackground.mock.calls.length, 2, 'the hung runner was replaced');
+    const relaunched = readRunnerSessionLiveness(device.id);
+    assert.equal(relaunched?.liveness, 'ready');
+    assert.notEqual(relaunched?.sessionId, hung?.sessionId);
+    assert.deepEqual(readRetainedLeaseDeviceIds(), [device.id]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+/**
+ * The start runs detached under the session lock. A caller whose deadline lands during the cold
+ * xctestrun build leaves on time with the readiness verdict, the build is neither killed nor
+ * repeated, and the next request queues behind it and joins the session it registers (#2894).
+ */
+test('a caller deadline during the xctestrun build leaves on time and the next request joins that start', async () => {
+  const controller = new AbortController();
+  const device = { ...IOS_SIMULATOR, id: 'runner-build-deadline-sim' };
+  let releaseBuild: () => void = () => {};
+  const buildReleased = new Promise<void>((resolve) => {
+    releaseBuild = resolve;
+  });
+  let buildSignal: AbortSignal | undefined;
+  mockEnsureXctestrunArtifact.mockImplementationOnce(async (_device, options) => {
+    buildSignal = options.budget?.signal;
+    controller.abort(callerDeadline());
+    await buildReleased;
+    return {
+      xctestrunPath: '/tmp/base-runner.xctestrun',
+      derived: '/tmp/derived',
+      cacheKey: RUNNER_CACHE_KEY_FIXTURE,
+      cache: 'miss',
+      artifact: 'rebuilt',
+      buildMs: 12,
+      xctestrunPathSource: 'build',
+    };
+  });
+
+  await assert.rejects(
+    executeRunnerCommand(device, SNAPSHOT, {
+      signal: controller.signal,
+      logPath: '/tmp/runner.log',
+    }),
+    readinessCanceled,
+  );
+  assert.equal(mockRunCmdBackground.mock.calls.length, 0, 'the caller left before the launch');
+  assert.equal(buildSignal?.aborted, false, 'the build outlives the caller deadline');
+  assert.equal(readRunnerSessionLiveness(device.id), null);
+
+  const joined = executeRunnerCommand(device, SNAPSHOT, { logPath: '/tmp/runner.log' });
+  releaseBuild();
+  await joined;
+
+  assert.equal(mockEnsureXctestrunArtifact.mock.calls.length, 1, 'the joiner did not build again');
+  assert.equal(mockRunCmdBackground.mock.calls.length, 1, 'the joiner did not launch again');
+  assert.equal(readRunnerSessionLiveness(device.id)?.liveness, 'ready');
+});
+
+/**
+ * A start that outlives its caller is bounded by a clock it owns. The caller's deadline fires mid
+ * build, the daemon then clears the request's abort registration without aborting it, and the build
+ * never finishes on its own: the default start budget must end it, release the session lock, and let
+ * the request queued behind it start over (#2894 review).
+ */
+test('a wedged build with no caller left is ended by the default start budget and frees the device', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const requestId = 'runner-wedged-build-request';
+  registerRequestAbort(requestId);
+  try {
+    const controller = new AbortController();
+    const device = { ...IOS_SIMULATOR, id: 'runner-wedged-build-sim' };
+    const build = wedgeXctestrunBuild(() => controller.abort(callerDeadline()));
+    const budgetOpenedAt = Date.now();
+
+    await assert.rejects(
+      settleUnderFakeTimers(
+        executeRunnerCommand(device, SNAPSHOT, {
+          requestId,
+          signal: controller.signal,
+          logPath: '/tmp/runner.log',
+        }),
+      ),
+      readinessCanceled,
+    );
+    clearRequestCanceled(requestId);
+    assert.equal(build.signal?.aborted, false, 'the caller deadline left the build running');
+    assert.ok(
+      build.remainingMs !== undefined && build.remainingMs <= DEFAULT_RUNNER_START_BUDGET_MS,
+      'the build budget derives from the start budget',
+    );
+
+    const next = executeRunnerCommand(device, SNAPSHOT, { logPath: '/tmp/runner.log' });
+    const diagnostics = await captureDiagnostics(async () => {
+      await vi.advanceTimersByTimeAsync(
+        DEFAULT_RUNNER_START_BUDGET_MS - (Date.now() - budgetOpenedAt),
+      );
+      assert.equal(build.signal?.aborted, true, 'the start budget ended the wedged build');
+      assert.equal(
+        (build.signal?.reason as AppError | undefined)?.details?.reason,
+        'runner_start_budget_exhausted',
+      );
+      await settleUnderFakeTimers(next);
+    });
+
+    assert.match(diagnostics, /ios_runner_detached_start_failed/);
+    assert.match(diagnostics, /runner_start_budget_exhausted/);
+    assert.ok(
+      Date.now() - budgetOpenedAt < DEFAULT_RUNNER_START_BUDGET_MS + 5_000,
+      'the queued request settled as soon as the budget released the lock',
+    );
+    assert.equal(mockEnsureXctestrunArtifact.mock.calls.length, 2, 'the next request built anew');
+    assert.equal(mockRunCmdBackground.mock.calls.length, 1, 'only the next request launched');
+    assert.equal(readRunnerSessionLiveness(device.id)?.liveness, 'ready');
+    assert.deepEqual(readRetainedLeaseDeviceIds(), [device.id]);
+  } finally {
+    clearRequestCanceled(requestId);
+    vi.useRealTimers();
+  }
+});
+
+/** An explicit `startupTimeoutMs` is the start's whole budget, build included, ahead of the default. */
+test('an explicit startupTimeoutMs bounds the whole start ahead of the default budget', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  try {
+    const device = { ...IOS_SIMULATOR, id: 'runner-explicit-start-budget-sim' };
+    const build = wedgeXctestrunBuild();
+    const startedAt = Date.now();
+
+    const command = executeRunnerCommand(device, SNAPSHOT, {
+      startupTimeoutMs: 30_000,
+      logPath: '/tmp/runner.log',
+    });
+    command.catch(() => {});
+    await settleUnderFakeTimers(build.started);
+    assert.ok(
+      build.remainingMs !== undefined && build.remainingMs <= 30_000,
+      'the build budget derives from the explicit start budget',
+    );
+
+    await vi.advanceTimersByTimeAsync(30_000 - (Date.now() - startedAt));
+    await assert.rejects(
+      settleUnderFakeTimers(command),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.details?.reason === 'runner_start_budget_exhausted' &&
+        error.details?.timeoutMs === 30_000,
+    );
+
+    assert.equal(build.signal?.aborted, true, 'the explicit budget ended the wedged build');
+    assert.ok(Date.now() - startedAt < DEFAULT_RUNNER_START_BUDGET_MS);
+    assert.equal(mockRunCmdBackground.mock.calls.length, 0, 'nothing was launched');
+    assert.equal(readRunnerSessionLiveness(device.id), null);
+    assert.deepEqual(readRetainedLeaseDeviceIds(), []);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('prepare cancellation stops only its runner and preserves unrelated prep', async () => {
@@ -200,7 +458,7 @@ test('prepare cancellation stops only its runner and preserves unrelated prep', 
       logPath: '/tmp/runner.log',
       healthTimeoutMs: 30_000,
     });
-    assert.ok(getRunnerSessionSnapshot(survivorDevice.id)?.alive);
+    assert.equal(readRunnerSessionLiveness(survivorDevice.id)?.liveness, 'ready');
 
     mockWaitForRunner.mockImplementation(async () => {
       markRequestCanceled(canceledRequestId);
@@ -215,11 +473,14 @@ test('prepare cancellation stops only its runner and preserves unrelated prep', 
       (error: unknown) => isRequestCanceledError(error),
     );
 
-    const canceledSignal = getRequestSignal(canceledRequestId);
-    assert.ok(mockRunCmdBackground.mock.calls.some((call) => call[2]?.signal === canceledSignal));
-    assert.equal(canceledSignal?.aborted, true);
-    assert.equal(getRunnerSessionSnapshot(canceledDevice.id), null);
-    assert.ok(getRunnerSessionSnapshot(survivorDevice.id)?.alive);
+    assert.equal(getRequestSignal(canceledRequestId)?.aborted, true);
+    assert.equal(
+      mockRunCmdBackground.mock.calls.at(-1)?.[2]?.signal?.aborted,
+      true,
+      'the request cancel reached the canceled launch',
+    );
+    assert.equal(readRunnerSessionLiveness(canceledDevice.id), null);
+    assert.equal(readRunnerSessionLiveness(survivorDevice.id)?.liveness, 'ready');
   } finally {
     clearRequestCanceled(survivorRequestId);
     clearRequestCanceled(canceledRequestId);
@@ -246,12 +507,12 @@ test('normal command cancellation during launch or initial readiness retains no 
       { command: 'snapshot', appBundleId: 'com.example.demo' },
       { requestId: survivorRequestId, logPath: '/tmp/runner.log' },
     );
-    assert.ok(getRunnerSessionSnapshot(survivorDevice.id)?.alive);
+    assert.equal(readRunnerSessionLiveness(survivorDevice.id)?.liveness, 'ready');
 
-    const canceledSignal = getRequestSignal(launchCanceledRequestId);
     mockRunCmdBackground.mockImplementationOnce((_cmd, _args, options) => {
-      assert.equal(options?.signal, canceledSignal);
+      assert.equal(options?.signal?.aborted, false);
       markRequestCanceled(launchCanceledRequestId);
+      assert.equal(options?.signal?.aborted, true, 'the request cancel reaches the launch');
       return makeBackgroundRunner(4343);
     });
 
@@ -278,9 +539,9 @@ test('normal command cancellation during launch or initial readiness retains no 
       (error: unknown) => isRequestCanceledError(error),
     );
 
-    assert.equal(getRunnerSessionSnapshot(launchCanceledDevice.id), null);
-    assert.equal(getRunnerSessionSnapshot(readinessCanceledDevice.id), null);
-    assert.ok(getRunnerSessionSnapshot(survivorDevice.id)?.alive);
+    assert.equal(readRunnerSessionLiveness(launchCanceledDevice.id), null);
+    assert.equal(readRunnerSessionLiveness(readinessCanceledDevice.id), null);
+    assert.equal(readRunnerSessionLiveness(survivorDevice.id)?.liveness, 'ready');
     assert.deepEqual(readRetainedLeaseDeviceIds(), [survivorDevice.id]);
   } finally {
     clearRequestCanceled(survivorRequestId);
@@ -288,6 +549,60 @@ test('normal command cancellation during launch or initial readiness retains no 
     clearRequestCanceled(readinessCanceledRequestId);
   }
 });
+
+type WedgedXctestrunBuild = {
+  /** The budget signal the build was handed; set once the build began. */
+  signal?: AbortSignal;
+  /** What the build budget had left when the build began. */
+  remainingMs?: number;
+  /** Resolves when the build began. */
+  started: Promise<void>;
+};
+
+/**
+ * A build that never finishes on its own: like the real xcodebuild exec, it ends only when the budget
+ * signal it was handed aborts, and then with the cancelled-command error the exec layer raises.
+ */
+function wedgeXctestrunBuild(onStart?: () => void): WedgedXctestrunBuild {
+  let markStarted: () => void = () => {};
+  const build: WedgedXctestrunBuild = {
+    started: new Promise<void>((resolve) => {
+      markStarted = resolve;
+    }),
+  };
+  mockEnsureXctestrunArtifact.mockImplementationOnce(async (_device, options) => {
+    const signal: AbortSignal = options.budget.signal;
+    build.signal = signal;
+    build.remainingMs = options.budget.deadline?.remainingMs();
+    markStarted();
+    onStart?.();
+    await new Promise<never>((_, reject) => {
+      signal.addEventListener(
+        'abort',
+        () => reject(createRequestCanceledError(undefined, signal.reason)),
+        { once: true },
+      );
+    });
+  });
+  return build;
+}
+
+/**
+ * Awaits a promise whose path may park on faked timers: the clock is advanced in small steps until
+ * it settles, so the test never has to know which step waited. The steps spend fake time, which is
+ * why budgets are measured from a `Date.now()` mark the test took itself.
+ */
+async function settleUnderFakeTimers<T>(promise: Promise<T>): Promise<T> {
+  let settled = false;
+  const tracked = promise.finally(() => {
+    settled = true;
+  });
+  tracked.catch(() => {});
+  for (let step = 0; step < 500 && !settled; step += 1) {
+    await vi.advanceTimersByTimeAsync(10);
+  }
+  return await tracked;
+}
 
 function readRetainedLeaseDeviceIds(): string[] {
   return fs.readdirSync(process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR!).map((entry) => {

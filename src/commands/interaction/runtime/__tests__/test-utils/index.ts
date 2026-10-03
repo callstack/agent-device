@@ -8,7 +8,8 @@ import {
   type CommandSessionStore,
 } from '../../../../../runtime.ts';
 import { ref } from '../../selector-read-utils.ts';
-import { makeSnapshotState } from '../../../../../__tests__/test-utils/snapshot-builders.ts';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
+import { UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES } from '@agent-device/selectors/interaction-targeting-fixtures';
 
 export function selectorSnapshot(): SnapshotState {
   return makeSnapshotState([
@@ -295,7 +296,8 @@ export function nonTouchableGroupSnapshot(): SnapshotState {
   return makeSnapshotState([
     {
       index: 0,
-      depth: 0,
+      depth: 1,
+      parentIndex: 2,
       type: 'XCUIElementTypeOther',
       label: 'Clickable group',
       rect: { x: 10, y: 20, width: 300, height: 80 },
@@ -303,12 +305,19 @@ export function nonTouchableGroupSnapshot(): SnapshotState {
     },
     {
       index: 1,
-      depth: 1,
+      depth: 2,
       parentIndex: 0,
       type: 'XCUIElementTypeOther',
       label: 'Decorative group',
       rect: { x: 30, y: 40, width: 60, height: 20 },
       hittable: false,
+    },
+    {
+      index: 2,
+      depth: 0,
+      type: 'XCUIElementTypeApplication',
+      rect: { x: 0, y: 0, width: 390, height: 844 },
+      hittable: true,
     },
   ]);
 }
@@ -333,6 +342,8 @@ export function createInteractionDevice(
   > & {
     platform?: AgentDeviceBackend['platform'];
     sessionMetadata?: Record<string, unknown>;
+    /** An advancing clock, for interactions that poll (the promotedTarget readiness loop). */
+    clock?: { now: () => number; sleep: (ms: number) => Promise<void> };
   } = {},
 ) {
   return createAgentDevice({
@@ -369,6 +380,7 @@ export function createInteractionDevice(
       { name: 'default', snapshot, metadata: overrides.sessionMetadata },
     ]),
     policy: localCommandPolicy(),
+    ...(overrides.clock ? { clock: overrides.clock } : {}),
   });
 }
 
@@ -438,6 +450,14 @@ export function ambiguousSelectorReadSnapshot(): SnapshotState {
       hittable: true,
     },
   ]);
+}
+
+/**
+ * One control reported twice by a live iOS snapshot (`interaction-targeting.fixtures`):
+ * the uniqueness reads answer about the control instead of refusing.
+ */
+export function unverifiedWrapperChainReadSnapshot(): SnapshotState {
+  return makeSnapshotState(UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES);
 }
 
 /**

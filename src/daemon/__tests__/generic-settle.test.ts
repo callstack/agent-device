@@ -1,13 +1,20 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { SnapshotBackend } from '@agent-device/kernel/snapshot';
 import type { CommandFlags } from '@agent-device/contracts/command';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import {
+  APP_SURFACE,
+  iosSystemSurfaceDisclosure,
+  iosSystemSurfaceTransitionDisclosure,
+  type IosSystemSurfaceProvenance,
+} from '@agent-device/contracts/ios-system-surface';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { activateCompleteRefFrame } from '../ref-frame.ts';
+import { activateCompleteRefFrame, refFrameState } from '../ref-frame.ts';
 import { setSessionSnapshot } from '../session-snapshot.ts';
 import type { SessionStore } from '../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
-import { buildSnapshotState } from '../../core/snapshot-state.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 
 // #1638 `--settle` on the GENERIC daemon route (scroll/back): the settled diff,
 // its refs, and the ref-frame/generation dance are the same contract the touch
@@ -15,19 +22,20 @@ import { buildSnapshotState } from '../../core/snapshot-state.ts';
 // a resolution, and the observation must run after the deferred-outcome
 // markers. Quiet windows are tuned down so no test waits real time.
 
-vi.mock('../handlers/interaction-snapshot.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../handlers/interaction-snapshot.ts')>();
+vi.mock('../interaction/index.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../interaction/index.ts')>();
   return {
     ...actual,
     captureSnapshotForSession: vi.fn(async () => ({
       nodes: [],
       createdAt: 0,
-      backend: 'xctest' as const,
+      backend: 'xctest',
+      producer: 'apple-runner' as const,
     })),
   };
 });
 
-import { captureSnapshotForSession } from '../handlers/interaction-snapshot.ts';
+import { captureSnapshotForSession } from '../interaction/index.ts';
 import { dispatchGenericCommand } from '../request-generic-dispatch.ts';
 
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotForSession);
@@ -69,6 +77,7 @@ type SettlePayload = {
     lines: Array<{ kind: string; text: string; ref?: string }>;
   };
   tail?: Array<{ ref: string; role: string; label?: string }>;
+  surfaceChange?: { from: string; to: string; disclosure: string };
   hint?: string;
 };
 
@@ -85,10 +94,7 @@ async function emulateCaptureSnapshotForSession(
     postGestureStabilizationPending: session.postGestureStabilization !== undefined,
   });
   const effectiveFlags = { ...(flags ?? {}), snapshotInteractiveOnly: options.interactiveOnly };
-  const snapshotData = (await mockDispatch('snapshot')) as {
-    nodes?: never[];
-    backend?: SnapshotBackend;
-  };
+  const snapshotData = (await mockDispatch('snapshot')) as Parameters<typeof buildSnapshotState>[0];
   const snapshot = buildSnapshotState(snapshotData ?? {}, effectiveFlags);
   setSessionSnapshot(session, snapshot);
   sessionStore.set(session.name, session);
@@ -101,7 +107,7 @@ function mockCommandDispatch(snapshots: Array<typeof BEFORE_NODES>) {
     if (command === 'snapshot') {
       const nodes = snapshots[Math.min(snapshotCalls, snapshots.length - 1)];
       snapshotCalls += 1;
-      return { nodes, backend: 'xctest' };
+      return { nodes, backend: 'xctest', producer: 'apple-runner' };
     }
     return {};
   });
@@ -121,12 +127,47 @@ const platformExecution = vi.fn(
 /** Stands in for the device work a bound generic leaf performs, keyed by command name. */
 const mockDispatch = vi.fn<(command: string) => Promise<Record<string, unknown>>>(async () => ({}));
 
-function seedSession(sessionName: string, sessionStore: SessionStore): SessionState {
+/**
+ * The session as it stands before the generic command runs. `baseline` is the STORED pre-action
+ * tree the settled diff is taken against, and the surface that capture described — which is how a
+ * session whose last observation was an in-place system surface (#2438) is set up.
+ */
+function seedSession(
+  sessionName: string,
+  sessionStore: SessionStore,
+  baseline: GenericSettleTree = { nodes: BEFORE_NODES },
+): SessionState {
   const session = makeIosSession(sessionName);
-  setSessionSnapshot(session, buildSnapshotState({ nodes: BEFORE_NODES, backend: 'xctest' }, {}));
+  setSessionSnapshot(session, buildSnapshotState(snapshotPayload(baseline), {}));
   activateCompleteRefFrame(session);
   sessionStore.set(sessionName, session);
   return session;
+}
+
+/** A tree plus the surface a capture of it describes: app content, or an in-place system surface. */
+type GenericSettleTree = {
+  nodes: RawSnapshotNode[];
+  systemSurface?: IosSystemSurfaceProvenance;
+};
+
+function snapshotPayload(tree: GenericSettleTree) {
+  return {
+    nodes: tree.nodes,
+    backend: 'xctest' as const,
+    producer: 'apple-runner' as const,
+    ...(tree.systemSurface ? { systemSurface: tree.systemSurface } : {}),
+  };
+}
+
+/**
+ * Every settle capture reads `tree`; any other command answers `result`. Unlike
+ * {@link mockCommandDispatch} the captured tree carries its surface provenance, so the settled
+ * capture can describe a surface other than the one the stored baseline described.
+ */
+function mockSurfaceDispatch(tree: GenericSettleTree, result: Record<string, unknown> = {}) {
+  mockDispatch.mockImplementation(async (command) =>
+    command === 'snapshot' ? snapshotPayload(tree) : result,
+  );
 }
 
 async function dispatchGeneric(params: {
@@ -167,8 +208,10 @@ beforeEach(() => {
   mockDispatch.mockResolvedValue({});
   mockCaptureSnapshotForSession.mockReset();
   mockCaptureSnapshotForSession.mockImplementation(
-    (session, flags, sessionStore, _contextFromFlags, options) =>
-      emulateCaptureSnapshotForSession(session, flags, sessionStore, options),
+    (...args: Parameters<typeof captureSnapshotForSession>) => {
+      const [session, flags, sessionStore, _contextFromFlags, options] = args;
+      return emulateCaptureSnapshotForSession(session, flags, sessionStore, options);
+    },
   );
 });
 
@@ -213,7 +256,7 @@ test('scroll --settle answers with the settled diff against the stored pre-actio
   // The settled tree became the stored snapshot, and its refs were published:
   // a partial frame is active at the generation the payload reports.
   const stored = sessionStore.get(sessionName) as SessionState;
-  expect(stored.refFrameState).toBe('active');
+  expect(refFrameState(stored)).toBe('active');
   expect(settle.refsGeneration).toBe(stored.snapshotGeneration);
   expect(stored.snapshot?.nodes.some((node) => node.label === 'Load more')).toBe(true);
 });
@@ -223,7 +266,8 @@ test('back --settle answers with the settled diff alongside the command result',
   const sessionName = 'generic-settle-back';
   const session = seedSession(sessionName, sessionStore);
   mockDispatch.mockImplementation(async (command) => {
-    if (command === 'snapshot') return { nodes: AFTER_NODES, backend: 'xctest' };
+    if (command === 'snapshot')
+      return { nodes: AFTER_NODES, backend: 'xctest', producer: 'apple-runner' };
     return { action: 'back', mode: 'in-app', message: 'Back' };
   });
 
@@ -244,6 +288,222 @@ test('back --settle answers with the settled diff alongside the command result',
     removals: 1,
     unchanged: 1,
   });
+});
+
+// #2438 cross-surface settle on the GENERIC route: iOS serves a web sign-in sheet
+// (com.apple.SafariViewService) IN PLACE over a still-foreground app, so a settled capture of the
+// sheet and the session's stored pre-action tree of the app describe DIFFERENT surfaces. The diff
+// above would then be a whole-surface replacement presented as change within one surface — and
+// since the daemon treats `diff` presence as "this response issues refs", it would hand the caller
+// refs for that claim. This route plumbs the baseline's surface identity through the
+// `SurfaceScopedNodes` it hands the settle engine; the element-targeted route guarantees the same contract in
+// `src/commands/interaction/runtime/post-action-surface.test.ts`, and these tests assert it for
+// scroll/back so the two routes cannot drift.
+//
+// Both directions are covered because each falsifies a DIFFERENT half of that plumbing, and
+// neither substitutes for the other: drop the baseline's surface identity here and only the
+// sheet-to-app tests fail (an app baseline has no surface id to lose); drop the settled capture's
+// surface identity and only the app-to-sheet tests fail.
+const WEB_SIGN_IN_SHEET: IosSystemSurfaceProvenance = {
+  bundleId: 'com.apple.SafariViewService',
+  kind: 'web-auth',
+};
+const WEB_SIGN_IN_DISCLOSURE = iosSystemSurfaceDisclosure(WEB_SIGN_IN_SHEET.bundleId);
+const WEB_SIGN_IN_DEPARTED_DISCLOSURE = iosSystemSurfaceTransitionDisclosure({
+  from: WEB_SIGN_IN_SHEET.bundleId,
+  to: APP_SURFACE,
+});
+
+/** Five nodes, so a settled sheet clears the tiny-tree readiness hint and the hint under test is
+ * the cross-surface one. No Application root: the sheet is hosted out of the app's process. */
+const WEB_SIGN_IN_SHEET_NODES = [
+  'Sign in with Example',
+  'Email',
+  'Password',
+  'Continue',
+  'Cancel',
+].map((label, index) => ({
+  index,
+  type: 'Button',
+  label,
+  rect: { x: 10, y: 120 + index * 50, width: 200, height: 44 },
+  hittable: true,
+}));
+
+/** The app content that returns once the sheet completes and dismisses itself, also past the
+ * tiny-tree count so the return direction asserts the same hint contract. */
+const APP_CONTENT_NODES = [
+  { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
+  ...['Load more', 'Profile', 'Settings', 'Sign out'].map((label, offset) => ({
+    index: offset + 1,
+    parentIndex: 0,
+    type: 'Button',
+    label,
+    rect: { x: 10, y: 20 + offset * 50, width: 120, height: 44 },
+    hittable: true,
+  })),
+];
+
+/**
+ * The cross-surface contract a settle route owes, asserted as one unit so `scroll` and `back`
+ * cannot drift from each other or from the targeted route: no diff is attached across the
+ * boundary — therefore no tail and no issued refs — the transition is disclosed, and the settle
+ * observation still reports its own verdict alongside that disclosure rather than instead of it.
+ */
+function expectCrossSurfaceSettle(
+  settle: SettlePayload,
+  change: { from: string; to: string; disclosure: string },
+): void {
+  expect(settle.surfaceChange).toEqual(change);
+  expect(settle.diff).toBeUndefined();
+  expect(settle.tail).toBeUndefined();
+  // `refsGeneration` is folded in only when the settled diff published refs (ADR 0014); a refused
+  // diff publishes none, so the payload must not name a generation either.
+  expect(settle.refsGeneration).toBeUndefined();
+  expect(settle.hint).toContain('different surfaces');
+  expect(settle.hint).toMatch(/take a snapshot/i);
+  expect(settle.settled).toBe(true);
+  expect(settle.captures).toBeGreaterThanOrEqual(2);
+  expect(settle.quietMs).toBe(25);
+  expect(settle.timeoutMs).toBe(2_000);
+}
+
+/** No refs were published, so the frame the mutating leaf expired stays expired (ADR 0014). */
+function expectNoPublishedRefFrame(sessionStore: SessionStore, sessionName: string): SessionState {
+  const stored = sessionStore.get(sessionName) as SessionState;
+  expect(refFrameState(stored)).toBe('expired');
+  return stored;
+}
+
+test('scroll --settle attaches no diff across an app-to-sheet surface change and discloses it', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'generic-settle-scroll-to-sheet';
+  const session = seedSession(sessionName, sessionStore);
+  // The stored pre-action tree is app content; every settle capture reads the sheet now presented
+  // over that still-foreground app.
+  mockSurfaceDispatch({ nodes: WEB_SIGN_IN_SHEET_NODES, systemSurface: WEB_SIGN_IN_SHEET });
+
+  const response = await dispatchGeneric({
+    sessionName,
+    sessionStore,
+    session,
+    command: 'scroll',
+    positionals: ['down'],
+    flags: { ...SETTLE_FLAGS },
+  });
+
+  expectCrossSurfaceSettle(expectOkData(response).settle as SettlePayload, {
+    from: 'app',
+    to: WEB_SIGN_IN_SHEET.bundleId,
+    disclosure: WEB_SIGN_IN_DISCLOSURE,
+  });
+  // Disclosed, not hidden: the settled sheet still becomes the stored observation a follow-up
+  // snapshot reads — and the surface identity the NEXT command's baseline is built from.
+  const stored = expectNoPublishedRefFrame(sessionStore, sessionName);
+  expect(stored.snapshot?.iosSystemSurfaceBundleId).toBe(WEB_SIGN_IN_SHEET.bundleId);
+});
+
+test('scroll --settle attaches no diff across a sheet-to-app surface change and discloses it', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'generic-settle-scroll-from-sheet';
+  // The baseline is the sheet this scroll acts on; the settled tree is the app content that
+  // returns once the sheet completes and dismisses itself.
+  const session = seedSession(sessionName, sessionStore, {
+    nodes: WEB_SIGN_IN_SHEET_NODES,
+    systemSurface: WEB_SIGN_IN_SHEET,
+  });
+  mockSurfaceDispatch({ nodes: APP_CONTENT_NODES });
+
+  const response = await dispatchGeneric({
+    sessionName,
+    sessionStore,
+    session,
+    command: 'scroll',
+    positionals: ['down'],
+    flags: { ...SETTLE_FLAGS },
+  });
+
+  const settle = expectOkData(response).settle as SettlePayload;
+  expectCrossSurfaceSettle(settle, {
+    from: WEB_SIGN_IN_SHEET.bundleId,
+    to: 'app',
+    // The sheet is gone, so the standing "is presented over the app" sentence cannot be the one
+    // used — the transition disclosure has to say it left.
+    disclosure: WEB_SIGN_IN_DEPARTED_DISCLOSURE,
+  });
+  expect(settle.surfaceChange?.disclosure).not.toBe(WEB_SIGN_IN_DISCLOSURE);
+  expect(settle.surfaceChange?.disclosure).toMatch(/sign-in sheet/);
+  const stored = expectNoPublishedRefFrame(sessionStore, sessionName);
+  expect(stored.snapshot?.iosSystemSurfaceBundleId).toBeUndefined();
+});
+
+test('back --settle attaches no diff across an app-to-sheet surface change and discloses it', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'generic-settle-back-to-sheet';
+  const session = seedSession(sessionName, sessionStore);
+  mockSurfaceDispatch(
+    { nodes: WEB_SIGN_IN_SHEET_NODES, systemSurface: WEB_SIGN_IN_SHEET },
+    {
+      action: 'back',
+      mode: 'in-app',
+      message: 'Back',
+    },
+  );
+
+  const response = await dispatchGeneric({
+    sessionName,
+    sessionStore,
+    session,
+    command: 'back',
+    flags: { ...SETTLE_FLAGS },
+  });
+
+  const data = expectOkData(response);
+  // The refusal rides ALONGSIDE the command's own closed result shape, same as the diff does.
+  expect(data.action).toBe('back');
+  expect(data.message).toBe('Back');
+  expectCrossSurfaceSettle(data.settle as SettlePayload, {
+    from: 'app',
+    to: WEB_SIGN_IN_SHEET.bundleId,
+    disclosure: WEB_SIGN_IN_DISCLOSURE,
+  });
+  const stored = expectNoPublishedRefFrame(sessionStore, sessionName);
+  expect(stored.snapshot?.iosSystemSurfaceBundleId).toBe(WEB_SIGN_IN_SHEET.bundleId);
+});
+
+test('back --settle attaches no diff across a sheet-to-app surface change and discloses it', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'generic-settle-back-from-sheet';
+  const session = seedSession(sessionName, sessionStore, {
+    nodes: WEB_SIGN_IN_SHEET_NODES,
+    systemSurface: WEB_SIGN_IN_SHEET,
+  });
+  mockSurfaceDispatch(
+    { nodes: APP_CONTENT_NODES },
+    {
+      action: 'back',
+      mode: 'in-app',
+      message: 'Back',
+    },
+  );
+
+  const response = await dispatchGeneric({
+    sessionName,
+    sessionStore,
+    session,
+    command: 'back',
+    flags: { ...SETTLE_FLAGS },
+  });
+
+  const data = expectOkData(response);
+  expect(data.action).toBe('back');
+  expectCrossSurfaceSettle(data.settle as SettlePayload, {
+    from: WEB_SIGN_IN_SHEET.bundleId,
+    to: 'app',
+    disclosure: WEB_SIGN_IN_DEPARTED_DISCLOSURE,
+  });
+  const stored = expectNoPublishedRefFrame(sessionStore, sessionName);
+  expect(stored.snapshot?.iosSystemSurfaceBundleId).toBeUndefined();
 });
 
 test('the settle observation runs after the post-gesture stabilization marker', async () => {
@@ -286,7 +546,7 @@ test('scroll without --settle takes no observation captures and issues no refs',
   expect(captureObservations).toEqual([]);
   // ADR 0014: the leaf side-effect seam expired the frame and nothing
   // re-published it.
-  expect((sessionStore.get(sessionName) as SessionState).refFrameState).toBe('expired');
+  expect(refFrameState(sessionStore.get(sessionName) as SessionState)).toBe('expired');
 });
 
 test('a settle observation that cannot build a runtime degrades instead of failing the action', async () => {
@@ -297,7 +557,10 @@ test('a settle observation that cannot build a runtime degrades instead of faili
   // SESSION_NOT_FOUND, and the observation is best-effort: the scroll already
   // happened, so the response keeps its result and simply carries no settle.
   const session = makeIosSession(sessionName);
-  setSessionSnapshot(session, buildSnapshotState({ nodes: BEFORE_NODES, backend: 'xctest' }, {}));
+  setSessionSnapshot(
+    session,
+    buildSnapshotState({ nodes: BEFORE_NODES, backend: 'xctest', producer: 'apple-runner' }, {}),
+  );
   activateCompleteRefFrame(session);
   mockCommandDispatch([AFTER_NODES]);
 

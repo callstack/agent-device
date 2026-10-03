@@ -1,5 +1,5 @@
 import type { DoctorCheck, DoctorKind } from '@agent-device/contracts/observability';
-import { runCmd } from '../../utils/exec.ts';
+import { runCmd } from '@agent-device/host-kit/command';
 
 const METRO_PROBE_TIMEOUT_MS = 1500;
 const METRO_PROCESS_LOOKUP_TIMEOUT_MS = 1500;
@@ -97,7 +97,7 @@ async function findListeningProcessId(port: number): Promise<number | undefined>
   if (result.exitCode !== 0) return undefined;
   return result.stdout
     .split('\n')
-    .map((line) => (line.startsWith('p') ? Number.parseInt(line.slice(1), 10) : NaN))
+    .map((line) => (line.startsWith('p') ? Number.parseInt(line.slice(1), 10) : Number.NaN))
     .find((pid) => Number.isInteger(pid) && pid > 0);
 }
 

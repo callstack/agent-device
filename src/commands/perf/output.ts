@@ -1,5 +1,5 @@
 import type { CommandRequestResult } from '@agent-device/contracts/client';
-import { isRecord } from '../../utils/parsing.ts';
+import { isRecord } from '@agent-device/kernel/record';
 import type { CliOutput } from '../command-contract.ts';
 import { resultOutput, type CliOutputFormatter } from '../output-common.ts';
 

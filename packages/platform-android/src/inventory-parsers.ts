@@ -5,7 +5,7 @@ export function isAndroidEmulatorSerial(serial: string): boolean {
 }
 
 export function normalizeAndroidDeviceName(value: string): string {
-  return value.toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+  return value.toLowerCase().replaceAll('_', ' ').replaceAll(/\s+/g, ' ').trim();
 }
 
 export type AndroidDeviceEntry = Readonly<{
@@ -25,6 +25,18 @@ export function parseAndroidDeviceEntries(rawOutput: string): AndroidDeviceEntry
     });
   }
   return devices;
+}
+
+/** Reads the model and OS version lines printed by the inventory description probe, in order. */
+export function parseAndroidDeviceDescription(rawOutput: string): {
+  model?: string;
+  osVersion?: string;
+} {
+  const [model, osVersion] = rawOutput.split(/\r?\n/).map((line) => line.trim());
+  return {
+    ...(model ? { model } : {}),
+    ...(osVersion ? { osVersion } : {}),
+  };
 }
 
 export function parseAndroidAvdList(rawOutput: string): string[] {

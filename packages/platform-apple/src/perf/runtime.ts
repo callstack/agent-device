@@ -73,5 +73,5 @@ export function createApplePerfOperations(
 }
 
 function timestampToken(): string {
-  return new Date().toISOString().replace(/[:.]/g, '-');
+  return new Date().toISOString().replaceAll(/[:.]/g, '-');
 }

@@ -4,12 +4,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
-vi.mock('../utils/exec.ts', () => ({
+vi.mock('@agent-device/host-kit/command', () => ({
   runCmdDetached: vi.fn(),
 }));
 
-import { runCmdDetached } from '../utils/exec.ts';
-import { maybeRunUpgradeNotifier, runUpdateCheckWorker } from '../utils/update-check.ts';
+import { runCmdDetached } from '@agent-device/host-kit/command';
+import { maybeRunUpgradeNotifier, runUpdateCheckWorker } from '../cli/update-check.ts';
 
 function makeTempStateDir(): string {
   return mkdtempForTestSync('agent-device-update-check-');
@@ -87,6 +87,32 @@ test('notifier prints cached upgrade notice once for a newly discovered version'
   assert.equal(cache.prompted, true);
 });
 
+test('notifier treats the release as newer than the -dev build of the same base', () => {
+  // main carries `-dev` between releases; the shared SemVer comparator ranks the release above it,
+  // where numeric string collation ranked it below and never prompted.
+  const stateDir = makeTempStateDir();
+  cleanupPaths.push(stateDir);
+  writeCache(stateDir, {
+    latestVersion: '0.12.0',
+    checkedAt: '2026-03-25T10:00:00.000Z',
+  });
+
+  let stderr = '';
+  vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown) => {
+    stderr += String(chunk);
+    return true;
+  }) as typeof process.stderr.write);
+
+  maybeRunUpgradeNotifier({
+    command: 'devices',
+    currentVersion: '0.12.0-dev',
+    stateDir,
+    flags: {},
+  });
+
+  assert.match(stderr, /Update available: agent-device 0\.12\.0-dev -> 0\.12\.0/);
+});
+
 test('notifier skips repeat prompts after the cached version was already shown', () => {
   const stateDir = makeTempStateDir();
   cleanupPaths.push(stateDir);
@@ -130,7 +156,7 @@ test('notifier starts a background check when the cache is stale', () => {
   assert.ok(spawnCall);
   assert.equal(spawnCall[0], process.execPath);
   assert.equal(spawnCall[1][0], '--experimental-strip-types');
-  assert.match(spawnCall[1][1] ?? '', /\/src\/utils\/update-check-entry\.ts$/);
+  assert.match(spawnCall[1][1] ?? '', /\/src\/cli\/update-check-entry\.ts$/);
   assert.equal(spawnCall[1][2], '--agent-device-run-update-check');
   assert.equal(spawnCall[1][3], path.join(stateDir, 'update-check.json'));
   assert.equal(spawnCall[1][4], '0.11.3');

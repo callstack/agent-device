@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 extension RunnerTests {
   // MARK: - Blocking System Modal Snapshot
@@ -68,15 +69,7 @@ extension RunnerTests {
     in springboard: XCUIApplication,
     deadline: Date = .distantFuture
   ) -> XCUIElement? {
-    let disableSafeProbe = RunnerEnv.isTruthy("AGENT_DEVICE_RUNNER_DISABLE_SAFE_MODAL_PROBE")
-    let queryElements: (() -> [XCUIElement]) -> [XCUIElement] = { fetch in
-      if disableSafeProbe {
-        return fetch()
-      }
-      return self.safeElementsQuery(fetch)
-    }
-
-    let alerts = queryElements {
+    let alerts = safeElementsQuery {
       springboard.alerts.allElementsBoundByIndex
     }
     for alert in alerts {
@@ -91,7 +84,7 @@ extension RunnerTests {
       return nil
     }
 
-    let sheets = queryElements {
+    let sheets = safeElementsQuery {
       springboard.sheets.allElementsBoundByIndex
     }
     for sheet in sheets {
@@ -231,7 +224,7 @@ extension RunnerTests {
         label: label.isEmpty ? nil : label,
         identifier: identifier.isEmpty ? nil : identifier,
         value: nil,
-        rect: snapshotRect(from: element.frame),
+        rect: SnapshotRect(element.frame),
         enabled: element.isEnabled,
         focused: nil,
         selected: nil,

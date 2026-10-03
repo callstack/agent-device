@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceClient } from '../../client/client-types.ts';
-import { STRUCTURED_BATCH_COMMAND_NAMES } from '../../core/batch-policy.ts';
+import { STRUCTURED_BATCH_COMMAND_NAMES } from '@agent-device/command-registry/batch-policy';
 import { findCommandMetadata } from '../../commands/command-metadata.ts';
 import { createCommandToolExecutor } from '../command-tools.ts';
 

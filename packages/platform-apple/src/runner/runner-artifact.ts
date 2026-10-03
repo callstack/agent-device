@@ -5,31 +5,43 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   runCmdStreaming,
-  type ExecBackgroundResult,
   withKeyedLock,
+  withProcessLock,
   emitRequestProgress,
   findProjectRoot,
+  isCommandTimeoutError,
 } from './host.ts';
+import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { resolveRunnerBuildFailureHint } from './runner-contract.ts';
+import { classifyRunnerStartupFailure } from './runner-error-classification.ts';
 import { logChunk } from './runner-io.ts';
-import { acquireXcodebuildSimulatorSetRedirect } from './runner-device-set.ts';
+import {
+  runnerSimulatorSetFailureDetails,
+  simulatorSetDestinationNotFoundMessage,
+  xcodebuildDestinationArgs,
+} from './runner-device-set.ts';
 import {
   acquireRunnerXctestrunCacheLock,
   assertSafeDerivedCleanup,
   cleanRunnerDerivedArtifacts,
   cleanRunnerDerivedBeforeEvaluation,
   emitRunnerXctestrunDecision,
+  emitRunnerXctestrunRebuildDecision,
   evaluateExistingXctestrun,
+  requireRunnerPhaseRemainingMs,
   resolveExpectedRunnerCacheMetadata,
+  resolveRunnerArchBuildSettings,
+  resolveRunnerBuildLocationSettings,
   resolveRunnerBundleBuildSettings,
   resolveRunnerDerivedPath,
   resolveRunnerMaxConcurrentDestinationsFlag,
   resolveRunnerPerformanceBuildSettings,
   resolveRunnerSandboxBuildArgs,
   resolveRunnerSigningBuildSettings,
+  requireCertifiedRunnerCacheArtifacts,
   writeRunnerCacheMetadataForArtifacts,
   type ExistingXctestrunState,
+  type RunnerPhaseBudget,
   type RunnerXctestrunCacheKind,
   type RunnerXctestrunCacheMetadata,
 } from './runner-cache.ts';
@@ -43,6 +55,7 @@ import {
   resolveRunnerBuildDestination,
   resolveRunnerXctestrunHints,
 } from './apple-runner-platform.ts';
+import { resolveRunnerCacheKey } from './runner-cache-metadata.ts';
 import { resolveAppleRunnerProjectPath } from './runner-source.ts';
 export { prepareXctestrunWithEnv } from './runner-artifact-env.ts';
 
@@ -54,12 +67,14 @@ export type RunnerXctestrunArtifactState = 'valid' | 'rebuilt';
 export type RunnerXctestrunArtifact = {
   xctestrunPath: string;
   derived: string;
-  cache: RunnerXctestrunCacheKind;
   artifact: RunnerXctestrunArtifactState;
   buildMs: number;
-  xctestrunPathSource: 'manifest' | 'scan' | 'build' | 'external';
+  xctestrunPathSource: 'manifest' | 'build' | 'external';
   reason?: string;
-};
+} & (
+  | { cache: Exclude<RunnerXctestrunCacheKind, 'external'>; cacheKey: string }
+  | { cache: 'external'; cacheKey?: string }
+);
 
 export type ExternalXctestRunnerOptions = {
   iosXctestrunFile?: string;
@@ -67,37 +82,48 @@ export type ExternalXctestRunnerOptions = {
   iosXctestEnvDir?: string;
 };
 
+/** What the build phase reads: its budget, and where it logs. */
+type RunnerXctestrunBuildOptions = {
+  verbose?: boolean;
+  logPath?: string;
+  traceLogPath?: string;
+  /**
+   * The build phase's one budget, opened by whoever owns the build: the cache decision's
+   * blocking toolchain probes and `xcodebuild` spend the same clock, and the owning
+   * request cancels both (#2422).
+   */
+  budget?: RunnerPhaseBudget;
+};
+
 export async function ensureXctestrunArtifact(
   device: DeviceInfo,
-  options: {
-    verbose?: boolean;
-    logPath?: string;
-    traceLogPath?: string;
-    buildTimeoutMs?: number;
+  options: RunnerXctestrunBuildOptions & {
     forceRunnerXctestrunRebuild?: boolean;
-    signal?: AbortSignal;
   } & ExternalXctestRunnerOptions,
 ): Promise<RunnerXctestrunArtifact> {
   const external = resolveExternalXctestrunArtifact(options);
   if (external) return external;
 
   const projectRoot = findProjectRoot();
-  const expectedCacheMetadata = resolveExpectedRunnerCacheMetadata(device, projectRoot);
+  const expectedCacheMetadata = resolveExpectedRunnerCacheMetadata(
+    device,
+    projectRoot,
+    options.budget,
+  );
   const derived = resolveRunnerDerivedPath(device, expectedCacheMetadata);
   return await withKeyedLock(runnerXctestrunBuildLocks, derived, async () => {
-    const releaseCacheLock = await acquireRunnerXctestrunCacheLock(derived);
-    try {
-      return await ensureXctestrunUnderCacheLock({
-        device,
-        options,
-        projectRoot,
-        expectedCacheMetadata,
-        derived,
-        forceRebuild: options.forceRunnerXctestrunRebuild === true,
-      });
-    } finally {
-      await releaseCacheLock();
-    }
+    return await withProcessLock({
+      acquire: () => acquireRunnerXctestrunCacheLock(derived),
+      task: () =>
+        ensureXctestrunUnderCacheLock({
+          device,
+          options,
+          projectRoot,
+          expectedCacheMetadata,
+          derived,
+          forceRebuild: options.forceRunnerXctestrunRebuild === true,
+        }),
+    });
   });
 }
 
@@ -146,13 +172,7 @@ function resolveExternalXctestDerivedDataPath(xctestrunPath: string): string {
 
 async function ensureXctestrunUnderCacheLock(params: {
   device: DeviceInfo;
-  options: {
-    verbose?: boolean;
-    logPath?: string;
-    traceLogPath?: string;
-    buildTimeoutMs?: number;
-    signal?: AbortSignal;
-  };
+  options: RunnerXctestrunBuildOptions;
   projectRoot: string;
   expectedCacheMetadata: RunnerXctestrunCacheMetadata;
   derived: string;
@@ -160,20 +180,11 @@ async function ensureXctestrunUnderCacheLock(params: {
 }): Promise<RunnerXctestrunArtifact> {
   const { device, options, projectRoot, expectedCacheMetadata, derived } = params;
   cleanRunnerDerivedBeforeEvaluation(derived, params.forceRebuild);
-  const existing = await evaluateExistingXctestrunForDevice({
-    device,
+  const existing = await evaluateExistingXctestrun({
     derived,
-    projectRoot,
     expectedCacheMetadata,
   });
-  const cache =
-    existing.reason === 'reuse_ready' ? 'exact' : existing.xctestrunPath ? 'restore-key' : 'miss';
-  if (existing.reason !== 'reuse_ready') {
-    emitRunnerXctestrunDecision('rebuild', existing.reason, {
-      derived,
-      xctestrunPath: existing.xctestrunPath,
-    });
-  }
+  const cache = existing.reason === 'reuse_ready' ? 'exact' : 'miss';
   const reusable = await resolveReusableXctestrunArtifact({
     device,
     derived,
@@ -182,7 +193,13 @@ async function ensureXctestrunUnderCacheLock(params: {
     cache,
   });
   if (reusable) return reusable;
-  if (existing.xctestrunPath) {
+  if (existing.reason !== 'reuse_ready') {
+    emitRunnerXctestrunRebuildDecision(existing, derived);
+  }
+  // Nothing survived evaluation — a certified state that failed repair, or one the manifest
+  // refuses — so the tree is discarded before the rebuild. A missing manifest is not ours to
+  // delete: that directory is either a first build or one the caller laid out itself.
+  if (existing.reason !== 'cache_metadata_missing') {
     assertSafeDerivedCleanup(derived);
     cleanRunnerDerivedArtifacts(derived);
   }
@@ -202,7 +219,7 @@ async function resolveReusableXctestrunArtifact(params: {
   derived: string;
   expectedCacheMetadata: RunnerXctestrunCacheMetadata;
   existing: ExistingXctestrunState;
-  cache: RunnerXctestrunArtifact['cache'];
+  cache: Exclude<RunnerXctestrunArtifact['cache'], 'external'>;
 }): Promise<RunnerXctestrunArtifact | null> {
   const { device, derived, expectedCacheMetadata, existing, cache } = params;
   if (existing.reason !== 'reuse_ready') return null;
@@ -217,25 +234,20 @@ async function resolveReusableXctestrunArtifact(params: {
     xctestrunPath: reusableXctestrun,
     derived,
     cache,
+    cacheKey: resolveRunnerCacheKey(expectedCacheMetadata),
     artifact: 'valid',
     buildMs: 0,
-    xctestrunPathSource: existing.source,
+    xctestrunPathSource: 'manifest',
   };
 }
 
 async function buildXctestrunArtifact(params: {
   device: DeviceInfo;
-  options: {
-    verbose?: boolean;
-    logPath?: string;
-    traceLogPath?: string;
-    buildTimeoutMs?: number;
-    signal?: AbortSignal;
-  };
+  options: RunnerXctestrunBuildOptions;
   projectRoot: string;
   expectedCacheMetadata: RunnerXctestrunCacheMetadata;
   derived: string;
-  cache: RunnerXctestrunArtifact['cache'];
+  cache: Exclude<RunnerXctestrunArtifact['cache'], 'external'>;
   reason: ExistingXctestrunState['reason'];
 }): Promise<RunnerXctestrunArtifact> {
   const { device, options, projectRoot, expectedCacheMetadata, derived, cache, reason } = params;
@@ -245,13 +257,14 @@ async function buildXctestrunArtifact(params: {
     throw new AppError('COMMAND_FAILED', 'iOS runner project not found', { projectPath });
   }
 
+  const buildTimeoutMs = requireRunnerPhaseRemainingMs(options.budget, 'runner_xctestrun_build');
   const buildStartedAt = Date.now();
   emitRequestProgress({
     type: 'command',
     status: 'progress',
     message: 'Building Apple runner...',
   });
-  await buildRunnerXctestrun(device, projectPath, derived, options);
+  await buildRunnerXctestrun(device, projectPath, derived, options, buildTimeoutMs);
   const buildMs = Math.max(0, Date.now() - buildStartedAt);
 
   const built = findXctestrun(derived, device);
@@ -267,8 +280,17 @@ async function buildXctestrunArtifact(params: {
   await repairMacOsRunnerProductsIfNeeded(device, builtProductPaths, built);
   // Release/dev script builds patch the synthesized XCTest runner app in scripts/.
   // This covers direct local xcodebuilds triggered by ensureXctestrunArtifact on cache miss.
+  // The manifest is written last so it certifies the bytes that actually run.
   await applyXctestRunnerAppIcon(builtProductPaths);
-  writeRunnerCacheMetadataForArtifacts(derived, expectedCacheMetadata, built, builtProductPaths);
+  requireCertifiedRunnerCacheArtifacts(
+    await writeRunnerCacheMetadataForArtifacts(
+      derived,
+      expectedCacheMetadata,
+      built,
+      builtProductPaths,
+    ),
+    derived,
+  );
   emitRunnerXctestrunDecision('build', 'built_new', {
     derived,
     xctestrunPath: built,
@@ -277,6 +299,7 @@ async function buildXctestrunArtifact(params: {
     xctestrunPath: built,
     derived,
     cache,
+    cacheKey: resolveRunnerCacheKey(expectedCacheMetadata),
     artifact: 'rebuilt',
     buildMs,
     xctestrunPathSource: 'build',
@@ -292,16 +315,19 @@ async function tryReuseExistingXctestrun(
 ): Promise<string | null> {
   try {
     await repairMacOsRunnerProductsIfNeeded(device, existing.productPaths, existing.xctestrunPath);
+    requireCertifiedRunnerCacheArtifacts(
+      await writeRunnerCacheMetadataForArtifacts(
+        derived,
+        expectedCacheMetadata,
+        existing.xctestrunPath,
+        existing.productPaths,
+      ),
+      derived,
+    );
     emitRunnerXctestrunDecision('reuse', 'reuse_ready', {
       derived,
       xctestrunPath: existing.xctestrunPath,
     });
-    writeRunnerCacheMetadataForArtifacts(
-      derived,
-      expectedCacheMetadata,
-      existing.xctestrunPath,
-      existing.productPaths,
-    );
     return existing.xctestrunPath;
   } catch (error) {
     if (!isExpectedRunnerRepairFailure(error)) {
@@ -316,42 +342,21 @@ async function tryReuseExistingXctestrun(
 }
 
 // Cache probe for preflight surfaces (doctor): runs the same no-build reuse
-// evaluation as the ensure path (cache metadata + product-path validation),
-// so a partial or stale cache never reports as ready. Resolving the expected
-// metadata stats the runner sources and reads tool versions (~100ms, cached
-// per process) but never builds.
+// evaluation as the ensure path (cache metadata + content-manifest validation),
+// so a partial, restored, or tampered cache never reports as ready. Resolving
+// the expected metadata stats the runner sources and reads tool versions
+// (~100ms, cached per process) and the manifest digests the products (tens of
+// ms) but never builds.
 export async function hasCachedAppleRunnerArtifact(device: DeviceInfo): Promise<boolean> {
   try {
     const projectRoot = findProjectRoot();
     const expectedCacheMetadata = resolveExpectedRunnerCacheMetadata(device, projectRoot);
     const derived = resolveRunnerDerivedPath(device, expectedCacheMetadata);
-    const existing = await evaluateExistingXctestrunForDevice({
-      device,
-      derived,
-      projectRoot,
-      expectedCacheMetadata,
-    });
+    const existing = await evaluateExistingXctestrun({ derived, expectedCacheMetadata });
     return existing.reason === 'reuse_ready';
   } catch {
     return false;
   }
-}
-
-function evaluateExistingXctestrunForDevice(params: {
-  device: DeviceInfo;
-  derived: string;
-  projectRoot: string;
-  expectedCacheMetadata: RunnerXctestrunCacheMetadata;
-}): Promise<ExistingXctestrunState> {
-  const { device, derived, projectRoot, expectedCacheMetadata } = params;
-  return evaluateExistingXctestrun({
-    derived,
-    projectRoot,
-    expectedCacheMetadata,
-    findXctestrun: (root) => findXctestrun(root, device),
-    xctestrunReferencesProjectRoot,
-    resolveExistingXctestrunProductPaths,
-  });
 }
 
 type XctestrunCandidate = {
@@ -432,38 +437,13 @@ export function scoreXctestrunCandidate(candidatePath: string, device: DeviceInf
   return score;
 }
 
-export function xctestrunReferencesProjectRoot(
-  xctestrunPath: string,
-  projectRoot: string,
-): boolean {
-  try {
-    const contents = fs.readFileSync(xctestrunPath, 'utf8');
-    const candidateRoots = new Set<string>([projectRoot]);
-    try {
-      candidateRoots.add(fs.realpathSync(projectRoot));
-    } catch {}
-    for (const root of candidateRoots) {
-      if (contents.includes(root)) {
-        return true;
-      }
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
 async function buildRunnerXctestrun(
   device: DeviceInfo,
   projectPath: string,
   derived: string,
-  options: {
-    verbose?: boolean;
-    logPath?: string;
-    traceLogPath?: string;
-    buildTimeoutMs?: number;
-    signal?: AbortSignal;
-  },
+  options: RunnerXctestrunBuildOptions,
+  /** What {@link requireRunnerPhaseRemainingMs} left of the build phase, for the exec layer. */
+  buildTimeoutMs: number | undefined,
 ): Promise<void> {
   const runnerBundleBuildSettings = resolveRunnerBundleBuildSettings(process.env);
   const signingBuildSettings = resolveRunnerSigningBuildSettings(
@@ -473,8 +453,8 @@ async function buildRunnerXctestrun(
   );
   const provisioningArgs = device.kind === 'device' ? ['-allowProvisioningUpdates'] : [];
   const performanceBuildSettings = resolveRunnerPerformanceBuildSettings();
+  const archBuildSettings = resolveRunnerArchBuildSettings(process.env);
   const sandboxBuildArgs = resolveRunnerSandboxBuildArgs();
-  const simulatorSetRedirect = await acquireXcodebuildSimulatorSetRedirect(device);
   try {
     await runCmdStreaming(
       'xcodebuild',
@@ -488,11 +468,12 @@ async function buildRunnerXctestrun(
         'NO',
         resolveRunnerMaxConcurrentDestinationsFlag(device),
         '1',
-        '-destination',
-        resolveRunnerBuildDestination(device),
+        ...xcodebuildDestinationArgs(device, resolveRunnerBuildDestination(device)),
         '-derivedDataPath',
         derived,
+        ...resolveRunnerBuildLocationSettings(derived),
         ...performanceBuildSettings,
+        ...archBuildSettings,
         ...sandboxBuildArgs,
         ...runnerBundleBuildSettings,
         ...provisioningArgs,
@@ -500,8 +481,8 @@ async function buildRunnerXctestrun(
       ],
       {
         detached: true,
-        timeoutMs: options.buildTimeoutMs,
-        signal: options.signal,
+        timeoutMs: buildTimeoutMs,
+        signal: options.budget?.signal,
         onSpawn: (child) => {
           runnerPrepProcesses.add(child);
           child.on('close', () => {
@@ -516,17 +497,37 @@ async function buildRunnerXctestrun(
         },
       },
     );
-  } catch (err) {
-    if (isRequestCanceledError(err)) throw err;
-    const appErr = err instanceof AppError ? err : new AppError('COMMAND_FAILED', String(err));
-    const hint = resolveRunnerBuildFailureHint(appErr);
-    throw new AppError('COMMAND_FAILED', 'xcodebuild build-for-testing failed', {
-      error: appErr.message,
-      details: appErr.details,
-      logPath: options.logPath,
-      hint,
-    });
-  } finally {
-    await simulatorSetRedirect?.release();
+  } catch (error) {
+    if (isRequestCanceledError(error)) throw error;
+    const appErr =
+      error instanceof AppError ? error : new AppError('COMMAND_FAILED', String(error));
+    const simulatorSet = runnerSimulatorSetFailureDetails(device);
+    // The reason and the hint beside it come from one classifier (#2680), so the reason a caller
+    // switches on can never disagree with the advice it is handed.
+    const { reason, hint, matched } = classifyRunnerStartupFailure(
+      new AppError(appErr.code, appErr.message, { ...appErr.details, ...simulatorSet }),
+    );
+    const hostDeadlineHit = isCommandTimeoutError(appErr);
+    // `startupRuleMatched` travels with the verdict: this wrapper buries the tool's text a level too
+    // deep for the rows to read again, and whether a row spoke is not recoverable from the reason
+    // alone (#2690 review). The device's own state is attached further out, by the startup catch that
+    // can see this build and the launch after it.
+    const message = 'xcodebuild build-for-testing failed';
+    throw new AppError(
+      'COMMAND_FAILED',
+      reason === 'simulator_set_destination_not_found'
+        ? simulatorSetDestinationNotFoundMessage(message, device, simulatorSet)
+        : message,
+      {
+        reason,
+        error: appErr.message,
+        details: appErr.details,
+        logPath: options.logPath,
+        hint,
+        startupRuleMatched: matched,
+        startupHostDeadlineHit: hostDeadlineHit,
+        ...simulatorSet,
+      },
+    );
   }
 }

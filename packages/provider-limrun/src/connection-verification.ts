@@ -67,7 +67,7 @@ export async function verifyLimrunConnection(
     },
     app: {
       status: 'missing',
-      message: 'A new Limrun instance does not have your app yet.',
+      message: 'Run apps to choose an uploaded asset before allocation.',
     },
   };
 }

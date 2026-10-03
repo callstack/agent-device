@@ -106,23 +106,50 @@ export function eagerlyEvaluatedModules(fileName: string, source: string): strin
   return [...new Set([...staticEvaluatedRefs(parsed.module), ...dynamic])];
 }
 
-function resolveRelative(fromFile: string, specifier: string): string | null {
-  const candidate = path.resolve(path.dirname(fromFile), specifier);
-  if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
-  for (const suffix of ['.ts', '.tsx', '/index.ts']) {
-    if (fs.existsSync(`${candidate}${suffix}`)) return `${candidate}${suffix}`;
+/**
+ * How the walker sees a source tree, by absolute path. The working tree is the default; a
+ * committed git tree (`scripts/__tests__/committed-source-tree.ts`) answers the same four
+ * questions for a merge-base without checking it out.
+ */
+export type SourceTreeReader = {
+  exists(file: string): boolean;
+  isFile(file: string): boolean;
+  readdir(dir: string): string[];
+  readFile(file: string): string;
+};
+
+const workingTreeReader: SourceTreeReader = {
+  exists: (file) => fs.existsSync(file),
+  isFile: (file) => fs.existsSync(file) && fs.statSync(file).isFile(),
+  readdir: (dir) => fs.readdirSync(dir),
+  readFile: (file) => fs.readFileSync(file, 'utf8'),
+};
+
+/**
+ * `.ts` only, matching what the repo counts as a production source: `tracked-sources.ts` scans
+ * `.ts` pathspecs and `isProductionSourceFile` accepts `.ts`, so a `.tsx` file under a walked root
+ * is invisible to every layering scan. Resolving one here would only produce an edge the committed
+ * tree reader cannot read, which crashes the ratchet instead of failing it.
+ */
+function resolveRelative(from: string, specifier: string, tree: SourceTreeReader): string | null {
+  const candidate = path.resolve(path.dirname(from), specifier);
+  if (tree.isFile(candidate)) return candidate;
+  for (const suffix of ['.ts', '/index.ts']) {
+    if (tree.exists(`${candidate}${suffix}`)) return `${candidate}${suffix}`;
   }
   return null;
 }
 
 /** `@agent-device/<pkg>` -> that package's directory, keyed by its declared name. */
-function readWorkspacePackageDirs(): Map<string, string> {
+function readWorkspacePackageDirs(tree: SourceTreeReader): Map<string, string> {
   const packagesRoot = path.resolve(import.meta.dirname, '../../packages');
   const dirs = new Map<string, string>();
-  for (const entry of fs.readdirSync(packagesRoot)) {
+  for (const entry of tree.readdir(packagesRoot)) {
     const manifestPath = path.join(packagesRoot, entry, 'package.json');
-    if (!fs.existsSync(manifestPath)) continue;
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as { name?: string };
+    if (!tree.exists(manifestPath)) continue;
+    const manifest = JSON.parse(tree.readFile(manifestPath)) as {
+      name?: string;
+    };
     if (manifest.name) dirs.set(manifest.name, path.join(packagesRoot, entry));
   }
   return dirs;
@@ -130,8 +157,8 @@ function readWorkspacePackageDirs(): Map<string, string> {
 
 type ExportTarget = { default?: string; types?: string } | string;
 
-function readExportTarget(packageDir: string, subpath: string): string | undefined {
-  const manifest = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8')) as {
+function exportTargetOf(dir: string, subpath: string, tree: SourceTreeReader): string | undefined {
+  const manifest = JSON.parse(tree.readFile(path.join(dir, 'package.json'))) as {
     exports?: Record<string, ExportTarget>;
   };
   const target = manifest.exports?.[subpath];
@@ -144,39 +171,71 @@ function readExportTarget(packageDir: string, subpath: string): string | undefin
  * pull a heavy module in just as effectively as a file under src/, and stopping the
  * walk at the package boundary would be the same blind spot in a new place.
  */
-function resolveWorkspace(specifier: string, packageDirs: Map<string, string>): string | null {
+function resolveWorkspace(
+  specifier: string,
+  packageDirs: Map<string, string>,
+  tree: SourceTreeReader,
+): string | null {
   const match = WORKSPACE_SPECIFIER.exec(specifier);
   const packageName = match?.[1];
   const packageDir = packageName ? packageDirs.get(packageName) : undefined;
   if (!packageDir) return null;
-  const target = readExportTarget(packageDir, `.${match?.[2] ?? ''}`);
+  const target = exportTargetOf(packageDir, `.${match?.[2] ?? ''}`, tree);
   if (!target) return null;
   const resolved = path.resolve(packageDir, target);
-  return fs.existsSync(resolved) ? resolved : null;
+  return tree.exists(resolved) ? resolved : null;
 }
 
 /**
- * The repo files `file` evaluates directly, already resolved to absolute paths.
- *
- * Memoized: the budget table in `eager-closure-budgets.ts` walks ~100 entries whose
- * subtrees overlap heavily (every contracts entry bottoms out in the same kernel
- * modules), so without this each shared file is re-read and re-parsed once per entry
- * that reaches it. Source files do not change during a run, so the cache is safe for
- * the lifetime of the worker.
+ * Memoized per tree: the budget gate walks ~200 entries whose subtrees overlap heavily, so
+ * without this each shared file is re-read and resolved once per entry that reaches it. A
+ * tree's content does not change during a run, so the memo lives as long as its reader.
  */
-const directEdgeCache = new Map<string, string[]>();
+type TreeMemo = {
+  packageDirs: Map<string, string>;
+  directEdges: Map<string, string[]>;
+};
+const treeMemos = new WeakMap<SourceTreeReader, TreeMemo>();
 
-function directEagerEdges(file: string, packageDirs: Map<string, string>): string[] {
-  const cached = directEdgeCache.get(file);
+function memoOf(tree: SourceTreeReader): TreeMemo {
+  let memo = treeMemos.get(tree);
+  if (!memo) {
+    memo = {
+      packageDirs: readWorkspacePackageDirs(tree),
+      directEdges: new Map(),
+    };
+    treeMemos.set(tree, memo);
+  }
+  return memo;
+}
+
+/**
+ * Specifiers per file, keyed by content: a merge-base and a working tree share almost every file
+ * byte-for-byte and parsing is the expensive step, so a second tree parses only what differs.
+ */
+const parsedByFile = new Map<string, { source: string; specifiers: string[] }>();
+
+function specifiersOf(file: string, source: string): string[] {
+  const cached = parsedByFile.get(file);
+  if (cached && cached.source === source) return cached.specifiers;
+  const specifiers = eagerlyEvaluatedModules(file, source);
+  parsedByFile.set(file, { source, specifiers });
+  return specifiers;
+}
+
+/** The repo files `file` evaluates directly, already resolved to absolute paths. */
+function directEagerEdges(file: string, tree: SourceTreeReader): string[] {
+  const memo = memoOf(tree);
+  const cached = memo.directEdges.get(file);
   if (cached) return cached;
   const resolvedEdges: string[] = [];
-  for (const specifier of eagerlyEvaluatedModules(file, fs.readFileSync(file, 'utf8'))) {
+  for (const specifier of specifiersOf(file, tree.readFile(file))) {
     const resolved = specifier.startsWith('.')
-      ? resolveRelative(file, specifier)
-      : resolveWorkspace(specifier, packageDirs);
+      ? resolveRelative(file, specifier, tree)
+      : resolveWorkspace(specifier, memo.packageDirs, tree);
     if (resolved) resolvedEdges.push(resolved);
   }
-  directEdgeCache.set(file, resolvedEdges);
+  memo.directEdges.set(file, resolvedEdges);
   return resolvedEdges;
 }
 
@@ -190,14 +249,16 @@ function directEagerEdges(file: string, packageDirs: Map<string, string>): strin
  * Breadth-first, so following the links back yields the SHORTEST chain to each file
  * rather than whatever route a depth-first walk happened to take.
  */
-export function eagerClosureGraphOf(entryFile: string): Map<string, string | null> {
-  const packageDirs = readWorkspacePackageDirs();
+export function eagerClosureGraphOf(
+  entryFile: string,
+  tree: SourceTreeReader = workingTreeReader,
+): Map<string, string | null> {
   const cameFrom = new Map<string, string | null>([[entryFile, null]]);
   const queue = [entryFile];
   for (let head = 0; head < queue.length; head += 1) {
     const current = queue[head];
     if (current === undefined) continue;
-    for (const resolved of directEagerEdges(current, packageDirs)) {
+    for (const resolved of directEagerEdges(current, tree)) {
       if (cameFrom.has(resolved)) continue;
       cameFrom.set(resolved, current);
       queue.push(resolved);
@@ -212,6 +273,9 @@ export function eagerClosureGraphOf(entryFile: string): Map<string, string | nul
  * The returned SET is what callers pin; iteration order is unspecified and carries no
  * meaning (it changed from depth- to breadth-first when `eagerClosureGraphOf` landed).
  */
-export function eagerClosureOf(entryFile: string): string[] {
-  return [...eagerClosureGraphOf(entryFile).keys()];
+export function eagerClosureOf(
+  entryFile: string,
+  tree: SourceTreeReader = workingTreeReader,
+): string[] {
+  return [...eagerClosureGraphOf(entryFile, tree).keys()];
 }

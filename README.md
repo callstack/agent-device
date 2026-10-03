@@ -141,11 +141,11 @@ The same session and evidence model works at every step: the agent explores the 
 
 ## How it works
 
-`agent-device` keeps device state in sessions. It sends commands to XCTest on iOS and tvOS, ADB and the snapshot helper on Android, HDC and ArkUI `uitest` on HarmonyOS, Vega CLI/VDA on the Vega Virtual Device, a local helper on macOS, and AT-SPI on Linux.
+`agent-device` keeps device state in sessions. It uses a local accessibility bridge for iOS Simulator snapshots and XCTest for iOS interactions, physical iOS, and tvOS; ADB and the snapshot helper on Android; HDC and ArkUI `uitest` on HarmonyOS; Vega CLI/VDA on the Vega Virtual Device; a local helper on macOS; and AT-SPI on Linux.
 
 Support depth varies by target. Newer backends such as HarmonyOS and Vega OS cover a subset of commands; run `agent-device capabilities --platform <platform>` to see what a target supports.
 
-Sessions are scoped to the caller's git worktree, and host-local device claims stop parallel agents from taking over each other's simulators and emulators. The same commands drive hosted devices on [BrowserStack, AWS Device Farm, Limrun, and Doublespeed](https://oss.callstack.com/agent-device/docs/device-clouds).
+Sessions are scoped to the caller's git worktree, and host-local device claims stop parallel agents from taking over each other's simulators and emulators. Inspect ownership without a daemon via `agent-device device status`, and settle provably dead owners with `agent-device device release --stale`. The same commands drive hosted devices on [BrowserStack, AWS Device Farm, Limrun, and Doublespeed](https://oss.callstack.com/agent-device/docs/device-clouds).
 
 `agent-device` uses the inspect-act-verify process from Vercel's [agent-browser](https://github.com/vercel-labs/agent-browser) for mobile, TV, and desktop apps. Basic `--platform web` support runs `agent-browser` in the same session and replay system.
 

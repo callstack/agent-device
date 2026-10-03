@@ -1,15 +1,15 @@
 # Testing Notes
 
-Repository-specific testing traps you cannot learn from the test runner alone. Executable gate
-ownership lives in `scripts/check-affected/` and `scripts/gate/`.
+Gate ownership lives in `scripts/check-affected/` and `scripts/gate/`.
 
 ## Which gates a change needs
 
 Three tiers:
 
 1. While editing: a focused test or `pnpm check:quick`.
-2. Before pushing: `pnpm check:affected --run`. It derives the relevant local gates and lists the
-   checks that CI or a native toolchain owns.
+2. On the exact pushed head (locally, or by a gate stage recording it on the PR):
+   `pnpm check:affected --run`. It derives the relevant local gates and lists checks CI or a
+   native toolchain owns.
 3. For a broad refactor, or when the full deterministic gate is requested: `pnpm check`.
 
 GitHub stays authoritative for provider integration, full coverage, native builds, device lanes, and
@@ -21,20 +21,20 @@ pnpm check:affected --json
 pnpm gate --help
 ```
 
-`check:affected --run` reports coverage obligations but never turns coverage instrumentation on. It
-runs one capped `vitest related` command. Run the dedicated coverage scripts only to diagnose a red
-CI result.
+`check:affected --run` reports coverage obligations without instrumenting; when related tests are
+selected, it runs one capped `vitest related` command. Run local coverage to investigate a specific
+coverage question or CI failure.
 
 Two selection traps recur:
 
-- A response that emits `platform` or `appleOs` needs provider integration and coverage evidence.
-  Unit tests do not run the provider project, which is what catches internal `apple` leaking onto
-  the wire.
+- A response emitting `platform` or `appleOs` needs provider integration and coverage evidence;
+  only the provider project catches internal `apple` leaking onto the wire.
 - A workspace package manifest or TypeScript config can rewire all consumers, so the affected
   selector fails open to the full gate set on purpose.
 
-Docs-only changes with no behavior impact need no runtime tests. Structural guidance gates still
-need a planted violation that shows their failure direction.
+Docs-only changes with no runtime behavior impact need no runtime tests or new tests asserting prose.
+Keep required gates; after those and focused checks pass, repeat or broaden only for changes,
+failures, or unresolved risks.
 
 ## Platform and live-device policy
 
@@ -45,8 +45,10 @@ provider, and coverage tests mock the typed HDC seam. Real validation is local h
 Apple runner changes run `pnpm check:xctest-selection` and build the affected target. The source
 `#if` guard is the XCTest lane classification — never maintain a second test-name list. Pure runner
 decisions use the macOS host lane; iOS/XCTest semantics need a simulator lane.
+The iOS PR lane derives platform-specific XCTests from Swift guards for runner changes;
+nightly runs the full suite.
 
-Local host-lane XCTest runs hit two snags CI never does:
+Local host-lane XCTest may need signing and automation permission:
 
 - System policy may refuse the unsigned bundle (`library load disallowed by system policy`, shown
   as `Early unexpected exit … crashed with signal kill`). Rebuild signed:
@@ -66,15 +68,18 @@ Read the entry file before running a lane. Do not copy its environment matrix he
 ## Shared test utilities
 
 Before creating fixtures, look in `src/__tests__/test-utils/`. Import named builders from the module
-that defines them (`session-factories.ts`, `device-fixtures.ts`, `store-factory.ts`). There is no
-barrel on purpose: one barrel made every test evaluate every helper's transitive graph. Shared
-`DeviceInfo`, session, snapshot, store, runtime-fact, and mocked-binary values belong in a sibling
-fixture module, not in repeated test literals.
+that defines them (`session-factories.ts`, `device-fixtures.ts`, `store-factory.ts`); avoid importing
+unrelated helpers through a barrel. Shared `DeviceInfo`, session, snapshot, store, runtime-fact,
+and mocked-binary values belong in a sibling fixture module, not in repeated test literals.
+`PROPERTY_RUNS` and the interaction touch-point/rect arbitraries live in
+`@agent-device/selectors/snapshot-geometry-fixtures` — the canonical location root tests and the
+selectors package both build on — not in `src/__tests__/test-utils/`. `makeSnapshotState` itself
+canonically lives in `@agent-device/capture-kit/snapshot-state-fixtures`, re-exported from there.
 
-Use `mkdtempForTest` or `mkdtempForTestSync`. Global setup redirects `TMPDIR` for the whole run and
-removes it after every worker exits — do not add per-test cleanup for those directories. An
-interrupted run may leave a directory behind; the next run prunes it once the owner process and
-every process using its `TMPDIR` are gone.
+Use `mkdtempForTest` or `mkdtempForTestSync`. Global setup redirects `TMPDIR` for the run and
+removes it after every worker exits — skip per-test cleanup. An interrupted run may leave a
+directory behind; the next run prunes it once its owner and every process using its `TMPDIR` are
+gone.
 
 Mock the seam the subject consumes. A daemon handler that binds a runtime gets fake runtime facts
 and facets, not a mock of generic dispatch. Generic dispatch mocks are migration debt — do not add
@@ -87,15 +92,15 @@ signalled directly.
 
 ## Regression evidence
 
-A regression test must be seen failing without the production change: revert the implementation, run
-the smallest owning test, record the failing count, restore. Apply the same proof to test relocation
-and structural gates — plant a type error or violation and watch the intended gate find and name it.
+Observe a regression test fail without the fix, then pass with it. For new or changed structural
+gates, plant a violation and verify the intended gate names it. Pure test moves retain their tests;
+verify discovery at the new path. If selection rules change, plant a failure to prove selection.
 
-A callback-based canary must observe the subject's semantic success, not just lifecycle completion.
-Example: React Native Gesture Handler's
+A callback-based canary must observe semantic success, not just lifecycle completion — e.g. React
+Native Gesture Handler's
 [`onFinalize`](https://docs.swmansion.com/react-native-gesture-handler/docs/fundamentals/callbacks-events/)
-also fires when recognition fails or is interrupted — use an activation-dependent callback, or
-assert the callback's success state before publishing a pass.
+also fires on failed or interrupted recognition. Use an activation-dependent callback, or assert
+success state before publishing a pass.
 
 A device replay counts as automatic regression coverage only when an automatic PR or scheduled lane
 selects and runs it. Name the owning lane and confirm the scenario ran on the exact PR head. A
@@ -105,8 +110,8 @@ For structured classifiers, pair the positive case with the closest negative. Wh
 can be identical with and without a typed reason, the negative test must prove the message alone
 cannot activate retry, fallback, or recovery.
 
-Test through public interfaces where practical. Never add production exports or test-only dependency
-injection just for a test; a missing seam must be a real product seam.
+Test through public interfaces where practical; never add production exports or test-only
+dependency injection — a missing seam needs a real product seam.
 
 ## Properties, fuzzing, and mutation
 
@@ -116,10 +121,9 @@ budgets so property files stay inside the unit slow-test gate.
 
 Parser fuzz targets live in `scripts/fuzz/targets.ts`. Validation generators carry the invalid
 outcome they planted, so silent acceptance and wrong error codes are failures. Cases run in a
-worker process, so the two faults a case cannot report about itself — never returning, and killing
-the process it runs in — are reported as `hang` and `crash` against the exact input rather than
-taking the caller down with them. Promote a discovered case with the command the harness prints —
-never hand-copy an unshrunk input.
+worker process, so a case that never returns or kills its process is reported as `hang` or `crash`
+against the exact input. Promote a discovered case with the command the harness prints — never
+hand-copy an unshrunk input.
 
 Mutation is report-only and limited to the registry in `scripts/mutation/modules.ts`. It measures
 whether tests distinguish changed decision logic. Do not infer redundancy from line coverage alone.
@@ -129,14 +133,12 @@ whether tests distinguish changed decision logic. Do not infer redundancy from l
 Run `pnpm depgraph affected` before touching a high-fan-in module:
 
 ```sh
-pnpm depgraph affected src/utils/exec.ts
+pnpm depgraph affected packages/host-kit/src/command.ts
 pnpm depgraph affected src/daemon/ref-frame.ts --json --limit 25
 ```
 
-It reports value-edge dependents, affected gates, public commands whose handler chains reach the
-module, live scenario owners, and interaction-guarantee cells; type-only and dynamic edges are
-classified separately. Feed the plan into `pnpm check:affected --run` — do not keep a parallel gate
-list in prose.
+Use its dependent, command, and guarantee-cell report to scope inspection. `pnpm check:affected --run`
+selects gates independently from the diff; it does not consume the depgraph report.
 
 ## Gate ownership
 
@@ -150,8 +152,8 @@ limitations (manual-only, opaque owners) belong in the gate declarations, not he
 
 ## Concurrency torture lane
 
-The harness uses a deterministic scheduler for modeled lock grants plus a separate real
-request-scope serialization guard. A seed reproduces the scheduler trace and terminal invariant:
+The harness uses a deterministic scheduler for modeled lock grants and a real request-scope
+serialization guard. A seed reproduces the scheduler trace and terminal invariant:
 
 ```sh
 pnpm test:concurrency-torture
@@ -159,28 +161,28 @@ TORTURE_SEED=1234 pnpm test:concurrency-torture
 ```
 
 Lock plans come from the production request-lock decisions — never hand-author a parallel plan. The
-modeled boundary is documented in the harness module, and every failure prints its exact replay
-command.
+modeled boundary is documented in the harness module; every failure prints its exact replay command.
 
-## Real-subprocess-spawn tests
+## Test evidence and versioned inputs
 
-`SUBPROCESS_STUB_TESTS` enumerates the few files that spawn a real subprocess per case. They ran
-serialized in their own Vitest project until #1823's kill criterion: now un-serialized in
-`unit-core`'s default forks pool, reverted if a timeout-shaped failure appears within 20 consecutive
-CI runs. Still excluded from the mutation lane either way. There is no unit-test retry layer — fix
-or remove flakes.
+Run- or commit-stamped benchmark output is never committed under `scripts/`: produce it at run
+time or fetch it from the evidence branch. Versioned inputs (fuzz corpus, Maestro fixtures,
+schemas, `contracts/fixtures/` tables) are unaffected.
 
 ## Speed rules
 
+Changing timeout failures that pass alone may be host contention. Reproduce on `origin/main` under
+the same load before classifying them as regressions.
+
+- Unit tests have no retry layer. Fix or remove flakes instead of hiding them behind retries.
 - Unit tests do not wait production time. Prefer budget-derived cadence, assert the caller passes
   the right timeout to its tool seam, or use an existing clock seam.
-- Vitest parallelizes files, so wall clock is bounded by the slowest file. Splitting a monolith
-  along source topology is a performance win, not just a readability win.
 - The slow-test reporter enforces unit and integration budgets. Existing pins only shrink; a new
   pin needs measured justification.
-- Test files over 1,000 lines are pinned to their merge-base size and may only shrink. Split the
-  family before adding tests; never raise the pin.
-- Keep isolation enabled and the pool on forks — both alternatives were measured and did not help.
-  The useful optimization is importing the module under test, not a platform barrel.
+- Test files over 1,000 lines may be no longer than at the merge-base with `origin/main`, and no
+  new test file may cross that line. Split the family before adding tests; shrinking needs no
+  gate edit.
+- Keep isolation enabled and the pool on forks; disabling isolation and changing pools did not
+  improve measured performance. Import the module under test, not a platform barrel.
 - Local Vitest runs use a four-worker cap. Override it when a run needs a different host share:
   `AGENT_DEVICE_VITEST_MAX_WORKERS=<n>` (clamped to host CPUs, ignored in CI).

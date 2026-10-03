@@ -4,22 +4,29 @@ import {
   isProcessGroupAlive,
   signalPidsBestEffort,
   signalProcessGroupBestEffort,
-  type ExecBackgroundResult,
   buildSimctlArgsForDevice,
   runAppleToolCommand,
   runXcrun,
 } from './host.ts';
+import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
+import {
+  buildRunnerSessionXctestrunDeviceCleanupPattern,
+  buildRunnerSessionXctestrunPathCleanupPattern,
+} from './runner-artifact-env.ts';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { cleanupTempFile } from './runner-io.ts';
 import { waitForRunner } from './runner-startup-transport.ts';
 import { withRunnerCommandId, type RunnerCommand } from './runner-contract.ts';
 import {
   cleanupOwnedRunnerLease,
+  currentRunnerLeaseOwnerToken,
   releaseRunnerLease,
+  withRunnerLeaseLock,
   type RunnerLeaseCleanupAdapter,
+  type RunnerXcodebuildCleanupTarget,
 } from './runner-lease.ts';
 import { IOS_RUNNER_CONTAINER_BUNDLE_IDS, runnerPrepProcesses } from './runner-xctestrun.ts';
-import type { RunnerSession } from './runner-session-types.ts';
+import { advanceRunnerSessionState, type RunnerSession } from './runner-session-types.ts';
 
 export const RUNNER_INVALIDATE_WAIT_TIMEOUT_MS = 1_000;
 
@@ -36,16 +43,30 @@ export const runnerLeaseCleanupAdapter: RunnerLeaseCleanupAdapter = {
   cleanupTempFile,
 };
 
+export type RunnerDisposalOptions = {
+  graceful?: boolean;
+  waitTimeoutMs?: number;
+  /**
+   * The caller already executes inside {@link withRunnerLeaseLock} for this
+   * device, so the ownership-fenced device-wide teardown must not re-acquire
+   * the (non-reentrant) lease lock.
+   */
+  leaseLockHeld?: boolean;
+};
+
 export async function disposeRunnerSession(
   session: RunnerSession,
-  options: { graceful?: boolean; waitTimeoutMs?: number } = {},
+  options: RunnerDisposalOptions = {},
 ): Promise<void> {
+  // From here the session is going away: it still owns the lease and the process is still up, so
+  // it can answer a request, and it must not be chosen for new work while it is being taken down.
+  advanceRunnerSessionState(session, 'draining');
   let processExitHandled = false;
   if (options.graceful !== false) {
     processExitHandled = await shutdownRunnerSessionGracefully(session);
   } else if (isMacOs(session.device)) {
     await interruptMacOsRunnerSessions([session]);
-    await cleanupRunnerSessionResources(session);
+    await cleanupRunnerSessionResources(session, options);
     return;
   } else {
     await killRunnerProcessTree(session.child.pid, 'SIGTERM');
@@ -57,7 +78,7 @@ export async function disposeRunnerSession(
       await killRunnerProcessTree(session.child.pid, 'SIGKILL');
     }
   }
-  await cleanupRunnerSessionResources(session);
+  await cleanupRunnerSessionResources(session, options);
 }
 
 export async function cleanupOwnedIosRunnerLease(deviceId: string): Promise<void> {
@@ -70,6 +91,9 @@ export async function abortRunnerSessionsAndPrepProcesses(
   const prepProcesses = Array.from(runnerPrepProcesses);
   const macOsSessions = activeSessions.filter((session) => isMacOs(session.device));
   const otherSessions = activeSessions.filter((session) => !isMacOs(session.device));
+  for (const session of activeSessions) {
+    advanceRunnerSessionState(session, 'draining');
+  }
   await signalRunnerSessions(otherSessions, 'SIGINT');
   await signalRunnerPrepProcesses(prepProcesses, 'SIGINT');
   await signalRunnerSessions(otherSessions, 'SIGTERM');
@@ -149,19 +173,23 @@ async function interruptMacOsRunnerSessions(sessions: readonly RunnerSession[]):
   // restores it during xcodebuild teardown. Give SIGINT time to complete that teardown before
   // escalating; revisit only if XCTest exposes a separate public cleanup acknowledgement.
   await signalRunnerSessions(sessions, 'SIGINT');
-  const afterInterrupt = await runnerSessionsStillAlive(
+  const afterInterrupt = await runnerSessionsWithRunningProcesses(
     sessions,
     MACOS_RUNNER_INTERRUPT_WAIT_TIMEOUT_MS,
   );
   await signalRunnerSessions(afterInterrupt, 'SIGTERM');
-  const afterTerm = await runnerSessionsStillAlive(
+  const afterTerm = await runnerSessionsWithRunningProcesses(
     afterInterrupt,
     MACOS_RUNNER_TERM_WAIT_TIMEOUT_MS,
   );
   await signalRunnerSessions(afterTerm, 'SIGKILL');
 }
 
-async function runnerSessionsStillAlive(
+/**
+ * The sessions whose runner process is still there after each waited up to `waitTimeoutMs` for its
+ * exit — the escalation step signals exactly these.
+ */
+async function runnerSessionsWithRunningProcesses(
   sessions: readonly RunnerSession[],
   waitTimeoutMs: number,
 ): Promise<RunnerSession[]> {
@@ -171,15 +199,61 @@ async function runnerSessionsStillAlive(
   return sessions.filter((_, index) => !exited[index]);
 }
 
-async function cleanupRunnerSessionResources(session: RunnerSession): Promise<void> {
-  await terminateRunnerSimulatorApps(session.device);
+async function cleanupRunnerSessionResources(
+  session: RunnerSession,
+  options: Pick<RunnerDisposalOptions, 'leaseLockHeld'> = {},
+): Promise<void> {
+  await settleOwnedRunnerDeviceState(session, options);
   cleanupTempFile(session.xctestrunPath);
   cleanupTempFile(session.jsonPath);
-  try {
-    await session.simulatorSetRedirect?.release();
-  } finally {
-    releaseRunnerLease(session.lease);
+  // The session's own resources are gone: no lease, no temp files.
+  advanceRunnerSessionState(session, 'stopped');
+}
+
+/**
+ * Terminating the runner container bundles acts on the whole device, and the
+ * lease file names whose runner lives in them; a takeover (device-claim or
+ * logical-lease) can change that between a check and the termination. The
+ * ownership check, the termination, and the lease release therefore run as one
+ * operation under the runner-lease lock — the same lock a successor holds for
+ * its entire reclaim-and-publish window. If the lock cannot be acquired, all
+ * device-wide teardown is skipped: whoever owns the lease settles that state,
+ * and an unreleased own lease turns stale once this process exits.
+ */
+async function settleOwnedRunnerDeviceState(
+  session: RunnerSession,
+  options: Pick<RunnerDisposalOptions, 'leaseLockHeld'>,
+): Promise<void> {
+  const settle = async () => {
+    if (runnerLeaseOwnedElsewhere(session)) return;
+    try {
+      await terminateRunnerSimulatorApps(session.device);
+    } finally {
+      releaseRunnerLease(session.lease);
+    }
+  };
+  if (options.leaseLockHeld) {
+    await settle();
+    return;
   }
+  try {
+    await withRunnerLeaseLock(session.deviceId, settle);
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'ios_runner_disposal_lease_lock_unavailable',
+      data: {
+        deviceId: session.deviceId,
+        sessionId: session.sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+  }
+}
+
+function runnerLeaseOwnedElsewhere(session: RunnerSession): boolean {
+  const onDiskToken = currentRunnerLeaseOwnerToken(session.deviceId);
+  return onDiskToken !== null && onDiskToken !== session.lease?.ownerToken;
 }
 
 async function terminateRunnerSimulatorApps(device: DeviceInfo): Promise<void> {
@@ -258,13 +332,12 @@ async function killRunnerProcessTree(
   } catch {}
 }
 
-async function killRunnerXcodebuildProcesses(
-  deviceId: string,
-  ownerToken: string | undefined,
-): Promise<void> {
-  const pattern = ownerToken
-    ? `xcodebuild.*test-without-building.*AgentDeviceRunner\\.env\\.session-${escapeRegex(deviceId)}-${escapeRegex(ownerToken)}-`
-    : `xcodebuild.*test-without-building.*AgentDeviceRunner\\.env\\.session-${escapeRegex(deviceId)}-[0-9]`;
+async function killRunnerXcodebuildProcesses(target: RunnerXcodebuildCleanupTarget): Promise<void> {
+  const { deviceId } = target;
+  const pattern = `xcodebuild.*test-without-building.*${
+    buildRunnerSessionXctestrunPathCleanupPattern(target.xctestrunPath) ??
+    buildRunnerSessionXctestrunDeviceCleanupPattern(deviceId)
+  }`;
   for (const signal of ['TERM', 'KILL'] as const) {
     try {
       await runAppleToolCommand('pkill', [`-${signal}`, '-f', pattern], {
@@ -283,8 +356,4 @@ async function killRunnerXcodebuildProcesses(
       });
     }
   }
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

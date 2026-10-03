@@ -1,5 +1,6 @@
-import { beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { SnapshotResult } from '@agent-device/contracts/snapshot-runtime';
+import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import {
   makeAndroidSession,
@@ -8,14 +9,18 @@ import {
 } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { withTestDeviceInventory } from '../../__tests__/test-utils/device-inventory-gateways.ts';
-import type { DaemonRequest } from '../types.ts';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
+import type { PostGestureOutcome } from '@agent-device/kernel/snapshot';
+import type { DaemonRequest } from '../daemon-request.ts';
 import { selectorCaptureFixture } from './selector-capture-fixture.ts';
+import { markDeferredInteractionOutcome } from '../deferred-interaction-outcome.ts';
+import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({ mockRunAppleRunnerCommand: vi.fn() }));
 
-vi.mock('../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
+vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../platforms/apple/core/runner-client.ts')>();
+    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
@@ -26,9 +31,13 @@ beforeEach(() => {
   mockRunAppleRunnerCommand.mockResolvedValue({});
 });
 
-// `is` answers every one of its seven predicates from the resolved capture — `isCommand` never
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+// `is` answers every one of its eight predicates from the resolved capture — `isCommand` never
 // reaches `backend.readText`. So its whole platform execution is the request-bound capture, and
-// these cases bind at `inspectFacts` / `bindDevice`, never at `core/dispatch-resolve.ts`.
+// these cases bind at `inspectFacts` / `bindDevice`, never at `-device/device-selection/dispatch-resolve`.
 
 const unavailableCapture = { available: false, reason: 'unsupported-device-kind' } as const;
 const activeAppRequired = { available: false, reason: 'owner-capability-missing' } as const;
@@ -54,8 +63,12 @@ function buttonSnapshot(): SnapshotResult {
   };
 }
 
-function isRequest(session: string, positionals: readonly string[]): DaemonRequest {
-  return { token: 't', session, command: 'is', positionals: [...positionals], flags: {} };
+function isRequest(
+  session: string,
+  positionals: readonly string[],
+  flags: DaemonRequest['flags'] = {},
+): DaemonRequest {
+  return { token: 't', session, command: 'is', positionals: [...positionals], flags };
 }
 
 test('an admitted is inspects once, binds once, and answers through the bound capture', async () => {
@@ -75,6 +88,145 @@ test('an admitted is inspects once, binds once, and answers through the bound ca
   expect(fixture.inspections).toEqual([ANDROID_EMULATOR]);
   expect(fixture.binds).toEqual([ANDROID_EMULATOR]);
   expect(fixture.captures.length).toBeGreaterThan(0);
+});
+
+test('is absent uses the bound readAny capture for selector-first input without rects', async () => {
+  const fixture = selectorCaptureFixture({
+    snapshot: () => ({ nodes: [], backend: 'xctest', producer: 'apple-runner' }),
+  });
+  const sessionStore = makeSessionStore();
+  sessionStore.set('is-absent', makeIosAppSession('is-absent'));
+
+  const response = await dispatchIsViaRuntime({
+    req: isRequest('is-absent', ['label="Removed row"', 'absent']),
+    sessionName: 'is-absent',
+    sessionStore,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    expect(response.data).toMatchObject({
+      predicate: 'absent',
+      pass: true,
+      matches: 0,
+    });
+  }
+  expect(fixture.captures).toHaveLength(1);
+  expect(fixture.captures[0]?.options?.includeRects).toBe(false);
+});
+
+test('is absent bypasses a cached no-match snapshot before evaluating the bound capture', async () => {
+  const cachedAbsent = {
+    ...makeSnapshotState([{ index: 0, type: 'StaticText', label: 'Current screen' }], {
+      backend: 'xctest',
+      producer: 'apple-runner',
+    }),
+    presentationKey: buildSnapshotPresentationKey({}),
+  } satisfies NonNullable<ReturnType<typeof makeIosAppSession>['snapshot']>;
+  const fixture = selectorCaptureFixture({
+    snapshot: () => ({
+      nodes: [{ index: 0, type: 'Button', label: 'Removed row' }],
+      backend: 'xctest',
+      producer: 'apple-runner',
+    }),
+  });
+  const sessionStore = makeSessionStore();
+  sessionStore.set(
+    'is-absent-fresh',
+    makeIosAppSession('is-absent-fresh', { snapshot: cachedAbsent }),
+  );
+
+  const response = await dispatchIsViaRuntime({
+    req: isRequest('is-absent-fresh', ['absent', 'label="Removed row"']),
+    sessionName: 'is-absent-fresh',
+    sessionStore,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+
+  expect(response?.ok).toBe(false);
+  if (response?.ok === false) {
+    expect(response.error.details).toMatchObject({
+      command: 'is',
+      reason: 'predicate_failed',
+      predicate: 'absent',
+      matches: 1,
+      observation: 'present',
+    });
+  }
+  expect(fixture.captures).toHaveLength(1);
+});
+
+test('is absent fails closed for a quality-less legacy iOS root-only capture', async () => {
+  const fixture = selectorCaptureFixture({
+    snapshot: () => ({
+      nodes: [{ index: 0, type: 'XCUIElementTypeApplication' }],
+      backend: 'xctest',
+      producer: 'apple-runner',
+    }),
+  });
+  const sessionStore = makeSessionStore();
+  sessionStore.set('is-legacy-sparse', makeIosAppSession('is-legacy-sparse'));
+
+  const response = await dispatchIsViaRuntime({
+    req: isRequest('is-legacy-sparse', ['absent', 'label="Removed row"']),
+    sessionName: 'is-legacy-sparse',
+    sessionStore,
+    inspectFacts: fixture.inspectFacts,
+    bindDevice: fixture.bindDevice,
+  });
+
+  expect(response?.ok).toBe(false);
+  if (response?.ok === false) {
+    expect(response.error.code).toBe('COMMAND_FAILED');
+    expect(response.error.details).toMatchObject({
+      command: 'is',
+      reason: 'predicate_failed',
+      predicate: 'absent',
+      observation: 'sparse',
+      matches: 0,
+      snapshotQuality: {
+        state: 'sparse',
+        backend: 'tree',
+        reasonCode: 'sparse-tree',
+      },
+    });
+  }
+  expect(fixture.captures).toHaveLength(1);
+});
+
+test('is absent rejects depth and scope before binding with typed invalid arguments', async () => {
+  const fixture = selectorCaptureFixture();
+  const sessionStore = makeSessionStore();
+  sessionStore.set('is-absent-flags', makeIosAppSession('is-absent-flags'));
+
+  for (const [flag, value] of [
+    ['snapshotScope', 'Login'],
+    ['snapshotDepth', 2],
+  ] as const) {
+    const response = await dispatchIsViaRuntime({
+      req: isRequest('is-absent-flags', ['absent', 'label="Gone"'], { [flag]: value }),
+      sessionName: 'is-absent-flags',
+      sessionStore,
+      inspectFacts: fixture.inspectFacts,
+      bindDevice: fixture.bindDevice,
+    });
+
+    expect(response?.ok).toBe(false);
+    if (response?.ok === false) {
+      expect(response.error.code).toBe('INVALID_ARGS');
+      expect(response.error.details).toMatchObject({
+        command: 'is',
+        predicate: 'absent',
+        rejectedOption: flag === 'snapshotScope' ? 'scope' : 'depth',
+      });
+    }
+  }
+  expect(fixture.inspections).toEqual([]);
+  expect(fixture.binds).toEqual([]);
+  expect(fixture.captures).toEqual([]);
 });
 
 test('an unavailable capture fact refuses before any bind', async () => {
@@ -270,4 +422,93 @@ test('a failing predicate answers COMMAND_FAILED from the bound capture', async 
   }
   // The bound capture is what answered it.
   expect(fixture.captures.length).toBeGreaterThan(0);
+});
+
+test('a miss on a surface that never settled carries the unsettled fact, and the re-read captures afresh', async () => {
+  vi.useFakeTimers();
+  // Every capture shows the row at a new offset, so no two consecutive reads agree.
+  const fixture = selectorCaptureFixture({
+    snapshot: (_input, index) => ({
+      nodes: [
+        {
+          index: 0,
+          type: 'Cell',
+          identifier: 'row',
+          rect: { x: 0, y: 200 - index * 37, width: 390, height: 60 },
+        },
+      ],
+      backend: 'xctest',
+      producer: 'apple-runner',
+    }),
+  });
+  const sessionStore = makeSessionStore();
+  const session = makeIosAppSession('is-unsettled');
+  markDeferredInteractionOutcome({ session, command: 'scroll', positionals: [], flags: {} });
+  sessionStore.set('is-unsettled', session);
+  const isVisible = () =>
+    dispatchIsViaRuntime({
+      req: isRequest('is-unsettled', ['visible', 'id=target']),
+      sessionName: 'is-unsettled',
+      sessionStore,
+      inspectFacts: fixture.inspectFacts,
+      bindDevice: fixture.bindDevice,
+    });
+  const pending = isVisible();
+  // Just past the 1.5s stabilization deadline, so the re-read lands inside the cache window.
+  await vi.advanceTimersByTimeAsync(1_700);
+  const outcome: PostGestureOutcome = {
+    kind: 'unsettled',
+    gesture: { action: 'scroll', positionals: [] },
+  };
+
+  const response = await pending;
+  expect(response?.ok === false && response.error).toMatchObject({
+    hint: expect.stringContaining(formatPostGestureOutcomeWarning(outcome)),
+    details: { reason: 'selector_not_found', postGestureOutcome: outcome },
+  });
+  const captures = fixture.captures.length;
+  const reread = await isVisible();
+  expect(fixture.captures.length).toBe(captures + 1);
+  expect(reread?.ok === false && reread.error.details?.postGestureOutcome).toBeUndefined();
+});
+
+test('a read after a scroll that moved nothing carries the no-effect outcome, and the re-read reuses its settled tree', async () => {
+  vi.useFakeTimers();
+  const row = {
+    index: 0,
+    type: 'Cell',
+    identifier: 'row',
+    rect: { x: 0, y: 200, width: 390, height: 60 },
+  };
+  const fixture = selectorCaptureFixture({
+    snapshot: () => ({ nodes: [row], backend: 'xctest', producer: 'apple-runner' }),
+  });
+  const sessionStore = makeSessionStore();
+  const session = makeIosAppSession('is-no-effect', { snapshot: makeSnapshotState([row]) });
+  markDeferredInteractionOutcome({ session, command: 'scroll', positionals: ['down'], flags: {} });
+  sessionStore.set('is-no-effect', session);
+  const isVisible = () =>
+    dispatchIsViaRuntime({
+      req: isRequest('is-no-effect', ['visible', 'id=row']),
+      sessionName: 'is-no-effect',
+      sessionStore,
+      inspectFacts: fixture.inspectFacts,
+      bindDevice: fixture.bindDevice,
+    });
+  const pending = isVisible();
+  // A tree that still matches its pre-gesture baseline is distrusted up to the 3.5s cap.
+  await vi.advanceTimersByTimeAsync(3_700);
+  const outcome: PostGestureOutcome = {
+    kind: 'no-effect',
+    gesture: { action: 'scroll', positionals: ['down'] },
+  };
+
+  const response = await pending;
+  expect(response?.ok && response.data).toMatchObject({
+    postGestureOutcome: outcome,
+    warnings: [formatPostGestureOutcomeWarning(outcome)],
+  });
+  const captures = fixture.captures.length;
+  await isVisible();
+  expect(fixture.captures.length).toBe(captures);
 });

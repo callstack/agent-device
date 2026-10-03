@@ -33,6 +33,7 @@ export type CheckId =
   | 'lint'
   | 'typecheck'
   | 'test-app-typecheck'
+  | 'test-app-security'
   | 'layering'
   | 'di-seams'
   | 'fallow'
@@ -46,6 +47,7 @@ export type CheckId =
   | 'provider-integration'
   | 'integration-node'
   | 'macos-coverage'
+  | 'ios-snapshot-differential'
   | 'integration-progress'
   | 'swift-runner-ios'
   | 'swift-runner-macos'
@@ -71,6 +73,7 @@ export type CheckId =
   | 'command-docs'
   | 'agent-guidance'
   | 'xctest-selection'
+  | 'packaged-runner-swift'
   // Gates that drive their own runner — declared nowhere, registered here.
   | 'maestro-conformance'
   | 'maestro-differential'
@@ -95,6 +98,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'lint',
   'typecheck',
   'test-app-typecheck',
+  'test-app-security',
   'layering',
   'di-seams',
   'fallow',
@@ -105,6 +109,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   // run before the related-project workload heats the host.
   'integration-node',
   'macos-coverage',
+  'ios-snapshot-differential',
   'vitest-related',
   'unit',
   'unit-ci',
@@ -134,6 +139,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'command-docs',
   'agent-guidance',
   'xctest-selection',
+  'packaged-runner-swift',
   'maestro-conformance',
   'maestro-differential',
   'maestro-regenerate',
@@ -187,7 +193,8 @@ const ROOT_TOOLING = new Set([
   'tsconfig.lib.json',
   'tsdown.config.ts',
   'vitest.config.ts',
-  '.oxlintrc.json',
+  '.fallowrc.json',
+  'oxlint.config.ts',
   '.oxfmtrc.json',
   '.npmrc',
 ]);
@@ -258,35 +265,19 @@ const staticTsGates: OwnershipRule = ({ file, isTs, underSrc, underTest }) =>
 
 const srcProdGate: OwnershipRule = ({ file, isSrcProd }) => {
   if (!isSrcProd) return [];
-  const selections = [
+  return [
     reason('layering', file, 'gate:layering', 'layering guard reads production src/ modules'),
     reason('build', file, 'src-prod', 'production source is compiled by the build'),
   ];
-  if (file.startsWith('src/platforms/')) {
-    selections.push(
-      reason(
-        'provider-integration',
-        file,
-        'platform-src',
-        'platform source shapes device/provider wire behavior',
-      ),
-      reason(
-        'coverage',
-        file,
-        'platform-src',
-        'Testing Matrix requires coverage for platform/device-response changes',
-      ),
-    );
-  }
-  return selections;
 };
 
 function isNodeIntegrationPath(file: string): boolean {
-  return (
-    file.startsWith('test/integration/') &&
-    !file.slice('test/integration/'.length).includes('/') &&
-    file.endsWith('.ts')
-  );
+  if (!file.startsWith('test/integration/') || !file.endsWith('.ts')) return false;
+  const rest = file.slice('test/integration/'.length);
+  // command-coverage/ holds the single declaration table every platform's node --test
+  // coverage smoke test projects its record from (#2411): a change there feeds all six
+  // smoke tests even though the file itself sits one level below test/integration/.
+  return !rest.includes('/') || rest.startsWith('command-coverage/');
 }
 
 const vitestRelatedOwnership: OwnershipRule = ({ file, isTs, underSrc, underTest }) =>
@@ -363,7 +354,11 @@ const nodeIntegrationOwnership: OwnershipRule = ({ file }) =>
 
 const macosCoverageOwnership: OwnershipRule = ({ file }) =>
   file === 'test/integration/smoke-macos-coverage.test.ts' ||
-  file.startsWith('test/integration/macos-e2e/')
+  file.startsWith('test/integration/macos-e2e/') ||
+  // The per-command coverage judgments (macOS included) are declared once here and
+  // projected into macos-e2e/coverage.ts at load time (#2411), so a table edit must
+  // still select the macOS lane the way editing the old macos-e2e manifest did.
+  file.startsWith('test/integration/command-coverage/')
     ? [
         reason(
           'macos-coverage',
@@ -445,25 +440,42 @@ const daemonWireCompatOwnership: OwnershipRule = ({ file }) => {
   ];
 };
 
+const ownsAppleRunnerBuildSource = (file: string): boolean =>
+  file.startsWith('apple/runner/') ||
+  file.startsWith('apple/snapshot-presentation/') ||
+  (file.startsWith('packages/platform-apple/src/runner/') && !file.includes('/__tests__/')) ||
+  file.endsWith('.swift');
+
 const BUILD_OWNERSHIP: ReadonlyArray<{
   check: CheckId;
   rule: string;
   detail: string;
   owns: (file: string) => boolean;
 }> = [
-  // Both platform builds compile the same runner sources, and each is a separate
-  // gate in a separate lane, so a Swift change owns both.
+  {
+    check: 'ios-snapshot-differential',
+    rule: 'own:ios-snapshot-differential',
+    detail: 'the required macOS lane runs the Swift/TypeScript snapshot differential',
+    owns: (file) =>
+      file.startsWith('packages/capture-kit/src/ios-snapshot-engine/') ||
+      file.startsWith('apple/snapshot-presentation/') ||
+      file === 'packages/kernel/src/rect.ts' ||
+      file === 'contracts/fixtures/ios-snapshot-engine-conformance.json' ||
+      file === 'contracts/fixtures/snapshot-actionability-policy.json',
+  },
+  // The native runner cache hashes these source trees for both Apple targets.
+  // Keep the build owner broader than the current file extensions.
   {
     check: 'swift-runner-ios',
     rule: 'own:swift',
     detail: 'Swift runner sources require the iOS XCUITest build',
-    owns: (file) => file.startsWith('apple/runner/') || file.endsWith('.swift'),
+    owns: ownsAppleRunnerBuildSource,
   },
   {
     check: 'swift-runner-macos',
     rule: 'own:swift',
     detail: 'Swift runner sources require the macOS XCUITest build',
-    owns: (file) => file.startsWith('apple/runner/') || file.endsWith('.swift'),
+    owns: ownsAppleRunnerBuildSource,
   },
   // The PR lane names each runner XCTest method it runs, so renaming or deleting one
   // silently shrinks that lane. Selected here so the drift shows up on the change that
@@ -474,12 +486,33 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
     detail: 'runner test methods must stay selected in CI and stripped from the npm source bundle',
     owns: (file) => file.startsWith('apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests/'),
   },
+  // The packager rewrites every runner Swift file on its way into the npm package, and nothing in
+  // this repo reads the result — the first consumer is a user's `xcodebuild`. Both the source and
+  // the two rewriting scripts own the check that the rewrite keeps the file parseable and keeps its
+  // line numbering.
+  {
+    check: 'packaged-runner-swift',
+    rule: 'own:packaged-runner-swift',
+    detail: 'packaged runner Swift must still parse and keep the checkout line numbering',
+    owns: (file) =>
+      file.startsWith('apple/runner/') ||
+      file === 'scripts/package-apple-runner-source.mjs' ||
+      file === 'scripts/strip-swift-comments.mjs',
+  },
   {
     check: 'android-helpers',
     rule: 'own:android-helpers',
     detail: 'Android helper packages have their own build',
     owns: (file) =>
       file.startsWith('android/snapshot-helper/') || file.startsWith('android/ime-helper/'),
+  },
+  {
+    check: 'unit',
+    rule: 'own:android-package-test-fixture',
+    detail: 'the Android package test fixture is consumed by the unit suite',
+    owns: (file) =>
+      file ===
+      'packages/platform-android/src/__tests__/test-utils/fixtures/android-helper-apk.fixture',
   },
   {
     check: 'macos-helper',
@@ -492,6 +525,30 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
     rule: 'own:mcp',
     detail: 'MCP registry metadata must stay in sync',
     owns: (file) => file === 'server.json' || file === 'smithery.yaml',
+  },
+  // image-size ships no fixed version for its parser DoS advisories; the in-tree
+  // pnpm patch is the mitigation, and only its defining files own the proof.
+  {
+    check: 'test-app-security',
+    rule: 'own:test-app-security',
+    detail: 'the image-size parser mitigation is proven by the test-app security suite',
+    owns: (file) =>
+      file.startsWith('examples/test-app/patches/') ||
+      file.startsWith('examples/test-app/security/') ||
+      file === 'examples/test-app/pnpm-workspace.yaml',
+  },
+  // In-package payload captures: a recorded tool response checked in under a package's fixture
+  // directory (`packages/*/**/__tests__/fixtures/*.json`, or a `fixtures/` dir beside the module that
+  // reads it). Nothing builds them and no `.ts` sibling names them, so without this a capture edit
+  // fails the gate open even though exactly one suite asserts against it.
+  {
+    check: 'unit',
+    rule: 'own:package-capture',
+    detail: 'the vitest unit suite reads the captured payload',
+    owns: (file) =>
+      file.startsWith('packages/') &&
+      file.endsWith('.json') &&
+      (file.includes('/__tests__/fixtures/') || file.includes('/fixtures/')),
   },
   // TS/Swift golden tables (`contracts/fixtures/*.json`): the vitest parity test and the
   // runner XCTest twin both read them, so a table edit owns the unit lane and both runner

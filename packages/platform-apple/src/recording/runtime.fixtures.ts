@@ -5,6 +5,7 @@ import type {
 } from '@agent-device/contracts/screen-recording-runtime-host';
 import type { ScreenRecordingStartInput } from '@agent-device/contracts/screen-recording-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
 import type { AppleScreenRecordingOperationHost } from './recovery.ts';
 
 export const coreDevice = Object.freeze({
@@ -44,12 +45,16 @@ export const processIdentity = Object.freeze({
   command: 'xcrun simctl io sim recordVideo /tmp/capture.mp4',
 });
 
+export function recordingOutputPath(name = 'capture.mp4'): string {
+  return `/tmp/${name}`;
+}
+
 export function recordingInput(
   overrides: Partial<ScreenRecordingStartInput> = {},
 ): ScreenRecordingStartInput {
   return {
     sessionId: 'one',
-    outputPath: '/tmp/capture.mp4',
+    outputPath: recordingOutputPath(),
     scope: 'device',
     showTouches: false,
     hideTouchesRequested: false,
@@ -60,22 +65,42 @@ export function recordingInput(
   };
 }
 
+export function simulatorRecorderStart(): Pick<
+  ScreenRecordingRuntimeHost['apple'],
+  'startSimulator'
+> {
+  return {
+    startSimulator: async () => ({
+      markers: [processIdentity],
+      wait: new Promise<never>(() => {}),
+      terminate: async () => {},
+    }),
+  };
+}
+
 export function appleRecordingHost(
   options: {
     apple?: Partial<ScreenRecordingRuntimeHost['apple']>;
     complete?: ScreenRecordingFinalizer['complete'];
-    prepare?: ScreenRecordingRuntimeHost['outputs']['prepare'];
+    sniff?: ScreenRecordingFinalizer['sniff'];
+    files?: ReturnType<typeof recordingFileStore>;
+    outputs?: Partial<ScreenRecordingRuntimeHost['outputs']>;
     ownedProcesses?: ScreenRecordingRuntimeHost['ownedProcesses'];
   } = {},
 ): AppleScreenRecordingOperationHost {
+  const store = options.files ?? recordingFileStore();
+  const provided = options.apple ?? {};
+  const startSimulator =
+    provided.startSimulator ??
+    (async () => {
+      throw new Error('unused');
+    });
   const apple = Object.assign(
     {
       availability: async () => ({ available: true }) as const,
       runRunner: async (_device: DeviceInfo, request: AppleScreenRecordingRunnerRequest) =>
         request.kind === 'start' ? coreDeviceRunnerStart : {},
-      startSimulator: async () => {
-        throw new Error('unused');
-      },
+      startSimulator,
       inspectProcess: async () => 'owned-alive' as const,
       terminateProcess: async () => 'terminated' as const,
       inspectRunner: async () => 'owned-alive' as const,
@@ -83,13 +108,34 @@ export function appleRecordingHost(
       captureClockAnchor: async () => undefined,
       isRunnerBundleId: async () => false,
     },
-    options.apple,
+    provided,
+    {
+      startSimulator: async (
+        device: DeviceInfo,
+        outputPath: string,
+        signal?: AbortSignal,
+      ): Promise<Awaited<ReturnType<ScreenRecordingRuntimeHost['apple']['startSimulator']>>> => {
+        // The recorder owns its own file and the stop copies it, so the double has to leave one
+        // behind wherever the runtime told `simctl` to write.
+        store.files.set(outputPath, 'fake-video');
+        return await startSimulator(device, outputPath, signal);
+      },
+    },
   );
   return {
     screenRecording: {
       apple,
-      outputs: { prepare: options.prepare ?? (async () => {}) },
-      finalize: { complete: options.complete ?? (async () => ({})) },
+      outputs: Object.assign({}, store.outputs, options.outputs),
+      finalize: {
+        // The real sniff reads the file and refuses one that is not there or not a video, which is
+        // what lets a recovery ask whether a recorder's file can still become an export.
+        sniff:
+          options.sniff ??
+          (async ({ outputPath }: Readonly<{ outputPath: string }>) => {
+            if (!store.exists(outputPath)) throw new Error(`no recording file at ${outputPath}`);
+          }),
+        complete: options.complete ?? (async () => ({})),
+      },
       ownedProcesses: options.ownedProcesses ?? { replace: () => {}, clear: () => {} },
     },
   };

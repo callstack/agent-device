@@ -1,4 +1,3 @@
-import type { AgentDeviceClient } from '../client/client-types.ts';
 import type { InputAudienceMap } from './input-audience.ts';
 
 export type JsonSchema = {
@@ -8,6 +7,8 @@ export type JsonSchema = {
   required?: readonly string[];
   additionalProperties?: boolean | JsonSchema;
   items?: JsonSchema;
+  minItems?: number;
+  maxItems?: number;
   prefixItems?: readonly JsonSchema[];
   oneOf?: readonly JsonSchema[];
   not?: JsonSchema;
@@ -49,19 +50,14 @@ export type CommandMetadata<Name extends string, Input> = {
    * map, which is why that is the one construction path for a field command.
    */
   inputAudience: InputAudienceMap;
-};
-
-export type ExecutableCommandContract<Name extends string, Input, Result> = CommandMetadata<
-  Name,
-  Input
-> & {
-  run: (client: AgentDeviceClient, input: Input) => Promise<Result>;
-  invoke: (client: AgentDeviceClient, input: unknown) => Promise<Result>;
-};
-
-export type ExecutableCommandProjection<ClientMethod extends string = string> = {
-  clientMethod: ClientMethod;
-  outputSchema: JsonSchema;
+  /**
+   * This command's default stdout IS the value — a read result, an attribute map, an
+   * artifact path — so a caller pipes it straight onward and a line appended after it
+   * changes what they receive. The single CLI dispatcher reads this to send the
+   * response's `Warning:` lines to stderr instead of stdout (#2682): every other
+   * command prints them after its own text, and no formatter decides this per-command.
+   */
+  parseableOutput?: true;
 };
 
 export type CliOutput = {
@@ -75,37 +71,4 @@ export function defineCommandMetadata<Name extends string, Input>(
   definition: CommandMetadata<Name, Input>,
 ): CommandMetadata<Name, Input> {
   return definition;
-}
-
-export function defineExecutableCommand<Name extends string, Input, Result>(
-  metadata: CommandMetadata<Name, Input>,
-  run: (client: AgentDeviceClient, input: Input) => Promise<Result>,
-): ExecutableCommandContract<Name, Input, Result>;
-
-export function defineExecutableCommand<
-  Name extends string,
-  Input,
-  Result,
-  const ClientMethod extends string,
->(
-  metadata: CommandMetadata<Name, Input>,
-  run: (client: AgentDeviceClient, input: Input) => Promise<Result>,
-  projection: ExecutableCommandProjection<ClientMethod>,
-): ExecutableCommandContract<Name, Input, Result> & {
-  projection: ExecutableCommandProjection<ClientMethod>;
-};
-
-export function defineExecutableCommand<Name extends string, Input, Result>(
-  metadata: CommandMetadata<Name, Input>,
-  run: (client: AgentDeviceClient, input: Input) => Promise<Result>,
-  projection?: ExecutableCommandProjection,
-): ExecutableCommandContract<Name, Input, Result> & {
-  projection?: ExecutableCommandProjection;
-} {
-  return {
-    ...metadata,
-    run,
-    invoke: async (client, input) => await run(client, metadata.readInput(input)),
-    ...(projection ? { projection } : {}),
-  };
 }

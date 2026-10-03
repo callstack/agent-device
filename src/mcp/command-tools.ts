@@ -1,9 +1,9 @@
 import type { AgentDeviceClientConfig } from '@agent-device/contracts/client';
 import type { AgentDeviceClient } from '../client/client-types.ts';
-import type { CommandMetadata, JsonSchema } from '../commands/command-contract.ts';
+import type { CliOutput, CommandMetadata, JsonSchema } from '../commands/command-contract.ts';
 import type { CommandExecutionResult } from '../commands/command-surface.ts';
 import { RESPONSE_LEVELS, type ResponseLevel } from '@agent-device/kernel/contracts';
-import { formatCliOutput } from '../commands/cli-output.ts';
+import { formatCliOutput, isParseableOutputCommand } from '../commands/cli-output.ts';
 import {
   findCommandMetadata,
   isCommandName,
@@ -11,12 +11,12 @@ import {
   listMcpCommandMetadata,
   type CommandName,
 } from '../commands/command-metadata.ts';
-import { mcpBody } from '../commands/command-text.ts';
-import { resolveStructuredBatchCommandName } from '../core/batch-policy.ts';
+import { mcpBody } from '@agent-device/command-registry/command-text';
+import { resolveStructuredBatchCommandName } from '@agent-device/command-registry/batch-policy';
 import {
   resolveCommandRecordsSessionAction,
   resolveCommandTimeoutPolicy,
-} from '../core/command-descriptor/registry.ts';
+} from '@agent-device/command-registry/registry';
 import { MCP_COMMAND_OUTPUT_SCHEMAS } from './mcp-output-schemas.ts';
 import { COMMON_INPUT_AUDIENCE } from '../commands/common-input-fields.ts';
 import {
@@ -30,7 +30,7 @@ import {
   mcpToolConfigProperties,
 } from './tool-control-fields.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { isRecord } from '../utils/parsing.ts';
+import { isRecord } from '@agent-device/kernel/record';
 import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
 import { resolveMcpConfigDefaults } from './tool-input-config.ts';
 import { projectStructuredContent } from './tool-result.ts';
@@ -173,7 +173,7 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
         findInadmissibleInput(name, metadata, input) ??
         findInadmissibleNestedCommandInput(metadata.inputSchema, input, name);
       if (rejection) {
-        return buildErrorToolResult(
+        return await buildErrorToolResult(
           new AppError('INVALID_ARGS', rejection),
           refPins,
           undefined,
@@ -191,13 +191,13 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
         refPins.mergeCommandResult(name, result, config.client.stateDir, commandInput.session);
         return {
           isError: false,
-          structuredContent: projectStructuredContent(name, result),
+          structuredContent: await projectStructuredContent(name, result),
           content: [
             {
               type: 'text',
               // Render from the UNPINNED input: the model typed plain refs and
               // must never see generation suffixes (zero token cost).
-              text: renderToolText({
+              text: await renderToolText({
                 name,
                 input: commandInput,
                 result,
@@ -208,7 +208,12 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
           ],
         };
       } catch (error) {
-        return buildErrorToolResult(error, refPins, config.client.stateDir, commandInput.session);
+        return await buildErrorToolResult(
+          error,
+          refPins,
+          config.client.stateDir,
+          commandInput.session,
+        );
       }
     },
   };
@@ -220,12 +225,12 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
  * `divergence.screen`'s refs merged/pinned at `refsGeneration` like any
  * ref-issuing success. Merge-only; never clears existing pins.
  */
-function buildErrorToolResult(
+async function buildErrorToolResult(
   error: unknown,
   refPins: ToolRefPinStore,
   stateDir: string | undefined,
   session: unknown,
-): ToolResult {
+): Promise<ToolResult> {
   const normalized = normalizeToolError(error);
   refPins.mergeErrorDetails(normalized.details, stateDir, session);
   return {
@@ -482,13 +487,13 @@ function withMcpConfigSchema(
   };
 }
 
-function renderToolText(params: {
+async function renderToolText(params: {
   name: CommandName;
   input: Record<string, unknown>;
   result: CommandExecutionResult;
   outputFormat: McpOutputFormat;
   responseLevel?: ResponseLevel;
-}): string {
+}): Promise<string> {
   // A non-default responseLevel (digest/full) hands back a leveled payload whose
   // shape the optimized CLI formatters do not understand (e.g. the snapshot
   // formatter expects `nodes`, which the digest drops) — rendering it through
@@ -500,13 +505,25 @@ function renderToolText(params: {
   ) {
     return renderJsonText(params.result);
   }
-  const cliOutput = formatCliOutput({
+  const cliOutput = await formatCliOutput({
     name: params.name,
     input: params.input,
     result: params.result,
   });
-  if (typeof cliOutput?.text === 'string') return cliOutput.text;
-  return renderJsonText(cliOutput?.data ?? params.result);
+  if (typeof cliOutput?.text !== 'string') return renderJsonText(cliOutput?.data ?? params.result);
+  return toolTextWithWarnings(params.name, cliOutput);
+}
+
+/**
+ * A model reads one string and has no second stream, so a `parseableOutput` command's stderr-routed
+ * warnings (#2682) belong in the tool text. Nothing else moves: a formatter's own stderr note stays
+ * out of it, exactly as before.
+ */
+function toolTextWithWarnings(name: CommandName, cliOutput: CliOutput): string {
+  const text = cliOutput.text ?? '';
+  if (!isParseableOutputCommand(name)) return text;
+  const stderr = cliOutput.stderr?.trimEnd() ?? '';
+  return stderr === '' ? text : `${text}${text.endsWith('\n') ? '' : '\n'}${stderr}`;
 }
 
 function renderJsonText(value: unknown): string {

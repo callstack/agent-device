@@ -4,27 +4,27 @@ export function createAppleToolHost(): AppleToolHost {
   return Object.freeze({
     isXcrunAvailable: async (signal?: AbortSignal) => {
       const { resolveAppleToolProvider } = await awaitPreservingAbortReason(
-        async () => await import('./platforms/apple/core/tool-provider.ts'),
+        async () => await import('@agent-device/platform-apple/tool-provider'),
         signal,
       );
+      const provider = resolveAppleToolProvider();
       const available = await awaitPreservingAbortReason(
-        async () => await resolveAppleToolProvider().whichCommand('xcrun'),
+        async () => await provider.whichCommand('xcrun'),
         signal,
       );
       return available;
     },
     run: async (request, signal) => {
-      const { runXcrun } = await awaitPreservingAbortReason(
-        async () => await import('./platforms/apple/core/tool-provider.ts'),
+      const { resolveAppleToolProvider, runXcrun } = await awaitPreservingAbortReason(
+        async () => await import('@agent-device/platform-apple/tool-provider'),
         signal,
       );
+      const options = { allowFailure: request.allowFailure, signal, timeoutMs: request.timeoutMs };
       const result = await awaitPreservingAbortReason(
         async () =>
-          await runXcrun([request.tool, ...request.args], {
-            allowFailure: request.allowFailure,
-            signal,
-            timeoutMs: request.timeoutMs,
-          }),
+          request.tool === 'simctl'
+            ? await resolveAppleToolProvider().simctl.run(request.args, options)
+            : await runXcrun([request.tool, ...request.args], options),
         signal,
       );
       return {

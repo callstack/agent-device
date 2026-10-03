@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
+import { getCliCommandSchema } from '../schema/command-schema.ts';
 import {
   recordCliReader,
-  recordCommandDefinition,
+  recordCommandFacet,
   recordCommandMetadata,
   recordDaemonWriter,
   traceCliReader,
-  traceCommandDefinition,
+  traceCommandFacet,
   traceCommandMetadata,
   traceDaemonWriter,
 } from './index.ts';
@@ -25,9 +26,9 @@ function expectInvalidArgs(fn: () => unknown, messageFragment: string) {
 describe('recording command interface', () => {
   test('owns record and trace public metadata', () => {
     expect(recordCommandMetadata.name).toBe('record');
-    expect(recordCommandDefinition.name).toBe('record');
+    expect(recordCommandFacet.definition.name).toBe('record');
     expect(traceCommandMetadata.name).toBe('trace');
-    expect(traceCommandDefinition.name).toBe('trace');
+    expect(traceCommandFacet.definition.name).toBe('trace');
   });
 
   test('reads record CLI input with recording flags', () => {
@@ -73,5 +74,16 @@ describe('recording command interface', () => {
       command: 'trace',
       positionals: ['stop', './diagnostics.trace'],
     });
+  });
+});
+
+describe('record CLI option declaration', () => {
+  test('hands the parser the table of which action reads which option', () => {
+    // The parser is what refuses an option its action cannot read, on the keys the caller typed. That
+    // holds only while this family's table reaches the schema the parser reads.
+    const reads = getCliCommandSchema('record').flagsByAction;
+
+    expect(reads?.['stop']).toEqual([]);
+    expect(reads?.['contact-sheet']).toContain('out');
   });
 });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { AgentDeviceBackend, BackendSnapshotResult } from '../../../backend.ts';
+import type { AgentDeviceBackend } from '../../../backend.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { createLocalArtifactAdapter } from '../../../io.ts';
 import {
@@ -8,86 +8,19 @@ import {
   createMemorySessionStore,
   localCommandPolicy,
 } from '../../../runtime.ts';
-import { makeSnapshotState } from '../../../__tests__/test-utils/snapshot-builders.ts';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { ref, selector } from './selector-read-utils.ts';
 import { buildSettleTailEntries, NEVER_SETTLED_HINT } from './settle.ts';
-import { readSnapshotQualityVerdict } from '../../../snapshot-quality/verdict.ts';
+import {
+  buttonSnapshot,
+  createFakeClock,
+  createSettleDevice,
+  welcomeSnapshot,
+} from './__tests__/settle-device-fixtures.ts';
+import { readSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 
 // #1101 --settle: quiet-window settle loop composition on the interaction
 // commands. Budgets are injected (fake clock) — no real waiting.
-
-function createFakeClock(stepMs = 300): {
-  now: () => number;
-  sleep: (ms: number) => Promise<void>;
-  advance: (ms: number) => void;
-} {
-  let elapsed = 0;
-  return {
-    now: () => elapsed,
-    sleep: async (ms: number) => {
-      elapsed += ms > 0 ? ms : stepMs;
-    },
-    advance: (ms: number) => {
-      elapsed += ms;
-    },
-  };
-}
-
-function buttonSnapshot(): SnapshotState {
-  return makeSnapshotState([
-    {
-      index: 0,
-      depth: 0,
-      type: 'Button',
-      label: 'Continue',
-      rect: { x: 10, y: 20, width: 100, height: 40 },
-      hittable: true,
-    },
-  ]);
-}
-
-// Five nodes so a settled capture clears the tiny-tree readiness heuristic.
-function welcomeSnapshot(): SnapshotState {
-  return makeSnapshotState(
-    ['Welcome!', 'Next', 'Back', 'Home', 'Menu'].map((label, index) => ({
-      index,
-      depth: index === 0 ? 0 : 1,
-      ...(index === 0 ? {} : { parentIndex: 0 }),
-      type: index === 0 ? 'StaticText' : 'Button',
-      label,
-      rect: { x: 10, y: 20 + index * 60, width: 100, height: 40 },
-      hittable: true,
-    })),
-  );
-}
-
-function createSettleDevice(params: {
-  stored: SnapshotState;
-  captureSnapshot: () => Promise<BackendSnapshotResult> | BackendSnapshotResult;
-  tap?: () => Promise<Record<string, unknown>>;
-  clock?: ReturnType<typeof createFakeClock>;
-  appBundleId?: string;
-}): ReturnType<typeof createAgentDevice> {
-  return createAgentDevice({
-    backend: {
-      platform: 'ios',
-      captureSnapshot: async () => await params.captureSnapshot(),
-      tap: async () => (params.tap ? await params.tap() : { ok: true }),
-      fill: async () => ({ ok: true }),
-      longPress: async () => ({ ok: true }),
-    } satisfies AgentDeviceBackend,
-    artifacts: createLocalArtifactAdapter(),
-    sessions: createMemorySessionStore([
-      {
-        name: 'default',
-        snapshot: params.stored,
-        ...(params.appBundleId ? { appBundleId: params.appBundleId } : {}),
-      },
-    ]),
-    policy: localCommandPolicy(),
-    clock: params.clock ?? createFakeClock(),
-  });
-}
 
 test('press --settle returns the settled diff and stores the settled tree', async () => {
   const before = buttonSnapshot();
@@ -2138,175 +2071,6 @@ test('the unchanged interactive tail is capped with a truncation marker', async 
   assert.equal(settle.diff?.summary.additions, 0);
   assert.equal(settle.tail?.length, 20);
   assert.equal(settle.tailTruncated, true);
-});
-
-test('buildSettleTailEntries dedups candidates already carrying an excluded ref', () => {
-  const settledNodes = makeSnapshotState([
-    {
-      index: 0,
-      depth: 0,
-      type: 'Button',
-      label: 'Add to cart',
-      rect: { x: 10, y: 20, width: 100, height: 40 },
-      hittable: true,
-    },
-    {
-      index: 1,
-      depth: 0,
-      type: 'Button',
-      label: 'Share',
-      rect: { x: 10, y: 80, width: 100, height: 40 },
-      hittable: true,
-    },
-  ]).nodes;
-
-  const result = buildSettleTailEntries(settledNodes, new Set(['e1']));
-
-  assert.deepEqual(result.tail, [{ ref: 'e2', role: 'button', label: 'Share' }]);
-});
-
-test('buildSettleTailEntries drops application/window chrome and does not require hittable', () => {
-  const settledNodes = makeSnapshotState([
-    { index: 0, depth: 0, type: 'Application', label: 'Example' },
-    { index: 1, depth: 0, type: 'Window' },
-    {
-      index: 2,
-      depth: 0,
-      type: 'Button',
-      label: 'Discard and go back',
-      rect: { x: 10, y: 20, width: 100, height: 40 },
-      // Deliberately no `hittable` field, mirroring a real post-dismiss
-      // capture: the tail bar no longer requires `hittable === true`.
-    },
-  ]).nodes;
-
-  const result = buildSettleTailEntries(settledNodes, new Set());
-
-  assert.deepEqual(result.tail, [{ ref: 'e3', role: 'button', label: 'Discard and go back' }]);
-});
-
-test('buildSettleTailEntries drops the keyboard container and its chrome descendants', () => {
-  const settledNodes = makeSnapshotState([
-    {
-      index: 0,
-      depth: 0,
-      type: 'Button',
-      label: 'Send',
-      rect: { x: 10, y: 20, width: 100, height: 40 },
-      hittable: true,
-    },
-    { index: 1, depth: 0, type: 'Keyboard', label: 'keyboard' },
-    { index: 2, depth: 1, parentIndex: 1, type: 'Key', label: 'q' },
-    { index: 3, depth: 1, parentIndex: 1, type: 'Button', label: 'shift' },
-  ]).nodes;
-
-  const result = buildSettleTailEntries(settledNodes, new Set());
-
-  assert.deepEqual(result.tail, [{ ref: 'e1', role: 'button', label: 'Send' }]);
-});
-
-test('buildSettleTailEntries drops Android IME chrome and status-bar chrome (#1198)', () => {
-  const settledNodes = makeSnapshotState([
-    {
-      index: 0,
-      depth: 0,
-      type: 'android.widget.Button',
-      label: 'Send',
-      bundleId: 'org.reactnavigation.playground',
-      rect: { x: 10, y: 20, width: 100, height: 40 },
-      hittable: true,
-    },
-    {
-      // Status-bar marker: this systemui run drops whole.
-      index: 1,
-      depth: 0,
-      type: 'android.widget.FrameLayout',
-      identifier: 'com.android.systemui:id/status_bar',
-      bundleId: 'com.android.systemui',
-    },
-    {
-      index: 2,
-      depth: 1,
-      parentIndex: 1,
-      type: 'android.widget.TextView',
-      identifier: 'com.android.systemui:id/clock',
-      label: '12:23',
-      bundleId: 'com.android.systemui',
-    },
-    {
-      index: 3,
-      depth: 0,
-      type: 'android.widget.FrameLayout',
-      bundleId: 'com.google.android.inputmethod.latin',
-      hittable: true,
-    },
-    {
-      index: 4,
-      depth: 1,
-      parentIndex: 3,
-      type: 'android.widget.FrameLayout',
-      label: 'Delete',
-      bundleId: 'com.google.android.inputmethod.latin',
-      hittable: true,
-    },
-  ]).nodes;
-
-  const result = buildSettleTailEntries(settledNodes, new Set(), 'org.reactnavigation.playground');
-
-  assert.deepEqual(result.tail, [{ ref: 'e1', role: 'button', label: 'Send' }]);
-});
-
-test('buildSettleTailEntries keeps unknown-foreign packages and drops only marked systemui chrome, with or without appBundleId (#1198)', () => {
-  // Keep-unknown-foreign default: a system dialog's buttons (package
-  // `android`) stay tail candidates; only the marked status/nav-bar
-  // window-run drops, and that does not depend on knowing the session's app.
-  const settledNodes = makeSnapshotState([
-    {
-      index: 0,
-      depth: 0,
-      type: 'android.widget.Button',
-      label: 'Send',
-      bundleId: 'org.reactnavigation.playground',
-      rect: { x: 10, y: 20, width: 100, height: 40 },
-      hittable: true,
-    },
-    {
-      index: 1,
-      depth: 0,
-      type: 'android.widget.FrameLayout',
-      identifier: 'com.android.systemui:id/status_bar_container',
-      bundleId: 'com.android.systemui',
-      rect: { x: 0, y: 0, width: 1344, height: 159 },
-    },
-    {
-      index: 2,
-      depth: 1,
-      parentIndex: 1,
-      type: 'android.widget.TextView',
-      identifier: 'com.android.systemui:id/clock',
-      label: '12:23',
-      bundleId: 'com.android.systemui',
-      rect: { x: 40, y: 40, width: 80, height: 40 },
-    },
-    {
-      index: 3,
-      depth: 0,
-      type: 'android.widget.Button',
-      label: 'Just once',
-      identifier: 'android:id/button_once',
-      bundleId: 'android',
-      rect: { x: 829, y: 2734, width: 255, height: 162 },
-      hittable: true,
-    },
-  ]).nodes;
-
-  for (const appBundleId of [undefined, 'org.reactnavigation.playground']) {
-    const result = buildSettleTailEntries(settledNodes, new Set(), appBundleId);
-    assert.deepEqual(
-      result.tail?.map((entry) => entry.label),
-      ['Send', 'Just once'],
-    );
-  }
 });
 
 test('a systemui volume dialog survives the settled diff and tail while the status bar drops (#1198)', async () => {

@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS as C } from '../../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS as C } from '@agent-device/command-registry/catalog';
 import { defineAndroidContractEvidence } from '../android-emulator-e2e/contract-evidence.ts';
 
 export const ANDROID_LIFECYCLE_CONTRACT_EVIDENCE = defineAndroidContractEvidence(

@@ -6,6 +6,8 @@ export const RUNTIME_SELECTOR_COVERAGE = definePathCoverage('runtime-selector', 
     'runtime-selector disambiguation: distinct subtrees reject without a geometry winner',
   ],
   occlusion: 'runtime-selector occlusion: covered button is refused',
+  keyboardOcclusion:
+    'runtime-selector keyboardOcclusion: a selector behind the visible keyboard is refused with tap_keyboard_occludes_target',
   parentOwnedTouchPoint:
     'runtime-selector parentOwnedTouchPoint: a fully tiled parent selector preserves selector context and refuses before dispatch',
   offscreen: [
@@ -21,10 +23,14 @@ export const RUNTIME_SELECTOR_COVERAGE = definePathCoverage('runtime-selector', 
     'runtime-selector verifyEvidence: press --verify returns a digest with change detection',
   settleObservation:
     'runtime-selector settleObservation: press --settle returns the settled diff with fresh refs',
-  errorTaxonomy:
+  errorTaxonomy: [
     'runtime-selector errorTaxonomy: no-match failure carries the shared code and hint',
+    'runtime-selector errorTaxonomy: a daemon selector miss discloses dispatched no',
+  ],
   resolutionDisclosure: [
     'runtime-selector resolutionDisclosure: a unique match discloses the unique runtime shape',
     'runtime-selector resolutionDisclosure: an equivalent wrapper chain discloses matchCount, winnerDiagnostic, and structural equivalence',
   ],
+  targetReadiness:
+    'runtime-selector targetReadiness: a target missing on the first capture resolves once a later poll observes it',
 });

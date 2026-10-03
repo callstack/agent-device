@@ -46,25 +46,32 @@ export const systemCliOutputFormatters = withSettleCapableNotes({
   back: messageOutput,
   home: messageOutput,
   orientation: messageOutput,
+  fold: messageOutput,
   'app-switcher': messageOutput,
+  'action-button': messageOutput,
   keyboard: resultOutput(keyboardCliOutput),
   clipboard: resultOutput(clipboardCliOutput),
   'tv-remote': messageOutput,
 } satisfies Record<string, CliOutputFormatter>);
 
 function formatAppState(data: AppStateCommandResult): string | null {
-  if (data.platform === 'ios') {
-    const lines = [`Foreground app: ${data.appName ?? data.appBundleId ?? 'unknown'}`];
-    if (data.appBundleId) lines.push(`Bundle: ${data.appBundleId}`);
-    if (data.source) lines.push(`Source: ${data.source}`);
-    return lines.join('\n');
-  }
+  if (data.platform === 'ios') return formatAppleAppState(data);
   if (data.platform === 'android') {
     const lines = [`Foreground app: ${data.package ?? 'unknown'}`];
     if (data.activity) lines.push(`Activity: ${data.activity}`);
     return lines.join('\n');
   }
   return null;
+}
+
+function formatAppleAppState(
+  data: Extract<AppStateCommandResult, { platform: 'ios' | 'macos' }>,
+): string {
+  const lines = [`Session app: ${data.appName ?? data.appBundleId ?? 'unknown'}`];
+  if (data.appBundleId) lines.push(`Bundle: ${data.appBundleId}`);
+  if (data.state) lines.push(`State: ${data.state}`);
+  if (data.source) lines.push(`Source: ${data.source}`);
+  return lines.join('\n');
 }
 
 function androidKeyboardNextAction(

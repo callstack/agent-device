@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers/promises';
 import { test } from 'vitest';
-import { listCliCommandNames } from '../../command-catalog.ts';
-import { helpTopicIds } from '../../cli-schema/cli-help.ts';
-import { listMcpExposedCommandNames } from '../../core/command-descriptor/registry.ts';
+import { listCliCommandNames } from '@agent-device/command-registry/catalog';
+import { helpTopicIds } from '../../commands/schema/cli-help.ts';
+import { listMcpExposedCommandNames } from '@agent-device/command-registry/registry';
 import { handleMcpMessage } from '../router.ts';
 import {
   HELP_TOOL_NAME,
@@ -81,6 +81,7 @@ test('server instructions are the compact workflow card, under the 2 KB client c
   // The card must name the start rule and the guide tool, and speak in tool properties.
   assert.match(MCP_SERVER_INSTRUCTIONS, /open \{app, foreground: true\}/);
   assert.match(MCP_SERVER_INSTRUCTIONS, /snapshot \{interactiveOnly: true\}/);
+  assert.match(MCP_SERVER_INSTRUCTIONS, /wait \{absent: selector\}/);
   assert.match(MCP_SERVER_INSTRUCTIONS, /Call help only/);
 });
 

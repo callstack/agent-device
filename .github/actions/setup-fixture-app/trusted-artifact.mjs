@@ -4,6 +4,8 @@ import { pathToFileURL } from 'node:url';
 
 const TRUSTED_WORKFLOW_PATH = '.github/workflows/test-app-build-cache.yml';
 
+const PLATFORM_JOB_NAMES = { android: 'Android Release', ios: 'iOS Release' };
+
 export async function findTrustedArtifact({ artifacts, expectedHeadSha, repository, loadRun }) {
   for (const artifact of artifacts) {
     if (!artifactBelongsToRepository(artifact, repository.id)) continue;
@@ -13,12 +15,23 @@ export async function findTrustedArtifact({ artifacts, expectedHeadSha, reposito
   return undefined;
 }
 
-export function classifyProducerState(runs, { expectedHeadSha, repository }) {
-  const run = runs.find((candidate) =>
-    isExpectedProducerRun(candidate, expectedHeadSha, repository.id),
-  );
+export function classifyProducerState(runs, jobs, { expectedHeadSha, repository, platform }) {
+  const run = findExpectedProducerRun(runs, expectedHeadSha, repository.id);
   if (!run) return 'absent';
-  return classifyRunState(run);
+  const jobName = requirePlatformJobName(platform);
+  const platformJob = jobs.find((candidate) => candidate.name === jobName);
+  if (platformJob) return classifyRunState(platformJob);
+  return run.status === 'completed' ? 'failed' : 'queued';
+}
+
+function findExpectedProducerRun(runs, expectedHeadSha, repositoryId) {
+  return runs.find((candidate) => isExpectedProducerRun(candidate, expectedHeadSha, repositoryId));
+}
+
+function requirePlatformJobName(platform) {
+  const jobName = PLATFORM_JOB_NAMES[platform];
+  if (!jobName) throw new Error(`unknown fixture platform: ${platform}`);
+  return jobName;
 }
 
 function artifactBelongsToRepository(artifact, repositoryId) {
@@ -113,14 +126,24 @@ async function runFindCommand(repositoryName, repository, commandArgs) {
 }
 
 async function runProducerStateCommand(repositoryName, repository, commandArgs) {
-  const [expectedHeadSha] = commandArgs;
-  requireArguments([expectedHeadSha], 'expected head SHA');
+  const [expectedHeadSha, platform] = commandArgs;
+  requireArguments([expectedHeadSha, platform], 'expected head SHA and platform');
   const result = await requestJson(
     `repos/${repositoryName}/actions/workflows/test-app-build-cache.yml/runs?head_sha=${encodeURIComponent(expectedHeadSha)}&per_page=20`,
   );
+  const runs = result.workflow_runs || [];
+  const run = findExpectedProducerRun(runs, expectedHeadSha, repository.id);
+  const jobs = run ? await loadRunJobs(repositoryName, run.id) : [];
   process.stdout.write(
-    classifyProducerState(result.workflow_runs || [], { expectedHeadSha, repository }),
+    classifyProducerState(runs, jobs, { expectedHeadSha, repository, platform }),
   );
+}
+
+async function loadRunJobs(repositoryName, runId) {
+  const result = await requestJson(
+    `repos/${repositoryName}/actions/runs/${runId}/jobs?per_page=100`,
+  );
+  return result.jobs || [];
 }
 
 function requireArguments(values, description) {

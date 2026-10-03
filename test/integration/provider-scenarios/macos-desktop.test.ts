@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'vitest';
-import { assertFlatToolCall, assertPngDimensions, assertPngFile } from './assertions.ts';
+import { SCREENSHOT_FULLSCREEN_REASONS } from '@agent-device/contracts/capture';
+import {
+  assertFlatToolCall,
+  assertPngDimensions,
+  assertPngFile,
+  assertRpcError,
+} from './assertions.ts';
 import { PROVIDER_SCENARIO_MACOS } from './fixtures.ts';
 import { createProviderScenarioTempPath, withProviderScenarioResource } from './harness.ts';
 import { createMacOsDesktopWorld } from './macos-world.ts';
@@ -16,6 +22,7 @@ import type {
 test('Provider-backed integration prepare uses the Apple runner lifecycle provider', async () => {
   const lifecycleCalls: string[] = [];
   const appleRunnerProvider: AppleRunnerProvider = {
+    hasLiveSession: () => true,
     runCommand: async () => {
       throw new Error('prepare should not be reduced to a raw runner command');
     },
@@ -274,6 +281,54 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
             expectData: { x: 116, y: 80 },
           },
           {
+            name: 'refresh frontmost refs before the repeat press',
+            command: 'snapshot',
+            flags: { snapshotInteractiveOnly: true },
+            assert: (snapshot) => {
+              const general = snapshot.json?.result?.data?.nodes?.find(
+                (node: { label?: string }) => node.label === 'General',
+              );
+              assert.equal(general?.ref, 'e2', JSON.stringify(snapshot.json));
+            },
+          },
+          {
+            name: 'double tap snapshot ref',
+            command: 'press',
+            positionals: ['@e2'],
+            flags: { doubleTap: true },
+            expectData: { x: 116, y: 80, doubleTap: true },
+          },
+        ]);
+
+        const helperScreenshotCallsBeforeFrontmostRefusal = appleTool.calls.filter(
+          (call) => call[0] === 'macos-helper' && call[1] === 'screenshot',
+        ).length;
+        const frontmostFullscreenRefusal = await daemon.callCommand('screenshot', [], {
+          out: screenshotPath,
+          screenshotFullscreen: true,
+        });
+        const frontmostRefusalErrorData = assertRpcError(
+          frontmostFullscreenRefusal,
+          'INVALID_ARGS',
+          /--fullscreen is not accepted on the macOS frontmost-app surface/,
+        );
+        const frontmostRefusalDetails = frontmostRefusalErrorData.details as
+          | Record<string, unknown>
+          | undefined;
+        assert.equal(
+          frontmostRefusalDetails?.reason,
+          SCREENSHOT_FULLSCREEN_REASONS.macOsHelperSurfaceFixedFrame,
+        );
+        assert.equal(frontmostRefusalDetails?.surface, 'frontmost-app');
+        assert.equal(
+          appleTool.calls.filter((call) => call[0] === 'macos-helper' && call[1] === 'screenshot')
+            .length,
+          helperScreenshotCallsBeforeFrontmostRefusal,
+          'A refused --fullscreen frontmost-app screenshot must not reach the macos-helper',
+        );
+
+        await runProviderScenario(daemon, [
+          {
             name: 'switch to desktop surface',
             command: 'open',
             flags: {
@@ -285,6 +340,34 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
               appBundleId: undefined,
             },
           },
+        ]);
+
+        const helperScreenshotCallsBeforeRefusal = appleTool.calls.filter(
+          (call) => call[0] === 'macos-helper' && call[1] === 'screenshot',
+        ).length;
+        const fullscreenRefusal = await daemon.callCommand('screenshot', [], {
+          out: screenshotPath,
+          screenshotFullscreen: true,
+        });
+        const refusalErrorData = assertRpcError(
+          fullscreenRefusal,
+          'INVALID_ARGS',
+          /--fullscreen is not accepted on the macOS desktop surface/,
+        );
+        const refusalDetails = refusalErrorData.details as Record<string, unknown> | undefined;
+        assert.equal(
+          refusalDetails?.reason,
+          SCREENSHOT_FULLSCREEN_REASONS.macOsHelperSurfaceFixedFrame,
+        );
+        assert.equal(refusalDetails?.surface, 'desktop');
+        assert.equal(
+          appleTool.calls.filter((call) => call[0] === 'macos-helper' && call[1] === 'screenshot')
+            .length,
+          helperScreenshotCallsBeforeRefusal,
+          'A refused --fullscreen desktop screenshot must not reach the macos-helper',
+        );
+
+        await runProviderScenario(daemon, [
           {
             name: 'read desktop surface state',
             command: 'appstate',
@@ -297,11 +380,10 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
             },
           },
           {
-            name: 'capture fullscreen desktop screenshot',
+            name: 'capture desktop screenshot',
             command: 'screenshot',
             flags: {
               out: screenshotPath,
-              screenshotFullscreen: true,
             },
             expectData: { path: screenshotPath },
             assert: () => {
@@ -313,7 +395,6 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
             command: 'screenshot',
             flags: {
               out: scaledScreenshotPath,
-              screenshotFullscreen: true,
               screenshotScale: 0.5,
             },
             expectData: { path: scaledScreenshotPath },
@@ -474,7 +555,6 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
           screenshotPath,
           '--surface',
           'desktop',
-          '--fullscreen',
         ]);
         assertFlatToolCall(appleTool.calls, [
           'macos-helper',
@@ -483,7 +563,6 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
           scaledScreenshotPath,
           '--surface',
           'desktop',
-          '--fullscreen',
         ]);
         assertFlatToolCall(appleTool.calls, [
           'macos-helper',
@@ -504,6 +583,19 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
           '116',
           '--y',
           '80',
+          '--bundle-id',
+          'com.apple.systempreferences',
+          '--surface',
+          'frontmost-app',
+        ]);
+        assertFlatToolCall(appleTool.calls, [
+          'macos-helper',
+          'press',
+          '--x',
+          '116',
+          '--y',
+          '80',
+          '--double-click',
           '--bundle-id',
           'com.apple.systempreferences',
           '--surface',

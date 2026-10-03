@@ -1,13 +1,12 @@
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
-import { makeSnapshotState } from '../../__tests__/test-utils/snapshot-builders.ts';
-import type { SessionState } from '../types.ts';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
+import type { SessionState } from '../session-state.ts';
 
 /**
  * Shared fixtures for the deferred-interaction-outcome test cluster:
  * post-gesture-stabilization.test.ts (the async capture loop),
  * post-gesture-stabilization-verdict.test.ts (the pure verdict/classifier
- * coverage — split by subject per #1563 review, to stay under the repo's
- * 500-line test-file tripwire, AGENTS.md), deferred-interaction-outcome.test.ts,
+ * coverage — split by subject per #1563 review), deferred-interaction-outcome.test.ts,
  * and session-snapshot-freshness.test.ts. Not a `.test.ts` file, so vitest
  * never tries to run it directly.
  */
@@ -118,7 +117,7 @@ export function applicationRootNode() {
  * `[Keyboard]` container PLUS a sibling "Next keyboard" assistant button
  * under the SAME window — a container-descendant-only walk provably misses
  * the sibling (see `collectKeyboardChrome`'s doc comment in
- * src/core/snapshot-chrome.ts, the source of truth this fixture's shape is
+ * packages/capture-kit/src/snapshot-chrome.ts, the source of truth this fixture's shape is
  * drawn from: "a SIBLING subtree holding the 'Next keyboard' and 'Dictate'
  * buttons — siblings of the container, so a container-descendant walk alone
  * provably misses them"). Neither entry is the container itself, so sharing

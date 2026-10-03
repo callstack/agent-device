@@ -18,28 +18,6 @@ enum TvRemoteButton: String {
 }
 
 extension RunnerTests {
-#if AGENT_DEVICE_RUNNER_UNIT_TESTS
-  func testTvRemoteButtonMappingAcceptsSupportedNamesAndRejectsUnknown() {
-    let supported = [
-      ("select", "select"),
-      ("SELECT", "select"),
-      ("menu", "menu"),
-      ("home", "home"),
-      ("up", "up"),
-      ("down", "down"),
-      ("left", "left"),
-      ("right", "right"),
-    ]
-    for (raw, expected) in supported {
-      XCTAssertEqual(tvRemoteButton(from: raw)?.rawValue, expected)
-    }
-
-    for raw in [String?(nil), "", "volumeUp", "select "] {
-      XCTAssertNil(tvRemoteButton(from: raw))
-    }
-  }
-#endif
-
   func resolveTvRemoteDoublePressDelay() -> TimeInterval {
     guard
       let raw = ProcessInfo.processInfo.environment["AGENT_DEVICE_TV_REMOTE_DOUBLE_PRESS_DELAY_MS"],
@@ -74,23 +52,22 @@ extension RunnerTests {
   }
 
   func elementHasFocus(_ element: XCUIElement) -> Bool {
-    var focused = false
-    _ = RunnerObjCExceptionCatcher.catchException({
-      if let value = (element as NSObject).value(forKey: "hasFocus") as? Bool {
-        focused = value
-      }
-    })
-    return focused
+    return focusBool(element as NSObject)
   }
 
-  func activateElement(app: XCUIApplication, element: XCUIElement, action: String) -> RunnerInteractionOutcome {
+  func activateElement(
+    app: XCUIApplication,
+    element: XCUIElement,
+    action: String,
+    resolvedFrame: CGRect? = nil
+  ) -> RunnerInteractionOutcome {
     if let outcome = selectFocusedTvElement(app: app, element: element, action: action) {
       return outcome
     }
 #if os(tvOS)
     return performElementTap(element)
 #else
-    let frame = element.frame
+    let frame = resolvedFrame ?? element.frame
     if !frame.isEmpty {
       // XCUIElement.tap() can fail the whole XCTest after navigation because it
       // re-resolves the tapped element even after the app removed it. Keep the

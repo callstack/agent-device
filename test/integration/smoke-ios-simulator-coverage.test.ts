@@ -10,14 +10,14 @@ import {
   normalizePublicSwipeMotion,
   swipePayloadFromPositionals,
 } from '@agent-device/contracts/gesture-normalization';
-import { PUBLIC_COMMANDS } from '../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import { isValidSelectorExpression } from '@agent-device/selectors';
 import { IOS_SIMULATOR_BEHAVIOR_COVERAGE } from './ios-simulator-e2e/behavior-coverage.ts';
 import {
   IOS_SIMULATOR_E2E_COVERAGE,
   liveCommandsForScenario,
-} from './ios-simulator-e2e/coverage-manifest.ts';
+} from './ios-simulator-e2e/coverage.ts';
 import { collectPagedEventTimeline } from './live-device-e2e/event-timeline.ts';
 import { findMissingFixtureIdentifiers } from './ios-simulator-e2e/fixture-identifier-coverage.ts';
 import { IOS_SIMULATOR_LIVE_SCENARIOS } from './ios-simulator-e2e/scenarios.ts';

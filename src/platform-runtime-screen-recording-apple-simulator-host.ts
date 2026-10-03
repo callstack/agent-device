@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import { execFailureDetails } from '@agent-device/host-kit/command';
+import { AppError } from '@agent-device/kernel/errors';
 import type {
   HostCommandResult,
   ManagedProcessIdentity,
@@ -19,6 +21,7 @@ const LIVENESS_GRACE_MS = 50;
 const READY_TIMEOUT_MS = 15_000;
 const IDENTITY_POLL_MS = 25;
 const IDENTITY_TIMEOUT_MS = 2_000;
+const UNPUBLISHED_STOP_GRACE_MS = 5_000;
 
 const appleSimulatorRecordingCommandMatches: ManagedProcessCommandMatcher = (
   persisted,
@@ -62,13 +65,12 @@ export async function startAppleSimulatorRecording(
   if (!background) throw new Error('simctl recordVideo acquisition did not return a process');
   let rootMarker: ManagedProcessIdentity | undefined;
   try {
-    rootMarker = await waitForManagedProcessIdentity(background.child.pid, signal);
+    rootMarker = await waitForManagedProcessIdentity(background.child.pid, background.wait, signal);
     if (!rootMarker) {
       throw new Error('simctl recordVideo did not expose a complete process identity');
     }
   } catch (error) {
-    background.child.kill('SIGKILL');
-    await background.wait.catch(() => undefined);
+    await rollbackAcquiredSimulatorProcess(background);
     signal?.throwIfAborted();
     throw error;
   }
@@ -96,15 +98,22 @@ export async function startAppleSimulatorRecording(
 
 async function waitForManagedProcessIdentity(
   pid: number | undefined,
+  wait: Promise<HostCommandResult>,
   signal?: AbortSignal,
 ): Promise<ManagedProcessIdentity | undefined> {
-  if (pid === undefined) return undefined;
-  const attempts = Math.ceil(IDENTITY_TIMEOUT_MS / IDENTITY_POLL_MS);
+  const processExit = observeSimulatorExit(wait);
+  const attempts = pid === undefined ? 0 : Math.ceil(IDENTITY_TIMEOUT_MS / IDENTITY_POLL_MS);
   for (let attempt = 0; attempt <= attempts; attempt += 1) {
     signal?.throwIfAborted();
     const marker = await resolveManagedProcessIdentity(pid);
     if (marker) return marker;
-    if (attempt < attempts) await delay(IDENTITY_POLL_MS, signal);
+    const exit = await Promise.race([
+      processExit,
+      attempt < attempts
+        ? delay(IDENTITY_POLL_MS, signal).then(() => undefined)
+        : Promise.resolve(undefined),
+    ]);
+    if (exit) throw startError(exit);
   }
   return undefined;
 }
@@ -116,10 +125,10 @@ async function acquireSimulatorProcess(
   const started = Promise.resolve(acquisition);
   if (!signal) return await started;
   if (signal.aborted) {
-    if (isSimulatorProcess(acquisition)) {
+    if ('child' in acquisition) {
       await rollbackAcquiredSimulatorProcess(acquisition);
     } else {
-      void started.then(rollbackAcquiredSimulatorProcess);
+      void started.then(rollbackAcquiredSimulatorProcess).catch(() => undefined);
     }
     throw signal.reason;
   }
@@ -134,24 +143,31 @@ async function acquireSimulatorProcess(
     return await Promise.race([started, aborted]);
   } catch (error) {
     if (!signal.aborted) throw error;
-    void started.then(rollbackAcquiredSimulatorProcess);
+    void started.then(rollbackAcquiredSimulatorProcess).catch(() => undefined);
     throw signal.reason;
   } finally {
     removeAbort();
   }
 }
 
-function isSimulatorProcess(
-  value: AppleSimulatorScreenRecordingProcess | Promise<AppleSimulatorScreenRecordingProcess>,
-): value is AppleSimulatorScreenRecordingProcess {
-  return 'child' in value;
-}
-
 async function rollbackAcquiredSimulatorProcess(
   process: AppleSimulatorScreenRecordingProcess,
 ): Promise<void> {
-  process.child.kill('SIGKILL');
-  await process.wait.catch(() => undefined);
+  // CONSERVATIVE: Give simctl time to detach from CoreSimulator before forcing exit;
+  // revisit only when the transport can explicitly acknowledge detachment.
+  process.child.kill('SIGINT');
+  const grace = new AbortController();
+  const settled = await Promise.race([
+    process.wait.then(
+      () => true,
+      () => true,
+    ),
+    delay(UNPUBLISHED_STOP_GRACE_MS, grace.signal).then(() => false),
+  ]).finally(() => grace.abort());
+  if (!settled) {
+    process.child.kill('SIGKILL');
+    await process.wait.catch(() => undefined);
+  }
 }
 
 function createAppleSimulatorProcess(
@@ -160,20 +176,24 @@ function createAppleSimulatorProcess(
 ): ScreenRecordingBackgroundProcess {
   let termination: Promise<void> | undefined;
   let terminatedByOwner = false;
-  const terminate = () =>
-    (termination ??= terminateManagedProcessSet(
-      markers,
-      background,
-      appleSimulatorRecordingCommandMatches,
-    ).then((outcome) => {
-      if (outcome === 'ownership-lost') {
-        throw new Error('simctl recordVideo process ownership changed before cleanup');
-      }
-      if (outcome !== 'terminated' && outcome !== 'already-missing') {
-        throw new Error('simctl recordVideo cleanup was not confirmed');
-      }
-      terminatedByOwner = outcome === 'terminated';
-    }));
+  const runTermination = () =>
+    terminateManagedProcessSet(markers, background, appleSimulatorRecordingCommandMatches).then(
+      (outcome) => {
+        if (outcome === 'ownership-lost') {
+          throw new Error('simctl recordVideo process ownership changed before cleanup');
+        }
+        terminatedByOwner = outcome === 'terminated';
+      },
+    );
+  // Only a confirmed termination stays memoized: `record stop` is the one seam its owner gets
+  // to re-drive a termination the host refused.
+  const terminate = () => {
+    termination ??= runTermination().catch((error: unknown) => {
+      termination = undefined;
+      throw error;
+    });
+    return termination;
+  };
   const wait = background.wait.then(async (result) => {
     const ownerTermination = termination;
     if (ownerTermination) await ownerTermination.catch(() => undefined);
@@ -203,10 +223,7 @@ async function waitForReadiness(
   wait: Promise<HostCommandResult>,
   signal?: AbortSignal,
 ): Promise<void> {
-  const processExit = wait.then(
-    (result) => ({ kind: 'exited' as const, result }),
-    (error: unknown) => ({ kind: 'failed' as const, error }),
-  );
+  const processExit = observeSimulatorExit(wait);
   let settled: AppleSimulatorExit | undefined;
   void processExit.then((outcome) => {
     settled = outcome;
@@ -235,11 +252,33 @@ async function waitForReadiness(
   }
 }
 
+function observeSimulatorExit(wait: Promise<HostCommandResult>): Promise<AppleSimulatorExit> {
+  return wait.then(
+    (result) => ({ kind: 'exited' as const, result }),
+    (error: unknown) => ({ kind: 'failed' as const, error }),
+  );
+}
+
 function startError(outcome: AppleSimulatorExit): Error {
   if (outcome.kind === 'failed') {
     return outcome.error instanceof Error ? outcome.error : new Error(String(outcome.error));
   }
-  return new Error(`simctl recordVideo exited with code ${outcome.result.exitCode}`);
+  const { exitCode } = outcome.result;
+  if (exitCode === 16) {
+    return new AppError(
+      'DEVICE_IN_USE',
+      'CoreSimulator host recording is already in progress',
+      execFailureDetails(
+        { ...outcome.result, exitCode },
+        {
+          reason: 'apple_simulator_recording_busy',
+          retriable: false,
+          hint: 'Stop the active recording with record stop in its owning session. If a previous recorder died and no recording is active, ask the host operator to restart the CoreSimulator stream service before retrying.',
+        },
+      ),
+    );
+  }
+  return new Error(`simctl recordVideo exited with code ${exitCode}`);
 }
 
 function delay(milliseconds: number, signal?: AbortSignal): Promise<void> {

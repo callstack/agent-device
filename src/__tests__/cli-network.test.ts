@@ -159,7 +159,7 @@ test('test command prints suite summary and exits non-zero on failures', async (
   assert.doesNotMatch(result.stderr, /Running replay suite\.\.\./);
   assert.doesNotMatch(result.stdout, /✓ 01-pass\.ad \(0\.01s\)/);
   assert.doesNotMatch(result.stdout, /⨯ "Checkout failure" in 02-fail\.ad/);
-  assert.match(result.stdout, /Failures:\n  Checkout failure\n    file: 02-fail\.ad/);
+  assert.match(result.stdout, /Failures:\n {2}Checkout failure\n {4}file: 02-fail\.ad/);
   assert.match(result.stdout, /Replay failed at step 1 \(open Demo\): boom/);
   assert.match(result.stdout, /artifacts: \/tmp\/test-artifacts\/02-fail/);
   assert.doesNotMatch(result.stdout, /SKIP \/tmp\/03-skip\.ad/);

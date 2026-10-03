@@ -36,9 +36,9 @@ test('interaction and fill grammar share ref, selector, and point parsing', () =
   assert.deepEqual(selectorFill.target, { kind: 'selector', selector: 'id=email' });
   assert.equal(selectorFill.text, 'qa@example.com');
 
-  const refFill = readInputFromCli('fill', ['@e4', 'Email', 'qa@example.com'], BASE_FLAGS);
-  assert.deepEqual(refFill.target, { kind: 'ref', ref: '@e4', label: 'Email' });
-  assert.equal(refFill.text, 'qa@example.com');
+  const refFill = readInputFromCli('fill', ['@e4', 'good', 'morning'], BASE_FLAGS);
+  assert.deepEqual(refFill.target, { kind: 'ref', ref: '@e4' });
+  assert.equal(refFill.text, 'good morning');
 
   const pointFill = readInputFromCli('fill', ['10', '20', 'hello'], BASE_FLAGS);
   assert.deepEqual(pointFill.target, { kind: 'point', x: 10, y: 20 });
@@ -169,7 +169,7 @@ test('is grammar explains the predicate/selector-key collision on invalid predic
       assert.equal(err.code, 'INVALID_ARGS');
       assert.match(
         err.message,
-        /is requires predicate: visible\|hidden\|exists\|editable\|selected\|focused\|text/,
+        /is requires predicate: visible\|hidden\|exists\|absent\|editable\|selected\|focused\|text/,
       );
       assert.match(err.details?.hint ?? '', /is <selector> <predicate>/);
       assert.match(err.details?.hint ?? '', /visible=true/);
@@ -197,4 +197,25 @@ test('settings grammar owns positional parsing for CLI commands', () => {
   assert.equal(clearAppState.setting, 'clear-app-state');
   assert.equal(clearAppState.state, 'clear');
   assert.equal(clearAppState.app, 'com.example.app');
+
+  const resetKeychain = readInputFromCli('settings', ['reset-keychain', 'clear'], {
+    ...BASE_FLAGS,
+    platform: 'ios',
+  });
+  assert.equal(resetKeychain.setting, 'reset-keychain');
+  assert.equal(resetKeychain.state, 'clear');
+});
+
+test('settings reset-keychain rejects an extra app argument instead of dropping it', () => {
+  assert.throws(
+    () =>
+      readInputFromCli('settings', ['reset-keychain', 'clear', 'com.example.app'], {
+        ...BASE_FLAGS,
+        platform: 'ios',
+      }),
+    (err: any) => {
+      assert.equal(err.code, 'INVALID_ARGS');
+      return true;
+    },
+  );
 });

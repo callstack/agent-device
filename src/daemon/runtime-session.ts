@@ -1,6 +1,7 @@
 import type { CommandSessionRecord, CommandSessionStore } from '../runtime-contract.ts';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
-import type { SessionState } from './types.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { refFrameTree } from './ref-frame.ts';
+import type { SessionState } from './session-state.ts';
 
 export type RuntimeSessionRecordOptions = {
   includeSnapshot?: boolean;
@@ -20,6 +21,7 @@ function toRuntimeSessionRecord(
   options: RuntimeSessionRecordOptions = {},
 ): CommandSessionRecord | undefined {
   if (!session) return undefined;
+  const frameTree = refFrameTree(session);
   return {
     name,
     appBundleId: session.appBundleId,
@@ -30,8 +32,8 @@ function toRuntimeSessionRecord(
           // ADR 0014: expose the authorized frame tree so ref resolution binds a
           // `@eN` to the node the caller was authorized against, not to whatever
           // now sits at that index in a newer observation.
-          ...(session.refFrameTree && options.omitRefFrameSnapshot !== true
-            ? { refFrameSnapshot: session.refFrameTree }
+          ...(frameTree && options.omitRefFrameSnapshot !== true
+            ? { refFrameSnapshot: frameTree }
             : {}),
         }
       : {}),

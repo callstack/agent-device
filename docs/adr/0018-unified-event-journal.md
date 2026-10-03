@@ -52,13 +52,14 @@ Normative summary of the proposal; contracts and rationale below.
 The codebase has grown four parallel event vocabularies, each with its own emit call, shape,
 redaction discipline, and sink (inventoried 2026-07-24):
 
-1. **Diagnostics** (`src/utils/diagnostics.ts`). ~155 distinct stringly-typed `phase` values across
+1. **Diagnostics** (`packages/host-kit/src/internal/diagnostics.ts`).
+   ~155 distinct stringly-typed `phase` values across
    ~70 files, an `AsyncLocalStorage` request scope entered in exactly three places (CLI pre-parse,
    daemon per-request in `request-router.ts`, daemon fatal catch-all), an in-memory buffer plus a
    `phaseCounts` tally, and debug-mode live streaming to the per-request ndjson file (after
    `createRequestExecutionScope` rebinds `logPath`), `daemon.log`, or stderr. The
    `traceLogPath` scope option is dead: no call site ever sets it.
-2. **Session event log** (`src/daemon/session-event-log.ts`). Append-only per-session
+2. **Session event log** (`@agent-device/session-journal/session-event-log`). Append-only per-session
    `events.ndjson` with kinds `request.started`/`request.finished`/`action.recorded`, written from
    three request-lifecycle points plus `SessionStore.recordAction`, read only by the public
    `events` command. `action.recorded` is already a projection of `session.actions` pushes — the
@@ -72,7 +73,7 @@ redaction discipline, and sink (inventoried 2026-07-24):
    request via `meta.requestProgress`; disabled under `--json`. Events are written to the wire
    **unredacted** today.
 4. **Replay timing trace** (`src/daemon/handlers/session-replay-trace.ts`,
-   `session-test-runtime.ts`, read by `src/replay/test/trace.ts`). Per-**attempt**
+   `session-test-runtime.ts`, read by `src/cli/replay-test/trace.ts`). Per-**attempt**
    `replay-timing.ndjson` files whose paths are created dynamically inside each attempt — written
    by **two different helpers, one of which redacts and one of which does not**
    (`appendReplayTraceEvent` vs `appendReplayTestTimingEvent`).
@@ -134,9 +135,9 @@ Consumers derive kind sets from traits: `RUNNER_ROUND_TRIP_PHASES` becomes
 deliberately do not, preserving today's cost semantics). A parity test pins the derived sets so a
 trait edit is a reviewed decision, not a drift.
 
-The catalog lives in `contracts` (ranked, kernel-adjacent) so every zone — including unranked
-peripherals and `utils` — may import it without a layering back-edge. The journal runtime evolves
-in place in `src/utils/diagnostics.ts`, keeping all existing import directions legal.
+The catalog lives in `contracts` (ranked, kernel-adjacent) so every zone may import it without a
+layering back-edge. The journal runtime evolves in place in
+`packages/host-kit/src/internal/diagnostics.ts`, keeping all existing import directions legal.
 
 ### 2. One journal, explicit sinks, defined scope model
 
@@ -324,7 +325,7 @@ gets built.
   inconsistency, and three write paths. Kept as the migration's first independently useful step
   instead.
 - **Merge `upload-progress` and `app-events` in:** rejected. Upload progress is a local
-  byte-counter callback that never crosses the request scope; `core/app-events.ts` is a deep-link
+  byte-counter callback that never crosses the request scope; `src/daemon/app-events.ts` is a deep-link
   builder for the `trigger-app-event` command, not an event channel.
 
 ## Validation required for implementation
@@ -361,7 +362,7 @@ gets built.
   field is either numeric, an enum imported from the owning registry (command names, error codes,
   flag keys), or a hash — and that no open-string field exists; adding one is a failing gate, not
   a review comment.
-- Layering: `scripts/layering/check.ts` stays green — catalog in `contracts`, runtime in `utils`,
+- Layering: `scripts/layering/check.ts` stays green — catalog in `contracts`, runtime in `host-kit`,
   no new back-edges.
 
 ## Migration plan

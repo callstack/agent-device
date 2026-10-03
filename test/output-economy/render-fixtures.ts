@@ -29,7 +29,7 @@ function interactionText(result: typeof SETTLE_ADDED_REF_RESULT): string {
 }
 
 export async function renderOutputFixtures() {
-  const snapshot = snapshotCliOutput({
+  const snapshot = await snapshotCliOutput({
     result: SNAPSHOT_RESULT,
   });
   const snapshotDigest = RESPONSE_VIEWS.snapshot!(SNAPSHOT_DAEMON_RESULT, 'digest');

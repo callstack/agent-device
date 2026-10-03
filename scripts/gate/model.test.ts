@@ -22,7 +22,7 @@ const model = loadModel(repoRoot, tracked);
 
 const scriptModel = (scripts: Record<string, string>) => ({
   scripts,
-  vitestProjects: ['unit-core', 'subprocess-stub'],
+  vitestProjects: ['unit-core', 'fuzz-worker'],
   opaque: {},
 });
 
@@ -61,31 +61,29 @@ test('a filtered Vitest run does not credit the whole project', () => {
 test('a bare Vitest run spans every configured project', () => {
   assert.deepEqual(scriptUnits('all', scriptModel({ all: 'vitest run --coverage' })), [
     'vitest:unit-core',
-    'vitest:subprocess-stub',
+    'vitest:fuzz-worker',
   ]);
 });
 
 test('a negated --project subtracts from the configured set, so the skipped one is not credited', () => {
   assert.deepEqual(
-    scriptUnits('cov', scriptModel({ cov: 'vitest run --coverage --project=!subprocess-stub' })),
+    scriptUnits('cov', scriptModel({ cov: 'vitest run --coverage --project=!fuzz-worker' })),
     ['vitest:unit-core'],
   );
 });
 
-// The real `test:coverage:ci` shape: a negated `--project` leg, then a second leg that is a
-// nested script. Both indirections have to survive, or the lane stops owning the project it
-// hands to that leg.
-test('the two halves of test:coverage:ci together still own every project', () => {
+// A negated `--project` leg followed by a nested script must preserve both
+// indirections, or the lane stops owning the project handed to that leg.
+test('split coverage commands together still own every project', () => {
   assert.deepEqual(
     scriptUnits(
       'test:coverage:ci',
       scriptModel({
-        'test:coverage:ci':
-          'vitest run --coverage --project=!subprocess-stub && pnpm test:subprocess-stub',
-        'test:subprocess-stub': 'vitest run --project subprocess-stub',
+        'test:coverage:ci': 'vitest run --coverage --project=!fuzz-worker && pnpm test:fuzz-worker',
+        'test:fuzz-worker': 'vitest run --project fuzz-worker',
       }),
     ),
-    ['vitest:unit-core', 'vitest:subprocess-stub'],
+    ['vitest:unit-core', 'vitest:fuzz-worker'],
   );
 });
 

@@ -133,7 +133,7 @@ test('the audit reads every shipped extension, not only the bundled .js files', 
     const audit = fixturePackage({ [file]: `const mod = require(\`${PRIVATE}\`);` });
     assert.throws(
       audit,
-      new RegExp(`${PRIVATE.replace('/', '\\/')} in ${file.replace('/', '\\/')}`),
+      new RegExp(`${PRIVATE.replace('/', String.raw`\/`)} in ${file.replace('/', String.raw`\/`)}`),
     );
   }
 });

@@ -3,19 +3,19 @@ import { normalizeTenantId, resolveSessionIsolationMode } from './config.ts';
 import { isTenantOwnedSessionName, tenantScopedSessionName } from './session-tenant-scope.ts';
 import {
   isLeaseAdmissionExempt,
-  isSessionlessPlainCloseAdmissionExempt,
+  isHumanControlMutation,
+  resolveSessionlessLeaseAdmissionExemption,
 } from './daemon-command-registry.ts';
+import type { DeviceLease, ProviderAppCatalog } from '@agent-device/contracts/device';
 import {
-  DEFAULT_PROXY_LEASE_TTL_MS,
   findMissingProxyLeaseFields,
-  isProxyLeaseScope,
   resolveLeaseScope,
   resolveRequestOrSessionLeaseScope,
 } from './lease-context.ts';
-import { leaseScopeToHeartbeatRequest } from '../core/lease-scope.ts';
+import { leaseScopeToHeartbeatRequest } from '@agent-device/contracts/lease-scope';
 import type { LeaseRegistry } from './lease-registry.ts';
-import type { DeviceLease } from '@agent-device/contracts/device';
-import type { DaemonRequest, SessionState } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 
 export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
   const isolation = resolveSessionIsolationMode(
@@ -65,6 +65,7 @@ export function assertRequestLeaseAdmission(
   req: DaemonRequest,
   leaseRegistry: LeaseRegistry,
   session?: SessionState,
+  options: Readonly<{ providerAppCatalog?: ProviderAppCatalog }> = {},
 ): DeviceLease | undefined {
   if (isLeaseAdmissionExempt(req.command)) {
     return undefined;
@@ -72,39 +73,44 @@ export function assertRequestLeaseAdmission(
   const requestLeaseScope = resolveLeaseScope(req);
   assertProxyOpenLeaseMetadata(req, requestLeaseScope);
   const sessionLease = session?.lease;
-  // #2016: a tenant-isolated connection that never reached `open` has no
-  // daemon session and no lease to admit or release. Falling through would
-  // make the generic tenant/run/lease check below throw "tenant isolation
-  // requires lease id.", which reads as an access-control failure instead of
-  // "nothing to close". Let the close handler's own session lookup return
-  // its SESSION_NOT_FOUND response instead. Requires `session === undefined`,
-  // not just a lease-less session: a *stored* session under tenant isolation
-  // is keyed by tenant, not by run, so a lease-less stored session could
-  // belong to another run in the same tenant — admission must still verify a
-  // matching lease before that run's session can be torn down. Which request
-  // shape qualifies (plain `close`, not an app-target `close <app>`) is the
-  // registry's call, not this module's — see `sessionlessPlainCloseAdmissionExempt`.
   if (
     session === undefined &&
     !requestLeaseScope.leaseId &&
-    isSessionlessPlainCloseAdmissionExempt(req)
+    hasSessionlessLeaseAdmissionExemption(req, options.providerAppCatalog)
   ) {
     return undefined;
   }
-  if (!sessionLease && req.meta?.sessionIsolation !== 'tenant') {
+  if (req.command === 'human_control' && !sessionLease && !requestLeaseScope.leaseId) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      'Takeover requires an active remote device lease. Local takeover is not supported.',
+    );
+  }
+  if (req.command !== 'human_control' && !sessionLease && req.meta?.sessionIsolation !== 'tenant') {
     if (!requestLeaseScope.leaseId) return undefined;
     if (!requestLeaseScope.tenantId && !requestLeaseScope.runId) return undefined;
   }
   assertRequestSessionLeaseMatches(requestLeaseScope, sessionLease);
   const leaseScope = resolveRequestOrSessionLeaseScope(req, session);
-  const heartbeatLeaseScope = {
-    ...leaseScope,
-    leaseTtlMs:
-      leaseScope.leaseTtlMs ??
-      (isProxyLeaseScope(leaseScope) ? DEFAULT_PROXY_LEASE_TTL_MS : undefined),
-  };
   leaseRegistry.assertLeaseAdmission(leaseScopeToHeartbeatRequest(leaseScope));
-  return leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(heartbeatLeaseScope));
+  // Admission renews for the window the lease already carries, or the window this request named.
+  // Naming a proxy-specific default here used to shorten every lease allocated above it — a client
+  // that rented a device for longer than the default lost it on the next admitted command (#2946).
+  const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(leaseScope));
+  if (isHumanControlMutation(req)) leaseRegistry.assertHumanControlAdmission(lease);
+  return lease;
+}
+
+function hasSessionlessLeaseAdmissionExemption(
+  req: DaemonRequest,
+  providerAppCatalog: ProviderAppCatalog | undefined,
+): boolean {
+  const exemption = resolveSessionlessLeaseAdmissionExemption(req);
+  if (exemption?.kind === 'unconditional') return true;
+  return (
+    exemption?.kind === 'provider-app-catalog' &&
+    providerAppCatalog?.supports(exemption.provider) === true
+  );
 }
 
 export function assertRequestLeaseAdmissionPreflight(req: DaemonRequest): void {

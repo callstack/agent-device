@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { checkIsArgs, checkIsPredicate, IS_PREDICATE_USAGE_HINT } from '@agent-device/selectors';
+import {
+  IS_PREDICATES,
+  checkIsArgs,
+  checkIsPredicate,
+  IS_PREDICATE_USAGE_HINT,
+} from '@agent-device/selectors';
+import { interactionCommandMetadata } from '../commands/interaction/metadata.ts';
 import { readInputFromCli } from '../commands/cli-grammar.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 
@@ -10,7 +18,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 // Three surfaces validate the same rule: the daemon handler (via `checkIsArgs`), the CLI
 // grammar (`readInputFromCli`), and the runtime command that receives already-parsed
 // options (`isCommand`, covered on its own production route in
-// commands/interaction/runtime/selector-read.test.ts). They used to state the rule three
+// commands/interaction/runtime/selector-is.test.ts). They used to state the rule three
 // times, and all three had drifted: one inlined its own predicate list, one compared the raw
 // token so it rejected input the daemon accepts, and one dropped the usage hint.
 //
@@ -19,6 +27,16 @@ import type { CliFlags } from '@agent-device/contracts/command';
 // helper-only test could not catch.
 
 const BASE_FLAGS = {} as CliFlags;
+const EXPECTED_IS_PREDICATES = [
+  'visible',
+  'hidden',
+  'exists',
+  'absent',
+  'editable',
+  'selected',
+  'focused',
+  'text',
+] as const;
 
 type Verdict = { ok: true; predicate: string } | { ok: false; message: string; hint?: string };
 
@@ -77,6 +95,18 @@ const CASES: readonly {
     expect: 'accept',
     predicate: 'text',
   },
+  {
+    name: 'absence predicate first',
+    positionals: ['absent', 'id="gone"'],
+    expect: 'accept',
+    predicate: 'absent',
+  },
+  {
+    name: 'absence predicate after selector',
+    positionals: ['id="gone"', 'absent'],
+    expect: 'accept',
+    predicate: 'absent',
+  },
   { name: 'unknown predicate', positionals: ['shiny', 'id="ok"'], expect: 'refuse' },
   { name: 'no predicate at all', positionals: [], expect: 'refuse' },
 ];
@@ -119,4 +149,43 @@ test('an unsupported predicate is refused with the same message and hint everywh
   // one whose author remembered it.
   assert.equal(daemon.hint, IS_PREDICATE_USAGE_HINT);
   assert.equal(cli.hint, IS_PREDICATE_USAGE_HINT);
+});
+
+test('command docs list every is predicate', () => {
+  const docs = fs.readFileSync(
+    path.resolve(import.meta.dirname, '../..', 'website/docs/docs/commands.md'),
+    'utf8',
+  );
+  const predicateList = docs.match(/Supported predicates are ([^.]+)\./)?.[1] ?? '';
+  assert.deepEqual(IS_PREDICATES, EXPECTED_IS_PREDICATES);
+  for (const predicate of EXPECTED_IS_PREDICATES) {
+    assert.match(predicateList, new RegExp(`\\b${predicate}\\b`));
+  }
+
+  const metadata = interactionCommandMetadata.find((entry) => entry.name === 'is');
+  const predicateSchema = metadata?.inputSchema.properties?.predicate;
+  assert.deepEqual(predicateSchema?.enum, IS_PREDICATES);
+});
+
+test('the CLI refuses scoped and depth-limited absence captures as INVALID_ARGS', () => {
+  for (const [flag, value] of [
+    ['snapshotScope', 'Login'],
+    ['snapshotDepth', 2],
+  ] as const) {
+    assert.throws(
+      () =>
+        readInputFromCli('is', ['absent', 'label="Gone"'], {
+          ...BASE_FLAGS,
+          [flag]: value,
+        } as CliFlags),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'INVALID_ARGS');
+        assert.equal(error.details?.command, 'is');
+        assert.equal(error.details?.predicate, 'absent');
+        assert.equal(error.details?.rejectedOption, flag === 'snapshotScope' ? 'scope' : 'depth');
+        return true;
+      },
+    );
+  }
 });

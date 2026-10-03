@@ -24,6 +24,9 @@ VERSION="$(node -p 'require("./package.json").version')"
 AGENT_DEVICE_ANDROID_HELPER=ime sh ./scripts/build-android-helper.sh "$VERSION" .tmp/android-ime-helper
 ```
 
+The shared script needs its build-tools version named by `AGENT_DEVICE_ANDROID_BUILD_TOOLS`; see
+the [snapshot helper's Build section](../snapshot-helper/README.md#build) for the full rule.
+
 ## Run
 
 ```sh
@@ -31,7 +34,7 @@ PACKAGE="com.callstack.agentdevice.imehelper"
 SERVICE="$PACKAGE/.TestInputMethodService"
 VERSION="$(node -p 'require("./package.json").version')"
 
-adb install -r -t ".tmp/android-ime-helper/agent-device-android-ime-helper-$VERSION.apk"
+adb install -r ".tmp/android-ime-helper/agent-device-android-ime-helper-$VERSION.apk"
 
 # Record the current default IME before switching, so it can be restored exactly.
 PREVIOUS_IME="$(adb shell settings get secure default_input_method)"
@@ -79,6 +82,6 @@ security boundary): if present and it doesn't match, the broadcast is dropped an
 Switching the active IME is machine-global, not session-scoped. A crashed daemon that switched the
 IME and never restored it leaves the device with an invisible keyboard -- on a real device, this
 means the user cannot type anywhere until they manually reset their IME in Settings. The TS-side
-lifecycle (`src/platforms/android/ime-lifecycle.ts`) persists the previously active IME to disk
+lifecycle (`packages/platform-android/src/ime-lifecycle.ts`) persists the previously active IME to disk
 before switching, restores it on session close/teardown, and best-effort restores any orphaned
 switch left behind by a previous crashed daemon on startup.

@@ -1,10 +1,24 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { AppError, type DiagnosticsRecordRef } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
-import type { SessionRef, SessionRuntimeHints, SessionState } from './types.ts';
+import { AppError } from '@agent-device/kernel/errors';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { SessionRef, SessionRuntimeHints, SessionState } from './session-state.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
-import { expandSessionPath, isSafeSessionSegment, safeSessionName } from './session-paths.ts';
+import {
+  expandSessionPath,
+  isSafeSessionSegment,
+  safeSessionName,
+} from '@agent-device/host-kit/session-paths';
+import {
+  readRepairTombstoneFile,
+  resolveRepairTombstonePath,
+  type RepairSessionTombstone,
+} from '../session-repair-tombstone.ts';
+import {
+  readIdleSessionTombstoneFile,
+  resolveIdleSessionTombstonePath,
+  type IdleSessionTombstone,
+} from './session-idle-tombstone.ts';
 import { NO_SCRIPT_PUBLICATION, isRepairCommittable } from './session-script-publication-state.ts';
 import { effectiveWriteForce } from './session-script-publication-capability.ts';
 import {
@@ -16,7 +30,7 @@ import {
   type SessionScriptWriteOptions,
   type SessionScriptWriteResult,
 } from './session-script-writer.ts';
-import { successText } from '../utils/success-text.ts';
+import { successText } from '@agent-device/kernel/success-text';
 import {
   appendActionEvent,
   appendSessionEvent,
@@ -25,30 +39,7 @@ import {
   resolveSessionEventLogPath,
   type SessionEventLogInput,
   type SessionEventLogPage,
-} from './session-event-log.ts';
-
-/**
- * ADR 0012 decision 6, R7 (C5a): a reaped repair session leaves this bounded
- * marker so the next command on the same key gets `REPAIR_SESSION_EXPIRED` +
- * re-run guidance, never a bare `SESSION_NOT_FOUND`. Bounded by `expiresAt`
- * so an old tombstone never shadows an unrelated future session name.
- */
-export type RepairSessionTombstone = {
-  owner: string;
-  reapedAt: number;
-  expiresAt: number;
-  sourcePath?: string;
-  /**
-   * ADR 0012 decision 6 (BLOCKER 2): set iff this tombstone marks a COMPLETE
-   * transaction whose commit FAILED at teardown (no-clobber refusal, bare
-   * `@ref`, or a filesystem write error) — as opposed to a transaction that
-   * was merely reaped before it ever finished. Preserves the real failure
-   * instead of losing it behind a generic "reaped before it was finalized"
-   * expiry, so `repairExpiredIfTombstoned` can surface a distinct
-   * `REPAIR_COMMIT_FAILED` with the actual cause.
-   */
-  commitFailure?: { code: string; message: string };
-};
+} from '@agent-device/session-journal/session-event-log';
 
 const REPAIR_TOMBSTONE_TTL_MS = 60 * 60_000;
 
@@ -80,7 +71,14 @@ export class SessionStore {
    * documents intent rather than committing anything; a genuinely new record needs it.
    */
   set(name: string, session: SessionState): void {
+    // A key with no record is a NEW occupant, and the previous occupant's idle-expiry marker must
+    // stop explaining this key's absences from now on. Clearing it here rather than at `open` covers
+    // every way a record arrives — `open`'s provisional record, a record-only `record` session — and
+    // cannot be forgotten by a future insertion path. A replacing `open` on a live session takes the
+    // other branch and keeps whatever marker that session will earn for itself.
+    const occupying = this.sessions.has(name);
     this.sessions.set(name, session);
+    if (!occupying) this.clearIdleExpiryTombstone(name);
   }
 
   delete(name: string): boolean {
@@ -176,9 +174,9 @@ export class SessionStore {
    * teardown finalize step for a session (idle-reap or daemon shutdown).
    *
    * BLOCKER 3: unlike the explicit `close --save-script` path
-   * (`session-close-script.ts`), teardown never runs `close`'s handler — but
-   * the source plan's terminal `close` was already skipped-while-armed (Fix
-   * 3), so a COMPLETE transaction's auto-commit here must record the same
+   * (`session-lifecycle/internal/session-close-script.ts`), teardown never runs `close`'s
+   * handler — but the source plan's terminal `close` was already skipped-while-armed (Fix 3),
+   * so a COMPLETE transaction's auto-commit here must record the same
    * synthetic finalize `close` first, or the auto-committed healed `.ad`
    * would be missing its own terminal `close` (not self-contained, unlike an
    * explicit close's commit).
@@ -220,8 +218,8 @@ export class SessionStore {
 
   /**
    * BLOCKER 3: mirrors the explicit close script's finalize-`close` recording
-   * (`session-close-script.ts`) for the auto-commit path, which never routes
-   * through `close`'s handler. Only recorded when this teardown is actually
+   * (`session-lifecycle/internal/session-close-script.ts`) for the auto-commit path, which never
+   * routes through `close`'s handler. Only recorded when this teardown is actually
    * about to attempt a commit (COMPLETE, not yet COMMITTED) — an aborted
    * (incomplete) transaction's write is a no-op regardless, so there is
    * nothing to make self-contained.
@@ -280,7 +278,7 @@ export class SessionStore {
 
   /** Returns a non-expired repair tombstone for `sessionName`, or `undefined`. */
   readRepairTombstone(sessionName: string): RepairSessionTombstone | undefined {
-    return readTombstoneFile(this.repairTombstonePath(sessionName));
+    return readRepairTombstoneFile(this.repairTombstonePath(sessionName));
   }
 
   /** ADR 0012 R7 (C5a): a fresh `replay --save-script` on this key clears the tombstone. */
@@ -290,13 +288,95 @@ export class SessionStore {
     } catch {}
   }
 
+  /**
+   * #2833: records the instant a command that attaches to this session finished, which is the moving
+   * signal the opt-in inactivity deadline for a claim-holding session is measured from. The store
+   * owns the field, so the request path reports the event without becoming a `SessionState` writer.
+   * Callers hold the session's execution lock, which is what makes one plain assignment enough.
+   *
+   * An unknown address is ignored rather than fatal: the common one is an `open` whose session was
+   * never built, and its own `createdAt` already starts that session's deadline clock.
+   */
+  noteSessionActivity(address: string, atMs: number = Date.now()): void {
+    const session = this.sessions.get(address);
+    if (!session) return;
+    session.lastActivityAtMs = atMs;
+  }
+
+  /**
+   * #2833: drops the bounded marker an idle-expired session leaves, so the next command on that key
+   * learns why its session is gone instead of being told to run `open`. Best effort — the expiry
+   * already happened, and a marker that cannot be written must not undo it.
+   */
+  writeIdleExpiryTombstone(sessionName: string, tombstone: IdleSessionTombstone): void {
+    try {
+      fs.mkdirSync(this.resolveSessionDir(sessionName), { recursive: true });
+      fs.writeFileSync(
+        resolveIdleSessionTombstonePath(this.resolveSessionDir(sessionName)),
+        `${JSON.stringify(tombstone)}\n`,
+      );
+    } catch (error) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'idle_expiry_tombstone_write_failed',
+        data: {
+          session: sessionName,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  /**
+   * #2833: the non-expired idle-expiry marker this exact session key left when it was expired, or
+   * `undefined`. Total by design: a name that cannot address a session directory has no marker rather
+   * than the `INVALID_ARGS` `resolveSessionDir` would raise, because this read runs on an error path
+   * where a throw would replace the caller's own failure with an internal one.
+   *
+   * The recorded owner has to be the key being asked about, not merely a session that shares its
+   * directory. A session name becomes a directory through `safeSessionName`, which is a many-to-one
+   * encoding — the same one every other session artifact shares, and one no marker may quietly fork
+   * from — so two distinct keys can land in one directory. Answering for either of them with the
+   * other's expiry would report the wrong window and, worse, the wrong device as the one this caller
+   * just lost. Absent rather than borrowed is the safe answer.
+   */
+  readIdleExpiryTombstone(sessionName: string): IdleSessionTombstone | undefined {
+    if (!isSafeSessionSegment(sessionName)) return undefined;
+    const tombstone = readIdleSessionTombstoneFile(
+      resolveIdleSessionTombstonePath(this.resolveSessionDir(sessionName)),
+    );
+    return tombstone?.owner === sessionName ? tombstone : undefined;
+  }
+
+  /**
+   * #2833: a fresh `open` on this key clears the idle-expiry marker, so a later `SESSION_NOT_FOUND`
+   * for a DIFFERENT removal of this session (an explicit `close`, a lease expiry) can't borrow the
+   * old expiry's explanation. Best effort, like the write.
+   */
+  clearIdleExpiryTombstone(sessionName: string): void {
+    try {
+      fs.rmSync(resolveIdleSessionTombstonePath(this.resolveSessionDir(sessionName)), {
+        force: true,
+      });
+    } catch (error) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'idle_expiry_tombstone_clear_failed',
+        data: {
+          session: sessionName,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
   private repairTombstonePath(sessionName: string): string {
-    return path.join(this.resolveSessionDir(sessionName), 'repair-tombstone.json');
+    return resolveRepairTombstonePath(this.resolveSessionDir(sessionName));
   }
 
   defaultTracePath(session: SessionState): string {
     const safeName = safeSessionName(session.name);
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
     return path.join(this.sessionsDir, `${safeName}-${timestamp}.trace.log`);
   }
 
@@ -317,7 +397,8 @@ export class SessionStore {
   }
 
   // Daemon state dir (parent of the `sessions/` dir), matching daemonPaths.baseDir. Called via
-  // sessionStore.resolveDaemonStateDir() in session-open.ts and session-close.ts.
+  // sessionStore.resolveDaemonStateDir() in session-lifecycle/internal/session-open.ts and
+  // session-lifecycle/internal/session-close.ts.
   resolveDaemonStateDir(): string {
     return path.dirname(this.sessionsDir);
   }
@@ -355,109 +436,4 @@ export class SessionStore {
     }
     return session.name;
   }
-}
-
-/** Parses/validates a tombstone file at `tombstonePath`; `undefined` if missing, malformed, or expired. */
-function readTombstoneFile(tombstonePath: string): RepairSessionTombstone | undefined {
-  let raw: string;
-  try {
-    raw = fs.readFileSync(tombstonePath, 'utf8');
-  } catch {
-    return undefined;
-  }
-  let parsed: RepairSessionTombstone;
-  try {
-    parsed = JSON.parse(raw) as RepairSessionTombstone;
-  } catch {
-    return undefined;
-  }
-  if (typeof parsed?.expiresAt !== 'number' || parsed.expiresAt <= Date.now()) return undefined;
-  return parsed;
-}
-
-/**
- * ADR 0012 decision 6 (BLOCKER 2, third follow-up): scans every session
- * subdirectory under `sessionsDir` for a non-expired repair tombstone that
- * records an UNRECOVERED commit failure (`commitFailure` set) — used by the
- * CLIENT side of the daemon boundary (`cleanupDaemonAfterRequest` in
- * `daemon-client-lifecycle.ts`), which has no live `SessionStore`/session name
- * to key off of, only the filesystem path an owned ephemeral daemon was given.
- * An owned ephemeral state dir services exactly one repair transaction at a
- * time, so the first match found is returned.
- */
-export function findUnrecoveredRepairCommitFailure(sessionsDir: string):
-  | {
-      sessionName: string;
-      tombstone: RepairSessionTombstone & {
-        commitFailure: NonNullable<RepairSessionTombstone['commitFailure']>;
-      };
-    }
-  | undefined {
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(sessionsDir, { withFileTypes: true });
-  } catch {
-    return undefined;
-  }
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const tombstone = readTombstoneFile(
-      path.join(sessionsDir, entry.name, 'repair-tombstone.json'),
-    );
-    if (tombstone?.commitFailure) {
-      return {
-        sessionName: entry.name,
-        tombstone: { ...tombstone, commitFailure: tombstone.commitFailure },
-      };
-    }
-  }
-  return undefined;
-}
-
-/** Path to session-scoped platform subprocess output, such as Apple runner xcodebuild logs. */
-export function resolveSessionRunnerLogPath(sessionDir: string): string {
-  return path.join(sessionDir, 'runner.log');
-}
-
-/** Path to request-scoped daemon diagnostics for this session. */
-export function resolveSessionRequestLogPath(
-  sessionDir: string,
-  requestId: string | undefined,
-): string {
-  const safeRequestId = safeSessionName(requestId && requestId.length > 0 ? requestId : 'unknown');
-  return path.join(sessionDir, 'requests', `${safeRequestId}.ndjson`);
-}
-
-/**
- * The request diagnostics record for one request: the path it is written to on
- * this host, and the locator a remote caller fetches the same record by
- * (#1801). Built in one call so the two can never name different records.
- */
-export function resolveSessionRequestLog(params: {
-  sessionDir: string;
-  session: string;
-  requestId: string | undefined;
-}): { path: string; ref: DiagnosticsRecordRef } {
-  return {
-    path: resolveSessionRequestLogPath(params.sessionDir, params.requestId),
-    ref: {
-      session: params.session,
-      requestId: params.requestId && params.requestId.length > 0 ? params.requestId : 'unknown',
-    },
-  };
-}
-
-/**
- * Where a CLIENT keeps its own copy of a remote daemon's request diagnostics
- * record (#1801). Mirrors the daemon-side layout under the caller's state dir
- * so a CI job can archive `remote-diagnostics/` wholesale.
- */
-export function resolveRemoteRequestDiagnosticsPath(
-  stateDir: string,
-  ref: DiagnosticsRecordRef,
-): string {
-  return resolveSessionRequestLogPath(
-    path.join(stateDir, 'remote-diagnostics', safeSessionName(ref.session)),
-    ref.requestId,
-  );
 }

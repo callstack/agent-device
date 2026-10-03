@@ -1,4 +1,5 @@
 import XCTest
+import AgentDeviceSnapshotPresentation
 
 private enum KeyboardDismissObservationTiming {
   static let timeout: TimeInterval = 2
@@ -30,6 +31,164 @@ enum RunnerKeyboardDismissMechanism: String {
   case dismissKey
 }
 
+/// The band the visible keyboard owns, measured by the one producer that can ask the keyboard
+/// directly instead of rebuilding it from a captured tree.
+///
+/// `app.keyboards.firstMatch` answers in the app's own orientation space, which no tree tier can say
+/// about its own rects while the app is rotated (#2612, #2653). Publishing the measurement is what
+/// lets the daemon's tap guard answer with a point-in-rect test instead of guessing where a
+/// plausible-looking band would be (#2660).
+enum RunnerKeyboardBandFact: Equatable {
+  case visible(CGRect)
+  case absent
+  case unmeasurable(String)
+
+  var payload: KeyboardBandFactPayload {
+    switch self {
+    case .visible(let frame):
+      return KeyboardBandFactPayload(
+        kind: "visible",
+        frame: SnapshotRect(
+          x: Double(frame.origin.x),
+          y: Double(frame.origin.y),
+          width: Double(frame.size.width),
+          height: Double(frame.size.height)
+        ),
+        reason: nil
+      )
+    case .absent:
+      return KeyboardBandFactPayload(kind: "absent", frame: nil, reason: nil)
+    case .unmeasurable(let reason):
+      return KeyboardBandFactPayload(kind: "unmeasurable", frame: nil, reason: reason)
+    }
+  }
+
+  var logKind: String {
+    switch self {
+    case .visible: return "visible"
+    case .absent: return "absent"
+    case .unmeasurable: return "unmeasurable"
+    }
+  }
+
+  var logReason: String {
+    switch self {
+    case .visible, .absent: return "-"
+    case .unmeasurable(let reason): return reason
+    }
+  }
+}
+
+/// The reason codes a capture publishes beside `unmeasurable`. Key behavior travels on these, never
+/// on prose: a daemon log line and a `snapshot --json` reader have to agree on what `unmeasurable`
+/// meant without parsing a sentence.
+enum RunnerKeyboardBandReason {
+  /// The `app.keyboards` read threw or otherwise produced no answer at all.
+  static let queryFailed = "keyboard-frame-query-failed"
+  /// The keyboard exists and reports no usable box. It is on screen — only its band is unknown, which
+  /// is not the same claim as `absent`.
+  static let unusableFrame = "keyboard-frame-unusable"
+  /// The read did not return inside the slice this capture had left for it, so the band was abandoned
+  /// rather than waited on: a keyboard this capture cannot afford to measure is not worth a stalled
+  /// capture, and the daemon's tap guard falls back to the tree rule for this capture alone.
+  static let queryTimeout = "keyboard-frame-query-timeout"
+  /// No slice was left at all, so the read was never dispatched.
+  static let budgetExhausted = "capture-plan-budget-exhausted"
+}
+
+/// Whether a keyboard's reported box can be a band at all. A zero-area or non-finite box is what an
+/// element XCTest cannot measure looks like.
+///
+/// Reads `origin` and `size` rather than the rect's own accessors: `CGRect.width` and `CGRect.height`
+/// standardize, so a box reported with a negative size answers them with a positive one and an
+/// unmeasurable element would ship as a measured band. The daemon's reader applies the same rule to
+/// the wire frame, so neither language can publish a band the other would refuse.
+func runnerKeyboardFrameIsUsable(_ frame: CGRect) -> Bool {
+  let size = frame.size
+  let origin = frame.origin
+  return [origin.x, origin.y, size.width, size.height].allSatisfy(\.isFinite)
+    && size.width > 0 && size.height > 0
+}
+
+/// The one decision the keyboard-band probe makes, kept away from the live query so the unit lane can
+/// pin it without a keyboard on screen. Three outcomes and no fourth: a read that failed says it
+/// failed, a keyboard that is not there is proven absent, and a keyboard whose box cannot be measured
+/// is unmeasurable rather than absent — the difference is whether anything may claim this screen is
+/// clear of a keyboard.
+func runnerKeyboardBandFact(
+  readSucceeded: Bool,
+  exists: Bool,
+  frame: CGRect
+) -> RunnerKeyboardBandFact {
+  guard readSucceeded else { return .unmeasurable(RunnerKeyboardBandReason.queryFailed) }
+  guard exists else { return .absent }
+  guard runnerKeyboardFrameIsUsable(frame) else {
+    return .unmeasurable(RunnerKeyboardBandReason.unusableFrame)
+  }
+  return .visible(frame)
+}
+
+private struct KeyboardBandProbeTimeout: Error {}
+
+extension RunnerTests {
+  /// The band the visible keyboard owns, read once per capture.
+  ///
+  /// Returns nil only where there is no iOS keyboard to look for. Every other outcome is stated,
+  /// including the ones where looking failed: a missing field would leave the daemon guessing which
+  /// tier answered, while a published `unmeasurable` names the reason where the band would have been.
+  ///
+  /// Its own main-thread hop with its own slice, taken after the tree so the fact is never older than
+  /// the tree it is compared against, and so a keyboard this capture cannot afford to measure costs the
+  /// capture nothing: a timeout abandons the fact and leaves the tree tier standing, the same trade
+  /// `boundedBlockingSystemAlertSnapshot` makes for the probe it bounds (#2660). The elapsed time rides
+  /// the stamp so the cost of the extra query stays checkable in the field.
+  func captureKeyboardBandFact(app: XCUIApplication, deadline: Date) -> RunnerKeyboardBandFact? {
+#if os(iOS)
+    let slice = min(Self.keyboardBandProbeBudget, max(0, deadline.timeIntervalSinceNow))
+    guard slice > 0 else {
+      NSLog(
+        "AGENT_DEVICE_RUNNER_KEYBOARD_BAND_FACT kind=unmeasurable reason=%@ elapsedMs=0",
+        RunnerKeyboardBandReason.budgetExhausted
+      )
+      return .unmeasurable(RunnerKeyboardBandReason.budgetExhausted)
+    }
+    let startedAt = Date()
+    let fact: RunnerKeyboardBandFact
+    do {
+      fact = try runMainThreadWork(
+        "keyboard_band",
+        timeout: slice,
+        timeoutError: { KeyboardBandProbeTimeout() }
+      ) {
+        self.keyboardBandFact(app: app)
+      }
+    } catch {
+      fact = .unmeasurable(RunnerKeyboardBandReason.queryTimeout)
+    }
+    NSLog(
+      "AGENT_DEVICE_RUNNER_KEYBOARD_BAND_FACT kind=%@ reason=%@ elapsedMs=%d",
+      fact.logKind,
+      fact.logReason,
+      Int(Date().timeIntervalSince(startedAt) * 1000)
+    )
+    return fact
+#else
+    return nil
+#endif
+  }
+
+  private func keyboardBandFact(app: XCUIApplication) -> RunnerKeyboardBandFact {
+    let read = safely("KEYBOARD_BAND_FACT") { () -> RunnerKeyboardBandFact? in
+      let keyboard = app.keyboards.firstMatch
+      guard keyboard.exists else {
+        return runnerKeyboardBandFact(readSucceeded: true, exists: false, frame: .zero)
+      }
+      return runnerKeyboardBandFact(readSucceeded: true, exists: true, frame: keyboard.frame)
+    }
+    return read ?? .unmeasurable(RunnerKeyboardBandReason.queryFailed)
+  }
+}
+
 extension RunnerTests {
   func isKeyboardVisible(app: XCUIApplication) -> Bool {
     return visibleKeyboardFrame(app: app) != nil
@@ -53,6 +212,7 @@ extension RunnerTests {
     if tapKeyboardDismissControl(app: app) {
       _ = keyboard.waitForNonExistence(timeout: KeyboardDismissObservationTiming.timeout)
       waitForScreenshotStability(
+        app: app,
         timeout: KeyboardDismissObservationTiming.settleTimeout,
         sampleInterval: KeyboardDismissObservationTiming.settleSampleInterval,
         requiredConsecutiveMatches: KeyboardDismissObservationTiming.settleRequiredConsecutiveMatches
@@ -81,23 +241,38 @@ extension RunnerTests {
   // so far, so it is unit-testable without a real screenshot pipeline; this loop
   // is the thin, untestable I/O shell around it.
   private func waitForScreenshotStability(
+    app: XCUIApplication,
     timeout: TimeInterval,
     sampleInterval: TimeInterval,
     requiredConsecutiveMatches: Int
   ) {
     let deadline = Date().addingTimeInterval(timeout)
-    var samples: [Data?] = [screenshotFingerprintForStabilityCheck()]
+    var samples: [Data?] = [screenshotFingerprintForStabilityCheck(app: app)]
     while Date() < deadline {
       sleepFor(sampleInterval)
-      samples.append(screenshotFingerprintForStabilityCheck())
+      samples.append(screenshotFingerprintForStabilityCheck(app: app))
       if runnerScreenshotStabilitySettled(samples, requiredConsecutiveMatches: requiredConsecutiveMatches) {
+        logScreenshotStability(samples: samples, settled: true)
         return
       }
     }
+    logScreenshotStability(samples: samples, settled: false)
   }
 
-  private func screenshotFingerprintForStabilityCheck() -> Data? {
-    guard let image = captureRunnerFrame() else { return nil }
+  /// Says what the settle actually looked at: samples that are all `nil` means the capture refused to
+  /// produce a frame, which is a different fact from a screen that never held still, and the two read
+  /// identically from the outside (#2728).
+  private func logScreenshotStability(samples: [Data?], settled: Bool) {
+    NSLog(
+      "AGENT_DEVICE_RUNNER_KEYBOARD_STABILITY samples=%ld captured=%ld settled=%@",
+      samples.count,
+      samples.compactMap { $0 }.count,
+      settled ? "yes" : "no"
+    )
+  }
+
+  private func screenshotFingerprintForStabilityCheck(app: XCUIApplication) -> Data? {
+    guard let image = captureRunnerFrame(app: app) else { return nil }
     return runnerPngData(for: image)
   }
 
@@ -272,63 +447,3 @@ func runnerScreenshotStabilitySettled(
   guard let first = window.first, let firstData = first else { return false }
   return window.allSatisfy { $0 == firstData }
 }
-
-#if AGENT_DEVICE_RUNNER_UNIT_TESTS
-extension RunnerTests {
-  func testRunnerScreenshotStabilitySettledNeedsEnoughSamples() {
-    XCTAssertFalse(runnerScreenshotStabilitySettled([], requiredConsecutiveMatches: 3))
-    XCTAssertFalse(runnerScreenshotStabilitySettled([Data([1])], requiredConsecutiveMatches: 3))
-    let frame = Data([1, 2, 3])
-    XCTAssertFalse(
-      runnerScreenshotStabilitySettled([frame, frame], requiredConsecutiveMatches: 3)
-    )
-  }
-
-  func testRunnerScreenshotStabilitySettledTrueWhenWindowMatches() {
-    let frame = Data([1, 2, 3])
-    XCTAssertTrue(
-      runnerScreenshotStabilitySettled([Data([9]), frame, frame, frame], requiredConsecutiveMatches: 3)
-    )
-  }
-
-  func testRunnerScreenshotStabilitySettledFalseOnMidWindowMismatch() {
-    // A momentary pause (two matching samples) followed by resumed movement
-    // must not read as settled: the 3-sample window still spans the mismatch.
-    let frame = Data([1, 2, 3])
-    let moved = Data([4, 5, 6])
-    XCTAssertFalse(
-      runnerScreenshotStabilitySettled([frame, frame, moved], requiredConsecutiveMatches: 3)
-    )
-  }
-
-  func testRunnerScreenshotStabilitySettledFalseOnFailedCapture() {
-    // A nil sample (failed screenshot) never counts as a match, even against
-    // other nils — an unverifiable run must not look "stable".
-    XCTAssertFalse(runnerScreenshotStabilitySettled([nil, nil, nil], requiredConsecutiveMatches: 3))
-    let frame = Data([1, 2, 3])
-    XCTAssertFalse(
-      runnerScreenshotStabilitySettled([frame, frame, nil], requiredConsecutiveMatches: 3)
-    )
-  }
-
-  func testRunnerScreenshotStabilitySettledOnlyLooksAtTheTrailingWindow() {
-    // An older mismatch before the trailing window must not block settlement
-    // once the required run of most-recent samples agrees.
-    let frame = Data([9])
-    XCTAssertTrue(
-      runnerScreenshotStabilitySettled(
-        [Data([1]), Data([2]), frame, frame, frame],
-        requiredConsecutiveMatches: 3
-      )
-    )
-  }
-
-  func testRunnerScreenshotStabilitySettledRejectsDegenerateRequirement() {
-    // Fewer than 2 required matches would make any single sample "settled" —
-    // guard against a misconfigured caller rather than silently no-op the wait.
-    XCTAssertFalse(
-      runnerScreenshotStabilitySettled([Data([1])], requiredConsecutiveMatches: 1)
-    )
-  }
-}
-#endif

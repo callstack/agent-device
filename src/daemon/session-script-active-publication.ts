@@ -1,6 +1,6 @@
 import type { SessionAction } from '@agent-device/contracts/session';
-import { resolveCommandRecordingEffect } from '../core/command-descriptor/registry.ts';
-import { parseWaitPositionals } from '../core/wait-positionals.ts';
+import { resolveCommandRecordingEffect } from '@agent-device/command-registry/registry';
+import { parseWaitPositionals } from '@agent-device/command-registry/wait-positionals';
 import { AppError } from '@agent-device/kernel/errors';
 import { isTouchTargetCommand } from '@agent-device/ad-script';
 import { dragGesturePayloadFromPositionals } from '@agent-device/contracts/gesture-normalization';

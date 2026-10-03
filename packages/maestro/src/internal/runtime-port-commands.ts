@@ -29,7 +29,9 @@ type MaestroCommandOf<K extends MaestroRuntimeCommand['kind']> = Extract<
   { kind: K }
 >;
 
-type MaestroLifecycleCommand = MaestroCommandOf<'launchApp' | 'stopApp' | 'openLink'>;
+type MaestroLifecycleCommand = MaestroCommandOf<
+  'launchApp' | 'stopApp' | 'setPermissions' | 'clearState' | 'openLink'
+>;
 type MaestroTargetCommand = MaestroCommandOf<'tapOn' | 'doubleTapOn' | 'longPressOn'>;
 type MaestroTextCommand = MaestroCommandOf<'inputText' | 'eraseText'>;
 type MaestroNavigationCommand = MaestroCommandOf<
@@ -53,6 +55,8 @@ type MaestroRuntimeCommandHandlers = {
 const MAESTRO_RUNTIME_COMMAND_HANDLERS = {
   launchApp: executeLifecycleCommand,
   stopApp: executeLifecycleCommand,
+  setPermissions: executeLifecycleCommand,
+  clearState: executeLifecycleCommand,
   openLink: executeLifecycleCommand,
   tapOn: executeTargetCommand,
   doubleTapOn: executeTargetCommand,
@@ -68,6 +72,7 @@ const MAESTRO_RUNTIME_COMMAND_HANDLERS = {
   waitForAnimationToEnd: executeNavigationCommand,
   takeScreenshot: executeSupportCommand,
   runScript: executeSupportCommand,
+  evalScript: executeEvaluationCommand,
   assertVisible: executeObservationCommand,
   assertNotVisible: executeObservationCommand,
   assertTrue: executeObservationCommand,
@@ -77,6 +82,8 @@ const MAESTRO_RUNTIME_COMMAND_HANDLERS = {
 const MAESTRO_COMMAND_REQUIRES_SETTLED_PREDECESSOR = {
   launchApp: true,
   stopApp: true,
+  setPermissions: true,
+  clearState: true,
   openLink: true,
   tapOn: true,
   doubleTapOn: true,
@@ -92,6 +99,7 @@ const MAESTRO_COMMAND_REQUIRES_SETTLED_PREDECESSOR = {
   waitForAnimationToEnd: true,
   takeScreenshot: false,
   runScript: false,
+  evalScript: false,
   assertVisible: false,
   assertNotVisible: false,
   assertTrue: false,
@@ -142,6 +150,23 @@ async function executeLifecycleCommand(
         context,
         'invalidate',
       );
+    case 'setPermissions':
+      return await invokeOperation(
+        operations.setPermissions,
+        {
+          appId: command.appId ?? request.appId,
+          permissions: resolveSetPermissions(command.permissions),
+        },
+        context,
+        'invalidate',
+      );
+    case 'clearState':
+      return await invokeOperation(
+        operations.clearState,
+        { appId: command.appId ?? request.appId },
+        context,
+        'invalidate',
+      );
     case 'openLink':
       return await invokeOperation(
         operations.openLink,
@@ -157,9 +182,17 @@ function launchAppInput(command: MaestroCommandOf<'launchApp'>, request: Maestro
     appId: command.appId ?? request.appId,
     stopApp: command.stopApp,
     clearState: command.clearState,
+    permissions: command.permissions ? resolveSetPermissions(command.permissions) : undefined,
     arguments: command.arguments,
     launchArguments: command.launchArguments,
   });
+}
+
+/** Values are case-insensitive; a `${VAR}` value is checked where the permission is applied. */
+function resolveSetPermissions(permissions: Readonly<Record<string, string>>) {
+  return Object.fromEntries(
+    Object.entries(permissions).map(([name, value]) => [name, value.toLowerCase()]),
+  );
 }
 
 async function executeTargetCommand(
@@ -391,6 +424,15 @@ async function executeObservationCommand(command: MaestroObservationCommand): Pr
   throw new AppError(
     'COMMAND_FAILED',
     `Maestro ${command.kind} must be executed by the observation engine.`,
+  );
+}
+
+function executeEvaluationCommand(
+  command: MaestroCommandOf<'evalScript'>,
+): Promise<MaestroRuntimeResult> {
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Maestro evalScript must be executed by the compute engine at ${command.source.path ?? ''}line ${command.source.line}.`,
   );
 }
 

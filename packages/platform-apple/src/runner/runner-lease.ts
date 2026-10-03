@@ -6,14 +6,19 @@ import {
   emitDiagnostic,
   publishFileSync,
   acquireProcessLock,
+  withProcessLock,
+  hasDeviceClaimAuthority,
   isProcessAlive,
   readProcessCommand,
   readProcessStartTime,
   classifyOwnerLiveness,
   leaseOwnerStateDir,
+  shellQuote,
 } from './host.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
+import { runnerSimulatorSetPath } from './runner-device-set.ts';
 
 const RUNNER_LEASE_SCHEMA_VERSION = 1;
 const RUNNER_LEASE_LOCK_TIMEOUT_MS = 30_000;
@@ -46,8 +51,28 @@ export type RunnerLease = {
   runnerStartTime?: string | null;
   port: number;
   xctestrunPath: string;
+  cacheKey?: string;
   jsonPath: string;
+  /**
+   * Where the leased runner's own output goes. The runner appends to this file for its whole life,
+   * including across a daemon handoff, so the daemon that adopts it can point at it (#2681).
+   * Absent on leases written before the runner's stdio moved onto a file.
+   */
+  runnerLogPath?: string;
+  /**
+   * The scoped simulator set that holds the leased runner's simulator; absent for the default set,
+   * and on leases written before a scoped-set runner could be handed off.
+   */
+  simulatorSetPath?: string;
   createdAtMs: number;
+  /**
+   * The owner arbitrates device ownership through host-global device claims
+   * (#1320): while it wants the device it holds the claim, so a daemon that
+   * holds the claim instead may stop and replace this runner. Absent on leases
+   * written before claim arbitration existed — those owners never signal
+   * ownership through claims, so claim authority must not preempt them.
+   */
+  deviceClaimProtocol?: 1;
 };
 
 // Why a foreign lease classifies as stale (reclaimable). The distinction is
@@ -71,23 +96,37 @@ type RunnerLeaseRequiredFields = Pick<
   'createdAtMs' | 'jsonPath' | 'ownerPid' | 'ownerToken' | 'port' | 'sessionId' | 'xctestrunPath'
 >;
 
+/**
+ * Which runner xcodebuild launches a cleanup may signal.
+ *
+ * With `xctestrunPath` — the path a lease recorded — the sweep is scoped to the one launch that
+ * artifact names. Without it the caller only knows the device, so the sweep covers that device's
+ * launches and must be a reclaim, never a stop of a session this daemon still considers live.
+ */
+export type RunnerXcodebuildCleanupTarget = Readonly<
+  { deviceId: string } & ({ xctestrunPath: string } | { xctestrunPath?: undefined })
+>;
+
 export type RunnerLeaseCleanupAdapter = {
   cleanupRunnerProcessTree(pid: number | undefined, signal: 'SIGTERM' | 'SIGKILL'): Promise<void>;
-  cleanupRunnerXcodebuildProcesses(deviceId: string, ownerToken: string | undefined): Promise<void>;
+  cleanupRunnerXcodebuildProcesses(target: RunnerXcodebuildCleanupTarget): Promise<void>;
   cleanupTempFile(filePath: string): void;
 };
 
 export function buildRunnerLease(params: {
-  deviceId: string;
+  device: DeviceInfo;
   sessionId: string;
   runnerPid: number | undefined;
   port: number;
   xctestrunPath: string;
+  cacheKey?: string;
   jsonPath: string;
+  runnerLogPath?: string;
 }): RunnerLease {
+  const runnerLogPath = readOptionalNonEmptyString(params.runnerLogPath);
   return {
     schemaVersion: RUNNER_LEASE_SCHEMA_VERSION,
-    deviceId: params.deviceId,
+    deviceId: params.device.id,
     ownerToken: runnerOwnerToken(),
     ownerPid: RUNNER_OWNER_PID,
     ownerStartTime: runnerOwnerStartTime(),
@@ -97,29 +136,32 @@ export function buildRunnerLease(params: {
     runnerStartTime: params.runnerPid ? readProcessStartTime(params.runnerPid) : null,
     port: params.port,
     xctestrunPath: params.xctestrunPath,
+    cacheKey: params.cacheKey,
     jsonPath: params.jsonPath,
+    ...(runnerLogPath ? { runnerLogPath } : {}),
+    ...optionalSimulatorSetPath(runnerSimulatorSetPath(params.device)),
     createdAtMs: Date.now(),
+    deviceClaimProtocol: 1,
   };
 }
 
 export async function withRunnerLeaseLock<T>(deviceId: string, task: () => Promise<T>): Promise<T> {
-  const release = await acquireProcessLock({
-    lockDirPath: `${resolveRunnerLeasePath(deviceId)}.lock`,
-    owner: {
-      pid: RUNNER_OWNER_PID,
-      startTime: runnerOwnerStartTime(),
-      acquiredAtMs: Date.now(),
-    },
-    timeoutMs: RUNNER_LEASE_LOCK_TIMEOUT_MS,
-    pollMs: RUNNER_LEASE_LOCK_POLL_MS,
-    ownerGraceMs: RUNNER_LEASE_OWNER_GRACE_MS,
-    description: `iOS runner lease for ${deviceId}`,
+  return await withProcessLock({
+    acquire: () =>
+      acquireProcessLock({
+        lockDirPath: `${resolveRunnerLeasePath(deviceId)}.lock`,
+        owner: {
+          pid: RUNNER_OWNER_PID,
+          startTime: runnerOwnerStartTime(),
+          acquiredAtMs: Date.now(),
+        },
+        timeoutMs: RUNNER_LEASE_LOCK_TIMEOUT_MS,
+        pollMs: RUNNER_LEASE_LOCK_POLL_MS,
+        ownerGraceMs: RUNNER_LEASE_OWNER_GRACE_MS,
+        description: `iOS runner lease for ${deviceId}`,
+      }),
+    task,
   });
-  try {
-    return await task();
-  } finally {
-    await release();
-  }
 }
 
 function readRunnerLease(deviceId: string): RunnerLease | null {
@@ -145,18 +187,23 @@ function classifyRunnerLease(lease: RunnerLease | null): RunnerLeaseState {
 }
 
 export async function prepareRunnerLeaseForStartup(
-  deviceId: string,
+  device: DeviceInfo,
   cleanup: RunnerLeaseCleanupAdapter,
   logicalLeaseContext?: RunnerLogicalLeaseContext,
 ): Promise<void> {
+  const deviceId = device.id;
   const state = classifyRunnerLease(readRunnerLease(deviceId));
   if (state.type === 'empty') {
-    await cleanup.cleanupRunnerXcodebuildProcesses(deviceId, undefined);
+    await cleanup.cleanupRunnerXcodebuildProcesses({ deviceId });
     return;
   }
   if (state.type === 'busy') {
     if (isSameStateDirRunnerLease(state.lease)) {
       await cleanupLeasedRunnerProcesses(state.lease, 'same-state-dir', cleanup);
+      return;
+    }
+    if (canDeviceClaimReclaimRunner(state.lease, device)) {
+      await cleanupLeasedRunnerProcesses(state.lease, 'device-claim-takeover', cleanup);
       return;
     }
     if (canLogicalLeaseReclaimRunner(state.lease, logicalLeaseContext)) {
@@ -189,6 +236,25 @@ function isSameStateDirRunnerLease(lease: RunnerLease): boolean {
   const currentStateDir = readCurrentStateDir();
   if (!currentStateDir || !lease.ownerStateDir) return false;
   return path.resolve(currentStateDir) === path.resolve(lease.ownerStateDir);
+}
+
+/**
+ * #1320 retained-runner rule: device claims are exclusive per device, so this
+ * process holding the claim proves the lease owner released or lost it — a
+ * retained warm runner, not an active one. Stop-and-recreate is safe because
+ * every owner-side cleanup path no-ops once the lease token changes. Gated on
+ * the lease declaring claim arbitration, so owners from builds that predate
+ * device claims (and therefore never hold one) keep today's refusal. The probe
+ * receives the full device: claim ownership is canonical family/OS/id, and a
+ * bare id could let a same-id claim from another platform family authorize a
+ * destructive takeover.
+ */
+function canDeviceClaimReclaimRunner(lease: RunnerLease, device: DeviceInfo): boolean {
+  return (
+    lease.deviceClaimProtocol === 1 &&
+    lease.deviceId === device.id &&
+    hasDeviceClaimAuthority(device)
+  );
 }
 
 function canLogicalLeaseReclaimRunner(
@@ -254,25 +320,45 @@ function formatEnvAssignment(name: string, value: string): string {
   return `${name}=${shellQuote(value)}`;
 }
 
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
 // A lease whose owner process is gone but whose runner may still be running:
 // the adoption path probes it instead of killing it. Detached leases (graceful
 // daemon shutdown rewrote the token) classify as stale too once the owner pid
 // dies, so crash-orphans and deliberate handoffs share one recovery path.
 // Adoption is strictly PID-dead-gated: an owner whose state dir is gone but
 // whose process is still alive may still hold a live connection to the
-// runner, so adopting it would create two masters. Those leases return null
+// runner, so adopting it would create two masters. Those leases are refused
 // here and go through prepareRunnerLeaseForStartup's force-stop path (kill
 // the leased runner processes, then rebuild) instead.
-export function readStaleRunnerLease(deviceId: string): RunnerLease | null {
+export type RunnerLeaseAdoptionRefusal =
+  | 'lease_owned_by_this_daemon'
+  | 'lease_owner_live'
+  | 'lease_owner_state_dir_gone';
+
+export type RunnerLeaseAdoptionVerdict =
+  | { type: 'adoptable'; lease: RunnerLease }
+  | { type: 'absent' }
+  | { type: 'refused'; reason: RunnerLeaseAdoptionRefusal; lease: RunnerLease };
+
+/** The one classification adoption reads, so a refused lease reports why it was refused. */
+export function readRunnerLeaseForAdoption(deviceId: string): RunnerLeaseAdoptionVerdict {
   const state = classifyRunnerLease(readRunnerLease(deviceId));
-  return state.type === 'stale' &&
-    (state.staleReason === 'owner-process-dead' || state.staleReason === 'owner-process-reused')
-    ? state.lease
-    : null;
+  switch (state.type) {
+    case 'empty':
+      return { type: 'absent' };
+    case 'owned':
+      return { type: 'refused', reason: 'lease_owned_by_this_daemon', lease: state.lease };
+    case 'busy':
+      return { type: 'refused', reason: 'lease_owner_live', lease: state.lease };
+    case 'stale':
+      return state.staleReason === 'owner-state-dir-gone'
+        ? { type: 'refused', reason: 'lease_owner_state_dir_gone', lease: state.lease }
+        : { type: 'adoptable', lease: state.lease };
+  }
+}
+
+export function readStaleRunnerLease(deviceId: string): RunnerLease | null {
+  const verdict = readRunnerLeaseForAdoption(deviceId);
+  return verdict.type === 'adoptable' ? verdict.lease : null;
 }
 
 // Marks a lease as handed off during graceful shutdown: the token no longer
@@ -303,6 +389,15 @@ export async function cleanupRunnerLeasesForOwner(
       await cleanupLeasedRunnerProcesses(lease, 'owned', cleanup);
     }),
   );
+}
+
+/**
+ * The owner token of the lease currently on disk for this device, or null when
+ * none is readable. Lets disposal recognize that a foreign owner (a device-claim
+ * or logical-lease takeover) has replaced the runner it is cleaning up after.
+ */
+export function currentRunnerLeaseOwnerToken(deviceId: string): string | null {
+  return readRunnerLease(deviceId)?.ownerToken ?? null;
 }
 
 export function releaseRunnerLease(lease: RunnerLease | undefined): void {
@@ -395,6 +490,10 @@ function normalizeRunnerLease(value: unknown, deviceId: string): RunnerLease | n
     ownerStateDir: readOptionalString(raw.ownerStateDir) ?? undefined,
     runnerPid: readPositiveInteger(raw.runnerPid),
     runnerStartTime: readOptionalString(raw.runnerStartTime),
+    runnerLogPath: readOptionalNonEmptyString(raw.runnerLogPath),
+    cacheKey: readOptionalNonEmptyString(raw.cacheKey),
+    ...optionalSimulatorSetPath(raw.simulatorSetPath),
+    ...(raw.deviceClaimProtocol === 1 ? { deviceClaimProtocol: 1 as const } : {}),
   };
 }
 
@@ -416,6 +515,15 @@ function readRunnerLeaseRequiredFields(
 
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function readOptionalNonEmptyString(value: unknown): string | undefined {
+  return readNonEmptyString(value) ?? undefined;
+}
+
+function optionalSimulatorSetPath(value: unknown): Pick<RunnerLease, 'simulatorSetPath'> {
+  const simulatorSetPath = readNonEmptyString(value);
+  return simulatorSetPath ? { simulatorSetPath } : {};
 }
 
 function readOptionalString(value: unknown): string | null {
@@ -441,14 +549,11 @@ function readFiniteNumber(value: unknown): number | null {
 // liveness only.
 async function cleanupLeasedRunnerProcesses(
   lease: RunnerLease,
-  reason: 'owned' | 'stale' | 'same-state-dir' | 'logical-lease-takeover',
+  reason: 'owned' | 'stale' | 'same-state-dir' | 'logical-lease-takeover' | 'device-claim-takeover',
   cleanup: RunnerLeaseCleanupAdapter,
 ): Promise<void> {
   emitDiagnostic({
-    level:
-      reason === 'stale' || reason === 'same-state-dir' || reason === 'logical-lease-takeover'
-        ? 'warn'
-        : 'debug',
+    level: reason === 'owned' ? 'debug' : 'warn',
     phase: 'ios_runner_lease_cleanup',
     data: {
       deviceId: lease.deviceId,
@@ -461,7 +566,10 @@ async function cleanupLeasedRunnerProcesses(
     },
   });
   await cleanup.cleanupRunnerProcessTree(resolveVerifiedLeaseRunnerPid(lease), 'SIGTERM');
-  await cleanup.cleanupRunnerXcodebuildProcesses(lease.deviceId, lease.ownerToken);
+  await cleanup.cleanupRunnerXcodebuildProcesses({
+    deviceId: lease.deviceId,
+    xctestrunPath: lease.xctestrunPath,
+  });
   await cleanup.cleanupRunnerProcessTree(resolveVerifiedLeaseRunnerPid(lease), 'SIGKILL');
   cleanup.cleanupTempFile(lease.xctestrunPath);
   cleanup.cleanupTempFile(lease.jsonPath);
@@ -479,6 +587,15 @@ async function cleanupLeasedRunnerProcesses(
  * pattern-based xcodebuild pkill in the cleanup adapter is unaffected and
  * still collects genuinely stray runner processes.
  */
+/**
+ * Whether a live pid is provably still the leased runner. The one place this contract is written, so
+ * the pid a caller is willing to signal and the pid adoption is willing to take over cannot drift
+ * apart (#2681).
+ */
+export function isLeaseRunnerProcessIntact(lease: RunnerLease, runnerPid: number): boolean {
+  return isProcessAlive(runnerPid) && verifyLeaseRunnerPidIdentity(lease, runnerPid);
+}
+
 function resolveVerifiedLeaseRunnerPid(lease: RunnerLease): number | undefined {
   const pid = lease.runnerPid ?? undefined;
   if (!pid || !isProcessAlive(pid)) return undefined;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 
-import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { assertPngFile } from '../provider-scenarios/assertions.ts';
 import { type LiveContext, runStep, verifyCommand } from './live-harness.ts';
 

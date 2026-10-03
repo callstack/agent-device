@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { resolveDaemonPaths } from '../../../src/daemon/config.ts';
+import { resolveDaemonPaths } from '../../../src/daemon-resolution.ts';
 import type { CliJsonResult } from '../cli-json.ts';
 import {
   createLiveDeviceContext,
@@ -11,7 +11,7 @@ import {
   type LiveDeviceContext,
 } from '../live-device-e2e/runtime.ts';
 import type { IosSimulatorBehaviorId } from './behavior-coverage.ts';
-import { liveCommandsForScenario } from './coverage-manifest.ts';
+import { liveCommandsForScenario } from './coverage.ts';
 import { liveBehaviorsForScenario, writeCoverageReport } from './live-coverage-report.ts';
 
 export { assertCoverageComplete, writeCoverageReport } from './live-coverage-report.ts';

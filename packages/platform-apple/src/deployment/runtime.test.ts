@@ -1,8 +1,40 @@
 import { expect, test, vi } from 'vitest';
 import type { AppleAppDeploymentExecutor } from '@agent-device/contracts/app-deployment-runtime';
+import type {
+  AppleToolRequest,
+  HostCommandResult,
+} from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
+import { execFailureDetails } from '@agent-device/host-kit/command';
+import { assertRejectsAppError } from '../__tests__/app-error.ts';
 import { appleAppDeploymentFacts, createAppleAppDeploymentOperations } from './runtime.ts';
+
+/**
+ * Mirrors runXcrun's own contract (host-kit exec.ts): a non-zero exit rejects with the same
+ * `execFailureDetails` shape `createExitError` builds — `processExitError: true` plus `cmd` and
+ * `args` — and no hint, unless the request set `allowFailure`. A fake that throws a bare
+ * COMMAND_FAILED cannot catch a call site that forgot `allowFailure`, or one whose caller drops
+ * the stderr excerpt `normalizeError` would otherwise surface (#2785).
+ */
+function xcrunLikeRun(
+  respond: (
+    request: AppleToolRequest,
+  ) => Readonly<{ stdout: string; stderr: string; exitCode: number }>,
+) {
+  return vi.fn(async (request: AppleToolRequest): Promise<HostCommandResult> => {
+    const result = respond(request);
+    if (result.exitCode !== 0 && !request.allowFailure) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `xcrun exited with code ${result.exitCode}`,
+        execFailureDetails(result, { cmd: 'xcrun', args: [request.tool, ...request.args] }),
+      );
+    }
+    return result;
+  });
+}
 
 function appleDevice(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
   return {
@@ -24,9 +56,21 @@ async function withoutInvalidatingAppResolutionCache<Result>(
   return await operation();
 }
 
+function bootedSimulatorListResult(
+  request: AppleToolRequest,
+): Readonly<{ stdout: string; stderr: string; exitCode: number }> {
+  return {
+    stdout: request.args.includes('list')
+      ? '{"devices":{"runtime":[{"udid":"apple-deployment-fact","state":"Booted"}]}}'
+      : '',
+    stderr: '',
+    exitCode: 0,
+  };
+}
+
 function deploymentHost(
   appleDeployment: AppleAppDeploymentExecutor,
-  run = vi.fn(async (request: { args: readonly string[] }) => ({
+  run = xcrunLikeRun((request) => ({
     stdout: request.args.includes('list')
       ? '{"devices":{"runtime":[{"udid":"apple-deployment-fact","state":"Booted"}]}}'
       : '',
@@ -261,6 +305,220 @@ test('exposes only fact-admitted Apple deployment operations', async () => {
     }),
   ).toEqual({});
 });
+
+test('physical iOS install failure surfaces the devicectl Developer Mode hint', async () => {
+  const prepareArtifact = vi.fn(async () => ({
+    installablePath: '/tmp/App.app',
+    bundleId: 'com.example.app',
+    appName: 'Example',
+    cleanup: vi.fn(async () => {}),
+  }));
+  const executor = {
+    prepareArtifact,
+    resolveAppBundleId: vi.fn(),
+    withInvalidatedAppResolutionCache: withoutInvalidatingAppResolutionCache,
+  } as AppleAppDeploymentExecutor;
+  const run = xcrunLikeRun((request) =>
+    request.args.includes('install')
+      ? {
+          stdout: '',
+          stderr: 'Unable to install "com.example.app": Developer Mode is disabled on this device.',
+          exitCode: 1,
+        }
+      : { stdout: '', stderr: '', exitCode: 0 },
+  );
+  const host = deploymentHost(executor, run);
+  const device = appleDevice({ kind: 'device', iosPhysicalDeviceBackend: 'coredevice' });
+  const operations = createAppleAppDeploymentOperations({
+    host,
+    device,
+    signal: new AbortController().signal,
+  });
+
+  await assertRejectsAppError(
+    async () =>
+      await operations.deployApp?.({
+        app: 'com.example.app',
+        appPath: '/tmp/App.app',
+        replaceExisting: false,
+      }),
+    {
+      code: 'COMMAND_FAILED',
+      hint: /Developer Mode/,
+      normalizedMessage: /Developer Mode is disabled on this device/,
+    },
+  );
+  expect(run.mock.calls.some(([request]) => request.args.includes('install'))).toBe(true);
+});
+
+test('simulator install failure surfaces the simctl stderr excerpt with no devicectl hint', async () => {
+  const prepareArtifact = vi.fn(async () => ({
+    installablePath: '/tmp/App.app',
+    bundleId: 'com.example.app',
+    appName: 'Example',
+    cleanup: vi.fn(async () => {}),
+  }));
+  const executor = {
+    prepareArtifact,
+    resolveAppBundleId: vi.fn(),
+    withInvalidatedAppResolutionCache: withoutInvalidatingAppResolutionCache,
+  } as AppleAppDeploymentExecutor;
+  const run = xcrunLikeRun((request) =>
+    request.args.includes('install')
+      ? {
+          stdout: '',
+          stderr: 'Failed to install the requested application',
+          exitCode: 1,
+        }
+      : bootedSimulatorListResult(request),
+  );
+  const host = deploymentHost(executor, run);
+  const device = appleDevice();
+  const operations = createAppleAppDeploymentOperations({
+    host,
+    device,
+    signal: new AbortController().signal,
+  });
+
+  await assertRejectsAppError(
+    async () =>
+      await operations.deployApp?.({
+        app: 'com.example.app',
+        appPath: '/tmp/App.app',
+        replaceExisting: false,
+      }),
+    {
+      code: 'COMMAND_FAILED',
+      normalizedMessage: /Failed to install the requested application/,
+      hint: null,
+    },
+  );
+  const [request] = run.mock.calls.find(([call]) => call.args.includes('install'))!;
+  expect(request.allowFailure).toBe(true);
+});
+
+test('simulator push failure surfaces the simctl stderr excerpt', async () => {
+  const executor = {
+    prepareArtifact: vi.fn(),
+    resolveAppBundleId: vi.fn(),
+    withInvalidatedAppResolutionCache: withoutInvalidatingAppResolutionCache,
+  } as AppleAppDeploymentExecutor;
+  const run = xcrunLikeRun((request) =>
+    request.args.includes('push')
+      ? {
+          stdout: '',
+          stderr: 'Invalid device state: Booted',
+          exitCode: 1,
+        }
+      : bootedSimulatorListResult(request),
+  );
+  const host = deploymentHost(executor, run);
+  const device = appleDevice();
+  const operations = createAppleAppDeploymentOperations({
+    host,
+    device,
+    signal: new AbortController().signal,
+  });
+
+  await assertRejectsAppError(
+    async () => await operations.sendPushNotification?.({ appId: 'com.example.app', payload: {} }),
+    {
+      code: 'COMMAND_FAILED',
+      normalizedMessage: /Invalid device state: Booted/,
+      hint: null,
+    },
+  );
+  const [request] = run.mock.calls.find(([call]) => call.args.includes('push'))!;
+  expect(request.allowFailure).toBe(true);
+});
+
+test('physical iOS uninstall failure surfaces the devicectl Developer Mode hint', async () => {
+  const resolveAppBundleId = vi.fn(async () => 'com.example.app');
+  const executor = {
+    prepareArtifact: vi.fn(),
+    resolveAppBundleId,
+    withInvalidatedAppResolutionCache: withoutInvalidatingAppResolutionCache,
+  } as AppleAppDeploymentExecutor;
+  const run = xcrunLikeRun((request) =>
+    request.args.includes('uninstall')
+      ? {
+          stdout: '',
+          stderr:
+            'Unable to uninstall "com.example.app": Developer Mode is disabled on this device.',
+          exitCode: 1,
+        }
+      : { stdout: '', stderr: '', exitCode: 0 },
+  );
+  const host = deploymentHost(executor, run);
+  const device = appleDevice({ kind: 'device', iosPhysicalDeviceBackend: 'coredevice' });
+  const operations = createAppleAppDeploymentOperations({
+    host,
+    device,
+    signal: new AbortController().signal,
+  });
+
+  await assertRejectsAppError(
+    async () =>
+      await operations.deployApp?.({
+        app: 'com.example.app',
+        appPath: '/tmp/replacement.app',
+        replaceExisting: true,
+      }),
+    {
+      code: 'COMMAND_FAILED',
+      hint: /Developer Mode/,
+      normalizedMessage: /Developer Mode is disabled on this device/,
+    },
+  );
+  expect(run.mock.calls.some(([request]) => request.args.includes('uninstall'))).toBe(true);
+});
+
+test.each([
+  [
+    'physical iOS CoreDevice',
+    appleDevice({ kind: 'device', iosPhysicalDeviceBackend: 'coredevice' }),
+  ],
+  ['iOS simulator', appleDevice()],
+] as const)(
+  'reinstall tolerates an already-missing %s uninstall with mixed-case stderr and still installs',
+  async (_name, device) => {
+    const resolveAppBundleId = vi.fn(async () => 'com.example.app');
+    const prepareArtifact = vi.fn(async () => ({
+      installablePath: '/tmp/App.app',
+      bundleId: 'com.example.app',
+      appName: 'Example',
+      cleanup: vi.fn(async () => {}),
+    }));
+    const executor = {
+      prepareArtifact,
+      resolveAppBundleId,
+      withInvalidatedAppResolutionCache: withoutInvalidatingAppResolutionCache,
+    } as AppleAppDeploymentExecutor;
+    const run = xcrunLikeRun((request) => {
+      if (request.args.includes('uninstall')) {
+        return { stdout: '', stderr: 'ERROR: App Not Installed', exitCode: 1 };
+      }
+      return bootedSimulatorListResult(request);
+    });
+    const host = deploymentHost(executor, run);
+    const operations = createAppleAppDeploymentOperations({
+      host,
+      device,
+      signal: new AbortController().signal,
+    });
+
+    await expect(
+      operations.deployApp?.({
+        app: 'com.example.app',
+        appPath: '/tmp/App.app',
+        replaceExisting: true,
+      }),
+    ).resolves.toMatchObject({ bundleId: 'com.example.app' });
+
+    expect(run.mock.calls.some(([request]) => request.args.includes('uninstall'))).toBe(true);
+    expect(run.mock.calls.some(([request]) => request.args.includes('install'))).toBe(true);
+  },
+);
 
 test('preserves Apple reinstall partial-failure ordering', async () => {
   const order: string[] = [];

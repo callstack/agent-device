@@ -1,5 +1,4 @@
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
-import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   type DeviceBinding,
   type DeviceBindingRequest,
@@ -17,6 +16,7 @@ import type {
   PlatformRuntimeProviderModule,
 } from '@agent-device/contracts/platform-runtime-operations';
 import {
+  createFullyUnavailablePlatformRuntimeFacts,
   createUnavailablePlatformRuntimeBinding,
   createUnavailablePlatformRuntimeFacts,
 } from '@agent-device/contracts/platform-runtime-unavailable';
@@ -30,6 +30,7 @@ import {
   type Platform,
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import type { ManagedLocalRuntimeOwnerRef } from './platform-runtime-managed-owner.ts';
 
 export type PlatformRuntimeProviderRegistration = Readonly<{
   runtime: ProviderDeviceRuntime;
@@ -41,6 +42,12 @@ export function createComposedPlatformRuntimeGateway(options: {
   loadHost: () => Promise<PlatformRuntimeHost>;
   providerRuntimes?: readonly ProviderDeviceRuntime[];
   providerModules?: readonly PlatformRuntimeProviderRegistration[];
+  /**
+   * Managed local owners are registered here and nowhere else. The list has no ordinary reader:
+   * `selectOrdinaryProvider`, `inspectFacts` and the ordinary `bind` arm never see it, so exact
+   * selection is the only way to reach one.
+   */
+  managedOwners?: readonly ManagedLocalRuntimeOwnerRef[];
 }): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   const providersByOwner = new Map<string, PlatformRuntimeProviderRegistration>();
   const modulesByRuntime = new Map<ProviderDeviceRuntime, PlatformRuntimeProviderModule>();
@@ -59,8 +66,17 @@ export function createComposedPlatformRuntimeGateway(options: {
     providersByOwner.set(key, registration);
     modulesByRuntime.set(runtime, module);
   }
+  const managedByOwner = new Map<string, ManagedLocalRuntimeOwnerRef>();
+  for (const ref of options.managedOwners ?? []) {
+    const key = runtimeOwnerKey(ref);
+    if (managedByOwner.has(key)) {
+      throw runtimeContractError(`Duplicate platform runtime owner: ${key}`);
+    }
+    managedByOwner.set(key, ref);
+  }
   const localLoads = new Map<Platform, Promise<PlatformRuntimeOwner>>();
   const providerLoads = new Map<PlatformRuntimeProviderModule, Promise<PlatformRuntimeOwner>>();
+  const managedLoads = new Map<string, PlatformRuntimeOwner>();
   const loadedOwners = new Map<string, PlatformRuntimeOwner>();
   let hostLoad: Promise<PlatformRuntimeHost> | undefined;
   const loadHost = async () => {
@@ -151,6 +167,20 @@ export function createComposedPlatformRuntimeGateway(options: {
       throw error;
     }
   };
+  // The wrapper module is loaded dynamically so an ordinary bind, which never reaches this arm,
+  // does not pay for it: `src/platform-runtime.ts`'s eager closure is a no-growth hub, and a
+  // static import here would be a permanent edge every command pays at startup.
+  const loadManaged = async (ref: ManagedLocalRuntimeOwnerRef) => {
+    const key = runtimeOwnerKey(ref);
+    const registered = managedByOwner.get(key);
+    if (!registered) throw ownerUnavailable(ref);
+    const existing = managedLoads.get(key);
+    if (existing) return existing;
+    const { createManagedLocalRuntimeOwner } = await import('./platform-runtime-managed-owner.ts');
+    const owner = registerOwner(createManagedLocalRuntimeOwner({ owner: registered, loadLocal }));
+    managedLoads.set(key, owner);
+    return owner;
+  };
 
   return Object.freeze({
     applicationLifecycle,
@@ -171,6 +201,7 @@ export function createComposedPlatformRuntimeGateway(options: {
           providersByOwner,
           loadProvider,
           loadLocal,
+          loadManaged,
         );
         return await bindAndValidate(selected, request);
       }
@@ -191,6 +222,7 @@ export function createComposedPlatformRuntimeGateway(options: {
       loadedOwners.clear();
       localLoads.clear();
       providerLoads.clear();
+      managedLoads.clear();
     },
   });
 }
@@ -273,9 +305,18 @@ function providerModeMatchesOwner(
   mode: DeviceBinding<PlatformRuntimeOperations>['facts']['device']['providerMode'],
   owner: RuntimeOwnerRef,
 ): boolean {
-  return owner.kind === 'local-family'
-    ? mode === 'local' || mode === 'transport-composed'
-    : mode === 'provider-runtime';
+  switch (owner.kind) {
+    case 'local-family':
+      return mode === 'local' || mode === 'transport-composed';
+    case 'managed-local':
+      // A managed owner delegates to the device's local family owner (`selectExactOwner`'s
+      // `managed-local` arm loads it through the same `loadLocal`), so it inherits that owner's
+      // provider modes verbatim, transport-composed included. This arm is unreachable until a
+      // managed owner is registered; U3 pins it with a binding regression test.
+      return mode === 'local' || mode === 'transport-composed';
+    case 'provider-runtime':
+      return mode === 'provider-runtime';
+  }
 }
 
 async function selectExactOwner(
@@ -283,122 +324,48 @@ async function selectExactOwner(
   providersByOwner: ReadonlyMap<string, PlatformRuntimeProviderRegistration>,
   loadProvider: (module: PlatformRuntimeProviderModule) => Promise<PlatformRuntimeOwner>,
   loadLocal: (family: Platform) => Promise<PlatformRuntimeOwner>,
+  loadManaged: (ref: ManagedLocalRuntimeOwnerRef) => Promise<PlatformRuntimeOwner>,
 ): Promise<PlatformRuntimeOwner> {
-  if (ref.kind === 'local-family') {
-    const owner = await loadLocal(ref.family);
-    if (sameRuntimeOwner(owner.owner, ref)) return owner;
-    throw ownerUnavailable(ref);
+  switch (ref.kind) {
+    case 'local-family': {
+      const owner = await loadLocal(ref.family);
+      if (sameRuntimeOwner(owner.owner, ref)) return owner;
+      throw ownerUnavailable(ref);
+    }
+    case 'managed-local':
+      return await loadManaged(ref);
+    case 'provider-runtime': {
+      const registration = providersByOwner.get(runtimeOwnerKey(ref));
+      if (registration) return await loadProvider(registration.module);
+      throw ownerUnavailable(ref);
+    }
   }
-  const registration = providersByOwner.get(runtimeOwnerKey(ref));
-  if (registration) return await loadProvider(registration.module);
-  throw ownerUnavailable(ref);
 }
+
+/** Missing provider modules must fail closed per operation, never via a shared lifecycle bucket. */
+const UNSUPPORTED_PROVIDER_MODE = Object.freeze({
+  available: false,
+  reason: 'unsupported-provider-mode',
+} as const);
 
 function unavailableProviderBinding(
   runtime: ProviderDeviceRuntime,
   device: DeviceInfo,
 ): DeviceBinding<PlatformRuntimeOperations> {
   const owner = providerRuntimeOwner(runtime.provider, 'default');
-  const unavailable = Object.freeze({
-    available: false,
-    reason: 'unsupported-provider-mode',
-  });
-  return createUnavailablePlatformRuntimeBinding(device, owner, {
-    appLog: unavailable,
-    appState: unavailable,
-    network: unavailable,
-    screenshot: unavailable,
-    viewport: unavailable,
-    focus: unavailable,
-    gesture: unavailable,
-    scroll: unavailable,
-    typeText: unavailable,
-    touch: unavailable,
-    elementText: unavailable,
-    back: unavailable,
-    home: unavailable,
-    orientation: unavailable,
-    tvRemote: unavailable,
-    keyboardStatus: unavailable,
-    keyboardDismiss: unavailable,
-    keyboardEnter: unavailable,
-    readClipboard: unavailable,
-    writeClipboard: unavailable,
-    appSwitcher: unavailable,
-    triggerAppEvent: unavailable,
-    setSetting: unavailable,
-    readAlert: unavailable,
-    awaitAlert: unavailable,
-    acceptAlert: unavailable,
-    dismissAlert: unavailable,
-    audioProbeCapture: unavailable,
-    audioProbeQuery: unavailable,
-    lifecycle: unavailableProviderLifecycleFacts(unavailable),
-  });
-}
-
-function unavailableProviderFacts(runtime: ProviderDeviceRuntime, device: DeviceInfo) {
-  const unavailable = Object.freeze({
-    available: false,
-    reason: 'unsupported-provider-mode',
-  } as const);
-  return createUnavailablePlatformRuntimeFacts(
+  return createUnavailablePlatformRuntimeBinding(
     device,
-    providerRuntimeOwner(runtime.provider, 'default'),
-    {
-      appLog: unavailable,
-      appState: unavailable,
-      network: unavailable,
-      screenshot: unavailable,
-      viewport: unavailable,
-      focus: unavailable,
-      gesture: unavailable,
-      scroll: unavailable,
-      typeText: unavailable,
-      touch: unavailable,
-      elementText: unavailable,
-      back: unavailable,
-      home: unavailable,
-      orientation: unavailable,
-      tvRemote: unavailable,
-      keyboardStatus: unavailable,
-      keyboardDismiss: unavailable,
-      keyboardEnter: unavailable,
-      readClipboard: unavailable,
-      writeClipboard: unavailable,
-      appSwitcher: unavailable,
-      triggerAppEvent: unavailable,
-      setSetting: unavailable,
-      readAlert: unavailable,
-      awaitAlert: unavailable,
-      acceptAlert: unavailable,
-      dismissAlert: unavailable,
-      audioProbeCapture: unavailable,
-      audioProbeQuery: unavailable,
-      readiness: unavailable,
-      lifecycle: unavailableProviderLifecycleFacts(unavailable),
-    },
+    owner,
+    createFullyUnavailablePlatformRuntimeFacts(UNSUPPORTED_PROVIDER_MODE),
   );
 }
 
-/** Missing provider modules must fail closed per operation, never via a shared lifecycle bucket. */
-function unavailableProviderLifecycleFacts(
-  unavailable: Extract<
-    DeviceBinding<PlatformRuntimeOperations>['facts']['operations'][keyof PlatformRuntimeOperations],
-    { available: false }
-  >,
-) {
-  return applicationLifecycleOperationFacts({
-    resolveOpenTarget: unavailable,
-    prepareApplicationOpen: unavailable,
-    openApplication: unavailable,
-    applyRuntimeHints: unavailable,
-    clearRuntimeHints: unavailable,
-    closeApplication: unavailable,
-    finalizeApplicationClose: unavailable,
-    prepareAppleRunner: unavailable,
-    configureProviderPortReverse: unavailable,
-  });
+function unavailableProviderFacts(runtime: ProviderDeviceRuntime, device: DeviceInfo) {
+  return createUnavailablePlatformRuntimeFacts(
+    device,
+    providerRuntimeOwner(runtime.provider, 'default'),
+    createFullyUnavailablePlatformRuntimeFacts(UNSUPPORTED_PROVIDER_MODE),
+  );
 }
 
 function ownerUnavailable(owner: RuntimeOwnerRef): AppError {

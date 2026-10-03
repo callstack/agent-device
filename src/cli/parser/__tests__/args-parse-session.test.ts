@@ -745,12 +745,15 @@ test('parseArgs recognizes connect device-feature flags and their short aliases'
       '--network-profile',
       '4g-lte-advanced-good',
       '--provider-no-resign-app',
+      '--appium-version',
+      '3.2.0',
     ],
     { strictFlags: true },
   );
   assert.equal(parsed.flags.providerDeviceOrientation, 'portrait');
   assert.equal(parsed.flags.providerGeoLocation, 'US');
   assert.equal(parsed.flags.providerTimezone, 'New_York');
+  assert.equal(parsed.flags.providerAppiumVersion, '3.2.0');
   assert.equal(parsed.flags.providerLanguage, 'Fr');
   assert.equal(parsed.flags.providerLocale, 'Fr');
   assert.equal(parsed.flags.providerNetworkProfile, '4g-lte-advanced-good');
@@ -837,15 +840,6 @@ test('parseArgs recognizes explicit config file flag', () => {
   });
   assert.equal(parsed.command, 'open');
   assert.equal(parsed.flags.config, './agent-device.json');
-});
-
-test('parseArgs recognizes open Device Hub opt-in flag', () => {
-  const parsed = parseArgs(['open', 'settings', '--platform', 'ios', '--device-hub'], {
-    strictFlags: true,
-  });
-  assert.equal(parsed.command, 'open');
-  assert.equal(parsed.flags.platform, 'ios');
-  assert.equal(parsed.flags.deviceHub, true);
 });
 
 test('parseArgs recognizes session lock policy flag', () => {

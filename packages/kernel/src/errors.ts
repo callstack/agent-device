@@ -56,6 +56,17 @@ export type DiagnosticsRecordRef = {
   requestId: string;
 };
 
+/**
+ * Whether the operation a failed request asked for reached the device. `no`: it provably never
+ * did, so resending it is safe. `unknown`: it may have landed, so observe the device before
+ * resending. A failure without the field was classified by no producer. The producer rows live in
+ * `contracts/fixtures/dispatch-disclosure.json`.
+ */
+export type DispatchDisclosure = 'no' | 'unknown';
+
+/** The error details bag as it crosses the wire: free-form, with the typed keys a reader may rely on. */
+export type ErrorWireDetails = Record<string, unknown> & { dispatched?: DispatchDisclosure };
+
 export type ErrorCause = {
   message: string;
   code?: string;
@@ -69,10 +80,12 @@ export type ErrorCause = {
  *   lifted onto the normalized error, stripped from details.
  * - `processExitError` + `stdout`/`stderr`/`exitCode` — marks a wrap of a real
  *   process exit so normalizeError can surface the first meaningful stderr line;
- *   build these via `execFailureDetails`/`requireExecSuccess` in src/utils/exec.ts
+ *   build these via `execFailureDetails`/`requireExecSuccess` in @agent-device/host-kit/command
  *   rather than by hand.
  * - `retriable` — typed retry signal hoisted to the wire error shape.
  * - `reason` — machine-dispatchable sub-classification within a code.
+ * - `dispatched` — {@link DispatchDisclosure} set by the producer that proved it; kept in details on
+ *   the wire and never defaulted.
  */
 export type AppErrorDetails = Record<string, unknown> & {
   hint?: string;
@@ -88,6 +101,7 @@ export type AppErrorDetails = Record<string, unknown> & {
   // null mirrors the raw child_process exit event: killed by signal, no code.
   exitCode?: number | null;
   reason?: string;
+  dispatched?: DispatchDisclosure;
 };
 
 export type NormalizedError = {
@@ -119,8 +133,64 @@ export type NormalizedError = {
    */
   retriable?: boolean;
   supportedOn?: string;
-  details?: Record<string, unknown>;
+  details?: ErrorWireDetails;
 };
+
+export type ElementMatchCandidateDetails = {
+  candidates: string[];
+  matches: number;
+  refsGeneration?: number;
+};
+
+export type ErrorCandidateView =
+  | (ElementMatchCandidateDetails & { kind: 'element-match' })
+  | { kind: 'device'; devices: Array<{ id: string; name: string }> };
+
+export function readErrorCandidateViews(
+  details: Record<string, unknown> | undefined,
+): ErrorCandidateView[] {
+  const candidates = readStringArray(details?.candidates);
+  const views: ErrorCandidateView[] = [];
+  if (candidates.length > 0) {
+    const matches = typeof details?.matches === 'number' ? details.matches : candidates.length;
+    const refsGeneration =
+      typeof details?.refsGeneration === 'number' ? details.refsGeneration : undefined;
+    views.push({
+      kind: 'element-match',
+      candidates,
+      matches,
+      ...(refsGeneration !== undefined ? { refsGeneration } : {}),
+    });
+  }
+  const devices = readDeviceList(details?.devices);
+  if (devices.length > 0) views.push({ kind: 'device', devices });
+  return views;
+}
+
+export function readElementMatchCandidateRefs(
+  details: Record<string, unknown> | undefined,
+): string[] {
+  return readStringArray(details?.candidates).flatMap((candidate) => {
+    const match = /^@(e\d+)(?:~s\d+)?(?:\s|$)/.exec(candidate);
+    return match?.[1] ? [match[1]] : [];
+  });
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === 'string');
+}
+
+function readDeviceList(value: unknown): Array<{ id: string; name: string }> {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (entry): entry is { id: string; name: string } =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      typeof (entry as { id?: unknown }).id === 'string' &&
+      typeof (entry as { name?: unknown }).name === 'string',
+  );
+}
 
 /**
  * Error payload returned by the daemon transport. It is kept beside the local
@@ -143,7 +213,7 @@ export type DaemonError = {
    * being handed a path on a filesystem it cannot read.
    */
   diagnosticsRecord?: DiagnosticsRecordRef;
-  details?: Record<string, unknown>;
+  details?: ErrorWireDetails;
   /** Additive retry and platform-support signals; absent when not derivable. */
   retriable?: boolean;
   supportedOn?: string;
@@ -206,10 +276,19 @@ export function createRequestCanceledError(details?: AppErrorDetails, cause?: un
   );
 }
 
+/**
+ * The typed reason of a canceled request, for a caller holding the details rather than the error:
+ * a rule table that matches on details needs the same fact {@link isRequestCanceledError} reads, and
+ * must not restate the literal.
+ */
+export function isRequestCanceledDetails(details: AppErrorDetails | undefined): boolean {
+  return details?.reason === REQUEST_CANCELED_REASON;
+}
+
 export function isRequestCanceledError(error: unknown): boolean {
   if (!(error instanceof AppError)) return false;
   if (error.code !== 'COMMAND_FAILED') return false;
-  if (error.details?.reason === REQUEST_CANCELED_REASON) return true;
+  if (isRequestCanceledDetails(error.details)) return true;
   // Owned debt: canceled errors that crossed a wire without their details keep
   // the message; do not add new message sniffs beside it.
   return error.message === REQUEST_CANCELED_MESSAGE;
@@ -218,6 +297,32 @@ export function isRequestCanceledError(error: unknown): boolean {
 /** The message of whatever was thrown, for diagnostics that must not themselves throw. */
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** One command a retry loop ran and could not make succeed, kept in the tool's own terms. */
+export type CommandAttemptFailure = {
+  args: readonly string[];
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+};
+
+/**
+ * The per-attempt view a retry loop attaches to its refusal, so the caller can tell which spelling
+ * the device rejected rather than only that all of them failed. Stderr is truncated per attempt, not
+ * in total: every attempt keeps a head of its own, because the loop usually fails for a reason that
+ * appears in only one of them.
+ */
+const COMMAND_ATTEMPT_STDERR_BUDGET = 400;
+
+export function summarizeCommandAttemptFailures(
+  failures: CommandAttemptFailure[],
+): Array<{ args: string; exitCode: number; stderr: string }> {
+  return failures.map((failure) => ({
+    args: failure.args.join(' '),
+    exitCode: failure.exitCode,
+    stderr: failure.stderr.slice(0, COMMAND_ATTEMPT_STDERR_BUDGET),
+  }));
 }
 
 export function asAppError(err: unknown, fallbackCode: AppErrorCode = 'UNKNOWN'): AppError {
@@ -349,11 +454,20 @@ function booleanDetail(
   return typeof value === 'boolean' ? value : undefined;
 }
 
+/**
+ * Facts a publisher leaves for a later catch in the same process, never for a caller: whether a rule
+ * row named this failure, and whether the host's own deadline ended the command behind it. Both
+ * describe our machinery rather than the caller's problem, and the caller was already handed the
+ * verdict those facts produced as `reason` and `hint` (#2690 review).
+ */
+const INTERNAL_PLUMBING_DETAIL_KEYS = ['startupRuleMatched', 'startupHostDeadlineHit'] as const;
+
 function stripDiagnosticMeta(
   details: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
   if (!details) return undefined;
   const output = { ...details };
+  for (const key of INTERNAL_PLUMBING_DETAIL_KEYS) delete output[key];
   delete output.hint;
   delete output.diagnosticId;
   delete output.logPath;
@@ -430,4 +544,61 @@ export function defaultHintForCode(code: string): string | undefined {
     default:
       return 'Retry with --debug and inspect diagnostics log for details.';
   }
+}
+
+export type DispatchDisclosureEvidence = {
+  /** Steps of a multi-step operation that reached the device before it failed. */
+  dispatchedSteps?: number;
+};
+
+/**
+ * Records, on the failure it proved, what a producer knows about whether the requested operation
+ * reached the device. A producer owns its verdict, so this overwrites; a later layer that only
+ * infers the verdict from its own side-effect seam uses {@link discloseUnclassifiedDispatch}.
+ */
+export function discloseDispatch<Failure extends AppError>(
+  error: Failure,
+  dispatched: DispatchDisclosure,
+  evidence: DispatchDisclosureEvidence = {},
+): Failure {
+  error.details = { ...error.details, ...evidence, dispatched };
+  return error;
+}
+
+/**
+ * The details of a failure after `dispatchedSteps` device-reaching steps of its operation returned.
+ * `no` describes the whole requested operation, so it holds only while no step was dispatched; after
+ * that the failure is `unknown`, and `details.dispatchedSteps` adds this count to any count the
+ * failing step already carries.
+ */
+export function detailsAfterDispatchedSteps(
+  details: ErrorWireDetails | undefined,
+  dispatchedSteps: number,
+): ErrorWireDetails | undefined {
+  if (dispatchedSteps === 0) return details;
+  const innerSteps = details?.dispatchedSteps;
+  return {
+    ...details,
+    dispatchedSteps: dispatchedSteps + (typeof innerSteps === 'number' ? innerSteps : 0),
+    dispatched: 'unknown',
+  };
+}
+
+/**
+ * {@link detailsAfterDispatchedSteps} on a thrown failure. A failure that is not an
+ * {@link AppError} passes through unchanged for the boundary that normalizes it.
+ */
+export function discloseDispatchAfterSteps(error: unknown, dispatchedSteps: number): unknown {
+  if (!(error instanceof AppError)) return error;
+  error.details = detailsAfterDispatchedSteps(error.details, dispatchedSteps);
+  return error;
+}
+
+/** The side-effect seam's verdict, recorded only when no producer classified the failure. */
+export function discloseUnclassifiedDispatch<Failure extends AppError>(
+  error: Failure,
+  dispatched: DispatchDisclosure,
+): Failure {
+  if (error.details?.dispatched !== undefined) return error;
+  return discloseDispatch(error, dispatched);
 }

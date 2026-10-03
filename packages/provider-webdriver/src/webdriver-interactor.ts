@@ -22,9 +22,12 @@ import {
   type CloudWebDriverProviderCapabilities,
 } from './capabilities.ts';
 import type { W3CPointerAction, WebDriverClient, WebDriverWindowRect } from './webdriver-client.ts';
+import { isWebDriverRequestTimeout } from './webdriver-transport.ts';
 import { touchPointer } from './webdriver-gestures.ts';
-import { scrollFrameFromWebDriverSource } from './webdriver-scroll-frame.ts';
-import { parseWebDriverSource } from './webdriver-source.ts';
+import {
+  scrollFrameFromAndroidWebDriverSource,
+  scrollFrameFromIosWebDriverSource,
+} from './webdriver-scroll-frame.ts';
 import { setWebDriverOrientation } from './webdriver-orientation.ts';
 
 /**
@@ -99,25 +102,34 @@ export type WebDriverInteractorOptions = {
   client: WebDriverClient;
   backend: Extract<SnapshotResult['backend'], 'android' | 'xctest'>;
   capabilities: CloudWebDriverProviderCapabilities;
+  targetId?: string;
 };
 
 export function createWebDriverInteractor(options: WebDriverInteractorOptions): Interactor {
-  return new WebDriverInteractor(options.client, options.backend, options.capabilities);
+  return new WebDriverInteractor(
+    options.client,
+    options.backend,
+    options.capabilities,
+    options.targetId,
+  );
 }
 
 class WebDriverInteractor implements Interactor {
   private readonly client: WebDriverClient;
   private readonly backend: Extract<SnapshotResult['backend'], 'android' | 'xctest'>;
   private readonly capabilities: CloudWebDriverProviderCapabilities;
+  private readonly targetId: string | undefined;
 
   constructor(
     client: WebDriverClient,
     backend: Extract<SnapshotResult['backend'], 'android' | 'xctest'>,
     capabilities: CloudWebDriverProviderCapabilities,
+    targetId?: string,
   ) {
     this.client = client;
     this.backend = backend;
     this.capabilities = capabilities;
+    this.targetId = targetId;
   }
 
   async open(
@@ -292,15 +304,37 @@ class WebDriverInteractor implements Interactor {
     await this.client.screenshot(outPath);
   }
 
-  async snapshot(_options?: SnapshotOptions): Promise<SnapshotResult> {
+  async snapshot(options?: SnapshotOptions) {
     this.requireSupport('snapshot');
-    // Spelled as a correlated pair per channel so the SnapshotProvenance union accepts it.
+    return await this.captureSource(options?.signal);
+  }
+
+  /**
+   * One page-source read, bound to the request that asked for it. Providers answer
+   * commands one at a time, so a read the client merely gave up on is not gone: the
+   * driver keeps walking the tree and every later command queues behind it (#2509).
+   */
+  private async captureSource(signal?: AbortSignal) {
+    const source = await this.readSource(signal);
+    if (this.backend === 'xctest') {
+      const { acquireWebDriverIosSnapshot } = await import('./webdriver-ios-snapshot.ts');
+      return acquireWebDriverIosSnapshot(source, this.targetId);
+    }
+    const { parseWebDriverSourceFacts } = await import('./webdriver-source.ts');
     return {
-      ...(this.backend === 'xctest'
-        ? { backend: 'xctest' as const, producer: 'appium-source' as const }
-        : { backend: 'android' as const, producer: 'appium-source' as const }),
-      nodes: parseWebDriverSource(await this.client.source()),
+      backend: 'android' as const,
+      producer: 'appium-source' as const,
+      nodes: parseWebDriverSourceFacts(source, 'android').nodes,
     };
+  }
+
+  private async readSource(signal?: AbortSignal): Promise<string> {
+    try {
+      return await this.client.source(signal === undefined ? {} : { signal });
+    } catch (error) {
+      if (!isWebDriverRequestTimeout(error)) throw error;
+      throw webDriverSourceTimeoutError(error);
+    }
   }
 
   async back(_mode?: BackMode): Promise<void> {
@@ -329,7 +363,7 @@ class WebDriverInteractor implements Interactor {
 
   async readClipboard(): Promise<string> {
     this.requireSupport('clipboard.read');
-    const value = await this.client.executeScript('mobile: getClipboard', [{}]);
+    const value = await this.client.executeReadScript('mobile: getClipboard', [{}]);
     return typeof value === 'string' ? value : '';
   }
 
@@ -345,24 +379,6 @@ class WebDriverInteractor implements Interactor {
     _options?: SettingOptions,
   ): Promise<Record<string, unknown> | void> {
     this.unsupported('settings');
-  }
-
-  // The four alert legs share one declared capability: a driver that cannot read a native alert
-  // cannot press its buttons either, and no provider in this family declares either half.
-  async readAlert(): Promise<Record<string, unknown>> {
-    this.unsupported('alert');
-  }
-
-  async awaitAlert(): Promise<Record<string, unknown>> {
-    this.unsupported('alert');
-  }
-
-  async acceptAlert(): Promise<Record<string, unknown>> {
-    this.unsupported('alert');
-  }
-
-  async dismissAlert(): Promise<Record<string, unknown>> {
-    this.unsupported('alert');
   }
 
   /**
@@ -498,7 +514,11 @@ class WebDriverInteractor implements Interactor {
   private async scrollGestureFrame(): Promise<WebDriverWindowRect> {
     const sourceFrame = await this.client
       .source()
-      .then((source) => scrollFrameFromWebDriverSource(source))
+      .then((source) =>
+        this.backend === 'xctest'
+          ? scrollFrameFromIosWebDriverSource(source)
+          : scrollFrameFromAndroidWebDriverSource(source),
+      )
       .catch(() => undefined);
     if (sourceFrame) return sourceFrame;
     return await this.client.windowRect();
@@ -554,4 +574,30 @@ function webDriverOperationForGesture(plan: GesturePlan): CloudWebDriverOperatio
     case 'rotate':
       return 'rotateGesture';
   }
+}
+
+/**
+ * A source read that ran out of budget is the one WebDriver timeout a caller can
+ * do something about, and #2509 showed it reading as an unexplained hang: the
+ * driver answers this call by walking the live UI tree, so a screen that never
+ * goes idle — looping video, live ticker, continuous animation — gives the walk no
+ * reason to settle. The transport's reason code is kept as-is; what the capture
+ * adds is what the wait was waiting for, and the one thing the caller cannot do,
+ * since this read's budget is the transport's own and no wider than the command's
+ * `--timeout` envelope around it.
+ */
+function webDriverSourceTimeoutError(error: AppError): AppError {
+  return new AppError(
+    'COMMAND_FAILED',
+    'The cloud driver did not finish reading the screen in its budget.',
+    {
+      ...error.details,
+      hint:
+        'A screen that never goes idle (looping video, live ticker, continuous animation) ' +
+        "gives the driver no moment to read the UI tree. This read has the transport's own " +
+        'budget and does not grow with --timeout; take a screenshot, or drive the screen from ' +
+        'refs an earlier snapshot already captured.',
+    },
+    error,
+  );
 }

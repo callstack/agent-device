@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
-import { createByteLimitStream } from '../utils/byte-limit-stream.ts';
+import { createByteLimitStream } from '@agent-device/host-kit/archive';
 import { parseUploadContentLength, parseUploadContentRange } from './resumable-upload-range.ts';
 
 export type ResumableTransferEntry = {

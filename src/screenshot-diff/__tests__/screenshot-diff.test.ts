@@ -1,25 +1,10 @@
-import { test, vi } from 'vitest';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
-vi.mock('../../utils/png-worker-client.ts', async () => {
-  const [{ PNG }, { decodePng }, { computeScreenshotDiffPixels }] = await Promise.all([
-    import('../../utils/png.ts'),
-    import('../../utils/png.ts'),
-    import('../../utils/screenshot-diff-pixels.ts'),
-  ]);
-  return {
-    decodePngAsync: async (buffer: Buffer, label: string) => decodePng(buffer, label),
-    encodePngAsync: async (png: InstanceType<typeof PNG>) => PNG.sync.write(png),
-    computeScreenshotDiffPixelsAsync: async (
-      job: Parameters<typeof computeScreenshotDiffPixels>[0],
-    ) => computeScreenshotDiffPixels(job),
-  };
-});
-
-import { PNG } from '../../utils/png.ts';
+import { hasPngSignature, PNG } from '@agent-device/capture-kit/png';
 import { compareScreenshots } from '../screenshot-diff.ts';
 
 function tmpDir(): string {
@@ -41,6 +26,26 @@ function writeSolidPng(
     png.data[i + 3] = 255;
   }
   fs.writeFileSync(filePath, PNG.sync.write(png));
+}
+
+/** Encode a solid-color JPEG, so a test can hand the comparison a lossy container. */
+async function writeSolidJpeg(
+  filePath: string,
+  width: number,
+  height: number,
+  color: { r: number; g: number; b: number },
+): Promise<Buffer> {
+  const { encode } = await import('jpeg-js');
+  const data = Buffer.alloc(width * height * 4);
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = color.r;
+    data[i + 1] = color.g;
+    data[i + 2] = color.b;
+    data[i + 3] = 255;
+  }
+  const jpeg = Buffer.from(encode({ width, height, data }, 90).data);
+  fs.writeFileSync(filePath, jpeg);
+  return jpeg;
 }
 
 function paintRect(
@@ -343,6 +348,49 @@ test('threshold controls sensitivity: small differences ignored at default thres
   assert.equal(strict.differentPixels, 25);
 });
 
+test.each([
+  [
+    { r: 0, g: 0, b: 0 },
+    { r: 255, g: 255, b: 255 },
+  ],
+  [
+    { r: 255, g: 0, b: 0 },
+    { r: 0, g: 255, b: 255 },
+  ],
+  [
+    { r: 0, g: 255, b: 0 },
+    { r: 255, g: 0, b: 255 },
+  ],
+  [
+    { r: 0, g: 0, b: 255 },
+    { r: 255, g: 255, b: 0 },
+  ],
+])('threshold 1 includes the maximum RGB distance from %j to %j', async (before, after) => {
+  const dir = tmpDir();
+  const baseline = path.join(dir, 'baseline.png');
+  const current = path.join(dir, 'current.png');
+  const outputPath = path.join(dir, 'diff.png');
+  writeSolidPng(baseline, 2, 2, before);
+  writeSolidPng(current, 2, 2, after);
+
+  const belowMaximum = await compareScreenshots(baseline, current, {
+    threshold: 1 - Number.EPSILON / 2,
+    outputPath,
+  });
+  assert.equal(belowMaximum.match, false);
+  assert.equal(belowMaximum.differentPixels, 4);
+  assert.equal(fs.existsSync(outputPath), true);
+
+  const maximum = await compareScreenshots(baseline, current, { threshold: 1, outputPath });
+  assert.equal(maximum.match, true);
+  assert.equal(maximum.differentPixels, 0);
+  assert.equal(maximum.mismatchPercentage, 0);
+  assert.equal(maximum.totalPixels, 4);
+  assert.equal(maximum.regions, undefined);
+  assert.equal(maximum.diffPath, undefined);
+  assert.equal(fs.existsSync(outputPath), false);
+});
+
 test('throws INVALID_ARGS when baseline file does not exist', async () => {
   const dir = tmpDir();
   const current = path.join(dir, 'current.png');
@@ -373,7 +421,7 @@ test('throws INVALID_ARGS when current file does not exist', async () => {
   );
 });
 
-test('throws COMMAND_FAILED for invalid PNG data', async () => {
+test('throws COMMAND_FAILED for bytes in neither supported container', async () => {
   const dir = tmpDir();
   const baseline = path.join(dir, 'baseline.png');
   const current = path.join(dir, 'current.png');
@@ -385,7 +433,78 @@ test('throws COMMAND_FAILED for invalid PNG data', async () => {
     () => compareScreenshots(baseline, current),
     (err: any) => {
       assert.equal(err.code, 'COMMAND_FAILED');
-      assert.match(err.message, /Failed to decode baseline screenshot/);
+      assert.match(err.message, /baseline screenshot is neither PNG nor JPEG/);
+      return true;
+    },
+  );
+});
+
+test('a JPEG stored under a .png name compares as a match', async () => {
+  const dir = tmpDir();
+  const baseline = path.join(dir, 'baseline.png');
+  const current = path.join(dir, 'current.png');
+
+  // The `.png` names hold JPEG bytes on purpose: the container is sniffed from the bytes.
+  const jpeg = await writeSolidJpeg(baseline, 8, 6, { r: 20, g: 200, b: 40 });
+  fs.writeFileSync(current, jpeg);
+
+  // The same stored bytes decode to the same pixels, so this pins an exact comparison.
+  const result = await compareScreenshots(baseline, current, { threshold: 0 });
+
+  assert.equal(result.match, true);
+  assert.equal(result.differentPixels, 0);
+  assert.equal(result.totalPixels, 48);
+});
+
+test('a JPEG comparison writes the diff artifact as PNG', async () => {
+  const dir = tmpDir();
+  const baseline = path.join(dir, 'baseline.jpg');
+  const current = path.join(dir, 'current.jpg');
+  const diffPath = path.join(dir, 'diff.png');
+
+  await writeSolidJpeg(baseline, 8, 6, { r: 20, g: 200, b: 40 });
+  await writeSolidJpeg(current, 8, 6, { r: 200, g: 20, b: 40 });
+
+  const result = await compareScreenshots(baseline, current, { outputPath: diffPath });
+
+  assert.equal(result.match, false);
+  assert.equal(result.diffPath, diffPath);
+  assert.equal(hasPngSignature(fs.readFileSync(diffPath)), true);
+});
+
+test('a JPEG input is measured at its decoded dimensions', async () => {
+  const dir = tmpDir();
+  const baseline = path.join(dir, 'baseline.jpg');
+  const current = path.join(dir, 'current.png');
+
+  await writeSolidJpeg(baseline, 8, 6, { r: 20, g: 200, b: 40 });
+  writeSolidPng(current, 5, 5, { r: 20, g: 200, b: 40 });
+
+  const result = await compareScreenshots(baseline, current);
+
+  assert.equal(result.match, false);
+  assert.deepEqual(result.dimensionMismatch, {
+    expected: { width: 8, height: 6 },
+    actual: { width: 5, height: 5 },
+  });
+});
+
+test('JPEG bytes that do not decode are refused with the JPEG decode error', async () => {
+  const dir = tmpDir();
+  const baseline = path.join(dir, 'baseline.jpg');
+  const current = path.join(dir, 'current.png');
+
+  fs.writeFileSync(
+    baseline,
+    Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32, 0x41)]),
+  );
+  writeSolidPng(current, 5, 5, { r: 0, g: 0, b: 0 });
+
+  await assert.rejects(
+    () => compareScreenshots(baseline, current),
+    (err: any) => {
+      assert.equal(err.code, 'COMMAND_FAILED');
+      assert.match(err.message, /Failed to decode baseline screenshot as JPEG/);
       return true;
     },
   );

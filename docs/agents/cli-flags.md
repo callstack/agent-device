@@ -1,18 +1,20 @@
 # Adding a CLI Flag
 
-A new flag touches only the layers that need to understand it. Stop at the layer where it stops
-mattering — threading it further is the common failure, not stopping too early.
+Thread a flag only through the layers that consume it:
 
 1. `packages/contracts/src/cli-flags.ts`: add to `CliFlags`; add the definition to the matching
-   `src/commands/cli-grammar/flag-definitions-*.ts` owner and the relevant group in `flag-groups.ts`
+   `packages/command-registry/src/flag-definitions-*.ts` owner and the relevant group in
+   `packages/command-registry/src/flag-groups.ts`
    (for example `SNAPSHOT_FLAGS`). Then update the command family metadata/schema that exposes the
    flag; find the owner with
-   `rg -n "<command>|supportedFlags|allowedFlags" src/commands src/cli-schema src/cli/parser`. For
-   schema-only CLI commands (`cdp`, `auth`, `connect`, `proxy`, `react-devtools`, `web`) the owner is
-   `SCHEMA_ONLY_CLI_COMMAND_SCHEMAS` in `src/cli-schema/command-overrides.ts`. New flags are
-   operator-only by default. Add a flag to `PROJECT_CONFIG_FLAG_KEYS` in
-   `src/cli-schema/cli-config.ts` only when repository control is safe; this positive allowlist is
-   the completeness gate.
+   `rg -n "<command>|supportedFlags|allowedFlags" src/commands src/cli/parser`. For
+   schema-only CLI commands, the owner is `SCHEMA_ONLY_CLI_COMMAND_SCHEMAS` in
+   `src/commands/schema/command-overrides.ts`. Every flag declaration states `projectConfig`
+   (may be set from a project `agent-device.json`) and `recorded` (the session recorder
+   copies it into `SessionAction.flags`). Both are required, so a new declaration that
+   omits either does not compile — that, not an allowlist, is the completeness gate. Set
+   `projectConfig: true` only when repository control is safe; a new flag is otherwise
+   operator-only. Set `recorded: true` only when a `.ad` recording must carry the flag.
 2. `src/commands/cli-grammar/*`: read the CLI flag into command input.
 3. `src/commands/command-projection.ts` and command-family projection helpers: write the input into
    the daemon request only if the flag affects daemon execution.
@@ -41,9 +43,22 @@ steps 1-3, plus step 9.
 
 ## Where CLI help and schema live
 
-- Long help prose: `src/cli-schema/cli-help.ts`. Flag definitions: `src/commands/cli-grammar/`.
+- Long help prose: `src/commands/schema/cli-help.ts`. Flag definitions: `src/commands/cli-grammar/`.
+- Synopsis: `src/commands/schema/usage.ts` generates the `[label]` flag tail from `allowedFlags`, so a
+  new option reaches `--help` without any synopsis edit. Declare `usageFlags` on the command only
+  when its synopsis names fewer options: `[]` for a synopsis that is pure grammar (or writes its own
+  mutually-exclusive brackets), otherwise the subset it names. `Command flags:` always lists
+  everything in `allowedFlags`. Keep a cross-cutting opt-in out of every synopsis with
+  `usageHidden: true` on its flag definition. `src/commands/schema/usage.test.ts` fails a tail that names
+  an option the command does not accept, or one the hand-written grammar already wrote.
+- A command whose first positional picks an action declares `flagsByAction` on its CLI schema, mapping
+  each action to the options it reads, and derives `allowedFlags` from that table. The parser then
+  refuses a typed option its action never reads, off the keys the caller provided: config, env, and
+  remote-config defaults fill `flags` without becoming a request, so `AGENT_DEVICE_FPS=30` never breaks
+  `record stop`. Keep an option every action reads out of the table — a row list is the only set the
+  parser refuses, and refusing `--json` would refuse the command.
 - Command-specific usage/flag metadata lives with the command family metadata that owns the command.
 - Parser/help *rendering* stays in `src/cli/parser/`; command schema metadata is derived from command
   metadata, family declarations, and the schema-only merge path in
-  `src/cli-schema/command-overrides.ts`. Keep the two separate.
-- Locating an owner: `rg -n "helpDescription|summary|supportedFlags|allowedFlags" src/commands src/cli/parser src/cli-schema`.
+  `src/commands/schema/command-overrides.ts`. Keep the two separate.
+- Locating an owner: `rg -n "helpDescription|summary|supportedFlags|allowedFlags" src/commands src/cli/parser`.

@@ -1,6 +1,0 @@
-.claude/**
-dist/**
-node_modules/**
-**/*.md
-scripts/maestro-conformance/corpus/**
-fallow-baselines/**

@@ -1,14 +1,11 @@
 import type { AppLogRuntimeHost, AppLogRuntimeOperations } from './app-log-runtime.ts';
-import type {
-  AppInventoryRuntimeHost,
-  AppInventoryRuntimeOperations,
-} from './app-inventory-runtime.ts';
+import type { AppInventoryRuntimeOperations } from './app-inventory-runtime.ts';
 import type {
   AndroidAppDeploymentExecutor,
   AppDeploymentRuntimeOperations,
   AppleAppDeploymentExecutor,
 } from './app-deployment-runtime.ts';
-import type { AppStateRuntimeHost, AppStateRuntimeOperations } from './app-state-runtime.ts';
+import type { AppStateRuntimeOperations } from './app-state-runtime.ts';
 import type { NetworkRuntimeHost, NetworkRuntimeOperations } from './network-runtime.ts';
 import type { ScreenRecordingRuntimeHost } from './screen-recording-runtime-host.ts';
 import type { ScreenRecordingRuntimeOperations } from './screen-recording-runtime.ts';
@@ -24,13 +21,14 @@ import type { ScrollRuntimeOperations } from './scroll-runtime.ts';
 import type { TypeTextRuntimeOperations } from './type-text-runtime.ts';
 import type { ElementTextRuntimeOperations } from './element-text-runtime.ts';
 import type { BackRuntimeOperations } from './back-runtime.ts';
-import type { HomeRuntimeOperations } from './home-runtime.ts';
 import type { OrientationRuntimeOperations } from './orientation-runtime.ts';
+import type { FoldRuntimeOperations } from './fold-runtime.ts';
 import type { TvRemoteRuntimeOperations } from './tv-remote-runtime.ts';
 import type { KeyboardRuntimeOperations } from './keyboard-runtime.ts';
 import type { ClipboardRuntimeOperations } from './clipboard-runtime.ts';
-import type { AppSwitcherRuntimeOperations } from './app-switcher-runtime.ts';
+import type { SystemButtonRuntimeOperations } from './system-button-runtime.ts';
 import type { AppEventRuntimeOperations } from './app-event-runtime.ts';
+import type { ReadableSetting } from './settings.ts';
 import type { SettingsRuntimeOperations } from './settings-runtime.ts';
 import type { AlertRuntimeOperations } from './alert-runtime.ts';
 import type { AudioProbeRuntimeOperations } from './audio-probe-runtime.ts';
@@ -77,12 +75,12 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   TypeTextRuntimeOperations &
   ElementTextRuntimeOperations &
   BackRuntimeOperations &
-  HomeRuntimeOperations &
   OrientationRuntimeOperations &
+  FoldRuntimeOperations &
   TvRemoteRuntimeOperations &
   KeyboardRuntimeOperations &
   ClipboardRuntimeOperations &
-  AppSwitcherRuntimeOperations &
+  SystemButtonRuntimeOperations &
   AppEventRuntimeOperations &
   SettingsRuntimeOperations &
   AlertRuntimeOperations &
@@ -113,13 +111,16 @@ export const typeTextRuntimeUse = defineUse({ required: ['typeText'] });
 export const backRuntimeUse = defineUse({ required: ['back'] });
 export const homeRuntimeUse = defineUse({ required: ['home'] });
 export const orientationRuntimeUse = defineUse({ required: ['setOrientation'] });
+export const foldRuntimeUse = defineUse({ required: ['setFoldPose'] });
 export const tvRemoteRuntimeUse = defineUse({ required: ['tvRemote'] });
 export const keyboardStatusUse = defineUse({ required: ['keyboardStatus'] });
 export const keyboardDismissUse = defineUse({ required: ['keyboardDismiss'] });
 export const keyboardEnterUse = defineUse({ required: ['keyboardEnter'] });
 export const appSwitcherRuntimeUse = defineUse({ required: ['appSwitcher'] });
+export const actionButtonRuntimeUse = defineUse({ required: ['actionButton'] });
 export const appEventRuntimeUse = defineUse({ required: ['triggerAppEvent'] });
 export const settingsRuntimeUse = defineUse({ required: ['setSetting'] });
+export const settingReadUse = defineUse({ required: ['readSetting'] });
 export const alertReadUse = defineUse({ required: ['readAlert'] });
 export const alertWaitUse = defineUse({ required: ['awaitAlert'] });
 export const alertAcceptUse = defineUse({ required: ['acceptAlert'] });
@@ -249,15 +250,31 @@ const gestureTargetAuthoredDragUse = defineUse({
  */
 export const gestureViewportRuntimeUse = defineUse({ required: ['gestureViewport'] });
 
-/** `scroll <direction>` executes one pass and needs nothing else. */
-const scrollDirectionUse = defineUse({ required: ['scrollDirection'] });
 /**
- * `scroll top` / `scroll bottom` verify hidden content between passes, so the capture is part of
- * the tier's requirement rather than something discovered mid-run — the retired leaf's
- * "requires snapshot support to verify hidden content before scrolling" refusal, moved to
- * admission.
+ * `scroll <direction>` executes one pass, and the capture that lets it answer with the movement it
+ * observed (#2714) is CONDITIONAL — not `preferred`, not `required` (ADR 0019 §2). Not preferred:
+ * the observation is what makes the direction tier's answer honest, which is correctness rather
+ * than a faster path, and §2 reserves `preferred` for optimizations that never carry correctness.
+ * Not required: a runtime that cannot read a screen still scrolls, and `movement: 'unobserved'` —
+ * or no movement field at all — is the answer it owes.
+ *
+ * Both sides are complete. An owner that can capture answers with the movement it saw; an owner that
+ * cannot answers exactly the response it answered before, distance and all. `scroll-runtime.test.ts`
+ * pins one case per side of that parity.
  */
-const scrollEdgeUse = defineUse({ required: ['scrollDirection', 'captureSnapshot'] });
+const scrollDirectionUse = defineUse({
+  required: ['scrollDirection'],
+  conditional: ['captureSnapshot'],
+});
+/**
+ * Every scroll that verifies between passes: `scroll top`/`scroll bottom` read hidden content at
+ * the edge, and `scroll --until <selector>` re-reads the tree to decide whether the target came
+ * into view. Both check against that capture rather than a stale session snapshot, so the capture
+ * is part of the tier's requirement rather than something discovered mid-run — the retired leaf's
+ * "requires snapshot support to verify hidden content before scrolling" refusal, moved to
+ * admission. One declaration, because the two tiers admit on identical facts.
+ */
+const scrollVerifiedPassUse = defineUse({ required: ['scrollDirection', 'captureSnapshot'] });
 
 const gestureUsesByTier = Object.freeze({
   plan: gesturePlanUse,
@@ -278,7 +295,10 @@ export const gestureRuntimePlanUses = Object.freeze([
 export const swipeRuntimePlanUses = Object.freeze([gesturePlanUse] as const);
 
 /** Every use `scroll` can select between. */
-export const scrollRuntimePlanUses = Object.freeze([scrollDirectionUse, scrollEdgeUse] as const);
+export const scrollRuntimePlanUses = Object.freeze([
+  scrollDirectionUse,
+  scrollVerifiedPassUse,
+] as const);
 
 type GesturePlanFor<Tier extends GestureRuntimeTier> = Readonly<{
   tier: Tier;
@@ -340,15 +360,28 @@ function gesturePlan<const Tier extends GestureRuntimeTier>(tier: Tier): Gesture
  */
 export type ScrollRuntimePlan =
   | Readonly<{ kind: 'direction'; use: typeof scrollDirectionUse }>
-  | Readonly<{ kind: 'edge'; edge: 'top' | 'bottom'; use: typeof scrollEdgeUse }>;
+  | Readonly<{ kind: 'edge'; edge: 'top' | 'bottom'; use: typeof scrollVerifiedPassUse }>
+  | Readonly<{ kind: 'until'; until: string; use: typeof scrollVerifiedPassUse }>;
 
-/** `scroll top`/`scroll bottom` verify between passes; every other scroll executes one pass. */
+/**
+ * `scroll top`/`scroll bottom` verify between passes, `scroll --until` re-reads the tree between
+ * passes to check its selector, and every other scroll executes one pass. The edge directions carry
+ * their own stop condition, so pairing them with `--until` names two, which the caller rejects
+ * before this resolves.
+ */
 export function resolveScrollRuntimePlan(
-  input: Readonly<{ edge?: 'top' | 'bottom' }>,
+  input: Readonly<{ edge?: 'top' | 'bottom'; until?: string }>,
 ): ScrollRuntimePlan {
+  if (input.until !== undefined) {
+    return Object.freeze({
+      kind: 'until',
+      until: input.until,
+      use: scrollVerifiedPassUse,
+    } as const);
+  }
   return input.edge === undefined
     ? Object.freeze({ kind: 'direction', use: scrollDirectionUse } as const)
-    : Object.freeze({ kind: 'edge', edge: input.edge, use: scrollEdgeUse } as const);
+    : Object.freeze({ kind: 'edge', edge: input.edge, use: scrollVerifiedPassUse } as const);
 }
 const captureSnapshotWithCustomActionsUse = defineUse({
   required: ['captureSnapshot', 'captureSnapshotWithCustomActions'],
@@ -388,11 +421,11 @@ const selectorTextCaptureWithoutActiveAppUse = defineUse({
  */
 const waitSelectorCaptureUse = defineUse({
   required: ['captureSnapshot'],
-  conditional: ['findText', 'findSelector'],
+  conditional: ['findText'],
 });
 const waitSelectorCaptureWithoutActiveAppUse = defineUse({
   required: ['captureSnapshot', 'captureSnapshotWithoutActiveApp'],
-  conditional: ['findText', 'findSelector'],
+  conditional: ['findText'],
 });
 
 /**
@@ -486,6 +519,18 @@ const selectorUsesByIntent = Object.freeze({
 } as const);
 
 export type SelectorCaptureRuntimeIntent = keyof typeof selectorUsesByIntent;
+
+/**
+ * The one action-selected plan `find` binds (ADR 0019 §9): the target capture always, plus the
+ * focus leg for `find focus` and the focus+type legs for `find type`. Every other action resolves
+ * its target from the capture and delegates or reads; the handler and plan-time consumers share
+ * this map so they cannot drift.
+ */
+export function findRuntimeIntent(
+  action: string,
+): Extract<SelectorCaptureRuntimeIntent, 'capture-only' | 'find-focus' | 'find-type'> {
+  return action === 'focus' ? 'find-focus' : action === 'type' ? 'find-type' : 'capture-only';
+}
 
 /**
  * Same two `kind`s the snapshot plan uses for this split — deliberately, so capture-only,
@@ -602,35 +647,46 @@ export function resolveSnapshotRuntimePlan(input: {
 
 const captureScreenshotUse = defineUse({ required: ['captureScreenshot'] });
 /**
- * `--overlay-refs` annotates the capture with the refs of a snapshot taken in the same request, so
- * the snapshot is part of what the command requires — not something to discover after the PNG is
+ * Screenshot post-processing that resolves a snapshot taken in the same request — `--overlay-refs`
+ * annotates the capture with snapshot refs, `--crop-on` crops it to a snapshot node's frame. The
+ * snapshot is part of what the command requires, not something to discover after the PNG is
  * already on disk. Declaring it in the use is what lets admission refuse the whole request up
  * front on a target that can capture pixels but not a tree.
  */
-const captureScreenshotWithOverlayRefsUse = defineUse({
+const captureScreenshotWithSnapshotUse = defineUse({
   required: ['captureScreenshot', 'captureSnapshot'],
 });
 
 export const screenshotRuntimePlanUses = Object.freeze([
   captureScreenshotUse,
-  captureScreenshotWithOverlayRefsUse,
+  captureScreenshotWithSnapshotUse,
 ] as const);
 
 export type ScreenshotRuntimePlan =
   | Readonly<{ kind: 'capture'; use: typeof captureScreenshotUse }>
   | Readonly<{
       kind: 'capture-with-overlay-refs';
-      use: typeof captureScreenshotWithOverlayRefsUse;
+      use: typeof captureScreenshotWithSnapshotUse;
+    }>
+  | Readonly<{
+      kind: 'capture-with-crop-on';
+      use: typeof captureScreenshotWithSnapshotUse;
     }>;
 
 /** Selects one owner-fact-backed capture plan from normalized command intent. */
 export function resolveScreenshotRuntimePlan(
-  input: Readonly<{ overlayRefs: boolean }>,
+  input: Readonly<{ overlayRefs: boolean; cropOn: boolean }>,
 ): ScreenshotRuntimePlan {
+  if (input.cropOn) {
+    return Object.freeze({
+      kind: 'capture-with-crop-on',
+      use: captureScreenshotWithSnapshotUse,
+    });
+  }
   return input.overlayRefs
     ? Object.freeze({
         kind: 'capture-with-overlay-refs',
-        use: captureScreenshotWithOverlayRefsUse,
+        use: captureScreenshotWithSnapshotUse,
       })
     : Object.freeze({ kind: 'capture', use: captureScreenshotUse });
 }
@@ -683,6 +739,66 @@ export const clipboardRuntimePlanUses = Object.freeze([
 ] as const);
 
 /**
+ * `settings`' leg-selected uses (ADR 0019 §9: one bind per handler). `settings <setting> <state>`
+ * and the bare `settings <setting>` read are separate cells because an owner can hold one without
+ * the other — the macOS host can set an appearance it has no ladder to read back — so the daemon's
+ * `snapshot-settings.ts` admits and binds exactly the leg the parsed positionals name.
+ */
+export const settingsRuntimePlanUses = Object.freeze([settingsRuntimeUse, settingReadUse] as const);
+
+/**
+ * The settings that answer a bare `settings <setting>` with the value the target holds, in the order
+ * `settings` help lists them. A setting joins the list only when at least one owner can read it back,
+ * which is what makes the read a second operation rather than a stateless write.
+ *
+ * The NAME lives in `settings.ts`, where every settings type and the settings owners already read it
+ * from; this is its VALUE, because the CLI's eager command-registry closure must evaluate the leg
+ * rule below and `contracts/settings.ts` is not in that closure — importing it here would add it
+ * (`scripts/__tests__/eager-closure-budgets.test.ts` ratchets the hub against growth) and importing
+ * this module from `settings.ts` would close a contracts type cycle the layering scan forbids. The
+ * two lines after this declaration pin the pair equal in both directions, so no test has to.
+ */
+export const READABLE_SETTINGS: readonly ReadableSetting[] = ['text-size'];
+const readableSettingsAreTheVocabulary: Record<ReadableSetting, true> = { 'text-size': true };
+void readableSettingsAreTheVocabulary;
+
+/** The leg one `settings` request is on, and the owner fact that leg admits. */
+export type SettingsRuntimePlan =
+  | Readonly<{ kind: 'read'; setting: ReadableSetting; use: typeof settingReadUse }>
+  | Readonly<{ kind: 'write'; use: typeof settingsRuntimeUse }>;
+
+const WRITE_SETTINGS_RUNTIME_PLAN: SettingsRuntimePlan = Object.freeze({
+  kind: 'write',
+  use: settingsRuntimeUse,
+});
+
+/**
+ * The ONE leg rule `settings` has, and the only place its readable-setting list is read. A request
+ * reads when it names a readable setting and nothing else; anything with a state is a mutation,
+ * including `settings text-size large`, which names the same word and changes the device. Both
+ * consumers resolve through here: the command descriptor turns `kind` into the recording and
+ * ref-frame effect, and the daemon admits `use` and reads the setting named — so the classification
+ * and the operation admitted cannot disagree. It sits beside the two uses rather than in the settings
+ * vocabulary because both consumers already evaluate this module, while the CLI's eager command-
+ * registry closure is ratcheted against growth by `scripts/__tests__/eager-closure-budgets.test.ts`.
+ */
+export function resolveSettingsRuntimePlan(
+  positionals: readonly string[] | undefined,
+): SettingsRuntimePlan {
+  const setting = normalizeVocabularyName(positionals?.[0]);
+  if (positionals?.length !== 1 || setting === undefined) return WRITE_SETTINGS_RUNTIME_PLAN;
+  return READABLE_SETTINGS.includes(setting)
+    ? Object.freeze({ kind: 'read', setting, use: settingReadUse })
+    : WRITE_SETTINGS_RUNTIME_PLAN;
+}
+
+/** Settings vocabulary normalization: the daemon lowercases its positionals, the CLI does not. */
+function normalizeVocabularyName(value: string | undefined): ReadableSetting | undefined {
+  const normalized = value?.trim().toLowerCase();
+  return READABLE_SETTINGS.find((name) => name === normalized);
+}
+
+/**
  * `alert`'s action-selected uses (ADR 0019 §9: one bind per handler). The four legs differ in
  * what they do to the device — one observes, one waits, two press a button — so the daemon's
  * `snapshot-alert.ts` admits and binds exactly the one the parsed subcommand names.
@@ -710,8 +826,6 @@ export const keyboardRuntimePlanUses = Object.freeze([
 export type PlatformRuntimeHost = AppLogRuntimeHost &
   NetworkRuntimeHost &
   Readonly<{
-    appInventory: AppInventoryRuntimeHost;
-    appState: AppStateRuntimeHost;
     /** Focused native ports; deployment semantics remain in the owning family packages. */
     appleDeployment: AppleAppDeploymentExecutor;
     androidDeployment: AndroidAppDeploymentExecutor;

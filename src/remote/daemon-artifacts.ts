@@ -1,29 +1,26 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
-import { loadNodeHttpRequester } from '../utils/node-http.ts';
-import type { DaemonArtifact, DaemonRequest, DaemonResponse } from '../daemon/types.ts';
-import {
-  buildDaemonHttpAuthHeaders,
-  buildDaemonHttpTenantHeaders,
-} from '../daemon/http-contract.ts';
+import type { DaemonArtifact, DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts';
 import {
   appendRecordingExtensionWhenMissing,
   recordingExtensionForPlatform,
-} from '../recording/output-path.ts';
+} from '@agent-device/capture-kit/recording-output-path';
 import { uploadArtifact } from './upload-client.ts';
 import { createStderrUploadProgressReporter, type UploadProgressSink } from './upload-progress.ts';
 
-// Mirrors the current daemon RPC timeout, but artifact download timeouts may diverge.
-const REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS = 90_000;
+// Mirrors `DEFAULT_TEST_ARTIFACTS_ROOT` in `packages/replay-test/src/internal/session-test-artifacts.ts`
+// (the daemon's own default). Duplicated rather than imported: pulling it from
+// `@agent-device/contracts` grew that package's pinned eager-import closure by 3 modules for one
+// string (#2246) — not worth it for a literal that only ever changes alongside this comment.
+const DEFAULT_TEST_ARTIFACTS_ROOT = '.agent-device/test-artifacts';
 
 export type DaemonArtifactEndpoint = {
   baseUrl?: string;
   token: string;
 };
 
-type PreparedRemoteRequest = {
+export type PreparedRemoteRequest = {
   positionals: string[];
   flags?: DaemonRequest['flags'];
   installSource?: NonNullable<DaemonRequest['meta']>['installSource'];
@@ -34,6 +31,7 @@ type PreparedRemoteRequest = {
 export async function prepareRemoteRequestArtifacts(
   req: Omit<DaemonRequest, 'token'>,
   info: DaemonArtifactEndpoint,
+  signal: AbortSignal,
 ): Promise<PreparedRemoteRequest> {
   const positionals = [...(req.positionals ?? [])];
   let flags = req.flags ? { ...req.flags } : undefined;
@@ -54,7 +52,7 @@ export async function prepareRemoteRequestArtifacts(
 
   assertRemoteDaemonSupportsSaveScript(req);
   flags = applyRemoteArtifactCommand(req, positionals, flags, clientArtifactPaths);
-  const remoteInstallSource = await prepareRemoteInstallSource(req, info, uploadProgress);
+  const remoteInstallSource = await prepareRemoteInstallSource(req, info, uploadProgress, signal);
   if (remoteInstallSource) {
     installSource = remoteInstallSource.installSource;
     uploadedArtifactId = remoteInstallSource.uploadedArtifactId ?? uploadedArtifactId;
@@ -75,6 +73,7 @@ export async function prepareRemoteRequestArtifacts(
     info,
     positionals,
     uploadProgress,
+    signal,
   );
   uploadedArtifactId = installPackageResult ?? uploadedArtifactId;
   return baseResult();
@@ -106,6 +105,7 @@ async function prepareRemoteInstallPackage(
   info: DaemonArtifactEndpoint,
   positionals: string[],
   onProgress: UploadProgressSink | undefined,
+  signal: AbortSignal,
 ): Promise<string | undefined> {
   const pathIndex = positionals.length === 1 ? 0 : 1;
   const rawPath = positionals[pathIndex];
@@ -124,6 +124,7 @@ async function prepareRemoteInstallPackage(
     token: info.token,
     platform: req.flags?.platform,
     onProgress,
+    signal,
   });
 }
 
@@ -135,20 +136,25 @@ function applyRemoteArtifactCommand(
 ): DaemonRequest['flags'] | undefined {
   const remoteArtifact = prepareRemoteArtifactCommand(req, positionals);
   if (!remoteArtifact) return flags;
-  if (remoteArtifact.positionalPath !== undefined) {
+  if (remoteArtifact.positionalIndex !== undefined && remoteArtifact.positionalPath !== undefined) {
     positionals[remoteArtifact.positionalIndex] = remoteArtifact.positionalPath;
   }
-  const nextFlags = applyRemoteArtifactOutFlag(flags, remoteArtifact.flagPath);
+  const nextFlags = applyRemoteArtifactFlag(
+    flags,
+    remoteArtifact.flagKey ?? 'out',
+    remoteArtifact.flagPath,
+  );
   clientArtifactPaths[remoteArtifact.field] = remoteArtifact.localPath;
   return nextFlags;
 }
 
-function applyRemoteArtifactOutFlag(
+function applyRemoteArtifactFlag(
   flags: DaemonRequest['flags'] | undefined,
+  flagKey: string,
   flagPath: string | undefined,
 ): DaemonRequest['flags'] | undefined {
   if (flagPath === undefined) return flags;
-  return { ...(flags ?? {}), out: flagPath };
+  return { ...(flags ?? {}), [flagKey]: flagPath };
 }
 
 function resolveLocalInstallPath(rawPath: string, cwd: string | undefined): string | undefined {
@@ -176,6 +182,7 @@ async function prepareRemoteInstallSource(
   req: Omit<DaemonRequest, 'token'>,
   info: DaemonArtifactEndpoint,
   onProgress: UploadProgressSink | undefined,
+  signal: AbortSignal,
 ): Promise<{
   installSource: NonNullable<DaemonRequest['meta']>['installSource'];
   uploadedArtifactId?: string;
@@ -216,6 +223,7 @@ async function prepareRemoteInstallSource(
     token: info.token,
     platform: req.flags?.platform,
     onProgress,
+    signal,
   });
   return {
     installSource: {
@@ -232,8 +240,9 @@ function prepareRemoteArtifactCommand(
 ): {
   field: string;
   localPath: string;
-  positionalIndex: number;
+  positionalIndex?: number;
   positionalPath?: string;
+  flagKey?: string;
   flagPath?: string;
 } | null {
   if (req.command === 'screenshot') {
@@ -272,7 +281,25 @@ function prepareRemoteArtifactCommand(
       ),
     };
   }
+  if (req.command === 'test') {
+    // #2246: `test` always materializes a suite artifacts directory, whether or not the caller
+    // passed `--artifacts-dir` — unlike `record`, there is no "nothing to redirect" case here.
+    // Resolving the caller-local root here (not on the daemon) mirrors #1802's read-side fix for
+    // the same command: the daemon must never resolve a path against the caller's `cwd`.
+    return {
+      field: 'artifactsDir',
+      localPath: resolveClientArtifactOutputRoot(req),
+      flagKey: 'artifactsDir',
+      flagPath: buildRemoteTempArtifactDirPath('test-artifacts'),
+    };
+  }
   return null;
+}
+
+function resolveClientArtifactOutputRoot(req: Omit<DaemonRequest, 'token'>): string {
+  const requested = req.flags?.artifactsDir;
+  const rawPath = hasNonEmptyString(requested) ? requested : DEFAULT_TEST_ARTIFACTS_ROOT;
+  return resolveAbsoluteClientPath(rawPath, req.meta?.cwd);
 }
 
 function recordingFallbackExtension(req: Omit<DaemonRequest, 'token'>): string {
@@ -299,8 +326,15 @@ function resolveClientArtifactOutputPath(
 ): string {
   const requested = req.positionals?.[positionalIndex] ?? req.flags?.out;
   const fallbackName = `${field === 'path' ? 'screenshot' : 'recording'}-${Date.now()}${fallbackExtension}`;
-  const rawPath = hasNonEmptyString(requested) ? requested : fallbackName;
-  return path.isAbsolute(rawPath) ? rawPath : path.resolve(req.meta?.cwd ?? process.cwd(), rawPath);
+  return resolveAbsoluteClientPath(
+    hasNonEmptyString(requested) ? requested : fallbackName,
+    req.meta?.cwd,
+  );
+}
+
+/** Shared tail of every "what local path did the caller mean" resolution in this file. */
+function resolveAbsoluteClientPath(rawPath: string, cwd: string | undefined): string {
+  return path.isAbsolute(rawPath) ? rawPath : path.resolve(cwd ?? process.cwd(), rawPath);
 }
 
 function hasNonEmptyString(value: unknown): value is string {
@@ -312,6 +346,14 @@ function buildRemoteTempArtifactPath(prefix: string, extension: string): string 
   return path.posix.join(
     '/tmp',
     `agent-device-${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${safeExtension}`,
+  );
+}
+
+/** A directory temp path — unlike `buildRemoteTempArtifactPath`, no extension is ever appended. */
+function buildRemoteTempArtifactDirPath(prefix: string): string {
+  return path.posix.join(
+    '/tmp',
+    `agent-device-${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   );
 }
 
@@ -329,18 +371,26 @@ export async function materializeRemoteArtifacts(
       nextArtifacts.push(artifact);
       continue;
     }
-    const localPath = resolveMaterializedArtifactPath(artifact, req);
-    await downloadRemoteArtifact({
+    const downloadPath = resolveMaterializedArtifactPath(artifact, req);
+    const materializedPath = await downloadRemoteArtifact({
       baseUrl: info.baseUrl,
       token: info.token,
       artifactId: artifact.artifactId,
-      destinationPath: localPath,
+      destinationPath: downloadPath,
       requestScope: req.meta,
+      // #2246: `test-artifacts` is the one directory-shaped artifact type today — known from the
+      // response, before any bytes arrive, so cleanup-on-error can be decided up front instead of
+      // racing the response headers (a directory destination must never be `rm`'d wholesale; see
+      // `downloadRemoteArtifact`).
+      isDirectory: artifact.artifactType === 'test-artifacts',
     });
-    nextData[artifact.field] = localPath;
+    // Directory artifacts download into a caller-owned root, then atomically publish their one
+    // top-level entry beneath it. Use the path the download actually published rather than the
+    // root hint sent over the wire; otherwise `artifactsDir` loses its suite invocation segment.
+    nextData[artifact.field] = materializedPath;
     nextArtifacts.push({
       ...artifact,
-      localPath,
+      localPath: materializedPath,
     });
   }
   nextData.artifacts = nextArtifacts;
@@ -366,100 +416,24 @@ type DownloadRemoteArtifactParams = {
   destinationPath: string;
   requestScope: DaemonRequest['meta'];
   timeoutMs?: number;
+  /** Whether `destinationPath` is a caller-owned root rather than one file to create. */
+  isDirectory?: boolean;
 };
 
-export async function downloadRemoteArtifact(params: DownloadRemoteArtifactParams): Promise<void> {
-  const artifactUrl = new URL(buildDaemonArtifactUrl(params.baseUrl, params.artifactId));
-  // `prepareRemoteRequestArtifacts` runs on every CLI request, but only a
-  // remote daemon ever downloads an artifact, so the HTTP stack loads here.
-  const transport = await loadNodeHttpRequester(artifactUrl.protocol);
-  await fs.promises.mkdir(path.dirname(params.destinationPath), { recursive: true });
-  await new Promise<void>((resolve, reject) => {
-    let settled = false;
-    const timeoutMs = params.timeoutMs ?? REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS;
-    const settle = (error?: Error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeoutHandle);
-      if (error) {
-        void fs.promises.rm(params.destinationPath, { force: true }).finally(() => reject(error));
-        return;
-      }
-      resolve();
-    };
-    const request = transport.request(
-      {
-        protocol: artifactUrl.protocol,
-        host: artifactUrl.hostname,
-        port: artifactUrl.port,
-        method: 'GET',
-        path: artifactUrl.pathname + artifactUrl.search,
-        headers: {
-          ...buildDaemonHttpAuthHeaders(params.token),
-          ...buildDaemonHttpTenantHeaders(params.requestScope?.tenantId),
-        },
-      },
-      (res) => {
-        if ((res.statusCode ?? 500) >= 400) {
-          let body = '';
-          res.setEncoding('utf8');
-          res.on('data', (chunk) => {
-            body += chunk;
-          });
-          res.on('end', () => {
-            settle(
-              new AppError('COMMAND_FAILED', 'Failed to download remote artifact', {
-                artifactId: params.artifactId,
-                statusCode: res.statusCode,
-                requestId: params.requestScope?.requestId,
-                body,
-              }),
-            );
-          });
-          return;
-        }
-        res.on('aborted', () => {
-          settle(
-            new AppError('COMMAND_FAILED', 'Remote artifact download was interrupted', {
-              artifactId: params.artifactId,
-              requestId: params.requestScope?.requestId,
-            }),
-          );
-        });
-        void pipeline(res, fs.createWriteStream(params.destinationPath)).then(
-          () => settle(),
-          (error: unknown) => settle(error instanceof Error ? error : new Error(String(error))),
-        );
-      },
-    );
-    const timeoutHandle = setTimeout(() => {
-      const timeoutError = new AppError('COMMAND_FAILED', 'Remote artifact download timed out', {
-        artifactId: params.artifactId,
-        requestId: params.requestScope?.requestId,
-        timeoutMs,
-      });
-      settle(timeoutError);
-      request.destroy(timeoutError);
-    }, timeoutMs);
-    request.on('error', (error) => {
-      if (error instanceof AppError) {
-        settle(error);
-        return;
-      }
-      settle(
-        new AppError(
-          'COMMAND_FAILED',
-          'Failed to download remote artifact',
-          {
-            artifactId: params.artifactId,
-            requestId: params.requestScope?.requestId,
-            timeoutMs,
-          },
-          error instanceof Error ? error : undefined,
-        ),
-      );
-    });
-    request.end();
+export async function downloadRemoteArtifact(
+  params: DownloadRemoteArtifactParams,
+): Promise<string> {
+  // Remote artifact transfer is not part of routine CLI startup. Keep the HTTP/archive owner out
+  // of the eager command graph and load it only after a remote response names an artifact.
+  const { downloadRemoteArtifactFromUrl } = await import('./artifact-download.ts');
+  return await downloadRemoteArtifactFromUrl({
+    artifactUrl: new URL(buildDaemonArtifactUrl(params.baseUrl, params.artifactId)),
+    token: params.token,
+    artifactId: params.artifactId,
+    destinationPath: params.destinationPath,
+    requestScope: params.requestScope,
+    ...(params.timeoutMs === undefined ? {} : { timeoutMs: params.timeoutMs }),
+    ...(params.isDirectory === undefined ? {} : { isDirectory: params.isDirectory }),
   });
 }
 

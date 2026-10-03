@@ -1,22 +1,22 @@
 import AVFoundation
 import Foundation
 
-/// Shared mechanics for the recording post-processing scripts (overlay burn-in, start trim).
+/// Shared mechanics for recording post-processing scripts (overlay burn-in).
 /// Each script keeps its own argument grammar and export-quality policy; this file owns the
 /// error vocabulary, flag-value reading, composition assembly, and the bounded export wait.
 
 enum RecordingScriptError: Error, CustomStringConvertible {
   case invalidArgs(String)
-  case invalidTrimRange
   case missingVideoTrack
   case exportFailed(String)
+  case frameWriteFailed(String)
 
   var description: String {
     switch self {
     case .invalidArgs(let message):
       return message
-    case .invalidTrimRange:
-      return "Trim start must be before the end of the recording."
+    case .frameWriteFailed(let message):
+      return message
     case .missingVideoTrack:
       return "Input video does not contain a video track."
     case .exportFailed(let message):
@@ -46,9 +46,8 @@ func sourceVideoTrack(of asset: AVURLAsset) throws -> AVAssetTrack {
 }
 
 /// Copies `videoTrack` for `timeRange` into a fresh composition, carrying the optional audio track
-/// along when present. The caller owns any `preferredTransform` policy: trim propagates the source
-/// transform directly, while overlay re-applies it through a video-composition layer instruction
-/// instead.
+/// along when present. The caller owns any `preferredTransform` policy: overlay re-applies it
+/// through a video-composition layer instruction instead of propagating the source transform.
 func makeRecordingComposition(
   asset: AVURLAsset,
   videoTrack: AVAssetTrack,

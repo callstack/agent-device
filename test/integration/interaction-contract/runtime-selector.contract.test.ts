@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { InteractionGuarantee } from '@agent-device/contracts/interaction-guarantees';
 import type { Point } from '@agent-device/kernel/snapshot';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import { selector } from '../../../src/commands/interaction/runtime/selector-read-utils.ts';
-import { assertRpcOk } from '../provider-scenarios/assertions.ts';
+import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import { scenarioName, scenarioNames } from './coverage-manifest.ts';
 import { RUNTIME_SELECTOR_COVERAGE } from './runtime-selector.coverage.ts';
@@ -11,6 +12,7 @@ import {
   closedDrawerSnapshot,
   continueButtonSnapshot,
   coveredButtonSnapshot,
+  keyboardCoveredTabBarSnapshot,
   drawerWithVisibleTwinSnapshot,
   equivalentWrapperChainSnapshot,
   edgeGrazingDrawerSnapshot,
@@ -18,6 +20,7 @@ import {
   nonHittableButtonSnapshot,
   RUNNER_CONTINUE_NODES,
   settledWelcomeSnapshot,
+  viewportOnlySnapshot,
 } from './fixtures.ts';
 import { createContractDevice } from './runtime-harness.ts';
 import { runnerSnapshotEntry, runnerTapEntry, withIosContractDaemon } from './daemon-harness.ts';
@@ -123,7 +126,37 @@ test(scenario('occlusion'), async () => {
 
   await assert.rejects(
     () => device.interactions.click(selector('label="Save draft"'), { session: 'default' }),
-    /covered by another visible element/,
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /covered by another visible element/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetCovered);
+      assert.equal(details?.dispatched, 'no');
+      return true;
+    },
+  );
+  assert.deepEqual(taps, []);
+});
+
+test(scenario('keyboardOcclusion'), async () => {
+  const taps: Point[] = [];
+  const device = createContractDevice(keyboardCoveredTabBarSnapshot(), {
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.click(selector('label="Form"'), { session: 'default' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /behind the visible keyboard/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'tap_keyboard_occludes_target');
+      assert.ok(typeof details?.hint === 'string');
+      assert.deepEqual(details?.keyboardFrame, { x: 0, y: 583, width: 402, height: 291 });
+      return true;
+    },
   );
   assert.deepEqual(taps, []);
 });
@@ -171,6 +204,35 @@ test(scenario('nonHittable'), async () => {
   assert.equal(result.kind, 'selector');
   assert.equal(result.targetHittable, false);
   assert.match(result.hint ?? '', /hittable: false/);
+});
+
+test(scenario('targetReadiness'), async () => {
+  const taps: Point[] = [];
+  let captures = 0;
+  const device = createContractDevice(viewportOnlySnapshot(), {
+    captureSnapshot: async () => {
+      captures += 1;
+      return {
+        // The first poll's interactive capture and its full-capture fallback both miss; the button
+        // appears only from the second poll on, so a loop that never polled again leaves the tap
+        // unsent.
+        snapshot: captures >= 3 ? continueButtonSnapshot() : viewportOnlySnapshot(),
+      };
+    },
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
+  });
+
+  const result = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+    // Never CLI- or model-writable, so the scenario supplies it directly.
+    readinessTimeoutMs: 2_000,
+  });
+
+  assert.equal(result.kind, 'selector');
+  assert.ok(captures >= 3, `expected at least 2 polls (>=3 captures), got ${captures}`);
+  assert.deepEqual(taps, [{ x: 60, y: 40 }]);
 });
 
 test(scenario('verifyEvidence'), async () => {
@@ -235,6 +297,21 @@ test(scenario('errorTaxonomy'), async () => {
     },
   );
 });
+
+test(
+  scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'errorTaxonomy')[1]!,
+  async () => {
+    await withIosContractDaemon(
+      [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerSnapshotEntry(RUNNER_CONTINUE_NODES)],
+      async (daemon) => {
+        const press = await daemon.callCommand('press', ['label=Missing']);
+        const error = assertRpcError(press, 'COMMAND_FAILED', /Selector did not match/);
+        assert.equal((error.details as Record<string, unknown>)?.dispatched, 'no');
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
 
 test(scenario('responseIdentity'), async () => {
   const device = createContractDevice(continueButtonSnapshot(), {

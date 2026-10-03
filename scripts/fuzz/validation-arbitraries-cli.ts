@@ -8,13 +8,13 @@
 // parser against it, which is what makes a silent acceptance (the #1433 class) reportable at all.
 
 import fc from 'fast-check';
-import { isKnownCliCommandName, listCliCommandNames } from '../../src/command-catalog.ts';
+import { isKnownCliCommandName, listCliCommandNames } from '@agent-device/command-registry/catalog';
 import {
   getCliCommandSchema,
   getFlagDefinitions,
   type FlagDefinition,
-} from '../../src/cli-schema/command-schema.ts';
-import { isFlagSupportedForCommand } from '../../src/cli-schema/option-schema.ts';
+} from '../../src/commands/schema/command-schema.ts';
+import { isFlagSupportedForCommand } from '../../src/commands/schema/option-schema.ts';
 import { encodeValidationCase, type ValidationCase } from './validation-case.ts';
 import { ACCEPT, SAFE_VALUES } from './validation-values.ts';
 

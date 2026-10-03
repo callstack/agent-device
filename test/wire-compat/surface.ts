@@ -42,21 +42,24 @@ const KERNEL_CONTRACTS = 'packages/kernel/src/contracts.ts';
 const KERNEL_ERRORS = 'packages/kernel/src/errors.ts';
 const KERNEL_DEVICE = 'packages/kernel/src/device.ts';
 const REQUEST_PROGRESS = 'packages/contracts/src/request-progress.ts';
-const HTTP_CONTRACT = 'src/daemon/http-contract.ts';
-const HTTP_HEALTH = 'src/daemon/http-health.ts';
+const DAEMON_HTTP = 'packages/contracts/src/daemon-http.ts';
 const HTTP_ERRORS = 'src/daemon/http-errors.ts';
 const HTTP_SERVER = 'src/daemon/server/http-server.ts';
+const HTTP_INSTANCE_PRECONDITION = 'src/daemon/server/http-instance-precondition.ts';
 const UPLOAD_HTTP = 'src/daemon/upload-http.ts';
 const ARTIFACT_HTTP = 'src/daemon/downloadable-artifact-http.ts';
 const REQUEST_DIAGNOSTICS_HTTP = 'src/daemon/request-diagnostics-http.ts';
+const SESSION_TENANT_SCOPE = 'src/daemon/session-tenant-scope.ts';
 const HTTP_REQUEST_TARGET = 'src/daemon/http-request-target.ts';
 const REMOTE_REQUEST_DIAGNOSTICS = 'src/remote/remote-request-diagnostics.ts';
-const PROGRESS_PROTOCOL = 'src/daemon/request-progress-protocol.ts';
-const CLIENT_RPC = 'src/daemon/client/daemon-client-rpc.ts';
-const CLIENT_PROGRESS = 'src/daemon/client/daemon-client-progress.ts';
-const CLIENT_TRANSPORT = 'src/daemon/client/daemon-client-transport.ts';
+const PROGRESS_PROTOCOL = 'src/request-progress-protocol.ts';
+const CLIENT_RPC = 'src/daemon-client/daemon-client-rpc.ts';
+const CLIENT_PROGRESS = 'src/daemon-client/daemon-client-progress.ts';
+const CLIENT_TRANSPORT = 'src/daemon-client/daemon-client-transport.ts';
+const DAEMON_PROXY = 'src/remote/daemon-proxy.ts';
 const UPLOAD_CLIENT = 'src/remote/upload-client.ts';
 const REMOTE_ARTIFACTS = 'src/remote/daemon-artifacts.ts';
+const ARTIFACT_DOWNLOAD = 'src/remote/artifact-download.ts';
 const UPLOAD_STREAM = 'src/remote/upload-stream.ts';
 
 function from(file: string, ...names: string[]): WireDeclarationRef[] {
@@ -68,12 +71,33 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
     adrBullet: 'HTTP route requirements for /health, /rpc, /upload, or /artifacts/*.',
     declarations: [
       ...from(
-        HTTP_CONTRACT,
+        DAEMON_HTTP,
         'DAEMON_HTTP_BASE_PATH',
+        'DAEMON_HTTP_INSTANCE_HEADER',
+        'DAEMON_HTTP_INSTANCE_MISMATCH_HEADER',
+        'DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER',
         'buildDaemonHttpUrl',
         'buildDaemonHttpBaseUrl',
       ),
-      ...from(HTTP_HEALTH, 'DaemonHealthPayload', 'buildDaemonHealthPayload'),
+      ...from(
+        DAEMON_HTTP,
+        'DaemonHealthPayload',
+        'buildDaemonHealthPayload',
+        'buildDaemonInstanceMismatchRpcResponse',
+      ),
+      ...from(HTTP_INSTANCE_PRECONDITION, 'refuseStaleDaemonInstance'),
+      ...from(
+        DAEMON_PROXY,
+        'refuseStaleProxyInstance',
+        'sendInstanceMismatch',
+        'buildUpstreamInstancePreconditionHeaders',
+      ),
+      ...from(
+        CLIENT_TRANSPORT,
+        'buildRemoteInstancePreconditionHeaders',
+        'isRemoteInstanceMismatchResponse',
+        'isRemoteInstanceMismatch',
+      ),
       // A shrunk body limit rejects payloads a released client still sends, so
       // it is a route requirement rather than an implementation detail.
       ...from(HTTP_SERVER, 'MAX_HTTP_RPC_BODY_BYTES'),
@@ -111,7 +135,9 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       ...from(
         CLIENT_TRANSPORT,
         'RemoteDaemonHealth',
+        'RemoteDaemonHealthLink',
         'readHealthPayload',
+        'readHealthLink',
         'readDaemonHttpHealth',
         'readRemoteDaemonHealth',
       ),
@@ -133,7 +159,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
     adrBullet: 'Authentication semantics required to authorize RPC, upload, or artifact requests.',
     declarations: [
       ...from(
-        HTTP_CONTRACT,
+        DAEMON_HTTP,
         'buildDaemonHttpAuthHeaders',
         'DAEMON_HTTP_TENANT_HEADER',
         'buildDaemonHttpTenantHeaders',
@@ -153,9 +179,16 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       ...from(ARTIFACT_HTTP, 'DownloadableArtifactHttpAuthorizer'),
       // The diagnostics route's authorization: the same token/auth-hook gate as
       // the artifact routes, plus the tenant rule that decides which sessions a
-      // caller may read a record from (#1801).
+      // caller may read a record from (#1801). `isTenantAddressableSessionName`
+      // is that rule; the namespace it takes says whether the caller's sessions
+      // were partitioned at all, which is what the naming side keys off.
       ...from(REQUEST_DIAGNOSTICS_HTTP, 'RequestDiagnosticsHttpAuthorizer'),
-      ...from('src/daemon/session-tenant-scope.ts', 'isTenantOwnedSessionName'),
+      ...from(
+        SESSION_TENANT_SCOPE,
+        'TenantSessionNamespace',
+        'isTenantOwnedSessionName',
+        'isTenantAddressableSessionName',
+      ),
     ],
   },
   {
@@ -172,6 +205,8 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'DaemonRequest',
         'DaemonRequestMeta',
         'SessionRuntimeHints',
+        'SESSION_RUNTIME_PLATFORMS',
+        'SessionRuntimePlatform',
         'daemonRuntimeSchema',
         'DaemonInstallSource',
         'DAEMON_LOCK_POLICIES',
@@ -190,7 +225,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       // `flags`/`input` bags, and ADR 0006 calls new flags additive.
       ...from('src/commands/cli-grammar/types.ts', 'DaemonCommandRequest'),
       // The lease method vocabulary the client and daemon must agree on.
-      ...from('src/core/lease-scope.ts', 'LeaseRpcCommand'),
+      ...from('packages/contracts/src/lease-scope.ts', 'LeaseRpcCommand'),
       // Producer side: the method vocabulary a released client sends, and the
       // projections that turn each method's params into a DaemonRequest.
       ...from(
@@ -237,6 +272,8 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       ...from(
         KERNEL_ERRORS,
         'DaemonError',
+        'ErrorWireDetails',
+        'DispatchDisclosure',
         'DiagnosticsRecordRef',
         'ErrorCause',
         'readDiagnosticsRecordRef',
@@ -384,6 +421,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'materializeRemoteArtifacts',
         'resolveMaterializedArtifactPath',
       ),
+      ...from(ARTIFACT_DOWNLOAD, 'RemoteArtifactDownload', 'downloadRemoteArtifactFromUrl'),
     ],
   },
 ];

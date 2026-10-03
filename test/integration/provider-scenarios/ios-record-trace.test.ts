@@ -2,6 +2,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
+import {
+  collectedRecordingPath,
+  nativeRecordingPath,
+} from '@agent-device/capture-kit/recording-stop-sequence';
+import { runCmdBackground } from '@agent-device/host-kit/command';
 import type { AppleSimulatorScreenRecordingTransport } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
 import {
   assertFlatToolCallStartsWith,
@@ -60,11 +65,13 @@ test('generic scoped iOS physical runner recording fails closed without local fa
   );
 });
 
-test('Provider-backed integration iOS simulator recording flow uses the focused Apple transport', async () => {
+test('iOS simulator recording reports host contention and recovers through the focused Apple transport', async () => {
   await withProviderScenarioTempDir(
     'agent-device-provider-scenario-ios-sim-record-',
     async (tmpDir) => {
       const recordingPath = path.join(tmpDir, 'sim-recording.mp4');
+      const recorderPath = nativeRecordingPath(recordingPath);
+      const collectedPath = collectedRecordingPath(recordingPath);
       const runnerTranscript = createProviderTranscript([]);
       const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
         runnerTranscript,
@@ -83,6 +90,16 @@ test('Provider-backed integration iOS simulator recording flow uses the focused 
         start: ({ device, outputPath }) => {
           assert.equal(device.id, PROVIDER_SCENARIO_IOS_SIMULATOR.id);
           recordingStarts.push(outputPath);
+          if (recordingStarts.length === 1) {
+            return runCmdBackground(
+              process.execPath,
+              [
+                '-e',
+                'process.stderr.write("Host recording is already in progress"); process.exit(16)',
+              ],
+              { allowFailure: true },
+            );
+          }
           return createProviderIosSimulatorRecordingProcess(outputPath, (signal) => {
             recordingSignals.push(signal);
           });
@@ -107,6 +124,21 @@ test('Provider-backed integration iOS simulator recording flow uses the focused 
         });
         assert.equal(open.statusCode, 200, JSON.stringify(open.json));
         assert.equal(open.json?.error, undefined, JSON.stringify(open.json));
+
+        const busyStart = await daemon.callCommand('record', ['start', recordingPath], {
+          hideTouches: true,
+        });
+        assert.equal(busyStart.json?.error?.data?.code, 'DEVICE_IN_USE');
+        assert.equal(busyStart.json?.error?.data?.retriable, false);
+        assert.equal(
+          busyStart.json?.error?.data?.details?.reason,
+          'apple_simulator_recording_busy',
+        );
+        assert.equal(busyStart.json?.error?.data?.details?.exitCode, 16);
+        assert.match(busyStart.json?.error?.data?.hint ?? '', /record stop/);
+        assert.match(busyStart.json?.error?.data?.hint ?? '', /CoreSimulator/);
+        assert.equal(daemon.session()?.screenRecording, undefined);
+        assert.equal(fs.existsSync(recordingPath), false);
 
         const recordStart = await daemon.callCommand(
           'record',
@@ -143,7 +175,12 @@ test('Provider-backed integration iOS simulator recording flow uses the focused 
         assert.equal(fs.existsSync(ownedProcessRecordPath), false);
 
         runnerTranscript.assertComplete();
-        assert.deepEqual(recordingStarts, [recordingPath]);
+        // The recorder is told its own path, and the caller's path arrives from a copy of it
+        // (ADR 0024 2.3), so neither sibling is left behind for the next run to wonder about.
+        assert.deepEqual(recordingStarts, [recorderPath, recorderPath]);
+        assert.equal(fs.existsSync(recordingPath), true);
+        assert.equal(fs.existsSync(recorderPath), false);
+        assert.equal(fs.existsSync(collectedPath), false);
         assert.deepEqual(recordingSignals, ['SIGINT']);
         assertFlatToolCallStartsWith(appleTool.calls, [
           'simctl',
@@ -164,7 +201,7 @@ test('Provider-backed integration iOS simulator recording flow uses the focused 
   );
 });
 
-function writeJsonOutputIfRequested(args: string[]): void {
+function writeJsonOutputIfRequested(args: readonly string[]): void {
   const jsonOutputIndex = args.indexOf('--json-output');
   const jsonPath = jsonOutputIndex >= 0 ? args[jsonOutputIndex + 1] : undefined;
   if (!jsonPath) return;

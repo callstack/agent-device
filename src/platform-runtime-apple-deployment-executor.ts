@@ -11,16 +11,16 @@ export function createAppleAppDeploymentExecutor(): AppleAppDeploymentExecutor {
   return Object.freeze({
     withInvalidatedAppResolutionCache: async (device, operation) => {
       const { invalidateIosAppResolutionCache } =
-        await import('./platforms/apple/core/app-resolution.ts');
+        await import('@agent-device/platform-apple/app-resolution');
       return await invalidateIosAppResolutionCache(device, operation);
     },
     prepareArtifact: async (input: MaterializeAppSourceInput, options) => {
       const { prepareIosInstallArtifact } =
-        await import('./platforms/apple/core/install-artifact.ts');
+        await import('@agent-device/platform-apple/install-artifact');
       return await prepareIosInstallArtifact(input.source, options);
     },
     resolveAppBundleId: async (device, app) => {
-      const { resolveIosApp } = await import('./platforms/apple/core/app-resolution.ts');
+      const { resolveIosApp } = await import('@agent-device/platform-apple/app-resolution');
       return await resolveIosApp(device, app);
     },
   });

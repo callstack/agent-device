@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { COMMAND_OWNER_FILES } from '../src/core/command-descriptor/owner-files.ts';
+import { COMMAND_OWNER_FILES } from '@agent-device/command-registry/owner-files';
 import { getDaemonRouteOwnerFiles } from '../src/daemon/route-owner-files.ts';
 import { walkFiles } from './lib/walk-files.ts';
 

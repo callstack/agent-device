@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 
-vi.mock('../utils/exec.ts', () => ({
+vi.mock('@agent-device/host-kit/command', () => ({
   runCmdStreaming: vi.fn(),
 }));
 
@@ -11,7 +11,7 @@ vi.mock('../client/client-react-devtools-companion.ts', () => ({
   stopReactDevtoolsCompanion: vi.fn(),
 }));
 
-import { runCmdStreaming } from '../utils/exec.ts';
+import { runCmdStreaming } from '@agent-device/host-kit/command';
 import {
   ensureReactDevtoolsCompanion,
   stopReactDevtoolsCompanion,
@@ -43,12 +43,12 @@ afterEach(() => {
 });
 
 test('react-devtools passthrough pins agent-react-devtools package version', () => {
-  assert.equal(AGENT_REACT_DEVTOOLS_PACKAGE, 'agent-react-devtools@0.4.0');
+  assert.equal(AGENT_REACT_DEVTOOLS_PACKAGE, 'agent-react-devtools@0.5.0');
   assert.deepEqual(buildReactDevtoolsNpmExecArgs(['get', 'tree', '--depth', '3']), [
     'exec',
     '--yes',
     '--package',
-    'agent-react-devtools@0.4.0',
+    'agent-react-devtools@0.5.0',
     '--',
     'agent-react-devtools',
     'get',
@@ -221,7 +221,7 @@ test('react-devtools stop cleans up remote companion', async () => {
     'exec',
     '--yes',
     '--package',
-    'agent-react-devtools@0.4.0',
+    'agent-react-devtools@0.5.0',
     '--',
     'agent-react-devtools',
     'stop',

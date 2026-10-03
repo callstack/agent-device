@@ -1,0 +1,513 @@
+import type { ResponseLevel } from '@agent-device/kernel/contracts';
+import { redactDiagnosticData } from '@agent-device/kernel/redaction';
+import type {
+  ReplayDivergence,
+  ReplayDivergenceResume,
+  ReplayDivergenceScreen,
+} from '@agent-device/contracts/divergence';
+
+/**
+ * The `resume` record carried by a divergence-shaped payload, or `undefined`
+ * when the payload does not carry a contract-shaped one.
+ *
+ * Returns the LIVE record rather than a copy: the daemon stamps
+ * `repairSessionHeld` onto it in place (`session-replay-coordinator.ts`)
+ * through this same reader. That is what lets the client key its keep-alive
+ * on the narrowed record too — a payload this reader rejects cannot be
+ * carrying the R7 liveness signal, because the stamp is only ever written to
+ * a record it accepted.
+ *
+ * Every field the returned type declares is checked, the two optional ones
+ * included: this is the owning interface for the shape, so a payload it
+ * accepts cannot type as `repairSessionHeld: true` while carrying something
+ * else. The narrowing is structural and local, like this module's other
+ * wire readers: the divergence façade is pinned at the modules it evaluates,
+ * and `json.ts` is not otherwise one of them.
+ */
+export function readReplayDivergenceResume(
+  divergence: unknown,
+): ReplayDivergenceResume | undefined {
+  const resume = (divergence as Record<string, unknown> | null | undefined)?.resume as
+    | Record<string, unknown>
+    | undefined;
+  if (typeof resume?.allowed !== 'boolean') return undefined;
+  if (!Number.isInteger(resume.from) || typeof resume.planDigest !== 'string') return undefined;
+  if (!resume.allowed && typeof resume.reason !== 'string') return undefined;
+  if (resume.repairSessionHeld !== undefined && resume.repairSessionHeld !== true) return undefined;
+  if (resume.alternateFrom !== undefined && !Number.isInteger(resume.alternateFrom)) {
+    return undefined;
+  }
+  return resume as ReplayDivergenceResume;
+}
+type BoundedResponseLevel = 'digest' | 'default' | 'full';
+
+export const REPLAY_DIVERGENCE_LEVEL_BYTE_LIMITS: Record<BoundedResponseLevel, number> = {
+  digest: 8 * 1024,
+  default: 24 * 1024,
+  full: 64 * 1024,
+};
+
+export const REPLAY_DIVERGENCE_DEFAULT_REF_LIMIT = 20;
+export const REPLAY_DIVERGENCE_DIGEST_REF_LIMIT = 8;
+export const REPLAY_DIVERGENCE_SUGGESTION_LIMIT = 5;
+// ADR 0012's 256-UTF-8-byte per-field cap; reached only through the field
+// sanitizers below so it is enforced in one place.
+const REPLAY_DIVERGENCE_FIELD_BYTE_LIMIT = 256;
+
+function levelForResponseLevel(level: ResponseLevel | undefined): BoundedResponseLevel {
+  return level === 'digest' || level === 'full' ? level : 'default';
+}
+
+/**
+ * UTF-8 byte-accurate truncation with a marker, never splitting a multi-byte
+ * codepoint. Used for every individual string field the ADR caps at 256 bytes
+ * (labels, ids, selectors, source paths, mismatch values, cause messages,
+ * hints).
+ */
+export function truncateUtf8Field(
+  value: string,
+  limit = REPLAY_DIVERGENCE_FIELD_BYTE_LIMIT,
+): string {
+  const bytes = Buffer.from(value, 'utf8');
+  if (bytes.length <= limit) return value;
+  const marker = '…<truncated>';
+  const markerBytes = Buffer.byteLength(marker, 'utf8');
+  const budget = Math.max(0, limit - markerBytes);
+  let sliceEnd = budget;
+  // Back off until we are not mid-codepoint (UTF-8 continuation bytes are 10xxxxxx).
+  while (sliceEnd > 0 && (bytes[sliceEnd]! & 0xc0) === 0x80) sliceEnd -= 1;
+  return `${bytes.subarray(0, sliceEnd).toString('utf8')}${marker}`;
+}
+
+/** Field sanitizer in the ADR-mandated order: redact first, then truncate. */
+export function sanitizeReplayDivergenceField(
+  value: string,
+  limit = REPLAY_DIVERGENCE_FIELD_BYTE_LIMIT,
+): string {
+  return truncateUtf8Field(redactDiagnosticData(value), limit);
+}
+
+export type ReplayVarScrubEntry = { name: string; value: string };
+
+/**
+ * Categorical expanded-variable exclusion (ADR 0012): every occurrence of a
+ * replay-scope value is replaced with a `<var:NAME>` marker, whatever the
+ * value looks like — this is not shape-based secret redaction.
+ */
+export function scrubReplayVarValues(
+  value: string,
+  entries: readonly ReplayVarScrubEntry[],
+): string {
+  let output = value;
+  for (const entry of entries) {
+    if (!entry.value) continue;
+    output = output.split(entry.value).join(`<var:${entry.name}>`);
+  }
+  return output;
+}
+
+/** Per-report field sanitizer: variable scrub, then redact, then truncate. */
+export function createReplayDivergenceSanitizer(
+  scrubVars: readonly ReplayVarScrubEntry[],
+): (value: string, limit?: number) => string {
+  return (value, limit) =>
+    sanitizeReplayDivergenceField(scrubReplayVarValues(value, scrubVars), limit);
+}
+
+function boundScreenRefs(screen: ReplayDivergenceScreen, limit: number): ReplayDivergenceScreen {
+  if (screen.state !== 'available' || screen.refs.length <= limit) return screen;
+  return { ...screen, refs: screen.refs.slice(0, limit), truncated: true };
+}
+
+/**
+ * Applies one level's array caps only (ref count, suggestion presence/count).
+ * Field-level 256-byte truncation is expected to already be applied by the
+ * caller at construction time — this function only bounds array shape.
+ */
+export function applyReplayDivergenceLevelCaps(
+  divergence: ReplayDivergence,
+  level: ResponseLevel | undefined,
+): ReplayDivergence {
+  const bounded = levelForResponseLevel(level);
+  const refLimit =
+    bounded === 'digest' ? REPLAY_DIVERGENCE_DIGEST_REF_LIMIT : REPLAY_DIVERGENCE_DEFAULT_REF_LIMIT;
+  const screen = boundScreenRefs(divergence.screen, refLimit);
+  const suggestions =
+    bounded === 'digest' ? [] : divergence.suggestions.slice(0, REPLAY_DIVERGENCE_SUGGESTION_LIMIT);
+  return { ...divergence, screen, suggestions };
+}
+
+export function measureReplayDivergenceBytes(divergence: ReplayDivergence): number {
+  return Buffer.byteLength(JSON.stringify(divergence), 'utf8');
+}
+
+/**
+ * Bounds the divergence to the response level's byte ceiling. On overflow,
+ * the fuller detail goes to a session-scoped artifact and a minimal
+ * divergence is returned; the cause is never dropped, only the screen digest
+ * and suggestions.
+ */
+export function boundReplayDivergence(params: {
+  divergence: ReplayDivergence;
+  level: ResponseLevel | undefined;
+  writeOverflowArtifact: (
+    fullDivergence: ReplayDivergence,
+  ) => { artifactPath: string } | { artifactUnavailable: true };
+}): ReplayDivergence {
+  const { divergence, level, writeOverflowArtifact } = params;
+  const bounded = levelForResponseLevel(level);
+  const limit = REPLAY_DIVERGENCE_LEVEL_BYTE_LIMITS[bounded];
+  const capped = applyReplayDivergenceLevelCaps(divergence, level);
+  const cappedBytes = measureReplayDivergenceBytes(capped);
+  if (cappedBytes <= limit) return capped;
+
+  const omittedBytes = cappedBytes - limit;
+  const full = applyReplayDivergenceLevelCaps(divergence, 'full');
+  const artifactResult = writeOverflowArtifact(full);
+  const minimal = buildMinimalReplayDivergence(capped);
+  return 'artifactPath' in artifactResult
+    ? { ...minimal, overflow: { omittedBytes, artifactPath: artifactResult.artifactPath } }
+    : { ...minimal, artifactUnavailable: true };
+}
+
+// Owns the "the minimal fallback always fits the budget" guarantee, so it
+// sanitizes every field itself rather than trusting the caller did.
+function buildMinimalReplayDivergence(capped: ReplayDivergence): ReplayDivergence {
+  return {
+    version: capped.version,
+    kind: capped.kind,
+    step: {
+      index: capped.step.index,
+      source: {
+        path: sanitizeReplayDivergenceField(capped.step.source.path),
+        line: capped.step.source.line,
+      },
+    },
+    action: sanitizeReplayDivergenceField(capped.action),
+    cause: {
+      code: capped.cause.code,
+      message: sanitizeReplayDivergenceField(capped.cause.message),
+      ...(capped.cause.hint ? { hint: sanitizeReplayDivergenceField(capped.cause.hint) } : {}),
+    },
+    screen: {
+      state: 'unavailable',
+      reason: 'omitted-for-size',
+      hint:
+        'The screen digest and suggestions were omitted to stay within the response byte budget. ' +
+        'See overflow.artifactPath (or retry at --level full) for the complete report.',
+    },
+    suggestions: [],
+    suggestionCount: capped.suggestionCount,
+    resume: capped.resume,
+    repairHint: capped.repairHint,
+    // targetBinding is the actual repair value of a target-binding
+    // divergence and is small relative to a full screen digest — keep it on
+    // the minimal fallback rather than dropping it with the screen/suggestions.
+    ...(capped.targetBinding ? { targetBinding: capped.targetBinding } : {}),
+  };
+}
+
+// Compact human-readable divergence report for text surfaces (CLI, MCP text,
+// `test` failures). Repair data (step location, screen availability, ranked
+// suggestions, overflow pointer) that the --json/structuredContent paths
+// carry must not be dropped on a text path. Reads the loose `details` bag so
+// every surface (which holds an error `details` record) can share it.
+export function formatReplayDivergenceReport(
+  details: Record<string, unknown> | undefined,
+): string | null {
+  const divergence = details?.divergence;
+  if (!divergence || typeof divergence !== 'object') return null;
+  const record = divergence as Record<string, unknown>;
+  const lines = [
+    ...divergenceStepLine(record.step),
+    ...divergenceTargetBindingLines(record.kind, record.targetBinding),
+    ...divergenceRepairHintLine(record.repairHint, record.resume),
+    ...divergenceScreenLine(record.screen),
+    ...divergenceSuggestionLines(record.suggestions, record.suggestionCount),
+    ...divergenceOverflowLine(record.overflow, record.artifactUnavailable),
+  ];
+  return lines.length > 0 ? lines.join('\n') : null;
+}
+
+/**
+ * ADR 0012 decision 6, extended per #1262: the repair-routing hint rendered
+ * on every text surface (CLI, MCP text, `test` failures) — the same field
+ * that rides `structuredContent`/JSON, so a text-only caller still learns
+ * which repair sub-flow applies. `record-and-heal`/`state-repair` guidance
+ * embeds the CONCRETE `resume.from`/`planDigest` values (computed by
+ * `buildReplayDivergenceResume`, decision 6 R2) when `resume.allowed` is
+ * true, so a text-only or JSON/MCP-first caller reads the identical next
+ * command instead of deriving it. `caution`/`manual` are genuinely dual-path
+ * (the daemon cannot know at divergence time which repair applies), so their
+ * guidance embeds `--from resume.from` (`N`, unshifted — a `--no-record`
+ * app-state fix) whenever `resume.allowed` is true, AND `--from
+ * resume.alternateFrom` (`N + 1`, a record-and-heal-shaped recorded corrective
+ * action) IFF the wire carries `alternateFrom` — the daemon's own verdict that
+ * a `--from N + 1` request would be accepted (`computeReplayResumeAlternateFrom`,
+ * `session-replay-resume.ts`). The renderer gates the second command on that
+ * field's PRESENCE and never re-derives resumability, so text and the
+ * structured wire never disagree on the advertised next command. When
+ * `resume.allowed` is false, a resume command is never rendered for any hint,
+ * and the reported `reason` is surfaced instead.
+ *
+ * #1271 stage 2 (ADR 0012 amendment): whenever `resume.repairSessionHeld` is
+ * `true` (this divergence is from a repair-armed `--save-script` replay),
+ * every hint's guidance also appends
+ * `REPAIR_DIAGNOSTICS_DEFAULT_EXCLUSION_CLAUSE` — read-only diagnostics used
+ * to locate the repair target (`snapshot -i`, `get attrs`, `find`, `is`) are
+ * excluded from the healed script by default (no `--no-record` needed), and
+ * an agent whose CORRECTIVE action is itself a read must pass `--record` on
+ * that one command so it lands in the heal. See `buildRepairHintGuidance`.
+ */
+function divergenceRepairHintLine(repairHint: unknown, resume: unknown): string[] {
+  if (typeof repairHint !== 'string') return [];
+  const guidance = buildRepairHintGuidance(repairHint, resume);
+  return [`Repair hint: ${repairHint}${guidance ? ` — ${guidance}` : ''}`];
+}
+
+type ResumeGuidance =
+  | { allowed: true; from: number; planDigest: string; alternateFrom: number | undefined }
+  | { allowed: false; reason: string | undefined };
+
+/** Reads the parts of `resume` the repair-hint guidance needs; `undefined` when the shape is unreadable. */
+function readResumeGuidance(resume: unknown): ResumeGuidance | undefined {
+  const record = resume as Record<string, unknown> | undefined;
+  if (!record || typeof record.allowed !== 'boolean') return undefined;
+  if (!record.allowed) {
+    return {
+      allowed: false,
+      reason: typeof record.reason === 'string' ? record.reason : undefined,
+    };
+  }
+  const { from, planDigest, alternateFrom } = record;
+  if (typeof from !== 'number' || typeof planDigest !== 'string' || planDigest.length === 0) {
+    return undefined;
+  }
+  return {
+    allowed: true,
+    from,
+    planDigest,
+    // Rendered VERBATIM from the wire; the daemon already proved a `--from
+    // alternateFrom` request would be accepted (#1262). The renderer must NOT
+    // re-derive it — that is precisely the bug the wire field fixed.
+    alternateFrom: typeof alternateFrom === 'number' ? alternateFrom : undefined,
+  };
+}
+
+function formatResumeCommand(from: number, planDigest: string): string {
+  return `replay --from ${from} --plan-digest ${planDigest}`;
+}
+
+/**
+ * #1271 stage 2 (ADR 0012 amendment; supersedes stage 1's interim
+ * "use --no-record" guidance now that the daemon enforces default
+ * exclusion itself — `isExcludedRepairSegmentObservation`,
+ * `session-action-recorder.ts`): read-only diagnostics an agent runs to
+ * LOCATE the repair target (`snapshot -i`, `get attrs`, `find`, `is`) are,
+ * by default, excluded from the healed script — the wave-3 E3 experiment's
+ * 0/4 clean-heal rate motivated the exclusion, but a blanket "exclude every
+ * read" would silently drop a diverged step whose OWN correction is itself
+ * a read (the E3 case). `--record` is the opt-in that forces exactly that
+ * one action through. Distinct from the existing `--no-record` mentions
+ * above (`state-repair`'s "fix app state with --no-record actions", and
+ * `buildDualPathRepairHintGuidance`'s state-fix clause), which are about
+ * correcting APP STATE via a MUTATING action, not about inspection reads —
+ * both clauses can legitimately apply to the same divergence.
+ */
+const REPAIR_DIAGNOSTICS_DEFAULT_EXCLUSION_CLAUSE =
+  'Read-only inspection while armed (snapshot -i, get attrs, find, is) is excluded from the healed script by default — no --no-record needed. If the step you are repairing is itself a read, add --record to that command so it lands in the heal.';
+
+/**
+ * Gated on `resume.repairSessionHeld === true` (decision 6, R7 C1): that is
+ * the ONLY signal that this divergence came from a repair-armed
+ * (`--save-script`) replay, where recorded diagnostics can actually pollute a
+ * healed script. It is absent (never `false`) on a plain non-repair
+ * divergence, so the clause must never render there — it would be pure noise.
+ */
+function isRepairSessionHeld(resume: unknown): boolean {
+  const record = resume as Record<string, unknown> | undefined;
+  return record?.repairSessionHeld === true;
+}
+
+function buildRepairHintGuidance(repairHint: string, resume: unknown): string | undefined {
+  const guidance = readResumeGuidance(resume);
+  const core = buildRepairHintGuidanceCore(repairHint, guidance);
+  if (core === undefined) return undefined;
+  return isRepairSessionHeld(resume)
+    ? `${core} ${REPAIR_DIAGNOSTICS_DEFAULT_EXCLUSION_CLAUSE}`
+    : core;
+}
+
+function buildRepairHintGuidanceCore(
+  repairHint: string,
+  guidance: ResumeGuidance | undefined,
+): string | undefined {
+  switch (repairHint) {
+    case 'record-and-heal':
+      return guidance?.allowed
+        ? `press the correct control via a blessed @ref from screen.refs (recorded), then ${formatResumeCommand(guidance.from, guidance.planDigest)}.`
+        : `press the correct control via a blessed @ref from screen.refs (recorded). ${resumeUnavailableSentence(guidance)}`;
+    case 'state-repair':
+      return guidance?.allowed
+        ? `fix app state with --no-record actions, then ${formatResumeCommand(guidance.from, guidance.planDigest)} to re-run it.`
+        : `fix app state with --no-record actions. ${resumeUnavailableSentence(guidance)}`;
+    case 'caution':
+      return buildDualPathRepairHintGuidance({
+        lead: 'something already matches the recorded selector; a blind re-press may repeat the mistake.',
+        guidance,
+      });
+    case 'manual':
+      return buildDualPathRepairHintGuidance({
+        lead: 'no safe automated repair could be proven; inspect the screen and repair by hand.',
+        guidance,
+      });
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * `caution`/`manual` guidance (#1262): the daemon cannot know at divergence
+ * time which of two repairs applies. Always offers `--from N` (an app-state
+ * fix via `--no-record` actions, then re-run the unchanged step; `resume.from`
+ * itself, never shifted for these hints — authorized by `resume.allowed`).
+ * ADDITIONALLY offers `--from alternateFrom` (a record-and-heal-shaped
+ * recorded corrective action, resuming PAST the diverged step) IFF the wire
+ * carries `resume.alternateFrom` — the daemon has already proven such a
+ * request would be accepted (`computeReplayResumeAlternateFrom`,
+ * `session-replay-resume.ts`). The renderer gates on the field's PRESENCE and
+ * never re-derives resumability, so it can never advertise a `--from` the
+ * daemon would then refuse (the parity bug #1262's review flagged: `N + 1` is
+ * unsafe exactly when the diverged step is a `runScript`/control-flow action,
+ * which `resume.allowed` for `N` does not detect). When the alternate is
+ * absent, only the state-fix command is shown. Neither command is rendered
+ * when `resume.allowed` is false — `N` itself is not resumable, so its
+ * alternate is moot.
+ */
+function buildDualPathRepairHintGuidance(params: {
+  lead: string;
+  guidance: ResumeGuidance | undefined;
+}): string {
+  const { lead, guidance } = params;
+  if (!guidance?.allowed) return `${lead} ${resumeUnavailableSentence(guidance)}`;
+  const stateFixClause = `if you fixed app state with --no-record actions: ${formatResumeCommand(guidance.from, guidance.planDigest)}`;
+  if (guidance.alternateFrom === undefined) return `${lead} ${stateFixClause}.`;
+  const recordedActionClause = `if you performed the step's intent as a recorded action: ${formatResumeCommand(guidance.alternateFrom, guidance.planDigest)}`;
+  return `${lead} ${stateFixClause}; ${recordedActionClause}.`;
+}
+
+/** Never renders a `--from` command — only reached when `resume.allowed` is false (or unreadable). */
+function resumeUnavailableSentence(guidance: ResumeGuidance | undefined): string {
+  if (guidance && !guidance.allowed && guidance.reason) {
+    return `This step cannot currently be resumed automatically (${guidance.reason}) — run a fresh full replay instead.`;
+  }
+  return 'This step cannot currently be resumed automatically — run a fresh full replay instead.';
+}
+
+function divergenceTargetBindingLines(kind: unknown, targetBinding: unknown): string[] {
+  if (typeof kind !== 'string' || kind === 'action-failure') return [];
+  const record = targetBinding as Record<string, unknown> | undefined;
+  if (!record) return [];
+  return [
+    divergenceTargetBindingHeaderLine(kind, record.matchCount),
+    ...divergenceTargetBindingMismatchLines(record.mismatches),
+    ...divergenceTargetBindingCandidateLines(record.candidates),
+  ];
+}
+
+function divergenceTargetBindingHeaderLine(kind: string, matchCount: unknown): string {
+  const suffix = typeof matchCount === 'number' ? ` (matchCount ${matchCount})` : '';
+  return `Target binding: ${kind}${suffix} — recorded target evidence did not verify.`;
+}
+
+function divergenceTargetBindingMismatchLines(mismatches: unknown): string[] {
+  if (!Array.isArray(mismatches) || mismatches.length === 0) return [];
+  return [`  mismatches: ${mismatches.slice(0, 5).join('; ')}`];
+}
+
+function divergenceTargetBindingCandidateLines(candidates: unknown): string[] {
+  if (!Array.isArray(candidates) || candidates.length === 0) return [];
+  return [
+    `  ${candidates.length} candidate(s) shared the recorded identity:`,
+    ...candidates.slice(0, 5).map((candidate) => `    ${divergenceScreenRefLine(candidate)}`),
+  ];
+}
+
+function divergenceStepLine(step: unknown): string[] {
+  const record = step as Record<string, unknown> | undefined;
+  if (typeof record?.index !== 'number') return [];
+  const source = record.source as Record<string, unknown> | undefined;
+  const location =
+    typeof source?.path === 'string' && typeof source.line === 'number'
+      ? ` (${source.path}:${source.line})`
+      : '';
+  return [`Divergence at step ${record.index}${location}`];
+}
+
+// Bound on ref lines in the TEXT report (matches the digest ref cap); the
+// full list rides in the structured payload.
+const TEXT_REPORT_REF_LINE_LIMIT = 8;
+
+function divergenceScreenLine(screen: unknown): string[] {
+  const record = screen as Record<string, unknown> | undefined;
+  if (record?.state === 'available' && Array.isArray(record.refs)) {
+    return availableScreenLines(record.refs, record.refsGeneration);
+  }
+  if (record?.state === 'unavailable') {
+    return [unavailableScreenLine(record)];
+  }
+  return [];
+}
+
+function availableScreenLines(refs: unknown[], refsGeneration: unknown): string[] {
+  const shown = refs.slice(0, TEXT_REPORT_REF_LINE_LIMIT).map(divergenceScreenRefLine);
+  const remaining = refs.length - shown.length;
+  return [
+    `Screen: ${refs.length} actionable ref(s) captured (refsGeneration ${refsGeneration}).`,
+    ...shown,
+    ...(remaining > 0 ? [`  ... ${remaining} more`] : []),
+  ];
+}
+
+function unavailableScreenLine(record: Record<string, unknown>): string {
+  const hint = typeof record.hint === 'string' && record.hint.length > 0 ? ` ${record.hint}` : '';
+  return `Screen: unavailable (${String(record.reason ?? 'unknown')}).${hint}`;
+}
+
+function divergenceScreenRefLine(entry: unknown): string {
+  const ref = entry as Record<string, unknown>;
+  const label = typeof ref.label === 'string' ? ` "${ref.label}"` : '';
+  return `  @${String(ref.ref)} [${String(ref.role)}]${label}`;
+}
+
+function divergenceSuggestionLines(suggestions: unknown, suggestionCount: unknown): string[] {
+  if (Array.isArray(suggestions) && suggestions.length > 0) {
+    return ['Suggestions:', ...suggestions.slice(0, 5).map(divergenceSuggestionLine)];
+  }
+  if (typeof suggestionCount === 'number' && suggestionCount > 0) {
+    return [
+      `Suggestions: ${suggestionCount} available (omitted at this response level; rerun with --json for the full report).`,
+    ];
+  }
+  return [];
+}
+
+function divergenceSuggestionLine(entry: unknown): string {
+  const suggestion = entry as Record<string, unknown>;
+  const label = typeof suggestion.label === 'string' ? ` "${suggestion.label}"` : '';
+  return `  - [${String(suggestion.basis)}]${label} ${String(suggestion.selector)}`;
+}
+
+function divergenceOverflowLine(overflow: unknown, artifactUnavailable: unknown): string[] {
+  if (overflow && typeof overflow === 'object') {
+    return [
+      `Full report written to ${String((overflow as Record<string, unknown>).artifactPath)}.`,
+    ];
+  }
+  if (artifactUnavailable === true) {
+    return [
+      'Full report exceeded the response budget and the overflow artifact could not be written.',
+    ];
+  }
+  return [];
+}

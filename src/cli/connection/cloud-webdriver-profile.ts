@@ -10,7 +10,7 @@ import type { PlatformSelector } from '@agent-device/kernel/device';
 import type { CliFlags } from '@agent-device/contracts/command';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { EnvMap } from '../../utils/env-map.ts';
+import { type EnvMap } from '@agent-device/kernel/source-value';
 import { readCloudDeviceFeatureProfileFields, readMetroProfileFields } from './profile-fields.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';
 import { resolveRequestedLeaseBackend } from '../commands/connection-runtime.ts';

@@ -1,10 +1,12 @@
 import type { CommandRequestResult } from '../../agent-device-client.ts';
 import { runCliCommandWithOutput } from '../../commands/cli-runner.ts';
+import { isParseableOutputCommand } from '../../commands/cli-output.ts';
+import { routeResponseWarnings } from '../../commands/output-common.ts';
 import type { CommandName } from '../../commands/command-metadata.ts';
 import type { CliOutput } from '../../commands/command-contract.ts';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { readCommandMessage } from '../../utils/success-text.ts';
+import { readCommandMessage } from '@agent-device/kernel/success-text';
 import { isNonDefaultResponseLevel } from '@agent-device/kernel/contracts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientBackedCliCommandName } from './client-backed.ts';
@@ -17,23 +19,25 @@ export async function runGenericClientBackedCommand({
   client,
   debug,
   replayTestReporterRuntime,
+  commandProgress,
 }: ClientCommandParams & { command: ClientBackedCliCommandName }): Promise<boolean> {
   const { result, cliOutput } = await runCliCommandWithOutput({
     client,
     command: command as CommandName,
     positionals,
     flags,
+    commandProgress,
   });
   // A non-default responseLevel returns a leveled payload (e.g. the snapshot
   // digest { nodeCount, refs }) that the per-command CLI formatters assume away —
   // they serialize the default shape and drop the digest fields. Emit the leveled
   // payload verbatim instead.
   if (isNonDefaultResponseLevel(flags.responseLevel)) {
-    writeCommandOutput(flags, result, () => JSON.stringify(result, null, 2));
+    await writeCommandOutput(flags, result, () => JSON.stringify(result, null, 2));
     return true;
   }
   if (cliOutput) {
-    writeCliOutput(flags, cliOutput);
+    await writeCliOutput(flags, cliOutput);
   } else {
     const exitCode = await writeGenericCliOutput(command, flags, result, {
       debug,
@@ -46,15 +50,15 @@ export async function runGenericClientBackedCommand({
   return true;
 }
 
-function writeGenericCliOutput(
+async function writeGenericCliOutput(
   command: ClientBackedCliCommandName,
   flags: CliFlags,
   data: CommandRequestResult,
   options: Pick<ClientCommandParams, 'debug' | 'replayTestReporterRuntime'> = {},
-): Promise<number> | number {
+): Promise<number> {
   if (command === 'test') {
     // Lazy: keeps the replay test reporting runtime off every other command's path.
-    return import('../../replay/test/reporting.ts').then(({ renderReplayTestResponse }) =>
+    return import('../replay-test/reporting.ts').then(({ renderReplayTestResponse }) =>
       renderReplayTestResponse({
         suite: data as ReplaySuiteResult,
         debug: options.debug,
@@ -66,17 +70,24 @@ function writeGenericCliOutput(
       }),
     );
   }
-  writeCommandOutput(flags, data, () =>
-    readCommandMessage(data as Record<string, unknown> | undefined),
+  // A command with no formatter still owes the response's warnings: it renders through the same
+  // router, on the stream its descriptor says its caller reads (#2682).
+  await writeCliOutput(
+    flags,
+    routeResponseWarnings(
+      { data, text: readCommandMessage(data as Record<string, unknown> | undefined) },
+      data,
+      isParseableOutputCommand(command as CommandName) ? 'stderr' : 'text',
+    ),
   );
   return 0;
 }
 
-function writeCliOutput(flags: CliFlags, output: CliOutput): void {
+async function writeCliOutput(flags: CliFlags, output: CliOutput): Promise<void> {
   if (!flags.json && output.stderr) {
     process.stderr.write(output.stderr);
   }
-  writeCommandOutput(
+  await writeCommandOutput(
     flags,
     flags.json ? (output.jsonData ?? output.data) : output.data,
     () => output.text,

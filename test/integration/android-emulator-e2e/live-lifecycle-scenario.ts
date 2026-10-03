@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { assertElementText, assertWaitText } from './live-assertions.ts';
 import { ANDROID_TEST_IME_PACKAGE } from './live-form-scenario.ts';
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';

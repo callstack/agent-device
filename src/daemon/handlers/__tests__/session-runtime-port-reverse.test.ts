@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import type { DaemonRequest } from '../../types.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 import { handlePortReverseCommand } from '../session-runtime-port-reverse.ts';
 
 const baseRequest = {

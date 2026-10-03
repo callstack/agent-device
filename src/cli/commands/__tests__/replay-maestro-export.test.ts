@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { parseAllDocuments } from 'yaml';
 import { describe, expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
@@ -8,8 +10,48 @@ import {
 } from '@agent-device/maestro';
 import { parseReplayScriptDetailed, readReplayScriptMetadata } from '@agent-device/ad-script';
 import { projectSelectorExpression } from '@agent-device/selectors';
+import { runCliCapture } from '../../../__tests__/cli-capture.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 describe('exportReplayScriptToMaestro', () => {
+  test.each([
+    ['tel:+15551234567', false],
+    ['tel:+15551234567', true],
+    ['mailto:agent@example.test', false],
+    ['mailto:agent@example.test', true],
+  ] as const)('CLI exports %s with explicit app=%s locally', async (link, withApp) => {
+    const dir = mkdtempForTestSync('agent-device-export-links-');
+    const sourcePath = path.join(dir, 'flow.ad');
+    const outPath = path.join(dir, 'flow.yaml');
+    const open = withApp ? `com.example.app ${link} --relaunch` : link;
+    fs.writeFileSync(sourcePath, `open ${open}\n`);
+
+    const result = await runCliCapture(['replay', 'export', sourcePath, '--json']);
+
+    expect(result.code).toBeNull();
+    expect(result.calls).toEqual([]);
+    expect(result.stderr).toBe('');
+    const output = JSON.parse(result.stdout);
+    expect(output).toEqual({
+      success: true,
+      data: { format: 'maestro', sourcePath, yaml: expect.any(String), warnings: [] },
+    });
+    expect(parseYamlDocs(output.data.yaml)).toEqual(
+      withApp
+        ? [
+            { appId: 'com.example.app' },
+            [{ launchApp: { appId: 'com.example.app', stopApp: true } }, { openLink: link }],
+          ]
+        : [[{ openLink: link }]],
+    );
+    expect(() => inspectMaestroFlow(output.data.yaml, 'flow.yaml')).not.toThrow();
+
+    const written = await runCliCapture(['replay', 'export', sourcePath, '--out', outPath]);
+
+    expect(written).toMatchObject({ code: null, calls: [], stderr: '', stdout: `${outPath}\n` });
+    expect(fs.readFileSync(outPath, 'utf8')).toBe(output.data.yaml);
+  });
+
   test('exports app launch, selectors, input, keyboard, assertions, and screenshots', () => {
     const result = exportReplayScriptToMaestro(`env USER="Ada"
 context platform=ios target=mobile
@@ -45,6 +87,24 @@ screenshot "./artifacts/checkout"
     ]);
   });
 
+  test('exports each app target when a script switches apps and returns', () => {
+    const result = exportReplayScriptToMaestro(`open com.example.shop
+open com.example.auth
+open com.example.shop
+`);
+
+    expect(() => inspectMaestroFlow(result.yaml, 'apps.yaml')).not.toThrow();
+    expect(parseYamlDocs(result.yaml)).toEqual([
+      { appId: 'com.example.shop' },
+      [
+        { launchApp: { appId: 'com.example.shop' } },
+        { launchApp: { appId: 'com.example.auth' } },
+        { launchApp: { appId: 'com.example.shop' } },
+      ],
+    ]);
+    expect(result.warnings).toEqual([]);
+  });
+
   test('exports the empty-fill clear as eraseText, never a vacuous inputText', () => {
     // `fill <target> ""` is the clear-field primitive (#2063); Maestro's `inputText: ""` types
     // nothing, so the recorded clear must become its clear verb.
@@ -54,7 +114,11 @@ fill id="email" ""
 `);
 
     const docs = parseYamlDocs(result.yaml);
-    expect(docs[1]).toEqual(['launchApp', { tapOn: { id: 'email' } }, 'eraseText']);
+    expect(docs[1]).toEqual([
+      { launchApp: { appId: 'com.example.app' } },
+      { tapOn: { id: 'email' } },
+      'eraseText',
+    ]);
     expect(result.warnings).toEqual([
       {
         line: 3,
@@ -75,7 +139,7 @@ wait 500
     expect(parseYamlDocs(result.yaml)).toEqual([
       { appId: 'com.example.app' },
       [
-        'launchApp',
+        { launchApp: { appId: 'com.example.app' } },
         { tapOn: { point: '120,240' } },
         { swipe: { start: '200,700', end: '200,200', duration: 100 } },
         { swipe: { start: '200,700', end: '200,200', duration: 100 } },
@@ -102,7 +166,7 @@ press text="Retry" --hold-ms 1500
     expect(parseYamlDocs(result.yaml)).toEqual([
       { appId: 'com.example.app' },
       [
-        'launchApp',
+        { launchApp: { appId: 'com.example.app' } },
         { longPressOn: { text: 'Last message' } },
         { longPressOn: { id: 'hold-button' } },
         { longPressOn: { text: 'Retry' } },
@@ -144,7 +208,11 @@ press text="Hold" --hold-ms 1000 --count 3 --interval-ms 150
 
     expect(parseYamlDocs(result.yaml)).toEqual([
       { appId: 'com.example.app' },
-      ['launchApp', { doubleTapOn: { id: 'retry' } }, { longPressOn: { text: 'Hold' } }],
+      [
+        { launchApp: { appId: 'com.example.app' } },
+        { doubleTapOn: { id: 'retry' } },
+        { longPressOn: { text: 'Hold' } },
+      ],
     ]);
     expect(result.warnings).toEqual([
       {

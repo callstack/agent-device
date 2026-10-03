@@ -58,6 +58,19 @@ agent-device replay ~/.agent-device/sessions/e2e-2026-02-09T12-00-00-000Z.ad --s
 
   Interior `close` actions still run. The flag is intentionally unavailable to `test` because suite
   attempts own cleanup, and it is rejected for Maestro YAML because that runtime owns its lifecycle.
+- `press`, `click`, and `longpress` steps wait up to 2 seconds for their target to appear before
+  they fail. A step recorded against a screen that was still loading passes on replay once the
+  target shows up. The wait covers only a target that is not on screen yet: a target that is
+  covered, off-screen, or matched by more than one element fails at once, as it does live.
+  A step that waited and then passed shows no trace of the wait in the replay output; run with
+  `--debug` to see it in the diagnostics.
+- When the target never appears, replay stops with `REPLAY_DIVERGENCE`, and
+  `error.details.readiness` says how long the step waited and how many times it looked (`waitedMs`,
+  `polls`, `end`). For a step recorded with a target annotation (the `# agent-device:target-v1`
+  line above it), `error.details.divergence.kind` is `selector-miss` and the step is never sent.
+  For a step without an annotation, `error.details.reason` is `selector_not_found`, as for a live
+  command. If the app shows an empty accessibility tree during that wait, `error.details.reason`
+  is `capture_sparse` instead; take a snapshot to see where the app is.
 
 ## Run Maestro compatibility flows
 
@@ -70,18 +83,19 @@ agent-device test ./maestro-flows --maestro --platform android --artifacts-dir .
 
 Supported subset:
 
-- Flows: `launchApp`; `runFlow` file/inline with platform, visibility, and limited boolean conditions; `onFlowStart`/`onFlowComplete`; `repeat.times` and retry.
+- Flows: `launchApp` (with `clearState`, `permissions`, and Apple-only launch arguments; `permissions` apply after state clearing but before launch, and a `launchApp` without `permissions` touches nothing — there is no silent `all: allow` default); `setPermissions` (mid-flow permission grants, denials, and resets; `all` resolves in the backend — one simctl call on iOS, the declared permissions on Android — with specific entries overriding after it); `runFlow` file/inline with platform, visibility, and limited boolean conditions; `onFlowStart`/`onFlowComplete`; `repeat.times` and retry.
 - Interactions: `tapOn`, `doubleTapOn`, `longPressOn`, `inputText` on the focused element, `eraseText`, `openLink`, `hideKeyboard`, basic `pressKey`, and `back`; selector targets poll until available and support recursive `index`, `childOf`, `above`, `below`, `leftOf`, `rightOf`, `containsChild`, `containsDescendants`, points, and `optional`; outer command labels are metadata, not target selectors.
-- Assertions and navigation: `assertVisible`, `assertNotVisible`, `assertTrue` (literal values and `${VAR}` lookups only; `""`, `"false"`, `"0"`, `"null"`, and `"undefined"` are falsy, everything else is truthy), `extendedWaitUntil`, `scroll`, `scrollUntilVisible`, absolute/percentage/target `swipe`, `takeScreenshot`, `waitForAnimationToEnd`, and `stopApp`.
-- Scripts: ordered `runScript` file/env scripts with `http.post`, `json`, and `output` variables.
+- Assertions and navigation: `assertVisible`, `assertNotVisible`, `assertTrue` (literal values and `${VAR}` lookups only; `""`, `"false"`, `"0"`, `"null"`, and `"undefined"` are falsy, everything else is truthy), `extendedWaitUntil`, `scroll`, `scrollUntilVisible`, absolute/percentage/target `swipe`, `takeScreenshot`, `waitForAnimationToEnd`, `clearState`, and `stopApp`.
+- Scripts: ordered `runScript` file/env scripts with `http.post`, `json`, and `output` variables; `evalScript` inline expressions run flow-scoped JavaScript and write `output.*` leaves for later steps.
 
 Boundaries:
 
-- Runtime: iOS and Android only; `launchApp.clearState` supports Android and iOS simulators, launch arguments are Apple-only, and standalone device utility/state commands are unsupported.
-- Expressions: `when.true` supports boolean literals and `maestro.platform` comparisons; `assertTrue` supports literal values and `${VAR}` lookups only; `repeat.while`, `evalScript`, and broader JavaScript expressions are unsupported.
+- Permissions: every entry is one `settings permission` call, applied in order with `all` first; the step stops at the first entry the selected platform refuses, earlier entries stay applied, and the error names what landed. Android’s only allow level is while-in-use, so `location: inuse` and `location: never` mean `allow` and `deny` there, while `location: always` and `photos: limited` are Apple-only and fail. On iOS, which service a runtime changes is `simctl privacy`’s own verdict: current runtimes refuse a targeted `notifications` change and leave notifications untouched under `all`.
+- Runtime: iOS and Android only; `launchApp.clearState` and standalone `clearState` support Android and iOS simulators, launch arguments are Apple-only, and other standalone device utility/state commands are unsupported.
+- Expressions: `evalScript` is the only command whose payload is evaluated as JavaScript (flow `env` and prior `output` leaves are string-typed); with that exception, fields stay literal or `${VAR}` lookup-only — `assertTrue` supports literals and bare lookups, `repeat.while` is unsupported, and other expression-shaped payloads fail loud.
 - Environment: flow `env` is the default, `AD_VAR_*` overrides it, and CLI `-e KEY=VALUE` wins over both.
 - Failure diagnostics: resolved targets and `runFlow` paths are rendered, while `inputText` payloads remain hidden; do not place secrets in diagnostic identifiers.
-- Trust: `runScript` executes trusted scripts, may make `http.post` network requests, and is not a security sandbox; output keys cannot contain a dot.
+- Trust: `runScript` and `evalScript` execute flow scripts in-process via `node:vm`, which is not a security sandbox; `runScript` may make `http.post` network requests and its output keys cannot contain a dot. `evalScript` is refused outright for a flow accepted over the daemon’s remote HTTP surface, since that context can escape to the host.
 - Errors and tracking: unsupported commands and fields fail with source context when available; open a focused issue only when implementation work is planned.
 - Session takeover: `--keep-session` is a native `.ad` replay option and is rejected for Maestro YAML.
 
@@ -97,7 +111,11 @@ agent-device replay export ./workflows/checkout.ad --out ./maestro/checkout.yaml
 
 `replay export` is a local file transform. It does not start the daemon or contact a device. If `--out` is omitted, the YAML is printed to stdout.
 
-The exporter is intentionally strict. It writes Maestro YAML for compatible flow actions such as app launch, taps, long press, text input, keyboard dismiss/enter, back, text visibility assertions, coordinate swipes, basic scroll, screenshots, and `.ad` `env` directives. Agent-only inspection or maintenance actions such as `snapshot`, `get`, `record`, `trace`, `settings`, and unsupported selector shapes fail with the source line and action instead of being silently dropped. Known semantic differences are reported as warnings; for example, `.ad` `fill` exports as `tapOn` plus `inputText`, which may append text in Maestro rather than replacing existing field contents. Native `.ad` `label=` selectors export as Maestro `text:` selectors and warn because Maestro text matching is broader than label-only matching.
+Each `open <appId>` exports with an explicit `launchApp.appId`, so a flow can switch between apps and return to the original app. The first app remains the flow's default `appId`; relaunch options and app-specific deep links stay attached to their authored targets.
+
+Deep links, including schemes without `//` such as `tel:` and `mailto:`, export as `openLink`. A standalone `open tel:+15551234567` emits only the link command; `open com.example.app mailto:agent@example.test` emits the app launch followed by the link.
+
+The exporter is intentionally strict. It writes Maestro YAML for compatible flow actions such as app launch, taps, long press, text input, keyboard dismiss/enter, back, home, text visibility assertions, coordinate swipes, basic scroll, screenshots, and `.ad` `env` directives. `home` exports as `pressKey: Home`, so flows that visit the home screen and reopen the app can be exported. Agent-only inspection or maintenance actions such as `snapshot`, `get`, `record`, `trace`, `settings`, and unsupported selector shapes fail with the source line and action instead of being silently dropped. Known semantic differences are reported as warnings; for example, `.ad` `fill` exports as `tapOn` plus `inputText`, which may append text in Maestro rather than replacing existing field contents. Native `.ad` `label=` selectors export as Maestro `text:` selectors and warn because Maestro text matching is broader than label-only matching.
 
 ## Run a lightweight `.ad` suite
 
@@ -110,14 +128,18 @@ agent-device test ./workflows --reporter default --reporter junit:./tmp/junit.xm
 ```
 
 - `test` discovers `.ad` files from files, directories, or globs and runs them serially.
+- Quote relative globs to expand them on the caller from its working directory, including when the directory name contains glob characters such as `[` or `{`. A missing file input without glob characters reports an error.
 - `context platform=...` inside each `.ad` file is the target source of truth for suite execution.
 - `--platform` is a filter for suite discovery; files without platform metadata are skipped when a filter is present.
 - `context timeout=...` and `context retries=...` can be declared per script; CLI flags override metadata. Retries are capped at `3`, and duplicate keys in the context header fail fast instead of silently overriding each other.
 - By default, suite artifacts are written under `.agent-device/test-artifacts/<run-id>/...`. Each attempt writes `replay.ad`, `result.txt`, and `replay-timing.ndjson`. Failed attempts also keep copied logs and artifact files when the replay produced them.
+- Copied diagnostic artifacts receive numbered filenames when their names collide with another artifact, a replay source, timing trace, or attempt manifest. `result.txt` lists the retained names in `copiedArtifacts`.
 - `replay-timing.ndjson` records attempt, cleanup, and per-step start/stop events with durations. Upload it from CI even for passing runs when comparing local and CI performance.
 - Timeouts are cooperative: the runner marks the attempt failed at the timeout boundary, then gives the underlying replay a short grace period to stop before session cleanup.
 - The default text reporter streams live progress on stderr while a suite runs, then prints the final summary, failed tests, and passed-on-retry flaky tests. Use `--verbose` to include step traces in completed-test progress output.
+- The default reporter prints a `Warnings:` section after the summary when any test accumulated composable warnings — for example a Maestro step with `optional: true` that was skipped — whether that test passed or failed. A failing `replay` run repeats the warnings it accumulated as `Warning:` lines after the error. `--json` carries the same strings in each test result's `warnings` array.
 - `--reporter` is repeatable. Built-ins are `default` for the console summary and `junit:<path>` for JUnit XML. Passing any explicit reporter list replaces the implicit default reporter, so include `--reporter default` when you also want terminal output. `--report-junit <path>` remains a compatibility alias for `--reporter junit:<path>`.
+- JUnit reports preserve legal Unicode and whitespace, and replace characters forbidden by XML 1.0 (such as terminal ESC or NUL) with `U+FFFD` (`�`) so CI parsers can read the report. JSON and other reporters retain the original suite values.
 - When `--fail-fast` and retries are both set, the current test still consumes its retries before the suite stops.
 
 ### Custom test reporters
@@ -204,7 +226,7 @@ export default createReporter;
 
 The CLI loads reporter modules with Node dynamic `import()`. Use `.mjs` or `.js` files at runtime; for TypeScript, compile the reporter to JavaScript before passing it to `--reporter`. Loading `.ts` files directly depends on Node's type-stripping behavior and is not part of the supported reporter contract.
 
-Live reporter hooks are semantic: `onSuiteStart`, `onTestStart`, `onTestStep`, and `onTestResult` run while the daemon request is active; generic command progress frames are not exposed to test reporters. These live hooks are synchronous — they run from the progress stream as events arrive and are not awaited, so keep their work synchronous and defer anything async to `onSuiteEnd`, which the CLI awaits before exiting. `onSuiteEnd` receives the final suite result. `getExitCode` can only raise the suite exit code, never lower it: the highest reporter-provided code wins and failed tests still exit with `1` when no reporter raises it further, so a reporter cannot mask a failing suite.
+Live reporter hooks are semantic: `onSuiteStart`, `onTestStart`, `onTestStep`, and `onTestResult` run while the daemon request is active; generic command progress frames are not exposed to test reporters. These live hooks are synchronous — they run from the progress stream as events arrive and are not awaited, so keep their work synchronous and defer anything async to `onSuiteEnd`, which the CLI awaits before exiting. `onSuiteEnd` receives the final suite result. `getExitCode` can only raise the suite exit code, never lower it: the highest reporter-provided code wins and failed tests still exit with `1` when no reporter raises it further, so a reporter cannot mask a failing suite. Return an integer from `0` to `255`, or `undefined` to leave the exit code unchanged. Other values fail with `INVALID_ARGS`; in particular, codes such as `256` are rejected before they can wrap to a successful process exit.
 
 ## Parametrise `.ad` scripts
 
@@ -375,5 +397,12 @@ Passing `--plan-digest` that no longer matches the current script — because yo
   - Leave the replay plan unchanged, repair app state so the reported failed step can be retried, then use its `--from`/`--plan-digest`. Resume starts at `--from`; it does not skip that step.
 - Replay file parse error:
   - Validate quoting in `.ad` lines (unclosed quotes are rejected).
+- A `press` or `click` step fails because its target was not found, but the element is on the
+  screenshot:
+  - A `selector-miss` divergence, or `error.details.readiness.end: expired`, means the element was
+    not in the accessibility tree for the whole 2-second wait: the selector is wrong for this
+    build, or the element is not exposed to accessibility. `readiness.end: sparse` means the app
+    showed an empty tree: the screen was mid-transition or the app had left. Add a `wait` step for
+    a landmark on the new screen before the press.
 - Maestro compatibility flow fails on unsupported syntax:
   - Check [ADR 0015](https://github.com/callstack/agent-device/blob/main/docs/adr/0015-direct-maestro-engine.md). If the missing feature matters to your suite, open a focused issue with a small flow snippet.

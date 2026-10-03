@@ -45,9 +45,9 @@ test('snapshot backend conformance rejects every promised control invariant', ()
     /must have a non-sparse quality verdict/,
   );
   expectFailure(
-    'recovered/truncated mismatch',
+    'truncated fixture capture',
     { ...base, truncated: true },
-    /quality\/truncation/,
+    /reported a truncated capture/,
   );
   expectFailure('minimum node count', { ...base, nodes: base.nodes.slice(0, 2) }, /too few nodes/);
   expectFailure(

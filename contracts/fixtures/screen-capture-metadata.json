@@ -1,0 +1,24 @@
+{
+  "comment": "Cross-language golden table for the display facts one Apple runner capture reports about the image it encoded (#2728). The vitest twin is packages/contracts/src/screen-capture-contract.test.ts and the Swift twin is UnitTests/RunnerTests+AppScreenCaptureTests.swift, which decodes and re-encodes every capture through the production ScreenshotMetadataPayload — so a renamed or dropped fact fails both lanes. This table deliberately records no field list: the Swift struct and the TypeScript reader are the only declarations of the shape. Add a measured capture here, never to one suite.",
+  "key": "screenshotMetadata",
+  "captures": [
+    {
+      "name": "Open Duo, resolved inner panel LCD-1: the window is 951x669 pt on display 3 and the upright encoding is one pixel per axis under the 2853x2007 CoreDevice calls the panel",
+      "metadata": {
+        "displayID": 3,
+        "pixelWidth": 2852,
+        "pixelHeight": 2006,
+        "pixelsPerPoint": 3
+      }
+    },
+    {
+      "name": "Closed Duo, outer panel LCD: the same command following the app onto the other panel, reported by the window that moved with it",
+      "metadata": {
+        "displayID": 1,
+        "pixelWidth": 1398,
+        "pixelHeight": 2034,
+        "pixelsPerPoint": 3
+      }
+    }
+  ]
+}

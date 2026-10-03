@@ -7,11 +7,11 @@ import type {
   ResolvedTarget,
 } from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
-import { SELECTOR_PIPELINE_POLICIES } from '../../../core/selector-pipeline-policy.ts';
+import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { Point } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { isFillableType } from '@agent-device/contracts/snapshot';
-import { attachResolvedInteractionTarget } from '../../../contracts/interaction-outcome.ts';
+import { attachResolvedInteractionTarget } from '../../../core/interaction-outcome.ts';
 import { toBackendContext } from '../../runtime-common.ts';
 import { toBackendResult, type RuntimeCommand } from '../../runtime-types.ts';
 import {
@@ -19,14 +19,11 @@ import {
   planPostActionObservation,
   type PostActionObservationOptions,
 } from './post-action-observation.ts';
-import {
-  dispatchNativeRefInteraction,
-  resolveInteractionTarget,
-  type ExpectedResolvedTarget,
-  type InteractionTarget,
-} from './resolution.ts';
+import { resolveInteractionTarget, type InteractionTarget } from './resolution.ts';
+import { dispatchNativeRefInteraction } from './native-ref-interaction.ts';
+import type { ExpectedResolvedTarget } from './interaction-resolution-request.ts';
 
-export { focusCommand, hoverCommand, longPressCommand, scrollCommand } from './gestures.ts';
+export { focusCommand, hoverCommand, longPressCommand } from './gestures.ts';
 export type {
   FocusCommandOptions,
   FocusCommandResult,
@@ -34,8 +31,6 @@ export type {
   HoverCommandResult,
   LongPressCommandOptions,
   LongPressCommandResult,
-  ScrollCommandOptions,
-  ScrollCommandResult,
 } from './gestures.ts';
 export type { InteractionTarget } from './resolution.ts';
 
@@ -43,6 +38,11 @@ export type PressCommandOptions = CommandContext &
   RepeatedInput & {
     target: InteractionTarget;
     button?: ClickButton;
+    /**
+     * Polls for the target to exist and become actionable, capped at the promotedTarget row's
+     * maxTimeoutMs. Absent takes one attempt.
+     */
+    readinessTimeoutMs?: number;
     /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
     expectedResolvedTarget?: ExpectedResolvedTarget;
     /** #1654: a mutating `find`'s already-resolved node; see resolution.ts. */
@@ -154,6 +154,7 @@ async function tapCommand(
     captureEvidenceBaseline: observation.needsPreActionBaseline,
     expectedResolvedTarget: options.expectedResolvedTarget,
     preresolvedTarget: options.preresolvedTarget,
+    readinessTimeoutMs: options.readinessTimeoutMs,
   });
   if (!runtime.backend.tap) {
     throw new AppError('UNSUPPORTED_OPERATION', 'tap is not supported by this backend');

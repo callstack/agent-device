@@ -1,15 +1,15 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { cleanupRetainedMaterializedPathsForSession } from './materialized-path-registry.ts';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 import type { SessionStore } from './session-store.ts';
 import { forceCleanupSessionAppLog } from './app-log-session-resource.ts';
 import { appLogResourceStore } from './app-log-resource-store.ts';
-import { finishLiveScreenRecording } from './screen-recording-session-resource.ts';
-import { finishLiveAudioProbe } from './audio-probe-session-resource.ts';
-import { finishLivePerfCapture } from './perf-capture-session-resource.ts';
+import { finishLiveAudioProbe } from '@agent-device/capture-kit/audio-probe-session-resource';
+import { finishLivePerfCapture } from '@agent-device/capture-kit/perf-capture-session-resource';
+import { finishLiveScreenRecording } from '@agent-device/capture-kit/screen-recording-session-resource';
 import { openWebSessionNames } from './web-session-names.ts';
-import type { PlatformResourceCleanup } from '@agent-device/contracts/platform-resource-cleanup';
+import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 
 export async function stopSessionAppLog(params: {
   session: SessionState;
@@ -33,7 +33,7 @@ export async function stopSessionPerfCapture(params: {
 }): Promise<void> {
   const currentSession = params.sessionStore.get(params.sessionName) ?? params.session;
   if (!currentSession.perfCapture) return;
-  await finishLivePerfCapture({ ...params, session: currentSession });
+  await finishLivePerfCapture({ ...params, session: currentSession, intent: 'disposal' });
 }
 
 export async function stopSessionSnapshotHelper(
@@ -44,8 +44,9 @@ export async function stopSessionSnapshotHelper(
 }
 
 // Best-effort mirror of the platform close `session close` dispatches for a web session
-// (`shouldDispatchPlatformClose` in daemon/handlers/session-close.ts) so a daemon shutdown or
-// expired-session reap tells agent-browser to close its fleet immediately instead of leaving it
+// (`shouldDispatchPlatformClose` in
+// `daemon/session-lifecycle/internal/session-close.ts`) so a daemon shutdown or expired-session
+// reap tells agent-browser to close its fleet immediately instead of leaving it
 // for agent-browser's own idle timer (`DEFAULT_AGENT_BROWSER_IDLE_TIMEOUT_MS`). Unlike its
 // siblings above, this has no second caller in the ordinary-close path (that path already
 // reaches the browser through `dispatchTargetedPlatformClose`), so it stays module-private.
@@ -210,6 +211,7 @@ export async function finishSessionScreenRecording(params: {
   const currentSession = params.sessionStore.get(params.sessionName) ?? params.session;
   if (!currentSession.screenRecording) return;
   await finishLiveScreenRecording({
+    intent: 'disposal',
     session: currentSession,
     sessionName: params.sessionName,
     sessionStore: params.sessionStore,
@@ -224,6 +226,7 @@ export async function finishSessionAudioProbe(params: {
   const currentSession = params.sessionStore.get(params.sessionName) ?? params.session;
   if (!currentSession.audioProbe) return;
   await finishLiveAudioProbe({
+    intent: 'disposal',
     session: currentSession,
     sessionName: params.sessionName,
     sessionStore: params.sessionStore,

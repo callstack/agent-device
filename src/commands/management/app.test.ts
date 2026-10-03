@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { parseArgs } from '../../cli/parser/args.ts';
@@ -9,13 +9,17 @@ import { createAgentDeviceClient } from '../../agent-device-client.ts';
 import type { DaemonRequest, DaemonResponse } from '@agent-device/kernel/contracts';
 import { readMetroSessionHints, writeMetroSessionHints } from '../../metro/metro-session-hints.ts';
 import { openCommandFacet } from './app.ts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 function flags(overrides: Partial<CliFlags> = {}): CliFlags {
   return overrides as CliFlags;
 }
 
 function tempStateDir(): string {
-  const dir = path.join(os.tmpdir(), `agent-device-app-test-${randomUUID()}`);
+  const dir = path.join(
+    mkdtempForTestSync('agent-device-app-test'),
+    `agent-device-app-test-${randomUUID()}`,
+  );
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -36,6 +40,29 @@ function createOpenClient(params: { stateDir: string; session: string; sessionRe
   );
   return { client, calls };
 }
+
+describe('open startup budget', () => {
+  test('open --timeout projects the startup budget onto the daemon request', async () => {
+    const parsed = parseArgs(['open', 'Settings', '--timeout', '600000'], { strictFlags: true });
+    const stateDir = tempStateDir();
+    try {
+      const { client, calls } = createOpenClient({ stateDir, session: 'cold-start' });
+      await openCommandFacet.definition.invoke(
+        client,
+        openCommandFacet.cliReader(parsed.positionals, parsed.flags),
+      );
+      expect(calls[0]?.flags?.timeoutMs).toBe(600_000);
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  test.each([0, -1, 1.5])('structured open input rejects the startup budget %s', (timeoutMs) => {
+    expect(() => openCommandFacet.metadata.readInput({ app: 'Settings', timeoutMs })).toThrow(
+      /timeoutMs/,
+    );
+  });
+});
 
 describe('open command metro session hints', () => {
   test('CLI parser accepts --metro-host/--metro-port/--bundle-url/--launch-url on open', () => {

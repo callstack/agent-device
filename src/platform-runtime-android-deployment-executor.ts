@@ -2,27 +2,22 @@ import type {
   AndroidAppDeploymentExecutor,
   MaterializeAppSourceInput,
 } from '@agent-device/contracts/app-deployment-runtime';
+import { loadAndroidMechanics } from './platform-runtime-android-mechanics.ts';
 
-/**
- * Temporary Android migration port. The package owns native command construction; this adapter
- * retains only artifact preparation and fuzzy app resolution until those legacy owners move.
- */
+/** Android deployment adapter; native command construction remains package-owned. */
 export function createAndroidAppDeploymentExecutor(): AndroidAppDeploymentExecutor {
   return Object.freeze({
     bundletoolJar: process.env.AGENT_DEVICE_BUNDLETOOL_JAR?.trim() || undefined,
     withInvalidatedAppResolutionCache: async (device, operation) => {
-      const { withAndroidAppResolutionCacheInvalidated } =
-        await import('./platforms/android/app-deployment-resolution.ts');
+      const { withAndroidAppResolutionCacheInvalidated } = await loadAndroidMechanics();
       return await withAndroidAppResolutionCacheInvalidated(device, operation);
     },
     prepareArtifact: async (input: MaterializeAppSourceInput, options) => {
-      const { prepareAndroidInstallArtifact } =
-        await import('./platforms/android/install-artifact.ts');
+      const { prepareAndroidInstallArtifact } = await loadAndroidMechanics();
       return await prepareAndroidInstallArtifact(input.source, options);
     },
     resolveAppPackage: async (device, app) => {
-      const { resolveAndroidApp } =
-        await import('./platforms/android/app-deployment-resolution.ts');
+      const { resolveAndroidApp } = await loadAndroidMechanics();
       const resolved = await resolveAndroidApp(device, app);
       if (resolved.type === 'intent') {
         const { AppError } = await import('@agent-device/kernel/errors');

@@ -1,68 +1,39 @@
 import {
-  buildSnapshotNodeMap,
-  findNearestScrollableAncestor,
-  findSnapshotAncestor,
   isUsefulVisibilityAnchor,
-  isViewportRootNode,
+  type SnapshotVisibility,
 } from '@agent-device/contracts/snapshot';
-import {
-  containsPoint,
-  isPositiveFiniteRect,
-  isRectVisibleInViewport,
-} from '@agent-device/kernel/rect';
-import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 
 export function isMaestroNodeVisible(
   node: SnapshotNode,
-  nodes: SnapshotNode[],
+  visibility: SnapshotVisibility,
   platform: 'android' | 'ios',
 ): boolean {
   if (platform === 'android' && node.visibleToUser === false) return false;
   if (isPositiveFiniteRect(node.rect)) {
-    return isVisibleInEffectiveViewport(node, nodes);
+    return visibility.isVisibleInEffectiveViewport(node);
   }
   if (node.rect) return false;
   if (platform !== 'android' && node.hittable === true) return true;
-  const anchor = findSnapshotAncestor(nodes, node, buildSnapshotNodeMap(nodes), (parent) =>
+  const anchor = visibility.findAncestor(node, (parent) =>
     isUsefulVisibilityAnchor(parent, platform) ? parent : null,
   );
   if (!anchor) return false;
   if (!isPositiveFiniteRect(anchor.rect)) {
     return platform !== 'android' && anchor.hittable === true;
   }
-  return isVisibleInEffectiveViewport(anchor, nodes);
+  return visibility.isVisibleInEffectiveViewport(anchor);
 }
 
 export function isDescendantOfSnapshotNode(
-  nodes: SnapshotNode[],
   node: SnapshotNode,
   ancestor: SnapshotNode,
-  nodeByIndex: ReadonlyMap<number, SnapshotNode>,
+  visibility: SnapshotVisibility,
 ): boolean {
   return Boolean(
-    findSnapshotAncestor(nodes, node, nodeByIndex, (candidate) =>
+    visibility.findAncestor(node, (candidate) =>
       candidate.index === ancestor.index ? candidate : null,
     ),
-  );
-}
-
-function isVisibleInEffectiveViewport(node: SnapshotNode, nodes: SnapshotNode[]): boolean {
-  if (!node.rect) return true;
-  const byIndex = buildSnapshotNodeMap(nodes);
-  const viewport =
-    findNearestScrollableAncestor(node, byIndex, (ancestor) => Boolean(ancestor.rect))?.rect ??
-    resolveRootViewport(nodes, node.rect);
-  return viewport ? isRectVisibleInViewport(node.rect, viewport) : true;
-}
-
-function resolveRootViewport(nodes: SnapshotNode[], target: Rect): Rect | null {
-  const viewportRects = nodes
-    .filter((node) => node.rect && isViewportRootNode(node))
-    .map((node) => node.rect!)
-    .sort((left, right) => right.width * right.height - left.width * left.height);
-  const centerX = target.x + target.width / 2;
-  const centerY = target.y + target.height / 2;
-  return (
-    viewportRects.find((rect) => containsPoint(rect, centerX, centerY)) ?? viewportRects[0] ?? null
   );
 }

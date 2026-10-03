@@ -9,7 +9,9 @@ These are cross-route behavior requirements; their rationale and owning decision
   resolution; ambiguity and other runner failures remain failures.
 - Regular selector reads are capture-backed. `@ref` resolves against its authorized ref frame,
   while `get`, `is`, `find`, and `wait` selectors capture through the backend. Polling bypasses the
-  snapshot cache, as do active freshness recovery and stabilization.
+  snapshot cache, as do active freshness recovery and stabilization. The cache serves a stored tree
+  only while it is the newest observation: a side-effect seam or a native read such as `wait
+  text`'s owner text reading retires it.
 - Sparse capture verdicts are observable failures and never replace the session snapshot. Only a
   user-facing snapshot may publish a fallback screenshot; internal polling must not create one
   artifact per attempt.
@@ -21,9 +23,9 @@ These are cross-route behavior requirements; their rationale and owning decision
   or unchanged evidence remains failure.
 - Android helper reuse is not snapshot-result caching. Freshness is short-lived, action-triggered,
   and learned only from route-safe complete observations.
-- Pending interaction outcome retry precedes stabilization; Android freshness recovery composes
-  afterward when required. Gesture-like mutations mark stabilization and disable direct iOS
-  selector shortcuts while it is pending.
+- Post-gesture stabilization runs first and Android freshness recovery composes afterward when
+  required. Gesture-like mutations mark stabilization and disable direct iOS selector shortcuts
+  while it is pending.
 - Session snapshot writes go through the shared snapshot mutation boundary. Sparse observations and
   empty ref-scoped projections do not overwrite stored evidence.
 - Maestro matching remains snapshot- and policy-owned. Coordinate dispatch uses fresh geometry; an

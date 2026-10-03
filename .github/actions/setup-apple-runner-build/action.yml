@@ -1,5 +1,5 @@
 name: 'Set Up Apple Runner Build'
-description: 'Restore an exact Apple runner build or build and cache it on a miss'
+description: 'Restore an exact Apple runner build and verify it with Xcode'
 
 inputs:
   derived-path:
@@ -16,13 +16,11 @@ inputs:
     description: 'Registered check id built through `pnpm gate`'
     required: true
   xcuitest-platform:
-    description: 'Optional AGENT_DEVICE_XCUITEST_PLATFORM value'
-    required: false
-    default: ''
+    description: 'AGENT_DEVICE_XCUITEST_PLATFORM value the runner build and its cache metadata are keyed by'
+    required: true
   xcuitest-destination:
-    description: 'Optional AGENT_DEVICE_XCUITEST_DESTINATION value'
-    required: false
-    default: ''
+    description: 'AGENT_DEVICE_XCUITEST_DESTINATION value, which must carry a platform= token'
+    required: true
 outputs:
   cache-hit:
     description: 'Whether an exact Apple runner build cache was restored'
@@ -44,7 +42,13 @@ runs:
       id: source-hash
       run: |
         set -euo pipefail
-        echo "value=${{ hashFiles('apple/runner/**', 'scripts/build-xcuitest-apple.sh', 'scripts/patch-xcuitest-runner-icon.ts', 'scripts/write-xcuitest-cache-metadata.mjs', 'packages/platform-apple/src/runner/apple-runner-platform.ts', 'packages/platform-apple/src/runner/runner-cache-metadata.ts', 'packages/platform-apple/src/runner/runner-icon.ts', 'packages/platform-apple/src/runner/runner-xctestrun.ts', 'packages/platform-apple/src/runner/runner-xctestrun-products.ts', '.github/actions/setup-apple-runner-build/action.yml', 'package.json', 'pnpm-lock.yaml') }}" >> "$GITHUB_OUTPUT"
+        echo "value=${{ hashFiles('apple/runner/**', 'apple/snapshot-presentation/**') }}" >> "$GITHUB_OUTPUT"
+      shell: bash
+
+    - name: Resolve Apple runner cache schema
+      id: cache-schema
+      run: |
+        echo "value=${{ hashFiles('.github/actions/setup-apple-runner-build/action.yml', 'scripts/build-xcuitest-apple.sh') }}" >> "$GITHUB_OUTPUT"
       shell: bash
 
     - name: Resolve Apple runner build variant
@@ -55,12 +59,19 @@ runs:
         INPUT_XCUITEST_DESTINATION: ${{ inputs.xcuitest-destination }}
       run: |
         set -euo pipefail
+        BUILD_COMMANDS="$(node -p 'JSON.stringify(Object.entries(require("./package.json").scripts).filter(([name]) => name.startsWith("build:xcuitest:")))')"
         VARIANT="$(
           printf '%s\n' \
             "$INPUT_GATE" \
+            "$BUILD_COMMANDS" \
+            "$(uname -m)" \
             "$INPUT_XCUITEST_PLATFORM" \
             "$INPUT_XCUITEST_DESTINATION" \
             "${AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS:-0}" \
+            "${AGENT_DEVICE_XCUITEST_ARCHS:-}" \
+            "${AGENT_DEVICE_IOS_BUNDLE_ID:-}" \
+            "${AGENT_DEVICE_IOS_RUNNER_APP_BUNDLE_ID:-}" \
+            "${AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID:-}" \
             | shasum -a 256 \
             | cut -c1-16
         )"
@@ -72,10 +83,9 @@ runs:
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
       with:
         path: ${{ inputs.derived-path }}
-        key: ${{ inputs.cache-key-prefix }}-${{ steps.xcode.outputs.key }}${{ inputs.cache-key-suffix }}-${{ steps.build-variant.outputs.key }}-${{ steps.source-hash.outputs.value }}
+        key: ${{ inputs.cache-key-prefix }}-${{ steps.xcode.outputs.key }}${{ inputs.cache-key-suffix }}-${{ steps.build-variant.outputs.key }}-${{ steps.cache-schema.outputs.value }}-${{ steps.source-hash.outputs.value }}
 
-    - name: Build Apple runner artifacts on cache miss
-      if: steps.restore-runner-build.outputs.cache-hit != 'true'
+    - name: Verify Apple runner artifacts with Xcode
       uses: ./.github/actions/run-gate
       with:
         gate: ${{ inputs.gate }}
@@ -83,10 +93,45 @@ runs:
         AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ inputs.derived-path }}
         AGENT_DEVICE_XCUITEST_PLATFORM: ${{ inputs.xcuitest-platform }}
         AGENT_DEVICE_XCUITEST_DESTINATION: ${{ inputs.xcuitest-destination }}
+        AGENT_DEVICE_XCUITEST_SKIP_ICON_PATCH: '1'
 
     - name: Save Apple runner build cache
       if: steps.restore-runner-build.outputs.cache-hit != 'true'
       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
       with:
         path: ${{ inputs.derived-path }}
-        key: ${{ inputs.cache-key-prefix }}-${{ steps.xcode.outputs.key }}${{ inputs.cache-key-suffix }}-${{ steps.build-variant.outputs.key }}-${{ steps.source-hash.outputs.value }}
+        key: ${{ steps.restore-runner-build.outputs.cache-primary-key }}
+
+    - name: Patch XCTest runner icon
+      shell: bash
+      run: node --experimental-strip-types scripts/patch-xcuitest-runner-icon.ts "${{ inputs.derived-path }}"
+
+    # The icon patch rewrites product bytes after the cache was saved unpatched, so the
+    # content manifest on this machine must certify the tree that will actually run.
+    - name: Re-publish Apple runner cache metadata
+      shell: bash
+      run: |
+        node --experimental-strip-types scripts/write-xcuitest-cache-metadata.ts \
+          "${{ inputs.xcuitest-platform }}" \
+          "${{ inputs.derived-path }}" \
+          "${{ inputs.xcuitest-destination }}" \
+          "${{ inputs.derived-path }}/Logs/agent-device-build-for-testing.log"
+
+    - name: Report Apple runner build cache
+      env:
+        CACHE_HIT: ${{ steps.restore-runner-build.outputs.cache-hit }}
+        CACHE_KEY: ${{ steps.restore-runner-build.outputs.cache-primary-key }}
+        BUILD_GATE: ${{ inputs.gate }}
+      run: |
+        set -euo pipefail
+        if [ "$CACHE_HIT" = 'true' ]; then
+          RESULT='restored exact native build; verified incrementally with Xcode; icon patch applied'
+        else
+          RESULT='cache miss; built and cached native runner; icon patch applied'
+        fi
+        {
+          printf '### Apple runner cache (%s)\n\n' "$BUILD_GATE"
+          printf '%s\n\n' "$RESULT"
+          printf 'Key: `%s`\n' "$CACHE_KEY"
+        } >> "$GITHUB_STEP_SUMMARY"
+      shell: bash

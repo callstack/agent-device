@@ -24,7 +24,7 @@ afterEach(() => {
   delete process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR;
 });
 
-/** Mirrors the canonical same-directory temp-path shape of src/utils/atomic-file.ts. */
+/** Mirrors the canonical same-directory temp-path shape of @agent-device/host-kit/file. */
 function isPublishTemporaryPath(value: unknown, destination: string): boolean {
   if (typeof value !== 'string') return false;
   if (path.dirname(value) !== path.dirname(destination)) return false;

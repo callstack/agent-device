@@ -86,6 +86,30 @@ test('MCP open keeps device-selection evidence in structured content and JSON te
   assert.deepEqual(JSON.parse(result.content[0]?.text ?? '{}').selection, openResult.selection);
 });
 
+test('MCP advertises and round-trips the strict wait absent field', async () => {
+  let observedInput: Record<string, unknown> | undefined;
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, _name, input) => {
+      observedInput = input;
+      return { waitedMs: 0 };
+    },
+  });
+  const waitTool = listCommandTools().find((tool) => tool.name === 'wait');
+  assert.equal(
+    (waitTool?.inputSchema.properties?.absent as { type?: string } | undefined)?.type,
+    'string',
+  );
+
+  const result = await executor.execute('wait', {
+    absent: 'label="Removed"',
+    timeoutMs: 5000,
+  });
+
+  assert.equal(result.isError, false);
+  assert.deepEqual(observedInput, { absent: 'label="Removed"', timeoutMs: 5000 });
+});
+
 test('MCP fill projects target-bound unconfirmed verification through its advertised schema', async () => {
   const fillResult = {
     targetKind: 'point',
@@ -140,6 +164,40 @@ test('MCP fill projects target-bound unconfirmed verification through its advert
   assert.deepEqual(validateAgainstSchema(result.structuredContent, fillTool.outputSchema), []);
   const { target: _target, ...missingTarget } = fillResult;
   assert.notDeepEqual(validateAgainstSchema(missingTarget, fillTool.outputSchema), []);
+});
+
+test('MCP fold advertises the native-panel discriminator and rejects a screen missing it', async () => {
+  const foldResult = {
+    action: 'fold',
+    pose: 'open',
+    hingeAngleDegrees: 180,
+    screen: { display: 'LCD-1', coordinateSpace: 'native-panel', widthPt: 669, heightPt: 951 },
+    message:
+      'Folded to open (hinge 180°, LCD-1 native panel 669x951pt, not snapshot coordinates); refs from before the pose change are stale',
+  } satisfies CommandExecutionResult<'fold'>;
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async () => foldResult,
+  });
+
+  const foldTool = listCommandTools().find((tool) => tool.name === 'fold');
+  assert.ok(foldTool?.outputSchema);
+  assert.equal(foldTool.outputSchema, COMMAND_OUTPUT_SCHEMAS.fold);
+
+  const result = await executor.execute('fold', { pose: 'open' });
+  assert.deepEqual(result.structuredContent, foldResult);
+  assert.deepEqual(validateAgainstSchema(result.structuredContent, foldTool.outputSchema), []);
+
+  // A panel report that drops the discriminator no longer validates: the coordinate-space contract
+  // is required, not inferable from the numbers alone.
+  const { coordinateSpace: _coordinateSpace, ...screenWithoutDiscriminator } = foldResult.screen;
+  assert.notDeepEqual(
+    validateAgainstSchema(
+      { ...foldResult, screen: screenWithoutDiscriminator },
+      foldTool.outputSchema,
+    ),
+    [],
+  );
 });
 
 test('MCP applies config-backed command defaults; explicit operator input is refused', async () => {

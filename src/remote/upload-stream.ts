@@ -3,7 +3,7 @@ import type { IncomingHttpHeaders } from 'node:http';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '@agent-device/kernel/errors';
-import { loadNodeHttpRequester, readNodeHttpResponseBody } from '../utils/node-http.ts';
+import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
 import {
   createUploadProgressTransform,
   type UploadProgressSink,
@@ -36,6 +36,8 @@ export async function streamFileToHttpRequest(options: {
   errorMessage: string;
   errorHint?: string;
   retryable?: boolean;
+  /** Ends this request when the work the upload serves is over; see `uploadArtifact`. */
+  signal?: AbortSignal;
   progress?: UploadStreamProgressOptions;
 }): Promise<UploadStreamResponse> {
   return await streamFileToHttpRequestAttempt({
@@ -60,6 +62,7 @@ async function streamFileToHttpRequestAttempt(options: {
   errorMessage: string;
   errorHint?: string;
   retryable?: boolean;
+  signal?: AbortSignal;
   redirectCount: number;
   startOffset: number;
   progress?: UploadStreamProgressOptions;
@@ -82,6 +85,9 @@ async function streamFileToHttpRequestAttempt(options: {
         method: options.method,
         path: options.url.pathname + options.url.search,
         headers,
+        // Aborting destroys the request mid-stream, which is the only way to stop bytes that are
+        // already piped at a device this client no longer holds the lease on.
+        ...(options.signal ? { signal: options.signal } : {}),
       },
       (res) => {
         responseReceived = true;
@@ -162,6 +168,12 @@ async function streamFileToHttpRequestAttempt(options: {
     req.on('error', (err) => {
       if (responseReceived) return;
       clearTimeout(timeout);
+      // A caller that canceled owns this outcome: the signal's reason is the answer, and wrapping it
+      // as an ordinary transport failure would let a retry path treat "we stopped" as "it broke".
+      if (options.signal?.aborted) {
+        reject(options.signal.reason);
+        return;
+      }
       reject(
         new AppError(
           'COMMAND_FAILED',

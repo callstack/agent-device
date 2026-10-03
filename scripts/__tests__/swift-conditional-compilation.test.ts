@@ -14,6 +14,7 @@ import {
 describe('the #if evaluator', () => {
   test.each([
     ['AGENT_DEVICE_RUNNER_UNIT_TESTS', { iOS: true, macOS: true, tvOS: true }],
+    ['AGENT_DEVICE_RUNNER_ISOLATION_CANARY', { iOS: true, macOS: true, tvOS: true }],
     ['os(iOS)', { iOS: true, macOS: false, tvOS: false }],
     ['!os(macOS)', { iOS: true, macOS: false, tvOS: true }],
     ['AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)', { iOS: true, macOS: false, tvOS: false }],

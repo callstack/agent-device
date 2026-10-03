@@ -1,10 +1,15 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import {
+  SNAPSHOT_CAPTURE_OPTION_KEYS,
+  snapshotOptionsFromFlags,
+} from '@agent-device/kernel/snapshot';
 import type {
   CaptureSnapshotInput,
   SnapshotRuntimeExecution,
 } from '@agent-device/contracts/snapshot-runtime';
 import { contextFromFlags, type DaemonCommandContext } from './context.ts';
-import type { DaemonRequest, SessionState } from './types.ts';
+import type { DaemonRequest } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 
 /**
  * The one place a daemon request becomes neutral capture intent. `snapshot` and `diff` build
@@ -37,13 +42,9 @@ export function buildRuntimeCaptureInput(
   return {
     options: {
       appBundleId,
-      interactiveOnly: flags?.snapshotInteractiveOnly,
-      preferredBackend: flags?.snapshotPreferredBackend,
-      depth: flags?.snapshotDepth,
+      ...snapshotOptionsFromFlags(flags, SNAPSHOT_CAPTURE_OPTION_KEYS),
+      // The session-resolved scope wins over the raw flag.
       scope: snapshotScope,
-      raw: flags?.snapshotRaw,
-      customActions: flags?.snapshotCustomActions,
-      includeHiddenContentHints: flags?.snapshotIncludeHiddenContentHints,
       includeRects: params.includeRects,
       surface,
     },

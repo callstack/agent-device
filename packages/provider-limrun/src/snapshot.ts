@@ -1,5 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
 type LimrunSelector = { key: 'id' | 'label' | 'text' | 'value'; value: string };
@@ -19,6 +17,8 @@ export type IosTreeNode = {
   role?: string;
   selected?: boolean;
   hittable?: boolean;
+  traits?: string[];
+  pid?: number;
   children?: IosTreeNode[];
   nodes?: IosTreeNode[];
   elements?: IosTreeNode[];
@@ -78,7 +78,8 @@ function readIosNodeIdentifier(node: IosTreeNode): string | undefined {
   return node.identifier ?? node.AXUniqueId ?? undefined;
 }
 
-function readIosNodeRect(node: IosTreeNode): RawSnapshotNode['rect'] {
+/** The node's screen-space rect, or undefined when the provider omitted a complete one. */
+export function readIosNodeRect(node: IosTreeNode): RawSnapshotNode['rect'] {
   const rect = node.rect ?? node.frame;
   if (
     !rect ||
@@ -97,19 +98,14 @@ function readIosNodeRect(node: IosTreeNode): RawSnapshotNode['rect'] {
   };
 }
 
-function readIosNodeChildren(node: IosTreeNode): IosTreeNode[] {
+export function readIosNodeChildren(node: IosTreeNode): IosTreeNode[] {
   return node.children ?? node.nodes ?? node.elements ?? [];
 }
 
 export function toIosSelector(selector: LimrunSelector) {
-  if (selector.key === 'id') return { accessibilityId: selector.value };
-  if (selector.key === 'value') return { value: selector.value };
+  if (selector.key === 'id') return { AXUniqueId: selector.value };
+  if (selector.key === 'value') return { AXValue: selector.value };
   // The Limrun iOS tree exposes visible text through AXLabel, so both
   // agent-device label and text selectors target the provider's label field.
-  return { label: selector.value };
-}
-
-export async function writeBase64File(filePath: string, base64: string): Promise<void> {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  await fs.promises.writeFile(filePath, Buffer.from(base64, 'base64'));
+  return { AXLabel: selector.value };
 }

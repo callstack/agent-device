@@ -16,6 +16,11 @@
       },
       {
         "type": "custom-link",
+        "label": "Provider Plugins",
+        "link": "/docs/plugins"
+      },
+      {
+        "type": "custom-link",
         "label": "AI Agent Setup",
         "link": "/docs/agent-setup"
       },

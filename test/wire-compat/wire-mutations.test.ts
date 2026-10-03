@@ -50,6 +50,27 @@ type WireMutation = {
 
 const MUTATIONS: readonly WireMutation[] = [
   {
+    breakClass: 'instance refusal: the daemon drops the mismatch response header',
+    file: 'src/daemon/server/http-instance-precondition.ts',
+    name: 'refuseStaleDaemonInstance',
+    from: "res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');",
+    to: '',
+  },
+  {
+    breakClass: 'instance refusal: the proxy drops the mismatch response header',
+    file: 'src/remote/daemon-proxy.ts',
+    name: 'sendInstanceMismatch',
+    from: "res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');",
+    to: '',
+  },
+  {
+    breakClass: 'instance refusal: the shared RPC error code changes',
+    file: 'packages/contracts/src/daemon-http.ts',
+    name: 'buildDaemonInstanceMismatchRpcResponse',
+    from: 'code: -32001',
+    to: 'code: -32002',
+  },
+  {
     breakClass: 'method naming: a released client keeps sending the old method name',
     file: 'src/daemon/server/http-server.ts',
     name: 'COMMAND_RPC_METHODS',
@@ -65,14 +86,14 @@ const MUTATIONS: readonly WireMutation[] = [
   },
   {
     breakClass: 'response serialization: the RPC envelope stops being newline-framed',
-    file: 'src/daemon/request-progress-protocol.ts',
+    file: 'src/request-progress-protocol.ts',
     name: 'serializeDaemonRpcResponseEnvelope',
     from: '}\\n`',
     to: '}`',
   },
   {
     breakClass: 'response parsing: the client narrows what a daemon may return',
-    file: 'src/daemon/client/daemon-client-rpc.ts',
+    file: 'src/daemon-client/daemon-client-rpc.ts',
     name: 'parseDaemonHttpResponseBody',
     from: 'error?: { message?: string; data?: Record<string, unknown> }',
     to: 'error?: { message: string }',
@@ -86,7 +107,7 @@ const MUTATIONS: readonly WireMutation[] = [
   },
   {
     breakClass: 'auth projection: the client stops sending the bearer form',
-    file: 'src/daemon/http-contract.ts',
+    file: 'packages/contracts/src/daemon-http.ts',
     name: 'buildDaemonHttpAuthHeaders',
     from: 'authorization: `Bearer ${normalizedToken}`,',
     to: '',
@@ -135,7 +156,7 @@ const MUTATIONS: readonly WireMutation[] = [
   },
   {
     breakClass: 'progress framing: the envelope discriminant is renamed',
-    file: 'src/daemon/request-progress-protocol.ts',
+    file: 'src/request-progress-protocol.ts',
     name: 'DaemonProgressEnvelope',
     from: "type: 'progress';",
     to: "kind: 'progress';",
@@ -145,21 +166,21 @@ const MUTATIONS: readonly WireMutation[] = [
   // why claiming "both sides" required these to be listed and proved.
   {
     breakClass: 'health consumer: the client stops reading the advertised protocol version',
-    file: 'src/daemon/client/daemon-client-transport.ts',
-    name: 'readHealthPayload',
+    file: 'src/daemon-client/daemon-client-transport.ts',
+    name: 'readHealthLink',
     from: "typeof parsed.rpcProtocolVersion === 'number' ? parsed.rpcProtocolVersion : undefined",
     to: 'undefined',
   },
   {
     breakClass: 'health consumer: the mismatch refusal ADR 0006 built is weakened',
-    file: 'src/daemon/client/daemon-client-transport.ts',
+    file: 'src/daemon-client/daemon-client-transport.ts',
     name: 'readRemoteDaemonHealth',
-    from: 'health.rpcProtocolVersion !== DAEMON_RPC_PROTOCOL_VERSION',
+    from: 'link.rpcProtocolVersion !== DAEMON_RPC_PROTOCOL_VERSION',
     to: 'false',
   },
   {
     breakClass: 'health consumer: the parsed health shape drops a released field',
-    file: 'src/daemon/client/daemon-client-transport.ts',
+    file: 'src/daemon-client/daemon-client-transport.ts',
     name: 'RemoteDaemonHealth',
     from: 'rpcProtocolVersion?: number;',
     to: '',
@@ -201,8 +222,8 @@ const MUTATIONS: readonly WireMutation[] = [
   },
   {
     breakClass: 'artifact consumer: the download request drops its tenant header',
-    file: 'src/remote/daemon-artifacts.ts',
-    name: 'downloadRemoteArtifact',
+    file: 'src/remote/artifact-download.ts',
+    name: 'downloadRemoteArtifactFromUrl',
     from: '...buildDaemonHttpTenantHeaders(params.requestScope?.tenantId),',
     to: '',
   },
@@ -307,9 +328,10 @@ const CLOSURE_PROBES: readonly { reachedFrom: string; omit: string }[] = [
     omit: 'packages/contracts/src/request-progress.ts#RequestProgressEvent',
   },
   {
-    // Plain relative import inside src/.
+    // Declaration moved into packages/contracts; the consumer reaches it through the
+    // package's exports map.
     reachedFrom: 'buildLeaseRpcParams',
-    omit: 'src/core/lease-scope.ts#LeaseRpcCommand',
+    omit: 'packages/contracts/src/lease-scope.ts#LeaseRpcCommand',
   },
   {
     // Workspace specifier resolved through the package's own exports map.

@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { withWebProvider } from './platforms/web/provider.ts';
+import { withWebProvider } from '@agent-device/platform-web';
 import { resolveWebScreenRecordingTransport } from './platform-runtime-screen-recording-web-host.ts';
 
 const web = {

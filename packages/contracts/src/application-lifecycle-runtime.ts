@@ -1,8 +1,9 @@
+import type { RuntimeOperationName } from './runtime-operation-names.ts';
+import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
 import type { SessionSurface } from './session-surface.ts';
-import type { RuntimeOperationFact } from './platform-runtime.ts';
 import type { ProviderPortReverseOptions } from './provider-device-runtime.ts';
 import type { TargetShutdownResult } from './target-shutdown-contract.ts';
 
@@ -27,6 +28,11 @@ export function hasRuntimeTransportHintValues(values: RuntimeHintValues): boolea
 
 /** Request-scoped runner/diagnostic context, without daemon request types. */
 export type ApplicationLifecycleExecution = Readonly<{
+  /**
+   * Absolute time by which a cold Simulator's boot must finish, from `open --timeout`. Absent
+   * means the platform's default boot wait; `prepare` derives its own deadline from `timeoutMs`.
+   */
+  startupDeadlineAtMs?: number;
   requestId?: string;
   logPath?: string;
   traceLogPath?: string;
@@ -39,6 +45,13 @@ export type ApplicationLifecycleExecution = Readonly<{
   iosXctestDerivedDataPath?: string;
   iosXctestEnvDir?: string;
   runnerLeaseContext?: RunnerLogicalLeaseContext;
+  /**
+   * The runtime operations the steps still ahead of this request inside the same plan (today: the
+   * remaining steps of a `batch`) must execute, derived by the daemon from the command descriptors'
+   * declared runtime uses. Never a public flag and never on the wire. Absent when the future of the
+   * session is unknown (a standalone command).
+   */
+  plannedOperations?: readonly RuntimeOperationName[];
 }>;
 
 /** Semantic target resolution used before an application open. */
@@ -61,10 +74,20 @@ export type OpenApplicationPreparationInput = Readonly<{
   currentAppBundleId?: string;
   hasExistingSession: boolean;
   surface: SessionSurface;
-  deviceHub: boolean;
   prewarmRunnerOnColdBoot: boolean;
   execution: ApplicationLifecycleExecution;
 }>;
+
+/**
+ * How much the platform's interaction host (the XCTest runner on iOS) is known to be needed by
+ * the plan that contains an open. `none`: every following step is proven observation-only, so this
+ * open starts no runner and releases a speculative one (started by an earlier prewarm, used by no
+ * command); a runner that has served a command is the session's and stays under the idle-stop
+ * policy. `possible`: the plan is unknown, so a speculative prewarm may run but observation never
+ * awaits it. `required`: a following step needs the runner, so readiness is prepared now and
+ * awaited by that step.
+ */
+export type OpenApplicationRunnerDemand = 'none' | 'possible' | 'required';
 
 /** The normalized public application launch, independent of daemon request shape. */
 export type OpenApplicationInput = Readonly<{
@@ -92,6 +115,8 @@ export type OpenApplicationInput = Readonly<{
 export type OpenApplicationTiming = Readonly<{
   relaunchCloseDurationMs?: number;
   runtimeHintsDurationMs?: number;
+  /** The runner demand the platform resolved for this open, when the platform decides one. */
+  runnerDemand?: OpenApplicationRunnerDemand;
   runnerPrewarmKind?: 'session' | 'xctestrun';
   runnerPrewarmScheduled?: boolean;
   runnerPrewarmWaited?: boolean;
@@ -99,11 +124,61 @@ export type OpenApplicationTiming = Readonly<{
   openDispatchDurationMs?: number;
   launchUrlDurationMs?: number;
   postOpenSettleDurationMs?: number;
+  /** Unset when the open had no launched app to observe, such as a URL or deep-link target. */
+  postOpenObservation?: PostOpenObservation;
+  /** Why the observation could not run; present exactly when it is `probe-failed`. */
+  postOpenObservationFailure?: PostOpenObservationFailure;
 }>;
+
+/**
+ * What an app open learned about the launched app before it returned. A local iOS Simulator asks
+ * its host AX bridge; a local Android device captures the app through the snapshot helper. Each
+ * owner bounds the observation, and the open succeeds whatever the value is.
+ *
+ * - `observable`: the launched app's tree was readable.
+ * - `unobservable`: the app stayed unreadable within the owner's bounded window: a launch transition
+ *   or AX-server state that did not clear, a system surface over the app, a content verdict after
+ *   the capture's own re-captures, or the window ran out.
+ * - `probe-failed`: the observation could not run (Android: the helper is not installed at the
+ *   current version, or adb or the accessibility service failed; iOS Simulator: the app's bridge
+ *   target could not be resolved, the bridge circuit is open, or the bridge failed with a code that
+ *   is not a launch transition). `postOpenObservationFailure` carries the typed failure.
+ * - `app-unidentified`: the open targeted an app, but the owner could not read which package it
+ *   launched, so nothing was observed.
+ * - `not-eligible`: the device has no observation path.
+ */
+export type PostOpenObservation =
+  | 'observable'
+  | 'unobservable'
+  | 'probe-failed'
+  | 'app-unidentified'
+  | 'not-eligible';
+
+/**
+ * The typed failure of a `probe-failed` observation, by what stopped it.
+ * - `capture`: an Android capture failed with this error `code` and typed `reason`.
+ * - `target`: an iOS Simulator could not resolve the app's bridge target; the error `code` and
+ *   typed `reason`.
+ * - `bridge`: the iOS Simulator host AX bridge failed with this failure `kind` and `code`.
+ * - `circuit`: the bridge circuit is open for this app generation, so the probe did not run.
+ */
+export type PostOpenObservationFailure =
+  | Readonly<{ source: 'capture'; code: string; reason?: string }>
+  | Readonly<{ source: 'target'; code: string; reason?: string }>
+  | Readonly<{ source: 'bridge'; kind: string; code: string }>
+  | Readonly<{ source: 'circuit' }>;
+
+/**
+ * A system confirmation the launch itself raised and the open answered. `accepted`: iOS held a
+ * launch URL behind `Open in "<App>"?` naming the session app, and the open accepted it.
+ */
+export type LaunchConfirmation = 'accepted';
 
 export type OpenApplicationOutcome = Readonly<{
   appBundleId?: string;
   timing: OpenApplicationTiming;
+  /** Present only when the open answered a launch confirmation. */
+  launchConfirmation?: LaunchConfirmation;
 }>;
 
 /** Applies or clears a platform's native representation of neutral runtime hints. */
@@ -154,6 +229,11 @@ export type PrepareAppleRunnerResult = Readonly<{
   xctestrunPath?: string;
   recoveryReason?: string;
   failureReason?: string;
+}>;
+
+/** Controls whether an opportunistic runner session prewarm also proves readiness. */
+export type AppleRunnerSessionPrewarmOptions = Readonly<{
+  healthCheck?: boolean;
 }>;
 
 /** Individual semantic operations exposed by the application lifecycle runtime facet. */
@@ -260,6 +340,7 @@ export type AppleApplicationTools = Readonly<{
     execution: ApplicationLifecycleExecution,
     signal: AbortSignal,
     propagateError: boolean,
+    options?: AppleRunnerSessionPrewarmOptions,
   ): Promise<void>;
   notifyRunnerAppRelaunched(
     device: DeviceInfo,
@@ -267,7 +348,27 @@ export type AppleApplicationTools = Readonly<{
     signal: AbortSignal,
   ): Promise<void>;
   stopRunnerSession(deviceId: string): Promise<void>;
-  scheduleRunnerIdleStop(deviceId: string): void;
+  /**
+   * Whether asking this device's runner now would be answered without a startup wait. A starting
+   * session is not live; a runner with no startup cost is. Observation paths use it to avoid
+   * awaiting runner readiness they do not need.
+   */
+  hasLiveRunnerSession(
+    device: DeviceInfo,
+    execution: Readonly<{ requestId?: string }>,
+  ): Promise<boolean>;
+  /** Stops a runner a prewarm started that no command has used; true when one was stopped. */
+  releaseSpeculativeRunner(
+    device: DeviceInfo,
+    execution: Readonly<{ requestId?: string }>,
+  ): Promise<boolean>;
+  /**
+   * Releases this device's runner at session close. When `retain` is set and the runner is idle it
+   * keeps warm reuse under an idle-stop timer; otherwise it stops now. A runner whose last exchange
+   * reported main-thread work still draining is never retained, so a stalled process is not pooled
+   * back out to the next `open` (#2552). Awaited so `close` returns only once the lease is gone.
+   */
+  releaseRunnerOnClose(deviceId: string, options: Readonly<{ retain: boolean }>): Promise<void>;
   prepareRunner(
     device: DeviceInfo,
     input: PrepareAppleRunnerInput,

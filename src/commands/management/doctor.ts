@@ -1,33 +1,70 @@
-import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
-import * as commandInput from '../command-input.ts';
-import { defineExecutableCommand } from '../command-contract.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import type { CommandSchemaOverride } from '@agent-device/command-registry/command-schema';
+import type { CommandResultMap } from '@agent-device/command-registry/command-result';
+import { DEVICE_TARGETS } from '@agent-device/kernel/device';
+import {
+  booleanField,
+  enumSchema,
+  looseObjectSchema,
+  numberSchema,
+  objectSchema,
+  stringField,
+  stringSchema,
+} from '../command-input.ts';
 import { commonInputFromFlags, direct } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
+import type { JsonSchema } from '../command-contract.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { managementCliOutputFormatters } from './output.ts';
+
+/**
+ * This family's advertised MCP `outputSchema`, keyed by daemon command name and projected into
+ * the command map by `src/mcp/command-output-schemas.ts`.
+ */
+export const DOCTOR_COMMAND_OUTPUT_SCHEMAS = {
+  // packages/contracts/src/doctor.ts
+  doctor: objectSchema(
+    {
+      status: enumSchema(['pass', 'warn', 'fail', 'info']),
+      summary: stringSchema(),
+      kind: enumSchema(['auto', 'react-native', 'expo', 'repack']),
+      platform: stringSchema(),
+      target: enumSchema(DEVICE_TARGETS),
+      targetApp: stringSchema(),
+      metro: objectSchema({ host: stringSchema(), port: numberSchema() }, ['host', 'port']),
+      checks: {
+        type: 'array',
+        items: objectSchema(
+          {
+            id: stringSchema(),
+            status: enumSchema(['pass', 'warn', 'fail', 'info']),
+            summary: stringSchema(),
+            hint: stringSchema(),
+            command: stringSchema(),
+            evidence: looseObjectSchema(),
+          },
+          ['id', 'status', 'summary'],
+        ),
+      },
+    },
+    ['status', 'summary', 'kind', 'checks'],
+  ),
+} satisfies Pick<Record<keyof CommandResultMap, JsonSchema>, 'doctor'>;
 
 const doctorCommandMetadata = defineFieldCommandMetadata(
   'doctor',
   'Diagnose device, app, development-server, and React Native or Expo readiness issues. Returns compact evidence for local inventory, sessions, optional app discovery, toolchains, and server reachability.',
   {
-    targetApp: commandInput.stringField(
+    targetApp: stringField(
       'Installed app package/bundle id or app name to verify without opening a session.',
     ),
-    remote: commandInput.booleanField(
-      'Check remote connection setup instead of local device inventory.',
-    ),
+    remote: booleanField('Check remote connection setup instead of local device inventory.'),
   },
 );
 
-const doctorCommandDefinition = defineExecutableCommand(doctorCommandMetadata, (client, input) =>
-  client.command.doctor(input),
-);
-
 const doctorCliSchema = {
-  usageOverride:
-    'doctor [--platform ios|android|harmonyos|vega|macos|linux|web|apple] [--app <id-or-name>] [--remote]',
+  usageOverride: 'doctor [--platform ios|android|harmonyos|vega|macos|linux|web|apple]',
   allowedFlags: ['targetApp', 'remote'],
 } as const satisfies CommandSchemaOverride;
 
@@ -49,7 +86,7 @@ export const doctorCommandFacet = defineCommandFacet({
       'On iOS simulators it also warms the XCTest runner build cache in the background when missing, so run it before the first Apple snapshot or interaction of a session.',
   },
   metadata: doctorCommandMetadata,
-  definition: doctorCommandDefinition,
+  run: (client, input) => client.command.doctor(input),
   cliSchema: doctorCliSchema,
   cliReader: doctorCliReader,
   daemonWriter: doctorDaemonWriter,

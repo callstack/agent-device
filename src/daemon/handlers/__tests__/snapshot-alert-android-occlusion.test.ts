@@ -1,14 +1,16 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
-vi.mock('../../../platforms/android/snapshot.ts', () => ({ snapshotAndroid: vi.fn() }));
-vi.mock('../../../platforms/android/input-actions.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platforms/android/input-actions.ts')>();
-  return { ...actual, pressAndroid: vi.fn(), backAndroid: vi.fn() };
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
+  return {
+    ...actual,
+    snapshotAndroid: vi.fn(),
+    pressAndroid: vi.fn(),
+    backAndroid: vi.fn(),
+  };
 });
 
-import { snapshotAndroid } from '../../../platforms/android/snapshot.ts';
-import { pressAndroid } from '../../../platforms/android/input-actions.ts';
+import { pressAndroid, snapshotAndroid } from '@agent-device/platform-android/mechanics';
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { createAndroidInteractor } from '../../../core/interactors/android.ts';
 import { makeAndroidSnapshotCapture } from '../../../__tests__/test-utils/android-snapshot-capture.ts';
@@ -28,7 +30,7 @@ afterEach(() => {
 test('Android alert get does not choose an exactly covered candidate', async () => {
   vi.mocked(snapshotAndroid).mockResolvedValue(coveredAlertCapture() as never);
 
-  const result = await alertLegs().readAlert();
+  const result = await alertLegs().readAlert!();
 
   expect(result).toMatchObject({ action: 'get', alert: null });
   expect(pressAndroid).not.toHaveBeenCalled();
@@ -38,12 +40,10 @@ test('Android alert accept does not tap an exactly covered candidate', async () 
   vi.useFakeTimers();
   vi.mocked(snapshotAndroid).mockResolvedValue(coveredAlertCapture() as never);
 
-  const outcome = alertLegs()
-    .acceptAlert()
-    .then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+  const outcome = alertLegs().acceptAlert!().then(
+    () => undefined,
+    (error: unknown) => error,
+  );
   await vi.advanceTimersByTimeAsync(3_500);
   const error = await outcome;
   expect(error).toBeInstanceOf(Error);

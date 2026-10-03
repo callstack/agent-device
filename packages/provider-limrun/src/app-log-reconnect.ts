@@ -91,9 +91,13 @@ async function reconnectAndroid(options: {
     });
     const serial = `${tunnel.address.address}:${tunnel.address.port}`;
     const adb = async (
-      args: string[],
+      args: readonly string[],
       commandOptions?: Parameters<LimrunRuntimeDependencies['host']['runAdb']>[1],
-    ) => await options.dependencies.host.runAdb(['-s', serial, ...args], commandOptions);
+    ) =>
+      await options.dependencies.host.runAdb(
+        options.dependencies.android.deviceAdbInvocation(serial, args),
+        commandOptions,
+      );
     const reader: LimrunAppLogReader = {
       platform: 'android',
       leaseId: options.descriptor.leaseId,
@@ -102,7 +106,10 @@ async function reconnectAndroid(options: {
         await options.dependencies.android.readLogs(adb, lineLimit),
       [Symbol.asyncDispose]: async () => {
         await options.dependencies.host
-          .runAdb(['disconnect', serial], { allowFailure: true, timeoutMs: 10_000 })
+          .runAdb(options.dependencies.android.hostAdbInvocation(['disconnect', serial]), {
+            allowFailure: true,
+            timeoutMs: 10_000,
+          })
           .catch(() => undefined);
         const results = await Promise.allSettled([
           Promise.resolve().then(() => tunnel.close()),

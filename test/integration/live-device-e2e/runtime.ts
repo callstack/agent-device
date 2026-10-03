@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { type CliJsonResult, formatResultDebug, runBuiltCliJson } from '../cli-json.ts';
+import { collectFailedStepEvidence, type FailedStepEvidence } from './failed-step-evidence.ts';
 
 export type StepRecord = {
   accepted: boolean;
@@ -49,6 +50,14 @@ type HarnessOptions<Context, BehaviorId extends string> = {
     env: NodeJS.ProcessEnv,
     options?: { timeoutMs?: number },
   ) => Promise<CliJsonResult>;
+  /**
+   * Platform-owned device facts for a failed step (rotation state, whether the app process is
+   * alive, crash logs), read outside agent-device so they describe the device even when the CLI
+   * path is what failed. Best-effort: a throw or undefined records nothing.
+   */
+  deviceEvidence?: (context: Context) => Promise<string | undefined>;
+  /** Bound for `deviceEvidence` as a group. A platform that adds probes raises this with them. */
+  deviceEvidenceTimeoutMs?: number;
   writeCoverageReport: (context: Context) => void;
 };
 
@@ -85,6 +94,8 @@ export function createLiveDeviceHarness<
   Context extends LiveDeviceContext<BehaviorId>,
   BehaviorId extends string,
 >(options: HarnessOptions<Context, BehaviorId>) {
+  const reportedFailures = new WeakSet<Error>();
+
   async function runScenario(context: Context, scenario: LiveScenario<Context>): Promise<void> {
     context.currentScenario = scenario.id;
     const commandCounts = evidenceCounts(
@@ -111,10 +122,44 @@ export function createLiveDeviceHarness<
         behaviorCounts,
       );
       context.completedScenarios.push(scenario.id);
+    } catch (error) {
+      await recordScenarioFailure(context, error);
+      throw error;
     } finally {
       context.timings.push({ durationMs: Date.now() - startedAt, id: scenario.id });
       options.writeCoverageReport(context);
     }
+  }
+
+  async function recordScenarioFailure(context: Context, error: unknown): Promise<void> {
+    if (error instanceof Error && reportedFailures.has(error)) return;
+    try {
+      const evidence = await captureFailedStepEvidence(context);
+      writeFailureReport(
+        context,
+        error instanceof Error ? (error.stack ?? error.message) : String(error),
+        evidence,
+      );
+    } catch {
+      // Artifact I/O is best-effort and must not replace the scenario failure.
+    }
+  }
+
+  function writeFailureReport(
+    context: Context,
+    description: string,
+    evidence: FailedStepEvidence,
+  ): string {
+    const message = [
+      description,
+      `scenario: ${context.currentScenario}`,
+      `artifacts: ${context.artifactDir}`,
+      `screenshot: ${evidence.screenshotPath ?? '(capture failed)'}`,
+      `snapshot: ${evidence.snapshotPath ?? '(capture failed)'}`,
+      `device: ${evidence.devicePath ?? '(not collected)'}`,
+    ].join('\n');
+    fs.writeFileSync(path.join(context.artifactDir, 'failed-step.txt'), message);
+    return message;
   }
 
   async function runStep(
@@ -140,7 +185,7 @@ export function createLiveDeviceHarness<
       status: result.status,
       step,
     });
-    assertStepOutcome(context, step, fullArgs, result, failedAsExpected, stepOptions);
+    await assertStepOutcome(context, step, fullArgs, result, failedAsExpected, stepOptions);
     updateSessionState(context, args[0], result.status);
     return result;
   }
@@ -158,28 +203,43 @@ export function createLiveDeviceHarness<
     writeStepHistory(context);
   }
 
-  function assertStepOutcome(
+  async function assertStepOutcome(
     context: Context,
     step: string,
     fullArgs: string[],
     result: CliJsonResult,
     failedAsExpected: boolean,
     stepOptions: RunStepOptions,
-  ): void {
+  ): Promise<void> {
     const unexpectedFailure =
       result.status !== 0 && !failedAsExpected && stepOptions.allowFailure !== true;
     if (unexpectedFailure) {
-      const message = [
+      const evidence = await captureFailedStepEvidence(context);
+      const message = writeFailureReport(
+        context,
         formatResultDebug(step, fullArgs, result),
-        `scenario: ${context.currentScenario}`,
-        `artifacts: ${context.artifactDir}`,
-      ].join('\n');
-      fs.writeFileSync(path.join(context.artifactDir, 'failed-step.txt'), message);
-      assert.fail(message);
+        evidence,
+      );
+      const failure = new assert.AssertionError({ message });
+      reportedFailures.add(failure);
+      throw failure;
     }
     if (stepOptions.expectFailure === true && result.status === 0) {
       assert.fail(`${step} unexpectedly succeeded\ncommand: agent-device ${fullArgs.join(' ')}`);
     }
+  }
+
+  function captureFailedStepEvidence(context: Context): Promise<FailedStepEvidence> {
+    const runCli = options.runCli ?? runBuiltCliJson;
+    const deviceEvidence = options.deviceEvidence;
+    return collectFailedStepEvidence({
+      stem: path.join(context.artifactDir, `failed-step-${context.stepHistory.length}`),
+      runCli: (args) => runCli(options.commonFlags(context, args), context.env),
+      ...(deviceEvidence ? { deviceEvidence: () => deviceEvidence(context) } : {}),
+      ...(options.deviceEvidenceTimeoutMs === undefined
+        ? {}
+        : { deviceEvidenceTimeoutMs: options.deviceEvidenceTimeoutMs }),
+    });
   }
 
   function updateSessionState(context: Context, command: string | undefined, status: number): void {

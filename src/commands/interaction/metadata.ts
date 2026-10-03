@@ -11,14 +11,17 @@ import {
   readGesturePayload,
 } from '@agent-device/contracts/gesture-input';
 import { SCROLL_DURATION_MAX_MS } from '@agent-device/contracts/scroll-command';
+import { IS_PREDICATES } from '@agent-device/contracts/is-predicate';
 import {
   SCROLL_DIRECTIONS,
+  SCROLL_INPUT_DIRECTIONS,
   SWIPE_PATTERNS,
   SWIPE_PAUSE_MAX_MS,
   SWIPE_PRESETS,
   SWIPE_REPETITION_MAX,
 } from '@agent-device/contracts/scroll-gesture';
 import { FIND_LOCATORS } from '@agent-device/selectors';
+import { commandAcceptsReadinessBudget } from '@agent-device/command-registry/registry';
 import {
   booleanField,
   elementTargetField,
@@ -26,6 +29,7 @@ import {
   integerField,
   interactionTargetField,
   numberField,
+  operatorField,
   pointField,
   repeatedFields,
   requiredField,
@@ -38,7 +42,6 @@ import { readCommonInput, type CommonCommandInput } from '../common-input-fields
 import { readInputRecord } from '../input-readers.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { postActionObservationFields } from '../post-action-observation-grammar.ts';
-import { SCROLL_INPUT_DIRECTIONS } from './runtime/gestures.ts';
 
 const FIND_ACTION_VALUES = [
   'click',
@@ -67,9 +70,9 @@ const interactionCommandDescriptions = {
     'Move input focus to explicit screen coordinates without entering text. Prefer semantic interactions when a snapshot ref or selector is available; use type or fill after focus.',
   type: 'Append text to the currently focused input. Use fill when the existing field value should be replaced, and focus first when no input is active.',
   scroll:
-    'Scroll in a direction, or toward the top/bottom edge of scrollable content. The optional amount is the finger-path fraction of the viewport axis; app scroll physics determine the final content offset.',
+    'Scroll in a direction, or toward the top/bottom edge of scrollable content. Set until to a selector to reach an off-screen target in one command rather than a scroll-and-check loop. The optional amount is the finger-path fraction of the viewport axis, honored up to 0.8 of it; directional scrolls reduce release momentum, while app scroll physics determine the final content offset. A visible keyboard shortens the swiped band instead of being dismissed; when too little is left, the command refuses with scroll_keyboard_occludes_surface. A directional scroll also reports the movement it observed as movement: moved, at-edge, unchanged, or unobserved when the two reads could not back a claim either way; an unchanged surface inside a container that still hides content in that direction refuses with scroll_no_progress rather than repeating the requested distance. The movement field is absent where a tier verifies per pass (top/bottom, until), where the runtime cannot read a screen, or where a settle observation or a replay already owns that observation.',
   get: 'Read text or accessibility attributes from a snapshot ref or selector without changing the app. Use format text for visible content or attrs for the element attribute map.',
-  is: 'Check whether a selector satisfies a UI predicate such as visible, hidden, editable, selected, focused, or text. Use wait when the condition may appear asynchronously.',
+  is: 'Check whether a selector satisfies a UI predicate such as visible, hidden, exists, absent, editable, selected, focused, or text. `absent` passes only when one readable, complete, settled, unscoped, full-depth accessibility capture has zero matches. Use wait when the condition may appear asynchronously.',
   find: 'Find by text/label/value/role/id and run action',
   gesture:
     'Perform a structured pan, fling, swipe, pinch, rotate, transform, or drag gesture. Select the gesture kind, then provide only the inputs that apply to that kind.',
@@ -77,12 +80,37 @@ const interactionCommandDescriptions = {
 
 type InteractionCommandName = keyof typeof interactionCommandDescriptions;
 
+/**
+ * The input field a command's `targetReadiness: 'budgeted'` descriptor trait entitles it to. Only
+ * those commands declare `readinessTimeoutMs`; the common input reader refuses the key for every
+ * command whose fields do not (`common-input-fields.ts`). Fails closed at module load for a command
+ * without the trait, so a field map cannot advertise a budget its runtime never polls under.
+ */
+function targetReadinessFields(command: InteractionCommandName) {
+  if (!commandAcceptsReadinessBudget(command)) {
+    throw new Error(`${command} does not declare targetReadiness: 'budgeted'`);
+  }
+  return {
+    readinessTimeoutMs: operatorField(
+      integerField(
+        "Operator-only: how long the command may poll for a target that does not exist yet, in milliseconds. Capped at the promotedTarget row's maxTimeoutMs; omitted takes the one-attempt resolution path.",
+        { min: 1 },
+      ),
+      {
+        operatorPath:
+          'Pass readinessTimeoutMs directly as CLI/Node.js command input; it is not exposed to model-facing tools.',
+      },
+    ),
+  };
+}
+
 const clickFields = {
   target: requiredField(interactionTargetField()),
   button: enumField(CLICK_BUTTONS, 'Pointer button for platforms that support mouse buttons.'),
   ...selectorSnapshotFields(),
   ...repeatedFields(),
   ...postActionObservationFields('click'),
+  ...targetReadinessFields('click'),
 };
 
 const pressFields = {
@@ -90,6 +118,7 @@ const pressFields = {
   ...selectorSnapshotFields(),
   ...repeatedFields(),
   ...postActionObservationFields('press'),
+  ...targetReadinessFields('press'),
 };
 
 const fillFields = {
@@ -112,6 +141,7 @@ const longPressFields = {
   durationMs: integerField('Long press duration in milliseconds.', { min: 0 }),
   ...selectorSnapshotFields(),
   ...postActionObservationFields('longpress'),
+  ...targetReadinessFields('longpress'),
 };
 
 const hoverFields = {
@@ -142,6 +172,9 @@ const scrollFields = {
   direction: requiredField(enumField(SCROLL_INPUT_DIRECTIONS)),
   amount: numberField('Platform scroll amount.'),
   pixels: integerField('Pixel scroll amount.', { min: 0 }),
+  until: stringField(
+    'Repeat scroll passes until this selector is visible on screen, then stop. Not valid with the top/bottom edge directions, which carry their own stop condition.',
+  ),
   durationMs: integerField('Scroll duration in milliseconds when the backend supports pacing.', {
     min: 0,
     max: SCROLL_DURATION_MAX_MS,
@@ -171,9 +204,7 @@ const getFields = {
 };
 
 const isFields = {
-  predicate: requiredField(
-    enumField(['visible', 'hidden', 'exists', 'editable', 'selected', 'focused', 'text'] as const),
-  ),
+  predicate: requiredField(enumField(IS_PREDICATES)),
   selector: requiredField(stringField()),
   value: stringField(),
   ...selectorSnapshotFields(),
@@ -250,9 +281,9 @@ export const interactionCommandMetadata = [
   defineInteractionCommandMetadata('focus', focusFields),
   defineInteractionCommandMetadata('type', typeFields),
   defineInteractionCommandMetadata('scroll', scrollFields),
-  defineInteractionCommandMetadata('get', getFields),
+  defineInteractionCommandMetadata('get', getFields, { parseableOutput: true }),
   defineInteractionCommandMetadata('is', isFields),
-  defineInteractionCommandMetadata('find', findFields),
+  defineInteractionCommandMetadata('find', findFields, { parseableOutput: true }),
   defineFieldCommandMetadata('gesture', interactionCommandDescriptions.gesture, gestureFields, {
     readInput: readGestureInput,
   }),
@@ -266,6 +297,6 @@ export function readGestureInput(input: unknown): GestureInput {
 function defineInteractionCommandMetadata<
   const TName extends InteractionCommandName,
   const TFields extends CommandFieldMap,
->(name: TName, fields: TFields) {
-  return defineFieldCommandMetadata(name, interactionCommandDescriptions[name], fields);
+>(name: TName, fields: TFields, options?: { parseableOutput?: true }) {
+  return defineFieldCommandMetadata(name, interactionCommandDescriptions[name], fields, options);
 }

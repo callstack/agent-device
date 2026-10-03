@@ -5,10 +5,15 @@ import {
   type LocalInteractorOperationResolver,
   type ProviderInteractorOperationResolver,
 } from './interactor-operation-binding.ts';
-import type { Interactor, RunnerContext, ScreenshotOptions } from './interactor-types.ts';
+import type {
+  Interactor,
+  RunnerContext,
+  ScreenshotCaptureFacts,
+  ScreenshotOptions,
+} from './interactor-types.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
 
-export type { ScreenshotOptions } from './interactor-types.ts';
+export type { ScreenshotCaptureFacts, ScreenshotOptions } from './interactor-types.ts';
 
 /** Runner metadata needed by the selected capture implementation, without request-owned state. */
 export type ScreenshotRuntimeExecution = Readonly<Omit<RunnerContext, 'appBundleId' | 'signal'>>;
@@ -25,7 +30,7 @@ export type CaptureScreenshotInput = Readonly<{
 }>;
 
 export type ScreenshotRuntimeOperations = Readonly<{
-  captureScreenshot(input: CaptureScreenshotInput): Promise<void>;
+  captureScreenshot(input: CaptureScreenshotInput): Promise<ScreenshotCaptureFacts>;
 }>;
 
 export type ScreenshotRuntimeOperationFacts = Readonly<{
@@ -55,7 +60,7 @@ function bindScreenshotCapture(
         appBundleId: input.options?.appBundleId,
         signal,
       });
-      await interactor.screenshot(input.outPath, input.options);
+      return (await interactor.screenshot(input.outPath, input.options)) ?? {};
     },
   });
 }

@@ -1,6 +1,10 @@
 import type { CliFlags, DaemonExcludedCliFlag } from './cli-flags.ts';
 import type { DaemonBatchStep } from './batch-step.ts';
-import type { Point } from '@agent-device/kernel/snapshot';
+import {
+  SNAPSHOT_OPTION_FLAGS,
+  type Point,
+  type SnapshotOptionKey,
+} from '@agent-device/kernel/snapshot';
 
 // The flag vocabulary a dispatched command is stated in terms of.
 //
@@ -24,13 +28,15 @@ export type MaestroRuntimeFlags = {
 export type CommandFlags = Omit<CliFlags, DaemonExcludedCliFlag> & {
   batchSteps?: DaemonBatchStep[];
   clearAppState?: boolean;
-  interactionOutcome?: {
-    retryOnNoChange?: boolean;
-  };
   launchArgs?: string[];
   kind?: string;
   maestro?: MaestroRuntimeFlags;
   postGestureStabilization?: boolean;
+  /**
+   * Readiness budget for press/click/longpress, capped at the promotedTarget row's maxTimeoutMs.
+   * No CliFlags counterpart: never CLI- or model-writable.
+   */
+  readinessTimeoutMs?: number;
   snapshotIncludeHiddenContentHints?: boolean;
   leaseProvider?: string;
   provider?: string;
@@ -43,3 +49,14 @@ export type CommandFlags = Omit<CliFlags, DaemonExcludedCliFlag> & {
   shardCount?: number;
   shardIndex?: number;
 };
+
+// Re-pins SNAPSHOT_OPTION_FLAGS (declared once in the kernel, which sits below contracts and
+// cannot name CommandFlags) against CommandFlags here: a renamed or misspelled flag key fails to
+// compile instead of silently reading `undefined` at every snapshotOptionsFromFlags call site.
+// This is a compile-time check, not API — it stays unexported so the command facade doesn't have
+// to widen just to carry it.
+const snapshotOptionFlagsPinnedToCommandFlags = SNAPSHOT_OPTION_FLAGS satisfies Record<
+  SnapshotOptionKey,
+  keyof CommandFlags
+>;
+void snapshotOptionFlagsPinnedToCommandFlags;

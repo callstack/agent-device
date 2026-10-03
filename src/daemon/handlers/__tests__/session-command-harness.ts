@@ -1,7 +1,5 @@
-import {
-  handleSessionCommands as handleProductionSessionCommands,
-  type SessionCommandInput,
-} from '../session.ts';
+import { handleSessionCommands as handleProductionSessionCommands } from '../session.ts';
+import type { SessionCommandInput } from '../session-command-input.ts';
 import type {
   AppDeploymentInput,
   AppDeploymentResult,

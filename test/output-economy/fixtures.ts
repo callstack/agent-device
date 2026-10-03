@@ -1,7 +1,7 @@
 import type { CaptureSnapshotResult, CommandRequestResult } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import type { DaemonResponseData } from '../../src/daemon/types.ts';
+import type { DaemonResponseData } from '../../src/daemon/daemon-request.ts';
 
 const SNAPSHOT_NODES: RawSnapshotNode[] = [
   {

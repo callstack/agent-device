@@ -1,5 +1,8 @@
 import {
   createRequestCanceledError,
+  discloseDispatch,
+  discloseUnclassifiedDispatch,
+  type DispatchDisclosure,
   isRequestCanceledError,
   AppError,
 } from '@agent-device/kernel/errors';
@@ -13,19 +16,40 @@ import {
   runXcrun,
 } from './host.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { BootFailureReason } from '@agent-device/provision-kit/boot-diagnostics';
 import {
   createRunnerCommandRouteResolver,
   invalidateDeviceTunnelIpCache,
   type RunnerCommandRoute,
 } from './runner-command-route.ts';
 import {
-  buildRunnerConnectError,
-  buildRunnerEarlyExitError,
+  classifyRunnerStartupFailure,
+  enrichRunnerStartupFailureWithDeviceStates,
+  isRunnerCommandProvablyUnwritten,
   isUsbmuxDeviceUnattachedError,
+  RUNNER_CACHE_RECOVERY_HINT,
+  runnerConnectFailureDetails,
   shouldRetryRunnerConnectError,
-  type RunnerCommand,
-} from './runner-contract.ts';
+  type IosRunnerDeviceStates,
+} from './runner-error-classification.ts';
+import type { RunnerCommand } from './runner-contract.ts';
 import type { RunnerSession } from './runner-session-types.ts';
+
+export type RunnerConnectionSession = Pick<
+  RunnerSession,
+  | 'startupRetryWake'
+  | 'child'
+  | 'startupDeviceStates'
+  | 'state'
+  | 'testPromise'
+  | 'readLogTail'
+  | 'device'
+  | 'runnerLogPath'
+>;
+import {
+  runnerSimulatorSetFailureDetails,
+  simulatorSetDestinationNotFoundMessage,
+} from './runner-device-set.ts';
 import {
   canFallBackFromUsbmux,
   fetchWithTimeout,
@@ -45,13 +69,16 @@ export async function waitForRunner(
   command: RunnerCommand,
   logPath?: string,
   timeoutMs: number = RUNNER_STARTUP_TIMEOUT_MS,
-  session?: RunnerSession,
+  session?: RunnerConnectionSession,
   signal?: AbortSignal,
 ): Promise<Response> {
   const deadline = Deadline.fromTimeoutMs(timeoutMs);
   const { resolveRoute, markUsbmuxUnattached } = createRunnerCommandRouteResolver(device, port);
   let route = await resolveRoute(deadline.remainingMs());
   let lastError: unknown = null;
+  // Every attempt posts the command itself, so the loop gives up "before send" only when no
+  // attempt could have written it.
+  let commandMayHaveBeenWritten = false;
   const maxAttempts = Math.max(1, Math.ceil(timeoutMs / RUNNER_CONNECT_ATTEMPT_INTERVAL_MS));
   try {
     return await retryWithPolicy(
@@ -73,6 +100,7 @@ export async function waitForRunner(
           },
           setLastError: (err) => {
             lastError = err;
+            if (!isRunnerCommandProvablyUnwritten(err)) commandMayHaveBeenWritten = true;
           },
         });
         if (response) return response;
@@ -114,16 +142,50 @@ export async function waitForRunner(
   if (device.kind === 'simulator') {
     const remainingMs = deadline.remainingMs();
     if (remainingMs <= 0) {
-      throw buildRunnerConnectError({ port, endpoints: route.endpoints, logPath, lastError });
+      throw withRunnerWriteEvidence(
+        buildRunnerConnectError({ port, endpoints: route.endpoints, logPath, lastError }),
+        commandMayHaveBeenWritten,
+      );
     }
-    const simResponse = await postCommandViaSimulator(device, port, command, remainingMs, signal);
+    const simResponse = await postCommandViaSimulator(
+      device,
+      port,
+      command,
+      remainingMs,
+      signal,
+    ).catch((error: unknown) => {
+      throw withRunnerWriteEvidence(error, commandMayHaveBeenWritten);
+    });
     return new Response(simResponse.body, { status: simResponse.status });
   }
 
   if (session?.child.exitCode !== null && session?.child.exitCode !== undefined) {
-    throw await buildRunnerEarlyExitError({ session, port, logPath });
+    throw withRunnerWriteEvidence(
+      await buildRunnerEarlyExitError({ session, port, logPath }),
+      commandMayHaveBeenWritten,
+    );
   }
-  throw buildRunnerConnectError({ port, endpoints: route.endpoints, logPath, lastError });
+  throw withRunnerWriteEvidence(
+    buildRunnerConnectError({
+      port,
+      endpoints: route.endpoints,
+      logPath,
+      lastError,
+      deviceStates: session?.startupDeviceStates,
+    }),
+    commandMayHaveBeenWritten,
+  );
+}
+
+/**
+ * An earlier attempt that may have written the command may also have executed it, so the loop's
+ * failure is `unknown` whatever a later refused attempt stamped.
+ */
+function withRunnerWriteEvidence(error: unknown, commandMayHaveBeenWritten: boolean): unknown {
+  if (!(error instanceof AppError)) return error;
+  return commandMayHaveBeenWritten
+    ? discloseDispatch(error, 'unknown')
+    : discloseUnclassifiedDispatch(error, 'no');
 }
 
 type RunnerRouteResolver = ReturnType<typeof createRunnerCommandRouteResolver>['resolveRoute'];
@@ -134,7 +196,7 @@ async function attemptRunnerConnection(params: {
   command: RunnerCommand;
   timeoutMs: number;
   logPath?: string;
-  session?: RunnerSession;
+  session?: RunnerConnectionSession;
   route: RunnerCommandRoute;
   resolveRoute: RunnerRouteResolver;
   markUsbmuxUnattached: () => void;
@@ -158,7 +220,7 @@ async function ensureRunnerAttemptCanStart(params: {
   port: number;
   timeoutMs: number;
   logPath?: string;
-  session?: RunnerSession;
+  session?: RunnerConnectionSession;
   attemptDeadline?: Deadline;
 }): Promise<void> {
   if (params.attemptDeadline?.isExpired()) {
@@ -232,12 +294,12 @@ async function tryReadySimulatorEndpoint(params: {
   device: DeviceInfo;
   port: number;
   command: RunnerCommand;
-  session?: RunnerSession;
+  session?: RunnerConnectionSession;
   signal?: AbortSignal;
   attemptDeadline?: Deadline;
   setLastError: (error: unknown) => void;
 }): Promise<Response | null> {
-  if (params.device.kind !== 'simulator' || !params.session?.ready) return null;
+  if (params.device.kind !== 'simulator' || params.session?.state !== 'ready') return null;
   return await tryRunnerSimulatorEndpoint(params.device, params.port, params.command, {
     signal: params.signal,
     attemptDeadline: params.attemptDeadline,
@@ -288,6 +350,7 @@ function buildRunnerEndpointProbeError(params: {
     port: params.port,
     endpoints: params.endpoints,
     lastError: params.lastError ? String(params.lastError) : undefined,
+    ...runnerConnectFailureDetails('runner_endpoint_probe_exhausted'),
   });
 }
 
@@ -311,10 +374,13 @@ async function tryRunnerRoute(
   try {
     const remainingMs = params.attemptDeadline?.remainingMs() ?? params.timeoutMs;
     if (remainingMs <= 0) {
-      throw new AppError('COMMAND_FAILED', 'Runner connection deadline exceeded', {
-        port: params.port,
-        timeoutMs: params.timeoutMs,
-      });
+      throw discloseDispatch(
+        new AppError('COMMAND_FAILED', 'Runner connection deadline exceeded', {
+          port: params.port,
+          timeoutMs: params.timeoutMs,
+        }),
+        'no',
+      );
     }
     return await usbmuxRunnerTransport.postCommand(
       device.id,
@@ -358,10 +424,13 @@ async function tryRunnerEndpoints(
     try {
       const remainingMs = attemptDeadline?.remainingMs() ?? timeoutMs;
       if (remainingMs <= 0) {
-        throw new AppError('COMMAND_FAILED', 'Runner connection deadline exceeded', {
-          port,
-          timeoutMs,
-        });
+        throw discloseDispatch(
+          new AppError('COMMAND_FAILED', 'Runner connection deadline exceeded', {
+            port,
+            timeoutMs,
+          }),
+          'no',
+        );
       }
       return await fetchWithTimeout(
         endpoint,
@@ -373,11 +442,11 @@ async function tryRunnerEndpoints(
         Math.min(RUNNER_CONNECT_REQUEST_TIMEOUT_MS, remainingMs),
         signal,
       );
-    } catch (err) {
-      if (signal?.aborted || isRequestCanceledError(err)) {
+    } catch (error) {
+      if (signal?.aborted || isRequestCanceledError(error)) {
         throw createRequestCanceledError();
       }
-      onError(endpoint, err);
+      onError(endpoint, error);
     }
   }
   return null;
@@ -399,14 +468,16 @@ async function tryRunnerSimulatorEndpoint(
   try {
     const simResponse = await postCommandViaSimulator(device, port, command, remainingMs, signal);
     return new Response(simResponse.body, { status: simResponse.status });
-  } catch (err) {
-    if (signal?.aborted || isRequestCanceledError(err)) {
+  } catch (error) {
+    if (signal?.aborted || isRequestCanceledError(error)) {
       throw createRequestCanceledError();
     }
-    onError(err);
+    onError(error);
     return null;
   }
 }
+
+const CURL_COULD_NOT_CONNECT_EXIT_CODE = 7;
 
 async function postCommandViaSimulator(
   device: DeviceInfo,
@@ -443,9 +514,119 @@ async function postCommandViaSimulator(
         port,
         reason,
         hint: bootFailureHint(reason),
+        ...runnerConnectFailureDetails('runner_connect_refused'),
+        // curl exit 7: it could not connect, so it sent nothing. Any other exit may follow the POST.
+        dispatched: (result.exitCode === CURL_COULD_NOT_CONNECT_EXIT_CODE
+          ? 'no'
+          : 'unknown') satisfies DispatchDisclosure,
       };
     },
   );
   const body = result.stdout as string;
   return { status: 200, body };
+}
+
+// What an early-exit error quotes of the runner's own log: enough for the boot-failure anchors
+// (signing, tunneld, device busy), bounded so a wedged xcodebuild cannot ship a megabyte in details.
+const RUNNER_EARLY_EXIT_LOG_TAIL_BYTES = 64 * 1024;
+
+export function resolveRunnerEarlyExitHint(
+  message: string,
+  stdout: string,
+  stderr: string,
+  reason?: BootFailureReason,
+): string {
+  const haystack = `${message}\n${stdout}\n${stderr}`.toLowerCase();
+  if (haystack.includes('device is busy') && haystack.includes('connecting')) {
+    return 'Target iOS device is still connecting. Keep it unlocked, wait for device trust/connection to settle, then retry.';
+  }
+  const classified = reason ?? 'IOS_RUNNER_CONNECT_TIMEOUT';
+  // Clearing cached build products cannot put a device into a provisioning
+  // profile, so that recovery advice is withheld where it would only add noise
+  // to an already actionable instruction.
+  if (classified === 'IOS_RUNNER_DEVICE_NOT_PROVISIONED') return bootFailureHint(classified);
+  return `${bootFailureHint(classified)} ${RUNNER_CACHE_RECOVERY_HINT}`;
+}
+
+function buildRunnerConnectError(params: {
+  port: number;
+  endpoints: string[];
+  logPath?: string;
+  lastError: unknown;
+  deviceStates?: IosRunnerDeviceStates;
+}): AppError {
+  const { port, endpoints, logPath, lastError, deviceStates } = params;
+  const message = 'Runner did not accept connection';
+  const error = new AppError('COMMAND_FAILED', message, {
+    port,
+    endpoints,
+    logPath,
+    lastError: lastError ? String(lastError) : undefined,
+    reason: classifyBootFailure({
+      error: lastError,
+      message,
+      context: { platform: 'ios', phase: 'connect' },
+    }),
+    hint: bootFailureHint('IOS_RUNNER_CONNECT_TIMEOUT'),
+    ...runnerConnectFailureDetails('runner_connect_refused'),
+  });
+  // The other way the connect stage gives up: `xcodebuild` is still alive at the deadline. It gets
+  // the same enrichment as the early exit below (#2683).
+  return enrichRunnerStartupFailureWithDeviceStates(error, deviceStates) as AppError;
+}
+
+export async function buildRunnerEarlyExitError(params: {
+  session: RunnerConnectionSession;
+  port: number;
+  logPath?: string;
+}): Promise<AppError> {
+  const { session, port, logPath } = params;
+  const result = await session.testPromise;
+  const message = 'Runner did not accept connection (xcodebuild exited early)';
+  // The runner writes its own output file, so the exec result holds nothing for a file-backed
+  // child; that file is what an early exit can quote (#2681).
+  const output = session.readLogTail?.(RUNNER_EARLY_EXIT_LOG_TAIL_BYTES) ?? '';
+  const reason = classifyBootFailure({
+    message,
+    stdout: output,
+    stderr: output,
+    context: { platform: 'ios', phase: 'connect' },
+  });
+  const simulatorSet = runnerSimulatorSetFailureDetails(session.device);
+  const setDestination = classifyRunnerStartupFailure(
+    new AppError('COMMAND_FAILED', message, { stderr: output, ...simulatorSet }),
+  );
+  const setDestinationMissing = setDestination.reason === 'simulator_set_destination_not_found';
+  // exec-guard-allow: xcodebuild can exit 0 and still count as an early exit;
+  // the trio is nested tool context under `xcodebuild`, classified into
+  // `reason`/`hint` above — not a process-exit wrap.
+  const error = new AppError(
+    'COMMAND_FAILED',
+    setDestinationMissing
+      ? simulatorSetDestinationNotFoundMessage(message, session.device, simulatorSet)
+      : message,
+    {
+      port,
+      // The quote always comes from the runner's own file, so that is the file the error has to name;
+      // pointing at the request's log would advertise a file that does not contain what is quoted (#2681).
+      logPath: session.runnerLogPath ?? logPath,
+      xcodebuild: {
+        exitCode: result.exitCode,
+        // One merged file since #2681: the tail is reported under `stderr`, which is where readers
+        // already look, next to the file it came from.
+        stderr: output,
+      },
+      reason: setDestinationMissing ? setDestination.reason : reason,
+      hint: setDestinationMissing
+        ? setDestination.hint
+        : resolveRunnerEarlyExitHint(message, output, output, reason),
+      ...simulatorSet,
+      ...runnerConnectFailureDetails('xcodebuild_exited_early'),
+    },
+  );
+  // The build catch is not the only way a runner stops before serving a command. A locked phone lets
+  // the build finish and kills `xcodebuild test-without-building` instead, so nothing reaches that
+  // catch and the disk-image state read before the build would be dropped. Same enrichment, applied
+  // to the failure this path actually produces (#2683).
+  return enrichRunnerStartupFailureWithDeviceStates(error, session.startupDeviceStates) as AppError;
 }

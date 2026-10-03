@@ -4,7 +4,8 @@ import { AppError } from '@agent-device/kernel/errors';
 import { selectorContainsKey } from '@agent-device/selectors';
 import { formatMaestroPoint } from './export-points.ts';
 import { DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY } from './compatibility-policy.ts';
-import type { MaestroExportCommand, MaestroExportConfig } from './export-types.ts';
+import type { ConvertedAction, MaestroExportCommand, MaestroExportConfig } from './export-types.ts';
+import { NAVIGATION_ACTION_CONVERTERS } from './export-navigation.ts';
 import { stringifyMaestroYamlDocuments } from './export-yaml.ts';
 
 export type MaestroExportWarning = {
@@ -31,11 +32,6 @@ type ExportContext = {
   warnings: MaestroExportWarning[];
   unsupported: MaestroExportWarning[];
 };
-
-type ConvertedAction =
-  | { kind: 'commands'; commands: MaestroExportCommand[]; warnings?: string[] }
-  | { kind: 'config'; appId: string; commands: MaestroExportCommand[]; warnings?: string[] }
-  | { kind: 'unsupported'; message: string };
 
 type ActionConverter = (
   action: SessionAction,
@@ -72,7 +68,7 @@ export function exportReplayActionsToMaestro(
         appendWarnings(context, converted.warnings, action, line);
         break;
       case 'config':
-        assignAppId(context, converted.appId, action, line);
+        context.config.appId ??= converted.appId;
         commands.push(...converted.commands);
         appendWarnings(context, converted.warnings, action, line);
         break;
@@ -107,14 +103,12 @@ function buildInitialConfig(metadata: MaestroExportOptions['metadata']): Maestro
 }
 
 const ACTION_CONVERTERS: Record<string, ActionConverter> = {
-  open: convertOpenAction,
+  ...NAVIGATION_ACTION_CONVERTERS,
   click: convertClickAction,
   press: convertClickAction,
   longpress: convertLongPressAction,
   fill: convertFillAction,
   type: convertTypeAction,
-  keyboard: convertKeyboardAction,
-  back: () => ({ kind: 'commands', commands: ['back'] }),
   wait: convertWaitAction,
   find: convertFindAction,
   screenshot: convertScreenshotAction,
@@ -132,40 +126,6 @@ function convertAction(
       message: `${action.command} has no Maestro equivalent`,
     }
   );
-}
-
-function convertOpenAction(action: SessionAction): ConvertedAction {
-  const [first, second] = action.positionals;
-  if (!first) return { kind: 'unsupported', message: 'open requires an app id or URL' };
-
-  if (isUrl(first)) {
-    return { kind: 'commands', commands: [{ openLink: first }] };
-  }
-
-  const launchApp = buildLaunchAppCommand(action, first);
-  if (second && isUrl(second)) {
-    return { kind: 'config', appId: first, commands: [launchApp, { openLink: second }] };
-  }
-  if (second) {
-    return { kind: 'unsupported', message: 'open with a non-URL second argument is unsupported' };
-  }
-  return { kind: 'config', appId: first, commands: [launchApp] };
-}
-
-function buildLaunchAppCommand(action: SessionAction, appId: string): MaestroExportCommand {
-  const options = buildLaunchAppOptions(action);
-  return options ? { launchApp: { appId, ...options } } : 'launchApp';
-}
-
-function buildLaunchAppOptions(action: SessionAction): Record<string, unknown> | undefined {
-  const launchArgs = action.flags?.launchArgs;
-  const options: Record<string, unknown> = {};
-  if (action.flags?.relaunch === true) options.stopApp = true;
-  if (action.flags?.clearAppState === true) options.clearState = true;
-  if (Array.isArray(launchArgs) && launchArgs.length > 0) {
-    options.launchArguments = launchArgs;
-  }
-  return Object.keys(options).length > 0 ? options : undefined;
 }
 
 function convertClickAction(
@@ -298,15 +258,6 @@ function convertTypeAction(action: SessionAction): ConvertedAction {
   return { kind: 'commands', commands: [{ inputText: text }] };
 }
 
-function convertKeyboardAction(action: SessionAction): ConvertedAction {
-  const [subcommand] = action.positionals;
-  if (subcommand === 'dismiss') return { kind: 'commands', commands: ['hideKeyboard'] };
-  if (subcommand === 'enter' || subcommand === 'return') {
-    return { kind: 'commands', commands: [{ pressKey: 'Enter' }] };
-  }
-  return { kind: 'unsupported', message: `keyboard ${subcommand ?? ''}`.trim() };
-}
-
 function convertWaitAction(
   action: SessionAction,
   resolveSelector: MaestroExportOptions['resolveSelector'],
@@ -320,6 +271,12 @@ function convertWaitAction(
       warnings: [
         'wait <ms> exports as waitForAnimationToEnd and may return before the full duration',
       ],
+    };
+  }
+  if (first === 'absent') {
+    return {
+      kind: 'unsupported',
+      message: 'strict wait absent requires zero selector matches and is unsupported by Maestro',
     };
   }
   if (first === 'text' && second) {
@@ -478,26 +435,6 @@ function withTapOptions(target: unknown, options: Record<string, unknown>): Maes
   return { tapOn: target };
 }
 
-function assignAppId(
-  context: ExportContext,
-  appId: string,
-  action: SessionAction,
-  line: number,
-): void {
-  if (!context.config.appId) {
-    context.config.appId = appId;
-    return;
-  }
-  if (context.config.appId === appId) return;
-  context.unsupported.push({
-    line,
-    action: formatActionForMessage(action),
-    message:
-      `multiple app ids cannot be represented in one Maestro config ` +
-      `(${context.config.appId} vs ${appId})`,
-  });
-}
-
 function readBackspaceCount(text: string): number | null {
   if (text.length === 0) return null;
   if (![...text].every((char) => char === '\b')) return null;
@@ -538,10 +475,6 @@ function formatUnsupportedList(entries: MaestroExportWarning[]): string {
 
 function formatActionForMessage(action: SessionAction): string {
   return [action.command, ...(action.positionals ?? [])].join(' ').trim();
-}
-
-function isUrl(value: string): boolean {
-  return /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(value);
 }
 
 function isNumber(value: string | undefined): value is string {

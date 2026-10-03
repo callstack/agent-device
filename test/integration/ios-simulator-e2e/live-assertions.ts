@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   assertFilesDiffer,
   assertJsonContains,
@@ -21,32 +21,72 @@ export const { assertElementText, assertWaitSelector, assertWaitText, capturePng
     PUBLIC_COMMANDS.wait,
   );
 
-const SCROLL_SEARCH_ATTEMPTS = 4;
-// A stalled capture says nothing about where the element is, so it must not consume the scroll
-// budget outright; a couple of retries absorb a slow runner without masking a real absence.
-const SCROLL_SEARCH_STALL_RETRIES = 2;
+export type LiveSnapshotNode = {
+  depth?: unknown;
+  hittable?: unknown;
+  identifier?: unknown;
+  index?: unknown;
+  label?: unknown;
+  parentIndex?: unknown;
+  type?: unknown;
+};
+
+export function snapshotNodes(result: { json?: any }): LiveSnapshotNode[] {
+  const nodes = result.json?.data?.nodes;
+  assert.ok(
+    Array.isArray(nodes),
+    `snapshot response did not contain nodes: ${JSON.stringify(result)}`,
+  );
+  return nodes as LiveSnapshotNode[];
+}
+
+/**
+ * Three forward scrolls reach 2.25 viewports of finger travel. The reverse steps are shorter: a
+ * controlled iOS scroll can still carry post-release inertia under host load (ADR 0013), so a
+ * forward step can carry a short target past the viewport, and a reverse step plus that inertia
+ * must stay inside one viewport so the reverse sweep cannot skip it again.
+ */
+const FORWARD = { direction: 'down', amount: '0.75' } as const;
+const REVERSE = { direction: 'up', amount: '0.5' } as const;
+const SCROLL_SEARCH_PLAN = [FORWARD, FORWARD, FORWARD, REVERSE, REVERSE, REVERSE];
+// A stalled capture, or one taken while the last scroll was still moving, says nothing about where
+// the element is, so re-reading it must not consume a scroll. A couple of re-reads per scroll absorb
+// a slow runner without masking a real absence.
+const SCROLL_SEARCH_REREADS = 2;
+const SETTLE_MS = '1000';
+
+export type ScrollSearchStep = (typeof SCROLL_SEARCH_PLAN)[number];
+
+export type ScrollSearchDevice = {
+  probeVisibility: (probe: number) => Promise<CliJsonResult>;
+  /** Gives a surface that was still moving a bounded pause before the next read. */
+  settle: () => Promise<void>;
+  scroll: (step: ScrollSearchStep, index: number) => Promise<unknown>;
+};
 
 export async function assertElementTextAfterScrolling(
   context: LiveContext,
   selector: string,
   expected: string,
 ): Promise<void> {
-  await searchForVisibleElement(
-    selector,
-    (attempt) =>
+  await searchForVisibleElement(selector, {
+    probeVisibility: (probe) =>
       runStep(
         context,
-        `check ${selector} visibility after scroll (attempt ${attempt})`,
+        `check ${selector} visibility (probe ${probe})`,
         ['is', 'visible', selector],
         { allowFailure: true },
       ),
-    (attempt) =>
-      runStep(context, `scroll toward ${selector} after attempt ${attempt}`, [
+    settle: async () => {
+      await runStep(context, `settle before re-reading ${selector}`, ['wait', SETTLE_MS]);
+    },
+    scroll: (step, index) =>
+      runStep(context, `scroll ${step.direction} toward ${selector} (scroll ${index})`, [
         'scroll',
-        'down',
-        '0.75',
-      ]).then(() => undefined),
-  );
+        step.direction,
+        step.amount,
+      ]).then((result) => result.json?.data),
+  });
   await assertElementText(context, selector, expected);
 }
 
@@ -58,32 +98,39 @@ export async function assertElementTextAfterScrolling(
  */
 export async function searchForVisibleElement(
   selector: string,
-  probeVisibility: (attempt: number) => Promise<CliJsonResult>,
-  scrollAfterAttempt: (attempt: number) => Promise<void>,
+  device: ScrollSearchDevice,
 ): Promise<void> {
-  let stallRetriesLeft = SCROLL_SEARCH_STALL_RETRIES;
-  let lastFailure: CliJsonResult | undefined;
-
-  for (let attempt = 1; attempt <= SCROLL_SEARCH_ATTEMPTS;) {
-    const probe = await probeVisibility(attempt);
-    if (probe.status === 0) return;
-    lastFailure = probe;
-
-    // The snapshot never came back, so the surface was never read. Scrolling here would move the
-    // surface for a reason unrelated to visibility and spend an attempt on no evidence.
-    if (probe.json?.error?.details?.captureStalled === true && stallRetriesLeft > 0) {
-      stallRetriesLeft -= 1;
-      continue;
+  const history: string[] = [];
+  let probes = 0;
+  const readWindow = async (): Promise<boolean> => {
+    for (let rereads = 0; ; rereads += 1) {
+      probes += 1;
+      const result = await device.probeVisibility(probes);
+      history.push(`probe ${probes}: ${JSON.stringify(result.json ?? { status: result.status })}`);
+      if (result.status === 0) return true;
+      const unread = unreadSurface(result);
+      if (unread === undefined || rereads === SCROLL_SEARCH_REREADS) return false;
+      if (unread === 'moving') {
+        await device.settle();
+        history.push(`settled for ${SETTLE_MS} ms`);
+      }
     }
+  };
 
-    attempt += 1;
-    if (attempt <= SCROLL_SEARCH_ATTEMPTS) {
-      await scrollAfterAttempt(attempt - 1);
-    }
+  for (const [index, step] of SCROLL_SEARCH_PLAN.entries()) {
+    if (await readWindow()) return;
+    const scrolled = await device.scroll(step, index + 1);
+    history.push(`scroll ${step.direction} ${index + 1}: ${JSON.stringify(scrolled ?? null)}`);
   }
-  assert.fail(
-    `${selector} did not become visible after scrolling\nlast visibility probe: ${JSON.stringify(lastFailure?.json ?? null)}`,
-  );
+  if (await readWindow()) return;
+  assert.fail(`${selector} did not become visible after scrolling\n${history.join('\n')}`);
+}
+
+/** Why a missed probe says nothing about where the element is, if it says nothing. */
+function unreadSurface(result: CliJsonResult): 'moving' | 'stalled' | undefined {
+  const details = result.json?.error?.details;
+  if (details?.postGestureOutcome?.kind === 'unsettled') return 'moving';
+  return details?.captureStalled === true ? 'stalled' : undefined;
 }
 
 function requireNode(

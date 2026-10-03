@@ -53,7 +53,7 @@ function duration(summary: ResultSummary): string {
 function failureLine(failure: Failure): string {
   const name = failure.testName ?? failure.testIdentifierString ?? '(unnamed)';
   const text = String(failure.failureText ?? '')
-    .replace(/\s+/g, ' ')
+    .replaceAll(/\s+/g, ' ')
     .slice(0, MAX_FAILURE_TEXT);
   return `- \`${name}\`${text ? ` — ${text}` : ''}`;
 }

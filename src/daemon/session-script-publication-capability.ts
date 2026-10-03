@@ -1,5 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { SessionState } from './types.ts';
+import type { SessionState } from './session-state.ts';
 import {
   NO_SCRIPT_PUBLICATION,
   abortAuthoring,
@@ -12,7 +12,7 @@ import {
   resolveScriptTarget,
   scriptTargetForce,
 } from './session-script-publication-state.ts';
-import { expandSessionPath } from './session-paths.ts';
+import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 
 /**
  * `SessionScriptPublication` (#1478 P4a): the daemon-private projection owning every supported
@@ -77,10 +77,10 @@ export function isSessionRecording(session: SessionState | undefined): boolean {
  *   (2026-08-02) showed it used to let a never-armed `close --save-script` fold into the
  *   authoring lifecycle and publish moments later in the same request — a script with selector
  *   fallback chains but no recording-time `target-v1` evidence, and no signal to the caller.
- *   `session-close.ts`'s `assertTerminalRecordingCloseAllowed` now rejects an unarmed
- *   `close --save-script` before any action recording runs, so this arm only fires for a
- *   future non-close caller of the shared ingress; it is kept as that caller's safety net, not
- *   as a documented close-time behavior.
+ *   `session-lifecycle/internal/session-close.ts`'s `assertTerminalRecordingCloseAllowed` now
+ *   rejects an unarmed `close --save-script` before any action recording runs, so this arm only
+ *   fires for a future non-close caller of the shared ingress; it is kept as that caller's safety
+ *   net, not as a documented close-time behavior.
  * - `authoring` -> retarget under the #1258 per-target force rule (`resolveScriptTarget`).
  * - `repair` -> retarget the repair target the same way (a replayed step may carry the flag).
  *

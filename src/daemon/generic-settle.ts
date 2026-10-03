@@ -1,14 +1,21 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { SettleObservation, SettleParams } from '@agent-device/contracts/interaction';
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { commandSupportsSettleObservation } from '../core/command-descriptor/registry.ts';
-import type { ContextFromFlags } from './handlers/interaction-common.ts';
-import { readSettleRequest, settleFlagGuardResponse } from './handlers/interaction-flags.ts';
-import { createInteractionRuntime } from './handlers/interaction-runtime.ts';
-import { captureSnapshotForSession } from './handlers/interaction-snapshot.ts';
+import type {
+  SettleObservation,
+  SettleParams,
+  SurfaceScopedNodes,
+} from '@agent-device/contracts/interaction';
+import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
+import {
+  captureSnapshotForSession,
+  createInteractionRuntime,
+  readSettleRequest,
+  settleFlagGuardResponse,
+} from './interaction/index.ts';
+import type { BoundContextFromFlags } from './context.ts';
 import { issueSettleRefs } from './session-snapshot.ts';
 import type { SessionStore } from './session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
+import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { SessionState } from './session-state.ts';
 
 /**
  * `--settle` on the generic daemon route (#1638): `scroll` and `back` change
@@ -53,7 +60,7 @@ type GenericSettleContext = {
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
-  contextFromFlags: ContextFromFlags;
+  contextFromFlags: BoundContextFromFlags;
 };
 
 /**
@@ -69,8 +76,14 @@ export function planGenericSettleObservation(
   if (invalidSettleFlags) return { response: invalidSettleFlags };
   const settle = readSettleRequest(params.flags);
   if (!settle) return {};
-  const baselineNodes = params.session.snapshot?.nodes ?? [];
-  return { observe: async () => await observeSettled(params, settle, baselineNodes) };
+  const snapshot = params.session.snapshot;
+  const baseline: SurfaceScopedNodes = {
+    nodes: snapshot?.nodes ?? [],
+    ...(snapshot?.iosSystemSurfaceBundleId
+      ? { surfaceBundleId: snapshot.iosSystemSurfaceBundleId }
+      : {}),
+  };
+  return { observe: async () => await observeSettled(params, settle, baseline) };
 }
 
 /**
@@ -83,7 +96,7 @@ export function planGenericSettleObservation(
 async function observeSettled(
   context: GenericSettleContext,
   settle: SettleParams,
-  baselineNodes: SnapshotNode[],
+  baseline: SurfaceScopedNodes,
 ): Promise<SettleObservation | undefined> {
   const runtime = createGenericSettleRuntime(context);
   if (!runtime) return undefined;
@@ -92,7 +105,7 @@ async function observeSettled(
   // use for press/fill.
   const observation = await runtime.interactions.settleObservation({
     ...settle,
-    baselineNodes,
+    baseline,
     session: context.sessionName,
     requestId: context.req.meta?.requestId,
   });

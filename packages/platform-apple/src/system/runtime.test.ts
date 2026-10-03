@@ -100,6 +100,60 @@ test('a physical non-macOS Apple device refuses settings as a platform leaf', ()
 });
 
 /**
+ * The read leg is narrower than the write leg on purpose: `simctl ui <device> content_size` answers
+ * on an iPhone/iPad simulator and nowhere else, so the macOS host that sets an appearance and the
+ * tvOS/visionOS simulators whose content size was never verified all refuse a read their leaf can
+ * still perform. This table is the authority behind `settings text-size`'s per-leaf behavior.
+ */
+test.each([
+  { appleOs: 'ios', kind: 'simulator', expected: true },
+  { appleOs: 'ios', kind: 'device', expected: false },
+  { appleOs: 'ipados', kind: 'simulator', expected: true },
+  { appleOs: 'ipados', kind: 'device', expected: false },
+  { appleOs: 'tvos', kind: 'simulator', expected: false },
+  { appleOs: 'tvos', kind: 'device', expected: false },
+  { appleOs: 'visionos', kind: 'simulator', expected: false },
+  { appleOs: 'visionos', kind: 'device', expected: false },
+  { appleOs: 'macos', kind: 'device', expected: false },
+  { appleOs: 'watchos', kind: 'simulator', expected: false },
+] as const)(
+  'reading a setting on an Apple $appleOs $kind is available: $expected',
+  ({ appleOs, kind, expected }) => {
+    expect(appleSystemFacts(appleDevice(appleOs, kind)).readSetting.available).toBe(expected);
+  },
+);
+
+test('the read refusal names the leaf that reports a content size back', () => {
+  // One sentence for the host, the physical devices, and the unverified simulator families: they
+  // share the reason (no `simctl ui` reading observed) rather than three near-identical hints.
+  for (const device of [
+    appleDevice('macos', 'device'),
+    appleDevice('tvos', 'simulator'),
+    appleDevice('visionos', 'simulator'),
+  ]) {
+    expect(appleSystemFacts(device).readSetting).toEqual({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: 'Apple targets answer a settings read only on iPhone and iPad simulators, where `simctl ui` reports the value the device holds.',
+    });
+  }
+});
+
+test('watchOS closes the read leg for the reason it closes every interactor-backed operation', () => {
+  expect(appleSystemFacts(appleDevice('watchos', 'simulator')).readSetting).toEqual({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
+});
+
+test('a leaf that can set a setting can be refused the right to read one back', () => {
+  // The asymmetry the two-leg split exists for: tvOS keeps `settings wifi on` and loses the read.
+  const facts = appleSystemFacts(appleDevice('tvos', 'simulator'));
+  expect(facts.setSetting.available).toBe(true);
+  expect(facts.readSetting.available).toBe(false);
+});
+
+/**
  * `alert`'s retired admission was the host-or-simulator closure widened by one leaf: physical
  * iOS, whose XCTest alert path is device-verified. Every other physical Apple leaf stays closed
  * exactly as `supportsAlertSurface` left it, and watchOS narrows for want of an interactor.
@@ -158,6 +212,7 @@ test('binds the system operations for an admitted cell and none for a refused on
   expect(admitted.readClipboard).toBeTypeOf('function');
   expect(admitted.writeClipboard).toBeTypeOf('function');
   expect(admitted.setSetting).toBeTypeOf('function');
+  expect(admitted.readSetting).toBeTypeOf('function');
   expect(admitted.readAlert).toBeTypeOf('function');
   expect(admitted.acceptAlert).toBeTypeOf('function');
 
@@ -169,8 +224,23 @@ test('binds the system operations for an admitted cell and none for a refused on
   expect(refused.readClipboard).toBeUndefined();
   expect(refused.writeClipboard).toBeUndefined();
   expect(refused.setSetting).toBeUndefined();
+  expect(refused.readSetting).toBeUndefined();
   // The refused cell here is clipboard's and settings' — a physical iOS device, which `alert`
   // deliberately still admits, so its legs stay bound.
   expect(refused.readAlert).toBeTypeOf('function');
   expect(resolve).not.toHaveBeenCalled();
+});
+
+test('binds the settings write leg without the read leg on an unverified simulator family', async () => {
+  // An Apple TV simulator keeps every settings mutation the retired admission gave it and gains no
+  // read: binding follows the two cells independently, which is what the read leg exists for.
+  const resolve = vi.fn(async () => ({}) as unknown as Interactor);
+  const host = { localInteractors: { resolve } };
+  const bound = createAppleSystemOperations({
+    host,
+    device: appleDevice('tvos', 'simulator'),
+    signal: new AbortController().signal,
+  });
+  expect(bound.setSetting).toBeTypeOf('function');
+  expect(bound.readSetting).toBeUndefined();
 });

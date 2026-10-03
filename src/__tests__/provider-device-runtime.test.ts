@@ -28,6 +28,16 @@ test('provider device runtime registry delegates lifecycle, inventory, and inter
   });
   await requestProviders.recoverExpiredLease?.(world.lease);
   assert.deepEqual(requestProviders.recoverableProviderIds, ['hit']);
+  assert.equal(requestProviders.providerAppCatalog?.supports('hit'), true);
+  assert.equal(requestProviders.providerAppCatalog?.supports('miss'), false);
+  assert.deepEqual(
+    await requestProviders.providerAppCatalog?.list({ provider: 'hit', platform: 'ios' }),
+    [],
+  );
+  await assert.rejects(
+    () => requestProviders.providerAppCatalog!.list({ provider: 'miss', platform: 'ios' }),
+    /does not expose an app catalog/,
+  );
   assert.deepEqual(world.recoveredLeases, [world.lease]);
   assert.deepEqual(
     await requestProviders.deviceInventorySource?.discover(
@@ -142,6 +152,7 @@ function makeProviderRuntimeWorld() {
     interactor,
     portReverseResult: { provider: 'hit' },
   });
+  hitRuntime.appCatalog = async () => [];
   hitRuntime.recoverExpiredLease = async (expiredLease) => {
     recoveredLeases.push(expiredLease);
   };

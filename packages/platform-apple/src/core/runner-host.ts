@@ -1,0 +1,106 @@
+import type { AppleRunnerHost } from '../runner/index.ts';
+import { publishFileSync, acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
+
+import {
+  commandDeveloperDir,
+  isCommandTimeoutError,
+  requireExecSuccess,
+  runCmdBackground,
+  runCmdStreaming,
+  runCmdSync,
+} from '@agent-device/host-kit/command';
+import { shellQuote } from '@agent-device/kernel/device-shell';
+import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
+import {
+  isProcessAlive,
+  isProcessGroupAlive,
+  readProcessCommand,
+  readProcessStartTime,
+  signalPidsBestEffort,
+  signalProcessGroupBestEffort,
+  classifyOwnerLiveness,
+  readHostCpuArchSync,
+} from '@agent-device/host-kit/process';
+import { Deadline, isEnvTruthy, retryWithPolicy } from '@agent-device/host-kit/retry';
+
+import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
+
+import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
+import { isRecord } from '@agent-device/kernel/record';
+import { parseBooleanLiteral } from '@agent-device/kernel/source-value';
+import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
+
+import {
+  getRequestSignal,
+  isRequestCanceled,
+  emitRequestProgress,
+} from '@agent-device/host-kit/request';
+
+import { bootFailureHint, classifyBootFailure } from '@agent-device/provision-kit/boot-diagnostics';
+import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
+import { visitXmlPlistEntries } from './plist-xml.ts';
+import {
+  getRunnerDeviceClaimAuthorityProbe,
+  getRunnerLeaseOwnerStateDir,
+} from './runner-owner-state.ts';
+import { buildSimctlArgsForDevice, simulatorAddressFor } from './simctl.ts';
+import { readApplePlistJson, runAppleToolCommand, runXcrun } from './tool-provider.ts';
+
+/**
+ * The real host capabilities for `@agent-device/platform-apple/runner`: the one place
+ * the runner package's port meets the root-owned utilities. Consumed by the
+ * production composition module (`runner-client.ts`) and by the vitest
+ * `apple-runner` project setup, which installs the same capabilities as
+ * overridable test defaults.
+ *
+ * Names only -- `AppleRunnerHost` derives every signature from the owning module, and naming each
+ * import keeps the bundler shaking the rest of those modules away. Spreading the modules whole
+ * instead would drop this list, at the cost of putting all of their exports on the host object at
+ * runtime (measured: 41 members to 128, +1.8 kB shipped, including a vitest-only memo reset) and
+ * making a name shared by two of them silently rebind a capability.
+ */
+export const appleRunnerHost: AppleRunnerHost = {
+  runCmdStreaming,
+  runCmdSync,
+  runCmdBackground,
+  requireExecSuccess,
+  isCommandTimeoutError,
+  commandDeveloperDir,
+  shellQuote,
+  emitDiagnostic,
+  withDiagnosticTimer,
+  retryWithPolicy,
+  isEnvTruthy,
+  deadlineFromTimeoutMs: (timeoutMs, nowMs) => Deadline.fromTimeoutMs(timeoutMs, nowMs),
+  isProcessAlive,
+  isProcessGroupAlive,
+  readProcessStartTime,
+  readProcessCommand,
+  signalPidsBestEffort,
+  signalProcessGroupBestEffort,
+  findProjectRoot,
+  readVersion,
+  acquireProcessLock,
+  withProcessLock,
+  withKeyedLock,
+  publishFileSync,
+  classifyOwnerLiveness,
+  readHostCpuArchSync,
+  createTtlMemo,
+  parseBooleanLiteral,
+  isRecord,
+  emitRequestProgress,
+  getRequestSignal,
+  isRequestCanceled,
+  classifyBootFailure,
+  bootFailureHint,
+  runAppleToolCommand,
+  runXcrun,
+  readApplePlistJson,
+  buildSimctlArgsForDevice,
+  simulatorAddressFor,
+  resolveIosPhysicalDeviceControl,
+  visitXmlPlistEntries,
+  leaseOwnerStateDir: getRunnerLeaseOwnerStateDir,
+  hasDeviceClaimAuthority: (device) => getRunnerDeviceClaimAuthorityProbe()?.(device) ?? false,
+};

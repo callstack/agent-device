@@ -4,29 +4,36 @@ import path from 'node:path';
 
 import { DEFAULT_ALERT_TIMEOUT_MS } from '@agent-device/contracts/alert-contract';
 
-import { PUBLIC_COMMANDS } from '../../../src/command-catalog.ts';
+import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   assertElementText,
   assertElementTextAfterScrolling,
   assertJsonContains,
   assertWaitText,
 } from './live-assertions.ts';
+import { waitForDeepLinkDestination } from './live-deep-link-destination.ts';
 import { clearStateLaunchUrlMaestroFlow } from './live-fixtures.ts';
 import { type LiveContext, runStep, verifyBehavior, verifyCommand } from './live-harness.ts';
 
 const C = PUBLIC_COMMANDS;
 const ALERT_WAIT_TIMEOUT = String(DEFAULT_ALERT_TIMEOUT_MS);
 const FIXTURE_HOME_TITLE = 'Agent Device Tester';
+// The first wait may pay the runner's 45 s startup budget before its first capture.
+const COLD_RUNNER_WAIT_TIMEOUT_MS = 60_000;
 const AUTOMATION_DEEP_LINK =
   'agent-device-test-app:///automation?event=cold.start&payload=%7B%22source%22%3A%22deep-link%22%7D';
 
 async function observeFixtureHome(context: LiveContext) {
-  await assertWaitText(context, FIXTURE_HOME_TITLE);
+  await assertWaitText(context, FIXTURE_HOME_TITLE, {
+    debug: true,
+    timeoutMs: COLD_RUNNER_WAIT_TIMEOUT_MS,
+  });
   const snapshot = await runStep(context, 'capture fixture home', [
     'snapshot',
     '-i',
     '-s',
     FIXTURE_HOME_TITLE,
+    '--debug',
   ]);
   const nodes = Array.isArray(snapshot.json?.data?.nodes) ? snapshot.json.data.nodes : [];
   assert.ok(
@@ -57,6 +64,7 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
     'open',
     context.appId,
     '--relaunch',
+    '--debug',
   ]);
   assertJsonContains(opened, context.appId, 'open response should retain fixture identity');
   const runnerLogPath = opened.json?.data?.runnerLogPath;
@@ -76,8 +84,7 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   verifyCommand(context, C.open, 'cold launch exposes the fixture UI through snapshot and wait');
 
   await openAutomationDeepLink(context, 'cold launch fixture through a deep link');
-  await acceptDeepLinkConfirmationIfPresent(context);
-  await assertWaitText(context, 'Automation lab');
+  await waitForDeepLinkDestination(context, ['text', 'Automation lab']);
   await assertElementText(context, 'id="automation-event-name"', 'cold.start');
   await assertElementText(context, 'id="automation-event-payload"', '{"source":"deep-link"}');
   await assertClearStateLaunchUrl(context);
@@ -107,6 +114,13 @@ export async function assertAutomationInput(context: LiveContext): Promise<void>
   await assertWaitText(context, 'Automation sheet');
   await runStep(context, 'close fixture sheet', ['click', 'id="automation-close-sheet"']);
   await assertWaitText(context, 'Automation lab');
+  const absentSheet = await runStep(context, 'assert closed fixture sheet is absent', [
+    'is',
+    'absent',
+    'id="automation-close-sheet"',
+  ]);
+  assert.equal(absentSheet.json?.data?.pass, true, JSON.stringify(absentSheet.json));
+  verifyCommand(context, C.is, 'strict absence observes the unmounted fixture sheet control');
   await runStep(context, 'restore automation route top after sheet', ['scroll', 'top']);
   verifyBehavior(
     context,
@@ -237,34 +251,15 @@ async function assertClearStateLaunchUrl(context: LiveContext): Promise<void> {
   await assertElementText(context, 'id="automation-event-payload"', '{"source":"deep-link"}');
 }
 
-export async function acceptDeepLinkConfirmationIfPresent(context: LiveContext): Promise<void> {
-  const destination = await runStep(
-    context,
-    'wait for deep-link destination before inspecting system UI',
-    ['wait', 'text', 'Automation lab', '2500'],
-    { allowFailure: true },
-  );
-  if (destination.status === 0) return;
-
-  const alert = await runStep(context, 'inspect delayed deep-link system alert', ['alert', 'get'], {
-    allowFailure: true,
-  });
-  if (alert.status !== 0) return;
-  const alertInfo = alert.json?.data;
-  assert.match(String(alertInfo?.message), /^Open in\b/, JSON.stringify(alert.json));
-  assert.ok(
-    Array.isArray(alertInfo?.items) && alertInfo.items.includes('Open'),
-    JSON.stringify(alert.json),
-  );
-  await runStep(context, 'accept deep-link confirmation', ['alert', 'accept']);
-}
-
 async function openAutomationDeepLink(context: LiveContext, step: string): Promise<void> {
+  // --debug keeps the open's own request log, which is where a held launch URL's alert read, the
+  // post-open observation verdict and any re-hand-off are visible when this step fails.
   await runStep(context, step, [
     'open',
     context.appId,
     '--relaunch',
     '--launch-url',
     AUTOMATION_DEEP_LINK,
+    '--debug',
   ]);
 }

@@ -1,4 +1,4 @@
-import { createDurableCaptureResourceStore } from './durable-capture-resource-store.ts';
+import { createDurableCaptureResourceStore } from '@agent-device/capture-kit/durable-capture';
 
 export const appLogResourceStore = createDurableCaptureResourceStore({
   resourceKind: 'app-log',

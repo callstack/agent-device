@@ -16,17 +16,17 @@ export interface SettingsScreenProps {
   diagnosticsLoading: boolean;
   diagnosticsState: 'idle' | 'ready' | 'error';
   notificationsEnabled: boolean;
-  reducedMotionEnabled: boolean;
+  onConfirmReset: () => void;
+  onLoadDiagnostics: () => void;
   onOpenAccessorySetup: () => void;
   onOpenAutomationLab: () => void;
   onOpenInertSurface: () => void;
   onOpenWebViewLab: () => void;
-  onLoadDiagnostics: () => void;
   onRetryDiagnostics: () => void;
   onSetNotificationsEnabled: (value: boolean) => void;
   onSetReducedMotionEnabled: (value: boolean) => void;
   onToggleDiagnostics: () => void;
-  onConfirmReset: () => void;
+  reducedMotionEnabled: boolean;
 }
 
 export function SettingsScreen(props: SettingsScreenProps) {
@@ -59,8 +59,8 @@ export function SettingsScreen(props: SettingsScreenProps) {
       <ScreenTitle
         badge="Debug"
         subtitle="Toggles, accordion content, loading states, retryable error banners, and native alerts."
-        title="Settings"
         testID="settings-title"
+        title="Settings"
       />
 
       <SectionCard

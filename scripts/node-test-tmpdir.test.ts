@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { runCmd, runCmdBackground } from '../src/utils/exec.ts';
+import { runCmd, runCmdBackground } from '@agent-device/host-kit/command';
 import {
   liveRunDirectoryConsumers,
   pruneAbandonedRunDirectories,
@@ -256,6 +256,77 @@ test('every node --test package.json script routes through scripts/node-test-tmp
   );
 });
 
+// These two files each sweep the real shared root: this file asserts
+// `pruneAbandonedRunDirectories(TEST_RUN_TMP_ROOT)` both keeps and removes a
+// planted directory, and the Vitest lifecycle file drives a real `vitest` whose
+// global setup sweeps the same root. `node --test` runs files in parallel by
+// default, so one file's sweep can remove the directory the other is mid-flight
+// on: the orphan test's "the next run prunes it" assertion then observes `[]`
+// and fails. Whether it does depends on process interleaving, not the code —
+// it passed 5/5 locally and failed on a CI runner with `actual: []`.
+// Serialization is the fix; this keeps it an invariant rather than a flag
+// someone can drop while "cleaning up" the lane.
+const GLOBAL_SWEEP_TEST_FILES = [
+  'scripts/node-test-tmpdir.test.ts',
+  'scripts/vitest-tmpdir-global-setup.test.ts',
+];
+
+// Serialization must reach the CHILD runner, and must mean one file at a time.
+// The wrapper spawns `node <args after its own path> --test`, so a flag written
+// before the wrapper path is parsed by the wrapper's own node process and never
+// gets there; a bare substring test would also accept `--test-concurrency=10`,
+// which is ten files in flight and the same race. Read the forwarded tokens of
+// the one segment that runs both sweep files, the way the wrapper test above
+// segments `&&` chains.
+const TEST_CONCURRENCY_ONE = '--test-concurrency=1';
+const WRAPPER_SCRIPT_TOKEN = 'scripts/node-test-tmpdir.ts';
+
+function sweepSegmentRunsParallel(command: string): boolean {
+  const segment = command
+    .split('&&')
+    .find(
+      (part) =>
+        part.includes(WRAPPER_SCRIPT_TOKEN) &&
+        GLOBAL_SWEEP_TEST_FILES.every((file) => part.includes(file)),
+    );
+  if (segment === undefined) {
+    return false;
+  }
+
+  const tokens = segment.trim().split(/\s+/);
+  const wrapperIndex = tokens.indexOf(WRAPPER_SCRIPT_TOKEN);
+  if (wrapperIndex === -1) {
+    // The wrapper is only ever invoked with its path as a standalone argument;
+    // any other shape is one this check cannot reason about, so report it as
+    // unsynchronized rather than guessing.
+    return true;
+  }
+
+  const forwarded = tokens.slice(wrapperIndex + 1);
+  const declared = forwarded.filter((token) => token.startsWith('--test-concurrency='));
+  return declared.length !== 1 || declared[0] !== TEST_CONCURRENCY_ONE;
+}
+
+test('lanes that sweep the shared run-directory root serialize their files', () => {
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(REPOSITORY_ROOT, 'package.json'), 'utf8'),
+  ) as { scripts?: Record<string, string> };
+
+  const unsynchronized = Object.entries(manifest.scripts ?? {})
+    .filter(([, command]) => GLOBAL_SWEEP_TEST_FILES.every((file) => command.includes(file)))
+    .filter(([, command]) => sweepSegmentRunsParallel(command))
+    .map(([name]) => name);
+
+  assert.deepEqual(
+    unsynchronized,
+    [],
+    `these scripts run the global run-directory sweep from several test files in parallel, so a ` +
+      `sweep from one file can remove the directory another file is asserting on: ` +
+      `${unsynchronized.join(', ')}. Add --test-concurrency=1 after scripts/node-test-tmpdir.ts ` +
+      `so the child runner receives it.`,
+  );
+});
+
 // INT32_MAX exceeds every platform's pid range (Linux pid_max caps at 2^22,
 // macOS at 99999), so kill(pid, 0) is ESRCH by construction — an owner that
 // is dead and can never be reused mid-test, unlike a freshly exited child's pid.
@@ -318,7 +389,7 @@ test('a run whose owner alone was killed keeps its directory while a child still
     `import fs from 'node:fs';
 import os from 'node:os';
 import { test } from 'node:test';
-import { runCmdDetached } from '../src/utils/exec.ts';
+import { runCmdDetached } from '@agent-device/host-kit/command';
 
 test('probe starts a long-lived detached child that inherits TMPDIR, then waits to be killed', async () => {
   const childPid = runCmdDetached(process.execPath, ['-e', 'setTimeout(() => {}, 60_000)']);

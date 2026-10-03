@@ -1,4 +1,5 @@
 import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import type { MaestroSelector } from './program-ir.ts';
 import type { MaestroPlatform } from './runtime-target-policy.ts';
 import {
@@ -13,7 +14,6 @@ import {
 import { createMaestroSnapshotResolver } from './runtime-selector-resolution.ts';
 import { pointInsideRect, stripUndefined } from './shared.ts';
 import { isMaestroNodeVisible } from './snapshot-policy.ts';
-import { buildSnapshotNodeMap } from '@agent-device/contracts/snapshot';
 import { hasMaestroRecursiveRelations as hasRecursiveRelations } from './selector-relations.ts';
 import { orderMaestroClickableFirst, resolveMaestroClickability } from './runtime-clickability.ts';
 
@@ -108,7 +108,8 @@ function createPresentedNodeLookup(presentation: MaestroInteractivePresentation)
   isVisible: (node: SnapshotNode) => boolean;
   visibleForSource: (node: SnapshotNode) => SnapshotNode[];
 } {
-  const presentedByIndex = buildSnapshotNodeMap(presentation.snapshot.nodes);
+  const visibility = createSnapshotVisibility(presentation.snapshot.nodes);
+  const presentedByIndex = visibility.nodeByIndex;
   const visibleBySourceIndex = new Map<number, SnapshotNode[]>();
   const forSource = (semanticNode: SnapshotNode): SnapshotNode[] => {
     return (presentation.presentedIndexesBySourceIndex.get(semanticNode.index) ?? []).flatMap(
@@ -122,7 +123,7 @@ function createPresentedNodeLookup(presentation: MaestroInteractivePresentation)
     const cached = visibleBySourceIndex.get(node.index);
     if (cached) return cached;
     const visible = forSource(node).filter((presentedNode) =>
-      isMaestroNodeVisible(presentedNode, presentation.snapshot.nodes, 'ios'),
+      isMaestroNodeVisible(presentedNode, visibility, 'ios'),
     );
     visibleBySourceIndex.set(node.index, visible);
     return visible;
@@ -148,11 +149,10 @@ function rankPresentedMaestroCandidates(
     visible,
     clickability,
     ranked: rankVisibleMaestroMatches(
-      snapshot.nodes,
       visible,
       query.selector,
       'ios',
-      resolver.nodeByIndex,
+      resolver.visibility,
       clickability,
     ),
   };

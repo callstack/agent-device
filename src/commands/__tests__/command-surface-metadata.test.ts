@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { listCliCommandNames } from '../../command-catalog.ts';
+import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import {
   listCommandResponseDataTransforms,
   listMcpExposedCommandNames,
-} from '../../core/command-descriptor/registry.ts';
-import { getSchemaOnlyCliCommandSchema } from '../../cli-schema/command-overrides.ts';
+} from '@agent-device/command-registry/registry';
+import { getSchemaOnlyCliCommandSchema } from '../schema/command-overrides.ts';
 import {
   listCommandMetadata,
   listCommandMetadataNames,
@@ -20,8 +20,8 @@ import {
   listCommandFamilyMetadata,
 } from '../family/registry.ts';
 import { listExecutableCommandNames } from '../command-surface.ts';
-import { helpBody, mcpBody } from '../command-text.ts';
-import { explainCommand } from '../command-explain.ts';
+import { helpBody, mcpBody } from '@agent-device/command-registry/command-text';
+import { explainCommand } from '../../cli/command-explain.ts';
 import { getDaemonRouteOwnerFiles } from '../../daemon/route-owner-files.ts';
 
 test('MCP exposed command names have metadata and executable command definitions', () => {
@@ -97,11 +97,11 @@ test('every command states a summary that is shorter than its description', () =
     assert.notEqual(
       summary
         .toLowerCase()
-        .replace(/[^a-z0-9 ]/g, '')
+        .replaceAll(/[^a-z0-9 ]/g, '')
         .trim(),
       description
         .toLowerCase()
-        .replace(/[^a-z0-9 ]/g, '')
+        .replaceAll(/[^a-z0-9 ]/g, '')
         .trim(),
       `${name}: summary duplicates the description`,
     );

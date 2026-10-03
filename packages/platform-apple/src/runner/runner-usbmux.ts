@@ -1,4 +1,8 @@
-import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  discloseDispatch,
+} from '@agent-device/kernel/errors';
 import http, { type IncomingMessage } from 'node:http';
 import { type Socket } from 'node:net';
 import { Deadline } from './host.ts';
@@ -28,7 +32,9 @@ export function createUsbmuxRunnerTransport(socketPath: string): UsbmuxRunnerTra
         port,
         deadline.remainingMs(),
         signal,
-      );
+      ).catch((error: unknown) => {
+        throw error instanceof AppError ? discloseDispatch(error, 'no') : error;
+      });
       try {
         return await postRunnerHttpCommand(socket, command, deadline.remainingMs(), signal);
       } catch (error) {

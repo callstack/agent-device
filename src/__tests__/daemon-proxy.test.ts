@@ -3,7 +3,18 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import http from 'node:http';
 import { createDaemonProxyServer } from '../remote/daemon-proxy.ts';
-import { DAEMON_RPC_PROTOCOL_VERSION } from '../daemon/http-health.ts';
+import { createDaemonHttpServer } from '../daemon/server/http-server.ts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
+import { readHostCpuArch } from '@agent-device/host-kit/process';
+import { executeRunScriptHttpRequest } from '@agent-device/maestro/run-script-http';
+import {
+  DAEMON_HTTP_NETWORK_ACCESS_HEADER,
+  DAEMON_HTTP_INSTANCE_HEADER,
+  DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
+  DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER,
+  DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
+  DAEMON_RPC_PROTOCOL_VERSION,
+} from '@agent-device/contracts/daemon-http';
 import {
   closeLoopbackServer,
   listenOnLoopback,
@@ -24,16 +35,27 @@ test('daemon proxy forwards rpc requests with upstream daemon token', async (t) 
 
   let upstreamAuth = '';
   let upstreamTokenHeader = '';
+  let upstreamNetworkAccess = '';
+  let upstreamExpectedInstance = '';
+  let upstreamExecutions = 0;
   let upstreamBody: Record<string, any> | undefined;
   const upstream = http.createServer((req, res) => {
     if (req.url === '/health') {
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ ok: true }));
+      res.end(JSON.stringify({ ok: true, instanceId: 'upstream-instance' }));
       return;
     }
     assert.equal(req.url, '/rpc');
     upstreamAuth = String(req.headers.authorization ?? '');
     upstreamTokenHeader = String(req.headers['x-agent-device-token'] ?? '');
+    upstreamNetworkAccess = String(req.headers[DAEMON_HTTP_NETWORK_ACCESS_HEADER] ?? '');
+    upstreamExpectedInstance = String(req.headers[DAEMON_HTTP_INSTANCE_HEADER] ?? '');
+    if (upstreamExpectedInstance && upstreamExpectedInstance !== 'upstream-instance') {
+      res.statusCode = 409;
+      res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
+      res.end(JSON.stringify({ jsonrpc: '2.0', id: 'req-1', error: { code: -32001 } }));
+      return;
+    }
     let body = '';
     req.setEncoding('utf8');
     req.on('data', (chunk) => {
@@ -41,6 +63,7 @@ test('daemon proxy forwards rpc requests with upstream daemon token', async (t) 
     });
     req.on('end', () => {
       upstreamBody = JSON.parse(body) as Record<string, any>;
+      upstreamExecutions += 1;
       res.setHeader('content-type', 'application/json');
       res.end(
         JSON.stringify({
@@ -60,11 +83,18 @@ test('daemon proxy forwards rpc requests with upstream daemon token', async (t) 
 
   try {
     const proxyPort = await listenOnLoopback(proxy);
+    const healthResponse = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/health`);
+    const health = (await healthResponse.json()) as Record<string, any>;
+    assert.equal(healthResponse.status, 200);
+    assert.equal(typeof health.instanceId, 'string');
+    assert.equal(typeof health.upstream?.instanceId, 'string');
     const response = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/rpc`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         authorization: 'Bearer proxy-secret',
+        [DAEMON_HTTP_INSTANCE_HEADER]: health.instanceId as string,
+        [DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER]: health.upstream.instanceId as string,
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -88,8 +118,248 @@ test('daemon proxy forwards rpc requests with upstream daemon token', async (t) 
     });
     assert.equal(upstreamAuth, 'Bearer daemon-secret');
     assert.equal(upstreamTokenHeader, 'daemon-secret');
+    assert.equal(upstreamNetworkAccess, DAEMON_HTTP_PUBLIC_NETWORK_ACCESS);
+    assert.equal(upstreamExpectedInstance, 'upstream-instance');
+    assert.equal(upstreamExecutions, 1);
     assert.equal(upstreamBody?.params?.token, 'daemon-secret');
     assert.equal(upstreamBody?.params?.command, 'devices');
+    const staleProxyResponse = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/rpc`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer proxy-secret',
+        [DAEMON_HTTP_INSTANCE_HEADER]: 'old-proxy',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'req-1',
+        method: 'agent_device.command',
+        params: {},
+      }),
+    });
+    assert.equal(staleProxyResponse.status, 409);
+    assert.equal(staleProxyResponse.headers.get(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER), 'true');
+    assert.equal(upstreamExecutions, 1);
+
+    const staleUpstreamResponse = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/rpc`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer proxy-secret',
+        [DAEMON_HTTP_INSTANCE_HEADER]: health.instanceId as string,
+        [DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER]: 'old-upstream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'req-1',
+        method: 'agent_device.command',
+        params: {},
+      }),
+    });
+    assert.equal(staleUpstreamResponse.status, 409);
+    assert.equal(staleUpstreamResponse.headers.get(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER), 'true');
+    assert.equal(upstreamExecutions, 1);
+  } finally {
+    await closeLoopbackServer(proxy);
+    await closeLoopbackServer(upstream);
+  }
+});
+
+test('proxy enforces public-only Maestro HTTP policy on a local daemon', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  let loopbackRequests = 0;
+  const loopbackTarget = http.createServer((_req, res) => {
+    loopbackRequests += 1;
+    res.end('loopback-secret');
+  });
+  const env = { ...process.env };
+  delete env.AGENT_DEVICE_HTTP_AUTH_HOOK;
+  delete env.AGENT_DEVICE_HTTP_AUTH_EXPORT;
+  const daemon = await createDaemonHttpServer({
+    token: 'daemon-secret',
+    env,
+    handleRequest: async (request) => {
+      const url = request.positionals[0] ?? '';
+      return {
+        ok: true,
+        data: await executeRunScriptHttpRequest({
+          method: 'GET',
+          url,
+          headers: {},
+          publicNetworkOnly: request.internal?.publicNetworkOnly === true,
+        }),
+      };
+    },
+  });
+  const targetPort = await listenOnLoopback(loopbackTarget);
+  const daemonPort = await listenOnLoopback(daemon);
+  const proxy = createDaemonProxyServer({
+    upstreamBaseUrl: `http://127.0.0.1:${daemonPort}`,
+    upstreamToken: 'daemon-secret',
+    clientToken: 'proxy-secret',
+  });
+
+  try {
+    const proxyPort = await listenOnLoopback(proxy);
+    const post = async (url: string) => {
+      const response = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/rpc`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer proxy-secret' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'proxy-trust',
+          method: 'agent_device.command',
+          params: {
+            token: 'proxy-secret',
+            command: 'run_script_http',
+            positionals: [url],
+            flags: {},
+          },
+        }),
+      });
+      return { status: response.status, body: (await response.json()) as Record<string, any> };
+    };
+
+    const loopbackResponse = await post(`http://127.0.0.1:${targetPort}/secret`);
+    assert.equal(loopbackResponse.status, 400, JSON.stringify(loopbackResponse.body));
+    assert.equal(loopbackResponse.body.error?.data?.code, 'INVALID_ARGS');
+    assert.match(loopbackResponse.body.error?.message ?? '', /non-public address/);
+    assert.equal(loopbackRequests, 0, 'the proxy path must never reach a loopback target');
+  } finally {
+    await closeLoopbackServer(proxy);
+    await closeLoopbackServer(daemon);
+    await closeLoopbackServer(loopbackTarget);
+  }
+});
+
+test('daemon proxy cancels the upstream daemon request when its client disconnects', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  let upstreamStarted!: (requestId: string | undefined) => void;
+  const started = new Promise<string | undefined>((resolve) => {
+    upstreamStarted = resolve;
+  });
+  let upstreamCanceled!: (reason: string) => void;
+  const canceled = new Promise<string>((resolve) => {
+    upstreamCanceled = resolve;
+  });
+  const env = { ...process.env };
+  delete env.AGENT_DEVICE_HTTP_AUTH_HOOK;
+  delete env.AGENT_DEVICE_HTTP_AUTH_EXPORT;
+  const daemon = await createDaemonHttpServer({
+    token: 'daemon-secret',
+    env,
+    handleRequest: async (request) => {
+      const requestId = request.meta?.requestId;
+      const signal = getRequestSignal(requestId);
+      upstreamStarted(requestId);
+      if (!signal) {
+        upstreamCanceled('no request signal was registered');
+      } else if (signal.aborted) {
+        upstreamCanceled('aborted');
+      } else {
+        signal.addEventListener('abort', () => upstreamCanceled('aborted'), { once: true });
+      }
+      await canceled;
+      return { ok: false, error: { code: 'COMMAND_FAILED', message: 'request canceled' } };
+    },
+  });
+  const proxy = createDaemonProxyServer({
+    upstreamBaseUrl: `http://127.0.0.1:${await listenOnLoopback(daemon)}`,
+    upstreamToken: 'daemon-secret',
+    clientToken: 'proxy-secret',
+  });
+
+  try {
+    const proxyPort = await listenOnLoopback(proxy);
+    const client = http.request({
+      host: '127.0.0.1',
+      port: proxyPort,
+      method: 'POST',
+      path: '/agent-device/rpc',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer proxy-secret' },
+    });
+    client.on('error', () => {});
+    client.end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'req-disconnect',
+        method: 'agent_device.command',
+        params: {
+          token: 'proxy-secret',
+          session: 'default',
+          command: 'snapshot',
+          positionals: [],
+          flags: {},
+        },
+      }),
+    );
+    const requestId = await started;
+    assert.match(String(requestId), /req-disconnect/);
+
+    client.destroy();
+
+    const timeout = new Promise<string>((resolve) => {
+      setTimeout(() => resolve('upstream request was never canceled'), 5000).unref();
+    });
+    assert.equal(await Promise.race([canceled, timeout]), 'aborted');
+  } finally {
+    await closeLoopbackServer(proxy);
+    await closeLoopbackServer(daemon);
+  }
+});
+
+test('daemon proxy forwards a request diagnostics record fetch and nothing else on that path', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const upstreamRequests: Array<{ method: string; url: string; auth: string }> = [];
+  const upstream = http.createServer((req, res) => {
+    upstreamRequests.push({
+      method: req.method ?? '',
+      url: req.url ?? '',
+      auth: String(req.headers.authorization ?? ''),
+    });
+    res.setHeader('content-type', 'application/x-ndjson');
+    res.end('{"phase":"request_failed"}\n');
+  });
+  const proxy = createDaemonProxyServer({
+    upstreamBaseUrl: `http://127.0.0.1:${await listenOnLoopback(upstream)}`,
+    upstreamToken: 'daemon-secret',
+    clientToken: 'proxy-secret',
+  });
+
+  try {
+    const proxyPort = await listenOnLoopback(proxy);
+    const record = `/agent-device/sessions/default/requests/req%3A1/diagnostics`;
+    const headers = { authorization: 'Bearer proxy-secret' };
+
+    const fetched = await fetch(`http://127.0.0.1:${proxyPort}${record}`, { headers });
+    assert.equal(fetched.status, 200);
+    assert.equal(await fetched.text(), '{"phase":"request_failed"}\n');
+    assert.deepEqual(upstreamRequests, [
+      {
+        method: 'GET',
+        url: '/sessions/default/requests/req%3A1/diagnostics',
+        auth: 'Bearer daemon-secret',
+      },
+    ]);
+
+    const unauthenticated = await fetch(`http://127.0.0.1:${proxyPort}${record}`);
+    assert.equal(unauthenticated.status, 401);
+    const posted = await fetch(`http://127.0.0.1:${proxyPort}${record}`, {
+      method: 'POST',
+      headers,
+    });
+    assert.equal(posted.status, 404);
+    const enumerated = await fetch(
+      `http://127.0.0.1:${proxyPort}/agent-device/sessions/default/requests`,
+      {
+        headers,
+      },
+    );
+    assert.equal(enumerated.status, 404);
+    assert.equal(upstreamRequests.length, 1, 'only the record fetch reaches the daemon');
   } finally {
     await closeLoopbackServer(proxy);
     await closeLoopbackServer(upstream);
@@ -133,6 +403,34 @@ test('daemon proxy rejects unauthenticated rpc requests', async (t) => {
   }
 });
 
+test('daemon proxy does not expose local human-control administration', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  let upstreamCalled = false;
+  const upstream = http.createServer((_req, res) => {
+    upstreamCalled = true;
+    res.end('{}');
+  });
+  const proxy = createDaemonProxyServer({
+    upstreamBaseUrl: `http://127.0.0.1:${await listenOnLoopback(upstream)}`,
+    upstreamToken: 'daemon-secret',
+    clientToken: 'proxy-secret',
+  });
+
+  try {
+    const proxyPort = await listenOnLoopback(proxy);
+    const response = await fetch(
+      `http://127.0.0.1:${String(proxyPort)}/agent-device/admin/human-control/holds`,
+      { headers: { authorization: 'Bearer proxy-secret' } },
+    );
+    assert.equal(response.status, 404);
+    assert.equal(upstreamCalled, false);
+  } finally {
+    await closeLoopbackServer(proxy);
+    await closeLoopbackServer(upstream);
+  }
+});
+
 test('daemon proxy leaves health endpoint unauthenticated', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
@@ -160,6 +458,8 @@ test('daemon proxy leaves health endpoint unauthenticated', async (t) => {
     assert.equal(payload.service, 'agent-device-proxy');
     assert.equal(typeof payload.version, 'string');
     assert.equal(payload.rpcProtocolVersion, DAEMON_RPC_PROTOCOL_VERSION);
+    assert.equal(typeof payload.instanceId, 'string');
+    assert.equal(payload.hostArch, await readHostCpuArch());
     assert.deepEqual(payload.upstream, { ok: true });
     assert.equal(upstreamAuth, 'Bearer daemon-secret');
     assert.equal(upstreamTokenHeader, 'daemon-secret');

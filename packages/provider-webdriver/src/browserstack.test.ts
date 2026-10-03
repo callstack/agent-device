@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
+
 import path from 'node:path';
 import { afterEach, test } from 'vitest';
 import { uploadBrowserStackApp } from './browserstack.ts';
+import { mkdtempForTest } from './tmp-dir.fixtures.ts';
 
 const realFetch = globalThis.fetch;
 
@@ -12,7 +13,7 @@ afterEach(() => {
 });
 
 test('BrowserStack upload aborts while the provider request is in flight', async () => {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-browserstack-upload-'));
+  const tempDir = await mkdtempForTest('agent-device-browserstack-upload-');
   const appPath = path.join(tempDir, 'App.apk');
   const controller = new AbortController();
   const abortReason = new Error('request cancelled during BrowserStack upload');

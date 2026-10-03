@@ -32,6 +32,7 @@ export function limrunOwnerOptions(
     ownsDevice: () => true,
     hasLiveSession: () => true,
     getInteractor: () => undefined,
+    getDeviceSession: () => undefined,
     openCurrent: async () => undefined,
     reconnect: async () => ({ status: 'missing' }),
     listApps: async () => [],
@@ -63,6 +64,18 @@ export function unusedLimrunHost(): PlatformRuntimeHost {
         skippedLines: 0,
       }),
       readProcessMarker: async () => ({ status: 'missing' }),
+    },
+    snapshot: {
+      captureSurface: async () => ({
+        backend: 'xctest' as const,
+        producer: 'appium-source' as const,
+        nodes: [],
+      }),
+      presentIosAcquisition: async () => ({
+        backend: 'xctest' as const,
+        producer: 'appium-source' as const,
+        nodes: [],
+      }),
     },
   } as unknown as PlatformRuntimeHost;
 }

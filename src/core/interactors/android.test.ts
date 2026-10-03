@@ -5,29 +5,23 @@ import {
 } from '@agent-device/contracts/capture';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAndroidInteractor } from './android.ts';
-import { snapshotAndroid } from '../../platforms/android/snapshot.ts';
-import { scrollAndroid } from '../../platforms/android/input-actions.ts';
-import { fillAndroid } from '../../platforms/android/text-input.ts';
+import {
+  fillAndroid,
+  scrollAndroid,
+  snapshotAndroid,
+} from '@agent-device/platform-android/mechanics';
 import { makeAndroidSnapshotCapture } from '../../__tests__/test-utils/android-snapshot-capture.ts';
 
-vi.mock('../../platforms/android/snapshot.ts', () => ({
-  snapshotAndroid: vi.fn(),
-}));
-vi.mock('../../platforms/android/input-actions.ts', () => ({
-  scrollAndroid: vi.fn(),
-  appSwitcherAndroid: vi.fn(),
-  backAndroid: vi.fn(),
-  focusAndroid: vi.fn(),
-  homeAndroid: vi.fn(),
-  longPressAndroid: vi.fn(),
-  pressAndroid: vi.fn(),
-  pressAndroidTvRemote: vi.fn(),
-  setAndroidOrientation: vi.fn(),
-}));
-vi.mock('../../platforms/android/text-input.ts', () => ({
-  fillAndroid: vi.fn(),
-  typeAndroid: vi.fn(),
-}));
+vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
+  return {
+    ...actual,
+    snapshotAndroid: vi.fn(),
+    scrollAndroid: vi.fn(),
+    fillAndroid: vi.fn(),
+    typeAndroid: vi.fn(),
+  };
+});
 
 const snapshotAndroidMock = vi.mocked(snapshotAndroid);
 const fillAndroidMock = vi.mocked(fillAndroid);
@@ -63,6 +57,7 @@ test('preserves Android clickability evidence through the interactor snapshot ad
 
   const result = await createAndroidInteractor(device).snapshot({});
 
+  if ('stage' in result) throw new Error('Android snapshot must be presented');
   expect(readSnapshotClickabilityEvidence(result)).toEqual(evidence);
   expect(readSnapshotOcclusionContextEvidence(result)).toEqual(occlusionContext);
   expect(result.quality).toEqual({ state: 'healthy', backend: 'android-helper' });
@@ -98,4 +93,21 @@ test('a device-only session releases the helper after fill and scroll', async ()
   expect(scrollAndroidMock).toHaveBeenCalledWith(device, 'down', {
     helperSessionScope: 'command',
   });
+});
+
+test('a transient snapshot reaches the Android capture with its settle deadline', async () => {
+  snapshotAndroidMock.mockResolvedValue(makeAndroidSnapshotCapture([]));
+
+  await createAndroidInteractor(device).snapshot({
+    appBundleId: 'com.example.app',
+    transient: { settleBy: 1_000 },
+  });
+
+  expect(snapshotAndroidMock).toHaveBeenCalledWith(
+    device,
+    expect.objectContaining({
+      appBundleId: 'com.example.app',
+      transient: { settleBy: 1_000 },
+    }),
+  );
 });

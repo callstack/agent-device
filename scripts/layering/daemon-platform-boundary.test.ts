@@ -246,20 +246,20 @@ test('R65 rejects platform selection inside cleanup orchestrators', () => {
 
   const predicate = violations(
     'export const cleanup = (device: any) => isIosFamily(device);',
-    'src/daemon/handlers/snapshot-session.ts',
+    'src/daemon/snapshot-session.ts',
   );
   assert.match(predicate[0]?.message ?? '', /typed root-composed cleanup capability/);
 
   const destructured = violations(
     "export const cleanup = (session: any) => { const { platform } = session.device; return platform === 'android'; };",
-    'src/daemon/handlers/session-close-lifecycle-teardown.ts',
+    'src/daemon/session-lifecycle/internal/session-close-lifecycle-teardown.ts',
   );
   assert.match(destructured[0]?.message ?? '', /may not select a concrete platform/);
 
   assert.deepEqual(
     violations(
       'export const cleanup = (owner: any, device: any) => owner.cleanupSessionlessExecutionHost(device);',
-      'src/daemon/handlers/snapshot-session.ts',
+      'src/daemon/snapshot-session.ts',
     ),
     [],
   );

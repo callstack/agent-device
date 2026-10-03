@@ -9,27 +9,26 @@ import {
   type PlatformRuntimeOperations,
   defineUse,
 } from '@agent-device/contracts/platform-runtime-operations';
-import { appLogDurableResource } from './app-log-session-resource.ts';
-import { acquireExactDurableCaptureRecoveryControl } from './durable-capture-runtime-recovery.ts';
-import type { DurableCaptureRecoveryControl } from './durable-capture-recovery-authority.ts';
 import type {
-  DurableCaptureRecoveryDiagnostic,
+  DurableCaptureRecoveryControl,
   DurableCaptureRecoverySummary,
-} from './durable-capture-resource-recovery.ts';
+} from '@agent-device/capture-kit/durable-capture';
+import type { ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { appLogDurableResource } from './app-log-session-resource.ts';
+import { acquireExactDurableCaptureRecoveryControl } from '@agent-device/capture-kit/durable-capture-runtime-recovery';
 
 const appLogRecoveryUse = defineUse({
   required: ['appLogReattach', 'appLogCleanup'],
 });
 
 export type AppLogRecoverySummary = DurableCaptureRecoverySummary;
-export type AppLogRecoveryDiagnostic = DurableCaptureRecoveryDiagnostic;
 
 export function recoverAppLogResourcesAfterDaemonLock(params: {
   sessionsDir: string;
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
   perRecordDeadlineMs?: number;
-  onDiagnostic?: (diagnostic: AppLogRecoveryDiagnostic) => void;
+  onDiagnostic?: (diagnostic: ResourceDiagnostic) => void;
 }): Promise<AppLogRecoverySummary> {
   return appLogDurableResource.recoverAll({
     sessionsDir: params.sessionsDir,
@@ -43,7 +42,7 @@ export function recoverAppLogResourceAfterDaemonLock(params: {
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
   perRecordDeadlineMs?: number;
-  onDiagnostic?: (diagnostic: AppLogRecoveryDiagnostic) => void;
+  onDiagnostic?: (diagnostic: ResourceDiagnostic) => void;
 }) {
   return appLogDurableResource.recoverOne(
     { sessionsDir: params.sessionsDir, ...buildAppLogRecoveryParams(params) },
@@ -55,7 +54,7 @@ function buildAppLogRecoveryParams(params: {
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
   perRecordDeadlineMs?: number;
-  onDiagnostic?: (diagnostic: AppLogRecoveryDiagnostic) => void;
+  onDiagnostic?: (diagnostic: ResourceDiagnostic) => void;
 }) {
   return {
     scope: params.scope,

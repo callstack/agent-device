@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { runtimeExecutionIntegrityViolations } from './runtime-execution-policy.ts';
 
-const REGISTRY = 'src/core/command-descriptor/registry.ts';
+const REGISTRY = 'packages/command-registry/src/registry.ts';
 const ADMISSION = 'src/daemon/runtime-admission.ts';
 
 function sources(entries: readonly (readonly [string, string])[]): ReadonlyMap<string, string> {

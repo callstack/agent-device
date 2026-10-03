@@ -147,3 +147,14 @@ test('errors when the lcov report is missing rather than silently passing', () =
   assert.equal(code, 1);
   assert.match(out, /no lcov report/);
 });
+
+test('a pure move owes nothing regardless of the host diff.renames setting', () => {
+  git('config', 'diff.renames', 'false');
+  git('mv', 'src/base.ts', 'src/moved.ts');
+  git('commit', '-q', '-m', 'move');
+  writeLcov('SF:src/moved.ts\nDA:1,0\nend_of_record\n');
+  const { code, out } = capture(() => run(['--base', 'main'], repo));
+  assert.equal(code, 0);
+  assert.match(out, /Changed-line coverage gate: PASS/);
+  assert.match(out, /0\/0 \(n\/a\)/);
+});

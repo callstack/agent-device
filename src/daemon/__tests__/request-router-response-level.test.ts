@@ -1,15 +1,15 @@
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
-import os from 'node:os';
+
 import path from 'node:path';
 
-vi.mock('../../platforms/apple/core/runner-client.ts', async (importOriginal) => {
+vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../platforms/apple/core/runner-client.ts')>();
+    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
   return { ...actual, stopIosRunnerSession: vi.fn(async () => {}) };
 });
 
-vi.mock('../device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
 // Register a test view on a command whose payload this file controls end to end, so the router
 // graft mechanics can be exercised without the real snapshot handler (the actual snapshot view is
@@ -34,10 +34,12 @@ import {
   gestureRuntimeSpies,
   lifecycleDeviceRuntimeGateway,
 } from './test-device-runtime-gateway.ts';
-import type { DaemonRequest, SessionState } from '../types.ts';
+import type { DaemonRequest } from '../daemon-request.ts';
+import type { SessionState } from '../session-state.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { commandRpcParamsSchema } from '@agent-device/kernel/contracts';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const REPRESENTATIVE_PAYLOAD = { message: 'scroll-ok', items: [1, 2, 3] } as const;
 /** What the bound `app-switcher` leaf answers; this file's registered view digests it. */
@@ -66,7 +68,7 @@ function makeHandler() {
   return {
     sessionStore,
     handler: createRequestHandler({
-      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       token: 'test-token',
       sessionStore,
       leaseRegistry: new LeaseRegistry(),

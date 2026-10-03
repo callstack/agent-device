@@ -1,13 +1,27 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
-import { localRuntimeOwner, providerRuntimeOwner } from './platform-runtime.ts';
 import {
+  localRuntimeOwner,
+  providerRuntimeOwner,
+  type RuntimeOperationKey,
+} from './platform-runtime.ts';
+import {
+  RUNTIME_OPERATION_NAMES,
+  isRuntimeOperationName,
+  type RuntimeOperationName,
+} from './runtime-operation-names.ts';
+import {
+  type PlatformRuntimeOperations,
+  type PlatformRuntimeProviderModule,
+  READABLE_SETTINGS,
   bootTargetHeadlessUse,
   bootTargetUse,
   captureSnapshotUse,
   resolveDeviceReadinessRuntimePlan,
+  resolveSettingsRuntimePlan,
   resolveSnapshotRuntimePlan,
-  type PlatformRuntimeProviderModule,
+  settingReadUse,
+  settingsRuntimeUse,
 } from './platform-runtime-operations.ts';
 
 function compileTimeProviderModuleProof(): void {
@@ -99,3 +113,47 @@ test.each([
     });
   },
 );
+
+// The value-level vocabulary must name exactly the operations union: a name missing from the list
+// or an extra name both collapse these assignments to a compile error.
+type OperationKey = RuntimeOperationKey<PlatformRuntimeOperations>;
+type MissingFromList = Exclude<OperationKey, RuntimeOperationName>;
+type ExtraInList = Exclude<RuntimeOperationName, OperationKey>;
+const noOperationIsMissingFromTheList: [MissingFromList] extends [never] ? true : never = true;
+const noListedNameIsUnknown: [ExtraInList] extends [never] ? true : never = true;
+
+test('the runtime operation vocabulary is the operations union, with no duplicates', () => {
+  // The two declarations above are the assertion: a drifted vocabulary makes `true`
+  // non-assignable to the `never` they are annotated with. After erasure this pair is
+  // `true && true`, which no production change can contradict.
+  void noOperationIsMissingFromTheList;
+  void noListedNameIsUnknown;
+  assert.equal(new Set(RUNTIME_OPERATION_NAMES).size, RUNTIME_OPERATION_NAMES.length);
+  assert.equal(isRuntimeOperationName('captureSnapshot'), true);
+  assert.equal(isRuntimeOperationName('notAnOperation'), false);
+});
+
+test('the settings leg rule names the read leg only for a lone readable setting', () => {
+  const read = resolveSettingsRuntimePlan(['text-size']);
+  assert.equal(read.kind, 'read');
+  assert.equal(read.use, settingReadUse);
+  if (read.kind === 'read') assert.equal(read.setting, 'text-size');
+
+  // Normalization is the shared rule's, not each consumer's: the daemon lowercases its positionals
+  // and the CLI does not.
+  assert.equal(resolveSettingsRuntimePlan([' Text-Size ']).use, settingReadUse);
+  // A category is the write leg even for a readable name, and an unreadable name never reads.
+  assert.equal(resolveSettingsRuntimePlan(['text-size', 'large']).use, settingsRuntimeUse);
+  assert.equal(resolveSettingsRuntimePlan(['wifi']).use, settingsRuntimeUse);
+  assert.equal(resolveSettingsRuntimePlan(undefined).use, settingsRuntimeUse);
+  assert.equal(resolveSettingsRuntimePlan([]).use, settingsRuntimeUse);
+});
+
+test('every readable setting is answered by the read use', () => {
+  // The list is what both the descriptor's classification and the daemon's admitted operation are
+  // built from, so a name that joins it without an owner answering it is caught where it is declared.
+  assert.deepEqual([...READABLE_SETTINGS], ['text-size']);
+  for (const setting of READABLE_SETTINGS) {
+    assert.equal(resolveSettingsRuntimePlan([setting]).use, settingReadUse);
+  }
+});
