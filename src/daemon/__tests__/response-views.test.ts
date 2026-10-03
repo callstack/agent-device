@@ -56,6 +56,21 @@ test('digest carries the foreground repair of the tree it collapsed', () => {
   expect(digest.targetActivation).toEqual(repair);
 });
 
+/**
+ * A digest drops the tree, so the box its rects were measured in (#3182) has to survive the
+ * collapse — otherwise an agent reading the digest has to infer the screen from nothing again.
+ */
+test('digest carries the viewport of the tree it collapsed (#3182)', () => {
+  const digest = snapshotView!(
+    { ...SNAPSHOT_DATA, viewport: { width: 390, height: 844 } },
+    'digest',
+  );
+  expect(digest.viewport).toEqual({ width: 390, height: 844 });
+
+  const withoutViewport = snapshotView!(SNAPSHOT_DATA, 'digest');
+  expect('viewport' in withoutViewport).toBe(false);
+});
+
 test('digest tolerates missing/empty node trees', () => {
   const digest = snapshotView!({ truncated: true }, 'digest');
   expect(digest).toMatchObject({ nodeCount: 0, refs: [], truncated: true });
