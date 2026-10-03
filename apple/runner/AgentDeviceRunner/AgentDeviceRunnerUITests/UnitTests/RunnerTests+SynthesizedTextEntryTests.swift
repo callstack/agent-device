@@ -155,5 +155,55 @@ extension RunnerTests {
     XCTAssertEqual(response.error?.code, "TEXT_INPUT_SYNTHESIS_BUDGET_EXCEEDED")
     XCTAssertEqual(String(describing: textField.value ?? ""), "")
   }
+
+  /// Launches the fixture whose field moves away when focused and leaves a neighbouring field under
+  /// the point the focus tap hit, the way a React Native bottom sheet extends above the keyboard.
+  /// The field is not focused yet, so the replacement's own tap starts the move.
+  @MainActor
+  func launchFieldThatMovesOnFocus() throws -> (field: XCUIElement, neighbour: XCUIElement) {
+    app.launchArguments = ["--agent-device-text-entry-regression", "--agent-device-text-entry-moves-on-focus"]
+    app.launch()
+    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    let field = app.textFields["agent-device-hardware-keyboard-input"]
+    let neighbour = app.textFields["agent-device-text-entry-neighbour"]
+    XCTAssertTrue(field.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(neighbour.waitForExistence(timeout: appExistenceTimeout))
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
+    penalizeSnapshotXCTestChannel(bundleId: nil, reason: "test")
+    return (field, neighbour)
+  }
+
+  /// The commit wait used to re-read whatever field sat under the pre-focus point, which after the
+  /// move is the neighbour, so a replacement that landed was reported as
+  /// TEXT_INPUT_COMMIT_NOT_OBSERVED.
+  @MainActor
+  func testSynthesizedReplacementConfirmsAFieldThatMovedOnFocus() throws {
+    let (field, neighbour) = try launchFieldThatMovesOnFocus()
+    defer { tearDownSynthesizedReplacementField() }
+    let pointBeforeFocus = field.frame
+
+    let response = try replaceSynthesizedFieldText(field, text: "fresh", commandId: "fill-moved-field")
+
+    XCTAssertNotEqual(field.frame.midY, pointBeforeFocus.midY, "the fixture field did not move")
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(String(describing: field.value ?? ""), "fresh")
+    XCTAssertEqual(String(describing: neighbour.value ?? ""), "neighbour")
+  }
+
+  /// `fill ""` used to clear whatever field the move left under the pre-focus point, and report
+  /// success because that field was then empty.
+  @MainActor
+  func testSynthesizedClearEmptiesTheFieldThatMovedOnFocus() throws {
+    let (field, neighbour) = try launchFieldThatMovesOnFocus()
+    defer { tearDownSynthesizedReplacementField() }
+
+    let response = try replaceSynthesizedFieldText(field, text: "", commandId: "clear-moved-field")
+
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(String(describing: field.value ?? ""), "")
+    XCTAssertEqual(String(describing: neighbour.value ?? ""), "neighbour")
+  }
 #endif
 }

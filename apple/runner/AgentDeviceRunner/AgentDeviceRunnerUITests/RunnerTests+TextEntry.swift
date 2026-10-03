@@ -66,8 +66,10 @@ extension RunnerTests {
     /// delivery happens before this wait starts and is bounded by `synthesizedDeliveryCeiling`.
     static let synthesizedCommitCeiling: TimeInterval = 10.0
     /// What a synthesized replacement spends before its first character: focusing the field took
-    /// 374–500 ms through the daemon on an iPhone 17 Pro simulator.
-    static let synthesizedReplacementFocusAllowance: TimeInterval = 2.0
+    /// 374–500 ms through the daemon on an iPhone 17 Pro simulator, and finding the input under the
+    /// point before that tap took up to 2.0 s more on a React Native bottom sheet (iPhone 17 Pro
+    /// Max, iOS 26.5).
+    static let synthesizedReplacementFocusAllowance: TimeInterval = 4.0
     /// How long a synthesized burst may spend posting its characters: what the command's
     /// main-thread watchdog leaves after focus and the longest commit wait. The private synthesize
     /// call delivers as it returns, so text that does not fit is refused before the first character
@@ -115,17 +117,24 @@ extension RunnerTests {
     let refreshPoint: CGPoint?
     let prefersFocusedElement: Bool
     let fromTapWitness: Bool
+    /// The text input that sat under `refreshPoint` before the focus tap. Focusing a field can move
+    /// the layout (keyboard avoidance, a bottom sheet extending above the keyboard), after which the
+    /// point hits a different field or none; this index-bound query handle still names the field
+    /// the command was aimed at. It identifies the field for reads and clears, never for routing.
+    let inputAtRefreshPoint: XCUIElement?
 
     init(
       element: XCUIElement?,
       refreshPoint: CGPoint?,
       prefersFocusedElement: Bool,
-      fromTapWitness: Bool = false
+      fromTapWitness: Bool = false,
+      inputAtRefreshPoint: XCUIElement? = nil
     ) {
       self.element = element
       self.refreshPoint = refreshPoint
       self.prefersFocusedElement = prefersFocusedElement
       self.fromTapWitness = fromTapWitness
+      self.inputAtRefreshPoint = inputAtRefreshPoint
     }
 
     func withElement(_ nextElement: XCUIElement?) -> TextEntryTarget {
@@ -138,7 +147,8 @@ extension RunnerTests {
         element: nextElement,
         refreshPoint: point,
         prefersFocusedElement: prefersFocusedElement,
-        fromTapWitness: fromTapWitness
+        fromTapWitness: fromTapWitness,
+        inputAtRefreshPoint: inputAtRefreshPoint
       )
     }
   }
@@ -211,6 +221,9 @@ extension RunnerTests {
       if let element = target.element, element.exists {
         return element
       }
+    }
+    if let input = target.inputAtRefreshPoint, input.exists {
+      return input
     }
     if let refreshPoint = target.refreshPoint,
        let refreshed = textInputAt(app: app, x: refreshPoint.x, y: refreshPoint.y) {
