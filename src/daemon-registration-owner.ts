@@ -64,7 +64,7 @@ export async function tryAcquireDaemonRegistration(
     owner: Object.freeze({
       publish({ socketPort, httpPort, ...fields }: DaemonRegistrationFields) {
         acquisition.assertHeld();
-        publishFileSync({ destination: boundPaths.logPath, contents: '', mode: 0o600 });
+        truncateDaemonLog(boundPaths.logPath);
         const transport = socketPort && httpPort ? 'dual' : httpPort ? 'http' : 'socket';
         acquisition.assertHeld();
         publishFileSync({
@@ -151,5 +151,15 @@ function writeShutdownReport(
     publishFileSync({ destination: filePath, contents, mode: 0o600 });
   } catch {
     return;
+  }
+}
+
+/** The daemon's stdout and stderr append to this inode, so it is emptied in place, never replaced. */
+function truncateDaemonLog(logPath: string): void {
+  const descriptor = fs.openSync(logPath, 'a', 0o600);
+  try {
+    fs.ftruncateSync(descriptor, 0);
+  } finally {
+    fs.closeSync(descriptor);
   }
 }

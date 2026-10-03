@@ -54,6 +54,20 @@ test('publication is atomic, binds identity and paths, and excludes a second acq
   assert.deepEqual(readDaemonShutdownReport(paths.baseDir), report);
 });
 
+test('publication truncates the log the daemon is already appending to', async () => {
+  const { paths, owner } = await acquire();
+  const daemonOutput = fs.openSync(paths.logPath, 'a');
+  try {
+    fs.writeSync(daemonOutput, 'previous run\n');
+    owner.publish(fields);
+    fs.writeSync(daemonOutput, 'listening\n');
+  } finally {
+    fs.closeSync(daemonOutput);
+  }
+  assert.equal(fs.readFileSync(paths.logPath, 'utf8'), 'listening\n');
+  await owner.finish(report);
+});
+
 for (const [pid, startTime, reason] of [
   [999_999_999, 'successor-start', 'replaced'],
   [process.pid, 'recycled-start', 'replaced'],
