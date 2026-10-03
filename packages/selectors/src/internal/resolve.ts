@@ -117,13 +117,24 @@ export type AstSelectorChainMatchList = {
 };
 
 /**
- * ADR 0012 migration step 4: the raw matched-node list for whichever chain
- * alternative `resolveSelectorChain` would pick (first alternative with any
- * match, in order) — mirrors `analyzeSelectorMatches`'s alternate-selection
- * exactly, decoupled from uniqueness/disambiguation, so a replay-time
- * verifier can compute `matchCount` and the recorded-identity set over the
- * SAME domain resolution itself used, independent of whether resolution
- * could pick a unique winner.
+ * Every node the winning chain alternative matches, in snapshot order, plus
+ * that alternative and its index; `null` when no alternative matches.
+ *
+ * "Winning" is the SAME alternative `findSelectorChainMatch` picks — the first
+ * with at least one match — decoupled from uniqueness and disambiguation:
+ * several matches are reported, never refused or narrowed to one. That is NOT
+ * always what `resolveSelectorChain` names: under its default
+ * `requireUnique: true` it skips an ambiguous alternative and resolves from a
+ * later one, so the indices agree when it passes `requireUnique: false`, when
+ * the first matching alternative is unique, or when `disambiguateAmbiguous:
+ * true` resolves that alternative in place (see `firstMatch` vs `matchedNodes`
+ * above). Published through `agent-device/selectors` (#3180) so a consumer
+ * applies its OWN strictness to the same matched-node domain the daemon
+ * resolves against, instead of reimplementing term matching.
+ *
+ * ADR 0012 migration step 4 kept this mirroring `analyzeSelectorMatches`'s
+ * alternate-selection exactly, so a replay-time verifier computes `matchCount`
+ * and the recorded-identity set over the SAME domain resolution itself used.
  */
 export function listSelectorChainMatches(
   nodes: SnapshotState['nodes'],

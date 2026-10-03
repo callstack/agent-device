@@ -6,6 +6,7 @@ export {
   isNodeEditable,
   isNodeVisible,
   isSelectorToken,
+  listSelectorChainMatches,
   parseSelectorChain,
   resolveSelectorChain,
   tryParseSelectorChain,
