@@ -32,7 +32,7 @@ import type { BindDeviceRuntime } from '../../request-runtime-binding.ts';
 test('appstate on iOS requires active session on selected device', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'default';
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, {
       platform: 'apple',
       id: 'sim-1',
@@ -78,7 +78,7 @@ test('appstate on iOS requires active session on selected device', async () => {
 test('appstate returns session appName when bundle id is unavailable', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'sim';
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, {
       platform: 'apple',
       id: 'sim-1',
@@ -128,7 +128,7 @@ test('appstate returns session appName when bundle id is unavailable', async () 
 test('appstate fails when iOS session has no tracked app', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'sim';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       platform: 'apple',
@@ -256,7 +256,7 @@ test('clipboard requires an active session or explicit device selector', async (
 test('clipboard rejects unsupported iOS physical devices', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-device-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       platform: 'apple',
@@ -342,7 +342,7 @@ function iosSessionRequest(sessionName: string): DaemonRequest {
 test('appstate on iOS reads the session app state from the runner when its owner admits it', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'sim';
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, IOS_SESSION_DEVICE),
     appBundleId: 'dev.e2e.benchmark',
     appName: 'Benchmark',
@@ -377,7 +377,7 @@ test('appstate on iOS reads the session app state from the runner when its owner
 test('appstate on iOS keeps the session answer, with no state, when no runner is live to ask', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'sim';
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, IOS_SESSION_DEVICE),
     appBundleId: 'dev.e2e.benchmark',
     appName: 'Benchmark',
@@ -404,7 +404,7 @@ test('appstate on iOS keeps the session answer, with no state, when no runner is
 test('appstate on iOS keeps the session answer, with no state, when the runner cannot read one', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'sim';
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, IOS_SESSION_DEVICE),
     appBundleId: 'dev.e2e.benchmark',
     appName: 'Benchmark',

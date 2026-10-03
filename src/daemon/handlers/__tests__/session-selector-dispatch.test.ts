@@ -173,7 +173,7 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
   const { inspectFacts, bindDevice } = keyboardCapableRuntime(device);
 
   // dismiss mutates the device → frame expires.
-  sessionStore.set(sessionName, makeSession(sessionName, device));
+  const dismissRef = sessionStore.publish(sessionName, makeSession(sessionName, device));
   await handleSessionCommands({
     req: {
       token: 't',
@@ -192,7 +192,8 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
   expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
 
   // status is a read-only probe → frame preserved (undefined === active).
-  sessionStore.set(sessionName, makeSession(sessionName, device));
+  sessionStore.retire(dismissRef);
+  sessionStore.publish(sessionName, makeSession(sessionName, device));
   await handleSessionCommands({
     req: {
       token: 't',
@@ -234,7 +235,7 @@ test('keyboard dismiss expires the frame before the invocation runs, even when i
     },
   });
 
-  sessionStore.set(sessionName, makeSession(sessionName, device));
+  sessionStore.publish(sessionName, makeSession(sessionName, device));
   await expect(
     handleSessionCommands({
       req: {

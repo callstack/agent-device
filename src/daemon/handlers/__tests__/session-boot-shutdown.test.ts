@@ -44,7 +44,7 @@ test('boot requires session or explicit selector', async () => {
 test('boot prefers explicit device selector over active session device', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'default';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       platform: 'android',
@@ -473,7 +473,7 @@ test('shutdown rejects active session device and points to close --shutdown', as
     target: 'mobile',
     booted: true,
   };
-  sessionStore.set(sessionName, makeSession(sessionName, selectedDevice));
+  sessionStore.publish(sessionName, makeSession(sessionName, selectedDevice));
   mockResolveTargetDevice.mockResolvedValue(selectedDevice);
 
   const response = await handleSessionCommands({

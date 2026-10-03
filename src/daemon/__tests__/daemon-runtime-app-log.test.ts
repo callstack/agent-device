@@ -123,7 +123,7 @@ test('daemon shutdown settles fenced app-log cleanup before finalization can rel
     forceCleanup,
   });
   session.appLog = { handle, envelope };
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const resourcePath = appLogResourceStore.resolvePath(
     sessionStore.resolveSessionDir(session.name),
   );

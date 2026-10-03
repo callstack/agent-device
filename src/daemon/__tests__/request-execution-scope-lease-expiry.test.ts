@@ -27,7 +27,7 @@ test('expired leases remove owned sessions before the next command and free capa
     now: () => now,
   });
   const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
-  sessionStore.set(
+  sessionStore.publish(
     'default',
     makeSession('default', {
       device: LINUX_DEVICE,

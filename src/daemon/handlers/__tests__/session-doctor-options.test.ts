@@ -11,8 +11,8 @@ test('the same-device warning names the other session by its address, not its na
   const store = makeSessionStore();
   const here = 'cwd:aaaaaaaaaaaaaaaa:default';
   const other = 'cwd:bbbbbbbbbbbbbbbb:default';
-  store.set(here, makeIosSession('default'));
-  store.set(other, makeIosSession('default'));
+  store.publish(here, makeIosSession('default'));
+  store.publish(other, makeIosSession('default'));
 
   const [check] = sessionChecks(store, here, store.get(here));
 
@@ -26,7 +26,7 @@ test('the same-device warning names the other session by its address, not its na
 test('a session alone on its device passes with its own address in evidence', () => {
   const store = makeSessionStore();
   const here = 'cwd:aaaaaaaaaaaaaaaa:default';
-  store.set(here, makeIosSession('default'));
+  store.publish(here, makeIosSession('default'));
 
   const [check] = sessionChecks(store, here, store.get(here));
 

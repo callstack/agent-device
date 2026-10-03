@@ -31,7 +31,7 @@ vi.mock('../session-doctor-metro.ts', () => ({
 test('doctor app checks retain runtime admission failures as a failed target-app check', async () => {
   const sessionName = 'doctor-app-runtime-failure';
   const sessionStore = makeSessionStore('agent-device-doctor-app-runtime-');
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     name: sessionName,
     device: LINUX_DEVICE,
     createdAt: Date.now(),
@@ -135,7 +135,7 @@ test('doctor preserves the legacy unsupported HarmonyOS target-app check', async
   };
   const sessionName = 'doctor-harmony-app-runtime';
   const sessionStore = makeSessionStore('agent-device-doctor-harmony-');
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     name: sessionName,
     device: harmonyDevice,
     createdAt: Date.now(),

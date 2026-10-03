@@ -91,6 +91,7 @@ function openOnUncontendedDevice(
   name: string,
   sessionStore: ReturnType<typeof makeSessionStore>,
   order: string[],
+  releaseAfterMs?: number,
 ): Promise<OpenOutcome> {
   return scope.runLocked(async () => {
     const currentOwner = sessionStore.findByDevice(CONTESTED_DEVICE.id);
@@ -98,7 +99,8 @@ function openOnUncontendedDevice(
       return `refused:${currentOwner.address}`;
     }
 
-    sessionStore.set(name, sessionOnDevice(name));
+    const ref = sessionStore.publish(name, sessionOnDevice(name));
+    if (releaseAfterMs !== undefined) setTimeout(() => sessionStore.retire(ref), releaseAfterMs);
     order.push(name);
     return `opened:${name}`;
   });
@@ -107,11 +109,10 @@ function openOnUncontendedDevice(
 test('an open that lost the race to a free device re-waits and opens rather than refusing', async () => {
   const sessionStore = makeSessionStore('agent-device-open-wait-race-');
   const leaseRegistry = new LeaseRegistry();
-  sessionStore.set('holder', sessionOnDevice('holder'));
+  const holder = sessionStore.publish('holder', sessionOnDevice('holder'));
   // The holder lets go shortly after; the first open to bind the device lets go again after that,
   // the way any session closed by its owner would.
-  setTimeout(() => sessionStore.delete('holder'), 50);
-  setTimeout(() => sessionStore.delete('first-opener'), 400);
+  setTimeout(() => sessionStore.retire(holder), 50);
 
   const first = await createRequestExecutionScope({
     req: openRequest('first-opener'),
@@ -128,7 +129,7 @@ test('an open that lost the race to a free device re-waits and opens rather than
   const startedAtMs = Date.now();
   // Each open binds a device to its own session under its own device lock, which is what a real
   // open does. The second can therefore only get in once the first releases it.
-  const firstOpened = openOnUncontendedDevice(first, 'first-opener', sessionStore, order);
+  const firstOpened = openOnUncontendedDevice(first, 'first-opener', sessionStore, order, 350);
   const secondOpened = openOnUncontendedDevice(second, 'second-opener', sessionStore, order);
 
   await expect(firstOpened).resolves.toBe('opened:first-opener');
@@ -147,7 +148,7 @@ test('an open that lost the race to a free device re-waits and opens rather than
 test('a close that frees the device mid-wait gets through while the open is waiting', async () => {
   const sessionStore = makeSessionStore('agent-device-open-wait-close-');
   const leaseRegistry = new LeaseRegistry();
-  sessionStore.set('holder', sessionOnDevice('holder'));
+  const holder = sessionStore.publish('holder', sessionOnDevice('holder'));
   const order: string[] = [];
 
   const opened = createRequestExecutionScope({
@@ -157,7 +158,7 @@ test('a close that frees the device mid-wait gets through while the open is wait
   }).then((scope) =>
     scope.runLocked(async () => {
       order.push('open-bound');
-      sessionStore.set('waiter', sessionOnDevice('waiter'));
+      sessionStore.publish('waiter', sessionOnDevice('waiter'));
       return 'opened';
     }),
   );
@@ -172,7 +173,7 @@ test('a close that frees the device mid-wait gets through while the open is wait
   await expect(
     closer.runLocked(async () => {
       order.push('close-freed-the-device');
-      sessionStore.delete('holder');
+      sessionStore.retire(holder);
       return 'closed';
     }),
   ).resolves.toBe('closed');

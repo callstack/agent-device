@@ -87,7 +87,7 @@ async function press({
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const response = await routeInteraction({
     req: { token: 't', session: session.name, command, positionals, flags },
     sessionName: session.name,
@@ -184,7 +184,7 @@ async function swipeRefusedOnSecondRepetition(): Promise<unknown> {
   }
   const sessionStore = makeSessionStore();
   const session = makeSession('dispatch-disclosure-swipe');
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const response = await routeInteraction({
     req: {
       token: 't',
@@ -216,7 +216,7 @@ async function pressThenForegroundReadRefused(): Promise<unknown> {
     appBundleId: 'com.example.app',
   });
   const sessionStore = makeSessionStore();
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const readRefusal = new AppError('COMMAND_FAILED', 'adb device offline', { dispatched: 'no' });
   const androidObservation: AndroidObservationAdapter = {
     ...clearAndroidObservationFixture,
@@ -325,7 +325,7 @@ test('a read-only command discloses no over a producer verdict it throws', async
 test('a plain Error a backend throws reaches the wire with dispatched unknown', async () => {
   const sessionStore = makeSessionStore();
   const session = makeSession('dispatch-disclosure-plain-error');
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const bindings = getRuntimeBindings();
   const bindDevice = vi.fn(async () => {
     throw new Error('socket hang up');

@@ -50,7 +50,10 @@ test('captureDivergenceObservation retryLaunchRace: the 12s deadline bounds retr
     const root = mkdtempForTestSync('agent-device-replay-divergence-deadline-');
     const sessionStore = new SessionStore(path.join(root, 'sessions'));
     const sessionName = 'default';
-    sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+    sessionStore.publish(
+      sessionName,
+      makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+    );
 
     mockDispatchCommand.mockImplementation(async () => {
       vi.setSystemTime(new Date(Date.now() + 5_000));

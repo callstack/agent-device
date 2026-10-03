@@ -31,7 +31,7 @@ test('daemon shutdown awaits durable recording finalization inside its extended 
       }),
   );
   const session = makeRecordingSession({ name: 'shutdown-recording', sessionStore, finish });
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const stderrChunks: string[] = [];
 
   const teardown = teardownDaemonSessionForShutdown({
@@ -68,7 +68,7 @@ test('daemon shutdown resolves durable recording resources through the effective
     }),
   });
   session.name = 'default';
-  sessionStore.set(effectiveSessionName, session);
+  sessionStore.publish(effectiveSessionName, session);
   const stderrChunks: string[] = [];
 
   await teardownDaemonSessionForShutdown({

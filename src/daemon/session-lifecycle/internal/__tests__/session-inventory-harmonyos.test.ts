@@ -98,7 +98,7 @@ beforeEach(() => {
 async function listApps(appsFilter: 'all' | 'user-installed'): Promise<DaemonResponse | null> {
   const sessionName = 'harmony-apps';
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName, HARMONY_DEVICE));
+  sessionStore.publish(sessionName, makeSession(sessionName, HARMONY_DEVICE));
   const req: DaemonRequest = {
     token: 'test-token',
     session: sessionName,

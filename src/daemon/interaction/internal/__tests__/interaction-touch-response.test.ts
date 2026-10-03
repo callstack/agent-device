@@ -296,7 +296,7 @@ test('press @ref --verify surfaces evidence through the interactionResultExtra a
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   // Post-action capture reports an extra node, so changedFromBefore should
   // read true against the pre-action (stored) snapshot's single node.
@@ -378,7 +378,7 @@ test('press @ref without --verify never includes an evidence field', async () =>
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   mockTapPoint.mockResolvedValue({ pressed: true });
 
   const response = await handleInteractionCommands({
@@ -422,7 +422,7 @@ test('fill selector --verify surfaces evidence through the interactionResultExtr
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockCaptureSnapshotForSession.mockResolvedValue({
     nodes: [
@@ -483,7 +483,7 @@ test('fill @ref --verify surfaces evidence in the ref response branch', async ()
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockCaptureSnapshotForSession.mockResolvedValue({
     nodes: [
@@ -552,7 +552,7 @@ test('fill @ref without --verify never includes an evidence field', async () => 
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
     req: {
@@ -601,7 +601,7 @@ test('fill @ref preserves fallback coordinates for recording when platform resul
     startedAt: Date.now() - 1_000,
     showTouches: true,
   });
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockFillPoint.mockResolvedValue({ filled: true });
   const response = await handleInteractionCommands({

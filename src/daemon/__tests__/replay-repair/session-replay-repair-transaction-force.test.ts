@@ -111,6 +111,7 @@ test('#1258: close --save-script --force overwrites an existing COMPLETE healed 
   const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-force-overwrite-',
   );
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   makeCompleteRepairSession(sessionStore, sessionName, root);
   // A prior COMPLETE (sentinel-marked) healed artifact already sits at the
   // default path — `--force` must overwrite it instead of refusing.
@@ -392,6 +393,7 @@ test('#1258 force is per-target: re-arming --save-script=<b> WITHOUT --force dro
     'agent-device-repair-transaction-retarget-clears-force-',
   );
   // Armed and forced for target <a> (flow.healed.ad).
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   const session = makeCompleteRepairSession(sessionStore, sessionName, root);
   session.scriptPublication = repairPublication('complete', {
     boundary: 0,
@@ -437,6 +439,7 @@ test('#1258 force per-target, contrast: re-arming --save-script=<b> WITH --force
   const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-retarget-force-overwrites-',
   );
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   const session = makeCompleteRepairSession(sessionStore, sessionName, root);
   session.scriptPublication = repairPublication('complete', {
     boundary: 0,

@@ -54,7 +54,7 @@ test.each([
       },
     }),
   });
-  daemon.setSession('default', {
+  daemon.publishSession('default', {
     ...makeIosAppSession('default'),
     device: PROVIDER_SCENARIO_IOS_SIMULATOR,
   });

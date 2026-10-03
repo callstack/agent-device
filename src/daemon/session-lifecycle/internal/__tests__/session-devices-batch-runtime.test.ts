@@ -358,7 +358,7 @@ test('batch step pins nested requests to the resolved session', async () => {
 test('close clears retained materialized install paths bound to the session', async () => {
   const sessionStore = makeSessionStore('agent-device-devices-batch-runtime-');
   const sessionName = 'materialized-close-active';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {

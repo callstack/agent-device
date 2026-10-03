@@ -21,6 +21,7 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DaemonRequest } from '../../../../src/daemon/daemon-request.ts';
+import type { SessionRef } from '../../../../src/daemon/session-state.ts';
 import type { SessionStore } from '../../../../src/daemon/session-store.ts';
 import { resolveRequestExecutionLockPlan } from '../../../../src/daemon/request-binding.ts';
 import { shouldLockSessionExecution } from '../../../../src/daemon/daemon-command-registry.ts';
@@ -71,6 +72,7 @@ export type LeaseScope = {
  * reference can never be mistaken for a live one.
  */
 export type SessionInstance = {
+  ref: SessionRef;
   instanceId: number;
   name: string;
   deviceId: string;

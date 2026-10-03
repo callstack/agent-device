@@ -40,7 +40,10 @@ test('a failing replay step returns REPLAY_DIVERGENCE with cause preserved and c
   const root = mkdtempForTestSync('agent-device-replay-divergence-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
 
   // The post-failure screen digest capture (and the suggestions re-resolution
@@ -166,7 +169,10 @@ test('a normalized nested failure preserves typed recovery signals on REPLAY_DIV
   const root = mkdtempForTestSync('agent-device-replay-recovery-signals-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const filePath = writeReplayFile(root, ['click "Save"']);
   mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
 
@@ -201,7 +207,10 @@ test('a capture the runner declared sparse reaches the divergence details as a v
   const root = mkdtempForTestSync('agent-device-replay-sparse-verdict-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const filePath = writeReplayFile(root, ['click "Not Now"']);
   mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
 
@@ -243,7 +252,10 @@ test('a failing replay step captures an available screen digest with blessed ref
   const root = mkdtempForTestSync('agent-device-replay-divergence-screen-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const filePath = writeReplayFile(root, ['click "Save"']);
 
   mockDispatchCommand.mockResolvedValue({
@@ -290,7 +302,10 @@ test('a failing replay step ranks a re-resolved suggestion when the recorded sel
   const root = mkdtempForTestSync('agent-device-replay-divergence-suggest-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   // The recorded selector is label-only, so it still structurally matches a
   // node in the fresh capture even though the underlying tap failed (e.g. the
   // node moved off-screen or was momentarily not hittable) — the exact class
@@ -387,7 +402,7 @@ test('a failure inside a retry-wrapped runFlow include reports the include file 
   const root = mkdtempForTestSync('agent-device-replay-retry-provenance-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const childPath = writeMaestroInclude(root);
   const mainPath = path.join(root, 'main.yaml');
   fs.writeFileSync(
@@ -444,7 +459,7 @@ test('a failure inside a runtime runFlow.when-wrapped include reports the includ
   const root = mkdtempForTestSync('agent-device-replay-when-provenance-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const childPath = writeMaestroInclude(root);
   const mainPath = path.join(root, 'main.yaml');
   fs.writeFileSync(
@@ -500,7 +515,7 @@ test('typed Maestro failures rank suggestions with Maestro regex selector semant
   const root = mkdtempForTestSync('agent-device-maestro-suggestion-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const flowPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(
     flowPath,
@@ -556,7 +571,7 @@ test('typed Maestro failures never serialize input text', async () => {
   const root = mkdtempForTestSync('agent-device-maestro-text-redaction-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const flowPath = path.join(root, 'flow.yaml');
   const typedText = 'highly-sensitive-value';
   fs.writeFileSync(

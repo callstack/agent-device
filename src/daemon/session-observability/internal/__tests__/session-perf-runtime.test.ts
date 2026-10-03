@@ -239,7 +239,10 @@ test.each(['shutdown', 'retire'] as const)(
 
 function makeStore() {
   const sessionStore = makeSessionStore('agent-device-perf-runtime-');
-  sessionStore.set('android', makeAndroidSession('android', { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    'android',
+    makeAndroidSession('android', { appBundleId: 'com.example.app' }),
+  );
   return sessionStore;
 }
 

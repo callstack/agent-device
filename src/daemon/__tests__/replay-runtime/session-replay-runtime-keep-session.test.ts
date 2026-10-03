@@ -53,7 +53,7 @@ test('--keep-session suppresses a close that is terminal among executable action
   const root = mkdtempForTestSync('agent-device-replay-keep-marker-tail-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'close', 'replay "./nested-flow.ad"']);
   const commands: string[] = [];
 
@@ -64,7 +64,7 @@ test('--keep-session suppresses a close that is terminal among executable action
     sessionStore,
     invoke: async (req) => {
       commands.push(req.command);
-      if (req.command === 'close') sessionStore.delete(sessionName);
+      if (req.command === 'close') sessionStore.retire(sessionStore.lookup(sessionName)!);
       return { ok: true, data: {} };
     },
   });
@@ -79,7 +79,7 @@ test('--keep-session fails explicitly when the completed replay has no live sess
   const root = mkdtempForTestSync('agent-device-replay-keep-postcondition-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Log out"']);
 
   const response = await runReplayForTest({
@@ -88,7 +88,7 @@ test('--keep-session fails explicitly when the completed replay has no live sess
     logPath: path.join(root, 'daemon.log'),
     sessionStore,
     invoke: async (req) => {
-      if (req.command === 'click') sessionStore.delete(sessionName);
+      if (req.command === 'click') sessionStore.retire(sessionStore.lookup(sessionName)!);
       return { ok: true, data: {} };
     },
   });
@@ -106,7 +106,7 @@ test('--keep-session suppresses only the authored terminal close and reports the
   const root = mkdtempForTestSync('agent-device-replay-keep-session-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"', 'close']);
   const commands: string[] = [];
 
@@ -117,7 +117,7 @@ test('--keep-session suppresses only the authored terminal close and reports the
     sessionStore,
     invoke: async (req) => {
       commands.push(req.command);
-      if (req.command === 'close') sessionStore.delete(sessionName);
+      if (req.command === 'close') sessionStore.retire(sessionStore.lookup(sessionName)!);
       return { ok: true, data: {} };
     },
   });
@@ -133,7 +133,7 @@ test('--keep-session preserves an interior close instead of broad command filter
   const root = mkdtempForTestSync('agent-device-replay-keep-interior-close-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'close', 'open "Next"']);
   const commands: string[] = [];
 
@@ -156,7 +156,7 @@ test('--keep-session is a no-op for an already close-less script', async () => {
   const root = mkdtempForTestSync('agent-device-replay-keep-close-less-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
   const invoke = vi.fn(async (_req: DaemonRequest) => ({ ok: true as const, data: {} }));
 
@@ -178,7 +178,7 @@ test('--keep-session rejects Maestro YAML before engine dispatch', async () => {
   const root = mkdtempForTestSync('agent-device-replay-keep-maestro-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = path.join(root, 'flow.yaml');
   fs.writeFileSync(filePath, ['appId: com.example.app', '---', '- launchApp'].join('\n'));
   const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));

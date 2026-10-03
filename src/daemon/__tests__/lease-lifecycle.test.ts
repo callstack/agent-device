@@ -22,7 +22,7 @@ test('admitRequestLeaseForLockedScope heartbeats and stores admitted lease on th
     deviceKey: 'ios:SIM-001',
     clientId: 'client-a',
   });
-  sessionStore.set(
+  sessionStore.publish(
     'default',
     makeIosSession('default', {
       lease: {
@@ -71,7 +71,7 @@ test('cleanupExpiredLeasedSession consumes expired lease and deletes the session
       expiresAt: lease.expiresAt,
     },
   });
-  sessionStore.set('default', session);
+  sessionStore.publish('default', session);
   now = 1_011;
   const teardownSession = vi.fn(async () => {});
 

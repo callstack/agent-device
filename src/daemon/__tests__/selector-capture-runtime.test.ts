@@ -38,7 +38,7 @@ test('selector capture cache is keyed by scoped presentation options', async () 
       nodes: [{ ref: 'e1', index: 0, type: 'Button', label: 'A' }],
     },
   });
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   boundCapture.mockImplementation(async (input) => ({
     backend: 'xctest',
     producer: 'apple-runner',
@@ -213,7 +213,7 @@ function proofRuntime(params: {
     params.sessionName,
     params.storedSnapshot ? { snapshot: params.storedSnapshot } : {},
   );
-  sessionStore.set(params.sessionName, session);
+  sessionStore.publish(params.sessionName, session);
   boundCapture.mockResolvedValue({
     backend: 'xctest',
     producer: 'apple-runner',
@@ -316,7 +316,7 @@ test('a later fact-less capture does not erase an earlier repair proof', async (
 function makeCaptureRuntime(sessionName: string) {
   const sessionStore = makeSessionStore('agent-device-selector-capture-');
   const session = makeIosSession(sessionName);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   const runtime = createSelectorCaptureRuntime({
     ref: sessionStore.lookup(sessionName),
     device: session.device,

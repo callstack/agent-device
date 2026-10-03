@@ -52,7 +52,7 @@ test.each([
   const root = mkdtempForTestSync('agent-device-replay-divergence-qsshade-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeAndroidSession(sessionName, { appBundleId: 'com.google.android.deskclock' }),
   );

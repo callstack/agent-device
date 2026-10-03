@@ -27,7 +27,10 @@ test('buildReplayFailureDivergence dedupes suggestions using the strongest basis
   const root = mkdtempForTestSync('agent-device-replay-suggest-dedupe-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
 
   mockDispatchCommand.mockResolvedValue({
     nodes: [

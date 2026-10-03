@@ -70,7 +70,7 @@ test('reinstall requires active session or explicit device selector', async () =
 
 test('reinstall validates required args before runtime admission', async () => {
   const store = makeStore();
-  store.set(
+  store.publish(
     'default',
     makeSession('default', {
       platform: 'apple',
@@ -108,7 +108,7 @@ test('install binds the deployment use exactly once after one facts admission', 
     kind: 'emulator',
     booted: true,
   });
-  store.set(session.name, session);
+  store.publish(session.name, session);
   const root = mkdtempForTestSync('agent-device-install-runtime-');
   const appPath = path.join(root, 'Sample.apk');
   fs.writeFileSync(appPath, 'placeholder');
@@ -157,7 +157,7 @@ test('install fails closed before binding when its provider owner lacks deployme
     kind: 'device',
     booted: true,
   });
-  store.set(session.name, session);
+  store.publish(session.name, session);
   const root = mkdtempForTestSync('agent-device-install-provider-unavailable-');
   const appPath = path.join(root, 'Sample.apk');
   fs.writeFileSync(appPath, 'placeholder');
@@ -216,7 +216,7 @@ test('reinstall cleans an uploaded artifact after the request-scoped operation',
     kind: 'simulator',
     booted: true,
   });
-  store.set(session.name, session);
+  store.publish(session.name, session);
   const root = mkdtempForTestSync('agent-device-uploaded-artifact-');
   const appPath = path.join(root, 'Sample.app');
   fs.writeFileSync(appPath, 'placeholder');
@@ -252,7 +252,7 @@ test('HarmonyOS reinstall updates the active session identity from the runtime r
     kind: 'emulator',
     booted: true,
   });
-  store.set(session.name, session);
+  store.publish(session.name, session);
   const root = mkdtempForTestSync('agent-device-harmony-reinstall-');
   const appPath = path.join(root, 'Sample.hap');
   fs.writeFileSync(appPath, 'placeholder');

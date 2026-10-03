@@ -101,7 +101,10 @@ test('buildReplayFailureDivergence excludes keyboard chrome from screen.refs and
   const root = mkdtempForTestSync('agent-device-replay-divergence-keyboard-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
 
   mockDispatchCommand.mockResolvedValue({
     nodes: keyboardSwampedNodes('Push Article'),
@@ -209,7 +212,10 @@ test('buildReplayFailureDivergence drops unlabeled non-interactive structural no
   const root = mkdtempForTestSync('agent-device-replay-divergence-structural-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
 
   mockDispatchCommand.mockResolvedValue({
     nodes: structuralNoiseNodes(),
@@ -321,7 +327,10 @@ test('buildReplayFailureDivergence keeps an app inputAccessoryView control in sc
   const root = mkdtempForTestSync('agent-device-replay-divergence-accessory-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
 
   mockDispatchCommand.mockResolvedValue({
     nodes: keyboardWithAccessoryNodes(),
@@ -373,7 +382,7 @@ test('buildReplayFailureDivergence excludes Android status-bar/IME chrome from s
   const root = mkdtempForTestSync('agent-device-replay-divergence-android-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeAndroidSession(sessionName, { appBundleId: 'com.callstack.agentdevicelab' }),
   );

@@ -49,7 +49,7 @@ function assertAndroidCapabilityHonesty(availableCommands: unknown): void {
 /** The one interaction-capable Android owner both projection tests below read. */
 async function projectAndroidCapabilities(sessionName: string) {
   const sessionStore = makeSessionStore('agent-device-capabilities-');
-  sessionStore.set(sessionName, makeAndroidSession(sessionName));
+  sessionStore.publish(sessionName, makeAndroidSession(sessionName));
   const runtime = createAdmissionRuntime({
     appLogAvailable: true,
     ensureReadyAvailable: true,
@@ -121,7 +121,7 @@ test('capabilities omits the commands this Android owner does not admit', async 
 test('capabilities excludes logs from an unavailable provider-mode XCTest runtime fact', async () => {
   const sessionName = 'provider-xctest-capabilities';
   const sessionStore = makeSessionStore('agent-device-capabilities-provider-xctest-');
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     name: sessionName,
     device: {
       platform: 'apple',
@@ -176,7 +176,7 @@ test('capabilities excludes logs from an unavailable provider-mode XCTest runtim
 test('capabilities excludes network when the runtime fact is unavailable', async () => {
   const sessionName = 'android-capabilities-no-network';
   const sessionStore = makeSessionStore('agent-device-capabilities-no-network-');
-  sessionStore.set(sessionName, makeAndroidSession(sessionName));
+  sessionStore.publish(sessionName, makeAndroidSession(sessionName));
   const runtime = createAdmissionRuntime({
     appLogAvailable: true,
     networkAvailable: false,
@@ -217,7 +217,7 @@ test('capabilities includes apps for the available HarmonyOS runtime fact', asyn
     target: 'mobile',
     booted: true,
   } as const;
-  sessionStore.set(sessionName, makeSession(sessionName, { device: harmonyDevice }));
+  sessionStore.publish(sessionName, makeSession(sessionName, { device: harmonyDevice }));
   const runtime = createAdmissionRuntime({
     appLogAvailable: true,
     networkAvailable: false,
@@ -298,7 +298,7 @@ test.each(APPS_UNAVAILABLE_CAPABILITY_CASES)(
   async ({ label, device, providerMode }) => {
     const sessionName = `capabilities-${label.toLowerCase().replaceAll(' ', '-')}`;
     const sessionStore = makeSessionStore(`agent-device-capabilities-${label}-`);
-    sessionStore.set(sessionName, makeSession(sessionName, { device }));
+    sessionStore.publish(sessionName, makeSession(sessionName, { device }));
     const runtime = createAdmissionRuntime({
       appLogAvailable: false,
       networkAvailable: false,
@@ -332,7 +332,7 @@ test.each(APPS_UNAVAILABLE_CAPABILITY_CASES)(
 test('capabilities excludes appstate when its runtime fact is unavailable', async () => {
   const sessionName = 'android-capabilities-no-appstate';
   const sessionStore = makeSessionStore('agent-device-capabilities-no-appstate-');
-  sessionStore.set(sessionName, makeAndroidSession(sessionName));
+  sessionStore.publish(sessionName, makeAndroidSession(sessionName));
   const runtime = createAdmissionRuntime({
     appLogAvailable: true,
     appStateAvailable: false,
@@ -364,7 +364,7 @@ test('capabilities excludes appstate when its runtime fact is unavailable', asyn
 test('capabilities excludes appstate when its readiness fact is unavailable', async () => {
   const sessionName = 'android-capabilities-no-readiness';
   const sessionStore = makeSessionStore('agent-device-capabilities-no-readiness-');
-  sessionStore.set(sessionName, makeAndroidSession(sessionName));
+  sessionStore.publish(sessionName, makeAndroidSession(sessionName));
   const runtime = createAdmissionRuntime({
     appLogAvailable: true,
     appStateAvailable: true,
@@ -424,7 +424,7 @@ test.each([
   async (_name, device) => {
     const sessionName = device.id + '-session';
     const sessionStore = makeSessionStore('agent-device-capabilities-' + device.id + '-');
-    sessionStore.set(sessionName, {
+    sessionStore.publish(sessionName, {
       name: sessionName,
       device,
       createdAt: Date.now(),

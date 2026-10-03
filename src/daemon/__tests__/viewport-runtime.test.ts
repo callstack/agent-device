@@ -165,7 +165,7 @@ test('request router joins viewport admission to execution, recording, and ref i
   const sessionStore = makeSessionStore('agent-device-viewport-generic-');
   const session = makeSession('viewport-runtime', { device: webDevice });
   activateCompleteRefFrame(session);
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const handler = createRequestHandler({
     logPath: '/tmp/daemon.log',
     token: 't',

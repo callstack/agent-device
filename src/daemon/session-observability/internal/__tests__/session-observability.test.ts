@@ -104,6 +104,9 @@ test.each(REMOVED_AGGREGATE_PERF_POSITIONALS.map((positionals) => [positionals] 
 
 function makeAndroidStore() {
   const sessionStore = makeSessionStore('agent-device-session-observability-');
-  sessionStore.set('android', makeAndroidSession('android', { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    'android',
+    makeAndroidSession('android', { appBundleId: 'com.example.app' }),
+  );
   return sessionStore;
 }

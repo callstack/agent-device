@@ -159,7 +159,7 @@ function scenario(params: { storedRepair?: boolean }) {
       iosSystemSurfaceBundleId: 'com.apple.SafariViewService',
     };
   }
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   return { sessionStore, sessionName, logPath: path.join(root, 'daemon.log') };
 }
 

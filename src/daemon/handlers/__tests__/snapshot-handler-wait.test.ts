@@ -82,7 +82,7 @@ async function runWaitCommand(
   positionals: string[],
 ) {
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName, device, appAttach(device)));
+  sessionStore.publish(sessionName, makeSession(sessionName, device, appAttach(device)));
   return await handleSnapshotCommands({
     req: snapshotRequest(sessionName, 'wait', { positionals }),
     sessionName,
@@ -177,7 +177,7 @@ test('wait text on Android uses freshness-aware capture instead of one-shot snap
   const sessionStore = makeSessionStore();
   const sessionName = 'android-wait-freshness';
   const session = makeAndroidFreshnessSession(sessionName, 'press', inboxBaselineNodes(18));
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   legacyDispatchCapture
     .mockResolvedValueOnce(
@@ -359,7 +359,7 @@ test('wait selector bypasses a fresh matching session snapshot', async () => {
       },
     ],
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   legacyDispatchCapture.mockResolvedValue({
     nodes: [
       {

@@ -140,7 +140,7 @@ function seedSession(
   const session = makeIosSession(sessionName);
   setSessionSnapshot(session, buildSnapshotState(snapshotPayload(baseline), {}));
   activateCompleteRefFrame(session);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   return session;
 }
 

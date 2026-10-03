@@ -157,7 +157,7 @@ function sessionRequest(
 test('open --relaunch closes and reopens active session app', async () => {
   const sessionStore = makeSessionStore('agent-device-relaunch-close-');
   const sessionName = 'android-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {
@@ -191,7 +191,7 @@ test('open --relaunch closes and reopens active session app', async () => {
 test('open --relaunch leaves the old frame expired when the close dispatch fails after dispatch (ADR 0014)', async () => {
   const sessionStore = makeSessionStore('agent-device-relaunch-close-');
   const sessionName = 'android-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {
@@ -283,7 +283,10 @@ test('open --relaunch on physical iOS retains runner through close/open', async 
     kind: 'device' as const,
     booted: true,
   };
-  sessionStore.set(sessionName, makeSession(sessionName, { device, appName: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeSession(sessionName, { device, appName: 'com.example.app' }),
+  );
 
   const calls: string[] = [];
   mockResolveTargetDevice.mockResolvedValue(device);
@@ -317,7 +320,10 @@ test('open --relaunch on iOS simulator collapses into one terminate-running open
     kind: 'simulator' as const,
     booted: true,
   };
-  sessionStore.set(sessionName, makeSession(sessionName, { device, appName: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeSession(sessionName, { device, appName: 'com.example.app' }),
+  );
 
   const calls: string[] = [];
   mockResolveTargetDevice.mockResolvedValue(device);
@@ -354,7 +360,10 @@ test('open <app> <url> --relaunch on iOS simulator delegates termination to the 
     kind: 'simulator' as const,
     booted: true,
   };
-  sessionStore.set(sessionName, makeSession(sessionName, { device, appName: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeSession(sessionName, { device, appName: 'com.example.app' }),
+  );
 
   const calls: string[] = [];
   mockResolveTargetDevice.mockResolvedValue(device);
@@ -387,7 +396,10 @@ test('open --relaunch --clear-app-state on iOS simulator keeps close-first order
     kind: 'simulator' as const,
     booted: true,
   };
-  sessionStore.set(sessionName, makeSession(sessionName, { device, appName: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeSession(sessionName, { device, appName: 'com.example.app' }),
+  );
 
   const calls: string[] = [];
   mockResolveTargetDevice.mockResolvedValue(device);
@@ -420,7 +432,7 @@ test('open --relaunch includes timing and waits for iOS runner prewarm after ope
     kind: 'device' as const,
     booted: true,
   };
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, { device, appName: 'Example', appBundleId: 'com.example.app' }),
   );
@@ -501,7 +513,7 @@ test('open --relaunch on iOS without existing session closes then opens target a
 test('close on macOS session stops runner and dismisses automation alert before delete', async () => {
   const sessionStore = makeSessionStore('agent-device-relaunch-close-');
   const sessionName = 'macos-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {
@@ -542,7 +554,7 @@ test('close on macOS session stops runner and dismisses automation alert before 
 test('close on iOS simulator session retains runner and deletes the session', async () => {
   const sessionStore = makeSessionStore('agent-device-relaunch-close-');
   const sessionName = 'ios-simulator-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {
@@ -567,7 +579,7 @@ test('close on iOS simulator session retains runner and deletes the session', as
 test('close on iOS simulator with scoped simulator set retains runner and deletes the session', async () => {
   const sessionStore = makeSessionStore('agent-device-relaunch-close-');
   const sessionName = 'ios-scoped-simulator-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {
@@ -600,7 +612,7 @@ test('close on leased iOS simulator session stops runner before deleting session
     deviceKey: 'ios:sim-1',
     clientId: 'client-a',
   });
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {
@@ -636,7 +648,7 @@ test('close on leased iOS simulator session stops runner before deleting session
 test('close --shutdown on iOS simulator stops runner before deleting session', async () => {
   const sessionStore = makeSessionStore('agent-device-relaunch-close-');
   const sessionName = 'ios-simulator-shutdown-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {
@@ -662,7 +674,7 @@ test('close --shutdown on iOS simulator stops runner before deleting session', a
 test('close <app> on iOS stops runner before app close dispatch and performs final idempotent stop', async () => {
   const sessionStore = makeSessionStore('agent-device-relaunch-close-');
   const sessionName = 'ios-close-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {
@@ -699,7 +711,7 @@ test('close <app> on iOS stops runner before app close dispatch and performs fin
 test('close <app> on iOS simulator retains runner while terminating app', async () => {
   const sessionStore = makeSessionStore('agent-device-relaunch-close-');
   const sessionName = 'ios-simulator-close-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {
@@ -736,7 +748,7 @@ test('close <app> on iOS simulator retains runner while terminating app', async 
 test('app-only close terminates an iOS simulator app without ending its session', async () => {
   const sessionStore = makeSessionStore('agent-device-relaunch-close-');
   const sessionName = 'ios-simulator-app-only-close';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {
@@ -775,7 +787,7 @@ test('app-only close terminates an iOS simulator app without ending its session'
 test('close <app> on macOS stops runner before app close dispatch and dismisses automation alert', async () => {
   const sessionStore = makeSessionStore('agent-device-relaunch-close-');
   const sessionName = 'macos-close-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {

@@ -49,7 +49,7 @@ test('push requires active session or explicit device selector', async () => {
 
 test('push validates payload before runtime facts admission', async () => {
   const sessionStore = makeSessionStore('agent-device-session-push-invalid-');
-  sessionStore.set('default', {
+  sessionStore.publish('default', {
     name: 'default',
     createdAt: Date.now(),
     actions: [],
@@ -83,7 +83,7 @@ test('push validates payload before runtime facts admission', async () => {
 
 test('push runs readiness and notification through one admitted runtime binding', async () => {
   const sessionStore = makeSessionStore('agent-device-session-push-runtime-');
-  sessionStore.set('default', {
+  sessionStore.publish('default', {
     name: 'default',
     createdAt: Date.now(),
     actions: [],
@@ -141,7 +141,7 @@ test('push runs readiness and notification through one admitted runtime binding'
 
 test('push treats an existing brace-prefixed payload as a file before inline JSON parsing', async () => {
   const sessionStore = makeSessionStore('agent-device-session-push-payload-file-');
-  sessionStore.set('default', {
+  sessionStore.publish('default', {
     name: 'default',
     createdAt: Date.now(),
     actions: [],
@@ -192,7 +192,7 @@ test('push treats an existing brace-prefixed payload as a file before inline JSO
 
 test('push stops at unavailable facts without binding', async () => {
   const sessionStore = makeSessionStore('agent-device-session-push-unsupported-');
-  sessionStore.set('default', {
+  sessionStore.publish('default', {
     name: 'default',
     createdAt: Date.now(),
     actions: [],
@@ -229,7 +229,7 @@ test('push stops at unavailable facts without binding', async () => {
 
 test('push fails closed before binding when a provider owner lacks readiness', async () => {
   const sessionStore = makeSessionStore('agent-device-session-push-provider-readiness-');
-  sessionStore.set('default', {
+  sessionStore.publish('default', {
     name: 'default',
     createdAt: Date.now(),
     actions: [],

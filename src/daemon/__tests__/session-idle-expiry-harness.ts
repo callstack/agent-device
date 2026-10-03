@@ -106,7 +106,7 @@ export function createIdleExpiryHarness(): Readonly<{
         createdAt: NOW - WINDOW_MS - 1,
         deviceClaim: { ...CLAIM },
       });
-      store.set(name, session);
+      store.publish(name, session);
       return session;
     },
     // Past its window on time alone, and holding no claim — nothing another agent waits on.
@@ -130,7 +130,7 @@ export function createIdleExpiryHarness(): Readonly<{
         createdAt: NOW - WINDOW_MS - 1,
         deviceClaim: acquired.ownership,
       });
-      fixture.sessionStore.set(name, session);
+      fixture.sessionStore.publish(name, session);
       return { session, deviceClaim: acquired.ownership };
     },
     claimFileHeld: (deviceClaim) => fs.existsSync(resolveDeviceClaimPath(deviceClaim.deviceKey)),
