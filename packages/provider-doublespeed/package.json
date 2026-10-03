@@ -1,0 +1,52 @@
+{
+  "name": "@agent-device/doublespeed",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "description": "Doublespeed iOS simulator plugin for agent-device.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./connection-verification": {
+      "types": "./src/connection-verification.ts",
+      "default": "./src/connection-verification.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown --config tsdown.config.ts",
+    "prepack": "pnpm build"
+  },
+  "devDependencies": {
+    "@agent-device/capture-kit": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "agent-device": "workspace:*"
+  },
+  "agentDevicePlugin": {
+    "apiVersion": 1,
+    "provider": "doublespeed",
+    "entry": "./dist/plugin.mjs",
+    "connection": {
+      "leaseKind": "direct-device-provider",
+      "requiresAppAttachment": false,
+      "requiresRemoteDaemon": false,
+      "supportsArtifacts": false,
+      "supportsDeferredAppSelection": true,
+      "supportsDirectPortReverse": false,
+      "usesCloudWebDriverLease": false
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "import": "./dist/plugin.mjs"
+      }
+    }
+  }
+}

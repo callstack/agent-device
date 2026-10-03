@@ -13,3 +13,7 @@ export function isCloudWebDriverProviderName(
 ): provider is CloudWebDriverKnownProviderName {
   return provider !== undefined && CLOUD_WEBDRIVER_KNOWN_PROVIDERS.has(provider);
 }
+
+export function isBrowserStackAppReference(value: string): boolean {
+  return /^bs:\/\/[\w.-]+$/.test(value);
+}

@@ -4,12 +4,13 @@ export type IosSnapshotProducer =
   | 'apple-runner'
   | 'simulator-ax-bridge'
   | 'appium-source'
-  | 'limrun-ios-tree';
+  | 'limrun-ios-tree'
+  | 'doublespeed-ios-tree';
 
 export type IosAcquisitionProducer = Exclude<IosSnapshotProducer, 'apple-runner'>;
 export type IosProviderAcquisitionProducer = Extract<
   IosAcquisitionProducer,
-  'appium-source' | 'limrun-ios-tree'
+  'appium-source' | 'limrun-ios-tree' | 'doublespeed-ios-tree'
 >;
 export type IosAcquisitionIntent = 'full' | 'surface-observation';
 export type IosSnapshotProjection = 'regular' | 'raw';

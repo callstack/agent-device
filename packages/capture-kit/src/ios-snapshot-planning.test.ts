@@ -103,6 +103,7 @@ test('truncation evidence is declared for every iOS producer', () => {
     'simulator-ax-bridge': 'available',
     'appium-source': 'unavailable',
     'limrun-ios-tree': 'unavailable',
+    'doublespeed-ios-tree': 'unavailable',
   } as const satisfies Record<IosSnapshotProducer, IosSnapshotEvidenceAvailability>;
 
   for (const producer of Object.keys(expected) as IosSnapshotProducer[]) {

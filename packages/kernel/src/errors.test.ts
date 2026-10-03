@@ -117,3 +117,20 @@ test('discloseDispatchAfterSteps keeps no only while no step of the series was d
   const plain = new Error('socket closed');
   assert.equal(discloseDispatchAfterSteps(plain, 4), plain);
 });
+
+test('bundled plugin errors preserve codes and details without changing subclass checks', async () => {
+  const copyPath = './errors.ts?plugin-copy';
+  const { AppError: PluginError } = await import(copyPath);
+  assert.notEqual(PluginError, AppError);
+  const foreign = new PluginError('INVALID_ARGS', 'bad plugin profile', { provider: 'example' });
+  assert.ok(foreign instanceof AppError);
+  const normalized = normalizeError(foreign);
+  assert.equal(normalized.code, 'INVALID_ARGS');
+  assert.equal(normalized.message, 'bad plugin profile');
+  assert.deepEqual(normalized.details, { provider: 'example' });
+  const ordinary = Object.assign(new Error('bad plugin profile'), { code: 'INVALID_ARGS' });
+  assert.equal(ordinary instanceof AppError, false);
+  class SpecificError extends AppError {}
+  assert.ok(new SpecificError('COMMAND_FAILED', 'specific') instanceof SpecificError);
+  assert.equal(foreign instanceof SpecificError, false);
+});

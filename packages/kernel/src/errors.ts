@@ -36,6 +36,31 @@ export type KnownAppErrorCode = (typeof KNOWN_APP_ERROR_CODES)[number];
 // include a default branch.
 export type AppErrorCode = KnownAppErrorCode | (string & {});
 
+const APP_ERROR_BRAND = Symbol.for('agent-device.AppError');
+
+export class AppError extends Error {
+  static [Symbol.hasInstance](value: unknown): boolean {
+    if (this !== AppError) return Function.prototype[Symbol.hasInstance].call(this, value);
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      (value as Record<symbol, unknown>)[APP_ERROR_BRAND] === true
+    );
+  }
+
+  code: AppErrorCode;
+  details?: AppErrorDetails;
+  cause?: unknown;
+
+  constructor(code: AppErrorCode, message: string, details?: AppErrorDetails, cause?: unknown) {
+    super(message);
+    Object.defineProperty(this, APP_ERROR_BRAND, { value: true });
+    this.code = code;
+    this.details = details;
+    this.cause = cause;
+  }
+}
+
 export function toAppErrorCode(
   code: string | undefined,
   fallback: AppErrorCode = 'COMMAND_FAILED',
@@ -218,19 +243,6 @@ export type DaemonError = {
   retriable?: boolean;
   supportedOn?: string;
 };
-
-export class AppError extends Error {
-  code: AppErrorCode;
-  details?: AppErrorDetails;
-  cause?: unknown;
-
-  constructor(code: AppErrorCode, message: string, details?: AppErrorDetails, cause?: unknown) {
-    super(message);
-    this.code = code;
-    this.details = details;
-    this.cause = cause;
-  }
-}
 
 /** Rehydrate a daemon transport error into the error type used by local callers. */
 export function throwDaemonError(error: DaemonError): never {

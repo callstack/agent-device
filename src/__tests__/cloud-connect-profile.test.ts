@@ -33,6 +33,7 @@ vi.mock('../provider-webdriver.ts', () => ({
 }));
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
