@@ -352,6 +352,24 @@ test('setIosSetting location refuses an appless session with the published reaso
   );
 });
 
+test('setIosSetting clear-app-state refuses an appless session with the published reason', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue(undefined);
+
+  await withFakeAppleTool(
+    (args) => unexpectedArgs(args),
+    async () => {
+      await assertRejectsAppError(
+        () => setIosSetting(IOS_TEST_SIMULATOR, 'clear-app-state', 'clear'),
+        {
+          code: 'INVALID_ARGS',
+          reason: PUBLISHED_ERROR_REASONS.sessionAppRequired,
+          dispatched: 'no',
+        },
+      );
+    },
+  );
+});
+
 test('setIosSetting appearance toggle flips current simulator appearance', async () => {
   await withFakeAppleTool(
     (args) => {

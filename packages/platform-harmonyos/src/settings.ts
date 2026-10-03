@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, sessionAppRequiredDetails } from '@agent-device/kernel/errors';
 import { runHarmonyShell } from './hdc.ts';
 
 export async function setHarmonySetting(
@@ -20,6 +20,7 @@ export async function setHarmonySetting(
     throw new AppError(
       'INVALID_ARGS',
       'settings clear-app-state requires an app id or an active app session.',
+      sessionAppRequiredDetails(),
     );
   }
 

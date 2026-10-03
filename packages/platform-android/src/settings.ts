@@ -125,6 +125,7 @@ export async function setAndroidSetting(
         throw new AppError(
           'INVALID_ARGS',
           'settings clear-app-state requires an app id or an active app session.',
+          sessionAppRequiredDetails(),
         );
       }
       const resolved = await resolveAndroidApp(device, appPackage);
