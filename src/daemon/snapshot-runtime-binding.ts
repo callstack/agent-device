@@ -19,7 +19,7 @@ import {
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
-import type { SessionState } from './session-state.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
 import {
   admitRuntimePlan,
   requireRuntimeBinding,
@@ -51,6 +51,7 @@ export type SnapshotRuntimeRouteParams = {
 type ResolvedSnapshotCaptureRuntime =
   | Readonly<{
       ok: true;
+      ref: SessionRef | undefined;
       session: SessionState | undefined;
       device: SessionState['device'];
       snapshotScope: string | undefined;
@@ -134,7 +135,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
   command: 'snapshot' | 'diff',
 ): Promise<ResolvedSnapshotCaptureRuntime> {
   const { req, sessionName, sessionStore } = params;
-  const { session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
+  const { ref, session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
   const resolvedScope = resolveSnapshotScope(req.flags?.snapshotScope, session);
   if (!resolvedScope.ok) return { ok: false, response: resolvedScope };
 
@@ -161,6 +162,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
   });
   return Object.freeze({
     ok: true,
+    ref,
     session,
     device,
     snapshotScope: resolvedScope.scope,

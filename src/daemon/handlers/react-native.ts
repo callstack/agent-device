@@ -17,6 +17,7 @@ import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapsh
 import type { DaemonResponse } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
 import {
+  bindInteractionSession,
   captureSnapshotForSession,
   finalizeTouchInteraction,
   type InteractionRouteInput,
@@ -28,6 +29,7 @@ import { errorResponse, noActiveSessionError } from '@agent-device/kernel/contra
 export async function handleReactNativeCommands(
   params: InteractionRouteInput,
 ): Promise<DaemonResponse | null> {
+  params = bindInteractionSession(params);
   const { req, sessionName, sessionStore } = params;
   if (req.command !== PUBLIC_COMMANDS.reactNative) return null;
   const parsed = parseReactNativeArgs(req.positionals ?? []);
@@ -62,7 +64,7 @@ export async function handleReactNativeCommands(
 
   try {
     const snapshot = await captureSnapshotForSession(
-      session,
+      params.sessionRef!,
       req.flags,
       sessionStore,
       params.contextFromFlags,
@@ -161,7 +163,7 @@ async function executeReactNativeOverlayDismiss(
   expireRefFrame(session);
   const data = await tapPoint(target.point);
   const actionFinishedAt = Date.now();
-  const verification = await verifyReactNativeOverlayDismissal(params, session);
+  const verification = await verifyReactNativeOverlayDismissal(params);
   const responseData = stripUndefined({
     ...readSnapshotNodesReferenceFrame(snapshot.nodes),
     ...data,
@@ -192,17 +194,14 @@ async function executeReactNativeOverlayDismiss(
   });
 }
 
-async function verifyReactNativeOverlayDismissal(
-  params: InteractionRouteInput,
-  session: SessionState,
-): Promise<{
+async function verifyReactNativeOverlayDismissal(params: InteractionRouteInput): Promise<{
   verified: boolean;
   verificationWarning?: string;
   nextCommand?: string;
 }> {
   const { req, sessionStore } = params;
   const verificationSnapshot = await captureSnapshotForSession(
-    session,
+    params.sessionRef!,
     req.flags,
     sessionStore,
     params.contextFromFlags,

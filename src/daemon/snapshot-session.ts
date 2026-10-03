@@ -11,9 +11,10 @@ export async function resolveSessionDevice(
   sessionName: string,
   flags: DaemonRequest['flags'],
 ) {
-  const session = sessionStore.get(sessionName);
+  const ref = sessionStore.lookup(sessionName);
+  const session = ref?.session;
   const device = session?.device ?? (await resolveTargetDevice(flags ?? {}));
-  return { session, device };
+  return { ref, session, device };
 }
 
 export async function withSessionlessRunnerCleanup<T>(
@@ -52,23 +53,14 @@ export function recordIfSession(
   });
 }
 
-export function buildSnapshotSession(params: {
-  session: SessionState | undefined;
+export function createSnapshotSession(params: {
   sessionName: string;
   sessionScope: SessionScope;
   device: SessionState['device'];
   snapshot: SessionState['snapshot'];
   appBundleId?: string;
 }): SessionState {
-  const { session, sessionName, sessionScope, device, snapshot, appBundleId } = params;
-  if (session) {
-    return {
-      ...session,
-      snapshot,
-      lastComparisonSafeSnapshot:
-        snapshot?.comparisonSafe === true ? snapshot : session.lastComparisonSafeSnapshot,
-    };
-  }
+  const { sessionName, sessionScope, device, snapshot, appBundleId } = params;
   return {
     name: sessionName,
     sessionScope,

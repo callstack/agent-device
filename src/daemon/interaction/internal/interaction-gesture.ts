@@ -1,3 +1,4 @@
+import { bindInteractionSession } from './interaction-session.ts';
 import { readOptionalInteger } from '@agent-device/contracts/command';
 import { type GesturePayload, readGesturePayload } from '@agent-device/contracts/gesture-input';
 import {
@@ -71,6 +72,7 @@ function isRefusal(
 export async function dispatchGestureViaRuntime(
   params: GestureHandlerParams,
 ): Promise<DaemonResponse> {
+  params = bindInteractionSession(params);
   return await dispatchGestureInteraction(params, 'gesture', async (session) =>
     runGestureInteraction(params, session),
   );
@@ -156,6 +158,7 @@ function buildGestureOutcome(
 export async function dispatchSwipeViaRuntime(
   params: GestureHandlerParams,
 ): Promise<DaemonResponse> {
+  params = bindInteractionSession(params);
   return await dispatchGestureInteraction(params, 'swipe', async (session) => {
     const input = readSwipeInput(params.req.input);
     // One bind for the whole series: `--count N` executes the bound operation N times under a

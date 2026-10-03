@@ -129,7 +129,7 @@ async function buildDirectIosCorroboratedResponse(params: {
     command: handlerParams.req.command,
     requestId: handlerParams.req.meta?.requestId,
     flags: handlerParams.req.flags,
-    session,
+    ref: handlerParams.sessionRef!,
     sessionStore: handlerParams.sessionStore,
     contextFromFlags: handlerParams.contextFromFlags,
     captureSnapshotForSession: handlerParams.captureSnapshotForSession,

@@ -198,7 +198,7 @@ export async function teardownDaemonSessionForShutdown(params: {
   // ADR 0012 decision 6, R7 + commit semantics (C2/C5a): commit the healed
   // `.ad` iff the repair transaction completed, else leave a bounded
   // `REPAIR_SESSION_EXPIRED` tombstone for the reaped-before-finalize case.
-  sessionStore.finalizeRepairTeardown(session);
+  sessionStore.finalizeRepairTeardown(ref);
   await beforeDelete?.(session);
   if (teardownSucceeded) await afterSuccessfulTeardown?.(session);
   sessionStore.retire(ref);
@@ -514,12 +514,10 @@ export async function startDaemonRuntime(
   // survive so the next pass can retry rather than leave a claim owned by a process that no longer
   // knows what it holds. So: resources, then the platform finalization that stops the execution host
   // and releases its lease, then the claim, cleared last, by the reaper.
-  const settleIdleExpiredSession = async (
-    session: SessionState,
-    sessionName: string,
-  ): Promise<void> => {
-    const ref = sessionStore.lookup(sessionName);
-    if (!ref) return;
+  const settleIdleExpiredSession = async (ref: SessionRef): Promise<void> => {
+    const session = sessionStore.resolveCurrent(ref) ?? ref.session;
+    const sessionName = ref.address;
+    const runtimeHints = runtimeHintValues(sessionStore.getRuntimeHints(sessionName));
     await teardownSessionResources({
       appLog: 'run',
       ref,
@@ -532,7 +530,7 @@ export async function startDaemonRuntime(
       scope: createDaemonRecoveryPlatformScope(),
       session,
       stateDir: baseDir,
-      runtimeHints: runtimeHintValues(sessionStore.getRuntimeHints(sessionName)),
+      runtimeHints,
       // The one caller that must say so: this daemon is staying alive, so there is no shutdown
       // phase a healthy runner could be deferred to. Taking the ordinary-close path stops the
       // runner and releases its lease instead of parking it until process exit.

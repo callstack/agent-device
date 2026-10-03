@@ -220,7 +220,7 @@ test('a disposal finish disposes a preserving kind’s material too', async () =
   });
 });
 
-test.each(['rebuild', 'retire', 'token', 'generation'] as const)(
+test.each(['rebuild', 'retire', 'handle', 'token', 'generation'] as const)(
   'a held finish after %s clears only its matching lifetime, handle and fence',
   async (change) => {
     const context = makeDurableCaptureContext();
@@ -270,7 +270,12 @@ test.each(['rebuild', 'retire', 'token', 'generation'] as const)(
       context.sessionStore.update(ref, (current) => ({
         ...current,
         name: 'updated',
-        capture: { ...active, envelope: { ...active.envelope, fence } },
+        capture: {
+          ...active,
+          handle:
+            change === 'handle' ? makeDurableCaptureStartResult(context).handle : active.handle,
+          envelope: { ...active.envelope, fence },
+        },
       }));
     }
     const before = context.sessionStore.get(context.sessionName)!;

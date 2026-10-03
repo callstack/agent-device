@@ -1,3 +1,4 @@
+import { bindInteractionSession } from './interaction-session.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type {
   InteractionTarget,
@@ -37,6 +38,7 @@ export async function dispatchTargetedTouchViaRuntime(
   params: TargetedTouchParams,
   command: TargetedTouchCommand,
 ): Promise<DaemonResponse> {
+  params = bindInteractionSession(params);
   const admission = await admitTargetedTouch(params, command);
   if ('response' in admission) return admission.response;
   const { admitted } = admission;

@@ -84,9 +84,10 @@ test('clearing an older handle or fence leaves a replacement capture intact', ()
     sessionStore: store,
     finish: async () => ({ status: 'cleanup-pending', reason: 'cleanup-unconfirmed' }),
   }).screenRecording!;
-  store.update(ref, { screenRecording: replacement });
+  const differentHandle = { ...active, handle: replacement.handle };
+  store.update(ref, { screenRecording: differentHandle });
   expect(binding.clear(active)).toBe('resource-changed');
-  expect(binding.read()).toBe(replacement);
+  expect(binding.read()).toBe(differentHandle);
   for (const fence of [
     { ...active.envelope.fence, token: 'next' },
     { ...active.envelope.fence, generation: active.envelope.fence.generation + 1 },

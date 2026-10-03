@@ -25,14 +25,15 @@ export function handleSessionScriptPublication(params: {
     );
   }
 
-  const session = sessionStore.get(sessionName);
-  if (!session) {
+  const ref = sessionStore.lookup(sessionName);
+  if (!ref) {
     return failure(
       new AppError('SESSION_NOT_FOUND', `No active session "${sessionName}".`, {
         hint: 'Start a fresh journey with open <app> --save-script[=<path>], then retry.',
       }),
     );
   }
+  const session = sessionStore.requireCurrent(ref);
   const eligibilityError = validatePublicationEligibility(session);
   if (eligibilityError) return failure(eligibilityError);
 
@@ -42,7 +43,7 @@ export function handleSessionScriptPublication(params: {
   }
   retargetActivePublication(session, { explicitPath, liveForce: req.flags?.force });
 
-  const result = sessionStore.writeSessionLog(session, {
+  const result = sessionStore.writeSessionLog(ref, {
     force: effectiveWriteForce(session, req.flags?.force),
     publication: 'active',
   });

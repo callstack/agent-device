@@ -3,10 +3,16 @@ import { legacyDispatchCapture } from '../../../__tests__/legacy-snapshot-captur
 import { test, expect, vi, beforeEach } from 'vitest';
 import { createInteractionRuntime, handleInteractionCommands } from '../../index.ts';
 import type { SessionStore } from '../../../session-store.ts';
-import type { SessionState } from '../../../session-state.ts';
+import type { SessionRef, SessionState } from '../../../session-state.ts';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { setSessionSnapshot } from '../../../session-snapshot.ts';
-import { activateCompleteRefFrame, expireRefFrame, refFrameState } from '../../../ref-frame.ts';
+import {
+  activateCompleteRefFrame,
+  expireRefFrame,
+  refFrameState,
+  refFrameTree,
+} from '../../../ref-frame.ts';
+import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
 import {
@@ -28,6 +34,10 @@ import {
 // beyond a few poll ticks.
 
 const mockCaptureSnapshotForSession = vi.hoisted(() => vi.fn());
+vi.mock('../../../snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
+const nativeCapture = vi.mocked(captureSnapshotWithInteractor);
 
 const BEFORE_NODES = [
   { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
@@ -54,7 +64,7 @@ const AFTER_NODES = [
 ];
 
 async function emulateCaptureSnapshotForSession(
-  session: SessionState,
+  ref: SessionRef,
   flags: CommandFlags | undefined,
   sessionStore: SessionStore,
   contextFromFlags: (
@@ -64,6 +74,7 @@ async function emulateCaptureSnapshotForSession(
   ) => Record<string, unknown>,
   options: { interactiveOnly: boolean },
 ) {
+  const session = sessionStore.requireCurrent(ref);
   const effectiveFlags = { ...(flags ?? {}), snapshotInteractiveOnly: options.interactiveOnly };
   const snapshotData = (await legacyDispatchCapture(
     session.device,
@@ -73,8 +84,7 @@ async function emulateCaptureSnapshotForSession(
     contextFromFlags(effectiveFlags, session.appBundleId, session.trace?.outPath),
   )) as Parameters<typeof buildSnapshotState>[0];
   const snapshot = buildSnapshotState(snapshotData ?? {}, effectiveFlags);
-  setSessionSnapshot(session, snapshot);
-  sessionStore.set(session.name, session);
+  setSessionSnapshot(sessionStore.requireCurrent(ref), snapshot);
   return snapshot;
 }
 
@@ -158,6 +168,7 @@ beforeEach(() => {
   });
   mockCaptureSnapshotForSession.mockReset();
   mockCaptureSnapshotForSession.mockImplementation(emulateCaptureSnapshotForSession);
+  nativeCapture.mockReset();
 });
 
 const SETTLE_FLAGS = { settle: true, settleQuietMs: 25, timeoutMs: 2_000 };
@@ -235,6 +246,65 @@ test('press --settle responds with the settled diff, refsGeneration, and activat
   expect(settle.refsGeneration).toBe(session.snapshotGeneration);
   // The settled tree became the stored session snapshot.
   expect(session.snapshot?.nodes.some((node) => node.label === 'Welcome!')).toBe(true);
+});
+
+test('held touch settle publishes refs into the current record of its scoped lifetime', async () => {
+  const sessionStore = makeSessionStore();
+  const address = 'cwd:touch-settle:default';
+  const seeded = seedSession(address, sessionStore);
+  seeded.name = 'default';
+  const ref = sessionStore.lookup(address)!;
+  let enter!: () => void;
+  let release!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    enter = resolve;
+  });
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let captures = 0;
+  nativeCapture.mockImplementation(async () => {
+    captures += 1;
+    if (captures === 2) {
+      enter();
+      await held;
+    }
+    return {
+      nodes: captures === 1 ? BEFORE_NODES : AFTER_NODES,
+      backend: 'xctest',
+      producer: 'apple-runner',
+    };
+  });
+  const running = handleInteractionCommands({
+    req: {
+      token: 't',
+      session: address,
+      command: 'press',
+      positionals: ['label=Continue'],
+      flags: { ...SETTLE_FLAGS },
+    },
+    sessionName: address,
+    sessionStore,
+    contextFromFlags,
+    ...getRuntimeBindings(),
+  });
+  try {
+    await entered;
+    expect(refFrameState(ref.session)).toBe('expired');
+    sessionStore.update(ref, { trace: { outPath: 'rebuilt-trace', startedAt: 1 } });
+    release();
+    const settle = expectOkData(await running).settle as SettlePayload;
+    const current = sessionStore.requireCurrent(ref);
+    expect(current.snapshot?.nodes.some((node) => node.label === 'Welcome!')).toBe(true);
+    expect(refFrameState(current)).toBe('active');
+    expect(refFrameTree(current)).toBe(current.snapshot);
+    expect(settle.refsGeneration).toBe(current.snapshotGeneration);
+    expect(refFrameState(ref.session)).toBe('expired');
+    expect(sessionStore.lookup('default')).toBeUndefined();
+  } finally {
+    release();
+    await running.catch(() => {});
+  }
 });
 
 const MODAL_BEFORE_NODES = [
@@ -391,7 +461,7 @@ test('a stalled settle capture receives its deadline signal and leaves the inter
   let observedAbort = false;
   mockCaptureSnapshotForSession.mockImplementation(
     async (
-      _session: SessionState,
+      _session: SessionRef,
       _flags: CommandFlags | undefined,
       _sessionStore: SessionStore,
       _contextFromFlags: typeof contextFromFlags,

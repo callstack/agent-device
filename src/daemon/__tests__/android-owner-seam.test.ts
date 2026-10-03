@@ -62,11 +62,13 @@ test('provider-owned Android sessions bypass local observation and recovery', as
       },
     ],
   };
+  const sessionStore = new SessionStore('/tmp/provider-owned-android');
+  const ref = sessionStore.publish(session.name, session);
   await expect(
     resolveDirectTouchReferenceFrameSafely({
-      session,
+      ref,
       flags: undefined,
-      sessionStore: new SessionStore('/tmp/provider-owned-android'),
+      sessionStore,
       contextFromFlags: () => ({}),
       captureSnapshotForSession: async () => session.snapshot!,
       observation,

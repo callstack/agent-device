@@ -20,7 +20,7 @@ export async function refreshAndroidRefSnapshotIfFreshnessActive(
     session.snapshot?.comparisonSafe === true ? session.snapshot : undefined;
   try {
     await params.captureSnapshotForSession(
-      session,
+      params.sessionRef!,
       params.req.flags,
       params.sessionStore,
       params.contextFromFlags,

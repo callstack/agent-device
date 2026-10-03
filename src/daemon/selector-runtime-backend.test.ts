@@ -52,6 +52,7 @@ test('wait text passes its poll deadline signal to the Apple runner fast path', 
       }),
   );
   const runtime = createSelectorRuntimeForDevice({
+    ref: sessionStore.lookup(sessionName),
     req: {
       token: 't',
       session: sessionName,
@@ -112,6 +113,7 @@ test('daemon wait stable pins private-ax on emitted snapshot runner requests', a
     },
   }));
   const runtime = createSelectorRuntimeForDevice({
+    ref: sessionStore.lookup(sessionName),
     req: {
       token: 't',
       session: sessionName,

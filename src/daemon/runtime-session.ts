@@ -1,7 +1,8 @@
 import type { CommandSessionRecord, CommandSessionStore } from '../runtime-contract.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { refFrameTree } from './ref-frame.ts';
-import type { SessionState } from './session-state.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
+import type { SessionStore } from './session-store.ts';
 
 export type RuntimeSessionRecordOptions = {
   includeSnapshot?: boolean;
@@ -44,16 +45,38 @@ function toRuntimeSessionRecord(
   };
 }
 
-export function createDaemonRuntimeSessionStore(params: {
-  sessionName: string;
-  getSession: () => SessionState | undefined;
-  recordOptions?: RuntimeSessionRecordOptions;
-  setRecord: (record: CommandSessionRecord) => void;
-}): CommandSessionStore {
+export function createReadonlyRuntimeSessionStore(
+  sessionName: string,
+  session: SessionState,
+): CommandSessionStore {
   return {
     get: (name) =>
+      name === sessionName ? toRuntimeSessionRecord(session, sessionName) : undefined,
+    set: () => {},
+  };
+}
+
+export function createDaemonRuntimeSessionStore(params: {
+  sessionName: string;
+  sessionStore: SessionStore;
+  ref: SessionRef | undefined;
+  recordOptions?: RuntimeSessionRecordOptions;
+  setRecord: (
+    record: CommandSessionRecord,
+    current: SessionState | undefined,
+    ref: SessionRef | undefined,
+  ) => SessionRef | void;
+}): CommandSessionStore & { getRef(): SessionRef | undefined } {
+  let ref = params.ref;
+  return {
+    getRef: () => (ref ? params.sessionStore.refresh(ref) : undefined),
+    get: (name) =>
       name === params.sessionName
-        ? toRuntimeSessionRecord(params.getSession(), params.sessionName, params.recordOptions)
+        ? toRuntimeSessionRecord(
+            ref ? params.sessionStore.resolveCurrent(ref) : undefined,
+            params.sessionName,
+            params.recordOptions,
+          )
         : undefined,
     set: (record) => {
       if (record.name !== params.sessionName) {
@@ -64,7 +87,9 @@ export function createDaemonRuntimeSessionStore(params: {
         });
         return;
       }
-      params.setRecord(record);
+      const current = ref ? params.sessionStore.requireCurrent(ref) : undefined;
+      const published = params.setRecord(record, current, ref);
+      if (published) ref = published;
     },
   };
 }

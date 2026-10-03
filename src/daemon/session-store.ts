@@ -12,6 +12,7 @@ import {
 } from './session-artifact-paths.ts';
 import {
   readRepairTombstoneFile,
+  clearRepairTombstoneFile,
   resolveRepairTombstonePath,
   type RepairSessionTombstone,
 } from '../session-repair-tombstone.ts';
@@ -231,10 +232,8 @@ export class SessionStore {
     );
   }
 
-  writeSessionLog(
-    session: SessionState,
-    options?: SessionScriptWriteOptions,
-  ): SessionScriptWriteResult {
+  writeSessionLog(ref: SessionRef, options?: SessionScriptWriteOptions): SessionScriptWriteResult {
+    const session = this.requireCurrent(ref);
     const result = this.scriptWriter.write(session, options);
     if (result.written) {
       emitDiagnostic({
@@ -273,22 +272,24 @@ export class SessionStore {
    * ordinary bounded `REPAIR_SESSION_EXPIRED` tombstone. A no-op for ordinary
    * (non-repair) sessions beyond the existing `writeSessionLog`.
    */
-  finalizeRepairTeardown(session: SessionState): void {
+  finalizeRepairTeardown(ref: SessionRef): void {
+    const session = this.resolveCurrent(ref);
+    if (!session) return;
     this.recordRepairFinalizeCloseIfCommitting(session);
     // #1258: no live request here (idle-reap/daemon-shutdown teardown), so
     // the only source of `force` is whatever was persisted on the session at
     // arm time.
-    const result = this.writeSessionLog(session, {
+    const result = this.writeSessionLog(ref, {
       force: effectiveWriteForce(session, undefined),
     });
     if (isUncommittedRepairSession(session)) {
       if (!result.written && result.error) {
-        this.writeRepairTombstone(session, REPAIR_TOMBSTONE_TTL_MS, {
+        this.writeRepairTombstone(ref, REPAIR_TOMBSTONE_TTL_MS, {
           code: String(result.error.code),
           message: result.error.message,
         });
       } else {
-        this.writeRepairTombstone(session);
+        this.writeRepairTombstone(ref);
       }
     }
   }
@@ -324,15 +325,17 @@ export class SessionStore {
    * teardown.
    */
   writeRepairTombstone(
-    session: SessionState,
+    ref: SessionRef,
     ttlMs = REPAIR_TOMBSTONE_TTL_MS,
     commitFailure?: { code: string; message: string },
   ): void {
+    const session = this.resolveCurrent(ref);
+    if (!session) return;
     try {
-      const dir = this.resolveSessionDir(session.name);
+      const dir = this.resolveSessionDir(ref.address);
       fs.mkdirSync(dir, { recursive: true });
       const tombstone: RepairSessionTombstone = {
-        owner: session.name,
+        owner: ref.address,
         reapedAt: Date.now(),
         expiresAt: Date.now() + ttlMs,
         ...(repairSessionSourcePath(session)
@@ -340,13 +343,13 @@ export class SessionStore {
           : {}),
         ...(commitFailure ? { commitFailure } : {}),
       };
-      fs.writeFileSync(this.repairTombstonePath(session.name), `${JSON.stringify(tombstone)}\n`);
+      fs.writeFileSync(this.repairTombstonePath(ref.address), `${JSON.stringify(tombstone)}\n`);
     } catch (error) {
       emitDiagnostic({
         level: 'warn',
         phase: 'repair_tombstone_write_failed',
         data: {
-          session: session.name,
+          session: ref.address,
           error: error instanceof Error ? error.message : String(error),
         },
       });
@@ -355,14 +358,12 @@ export class SessionStore {
 
   /** Returns a non-expired repair tombstone for `sessionName`, or `undefined`. */
   readRepairTombstone(sessionName: string): RepairSessionTombstone | undefined {
-    return readRepairTombstoneFile(this.repairTombstonePath(sessionName));
+    return readRepairTombstoneFile(this.repairTombstonePath(sessionName), sessionName);
   }
 
   /** ADR 0012 R7 (C5a): a fresh `replay --save-script` on this key clears the tombstone. */
   clearRepairTombstone(sessionName: string): void {
-    try {
-      fs.rmSync(this.repairTombstonePath(sessionName), { force: true });
-    } catch {}
+    clearRepairTombstoneFile(this.repairTombstonePath(sessionName), sessionName);
   }
 
   /**

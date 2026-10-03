@@ -73,6 +73,7 @@ const DAEMON_INTERACTION_FACADE = {
   exports: [
     'FindRouteInput',
     'InteractionRouteInput',
+    'bindInteractionSession',
     'captureSnapshotForSession',
     'createInteractionRuntime',
     'finalizeTouchInteraction',
