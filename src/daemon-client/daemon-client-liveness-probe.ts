@@ -1,14 +1,15 @@
 import net from 'node:net';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
-import { loadNodeHttpRequester, consumeTextLines } from '@agent-device/host-kit/transport';
+import { consumeTextLines } from '@agent-device/host-kit/transport';
+import { readDaemonHttpHealth } from './daemon-client-transport.ts';
 import type { DaemonRequest } from '../daemon/daemon-request.ts';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 
-// The post-timeout liveness probe (#3177): the question a daemon reset may no longer assume.
-// The daemon owns request-scoped recovery, so a reset is only justified for a daemon that answers
-// nothing — and the question must be asked on FRESH connections, because the timed-out connection
-// is the one the transport tears down to cancel that request.
+// The post-timeout liveness probe (#3177): the question a daemon reset may no longer assume. The
+// daemon owns request-scoped recovery, so a reset is only justified for a daemon that answers
+// nothing, and it must be asked on FRESH connections — the timed-out connection is the one the
+// transport already tore down to cancel that request.
 
 // The extra latency a caller of a reset-eligible timed-out request can pay before its error lands.
 // An order of magnitude under the narrowest reset-eligible envelope (pinned in
@@ -17,16 +18,16 @@ import type { DaemonInfo } from './daemon-client-metadata.ts';
 export const LIVENESS_PROBE_BUDGET_MS = 1_000;
 
 /**
- * Whether this local daemon answers anything within the probe budget: its HTTP health route, or
- * one sessionless RPC on its socket. An answer on either leg proves the daemon's event loop serves
- * fresh requests; a refused or silent leg answers "not this one", not "not the daemon".
+ * Whether this local daemon answers anything within the probe budget: its HTTP health route, or one
+ * sessionless RPC on its socket. An answer on either leg proves the event loop serves fresh
+ * requests; a refused or silent leg answers "not this one", not "not the daemon".
  *
  * Both legs run CONCURRENTLY against one shared deadline: the finding is per-daemon, not per-leg,
- * and a leg that hangs must not spend the window the other leg needs. The first AFFIRMATIVE is
- * unrevocable and settles at once. The deadline is ABSOLUTE — the transports' own idle timeouts
- * never fire while an endpoint trickles bytes — so the negative verdict always lands inside the
- * window. A leg never rejects: a probe that cannot ask is an endpoint that did not answer.
- * `session` rides along so an isolation-scoped daemon routes the probe like the request it follows.
+ * and a leg that hangs must not spend the window the other needs. The first AFFIRMATIVE is
+ * unrevocable and settles at once, retiring the other leg. The deadline is ABSOLUTE, so a leg whose
+ * endpoint trickles bytes still answers inside the window. A leg never rejects: a probe that cannot
+ * ask is an endpoint that did not answer. `session` rides along so an isolation-scoped daemon routes
+ * the probe like the request it follows.
  */
 export async function probeDaemonResponsive(
   info: DaemonInfo,
@@ -34,7 +35,7 @@ export async function probeDaemonResponsive(
 ): Promise<boolean> {
   const deadlineAtMs = Date.now() + LIVENESS_PROBE_BUDGET_MS;
   const legs: ProbeLeg[] = [];
-  if (info.httpPort) legs.push(probeHttpHealth(info.httpPort, deadlineAtMs));
+  if (info.httpPort) legs.push(probeHttpHealth(info, deadlineAtMs));
   if (info.port) legs.push(probeSocketRpc(info.port, info.token, params.session, deadlineAtMs));
   if (legs.length === 0) return false;
   return await new Promise<boolean>((resolve) => {
@@ -84,31 +85,27 @@ function createProbeLeg(deadlineAtMs: number): {
   };
 }
 
-function probeHttpHealth(httpPort: number, deadlineAtMs: number): ProbeLeg {
+function probeHttpHealth(info: DaemonInfo, deadlineAtMs: number): ProbeLeg {
   const probe = createProbeLeg(deadlineAtMs);
-  // `readDaemonInfo` accepts any positive integer port, and `transport.request` throws on one out
-  // of range; this leg builds detached, so the throw would reach the caller as an unhandled
-  // rejection.
+  const abort = new AbortController();
+  // `readDaemonHttpHealth` owns the /health request; the probe supplies its own absolute budget and
+  // a way to retire the request once the other leg decides the finding. A malformed record throws
+  // inside that function — an endpoint that did not answer, never a rejection from the recovery path.
   void (async () => {
     try {
-      const transport = await loadNodeHttpRequester('http:');
-      const request = transport.request(
-        { host: '127.0.0.1', port: String(httpPort), path: '/health', method: 'GET' },
-        (res) => {
-          // Any status is an answer: the health route is served before any request handling, so
-          // reaching it proves the event loop serves fresh requests. Drain so the response cannot
-          // hold the socket open past the finding.
-          res.resume();
-          probe.settle(true);
-        },
-      );
-      request.on('error', () => probe.settle(false));
-      probe.attach(() => request.destroy());
-      request.end();
+      const health = await readDaemonHttpHealth(info, Math.max(1, deadlineAtMs - Date.now()), {
+        signal: abort.signal,
+        budgetOverridesHealthCheckCap: true,
+      });
+      // ANY status is an answer (the health route is served ahead of request handling, so reaching
+      // it proves the event loop serves fresh requests). Reading `reachable` instead would let a
+      // 5xx read as silence and authorize killing a daemon that was answering.
+      probe.settle(health.statusCode !== undefined);
     } catch {
       probe.settle(false);
     }
   })();
+  probe.attach(() => abort.abort());
   return probe.leg;
 }
 

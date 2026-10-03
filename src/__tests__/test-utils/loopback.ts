@@ -45,11 +45,8 @@ export async function skipWhenLoopbackUnavailable(
 }
 
 // Connections the test server accepted after it started listening. A `net.Server` refuses to close
-// while a connection is live, and a connection whose handler never consumed the bytes the client
-// wrote stays open even after the client sends a RST, so a stand-in daemon that hangs one request
-// (the whole point of a timeout test) would otherwise hang the teardown with it. The real daemon
-// answers this with `DaemonServer.destroyConnections` (`src/daemon/server/transport.ts`); this is
-// the same teardown for a stand-in, armed at listen time so no connection can be missed.
+// while a connection is live, and a hung-request stand-in keeps one open past the client's RST, so
+// teardown destroys them — the job `DaemonServer.destroyConnections` does for the real daemon.
 const acceptedConnections = new WeakMap<LoopbackServer, Set<net.Socket>>();
 
 export async function listenOnLoopback(server: LoopbackServer): Promise<number> {

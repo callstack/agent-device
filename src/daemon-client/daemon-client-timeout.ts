@@ -171,15 +171,11 @@ type DaemonReset = Readonly<{
 // proves is ours, then clear the registration the dead daemon can no longer release. Identity is
 // re-verified immediately before the signal so a recycled pid is never signaled, and the
 // registration is re-read afterward under the same proof (#3125): the probe window is exactly when
-// a replacement daemon can publish, and a reset that deleted on faith would orphan the
-// replacement's record. A `replaced` verdict leaves that record alone; a kill proves the OLD
-// daemon unconditionally, so the signal itself needed no such proof.
+// a replacement daemon can publish, so only a `match` verdict may delete the record.
 //
-// The startup lock is deliberately untouched. ADR 0030 gives reclaim to the acquirer under its
-// mutation guard, and `daemon.lock` is now that protocol's directory — a client deleting it
-// out-of-band is the legacy-reclaimer pattern the ADR refuses. A reset therefore ends the process
-// and its own registration only; the next acquirer reclaims the dead holder's lock through the
-// protocol.
+// The startup lock is deliberately untouched: ADR 0030 gives reclaim to the acquirer under its
+// mutation guard, and a client deleting `daemon.lock` out-of-band is the legacy-reclaimer pattern
+// that ADR refuses.
 async function resetDaemonAfterTimeout(info: DaemonInfo, paths: DaemonPaths): Promise<DaemonReset> {
   let forcedKill = false;
   try {

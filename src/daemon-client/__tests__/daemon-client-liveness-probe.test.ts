@@ -76,6 +76,20 @@ test('a daemon answering /health is responsive', async (t) => {
   });
 });
 
+test('a 5xx answer is still an answer: the finding is liveness, not reachability policy', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  // The HTTP leg rides the reachability reader (`readDaemonHttpHealth`), which reports a 5xx as
+  // UNREACHABLE for its own policy. Reading that flag here would make a daemon that answered 500
+  // look silent and authorize killing a live shared daemon — the bug #3177 is about.
+  const server = http.createServer((_req, res) => {
+    res.statusCode = 503;
+    res.end('overloaded');
+  });
+  await withLoopback(server, async (port) => {
+    assert.equal(await probeDaemonResponsive(daemonInfo({ httpPort: port })), true);
+  });
+});
+
 test('a refused endpoint is negative, not a hang: the verdict arrives well inside the budget', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   // The wedged-daemon shape: connections are accepted and destroyed without an answer. The

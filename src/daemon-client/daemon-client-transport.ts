@@ -141,9 +141,16 @@ export async function readRemoteDaemonHealth(
   return health;
 }
 
-async function readDaemonHttpHealth(
+export async function readDaemonHttpHealth(
   info: DaemonInfo,
   probeTimeoutMs?: number,
+  /**
+   * `signal` lets a caller that races this health read against another probe retire the request
+   * once the race is decided. `budgetOverridesHealthCheckCap` opts out of the health-check timeouts,
+   * which are a policy for reachability probes: the post-timeout liveness probe (#3177) carries its
+   * own absolute budget, and truncating it to 500ms would make a slow-to-answer daemon read as dead.
+   */
+  options: Readonly<{ signal?: AbortSignal; budgetOverridesHealthCheckCap?: boolean }> = {},
 ): Promise<RemoteDaemonHealth> {
   const endpoint = info.baseUrl
     ? buildDaemonHttpUrl(info.baseUrl, 'health')
@@ -153,12 +160,15 @@ async function readDaemonHttpHealth(
   if (!endpoint) return { reachable: false };
   const url = new URL(endpoint);
   const transport = await loadNodeHttpRequester(url.protocol);
-  const timeoutMs = Math.min(
-    info.baseUrl ? REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS : LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS,
-    probeTimeoutMs ?? Number.POSITIVE_INFINITY,
-  );
+  const healthCheckCapMs = info.baseUrl
+    ? REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS
+    : LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS;
+  const timeoutMs =
+    options.budgetOverridesHealthCheckCap && probeTimeoutMs !== undefined
+      ? probeTimeoutMs
+      : Math.min(healthCheckCapMs, probeTimeoutMs ?? Number.POSITIVE_INFINITY);
   if (timeoutMs <= 0) return { reachable: false, timedOut: true };
-  const signal = AbortSignal.timeout(Math.ceil(timeoutMs));
+  const signal = options.signal ?? AbortSignal.timeout(Math.ceil(timeoutMs));
   return await new Promise((resolve) => {
     const headers = info.baseUrl ? buildDaemonHttpAuthHeaders(info.token) : {};
     const unreachable = (): RemoteDaemonHealth =>
