@@ -4,6 +4,7 @@ import type {
 } from '@agent-device/contracts/observability';
 import type { ProviderWebDriverDependencies } from './dependencies.ts';
 import {
+  CLOUD_WEBDRIVER_PROFILE_FIELDS,
   createCloudWebDriverProviderDefinitions,
   type DefaultCloudWebDriverArtifactEnv,
   type DefaultCloudWebDriverProviderRuntimeEnv,
@@ -17,9 +18,8 @@ import {
 } from './connection-verification.ts';
 import type { CloudWebDriverRuntime } from './runtime.ts';
 
-export { CLOUD_WEBDRIVER_PROVIDERS };
+export { CLOUD_WEBDRIVER_PROFILE_FIELDS, CLOUD_WEBDRIVER_PROVIDERS };
 export { readAwsDeviceFarmRegionFromArn };
-export { rejectBrowserStackOnlyDeviceFeatures } from './browserstack-device-features.ts';
 export type { CloudWebDriverKnownProviderName } from './providers.ts';
 export type { ProviderWebDriverDependencies, RunHostCommand } from './dependencies.ts';
 export type {

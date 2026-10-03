@@ -18,6 +18,7 @@ import type {
   PlatformRuntimeProviderModule,
 } from '@agent-device/contracts/platform-runtime-operations';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/provider-profile-fields';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   createCloudWebDriverCapabilities,
@@ -100,6 +101,8 @@ export type CloudWebDriverRuntimeOptions = {
   deviceId?: (lease: DeviceLease) => string;
   prepareSession?: CloudWebDriverPrepareSession;
   capabilityOverrides?: CloudWebDriverCapabilityOverrides;
+  /** Profile fields this provider reads; any field it refuses fails session preparation. */
+  profileFields?: ProviderProfileFieldDeclaration;
 };
 
 export function createCloudWebDriverRuntime(

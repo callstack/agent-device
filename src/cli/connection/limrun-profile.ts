@@ -3,6 +3,8 @@ import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { type EnvMap } from '@agent-device/kernel/source-value';
+import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/provider-profile-fields';
+import { LIMRUN_PROFILE_FIELDS } from '@agent-device/provider-limrun';
 import { readMetroProfileFields } from './profile-fields.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';
 import { resolveRequestedLeaseBackend } from '../commands/connection-runtime.ts';
@@ -53,6 +55,7 @@ function buildLimrunRemoteProfile(options: { flags: CliFlags }): RemoteConfigPro
 }
 
 function validateLimrunConnectFlags(flags: CliFlags): 'android-instance' | 'ios-instance' {
+  rejectRefusedProviderProfileFields(flags, LIMRUN_PROFILE_FIELDS);
   if (flags.platform !== 'android' && flags.platform !== 'ios') {
     throw new AppError('INVALID_ARGS', 'connect limrun requires --platform ios or android.');
   }

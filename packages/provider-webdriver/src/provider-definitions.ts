@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { CloudArtifactsResult } from '@agent-device/contracts/observability';
 import type { LeaseLifecycleContext } from '@agent-device/contracts/device';
+import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/provider-profile-fields';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ProviderWebDriverDependencies } from './dependencies.ts';
 import {
@@ -22,7 +23,6 @@ import {
 import {
   buildBrowserStackDeviceFeatureCapabilities,
   readBrowserStackDeviceFeatureFields,
-  rejectBrowserStackOnlyDeviceFeatures,
 } from './browserstack-device-features.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS, type CloudWebDriverKnownProviderName } from './providers.ts';
 import { readAwsDeviceFarmRegionFromArn } from './connection-verification.ts';
@@ -52,8 +52,70 @@ export type DefaultCloudWebDriverProviderRuntimeEnv = DefaultCloudWebDriverArtif
   AWS_DEVICE_FARM_APP_ARN?: string;
 };
 
+const BROWSERSTACK_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
+  provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+  label: 'BrowserStack',
+  fields: {
+    providerApp: 'consumed',
+    providerOsVersion: 'consumed',
+    providerProject: 'consumed',
+    providerBuild: 'consumed',
+    providerSessionName: 'consumed',
+    providerDeviceOrientation: 'consumed',
+    providerGeoLocation: 'consumed',
+    providerTimezone: 'consumed',
+    providerAppiumVersion: 'consumed',
+    providerLanguage: 'consumed',
+    providerLocale: 'consumed',
+    providerNetworkProfile: 'consumed',
+    providerCustomNetwork: 'consumed',
+    providerNoResignApp: 'consumed',
+    awsProjectArn: 'refused',
+    awsDeviceArn: 'refused',
+    awsAppArn: 'refused',
+    awsRegion: 'refused',
+    awsInteractionMode: 'refused',
+  },
+};
+
+const AWS_DEVICE_FARM_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
+  provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+  label: 'AWS Device Farm',
+  fields: {
+    providerApp: 'refused',
+    providerOsVersion: 'refused',
+    providerProject: 'refused',
+    providerBuild: 'refused',
+    providerSessionName: 'consumed',
+    providerDeviceOrientation: 'refused',
+    providerGeoLocation: 'refused',
+    providerTimezone: 'refused',
+    providerAppiumVersion: 'refused',
+    providerLanguage: 'refused',
+    providerLocale: 'refused',
+    providerNetworkProfile: 'refused',
+    providerCustomNetwork: 'refused',
+    providerNoResignApp: 'refused',
+    awsProjectArn: 'consumed',
+    awsDeviceArn: 'consumed',
+    awsAppArn: 'consumed',
+    awsRegion: 'consumed',
+    awsInteractionMode: 'consumed',
+  },
+};
+
+/** The profile fields each hub provider reads, for routes that check them before a runtime exists. */
+export const CLOUD_WEBDRIVER_PROFILE_FIELDS: Readonly<
+  Record<CloudWebDriverKnownProviderName, ProviderProfileFieldDeclaration>
+> = {
+  [CLOUD_WEBDRIVER_PROVIDERS.browserStack]: BROWSERSTACK_PROFILE_FIELDS,
+  [CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm]: AWS_DEVICE_FARM_PROFILE_FIELDS,
+};
+
 export type CloudWebDriverProviderDefinition = {
   provider: CloudWebDriverKnownProviderName;
+  /** Every profile field, consumed or refused; session preparation refuses the refused ones. */
+  profileFields: ProviderProfileFieldDeclaration;
   createRuntime: (env: DefaultCloudWebDriverProviderRuntimeEnv) => CloudWebDriverRuntime;
   listArtifactsFromEnv: (
     providerSessionId: string,
@@ -67,10 +129,12 @@ export function createCloudWebDriverProviderDefinitions(
   return [
     {
       provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+      profileFields: BROWSERSTACK_PROFILE_FIELDS,
       createRuntime: (env) =>
         createCloudWebDriverRuntime({
           clientVersion: dependencies.clientVersion,
           provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+          profileFields: BROWSERSTACK_PROFILE_FIELDS,
           platform: 'android',
           deviceName: 'BrowserStack device',
           endpoint: env.BROWSERSTACK_WEBDRIVER_ENDPOINT ?? BROWSERSTACK_APP_AUTOMATE_ENDPOINT,
@@ -172,10 +236,12 @@ export function createCloudWebDriverProviderDefinitions(
     },
     {
       provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+      profileFields: AWS_DEVICE_FARM_PROFILE_FIELDS,
       createRuntime: (env) =>
         createCloudWebDriverRuntime({
           clientVersion: dependencies.clientVersion,
           provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+          profileFields: AWS_DEVICE_FARM_PROFILE_FIELDS,
           endpoint: 'http://127.0.0.1/',
           platform: 'android',
           deviceName: 'AWS Device Farm device',
@@ -192,13 +258,6 @@ export function createCloudWebDriverProviderDefinitions(
           },
           prepareSession: async ({ req, lease, base }) => {
             const request = requireRequest(req, 'AWS Device Farm');
-            // Enforced here, not only in the CLI profile builder: the typed client and
-            // hand-authored remote-config profiles both reach session preparation without passing
-            // through `connect`, and would otherwise have these capabilities silently dropped.
-            rejectBrowserStackOnlyDeviceFeatures(
-              request.flags,
-              CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
-            );
             const platform = requireRequestPlatform(request, 'AWS Device Farm');
             const sessionOptions = {
               client: createAwsCliDeviceFarmClient({

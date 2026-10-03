@@ -203,6 +203,12 @@ export class WebDriverSessionManager {
     lease: DeviceLease,
     req: LeaseLifecycleContext | undefined,
   ): Promise<CloudWebDriverPreparedSession> {
+    if (this.options.profileFields) {
+      // Loaded on first allocation so the package entry's eager closure stays unchanged.
+      const { rejectRefusedProviderProfileFields } =
+        await import('@agent-device/contracts/provider-profile-fields');
+      rejectRefusedProviderProfileFields(req?.flags, this.options.profileFields);
+    }
     const base = this.baseSessionForLease(lease);
     return this.options.prepareSession
       ? await this.options.prepareSession({ lease, req, base })

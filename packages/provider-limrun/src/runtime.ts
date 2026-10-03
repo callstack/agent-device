@@ -237,9 +237,11 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     const {
       allocateLimrunAndroidSession,
       allocateLimrunIosSession,
+      rejectRefusedLimrunProfileFields,
       resolvePreinstalledAppId,
       resolveRequestedLimrunAppAsset,
     } = await import('./session-allocation.ts');
+    rejectRefusedLimrunProfileFields(context);
     const requestedAsset = await resolveRequestedLimrunAppAsset(this.limrun, platform, context);
     const session =
       platform === 'ios'

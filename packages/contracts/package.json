@@ -364,6 +364,10 @@
       "types": "./src/runtime-operation-names.ts",
       "default": "./src/runtime-operation-names.ts"
     },
+    "./provider-profile-fields": {
+      "types": "./src/provider-profile-fields.ts",
+      "default": "./src/provider-profile-fields.ts"
+    },
     "./progress": {
       "types": "./src/facades/progress.ts",
       "default": "./src/facades/progress.ts"

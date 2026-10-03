@@ -142,7 +142,7 @@ test('BrowserStack facade nests device-feature capabilities inside bstack:option
   });
 }, 15_000);
 
-test('AWS Device Farm facade rejects BrowserStack-owned device features at session preparation', async () => {
+test('AWS Device Farm facade rejects device features it does not read at session preparation', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const host = new FakeAwsHostCommand(`${server.url}/wd/hub/`);
     const provider = createProviderWebDriver({
@@ -172,7 +172,7 @@ test('AWS Device Farm facade rejects BrowserStack-owned device features at sessi
         (error: unknown) => {
           assert.match(
             (error as Error).message,
-            /--provider-device-orientation, --provider-network-profile are only supported by BrowserStack, not aws-device-farm/,
+            /--provider-device-orientation, --provider-network-profile are not supported by AWS Device Farm/,
           );
           return true;
         },
