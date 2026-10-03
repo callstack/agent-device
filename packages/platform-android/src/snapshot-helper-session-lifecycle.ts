@@ -234,21 +234,22 @@ function androidSnapshotHelperSessionRetryAfterMs(failureDurationMs: number): nu
  */
 export async function retireFailedAndroidSnapshotHelperSession(params: {
   deviceKey: string;
+  /** Helper build of the session whose capture failed. */
+  identity: string;
   failedAfterMs: number;
   /** Budget of the one-shot capture that answers in place of the failed session. */
   fallbackBudgetMs: number;
   signal?: AbortSignal;
   cause: unknown;
 }): Promise<void> {
-  const identity = sessions.get(params.deviceKey)?.identity;
   await stopAndroidSnapshotHelperSession(params.deviceKey, {
     force: true,
     signal: params.signal,
     cause: params.cause,
   });
-  if (identity === undefined || params.signal?.aborted) return;
+  if (params.signal?.aborted) return;
   failedSessions.set(
-    identity,
+    params.identity,
     Date.now() +
       params.fallbackBudgetMs +
       androidSnapshotHelperSessionRetryAfterMs(params.failedAfterMs),

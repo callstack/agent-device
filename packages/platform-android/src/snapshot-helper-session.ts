@@ -71,6 +71,7 @@ async function captureFromAndroidSnapshotHelperSession(params: {
   } catch (error) {
     await retireFailedAndroidSnapshotHelperSession({
       deviceKey,
+      identity: session.identity,
       failedAfterMs: Date.now() - requestedAtMs,
       fallbackBudgetMs: resolveAndroidSnapshotHelperCaptureOptions(options).commandTimeoutMs,
       signal: options.signal,
