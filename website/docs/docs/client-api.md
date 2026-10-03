@@ -239,6 +239,15 @@ Results are daemon-shaped objects with typed known fields, so command semantics 
 
 A failed interaction rejects with the same error the CLI prints. Read `error.details.dispatched` before you retry; [Commands](./commands.md) explains the two values.
 
+Every client call accepts `signal?: AbortSignal` to cancel that one call:
+
+```ts
+const controller = new AbortController();
+await client.interactions.press({ ref: '@e12', signal: controller.signal });
+```
+
+A signal that is already aborted rejects the call without sending anything (`error.details.dispatched: 'no'`). Aborting while the request is in flight closes that request's connection, the daemon marks the request canceled, and the promise rejects with the typed canceled-request error (`error.details.reason: 'request_canceled'`, `error.details.dispatched: 'unknown'`). The daemon and the session stay alive for other requests. An abort is never a timeout: it never triggers the timeout path's runner cleanup or daemon reset.
+
 ```ts
 await client.command.wait({
   text: 'Continue',
