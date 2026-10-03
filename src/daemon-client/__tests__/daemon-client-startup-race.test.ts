@@ -67,6 +67,150 @@ async function awaitFile(file: string) {
   }
 }
 
+const observationIdentity = readCurrentOwnerIdentity();
+test.for([
+  {
+    proof: 'matching',
+    startTime: observationIdentity.startTime,
+    infoStart: observationIdentity.startTime,
+    expectedAllowed: true,
+    expectedState: 'held',
+  },
+  {
+    proof: 'missing',
+    startTime: null,
+    infoStart: undefined,
+    expectedAllowed: false,
+    expectedState: 'held',
+  },
+  {
+    proof: 'null',
+    startTime: null,
+    infoStart: null,
+    expectedAllowed: false,
+    expectedState: 'held',
+  },
+  {
+    proof: 'empty',
+    startTime: '',
+    infoStart: '',
+    expectedAllowed: false,
+    expectedState: 'held',
+  },
+  {
+    proof: 'blank',
+    startTime: ' \t ',
+    infoStart: ' \t ',
+    expectedAllowed: false,
+    expectedState: 'held',
+  },
+  {
+    proof: 'absent',
+    startTime: null,
+    infoStart: undefined,
+    expectedAllowed: true,
+    expectedState: 'absent',
+  },
+])(
+  'existing registration observation requires proved matching birth times ($proof)',
+  async ({ startTime, infoStart, expectedAllowed, expectedState }, t) => {
+    if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');
+    const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-observation-proof-'));
+    const http = await startHttpDaemonFixture({ devices: [] });
+    assert.ok(observationIdentity.startTime?.trim());
+    const claim =
+      expectedState === 'absent'
+        ? undefined
+        : tryAcquireProcessLock({
+            lockDirPath: paths.lockPath,
+            owner: { pid: observationIdentity.pid, startTime, acquiredAtMs: Date.now() },
+          });
+    assert.ok(!claim || claim.status === 'acquired');
+    assert.equal(inspectProcessLock(paths.lockPath).state, expectedState);
+    fs.writeFileSync(
+      paths.infoPath,
+      JSON.stringify({
+        ...fields(http.port),
+        pid: observationIdentity.pid,
+        processStartTime: infoStart,
+      }),
+    );
+    const originalInfo = fs.readFileSync(paths.infoPath, 'utf8');
+    spawn.mockImplementation(() => {
+      throw new Error('fixture refuses a replacement launch');
+    });
+    try {
+      if (expectedAllowed) {
+        assert.equal((await sendToDaemon(request(paths))).ok, true);
+        assert.equal(spawn.mock.calls.length, 0);
+        assert.equal(http.rpcRequests.length, 1);
+      } else {
+        await assert.rejects(sendToDaemon(request(paths)), (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.details?.kind, 'daemon_startup_failed');
+          return true;
+        });
+        assert.equal(spawn.mock.calls.length, 1);
+        assert.deepEqual(http.seenPaths, []);
+      }
+      assert.equal(fs.readFileSync(paths.infoPath, 'utf8'), originalInfo);
+    } finally {
+      if (claim?.status === 'acquired') await claim.acquisition.release();
+      await closeLoopbackServer(http.server);
+    }
+  },
+);
+
+test.for(['early exit', 'timeout'] as const)(
+  'a private startup $0 retires its owned directory after joining the child',
+  async (failure) => {
+    let paths: DaemonPaths | undefined;
+    let child: ReturnType<typeof runCmdDetachedMonitored> | undefined;
+    let now = Date.now();
+    let advanced = false;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    spawn.mockImplementation((_command, _args, options) => {
+      paths = resolveDaemonPaths(String(options?.env?.AGENT_DEVICE_STATE_DIR));
+      fs.writeFileSync(path.join(paths.baseDir, 'defer-publication'), 'wait');
+      child = spawnRegisteredDaemonFixture(paths, fields(1), options);
+      return child;
+    });
+    pause.mockImplementation(async (ms) => {
+      if (advanced) {
+        now += ms;
+        return;
+      }
+      assert.ok(paths && child);
+      await awaitFile(path.join(paths.baseDir, 'registration-held'));
+      if (failure === 'early exit') {
+        process.kill(child.pid, 'SIGTERM');
+        await child.exited;
+        now += 14_999;
+      } else now += 15_000;
+      advanced = true;
+    });
+    await assert.rejects(
+      sendToDaemon({ session: 'default', command: 'test', positionals: [], flags: {} }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.details?.kind, 'daemon_startup_failed');
+        const cleanup = error.details?.cleanupResults as Array<{
+          status: string;
+          removedStateDir?: boolean;
+        }>;
+        assert.equal(cleanup[0]?.status, 'retired');
+        assert.equal(cleanup[0]?.removedStateDir, true);
+        return true;
+      },
+    );
+    assert.ok(paths && child);
+    await child.exited;
+    assert.equal(isProcessAlive(child.pid), false);
+    assert.equal(fs.existsSync(paths.baseDir), false);
+    assert.equal(spawn.mock.calls.length, 1);
+  },
+);
+
 for (const command of ['devices', 'test']) {
   test(`a joined busy contender adopts a real winner for ${command}`, async (t) => {
     if (!(await supportsLoopbackBind())) return t.skip('loopback unavailable');

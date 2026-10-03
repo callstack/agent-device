@@ -229,7 +229,9 @@ function registrationAllowsDaemonObservation(
     inspection.state === 'absent' ||
     (inspection.state === 'held' &&
       inspection.owner.pid === info.pid &&
-      inspection.owner.startTime === (info.processStartTime ?? null))
+      inspection.owner.startTime !== null &&
+      inspection.owner.startTime.trim().length > 0 &&
+      inspection.owner.startTime === info.processStartTime)
   );
 }
 
@@ -440,13 +442,12 @@ async function retireStartupAttempt(
   settings: DaemonClientSettings,
   launch: DaemonStartupLaunch,
   deadline: number,
-  ownedStateDir?: OwnedReplayStateDir,
 ): Promise<{ cleanup: DaemonRetirementResult; joined: boolean }> {
   const cleanup = await stopAndRetireDaemon({
     paths: settings.paths,
     observed: { pid: launch.pid, startTime: launch.startTime ?? null },
     mode: 'graceful',
-    ownedStateDir,
+    ownedStateDir: settings.ownedStateDir,
     termTimeoutMs: Math.min(3_000, remainingStartupBudget(deadline)),
     killTimeoutMs: 1_000,
     lockTimeoutMs: 0,
@@ -806,12 +807,7 @@ async function readReadyLaunchedDaemon(
       ? info
       : null;
   } catch (error) {
-    const { cleanup, joined } = await retireStartupAttempt(
-      settings,
-      launch,
-      deadline,
-      settings.ownedStateDir,
-    );
+    const { cleanup, joined } = await retireStartupAttempt(settings, launch, deadline);
     emitDiagnostic({
       level: 'warn',
       phase: 'daemon_startup_observation_failed',

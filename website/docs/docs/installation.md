@@ -122,6 +122,14 @@ If daemon startup fails, retry with `--debug` and inspect the retained state and
 
 Before upgrading across the daemon lock change, stop every older client and daemon using that directory with their original CLI. Prevent older versions from returning while the upgraded version runs. Use a single deployed version or separate environments for concurrent installations.
 
+If you used a source checkout before worktree-specific state directories, stop its daemon in `~/.agent-device` from that older checkout:
+
+```sh
+AGENT_DEVICE_STATE_DIR="$HOME/.agent-device" pnpm clean:daemon
+```
+
+The upgraded checkout defaults to a different directory, so its plain `pnpm clean:daemon` does not target that legacy daemon.
+
 Startup refuses legacy lock files and unverified ownership. Confirm every user of the state directory stopped before manual recovery; removing `daemon.json` or `daemon.lock` alone is not a safe reset.
 
 Packaged installs default to `~/.agent-device`; source checkouts use a worktree directory under `~/.agent-device/dev/`. `AGENT_DEVICE_STATE_DIR` or `--state-dir` overrides either default.

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { readCurrentOwnerIdentity, isProcessAlive } from '@agent-device/host-kit/process';
+import * as hostProcess from '@agent-device/host-kit/process';
 import {
   tryAcquireDaemonRegistration,
   stopAndRetireDaemon,
@@ -10,6 +11,7 @@ import {
   createOwnedReplayStateDir,
   DAEMON_STARTUP_EXIT_CODES,
   launchDaemonProcess,
+  type DaemonRetirementResult,
   type OwnedReplayStateDir,
 } from '../daemon-registration-owner.ts';
 import { resolveDaemonPaths, type DaemonPaths } from '../daemon-resolution.ts';
@@ -410,6 +412,160 @@ test('private retirement retains the directory while an earlier actual startup c
     assert.equal((await second.exited).exitCode, 0);
   } finally {
     await finishPrivateTestDaemons(paths, first, second);
+  }
+});
+
+const privateStartupFailures = [
+  ['missing-birth', 'ownership-unproven', []],
+  ['unverified-birth', 'exit-unconfirmed', []],
+  ['signal-error', 'stop-failed', ['SIGTERM']],
+] as const;
+
+for (const [failure, reason, expectedSignals] of privateStartupFailures) {
+  test(`private startup completion is joined despite ${failure} proof`, async () => {
+    const ownedStateDir = createOwnedReplayStateDir();
+    const paths = ownedStateDir.paths;
+    const exitPath = path.join(paths.baseDir, 'exit-startup');
+    const args = registeredDaemonFixtureArgs(paths, fields);
+    fs.appendFileSync(
+      args[1]!,
+      `setInterval(() => { if (fs.existsSync(${JSON.stringify(exitPath)})) process.exit(0); }, 10);`,
+    );
+    const birthProbe =
+      failure === 'missing-birth'
+        ? vi.spyOn(hostProcess, 'readProcessStartTime').mockReturnValueOnce(null)
+        : undefined;
+    const launch = launchDaemonProcess({ paths, args, serverMode: 'socket', ownedStateDir });
+    birthProbe?.mockRestore();
+    let actualStartTime: string | null = null;
+    let exitTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await waitForFixtureFile(paths.infoPath);
+      actualStartTime = hostProcess.readProcessStartTime(launch.pid);
+      assert.ok(actualStartTime);
+      if (failure === 'missing-birth') assert.equal(launch.startTime, undefined);
+      else assert.ok(launch.startTime);
+      const metadata = fs.readFileSync(paths.infoPath, 'utf8');
+      let joined = false;
+      void launch.exited.then(() => {
+        joined = true;
+      });
+      const signal = process.kill.bind(process);
+      const signals = vi.spyOn(process, 'kill');
+      const primary = Object.assign(new Error('Cannot signal fixture'), { code: 'EIO' });
+      if (failure === 'unverified-birth')
+        vi.spyOn(hostProcess, 'readProcessStartTime').mockReturnValue(null);
+      if (failure === 'signal-error')
+        signals.mockImplementation((pid, requested) => {
+          if (requested === 'SIGTERM') throw primary;
+          return signal(pid, requested);
+        });
+      const pending = stopAndRetireDaemon({
+        paths,
+        observed: { pid: launch.pid, startTime: launch.startTime ?? null },
+        mode: 'graceful',
+        ownedStateDir,
+        startupJoinTimeoutMs: 500,
+      });
+      exitTimer = setTimeout(() => fs.writeFileSync(exitPath, 'exit'), 10);
+      const result = await pending;
+      assert.equal(joined, true, 'retirement returned before its recorded child completed');
+      assert.equal(result.status, 'retained', JSON.stringify(result));
+      if (result.status !== 'retained') assert.fail('unproven startup unexpectedly retired');
+      assert.equal(result.reason, reason);
+      assertPrivateStartupFailureDetails(result, failure, primary);
+      assert.deepEqual(
+        signals.mock.calls.filter(([, requested]) => requested !== 0),
+        expectedSignals.map((requested) => [launch.pid, requested]),
+      );
+      assert.equal(result.removedInfo, false);
+      assert.equal(fs.readFileSync(paths.infoPath, 'utf8'), metadata);
+      assert.equal(fs.existsSync(paths.lockPath), true);
+      assert.equal(fs.existsSync(paths.baseDir), true);
+    } finally {
+      clearTimeout(exitTimer);
+      vi.restoreAllMocks();
+      await finishPrivateTestDaemons(paths, {
+        ...launch,
+        startTime: actualStartTime ?? hostProcess.readProcessStartTime(launch.pid) ?? undefined,
+      });
+    }
+  });
+}
+
+function assertPrivateStartupFailureDetails(
+  result: Extract<DaemonRetirementResult, { status: 'retained' }>,
+  failure: (typeof privateStartupFailures)[number][0],
+  primary: Error,
+): void {
+  switch (failure) {
+    case 'missing-birth':
+      assert.equal(result.error?.details?.reason, 'daemon_private_startup_unowned');
+      break;
+    case 'unverified-birth':
+      assert.deepEqual(result.termination, {
+        status: 'retained',
+        reason: 'identity-unverified',
+        signal: 'SIGTERM',
+      });
+      break;
+    case 'signal-error':
+      assert.equal(result.error?.message, primary.message);
+      assert.equal(result.error?.cause?.code, 'EIO');
+      break;
+  }
+}
+
+test('private startup completion stays bounded without birth proof and retains the live child', async () => {
+  const ownedStateDir = createOwnedReplayStateDir();
+  const paths = ownedStateDir.paths;
+  const birthProbe = vi.spyOn(hostProcess, 'readProcessStartTime').mockReturnValueOnce(null);
+  const launch = launchDaemonProcess({
+    paths,
+    args: registeredDaemonFixtureArgs(paths, fields),
+    serverMode: 'socket',
+    ownedStateDir,
+  });
+  birthProbe.mockRestore();
+  let actualStartTime: string | null = null;
+  try {
+    await waitForFixtureFile(paths.infoPath);
+    actualStartTime = hostProcess.readProcessStartTime(launch.pid);
+    assert.ok(actualStartTime);
+    assert.equal(launch.startTime, undefined);
+    const metadata = fs.readFileSync(paths.infoPath, 'utf8');
+    const signals = vi.spyOn(process, 'kill');
+    const pending = stopAndRetireDaemon({
+      paths,
+      observed: { pid: launch.pid, startTime: null },
+      mode: 'force',
+      ownedStateDir,
+      startupJoinTimeoutMs: 0,
+    });
+    assert.throws(
+      () => launchDaemonProcess({ paths, args: [], serverMode: 'socket', ownedStateDir }),
+      (error: { details?: { reason?: string } }) =>
+        error.details?.reason === 'daemon_startup_admission_closed',
+    );
+    const result = await pending;
+    assert.equal(result.status, 'retained', JSON.stringify(result));
+    if (result.status !== 'retained') assert.fail('unproven live startup unexpectedly retired');
+    assert.equal(result.reason, 'ownership-unproven');
+    assert.equal(result.error?.details?.reason, 'daemon_private_startup_unowned');
+    assert.equal(isProcessAlive(launch.pid), true);
+    assert.deepEqual(
+      signals.mock.calls.filter(([, requested]) => requested !== 0),
+      [],
+    );
+    assert.equal(fs.readFileSync(paths.infoPath, 'utf8'), metadata);
+    assert.equal(fs.existsSync(paths.lockPath), true);
+    assert.equal(fs.existsSync(paths.baseDir), true);
+  } finally {
+    vi.restoreAllMocks();
+    await finishPrivateTestDaemons(paths, {
+      ...launch,
+      startTime: actualStartTime ?? hostProcess.readProcessStartTime(launch.pid) ?? undefined,
+    });
   }
 });
 

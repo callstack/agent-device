@@ -326,6 +326,7 @@ export async function stopAndRetireDaemon(
       if (owned.retirement) return await owned.retirement;
     }
   } catch (error) {
+    await joinOwnedStartups(owned, input.startupJoinTimeoutMs ?? 1_000);
     return {
       status: 'retained',
       reason: 'ownership-unproven',
@@ -372,28 +373,21 @@ async function retireObservedDaemon(
 ): Promise<DaemonRetirementResult> {
   const paths = { ...input.paths };
   const observed = input.observed && { ...input.observed };
-  let termination: ConfirmedDaemonTermination | undefined;
+  let termination: DaemonTerminationResult | undefined;
+  let stopFailure: NormalizedError | undefined;
   if (observed) {
     try {
-      const result = await terminate(observed);
-      if (result.status !== 'exited')
-        return {
-          status: 'retained',
-          reason: 'exit-unconfirmed',
-          termination: result,
-          removedInfo: false,
-        };
-      termination = result;
+      termination = await terminate(observed);
     } catch (error) {
-      return {
-        status: 'retained',
-        reason: 'stop-failed',
-        removedInfo: false,
-        error: normalizeError(error),
-      };
+      stopFailure = normalizeError(error);
     }
   }
-  if (owned && !(await joinOwnedStartups(owned, startupJoinTimeoutMs))) {
+  const joined = await joinOwnedStartups(owned, startupJoinTimeoutMs);
+  if (stopFailure)
+    return { status: 'retained', reason: 'stop-failed', removedInfo: false, error: stopFailure };
+  if (termination && termination.status !== 'exited')
+    return { status: 'retained', reason: 'exit-unconfirmed', termination, removedInfo: false };
+  if (!joined) {
     return { status: 'retained', reason: 'startup-unconfirmed', termination, removedInfo: false };
   }
   return await retireDaemonRegistration({ ...input, paths }, termination, owned);
@@ -501,8 +495,11 @@ async function recordRegistrationWarning(
   });
 }
 
-async function joinOwnedStartups(owned: PrivateReplayState, timeoutMs: number): Promise<boolean> {
-  if (owned.startups.every((startup) => startup.joined)) return true;
+async function joinOwnedStartups(
+  owned: PrivateReplayState | undefined,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (!owned || owned.startups.every((startup) => startup.joined)) return true;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([

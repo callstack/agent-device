@@ -51,6 +51,18 @@ The client refuses an older registration before signaling or changing it. This p
 cutover; it does not expand the host-kit mixed-protocol support contract. Older clients still
 require the deployment controls above.
 
+## Recovering retained legacy daemon state
+
+Stop every daemon and client using the affected state directory, including older versions,
+and verify that those processes have exited. Keep them stopped throughout recovery.
+Only then remove the legacy `daemon.lock` file and any retained `daemon.reclaim.lock` guard
+from that directory. Preserve the other state, logs and repair evidence.
+
+Start one supported version using that directory and prevent older clients or daemons from
+returning. If every user cannot be identified and stopped, retain the files and use a separate
+state directory. This procedure applies to daemon registration; shared build and cache locks
+require the same confirmation for every process using their own paths.
+
 ## Registration operations
 
 [Shared retirement](../../src/daemon-registration-owner.ts) owns verified termination, protected
