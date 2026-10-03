@@ -284,3 +284,89 @@ test('a malformed keyboard payload is restated by the kernel reader, never forwa
     assert.deepEqual(read, { kind: 'unmeasurable', reason }, `payload ${JSON.stringify(payload)}`);
   }
 });
+
+// #3182: the response publishes the box the fold already resolved for the presentation, never a
+// second box and never a zero. The viewport the validator receives and the viewport the capture
+// publishes must be the same evidence — if the fold validated against one box and the response
+// published another, a consumer scaling rects against `viewport` would scale against a screen the
+// numbers were never checked against.
+test('the published viewport is the root box the presentation validated against (#3182)', () => {
+  const screen: RawSnapshotNode = {
+    index: 0,
+    type: 'Application',
+    rect: { x: 0, y: 0, width: 390, height: 844 },
+  };
+  const button: RawSnapshotNode = {
+    index: 1,
+    parentIndex: 0,
+    type: 'Button',
+    label: 'Open',
+    rect: { x: 16, y: 400, width: 80, height: 32 },
+    hittable: true,
+  };
+
+  const presented = presentAppleRunnerSnapshot('device-1', undefined, {
+    nodes: [screen, button],
+  });
+
+  assert.deepEqual(presented.viewport, { width: 390, height: 844 });
+});
+
+test('the published viewport follows the quality payload the fold prefers (#3182)', () => {
+  // A scoped capture can carry an unscoped quality payload whose Application root is the screen;
+  // the fold resolves the viewport from those roots, and the response must publish that same box.
+  const scopedRoot: RawSnapshotNode = {
+    index: 0,
+    type: 'Application',
+    rect: { x: 0, y: 100, width: 390, height: 400 },
+  };
+  const qualityRoot: RawSnapshotNode = {
+    index: 0,
+    type: 'Application',
+    rect: { x: 0, y: 0, width: 390, height: 844 },
+  };
+
+  const presented = presentAppleRunnerSnapshot('device-1', undefined, {
+    nodes: [scopedRoot],
+    qualityPayload: { nodes: [qualityRoot], truncated: false, scope: null },
+  });
+
+  assert.deepEqual(presented.viewport, { width: 390, height: 844 });
+});
+
+test('a capture with no usable viewport box publishes no viewport, never a zero (#3182)', () => {
+  // `runnerFatal` skips presentation, so this exercises the publication seam alone: a zero-extent
+  // root is the failed Apple read, and the guard must answer with absence.
+  const fatalZero = presentAppleRunnerSnapshot('device-1', undefined, {
+    nodes: [{ index: 0, type: 'Application', rect: { x: 0, y: 0, width: 0, height: 0 } }],
+    runnerFatal: true,
+  });
+  assert.equal('viewport' in fatalZero, false);
+
+  const rootless = presentAppleRunnerSnapshot('device-1', undefined, {
+    nodes: [{ index: 0, type: 'Other' }],
+    runnerFatal: true,
+  });
+  assert.equal('viewport' in rootless, false);
+});
+
+test('the infinite viewport a failed Apple read crosses the wire as never publishes (#3182)', () => {
+  // `CGRectInfinite` is finite in every component and maximal in extent: without the shared guard
+  // it would publish the largest box on the wire as the screen.
+  const presented = presentAppleRunnerSnapshot('device-1', undefined, {
+    nodes: [
+      {
+        index: 0,
+        type: 'Application',
+        rect: {
+          x: -Number.MAX_VALUE / 2,
+          y: -Number.MAX_VALUE / 2,
+          width: Number.MAX_VALUE,
+          height: Number.MAX_VALUE,
+        },
+      },
+    ],
+    runnerFatal: true,
+  });
+  assert.equal('viewport' in presented, false);
+});
