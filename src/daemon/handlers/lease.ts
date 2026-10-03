@@ -70,7 +70,13 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         providerRuntimeIds,
         providerRuntimeRequiredIds,
       );
+      const activeLeaseIds = new Set(
+        leaseRegistry.listActiveLeases().map((entry) => entry.leaseId),
+      );
       const lease = leaseRegistry.allocateLease(leaseScopeToAllocateRequest(leaseScope));
+      // A run's repeat allocation reuses its live lease; refusing that request must not end the
+      // lease, or the provider session the first allocation created is left without an owner.
+      const reused = activeLeaseIds.has(lease.leaseId);
       const requestId = req.meta?.requestId;
       return await leaseRegistry.runDeviceMutation(lease, async () => {
         let providerData: Record<string, unknown> | undefined;
@@ -85,7 +91,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
           });
           recordProviderSession(leaseRegistry, lease, providerData);
         } catch (error) {
-          leaseRegistry.releaseLease(leaseReleaseRequestFor(lease));
+          if (!reused) leaseRegistry.releaseLease(leaseReleaseRequestFor(lease));
           throw error;
         } finally {
           work.release();

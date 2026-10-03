@@ -172,3 +172,39 @@ test('a lease allocated without a provider keeps the TTL it was created with', a
   assert.equal(lease.expiresAt, 65_000);
   assert.deepEqual(registry.listActiveLeases(), [lease]);
 });
+
+// The registry hands a run's repeat allocation the lease it already holds. A provider refusing the
+// repeat request (a profile field it does not read) must leave that lease and its session alone.
+test("a refused repeat allocation keeps the run's live lease", async () => {
+  const registry = new LeaseRegistry();
+  const sessionStore = makeSessionStore('agent-device-refused-repeat-');
+  let calls = 0;
+  const allocate = async (req: DaemonRequest) =>
+    await handleLeaseCommands({
+      req,
+      sessionName: 'lease-ttl-test',
+      sessionStore,
+      leaseRegistry: registry,
+      leaseLifecycleProvider: {
+        allocate: async () => {
+          calls += 1;
+          if (calls === 1) return { providerSessionId: 'session-1' };
+          throw new AppError('INVALID_ARGS', '--provider-os-version is not supported by Cloud.');
+        },
+      },
+    });
+
+  const first = await allocate(allocateRequest());
+  const lease = (first?.ok ? first.data?.lease : undefined) as DeviceLease;
+  const repeat = allocateRequest();
+  repeat.flags = { providerOsVersion: '18.0' };
+  await assert.rejects(
+    allocate(repeat),
+    (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
+  );
+  assert.equal(calls, 2);
+  assert.deepEqual(
+    registry.listActiveLeases().map((entry) => entry.leaseId),
+    [lease.leaseId],
+  );
+});

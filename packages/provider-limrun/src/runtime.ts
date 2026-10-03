@@ -231,9 +231,6 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     if (lease.leaseProvider !== this.provider) return undefined;
     const platform = platformForLimrunLeaseBackend(lease.backend);
     if (!platform) return undefined;
-    const existing = this.sessions.get(lease.leaseId);
-    if (existing) return { limrunInstanceId: existing.instanceId, device: existing.device };
-
     const {
       allocateLimrunAndroidSession,
       allocateLimrunIosSession,
@@ -241,7 +238,10 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       resolvePreinstalledAppId,
       resolveRequestedLimrunAppAsset,
     } = await import('./session-allocation.ts');
+    // Before the reuse below: a repeat allocation of a live lease carries flags of its own.
     rejectRefusedLimrunProfileFields(context);
+    const existing = this.sessions.get(lease.leaseId);
+    if (existing) return { limrunInstanceId: existing.instanceId, device: existing.device };
     const requestedAsset = await resolveRequestedLimrunAppAsset(this.limrun, platform, context);
     const session =
       platform === 'ios'

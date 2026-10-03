@@ -101,8 +101,8 @@ export type CloudWebDriverRuntimeOptions = {
   deviceId?: (lease: DeviceLease) => string;
   prepareSession?: CloudWebDriverPrepareSession;
   capabilityOverrides?: CloudWebDriverCapabilityOverrides;
-  /** Profile fields this provider reads; any field it refuses fails session preparation. */
-  profileFields?: ProviderProfileFieldDeclaration;
+  /** Profile fields this provider reads; any field it refuses fails lease allocation. */
+  profileFields: ProviderProfileFieldDeclaration;
 };
 
 export function createCloudWebDriverRuntime(

@@ -82,6 +82,11 @@ export class WebDriverSessionManager {
 
   async allocate(lease: DeviceLease, req?: LeaseLifecycleContext): Promise<LeaseResult> {
     if (lease.leaseProvider !== this.options.provider) return undefined;
+    // Before the reuse below: a repeat allocation of a live lease carries flags of its own.
+    // Loaded here rather than eagerly so the package entry's closure stays unchanged.
+    const { rejectRefusedProviderProfileFields } =
+      await import('@agent-device/contracts/provider-profile-fields');
+    rejectRefusedProviderProfileFields(req?.flags, this.options.profileFields);
     if (this.sessionsByLeaseId.has(lease.leaseId)) return this.heartbeat(lease);
     const prepared = await this.prepareSession(lease, req);
     const client = new WebDriverClient({
@@ -203,12 +208,6 @@ export class WebDriverSessionManager {
     lease: DeviceLease,
     req: LeaseLifecycleContext | undefined,
   ): Promise<CloudWebDriverPreparedSession> {
-    if (this.options.profileFields) {
-      // Loaded on first allocation so the package entry's eager closure stays unchanged.
-      const { rejectRefusedProviderProfileFields } =
-        await import('@agent-device/contracts/provider-profile-fields');
-      rejectRefusedProviderProfileFields(req?.flags, this.options.profileFields);
-    }
     const base = this.baseSessionForLease(lease);
     return this.options.prepareSession
       ? await this.options.prepareSession({ lease, req, base })

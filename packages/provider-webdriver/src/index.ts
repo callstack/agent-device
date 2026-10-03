@@ -50,7 +50,7 @@ export function createProviderWebDriver(
   return {
     providerIds: definitions.map((definition) => definition.provider),
     createDefaultRuntimes: (env = process.env) =>
-      definitions.map((definition) => definition.createRuntime(env)),
+      definitions.map((definition) => definition.createRuntime(env, definition.profileFields)),
     listArtifactsFromEnv: async (query, env) => {
       if (!query.providerSessionId) return undefined;
       return await definitions
