@@ -78,9 +78,10 @@ test('a daemon answering /health is responsive', async (t) => {
 
 test('a 5xx answer is still an answer: the finding is liveness, not reachability policy', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
-  // The HTTP leg rides the reachability reader (`readDaemonHttpHealth`), which reports a 5xx as
-  // UNREACHABLE for its own policy. Reading that flag here would make a daemon that answered 500
-  // look silent and authorize killing a live shared daemon — the bug #3177 is about.
+  // `readDaemonHttpHealth` (the reachability reader the transport uses before each command) reports
+  // a 5xx as UNREACHABLE — correct for its own policy, wrong for this one. The probe asks only
+  // whether the endpoint answered, so a daemon serving a 500 is alive and must not be killed:
+  // reading a reachability flag here would reproduce the bug #3177 is about.
   const server = http.createServer((_req, res) => {
     res.statusCode = 503;
     res.end('overloaded');
