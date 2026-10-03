@@ -19,9 +19,8 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
 }));
 
 import { resolveDaemonPaths, type DaemonPaths } from '../../daemon-resolution.ts';
-import { sendToDaemon, type DaemonRequest, type DaemonResponse } from '../daemon-client.ts';
+import { sendToDaemon, type DaemonResponse } from '../daemon-client.ts';
 import { attachActiveSessionAddressHint } from '../daemon-client-lifecycle.ts';
-import { sendRequest } from '../daemon-client-transport.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
@@ -158,37 +157,6 @@ function installSpawnedHttpDaemonAtOwnedStateDir(
     });
     return { pid: process.pid, exited: new Promise(() => {}) };
   });
-}
-
-async function startHangingHttpDaemonFixture(): Promise<HttpDaemonFixture> {
-  const seenPaths: string[] = [];
-  const rpcRequests: Record<string, any>[] = [];
-  const server = http.createServer((req, res) => {
-    const url = new URL(req.url || '/', 'http://127.0.0.1');
-    seenPaths.push(`${req.method ?? 'GET'} ${url.pathname}`);
-
-    if (req.method === 'GET' && url.pathname === '/health') {
-      res.writeHead(200);
-      res.end('ok');
-      return;
-    }
-
-    if (req.method === 'POST' && url.pathname === '/rpc') {
-      const chunks: Buffer[] = [];
-      req.on('data', (chunk) => {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      });
-      req.on('end', () => {
-        rpcRequests.push(JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, any>);
-      });
-      return;
-    }
-
-    res.writeHead(404);
-    res.end('not found');
-  });
-  const port = await listenOnLoopback(server);
-  return { server, port, seenPaths, rpcRequests };
 }
 
 function installSpawnedHttpDaemon(paths: DaemonPaths, httpPort: number): void {
@@ -588,72 +556,6 @@ test('sendToDaemon replaces socket-only daemon metadata when HTTP transport is r
     stderrCapture.restore();
     await closeLoopbackServer(freshDaemon.server);
     fs.rmSync(stateDir, { recursive: true, force: true });
-  }
-});
-
-test('sendRequest timeout cleanup uses resolved daemon paths instead of request flags', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
-
-  const daemonStateDir = makeTempStateDir('agent-device-daemon-timeout-active-');
-  const requestFlagStateDir = makeTempStateDir('agent-device-daemon-timeout-request-');
-  const daemonPaths = resolveDaemonPaths(daemonStateDir);
-  const requestFlagPaths = resolveDaemonPaths(requestFlagStateDir);
-  const daemon = await startHangingHttpDaemonFixture();
-  writeDaemonInfo(daemonPaths, {
-    httpPort: daemon.port,
-    transport: 'http',
-    pid: 999_999,
-  });
-  writeDaemonLock(daemonPaths, { pid: 999_999 });
-  writeDaemonInfo(requestFlagPaths, {
-    httpPort: daemon.port,
-    transport: 'http',
-    pid: 999_998,
-  });
-  writeDaemonLock(requestFlagPaths, { pid: 999_998 });
-
-  const request: DaemonRequest = {
-    session: 'default',
-    command: 'replay',
-    positionals: [],
-    flags: { stateDir: requestFlagStateDir, daemonTransport: 'http' },
-    token: 'local-secret',
-    meta: { requestId: 'req-timeout-paths' },
-  };
-
-  try {
-    let thrown: unknown;
-    try {
-      await sendRequest(
-        {
-          token: 'local-secret',
-          pid: 999_999,
-          httpPort: daemon.port,
-          transport: 'http',
-        },
-        request,
-        'http',
-        daemonPaths,
-        50,
-      );
-    } catch (error) {
-      thrown = error;
-    }
-
-    assert.ok(thrown instanceof AppError);
-    assert.equal(thrown.message, 'Daemon request timed out');
-    assert.deepEqual(daemon.seenPaths, ['POST /rpc']);
-    assert.equal(fs.existsSync(daemonPaths.infoPath), false);
-    assert.equal(fs.existsSync(daemonPaths.lockPath), false);
-    assert.equal(fs.existsSync(requestFlagPaths.infoPath), true);
-    assert.equal(fs.existsSync(requestFlagPaths.lockPath), true);
-  } finally {
-    await closeLoopbackServer(daemon.server);
-    fs.rmSync(daemonStateDir, { recursive: true, force: true });
-    fs.rmSync(requestFlagStateDir, { recursive: true, force: true });
   }
 });
 

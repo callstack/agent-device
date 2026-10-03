@@ -70,7 +70,10 @@ for (const [commandClass, row] of Object.entries(COMMAND_ROWS)) {
         return true;
       },
     );
-    assert.equal(mockRunCmdSync.mock.calls.filter(([command]) => command === 'pkill').length, 3);
+    // #3177: a timed-out request never spawns the host-wide runner `pkill` sweep again. The
+    // timeout must stay bounded not only in wall-clock but in blast radius: the daemon cancels
+    // this request when the connection dies, and processes belong to the daemon's leases.
+    assert.equal(mockRunCmdSync.mock.calls.filter(([command]) => command === 'pkill').length, 0);
   });
 
   for (const responseShape of ['partial', 'malformed'] as const) {
