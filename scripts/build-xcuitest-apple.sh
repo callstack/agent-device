@@ -144,6 +144,9 @@ build_for_testing() {
     -scheme "$SCHEME" \
     -destination "$DESTINATION" \
     -derivedDataPath "$DERIVED_PATH" \
+    SYMROOT="$DERIVED_PATH/Build/Products" \
+    OBJROOT="$DERIVED_PATH/Build/Intermediates.noindex" \
+    SHARED_PRECOMPS_DIR="$DERIVED_PATH/Build/Intermediates.noindex/PrecompiledHeaders" \
     "$@"
 }
 

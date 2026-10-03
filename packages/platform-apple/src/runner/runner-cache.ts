@@ -25,6 +25,7 @@ export {
   requireRunnerPhaseRemainingMs,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerArchBuildSettings,
+  resolveRunnerBuildLocationSettings,
   resolveRunnerBundleBuildSettings,
   resolveRunnerDerivedPath,
   resolveRunnerMaxConcurrentDestinationsFlag,

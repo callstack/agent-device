@@ -185,3 +185,18 @@ describe('scripts/build-xcuitest-apple.sh isolation scan', () => {
     expect(result.stderr).not.toMatch(/runner isolation scan/);
   });
 });
+
+describe('scripts/build-xcuitest-apple.sh build location', () => {
+  test('pins every build root under the derived path so a custom Xcode build location cannot move products', () => {
+    const result = runBuildScript(log(...CANARY_DIAGNOSTICS), 65);
+    const args = fs.readFileSync(result.xcodebuildArgs, 'utf8').split('\n');
+    const intermediates = path.join(result.derived, 'Build', 'Intermediates.noindex');
+    expect(args).toEqual(
+      expect.arrayContaining([
+        `SYMROOT=${path.join(result.derived, 'Build', 'Products')}`,
+        `OBJROOT=${intermediates}`,
+        `SHARED_PRECOMPS_DIR=${path.join(intermediates, 'PrecompiledHeaders')}`,
+      ]),
+    );
+  });
+});
