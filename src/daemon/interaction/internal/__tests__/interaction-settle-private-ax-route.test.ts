@@ -61,7 +61,7 @@ beforeEach(() => {
 test('daemon press --settle pins private-ax on emitted snapshot runner requests', async () => {
   const sessionName = 'press-settle-private-ax-route';
   const sessionStore = makeSessionStore();
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeIosSession(sessionName, {
       appBundleId: 'com.example.fixture',

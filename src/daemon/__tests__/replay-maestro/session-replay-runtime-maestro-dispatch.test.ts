@@ -116,7 +116,7 @@ test('runReplayCommand reports snapshot diagnostics from per-action session samp
     ['snapshot', 'snapshot', 'snapshot', 'snapshot', 'snapshot', ''].join('\n'),
   );
   const sessionStore = new SessionStore(path.join(root, 'state'));
-  sessionStore.set(
+  sessionStore.publish(
     's',
     makeIosSession('s', {
       snapshotDiagnostics: { samples: [] },
@@ -180,7 +180,7 @@ test('runReplayCommand reports snapshot diagnostics on replay failure', async ()
     ['snapshot', 'snapshot', 'snapshot', 'snapshot', 'click "Missing"', ''].join('\n'),
   );
   const sessionStore = new SessionStore(path.join(root, 'state'));
-  sessionStore.set(
+  sessionStore.publish(
     's',
     makeIosSession('s', {
       snapshotDiagnostics: { samples: [] },

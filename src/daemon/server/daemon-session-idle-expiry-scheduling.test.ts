@@ -316,14 +316,10 @@ test('a session that moved to another device is fenced by that device, not the s
   });
   const command = withKeyedLock(locks, 'session:default', async () => {
     await commandHeld;
-    sessionStore.set(
-      'default',
-      makeIosSession('default', {
-        createdAt: NOW - WINDOW_MS - 1,
-        device: { ...IOS_SIMULATOR, id: 'sim-2', name: 'iPhone 17' },
-        deviceClaim: { ...CLAIM, deviceKey: 'ios:sim-2' },
-      }),
-    );
+    sessionStore.update(sessionStore.lookup('default')!, {
+      device: { ...IOS_SIMULATOR, id: 'sim-2', name: 'iPhone 17' },
+      deviceClaim: { ...CLAIM, deviceKey: 'ios:sim-2' },
+    });
   });
 
   // A command on the NEW session's device is in flight the whole time.
@@ -454,14 +450,14 @@ test('a settle that outruns its wait still finishes the release it started', asy
 
 test('a daemon beginning to leave does not start settling the next session', async () => {
   const { sessionStore } = makeFixture('agent-device-idle-expiry-closing-');
-  sessionStore.set(
+  sessionStore.publish(
     'first',
     makeIosSession('first', {
       createdAt: NOW - WINDOW_MS - 1,
       deviceClaim: { ...CLAIM, deviceKey: 'ios:sim-1' },
     }),
   );
-  sessionStore.set(
+  sessionStore.publish(
     'second',
     makeIosSession('second', {
       createdAt: NOW - WINDOW_MS - 1,

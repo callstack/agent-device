@@ -189,7 +189,7 @@ test('request router joins focus admission to execution, recording, and ref inva
   const sessionStore = makeSessionStore('agent-device-focus-generic-');
   const session = makeSession('focus-runtime', { device: appleDevice });
   activateCompleteRefFrame(session);
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const handler = createRequestHandler({
     logPath: '/tmp/daemon.log',
     token: 't',

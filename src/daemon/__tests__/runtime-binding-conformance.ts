@@ -148,7 +148,7 @@ export const conformedRuntimeBindings = {
     resolve: async (device, bindings) => {
       const sessionStore = makeSessionStore('agent-device-runtime-binding-conformance-');
       const session = makeSession('diff-runtime', { device, appBundleId: 'com.example.app' });
-      sessionStore.set(session.name, session);
+      sessionStore.publish(session.name, session);
       const response = await dispatchSnapshotDiffViaRuntime({
         req: {
           command: 'diff',

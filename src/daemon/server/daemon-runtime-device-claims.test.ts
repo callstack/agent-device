@@ -36,7 +36,7 @@ function setup(): { session: SessionState; sessionStore: SessionStore; stateDir:
     actions: [],
   };
   const sessionStore = new SessionStore(path.join(stateDir, 'sessions'));
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   return { session, sessionStore, stateDir };
 }
 

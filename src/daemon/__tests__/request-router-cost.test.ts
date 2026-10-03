@@ -85,7 +85,7 @@ beforeEach(() => {
 
 test('(a) flag-off identity: meta.includeCost absent === no meta at all, byte-identical and no cost', async () => {
   const { sessionStore, handler } = makeHandler();
-  sessionStore.set('cost-session', makeIosSession('cost-session'));
+  sessionStore.publish('cost-session', makeIosSession('cost-session'));
 
   const respNoMeta = await handler(baseRequest());
   const respMetaWithoutCost = await handler(baseRequest({ meta: {} }));
@@ -107,7 +107,7 @@ test('(a) flag-off identity: meta.includeCost absent === no meta at all, byte-id
 
 test('(b) flag-on additive-only: cost block is the ONLY delta vs flag-off', async () => {
   const { sessionStore, handler } = makeHandler();
-  sessionStore.set('cost-session', makeIosSession('cost-session'));
+  sessionStore.publish('cost-session', makeIosSession('cost-session'));
 
   const respFlagOff = await handler(baseRequest());
   const respFlagOn = await handler(baseRequest({ meta: { includeCost: true } }));
@@ -134,7 +134,7 @@ test('(b) flag-on additive-only: cost block is the ONLY delta vs flag-off', asyn
 
 test('(c) runnerRoundTrips counts real iOS-runner round-trip diagnostics in scope', async () => {
   const { sessionStore, handler } = makeHandler();
-  sessionStore.set('cost-session', makeIosSession('cost-session'));
+  sessionStore.publish('cost-session', makeIosSession('cost-session'));
 
   // The bound operation runs inside the request's diagnostics scope, so emitting here is
   // equivalent to the runner-session emitting these phases per round-trip.
@@ -157,7 +157,7 @@ test('(c) runnerRoundTrips counts real iOS-runner round-trip diagnostics in scop
 
 test('(c2) nodeCount reports the node-tree size whenever data carries a nodes array, additive-only', async () => {
   const { sessionStore, handler } = makeHandler();
-  sessionStore.set('cost-session', makeIosSession('cost-session'));
+  sessionStore.publish('cost-session', makeIosSession('cost-session'));
 
   // The nodeCount read is command-agnostic: it triggers on any response.data that
   // carries a `nodes` array (in production only the snapshot node-tree commands
@@ -191,7 +191,7 @@ test('(c2) nodeCount reports the node-tree size whenever data carries a nodes ar
 
 test('(d) error path: a failing request with includeCost:true produces NO cost', async () => {
   const { sessionStore, handler } = makeHandler();
-  sessionStore.set('cost-session', makeIosSession('cost-session'));
+  sessionStore.publish('cost-session', makeIosSession('cost-session'));
 
   // Conflicting explicit selector under a reject lock policy fails before the bound execution.
   const failingRequest = baseRequest({

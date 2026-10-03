@@ -50,7 +50,7 @@ test('primary request failure survives a rejecting binding disposal', async () =
 
 function makeHandler(gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>) {
   const sessionStore = makeSessionStore('request-runtime-binding-router-');
-  sessionStore.set('session', {
+  sessionStore.publish('session', {
     name: 'session',
     device: { platform: 'android', id: 'emulator-5554', name: 'Pixel', kind: 'emulator' },
     appBundleId: 'com.example.app',

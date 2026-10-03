@@ -234,7 +234,7 @@ test('a session closed by its owner stops the retry clock tracking it', async ()
   await sweeps.swept();
   assert.equal(settleCalls, 1);
 
-  sessionStore.delete('default');
+  sessionStore.retire(sessionStore.lookup('default')!);
   await runUntilIdle(controller, 10);
   assert.equal(settleCalls, 1, 'nothing is left to retry once the session is gone');
   controller.cancel();
@@ -243,7 +243,7 @@ test('a session closed by its owner stops the retry clock tracking it', async ()
 test('a settled session of another kind is never touched by the sweep', async () => {
   const { sessionStore } = makeFixture('agent-device-idle-expiry-kind-');
   // Past its deadline in time, but holding a remote lease: that lease owns the device.
-  sessionStore.set(
+  sessionStore.publish(
     'leased',
     makeIosSession('leased', {
       createdAt: NOW - WINDOW_MS - 1,
@@ -258,7 +258,7 @@ test('a settled session of another kind is never touched by the sweep', async ()
   );
   // Past its deadline too, but holding no claim: there is no device for another agent to wait on,
   // so there is nothing here an expiry could reclaim and nothing to release.
-  sessionStore.set('plain', unclaimedExpiredSession('plain'));
+  sessionStore.publish('plain', unclaimedExpiredSession('plain'));
 
   const settledNames: string[] = [];
   const controller = createSessionIdleExpiry({
@@ -292,7 +292,8 @@ test('a held-back settle leaves a repair transaction uncommitted, so a later pas
     createdAt: NOW - WINDOW_MS - 1,
     deviceClaim: { ...deviceClaim },
   });
-  sessionStore.set('default', session);
+  sessionStore.retire(sessionStore.lookup('default')!);
+  sessionStore.publish('default', session);
 
   const claimsDir = path.dirname(resolveDeviceClaimPath(deviceClaim.deviceKey));
   const sweeps = createSweepBarrier();
@@ -353,7 +354,8 @@ test('a committed expiry finalizes the repair transaction it ends', async () => 
     createdAt: NOW - WINDOW_MS - 1,
     deviceClaim: { ...deviceClaim },
   });
-  sessionStore.set('default', session);
+  sessionStore.retire(sessionStore.lookup('default')!);
+  sessionStore.publish('default', session);
 
   const sweeps = createSweepBarrier();
   const controller = createSessionIdleExpiry({

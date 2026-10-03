@@ -52,7 +52,7 @@ test('a perf stop whose pull failed re-collects the device-side trace the first 
     createdAt: 1,
     actions: [],
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   const capture = {
     action: 'start' as const,
     kind: 'perfetto' as const,

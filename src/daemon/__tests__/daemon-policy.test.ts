@@ -40,7 +40,7 @@ function makeHandler(
   options: { inventory?: readonly DeviceInfo[]; providerInventory?: readonly DeviceInfo[] } = {},
 ) {
   const sessionStore = makeSessionStore('agent-device-daemon-policy-');
-  sessionStore.set('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
+  sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
   const bind = vi.fn(lifecycleDeviceRuntimeGateway.bind);
   const inspectFacts = vi.fn(lifecycleDeviceRuntimeGateway.inspectFacts);
   const handler = createRequestHandler({

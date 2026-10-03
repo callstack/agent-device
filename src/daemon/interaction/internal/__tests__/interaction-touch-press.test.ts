@@ -107,7 +107,7 @@ test('click on a macOS menubar wrapper ref promotes to the same-rect menu bar it
     createdAt: Date.now(),
     backend: 'macos-helper',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
     req: {
@@ -164,7 +164,7 @@ test('press @ref promotes a non-hittable node to its hittable ancestor before ta
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockTapPoint.mockResolvedValue({ pressed: true });
 
@@ -226,7 +226,7 @@ test('press @ref does not promote to a full-screen hittable ancestor', async () 
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockTapPoint.mockResolvedValue({ pressed: true });
 
@@ -285,7 +285,7 @@ test('click --button secondary on @ref dispatches a secondary press on macOS and
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockTapPoint.mockResolvedValue({ button: 'secondary' });
 
@@ -321,7 +321,7 @@ test('click --button secondary on @ref dispatches a secondary press on macOS and
 test('#1654: a mutating find click acts on the node find resolved, not a re-resolved @ref', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'find-preresolved-click';
-  sessionStore.set(sessionName, makeStaleRefSession(sessionName));
+  sessionStore.publish(sessionName, makeStaleRefSession(sessionName));
   const preresolved = makeFindPreresolvedTree();
 
   const response = await runFindInternalClick(sessionStore, sessionName, {
@@ -337,7 +337,7 @@ test('#1654: a mutating find click acts on the node find resolved, not a re-reso
 test('#1654 control: without the resolved-target payload the same click still resolves @ref from the session tree', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'find-preresolved-control';
-  sessionStore.set(sessionName, makeStaleRefSession(sessionName));
+  sessionStore.publish(sessionName, makeStaleRefSession(sessionName));
 
   const response = await runFindInternalClick(sessionStore, sessionName, {});
 
@@ -355,7 +355,7 @@ test('#1654: the leaf performs no ref lookup at all — a session that could not
   const sessionName = 'find-preresolved-no-session-tree';
   const session = makeSession(sessionName);
   session.snapshot = undefined;
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   const preresolved = makeFindPreresolvedTree();
 
   const withoutPreresolution = await runFindInternalClick(sessionStore, sessionName, {});
@@ -374,7 +374,7 @@ test('#1654: the shared guards still run on the pre-resolved node', async () => 
   // node is still refused, at the same ADR 0011 `runtime-ref` occlusion cell.
   const sessionStore = makeSessionStore();
   const sessionName = 'find-preresolved-occluded';
-  sessionStore.set(sessionName, makeStaleRefSession(sessionName));
+  sessionStore.publish(sessionName, makeStaleRefSession(sessionName));
   const preresolved = makeFindPreresolvedTree();
   const blocked = {
     ...preresolved.node,
@@ -396,7 +396,10 @@ test('#1654: the shared guards still run on the pre-resolved node', async () => 
 test('a read right after a press captures the post-tap screen instead of reusing the pre-tap tree', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'read-after-press';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const screen = (step: string) => ({
     backend: 'xctest' as const,
     producer: 'apple-runner' as const,

@@ -186,7 +186,7 @@ test('open runtime payload clears stale applied transport hints before launch', 
     metroHost: '10.0.0.10',
     metroPort: 8081,
   });
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, makeAndroidEmulator()),
     appBundleId: 'com.example.demo',
     appName: 'Demo',

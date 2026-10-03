@@ -31,7 +31,7 @@ test('Provider-backed integration Android TV remote flow sends D-pad keyevents',
         deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID_TV],
       }),
     async (daemon) => {
-      daemon.setSession('default', {
+      daemon.publishSession('default', {
         name: 'default',
         device: PROVIDER_SCENARIO_ANDROID_TV,
         createdAt: Date.now(),

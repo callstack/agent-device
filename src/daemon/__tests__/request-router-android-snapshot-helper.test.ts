@@ -14,7 +14,7 @@ import {
 
 function makeAndroidSessionStore(name: string): SessionStore {
   const sessionStore = new SessionStore(`/tmp/${name}`);
-  sessionStore.set('default', {
+  sessionStore.publish('default', {
     name: 'default',
     createdAt: Date.now(),
     device: {

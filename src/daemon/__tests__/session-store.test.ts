@@ -117,7 +117,7 @@ test('session lease metadata round-trips through the store', () => {
     expiresAt: 123_456,
   };
 
-  store.set(session.name, session);
+  store.publish(session.name, session);
 
   assert.deepEqual(store.get(session.name)?.lease, session.lease);
 });
@@ -125,7 +125,7 @@ test('session lease metadata round-trips through the store', () => {
 test('sessions without lease metadata remain valid', () => {
   const { store, session } = makeFixture('agent-device-session-unleased-');
 
-  store.set(session.name, session);
+  store.publish(session.name, session);
 
   assert.equal(store.get(session.name)?.lease, undefined);
 });
@@ -848,7 +848,7 @@ test('BLOCKER 3: finalizeRepairTeardown auto-commit records a terminal close, pr
 
 test('noteSessionActivity stamps the live record and ignores an unknown address', () => {
   const { store, session } = makeFixture('agent-device-store-note-activity-');
-  store.set('default', session);
+  store.publish('default', session);
   assert.equal(session.lastActivityAtMs, undefined);
 
   store.noteSessionActivity('default', 5_000);

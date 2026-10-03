@@ -32,7 +32,10 @@ export function setup(prefix: string) {
   const root = mkdtempForTestSync(prefix);
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   return {
     root,
     sessionStore,
@@ -74,6 +77,6 @@ export function makeCompleteRepairSession(
       },
     ],
   });
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   return session;
 }

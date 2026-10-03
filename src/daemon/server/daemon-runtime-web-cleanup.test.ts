@@ -32,7 +32,7 @@ test('daemon-startup web cleanup passes open web sessions to the reaper', async 
   try {
     await installFakeManagedAgentBrowser(stateDir);
     const sessionStore = new SessionStore(path.join(stateDir, 'sessions'));
-    sessionStore.set('web-session', {
+    sessionStore.publish('web-session', {
       name: 'web-session',
       device: WEB_DESKTOP_DEVICE,
       createdAt: Date.now(),

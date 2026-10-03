@@ -200,7 +200,7 @@ function audioParams(
 
 test('audio probe validates daemon duration bounds', async () => {
   const sessionStore = makeSessionStore('agent-device-session-audio-');
-  sessionStore.set('web', makeSession('web', { device: WEB_DESKTOP_DEVICE }));
+  sessionStore.publish('web', makeSession('web', { device: WEB_DESKTOP_DEVICE }));
   const { params, bindDevice } = audioParams('web', sessionStore, WEB_DESKTOP_DEVICE, {
     positionals: ['probe', 'start', '99', '1000'],
     cells: { capture: false, query: true },
@@ -215,7 +215,7 @@ test('audio probe validates daemon duration bounds', async () => {
 
 test('audio probe validates daemon bucket bounds', async () => {
   const sessionStore = makeSessionStore('agent-device-session-audio-');
-  sessionStore.set('web', makeSession('web', { device: WEB_DESKTOP_DEVICE }));
+  sessionStore.publish('web', makeSession('web', { device: WEB_DESKTOP_DEVICE }));
   const { params, bindDevice } = audioParams('web', sessionStore, WEB_DESKTOP_DEVICE, {
     positionals: ['probe', 'start', '1000', '99'],
     cells: { capture: false, query: true },
@@ -230,7 +230,7 @@ test('audio probe validates daemon bucket bounds', async () => {
 
 test('audio probe rejects timing positionals for status', async () => {
   const sessionStore = makeSessionStore('agent-device-session-audio-');
-  sessionStore.set('web', makeSession('web', { device: WEB_DESKTOP_DEVICE }));
+  sessionStore.publish('web', makeSession('web', { device: WEB_DESKTOP_DEVICE }));
   const { params, bindDevice } = audioParams('web', sessionStore, WEB_DESKTOP_DEVICE, {
     positionals: ['probe', 'status', '1000'],
     cells: { capture: false, query: true },
@@ -242,7 +242,7 @@ test('audio probe rejects timing positionals for status', async () => {
 
 test('audio refuses with the owner-stated hint when no fact admits it', async () => {
   const sessionStore = makeSessionStore('agent-device-session-audio-');
-  sessionStore.set('ios-device', makeIosSession('ios-device', { device: IOS_DEVICE }));
+  sessionStore.publish('ios-device', makeIosSession('ios-device', { device: IOS_DEVICE }));
   const { params, bindDevice } = audioParams('ios-device', sessionStore, IOS_DEVICE, {
     positionals: ['probe', 'status'],
     cells: { capture: false, query: false },
@@ -260,7 +260,7 @@ test('audio refuses with the owner-stated hint when no fact admits it', async ()
 test('audio probe start binds once, adopts the durable handle, and answers from it', async () => {
   const sessionStore = makeSessionStore('agent-device-session-audio-');
   const session = makeMacOsSession('macos');
-  sessionStore.set('macos', session);
+  sessionStore.publish('macos', session);
   const runtime = fakeCaptureRuntime(session.device, runningStatus());
   const { params, bindDevice } = audioParams('macos', sessionStore, session.device, {
     positionals: ['probe', 'start', '1000', '500'],
@@ -289,7 +289,7 @@ test('audio probe start binds once, adopts the durable handle, and answers from 
 test('audio probe starts host helper for iOS simulator audio', async () => {
   const sessionStore = makeSessionStore('agent-device-session-audio-');
   const session = makeIosSession('ios-sim');
-  sessionStore.set('ios-sim', session);
+  sessionStore.publish('ios-sim', session);
   const runtime = fakeCaptureRuntime(session.device, runningStatus());
   const { params } = audioParams('ios-sim', sessionStore, session.device, {
     positionals: ['probe', 'start', '1000', '500'],
@@ -307,7 +307,7 @@ test('audio probe starts host helper for iOS simulator audio', async () => {
 test(ANDROID_AUDIO_CONTRACT_EVIDENCE.testName, async () => {
   const sessionStore = makeSessionStore('agent-device-session-audio-');
   const session = makeAndroidSession('android');
-  sessionStore.set('android', session);
+  sessionStore.publish('android', session);
   const runtime = fakeCaptureRuntime(session.device, runningStatus({ peakDbfs: [-13] }));
   const { params } = audioParams('android', sessionStore, session.device, {
     positionals: ['probe', 'start', '1000', '500'],
@@ -325,7 +325,7 @@ test(ANDROID_AUDIO_CONTRACT_EVIDENCE.testName, async () => {
 test('audio probe stop finishes the durable resource and clears the slot', async () => {
   const sessionStore = makeSessionStore('agent-device-session-audio-');
   const session = makeMacOsSession('macos');
-  sessionStore.set('macos', session);
+  sessionStore.publish('macos', session);
   const runtime = fakeCaptureRuntime(session.device, runningStatus());
   const start = audioParams('macos', sessionStore, session.device, {
     positionals: ['probe', 'start', '1000', '500'],
@@ -355,7 +355,7 @@ test('audio probe stop finishes the durable resource and clears the slot', async
 test('audio probe status without an active probe reports not-started', async () => {
   const sessionStore = makeSessionStore('agent-device-session-audio-');
   const session = makeMacOsSession('macos');
-  sessionStore.set('macos', session);
+  sessionStore.publish('macos', session);
   const { params } = audioParams('macos', sessionStore, session.device, {
     positionals: ['probe', 'status'],
     cells: { capture: true, query: false },
@@ -370,7 +370,7 @@ test('audio probe status without an active probe reports not-started', async () 
 
 test('audio probe forwards daemon millisecond timing to the web query operation', async () => {
   const sessionStore = makeSessionStore('agent-device-session-audio-');
-  sessionStore.set('web', makeSession('web', { device: WEB_DESKTOP_DEVICE }));
+  sessionStore.publish('web', makeSession('web', { device: WEB_DESKTOP_DEVICE }));
   const audioProbeQuery = vi.fn(
     async (_input: { action: string; durationMs: number; bucketMs: number }) =>
       runningStatus({ source: 'media-elements', backend: 'agent-browser' }),

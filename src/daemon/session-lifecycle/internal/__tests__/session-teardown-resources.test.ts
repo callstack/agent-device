@@ -38,7 +38,7 @@ test('close finalizes an active iOS simulator recording before deleting the sess
   const sessionName = 'ios-active-recording-close-session';
   const session = makeIosSimulatorRecordingSession(sessionStore, sessionName);
   const finish = recordingFinishMock(session);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const response = await handleSessionCommands({
     req: {
@@ -75,7 +75,7 @@ test('close surfaces a recording finalization failure through the cleanup-failur
   });
   const finish = recordingFinishMock(session);
   const forceCleanup = recordingCleanupMock(session);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   await expect(
     handleSessionCommands({
@@ -105,7 +105,7 @@ test('daemon resource teardown finalizes recording before lifecycle runner dispo
   const sessionStore = makeSessionStore();
   const session = makeIosSimulatorRecordingSession(sessionStore, sessionName);
   const finish = recordingFinishMock(session);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   await teardownSessionResources({
     appLog: 'already-settled',
@@ -138,7 +138,7 @@ test('daemon session teardown surfaces a recording finalization failure', async 
   });
   const finish = recordingFinishMock(session);
   const forceCleanup = recordingCleanupMock(session);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   await expect(
     teardownSessionResources({
@@ -162,7 +162,7 @@ test('daemon session teardown retains recording evidence when finish and forced 
   });
   const finish = recordingFinishMock(session);
   const forceCleanup = recordingCleanupMock(session);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   await expect(
     teardownSessionResources({
@@ -229,7 +229,7 @@ test('daemon session teardown attempts every resource after an earlier cleanup r
 
   // Perf cleanup runs before the snapshot-helper cleanup.
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   await expect(
     teardownSessionResources({
@@ -279,7 +279,7 @@ test('daemon session teardown closes an open web session immediately, not on age
   // Teardown always runs while the session it is tearing down is still in the store (session
   // deletion happens after), which is what keeps the provider-startup orphan sweep from treating
   // this session's own browser as an orphan and scanning real host processes for it.
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   mockRunCmd.mockResolvedValue(agentBrowserJsonResult({ success: true, data: {} }));
 
   await teardownSessionResources({
@@ -303,7 +303,7 @@ test('daemon session teardown surfaces a web close failure through the cleanup-f
   const sessionStore = makeSessionStore();
   await installFakeManagedAgentBrowser(sessionStore.resolveDaemonStateDir());
   const session = makeSession(sessionName, WEB_DESKTOP_DEVICE);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   mockRunCmd.mockResolvedValue(
     agentBrowserJsonResult({ success: false, error: 'no active browser session' }),
   );

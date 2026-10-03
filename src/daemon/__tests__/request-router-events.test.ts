@@ -180,7 +180,7 @@ test('events flushes pending event writes before reading', async () => {
 // every other platform.
 test('events reads the daemon-owned session timeline for a web-backed session', async () => {
   const sessionStore = makeSessionStore('agent-device-router-events-web-');
-  sessionStore.set('web-session', makeSession('web-session', { device: WEB_DESKTOP_DEVICE }));
+  sessionStore.publish('web-session', makeSession('web-session', { device: WEB_DESKTOP_DEVICE }));
   sessionStore.recordEvent('web-session', {
     kind: 'action.recorded',
     command: 'click',
@@ -218,7 +218,7 @@ test('events reads the daemon-owned session timeline for a web-backed session', 
 
 test('request timeline records thrown request failures after scope creation', async () => {
   const sessionStore = makeSessionStore('agent-device-router-events-throws-');
-  sessionStore.set('events-session', makeIosSession('events-session'));
+  sessionStore.publish('events-session', makeIosSession('events-session'));
 
   const handler = createRequestHandler({
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),

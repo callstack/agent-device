@@ -61,7 +61,7 @@ beforeEach(() => {
 test('alert accept retries a typed alert absence and succeeds on the second attempt', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim';
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
 
   let calls = 0;
   mockRunnerCommand.mockImplementation(async () => {
@@ -85,7 +85,7 @@ test('alert accept retries a typed alert absence and succeeds on the second atte
 test('alert accept adds a scoped-snapshot hint after retrying alert-not-found failures', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim';
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
   mockRunnerCommand.mockRejectedValue(alertAbsence());
 
   let thrown: unknown;
@@ -103,7 +103,7 @@ test('alert accept adds a scoped-snapshot hint after retrying alert-not-found fa
 test('alert dismiss retries a typed absence whatever the message says', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim';
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
 
   let calls = 0;
   mockRunnerCommand.mockImplementation(async () => {

@@ -64,7 +64,7 @@ function makeIosSession(name: string): SessionState {
 
 function makeHandler() {
   const sessionStore = makeSessionStore('agent-device-router-level-');
-  sessionStore.set('level-session', makeIosSession('level-session'));
+  sessionStore.publish('level-session', makeIosSession('level-session'));
   return {
     sessionStore,
     handler: createRequestHandler({

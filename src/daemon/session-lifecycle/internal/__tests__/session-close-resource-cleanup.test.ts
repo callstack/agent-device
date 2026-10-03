@@ -39,7 +39,7 @@ test('close stops Android snapshot helper session before deleting session', asyn
     kind: 'emulator',
     booted: true,
   };
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, device),
     appBundleId: 'com.example.app',
   });
@@ -133,7 +133,7 @@ test('close stops active host audio probe before deleting session', async () => 
     }),
     audioProbe: { handle, envelope },
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   audioProbeResourceStore.write(
     audioProbeResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName)),
     envelope,
@@ -161,7 +161,7 @@ test('close stops active host audio probe before deleting session', async () => 
 test('close dispatches web session cleanup without a positional target', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'web-close-session';
-  sessionStore.set(sessionName, makeSession(sessionName, WEB_DESKTOP_DEVICE));
+  sessionStore.publish(sessionName, makeSession(sessionName, WEB_DESKTOP_DEVICE));
 
   const response = await handleSessionCommands({
     req: {
@@ -199,7 +199,7 @@ test('close preserves the session and lease when provider release fails so it ca
     deviceKey: 'ios:bs-device',
     clientId: 'client-a',
   });
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, WEB_DESKTOP_DEVICE),
     lease: {
       leaseId: lease.leaseId,

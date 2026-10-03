@@ -102,7 +102,7 @@ test('replay routes native and Maestro sources through one application seam and 
   for (const replayCase of cases) {
     const root = mkdtempForTestSync(`agent-device-replay-application-${replayCase.kind}-`);
     const sessionStore = new SessionStore(path.join(root, 'sessions'));
-    sessionStore.set('default', makeIosSession('default'));
+    sessionStore.publish('default', makeIosSession('default'));
     const req = await replayCase.buildRequest(root);
     const invoked: DaemonRequest[] = [];
 
@@ -130,7 +130,7 @@ test('replay routes native and Maestro sources through one application seam and 
 test('replay admits an annotated target before dispatching its mutation', async () => {
   const root = mkdtempForTestSync('agent-device-replay-application-admission-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  sessionStore.set('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
+  sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
   const filePath = writeReplayFile(root, [
     '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}',
     'click label="Save"',
@@ -168,7 +168,7 @@ test('replay admits an annotated target before dispatching its mutation', async 
 test('replay projects the exact failure cause and retains artifacts from the failed step', async () => {
   const root = mkdtempForTestSync('agent-device-replay-application-failure-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  sessionStore.set('default', makeIosSession('default'));
+  sessionStore.publish('default', makeIosSession('default'));
   const artifactPath = path.join(root, 'failure.png');
   fs.writeFileSync(artifactPath, 'artifact');
   const filePath = writeReplayFile(root, ['open "Demo"']);

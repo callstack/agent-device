@@ -100,7 +100,7 @@ test('press @ref fails when Android tap escapes to launcher', async () => {
     createdAt: Date.now(),
     backend: 'android',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockTapPoint.mockResolvedValue({ pressed: true });
   mockGetAndroidAppState.mockResolvedValue({
@@ -148,7 +148,7 @@ test('press @ref fails when Android tap escapes to Settings', async () => {
     createdAt: Date.now(),
     backend: 'android',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockTapPoint.mockResolvedValue({ pressed: true });
   mockGetAndroidAppState.mockResolvedValue({
@@ -203,7 +203,7 @@ test.each(ANDROID_PERMISSION_PROMPT_PACKAGES)(
       createdAt: Date.now(),
       backend: 'android',
     };
-    sessionStore.set(sessionName, session);
+    sessionStore.publish(sessionName, session);
 
     mockTapPoint.mockResolvedValue({ pressed: true });
     mockGetAndroidAppState.mockResolvedValue({
@@ -268,7 +268,7 @@ test('a ref action aborts with the shared ref_frame_expired rejection after Andr
   };
   session.snapshotGeneration = 900;
   // A freshly issued complete frame is active.
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
     req: { token: 't', session: sessionName, command: 'press', positionals: ['@e1'], flags: {} },

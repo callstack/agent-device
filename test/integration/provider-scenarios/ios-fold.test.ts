@@ -105,7 +105,7 @@ test('timed fold keyframes reach simulator HID through the public client and dae
       },
     }),
   });
-  daemon.setSession(
+  daemon.publishSession(
     'default',
     makeIosAppSession('default', { device: PROVIDER_SCENARIO_IOS_SIMULATOR }),
   );
@@ -278,7 +278,7 @@ async function runFoldLedgerScenario(params: {
       deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
       appleToolProvider: () => provider,
     });
-    daemon.setSession(
+    daemon.publishSession(
       'default',
       makeIosAppSession('default', { device: PROVIDER_SCENARIO_IOS_SIMULATOR }),
     );

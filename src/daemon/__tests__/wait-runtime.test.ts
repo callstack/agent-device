@@ -210,7 +210,7 @@ async function runWait(
       backend: 'web',
     } as unknown as NonNullable<typeof session.snapshot>;
   }
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const response = await handleSnapshotCommands({
     req: waitRequest(positionals, flags),
     sessionName: session.name,

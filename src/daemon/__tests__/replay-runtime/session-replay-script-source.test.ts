@@ -45,7 +45,7 @@ beforeEach(() => {
 test('a bundled replay runs after the script file is gone from the daemon host', async () => {
   const root = mkdtempForTestSync('agent-device-replay-source-bundle-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  sessionStore.set('default', makeIosSession('default'));
+  sessionStore.publish('default', makeIosSession('default'));
   const scriptPath = path.join(root, 'flow.ad');
   fs.writeFileSync(scriptPath, 'open "Demo"\nclick "Save"\n');
   const bundle = replayScriptSourceBundleFor(scriptPath);
@@ -75,7 +75,7 @@ test('a bundled replay runs after the script file is gone from the daemon host',
 test('a bundled Maestro replay resolves runFlow includes from the bundle, not the daemon disk', async () => {
   const root = mkdtempForTestSync('agent-device-replay-maestro-bundle-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  sessionStore.set('default', makeIosSession('default'));
+  sessionStore.publish('default', makeIosSession('default'));
   const flowPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(flowPath, 'appId: com.example.app\n---\n- runFlow: included.yaml\n');
   fs.writeFileSync(path.join(root, 'included.yaml'), '---\n- back\n');
@@ -107,7 +107,7 @@ test('a bundled Maestro replay resolves runFlow includes from the bundle, not th
 test('a Maestro include missing from the bundle fails naming the include path', async () => {
   const root = mkdtempForTestSync('agent-device-replay-maestro-missing-include-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  sessionStore.set('default', makeIosSession('default'));
+  sessionStore.publish('default', makeIosSession('default'));
   const flowPath = path.join(root, 'flow.yaml');
   const flow = 'appId: com.example.app\n---\n- runFlow: absent.yaml\n';
   fs.writeFileSync(flowPath, flow);
@@ -141,7 +141,7 @@ test('a Maestro include missing from the bundle fails naming the include path', 
 test('a request carrying only a path is refused with the client-must-send-sources message', async () => {
   const root = mkdtempForTestSync('agent-device-replay-path-only-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  sessionStore.set('default', makeIosSession('default'));
+  sessionStore.publish('default', makeIosSession('default'));
   const scriptPath = path.join(root, 'flow.ad');
   fs.writeFileSync(scriptPath, 'open "Demo"\n');
 
@@ -171,7 +171,7 @@ test('a request carrying only a path is refused with the client-must-send-source
 test('a failing step reports the caller-resolved script path and line', async () => {
   const root = mkdtempForTestSync('agent-device-replay-source-display-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  sessionStore.set('default', makeIosSession('default'));
+  sessionStore.publish('default', makeIosSession('default'));
   const scriptPath = path.join(root, 'flow.ad');
   fs.writeFileSync(scriptPath, 'open "Demo"\nclick "Nope"\n');
 

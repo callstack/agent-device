@@ -73,7 +73,7 @@ function harness(
 function request(positionals: string[]) {
   const sessionName = 'clipboard-session';
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName, androidDevice));
+  sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
   mockResolveTargetDevice.mockResolvedValue(androidDevice);
   return {
     sessionName,

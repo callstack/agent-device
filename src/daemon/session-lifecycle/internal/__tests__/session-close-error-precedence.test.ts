@@ -38,7 +38,7 @@ test('targeted close preserves the platform-close AppError and still runs later 
       booted: true,
     },
   });
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const platformCloseError = new AppError('DEVICE_UNAVAILABLE', 'platform close failed', {
     reason: 'device_disconnected',
@@ -111,7 +111,7 @@ test('a failed platform close retains the device claim and reports it', async ()
     }
     const session = makeIosSimulatorRecordingSession(sessionStore, sessionName, { device });
     session.deviceClaim = acquired.ownership;
-    sessionStore.set(sessionName, session);
+    sessionStore.publish(sessionName, session);
 
     const platformCloseError = new AppError('DEVICE_UNAVAILABLE', 'platform close failed', {
       reason: 'device_disconnected',
@@ -228,7 +228,7 @@ test('a failing best-effort cleanup also retains the device claim and reports it
         ? Envelope
         : never,
     };
-    sessionStore.set(sessionName, session);
+    sessionStore.publish(sessionName, session);
 
     // The platform close itself succeeds; only the best-effort cleanup step fails, so the
     // blocking error arrives as the cleanup aggregate rather than as platformCloseError.
@@ -321,7 +321,7 @@ test('a successful close clears the device claim', async () => {
       ...makeSession(sessionName, device),
       deviceClaim: acquired.ownership,
     };
-    sessionStore.set(sessionName, session);
+    sessionStore.publish(sessionName, session);
 
     const response = await handleSessionCommands({
       req: {
@@ -362,7 +362,7 @@ test('targeted close skips platform dispatch and preserves the error when the re
     }),
     appBundleId: 'com.example.app',
   } as unknown as SessionState;
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const preCloseError = new AppError('RUNNER_UNAVAILABLE', 'runner stop failed', {
     reason: 'runner_stop_failed',

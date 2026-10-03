@@ -86,7 +86,10 @@ test('a record-and-heal divergence on the LAST step resumes with an empty tail a
   const root = mkdtempForTestSync('agent-device-replay-empty-tail-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const evidence = await recordArticleEvidence();
   const filePath = writeReplayFile(root, [
     'open "Demo" --relaunch',
@@ -213,7 +216,10 @@ test('a manual divergence (unannotated action-failure) on the LAST step resumes 
   const root = mkdtempForTestSync('agent-device-replay-empty-tail-manual-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   // No target-v1 annotation: an unannotated action-failure always routes to
   // the `manual` fail-safe (no recorded targetEvidence).
   const filePath = writeReplayFile(root, ['open "Demo" --relaunch', 'click label="Save"']);
@@ -327,7 +333,10 @@ test('a caution (identity-mismatch) divergence on the LAST step resumes with an 
   const root = mkdtempForTestSync('agent-device-replay-empty-tail-caution-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const SAVE_ANNOTATION =
     '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}';
   const filePath = writeReplayFile(root, [
@@ -451,7 +460,10 @@ test('--from N stays legal for a caution divergence even after the N + 1 empty-t
   const root = mkdtempForTestSync('agent-device-replay-empty-tail-caution-from-n-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const SAVE_ANNOTATION =
     '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}';
   const filePath = writeReplayFile(root, [
@@ -545,7 +557,10 @@ test('an unauthorized --from one past the plan end is rejected on an ARMED sessi
   const root = mkdtempForTestSync('agent-device-replay-empty-tail-state-repair-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const evidence = await recordArticleEvidence();
   const filePath = writeReplayFile(root, [
     'open "Demo" --relaunch',
@@ -628,7 +643,10 @@ test('a stale --plan-digest on an empty-tail resume is rejected WITHOUT consumin
   const root = mkdtempForTestSync('agent-device-replay-empty-tail-digest-retry-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const evidence = await recordArticleEvidence();
   const filePath = writeReplayFile(root, [
     'open "Demo" --relaunch',

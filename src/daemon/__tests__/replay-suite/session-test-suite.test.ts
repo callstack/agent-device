@@ -354,7 +354,7 @@ test('test stops before retrying when a rejected close leaves the prior macOS se
     },
     invoke: async (req) => {
       replayAttempts += 1;
-      sessionStore.set(req.session, makeMacOsSession(req.session));
+      sessionStore.publish(req.session, makeMacOsSession(req.session));
       return {
         ok: false,
         error: { code: 'COMMAND_FAILED', message: 'open "System Settings" failed' },
@@ -497,7 +497,7 @@ test('test aggregates snapshot diagnostics from replay session samples', async (
         backend: 'android',
         platform: 'android',
       });
-      sessionStore.set(req.session, session);
+      sessionStore.publish(req.session, session);
       return { ok: true, data: { replayed: 1, healed: 0 } };
     },
   });
@@ -554,7 +554,7 @@ test('test aggregates snapshot diagnostics from failed replay session samples', 
         backend: 'android',
         platform: 'android',
       });
-      sessionStore.set(req.session, session);
+      sessionStore.publish(req.session, session);
       return {
         ok: false,
         error: { code: 'COMMAND_FAILED', message: 'open failed' },

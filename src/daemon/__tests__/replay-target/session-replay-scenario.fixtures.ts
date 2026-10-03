@@ -22,7 +22,7 @@ function iosReplayScene(prefix: string): ReplaySessionScene {
   const root = mkdtempForTestSync(prefix);
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosAppSession(sessionName));
+  sessionStore.publish(sessionName, makeIosAppSession(sessionName));
   return { root, sessionStore, sessionName, logPath: path.join(root, 'daemon.log') };
 }
 

@@ -97,7 +97,7 @@ function seedSession(sessionName: string, sessionStore: ReturnType<typeof makeSe
   // The seed emulates a snapshot response that issued these refs: a complete,
   // active ref frame (ADR 0014).
   activateCompleteRefFrame(session);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   return session;
 }
 
@@ -381,7 +381,6 @@ test('press --settle rejects an expired-frame ref before dispatch or observation
   const session = seedSession(sessionName, sessionStore);
   // ADR 0014: a device action since the snapshot expired the ref frame.
   expireRefFrame(session);
-  sessionStore.set(sessionName, session);
   legacyDispatchCapture.mockRejectedValue(
     new Error('dispatch should not be called for an expired-frame ref'),
   );

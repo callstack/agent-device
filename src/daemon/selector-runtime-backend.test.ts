@@ -30,7 +30,7 @@ test('wait text passes its poll deadline signal to the Apple runner fast path', 
     createdAt: Date.now(),
     actions: [],
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   let observedSignal: AbortSignal | undefined;
   // R35: every selector runtime is bound, so the poll deadline must reach the platform through
   // the bound capture's per-capture signal — the seam the runner used to be reached through.
@@ -101,7 +101,7 @@ test('daemon wait stable pins private-ax on emitted snapshot runner requests', a
     actions: [],
     snapshot,
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   const capture = vi.fn(async (_input: CaptureSnapshotInput): Promise<SnapshotResult> => ({
     backend: 'xctest',
     producer: 'apple-runner',

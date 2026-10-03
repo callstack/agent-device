@@ -70,7 +70,7 @@ export async function runFindClickScenario(options: {
   const sessionStore = makeSessionStore();
   const sessionName = 'default';
   const session = options.session ?? makeSession(sessionName);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   if (options.nodes !== undefined) {
     mockDispatch.mockImplementation(async (_device, command) => {

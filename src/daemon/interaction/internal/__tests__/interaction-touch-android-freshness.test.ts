@@ -87,7 +87,7 @@ test('press @ref refreshes Android snapshot when freshness tracking is active', 
     baselineCount: 1,
     routeComparable: false,
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockCaptureSnapshotForSession.mockResolvedValue({
     nodes: [
@@ -159,7 +159,7 @@ test('ADR 0014: Android freshness cannot retarget an admitted ref by positional 
     baselineCount: 1,
     routeComparable: false,
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   // The freshness refresh returns a DIFFERENT element at @e1's index — after
   // navigation the button at that position is now "Cancel", not "Continue".
@@ -224,7 +224,7 @@ test('press @ref falls back to cached Android ref when freshness refresh fails',
     baselineCount: 1,
     routeComparable: true,
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockCaptureSnapshotForSession.mockRejectedValueOnce(new Error('uiautomator timeout'));
 
@@ -293,7 +293,7 @@ test('coordinate press preserves Android route freshness from last comparable sn
     backend: 'android',
     comparisonSafe: false,
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
     req: {

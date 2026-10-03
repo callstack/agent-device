@@ -31,7 +31,10 @@ test('a mid-loop throw reports exactly the artifacts of the steps that ran befor
   const root = mkdtempForTestSync('agent-device-replay-artifact-ledger-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
 
   // Two real files, so `collectReplayActionArtifactPaths`' existence check
   // keeps them (it drops any candidate path that is not a file on disk).
@@ -87,7 +90,10 @@ test('a completed run reports every step’s artifacts through the threaded ledg
   const root = mkdtempForTestSync('agent-device-replay-artifact-ledger-ok-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
 
   const firstArtifact = path.join(root, 'step-1.png');
   const secondArtifact = path.join(root, 'step-2.png');
