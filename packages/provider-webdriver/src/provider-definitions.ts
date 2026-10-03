@@ -1,5 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import type { CloudArtifactsResult } from '@agent-device/contracts/observability';
 import type { LeaseLifecycleContext } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -17,7 +15,7 @@ import {
   buildBrowserStackCapabilities,
   createBrowserStackUploadApp,
   listBrowserStackCloudArtifacts,
-  uploadBrowserStackApp,
+  resolveBrowserStackAppReference,
 } from './browserstack.ts';
 import {
   buildBrowserStackDeviceFeatureCapabilities,
@@ -108,22 +106,24 @@ export function createCloudWebDriverProviderDefinitions(
               'providerOsVersion',
               'BrowserStack requires --provider-os-version <version>.',
             );
-            const app = await resolveBrowserStackAppReference({
-              clientVersion: dependencies.clientVersion,
-              app: requireFlag(
+            const app = await resolveBrowserStackAppReference(
+              requireFlag(
                 request,
                 'providerApp',
                 'BrowserStack requires --provider-app <bs://app-id-or-local-path>.',
               ),
-              cwd: request.cwd,
-              username,
-              accessKey,
-              uploadEndpoint: env.BROWSERSTACK_APP_UPLOAD_ENDPOINT,
-              // A local IPA/APK upload can run long (130 MB is routine); an
-              // upload is not a billed resource, so the request's cancellation
-              // may simply abort it — unlike the session creation that follows.
-              signal: request.signal,
-            });
+              {
+                clientVersion: dependencies.clientVersion,
+                username,
+                accessKey,
+                endpoint: env.BROWSERSTACK_APP_UPLOAD_ENDPOINT,
+                cwd: request.cwd,
+                // A local IPA/APK upload can run long (130 MB is routine); an
+                // upload is not a billed resource, so the request's cancellation
+                // may simply abort it — unlike the session creation that follows.
+                signal: request.signal,
+              },
+            );
             return {
               ...base,
               platform,
@@ -247,40 +247,6 @@ export function createCloudWebDriverProviderDefinitions(
       },
     },
   ];
-}
-
-async function resolveBrowserStackAppReference(options: {
-  clientVersion: string;
-  app: string;
-  cwd?: string;
-  username: string;
-  accessKey: string;
-  uploadEndpoint?: string;
-  signal?: AbortSignal;
-}): Promise<string> {
-  if (isProviderAppReference(options.app)) return options.app;
-  const appPath = path.resolve(options.cwd ?? process.cwd(), options.app);
-  if (!fs.existsSync(appPath)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'BrowserStack --provider-app must be a bs:// app id, URL, or existing local app path.',
-      { providerApp: options.app },
-    );
-  }
-  return await uploadBrowserStackApp(
-    appPath,
-    {
-      clientVersion: options.clientVersion,
-      username: options.username,
-      accessKey: options.accessKey,
-      endpoint: options.uploadEndpoint,
-    },
-    options.signal,
-  );
-}
-
-function isProviderAppReference(value: string): boolean {
-  return value.startsWith('bs://') || /^https?:\/\//.test(value);
 }
 
 function requireRequest(

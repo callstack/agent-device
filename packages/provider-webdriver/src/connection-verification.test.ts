@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import { createProviderWebDriver } from './index.ts';
 import type { RunHostCommand } from './dependencies.ts';
 
@@ -76,6 +77,52 @@ test('BrowserStack classifies rejected credentials without exposing them', async
   await assert.rejects(createProvider().verifyConnection(browserStackOptions), (error: unknown) => {
     assert.equal((error as { code?: string }).code, 'UNAUTHORIZED');
     assert.doesNotMatch(JSON.stringify(error), /browser-key/);
+    return true;
+  });
+});
+
+test('BrowserStack points HTTP failures at its service status and transport failures at the network', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => jsonResponse({}, 503)),
+  );
+  await assert.rejects(createProvider().verifyConnection(browserStackOptions), (error: unknown) => {
+    assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
+    assert.equal(
+      (error as { details?: { hint?: string } }).details?.hint,
+      'Retry connect or check the BrowserStack service status.',
+    );
+    return true;
+  });
+
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      throw new TypeError('fetch failed');
+    }),
+  );
+  await assert.rejects(createProvider().verifyConnection(browserStackOptions), (error: unknown) => {
+    assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
+    assert.equal(
+      (error as { details?: { hint?: string } }).details?.hint,
+      'Check network access to api-cloud.browserstack.com and retry connect.',
+    );
+    return true;
+  });
+});
+
+test('BrowserStack reports a non-JSON verification answer typed, with its status', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response('<html>maintenance</html>', { status: 200 })),
+  );
+
+  await assert.rejects(createProvider().verifyConnection(browserStackOptions), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'COMMAND_FAILED');
+    assert.equal(error.message, 'BrowserStack connection verification answer was not JSON.');
+    assert.equal(error.details?.status, 200);
+    assert.equal(error.details?.hint, 'Retry connect or check the BrowserStack service status.');
     return true;
   });
 });
