@@ -12,8 +12,7 @@ import { withDurableCaptureResourceFence, type DurableCaptureResourceFenceLease 
 import type {
   DurableCaptureFinishIntent,
   DurableCaptureRecordDefinition,
-  DurableCaptureResourceDefinition,
-  DurableCaptureSessionStore,
+  DurableCaptureSessionBinding,
 } from './definition.ts';
 import { capitalizeDurableCaptureLabel, durableCaptureDiagnosticPrefix } from './labels.ts';
 
@@ -21,18 +20,15 @@ export async function finishLiveDurableCapture<
   K extends string,
   H extends LiveResourceHandle<C>,
   C,
-  S,
 >(
-  definition: DurableCaptureResourceDefinition<K, H, C, S>,
+  definition: DurableCaptureRecordDefinition<K, C>,
   params: {
-    session: S;
-    sessionName: string;
-    sessionStore: DurableCaptureSessionStore<S>;
+    binding: DurableCaptureSessionBinding<K, H>;
     intent: DurableCaptureFinishIntent;
   },
   resourcePath: string,
 ): Promise<C> {
-  const active = definition.sessionSlot.read(params.session);
+  const active = params.binding.read();
   if (!active) throw new AppError('INVALID_ARGS', definition.messages.noActive);
   try {
     const result = await finishDurableCaptureHandle(definition, {
@@ -41,12 +37,12 @@ export async function finishLiveDurableCapture<
       resourcePath,
       intent: params.intent,
     });
-    clearLiveSlot(definition, params);
+    params.binding.clear(active);
     return result;
   } catch (error) {
     const record = definition.store.read(resourcePath);
     if (record.status === 'decoded' && record.envelope.lifecycle === 'completed') {
-      clearLiveSlot(definition, params);
+      params.binding.clear(active);
     }
     throw error;
   }
@@ -186,16 +182,6 @@ function emitFailedFinishCleanupDiagnostic<K extends string, C>(
   });
 }
 
-function clearLiveSlot<K extends string, H extends LiveResourceHandle<C>, C, S>(
-  definition: DurableCaptureResourceDefinition<K, H, C, S>,
-  params: { session: S; sessionName: string; sessionStore: DurableCaptureSessionStore<S> },
-): void {
-  params.sessionStore.set(
-    params.sessionName,
-    definition.sessionSlot.replace(params.session, undefined),
-  );
-}
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -204,17 +190,14 @@ export async function forceCleanupLiveDurableCapture<
   K extends string,
   H extends LiveResourceHandle<C>,
   C,
-  S,
 >(
-  definition: DurableCaptureResourceDefinition<K, H, C, S>,
+  definition: DurableCaptureRecordDefinition<K, C>,
   params: {
-    session: S;
-    sessionName?: string;
-    sessionStore?: DurableCaptureSessionStore<S>;
+    binding: DurableCaptureSessionBinding<K, H>;
     resourcePath: string;
   },
 ): Promise<void> {
-  const active = definition.sessionSlot.read(params.session);
+  const active = params.binding.read();
   if (!active) return;
   const outcome = await withDurableCaptureResourceFence({
     store: definition.store,
@@ -228,12 +211,7 @@ export async function forceCleanupLiveDurableCapture<
     },
   });
   requireConfirmedDurableCaptureCleanup(definition, outcome);
-  if (params.sessionStore && params.sessionName) {
-    params.sessionStore.set(
-      params.sessionName,
-      definition.sessionSlot.replace(params.session, undefined),
-    );
-  }
+  params.binding.clear(active);
 }
 
 export function transitionCleanupOutcome<K extends string>(

@@ -25,9 +25,7 @@ test('one coordinator exposes the typed manifest and all lifecycle entrypoints',
   await expect(
     testCaptureResource.finishLive({
       intent: 'capture',
-      session: active,
-      sessionName: context.sessionName,
-      sessionStore: context.sessionStore,
+      binding: context.binding,
     }),
   ).resolves.toMatchObject({ outputPath: '/tmp/app.log', completedAt: 2 });
   expect(context.sessionStore.get(context.sessionName)?.appLog).toBeUndefined();

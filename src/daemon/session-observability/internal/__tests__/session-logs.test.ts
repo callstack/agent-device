@@ -269,7 +269,7 @@ test('rejected pending cleanup retains cleanup-pending record and blocks replace
 test('post-transfer SessionStore failure disposes the transferred handle and preserves primary error', async () => {
   const { sessionStore, sessionName } = openSession();
   const primary = new Error('store adoption failed');
-  vi.spyOn(sessionStore, 'set').mockImplementationOnce(() => {
+  vi.spyOn(sessionStore, 'update').mockImplementationOnce(() => {
     throw primary;
   });
   const response = await runLogs(sessionStore, sessionName, ['start'], {}, runtime.bindDevice);

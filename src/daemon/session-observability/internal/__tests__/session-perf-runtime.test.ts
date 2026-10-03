@@ -201,6 +201,42 @@ test('perf native capture is adopted durably and stop uses the live handle witho
   );
 });
 
+test.each(['shutdown', 'retire'] as const)(
+  'perf refuses native startup after %s during binding',
+  async (change) => {
+    const sessionStore = makeStore();
+    const ref = sessionStore.lookup('android')!;
+    const start = vi.fn<PerfRuntimeOperations['perfNativeCaptureStart']>();
+    const runtime = createPerfRuntime({ perfNativeCaptureStart: start });
+    const bindDevice: BindDeviceRuntime = async (device, use) => {
+      const bound = await runtime.bindDevice(device, use);
+      if (change === 'shutdown') sessionStore.closeAdmission();
+      else sessionStore.retire(ref);
+      return bound;
+    };
+    const response = await handleSessionObservabilityCommands({
+      req: {
+        token: 't',
+        session: 'android',
+        command: 'perf',
+        positionals: ['trace', 'start', 'xctrace'],
+      },
+      sessionName: 'android',
+      sessionStore,
+      inspectFacts: runtime.inspectFacts,
+      bindDevice,
+      perfCaptureAdmissionLedger: createPerfCaptureAdmissionLedger(),
+    });
+    assert.equal(response?.ok, false);
+    if (response && !response.ok)
+      assert.equal(
+        response.error.details?.reason,
+        change === 'shutdown' ? 'daemon_shutting_down' : 'session_lifetime_ended',
+      );
+    assert.equal(start.mock.calls.length, 0);
+  },
+);
+
 function makeStore() {
   const sessionStore = makeSessionStore('agent-device-perf-runtime-');
   sessionStore.set('android', makeAndroidSession('android', { appBundleId: 'com.example.app' }));

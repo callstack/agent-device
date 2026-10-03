@@ -132,7 +132,7 @@ test('daemon shutdown settles fenced app-log cleanup before finalization can rel
   const beforeDelete = vi.fn(async () => {});
 
   const teardown = teardownDaemonSessionForShutdown({
-    session,
+    ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stderr: { write: () => {} },
     beforeDelete,

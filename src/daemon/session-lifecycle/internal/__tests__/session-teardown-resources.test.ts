@@ -109,14 +109,12 @@ test('daemon resource teardown finalizes recording before lifecycle runner dispo
 
   await teardownSessionResources({
     appLog: 'already-settled',
-    session,
-    sessionName,
+    ref: sessionStore.lookup(sessionName)!,
     sessionStore,
   });
   await teardownSessionResources({
     appLog: 'already-settled',
-    session,
-    sessionName,
+    ref: sessionStore.lookup(sessionName)!,
     sessionStore,
   });
 
@@ -145,8 +143,7 @@ test('daemon session teardown surfaces a recording finalization failure', async 
   await expect(
     teardownSessionResources({
       appLog: 'already-settled',
-      session,
-      sessionName,
+      ref: sessionStore.lookup(sessionName)!,
       sessionStore,
     }),
   ).rejects.toThrow(/recording: .*failed to stop recording/);
@@ -170,8 +167,7 @@ test('daemon session teardown retains recording evidence when finish and forced 
   await expect(
     teardownSessionResources({
       appLog: 'already-settled',
-      session,
-      sessionName,
+      ref: sessionStore.lookup(sessionName)!,
       sessionStore,
     }),
   ).rejects.toThrow(/recording: .*failed to stop recording/);
@@ -206,7 +202,8 @@ test('daemon session teardown stops Android snapshot helper session', async () =
   } as SessionState;
 
   const sessionStore = makeSessionStore();
-  await teardownSessionResources({ appLog: 'already-settled', session, sessionName, sessionStore });
+  const ref = sessionStore.publish(sessionName, session);
+  await teardownSessionResources({ appLog: 'already-settled', ref, sessionStore });
 
   expect(mockStopAndroidSnapshotHelperSessionForDevice).toHaveBeenCalledWith(session.device);
 });
@@ -237,8 +234,7 @@ test('daemon session teardown attempts every resource after an earlier cleanup r
   await expect(
     teardownSessionResources({
       appLog: 'already-settled',
-      session,
-      sessionName,
+      ref: sessionStore.lookup(sessionName)!,
       sessionStore,
     }),
   ).rejects.toMatchObject({
@@ -286,7 +282,11 @@ test('daemon session teardown closes an open web session immediately, not on age
   sessionStore.set(sessionName, session);
   mockRunCmd.mockResolvedValue(agentBrowserJsonResult({ success: true, data: {} }));
 
-  await teardownSessionResources({ appLog: 'already-settled', session, sessionName, sessionStore });
+  await teardownSessionResources({
+    appLog: 'already-settled',
+    ref: sessionStore.lookup(sessionName)!,
+    sessionStore,
+  });
 
   // A SIGTERM daemon shutdown (or an expired-session reap) tells agent-browser to close its
   // fleet right away, the same way an explicit `session close` does, instead of leaving the
@@ -309,7 +309,11 @@ test('daemon session teardown surfaces a web close failure through the cleanup-f
   );
 
   await expect(
-    teardownSessionResources({ appLog: 'already-settled', session, sessionName, sessionStore }),
+    teardownSessionResources({
+      appLog: 'already-settled',
+      ref: sessionStore.lookup(sessionName)!,
+      sessionStore,
+    }),
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     details: expect.objectContaining({
@@ -329,11 +333,12 @@ test('daemon session teardown never dispatches a web close for a non-web session
     booted: true,
   });
 
+  const sessionStore = makeSessionStore();
+  const ref = sessionStore.publish(sessionName, session);
   await teardownSessionResources({
     appLog: 'already-settled',
-    session,
-    sessionName,
-    sessionStore: makeSessionStore(),
+    ref,
+    sessionStore,
   });
 
   expect(mockRunCmd).not.toHaveBeenCalled();

@@ -1,3 +1,4 @@
+import { bindSessionPerfCapture } from '../session-capture-binding.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { AppError } from '@agent-device/kernel/errors';
@@ -102,6 +103,7 @@ test('a perf stop whose pull failed re-collects the device-side trace the first 
     },
   );
 
+  const binding = bindSessionPerfCapture(sessionStore, sessionStore.lookup(sessionName)!);
   const started = await startAndroidPerfCapture(device, localRuntimeOwner('android'), {
     sessionId: sessionName,
     appId: capture.packageName,
@@ -112,9 +114,7 @@ test('a perf stop whose pull failed re-collects the device-side trace the first 
   });
   await adoptStartedPerfCapture({
     admissionLedger: createPerfCaptureAdmissionLedger(),
-    session,
-    sessionName,
-    sessionStore,
+    binding,
     device,
     owner: localRuntimeOwner('android'),
     fence,
@@ -128,9 +128,7 @@ test('a perf stop whose pull failed re-collects the device-side trace the first 
   const stop = () =>
     finishLivePerfCapture({
       intent: 'capture',
-      session: sessionStore.get(sessionName) ?? session,
-      sessionName,
-      sessionStore,
+      binding,
     });
 
   await expect(stop()).rejects.toBe(pullFailure);
