@@ -35,6 +35,7 @@ vi.mock('../provider-webdriver.ts', () => ({
 afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 const mockedResolveCloudAccessForConnect = vi.mocked(resolveCloudAccessForConnect);

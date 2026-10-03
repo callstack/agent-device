@@ -115,8 +115,27 @@ test('Limrun verification reports a rejected instance token with the variables t
     }),
     (error: unknown) => {
       assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
-      assert.match(JSON.stringify(error), /LIM_IOS_INSTANCE_URL and LIM_IOS_INSTANCE_TOKEN/);
+      assert.match(JSON.stringify(error), /LIM_IOS_INSTANCE_URL and LIM_IOS_INSTANCE_TOKEN,/);
       assert.doesNotMatch(JSON.stringify(error), /lim_st_secret/);
+      return true;
+    },
+  );
+});
+
+test('Limrun Android verification failure names the ADB URL variable too', async () => {
+  instanceClients.createAndroid.mockRejectedValueOnce(new Error('adb endpoint refused'));
+
+  await assert.rejects(
+    verifyLimrunConnection({
+      instances: { android: { apiUrl: 'https://attached/api', token: 't', adbUrl: 'wss://adb' } },
+      clientVersion: '1.2.3',
+      platform: 'android',
+    }),
+    (error: unknown) => {
+      assert.match(
+        JSON.stringify(error),
+        /LIM_ANDROID_INSTANCE_TOKEN, and LIM_ANDROID_INSTANCE_ADB_URL/,
+      );
       return true;
     },
   );

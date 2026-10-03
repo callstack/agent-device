@@ -790,6 +790,31 @@ test('Limrun drives existing instances without an API key and never deletes them
   }
 });
 
+test('Limrun removes only its own port reverse mappings from an attached Android instance', async () => {
+  const runtime = new LimrunRuntime({ instances: { android: ATTACHED_ANDROID } });
+  const lease = { ...androidLease(), leaseId: 'lease-attached-android' };
+  vi.mocked(runCmd).mockImplementation(async (_command, args) => ({
+    stdout: args.includes('--list') ? 'host-7 tcp:8081 tcp:8081\nhost-9 tcp:8097 tcp:8097\n' : '',
+    stderr: '',
+    exitCode: 0,
+  }));
+
+  await allocateLimrunDevice(runtime, lease);
+  await runtime.configurePortReverse({
+    leaseId: lease.leaseId,
+    devicePort: 8097,
+    hostPort: 8097,
+    name: 'react-devtools',
+  });
+  await runtime.shutdown();
+
+  const removals = vi
+    .mocked(runCmd)
+    .mock.calls.map(([, args]) => args)
+    .filter((args) => args.includes('--remove'));
+  assert.deepEqual(removals, [['-s', '127.0.0.1:62001', 'reverse', '--remove', 'tcp:8097']]);
+});
+
 test('Limrun instance access wins over the API key for its platform only', async () => {
   const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', instances: { ios: ATTACHED_IOS } });
 

@@ -42,7 +42,7 @@ import { buildLimrunClientOptions, LIMRUN_CLIENT_HEADER } from './client-options
 import { resolveLimrunRuntimeInstance } from './runtime-instance.ts';
 import type { LimrunRequestOperationDrain } from './request-cancellation.ts';
 import type { LimrunAppAsset } from './app-catalog.ts';
-import type { LimrunInstanceAccess } from './instance-access.ts';
+import { isAttachedLimrunInstanceId, type LimrunInstanceAccess } from './instance-access.ts';
 
 type LimrunRuntimeSession = LimrunIosSession | LimrunAndroidSession;
 
@@ -333,7 +333,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     lease: DeviceLease,
   ): Promise<Record<string, unknown> | undefined> {
     const platform = platformForLimrunLeaseBackend(lease.backend);
-    if (!platform || this.isAttached(platform)) return undefined;
+    if (!platform || this.options.instances?.[platform]) return undefined;
     const limrun = this.orgClient('Recovering an expired lease');
     const labelSelector = `provider=${LIMRUN_PROVIDER},leaseId=${lease.leaseId}`;
     const instances =
@@ -355,17 +355,13 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private async terminateSession(session: LimrunRuntimeSession): Promise<void> {
     session.client.disconnect();
     if (session.platform === 'android') await cleanupLimrunAndroidAdbTunnel(session);
-    if (this.isAttached(session.platform)) return;
+    if (isAttachedLimrunInstanceId(session.instanceId)) return;
     const limrun = this.orgClient('Deleting an instance');
     if (session.platform === 'ios') {
       await limrun.iosInstances.delete(session.instanceId);
     } else {
       await limrun.androidInstances.delete(session.instanceId);
     }
-  }
-
-  private isAttached(platform: LimrunPlatform): boolean {
-    return this.options.instances?.[platform] !== undefined;
   }
 
   private orgClient(
@@ -409,18 +405,10 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   }
 
   async reconnectAppLogReader(descriptor: LimrunAppLogDescriptor, signal?: AbortSignal) {
-    const { reconnectAttachedLimrunAppLogReader, reconnectLimrunAppLogReader } =
-      await import('./app-log-reconnect.ts');
-    const instances = this.options.instances;
-    if (instances && this.isAttached(descriptor.platform)) {
-      return await reconnectAttachedLimrunAppLogReader({
-        instances,
-        descriptor,
-        dependencies: this.dependencies,
-      });
-    }
+    const { reconnectLimrunAppLogReader } = await import('./app-log-reconnect.ts');
     return await reconnectLimrunAppLogReader({
-      limrun: this.orgClient('Reconnecting app logs'),
+      orgClient: () => this.orgClient('Reconnecting app logs'),
+      instances: this.options.instances,
       descriptor,
       dependencies: this.dependencies,
       signal,

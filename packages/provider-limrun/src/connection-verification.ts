@@ -117,7 +117,10 @@ async function verifyAttachedInstance(
   connect: InstanceConnector,
 ): Promise<LimrunConnectionVerification> {
   const platformName = platform === 'android' ? 'Android' : 'iOS';
-  const envPrefix = platform === 'android' ? 'LIM_ANDROID' : 'LIM_IOS';
+  const instanceVars =
+    platform === 'android'
+      ? 'LIM_ANDROID_INSTANCE_URL, LIM_ANDROID_INSTANCE_TOKEN, and LIM_ANDROID_INSTANCE_ADB_URL'
+      : 'LIM_IOS_INSTANCE_URL and LIM_IOS_INSTANCE_TOKEN';
   try {
     const client = await connect();
     client.disconnect();
@@ -126,7 +129,7 @@ async function verifyAttachedInstance(
       'COMMAND_FAILED',
       `Limrun ${platformName} instance access failed.`,
       {
-        hint: `Check ${envPrefix}_INSTANCE_URL and ${envPrefix}_INSTANCE_TOKEN, and that the instance is still running.`,
+        hint: `Check ${instanceVars}, and that the instance is still running.`,
       },
       error,
     );

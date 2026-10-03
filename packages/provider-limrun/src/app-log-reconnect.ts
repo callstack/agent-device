@@ -8,42 +8,55 @@ import type { LimrunAppLogReader } from './app-log-poller.ts';
 import type { LimrunAppLogReconnectOutcome } from './app-log-runtime.ts';
 import {
   attachedLimrunInstanceId,
+  isAttachedLimrunInstanceId,
   type LimrunAndroidInstanceAccess,
   type LimrunInstanceAccess,
   type LimrunIosInstanceAccess,
 } from './instance-access.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 
+/**
+ * Reopens the reader a descriptor names. An attached instance reconnects with its own access; an
+ * instance this runtime created is looked up through the organization API.
+ */
 export async function reconnectLimrunAppLogReader(options: {
-  limrun: Limrun;
+  orgClient: () => Limrun;
+  instances?: LimrunInstanceAccess;
   descriptor: LimrunAppLogDescriptor;
   dependencies: LimrunRuntimeDependencies;
   signal?: AbortSignal;
 }): Promise<LimrunAppLogReconnectOutcome> {
+  options.signal?.throwIfAborted();
+  if (isAttachedLimrunInstanceId(options.descriptor.instanceId)) {
+    return await reconnectAttached(
+      options.instances ?? {},
+      options.descriptor,
+      options.dependencies,
+    );
+  }
+  const limrun = options.orgClient();
   try {
     return options.descriptor.platform === 'ios'
-      ? await reconnectIos(options)
-      : await reconnectAndroid(options);
+      ? await reconnectIos({ ...options, limrun })
+      : await reconnectAndroid({ ...options, limrun });
   } catch (error) {
     if (error instanceof NotFoundError) return { status: 'missing' };
     throw error;
   }
 }
 
-/** Reopens a reader on the attached instance, if it is still the one the descriptor names. */
-export async function reconnectAttachedLimrunAppLogReader(options: {
-  instances: LimrunInstanceAccess;
-  descriptor: LimrunAppLogDescriptor;
-  dependencies: LimrunRuntimeDependencies;
-}): Promise<LimrunAppLogReconnectOutcome> {
-  const { descriptor, instances } = options;
+async function reconnectAttached(
+  instances: LimrunInstanceAccess,
+  descriptor: LimrunAppLogDescriptor,
+  dependencies: LimrunRuntimeDependencies,
+): Promise<LimrunAppLogReconnectOutcome> {
   if (descriptor.platform === 'ios') {
     return isDescribedInstance(instances.ios, descriptor)
       ? await openIosReader(instances.ios, descriptor)
       : { status: 'ownership-lost' };
   }
   return isDescribedInstance(instances.android, descriptor)
-    ? await openAndroidReader(instances.android, descriptor, options.dependencies)
+    ? await openAndroidReader(instances.android, descriptor, dependencies)
     : { status: 'ownership-lost' };
 }
 

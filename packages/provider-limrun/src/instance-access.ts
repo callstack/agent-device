@@ -19,10 +19,17 @@ export type LimrunInstanceAccess = Readonly<{
   android?: LimrunAndroidInstanceAccess;
 }>;
 
+const ATTACHED_INSTANCE_ID_PREFIX = 'attached-';
+
 /**
  * A stable local id for an attached instance, derived from the API URL that identifies it, so the
  * same instance keeps the same id across daemon restarts.
  */
 export function attachedLimrunInstanceId(apiUrl: string): string {
-  return `attached-${createHash('sha256').update(apiUrl).digest('hex').slice(0, 12)}`;
+  return `${ATTACHED_INSTANCE_ID_PREFIX}${createHash('sha256').update(apiUrl).digest('hex').slice(0, 12)}`;
+}
+
+/** Whether an instance id names an attached instance, which someone else created and owns. */
+export function isAttachedLimrunInstanceId(instanceId: string): boolean {
+  return instanceId.startsWith(ATTACHED_INSTANCE_ID_PREFIX);
 }

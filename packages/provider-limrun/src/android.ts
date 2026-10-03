@@ -21,6 +21,7 @@ import type {
   LimrunRuntimeDependencies,
 } from './runtime-dependencies.ts';
 import type { AndroidAdbInvocation } from '@agent-device/platform-android/mechanics';
+import { isAttachedLimrunInstanceId } from './instance-access.ts';
 import { normalizeOptionalString } from './strings.ts';
 import {
   awaitLimrunDeploymentOperation,
@@ -165,9 +166,10 @@ async function cleanupAndroidPortReverse(session: LimrunAndroidSession): Promise
   const mappings = await reverse.list().catch(() => []);
   const owners = new Set<string>();
   const unownedLocals: LimrunPortReverseEndpoint[] = [];
+  const sharedDevice = isAttachedLimrunInstanceId(session.instanceId);
   for (const mapping of mappings) {
     if (mapping.ownerId) owners.add(mapping.ownerId);
-    else unownedLocals.push(mapping.local);
+    else if (!sharedDevice) unownedLocals.push(mapping.local);
   }
   await Promise.allSettled([
     ...[...owners].map(async (ownerId) => await reverse.removeAllOwned(ownerId)),
