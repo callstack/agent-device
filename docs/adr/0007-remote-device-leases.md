@@ -67,6 +67,16 @@ one minute, while a cloud WebDriver connection profile asks for ten. A single co
 longer than its own lease is therefore ordinary on the default and only reachable through a profile
 on the longer one.
 
+## Provider allocation
+
+Allocation is admitted work too. The registry records a lease before a hosted provider creates the
+session behind it, and creating that session can take longer than the lease's inactivity TTL, so a
+lease timed from its record was already expired, or nearly so, when its client first received it, and
+the paid session it pointed at was orphaned. The allocation therefore holds a work pass while the
+provider allocates: the lease cannot expire underneath it, and a successful allocation still wanted by
+its requester starts the inactivity TTL from the moment allocation completed. A requester that hung up
+preserves nothing, and its allocation is released as before.
+
 ## Client-side work that precedes admission
 
 Protecting admitted work covers nothing that happens before a request is admitted. Installing an

@@ -3,6 +3,7 @@ import {
   type CloudProviderProfileFields,
 } from '@agent-device/contracts/remote';
 import { AppError } from '@agent-device/kernel/errors';
+import { requireProviderDeviceOrientation } from './webdriver-utils.ts';
 import type { CloudWebDriverPlatform } from './runtime.ts';
 
 /**
@@ -199,24 +200,11 @@ function assignStringField(
   value: string,
 ): void {
   if (spec.field === 'providerDeviceOrientation') {
-    fields.providerDeviceOrientation = requireDeviceOrientation(spec, value);
+    fields.providerDeviceOrientation = requireProviderDeviceOrientation(spec, value);
     return;
   }
   if (spec.field === 'providerNoResignApp') return;
   fields[spec.field] = value;
-}
-
-function requireDeviceOrientation(
-  spec: BrowserStackDeviceFeatureSpec,
-  value: string,
-): (typeof PROVIDER_DEVICE_ORIENTATIONS)[number] {
-  const match = PROVIDER_DEVICE_ORIENTATIONS.find((orientation) => orientation === value);
-  if (match) return match;
-  throw new AppError('INVALID_ARGS', `Invalid ${spec.flag} value: ${value}.`, {
-    hint: `Use ${PROVIDER_DEVICE_ORIENTATIONS.join('|')}.`,
-    flag: spec.flag,
-    capability: spec.capability,
-  });
 }
 
 function requireSupportedPlatform(

@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { handleLeaseCommands } from '../lease.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
+import type { DaemonRequest } from '../../daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import type { DeviceLease } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
 import {
@@ -92,4 +94,84 @@ test('activation drains canceled provider allocation and its release cleanup', a
   } finally {
     clearRequestCanceled(requestId);
   }
+});
+
+function allocateRequest(): DaemonRequest {
+  return {
+    token: 'test-token',
+    session: 'lease-ttl-test',
+    command: 'lease_allocate',
+    positionals: [],
+    flags: {},
+    meta: {
+      tenantId: 'tenant-a',
+      runId: 'run-a',
+      clientId: 'client-a',
+      leaseBackend: 'android-instance',
+      leaseProvider: 'cloud',
+    },
+  };
+}
+
+// A hosted provider can spend longer creating its session than the lease's inactivity
+// TTL. Stamping the TTL when the registry record is created handed the client a lease
+// that was already expired, and the paid session behind it was orphaned.
+test('a lease whose provider allocation outlasts its TTL is active when allocation returns', async () => {
+  let now = 0;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 60_000 });
+  const response = await handleLeaseCommands({
+    req: allocateRequest(),
+    sessionName: 'lease-ttl-test',
+    sessionStore: makeSessionStore('agent-device-slow-provider-'),
+    leaseRegistry: registry,
+    leaseLifecycleProvider: {
+      allocate: async (lease) => {
+        now = 80_000;
+        assert.deepEqual(
+          registry.consumeExpiredLeases(),
+          [],
+          'the sweeper must not reap a lease mid-allocation',
+        );
+        now = 90_000;
+        return { providerSessionId: `session-${lease.leaseId}` };
+      },
+    },
+  });
+
+  assert.equal(response?.ok, true);
+  const lease = (response?.ok ? response.data?.lease : undefined) as DeviceLease;
+  assert.equal(lease.expiresAt, 150_000);
+  assert.deepEqual(
+    registry.listActiveLeases().map((entry) => [entry.leaseId, entry.expiresAt]),
+    [[lease.leaseId, 150_000]],
+  );
+  now = 149_999;
+  registry.assertLeaseAdmission({
+    leaseId: lease.leaseId,
+    tenantId: lease.tenantId,
+    runId: lease.runId,
+    leaseBackend: lease.backend,
+    leaseProvider: lease.leaseProvider,
+  });
+});
+
+test('a lease allocated without a provider keeps the TTL it was created with', async () => {
+  let now = 5_000;
+  const registry = new LeaseRegistry({
+    now: () => (now += 1_000),
+    defaultLeaseTtlMs: 60_000,
+  });
+  const response = await handleLeaseCommands({
+    req: allocateRequest(),
+    sessionName: 'lease-ttl-test',
+    sessionStore: makeSessionStore('agent-device-no-provider-'),
+    leaseRegistry: registry,
+  });
+
+  assert.equal(response?.ok, true);
+  const lease = (response?.ok ? response.data?.lease : undefined) as DeviceLease;
+  assert.ok(now > lease.createdAt, 'the clock advanced while the lease was allocated');
+  assert.equal(lease.heartbeatAt, lease.createdAt);
+  assert.equal(lease.expiresAt, lease.createdAt + 60_000);
+  assert.deepEqual(registry.listActiveLeases(), [lease]);
 });

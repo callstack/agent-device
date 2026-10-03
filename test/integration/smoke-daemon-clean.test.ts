@@ -1,3 +1,4 @@
+import { cleanupDaemonTestState } from './support/daemon-test-cleanup.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -5,8 +6,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
 import { runCmdSync } from '@agent-device/host-kit/command';
-import { isProcessAlive } from '@agent-device/host-kit/process';
-import { stopProcessForTakeover } from '../../src/daemon-process.ts';
+import { isProcessAlive, readProcessStartTime } from '@agent-device/host-kit/process';
+import { stopAndRetireDaemon } from '../../src/daemon-registration-owner.ts';
+import { resolveDaemonPaths } from '../../src/daemon-resolution.ts';
 
 import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import { runCliJson } from './test-helpers.ts';
@@ -15,6 +17,37 @@ type DaemonInfo = {
   pid: number;
   processStartTime?: string;
 };
+
+test('clean daemon retains metadata when a live recorded process is not a verified daemon', () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-clean-retained-'));
+  const identity = { pid: process.pid, processStartTime: readProcessStartTime(process.pid) };
+  assert.ok(identity.processStartTime);
+  const contents = JSON.stringify(identity);
+  fs.writeFileSync(path.join(stateDir, 'daemon.json'), contents);
+  fs.writeFileSync(path.join(stateDir, 'daemon.lock'), contents);
+  try {
+    const cleanup = runCmdSync(
+      process.execPath,
+      ['--experimental-strip-types', 'scripts/clean-daemon.ts'],
+      {
+        env: { ...process.env, AGENT_DEVICE_STATE_DIR: stateDir },
+        timeoutMs: 5_000,
+        allowFailure: true,
+      },
+    );
+    assert.notEqual(cleanup.exitCode, 0, 'unconfirmed exit cannot complete cleanup');
+    assert.match(
+      cleanup.stderr,
+      /Daemon cleanup retained state because retirement could not be confirmed/,
+    );
+    assert.match(cleanup.stderr, /exit-unconfirmed/);
+    assert.equal(fs.readFileSync(path.join(stateDir, 'daemon.json'), 'utf8'), contents);
+    assert.equal(fs.readFileSync(path.join(stateDir, 'daemon.lock'), 'utf8'), contents);
+    assert.equal(isProcessAlive(process.pid), true);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
 
 test('clean daemon script stops a live daemon before removing metadata', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) {
@@ -47,14 +80,34 @@ test('clean daemon script stops a live daemon before removing metadata', async (
     // leave only classified artifacts in its state dir.
     await assertNoDaemonLeaks({ stateDir, daemonPids: [info.pid], phase: 'after-shutdown' });
   } finally {
-    if (info) {
-      await stopProcessForTakeover(info.pid, {
-        termTimeoutMs: 1_500,
-        killTimeoutMs: 1_500,
-        expectedStartTime: info.processStartTime,
-      });
-    }
-    fs.rmSync(stateDir, { recursive: true, force: true });
+    await cleanupDaemonTestState(stateDir, info ?? null);
+  }
+});
+
+test('forced retirement waits for a real daemon and reclaims its abandoned registration claim', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-forced-retirement-'));
+  let info: DaemonInfo | undefined;
+  try {
+    const cli = runCliJson(['session', 'list', '--json', '--state-dir', stateDir]);
+    assert.equal(cli.status, 0, `${cli.stderr}\n${cli.stdout}`);
+    info = readDaemonInfo(stateDir);
+    const paths = resolveDaemonPaths(stateDir);
+    assert.equal(fs.existsSync(paths.lockPath), true);
+    const result = await stopAndRetireDaemon({
+      paths,
+      observed: { pid: info.pid, startTime: info.processStartTime ?? null },
+      mode: 'force',
+    });
+    assert.equal(result.status, 'retired', JSON.stringify(result));
+    if (result.status !== 'retired') assert.fail('retirement not confirmed');
+    assert.equal(result.termination.mode, 'forced');
+    assert.equal(result.removedInfo, true);
+    assert.equal(isProcessAlive(info.pid), false);
+    assert.equal(fs.existsSync(paths.infoPath), false);
+    assert.equal(fs.existsSync(paths.lockPath), false);
+  } finally {
+    await cleanupDaemonTestState(stateDir, info ?? null);
   }
 });
 

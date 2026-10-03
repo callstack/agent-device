@@ -2,7 +2,11 @@ import path from 'node:path';
 import type { LocalInstallSource } from '@agent-device/kernel/contracts';
 import { readIosBundleInfo } from './bundle-info.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { extractArchiveSafely, ArchiveBudget } from '@agent-device/host-kit/archive';
+import {
+  archiveTypeFromPath,
+  extractArchiveSafely,
+  ArchiveBudget,
+} from '@agent-device/host-kit/archive';
 
 import {
   installArtifactArchiveBudget,
@@ -32,6 +36,7 @@ type IosPayloadAppBundle = {
 export type PreparedIosInstallArtifact = {
   archivePath?: string;
   installablePath: string;
+  uploadPath?: string;
   bundleId?: string;
   appName?: string;
   cleanup: () => Promise<void>;
@@ -70,9 +75,11 @@ async function prepareIosInstallArtifactInScope(
         ? materialized.installablePath
         : undefined);
 
+    const uploadPath = iosUploadPath(materialized);
     return {
       archivePath,
       installablePath: resolvedInstallable.installPath,
+      ...(uploadPath ? { uploadPath } : {}),
       bundleId: bundleInfo.bundleId,
       appName: bundleInfo.appName,
       cleanup: async () => {
@@ -91,6 +98,24 @@ async function prepareIosInstallArtifactInScope(
 }
 
 export { readIosBundleInfo } from './bundle-info.ts';
+
+/**
+ * The installable is an extracted `.app` directory, which no hosted upload API accepts. The file
+ * that carries it is the `.ipa` it was unpacked from, or the zip the `.app` was extracted from
+ * directly; an outer archive that merely wrapped either is never it.
+ */
+function iosUploadPath(materialized: {
+  containingArchivePath?: string;
+  installablePath: string;
+}): string | undefined {
+  if (materialized.installablePath.toLowerCase().endsWith('.ipa')) {
+    return materialized.installablePath;
+  }
+  const { containingArchivePath } = materialized;
+  return containingArchivePath && archiveTypeFromPath(containingArchivePath) === 'zip'
+    ? containingArchivePath
+    : undefined;
+}
 
 async function resolveIosInstallablePath(
   appPath: string,

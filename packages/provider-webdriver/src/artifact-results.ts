@@ -28,3 +28,18 @@ export function unavailableCloudArtifactsResult(options: {
     message: options.error instanceof Error ? options.error.message : String(options.error),
   };
 }
+
+/** A ready URL artifact read off a provider's session-details record, or nothing when the field is absent. */
+export function urlArtifactFromDetails(
+  provider: string,
+  providerSessionId: string,
+  details: Record<string, unknown>,
+  field: string,
+  kind: CloudArtifact['kind'],
+  name: string,
+): CloudArtifact | undefined {
+  const value = details[field];
+  const url = typeof value === 'string' ? value.trim() : '';
+  if (url.length === 0) return undefined;
+  return { provider, providerSessionId, kind, name, url, availability: 'ready' };
+}

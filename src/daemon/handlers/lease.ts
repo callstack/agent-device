@@ -71,20 +71,28 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         providerRuntimeRequiredIds,
       );
       const lease = leaseRegistry.allocateLease(leaseScopeToAllocateRequest(leaseScope));
+      const requestId = req.meta?.requestId;
       return await leaseRegistry.runDeviceMutation(lease, async () => {
         let providerData: Record<string, unknown> | undefined;
+        // A hosted provider can take longer than the lease TTL to create its session; the work
+        // pass keeps the lease alive until it does, and ending the pass restarts the TTL then.
+        const work = leaseLifecycleProvider?.allocate
+          ? leaseRegistry.retainLeaseWork(lease, () => !isRequestCanceled(requestId))
+          : undefined;
         try {
           providerData = await leaseLifecycleProvider?.allocate?.(lease, {
             ...leaseLifecycleContext(req),
-            signal: getRequestSignal(req.meta?.requestId),
+            signal: getRequestSignal(requestId),
             deadline: Date.now() + LEASE_ALLOCATION_BUDGET_MS,
           });
           recordProviderSession(leaseRegistry, lease, providerData);
         } catch (error) {
           leaseRegistry.releaseLease(leaseReleaseRequestFor(lease));
           throw error;
+        } finally {
+          work?.release();
         }
-        if (isRequestCanceled(req.meta?.requestId)) {
+        if (isRequestCanceled(requestId)) {
           // The requester left while the provider was allocating; the lease it
           // produced is real (and billed) and nobody will ever release it.
           throw await releaseAllocationForGoneRequester(
@@ -93,9 +101,10 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
             leaseRegistry,
           );
         }
+        const allocated = leaseRegistry.getLease(leaseReleaseRequestFor(lease)) ?? lease;
         return {
           ok: true,
-          data: { lease, ...(providerData ? { provider: providerData } : {}) },
+          data: { lease: allocated, ...(providerData ? { provider: providerData } : {}) },
         };
       });
     }

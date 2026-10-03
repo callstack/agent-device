@@ -1,7 +1,12 @@
 import fs from 'node:fs';
+import { AppError } from '@agent-device/kernel/errors';
 import { shellQuote } from '@agent-device/kernel/device-shell';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { isAgentDeviceDaemonProcess, stopProcessForTakeover } from '../daemon-process.ts';
+import {
+  isAgentDeviceDaemonProcess,
+  stopDaemonProcess,
+  type DaemonTerminationResult,
+} from '../daemon-process.ts';
 
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 
@@ -198,11 +203,15 @@ export async function cleanupFailedDaemonStartupMetadata(
         result.retainedLockProcess = true;
       } else {
         if (liveLockProcess) {
-          await stopProcessForTakeover(lockInfo.pid, {
-            termTimeoutMs: DAEMON_TAKEOVER_TERM_TIMEOUT_MS,
-            killTimeoutMs: DAEMON_TAKEOVER_KILL_TIMEOUT_MS,
-            expectedStartTime: lockInfo.processStartTime,
-          });
+          const termination = await stopDaemonProcess(
+            { pid: lockInfo.pid, startTime: lockInfo.processStartTime ?? null },
+            {
+              mode: 'graceful',
+              termTimeoutMs: DAEMON_TAKEOVER_TERM_TIMEOUT_MS,
+              killTimeoutMs: DAEMON_TAKEOVER_KILL_TIMEOUT_MS,
+            },
+          );
+          requireDaemonExit(termination);
           result.stoppedLockProcess = true;
         }
         removeDaemonLock(paths.lockPath);
@@ -246,11 +255,26 @@ export async function recoverDaemonLockHolder(paths: DaemonPaths): Promise<boole
   return false;
 }
 
-export async function stopDaemonProcessForTakeover(info: DaemonInfo): Promise<void> {
-  await stopProcessForTakeover(info.pid, {
-    termTimeoutMs: DAEMON_TAKEOVER_TERM_TIMEOUT_MS,
-    killTimeoutMs: DAEMON_TAKEOVER_KILL_TIMEOUT_MS,
-    expectedStartTime: info.processStartTime,
+export async function stopDaemonProcessForTakeover(
+  info: DaemonInfo,
+): Promise<DaemonTerminationResult> {
+  const termination = await stopDaemonProcess(
+    { pid: info.pid, startTime: info.processStartTime ?? null },
+    {
+      mode: 'graceful',
+      termTimeoutMs: DAEMON_TAKEOVER_TERM_TIMEOUT_MS,
+      killTimeoutMs: DAEMON_TAKEOVER_KILL_TIMEOUT_MS,
+    },
+  );
+  requireDaemonExit(termination);
+  return termination;
+}
+
+function requireDaemonExit(termination: DaemonTerminationResult): void {
+  if (termination.status !== 'retained') return;
+  throw new AppError('COMMAND_FAILED', 'Daemon exit could not be confirmed.', {
+    reason: 'daemon_exit_unconfirmed',
+    termination,
   });
 }
 

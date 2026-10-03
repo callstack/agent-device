@@ -13,3 +13,21 @@ export function isCloudWebDriverProviderName(
 ): provider is CloudWebDriverKnownProviderName {
   return provider !== undefined && CLOUD_WEBDRIVER_KNOWN_PROVIDERS.has(provider);
 }
+
+const BROWSERSTACK_APP_SCHEME = 'bs://';
+
+/**
+ * URI schemes are case-insensitive, but BrowserStack only matches the lower-case spelling, so
+ * `BS://id` is returned as `bs://id`. Anything without the scheme returns undefined.
+ */
+export function canonicalBrowserStackAppReference(app: string): string | undefined {
+  if (app.slice(0, BROWSERSTACK_APP_SCHEME.length).toLowerCase() !== BROWSERSTACK_APP_SCHEME) {
+    return undefined;
+  }
+  return `${BROWSERSTACK_APP_SCHEME}${app.slice(BROWSERSTACK_APP_SCHEME.length)}`;
+}
+
+/** An id outside this grammar would pass every local check and fail only at session creation. */
+export function isBrowserStackAppReference(reference: string): boolean {
+  return /^bs:\/\/[\w.-]+$/.test(reference);
+}

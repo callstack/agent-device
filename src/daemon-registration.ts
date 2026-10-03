@@ -4,7 +4,7 @@ import {
   ownerIdentityMatches,
   type OwnerIdentity,
 } from '@agent-device/host-kit/process';
-import { resolveDaemonPaths } from '../daemon-resolution.ts';
+import { resolveDaemonPaths } from './daemon-resolution.ts';
 
 /**
  * The daemon identity published in a state dir's `daemon.json`. It is the only
@@ -80,10 +80,11 @@ export type RegisteredDaemonOwnership =
 
 export function readRegisteredDaemonOwnership(
   infoPath: string,
-  owner: OwnerIdentity,
+  owner: OwnerIdentity | null,
 ): RegisteredDaemonOwnership {
   const record = readRegistration(infoPath);
   if (record.status !== 'registered') return { state: record.status };
+  if (!owner) return { state: 'unproven' };
   if (ownerIdentityDiffers(record.identity, owner)) {
     return { state: 'replaced', identity: record.identity };
   }

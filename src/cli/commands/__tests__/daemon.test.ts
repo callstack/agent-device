@@ -16,7 +16,7 @@ vi.mock('../../../daemon/daemon-stop.ts', () => ({
   readDaemonStopIdentity: mocks.readDaemonStopIdentity,
   stopDaemon: mocks.stopDaemon,
 }));
-vi.mock('../../../daemon/daemon-shutdown-report.ts', () => ({
+vi.mock('../../../daemon-shutdown-report.ts', () => ({
   readDaemonShutdownReport: mocks.readDaemonShutdownReport,
 }));
 vi.mock('../../../platform-runtime-daemon-owner-cleanup.ts', () => ({

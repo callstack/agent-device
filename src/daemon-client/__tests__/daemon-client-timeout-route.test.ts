@@ -27,9 +27,18 @@ import http from 'node:http';
 
 import path from 'node:path';
 import assert from 'node:assert/strict';
-import { beforeEach, test, vi } from 'vitest';
+import { beforeEach, afterEach, test, vi } from 'vitest';
 
-const { mockRunCmdSync } = vi.hoisted(() => ({ mockRunCmdSync: vi.fn() }));
+const { mockRunCmdSync, mockIsDaemon, mockStop } = vi.hoisted(() => ({
+  mockRunCmdSync: vi.fn(),
+  mockIsDaemon: vi.fn(),
+  mockStop: vi.fn(),
+}));
+vi.mock('../../daemon-process.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../daemon-process.ts')>()),
+  isAgentDeviceDaemonProcess: mockIsDaemon,
+  stopDaemonProcess: mockStop,
+}));
 
 vi.mock('@agent-device/host-kit/command', async () => {
   const actual = await vi.importActual<typeof import('@agent-device/host-kit/command')>(
@@ -120,7 +129,10 @@ function startHangingHttpServer(): Promise<{ server: http.Server; port: number }
 
 beforeEach(() => {
   mockRunCmdSync.mockReset();
+  mockIsDaemon.mockReset();
+  mockStop.mockReset();
 });
+afterEach(() => vi.restoreAllMocks());
 
 test('socket timeout: pkill cleanup still runs for a declared non-Apple platform that actually terminates a runner (rebound-session case), and the hint claims Apple on that evidence', async () => {
   // Simulates --session-lock strip silently rebinding this request onto an
@@ -265,4 +277,34 @@ test('remote HTTP timeout never runs the Apple pkill cleanup and uses the remote
   }
 
   assert.equal(mockRunCmdSync.mock.calls.length, 0);
+});
+
+test('a refused timeout fallback preserves the timeout without an unhandled rejection', async () => {
+  mockRunCmdSync.mockReturnValue({ exitCode: 1, stdout: '', stderr: '' });
+  mockIsDaemon.mockReturnValue(true);
+  mockStop.mockResolvedValue({ status: 'retained', reason: 'exit-timeout' });
+  vi.spyOn(process, 'kill').mockImplementation(() => {
+    throw Object.assign(new Error('refused'), { code: 'EPERM' });
+  });
+  const { server, port } = await startHangingSocketServer();
+  try {
+    await assert.rejects(
+      sendRequest(
+        { port, pid: 7, token: 'test-token', processStartTime: 'start' },
+        { ...buildRequest(undefined), command: 'open' },
+        'socket',
+        dummyStatePaths(),
+        TIMEOUT_MS,
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.details?.reason, 'daemon_transport_timeout');
+        return true;
+      },
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(mockStop.mock.calls.length, 1);
+  } finally {
+    server.close();
+  }
 });

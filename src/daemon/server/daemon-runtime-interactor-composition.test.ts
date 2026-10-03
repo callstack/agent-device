@@ -6,6 +6,11 @@ import { setActiveProviderDeviceRuntimes } from '../../provider-device-runtime.t
 import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { createDaemonProviderRuntimeComposition } from '../../provider-device-runtimes.ts';
+import {
+  DAEMON_STARTUP_EXIT_CODES,
+  tryAcquireDaemonRegistration,
+} from '../../daemon-registration-owner.ts';
+import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { interactorResolution } from '../interactor-resolution.ts';
 
 vi.mock('../../platform-runtime.ts', () => ({
@@ -85,7 +90,9 @@ test('daemon startup composes the interactor resolution the daemon resolves thro
 });
 
 test('a daemon attempt losing the lock shuts down every constructed provider', async () => {
-  vi.spyOn(await import('./server-lifecycle.ts'), 'acquireDaemonLock').mockReturnValueOnce(false);
+  const stateDir = mkdtempForTestSync('daemon-held-lock-');
+  const held = await tryAcquireDaemonRegistration(resolveDaemonPaths(stateDir));
+  if (held.status !== 'acquired') throw new Error('registration fixture refused');
   const shutdown = vi.fn(() => {
     throw new Error('cleanup failed');
   });
@@ -103,7 +110,7 @@ test('a daemon attempt losing the lock shuts down every constructed provider', a
   });
   const exit = vi.fn();
   const runtime = await startDaemonRuntime({
-    env: { AGENT_DEVICE_STATE_DIR: mkdtempForTestSync('daemon-held-lock-') },
+    env: { AGENT_DEVICE_STATE_DIR: stateDir },
     exit,
     registerProcessHandlers: false,
     stderr: { write: () => {} },
@@ -112,5 +119,6 @@ test('a daemon attempt losing the lock shuts down every constructed provider', a
   expect(runtime).toBeNull();
   expect(shutdown).toHaveBeenCalledOnce();
   expect(otherShutdown).toHaveBeenCalledOnce();
-  expect(exit).toHaveBeenCalledWith(0);
+  expect(exit).toHaveBeenCalledWith(DAEMON_STARTUP_EXIT_CODES.busy);
+  await held.owner.finish();
 });

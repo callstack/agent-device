@@ -1,10 +1,11 @@
+import { cleanupDaemonTestState } from './support/daemon-test-cleanup.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
-import { stopProcessForTakeover } from '../../src/daemon-process.ts';
+import { stopDaemonProcess } from '../../src/daemon-process.ts';
 import { isProcessAlive } from '@agent-device/host-kit/process';
 import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import { runCliJson } from './test-helpers.ts';
@@ -73,27 +74,19 @@ test('daemon replace mid-command returns a structured, parseable error and exits
 
     info = readDaemonInfo(stateDir);
     daemonPids.push(info.pid);
-    await stopProcessForTakeover(info.pid, {
-      termTimeoutMs: 1_500,
-      killTimeoutMs: 1_500,
-      expectedStartTime: info.processStartTime,
-    });
+    const termination = await stopDaemonProcess(
+      { pid: info.pid, startTime: info.processStartTime ?? null },
+      { mode: 'graceful', termTimeoutMs: 1_500, killTimeoutMs: 1_500 },
+    );
+    assert.notEqual(termination.status, 'retained', JSON.stringify(termination));
     // #1781 B1: neither the SIGKILLed daemon nor its replacement may leave owned
     // processes or unclassified state-dir residue once both are gone. `info`
-    // stays set until this passes: `stopProcessForTakeover` is best-effort, so a
-    // failed stop must still reach the `finally` retry below rather than have
+    // stays set until this passes: an unconfirmed stop must still reach the
+    // `finally` retry below rather than have
     // the state dir removed out from under a daemon that is still running.
     await assertNoDaemonLeaks({ stateDir, daemonPids, phase: 'after-shutdown' });
-    info = null;
   } finally {
-    if (info) {
-      await stopProcessForTakeover(info.pid, {
-        termTimeoutMs: 1_500,
-        killTimeoutMs: 1_500,
-        expectedStartTime: info.processStartTime,
-      });
-    }
-    fs.rmSync(stateDir, { recursive: true, force: true });
+    await cleanupDaemonTestState(stateDir, info);
   }
 });
 

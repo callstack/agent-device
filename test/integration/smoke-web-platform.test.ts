@@ -17,7 +17,7 @@ import {
   type AgentBrowserToolStatus,
 } from '@agent-device/platform-web';
 import {
-  stopProcessForTakeover,
+  stopDaemonProcess,
   waitForDaemonExit,
   type DaemonProcessIdentity,
 } from '../../src/daemon-process.ts';
@@ -227,7 +227,7 @@ async function runWebShutdownSmoke(context: WebSmokeContext): Promise<void> {
 }
 
 // Best-effort and independent of how far the `try` block got: a daemon that survived SIGTERM
-// (stopProcessForTakeover escalates to SIGKILL) and a Chrome fleet that outlived it (a forceful
+// (stopDaemonProcess escalates to SIGKILL) and a Chrome fleet that outlived it (a forceful
 // reap, not cleanupManagedAgentBrowserOrphans — see forceKillManagedBrowserProcesses) are reaped
 // here regardless of which assertion above failed, or whether none did. Mirrors cleanupWebSmoke's
 // AggregateError shape so a cleanup failure never silently swallows the assertion failure it ran
@@ -244,11 +244,7 @@ async function cleanupWebShutdownSmoke(
   const errors: unknown[] = [];
   if (daemonIdentity !== undefined) {
     try {
-      await stopProcessForTakeover(daemonIdentity.pid, {
-        termTimeoutMs: timeouts.termTimeoutMs,
-        killTimeoutMs: timeouts.killTimeoutMs,
-        expectedStartTime: daemonIdentity.startTime,
-      });
+      await stopWebSmokeDaemon(daemonIdentity, timeouts);
     } catch (error) {
       errors.push(error);
     }
@@ -267,6 +263,16 @@ async function cleanupWebShutdownSmoke(
   }
   if (errors.length === 1) throw errors[0];
   if (errors.length > 1) throw new AggregateError(errors, 'web shutdown smoke cleanup failed');
+}
+
+async function stopWebSmokeDaemon(
+  identity: DaemonProcessIdentity,
+  timeouts: { termTimeoutMs: number; killTimeoutMs: number },
+): Promise<void> {
+  const termination = await stopDaemonProcess(identity, { mode: 'graceful', ...timeouts });
+  if (termination.status === 'retained') {
+    throw new Error(`Daemon cleanup retained the process: ${termination.reason}`);
+  }
 }
 
 // Deliberately NOT cleanupManagedAgentBrowserOrphans: that function exists to leave an actively

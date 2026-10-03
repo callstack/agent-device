@@ -1,5 +1,6 @@
 import {
   CLOUD_WEBDRIVER_PROVIDERS,
+  parseBrowserStackAppReference,
   readAwsDeviceFarmRegionFromArn,
   rejectBrowserStackOnlyDeviceFeatures,
   type CloudWebDriverKnownProviderName,
@@ -49,6 +50,11 @@ export function resolveCloudWebDriverConnectProfile(options: {
     cwd: options.cwd,
     env: options.env,
     flags: options.flags,
+    // Verification reads these flags; it must see the canonical reference the profile saved,
+    // not the spelling typed on the command line.
+    ...(providerConfig.providerApp
+      ? { extraFlags: { providerApp: providerConfig.providerApp } }
+      : {}),
   });
 }
 
@@ -121,7 +127,9 @@ function browserStackProfileFields(options: {
 }
 
 function normalizeBrowserStackAppReference(app: string, cwd: string): string {
-  if (app.startsWith('bs://') || /^https?:\/\//i.test(app)) return app;
+  if (/^https?:\/\//i.test(app)) return app;
+  const reference = parseBrowserStackAppReference(app);
+  if (reference !== undefined) return reference;
   const resolvedPath = path.resolve(cwd, app);
   try {
     if (fs.statSync(resolvedPath).isFile()) return resolvedPath;

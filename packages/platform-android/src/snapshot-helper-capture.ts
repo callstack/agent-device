@@ -228,9 +228,13 @@ async function readFallbackHelperOutputOrThrow(
   result: Awaited<ReturnType<AndroidSnapshotHelperCaptureOptions['adb']>>,
   error: unknown,
 ): Promise<AndroidSnapshotHelperReadResult> {
-  if (error instanceof AppError && result.exitCode !== 0 && error.details?.helper) throw error;
+  const helperFailure = error instanceof AppError && error.details?.helper ? error : undefined;
+  if (helperFailure && result.exitCode !== 0) throw helperFailure;
   const fileOutput = await readFallbackHelperOutputFile(options, resolved, result);
   if (fileOutput) return { output: fileOutput, cleanupDone: true };
+  // `am instrument` exits 0 after a helper that reported its own failure, so that report is the
+  // answer whenever no output file stands in for it.
+  if (helperFailure) throw helperFailure;
   // exec-guard-allow: reachable at exit 0 (helper output unparseable); the
   // message already branches on the exit code.
   throw new AppError(

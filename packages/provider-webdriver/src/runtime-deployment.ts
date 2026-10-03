@@ -49,10 +49,10 @@ export function createWebDriverDeploymentRuntime(
     findSessionForDevice(device: DeviceInfo): WebDriverProviderSession | undefined;
   }>,
 ): WebDriverDeploymentRuntime {
-  const installApp = async (
+  const install = async (
     device: DeviceInfo,
     app: string,
-    appPath: string,
+    paths: Readonly<{ appPath: string; uploadPath: string }>,
     installOptions?: ProviderDeviceInstallOptions,
     signal?: AbortSignal,
   ): Promise<ProviderDeviceInstallResult | undefined> => {
@@ -63,13 +63,20 @@ export function createWebDriverDeploymentRuntime(
       session,
       device,
       app,
-      appPath,
+      paths.uploadPath,
       installOptions,
       signal,
     );
-    await session.client.installApp(upload?.appReference ?? appPath, signal);
+    await session.client.installApp(upload?.appReference ?? paths.appPath, signal);
     return providerInstallResult(upload, installOptions);
   };
+  const installApp = async (
+    device: DeviceInfo,
+    app: string,
+    appPath: string,
+    installOptions?: ProviderDeviceInstallOptions,
+    signal?: AbortSignal,
+  ) => await install(device, app, { appPath, uploadPath: appPath }, installOptions, signal);
   return Object.freeze({
     fact: (device) => deploymentFact(options.findSessionForDevice(device)),
     installApp,
@@ -92,10 +99,13 @@ export function createWebDriverDeploymentRuntime(
       ),
     deployMaterializedApp: async (device, input, signal) =>
       deploymentResult(
-        await installApp(
+        await install(
           device,
           '',
-          input.artifact.installablePath,
+          {
+            appPath: input.artifact.installablePath,
+            uploadPath: input.artifact.uploadPath ?? input.artifact.installablePath,
+          },
           {
             appIdentifierHint: input.artifact.bundleId,
             packageNameHint: input.artifact.packageName,

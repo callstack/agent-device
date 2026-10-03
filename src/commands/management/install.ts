@@ -204,11 +204,21 @@ function resolveInstallSource(positionals: string[], flags: CliFlags) {
   }
   if (githubArtifactSource) return githubArtifactSource;
   if (configuredSource) return configuredSource;
+  if (!isHttpUrl(url!)) {
+    throw new AppError('INVALID_ARGS', `install-from-source <url> must be an http(s) URL: ${url}`, {
+      hint: 'Install a local build with install <app> <path>.',
+    });
+  }
   return {
     kind: 'url' as const,
     url: url!,
     headers: parseInstallSourceHeaders(flags.header),
   };
+}
+
+function isHttpUrl(value: string): boolean {
+  const protocol = URL.parse(value)?.protocol;
+  return protocol === 'http:' || protocol === 'https:';
 }
 
 function parseInstallSourceHeaders(

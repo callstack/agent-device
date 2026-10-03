@@ -44,6 +44,10 @@ Some OEM builds gate the first install of a package behind the system package in
 
 An unattended first Android snapshot therefore times out with a helper install failure whose hint says to check the device screen for a pending install confirmation. Confirm the prompts on the device and retry; if no dialog is showing, restart the ADB server as the hint says.
 
+## Android: WSL needs Linux platform-tools
+
+Under WSL, the Windows `adb.exe` (for example from an `ANDROID_HOME` under `/mnt/c`) answers `adb version` but resolves every host path it is given as a Windows path, so recordings, pulls, and installs fail. Install Linux Android platform-tools inside WSL, put them first on `PATH`, and point `ANDROID_HOME` at a Linux SDK. `agent-device doctor` fails the toolchain check with reason `android_adb_windows_binary_on_posix_host` when `adb` reports a Windows install path or reports that it is running on Windows. The same check catches a Windows `adb.exe` reached from macOS or Linux through WSL interop or Wine.
+
 ## Android: no clipboard access over adb on Android 16
 
 `agent-device` reaches the Android clipboard through `adb shell cmd clipboard`. That command works only on a build whose clipboard service implements a shell command, and AOSP's `ClipboardService` does not: the class carries no shell command at `android13-release`, `android14-release`, `android15-release` or `android16-release`, nor on current AOSP `main`, and a physical device runs that same class. On Android 16 (API 36) every `cmd clipboard get text` and `cmd clipboard set text <text>` call is answered by the framework's default `Binder.handleShellCommand` — `No shell command implementation.` on stderr, exit status **0** — so the clipboard is never touched even though the call reports success.

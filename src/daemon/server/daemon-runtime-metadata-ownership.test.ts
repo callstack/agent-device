@@ -100,6 +100,7 @@ afterEach(() => {
   startupFailure.active = false;
   lifecycleEvents.length = 0;
   providerComposition.skipped = [];
+  vi.restoreAllMocks();
 });
 
 test('a shutdown whose daemon.json names a successor keeps the file and logs the decline', async () => {
@@ -132,18 +133,38 @@ test('a shutdown whose daemon.json names a successor keeps the file and logs the
   }
 });
 
-test('a shutdown that still owns its daemon.json removes it without a decline', async () => {
+test('a shutdown removes its own metadata and reports an unverified release', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-info-owned-shutdown-');
   const paths = resolveDaemonPaths(stateDir);
   try {
     const runtime = await startRuntime(stateDir, () => {});
     expect(runtime).not.toBeNull();
 
+    const originalRmdir = fs.rmdirSync;
+    vi.spyOn(fs, 'rmdirSync').mockImplementation((target, options) => {
+      if (target === paths.lockPath) throw Object.assign(new Error('busy'), { code: 'EBUSY' });
+      return originalRmdir(target, options);
+    });
     await runtime?.shutdown();
 
     expect(fs.existsSync(paths.infoPath)).toBe(false);
     expect(logEvents(stateDir).map((event) => event.phase)).not.toContain(
       'daemon_info_removal_declined',
+    );
+    expect(logEvents(stateDir)).toContainEqual(
+      expect.objectContaining({
+        phase: 'daemon_registration_finish_failed',
+        data: expect.objectContaining({
+          error: expect.objectContaining({
+            message: 'Cannot verify ownership of daemon registration',
+            details: expect.objectContaining({
+              lockDirPath: paths.lockPath,
+              ownerReleaseUnverified: true,
+            }),
+            hint: expect.stringContaining('confirming all users'),
+          }),
+        }),
+      }),
     );
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
@@ -245,10 +266,11 @@ test('both exits tear the watch down before they touch daemon.json', () => {
   // publication needs a real toolchain — so the invariant is read off the source, the same way the
   // arming order above is.
   const source = fs.readFileSync(new URL('./daemon-runtime.ts', import.meta.url), 'utf8');
-  const stopped = source.indexOf('stopMetadataLossWatch();');
-  const removal = source.indexOf('await removeOwnDaemonInfo(');
-
-  expect(stopped).toBeGreaterThanOrEqual(0);
-  expect(removal).toBeGreaterThan(stopped);
-  expect(source.match(/stopMetadataLossWatch\(\);/g)).toHaveLength(2);
+  const stops = [...source.matchAll(/stopMetadataLossWatch\(\);/g)].map((m) => m.index);
+  const finishes = [...source.matchAll(/await finishDaemonRegistration\(/g)].map((m) => m.index);
+  expect(stops).toHaveLength(2);
+  expect(finishes).toHaveLength(2);
+  expect(finishes[0]).toBeGreaterThan(stops[0]!);
+  expect(finishes[0]).toBeLessThan(stops[1]!);
+  expect(finishes[1]).toBeGreaterThan(stops[1]!);
 });

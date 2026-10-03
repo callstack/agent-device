@@ -3,6 +3,7 @@ import {
   readHostProcessIdentityObservations,
   readProcessCommand,
   readProcessStartTime,
+  type OwnerIdentity,
 } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 
@@ -38,7 +39,7 @@ export function isAgentDeviceDaemonProcess(
   return isAgentDeviceDaemonCommand(command);
 }
 
-export function trySignalProcess(pid: number, signal: NodeJS.Signals): boolean {
+function trySignalProcess(pid: number, signal: NodeJS.Signals): boolean {
   try {
     process.kill(pid, signal);
     return true;
@@ -50,36 +51,22 @@ export function trySignalProcess(pid: number, signal: NodeJS.Signals): boolean {
 }
 
 /** A daemon pinned to one process lifetime, never a bare pid. */
-export type DaemonProcessIdentity = {
+export type DaemonProcessIdentity = Readonly<{
   pid: number;
   startTime: string;
-};
+}>;
 
 export type DaemonExitWait = {
-  /** The pid was released, or the host handed it to a different process. */
+  /** The process terminated, or the host handed its pid to a different process. */
   exited: boolean;
   elapsedMs: number;
 };
 
 const DAEMON_EXIT_POLL_MS = 100;
 
-type DaemonPidState = 'ours' | 'exiting' | 'released' | 'recycled';
-
-function classifyDaemonPid(identity: DaemonProcessIdentity): DaemonPidState {
-  if (!isProcessAlive(identity.pid)) return 'released';
-  // A terminated pid awaiting reap answers kill(pid, 0), keeps its start time, and
-  // reports its command as `<defunct>`; only the process state distinguishes it.
-  const observed = readHostProcessIdentityObservations([identity.pid]).get(identity.pid);
-  if (!observed || observed.state.startsWith('Z')) return 'exiting';
-  if (observed.startTime !== identity.startTime) return 'recycled';
-  const command = readProcessCommand(identity.pid);
-  if (!command) return 'exiting';
-  return isAgentDeviceDaemonCommand(command) ? 'ours' : 'recycled';
-}
-
 /**
- * Resolves once `identity` has left the host — released or recycled. A pid still
- * being torn down is neither, so the wait continues until the number is free.
+ * Confirms termination from a released pid, a verified zombie, or a different
+ * readable process lifetime. An unreadable process observation is not proof.
  */
 export async function waitForDaemonExit(
   identity: DaemonProcessIdentity,
@@ -89,34 +76,90 @@ export async function waitForDaemonExit(
   const deadline = startedAt + options.timeoutMs;
   const pollMs = options.pollMs ?? DAEMON_EXIT_POLL_MS;
   const hasExited = (): boolean => {
-    const state = classifyDaemonPid(identity);
-    return state === 'released' || state === 'recycled';
+    if (!isProcessAlive(identity.pid)) return true;
+    const observed = readHostProcessIdentityObservations([identity.pid]).get(identity.pid);
+    return Boolean(
+      observed?.state.startsWith('Z') ||
+      (observed?.startTime && observed.startTime !== identity.startTime),
+    );
   };
   let exited = hasExited();
   while (!exited && Date.now() < deadline) {
-    await sleep(pollMs);
+    await sleep(Math.min(pollMs, Math.max(0, deadline - Date.now())));
     exited = hasExited();
   }
   return { exited, elapsedMs: Date.now() - startedAt };
 }
 
-function signalDaemonIdentity(identity: DaemonProcessIdentity, signal: NodeJS.Signals): boolean {
-  if (!isAgentDeviceDaemonProcess(identity.pid, identity.startTime)) return false;
-  return trySignalProcess(identity.pid, signal);
-}
+export type DaemonTerminationResult =
+  /** A released bare PID, without lifetime proof or metadata cleanup authority. */
+  | Readonly<{ status: 'not-running' }>
+  | Readonly<{
+      status: 'exited';
+      identity: DaemonProcessIdentity;
+      mode: 'already-exited' | 'graceful' | 'forced';
+    }>
+  | Readonly<{
+      status: 'retained';
+      reason: 'missing-start-time' | 'identity-unverified' | 'signal-failed' | 'exit-timeout';
+      signal?: NodeJS.Signals;
+    }>;
 
-export async function stopProcessForTakeover(
-  pid: number,
+/** Owns every signal and exit wait for one observed daemon lifetime. */
+export async function stopDaemonProcess(
+  observed: Readonly<OwnerIdentity>,
   options: {
+    mode: 'graceful' | 'force';
     termTimeoutMs: number;
     killTimeoutMs: number;
-    expectedStartTime: string | undefined;
   },
-): Promise<void> {
-  if (!options.expectedStartTime) return;
-  const identity: DaemonProcessIdentity = { pid, startTime: options.expectedStartTime };
-  if (!signalDaemonIdentity(identity, 'SIGTERM')) return;
-  if ((await waitForDaemonExit(identity, { timeoutMs: options.termTimeoutMs })).exited) return;
-  if (!signalDaemonIdentity(identity, 'SIGKILL')) return;
-  await waitForDaemonExit(identity, { timeoutMs: options.killTimeoutMs });
+): Promise<DaemonTerminationResult> {
+  if (!observed.startTime?.trim()) {
+    if (!isProcessAlive(observed.pid)) return { status: 'not-running' };
+    return { status: 'retained', reason: 'missing-start-time' };
+  }
+  const identity: DaemonProcessIdentity = { pid: observed.pid, startTime: observed.startTime };
+  if ((await waitForDaemonExit(identity, { timeoutMs: 0 })).exited) {
+    return { status: 'exited', identity, mode: 'already-exited' };
+  }
+  let previousSignal: 'SIGTERM' | undefined;
+  if (options.mode === 'graceful') {
+    const result = await signalAndWaitForDaemonExit(identity, {
+      signal: 'SIGTERM',
+      timeoutMs: options.termTimeoutMs,
+    });
+    if (result.status !== 'survived') return result;
+    previousSignal = 'SIGTERM';
+  }
+  const result = await signalAndWaitForDaemonExit(identity, {
+    signal: 'SIGKILL',
+    timeoutMs: options.killTimeoutMs,
+    previousSignal,
+  });
+  return result.status === 'survived' ? { status: 'retained', reason: 'exit-timeout' } : result;
+}
+
+async function signalAndWaitForDaemonExit(
+  identity: DaemonProcessIdentity,
+  options: { signal: 'SIGTERM' | 'SIGKILL'; timeoutMs: number; previousSignal?: 'SIGTERM' },
+): Promise<DaemonTerminationResult | Readonly<{ status: 'survived' }>> {
+  const verified = isAgentDeviceDaemonProcess(identity.pid, identity.startTime);
+  const signaled = verified && trySignalProcess(identity.pid, options.signal);
+  const mode = signaled
+    ? options.signal === 'SIGTERM'
+      ? 'graceful'
+      : 'forced'
+    : options.previousSignal
+      ? 'graceful'
+      : 'already-exited';
+  const wait = await waitForDaemonExit(identity, {
+    timeoutMs: mode === 'already-exited' ? 0 : options.timeoutMs,
+  });
+  if (wait.exited) return { status: 'exited', identity, mode };
+  if (signaled) return { status: 'survived' };
+  return {
+    status: 'retained',
+    signal: options.signal,
+    reason: verified ? 'signal-failed' : 'identity-unverified',
+  };
 }

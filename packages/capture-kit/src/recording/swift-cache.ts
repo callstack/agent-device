@@ -204,19 +204,14 @@ async function acquireSwiftCacheLock(
       },
       timeoutMs,
       pollMs: LOCK_RETRY_DELAY_MS,
-      ownerGraceMs: timeoutMs,
       description: `Swift cache lock: ${lockDir} (${timeoutMs}ms)`,
     });
   } catch (error) {
-    if (
-      error instanceof AppError &&
-      error.message.startsWith('Timed out waiting for Swift cache lock:')
-    ) {
+    if (error instanceof AppError && error.details?.reason === 'process_lock_timeout') {
       throw new AppError('COMMAND_FAILED', error.message, {
         ...error.details,
         lockDir,
         timeoutMs,
-        hint: `Another agent-device process may still be compiling this Swift helper. Retry shortly; if no agent-device process is active, remove "${lockDir}" and retry.`,
       });
     }
     throw error;

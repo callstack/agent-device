@@ -84,6 +84,12 @@ const HELPER_INSTALL_TIMEOUT_MS = 30_000;
  */
 const HELPER_CONTENT_CAPTURE_ATTEMPTS = 3;
 const HELPER_CONTENT_RECAPTURE_DELAY_MS = 250;
+/**
+ * No re-capture starts this long after the first attempt did. One attempt can spend a session start,
+ * a timed-out session request, and the whole one-shot command budget, so attempts counted alone let
+ * a busy screen run a snapshot past the daemon request envelope.
+ */
+const HELPER_CONTENT_RECAPTURE_WINDOW_MS = 10_000;
 export type AndroidSnapshotOptions = SnapshotOptions & {
   appBundleId?: string;
   signal?: AbortSignal;
@@ -281,43 +287,75 @@ async function captureAndroidUiHierarchyWithHelper(
   artifact: AndroidSnapshotHelperArtifact,
 ): Promise<{ xml: string; metadata: AndroidSnapshotBackendMetadata }> {
   const helperDeviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
-  const adbProvider = resolveAndroidAdbProvider(device, options.helperAdb);
   const releaseHelperSession = releasesHelperSessionAfterCapture(options, helperDeviceKey);
   try {
-    let previousContentReason: AndroidContentRecoveryReason | undefined;
-    for (let attempt = 0; ; attempt += 1) {
-      if (attempt > 0) await delayBeforeContentRecapture(options.signal);
-      const settled = await captureAndroidHelperContentAttempt({
-        options,
-        adb,
-        adbProvider,
-        artifact,
-        helperDeviceKey,
-        attempt,
-        previousContentReason,
-      });
-      if (settled.outcome === 'captured') return settled.capture;
-      if (
-        attempt + 1 >= HELPER_CONTENT_CAPTURE_ATTEMPTS ||
-        (options.transient !== undefined && Date.now() >= options.transient.settleBy)
-      ) {
-        return await rejectAndroidHelperContentUnavailable({
-          contentRecovery: settled.decision,
-          attempts: attempt + 1,
-          helperDeviceKey,
-          artifact,
-          adb,
-          signal: options.signal,
-          retireHelper: options.transient === undefined,
-        });
-      }
-      previousContentReason = settled.decision.reason;
-    }
+    return await captureAndroidHelperContentWithinWindow({
+      options,
+      adb,
+      adbProvider: resolveAndroidAdbProvider(device, options.helperAdb),
+      artifact,
+      helperDeviceKey,
+    });
   } finally {
     if (releaseHelperSession) {
       await stopAndroidSnapshotHelperSession(helperDeviceKey);
     }
   }
+}
+
+/**
+ * Re-captures unusable content until a capture answers, the attempts run out, or the re-capture
+ * window has closed by the time the next attempt would start.
+ */
+async function captureAndroidHelperContentWithinWindow(params: {
+  options: AndroidSnapshotOptions;
+  adb: AndroidAdbExecutor;
+  adbProvider: AndroidAdbProvider;
+  artifact: AndroidSnapshotHelperArtifact;
+  helperDeviceKey: string;
+}): Promise<{ xml: string; metadata: AndroidSnapshotBackendMetadata }> {
+  const { options } = params;
+  const recaptureDeadlineMs = resolveContentRecaptureDeadlineMs(options);
+  const rejectContentUnavailable = async (
+    contentRecovery: AndroidHelperContentRecoveryDecision,
+    attempts: number,
+  ) =>
+    await rejectAndroidHelperContentUnavailable({
+      contentRecovery,
+      attempts,
+      helperDeviceKey: params.helperDeviceKey,
+      artifact: params.artifact,
+      adb: params.adb,
+      signal: options.signal,
+      retireHelper: options.transient === undefined,
+    });
+  let previousDecision: AndroidHelperContentRecoveryDecision | undefined;
+  for (let attempt = 0; ; attempt += 1) {
+    if (previousDecision) {
+      await delayBeforeContentRecapture(options.signal);
+      if (Date.now() >= recaptureDeadlineMs) {
+        return await rejectContentUnavailable(previousDecision, attempt);
+      }
+    }
+    const settled = await captureAndroidHelperContentAttempt({
+      ...params,
+      attempt,
+      previousContentReason: previousDecision?.reason,
+    });
+    if (settled.outcome === 'captured') return settled.capture;
+    if (attempt + 1 >= HELPER_CONTENT_CAPTURE_ATTEMPTS || Date.now() >= recaptureDeadlineMs) {
+      return await rejectContentUnavailable(settled.decision, attempt + 1);
+    }
+    previousDecision = settled.decision;
+  }
+}
+
+/** No re-capture starts after this instant: the end of the window, or a transient read's settle-by. */
+function resolveContentRecaptureDeadlineMs(options: AndroidSnapshotOptions): number {
+  return Math.min(
+    Date.now() + HELPER_CONTENT_RECAPTURE_WINDOW_MS,
+    options.transient?.settleBy ?? Number.POSITIVE_INFINITY,
+  );
 }
 
 /** A transient read keeps a session it found running and releases one it had to start. */

@@ -441,6 +441,58 @@ test('connect browserstack generates local provider profile without credentials'
   }
 });
 
+test('connect browserstack canonicalizes the app scheme and refuses a malformed bs:// id', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-browserstack-ref-');
+  const stateDir = path.join(tempRoot, '.state');
+  vi.stubEnv('BROWSERSTACK_USERNAME', 'browser-user');
+  vi.stubEnv('BROWSERSTACK_ACCESS_KEY', 'browser-key');
+  const flags = {
+    platform: 'android' as const,
+    device: 'Google Pixel 8',
+    providerOsVersion: '14.0',
+  };
+
+  try {
+    await connectWithGeneratedProviderProfile({
+      stateDir,
+      positionals: ['browserstack'],
+      flags: { ...flags, providerApp: 'Bs://app-id' },
+    });
+    assert.equal(
+      readGeneratedConfig(readRequiredActiveState(stateDir).remoteConfigPath).providerApp,
+      'bs://app-id',
+    );
+    // Verification must look up the reference the profile saved, not the spelling typed.
+    const verified = mockedVerifyWebDriverConnection.mock.calls[0]?.[0];
+    assert.equal(verified?.provider === 'browserstack' ? verified.app : undefined, 'bs://app-id');
+
+    for (const app of ['bs://', 'bs://a b', 'BS://a/b']) {
+      assert.throws(
+        () =>
+          resolveCloudWebDriverConnectProfile({
+            provider: 'browserstack',
+            stateDir,
+            cwd: tempRoot,
+            env: { BROWSERSTACK_USERNAME: 'browser-user', BROWSERSTACK_ACCESS_KEY: 'browser-key' },
+            flags: { json: false, help: false, version: false, ...flags, providerApp: app },
+          }),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'INVALID_ARGS');
+          assert.equal(error.message, `BrowserStack --provider-app ${app} is not a bs:// app id.`);
+          assert.deepEqual(error.details, {
+            providerApp: app,
+            hint: 'Pass <bs://app-id-or-local-path>.',
+          });
+          return true;
+        },
+      );
+    }
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('connect --remote-config verifies a direct provider profile before saving state', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-provider-config-');
   const stateDir = path.join(tempRoot, '.state');
