@@ -1,5 +1,6 @@
 import {
   PROVIDER_DEVICE_ORIENTATIONS,
+  PROVIDER_PROFILE_FIELD_FLAGS,
   type CloudProviderProfileFields,
 } from '@agent-device/contracts/remote';
 import { AppError } from '@agent-device/kernel/errors';
@@ -33,7 +34,7 @@ type BrowserStackDeviceFeatureSpec = {
   field: keyof BrowserStackDeviceFeatureFields;
   /** Key emitted inside `bstack:options`. */
   capability: string;
-  /** Canonical CLI flag, so an error can name a recovery action. */
+  /** Canonical CLI flag, read from `PROVIDER_PROFILE_FIELD_FLAGS`. */
   flag: string;
   /**
    * `negated-boolean` is a flag whose presence means "turn the capability off" — BrowserStack
@@ -45,24 +46,21 @@ type BrowserStackDeviceFeatureSpec = {
   platform?: CloudWebDriverPlatform;
 };
 
-export const BROWSERSTACK_DEVICE_FEATURE_SPECS: readonly BrowserStackDeviceFeatureSpec[] = [
+const BROWSERSTACK_DEVICE_FEATURE_ROWS: readonly Omit<BrowserStackDeviceFeatureSpec, 'flag'>[] = [
   {
     field: 'providerDeviceOrientation',
     capability: 'deviceOrientation',
-    flag: '--provider-device-orientation',
     type: 'enum',
     enumValues: PROVIDER_DEVICE_ORIENTATIONS,
   },
   {
     field: 'providerGeoLocation',
     capability: 'geoLocation',
-    flag: '--provider-geo-location',
     type: 'string',
   },
   {
     field: 'providerTimezone',
     capability: 'timezone',
-    flag: '--provider-timezone',
     type: 'string',
   },
   {
@@ -70,31 +68,26 @@ export const BROWSERSTACK_DEVICE_FEATURE_SPECS: readonly BrowserStackDeviceFeatu
     // (deepLink, pressButton, activateApp) need a 2.x+ server.
     field: 'providerAppiumVersion',
     capability: 'appiumVersion',
-    flag: '--provider-appium-version',
     type: 'string',
   },
   {
     field: 'providerLanguage',
     capability: 'language',
-    flag: '--provider-language',
     type: 'string',
   },
   {
     field: 'providerLocale',
     capability: 'locale',
-    flag: '--provider-locale',
     type: 'string',
   },
   {
     field: 'providerNetworkProfile',
     capability: 'networkProfile',
-    flag: '--provider-network-profile',
     type: 'string',
   },
   {
     field: 'providerCustomNetwork',
     capability: 'customNetwork',
-    flag: '--provider-custom-network',
     type: 'string',
   },
   {
@@ -102,11 +95,16 @@ export const BROWSERSTACK_DEVICE_FEATURE_SPECS: readonly BrowserStackDeviceFeatu
     // entitlements. Opting out keeps entitlement-dependent features (push notifications) testable.
     field: 'providerNoResignApp',
     capability: 'resignApp',
-    flag: '--provider-no-resign-app',
     type: 'negated-boolean',
     platform: 'ios',
   },
 ];
+
+export const BROWSERSTACK_DEVICE_FEATURE_SPECS: readonly BrowserStackDeviceFeatureSpec[] =
+  BROWSERSTACK_DEVICE_FEATURE_ROWS.map((row) => ({
+    ...row,
+    flag: PROVIDER_PROFILE_FIELD_FLAGS[row.field],
+  }));
 
 /**
  * Builds the `bstack:options` fragment for the configured device features.

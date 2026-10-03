@@ -42,6 +42,31 @@ export type CloudProviderProfileFields = {
   awsInteractionMode?: 'INTERACTIVE' | 'NO_VIDEO' | 'VIDEO_ONLY';
 };
 
+/** Canonical CLI flag for each profile field, so an error can name a recovery action. */
+export const PROVIDER_PROFILE_FIELD_FLAGS: Readonly<
+  Record<keyof CloudProviderProfileFields, string>
+> = {
+  providerApp: '--provider-app',
+  providerOsVersion: '--provider-os-version',
+  providerProject: '--provider-project',
+  providerBuild: '--provider-build',
+  providerSessionName: '--provider-session-name',
+  providerDeviceOrientation: '--provider-device-orientation',
+  providerGeoLocation: '--provider-geo-location',
+  providerTimezone: '--provider-timezone',
+  providerAppiumVersion: '--provider-appium-version',
+  providerLanguage: '--provider-language',
+  providerLocale: '--provider-locale',
+  providerNetworkProfile: '--provider-network-profile',
+  providerCustomNetwork: '--provider-custom-network',
+  providerNoResignApp: '--provider-no-resign-app',
+  awsProjectArn: '--aws-project-arn',
+  awsDeviceArn: '--aws-device-arn',
+  awsAppArn: '--aws-app-arn',
+  awsRegion: '--aws-region',
+  awsInteractionMode: '--aws-interaction-mode',
+};
+
 export type RemoteConfigMetroOptions = {
   metroProjectRoot?: string;
   metroKind?: MetroPrepareKind;

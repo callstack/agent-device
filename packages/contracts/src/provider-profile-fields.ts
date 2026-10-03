@@ -1,5 +1,8 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { CloudProviderProfileFields } from './remote-config-fields.ts';
+import {
+  PROVIDER_PROFILE_FIELD_FLAGS,
+  type CloudProviderProfileFields,
+} from './remote-config-fields.ts';
 
 export type ProviderProfileField = keyof CloudProviderProfileFields;
 
@@ -13,28 +16,6 @@ export type ProviderProfileFieldDeclaration = Readonly<{
   label: string;
   fields: Readonly<Record<ProviderProfileField, 'consumed' | 'refused'>>;
 }>;
-
-const PROVIDER_PROFILE_FIELD_FLAGS: Readonly<Record<ProviderProfileField, string>> = {
-  providerApp: '--provider-app',
-  providerOsVersion: '--provider-os-version',
-  providerProject: '--provider-project',
-  providerBuild: '--provider-build',
-  providerSessionName: '--provider-session-name',
-  providerDeviceOrientation: '--provider-device-orientation',
-  providerGeoLocation: '--provider-geo-location',
-  providerTimezone: '--provider-timezone',
-  providerAppiumVersion: '--provider-appium-version',
-  providerLanguage: '--provider-language',
-  providerLocale: '--provider-locale',
-  providerNetworkProfile: '--provider-network-profile',
-  providerCustomNetwork: '--provider-custom-network',
-  providerNoResignApp: '--provider-no-resign-app',
-  awsProjectArn: '--aws-project-arn',
-  awsDeviceArn: '--aws-device-arn',
-  awsAppArn: '--aws-app-arn',
-  awsRegion: '--aws-region',
-  awsInteractionMode: '--aws-interaction-mode',
-};
 
 /**
  * Fails when `flags` set a profile field the provider refuses. Every route to a provider — connect,
