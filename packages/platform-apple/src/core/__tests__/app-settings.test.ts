@@ -389,11 +389,14 @@ test('setIosSetting permission grant all passes all through as one simctl call',
   );
 });
 
-test('setIosSetting clear-app-state wipes iOS simulator app data container', async () => {
+test('setIosSetting clear-app-state wipes app data and keeps the container manager metadata', async () => {
   const containerPath = await mkdtempForTest('agent-device-ios-clear-app-state-container-');
+  const metadataFile = '.com.apple.mobile_container_manager.metadata.plist';
   await fs.mkdir(path.join(containerPath, 'Documents'), { recursive: true });
   await fs.writeFile(path.join(containerPath, 'Documents', 'db.sqlite'), 'db');
   await fs.writeFile(path.join(containerPath, 'Library.plist'), 'prefs');
+  await fs.writeFile(path.join(containerPath, '.app-dotfile'), 'app data');
+  await fs.writeFile(path.join(containerPath, metadataFile), 'metadata');
 
   await withFakeAppleTool(
     (args) => {
@@ -413,7 +416,8 @@ test('setIosSetting clear-app-state wipes iOS simulator app data container', asy
       );
       assert.equal(result?.cleared, true);
       assert.equal(result?.bundleId, 'com.example.app');
-      assert.deepEqual(await fs.readdir(containerPath), []);
+      assert.deepEqual(await fs.readdir(containerPath), [metadataFile]);
+      assert.equal(await fs.readFile(path.join(containerPath, metadataFile), 'utf8'), 'metadata');
 
       const flat = calls.map((args) => args.join(' '));
       assert.equal(flat.includes('simctl terminate sim-1 com.example.app'), true, flat.join('; '));
