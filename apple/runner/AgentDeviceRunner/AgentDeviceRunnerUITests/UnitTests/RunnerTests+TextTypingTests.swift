@@ -257,6 +257,30 @@ extension RunnerTests {
     XCTAssertEqual(editableTextValue(for: app.textFields.element(boundBy: 0), treatingPlaceholderAsEmpty: true), "")
   }
 
+  // The known limit: neither input has an identifier, and the successor takes the code field's index
+  // in the query that bound it, so the remaining posts resolve to it. Refusing point and focus
+  // re-resolution would not help, because the index-bound query itself returns the successor. The
+  // command must still fail typed, never report success or repair into the successor.
+  @MainActor
+  func testFillFailsTypedWhenAnIndistinguishableInputReplacesItMidDelivery() throws {
+    let textField = try launchRemovableInputFixture(
+      "--agent-device-text-entry-replace-after-input",
+      "--agent-device-text-entry-unnamed-input"
+    )
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-unnamed-replaced", text: "123456", at: textField)
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "TEXT_ENTRY_MISMATCH")
+    XCTAssertEqual(app.textFields.count, 1)
+    XCTAssertEqual(editableTextValue(for: app.textFields.element(boundBy: 0), treatingPlaceholderAsEmpty: true), "23456")
+  }
+
   // Text past the delivery budget cannot be paced into a field the runner cannot resolve, so it goes
   // through application-wide typing. The budget is charged the whole command, warmup split included:
   // an append peels its first character for warmup, so a per-dispatch charge would find both of its
