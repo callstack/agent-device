@@ -3,6 +3,7 @@ import { afterEach, test } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { createCloudWebDriverRuntime, type CloudWebDriverRuntimeOptions } from './runtime.ts';
+import { consumeAllProfileFields } from './profile-fields.fixtures.ts';
 
 const realFetch = globalThis.fetch;
 
@@ -106,6 +107,7 @@ function makeRuntime(overrides: Partial<CloudWebDriverRuntimeOptions> = {}) {
     endpoint: 'https://webdriver.test/wd/hub/',
     platform: 'android',
     deviceName: 'Test device',
+    profileFields: consumeAllProfileFields('webdriver-test'),
     requestPolicy: { retryAttempts: 0 },
     ...overrides,
   });

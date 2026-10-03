@@ -302,6 +302,66 @@ test('connect limrun rejects unsupported public device and backend selections', 
   assert.match(backend.stdout, /requires --lease-backend ios-instance/);
 });
 
+test('connect limrun refuses profile fields Limrun does not read', async () => {
+  const result = await runCliCapture(
+    [
+      'connect',
+      'limrun',
+      '--platform',
+      'ios',
+      '--provider-os-version',
+      '18',
+      '--provider-geo-location',
+      'US',
+      '--json',
+    ],
+    {
+      env: { LIMRUN_API_KEY: 'lim_test_key' },
+      stateDirPrefix: 'agent-device-connect-limrun-profile-fields-',
+    },
+  );
+  assert.equal(result.code, 1);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.error.code, 'INVALID_ARGS');
+  assert.deepEqual(payload.error.details.flags, [
+    '--provider-os-version',
+    '--provider-geo-location',
+  ]);
+});
+
+test('connect browserstack refuses AWS Device Farm flags', () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-browserstack-reject-');
+
+  try {
+    assert.throws(
+      () =>
+        resolveCloudWebDriverConnectProfile({
+          provider: 'browserstack',
+          stateDir: path.join(tempRoot, '.state'),
+          cwd: tempRoot,
+          env: {},
+          flags: {
+            json: false,
+            help: false,
+            version: false,
+            platform: 'android',
+            device: 'Google Pixel 8',
+            awsProjectArn: 'arn:aws:devicefarm:us-west-2:123:project:project-a',
+          },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'INVALID_ARGS');
+        assert.equal(error.details?.provider, 'browserstack');
+        assert.deepEqual(error.details?.flags, ['--aws-project-arn']);
+        return true;
+      },
+    );
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('connect without remote config rejects legacy remoteConfig string profile response', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-cloud-legacy-');
   const stateDir = path.join(tempRoot, '.state');
@@ -734,7 +794,7 @@ test('connect does not activate provider state when verification fails', async (
   }
 });
 
-test('connect aws-device-farm rejects BrowserStack-only device-feature flags', () => {
+test('connect aws-device-farm rejects device-feature flags it does not read', () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-aws-reject-');
 
   try {
@@ -760,8 +820,7 @@ test('connect aws-device-farm rejects BrowserStack-only device-feature flags', (
         assert.equal(error.code, 'INVALID_ARGS');
         // Names every offending flag, and fires before the provider's own required-arg checks so
         // the caller is told what is unsupported rather than what else is missing.
-        assert.match(error.message, /--provider-device-orientation, --provider-timezone/);
-        assert.match(error.message, /only supported by BrowserStack, not aws-device-farm/);
+        assert.equal(error.details?.provider, 'aws-device-farm');
         assert.deepEqual(error.details?.flags, [
           '--provider-device-orientation',
           '--provider-timezone',

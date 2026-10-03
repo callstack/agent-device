@@ -20,4 +20,6 @@ For each provider, the standard lifecycle is:
 3. Follow the printed next command to install or open the app.
 4. Run normal device commands, then `agent-device close` and `agent-device disconnect`.
 
+Each provider reads only its own provider flags (`--provider-*` and `--aws-*`). A flag the provider does not use fails with `INVALID_ARGS` naming the flag, whether it arrives through `connect`, `client.leases.allocate()`, or a remote-config profile, so a setting is never silently dropped.
+
 Each provider guide covers its connection selectors, client configuration, MCP setup, artifacts, and troubleshooting. Generated remote profiles are safe to store as non-secret configuration. They may include app IDs, ARNs, device names, OS versions, and labels, but never provider API keys or AWS secret keys.

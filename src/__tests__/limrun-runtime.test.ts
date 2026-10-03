@@ -6,6 +6,7 @@ import { LimrunRuntime } from '../sdk/limrun.ts';
 import { createExpiredProviderLeaseReleaser } from '../daemon/provider-lease-expiry.ts';
 import type { SimulatorLease } from '../daemon/lease-registry.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import { readVersion } from '@agent-device/host-kit/version';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
@@ -167,6 +168,35 @@ test('Limrun runtime identifies direct CLI usage to the Limrun API', async () =>
       provider: 'limrun',
       source: 'agent-device-cli',
     });
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test('Limrun refuses a refused field on a repeat allocation of its live lease', async () => {
+  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key' });
+  const lease: SimulatorLease = {
+    leaseId: 'lease-repeat',
+    tenantId: 'team-a',
+    runId: 'run-a',
+    backend: 'ios-instance',
+    leaseProvider: 'limrun',
+    createdAt: 1,
+    heartbeatAt: 1,
+    expiresAt: 60_001,
+  };
+  try {
+    const allocateLease = runtime.leaseLifecycle.allocate;
+    if (!allocateLease) throw new Error('Limrun runtime must provide lease allocation');
+    await allocateLease(lease);
+    await assert.rejects(
+      allocateLease(lease, { flags: { providerOsVersion: '18.0' } }),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        JSON.stringify(error.details?.flags) === '["--provider-os-version"]',
+    );
+    assert.equal(limrunMockState.iosCreate.mock.calls.length, 1);
   } finally {
     await runtime.shutdown();
   }
