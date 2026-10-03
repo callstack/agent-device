@@ -178,9 +178,12 @@ test('a skipped provider runtime is logged after this daemon publishes its recor
   });
   providerComposition.skipped = [{ provider: 'limrun', error }];
   const runtime = await startRuntime(stateDir, () => {});
-  const skipped = logEvents(stateDir).find(({ phase }) => phase === 'provider_runtime_skipped');
-  expect(skipped?.data).toMatchObject({ provider: 'limrun', code: 'INVALID_ARGS' });
-  await runtime?.shutdown();
+  try {
+    const skipped = logEvents(stateDir).find(({ phase }) => phase === 'provider_runtime_skipped');
+    expect(skipped?.data).toMatchObject({ provider: 'limrun', code: 'INVALID_ARGS' });
+  } finally {
+    await runtime?.shutdown();
+  }
 });
 
 test('a startup that fails before publication removes no record and writes no log', async () => {
