@@ -1,3 +1,4 @@
+import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
 /**
  * #1271 stage 2 (ADR 0012 amendment): repair-segment default exclusion of
  * observation-only commands (`snapshot`/`get`/`is`/a read-only `find`), the
@@ -193,14 +194,14 @@ test('diagnostic get/is reads mid-repair are excluded from the healed script by 
   // --- The agent explores mid-repair: a couple of diagnostic reads to locate
   // the renamed control. Both are observation-only and the session is
   // repair-armed, so per the default exclusion neither is appended. ---
-  ctx.sessionStore.recordAction(session, {
+  ctx.sessionStore.recordAction(storeSessionForTest(ctx.sessionStore, session), {
     command: 'get',
     positionals: ['attrs', '@e5'],
     flags: {},
     result: { selectorChain: ['id="save-v2"'] },
     interactiveObservation: true,
   });
-  ctx.sessionStore.recordAction(session, {
+  ctx.sessionStore.recordAction(storeSessionForTest(ctx.sessionStore, session), {
     command: 'is',
     positionals: ['visible', 'id="save-v2"'],
     flags: {},
@@ -212,7 +213,7 @@ test('diagnostic get/is reads mid-repair are excluded from the healed script by 
 
   // --- The agent performs the corrective press (blessed @ref), recorded live —
   // a mutating action is never observation-only, so it is unaffected. ---
-  ctx.sessionStore.recordAction(session, {
+  ctx.sessionStore.recordAction(storeSessionForTest(ctx.sessionStore, session), {
     command: 'press',
     positionals: ['@e7'],
     flags: {},
@@ -295,7 +296,7 @@ test("a --record'ed diagnostic read lands in the healed script (the diverged-ste
   // --- The agent's correction for the diverged step IS itself a read (the
   // wave-3 E3 shape): `get attrs` on the renamed control, explicitly forced
   // into the heal with `--record` since it would otherwise be excluded. ---
-  ctx.sessionStore.recordAction(session, {
+  ctx.sessionStore.recordAction(storeSessionForTest(ctx.sessionStore, session), {
     command: 'get',
     positionals: ['attrs', '@e7'],
     flags: { record: true },
@@ -374,14 +375,14 @@ test('empty-segment guard: a --from resume refuses with an actionable --record h
   // --- The agent ONLY inspects — never performs a corrective action. Both
   // reads are excluded from `session.actions`, so nothing was recorded in
   // this repair segment. ---
-  ctx.sessionStore.recordAction(session, {
+  ctx.sessionStore.recordAction(storeSessionForTest(ctx.sessionStore, session), {
     command: 'get',
     positionals: ['attrs', '@e5'],
     flags: {},
     result: { selectorChain: ['id="save-v2"'] },
     interactiveObservation: true,
   });
-  ctx.sessionStore.recordAction(session, {
+  ctx.sessionStore.recordAction(storeSessionForTest(ctx.sessionStore, session), {
     command: 'find',
     positionals: ['id', 'save-v2', 'exists'],
     flags: {},
@@ -418,7 +419,7 @@ test('non-repair authoring recording is unchanged: a read in a fresh `open --sav
   session.scriptPublication = authoringPublication('armed');
   expect(session.scriptPublication.kind).not.toBe('repair');
 
-  ctx.sessionStore.recordAction(session, {
+  ctx.sessionStore.recordAction(storeSessionForTest(ctx.sessionStore, session), {
     command: 'get',
     positionals: ['attrs', '@e5'],
     flags: {},

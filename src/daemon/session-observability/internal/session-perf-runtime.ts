@@ -104,10 +104,9 @@ function recordSuccessfulPerfResponse(
   response: DaemonResponse,
 ): DaemonResponse {
   if (!response.ok) return response;
-  const session = params.sessionStore.resolveCurrent(params.ref);
   recordSessionAction(
     params.sessionStore,
-    session,
+    params.ref,
     params.req,
     'perf',
     isDataRecord(response.data) ? { ...response.data } : {},

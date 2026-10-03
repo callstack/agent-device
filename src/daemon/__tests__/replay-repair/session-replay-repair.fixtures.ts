@@ -1,3 +1,4 @@
+import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
 import { isSessionRecording } from '../../session-script-publication-capability.ts';
 /**
  * Shared fixtures for the ADR 0012 decision 6 repair-loop tests. The mock
@@ -59,7 +60,7 @@ export function makeRecordingReplayInvoke(config: RecordingReplayInvokeConfig): 
     }
     const session = resolveInvokeSession(config, req);
     const evidence = isSessionRecording(session) ? config.evidence?.(req) : undefined;
-    sessionStore.recordAction(session, {
+    sessionStore.recordAction(storeSessionForTest(sessionStore, session, config.sessionName), {
       command: req.command,
       positionals: req.positionals ?? [],
       flags: req.flags ?? {},

@@ -289,7 +289,7 @@ test('an owner-armed session still records its target and publishes its script',
 
   // What `open`/`close --save-script` do once past the seam: arm the session,
   // then publish at teardown. Unchanged by the ingress rejection.
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'open',
     positionals: ['Example'],
     flags: { saveScript: target },

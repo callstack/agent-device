@@ -131,7 +131,6 @@ function buildTargetedRuntimeOptions(
       const resultDurationMs = readLongPressResultDuration(result);
       return await buildTargetedTouchResponsePayloads({
         params,
-        session,
         result,
         staleRefsWarning,
         publicData: transformTouchResponseData({

@@ -99,7 +99,9 @@ import {
 } from '../../__tests__/test-utils/device-claim-store.ts';
 import { sendRequest } from '../../daemon-client/daemon-client-transport.ts';
 import { resolveDaemonPaths } from '../../daemon-resolution.ts';
-import { startDaemonRuntime } from './daemon-runtime.ts';
+import { startDaemonRuntime, teardownDaemonSessionForShutdown } from './daemon-runtime.ts';
+import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 
 afterEach(() => {
   lifecycleEvents.length = 0;
@@ -315,3 +317,47 @@ test('shutdown joins dispatch completion after force-closing the client before t
     await runtime?.shutdown();
   }
 });
+test.each([false, true])(
+  'shutdown forwards only the addressed lifetime’s runtime hints, retired=%s',
+  async (retired) => {
+    const sessionStore = makeSessionStore('shutdown-scoped-hints-');
+    const address = 'cwd:shutdown-hints:default';
+    const ref = sessionStore.publish(address, makeIosSession('default'));
+    const publicRef = sessionStore.publish('default', makeIosSession('default'));
+    sessionStore.setRuntimeHints(address, { metroHost: 'scoped.example', metroPort: 8082 });
+    sessionStore.setRuntimeHints('default', { metroHost: 'public.example', metroPort: 8083 });
+    let successor;
+    if (retired) {
+      sessionStore.retire(ref);
+      successor = sessionStore.publish(address, makeIosSession('default'));
+      sessionStore.setRuntimeHints(address, { metroHost: 'successor.example', metroPort: 8084 });
+    }
+    const finalizeApplicationLifecycle = vi.fn(async () => {});
+
+    await teardownDaemonSessionForShutdown({
+      ref,
+      sessionStore,
+      stderr: { write: () => {} },
+      finalizeApplicationLifecycle,
+    });
+
+    expect(finalizeApplicationLifecycle).toHaveBeenCalledWith(
+      ref.session,
+      retired ? {} : { metroHost: 'scoped.example', metroPort: '8082' },
+    );
+    expect(sessionStore.resolveCurrent(publicRef)).toBe(publicRef.session);
+    expect(sessionStore.getRuntimeHints('default')).toEqual({
+      metroHost: 'public.example',
+      metroPort: 8083,
+    });
+    if (successor) {
+      expect(sessionStore.resolveCurrent(successor)).toBe(successor.session);
+      expect(sessionStore.getRuntimeHints(address)).toEqual({
+        metroHost: 'successor.example',
+        metroPort: 8084,
+      });
+    } else {
+      expect(sessionStore.lookup(address)).toBeUndefined();
+    }
+  },
+);

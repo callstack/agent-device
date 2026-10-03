@@ -174,7 +174,7 @@ async function startRecording(
   const snapshot = adopted.handle.inspect();
   recordSessionAction(
     params.sessionStore,
-    params.sessionStore.requireCurrent(adoptedRef),
+    adoptedRef,
     params.req,
     params.req.command,
     buildRecordingStartedAction(snapshot),
@@ -260,20 +260,14 @@ async function stopRecording(
   const completion = stopped.completion;
   const response = buildRecordingStopResponse(completion);
   if (stopped.recordsSessionAction) {
-    recordSessionAction(
-      params.sessionStore,
-      ref ? params.sessionStore.resolveCurrent(ref) : undefined,
-      params.req,
-      params.req.command,
-      {
-        action: 'stop',
-        outPath: completion.outPath,
-        ...(completion.clientOutPath
-          ? { requestedFileName: path.basename(completion.clientOutPath) }
-          : {}),
-        showTouches: completion.showTouches,
-      },
-    );
+    recordSessionAction(params.sessionStore, ref, params.req, params.req.command, {
+      action: 'stop',
+      outPath: completion.outPath,
+      ...(completion.clientOutPath
+        ? { requestedFileName: path.basename(completion.clientOutPath) }
+        : {}),
+      showTouches: completion.showTouches,
+    });
   }
   if (session.recordOnlySession && ref) params.sessionStore.retire(ref);
   return response;

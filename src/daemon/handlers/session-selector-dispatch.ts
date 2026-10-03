@@ -1,7 +1,7 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
-import type { SessionState } from '../session-state.ts';
+import type { SessionRef, SessionState } from '../session-state.ts';
 import type { SessionStore } from '../session-store.ts';
 import { contextFromFlags } from '../context.ts';
 import {
@@ -32,9 +32,9 @@ type SessionCommandPrepareOutcome =
 /**
  * The one orchestration every session/selector-route leaf shares: guard, resolve the device,
  * admit-then-prepare via the caller's own strategy, expire the ref frame if the command mutates
- * (immediately before the prepared invocation runs, never after), derive and record the next
- * session. `prepare` is where each leaf's own admission and binding lives; everything around it
- * is identical, so it lives here once instead of once per command. Every leaf on this route now
+ * (immediately before the prepared invocation runs, never after), apply the optional session
+ * patch and record the action. `prepare` owns each leaf's admission and binding; the shared
+ * orchestration lives here once. Every leaf on this route now
  * supplies a bind-and-execute thunk — R57 retired the last capability-gate-then-`dispatchCommand`
  * one with `trigger-app-event`.
  */
@@ -46,14 +46,10 @@ async function runSessionOrSelectorDispatch(params: {
   command: string;
   positionals: string[];
   recordPositionals?: string[];
-  deriveNextSession?: (
-    session: SessionState,
-    result: Record<string, unknown> | void,
-    device: DeviceInfo,
-  ) => Promise<SessionState> | SessionState;
+  updateSession?: (ref: SessionRef, result: Record<string, unknown> | void) => Promise<void> | void;
   prepare: (
     device: DeviceInfo,
-    session: SessionState | undefined,
+    ref: SessionRef | undefined,
   ) => Promise<SessionCommandPrepareOutcome>;
 }): Promise<DaemonResponse> {
   const {
@@ -63,10 +59,11 @@ async function runSessionOrSelectorDispatch(params: {
     command,
     positionals,
     recordPositionals,
-    deriveNextSession,
+    updateSession,
     prepare,
   } = params;
-  const session = sessionStore.get(sessionName);
+  const ref = sessionStore.lookup(sessionName);
+  const session = ref?.session;
   const flags = req.flags ?? {};
   const guard = requireSessionOrExplicitSelector(command, session, flags);
   if (guard) return guard;
@@ -75,29 +72,26 @@ async function runSessionOrSelectorDispatch(params: {
     session,
     flags,
   });
-  const prepared = await prepare(device, session);
+  if (ref) sessionStore.requireCurrent(ref);
+  const prepared = await prepare(device, ref);
   if (!prepared.ok) return prepared.response;
 
   // ADR 0014 side-effect seam for session/selector-route leaves (keyboard
   // dismiss/enter/return, push, trigger-app-event). Expire the frame immediately before the
   // mutating invocation runs — not after it resolves — when the classification says this
   // request mutates; keyboard status/get resolve to `preserve` and leave the frame untouched.
-  if (session && resolveRefFrameEffect(req) === 'may-invalidate') {
-    expireRefFrame(session);
+  const current = ref ? sessionStore.requireCurrent(ref) : undefined;
+  if (current && resolveRefFrameEffect(req) === 'may-invalidate') {
+    expireRefFrame(current);
   }
 
   const result = await prepared.execute();
 
-  if (session) {
-    const nextSession = deriveNextSession
-      ? await deriveNextSession(session, result, device)
-      : session;
-    recordSessionAction(sessionStore, nextSession, req, command, result ?? {}, {
+  if (ref) {
+    if (updateSession) await updateSession(ref, result);
+    recordSessionAction(sessionStore, ref, req, command, result ?? {}, {
       positionals: recordPositionals ?? positionals,
     });
-    if (nextSession !== session) {
-      sessionStore.set(sessionName, nextSession);
-    }
   }
   return { ok: true, data: result ?? {} };
 }
@@ -150,7 +144,7 @@ type SessionRouteRuntimeResolver = (
 /**
  * The whole shape a migrated session-route leaf needs: admit and bind through the caller's own
  * resolver, then hand `runSessionOrSelectorDispatch` the bound runtime's `execute` to invoke after
- * expiring the frame. Only the resolver, the command name and the optional session derivation
+ * expiring the frame. Only the resolver, the command name and the optional post-execution session patch
  * differ per leaf, so one entry point here is what keeps `keyboard` and `trigger-app-event` from
  * drifting into two copies of the same wiring.
  */
@@ -164,7 +158,7 @@ async function runBoundSessionRoute(
        * lexically. A bare reference would dedupe the wiring and delete the proof with it.
        */
       resolveRuntime: SessionRouteRuntimeResolver;
-      deriveNextSession?: Parameters<typeof runSessionOrSelectorDispatch>[0]['deriveNextSession'];
+      updateSession?: Parameters<typeof runSessionOrSelectorDispatch>[0]['updateSession'];
     }>,
 ): Promise<DaemonResponse> {
   const { req, sessionName, logPath, sessionStore, inspectFacts, bindDevice } = params;
@@ -175,8 +169,8 @@ async function runBoundSessionRoute(
     sessionStore,
     command: params.command,
     positionals,
-    ...(params.deriveNextSession ? { deriveNextSession: params.deriveNextSession } : {}),
-    prepare: async (device, session) => {
+    ...(params.updateSession ? { updateSession: params.updateSession } : {}),
+    prepare: async (device, ref) => {
       const bound = await params.resolveRuntime({
         device,
         positionals,
@@ -185,6 +179,7 @@ async function runBoundSessionRoute(
         bindDevice,
       });
       if (!bound.ok) return { ok: false, response: bound.response };
+      const session = ref ? sessionStore.requireCurrent(ref) : undefined;
       const dispatchContext = {
         ...contextFromFlags(logPath, req.flags, session?.appBundleId, session?.trace?.outPath),
         surface: session?.surface,
@@ -217,19 +212,16 @@ export async function handleAppEventCommand(
     ...params,
     command: PUBLIC_COMMANDS.triggerAppEvent,
     resolveRuntime: (runtimeParams) => resolveBoundAppEventRuntime(runtimeParams),
-    deriveNextSession: async (session, result) => {
+    updateSession: async (ref, result) => {
       const eventUrl = typeof result?.eventUrl === 'string' ? result.eventUrl : undefined;
-      const nextAppBundleId = eventUrl
-        ? ((await resolveSessionAppBundleIdForTarget(
-            session.device,
-            eventUrl,
-            session.appBundleId,
-          )) ?? session.appBundleId)
-        : session.appBundleId;
-      return {
-        ...session,
-        appBundleId: nextAppBundleId,
-      };
+      if (!eventUrl) return;
+      const session = params.sessionStore.requireCurrent(ref);
+      const appBundleId = await resolveSessionAppBundleIdForTarget(
+        session.device,
+        eventUrl,
+        session.appBundleId,
+      );
+      if (appBundleId !== undefined) params.sessionStore.update(ref, { appBundleId });
     },
   });
 }

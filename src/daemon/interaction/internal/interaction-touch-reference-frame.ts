@@ -18,11 +18,18 @@ async function resolveDirectTouchReferenceFrame(params: {
 }): Promise<GestureReferenceFrame | undefined> {
   const { ref, flags, sessionStore, contextFromFlags, captureSnapshotForSession, observation } =
     params;
-  const session = sessionStore.requireCurrent(ref);
-  const recording = session.screenRecording?.handle;
-  if (!recording) {
+  const session = sessionStore.resolveCurrent(ref);
+  if (!session) return undefined;
+  const resource = session.screenRecording;
+  if (!resource) {
     return undefined;
   }
+  const recording = resource.handle;
+  const rememberFrame = (frame: GestureReferenceFrame | undefined) => {
+    if (!frame || sessionStore.resolveCurrent(ref)?.screenRecording !== resource) return undefined;
+    recording.setTouchReferenceFrame(frame);
+    return frame;
+  };
   const currentFrame = recording.inspect().touchReferenceFrame;
   if (currentFrame) {
     return currentFrame;
@@ -35,26 +42,21 @@ async function resolveDirectTouchReferenceFrame(params: {
   ) {
     if (!observation) throw new Error('Android observation was not injected into the request');
     const size = await observation.readScreenSize(session.device);
-    const referenceFrame = {
+    return rememberFrame({
       referenceWidth: size.width,
       referenceHeight: size.height,
-    };
-    recording.setTouchReferenceFrame(referenceFrame);
-    return referenceFrame;
+    });
   }
 
   const snapshotFrame = getSnapshotReferenceFrame(session.snapshot);
   if (snapshotFrame) {
-    recording.setTouchReferenceFrame(snapshotFrame);
-    return snapshotFrame;
+    return rememberFrame(snapshotFrame);
   }
 
   const snapshot = await captureSnapshotForSession(ref, flags, sessionStore, contextFromFlags, {
     interactiveOnly: true,
   });
-  const referenceFrame = getSnapshotReferenceFrame(snapshot);
-  if (referenceFrame) recording.setTouchReferenceFrame(referenceFrame);
-  return referenceFrame;
+  return rememberFrame(getSnapshotReferenceFrame(snapshot));
 }
 
 export async function resolveDirectTouchReferenceFrameSafely(params: {
@@ -68,11 +70,13 @@ export async function resolveDirectTouchReferenceFrameSafely(params: {
   try {
     return await resolveDirectTouchReferenceFrame(params);
   } catch (error) {
+    const current = params.sessionStore.resolveCurrent(params.ref);
+    if (!current) return undefined;
     emitDiagnostic({
       level: 'warn',
       phase: 'touch_reference_frame_resolve_failed',
       data: {
-        platform: params.ref.session.device.platform,
+        platform: current.device.platform,
         error: error instanceof Error ? error.message : String(error),
       },
     });

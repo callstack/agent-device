@@ -36,6 +36,7 @@ import { runtimeHintValues } from '../session-runtime.ts';
 import { closeDaemonServers } from './server-shutdown.ts';
 import type { DaemonInvokeFn } from '../daemon-request.ts';
 import type { SessionRef, SessionState } from '../session-state.ts';
+import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
 import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
 import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
@@ -137,7 +138,10 @@ export async function teardownDaemonSessionForShutdown(params: {
   sessionStore: SessionStore;
   stateDir?: string;
   stderr: WritableOutput;
-  finalizeApplicationLifecycle?: (session: SessionState) => Promise<void>;
+  finalizeApplicationLifecycle?: (
+    session: SessionState,
+    runtimeHints: RuntimeHintValues,
+  ) => Promise<void>;
   beforeDelete?: (session: SessionState) => Promise<void>;
   afterSuccessfulTeardown?: (session: SessionState) => Promise<void>;
 }): Promise<void> {
@@ -150,7 +154,11 @@ export async function teardownDaemonSessionForShutdown(params: {
     beforeDelete,
     afterSuccessfulTeardown,
   } = params;
-  const session = sessionStore.resolveCurrent(ref) ?? ref.session;
+  const current = sessionStore.resolveCurrent(ref);
+  const session = current ?? ref.session;
+  const runtimeHints = runtimeHintValues(
+    current ? sessionStore.getRuntimeHints(ref.address) : undefined,
+  );
   const timeoutMs = resolveDaemonSessionTeardownTimeoutMs(session);
   // The ownership-fenced app-log side effect must settle while this process
   // still owns the daemon lock. It is intentionally outside the generic
@@ -182,7 +190,8 @@ export async function teardownDaemonSessionForShutdown(params: {
           session,
           stderr,
           resource: 'lifecycle',
-          teardown: async () => await finalizeApplicationLifecycle(sessionAfterAppLog),
+          teardown: async () =>
+            await finalizeApplicationLifecycle(sessionAfterAppLog, runtimeHints),
         })
       : true;
     return genericTeardownSucceeded && lifecycleTeardownSucceeded;
@@ -477,13 +486,13 @@ export async function startDaemonRuntime(
         ref,
         sessionStore,
         stderr,
-        finalizeApplicationLifecycle: async (sessionToFinalize) =>
+        finalizeApplicationLifecycle: async (sessionToFinalize, runtimeHints) =>
           await finalizeDaemonSessionApplicationLifecycle({
             gateway: deviceRuntimeGateway,
             scope: createDaemonRecoveryPlatformScope(),
             session: sessionToFinalize,
             stateDir: baseDir,
-            runtimeHints: runtimeHintValues(sessionStore.getRuntimeHints(sessionToFinalize.name)),
+            runtimeHints,
           }),
         beforeDelete: async (sessionToFinalize) => {
           await finalizeDaemonSessionLease({

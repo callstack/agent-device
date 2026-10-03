@@ -171,7 +171,7 @@ async function executeWaitRequest(
     const recordedTarget = readRecordedResolutionTarget(result);
     recordIfSession(
       sessionStore,
-      sessionName,
+      params.ref,
       req,
       stripResolutionPayload(result),
       recordedTarget,

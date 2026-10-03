@@ -63,7 +63,8 @@ export async function dispatchSnapshotRuntimeCommand(
     session,
     device,
     async () => {
-      const { req, sessionName, logPath, sessionStore } = params;
+      const { req, logPath, sessionStore } = params;
+      const sessionName = ref?.address ?? params.sessionName;
       const capturedQuality: CapturedSnapshotQuality = {};
       const { runtime, sessions } = createSnapshotRuntime({
         req,
@@ -102,7 +103,7 @@ export async function dispatchSnapshotRuntimeCommand(
         req,
         sessionName,
         sessionStore,
-        session: current,
+        ref: sessions.getRef(),
         result: result.record,
       });
       const data = applyRecoveredWarningLatch({
@@ -146,15 +147,15 @@ function createSnapshotRuntime(params: {
         isRefScopedSnapshot(req),
       );
       const snapshot = keepCurrentSnapshot ? current.snapshot : snapshotRecord.snapshot;
-      const nextSession: SessionState =
-        current ??
-        createSnapshotSession({
-          sessionName,
-          sessionScope: resolveSessionScope(req),
-          device,
-          snapshot,
-          appBundleId: record.appBundleId,
-        });
+      const nextSession: SessionState = ref
+        ? sessionStore.update(ref, {})
+        : createSnapshotSession({
+            sessionName,
+            sessionScope: resolveSessionScope(req),
+            device,
+            snapshot,
+            appBundleId: record.appBundleId,
+          });
       nextSession.appName = record.appName ?? current?.appName;
       setCommandSnapshot(nextSession, {
         snapshot,
@@ -266,12 +267,11 @@ function recordSnapshotRuntimeAction(params: {
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
-  session: SessionState | undefined;
+  ref: SessionRef | undefined;
   result: SnapshotRuntimeRecord;
 }): void {
-  const session = params.session;
-  if (!session) return;
-  params.sessionStore.recordAction(session, {
+  if (!params.ref) return;
+  params.sessionStore.recordAction(params.ref, {
     command: params.req.command,
     positionals: params.req.positionals ?? [],
     flags: params.req.flags ?? {},

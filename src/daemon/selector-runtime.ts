@@ -66,7 +66,7 @@ export async function dispatchFindReadOnlyViaRuntime(
     });
     recordIfSession(
       params.sessionStore,
-      params.sessionName,
+      resolvedRuntime.ref,
       req,
       buildFindRecordResult(result, action),
     );
@@ -168,7 +168,7 @@ export async function dispatchGetViaRuntime(
     });
     recordIfSession(
       params.sessionStore,
-      params.sessionName,
+      resolvedRuntime.ref,
       req,
       buildGetRecordResult(result, sub),
       {
@@ -236,7 +236,7 @@ export async function dispatchIsViaRuntime(
     });
     const recordedTarget = readRecordedResolutionTarget(result);
     const strippedResult = stripResolutionPayload(result);
-    recordIfSession(params.sessionStore, params.sessionName, req, strippedResult, recordedTarget);
+    recordIfSession(params.sessionStore, resolvedRuntime.ref, req, strippedResult, recordedTarget);
     return stripSelectorChain(strippedResult);
   });
   return withCaptureDisclosures({

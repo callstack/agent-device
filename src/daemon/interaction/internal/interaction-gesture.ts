@@ -239,7 +239,7 @@ async function dispatchGestureInteraction(
       responseData.warning = `${existingWarning}${readiness.warning}`;
     }
     return finalizeTouchInteraction({
-      session,
+      ref: params.sessionRef!,
       sessionStore: params.sessionStore,
       command,
       actionCommand: command,

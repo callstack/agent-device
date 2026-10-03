@@ -18,12 +18,9 @@ export type RepairCloseCommit =
   | { kind: 'aborted' }
   | { kind: 'failed'; error: AppError };
 
-function recordCloseAction(
-  sessionStore: SessionStore,
-  session: SessionState,
-  req: DaemonRequest,
-): void {
-  sessionStore.recordAction(session, {
+function recordCloseAction(sessionStore: SessionStore, ref: SessionRef, req: DaemonRequest): void {
+  const session = sessionStore.requireCurrent(ref);
+  sessionStore.recordAction(ref, {
     command: 'close',
     positionals: req.positionals ?? [],
     flags: (req.flags ?? {}) as CommandFlags,
@@ -40,7 +37,7 @@ export function commitRepairScriptBeforeClose(
   if (!isRepairArmedSession(session)) return { kind: 'not-armed' };
 
   const actionsBeforeClose = session.actions.length;
-  recordCloseAction(sessionStore, session, req);
+  recordCloseAction(sessionStore, ref, req);
   const alreadyPublished = isSessionScriptPublished(session);
   const result = sessionStore.writeSessionLog(ref, {
     force: effectiveWriteForce(session, req.flags?.force),
@@ -85,7 +82,7 @@ export function finalizeOrdinaryCloseScript(params: {
   const { req, ref, sessionStore, platformCloseError } = params;
   const session = sessionStore.requireCurrent(ref);
   if (!platformCloseError) {
-    recordCloseAction(sessionStore, session, req);
+    recordCloseAction(sessionStore, ref, req);
   }
   // The recorded close action already armed target/force through the recorder's flag ingress.
   // On a platform-close failure that action was never recorded, so the log still publishes to the

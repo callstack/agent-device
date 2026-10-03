@@ -1,12 +1,12 @@
 import type { LaunchConfirmation } from '@agent-device/contracts/application-lifecycle-runtime';
-import type { SessionScope, SessionSurface } from '@agent-device/contracts/session';
+import type { SessionSurface } from '@agent-device/contracts/session';
 import {
   isIosFamily,
   isSerialAddressablePlatform,
   publicPlatformString,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import type { SessionRuntimeHints, SessionState } from '../../session-state.ts';
+import type { SessionRuntimeHints } from '../../session-state.ts';
 import { successText } from '@agent-device/kernel/success-text';
 import type { StartupPerfSample } from './session-startup-metrics.ts';
 import type { DeviceSelectionResult } from '@agent-device/device-selection/device-selection-resolver';
@@ -89,37 +89,4 @@ function selectionResponseData(
   if (!selection) return {};
   const { device: _device, ...metadata } = selection;
   return { selection: metadata };
-}
-
-export function buildNextOpenSession(params: {
-  existingSession?: SessionState;
-  sessionName: string;
-  sessionScope: SessionScope;
-  device: DeviceInfo;
-  surface: SessionSurface;
-  appBundleId?: string;
-  appName?: string;
-}): SessionState {
-  const { existingSession, sessionName, sessionScope, device, surface, appBundleId, appName } =
-    params;
-  if (existingSession) {
-    return {
-      ...existingSession,
-      device,
-      surface,
-      appBundleId,
-      appName,
-      snapshot: undefined,
-    };
-  }
-  return {
-    name: sessionName,
-    sessionScope,
-    device,
-    createdAt: Date.now(),
-    surface,
-    appBundleId,
-    appName,
-    actions: [],
-  };
 }

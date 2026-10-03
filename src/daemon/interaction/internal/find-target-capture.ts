@@ -21,7 +21,6 @@ export function createFindTargetCapture(
   params: Readonly<{
     ref: SessionRef;
     device: SessionState['device'];
-    session: SessionState;
     req: DaemonRequest;
     logPath: string;
     locator: FindLocator;
@@ -36,11 +35,10 @@ export function createFindTargetCapture(
     captureProof: RequestCaptureProof;
   }>,
 ): () => Promise<FindTargetTree> {
-  const { device, session, req, logPath, locator, query, sessionStore, sessionName } = params;
+  const { device, req, logPath, locator, query, sessionStore, sessionName } = params;
   const captureRuntime = createSelectorCaptureRuntime({
     ref: params.ref,
     device,
-    session,
     sessionStore,
     sessionName,
     req,

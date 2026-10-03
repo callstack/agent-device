@@ -41,6 +41,7 @@ import { errorResponse } from '@agent-device/kernel/contracts';
 export type SnapshotRuntimeRouteParams = {
   req: DaemonRequest;
   sessionName: string;
+  sessionRef?: SessionRef;
   logPath: string;
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
@@ -135,7 +136,12 @@ export async function resolveBoundSnapshotCaptureRuntime(
   command: 'snapshot' | 'diff',
 ): Promise<ResolvedSnapshotCaptureRuntime> {
   const { req, sessionName, sessionStore } = params;
-  const { ref, session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
+  const { ref, session, device } = await resolveSessionDevice(
+    sessionStore,
+    sessionName,
+    req.flags,
+    params.sessionRef,
+  );
   const resolvedScope = resolveSnapshotScope(req.flags?.snapshotScope, session);
   if (!resolvedScope.ok) return { ok: false, response: resolvedScope };
 

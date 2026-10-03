@@ -199,7 +199,7 @@ export function setSessionRuntimeHintsForOpen(
 ): SessionRuntimeHints | undefined {
   if (!runtime) return undefined;
   if (countConfiguredRuntimeHints(runtime) === 0) {
-    sessionStore.clearRuntimeHints(sessionName);
+    sessionStore.setRuntimeHints(sessionName, undefined);
     return undefined;
   }
   sessionStore.setRuntimeHints(sessionName, runtime);
