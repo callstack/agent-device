@@ -538,3 +538,167 @@ test('a toolbar host enclosing a plain content sibling still covers it, so the e
 
   assert.deepEqual(coveredLabels(nodes), ['Other', 'Barless primary']);
 });
+
+// `snapshot -i` of a SwiftUI `fullScreenCover` presented from a `.large` sheet over the Home tab on an
+// iOS 27 simulator, cells trimmed. All three presentations are listed as siblings of the root, each
+// ending with its toolbar host. The sheet's host encloses Home's bar and list and the cover's.
+const COVER_OVER_SHEET_ROWS: CapturedNode[] = [
+  [0, undefined, 'Other', 'SwiftUIApplication', 'SheetRepro', [0, 0, 402, 874]],
+  [1, 0, 'NavigationBar', 'SwiftUI.UIKitNavigationBar', undefined, [0, 62, 402, 106]],
+  [2, 1, 'Button', 'SwiftUI.AccessibilityNode', 'Edit', [328.67, 66, 53.33, 36]],
+  [4, 0, 'CollectionView', 'SwiftUI.UpdateCoalescingCollectionView', undefined, [0, 116, 402, 675]],
+  [6, 4, 'Button', 'SwiftUI.AccessibilityNode', 'Open medium sheet', [16, 168, 370, 52]],
+  [16, 0, 'Toolbar', '_UIFloatingBarContainerView', 'Toolbar', [0, 0, 402, 874]],
+  [17, 0, 'TabBar', 'UITabBar', 'Tab Bar', [0, 791, 402, 83]],
+  [18, 17, 'Button', '_UITabButton', 'Home', [68, 795, 94, 54]],
+  [21, 0, 'NavigationBar', 'SwiftUI.UIKitNavigationBar', undefined, [0, 78, 402, 106]],
+  [22, 21, 'Button', 'SwiftUI.AccessibilityNode', 'Close', [20, 82, 67, 36]],
+  [
+    26,
+    0,
+    'CollectionView',
+    'SwiftUI.UpdateCoalescingCollectionView',
+    undefined,
+    [0, 132, 402, 680],
+  ],
+  [28, 26, 'Button', 'SwiftUI.AccessibilityNode', 'Primary action', [16, 184, 370, 52]],
+  [43, 26, 'Button', 'SwiftUI.AccessibilityNode', 'Row 1', [16, 733, 370, 52]],
+  [46, 0, 'Toolbar', '_UIFloatingBarContainerView', 'Toolbar', [0, 62, 402, 812]],
+  [47, 46, 'Button', 'SwiftUI.AccessibilityNode', 'Bottom', [162, 804, 78, 36]],
+  [48, 0, 'NavigationBar', 'SwiftUI.UIKitNavigationBar', undefined, [0, 62, 402, 54]],
+  [49, 48, 'Button', 'SwiftUI.AccessibilityNode', 'Upper close', [20, 66, 116, 36]],
+  [51, 48, 'Button', 'SwiftUI.AccessibilityNode', 'Upper save', [268, 66, 114, 36]],
+  [
+    52,
+    0,
+    'CollectionView',
+    'SwiftUI.UpdateCoalescingCollectionView',
+    undefined,
+    [0, 116, 402, 696],
+  ],
+  [54, 52, 'Button', 'SwiftUI.AccessibilityNode', 'Upper primary', [16, 151, 370, 52]],
+  [57, 52, 'Button', 'SwiftUI.AccessibilityNode', 'Upper row 0', [16, 255, 370, 52]],
+  [68, 0, 'Toolbar', '_UIFloatingBarContainerView', 'Toolbar', [0, 0, 402, 874]],
+  [69, 68, 'Button', 'SwiftUI.AccessibilityNode', 'Upper bottom', [136.67, 804, 128.67, 36]],
+];
+
+const HOME_ROW_INDEXES = new Set([1, 2, 4, 6, 16, 17, 18]);
+const COVER_ROW_INDEXES = new Set([48, 49, 51, 52, 54, 57, 68, 69]);
+const COVER_CONTROLS = [
+  'Upper close',
+  'Upper save',
+  'Upper primary',
+  'Upper row 0',
+  'Upper bottom',
+];
+
+test('a full-screen cover over a sheet leaves the sheet beneath covered and the cover pressable', () => {
+  const covered = coveredLabels(capturedTree(COVER_OVER_SHEET_ROWS));
+
+  for (const label of ['Edit', 'Open medium sheet', 'Close', 'Primary action', 'Row 1']) {
+    assert.ok(covered.includes(label), `${label} sits beneath the cover`);
+  }
+  for (const label of COVER_CONTROLS) {
+    assert.ok(!covered.includes(label), `${label} is on the cover`);
+  }
+});
+
+test('a toolbar host enclosing the bars of a presentation stacked over it keeps covering', () => {
+  // The capture without Home: only the cover's bar and list, listed after the sheet's host, tell it
+  // apart from a lone sheet.
+  const rows = COVER_OVER_SHEET_ROWS.filter(([index]) => !HOME_ROW_INDEXES.has(index));
+  const covered = coveredLabels(capturedTree(rows));
+
+  assert.ok(covered.includes('Primary action'));
+  assert.ok(covered.includes('Row 1'));
+  for (const label of COVER_CONTROLS) assert.ok(!covered.includes(label));
+});
+
+test('a toolbar host enclosing the bars of a presentation beneath it keeps covering', () => {
+  // The capture without the cover: a sheet host enclosing Home's bar and list, which sit before Home's
+  // own host, covers Home. It covers the sheet too, failing closed; iOS publishes no presentation
+  // beneath a sheet, so this shape is not captured live.
+  const rows = COVER_OVER_SHEET_ROWS.filter(([index]) => !COVER_ROW_INDEXES.has(index));
+  const covered = coveredLabels(capturedTree(rows));
+
+  assert.ok(covered.includes('Edit'));
+  assert.ok(covered.includes('Open medium sheet'));
+});
+
+test.for([
+  {
+    name: 'a sheet over a sheet',
+    rows: [
+      [0, undefined, 'Other', 'SwiftUIApplication', 'SheetRepro', [0, 0, 402, 874]],
+      [1, 0, 'NavigationBar', 'SwiftUI.UIKitNavigationBar', undefined, [0, 88, 402, 54]],
+      [2, 1, 'Button', 'SwiftUI.AccessibilityNode', 'Upper close', [20, 92, 116, 36]],
+      [4, 1, 'Button', 'SwiftUI.AccessibilityNode', 'Upper save', [268, 92, 114, 36]],
+      [
+        5,
+        0,
+        'CollectionView',
+        'SwiftUI.UpdateCoalescingCollectionView',
+        undefined,
+        [0, 142, 402, 670],
+      ],
+      [7, 5, 'Button', 'SwiftUI.AccessibilityNode', 'Upper primary', [16, 177, 370, 52]],
+      [20, 5, 'Button', 'SwiftUI.AccessibilityNode', 'Upper row 5', [16, 541, 370, 52]],
+      [21, 0, 'Toolbar', '_UIFloatingBarContainerView', 'Toolbar', [0, 72, 402, 802]],
+      [22, 21, 'Button', 'SwiftUI.AccessibilityNode', 'Upper bottom', [136.67, 804, 128.67, 36]],
+    ],
+  },
+  {
+    name: 'a sheet over a plain screen',
+    rows: [
+      [0, undefined, 'Other', 'SwiftUIApplication', 'SheetRepro', [0, 0, 402, 874]],
+      [1, 0, 'NavigationBar', 'SwiftUI.UIKitNavigationBar', undefined, [0, 78, 402, 54]],
+      [2, 1, 'Button', 'SwiftUI.AccessibilityNode', 'Upper close', [20, 82, 116, 36]],
+      [4, 1, 'Button', 'SwiftUI.AccessibilityNode', 'Upper save', [268, 82, 114, 36]],
+      [
+        5,
+        0,
+        'CollectionView',
+        'SwiftUI.UpdateCoalescingCollectionView',
+        undefined,
+        [0, 132, 402, 680],
+      ],
+      [7, 5, 'Button', 'SwiftUI.AccessibilityNode', 'Upper primary', [16, 167, 370, 52]],
+      [20, 5, 'Button', 'SwiftUI.AccessibilityNode', 'Upper row 5', [16, 531, 370, 52]],
+      [21, 0, 'Toolbar', '_UIFloatingBarContainerView', 'Toolbar', [0, 62, 402, 812]],
+      [22, 21, 'Button', 'SwiftUI.AccessibilityNode', 'Upper bottom', [136.67, 804, 128.67, 36]],
+    ],
+  },
+] satisfies { name: string; rows: CapturedNode[] }[])(
+  'the captured iOS 27 $name publishes only the top sheet, and none of it is covered',
+  ({ rows }) => {
+    // iOS drops the presentation beneath a sheet from the capture, so no lower control gets a ref.
+    assert.deepEqual(coveredLabels(capturedTree(rows)), []);
+  },
+);
+
+test('a toolbar host enclosing only a scroll indicator still covers, so the scroll evidence is a container', () => {
+  const nodes = capturedTree([
+    [0, undefined, 'Other', 'SwiftUIApplication', 'SheetRepro', [0, 0, 402, 874]],
+    [1, 0, 'Other', 'UIView', undefined, [0, 100, 402, 712]],
+    [3, 1, 'Button', 'SwiftUI.AccessibilityNode', 'Barless primary', [16, 100, 370, 49]],
+    [4, 0, 'ScrollBar', '_UIScrollViewScrollIndicator', undefined, [396, 100, 3, 712]],
+    [17, 0, 'Toolbar', '_UIFloatingBarContainerView', 'Toolbar', [0, 62, 402, 812]],
+  ]);
+
+  assert.ok(coveredLabels(nodes).includes('Barless primary'));
+});
+
+test('a control the exempt toolbar host really hosts still covers the row it overlaps', () => {
+  // The host is exempt for the list it encloses, but a bar-kind strip it hosts is judged by its own
+  // rect: it covers the row beneath it and leaves the row above it alone.
+  const nodes = capturedTree([
+    [0, undefined, 'Other', 'SwiftUIApplication', 'SheetRepro', [0, 0, 402, 874]],
+    [1, 0, 'CollectionView', 'SwiftUI.CollectionView', undefined, [0, 100, 402, 712]],
+    [3, 1, 'Button', 'SwiftUI.AccessibilityNode', 'Barless primary', [16, 100, 370, 49]],
+    [16, 1, 'Button', 'SwiftUI.AccessibilityNode', 'Barless row 12', [16, 773, 370, 39]],
+    [17, 0, 'Toolbar', '_UIFloatingBarContainerView', 'Toolbar', [0, 62, 402, 812]],
+    [18, 17, 'Toolbar', '_UIBarPlatterView', 'Bottom bar', [16, 760, 370, 60]],
+  ]);
+
+  assert.deepEqual(coveredLabels(nodes), ['Barless row 12']);
+});
