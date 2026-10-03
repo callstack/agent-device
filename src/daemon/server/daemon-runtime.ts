@@ -362,7 +362,6 @@ export async function startDaemonRuntime(
   const daemonCodeOrigin = resolveDaemonCodeOrigin();
   const daemonCodeSignature = resolveDaemonCodeSignature();
   const providerComposition = await createDaemonProviderRuntimeComposition(env);
-  await noteSkippedProviderRuntimes(logPath, providerComposition.skipped);
   const providerDeviceRuntimes = [...providerComposition.runtimes];
   const deviceRuntimeGateway = createPlatformRuntimeGateway({
     assertShutdownAllowed: daemonPolicy
@@ -735,6 +734,7 @@ export async function startDaemonRuntime(
     publishDaemonInfo(socketPort, httpPort);
     stopMetadataLossWatch = armDaemonMetadataLossWatch(baseDir, infoPath, logPath, daemonIdentity);
     await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
+    await noteSkippedProviderRuntimes(logPath, providerComposition.skipped);
     // After publication: publishDaemonInfo truncates daemon.log, so anything
     // written before it is lost — including reconciliation diagnostics.
     await reconcileDeviceClaimsForDaemonStartup(

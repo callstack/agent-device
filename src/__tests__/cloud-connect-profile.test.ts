@@ -200,29 +200,24 @@ test('connect limrun generates a local daemon remote profile', async () => {
 });
 
 test('connect limrun attaches to an existing instance without storing its token', async () => {
-  const tempRoot = mkdtempForTestSync('agent-device-connect-limrun-attach-');
-  const stateDir = path.join(tempRoot, '.state');
+  const stateDir = path.join(mkdtempForTestSync('agent-device-connect-limrun-attach-'), '.state');
   const ios = { apiUrl: 'https://region.limrun.example/v1/ios_x/api', token: 'ios-instance-token' };
   vi.stubEnv('LIMRUN_API_KEY', '');
   vi.stubEnv('LIM_IOS_INSTANCE_URL', ios.apiUrl);
   vi.stubEnv('LIM_IOS_INSTANCE_TOKEN', ios.token);
 
-  try {
-    await captureConnectStdout(async () => {
-      await connectCommand({
-        positionals: ['limrun'],
-        flags: { json: true, help: false, version: false, stateDir, platform: 'ios' },
-        client: {} as AgentDeviceClient,
-      });
+  await captureConnectStdout(async () => {
+    await connectCommand({
+      positionals: ['limrun'],
+      flags: { json: true, help: false, version: false, stateDir, platform: 'ios' },
+      client: {} as AgentDeviceClient,
     });
+  });
 
-    const state = readRequiredActiveState(stateDir);
-    assert.equal(state.leaseBackend, 'ios-instance');
-    assert.doesNotMatch(fs.readFileSync(state.remoteConfigPath, 'utf8'), /ios-instance-token/);
-    assert.deepEqual(mockedVerifyLimrunConnection.mock.calls[0]?.[0].instances?.ios, ios);
-  } finally {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
-  }
+  const state = readRequiredActiveState(stateDir);
+  assert.equal(state.leaseBackend, 'ios-instance');
+  assert.doesNotMatch(fs.readFileSync(state.remoteConfigPath, 'utf8'), /ios-instance-token/);
+  assert.deepEqual(mockedVerifyLimrunConnection.mock.calls[0]?.[0].instances?.ios, ios);
 });
 
 test('connect limrun persists deferred Metro bridge settings', async () => {

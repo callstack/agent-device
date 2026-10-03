@@ -83,15 +83,7 @@ const runtime = new LimrunRuntime({
 });
 ```
 
-To drive existing instances instead, pass `instances` with or without `apiKey`. A platform listed there never creates or deletes instances:
-
-```ts
-const runtime = new LimrunRuntime({
-  instances: {
-    ios: { apiUrl: iosInstance.status.apiUrl, token: iosInstance.status.token },
-  },
-});
-```
+To drive existing instances, pass `instances: { ios: { apiUrl, token } }` (Android also takes `adbUrl`), with or without `apiKey`. A platform listed there never creates or deletes instances.
 
 After allocating a lease, an embedding bridge can call `runtime.getDeviceSession(device)` for the allocated device's reusable semantic capabilities. The facade includes app inventory, foreground state where Limrun exposes it, key input, bounded log reads, recording, remote asset installation, and the existing interactor. Android also exposes agent-device's `AndroidAdbProvider` abstraction for helpers and reversible port forwarding. iOS exposes a typed `simctl` execution handle for bridge-owned runner lifecycle and launch policy. Raw Limrun clients remain private to the provider runtime.
 

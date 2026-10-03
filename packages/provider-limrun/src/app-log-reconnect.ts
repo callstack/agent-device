@@ -15,10 +15,6 @@ import type {
 } from './instance-access.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 
-/**
- * Reopens the reader a descriptor names. An attached instance reconnects with its own access; an
- * instance this runtime created is looked up through the organization API.
- */
 export async function reconnectLimrunAppLogReader(options: {
   limrun?: Limrun;
   instances?: LimrunInstanceAccess;
