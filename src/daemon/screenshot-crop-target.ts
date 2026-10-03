@@ -2,7 +2,12 @@ import {
   SCREENSHOT_CROP_REASONS,
   type ScreenshotCropReason,
 } from '@agent-device/contracts/capture';
-import { macOsSurfaceBackend, type SessionSurface } from '@agent-device/contracts/session';
+import {
+  macOsSurfaceBackend,
+  readMacOsAppBackend,
+  type SessionSurface,
+} from '@agent-device/contracts/session';
+import { readHostEnvironmentVariable } from '@agent-device/host-kit/process';
 import { resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { validateSelectorExpression } from '@agent-device/selectors';
@@ -99,7 +104,12 @@ function classifyAppleCropTarget(
 }
 
 function classifyMacOsCropTarget(surface: SessionSurface | undefined): CropTarget {
-  return macOsSurfaceBackend(surface) === 'macos-helper' ? 'macos-helper' : 'macos-app-window';
+  // Only an app session's backend depends on the host; the other surfaces are always helper-routed.
+  const appBackend =
+    (surface ?? 'app') === 'app' ? readMacOsAppBackend(readHostEnvironmentVariable) : 'xctest';
+  return macOsSurfaceBackend(surface, appBackend) === 'macos-helper'
+    ? 'macos-helper'
+    : 'macos-app-window';
 }
 
 function cropRefusal(target: string, rejectionReason?: ScreenshotCropReason): AppError {

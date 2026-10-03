@@ -5,7 +5,8 @@ import type {
   OwnedProcessRecordWriter,
 } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
-import { macOsHelperSurface } from '@agent-device/contracts/session';
+import { macOsHelperSurface, readMacOsAppBackend } from '@agent-device/contracts/session';
+import { readHostEnvironmentVariable } from '@agent-device/host-kit/process';
 import type {
   CaptureSnapshotInput,
   SnapshotResult,
@@ -42,7 +43,10 @@ export async function loadMacOsSurfaceSnapshot(
   options: CaptureSnapshotInput['options'],
   signal?: AbortSignal,
 ): Promise<SnapshotResult> {
-  const surface = macOsHelperSurface(options?.surface);
+  const surface = macOsHelperSurface(
+    options?.surface,
+    readMacOsAppBackend(readHostEnvironmentVariable),
+  );
   if (!surface) {
     throw new TypeError('Apple surface capture requires a helper-routed macOS surface');
   }
