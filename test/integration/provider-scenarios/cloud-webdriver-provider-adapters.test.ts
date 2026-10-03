@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import type { IncomingHttpHeaders } from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   CLOUD_WEBDRIVER_PROVIDERS,
   createProviderWebDriver,
@@ -170,10 +171,12 @@ test('AWS Device Farm facade rejects device features it does not read at session
             },
           }),
         (error: unknown) => {
-          assert.match(
-            (error as Error).message,
-            /--provider-device-orientation, --provider-network-profile are not supported by AWS Device Farm/,
-          );
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'INVALID_ARGS');
+          assert.deepEqual(error.details?.flags, [
+            '--provider-device-orientation',
+            '--provider-network-profile',
+          ]);
           return true;
         },
       );
@@ -212,7 +215,10 @@ test('BrowserStack refuses a refused field on a repeat allocation of its live le
               awsProjectArn: 'arn:aws:devicefarm:us-west-2:123:project/project-id',
             },
           }),
-        /--aws-project-arn is not supported by BrowserStack/,
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.code === 'INVALID_ARGS' &&
+          JSON.stringify(error.details?.flags) === '["--aws-project-arn"]',
       );
       assert.equal(server.calls.length, sessionCalls);
       assert.deepEqual(await runtime.leaseLifecycle.heartbeat?.(lease), {

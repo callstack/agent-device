@@ -6,6 +6,7 @@ import { LimrunRuntime } from '../sdk/limrun.ts';
 import { createExpiredProviderLeaseReleaser } from '../daemon/provider-lease-expiry.ts';
 import type { SimulatorLease } from '../daemon/lease-registry.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import { readVersion } from '@agent-device/host-kit/version';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
@@ -190,7 +191,10 @@ test('Limrun refuses a refused field on a repeat allocation of its live lease', 
     await allocateLease(lease);
     await assert.rejects(
       allocateLease(lease, { flags: { providerOsVersion: '18.0' } }),
-      /--provider-os-version is not supported by Limrun/,
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        JSON.stringify(error.details?.flags) === '["--provider-os-version"]',
     );
     assert.equal(limrunMockState.iosCreate.mock.calls.length, 1);
   } finally {

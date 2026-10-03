@@ -321,10 +321,12 @@ test('connect limrun refuses profile fields Limrun does not read', async () => {
     },
   );
   assert.equal(result.code, 1);
-  assert.match(
-    result.stdout,
-    /--provider-os-version, --provider-geo-location are not supported by Limrun/,
-  );
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.error.code, 'INVALID_ARGS');
+  assert.deepEqual(payload.error.details.flags, [
+    '--provider-os-version',
+    '--provider-geo-location',
+  ]);
 });
 
 test('connect browserstack refuses AWS Device Farm flags', () => {
@@ -350,8 +352,8 @@ test('connect browserstack refuses AWS Device Farm flags', () => {
       (error: unknown) => {
         assert.ok(error instanceof AppError);
         assert.equal(error.code, 'INVALID_ARGS');
-        assert.equal(error.message, '--aws-project-arn is not supported by BrowserStack.');
         assert.equal(error.details?.provider, 'browserstack');
+        assert.deepEqual(error.details?.flags, ['--aws-project-arn']);
         return true;
       },
     );
@@ -818,8 +820,7 @@ test('connect aws-device-farm rejects device-feature flags it does not read', ()
         assert.equal(error.code, 'INVALID_ARGS');
         // Names every offending flag, and fires before the provider's own required-arg checks so
         // the caller is told what is unsupported rather than what else is missing.
-        assert.match(error.message, /--provider-device-orientation, --provider-timezone/);
-        assert.match(error.message, /are not supported by AWS Device Farm/);
+        assert.equal(error.details?.provider, 'aws-device-farm');
         assert.deepEqual(error.details?.flags, [
           '--provider-device-orientation',
           '--provider-timezone',

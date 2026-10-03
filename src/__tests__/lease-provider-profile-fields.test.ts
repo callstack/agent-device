@@ -79,7 +79,7 @@ test('leases.allocate refuses an OS version Limrun cannot honour instead of igno
     (error: unknown) =>
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
-      /--provider-os-version is not supported by Limrun/.test(error.message),
+      JSON.stringify(error.details?.flags) === '["--provider-os-version"]',
   );
   assert.equal(limrunInstances.iosCreate.mock.calls.length, 0);
 });
@@ -118,7 +118,9 @@ test('a remote-config profile cannot carry a field Limrun refuses past lease all
     assert.equal(result.code, 1);
     assert.equal(result.calls[0]?.command, 'lease_allocate');
     assert.equal(result.calls[0]?.flags?.providerGeoLocation, 'US');
-    assert.match(result.stdout, /--provider-geo-location is not supported by Limrun/);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.error.code, 'INVALID_ARGS');
+    assert.deepEqual(payload.error.details.flags, ['--provider-geo-location']);
     assert.equal(limrunInstances.iosCreate.mock.calls.length, 0);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
