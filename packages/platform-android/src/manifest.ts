@@ -77,14 +77,76 @@ function parseTextManifestPackageName(text: string): string | undefined {
 }
 
 function parseBinaryManifestPackageName(buffer: Buffer): string | undefined {
+  const dataEnd = readBinaryTreeDataEnd(buffer);
+  if (!dataEnd) return undefined;
+
+  let strings: AndroidManifestStrings | undefined;
+  for (let offset = dataEnd.treeHeaderSize; offset + RES_CHUNK_HEADER_SIZE <= dataEnd.dataEnd;) {
+    const chunk = readChunkHeader(buffer, offset, dataEnd.dataEnd);
+    if (!chunk) return undefined;
+
+    if (chunk.type === RES_STRING_POOL_TYPE) {
+      strings = parseStringPool(buffer.subarray(offset, offset + chunk.chunkSize));
+      if (!strings) return undefined;
+    } else if (strings) {
+      const packageName = parsePackageInChunk(buffer, chunk, offset, strings);
+      if (packageName) return packageName;
+    }
+    offset += chunk.chunkSize;
+  }
+
+  return undefined;
+}
+
+type BinaryChunkHeader = Readonly<{
+  type: number;
+  headerSize: number;
+  chunkSize: number;
+}>;
+
+function readChunkHeader(
+  buffer: Buffer,
+  offset: number,
+  dataEnd: number,
+): BinaryChunkHeader | undefined {
+  const type = buffer.readUInt16LE(offset);
+  const headerSize = buffer.readUInt16LE(offset + 2);
+  const chunkSize = buffer.readUInt32LE(offset + 4);
+  if (!isChunkHeaderValid(headerSize, chunkSize) || offset + chunkSize > dataEnd) {
+    return undefined;
+  }
+  return { type, headerSize, chunkSize };
+}
+
+function parsePackageInChunk(
+  buffer: Buffer,
+  chunk: BinaryChunkHeader,
+  offset: number,
+  strings: AndroidManifestStrings,
+): string | undefined {
+  if (chunk.type !== RES_XML_START_ELEMENT_TYPE) {
+    return undefined;
+  }
+  return parseStartElementPackageName(
+    buffer,
+    offset,
+    offset + chunk.chunkSize,
+    chunk.headerSize,
+    strings,
+  );
+}
+
+// AOSP `validate_chunk` checks every chunk against the parent's remaining bytes, so the tree
+// container must fit the buffer and its declared end (`mDataEnd`) — not the buffer end — bounds
+// the chunk walk.
+function readBinaryTreeDataEnd(
+  buffer: Buffer,
+): Readonly<{ treeHeaderSize: number; dataEnd: number }> | undefined {
   if (buffer.length < RES_CHUNK_HEADER_SIZE || buffer.readUInt16LE(0) !== RES_XML_TYPE) {
     return undefined;
   }
   const treeHeaderSize = buffer.readUInt16LE(2);
   const treeSize = buffer.readUInt32LE(4);
-  // AOSP `validate_chunk` checks every chunk against the parent's remaining bytes, so the tree
-  // container must fit the buffer and its declared end (`mDataEnd`) — not the buffer end — bounds
-  // the chunk walk.
   if (
     !isChunkHeaderValid(treeHeaderSize, treeSize) ||
     treeHeaderSize < RES_XML_TREE_HEADER_SIZE ||
@@ -92,34 +154,7 @@ function parseBinaryManifestPackageName(buffer: Buffer): string | undefined {
   ) {
     return undefined;
   }
-  const dataEnd = treeSize;
-
-  let strings: AndroidManifestStrings | undefined;
-  for (let offset = treeHeaderSize; offset + RES_CHUNK_HEADER_SIZE <= dataEnd;) {
-    const type = buffer.readUInt16LE(offset);
-    const headerSize = buffer.readUInt16LE(offset + 2);
-    const chunkSize = buffer.readUInt32LE(offset + 4);
-    if (!isChunkHeaderValid(headerSize, chunkSize) || offset + chunkSize > dataEnd) {
-      return undefined;
-    }
-
-    if (type === RES_STRING_POOL_TYPE) {
-      strings = parseStringPool(buffer.subarray(offset, offset + chunkSize));
-      if (!strings) return undefined;
-    } else if (type === RES_XML_START_ELEMENT_TYPE && strings) {
-      const packageName = parseStartElementPackageName(
-        buffer,
-        offset,
-        offset + chunkSize,
-        headerSize,
-        strings,
-      );
-      if (packageName) return packageName;
-    }
-    offset += chunkSize;
-  }
-
-  return undefined;
+  return { treeHeaderSize, dataEnd: treeSize };
 }
 
 // AOSP `validate_chunk`: a chunk header is readable only when it spans the common header, and

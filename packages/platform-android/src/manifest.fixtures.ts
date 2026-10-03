@@ -71,64 +71,49 @@ export type SyntheticManifest = Readonly<{
   paddingStrings?: number;
 }>;
 
+type SyntheticManifestLayout = Readonly<{
+  packageName: string;
+  elementName: string;
+  utf8Strings: boolean;
+  typedValueOnly: boolean;
+  attributeStride: number;
+  attrExtSize: number;
+  nodeHeaderSize: number;
+  attributes: readonly SyntheticAttribute[];
+  packageIndex: number;
+  attributeStart: number;
+  attributeCount: number;
+  startElementChunkSizeShrink: number;
+  paddingStrings: number;
+}>;
+
 export function buildBinaryAndroidManifest(input: SyntheticManifest = {}): Buffer {
-  const packageName = input.packageName ?? ANDROID_MANIFEST_FIXTURE_PACKAGE;
-  const elementName = input.elementName ?? 'manifest';
-  const utf8Strings = input.utf8Strings ?? false;
-  const extraAttributes = input.attributes ?? [];
-  const attributeStride = input.attributeStride ?? RES_XML_ATTRIBUTE_SIZE;
-  const attrExtSize = input.attrExtSize ?? RES_XML_ATTR_EXT_SIZE;
-  const nodeHeaderSize = input.nodeHeaderSize ?? RES_XML_NODE_HEADER_SIZE;
-
-  const packageAttribute: SyntheticAttribute = { name: 'package', value: packageName };
-  const attributes = [...extraAttributes];
-  const packageIndex =
-    input.packagePosition === 'last'
-      ? attributes.length
-      : input.packagePosition === 'first' || input.packagePosition === undefined
-        ? 0
-        : Math.min(Math.max(input.packagePosition, 0), attributes.length);
-  attributes.splice(packageIndex, 0, packageAttribute);
-
-  const pool = new StringPool([elementName, 'android', ANDROID_NAMESPACE_URI, 'package']);
-  pool.add(packageName);
-  for (const attribute of attributes) pool.add(attribute.name).add(attribute.value);
-  for (let index = 0; index < (input.paddingStrings ?? 0); index += 1) pool.add(`unused${index}`);
-
-  const attributeBuffers = attributes.map((attribute) =>
+  const layout = resolveSyntheticLayout(input);
+  const pool = buildManifestStringPool(layout);
+  const attributeBuffers = layout.attributes.map((attribute, index) =>
     buildAttribute(
       pool,
       attribute,
-      attribute === packageAttribute,
-      attributeStride,
-      attribute === packageAttribute ? input.typedValueOnly : false,
+      index === layout.packageIndex,
+      layout.attributeStride,
+      index === layout.packageIndex && layout.typedValueOnly,
     ),
   );
 
-  const attrExt = Buffer.alloc(attrExtSize);
-  // aapt2 declares the root element without a namespace; `attrExtSize` may carry fields past the
-  // six known ones, which a reader must skip without misaligning the attribute array.
-  attrExt.writeUInt32LE(NO_INDEX, 0);
-  attrExt.writeUInt32LE(pool.indexOf(elementName), 4);
-  attrExt.writeUInt16LE(input.attributeStartOverride ?? attrExtSize, 8);
-  attrExt.writeUInt16LE(attributeStride, 10);
-  attrExt.writeUInt16LE(input.attributeCountOverride ?? attributeBuffers.length, 12);
-
-  const startElementBody = Buffer.concat([attrExt, ...attributeBuffers]);
   const startElementChunk = buildNodeChunk(
     RES_XML_START_ELEMENT_TYPE,
-    nodeHeaderSize,
-    startElementBody,
-    input.startElementChunkSizeShrink ?? 0,
+    layout.nodeHeaderSize,
+    Buffer.concat([buildAttrExt(pool, layout), ...attributeBuffers]),
+    layout.startElementChunkSizeShrink,
   );
 
   const chunks = Buffer.concat([
-    pool.build(utf8Strings),
+    pool.build(layout.utf8Strings),
     buildChunk(RES_XML_RESOURCE_MAP_TYPE, 8, Buffer.alloc(4)),
-    buildNamespaceChunk(RES_XML_START_NAMESPACE_TYPE, nodeHeaderSize, pool),
+    buildNamespaceChunk(RES_XML_START_NAMESPACE_TYPE, layout.nodeHeaderSize, pool),
     startElementChunk,
-    buildEndElementChunk(nodeHeaderSize, pool, elementName),
-    buildNamespaceChunk(RES_XML_END_NAMESPACE_TYPE, nodeHeaderSize, pool),
+    buildEndElementChunk(layout.nodeHeaderSize, pool, layout.elementName),
+    buildNamespaceChunk(RES_XML_END_NAMESPACE_TYPE, layout.nodeHeaderSize, pool),
   ]);
 
   const header = Buffer.alloc(8);
@@ -136,6 +121,82 @@ export function buildBinaryAndroidManifest(input: SyntheticManifest = {}): Buffe
   header.writeUInt16LE(8, 2);
   header.writeUInt32LE(8 + chunks.length, 4);
   return Buffer.concat([header, chunks]);
+}
+
+function resolveSyntheticLayout(input: SyntheticManifest): SyntheticManifestLayout {
+  const packageName = input.packageName ?? ANDROID_MANIFEST_FIXTURE_PACKAGE;
+  const attributes = withPackageAttribute(input, packageName);
+  const attrExtSize = input.attrExtSize ?? RES_XML_ATTR_EXT_SIZE;
+  return {
+    packageName,
+    ...resolveManifestShape(input),
+    attributeStride: input.attributeStride ?? RES_XML_ATTRIBUTE_SIZE,
+    attrExtSize,
+    nodeHeaderSize: input.nodeHeaderSize ?? RES_XML_NODE_HEADER_SIZE,
+    attributes,
+    packageIndex: resolvePackageIndex(input.packagePosition, attributes.length - 1),
+    attributeStart: input.attributeStartOverride ?? attrExtSize,
+    attributeCount: input.attributeCountOverride ?? attributes.length,
+  };
+}
+
+function resolveManifestShape(input: SyntheticManifest): Pick<
+  SyntheticManifestLayout,
+  'elementName' | 'utf8Strings' | 'typedValueOnly'
+> & {
+  startElementChunkSizeShrink: number;
+  paddingStrings: number;
+} {
+  return {
+    elementName: input.elementName ?? 'manifest',
+    utf8Strings: input.utf8Strings ?? false,
+    typedValueOnly: input.typedValueOnly ?? false,
+    startElementChunkSizeShrink: input.startElementChunkSizeShrink ?? 0,
+    paddingStrings: input.paddingStrings ?? 0,
+  };
+}
+
+function withPackageAttribute(input: SyntheticManifest, packageName: string): SyntheticAttribute[] {
+  const attributes = [...(input.attributes ?? [])];
+  attributes.splice(resolvePackageIndex(input.packagePosition, attributes.length), 0, {
+    name: 'package',
+    value: packageName,
+  });
+  return attributes;
+}
+
+function resolvePackageIndex(
+  position: SyntheticManifest['packagePosition'],
+  length: number,
+): number {
+  if (position === 'last') return length;
+  if (position === 'first' || position === undefined) return 0;
+  return Math.min(Math.max(position, 0), length);
+}
+
+function buildManifestStringPool(layout: SyntheticManifestLayout): StringPool {
+  const pool = new StringPool([
+    layout.elementName,
+    'android',
+    ANDROID_NAMESPACE_URI,
+    'package',
+    layout.packageName,
+  ]);
+  for (const attribute of layout.attributes) pool.add(attribute.name).add(attribute.value);
+  for (let index = 0; index < layout.paddingStrings; index += 1) pool.add(`unused${index}`);
+  return pool;
+}
+
+function buildAttrExt(pool: StringPool, layout: SyntheticManifestLayout): Buffer {
+  const attrExt = Buffer.alloc(layout.attrExtSize);
+  // aapt2 declares the root element without a namespace; `attrExtSize` may carry fields past the
+  // six known ones, which a reader must skip without misaligning the attribute array.
+  attrExt.writeUInt32LE(NO_INDEX, 0);
+  attrExt.writeUInt32LE(pool.indexOf(layout.elementName), 4);
+  attrExt.writeUInt16LE(layout.attributeStart, 8);
+  attrExt.writeUInt16LE(layout.attributeStride, 10);
+  attrExt.writeUInt16LE(layout.attributeCount, 12);
+  return attrExt;
 }
 
 export type BinaryManifestChunk = Readonly<{
