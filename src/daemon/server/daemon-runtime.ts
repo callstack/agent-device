@@ -240,6 +240,20 @@ export async function flushDaemonStartupDiagnostics(
   );
 }
 
+async function noteSkippedProviderRuntimes(
+  logPath: string,
+  skipped: readonly Readonly<{ provider: string; error: AppError }>[] | undefined,
+): Promise<void> {
+  for (const { provider, error } of skipped ?? []) {
+    await emitDaemonDiagnostic(logPath, 'provider_runtime_skipped', {
+      provider,
+      code: error.code,
+      message: error.message,
+      hint: error.details?.hint,
+    });
+  }
+}
+
 /**
  * Records one daemon-level event. These run outside any request, so there is no request scope and no
  * resolved debug level to inherit; debug is forced on for the same reason the #2681 handoff forces it —
@@ -348,6 +362,7 @@ export async function startDaemonRuntime(
   const daemonCodeOrigin = resolveDaemonCodeOrigin();
   const daemonCodeSignature = resolveDaemonCodeSignature();
   const providerComposition = await createDaemonProviderRuntimeComposition(env);
+  await noteSkippedProviderRuntimes(logPath, providerComposition.skipped);
   const providerDeviceRuntimes = [...providerComposition.runtimes];
   const deviceRuntimeGateway = createPlatformRuntimeGateway({
     assertShutdownAllowed: daemonPolicy

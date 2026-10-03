@@ -6,12 +6,14 @@ import type {
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import { APP_LOG_RESOURCE_KIND } from '@agent-device/contracts/app-log-runtime';
 import { createDurableResourceEnvelope, encodeDurableDescriptor } from '@agent-device/capture-kit';
+import type { LimrunInstanceOwnership } from './instance-access.ts';
 
 export type LimrunAppLogDescriptor = Readonly<{
   transport: 'limrun-log-poller';
   platform: 'ios' | 'android';
   leaseId: string;
   instanceId: string;
+  ownership: LimrunInstanceOwnership;
   appBundleId: string;
   outputPath: string;
 }>;
@@ -24,7 +26,9 @@ export const limrunAppLogDescriptorCodec: DurableDescriptorCodec<
   version: 1,
   encode: (descriptor) => ({ ...descriptor }),
   decode: (body) => {
+    const ownership = decodeOwnership(body.ownership);
     if (
+      !ownership ||
       body.transport !== 'limrun-log-poller' ||
       (body.platform !== 'ios' && body.platform !== 'android') ||
       !isNonEmptyString(body.leaseId) ||
@@ -41,6 +45,7 @@ export const limrunAppLogDescriptorCodec: DurableDescriptorCodec<
         platform: body.platform,
         leaseId: body.leaseId,
         instanceId: body.instanceId,
+        ownership,
         appBundleId: body.appBundleId,
         outputPath: body.outputPath,
       }),
@@ -76,6 +81,12 @@ export function createLimrunAppLogEnvelope(input: {
     lifecycle: 'open',
     descriptor: encodeDurableDescriptor(limrunAppLogDescriptorCodec, input.descriptor),
   });
+}
+
+/** Descriptors written before attach support carry no ownership; those named created instances. */
+function decodeOwnership(value: unknown): LimrunInstanceOwnership | undefined {
+  if (value === undefined) return 'created';
+  return value === 'created' || value === 'attached' ? value : undefined;
 }
 
 function isNonEmptyString(value: unknown): value is string {

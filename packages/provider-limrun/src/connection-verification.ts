@@ -134,7 +134,7 @@ async function verifyAttachedInstance(
   return {
     provider: 'limrun',
     service: 'Limrun',
-    verificationMessage: `Existing ${platformName} instance access verified. agent-device will not create or delete it.`,
+    verificationMessage: `Existing ${platformName} instance access verified. A daemon started with these variables drives it without creating or deleting it.`,
     device: {
       status: 'verified',
       name: `Existing ${platformName} ${android ? 'emulator' : 'simulator'}`,

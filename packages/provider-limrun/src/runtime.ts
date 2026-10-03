@@ -23,6 +23,7 @@ import {
   type LimrunAndroidSession,
 } from './android.ts';
 import {
+  attachedLimrunInstanceId,
   buildLimrunDevice,
   LIMRUN_PROVIDER,
   parseLimrunDeviceId,
@@ -45,15 +46,15 @@ import type {
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
 import type { LimrunAppLogReader } from './app-log-poller.ts';
-import { buildLimrunClientOptions, LIMRUN_CLIENT_HEADER } from './client-options.ts';
+import {
+  buildLimrunClientOptions,
+  LIMRUN_CLIENT_HEADER,
+  requireLimrunOrgClient,
+} from './client-options.ts';
 import { resolveLimrunRuntimeInstance } from './runtime-instance.ts';
 import type { LimrunRequestOperationDrain } from './request-cancellation.ts';
 import type { LimrunAppAsset } from './app-catalog.ts';
-import {
-  attachedLimrunInstanceId,
-  isAttachedLimrunInstanceId,
-  type LimrunInstanceAccess,
-} from './instance-access.ts';
+import type { LimrunInstanceAccess } from './instance-access.ts';
 
 type LimrunRuntimeSession = LimrunIosSession | LimrunAndroidSession;
 
@@ -268,7 +269,8 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     const { ios, android } = this.options.instances ?? {};
     const target = (apiUrl: string) => {
       const instanceId = attachedLimrunInstanceId(apiUrl);
-      return { lease, instanceId, device: buildLimrunDevice(platform, lease, instanceId) };
+      const device = buildLimrunDevice(platform, lease, instanceId);
+      return { lease, instanceId, ownership: 'attached' as const, device };
     };
     if (platform === 'android') {
       return (
@@ -354,8 +356,8 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     lease: DeviceLease,
   ): Promise<Record<string, unknown> | undefined> {
     const platform = platformForLimrunLeaseBackend(lease.backend);
-    if (!platform || this.options.instances?.[platform]) return undefined;
-    const limrun = this.orgClient('Recovering an expired lease');
+    const limrun = this.limrun;
+    if (!platform || !limrun) return undefined;
     const labelSelector = `provider=${LIMRUN_PROVIDER},leaseId=${lease.leaseId}`;
     const instances =
       platform === 'ios'
@@ -376,7 +378,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private async terminateSession(session: LimrunRuntimeSession): Promise<void> {
     session.client.disconnect();
     if (session.platform === 'android') await cleanupLimrunAndroidAdbTunnel(session);
-    if (isAttachedLimrunInstanceId(session.instanceId)) return;
+    if (session.ownership === 'attached') return;
     const limrun = this.orgClient('Deleting an instance');
     if (session.platform === 'ios') {
       await limrun.iosInstances.delete(session.instanceId);
@@ -385,14 +387,8 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     }
   }
 
-  private orgClient(
-    operation: string,
-    hint = 'This daemon drives an existing Limrun instance with its own token. Set LIMRUN_API_KEY, or ask the instance owner to do this.',
-  ): Limrun {
-    if (this.limrun) return this.limrun;
-    throw new AppError('UNSUPPORTED_OPERATION', `${operation} requires a Limrun API key.`, {
-      hint,
-    });
+  private orgClient(operation: string, hint?: string): Limrun {
+    return requireLimrunOrgClient(this.limrun, operation, hint);
   }
 
   private getSessionForDevice(device: DeviceInfo): LimrunRuntimeSession | undefined {
@@ -417,6 +413,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       platform: session.platform,
       leaseId: session.lease.leaseId,
       instanceId: session.instanceId,
+      ownership: session.ownership,
       readLogs: async (appBundleId, lineLimit) =>
         publicSession.platform === 'ios'
           ? await publicSession.readLogs(appBundleId, lineLimit)
@@ -428,7 +425,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   async reconnectAppLogReader(descriptor: LimrunAppLogDescriptor, signal?: AbortSignal) {
     const { reconnectLimrunAppLogReader } = await import('./app-log-reconnect.ts');
     return await reconnectLimrunAppLogReader({
-      orgClient: () => this.orgClient('Reconnecting app logs'),
+      limrun: this.limrun,
       instances: this.options.instances,
       descriptor,
       dependencies: this.dependencies,

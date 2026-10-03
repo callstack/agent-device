@@ -9,12 +9,14 @@ import { AsyncCleanupStack } from '@agent-device/contracts/async-lifecycle';
 import { createAppLogLiveHandleFromFinish } from '@agent-device/capture-kit';
 import type { LogBackend } from '@agent-device/contracts/observability';
 import { awaitLimrunOperation } from './request-cancellation.ts';
+import type { LimrunInstanceOwnership } from './instance-access.ts';
 
 export type LimrunAppLogReader = AsyncDisposable &
   Readonly<{
     platform: 'ios' | 'android';
     leaseId: string;
     instanceId: string;
+    ownership: LimrunInstanceOwnership;
     readLogs(appBundleId: string, lineLimit: number): Promise<string>;
   }>;
 

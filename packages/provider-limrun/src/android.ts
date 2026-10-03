@@ -21,7 +21,7 @@ import type {
   LimrunRuntimeDependencies,
 } from './runtime-dependencies.ts';
 import type { AndroidAdbInvocation } from '@agent-device/platform-android/mechanics';
-import { isAttachedLimrunInstanceId } from './instance-access.ts';
+import type { LimrunInstanceOwnership } from './instance-access.ts';
 import { normalizeOptionalString } from './strings.ts';
 import {
   awaitLimrunDeploymentOperation,
@@ -34,6 +34,7 @@ type LimrunAndroidAdbSession = {
   platform: 'android';
   lease: DeviceLease;
   instanceId: string;
+  readonly ownership: LimrunInstanceOwnership;
   device: DeviceInfo;
   client: LimrunAndroidClient;
   /** Instance bearer token; the recording download the SDK would run inline is done by the host instead. */
@@ -52,6 +53,7 @@ export async function createLimrunAndroidSession(
   options: {
     lease: DeviceLease;
     instanceId: string;
+    ownership: LimrunInstanceOwnership;
     device: DeviceInfo;
     apiUrl: string;
     adbUrl: string;
@@ -69,6 +71,7 @@ export async function createLimrunAndroidSession(
     platform: 'android',
     lease: options.lease,
     instanceId: options.instanceId,
+    ownership: options.ownership,
     device: options.device,
     client,
     token: options.token,
@@ -166,7 +169,7 @@ async function cleanupAndroidPortReverse(session: LimrunAndroidSession): Promise
   const mappings = await reverse.list().catch(() => []);
   const owners = new Set<string>();
   const unownedLocals: LimrunPortReverseEndpoint[] = [];
-  const sharedDevice = isAttachedLimrunInstanceId(session.instanceId);
+  const sharedDevice = session.ownership === 'attached';
   for (const mapping of mappings) {
     if (mapping.ownerId) owners.add(mapping.ownerId);
     else if (!sharedDevice) unownedLocals.push(mapping.local);

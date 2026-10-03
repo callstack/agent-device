@@ -90,6 +90,7 @@ export async function allocateLimrunIosSession(
       {
         lease: params.lease,
         instanceId: instance.metadata.id,
+        ownership: 'created',
         device: buildLimrunDevice('ios', params.lease, instance.metadata.id),
         apiUrl: instance.status.apiUrl,
         token: instance.status.token,
@@ -134,6 +135,7 @@ export async function allocateLimrunAndroidSession(
       {
         lease: params.lease,
         instanceId: instance.metadata.id,
+        ownership: 'created',
         device: buildLimrunDevice('android', params.lease, instance.metadata.id),
         apiUrl: instance.status.apiUrl,
         token: instance.status.token,

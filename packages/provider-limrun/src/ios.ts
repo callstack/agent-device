@@ -23,12 +23,14 @@ import {
   awaitLimrunDeploymentOperation,
   type LimrunRequestOperationDrain,
 } from './request-cancellation.ts';
+import type { LimrunInstanceOwnership } from './instance-access.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 
 export type LimrunIosSession = {
   platform: 'ios';
   lease: DeviceLease;
   instanceId: string;
+  readonly ownership: LimrunInstanceOwnership;
   device: DeviceInfo;
   client: LimrunIosClient;
   /** Instance bearer token; the recording download the SDK would run inline is done by the host instead. */
@@ -52,6 +54,7 @@ export async function createLimrunIosSession(
   options: {
     lease: DeviceLease;
     instanceId: string;
+    ownership: LimrunInstanceOwnership;
     device: DeviceInfo;
     apiUrl: string;
     token: string;
@@ -67,6 +70,7 @@ export async function createLimrunIosSession(
     platform: 'ios',
     lease: options.lease,
     instanceId: options.instanceId,
+    ownership: options.ownership,
     device: options.device,
     client,
     token: options.token,

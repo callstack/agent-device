@@ -27,6 +27,24 @@ test('bundled composition stays independent of configured plugins and reserves a
   await Promise.all(composition.runtimes.map((runtime) => runtime.shutdown()));
 });
 
+test('daemon composition skips Limrun for a partial instance set and still loads every other provider', async () => {
+  const { home, env } = pluginHome();
+  selectPlugin(home, 'example', 'example', registrationSource('example'));
+  const composition = await createDaemonProviderRuntimeComposition({
+    ...env,
+    LIMRUN_API_KEY: 'lim_test_key',
+    LIM_ANDROID_INSTANCE_URL: 'https://region.limrun.example/v1/android_x/api',
+    LIM_ANDROID_INSTANCE_TOKEN: 'android-instance-token',
+  });
+
+  const providers = composition.runtimes.map((runtime) => runtime.provider);
+  assert.deepEqual(providers, ['browserstack', 'aws-device-farm', 'example']);
+  assert.equal(composition.skipped?.[0]?.provider, 'limrun');
+  assert.equal(composition.skipped?.[0]?.error.code, 'INVALID_ARGS');
+  assert.match(composition.skipped?.[0]?.error.message ?? '', /LIM_ANDROID_INSTANCE_ADB_URL/);
+  await Promise.all(composition.runtimes.map((runtime) => runtime.shutdown()));
+});
+
 test('daemon composition rejects builtin provider IDs before evaluating plugins', async () => {
   for (const provider of ['limrun', 'browserstack', 'aws-device-farm']) {
     const { home, env } = pluginHome();

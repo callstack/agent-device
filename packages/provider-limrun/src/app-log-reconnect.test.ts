@@ -31,7 +31,7 @@ import {
   type AndroidAdbInvocation,
 } from '@agent-device/platform-android/mechanics';
 import { reconnectLimrunAppLogReader } from './app-log-reconnect.ts';
-import { attachedLimrunInstanceId } from './instance-access.ts';
+import { attachedLimrunInstanceId } from './device.ts';
 import { createInstanceClient as createIosInstanceClient } from '@limrun/api/ios-client';
 import type {
   LimrunAdbCommandOptions,
@@ -46,17 +46,17 @@ test('reattaches an owned Limrun instance without persisting credentials', async
   }));
   const signal = new AbortController().signal;
   const outcome = await reconnectLimrunAppLogReader({
-    orgClient: () =>
-      ({
-        iosInstances: {
-          get,
-        },
-      }) as never,
+    limrun: {
+      iosInstances: {
+        get,
+      },
+    } as never,
     descriptor: {
       transport: 'limrun-log-poller',
       platform: 'ios',
       leaseId: 'lease-a',
       instanceId: 'instance-a',
+      ownership: 'created',
       appBundleId: 'com.example.app',
       outputPath: '/sessions/one/app.log',
     },
@@ -73,20 +73,20 @@ test('reattaches an owned Limrun instance without persisting credentials', async
 
 test('fails closed when the instance labels do not match the descriptor lease', async () => {
   const outcome = await reconnectLimrunAppLogReader({
-    orgClient: () =>
-      ({
-        iosInstances: {
-          get: vi.fn(async () => ({
-            metadata: { labels: { provider: 'limrun', leaseId: 'another-lease' } },
-            status: { state: 'ready', apiUrl: 'https://instance', token: 'secret' },
-          })),
-        },
-      }) as never,
+    limrun: {
+      iosInstances: {
+        get: vi.fn(async () => ({
+          metadata: { labels: { provider: 'limrun', leaseId: 'another-lease' } },
+          status: { state: 'ready', apiUrl: 'https://instance', token: 'secret' },
+        })),
+      },
+    } as never,
     descriptor: {
       transport: 'limrun-log-poller',
       platform: 'ios',
       leaseId: 'lease-a',
       instanceId: 'instance-a',
+      ownership: 'created',
       appBundleId: 'com.example.app',
       outputPath: '/sessions/one/app.log',
     },
@@ -99,25 +99,25 @@ test('disconnects the Android instance client when tunnel acquisition fails', as
   androidClient.disconnect.mockClear();
   await expect(
     reconnectLimrunAppLogReader({
-      orgClient: () =>
-        ({
-          androidInstances: {
-            get: vi.fn(async () => ({
-              metadata: { labels: { provider: 'limrun', leaseId: 'lease-a' } },
-              status: {
-                state: 'ready',
-                apiUrl: 'https://instance',
-                adbWebSocketUrl: 'wss://adb',
-                token: 'secret',
-              },
-            })),
-          },
-        }) as never,
+      limrun: {
+        androidInstances: {
+          get: vi.fn(async () => ({
+            metadata: { labels: { provider: 'limrun', leaseId: 'lease-a' } },
+            status: {
+              state: 'ready',
+              apiUrl: 'https://instance',
+              adbWebSocketUrl: 'wss://adb',
+              token: 'secret',
+            },
+          })),
+        },
+      } as never,
       descriptor: {
         transport: 'limrun-log-poller',
         platform: 'android',
         leaseId: 'lease-a',
         instanceId: 'instance-a',
+        ownership: 'created',
         appBundleId: 'com.example.app',
         outputPath: '/sessions/one/app.log',
       },
@@ -141,25 +141,25 @@ test('addresses app-log adb traffic at the tunnel serial and hands cleanup a com
   }));
   androidClient.disconnect.mockClear();
   const outcome = await reconnectLimrunAppLogReader({
-    orgClient: () =>
-      ({
-        androidInstances: {
-          get: vi.fn(async () => ({
-            metadata: { labels: { provider: 'limrun', leaseId: 'lease-a' } },
-            status: {
-              state: 'ready',
-              apiUrl: 'https://instance',
-              adbWebSocketUrl: 'wss://adb',
-              token: 'secret',
-            },
-          })),
-        },
-      }) as never,
+    limrun: {
+      androidInstances: {
+        get: vi.fn(async () => ({
+          metadata: { labels: { provider: 'limrun', leaseId: 'lease-a' } },
+          status: {
+            state: 'ready',
+            apiUrl: 'https://instance',
+            adbWebSocketUrl: 'wss://adb',
+            token: 'secret',
+          },
+        })),
+      },
+    } as never,
     descriptor: {
       transport: 'limrun-log-poller',
       platform: 'android',
       leaseId: 'lease-a',
       instanceId: 'instance-a',
+      ownership: 'created',
       appBundleId: 'com.example.app',
       outputPath: '/sessions/one/app.log',
     },
@@ -218,24 +218,23 @@ test('addresses app-log adb traffic at the tunnel serial and hands cleanup a com
 
 const ATTACHED_ACCESS = { apiUrl: 'https://attached.example/api', token: 'instance-token' };
 
-function attachedDescriptor(instanceId = attachedLimrunInstanceId(ATTACHED_ACCESS.apiUrl)) {
+function attachedDescriptor(
+  instanceId = attachedLimrunInstanceId(ATTACHED_ACCESS.apiUrl),
+  ownership: 'created' | 'attached' = 'attached',
+) {
   return {
     transport: 'limrun-log-poller',
     platform: 'ios',
     leaseId: 'lease-a',
     instanceId,
+    ownership,
     appBundleId: 'com.example.app',
     outputPath: '/sessions/one/app.log',
   } as const;
 }
 
-function unavailableOrgClient(): never {
-  throw new Error('the organization API must not be used');
-}
-
 test('reattaches app logs to the attached instance the descriptor names', async () => {
   const outcome = await reconnectLimrunAppLogReader({
-    orgClient: unavailableOrgClient,
     instances: { ios: ATTACHED_ACCESS },
     descriptor: attachedDescriptor(),
     dependencies: {} as LimrunRuntimeDependencies,
@@ -247,7 +246,6 @@ test('reattaches app logs to the attached instance the descriptor names', async 
   expect(outcome.status).toBe('opened');
 
   const replaced = await reconnectLimrunAppLogReader({
-    orgClient: unavailableOrgClient,
     instances: { ios: { ...ATTACHED_ACCESS, apiUrl: 'https://another-instance.example/api' } },
     descriptor: attachedDescriptor(),
     dependencies: {} as LimrunRuntimeDependencies,
@@ -261,9 +259,9 @@ test('reattaches a created instance through the organization API while another i
     status: { state: 'ready', apiUrl: 'https://created.example/api', token: 'created-token' },
   }));
   const outcome = await reconnectLimrunAppLogReader({
-    orgClient: () => ({ iosInstances: { get } }) as never,
+    limrun: { iosInstances: { get } } as never,
     instances: { ios: ATTACHED_ACCESS },
-    descriptor: attachedDescriptor('ios_created_instance'),
+    descriptor: attachedDescriptor('ios_created_instance', 'created'),
     dependencies: {} as LimrunRuntimeDependencies,
   });
   expect(get).toHaveBeenCalledOnce();
@@ -276,7 +274,6 @@ test('does not connect once the reconnect request is aborted', async () => {
   vi.mocked(createIosInstanceClient).mockClear();
   await expect(
     reconnectLimrunAppLogReader({
-      orgClient: unavailableOrgClient,
       instances: { ios: ATTACHED_ACCESS },
       descriptor: attachedDescriptor(),
       dependencies: {} as LimrunRuntimeDependencies,

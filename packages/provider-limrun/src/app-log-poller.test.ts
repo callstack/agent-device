@@ -12,6 +12,7 @@ describe('Limrun app-log poller', () => {
       platform: 'ios',
       leaseId: 'lease-1',
       instanceId: 'instance-1',
+      ownership: 'created',
       readLogs: vi.fn(async () => 'old line\nshared\nnew line\n'),
       [Symbol.asyncDispose]: async () => {
         readerDisposed = true;
@@ -50,6 +51,7 @@ describe('Limrun app-log poller', () => {
         platform: 'ios',
         leaseId: 'lease-1',
         instanceId: 'instance-1',
+        ownership: 'created',
         readLogs: async () => '',
         [Symbol.asyncDispose]: dispose,
       };
@@ -78,6 +80,7 @@ describe('Limrun app-log poller', () => {
       platform: 'ios',
       leaseId: 'lease-1',
       instanceId: 'instance-1',
+      ownership: 'created',
       readLogs: async () => `${'b'.repeat(240_000)}\n`,
       [Symbol.asyncDispose]: async () => {},
     };
@@ -100,6 +103,7 @@ describe('Limrun app-log poller', () => {
       platform: 'ios',
       leaseId: 'lease-1',
       instanceId: 'instance-1',
+      ownership: 'created',
       readLogs: async () => '',
       [Symbol.asyncDispose]: async () => {
         throw new Error('reader cleanup failed');
@@ -132,6 +136,7 @@ describe('Limrun app-log poller', () => {
       platform: 'android',
       leaseId: 'lease-1',
       instanceId: 'instance-1',
+      ownership: 'created',
       readLogs: vi.fn(async () => await new Promise<string>(() => {})),
       [Symbol.asyncDispose]: async () => {
         readerDisposed = true;

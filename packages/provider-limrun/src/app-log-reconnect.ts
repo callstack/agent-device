@@ -6,12 +6,12 @@ import { AsyncCleanupStack } from '@agent-device/contracts/async-lifecycle';
 import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
 import type { LimrunAppLogReader } from './app-log-poller.ts';
 import type { LimrunAppLogReconnectOutcome } from './app-log-runtime.ts';
-import {
-  attachedLimrunInstanceId,
-  isAttachedLimrunInstanceId,
-  type LimrunAndroidInstanceAccess,
-  type LimrunInstanceAccess,
-  type LimrunIosInstanceAccess,
+import { requireLimrunOrgClient } from './client-options.ts';
+import { attachedLimrunInstanceId } from './device.ts';
+import type {
+  LimrunAndroidInstanceAccess,
+  LimrunInstanceAccess,
+  LimrunIosInstanceAccess,
 } from './instance-access.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 
@@ -20,21 +20,21 @@ import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
  * instance this runtime created is looked up through the organization API.
  */
 export async function reconnectLimrunAppLogReader(options: {
-  orgClient: () => Limrun;
+  limrun?: Limrun;
   instances?: LimrunInstanceAccess;
   descriptor: LimrunAppLogDescriptor;
   dependencies: LimrunRuntimeDependencies;
   signal?: AbortSignal;
 }): Promise<LimrunAppLogReconnectOutcome> {
   options.signal?.throwIfAborted();
-  if (isAttachedLimrunInstanceId(options.descriptor.instanceId)) {
+  if (options.descriptor.ownership === 'attached') {
     return await reconnectAttached(
       options.instances ?? {},
       options.descriptor,
       options.dependencies,
     );
   }
-  const limrun = options.orgClient();
+  const limrun = requireLimrunOrgClient(options.limrun, 'Reconnecting app logs');
   try {
     return options.descriptor.platform === 'ios'
       ? await reconnectIos({ ...options, limrun })
@@ -101,6 +101,7 @@ async function openIosReader(
     platform: 'ios',
     leaseId: descriptor.leaseId,
     instanceId: descriptor.instanceId,
+    ownership: descriptor.ownership,
     readLogs: async (appBundleId, lineLimit) => await client.appLogTail(appBundleId, lineLimit),
     [Symbol.asyncDispose]: async () => client.disconnect(),
   };
@@ -170,6 +171,7 @@ async function openAndroidReader(
       platform: 'android',
       leaseId: descriptor.leaseId,
       instanceId: descriptor.instanceId,
+      ownership: descriptor.ownership,
       readLogs: async (_appBundleId, lineLimit) =>
         await dependencies.android.readLogs(adb, lineLimit),
       [Symbol.asyncDispose]: async () => {

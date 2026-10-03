@@ -127,6 +127,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
 afterEach(() => {
   limrunMockState.constructorOptions.length = 0;
   vi.clearAllMocks();
+  vi.mocked(runCmd).mockReset();
 });
 
 test('Limrun runtime identifies direct CLI usage to the Limrun API', async () => {
