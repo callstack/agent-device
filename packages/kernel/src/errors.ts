@@ -274,7 +274,8 @@ export const PUBLISHED_ERROR_REASONS = {
   sessionOrDeviceSelectorRequired: 'session_or_device_selector_required',
 } as const;
 
-export type PublishedErrorReason = (typeof PUBLISHED_ERROR_REASONS)[keyof typeof PUBLISHED_ERROR_REASONS];
+export type PublishedErrorReason =
+  (typeof PUBLISHED_ERROR_REASONS)[keyof typeof PUBLISHED_ERROR_REASONS];
 
 /** The details of a refusal that stopped a request before anything could reach a device. */
 export type RefusalDetails<TReason extends PublishedErrorReason> = AppErrorDetails & {
