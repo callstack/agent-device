@@ -80,6 +80,35 @@ test('BrowserStack classifies rejected credentials without exposing them', async
   });
 });
 
+test('BrowserStack points HTTP failures at its service status and transport failures at the network', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => jsonResponse({}, 503)),
+  );
+  await assert.rejects(createProvider().verifyConnection(browserStackOptions), (error: unknown) => {
+    assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
+    assert.equal(
+      (error as { details?: { hint?: string } }).details?.hint,
+      'Retry connect or check the BrowserStack service status.',
+    );
+    return true;
+  });
+
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      throw new TypeError('fetch failed');
+    }),
+  );
+  await assert.rejects(createProvider().verifyConnection(browserStackOptions), (error: unknown) => {
+    assert.equal(
+      (error as { details?: { hint?: string } }).details?.hint,
+      'Check network access to api-cloud.browserstack.com and retry connect.',
+    );
+    return true;
+  });
+});
+
 test('BrowserStack defers a bs app reference outside the recent upload window', async () => {
   vi.stubGlobal(
     'fetch',

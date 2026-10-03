@@ -32,6 +32,8 @@ export type MaterializeInstallableOptions = {
 
 export type MaterializedInstallable = {
   archivePath?: string;
+  /** The archive the installable was extracted from directly, when it came out of one. */
+  containingArchivePath?: string;
   installablePath: string;
   cleanup: () => Promise<void>;
 };
@@ -67,6 +69,9 @@ export async function materializeInstallablePath(
     });
     return {
       archivePath: resolved.archivePath,
+      ...(resolved.containingArchivePath
+        ? { containingArchivePath: resolved.containingArchivePath }
+        : {}),
       installablePath: resolved.installablePath,
       cleanup: async () => {
         await runCleanupTasks(cleanupTasks);

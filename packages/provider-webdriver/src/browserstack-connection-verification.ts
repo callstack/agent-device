@@ -1,7 +1,6 @@
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { agentDeviceRequestHeaders } from './request-headers.ts';
-import { basicAuthHeader } from './webdriver-utils.ts';
+import { fetchProviderVerificationJson, sameOsVersion } from './webdriver-utils.ts';
 import type {
   CloudWebDriverConnectionVerification,
   CloudWebDriverConnectionVerificationOptions,
@@ -105,42 +104,15 @@ async function fetchBrowserStackJson(
   auth: { username: string; accessKey: string },
   clientVersion: string,
 ): Promise<unknown> {
-  try {
-    const response = await fetch(endpoint, {
-      headers: {
-        ...agentDeviceRequestHeaders(clientVersion),
-        Authorization: basicAuthHeader(auth),
-      },
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!response.ok) {
-      const unauthorized = response.status === 401 || response.status === 403;
-      throw new AppError(
-        unauthorized ? 'UNAUTHORIZED' : 'COMMAND_FAILED',
-        'BrowserStack rejected connection verification.',
-        {
-          status: response.status,
-          hint: unauthorized
-            ? 'Check BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY.'
-            : 'Retry connect or check the BrowserStack service status.',
-        },
-      );
-    }
-    return (await response.json()) as unknown;
-  } catch (error) {
-    if (error instanceof AppError) throw error;
-    throw new AppError(
-      'COMMAND_FAILED',
-      'BrowserStack connection verification failed.',
-      { hint: 'Check network access to api-cloud.browserstack.com and retry connect.' },
-      error,
-    );
-  }
-}
-
-function sameOsVersion(left: string, right: string): boolean {
-  const normalize = (value: string) => value.replace(/(?:\.0)+$/, '');
-  return normalize(left) === normalize(right);
+  return await fetchProviderVerificationJson(endpoint, {
+    clientVersion,
+    auth,
+    hints: {
+      service: 'BrowserStack',
+      unauthorizedHint: 'Check BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY.',
+      networkHint: 'Check network access to api-cloud.browserstack.com and retry connect.',
+    },
+  });
 }
 
 function readBrowserStackDevices(
