@@ -47,6 +47,7 @@ test('snapshot stamps the xctest channel with its own producer', async () => {
 
   const result = await createDoublespeedIosInteractor(session).snapshot();
 
+  if ('stage' in result) throw new Error('Doublespeed returns a decoded tree');
   expect(result.backend).toBe('xctest');
   expect(result.producer).toBe('doublespeed-ios-tree');
   expect(result.nodes?.map((node) => [node.label, node.depth, node.parentIndex])).toEqual([
@@ -69,7 +70,7 @@ test('routes open, deep links, home and orientation through the session', async 
   await interactor.open('com.example.ios');
   await interactor.open('example://deep/link');
   await interactor.open('com.example.ios', { url: 'https://example.test/path' });
-  await interactor.home();
+  await interactor.home?.();
   await interactor.setOrientation('landscape-left');
   await interactor.tapElementSelector?.({ key: 'text', value: 'Continue' });
 

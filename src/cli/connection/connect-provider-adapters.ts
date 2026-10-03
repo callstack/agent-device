@@ -106,7 +106,7 @@ export async function resolveConnectProviderProfile(options: {
         remoteConfig: resolved.resolvedPath,
       },
       remoteConfigPath: resolved.resolvedPath,
-      ...(isConnectProviderName(leaseProvider) ? { provider: leaseProvider } : {}),
+      ...(isConnectProviderName(leaseProvider, env) ? { provider: leaseProvider } : {}),
     };
   }
   const provider =

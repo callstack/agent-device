@@ -12,11 +12,10 @@ import {
   bindProviderScrollInteractor,
   scrollRuntimeOperationFacts,
 } from '@agent-device/contracts/scroll-runtime';
-import { homeRuntimeOperationFacts } from '@agent-device/contracts/home-runtime';
+import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
 import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
-import { appSwitcherRuntimeOperationFacts } from '@agent-device/contracts/app-switcher-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
@@ -102,6 +101,7 @@ function doublespeedGestureFacts(
 ): GestureRuntimeOperationFacts {
   const gesture = cell === available ? gestureUnavailable : cell;
   return gestureRuntimeOperationFacts({
+    unsupported: gestureUnavailable,
     plan: gesture,
     directionalFling: gesture,
     multiTouch: gesture,
@@ -123,6 +123,7 @@ export function doublespeedInteractionOperationFacts(
     ...focusRuntimeOperationFacts({ focus: cell }),
     ...typeTextRuntimeOperationFacts({ type: cell }),
     ...touchRuntimeOperationFacts({
+      unsupported: unsupportedTouch,
       tap: cell,
       tapRef: unsupportedTouch,
       longPress: cell,
@@ -176,7 +177,7 @@ export function doublespeedNavigationOperationFacts(
 ) {
   return Object.freeze({
     ...backRuntimeOperationFacts({ back: liveSessionUnavailable ?? backUnavailable }),
-    ...homeRuntimeOperationFacts({ home: liveSessionUnavailable ?? available }),
+
     ...orientationRuntimeOperationFacts({ orientation: liveSessionUnavailable ?? available }),
     ...tvRemoteRuntimeOperationFacts({ tvRemote: liveSessionUnavailable ?? tvRemoteUnavailable }),
   });
@@ -188,7 +189,12 @@ export function doublespeedKeyboardOperationFacts(
 ) {
   const cell = liveSessionUnavailable ?? keyboardUnavailable;
   return Object.freeze({
-    ...keyboardRuntimeOperationFacts({ status: cell, dismiss: cell, enter: cell }),
+    ...keyboardRuntimeOperationFacts({
+      unsupported: cell,
+      status: cell,
+      dismiss: cell,
+      enter: cell,
+    }),
   });
 }
 
@@ -197,7 +203,9 @@ export function doublespeedClipboardOperationFacts(
   liveSessionUnavailable?: RuntimeOperationUnavailability,
 ) {
   const cell = liveSessionUnavailable ?? clipboardUnavailable;
-  return Object.freeze({ ...clipboardRuntimeOperationFacts({ read: cell, write: cell }) });
+  return Object.freeze({
+    ...clipboardRuntimeOperationFacts({ unsupported: cell, read: cell, write: cell }),
+  });
 }
 
 export function doublespeedAlertOperationFacts(
@@ -210,12 +218,14 @@ export function doublespeedAlertOperationFacts(
   });
 }
 
-export function doublespeedAppSwitcherOperationFacts(
+export function doublespeedSystemButtonOperationFacts(
   _device: DeviceInfo,
   liveSessionUnavailable?: RuntimeOperationUnavailability,
 ) {
   return Object.freeze({
-    ...appSwitcherRuntimeOperationFacts({
+    ...systemButtonRuntimeOperationFacts({
+      unsupported: unsupportedTouch,
+      home: liveSessionUnavailable ?? available,
       appSwitcher: liveSessionUnavailable ?? appSwitcherUnavailable,
     }),
   });
@@ -236,6 +246,9 @@ export function doublespeedSettingsOperationFacts(
   liveSessionUnavailable?: RuntimeOperationUnavailability,
 ) {
   return Object.freeze({
-    ...settingsRuntimeOperationFacts({ setSetting: liveSessionUnavailable ?? settingsUnavailable }),
+    ...settingsRuntimeOperationFacts({
+      setSetting: liveSessionUnavailable ?? settingsUnavailable,
+      readSetting: liveSessionUnavailable ?? settingsUnavailable,
+    }),
   });
 }

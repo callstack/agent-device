@@ -1,34 +1,7 @@
-import { register } from 'node:module';
-import { pathToFileURL } from 'node:url';
 import { AppError } from '@agent-device/kernel/errors';
 import { execFailureDetails, runCmd } from '@agent-device/host-kit/command';
-import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
+import { readVersion } from '@agent-device/host-kit/version';
 import type { ProviderPluginHost } from '../sdk/plugins.ts';
-
-let hostBound = false;
-
-export function bindPluginHost(): void {
-  if (hostBound) return;
-  const root = pathToFileURL(`${findProjectRoot()}/`).href;
-  const source = import.meta.url.startsWith(`${root}src/`);
-  register(
-    `data:text/javascript,${encodeURIComponent(`
-    let host;
-    export function initialize(data) { host = data; }
-    export async function resolve(specifier, context, nextResolve) {
-      if (specifier === 'agent-device' && host.source) {
-        return { url: new URL('src/sdk/index.ts', host.root).href, shortCircuit: true };
-      }
-      if (specifier === 'agent-device' || specifier.startsWith('agent-device/')) {
-        return nextResolve(specifier, { ...context, parentURL: new URL('plugin-host.mjs', host.root).href });
-      }
-      return nextResolve(specifier, context);
-    }
-  `)}`,
-    { parentURL: import.meta.url, data: { root, source } },
-  );
-  hostBound = true;
-}
 
 export function createPluginHost(
   env: NodeJS.ProcessEnv,

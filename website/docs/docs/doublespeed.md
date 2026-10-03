@@ -7,6 +7,16 @@ description: Drive Doublespeed iOS simulators with agent-device.
 
 Use [Doublespeed](https://mac.doublespeed.ai) for direct remote iOS simulators hosted on a Mac mini fleet. Doublespeed does not use local or physical-device selectors such as `--udid`, `--serial`, or `--device`.
 
+## Install the plugin
+
+```bash
+agent-device plugins add @agent-device/doublespeed
+```
+
+The provider is an optional npm package installed under `AGENT_DEVICE_HOME`.
+After adding or updating it, close sessions and run `agent-device daemon stop`
+with the state directory you use; the next device command loads the selected plugin.
+
 ## Credentials and connection
 
 Set a Doublespeed API key in a non-interactive environment. `DOUBLESPEED_DEVICE` optionally selects the simulator model (default `iPhone 16`); `DOUBLESPEED_API_URL` optionally overrides the service endpoint.

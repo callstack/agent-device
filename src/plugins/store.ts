@@ -112,7 +112,6 @@ async function stagePlugin(
       [
         'install',
         '--ignore-scripts',
-        '--omit=peer',
         '--no-audit',
         '--no-fund',
         '--global=false',

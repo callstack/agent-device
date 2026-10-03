@@ -1,5 +1,3 @@
-import { AppError } from './app-error.ts';
-export { AppError } from './app-error.ts';
 import { redactDiagnosticData, sanitizeErrorCause as normalizeErrorCause } from './redaction.ts';
 
 /**
@@ -37,6 +35,31 @@ export type KnownAppErrorCode = (typeof KNOWN_APP_ERROR_CODES)[number];
 // exhaustive by construction — SDK consumers handling unknown codes should
 // include a default branch.
 export type AppErrorCode = KnownAppErrorCode | (string & {});
+
+const APP_ERROR_BRAND = Symbol.for('agent-device.AppError');
+
+export class AppError extends Error {
+  static [Symbol.hasInstance](value: unknown): boolean {
+    if (this !== AppError) return Function.prototype[Symbol.hasInstance].call(this, value);
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      (value as Record<symbol, unknown>)[APP_ERROR_BRAND] === true
+    );
+  }
+
+  code: AppErrorCode;
+  details?: AppErrorDetails;
+  cause?: unknown;
+
+  constructor(code: AppErrorCode, message: string, details?: AppErrorDetails, cause?: unknown) {
+    super(message);
+    Object.defineProperty(this, APP_ERROR_BRAND, { value: true });
+    this.code = code;
+    this.details = details;
+    this.cause = cause;
+  }
+}
 
 export function toAppErrorCode(
   code: string | undefined,

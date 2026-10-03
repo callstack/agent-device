@@ -3,6 +3,16 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ConnectionProviderCapabilities } from '../cli/connection/provider-policy.ts';
 
+import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
+
+export const RESERVED_PLUGIN_PROVIDERS = [
+  'cloud',
+  'proxy',
+  CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+  CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+  'limrun',
+] as const;
+
 const PROVIDER_PLUGIN_API_VERSION = 1;
 type PluginManifest = {
   name: string;
@@ -19,7 +29,7 @@ export function assertUniquePluginProviders(
   plugins: readonly PluginManifest[],
   reserved: readonly string[],
 ): void {
-  const providers = new Set(reserved);
+  const providers = new Set<string>([...RESERVED_PLUGIN_PROVIDERS, ...reserved]);
   for (const plugin of plugins) {
     const provider = plugin.agentDevicePlugin.provider;
     if (providers.has(provider))

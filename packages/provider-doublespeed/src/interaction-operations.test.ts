@@ -4,7 +4,7 @@ import { expect, test } from 'vitest';
 import {
   doublespeedAlertOperationFacts,
   doublespeedAppEventOperationFacts,
-  doublespeedAppSwitcherOperationFacts,
+  doublespeedSystemButtonOperationFacts,
   doublespeedClipboardOperationFacts,
   doublespeedInteractionOperationFacts,
   doublespeedKeyboardOperationFacts,
@@ -37,7 +37,7 @@ test('the session admits tap, long press, selector taps and scroll but no gestur
 
 test('navigation admits home and orientation but refuses back and tv-remote', () => {
   const facts = doublespeedNavigationOperationFacts(device);
-  expect(facts.home).toEqual({ available: true });
+  expect(doublespeedSystemButtonOperationFacts(device).home).toEqual({ available: true });
   expect(facts.setOrientation).toEqual({ available: true });
   expect(facts.back).toEqual({
     available: false,
@@ -49,7 +49,9 @@ test('navigation admits home and orientation but refuses back and tv-remote', ()
 
 test('a dead session closes every cell with the same reason', () => {
   const navigation = doublespeedNavigationOperationFacts(device, liveSessionUnavailable);
-  expect(navigation.home).toEqual(liveSessionUnavailable);
+  expect(doublespeedSystemButtonOperationFacts(device, liveSessionUnavailable).home).toEqual(
+    liveSessionUnavailable,
+  );
   expect(navigation.setOrientation).toEqual(liveSessionUnavailable);
   expect(navigation.back).toEqual(liveSessionUnavailable);
   const interaction = doublespeedInteractionOperationFacts(device, liveSessionUnavailable);
@@ -72,7 +74,7 @@ test('system leaves the session does not serve are refused with their own wordin
     available: false,
   });
   expect(doublespeedSettingsOperationFacts(device).setSetting).toMatchObject({ available: false });
-  expect(doublespeedAppSwitcherOperationFacts(device).appSwitcher).toMatchObject({
+  expect(doublespeedSystemButtonOperationFacts(device).appSwitcher).toMatchObject({
     available: false,
   });
   expect(doublespeedKeyboardOperationFacts(device).keyboardEnter).toMatchObject({
@@ -95,7 +97,10 @@ test('binding exposes only the admitted navigation operations and drives the int
     device,
     signal: new AbortController().signal,
     resolveInteractor: () => interactor,
-    facts: doublespeedNavigationOperationFacts(device),
+    facts: {
+      ...doublespeedNavigationOperationFacts(device),
+      ...doublespeedSystemButtonOperationFacts(device),
+    },
   });
 
   expect(operations.home).toBeTypeOf('function');

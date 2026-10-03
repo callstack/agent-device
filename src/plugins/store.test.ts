@@ -20,7 +20,6 @@ function installFixture(name = packageName, apiVersion = 1, provider = 'example'
     assert.equal(argv[argv.indexOf('--prefix') + 1], options!.cwd);
     assert.ok(argv.includes('--global=false'));
     assert.ok(argv.includes('--ignore-scripts'));
-    assert.ok(argv.includes('--omit=peer'));
     assert.ok(argv.includes('--workspaces=false'));
     assert.ok(argv.includes('--package-lock=true'));
     writePlugin(options!.cwd!, name, apiVersion, provider);

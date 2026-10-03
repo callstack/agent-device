@@ -650,6 +650,7 @@ Limrun direct-device flow:
   agent-device disconnect
 
 Doublespeed direct-simulator flow:
+  agent-device plugins add @agent-device/doublespeed
   DOUBLESPEED_API_KEY=...
   agent-device connect doublespeed --platform ios
 

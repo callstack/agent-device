@@ -106,17 +106,14 @@ export function createDoublespeedPlatformRuntimeOwner(
             touch: liveSessionUnavailable,
             elementText: liveSessionUnavailable,
             back: liveSessionUnavailable,
-            home: liveSessionUnavailable,
+            systemButton: liveSessionUnavailable,
             orientation: liveSessionUnavailable,
+            fold: liveSessionUnavailable,
             tvRemote: liveSessionUnavailable,
-            keyboardStatus: liveSessionUnavailable,
-            keyboardDismiss: liveSessionUnavailable,
-            keyboardEnter: liveSessionUnavailable,
-            readClipboard: liveSessionUnavailable,
-            writeClipboard: liveSessionUnavailable,
-            appSwitcher: liveSessionUnavailable,
+            keyboard: liveSessionUnavailable,
+            clipboard: liveSessionUnavailable,
             triggerAppEvent: liveSessionUnavailable,
-            setSetting: liveSessionUnavailable,
+            settings: liveSessionUnavailable,
             readAlert: liveSessionUnavailable,
             awaitAlert: liveSessionUnavailable,
             acceptAlert: liveSessionUnavailable,
@@ -263,7 +260,7 @@ function bindDoublespeedAppLogs(
     ...recovery,
     networkDump: async (input) => {
       const recent = await options.host.appLogs.readRecent(input.sessionId, input.maxScanLines);
-      const dump = readRecentNetworkTrafficFromText(recent.text, {
+      const { dump } = readRecentNetworkTrafficFromText(recent.text, {
         ...input,
         path: recent.path,
         exists: recent.exists,

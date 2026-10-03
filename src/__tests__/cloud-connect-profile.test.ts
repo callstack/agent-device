@@ -14,8 +14,14 @@ import {
 import type { AgentDeviceClient } from '../agent-device-client.ts';
 import { resolveCloudWebDriverConnectProfile } from '../cli/connection/cloud-webdriver-profile.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { verifyDoublespeedConnection } from '@agent-device/provider-doublespeed';
+import { verifyDoublespeedConnection } from '../../packages/provider-doublespeed/src/connection-verification.ts';
 import { verifyLimrunConnection } from '@agent-device/provider-limrun';
+import doublespeedPlugin from '../../packages/provider-doublespeed/src/plugin.ts';
+import { createPluginHost } from '../plugins/host.ts';
+import { selectPlugin, pluginHome } from '../plugins/plugin.fixtures.ts';
+import { installedPlugins } from '../plugins/store.ts';
+import manifest from '../../packages/provider-doublespeed/package.json' with { type: 'json' };
+import type { PluginConnection } from '../plugins/connection.ts';
 import { providerWebDriver } from '../provider-webdriver.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
@@ -29,16 +35,36 @@ vi.mock('@agent-device/provider-limrun', async (importOriginal) => ({
   verifyLimrunConnection: vi.fn(),
 }));
 
-vi.mock('@agent-device/provider-doublespeed', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/provider-doublespeed')>()),
-  verifyDoublespeedConnection: vi.fn(),
-}));
+vi.mock(
+  '../../packages/provider-doublespeed/src/connection-verification.ts',
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import('../../packages/provider-doublespeed/src/connection-verification.ts')
+    >()),
+    verifyDoublespeedConnection: vi.fn(),
+  }),
+);
 
 vi.mock('../provider-webdriver.ts', () => ({
   providerWebDriver: { verifyConnection: vi.fn() },
 }));
 
+vi.mock('../plugins/load.ts', () => ({
+  withPluginConnection: async (
+    _provider: string,
+    env: NodeJS.ProcessEnv,
+    use: (connection: PluginConnection) => Promise<unknown>,
+  ) => {
+    const registration = doublespeedPlugin(createPluginHost(env, undefined));
+    try {
+      return await use(registration.connection);
+    } finally {
+      await registration.runtime.shutdown();
+    }
+  },
+}));
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -49,6 +75,14 @@ const mockedVerifyDoublespeedConnection = vi.mocked(verifyDoublespeedConnection)
 const mockedVerifyWebDriverConnection = vi.mocked(providerWebDriver.verifyConnection);
 
 beforeEach(() => {
+  const { home, env } = pluginHome();
+  selectPlugin(home, manifest.name, 'doublespeed', 'export default () => {};');
+  const [plugin] = installedPlugins(env);
+  const manifestPath = path.join(plugin!.directory, 'package.json');
+  const declared = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  declared.agentDevicePlugin.connection = manifest.agentDevicePlugin.connection;
+  fs.writeFileSync(manifestPath, JSON.stringify(declared));
+  vi.stubEnv('AGENT_DEVICE_HOME', home);
   mockedVerifyDoublespeedConnection.mockResolvedValue({
     provider: 'doublespeed',
     service: 'Doublespeed',
@@ -252,6 +286,7 @@ test('connect doublespeed generates an iOS-only local daemon remote profile', as
       /remote-connections\/generated\/doublespeed-[a-f0-9]{16}\.json$/,
     );
     assert.deepEqual(readGeneratedConfigKeys(state.remoteConfigPath), [
+      'clientId',
       'daemonTransport',
       'leaseBackend',
       'leaseProvider',

@@ -416,6 +416,7 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(help, /connect browserstack --platform android/);
   assert.match(help, /connect aws-device-farm --platform android/);
   assert.match(help, /connect limrun --platform android/);
+  assert.match(help, /plugins add @agent-device\/doublespeed/);
   assert.match(help, /connect doublespeed --platform ios/);
   assert.match(help, /Doublespeed uses DOUBLESPEED_API_KEY/);
   assert.match(help, /AWS_REGION=us-west-2 AWS_ACCESS_KEY_ID/);

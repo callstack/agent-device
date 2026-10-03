@@ -5,9 +5,9 @@ import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/plat
 import type { ProviderPluginHost } from '../sdk/plugins.ts';
 import { installedPlugins } from './store.ts';
 import { resolvePluginEntry, assertUniquePluginProviders } from './manifest.ts';
-import { bindPluginHost, createPluginHost } from './host.ts';
+import { createPluginHost } from './host.ts';
 import type { PluginConnection } from './connection.ts';
-import { BUILTIN_CONNECT_PROVIDERS } from '../cli/connection/provider-policy.ts';
+import { RESERVED_PLUGIN_PROVIDERS } from './manifest.ts';
 import type { WebDriverPluginOptions } from '../sdk/plugin-webdriver.ts';
 
 type ProviderPluginRegistration = Readonly<{
@@ -19,13 +19,15 @@ type ProviderPluginRegistration = Readonly<{
 export async function loadProviderPlugins(
   env: NodeJS.ProcessEnv,
   reservedProviders: readonly string[],
+  onlyProvider?: string,
 ): Promise<ProviderPluginRegistration[]> {
   const plugins = installedPlugins(env);
   assertUniquePluginProviders(plugins, reservedProviders);
   const registrations: ProviderPluginRegistration[] = [];
   try {
-    for (const plugin of plugins) {
-      bindPluginHost();
+    for (const plugin of plugins.filter(
+      (plugin) => onlyProvider === undefined || plugin.agentDevicePlugin.provider === onlyProvider,
+    )) {
       const module = await import(
         pathToFileURL(resolvePluginEntry(plugin.directory, plugin.agentDevicePlugin.entry)).href
       );
@@ -101,7 +103,7 @@ export async function withPluginConnection<T>(
   env: NodeJS.ProcessEnv,
   use: (connection: PluginConnection) => Promise<T>,
 ): Promise<T> {
-  const registrations = await loadProviderPlugins(env, BUILTIN_CONNECT_PROVIDERS);
+  const registrations = await loadProviderPlugins(env, RESERVED_PLUGIN_PROVIDERS, provider);
   try {
     const connection = registrations.find(
       (entry) => entry.runtime.provider === provider,

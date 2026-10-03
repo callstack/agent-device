@@ -71,10 +71,17 @@ test('connection callbacks run from the installed plugin and always release runt
     "connection: { resolve: () => ({ profile: { leaseProvider: 'example', platform: 'android' } }), verify: async () => { throw host.createError('COMMAND_FAILED', 'verification failed'); } }, platformModule:",
   );
   selectPlugin(home, 'example', 'example', source);
+  selectPlugin(home, 'unrelated', 'unrelated', 'throw new Error("unrelated plugin evaluated");');
   const profile = await withPluginConnection(
     'example',
     env,
-    async (connection) => await connection.resolve({ flags: {}, stateDir: home, cwd: home, env }),
+    async (connection) =>
+      await connection.resolve({
+        flags: { json: false, help: false, version: false },
+        stateDir: home,
+        cwd: home,
+        env,
+      }),
   );
   assert.equal(profile.profile.platform, 'android');
   assert.ok(fs.existsSync(marker));
@@ -83,7 +90,8 @@ test('connection callbacks run from the installed plugin and always release runt
     withPluginConnection(
       'example',
       env,
-      async (connection) => await connection.verify({ flags: {}, env }),
+      async (connection) =>
+        await connection.verify({ flags: { json: false, help: false, version: false }, env }),
     ),
     { code: 'COMMAND_FAILED' },
   );

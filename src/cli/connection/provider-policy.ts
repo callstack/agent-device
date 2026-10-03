@@ -6,13 +6,8 @@ import {
 import { pluginConnectionCapabilities, pluginConnectionNames } from '../../plugins/connection.ts';
 
 export type DirectDeviceConnectProvider = CloudWebDriverKnownProviderName | 'limrun';
-export const BUILTIN_CONNECT_PROVIDERS = [
-  'cloud',
-  'proxy',
-  CLOUD_WEBDRIVER_PROVIDERS.browserStack,
-  CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
-  'limrun',
-] as const;
+export { RESERVED_PLUGIN_PROVIDERS as BUILTIN_CONNECT_PROVIDERS } from '../../plugins/manifest.ts';
+import { RESERVED_PLUGIN_PROVIDERS as BUILTIN_CONNECT_PROVIDERS } from '../../plugins/manifest.ts';
 export type BuiltinConnectProvider = (typeof BUILTIN_CONNECT_PROVIDERS)[number];
 export type ConnectProvider = BuiltinConnectProvider | (string & {});
 
@@ -26,12 +21,15 @@ export type ConnectionProviderCapabilities = {
   usesCloudWebDriverLease: boolean;
 };
 
-export function isConnectProviderName(value: string | undefined): value is ConnectProvider {
+export function isConnectProviderName(
+  value: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): value is ConnectProvider {
   return (
     value === 'cloud' ||
     value === 'proxy' ||
     isDirectDeviceConnectProvider(value) ||
-    pluginConnectionCapabilities(value) !== undefined
+    pluginConnectionCapabilities(value, env) !== undefined
   );
 }
 
