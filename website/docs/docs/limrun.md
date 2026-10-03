@@ -36,7 +36,7 @@ agent-device disconnect
 
 Limrun Android uses the direct ADB tunnel. Normal Android helper-backed snapshots, installs, and port reverse flow are available, including the usual Android reverse setup for a local Metro server.
 
-Limrun iOS uses the direct Limrun iOS client. It supports app lifecycle commands, snapshots, screenshots, taps, text input, scrolling, and app installation. It cannot reverse a remote device port to a local host port. For iOS Metro or React DevTools, use a publicly reachable HTTPS endpoint or bridge URL instead of a local-only address.
+Limrun iOS uses the direct Limrun iOS client. It supports app lifecycle commands, snapshots, screenshots, taps, text input, scrolling, and app installation. `open --launch-args` relaunches the app with those arguments through simctl. It cannot reverse a remote device port to a local host port. For iOS Metro or React DevTools, use a publicly reachable HTTPS endpoint or bridge URL instead of a local-only address.
 
 iOS text entry is witnessed rather than assumed. `fill` taps the target, waits for that field to take text-entry focus, and only then types, so an app that exposes fields without ever publishing a globally focused element - Flutter forms are the common case - still fills and reports `textEntryReadiness: "focused-element"`. A tap that nothing answers fails with `text_entry_focus_not_observed` instead of typing into an unknown field; `type` stays the deliberate route into whichever field already holds focus.
 
