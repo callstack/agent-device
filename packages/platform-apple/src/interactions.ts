@@ -206,7 +206,8 @@ async function runApplePressPoint(
   point: { x: number; y: number },
   options: PressPointOptions,
 ): Promise<Record<string, unknown>> {
-  const helper = isMacOs(device) ? macOsHelperSurface(options.surface) : undefined;
+  // The runner owner's routing: an app session reaches here only on the XCTest backend.
+  const helper = isMacOs(device) ? macOsHelperSurface(options.surface, 'xctest') : undefined;
   if (helper) {
     return await runMacOsSurfacePress(context, point, options, helper);
   }

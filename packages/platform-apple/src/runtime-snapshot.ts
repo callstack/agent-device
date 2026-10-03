@@ -14,6 +14,7 @@ import type {
 import { macOsSurfaceBackend, type SessionSurface } from '@agent-device/contracts/session';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { hasSimulatorBridge } from './snapshot-observability.ts';
+import { hostMacOsAppBackend } from './os/macos/app-backend.ts';
 import type { AppleSnapshotRoute } from './snapshot-route.ts';
 
 /** Apple-owned selection between app snapshots and explicit macOS surface snapshots. */
@@ -28,7 +29,10 @@ export function bindAppleSnapshotRuntime(
     resolveInteractor: host.localInteractors.resolve,
   });
   const captureSnapshot = async (input: CaptureSnapshotInput) => {
-    if (isMacOs(request.device) && macOsSurfaceBackend(input.options?.surface) === 'macos-helper') {
+    if (
+      isMacOs(request.device) &&
+      macOsSurfaceBackend(input.options?.surface, hostMacOsAppBackend()) === 'macos-helper'
+    ) {
       return await host.snapshot.captureSurface(
         request.device,
         input.options,
@@ -110,7 +114,10 @@ async function admitAppleNativeFind(
 ): Promise<AdmittedAppleNativeFind | undefined> {
   const appBundleId = input.options?.appBundleId;
   if (appBundleId === undefined) return undefined;
-  if (isMacOs(request.device) && macOsSurfaceBackend(input.options?.surface) === 'macos-helper') {
+  if (
+    isMacOs(request.device) &&
+    macOsSurfaceBackend(input.options?.surface, hostMacOsAppBackend()) === 'macos-helper'
+  ) {
     return undefined;
   }
   const signal = input.signal ? AbortSignal.any([request.signal, input.signal]) : request.signal;

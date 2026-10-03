@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { macOsHelperSurface } from '@agent-device/contracts/session';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/tool-provider.ts';
+import { readFileSync } from 'node:fs';
 import {
+  MACOS_DELIVERY_MECHANISMS,
+  MACOS_HELPER_REFUSAL_REASONS,
   macOsClickScheduleMs,
   runMacOsPressAction,
   runMacOsReadTextAction,
@@ -10,9 +13,9 @@ import {
   runMacOsSnapshotAction,
 } from './helper.ts';
 
-const desktop = macOsHelperSurface('desktop')!;
-const menubar = macOsHelperSurface('menubar')!;
-const frontmostApp = macOsHelperSurface('frontmost-app')!;
+const desktop = macOsHelperSurface('desktop', 'xctest')!;
+const menubar = macOsHelperSurface('menubar', 'xctest')!;
+const frontmostApp = macOsHelperSurface('frontmost-app', 'xctest')!;
 
 test('macOS helper snapshot passes cancellation to the helper process', async () => {
   const controller = new AbortController();
@@ -254,4 +257,18 @@ test('helper entry points accept only an owner-routed surface', () => {
     await runMacOsScreenshotAction(out);
   };
   assert.equal(typeof widenedCalls, 'function');
+});
+
+test('the helper vocabulary matches the table the Swift helper is held to', () => {
+  const fixture = JSON.parse(
+    readFileSync(
+      new URL(
+        '../../../../../contracts/fixtures/macos-native-helper-outcomes.json',
+        import.meta.url,
+      ),
+      'utf8',
+    ),
+  ) as { refusalReasons: string[]; deliveryMechanisms: string[] };
+  assert.deepEqual([...MACOS_HELPER_REFUSAL_REASONS], fixture.refusalReasons);
+  assert.deepEqual([...MACOS_DELIVERY_MECHANISMS], fixture.deliveryMechanisms);
 });
