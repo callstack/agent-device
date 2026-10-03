@@ -57,12 +57,20 @@ export function snapshotViewportSizeFrom(box: Rect | undefined): SnapshotViewpor
  * `{ width, height }` pair the guard accepts survives, and anything else is the absence that means
  * unknown. A reader that trusted the payload could otherwise hand a consumer the `width: 0` a broken
  * producer wrote, which is the claim {@link snapshotViewportSizeFrom} exists to make unrepresentable.
+ *
+ * The published shape carries no origin, but a producer shipping the failed-read box it still holds
+ * would ship the `CGRectInfinite` origin beside the maximal extents; when an `x`/`y` is present the
+ * guard sees it, so the sentinel #2891 exists for is refused here too rather than being flattened
+ * into the largest finite box on the wire.
  */
 export function readSnapshotViewportSize(value: unknown): SnapshotViewportSize | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
-  const { width, height } = value as Record<string, unknown>;
+  const { x, y, width, height } = value as Record<string, unknown>;
   if (typeof width !== 'number' || typeof height !== 'number') return undefined;
-  return isPositiveFiniteRect({ x: 0, y: 0, width, height }) ? { width, height } : undefined;
+  if (x !== undefined && typeof x !== 'number') return undefined;
+  if (y !== undefined && typeof y !== 'number') return undefined;
+  const box = { x: x ?? 0, y: y ?? 0, width, height };
+  return isPositiveFiniteRect(box) ? { width, height } : undefined;
 }
 
 export function rectContains(container: Rect, nested: Rect): boolean {
