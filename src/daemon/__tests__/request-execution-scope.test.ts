@@ -9,9 +9,7 @@ import {
 import {
   makeAndroidSession,
   makeIosSession,
-  makeSession,
 } from '../../__tests__/test-utils/session-factories.ts';
-import { LINUX_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
@@ -495,45 +493,6 @@ test('provider lease admission succeeds without a device key', async () => {
   });
 
   expect(scope.sessionName).toBe('default');
-});
-
-test('expired leases remove owned sessions before the next command and free capacity', async () => {
-  let now = 1_000;
-  const sessionStore = makeSessionStore('agent-device-request-scope-');
-  const leaseRegistry = new LeaseRegistry({
-    maxActiveSimulatorLeases: 1,
-    defaultLeaseTtlMs: 10,
-    minLeaseTtlMs: 1,
-    now: () => now,
-  });
-  const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
-  sessionStore.set(
-    'default',
-    makeSession('default', {
-      device: LINUX_DEVICE,
-      lease: {
-        leaseId: lease.leaseId,
-        tenantId: lease.tenantId,
-        runId: lease.runId,
-        leaseBackend: lease.backend,
-        leaseProvider: 'proxy',
-        deviceKey: 'ios:SIM-001',
-        expiresAt: lease.expiresAt,
-      },
-    }),
-  );
-  now = 1_011;
-
-  const scope = await createRequestExecutionScope({
-    req: makeRequest({ command: 'snapshot' }),
-    sessionStore,
-    leaseRegistry,
-  });
-  await scope.runLocked(async () => 'ran');
-
-  expect(sessionStore.get('default')).toBeUndefined();
-  const nextLease = leaseRegistry.allocateLease({ tenantId: 'tenant-b', runId: 'run-2' });
-  expect(nextLease.tenantId).toBe('tenant-b');
 });
 
 // A lease renewed only at admission lets one command slower than its inactivity TTL

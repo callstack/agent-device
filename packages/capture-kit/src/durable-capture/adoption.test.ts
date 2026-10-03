@@ -68,3 +68,25 @@ test('a failed terminal transition preserves the primary error and reports it un
     reason: expect.stringMatching(/./),
   });
 });
+
+test('adoption refuses a retired lifetime even when its address has a vacant successor', async () => {
+  const context = makeDurableCaptureContext();
+  const start = makeDurableCaptureStartResult(context);
+  context.sessionStore.retire(context.sessionStore.lookup(context.sessionName));
+  const successor = { name: 'successor' };
+  context.sessionStore.set(context.sessionName, successor);
+  await expect(
+    adoptStartedDurableCapture(
+      testCaptureDefinition,
+      {
+        ...context,
+        ...start,
+        throwIfCanceled: () => {},
+      },
+      context.resourcePath,
+    ),
+  ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+  expect(start.forceCleanup).toHaveBeenCalledOnce();
+  expect(context.sessionStore.get(context.sessionName)).toBe(successor);
+  expect(testCaptureStore.read(context.resourcePath).status).toBe('missing');
+});

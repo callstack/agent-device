@@ -49,7 +49,7 @@ test('daemon shutdown awaits a slow web close inside its extended budget', async
   const stderrChunks: string[] = [];
 
   const teardown = teardownDaemonSessionForShutdown({
-    session,
+    ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stateDir: root,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },
@@ -83,7 +83,7 @@ test('daemon shutdown closes an open web session immediately, without waiting fo
   const stderrChunks: string[] = [];
 
   await teardownDaemonSessionForShutdown({
-    session,
+    ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stateDir: root,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },
@@ -116,7 +116,7 @@ test('daemon shutdown reports a web close failure on stderr instead of losing it
   const stderrChunks: string[] = [];
 
   await teardownDaemonSessionForShutdown({
-    session,
+    ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stateDir: root,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },

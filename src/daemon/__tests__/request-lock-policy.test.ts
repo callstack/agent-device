@@ -1,3 +1,4 @@
+import { makeStoredSessionRef } from '../../__tests__/test-utils/store-factory.ts';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { applyRequestLockPolicy } from '../request-lock-policy.ts';
@@ -34,7 +35,7 @@ const ANDROID_SESSION: SessionState = {
 
 /** Both fixtures are explicitly named, so each is stored under — and addressed by — its name. */
 function ref(session: SessionState): SessionRef {
-  return { address: session.name, session };
+  return makeStoredSessionRef(session);
 }
 
 test('allows compatible fresh-session selectors under request lock policy', () => {

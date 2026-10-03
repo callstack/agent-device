@@ -19,11 +19,18 @@ test('session resources are constructed only by their durable domain owners', ()
           appLogFailure: failure,
           audioProbe: audio,
           perfCapture: perf,
+          screenRecording: recording,
         });`,
       ],
       [
         'src/daemon/app-log-session-resource.ts',
-        `sessionStore.set(name, { ...session, appLog: log, appLogFailure: undefined });`,
+        `sessionStore.update(ref, { appLog: log, appLogFailure: undefined });`,
+      ],
+      [
+        'src/daemon/session-capture-binding.ts',
+        `sessionStore.update(ref, { audioProbe: audio });
+         sessionStore.update(ref, { perfCapture: perf });
+         sessionStore.update(ref, { screenRecording: recording });`,
       ],
       [
         'packages/capture-kit/src/capture-admission/audio-probe-session-resource.ts',
@@ -39,6 +46,9 @@ test('session resources are constructed only by their durable domain owners', ()
       'src/daemon/handlers/planted.ts: session appLogFailure record constructed outside its owner',
       'src/daemon/handlers/planted.ts: session audioProbe record constructed outside its owner',
       'src/daemon/handlers/planted.ts: session perfCapture record constructed outside its owner',
+      'src/daemon/handlers/planted.ts: session screenRecording record constructed outside its owner',
+      'packages/capture-kit/src/capture-admission/audio-probe-session-resource.ts: session audioProbe record constructed outside its owner',
+      'packages/capture-kit/src/capture-admission/perf-capture-session-resource.ts: session perfCapture record constructed outside its owner',
     ],
   );
 });

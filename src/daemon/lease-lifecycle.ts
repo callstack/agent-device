@@ -14,12 +14,12 @@ import {
 } from './request-admission.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonRequest } from './daemon-request.ts';
-import type { SessionState } from './session-state.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
 import { providerSessionIdFromData } from './provider-session-ownership.ts';
 
 export type ExpiredProviderLeaseRecovery = (lease: DeviceLease) => Promise<void>;
 
-export type SessionTeardown = (session: SessionState, sessionName: string) => Promise<void>;
+export type SessionTeardown = (ref: SessionRef) => Promise<void>;
 
 export async function releaseExpiredProviderLease(
   recoverExpiredLease: ExpiredProviderLeaseRecovery | undefined,
@@ -62,9 +62,10 @@ export async function cleanupExpiredLeasedSession(params: {
   leaseRegistry: LeaseRegistry;
   teardownSession: SessionTeardown;
 }): Promise<boolean> {
-  const session = params.sessionStore.get(params.sessionName);
+  const ref = params.sessionStore.lookup(params.sessionName);
+  const session = ref?.session;
   const lease = session?.lease;
-  if (!session || !lease) return false;
+  if (!ref || !session || !lease) return false;
   const expiredLease = params.leaseRegistry.consumeExpiredLease(lease.leaseId);
   if (!expiredLease) return false;
   emitDiagnostic({
@@ -77,7 +78,7 @@ export async function cleanupExpiredLeasedSession(params: {
       deviceKey: lease.deviceKey,
     },
   });
-  await params.teardownSession(session, session.name).catch((error) => {
+  await params.teardownSession(ref).catch((error) => {
     emitDiagnostic({
       level: 'debug',
       phase: 'leased_session_expiry_cleanup_failed',
@@ -100,7 +101,7 @@ export async function cleanupExpiredLeasedSession(params: {
       },
     });
   });
-  params.sessionStore.delete(session.name);
+  params.sessionStore.retire(ref);
   return true;
 }
 
@@ -112,7 +113,8 @@ export function admitRequestLeaseForLockedScope(params: {
   providerAppCatalog?: ProviderAppCatalog;
 }): DaemonRequest {
   const { sessionName, sessionStore, leaseRegistry } = params;
-  const existingSession = sessionStore.get(sessionName);
+  const ref = sessionStore.lookup(sessionName);
+  const existingSession = ref?.session;
   const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, existingSession, {
     providerAppCatalog: params.providerAppCatalog,
   });
@@ -125,15 +127,14 @@ export function admitRequestLeaseForLockedScope(params: {
       admittedLease: activeLease,
     },
   };
-  if (existingSession?.lease) {
-    sessionStore.set(sessionName, {
-      ...existingSession,
+  if (ref && existingSession?.lease) {
+    sessionStore.update(ref, (current) => ({
       lease: {
-        ...existingSession.lease,
+        ...current.lease!,
         leaseBackend: activeLease.backend,
         expiresAt: activeLease.expiresAt,
       },
-    });
+    }));
   }
   return nextReq;
 }

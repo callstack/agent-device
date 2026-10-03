@@ -12,8 +12,7 @@ import {
   adoptStartedDurableCapture,
   createDurableCaptureResourceStore,
   finishLiveDurableCapture,
-  type DurableCaptureResourceDefinition,
-  type DurableCaptureSessionStore,
+  type DurableCaptureRecordDefinition,
 } from '@agent-device/capture-kit/durable-capture';
 import { mkdtempForTestSync } from '../__tests__/test-utils/tmp-dir.ts';
 import { androidRecordingDevice, recordingHost, recordingInput } from './fixtures.ts';
@@ -114,7 +113,7 @@ type AndroidRecordingSession = Readonly<{
 
 /**
  * The daemon's recording record assembled around the real Android handle: the same definition the
- * daemon declares in `src/daemon/screen-recording-session-resource.ts`, including its policy,
+ * daemon declares in `packages/capture-kit/src/capture-admission/screen-recording-session-resource.ts`, including its policy,
  * driving the shared coordinator.
  */
 async function adoptAndroidRecording(params: {
@@ -128,42 +127,50 @@ async function adoptAndroidRecording(params: {
     fileName: 'screen-recording.resource.json',
     displayName: 'screen recording',
   });
-  const definition: DurableCaptureResourceDefinition<
-    'screen-recording',
-    ScreenRecordingLiveHandle,
-    ScreenRecordingCompletion,
-    AndroidRecordingSession
-  > = {
-    resourceKind: 'screen-recording',
-    displayName: 'screen recording',
-    store,
-    failedFinishPolicy: 'preserve-retry-material',
-    sessionSlot: {
-      read: (session) => session.recording,
-      replace: (session, recording) => ({ ...session, recording }),
-    },
-    completionMetadata: (completion) => ({ outPath: completion.outPath }),
-    messages: {
-      noActive: 'no active recording',
-      cleanupPendingHint: 'Keep screen-recording.resource.json and retry stop.',
-    },
-  };
+  const definition: DurableCaptureRecordDefinition<'screen-recording', ScreenRecordingCompletion> =
+    {
+      resourceKind: 'screen-recording',
+      displayName: 'screen recording',
+      store,
+      failedFinishPolicy: 'preserve-retry-material',
+      completionMetadata: (completion) => ({ outPath: completion.outPath }),
+      messages: {
+        noActive: 'no active recording',
+        cleanupPendingHint: 'Keep screen-recording.resource.json and retry stop.',
+      },
+    };
   const sessionsDir = mkdtempForTestSync('agent-device-android-failed-finish-session-');
   let session: AndroidRecordingSession = {};
-  const sessionStore: DurableCaptureSessionStore<AndroidRecordingSession> = {
-    set: (_name, next) => {
+  const sessionStore = {
+    get: () => session,
+    set: (_name: string, next: AndroidRecordingSession) => {
       session = next;
     },
-    resolveSessionDir: (name) => path.join(sessionsDir, name),
+    resolveSessionDir: (name: string) => path.join(sessionsDir, name),
   };
-  const resourcePath = store.resolvePath(sessionStore.resolveSessionDir(params.sessionName));
+  const binding = {
+    address: params.sessionName,
+    sessionDir: sessionStore.resolveSessionDir(params.sessionName),
+    read: () => session.recording,
+    assertAdoptable: () => {
+      if (session.recording) throw new Error('Already recording');
+    },
+    canPersist: () => !session.recording,
+    adopt: (recording: AndroidRecordingSession['recording']) => {
+      session = { ...session, recording };
+    },
+    clear: (expected: NonNullable<AndroidRecordingSession['recording']>) => {
+      if (session.recording?.handle !== expected.handle) return 'resource-changed' as const;
+      session = { ...session, recording: undefined };
+      return 'cleared' as const;
+    },
+  };
+  const resourcePath = store.resolvePath(binding.sessionDir);
   await adoptStartedDurableCapture(
     definition,
     {
       reportUndurableCleanup: () => {},
-      session,
-      sessionName: params.sessionName,
-      sessionStore,
+      binding,
       device: androidRecordingDevice,
       owner: params.owner,
       fence: params.envelope.fence,
@@ -178,9 +185,7 @@ async function adoptAndroidRecording(params: {
       finishLiveDurableCapture(
         definition,
         {
-          session,
-          sessionName: params.sessionName,
-          sessionStore,
+          binding,
           intent: 'capture',
         },
         resourcePath,

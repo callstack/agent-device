@@ -1,6 +1,5 @@
 import type { JsonObject } from '@agent-device/contracts/client';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
-import type { LiveResourceHandle } from '@agent-device/contracts/durable-resource';
 import type { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import type {
   ResourceOwnershipFence,
@@ -9,24 +8,19 @@ import type {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DurableCaptureResourceStore } from './store.ts';
 
-/**
- * The whole of the session store these mechanics touch: where a session's records live, and
- * how an updated session record is put back. The session type itself stays opaque — only a
- * definition's own `sessionSlot` looks inside it.
- */
-export type DurableCaptureSessionStore<S> = Readonly<{
-  set(name: string, session: S): void;
-  resolveSessionDir(name: string): string;
-}>;
-
 export type DurableCaptureSessionResource<K extends string, H extends AsyncDisposable> = Readonly<{
   handle: H;
   envelope: DurableResourceEnvelope<K>;
 }>;
 
-export type DurableCaptureSessionSlot<K extends string, H extends AsyncDisposable, S> = Readonly<{
-  read(session: S): DurableCaptureSessionResource<K, H> | undefined;
-  replace(session: S, resource: DurableCaptureSessionResource<K, H> | undefined): S;
+export type DurableCaptureSessionBinding<K extends string, H extends AsyncDisposable> = Readonly<{
+  address: string;
+  sessionDir: string;
+  read(): DurableCaptureSessionResource<K, H> | undefined;
+  assertAdoptable(): void;
+  canPersist(): boolean;
+  adopt(resource: DurableCaptureSessionResource<K, H>): void;
+  clear(expected: DurableCaptureSessionResource<K, H>): 'cleared' | 'retired' | 'resource-changed';
 }>;
 
 /**
@@ -70,14 +64,6 @@ export type DurableCaptureRecordDefinition<K extends string, C> = Readonly<{
   }>;
 }>;
 
-export type DurableCaptureResourceDefinition<
-  K extends string,
-  H extends LiveResourceHandle<C>,
-  C,
-  S,
-> = DurableCaptureRecordDefinition<K, C> &
-  Readonly<{ sessionSlot: DurableCaptureSessionSlot<K, H, S> }>;
-
 /**
  * What the mechanics observed about a failed adoption's cleanup. Reporting it keeps the
  * admission decision — block a replacement start, or clear an earlier block — with the caller.
@@ -86,11 +72,9 @@ export type DurableCaptureCleanupOutcome =
   | { confirmed: true }
   | { confirmed: false; reason: string };
 
-export type AdoptStartedDurableCaptureParams<K extends string, H extends AsyncDisposable, S> = {
+export type AdoptStartedDurableCaptureParams<K extends string, H extends AsyncDisposable> = {
   reportUndurableCleanup(device: DeviceInfo, outcome: DurableCaptureCleanupOutcome): void;
-  session: S;
-  sessionName: string;
-  sessionStore: DurableCaptureSessionStore<S>;
+  binding: DurableCaptureSessionBinding<K, H>;
   device: DeviceInfo;
   owner: RuntimeOwnerRef;
   fence: ResourceOwnershipFence;

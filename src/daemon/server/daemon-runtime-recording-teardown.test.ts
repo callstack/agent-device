@@ -35,7 +35,7 @@ test('daemon shutdown awaits durable recording finalization inside its extended 
   const stderrChunks: string[] = [];
 
   const teardown = teardownDaemonSessionForShutdown({
-    session,
+    ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },
   });
@@ -72,7 +72,7 @@ test('daemon shutdown resolves durable recording resources through the effective
   const stderrChunks: string[] = [];
 
   await teardownDaemonSessionForShutdown({
-    session,
+    ref: sessionStore.lookup(effectiveSessionName)!,
     sessionStore,
     stateDir: root,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },
