@@ -317,6 +317,7 @@ const PUBLISHED_SNAPSHOT_DATA_KEYS = [
   'refsGeneration',
   'snapshotDiagnostics',
   'truncated',
+  'viewport',
   'visibility',
   'warnings',
 ] as const;
