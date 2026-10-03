@@ -6,6 +6,7 @@ import { publishFileSync } from './atomic-file.ts';
 import { emitDiagnostic } from './diagnostics.ts';
 import {
   classifyOwnerLiveness,
+  isProcessPid,
   ownerIdentityMatches,
   type OwnerLiveness,
 } from './owner-identity.ts';
@@ -553,7 +554,7 @@ function parseProcessLockOwner(contents: string): ProcessLockOwnerRecord | null 
 
 const PROCESS_LOCK_OWNER_FIELD_SHAPES: Record<keyof ProcessLockOwner, (value: unknown) => boolean> =
   {
-    pid: (value) => typeof value === 'number' && Number.isInteger(value) && value > 0,
+    pid: isProcessPid,
     acquiredAtMs: (value) => typeof value === 'number' && Number.isFinite(value),
     startTime: (value) => value === undefined || value === null || typeof value === 'string',
   };

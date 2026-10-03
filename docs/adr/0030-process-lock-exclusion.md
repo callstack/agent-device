@@ -40,6 +40,32 @@ guard cannot constrain legacy code after its final check. The support boundary t
 requires deployment control; host-kit does not claim to detect or evict every legacy user.
 
 Daemon registration has a separate cutover boundary: keep the same `daemon.lock` path and
-refuse legacy files rather than automatically reclaiming them. Its startup tests must cover
-an already-running older daemon and concurrent old/new startup. This does not expand the
-host-kit mixed-protocol support contract.
+refuse legacy files rather than automatically reclaiming them. A legacy daemon creates an
+exclusive file; a hardened daemon creates a directory at that same path. The old acquisition
+cannot unlink a directory, and the new acquisition retains an existing file.
+
+The [registration tests](../../src/__tests__/daemon-registration-owner.test.ts) exercise real
+children using the c237027737 legacy acquisition and the current owner. They cover an older
+daemon already running, a hardened owner waiting to publish metadata, and concurrent startup.
+The client refuses an older registration before signaling or changing it. This proves the daemon
+cutover; it does not expand the host-kit mixed-protocol support contract. Older clients still
+require the deployment controls above.
+
+## Registration operations
+
+[Shared retirement](../../src/daemon-registration-owner.ts) owns verified termination, protected
+metadata inspection and removal, and release. Takeover, failed startup, replay cleanup, timeout
+reset and manual stop await its result. Abandoned recovery uses the same protected retirement
+sequence without signaling a live process. Daemon publication and shutdown use functions bound
+to their acquired claim.
+
+```mermaid
+flowchart LR
+    C[Client lifecycle and timeout] --> R[Shared retirement]
+    M[Manual stop] --> R
+    P[Abandoned recovery and pruning] --> R
+    R --> L[Acquired registration claim]
+    D[Daemon startup and shutdown] --> O[Functions bound to own claim]
+    O --> L
+    L --> F[Protected metadata and reports]
+```

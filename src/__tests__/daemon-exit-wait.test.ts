@@ -57,6 +57,16 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+test.each([0, -1, 1.5, 2_147_483_648, Number.MAX_SAFE_INTEGER])(
+  'an invalid native pid %s cannot prove exit during recovery',
+  async (pid) => {
+    expect(await waitForDaemonExit({ pid, startTime: OURS }, { timeoutMs: 0 })).toEqual({
+      exited: false,
+      elapsedMs: 0,
+    });
+  },
+);
+
 test('waitForDaemonExit reports a pid recycled mid-wait as exited, without burning the deadline', async () => {
   setTimeout(() => state.starts.set(PID, RECYCLED), 20);
   const wait = await waitForDaemonExit(
