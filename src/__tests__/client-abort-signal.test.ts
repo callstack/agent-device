@@ -53,14 +53,20 @@ test('the signal rides the transport context so a built-in-style transport can c
 });
 
 test('aborting a call whose transport ignores the signal still rejects the caller with the typed canceled error', async () => {
+  let lingering: ReturnType<typeof setTimeout> | undefined;
   const client = createAgentDeviceClient(
     {},
     {
       transport: (req) =>
         new Promise<DaemonResponse>((resolve) => {
           // A custom transport that never inspects the context signal: the guard must still settle
-          // the caller's promise when the abort fires.
-          setTimeout(() => resolve({ ok: true, data: { ignored: req.command } }), 10_000);
+          // the caller's promise when the abort fires. The late resolve is cleared once the caller
+          // has been rejected, so the worker keeps no timer alive for its own promise.
+          lingering = setTimeout(
+            () => resolve({ ok: true, data: { ignored: req.command } }),
+            10_000,
+          );
+          lingering.unref?.();
         }),
     },
   );
@@ -68,6 +74,7 @@ test('aborting a call whose transport ignores the signal still rejects the calle
   const call = client.interactions.press({ ref: '@e12', signal: controller.signal });
   setTimeout(() => controller.abort(), 10);
   await assert.rejects(call, (error: unknown) => canceledWith(error, 'unknown'));
+  if (lingering) clearTimeout(lingering);
 });
 
 test('a signal on one call does not cancel another', async () => {
