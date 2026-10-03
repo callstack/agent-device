@@ -298,14 +298,26 @@ static const NSUInteger AgentDeviceTextEntryAutoSubmitLength = 6;
       textField.text.length > 0) {
     [textField removeFromSuperview];
   }
-  // An auto-submitting one-time-code field: the last digit navigates to a screen whose own input sits
-  // where the code field was.
-  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-auto-submit"] &&
-      textField.text.length >= AgentDeviceTextEntryAutoSubmitLength && textField.superview != nil) {
+  // An auto-submitting one-time-code field: the last digit navigates away, to a screen whose own
+  // input takes the code field's place or to one without an input. `replace-after-input` is the
+  // same navigation landing before the code is complete.
+  NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
+  BOOL codeComplete = textField.text.length >= AgentDeviceTextEntryAutoSubmitLength;
+  if (textField.superview == nil) {
+    return;
+  }
+  if ((codeComplete && [arguments containsObject:@"--agent-device-text-entry-auto-submit"]) ||
+      (textField.text.length > 0 && [arguments containsObject:@"--agent-device-text-entry-replace-after-input"])) {
     UITextField *nextScreenField = [[UITextField alloc] initWithFrame:textField.frame];
-    nextScreenField.accessibilityIdentifier = @"agent-device-auto-submit-next-screen-input";
+    if (![arguments containsObject:@"--agent-device-text-entry-unnamed-input"]) {
+      nextScreenField.accessibilityIdentifier = @"agent-device-auto-submit-next-screen-input";
+    }
     nextScreenField.borderStyle = UITextBorderStyleRoundedRect;
     [textField.superview addSubview:nextScreenField];
+    [textField removeFromSuperview];
+    [nextScreenField becomeFirstResponder];
+  } else if (codeComplete &&
+             [arguments containsObject:@"--agent-device-text-entry-auto-submit-without-successor"]) {
     [textField removeFromSuperview];
   }
 }
@@ -351,7 +363,9 @@ static const NSUInteger AgentDeviceTextEntryAutoSubmitLength = 6;
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-regression"]) {
     UITextField *textField = [[UITextField alloc] init];
-    textField.accessibilityIdentifier = @"agent-device-hardware-keyboard-input";
+    if (![NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-unnamed-input"]) {
+      textField.accessibilityIdentifier = @"agent-device-hardware-keyboard-input";
+    }
     textField.borderStyle = UITextBorderStyleRoundedRect;
     // An empty input view keeps the software keyboard down, which is the hardware-keyboard responder
     // these routes are addressed to. `--agent-device-text-entry-soft-keyboard` leaves the real input

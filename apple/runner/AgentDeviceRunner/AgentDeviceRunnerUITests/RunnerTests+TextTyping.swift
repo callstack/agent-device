@@ -85,7 +85,6 @@ extension RunnerTests {
     let initialResolveStartedAt = Date()
     let initialTarget = resolveTextEntryElement(app: app, target: activeTarget)
     activeTarget = activeTarget.withElement(initialTarget)
-    let deliveredTo = activeTarget.inputIdentity
     let currentText = editableTextValue(for: initialTarget, treatingPlaceholderAsEmpty: true)
     let initialText = repairMode == .append ? currentText : nil
     let expectedText = expectedTextEntryValue(typedText: text, mode: repairMode, initialText: initialText)
@@ -195,7 +194,7 @@ extension RunnerTests {
         textEntryRoute = "xctest-element"
         currentTarget.typeText(value)
         return (currentTarget, nil)
-      } else if activeTarget.prefersFocusedElement && isKeyboardVisible(app: app) {
+      } else if activeTarget.boundIdentity == nil && activeTarget.prefersFocusedElement && isKeyboardVisible(app: app) {
 #if os(iOS)
         // Two ways this post leaves the synthesized channel, and both hand the text to
         // application-wide typing: the command's own budget refused it, or XCTest's private synthesis
@@ -344,7 +343,6 @@ extension RunnerTests {
     var result = verifyTextEntryWithRepairIfNeeded(
       app: app,
       target: activeTarget,
-      deliveredTo: deliveredTo,
       expectedText: expectedText,
       repairMode: repairMode
     )
@@ -391,13 +389,21 @@ extension RunnerTests {
   private func verifyTextEntryWithRepairIfNeeded(
     app: XCUIApplication,
     target: TextEntryTarget,
-    deliveredTo: TextEntryInputIdentity?,
     expectedText: String?,
     repairMode: TextTypingRepairMode
   ) -> TextEntryResult {
-    // The app reacted to the delivered text by removing the input. Its value can no longer be read
-    // back, and re-resolving by point or focus would verify, and possibly repair, another input.
-    if Self.textEntryInputRemovedAfterDelivery(deliveredTo: deliveredTo, afterDelivery: target.inputIdentity) {
+    if target.boundIdentity != nil, resolveTextEntryElement(app: app, target: target) == nil {
+      guard boundTextEntryInputIsGone(app: app, target: target) else {
+        return TextEntryResult(
+          verified: nil,
+          repaired: false,
+          expectedText: expectedText,
+          observedText: nil,
+          failure: .commitNotObserved
+        )
+      }
+      // Every character was delivered and the app then removed the input, as an auto-submitting
+      // code field does. Its value can no longer be read back.
       NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_INPUT_REMOVED_AFTER_DELIVERY")
       return TextEntryResult(verified: nil, repaired: false, expectedText: expectedText, observedText: nil)
     }
@@ -419,6 +425,15 @@ extension RunnerTests {
       expectedText: expectedText,
       repairMode: repairMode
     ) else {
+      return verifyTextEntry(
+        app: app,
+        target: target,
+        expectedText: expectedText,
+        repaired: false
+      )
+    }
+    guard Self.textEntryRepairCanTarget(boundIdentity: target.boundIdentity) else {
+      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_REPAIR_REFUSED reason=unidentified-input")
       return verifyTextEntry(
         app: app,
         target: target,
