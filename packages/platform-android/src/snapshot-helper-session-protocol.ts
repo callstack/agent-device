@@ -304,5 +304,7 @@ function readSessionMetadata(headers: Record<string, string>): AndroidSnapshotHe
     truncated: readInstrumentationResultBoolean(headers.truncated),
     elapsedMs: readInstrumentationResultNumber(headers.elapsedMs),
     pixelDensity: readInstrumentationResultNumber(headers.pixelDensity),
+    displayWidth: readInstrumentationResultNumber(headers.displayWidth),
+    displayHeight: readInstrumentationResultNumber(headers.displayHeight),
   };
 }

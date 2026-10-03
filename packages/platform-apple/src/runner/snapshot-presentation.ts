@@ -21,10 +21,12 @@ import {
 } from '@agent-device/capture-kit/ios-snapshot-planning';
 import { AppError } from '@agent-device/kernel/errors';
 import { readSnapshotKeyboardBandFact } from '@agent-device/kernel/record';
+import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import type {
   RawSnapshotNode,
   SnapshotKeyboardBandFact,
   SnapshotQualityVerdict,
+  SnapshotViewportSize,
   IosTargetActivation,
 } from '@agent-device/kernel/snapshot';
 import {
@@ -84,14 +86,30 @@ function readSystemSurfaceProvenance(value: unknown): IosSystemSurfaceProvenance
   return host && { bundleId: host.bundleId, kind: host.kind };
 }
 
+/**
+ * What one Apple runner capture leaves behind after presentation: the presented tree, and the box
+ * its rects are measured in (#3182). The viewport is the evidence the fold already resolved — the
+ * app's own box when the runner read one, otherwise the largest window root in the payload, which on
+ * tvOS is the screen every `XCUIApplication` rect is measured on — and it is published through the
+ * same guard every other producer passes, so an unusable box stays absent instead of reaching a
+ * reader as zero. This is the host-side owner ADR 0004 gives the viewport question; the runner
+ * itself never grows a second wire key for a fact the host already derives from the payload's roots.
+ */
+export type AppleRunnerSnapshotPresentation = Readonly<{
+  nodes: RawSnapshotNode[];
+  viewport?: SnapshotViewportSize;
+}>;
+
 export function presentAppleRunnerSnapshot(
   deviceId: string,
   options: SnapshotOptions | undefined,
   result: AppleRunnerSnapshotResult,
-): RawSnapshotNode[] {
+): AppleRunnerSnapshotPresentation {
   const nodes = result.nodes ?? [];
+  const viewportEvidence = runnerViewportEvidence(nodes, result.qualityPayload?.nodes);
+  const viewport = viewportSize(viewportEvidence);
   if (result.runnerFatal === true || (nodes.length === 0 && result.qualityPayload === undefined)) {
-    return nodes;
+    return { nodes, ...(viewport ? { viewport } : {}) };
   }
 
   const request = createIosSnapshotRequest({
@@ -101,7 +119,6 @@ export function presentAppleRunnerSnapshot(
     scope: options?.scope,
     customActions: options?.customActions,
   });
-  const viewport = runnerViewportEvidence(nodes, result.qualityPayload?.nodes);
 
   const input: IosSnapshotInput = {
     stage: 'presented',
@@ -119,7 +136,7 @@ export function presentAppleRunnerSnapshot(
     },
     validation: {
       presentationKey: buildIosSnapshotPresentationKey(request),
-      viewport,
+      viewport: viewportEvidence,
       hittability: { kind: 'available' },
       lineage: { targetId: deviceId },
       residue: [],
@@ -127,10 +144,17 @@ export function presentAppleRunnerSnapshot(
   };
 
   try {
-    return presentIosRunnerSnapshot(input, request).nodes;
+    return {
+      nodes: presentIosRunnerSnapshot(input, request).nodes,
+      ...(viewport ? { viewport } : {}),
+    };
   } catch (error) {
     throwSnapshotPresentationError(error, result);
   }
+}
+
+function viewportSize(evidence: IosViewportEvidence): SnapshotViewportSize | undefined {
+  return snapshotViewportSizeFrom(evidence.kind === 'missing' ? undefined : evidence.rect);
 }
 
 /**

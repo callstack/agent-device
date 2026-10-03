@@ -9,7 +9,10 @@ import type {
   RawSnapshotNode,
   SnapshotBackend,
   SnapshotQualityVerdict,
+  SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
+import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
+import type { AndroidSnapshotHelperMetadata } from './snapshot-helper-types.ts';
 import type { AndroidSnapshotAnalysis } from './ui-hierarchy.ts';
 
 const androidCaptureEvidence = Symbol('androidSnapshotCaptureEvidence');
@@ -25,6 +28,12 @@ type AndroidSnapshotCaptureData = Readonly<{
   analysis: AndroidSnapshotAnalysis;
   androidSnapshot: AndroidSnapshotBackendMetadata;
   quality?: SnapshotQualityVerdict;
+  /**
+   * The screen the captured bounds are measured in (#3182): the helper's own display read, so a
+   * capture of an empty screen still reports it. Derived, never stored, so this carrier cannot drift
+   * from the `displayWidth`/`displayHeight` pair it came from.
+   */
+  viewport?: SnapshotViewportSize;
 }>;
 
 /** Opaque acquisition envelope: exact Android facts cannot be detached from the captured nodes. */
@@ -43,6 +52,23 @@ export function createAndroidSnapshotCapture(
 ): AndroidSnapshotCapture {
   Object.defineProperty(data, androidCaptureEvidence, { value: evidence });
   return data as AndroidSnapshotCapture;
+}
+
+/**
+ * The one place Android's published viewport is built: from the display pair the helper transport
+ * carries (#3182), through the shared guard, so a zero the platform answered with never becomes a
+ * viewport a reader trusts. The pair lives only on the helper's own metadata; the backend metadata
+ * the response publishes keeps the converted fact instead of a second copy of the raw read.
+ */
+export function androidSnapshotViewportFromHelperMetadata(
+  metadata: AndroidSnapshotHelperMetadata,
+): SnapshotViewportSize | undefined {
+  return snapshotViewportSizeFrom({
+    x: 0,
+    y: 0,
+    width: metadata.displayWidth ?? Number.NaN,
+    height: metadata.displayHeight ?? Number.NaN,
+  });
 }
 
 /** The sole adapter from Android acquisition into daemon snapshot publication. */

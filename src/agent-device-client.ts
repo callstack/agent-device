@@ -71,6 +71,7 @@ import {
   type MetroSessionHints,
 } from './metro/metro-session-hints.ts';
 import { isRecord, readSnapshotKeyboardBandFact } from '@agent-device/kernel/record';
+import { readSnapshotViewportSize } from '@agent-device/kernel/rect';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { createLeaseClient } from './client/lease-client.ts';
 import { normalizeScreenshotCaptureResult } from './client/screenshot-result.ts';
@@ -529,6 +530,7 @@ function optionalSnapshotResponseFields(
     | 'unchanged'
     | 'visibility'
     | 'keyboard'
+    | 'viewport'
     | 'warnings'
     | 'snapshotQuality'
     | 'snapshotDiagnostics'
@@ -539,9 +541,11 @@ function optionalSnapshotResponseFields(
   const visibility = readObject(data.visibility);
   const unchanged = readObject(data.unchanged);
   const keyboard = readSnapshotKeyboardBandFact(data.keyboard);
+  const viewport = readSnapshotViewportSize(data.viewport);
   const snapshotDiagnostics = readSnapshotDiagnosticsSummary(data.snapshotDiagnostics);
   return {
     ...(keyboard ? { keyboard } : {}),
+    ...(viewport ? { viewport } : {}),
     ...(visibility ? { visibility: visibility as CaptureSnapshotResult['visibility'] } : {}),
     ...readSerializedSnapshotCaptureAnnotations(data),
     ...(unchanged ? { unchanged: unchanged as CaptureSnapshotResult['unchanged'] } : {}),

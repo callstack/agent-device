@@ -1,4 +1,4 @@
-import type { Rect } from './snapshot.ts';
+import type { Rect, SnapshotViewportSize } from './snapshot.ts';
 
 /**
  * CoreGraphics' `CGRectInfinite`, spelled in the four doubles Apple builds it from. This is what a
@@ -38,6 +38,31 @@ export function isPositiveFiniteRect(rect: Rect | undefined): rect is Rect {
   if (!Number.isFinite(x + width) || !Number.isFinite(y + height)) return false;
   if (width <= 0 || height <= 0) return false;
   return !isCGRectInfinite(rect);
+}
+
+/**
+ * The ONE construction path for the viewport a snapshot response publishes (#3182): a producer hands
+ * over the box it read, and a box this guard refuses yields `undefined` — the absence that means
+ * unknown — instead of a size with a zero in it. A producer that published a zero would be
+ * answering "this screen has no width", which no producer measured; a reader that has to tell the
+ * two apart can only do it when one of them is unrepresentable.
+ */
+export function snapshotViewportSizeFrom(box: Rect | undefined): SnapshotViewportSize | undefined {
+  if (!isPositiveFiniteRect(box)) return undefined;
+  return { width: box.width, height: box.height };
+}
+
+/**
+ * Re-read of a viewport this repo already published, out of an untyped wire payload: only a
+ * `{ width, height }` pair the guard accepts survives, and anything else is the absence that means
+ * unknown. A reader that trusted the payload could otherwise hand a consumer the `width: 0` a broken
+ * producer wrote, which is the claim {@link snapshotViewportSizeFrom} exists to make unrepresentable.
+ */
+export function readSnapshotViewportSize(value: unknown): SnapshotViewportSize | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const { width, height } = value as Record<string, unknown>;
+  if (typeof width !== 'number' || typeof height !== 'number') return undefined;
+  return isPositiveFiniteRect({ x: 0, y: 0, width, height }) ? { width, height } : undefined;
 }
 
 export function rectContains(container: Rect, nested: Rect): boolean {
