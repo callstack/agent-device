@@ -308,3 +308,39 @@ test('a refused timeout fallback preserves the timeout without an unhandled reje
     server.close();
   }
 });
+
+test('a local record stop timeout keeps the exporting daemon alive and names the retry', async () => {
+  mockRunCmdSync.mockReturnValue({ exitCode: 1, stdout: '', stderr: '' });
+  mockIsDaemon.mockReturnValue(true);
+  const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+  const { server, port } = await startHangingSocketServer();
+  try {
+    await assert.rejects(
+      sendRequest(
+        { port, pid: 7, token: 'test-token', processStartTime: 'start' },
+        {
+          ...buildRequest('ios'),
+          session: 'e2e-ios-0',
+          command: 'record',
+          positionals: ['stop'],
+        },
+        'socket',
+        dummyStatePaths(),
+        TIMEOUT_MS,
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.details?.reason, 'daemon_transport_timeout');
+        assert.match(
+          error.details?.hint as string,
+          /^The daemon is still exporting the recording\. Run agent-device record stop --session e2e-ios-0 again/,
+        );
+        return true;
+      },
+    );
+  } finally {
+    server.close();
+  }
+  assert.equal(kill.mock.calls.length, 0);
+  assert.equal(mockStop.mock.calls.length, 0);
+});

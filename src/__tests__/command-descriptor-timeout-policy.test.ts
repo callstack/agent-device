@@ -71,6 +71,9 @@ test('daemon-preserving timeout commands are a bounded, reviewed set', () => {
   // sessions the daemon owns, so a client-side timeout must not SIGKILL the
   // daemon mid-create/mid-release and orphan them (and every other provider
   // session held).
+  // record joined because a `record stop` export can outlast the envelope: a
+  // reset mid-export left an ownerless open manifest that refused every later
+  // `record start` on the device.
   const preserving = commandDescriptors
     .filter((descriptor) => descriptor.timeoutPolicy.onTimeout === 'preserve-daemon')
     .map((descriptor) => descriptor.name);
@@ -87,6 +90,7 @@ test('daemon-preserving timeout commands are a bounded, reviewed set', () => {
     'lease_release',
     'longpress',
     'press',
+    'record',
     'scroll',
     'snapshot',
     'type',
