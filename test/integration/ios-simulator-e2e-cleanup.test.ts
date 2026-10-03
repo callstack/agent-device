@@ -73,7 +73,9 @@ test('the known mic-permission appless refusal stops retrying immediately', asyn
   let attempts = 0;
   const failure = await retryCleanupStep(MIC_STEP, async () => {
     attempts += 1;
-    return invalidArgsResult(MIC_APPLESS_MESSAGE, PUBLISHED_ERROR_REASONS.sessionAppRequired);
+    // Message wording deliberately differs from the shipped refusal: only the typed reason may
+    // trigger the skip, so a guard that also matched the message would fail here.
+    return invalidArgsResult('updated wording', PUBLISHED_ERROR_REASONS.sessionAppRequired);
   });
   assert.equal(failure, undefined);
   assert.equal(attempts, 1, 'should not retry the known appless refusal');

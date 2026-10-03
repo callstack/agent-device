@@ -72,6 +72,7 @@ export async function setIosSetting(
         throw new AppError(
           'INVALID_ARGS',
           'settings clear-app-state requires an app id or an active app session.',
+          sessionAppRequiredDetails(),
         );
       }
       const result = await clearIosSimulatorAppState(device, appBundleId);

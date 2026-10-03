@@ -261,8 +261,9 @@ export const PUBLISHED_ERROR_REASONS = {
   /**
    * A per-app setting was asked for while the request carries no app — the session binds none and
    * none was named for this request. Recovery: `open` the app (or name it for the request), then
-   * retry. Both the Apple and Android owners answer with this one reason for every per-app setting,
-   * because the recovery is the same whichever setting asked.
+   * retry. The daemon's `clear-app-state` pre-check and the Apple, Android, and HarmonyOS owners
+   * all answer with this one reason for every per-app setting, because the recovery is the same
+   * whichever setting asked.
    */
   sessionAppRequired: 'session_app_required',
   /**
