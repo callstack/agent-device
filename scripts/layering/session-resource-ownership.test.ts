@@ -33,6 +33,10 @@ test('session resources are constructed only by their durable domain owners', ()
          sessionStore.update(ref, { screenRecording: recording });`,
       ],
       [
+        'src/daemon/screen-recording-session-binding.ts',
+        `sessionStore.publish(address, { ...draft, screenRecording });`,
+      ],
+      [
         'packages/capture-kit/src/capture-admission/audio-probe-session-resource.ts',
         `sessionStore.set(name, { ...session, audioProbe: audio });`,
       ],

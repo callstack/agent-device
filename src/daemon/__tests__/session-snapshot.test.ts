@@ -5,7 +5,7 @@ import {
   markSessionPartialRefsIssued,
   resolveRefStalenessWarning,
   setSessionSnapshot,
-  setSnapshotLineage,
+  setCommandSnapshot,
   STALE_SNAPSHOT_REFS_WARNING,
 } from '../session-snapshot.ts';
 import {
@@ -179,7 +179,8 @@ test('a ref pinned before a diff keeps resolving: the diff advances the counter,
   // `diff` replaces the stored tree, so lineage advances the counter — but it passes
   // `issuesRefsToClient: false`, so it never reactivates the frame.
   const afterDiff: SessionState = { ...session };
-  setSnapshotLineage(afterDiff, {
+  setCommandSnapshot(afterDiff, {
+    snapshot: afterDiff.snapshot!,
     scopeSource: undefined,
     keptCurrentSnapshot: false,
     previousGeneration: session.snapshotGeneration,
@@ -211,7 +212,8 @@ test('keeping the current snapshot leaves the counter alone', () => {
   setSessionSnapshot(session, makeSnapshot());
   const before = session.snapshotGeneration;
 
-  setSnapshotLineage(session, {
+  setCommandSnapshot(session, {
+    snapshot: session.snapshot!,
     scopeSource: undefined,
     keptCurrentSnapshot: true,
     previousGeneration: before,

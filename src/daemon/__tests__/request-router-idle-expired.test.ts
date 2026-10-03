@@ -95,8 +95,7 @@ test('an expired marker that has aged out stops explaining the absence', async (
 
 test('an abandoned repair transaction outranks the idle-expiry marker', async () => {
   const { sessionStore, handler } = makeHandler('agent-device-router-idle-vs-repair-');
-  writeIdleMarker(sessionStore, 'repair-x');
-  sessionStore.writeRepairTombstone({
+  const ref = sessionStore.publish('repair-x', {
     name: 'repair-x',
     device: { platform: 'apple', id: 'sim-1', name: 'iPhone', kind: 'simulator', booted: true },
     createdAt: Date.now(),
@@ -109,6 +108,10 @@ test('an abandoned repair transaction outranks the idle-expiry marker', async ()
       sourcePath: '/flows/login.ad',
     },
   });
+
+  sessionStore.writeRepairTombstone(ref);
+  sessionStore.retire(ref);
+  writeIdleMarker(sessionStore, 'repair-x');
 
   const response = await handler(closeRequest('repair-x'));
 

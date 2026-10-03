@@ -1,9 +1,11 @@
+import { bindInteractionSession } from './interaction-session.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { FillCommandResult, InteractionTarget } from '@agent-device/contracts/interaction';
 import { issueSettleRefs, resolveRefStalenessWarning } from '../../session-snapshot.ts';
 import { readRefMutationFrame } from '../../ref-frame.ts';
 import type { DaemonResponse } from '../../daemon-request.ts';
-import type { SessionState } from '../../session-state.ts';
+import type { SessionRef, SessionState } from '../../session-state.ts';
+import type { SessionStore } from '../../session-store.ts';
 import { isSessionRecording } from '../../session-script-publication-capability.ts';
 import { assertRecordedFillParameterization } from './interaction-recorded-input.ts';
 import { readSettleRequest, settleFlagGuardResponse } from './interaction-flags.ts';
@@ -48,9 +50,10 @@ type AdmittedFill = {
 };
 
 export async function dispatchFillViaRuntime(params: FillParams): Promise<DaemonResponse> {
+  params = bindInteractionSession(params);
   const admission = await admitFill(params);
   if ('response' in admission) return admission.response;
-  const { session, parsedTarget, touchExecutor, staleRefsWarning } = admission.admitted;
+  const { parsedTarget, touchExecutor, staleRefsWarning } = admission.admitted;
   const { req, sessionName } = params;
   const replayTargetGuard = req.internal?.replayTargetGuard;
 
@@ -77,7 +80,8 @@ export async function dispatchFillViaRuntime(params: FillParams): Promise<Daemon
       }),
     buildPayloads: (result) =>
       buildFillResponsePayloads({
-        session,
+        ref: params.sessionRef!,
+        sessionStore: params.sessionStore,
         result,
         text: parsedTarget.text,
         flags: req.flags,
@@ -198,13 +202,15 @@ async function prepareFillRefTarget(
 }
 
 function buildFillResponsePayloads(params: {
-  session: SessionState;
+  ref: SessionRef;
+  sessionStore: SessionStore;
   result: FillCommandResult;
   text: string;
   flags: CommandFlags | undefined;
   staleRefsWarning: string | undefined;
 }): InteractionResponsePayloads {
-  const { session, result } = params;
+  const { result, ref, sessionStore } = params;
+  const session = sessionStore.requireCurrent(ref);
   const maestroFallback = maestroFallbackDisclosure(
     params.flags?.maestro?.allowNonHittableCoordinateFallback === true,
     result.backendResult,
@@ -227,6 +233,6 @@ function buildFillResponsePayloads(params: {
     referenceFrame,
     extra: { text: params.text, ...maestroFallback.extra },
     staleRefsWarning: params.staleRefsWarning,
-    settleRefsGeneration: issueSettleRefs(session, result.settle),
+    settleRefsGeneration: issueSettleRefs(ref, sessionStore, result.settle),
   });
 }

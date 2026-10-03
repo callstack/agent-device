@@ -486,16 +486,15 @@ export async function prepareLockedRequestScope(params: {
   const { scope, sessionStore, trackDownloadableArtifact } = params;
   const logPath = scope.runnerLogPath;
   scope.throwIfCanceled();
-  const seededSession = sessionStore.get(scope.sessionName);
-  if (seededSession) {
-    // Called under runLocked: refreshRecordingHealth may mutate session recording state.
-    await refreshRecordingHealth(seededSession);
-    sessionStore.set(scope.sessionName, seededSession);
+  const seededRef = sessionStore.lookup(scope.sessionName);
+  if (seededRef) {
+    await refreshRecordingHealth(sessionStore, seededRef);
+    scope.throwIfCanceled();
+    sessionStore.requireCurrent(seededRef);
   }
   const binding = prepareLockedRequestBinding({
     req: scope.req,
-    sessionName: scope.sessionName,
-    sessionStore,
+    existingRef: seededRef ? sessionStore.refresh(seededRef) : undefined,
   });
   const lockedReq = binding.req;
   // `scope.sessionName` is the resolved store key, so `existingRef` carries the address every
@@ -563,7 +562,10 @@ export async function prepareLockedRequestScope(params: {
         ({
           ...contextFromFlags(flags, appBundleId, traceLogPath),
           // Handlers may update surface during the request, so read the current session state.
-          surface: sessionStore.get(scope.sessionName)?.surface,
+          surface: (seededRef
+            ? sessionStore.resolveCurrent(seededRef)
+            : sessionStore.get(scope.sessionName)
+          )?.surface,
         }) satisfies DaemonCommandContext,
     },
   };

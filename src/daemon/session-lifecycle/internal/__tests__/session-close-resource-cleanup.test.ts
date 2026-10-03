@@ -259,3 +259,63 @@ test('close preserves the session and lease when provider release fails so it ca
   expect(sessionStore.get(sessionName)).toBeUndefined();
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
 });
+
+test('close cannot retire a replacement session while its provider release waits', async () => {
+  const sessionStore = makeSessionStore();
+  const leaseRegistry = new LeaseRegistry();
+  const address = 'cwd:provider-close:default';
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'browserstack',
+    deviceKey: 'ios:bs-device',
+    clientId: 'client-a',
+  });
+  const ref = sessionStore.publish(address, {
+    ...makeSession('default', WEB_DESKTOP_DEVICE),
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      leaseProvider: lease.leaseProvider,
+      deviceKey: lease.deviceKey,
+      clientId: lease.clientId,
+      expiresAt: lease.expiresAt,
+    },
+  });
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const providerRelease = vi.fn(async () => {
+    await held;
+    return { releasedBy: 'provider' };
+  });
+  const closing = handleSessionCommands({
+    req: { token: 't', session: address, command: 'close', positionals: [], flags: {} },
+    sessionName: address,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    leaseRegistry,
+    leaseLifecycleProvider: { release: providerRelease },
+    invoke: noopInvoke,
+  });
+  try {
+    await vi.waitFor(() => expect(providerRelease).toHaveBeenCalledOnce());
+    sessionStore.retire(ref);
+    const successor = sessionStore.publish(address, makeSession('default', WEB_DESKTOP_DEVICE));
+    sessionStore.setRuntimeHints(address, { metroPort: 9090 });
+    release();
+    expect(await closing).toMatchObject({
+      ok: true,
+      data: { provider: { releasedBy: 'provider' } },
+    });
+    expect(sessionStore.requireCurrent(successor)).toBe(successor.session);
+    expect(sessionStore.getRuntimeHints(address)).toEqual({ metroPort: 9090 });
+    expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
+  } finally {
+    release();
+    await closing.catch(() => {});
+  }
+});

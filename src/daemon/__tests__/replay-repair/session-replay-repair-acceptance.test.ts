@@ -1,3 +1,4 @@
+import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
 /**
  * ADR 0012 decision 6 acceptance test: a healed sibling `.ad` produced by the
  * repair loop must replay end-to-end in a FRESH session, with every selector
@@ -140,7 +141,7 @@ test('a healed script survives repair + fresh-session replay: self-contained ope
   // repair-armed write on the same explicit finalize signal `close
   // --save-script` sets). ---
   markRepairTransactionComplete(session);
-  sessionStore.writeSessionLog(session);
+  sessionStore.writeSessionLog(storeSessionForTest(sessionStore, session));
   const healedPath = path.join(root, 'flow.healed.ad');
   expect(fs.existsSync(healedPath)).toBe(true);
   const healedScript = fs.readFileSync(healedPath, 'utf8');

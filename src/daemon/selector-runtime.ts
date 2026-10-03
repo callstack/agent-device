@@ -85,13 +85,13 @@ export async function dispatchFindReadOnlyViaRuntime(
               .filter((ref): ref is string => typeof ref === 'string')
           : [];
     if (publishedRefs.length > 0) {
-      const session = params.sessionStore.get(params.sessionName);
-      if (session) {
+      const ref = resolvedRuntime.ref;
+      if (ref) {
+        const session = params.sessionStore.requireCurrent(ref);
         // ADR 0014: a read-only find publishes exactly the refs it returned —
         // one for single-match actions, every listed ref for `list` — so it
         // activates a PARTIAL frame authorizing exactly those ref bodies.
         markSessionPartialRefsIssued(session, publishedRefs);
-        params.sessionStore.set(params.sessionName, session);
         if (session.snapshotGeneration !== undefined) {
           return { ...data, refsGeneration: session.snapshotGeneration };
         }

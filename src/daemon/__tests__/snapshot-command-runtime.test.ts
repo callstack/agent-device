@@ -85,3 +85,60 @@ for (const command of ['snapshot', 'diff snapshot'] as const) {
     }
   });
 }
+
+for (const change of ['rebuild', 'replace'] as const) {
+  test(`snapshot completion respects a scoped lifetime after ${change}`, async () => {
+    const sessionStore = makeSessionStore();
+    const address = 'cwd:snapshot-completion:default';
+    const ref = sessionStore.publish(
+      address,
+      makeAndroidSession('default', { trace: { outPath: 'prior-trace', startedAt: 0 } }),
+    );
+    const entered = deferred();
+    const release = deferred();
+    captureMock.mockImplementation(async () => {
+      entered.resolve();
+      await release.promise;
+      return {
+        backend: 'uiautomator',
+        nodes: [{ index: 0, type: 'Button', label: 'Captured' }],
+      };
+    });
+    const running = dispatchSnapshotViaRuntime({
+      req: { command: 'snapshot', positionals: [], token: 't', session: address },
+      sessionName: address,
+      logPath: '/dev/null',
+      sessionStore,
+      ...snapshotRuntimeFixture(),
+    });
+    const result = running.then(
+      (response) => ({ response }),
+      (error: unknown) => ({ error }),
+    );
+    try {
+      await entered.promise;
+      if (change === 'rebuild') {
+        const trace = { outPath: 'intervening-trace', startedAt: 1 };
+        sessionStore.update(ref, { trace });
+        release.resolve();
+        expect(await result).toMatchObject({ response: { ok: true } });
+        const current = sessionStore.requireCurrent(ref);
+        expect(current.trace).toBe(trace);
+        expect(current.snapshot?.nodes[0]?.label).toBe('Captured');
+      } else {
+        sessionStore.retire(ref);
+        const successor = sessionStore.publish(address, makeAndroidSession('default'));
+        release.resolve();
+        expect(await result).toMatchObject({
+          error: { details: { reason: 'session_lifetime_ended' } },
+        });
+        expect(sessionStore.requireCurrent(successor)).toBe(successor.session);
+        expect(successor.session.snapshot).toBeUndefined();
+      }
+      expect(sessionStore.lookup('default')).toBeUndefined();
+    } finally {
+      release.resolve();
+      await result;
+    }
+  });
+}

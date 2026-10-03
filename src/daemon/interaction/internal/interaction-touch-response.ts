@@ -294,24 +294,31 @@ export async function buildTargetedTouchResponsePayloads(params: {
   publicData?: Record<string, unknown>;
   extra: Record<string, unknown>;
 }): Promise<InteractionResponsePayloads> {
-  const { params: handlerParams, session, result, publicData, extra } = params;
+  const { params: handlerParams, result, publicData, extra } = params;
   const referenceFrame =
     result.kind === 'point'
       ? await resolveDirectTouchReferenceFrameSafely({
-          session,
+          ref: handlerParams.sessionRef!,
           flags: handlerParams.req.flags,
           sessionStore: handlerParams.sessionStore,
           contextFromFlags: handlerParams.contextFromFlags,
           captureSnapshotForSession: handlerParams.captureSnapshotForSession,
           observation: handlerParams.androidObservation,
         })
-      : readSnapshotNodesReferenceFrame(session.snapshot?.nodes ?? []);
+      : readSnapshotNodesReferenceFrame(
+          handlerParams.sessionStore.requireCurrent(handlerParams.sessionRef!).snapshot?.nodes ??
+            [],
+        );
   return buildInteractionResponseData({
     source: { kind: 'runtime', result, publicData },
     referenceFrame,
     extra,
     staleRefsWarning: params.staleRefsWarning,
-    settleRefsGeneration: issueSettleRefs(session, result.settle),
+    settleRefsGeneration: issueSettleRefs(
+      handlerParams.sessionRef,
+      handlerParams.sessionStore,
+      result.settle,
+    ),
   });
 }
 

@@ -62,7 +62,9 @@ test('a command that finds no session but hits a live repair tombstone gets REPA
   const { sessionStore, handler } = makeHandler('agent-device-router-repair-expired-');
   // The repair session was reaped (idle-reap) leaving a tombstone; the store
   // has no live session by that name.
-  sessionStore.writeRepairTombstone(tombstonedSession('repair-x'));
+  const ref = sessionStore.publish('repair-x', tombstonedSession('repair-x'));
+  sessionStore.writeRepairTombstone(ref);
+  sessionStore.retire(ref);
 
   const response = await handler(closeRequest('repair-x'));
 
@@ -89,10 +91,12 @@ test('without a tombstone, a missing session still returns a plain SESSION_NOT_F
 // never completed at all.
 test('a command hitting a commit-failure tombstone gets REPAIR_COMMIT_FAILED with the real cause, not a generic REPAIR_SESSION_EXPIRED', async () => {
   const { sessionStore, handler } = makeHandler('agent-device-router-commit-failed-');
-  sessionStore.writeRepairTombstone(tombstonedSession('repair-commit-fail'), undefined, {
+  const ref = sessionStore.publish('repair-commit-fail', tombstonedSession('repair-commit-fail'));
+  sessionStore.writeRepairTombstone(ref, undefined, {
     code: 'COMMAND_FAILED',
     message: 'A prior healed script already exists at /flows/login.healed.ad; ...',
   });
+  sessionStore.retire(ref);
 
   const response = await handler(closeRequest('repair-commit-fail'));
 
@@ -108,7 +112,9 @@ test('a command hitting a commit-failure tombstone gets REPAIR_COMMIT_FAILED wit
 test('an expired tombstone does not shadow a missing session', async () => {
   const { sessionStore, handler } = makeHandler('agent-device-router-expired-tombstone-');
   // TTL 0 => already stale.
-  sessionStore.writeRepairTombstone(tombstonedSession('repair-y'), 0);
+  const ref = sessionStore.publish('repair-y', tombstonedSession('repair-y'));
+  sessionStore.writeRepairTombstone(ref, 0);
+  sessionStore.retire(ref);
 
   const response = await handler(closeRequest('repair-y'));
 
@@ -144,7 +150,9 @@ test('a replay --from continuation on a reaped repair session gets REPAIR_SESSIO
   }).planDigest;
 
   // The repair session was reaped, leaving a tombstone; no live session exists.
-  sessionStore.writeRepairTombstone(tombstonedSession('repair-from'));
+  const ref = sessionStore.publish('repair-from', tombstonedSession('repair-from'));
+  sessionStore.writeRepairTombstone(ref);
+  sessionStore.retire(ref);
 
   const response = await handler({
     token: 'test-token',

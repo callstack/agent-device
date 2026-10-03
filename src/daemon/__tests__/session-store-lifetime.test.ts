@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import {
+  makeSession,
+  makeRepairCompleteSession,
+  makeRepairArmedSession,
+  authoringPublication,
+} from '../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore, storeSessionForTest } from '../../__tests__/test-utils/store-factory.ts';
+import { resolveRepairTombstonePath } from '../../session-repair-tombstone.ts';
 
 const ADDRESS = 'cwd:worktree:default';
 
@@ -120,4 +127,85 @@ test('a ref from another store has no authority over the same address', () => {
   assert.throws(() => target.update(foreign, { appName: 'Foreign' }), ended);
   assert.equal(target.retire(foreign), false);
   assert.equal(target.requireCurrent(local), foreign.session);
+});
+
+test('script writes use the latest matching record and refuse a retired lifetime', () => {
+  const store = makeSessionStore();
+  const ref = store.publish(ADDRESS, makeSession('default'));
+  store.update(ref, {
+    scriptPublication: authoringPublication('armed'),
+    actions: [{ ts: 1, command: 'click', positionals: ['id="late-action"'], flags: {} }],
+  });
+  const result = store.writeSessionLog(ref);
+  assert.equal(result.written, true);
+  if (result.written) assert.match(fs.readFileSync(result.path, 'utf8'), /late-action/);
+  store.retire(ref);
+  const successor = store.publish(ADDRESS, makeRepairCompleteSession('default'));
+  assert.throws(() => store.writeSessionLog(ref), ended);
+  store.finalizeRepairTeardown(ref);
+  const state = store.requireCurrent(successor).scriptPublication;
+  assert.equal(state?.kind, 'repair');
+  if (state?.kind === 'repair') assert.equal(state.status, 'complete');
+  assert.equal(successor.session.actions.length, 0);
+});
+
+test('repair tombstones follow the scoped address and cannot be written by a retired ref', () => {
+  const store = makeSessionStore();
+  const ref = store.publish(ADDRESS, makeRepairArmedSession('default'));
+  store.update(ref, {
+    scriptPublication: {
+      kind: 'repair',
+      status: 'armed',
+      boundary: 0,
+      target: { kind: 'default', force: false },
+      sourcePath: '/latest.ad',
+    },
+  });
+  store.writeRepairTombstone(ref);
+  assert.equal(store.readRepairTombstone(ADDRESS)?.owner, ADDRESS);
+  assert.equal(store.readRepairTombstone(ADDRESS)?.sourcePath, '/latest.ad');
+  assert.equal(store.readRepairTombstone('default'), undefined);
+  store.retire(ref);
+  store.clearRepairTombstone(ADDRESS);
+  const successor = store.publish(ADDRESS, makeRepairArmedSession('default'));
+  store.writeRepairTombstone(ref);
+  assert.equal(store.readRepairTombstone(ADDRESS), undefined);
+  assert.equal(store.requireCurrent(successor), successor.session);
+});
+
+test('test session publication uses its explicit scoped address', () => {
+  const store = makeSessionStore();
+  const session = makeSession('default');
+  const ref = store.publish(ADDRESS, session);
+  const stored = storeSessionForTest(store, session, ADDRESS);
+  assert.equal(stored.lifetime, ref.lifetime);
+  assert.equal(stored.session, session);
+  assert.equal(store.get('default'), undefined);
+  assert.equal(store.listRefs().length, 1);
+});
+
+test('colliding artifact directories cannot share or clear another address\u2019s repair tombstone', () => {
+  const store = makeSessionStore();
+  const collision = 'cwd_worktree_default';
+  const ref = store.publish(ADDRESS, makeRepairArmedSession('default'));
+  assert.equal(store.resolveSessionDir(ADDRESS), store.resolveSessionDir(collision));
+  store.writeRepairTombstone(ref);
+  assert.equal(store.readRepairTombstone(ADDRESS)?.owner, ADDRESS);
+  assert.equal(store.readRepairTombstone(collision), undefined);
+  store.clearRepairTombstone(collision);
+  assert.equal(store.readRepairTombstone(ADDRESS)?.owner, ADDRESS);
+  store.clearRepairTombstone(ADDRESS);
+  assert.equal(store.readRepairTombstone(ADDRESS), undefined);
+});
+
+test('tombstone cleanup retains malformed evidence and removes an expired owned marker', () => {
+  const store = makeSessionStore();
+  const tombstonePath = resolveRepairTombstonePath(store.resolveSessionDir(ADDRESS));
+  fs.mkdirSync(store.resolveSessionDir(ADDRESS), { recursive: true });
+  fs.writeFileSync(tombstonePath, '{');
+  store.clearRepairTombstone(ADDRESS);
+  assert.equal(fs.readFileSync(tombstonePath, 'utf8'), '{');
+  fs.writeFileSync(tombstonePath, JSON.stringify({ owner: ADDRESS, expiresAt: 0, reapedAt: 0 }));
+  store.clearRepairTombstone(ADDRESS);
+  assert.equal(fs.existsSync(tombstonePath), false);
 });

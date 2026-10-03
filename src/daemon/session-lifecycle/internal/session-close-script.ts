@@ -3,7 +3,7 @@ import { successText } from '@agent-device/kernel/success-text';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
-import type { SessionState } from '../../session-state.ts';
+import type { SessionRef, SessionState } from '../../session-state.ts';
 import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../../session-script-publication-state.ts';
 import {
   effectiveWriteForce,
@@ -33,15 +33,16 @@ function recordCloseAction(
 
 export function commitRepairScriptBeforeClose(
   sessionStore: SessionStore,
-  session: SessionState,
+  ref: SessionRef,
   req: DaemonRequest,
 ): RepairCloseCommit {
+  const session = sessionStore.requireCurrent(ref);
   if (!isRepairArmedSession(session)) return { kind: 'not-armed' };
 
   const actionsBeforeClose = session.actions.length;
   recordCloseAction(sessionStore, session, req);
   const alreadyPublished = isSessionScriptPublished(session);
-  const result = sessionStore.writeSessionLog(session, {
+  const result = sessionStore.writeSessionLog(ref, {
     force: effectiveWriteForce(session, req.flags?.force),
   });
   if (result.written) return { kind: 'committed', path: result.path };
@@ -77,11 +78,12 @@ export function buildRetriableRepairCloseFailureResponse(
 
 export function finalizeOrdinaryCloseScript(params: {
   req: DaemonRequest;
-  session: SessionState;
+  ref: SessionRef;
   sessionStore: SessionStore;
   platformCloseError: unknown;
 }): AppError | undefined {
-  const { req, session, sessionStore, platformCloseError } = params;
+  const { req, ref, sessionStore, platformCloseError } = params;
+  const session = sessionStore.requireCurrent(ref);
   if (!platformCloseError) {
     recordCloseAction(sessionStore, session, req);
   }
@@ -90,7 +92,7 @@ export function finalizeOrdinaryCloseScript(params: {
   // session default rather than the request's explicit path — the lifecycle armed by `open` is
   // what authorizes the write, and it is untouched by that failure.
   try {
-    const result = sessionStore.writeSessionLog(session, {
+    const result = sessionStore.writeSessionLog(ref, {
       force: effectiveWriteForce(session, req.flags?.force),
     });
     if (result.written) markCloseGeneratedPublicationDone(session, result.path);

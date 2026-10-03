@@ -8,7 +8,7 @@ import type { DeferredInteractionOutcomeMark } from '../../deferred-interaction-
 import type { RecordActionEntry } from '../../session-action-recorder.ts';
 import type { BoundContextFromFlags } from '../../context.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
-import type { SessionState } from '../../session-state.ts';
+import type { SessionRef, SessionState } from '../../session-state.ts';
 import type { BoundGestureExecutor } from '../../gesture-runtime.ts';
 import type { BoundTouchExecutor } from '../../touch-runtime.ts';
 import type { BoundSnapshotCapture } from '../../snapshot-runtime-binding.ts';
@@ -26,6 +26,7 @@ export type InteractionRouteInput = {
   sessionName: string;
   logPath?: string;
   sessionStore: SessionStore;
+  sessionRef?: SessionRef;
   captureSnapshotForSession?: CaptureSnapshotForSession;
   contextFromFlags: BoundContextFromFlags;
   inspectFacts?: InspectDeviceRuntimeFacts;
@@ -49,7 +50,7 @@ export type FindRouteInput = {
 };
 
 export type CaptureSnapshotForSession = (
-  session: SessionState,
+  ref: SessionRef,
   flags: CommandFlags | undefined,
   sessionStore: SessionStore,
   contextFromFlags: BoundContextFromFlags,

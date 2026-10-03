@@ -29,7 +29,7 @@ import type {
   RecordedGenericRequest,
   ResolvedGenericExecution,
 } from './request-generic-dispatch.ts';
-import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
+import { createReadonlyRuntimeSessionStore } from './runtime-session.ts';
 import { assertScreenshotCropPolicy } from './screenshot-crop-target.ts';
 import { buildScreenshotCropWarnings, cropScreenshotToSelector } from './screenshot-crop.ts';
 import { annotateScreenshotWithRefs } from '@agent-device/capture-kit/screenshot-overlay';
@@ -121,12 +121,7 @@ export async function captureScreenshotArtifact(
   const runtime = createCommandSurfaceAgentDevice({
     backend: createBoundScreenshotBackend(params),
     artifacts: createDaemonScreenshotArtifactAdapter(),
-    sessions: createDaemonRuntimeSessionStore({
-      sessionName,
-      getSession: () => session,
-      recordOptions: { includeSnapshot: false },
-      setRecord: () => {},
-    }),
+    sessions: createReadonlyRuntimeSessionStore(sessionName, session),
     policy: localCommandPolicy(),
   });
 
