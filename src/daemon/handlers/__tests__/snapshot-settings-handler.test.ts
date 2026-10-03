@@ -26,6 +26,7 @@ import {
   tvOsSimulatorDevice,
 } from './snapshot-handler.fixtures.ts';
 import { activateCompleteRefFrame, refFrameState } from '../../ref-frame.ts';
+import { PUBLISHED_ERROR_REASONS } from '@agent-device/kernel/errors';
 
 vi.mock('../../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../__tests__/legacy-snapshot-capture-fixture.ts');
@@ -144,6 +145,8 @@ test('settings clear-app-state rejects missing app id when no app session is bou
   if (response?.ok === false) {
     expect(response.error.code).toBe('INVALID_ARGS');
     expect(response.error.message).toMatch(/requires an app id/i);
+    expect(response.error.details?.reason).toBe(PUBLISHED_ERROR_REASONS.sessionAppRequired);
+    expect(response.error.details?.dispatched).toBe('no');
   }
   expect(fixtureSettingsMutations).toHaveLength(0);
 });

@@ -29,7 +29,12 @@ import {
   makeSession,
 } from '../../__tests__/test-utils/session-factories.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError, retriableForErrorCode } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  defaultHintForCode,
+  PUBLISHED_ERROR_REASONS,
+  retriableForErrorCode,
+} from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const mockLifecycleEffect = vi.mocked(dispatchApplicationLifecycleEffect);
@@ -238,4 +243,25 @@ test('#1391: an ordinary close-time script-save failure surfaces details.reason/
   } finally {
     fs.rmSync(targetPath, { force: true });
   }
+});
+
+test('#3181: the session-or-selector refusal reaches the caller with its reason and dispatched no through the router', async () => {
+  const { handler } = makeHandler();
+
+  // No session exists for `typed-error` and no device selector is given, so the
+  // handler returns this refusal — the returned-error path finalizeDaemonResponse rebuilds.
+  const response = await handler(request('capabilities'));
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('INVALID_ARGS');
+  expect(response.error.message).toBe(
+    'capabilities requires an active session or an explicit device selector (e.g. --platform ios).',
+  );
+  expect(response.error.details?.reason).toBe(
+    PUBLISHED_ERROR_REASONS.sessionOrDeviceSelectorRequired,
+  );
+  expect(response.error.details?.dispatched).toBe('no');
+  // The hint stays the INVALID_ARGS default: the reason, not the prose, is the new information.
+  expect(response.error.hint).toBe(defaultHintForCode('INVALID_ARGS'));
 });

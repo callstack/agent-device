@@ -31,6 +31,7 @@ import { recordIfSession } from '../snapshot-session.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { readLocationCoordinate } from '@agent-device/kernel/location-coordinates';
+import { sessionAppRequiredDetails } from '@agent-device/kernel/errors';
 import { successText, withSuccessText } from '@agent-device/kernel/success-text';
 
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
@@ -356,6 +357,7 @@ function settingsWriteRefusal(
     return errorResponse(
       'INVALID_ARGS',
       'settings clear-app-state requires an app id when no app is bound to the session',
+      sessionAppRequiredDetails(),
     );
   }
   return undefined;

@@ -13,6 +13,7 @@ import {
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   AppError,
+  sessionAppRequiredDetails,
   summarizeCommandAttemptFailures,
   type CommandAttemptFailure,
 } from '@agent-device/kernel/errors';
@@ -71,6 +72,7 @@ export async function setIosSetting(
         throw new AppError(
           'INVALID_ARGS',
           'settings clear-app-state requires an app id or an active app session.',
+          sessionAppRequiredDetails(),
         );
       }
       const result = await clearIosSimulatorAppState(device, appBundleId);
@@ -135,7 +137,11 @@ export async function setIosSetting(
       }
       const enabled = parseSettingState(state);
       if (!appBundleId) {
-        throw new AppError('INVALID_ARGS', 'location setting requires an active app in session');
+        throw new AppError(
+          'INVALID_ARGS',
+          'location setting requires an active app in session',
+          sessionAppRequiredDetails(),
+        );
       }
       const action = enabled ? 'grant' : 'revoke';
       await runSimctlForDevice(device, ['privacy', device.id, action, 'location', appBundleId]);
@@ -163,7 +169,11 @@ export async function setIosSetting(
     }
     case 'permission': {
       if (!appBundleId) {
-        throw new AppError('INVALID_ARGS', 'permission setting requires an active app in session');
+        throw new AppError(
+          'INVALID_ARGS',
+          'permission setting requires an active app in session',
+          sessionAppRequiredDetails(),
+        );
       }
       const action = mapIosPermissionAction(parsePermissionAction(state));
       const target = parseIosPermissionTarget(options?.permissionTarget, options?.permissionMode);

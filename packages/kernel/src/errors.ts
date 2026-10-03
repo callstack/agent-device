@@ -252,6 +252,59 @@ export function throwDaemonError(error: DaemonError): never {
 }
 
 /**
+ * The `details.reason` values a refusal answers with when the caller must know *why* a request was
+ * stopped rather than read the prose: what a caller does to recover is the reason's meaning, and it
+ * is public surface. Every refusal that names a reason here states its `dispatched` disclosure too,
+ * because a refusal that reached no device is exactly what makes a retry safe.
+ */
+export const PUBLISHED_ERROR_REASONS = {
+  /**
+   * A per-app setting was asked for while the request carries no app — the session binds none and
+   * none was named for this request. Recovery: `open` the app (or name it for the request), then
+   * retry. The daemon's `clear-app-state` pre-check and the Apple, Android, and HarmonyOS owners
+   * all answer with this one reason for every per-app setting, because the recovery is the same
+   * whichever setting asked.
+   */
+  sessionAppRequired: 'session_app_required',
+  /**
+   * A device-bound command was asked for with neither an active session nor an explicit device
+   * selector, so there was no target to route to. Recovery: `open` a session or pass `--platform`
+   * or another device selector, then retry. One reason covers every command that asks the daemon to
+   * find a device for it; the command it asks for stays in the message.
+   */
+  sessionOrDeviceSelectorRequired: 'session_or_device_selector_required',
+} as const;
+
+export type PublishedErrorReason =
+  (typeof PUBLISHED_ERROR_REASONS)[keyof typeof PUBLISHED_ERROR_REASONS];
+
+/** The details of a refusal that stopped a request before anything could reach a device. */
+export type RefusalDetails<TReason extends PublishedErrorReason> = AppErrorDetails & {
+  reason: TReason;
+  dispatched: 'no';
+};
+
+/** The details of a per-app setting refused for want of an app. */
+export function sessionAppRequiredDetails(): RefusalDetails<
+  (typeof PUBLISHED_ERROR_REASONS)['sessionAppRequired']
+> {
+  return {
+    reason: PUBLISHED_ERROR_REASONS.sessionAppRequired,
+    dispatched: 'no',
+  };
+}
+
+/** The details of a command refused for want of a target to route to. */
+export function sessionOrDeviceSelectorRequiredDetails(): RefusalDetails<
+  (typeof PUBLISHED_ERROR_REASONS)['sessionOrDeviceSelectorRequired']
+> {
+  return {
+    reason: PUBLISHED_ERROR_REASONS.sessionOrDeviceSelectorRequired,
+    dispatched: 'no',
+  };
+}
+
+/**
  * `details.reason` of a request its requester abandoned — an explicit cancel or
  * a client disconnect. One definition, so every layer that must let a
  * cancellation through untouched (retry loops, provider adapters, runner

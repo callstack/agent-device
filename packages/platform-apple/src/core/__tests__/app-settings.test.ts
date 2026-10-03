@@ -28,7 +28,7 @@ const simulatorActual = await vi.importActual<typeof import('../simulator.ts')>(
 import { setIosSetting } from '../app-settings.ts';
 import { withMockedMacOsHelper } from './macos-helper-test-utils.ts';
 import { ensureBootedSimulator } from '../simulator.ts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, PUBLISHED_ERROR_REASONS } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import { retryWithPolicy } from '@agent-device/host-kit/retry';
 import { assertRejectsAppError } from '../../__tests__/app-error.ts';
@@ -311,6 +311,61 @@ test('setIosSetting location set sends simulator latitude and longitude', async 
         longitude: -122.009,
       });
       assert.deepEqual(calls, [['simctl', 'location', 'sim-1', 'set', '37.3349,-122.009']]);
+    },
+  );
+});
+
+test('setIosSetting permission requires an app in session with the published reason', async () => {
+  await withFakeAppleTool(
+    (args) => {
+      if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
+      return unexpectedArgs(args);
+    },
+    async () => {
+      await assertRejectsAppError(
+        () =>
+          setIosSetting(IOS_TEST_SIMULATOR, 'permission', 'grant', undefined, {
+            permissionTarget: 'camera',
+          }),
+        {
+          code: 'INVALID_ARGS',
+          reason: PUBLISHED_ERROR_REASONS.sessionAppRequired,
+          dispatched: 'no',
+        },
+      );
+    },
+  );
+});
+
+test('setIosSetting location refuses an appless session with the published reason', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue(undefined);
+
+  await withFakeAppleTool(
+    (args) => unexpectedArgs(args),
+    async () => {
+      await assertRejectsAppError(() => setIosSetting(IOS_TEST_SIMULATOR, 'location', 'on'), {
+        code: 'INVALID_ARGS',
+        reason: PUBLISHED_ERROR_REASONS.sessionAppRequired,
+        dispatched: 'no',
+      });
+    },
+  );
+});
+
+test('setIosSetting clear-app-state refuses an appless session with the published reason', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue(undefined);
+
+  await withFakeAppleTool(
+    (args) => unexpectedArgs(args),
+    async () => {
+      await assertRejectsAppError(
+        () => setIosSetting(IOS_TEST_SIMULATOR, 'clear-app-state', 'clear'),
+        {
+          code: 'INVALID_ARGS',
+          reason: PUBLISHED_ERROR_REASONS.sessionAppRequired,
+          dispatched: 'no',
+        },
+      );
     },
   );
 });
