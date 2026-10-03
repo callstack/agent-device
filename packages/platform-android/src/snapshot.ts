@@ -293,10 +293,28 @@ async function captureAndroidUiHierarchyWithHelper(
     Date.now() + HELPER_CONTENT_RECAPTURE_WINDOW_MS,
     options.transient?.settleBy ?? Number.POSITIVE_INFINITY,
   );
+  const rejectContentUnavailable = async (
+    contentRecovery: AndroidHelperContentRecoveryDecision,
+    attempts: number,
+  ) =>
+    await rejectAndroidHelperContentUnavailable({
+      contentRecovery,
+      attempts,
+      helperDeviceKey,
+      artifact,
+      adb,
+      signal: options.signal,
+      retireHelper: options.transient === undefined,
+    });
   try {
-    let previousContentReason: AndroidContentRecoveryReason | undefined;
+    let previousDecision: AndroidHelperContentRecoveryDecision | undefined;
     for (let attempt = 0; ; attempt += 1) {
-      if (attempt > 0) await delayBeforeContentRecapture(options.signal);
+      if (previousDecision) {
+        await delayBeforeContentRecapture(options.signal);
+        if (Date.now() >= recaptureDeadlineMs) {
+          return await rejectContentUnavailable(previousDecision, attempt);
+        }
+      }
       const settled = await captureAndroidHelperContentAttempt({
         options,
         adb,
@@ -304,21 +322,13 @@ async function captureAndroidUiHierarchyWithHelper(
         artifact,
         helperDeviceKey,
         attempt,
-        previousContentReason,
+        previousContentReason: previousDecision?.reason,
       });
       if (settled.outcome === 'captured') return settled.capture;
       if (attempt + 1 >= HELPER_CONTENT_CAPTURE_ATTEMPTS || Date.now() >= recaptureDeadlineMs) {
-        return await rejectAndroidHelperContentUnavailable({
-          contentRecovery: settled.decision,
-          attempts: attempt + 1,
-          helperDeviceKey,
-          artifact,
-          adb,
-          signal: options.signal,
-          retireHelper: options.transient === undefined,
-        });
+        return await rejectContentUnavailable(settled.decision, attempt + 1);
       }
-      previousContentReason = settled.decision.reason;
+      previousDecision = settled.decision;
     }
   } finally {
     if (releaseHelperSession) {

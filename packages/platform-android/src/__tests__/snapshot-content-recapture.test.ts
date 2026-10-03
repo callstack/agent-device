@@ -8,6 +8,7 @@ vi.mock('../adb.ts', async (importOriginal) => {
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { sleep } from '../adb.ts';
 import { snapshotAndroid } from '../snapshot.ts';
 import { resetAndroidSnapshotHelperInstallCache } from '../snapshot-helper-install.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
@@ -36,7 +37,10 @@ afterEach(async () => {
   await resetAndroidSnapshotHelperSessions();
 });
 
-/** Captures of a busy screen that each answer with system chrome only, after `captureCostMs`. */
+/**
+ * Captures of a busy screen that each answer with system chrome only, after `captureCostMs`.
+ * Every sleep advances the clock by the time it was asked to wait.
+ */
 async function captureBusyScreen(captureCostMs: number): Promise<{
   error: unknown;
   sessionCaptures: number;
@@ -44,6 +48,9 @@ async function captureBusyScreen(captureCostMs: number): Promise<{
   let clockOffsetMs = 0;
   const realNow = Date.now.bind(Date);
   vi.spyOn(Date, 'now').mockImplementation(() => realNow() + clockOffsetMs);
+  vi.mocked(sleep).mockImplementation(async (ms: number) => {
+    clockOffsetMs += ms;
+  });
   let sessionCaptures = 0;
   const provider = createPersistentSnapshotHelperProvider({
     calls: [],
@@ -78,6 +85,14 @@ test('a busy screen whose captures are slow is not re-captured past the window',
   // One attempt that spends a whole helper command budget leaves no room in the daemon request
   // envelope for two more of the same.
   const { error, sessionCaptures } = await captureBusyScreen(30_000);
+
+  assert.ok(error instanceof AppError);
+  assert.equal(error.details?.attempts, 1);
+  assert.equal(sessionCaptures, 1);
+});
+
+test('a busy screen is not re-captured when the delay before it crosses the window', async () => {
+  const { error, sessionCaptures } = await captureBusyScreen(9_900);
 
   assert.ok(error instanceof AppError);
   assert.equal(error.details?.attempts, 1);
