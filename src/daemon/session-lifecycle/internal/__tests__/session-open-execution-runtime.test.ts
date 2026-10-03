@@ -1,11 +1,17 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 
 import path from 'node:path';
+import fs from 'node:fs';
 import type {
   ApplicationLifecycleRuntimeOperations,
   OpenApplicationInput,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DaemonRequest } from '../../../daemon-request.ts';
+import {
+  registerRequestAbort,
+  markRequestCanceled,
+  clearRequestAbortRegistration,
+} from '@agent-device/host-kit/request';
 import { AppError } from '@agent-device/kernel/errors';
 
 const mockResolveTargetDevice = vi.hoisted(() => vi.fn());
@@ -436,3 +442,211 @@ test('open reports the launch confirmation its platform answered', async () => {
   expect(response?.ok).toBe(true);
   if (response?.ok) expect(response.data?.launchConfirmation).toBe('accepted');
 });
+
+function holdNativeOpen() {
+  let entered!: () => void;
+  let release!: () => void;
+  const reached = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const bindDefault = mockBindDeviceRuntime.getMockImplementation();
+  if (!bindDefault) throw new Error('the harness binds a default runtime');
+  mockBindDeviceRuntime.mockImplementationOnce(async (device, use) => {
+    const binding = await bindDefault(device, use);
+    const operations = binding.operations as ApplicationLifecycleRuntimeOperations;
+    return {
+      ...binding,
+      operations: {
+        ...binding.operations,
+        openApplication: async (input: OpenApplicationInput) => {
+          entered();
+          await held;
+          return await operations.openApplication(input);
+        },
+      },
+    };
+  });
+  return { reached, release };
+}
+
+function invokeHeldOpen(
+  sessionStore: ReturnType<typeof makeSessionStore>,
+  req?: Partial<DaemonRequest>,
+) {
+  return handleSessionCommands({
+    req: {
+      token: 't',
+      command: 'open',
+      session: 'default',
+      positionals: ['com.example.demo'],
+      flags: { platform: 'android' },
+      ...req,
+    },
+    sessionName: 'cwd:held-open:default',
+    sessionStore,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    invoke: noopInvoke,
+  });
+}
+
+test('reopen publishes into the latest record of the same lifetime after native launch', async () => {
+  const store = makeSessionStore();
+  const session = makeSession('default', makeAndroidEmulator());
+  const ref = store.publish('cwd:held-open:default', session);
+  const native = holdNativeOpen();
+  const pending = invokeHeldOpen(store);
+  await native.reached;
+  store.update(ref, { recordOnlySession: true });
+  native.release();
+  expect((await pending)?.ok).toBe(true);
+  expect(store.lookup(ref.address)?.lifetime).toBe(ref.lifetime);
+  expect(store.requireCurrent(ref).recordOnlySession).toBe(true);
+  expect(store.requireCurrent(ref).createdAt).toBe(session.createdAt);
+  expect(store.requireCurrent(ref).name).toBe('default');
+});
+
+test('a retired reopen cannot write hints or actions to the same record republished as a successor', async () => {
+  const store = makeSessionStore();
+  const session = makeSession('default', makeAndroidEmulator());
+  const ref = store.publish('cwd:held-open:default', session);
+  const native = holdNativeOpen();
+  const pending = invokeHeldOpen(store, { runtime: { metroHost: 'new-host', metroPort: 9000 } });
+  const refusal = expect(pending).rejects.toThrow(
+    expect.objectContaining({
+      details: expect.objectContaining({ reason: 'session_lifetime_ended' }),
+    }),
+  );
+  await native.reached;
+  store.retire(ref);
+  const successor = store.publish(ref.address, session);
+  store.setRuntimeHints(ref.address, { platform: 'android', metroHost: 'successor-host' });
+  native.release();
+  await refusal;
+  expect(store.requireCurrent(successor)).toBe(session);
+  expect(session.actions).toEqual([]);
+  expect(store.getRuntimeHints(ref.address)?.metroHost).toBe('successor-host');
+});
+
+test('a provisional open refuses a successor before native launch', async () => {
+  const store = makeSessionStore();
+  const session = makeSession('default', makeAndroidEmulator());
+  const ref = store.publish('cwd:held-open:default', session);
+  await expect(
+    invokeHeldOpen(store, {
+      internal: {
+        openLifecycle: {
+          beforeDispatch: async () => {
+            const provisional = store.requireCurrent(ref);
+            store.retire(ref);
+            store.publish(ref.address, provisional);
+          },
+        },
+      },
+    }),
+  ).rejects.toThrow(
+    expect.objectContaining({
+      details: expect.objectContaining({ reason: 'session_lifetime_ended' }),
+    }),
+  );
+  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(store.get(ref.address)?.actions).toEqual([]);
+});
+
+test('fresh open completing after shutdown cannot publish or replace runtime hints', async () => {
+  const store = makeSessionStore();
+  mockResolveTargetDevice.mockResolvedValue(makeAndroidEmulator('emulator-shutdown-open'));
+  const native = holdNativeOpen();
+  const pending = invokeHeldOpen(store, { runtime: { metroHost: 'new-host', metroPort: 9000 } });
+  const refusal = expect(pending).rejects.toThrow(
+    expect.objectContaining({
+      details: expect.objectContaining({ reason: 'daemon_shutting_down' }),
+    }),
+  );
+  await native.reached;
+  store.closeAdmission();
+  native.release();
+  await refusal;
+  expect(store.get('cwd:held-open:default')).toBeUndefined();
+  expect(store.getRuntimeHints('cwd:held-open:default')).toBeUndefined();
+});
+
+test('cancelled fresh open does not publish after native launch returns', async () => {
+  const store = makeSessionStore();
+  mockResolveTargetDevice.mockResolvedValue(makeAndroidEmulator('emulator-cancelled-open'));
+  const native = holdNativeOpen();
+  const requestId = 'cancelled-open-lifetime';
+  const registration = registerRequestAbort(requestId);
+  try {
+    const pending = invokeHeldOpen(store, { meta: { requestId } });
+    await native.reached;
+    markRequestCanceled(requestId);
+    native.release();
+    expect(await pending).toEqual(
+      expect.objectContaining({
+        ok: false,
+        error: expect.objectContaining({
+          code: 'COMMAND_FAILED',
+          details: expect.objectContaining({ reason: 'request_canceled' }),
+        }),
+      }),
+    );
+    expect(store.get('cwd:held-open:default')).toBeUndefined();
+  } finally {
+    clearRequestAbortRegistration(registration);
+  }
+});
+
+test('fresh open does not publish when its artifact directory cannot be created', async () => {
+  const store = makeSessionStore();
+  mockResolveTargetDevice.mockResolvedValue(makeAndroidEmulator('emulator-directory-failed-open'));
+  fs.writeFileSync(path.dirname(store.resolveSessionDir('cwd:held-open:default')), 'blocked');
+  await expect(
+    invokeHeldOpen(store, { runtime: { metroHost: 'new-host', metroPort: 9000 } }),
+  ).rejects.toMatchObject({ code: 'ENOTDIR' });
+  expect(mockDispatch).toHaveBeenCalled();
+  expect(store.get('cwd:held-open:default')).toBeUndefined();
+  expect(store.getRuntimeHints('cwd:held-open:default')).toBeUndefined();
+});
+
+for (const transition of ['rebuild', 'retire'] as const) {
+  test(`foreground composition retains the published lifetime across ${transition}`, async () => {
+    const store = makeSessionStore();
+    mockResolveTargetDevice.mockResolvedValue(
+      makeAndroidEmulator(`emulator-foreground-${transition}`),
+    );
+    const record = store.recordAction.bind(store);
+    vi.spyOn(store, 'recordAction').mockImplementationOnce((recordedRef, entry) => {
+      record(recordedRef, entry);
+      const ref = store.lookup('cwd:held-open:default')!;
+      queueMicrotask(() => {
+        if (transition === 'rebuild') {
+          store.update(ref, { recordOnlySession: true });
+        } else {
+          store.retire(ref);
+          store.publish(ref.address, recordedRef.session);
+        }
+        mockInspectDeviceRuntimeFacts.mockClear();
+      });
+    });
+    const response = await invokeHeldOpen(store, {
+      flags: { platform: 'android', foreground: true },
+    });
+    expect(response?.ok).toBe(true);
+    if (!response?.ok) throw new Error('open must remain successful');
+    if (transition === 'retire') {
+      expect(response.data?.initialSnapshotError).toEqual(
+        expect.objectContaining({
+          details: expect.objectContaining({ reason: 'session_lifetime_ended' }),
+        }),
+      );
+      expect(mockInspectDeviceRuntimeFacts).not.toHaveBeenCalled();
+      expect(store.get('cwd:held-open:default')?.snapshot).toBeUndefined();
+    } else {
+      expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalled();
+      expect(store.get('cwd:held-open:default')?.recordOnlySession).toBe(true);
+    }
+  });
+}

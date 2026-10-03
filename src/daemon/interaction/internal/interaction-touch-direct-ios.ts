@@ -72,7 +72,7 @@ export async function dispatchDirectIosSelectorTap(
       },
     });
     return finalizeTouchInteraction({
-      session,
+      ref: handlerParams.sessionRef!,
       sessionStore: handlerParams.sessionStore,
       command: handlerParams.req.command,
       positionals: handlerParams.req.positionals ?? [],
@@ -86,7 +86,6 @@ export async function dispatchDirectIosSelectorTap(
     const corroboratedResponse = await buildDirectIosCorroboratedResponse({
       error,
       handlerParams,
-      session,
       extra,
       positionals: [],
       actionStartedAt,
@@ -118,12 +117,11 @@ async function buildDirectIosCorroboratedResponse(params: {
   handlerParams: InteractionRouteInput & {
     captureSnapshotForSession: CaptureSnapshotForSession;
   };
-  session: SessionState;
   extra: Record<string, unknown>;
   positionals: string[];
   actionStartedAt: number;
 }): Promise<DaemonResponse | undefined> {
-  const { error, handlerParams, session, extra, positionals, actionStartedAt } = params;
+  const { error, handlerParams, extra, positionals, actionStartedAt } = params;
   const corroboration = await corroborateIosTapFailure({
     error,
     command: handlerParams.req.command,
@@ -143,7 +141,7 @@ async function buildDirectIosCorroboratedResponse(params: {
     extra,
   });
   return finalizeTouchInteraction({
-    session,
+    ref: handlerParams.sessionRef!,
     sessionStore: handlerParams.sessionStore,
     command: handlerParams.req.command,
     positionals: handlerParams.req.positionals ?? positionals,

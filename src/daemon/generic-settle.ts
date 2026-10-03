@@ -110,6 +110,8 @@ async function observeSettled(
     session: context.sessionName,
     requestId: context.req.meta?.requestId,
   });
+  if (context.sessionRef && !context.sessionStore.resolveCurrent(context.sessionRef))
+    return undefined;
   const refsGeneration = issueSettleRefs(context.sessionRef, context.sessionStore, observation);
   return refsGeneration === undefined ? observation : { ...observation, refsGeneration };
 }

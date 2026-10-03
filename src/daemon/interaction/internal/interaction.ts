@@ -168,7 +168,7 @@ async function runTypeTextViaRuntime(
     const responseData: Record<string, unknown> = { ...result };
     appendTypeReadinessWarnings(responseData, recordingRecoveryWarning, readiness);
     return finalizeTouchInteraction({
-      session,
+      ref: params.sessionRef!,
       sessionStore,
       command: req.command,
       positionals: req.positionals ?? [],

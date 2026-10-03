@@ -1,3 +1,4 @@
+import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
 /**
  * ADR 0012 decision 6 repair-transaction `--force`/`--overwrite` semantics (#1258): a
  * `--save-script` target that already exists is refused at arm time, before any step runs, unless
@@ -244,7 +245,7 @@ test('#1258 preflight honors PERSISTED force: a --from continuation without --fo
 
   // The agent's corrective press (blessed @ref), recorded live.
   const session = sessionStore.get(sessionName)!;
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e7'],
     flags: {},
@@ -317,7 +318,7 @@ test('#1258 preflight is per-target: a --from continuation RETARGETING to an exi
   expect(sessionTargetPath(session)).toBe(targetA);
   expect(sessionTargetForce(session)).toBe(true);
   // The agent's corrective press.
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e7'],
     flags: {},

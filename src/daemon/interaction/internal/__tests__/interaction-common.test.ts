@@ -78,7 +78,7 @@ test('parameterized fill scrubs backend and nested settle echoes at the response
   };
 
   const response = finalizeTouchInteraction({
-    session,
+    ref: sessionStore.lookup(session.name)!,
     sessionStore,
     command: 'fill',
     positionals: ['id="password"', secret],
@@ -266,7 +266,7 @@ test.each([
     };
 
     const response = finalizeTouchInteraction({
-      session,
+      ref: sessionStore.lookup(session.name)!,
       sessionStore,
       command: 'fill',
       positionals: ['id="password"', literal],

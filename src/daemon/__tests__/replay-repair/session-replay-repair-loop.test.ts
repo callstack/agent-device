@@ -1,3 +1,4 @@
+import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
 import { isSessionRecording } from '../../session-script-publication-capability.ts';
 /**
  * ADR 0012 decision 6: `replay --save-script` arming (R1), the repair-run
@@ -134,7 +135,7 @@ test('R1/R2/R6: prefix steps get fresh evidence, corrective + resumed steps land
   expect(divergence.resume.from).toBe(3);
 
   // --- Agent performs the corrective action live (recorded). ---
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e9'],
     flags: {},
@@ -381,13 +382,13 @@ test('a --no-record state-fix action never enters session.actions', () => {
 
   // Agent fixes app state with --no-record, then performs the real corrective
   // action (recorded).
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['100', '200'],
     flags: { noRecord: true },
     result: {},
   });
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e9'],
     flags: {},
@@ -578,7 +579,7 @@ test('Fix 3: a --from resume that lands on the terminal close skips it too, lett
   expect(divergence.resume.from).toBe(2);
 
   const session = sessionStore.get(sessionName)!;
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e9'],
     flags: {},

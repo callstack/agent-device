@@ -65,7 +65,7 @@ function recordOpen(
   flags: RecordActionEntry['flags'] = { platform: 'ios', saveScript: true },
   runtime?: RecordActionEntry['runtime'],
 ): void {
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'open',
     positionals: ['Settings'],
     flags,
@@ -75,7 +75,7 @@ function recordOpen(
 }
 
 function recordClose(store: SessionStore, session: SessionState): void {
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'close',
     positionals: [],
     flags: { platform: 'ios' },
@@ -143,7 +143,7 @@ test('parameterized fill publication writes only the placeholder to target and t
   const fixture = makeFixture('agent-device-session-log-parameterized-fill-');
   const secret = 'publication-only-live-value-1348';
   recordOpen(fixture.store, fixture.session);
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'fill',
     positionals: ['id="password"', secret],
     flags: { platform: 'ios', recordAs: 'PASSWORD' },
@@ -167,7 +167,7 @@ test('parameterized fill publication writes only the placeholder to target and t
 test('recordAction writes a paged session event log', async () => {
   const { store, session } = makeFixture('agent-device-session-events-');
   recordOpen(store, session, { platform: 'ios' });
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'click',
     positionals: ['@14', 'Checkout'],
     flags: { platform: 'ios' },
@@ -189,7 +189,7 @@ test('recordAction writes a paged session event log', async () => {
 
 test('recordAction event log redacts typed text and its length from display positionals', async () => {
   const { store, session } = makeFixture('agent-device-session-events-redaction-');
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'fill',
     positionals: ['@14', 'super-secret-token'],
     flags: {},
@@ -213,25 +213,25 @@ test('recordAction event log redacts payload-bearing and unknown positionals', a
   const eventPayload = '{"token":"event-secret-token"}';
   const futurePayload = 'future-secret-token';
 
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'clipboard',
     positionals: ['write', clipboardText],
     flags: {},
     result: { action: 'write', textLength: Array.from(clipboardText).length },
   });
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'push',
     positionals: ['com.example.app', pushPayload],
     flags: {},
     result: { message: 'Pushed notification to com.example.app' },
   });
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'trigger-app-event',
     positionals: ['checkout', eventPayload],
     flags: {},
     result: { message: 'Triggered app event checkout' },
   });
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'future-command',
     positionals: ['public-ish', futurePayload],
     flags: {},
@@ -256,13 +256,13 @@ test('recordAction event log redacts payload-bearing and unknown positionals', a
 test('recordAction event log omits transformed messages for redacted positionals', async () => {
   const { store, session } = makeFixture('agent-device-session-events-overlap-redaction-');
 
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'future-command',
     positionals: ['token', 'my-token-123'],
     flags: {},
     result: { message: 'Ran my-token-123 after token' },
   });
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'future-command',
     positionals: ['arg', 'my-arg-123'],
     flags: {},
@@ -284,7 +284,7 @@ test('recordAction event log omits transformed messages for redacted positionals
 
 test('recordAction event log does not leak short typed text or its length', async () => {
   const { store, session } = makeFixture('agent-device-session-events-short-text-');
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'type',
     positionals: ['e'],
     flags: {},
@@ -302,7 +302,7 @@ test('recordAction event log does not leak short typed text or its length', asyn
 
 test('recordAction event log omits value-bearing selector details', async () => {
   const { store, session } = makeFixture('agent-device-session-events-selector-redaction-');
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'click',
     positionals: ['value=123456'],
     flags: {},
@@ -329,7 +329,7 @@ test('recordAction event log omits value-bearing selector details', async () => 
 test('recordAction event log rejects malformed provider scroll output', async () => {
   const { store, session } = makeFixture('agent-device-session-events-malformed-scroll-');
   const privateValue = 'provider-private-scroll-value';
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'scroll',
     positionals: [privateValue],
     flags: {},
@@ -416,7 +416,7 @@ test('writeSessionLog persists open --relaunch in script output', () => {
 test('writeSessionLog persists record --hide-touches flags in script output', () => {
   const fixture = makeFixture('agent-device-session-log-record-');
   recordOpen(fixture.store, fixture.session);
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'record',
     positionals: ['start', './capture.mp4'],
     flags: {
@@ -435,7 +435,7 @@ test('writeSessionLog persists record --hide-touches flags in script output', ()
 test('writeSessionLog persists screenshot flags in script output', () => {
   const fixture = makeFixture('agent-device-session-log-screenshot-');
   recordOpen(fixture.store, fixture.session);
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'screenshot',
     positionals: ['./page.png'],
     flags: { platform: 'ios', screenshotFullscreen: true, screenshotScale: 0.3 },
@@ -471,7 +471,7 @@ test('writeSessionLog persists inline open runtime hints in script output', () =
 test('writeSessionLog persists runtime set hints in script output', () => {
   const fixture = makeFixture('agent-device-session-log-runtime-');
   recordOpen(fixture.store, fixture.session);
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'runtime',
     positionals: ['set'],
     flags: {
@@ -494,7 +494,7 @@ test('writeSessionLog persists runtime set hints in script output', () => {
 test('writeSessionLog preserves interaction series flags for click/press/swipe', () => {
   const fixture = makeFixture('agent-device-session-log-series-flags-');
   recordOpen(fixture.store, fixture.session);
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'click',
     positionals: ['id="continue_button"'],
     flags: {
@@ -507,7 +507,7 @@ test('writeSessionLog preserves interaction series flags for click/press/swipe',
     },
     result: {},
   });
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'press',
     positionals: ['201', '545'],
     flags: {
@@ -517,7 +517,7 @@ test('writeSessionLog preserves interaction series flags for click/press/swipe',
     },
     result: {},
   });
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'swipe',
     positionals: ['10', '20', '30', '40'],
     flags: {
@@ -528,7 +528,7 @@ test('writeSessionLog preserves interaction series flags for click/press/swipe',
     },
     result: {},
   });
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'fill',
     positionals: ['@e5', 'search'],
     flags: {
@@ -537,7 +537,7 @@ test('writeSessionLog preserves interaction series flags for click/press/swipe',
     },
     result: {},
   });
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'gesture',
     positionals: ['pan', '195', '443', '48', '0', '500'],
     flags: {
@@ -561,19 +561,19 @@ test('writeSessionLog preserves interaction series flags for click/press/swipe',
 test('writeSessionLog optimizes selector chains and scopes fallback snapshots', () => {
   const fixture = makeFixture('agent-device-session-log-selectors-');
   recordOpen(fixture.store, fixture.session);
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'snapshot',
     positionals: [],
     flags: { platform: 'ios', snapshotInteractiveOnly: true },
     result: {},
   });
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'click',
     positionals: ['@e1'],
     flags: { platform: 'ios', count: 2 },
     result: { selectorChain: ['text="Continue"', 'role=button'], refLabel: 'Continue' },
   });
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'longpress',
     positionals: ['@e3', '800'],
     flags: { platform: 'ios' },
@@ -583,13 +583,13 @@ test('writeSessionLog optimizes selector chains and scopes fallback snapshots', 
     },
   });
   // #1783: hover @ref publishes as a portable selector line like click/longpress.
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'hover',
     positionals: ['@e4~s12'],
     flags: { platform: 'web', settle: true },
     result: { selectorChain: ['text="Second message"', 'role=link'] },
   });
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'fill',
     positionals: ['@e2', 'hello world'],
     flags: { platform: 'ios', delayMs: 5 },
@@ -631,19 +631,19 @@ test('writeSessionLog preserves significant whitespace and empty string argument
       launchUrl: 'myapp://dev ',
     },
   );
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'type',
     positionals: ['  leading\ttrailing  '],
     flags: { platform: 'ios' },
     result: {},
   });
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'fill',
     positionals: ['@e5', ''],
     flags: { platform: 'ios' },
     result: { refLabel: 'Search field' },
   });
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'screenshot',
     positionals: [' ./screens/final.png '],
     flags: { platform: 'ios' },
@@ -678,7 +678,7 @@ const SAVE_TARGET_EVIDENCE: TargetAnnotationV1 = {
 test('writeSessionLog emits the target-v1 annotation immediately before its action line', () => {
   const fixture = makeFixture('agent-device-session-log-target-evidence-');
   recordOpen(fixture.store, fixture.session);
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'click',
     positionals: ['@e12'],
     flags: { platform: 'ios' },
@@ -700,7 +700,7 @@ test('writeSessionLog emits the target-v1 annotation immediately before its acti
 test('writeSessionLog never fabricates a target-v1 annotation for actions recorded without evidence', () => {
   const fixture = makeFixture('agent-device-session-log-no-target-evidence-');
   recordOpen(fixture.store, fixture.session);
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'click',
     positionals: ['@e12'],
     flags: { platform: 'ios' },

@@ -26,7 +26,7 @@ import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtim
 import { contextFromFlags } from '../context.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
-import type { SessionState } from '../session-state.ts';
+import type { SessionRef, SessionState } from '../session-state.ts';
 import { recordIfSession } from '../snapshot-session.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -62,7 +62,7 @@ type HandleSettingsCommandParams = {
   req: DaemonRequest;
   logPath: string;
   sessionStore: SessionStore;
-  session: SessionState | undefined;
+  ref: SessionRef | undefined;
   device: SessionState['device'];
   parsed: ParsedSettingsRequest;
   inspectFacts?: InspectDeviceRuntimeFacts;
@@ -217,7 +217,8 @@ async function executeSettingsRead(
   params: HandleSettingsCommandParams,
   setting: ReadableSetting,
 ): Promise<DaemonResponse> {
-  const { req, logPath, sessionStore, session, device, inspectFacts, bindDevice } = params;
+  const { req, logPath, sessionStore, ref, device, inspectFacts, bindDevice } = params;
+  let session = ref ? sessionStore.requireCurrent(ref) : undefined;
   const refusal = settingsRequestRefusal(device, setting);
   if (refusal !== undefined) return refusal;
   const admission = await admitRuntimeUse({
@@ -229,6 +230,8 @@ async function executeSettingsRead(
     readiness: !session,
   });
   if (admission.type === 'response') return admission.response;
+
+  session = ref ? sessionStore.requireCurrent(ref) : undefined;
 
   emitDiagnostic({
     level: 'debug',
@@ -249,7 +252,7 @@ async function executeSettingsRead(
     ...payload,
     ...successText(describeSettingRead(payload)),
   };
-  recordIfSession(sessionStore, session, req, data);
+  recordIfSession(sessionStore, ref, req, data);
   return { ok: true, data };
 }
 
@@ -257,7 +260,8 @@ async function executeSettingsWrite(
   params: HandleSettingsCommandParams,
   parsed: ParsedSettingsArgs,
 ): Promise<DaemonResponse> {
-  const { req, logPath, sessionStore, session, device, inspectFacts, bindDevice } = params;
+  const { req, logPath, sessionStore, ref, device, inspectFacts, bindDevice } = params;
+  let session = ref ? sessionStore.requireCurrent(ref) : undefined;
   const { setting, state } = parsed;
   const refusal = settingsRequestRefusal(device, setting);
   if (refusal !== undefined) return refusal;
@@ -269,8 +273,9 @@ async function executeSettingsWrite(
     bindDevice,
     readiness: !session,
   });
-  const appBundleId = settingsWriteAppId(req, parsed, session);
   if (admission.type === 'response') return admission.response;
+  session = ref ? sessionStore.requireCurrent(ref) : undefined;
+  const appBundleId = settingsWriteAppId(req, parsed, session);
   const writeRefusal = settingsWriteRefusal(parsed, appBundleId);
   if (writeRefusal !== undefined) return writeRefusal;
   // ADR 0014 side-effect seam: a settings mutation changes device state; expire the frame before
@@ -292,7 +297,7 @@ async function executeSettingsWrite(
     ),
     describeSettingWrite(setting, state, appBundleId),
   );
-  recordIfSession(sessionStore, session, req, data);
+  recordIfSession(sessionStore, ref, req, data);
   return { ok: true, data };
 }
 

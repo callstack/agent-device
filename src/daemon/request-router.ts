@@ -493,10 +493,11 @@ async function dispatchGenericForLockedScope(params: {
   androidObservation: AndroidObservationAdapter;
 }): Promise<DaemonResponse> {
   const { lockedScope, logPath, sessionStore, androidObservation } = params;
-  const session = sessionStore.get(lockedScope.sessionName);
-  if (!session) {
+  const ref = sessionStore.lookup(lockedScope.sessionName);
+  if (!ref) {
     return noActiveSessionError();
   }
+  const session = sessionStore.requireCurrent(ref);
 
   const runtimeExecution = await resolveGenericRuntimeExecution({
     req: lockedScope.req,
@@ -516,7 +517,7 @@ async function dispatchGenericForLockedScope(params: {
   const { dispatchGenericCommand } = await loadGenericRequestHandlerModule();
   const dispatchResponse = await dispatchGenericCommand({
     req: lockedScope.req,
-    session,
+    ref,
     sessionName: lockedScope.sessionName,
     logPath,
     sessionStore,

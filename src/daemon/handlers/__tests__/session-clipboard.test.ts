@@ -216,3 +216,28 @@ test('clipboard write with no text argument reports how to clear instead', async
     'clipboard write requires text (use "" to clear clipboard)',
   );
 });
+
+for (const action of ['read', 'write'] as const) {
+  test(`clipboard ${action} refuses retirement during device resolution before binding`, async () => {
+    const spies = harness({ read: available, write: available });
+    const input = request(action === 'read' ? ['read'] : ['write', 'text']);
+    const ref = input.sessionStore.lookup(input.sessionName)!;
+    mockResolveTargetDevice.mockImplementationOnce(async () => {
+      input.sessionStore.retire(ref);
+      input.sessionStore.publish(input.sessionName, makeSession(input.sessionName, androidDevice));
+      return androidDevice;
+    });
+    await expect(
+      handleSessionClipboardCommand({
+        ...input,
+        req: { ...input.req, flags: { platform: 'android', serial: androidDevice.id } },
+        ...spies,
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'session_lifetime_ended' } });
+    expect(spies.inspectFacts).not.toHaveBeenCalled();
+    expect(spies.bindDevice).not.toHaveBeenCalled();
+    expect(mockEnsureDeviceReady).not.toHaveBeenCalled();
+    expect(spies.readClipboard).not.toHaveBeenCalled();
+    expect(spies.writeClipboard).not.toHaveBeenCalled();
+  });
+}

@@ -90,7 +90,11 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
     bindDevice,
     platformResourceCleanup,
   }) => {
-    const { session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
+    const { ref, session, device } = await resolveSessionDevice(
+      sessionStore,
+      sessionName,
+      req.flags,
+    );
     return await withSessionlessRunnerCleanup(
       session,
       device,
@@ -99,7 +103,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
           req,
           logPath,
           sessionStore,
-          session,
+          ref,
           device,
           inspectFacts,
           bindDevice,
@@ -119,7 +123,11 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
   }) => {
     const parsedSettings = parseSettingsArgs(req);
     if (!parsedSettings.ok) return parsedSettings;
-    const { session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
+    const { ref, session, device } = await resolveSessionDevice(
+      sessionStore,
+      sessionName,
+      req.flags,
+    );
     return await withSessionlessRunnerCleanup(
       session,
       device,
@@ -128,7 +136,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
           req,
           logPath,
           sessionStore,
-          session,
+          ref,
           device,
           parsed: parsedSettings.parsed,
           inspectFacts,

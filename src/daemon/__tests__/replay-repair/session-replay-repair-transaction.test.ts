@@ -158,7 +158,7 @@ test('end-to-end repair transaction: cold divergence stays alive, corrective res
 
   // --- Agent performs the corrective press (blessed @ref), recorded live. ---
   const session = sessionStore.get(sessionName)!;
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e7'],
     flags: {},

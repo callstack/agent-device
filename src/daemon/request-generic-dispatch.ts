@@ -61,7 +61,7 @@ export type ResolvedGenericExecution =
 
 export async function dispatchGenericCommand(params: {
   req: DaemonRequest;
-  session: SessionState;
+  ref: SessionRef;
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
@@ -74,8 +74,8 @@ export async function dispatchGenericCommand(params: {
   recordedRequest?: RecordedGenericRequest;
   androidObservation?: AndroidObservationAdapter;
 }): Promise<DaemonResponse> {
-  const { req, session, logPath, sessionStore, contextFromFlags } = params;
-  const sessionRef = sessionStore.lookup(params.sessionName);
+  const { req, ref: sessionRef, logPath, sessionStore, contextFromFlags } = params;
+  const session = sessionStore.requireCurrent(sessionRef);
   const platformCommand = req.command;
 
   const commandReadiness = await ensureGenericCommandReady(
@@ -112,9 +112,10 @@ export async function dispatchGenericCommand(params: {
   };
 
   const actionStartedAt = Date.now();
+  const current = sessionStore.requireCurrent(sessionRef);
   const dispatchContext = {
-    ...contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
-    surface: session.surface,
+    ...contextFromFlags(req.flags, current.appBundleId, current.trace?.outPath),
+    surface: current.surface,
   };
   // ADR 0014 side-effect seam for generic-route leaves (back/home/rotate/scroll/
   // tv-remote/app-switcher/viewport/focus). Effect classification
@@ -122,10 +123,10 @@ export async function dispatchGenericCommand(params: {
   // before dispatching so a later ref cannot reuse it. Read-only generic leaves
   // (screenshot) are classified `preserve` and leave the frame untouched.
   if (resolveRefFrameEffect(req) === 'may-invalidate') {
-    expireRefFrame(session);
+    expireRefFrame(current);
   }
   const data = await params.executePlatformCommand({
-    session,
+    session: current,
     sessionName: params.sessionName,
     logPath,
     command: platformCommand,
@@ -136,7 +137,7 @@ export async function dispatchGenericCommand(params: {
   });
   return await finalizeGenericCommand({
     req,
-    session,
+    ref: sessionRef,
     sessionStore,
     command: platformCommand,
     resolvedPositionals,
@@ -159,7 +160,7 @@ export async function dispatchGenericCommand(params: {
  */
 async function finalizeGenericCommand(params: {
   req: DaemonRequest;
-  session: SessionState;
+  ref: SessionRef;
   sessionStore: SessionStore;
   command: string;
   resolvedPositionals: string[];
@@ -170,9 +171,9 @@ async function finalizeGenericCommand(params: {
   observeSettle?: () => Promise<SettleObservation | undefined>;
   androidObservation?: AndroidObservationAdapter;
 }): Promise<DaemonResponse> {
-  const { req, session, sessionStore, command } = params;
+  const { req, ref, sessionStore, command } = params;
   const postflightReadiness = await ensureNoAndroidBlockingDialogReady(
-    session,
+    sessionStore.requireCurrent(ref),
     command,
     params.androidObservation,
     'after-command',
@@ -181,7 +182,7 @@ async function finalizeGenericCommand(params: {
 
   let data = withReadinessWarnings(params.data, params.readinessWarnings);
   recordVisualizationAndAction({
-    session,
+    ref,
     sessionStore,
     command,
     resolvedPositionals: params.resolvedPositionals,
@@ -194,7 +195,7 @@ async function finalizeGenericCommand(params: {
   });
 
   markDeferredInteractionOutcome({
-    session,
+    session: sessionStore.requireCurrent(ref),
     command,
     positionals: params.resolvedPositionals,
     flags: req.flags,
@@ -332,7 +333,7 @@ async function ensureGenericCommandReady(
 }
 
 function recordVisualizationAndAction(params: {
-  session: SessionState;
+  ref: SessionRef;
   sessionStore: SessionStore;
   command: string;
   resolvedPositionals: string[];
@@ -344,7 +345,7 @@ function recordVisualizationAndAction(params: {
   clientArtifactPaths: Record<string, string> | undefined;
 }): void {
   const {
-    session,
+    ref,
     sessionStore,
     command,
     resolvedPositionals,
@@ -355,6 +356,7 @@ function recordVisualizationAndAction(params: {
     flags,
     clientArtifactPaths,
   } = params;
+  const session = sessionStore.requireCurrent(ref);
   const visualizationData = augmentScrollVisualizationResult(
     session,
     command,
@@ -370,7 +372,7 @@ function recordVisualizationAndAction(params: {
     actionStartedAt,
     actionFinishedAt,
   );
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(ref, {
     command,
     positionals: recorded.positionals,
     flags: recorded.flags,

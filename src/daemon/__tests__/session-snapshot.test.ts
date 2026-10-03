@@ -1,8 +1,11 @@
 import { expect, test } from 'vitest';
+import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import type { SettleObservation } from '@agent-device/contracts/interaction';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { SessionState } from '../session-state.ts';
 import {
   markSessionPartialRefsIssued,
+  issueSettleRefs,
   resolveRefStalenessWarning,
   setSessionSnapshot,
   setCommandSnapshot,
@@ -179,12 +182,14 @@ test('a ref pinned before a diff keeps resolving: the diff advances the counter,
   // `diff` replaces the stored tree, so lineage advances the counter — but it passes
   // `issuesRefsToClient: false`, so it never reactivates the frame.
   const afterDiff: SessionState = { ...session };
+  const diffSnapshot = makeSnapshot();
   setCommandSnapshot(afterDiff, {
-    snapshot: afterDiff.snapshot!,
+    snapshot: diffSnapshot,
     scopeSource: undefined,
     keptCurrentSnapshot: false,
     previousGeneration: session.snapshotGeneration,
   });
+  expect(afterDiff.snapshot).toBe(diffSnapshot);
   expect(afterDiff.snapshotGeneration).not.toBe(session.snapshotGeneration);
   expect(refFrameEpoch(afterDiff)).toBe(issuedAt);
 
@@ -220,3 +225,36 @@ test('keeping the current snapshot leaves the counter alone', () => {
   });
   expect(session.snapshotGeneration).toBe(before);
 });
+
+for (const retire of [false, true]) {
+  test(`settle ref issuance checks lifetime before publishing (${retire ? 'retired' : 'live'})`, () => {
+    const store = makeSessionStore();
+    const session = makeSession();
+    setSessionSnapshot(session, makeSnapshot());
+    const ref = store.publish('cwd:settle:default', session);
+    const priorFrame = refFrame(session);
+    if (retire) {
+      store.retire(ref);
+      store.publish(ref.address, session);
+    }
+    const observation: SettleObservation = {
+      settled: true,
+      waitedMs: 1,
+      captures: 2,
+      quietMs: 1,
+      timeoutMs: 20,
+      diff: {
+        summary: { additions: 1, removals: 0, unchanged: 0 },
+        lines: [{ kind: 'added', text: 'new button', ref: 'e1' }],
+      },
+    };
+    const generation = issueSettleRefs(ref, store, observation);
+    if (retire) {
+      expect(generation).toBeUndefined();
+      expect(refFrame(session)).toBe(priorFrame);
+    } else {
+      expect(generation).toBe(session.snapshotGeneration);
+      expect(refFrameScope(session)).toEqual(new Set(['e1']));
+    }
+  });
+}

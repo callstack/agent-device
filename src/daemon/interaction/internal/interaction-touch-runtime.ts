@@ -108,7 +108,7 @@ export async function dispatchRuntimeInteraction<
       responseData.warning = warning;
     }
     return finalizeTouchInteraction({
-      session,
+      ref: params.sessionRef,
       sessionStore: params.sessionStore,
       command: params.req.command,
       positionals: params.req.positionals ?? [],
@@ -176,7 +176,7 @@ async function buildRuntimeIosCorroboratedResponse(params: {
     extra: params.extra,
   });
   return finalizeTouchInteraction({
-    session: params.session,
+    ref: params.handlerParams.sessionRef!,
     sessionStore: params.handlerParams.sessionStore,
     command: params.handlerParams.req.command,
     positionals: params.handlerParams.req.positionals ?? [],
