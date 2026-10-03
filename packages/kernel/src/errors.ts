@@ -1,3 +1,5 @@
+import { AppError } from './app-error.ts';
+export { AppError } from './app-error.ts';
 import { redactDiagnosticData, sanitizeErrorCause as normalizeErrorCause } from './redaction.ts';
 
 /**
@@ -218,19 +220,6 @@ export type DaemonError = {
   retriable?: boolean;
   supportedOn?: string;
 };
-
-export class AppError extends Error {
-  code: AppErrorCode;
-  details?: AppErrorDetails;
-  cause?: unknown;
-
-  constructor(code: AppErrorCode, message: string, details?: AppErrorDetails, cause?: unknown) {
-    super(message);
-    this.code = code;
-    this.details = details;
-    this.cause = cause;
-  }
-}
 
 /** Rehydrate a daemon transport error into the error type used by local callers. */
 export function throwDaemonError(error: DaemonError): never {

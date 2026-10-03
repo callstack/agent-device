@@ -192,6 +192,12 @@ export async function readIosSetting(
   return await IOS_READABLE_SETTINGS[setting](device);
 }
 
+/**
+ * Binds a data container to its bundle in the simulator's container manager. It is container
+ * identity, not app state: removing it orphans the container until the app is reinstalled.
+ */
+const CONTAINER_MANAGER_METADATA_FILE = '.com.apple.mobile_container_manager.metadata.plist';
+
 async function clearIosSimulatorAppState(
   device: DeviceInfo,
   app: string,
@@ -223,7 +229,11 @@ async function clearIosSimulatorAppState(
   }
 
   const entries = await readHostDirectory(containerPath);
-  await Promise.all(entries.map((entry) => removeHostPath(path.join(containerPath, entry))));
+  await Promise.all(
+    entries
+      .filter((entry) => entry !== CONTAINER_MANAGER_METADATA_FILE)
+      .map((entry) => removeHostPath(path.join(containerPath, entry))),
+  );
 
   return { bundleId, containerPath };
 }

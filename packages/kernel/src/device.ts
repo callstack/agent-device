@@ -409,8 +409,7 @@ function resolveDeviceByName(
   deviceName: string | undefined,
 ): DeviceInfo | undefined {
   if (!deviceName) return undefined;
-  const normalizedName = normalizeDeviceName(deviceName);
-  const match = candidates.find((device) => normalizeDeviceName(device.name) === normalizedName);
+  const match = candidates.find((device) => matchesDeviceNameSelector(device, deviceName));
   if (!match) {
     const hint = deviceIdentityMistakenForNameHint(candidates, deviceName);
     throw new AppError(
@@ -570,10 +569,7 @@ function matchesExplicitDeviceSelector(device: DeviceInfo, selector: DeviceSelec
   ) {
     return false;
   }
-  if (
-    selector.deviceName &&
-    normalizeDeviceName(device.name) !== normalizeDeviceName(selector.deviceName)
-  ) {
+  if (selector.deviceName && !matchesDeviceNameSelector(device, selector.deviceName)) {
     return false;
   }
   return true;
@@ -608,6 +604,18 @@ function throwNoDevicesFound(selector: DeviceSelector, context: DeviceSelectionC
     });
   }
   throw new AppError('DEVICE_NOT_FOUND', 'No devices found', { selector });
+}
+
+/**
+ * Whether a `--device` name selects `device`. Selection and session-binding checks share this
+ * matcher so a name that picked a device keeps matching it, e.g. AVD `Pixel_9_API_37` for the
+ * displayed `Pixel 9 API 37`.
+ */
+export function matchesDeviceNameSelector(
+  device: Pick<DeviceInfo, 'name'>,
+  deviceName: string,
+): boolean {
+  return normalizeDeviceName(device.name) === normalizeDeviceName(deviceName);
 }
 
 function normalizeDeviceName(value: string): string {

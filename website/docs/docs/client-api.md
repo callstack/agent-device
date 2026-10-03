@@ -97,6 +97,8 @@ Supported public entry points for Node consumers:
   - `runtime.getDeviceSession(device)`
   - types: `LimrunRuntimeOptions`, `LimrunDeviceSession`, `LimrunAndroidDeviceSession`,
     `LimrunIosDeviceSession`, `LimrunIosCommandExecution`
+- `agent-device/plugins/webdriver`
+  - experimental `WebDriverPluginOptions` for providers using the shared engine.
 - `agent-device/plugins`
   - experimental factory context: `ProviderPluginHost`; see [provider plugins](./plugins.md).
 - `agent-device/ai-sdk`

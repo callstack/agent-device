@@ -73,6 +73,10 @@
     "./plugins": {
       "types": "./dist/src/plugins.d.ts",
       "import": "./dist/src/plugins.js"
+    },
+    "./plugins/webdriver": {
+      "types": "./dist/src/plugins/webdriver.d.ts",
+      "import": "./dist/src/plugins/webdriver.js"
     }
   },
   "engines": {

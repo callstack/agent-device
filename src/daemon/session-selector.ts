@@ -4,6 +4,7 @@ import type { SessionRef, SessionState } from './session-state.ts';
 import {
   isIosFamily,
   isSerialAddressablePlatform,
+  matchesDeviceNameSelector,
   matchesPlatformSelector,
 } from '@agent-device/kernel/device';
 import { parseSerialAllowlist } from '@agent-device/kernel/device-isolation';
@@ -71,7 +72,7 @@ export function listSessionSelectorConflicts(
     mismatches.push({ key: 'serial', value: flags.serial });
   }
 
-  if (flags.device && flags.device.trim().toLowerCase() !== device.name.trim().toLowerCase()) {
+  if (flags.device && !matchesDeviceNameSelector(device, flags.device)) {
     mismatches.push({ key: 'device', value: flags.device });
   }
 

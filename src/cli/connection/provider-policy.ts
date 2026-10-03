@@ -3,12 +3,18 @@ import {
   isCloudWebDriverProviderName,
   type CloudWebDriverKnownProviderName,
 } from '@agent-device/provider-webdriver/providers';
+import { pluginConnectionCapabilities, pluginConnectionNames } from '../../plugins/connection.ts';
 
-export type DirectDeviceConnectProvider =
-  | CloudWebDriverKnownProviderName
-  | 'limrun'
-  | 'doublespeed';
-export type ConnectProvider = 'cloud' | 'proxy' | DirectDeviceConnectProvider;
+export type DirectDeviceConnectProvider = CloudWebDriverKnownProviderName | 'limrun';
+export const BUILTIN_CONNECT_PROVIDERS = [
+  'cloud',
+  'proxy',
+  CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+  CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+  'limrun',
+] as const;
+export type BuiltinConnectProvider = (typeof BUILTIN_CONNECT_PROVIDERS)[number];
+export type ConnectProvider = BuiltinConnectProvider | (string & {});
 
 export type ConnectionProviderCapabilities = {
   leaseKind: 'proxy' | 'direct-device-provider' | 'remote-provider';
@@ -21,26 +27,22 @@ export type ConnectionProviderCapabilities = {
 };
 
 export function isConnectProviderName(value: string | undefined): value is ConnectProvider {
-  return value === 'cloud' || value === 'proxy' || isDirectDeviceConnectProvider(value);
+  return (
+    value === 'cloud' ||
+    value === 'proxy' ||
+    isDirectDeviceConnectProvider(value) ||
+    pluginConnectionCapabilities(value) !== undefined
+  );
 }
 
 function isDirectDeviceConnectProvider(
   provider: string | undefined,
 ): provider is DirectDeviceConnectProvider {
-  return (
-    provider === 'limrun' || provider === 'doublespeed' || isCloudWebDriverProviderName(provider)
-  );
+  return provider === 'limrun' || isCloudWebDriverProviderName(provider);
 }
 
 export function connectProviderNamesForError(): string {
-  return [
-    'cloud',
-    'proxy',
-    CLOUD_WEBDRIVER_PROVIDERS.browserStack,
-    CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
-    'limrun',
-    'doublespeed',
-  ].join(', ');
+  return [...BUILTIN_CONNECT_PROVIDERS, ...pluginConnectionNames()].join(', ');
 }
 
 export function connectionProviderCapabilities(
@@ -48,6 +50,10 @@ export function connectionProviderCapabilities(
 ): ConnectionProviderCapabilities {
   const directDeviceProvider = isDirectDeviceConnectProvider(provider);
   const cloudWebDriver = isCloudWebDriverProviderName(provider);
+  if (!directDeviceProvider && provider !== 'cloud' && provider !== 'proxy') {
+    const plugin = pluginConnectionCapabilities(provider);
+    if (plugin) return plugin;
+  }
   return {
     leaseKind:
       provider === 'proxy'

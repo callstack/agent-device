@@ -1,12 +1,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import type { ConnectionProviderCapabilities } from '../cli/connection/provider-policy.ts';
 
 const PROVIDER_PLUGIN_API_VERSION = 1;
 type PluginManifest = {
   name: string;
   version: string;
-  agentDevicePlugin: { apiVersion: number; provider: string; entry: string };
+  agentDevicePlugin: {
+    apiVersion: number;
+    provider: string;
+    entry: string;
+    connection?: ConnectionProviderCapabilities;
+  };
 };
 
 export function assertUniquePluginProviders(
@@ -53,6 +59,28 @@ export function readPluginManifest(directory: string): PluginManifest {
     });
   }
   resolvePluginEntry(directory, declaration.entry);
+  if (declaration.connection !== undefined) {
+    const policy = declaration.connection;
+    if (
+      !policy ||
+      typeof policy !== 'object' ||
+      policy.leaseKind !== 'direct-device-provider' ||
+      [
+        'requiresAppAttachment',
+        'requiresRemoteDaemon',
+        'supportsArtifacts',
+        'supportsDeferredAppSelection',
+        'supportsDirectPortReverse',
+        'usesCloudWebDriverLease',
+      ].some((key) => typeof policy[key as keyof ConnectionProviderCapabilities] !== 'boolean') ||
+      policy.requiresRemoteDaemon
+    ) {
+      throw new AppError(
+        'INVALID_ARGS',
+        'Plugin connection must declare local provider capabilities',
+      );
+    }
+  }
   return manifest as PluginManifest;
 }
 

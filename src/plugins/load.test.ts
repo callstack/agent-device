@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { loadProviderPlugins } from './load.ts';
+import { loadProviderPlugins, withPluginConnection } from './load.ts';
 import { pluginHome, selectPlugin, registrationSource } from './plugin.fixtures.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ProviderPluginHost } from '../sdk/plugins.ts';
@@ -61,4 +61,45 @@ test('cleanup throwing synchronously preserves the factory failure', async () =>
   selectPlugin(home, 'two', 'two', 'export default () => { throw new Error("factory failed"); };');
   await assert.rejects(loadProviderPlugins(env, []), /factory failed/);
   assert.ok(fs.existsSync(marker));
+});
+
+test('connection callbacks run from the installed plugin and always release runtimes', async () => {
+  const { home, env } = pluginHome();
+  const marker = path.join(home, 'shutdown');
+  const source = registrationSource('example', marker).replace(
+    'platformModule:',
+    "connection: { resolve: () => ({ profile: { leaseProvider: 'example', platform: 'android' } }), verify: async () => { throw host.createError('COMMAND_FAILED', 'verification failed'); } }, platformModule:",
+  );
+  selectPlugin(home, 'example', 'example', source);
+  const profile = await withPluginConnection(
+    'example',
+    env,
+    async (connection) => await connection.resolve({ flags: {}, stateDir: home, cwd: home, env }),
+  );
+  assert.equal(profile.profile.platform, 'android');
+  assert.ok(fs.existsSync(marker));
+  fs.unlinkSync(marker);
+  await assert.rejects(
+    withPluginConnection(
+      'example',
+      env,
+      async (connection) => await connection.verify({ flags: {}, env }),
+    ),
+    { code: 'COMMAND_FAILED' },
+  );
+  assert.ok(fs.existsSync(marker));
+});
+
+test('WebDriver plugins use the shared engine and refuse mismatched providers', async () => {
+  const { home, env } = pluginHome();
+  const source =
+    "export default () => ({ webDriver: { provider: 'example', endpoint: 'http://127.0.0.1/', platform: 'android', deviceName: 'example' } });";
+  selectPlugin(home, 'example', 'example', source);
+  const [registration] = await loadProviderPlugins(env, []);
+  assert.equal(registration!.runtime.provider, 'example');
+  assert.equal(registration!.platformModule.owner.provider, 'example');
+  await registration!.runtime.shutdown();
+  const other = pluginHome();
+  selectPlugin(other.home, 'example', 'wrong', source);
+  await assert.rejects(loadProviderPlugins(other.env, []), { code: 'INVALID_ARGS' });
 });
