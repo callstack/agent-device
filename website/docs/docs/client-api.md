@@ -65,6 +65,7 @@ Supported public entry points for Node consumers:
   - `tryParseSelectorChain(expression)`
   - `resolveSelectorChain(nodes, chain, options)`
   - `findSelectorChainMatch(nodes, chain, options)`
+  - `listSelectorChainMatches(nodes, chain, options)`
   - `formatSelectorFailure(chain, diagnostics, options)`
   - `isNodeVisible(node)`
   - `isSelectorToken(token)`
@@ -495,6 +496,8 @@ Use `agent-device/remote-config` for profile loading and path resolution, `agent
 ## Selector helpers
 
 Use `agent-device/selectors` when a remote daemon or bridge needs to parse and match selector expressions without deep-importing daemon internals. Matching is platform-aware because role normalization and editability checks differ by backend.
+
+`listSelectorChainMatches(nodes, chain, options)` returns every node the winning selector alternative matches, in snapshot order, plus that alternative and its index — the same first-match domain `findSelectorChainMatch` uses, without uniqueness refusal, so a runner applies its own strictness to the same nodes the CLI matched. `resolveSelectorChain` can name a LATER alternative: by default it refuses an ambiguous one and keeps walking, so the indices agree when it passes `requireUnique: false`, when the first matching alternative is unique, or when `disambiguateAmbiguous: true` resolves that alternative in place. It returns `null` when no alternative matches. `options` is `{ platform, requireRect? }`; the matched `SnapshotNode` objects are the ones passed in.
 
 ```ts
 import { findSelectorChainMatch, parseSelectorChain } from 'agent-device/selectors';

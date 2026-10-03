@@ -329,7 +329,9 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
           './plugins': (mod) => Object.keys(mod).length === 0,
           './remote-config': (mod) => typeof mod,
           './selectors': (mod) =>
-            mod.isSelectorToken('||') && typeof mod.parseSelectorChain === 'function',
+            mod.isSelectorToken('||') &&
+            typeof mod.parseSelectorChain === 'function' &&
+            typeof mod.listSelectorChainMatches === 'function',
         };
         const subpathSmokeResults = {};
         for (const subpath of Object.keys(subpathSmoke).sort()) {
