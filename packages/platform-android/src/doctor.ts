@@ -3,7 +3,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
 import type { HostDiagnosticsContext } from '@agent-device/contracts/host-diagnostics';
-import { commandFirstLine } from '@agent-device/provision-kit/toolchain-probe';
+import { commandOutput, firstOutputLine } from '@agent-device/provision-kit/toolchain-probe';
 import { resolveAndroidAdbExecutor, runAdbShell, type AndroidAdbExecutor } from './adb-executor.ts';
 import {
   isAndroidTestImeActive,
@@ -18,6 +18,7 @@ import {
 } from './adb-host.ts';
 
 const ANDROID_PROBE_TIMEOUT_MS = 2000;
+const WINDOWS_ADB_ON_POSIX_HOST_REASON = 'android_adb_windows_binary_on_posix_host';
 
 type AndroidLicenseState = 'accepted' | 'missing' | 'unknown';
 type AndroidToolchainProbe = {
@@ -27,13 +28,19 @@ type AndroidToolchainProbe = {
 };
 
 export async function androidToolchainCheck(
-  environment: AndroidAdbEnvironment = requireAndroidAdbHost().environment,
+  environment: AndroidAdbEnvironment,
+  hostPlatform: NodeJS.Platform,
   files: Pick<AndroidAdbFileHost, 'access'> = requireAndroidAdbHost().files,
 ): Promise<DoctorCheck> {
   const sdkRoot = environment.ANDROID_HOME || environment.ANDROID_SDK_ROOT;
   const license = await androidLicenseState(sdkRoot, files);
-  const versionLine = await commandFirstLine('adb', ['version']);
-  if (!versionLine) return missingAndroidAdbCheck(sdkRoot, license);
+  const versionOutput = await commandOutput('adb', ['version']);
+  const versionLine = versionOutput === undefined ? undefined : firstOutputLine(versionOutput);
+  if (!versionOutput || !versionLine) return missingAndroidAdbCheck(sdkRoot, license);
+  const adbPath = androidAdbInstallPath(versionOutput);
+  if (hostPlatform !== 'win32' && adbPath && isWindowsHostPath(adbPath)) {
+    return windowsAdbOnPosixHostCheck({ adbPath, sdkRoot, versionLine });
+  }
 
   return androidAdbCheck({
     license,
@@ -171,6 +178,37 @@ async function probeAndroidReverse(
       evidence: { code: normalized.code },
     };
   }
+}
+
+/** The binary path adb reports for itself on its `Installed as` version line. */
+function androidAdbInstallPath(versionOutput: string): string | undefined {
+  return /^Installed as (.+)$/m.exec(versionOutput)?.[1]?.trim();
+}
+
+/** A drive-letter or UNC path, which only a Windows binary reports. */
+function isWindowsHostPath(candidate: string): boolean {
+  return /^(?:[A-Za-z]:[\\/]|\\\\)/.test(candidate);
+}
+
+/**
+ * A Windows adb.exe reached from a Linux host (WSL interop) answers `adb version`, but it resolves
+ * every host path it is handed as a Windows path, so pulls, pushes, and installs miss the Linux files.
+ */
+function windowsAdbOnPosixHostCheck(
+  probe: Readonly<{ adbPath: string; sdkRoot: string | undefined; versionLine: string }>,
+): DoctorCheck {
+  return {
+    id: 'toolchain',
+    status: 'fail',
+    summary: `Android toolchain: adb on PATH is the Windows binary ${probe.adbPath}, which cannot use this host's file paths.`,
+    hint: 'Under WSL, install Linux Android platform-tools, put them first on PATH, and point ANDROID_HOME at a Linux SDK instead of one under /mnt/<drive>.',
+    evidence: {
+      reason: WINDOWS_ADB_ON_POSIX_HOST_REASON,
+      adbPath: probe.adbPath,
+      adbVersion: probe.versionLine,
+      androidHome: probe.sdkRoot ?? null,
+    },
+  };
 }
 
 function androidAdbCheck(probe: AndroidToolchainProbe): DoctorCheck {
