@@ -110,37 +110,66 @@ extension RunnerTests {
     var failure: TextEntryFailure? = nil
   }
 
+  /// Which input an element query resolved to. A query bound by index or point re-resolves to
+  /// whatever input occupies that slot now, so `exists` alone cannot tell the typed input from the
+  /// next screen's.
+  struct TextEntryInputIdentity: Equatable {
+    let elementType: XCUIElement.ElementType
+    let identifier: String
+  }
+
   struct TextEntryTarget {
     let element: XCUIElement?
     let refreshPoint: CGPoint?
     let prefersFocusedElement: Bool
     let fromTapWitness: Bool
+    /// The input `element` resolved to when it was last bound, or nil when it did not resolve.
+    let inputIdentity: TextEntryInputIdentity?
 
     init(
       element: XCUIElement?,
       refreshPoint: CGPoint?,
       prefersFocusedElement: Bool,
-      fromTapWitness: Bool = false
+      fromTapWitness: Bool = false,
+      inputIdentity: TextEntryInputIdentity? = nil
     ) {
       self.element = element
       self.refreshPoint = refreshPoint
       self.prefersFocusedElement = prefersFocusedElement
       self.fromTapWitness = fromTapWitness
+      self.inputIdentity = inputIdentity
     }
 
     func withElement(_ nextElement: XCUIElement?) -> TextEntryTarget {
       guard let nextElement else {
         return self
       }
-      let frame = nextElement.frame
+      // An app may remove the input in reaction to the text just typed. Reading `frame` from a
+      // removed element records an XCTest failure; a snapshot that cannot resolve only throws.
+      let snapshot = try? nextElement.snapshot()
+      let frame = snapshot?.frame ?? .zero
       let point = frame.isEmpty ? refreshPoint : CGPoint(x: frame.midX, y: frame.midY)
       return TextEntryTarget(
         element: nextElement,
         refreshPoint: point,
         prefersFocusedElement: prefersFocusedElement,
-        fromTapWitness: fromTapWitness
+        fromTapWitness: fromTapWitness,
+        inputIdentity: snapshot.map {
+          TextEntryInputIdentity(elementType: $0.elementType, identifier: $0.identifier)
+        }
       )
     }
+  }
+
+  /// Whether the input text was delivered to is gone once delivery finished: removed, or replaced
+  /// in its query slot by another input, as when an auto-submitting code field navigates away.
+  /// Unknown when the input never resolved, so that case keeps verifying.
+  static func textEntryInputRemovedAfterDelivery(
+    deliveredTo: TextEntryInputIdentity?,
+    afterDelivery: TextEntryInputIdentity?
+  ) -> Bool {
+    guard let deliveredTo else { return false }
+    return afterDelivery != deliveredTo
   }
 
   struct TextEntryStabilization {

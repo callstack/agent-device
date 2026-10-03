@@ -153,6 +153,46 @@ extension RunnerTests {
     XCTAssertFalse(textField.exists)
   }
 
+  // An auto-submitting code field: the last digit navigates to a screen with its own input where the
+  // code field was. The fill delivered every character, so it succeeds unverified instead of
+  // recording an XCTest failure that the runner would convert into XCTEST_RECORDED_FAILURE and a
+  // session restart, and it neither verifies nor repairs into the next screen's input.
+  @MainActor
+  func testFillSucceedsWhenAppRemovesInputAfterLastCharacter() throws {
+    let textField = try launchRemovableInputFixture("--agent-device-text-entry-auto-submit")
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-auto-submit", text: "123456", at: textField)
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertFalse(textField.exists)
+    let nextScreenField = app.textFields["agent-device-auto-submit-next-screen-input"]
+    XCTAssertTrue(nextScreenField.exists)
+    XCTAssertEqual(editableTextValue(for: nextScreenField, treatingPlaceholderAsEmpty: true), "")
+  }
+
+  // The closest negative: the input is removed after the first character, so the rest was never
+  // delivered. That stays a typed failure, still without an XCTest failure.
+  @MainActor
+  func testFillFailsWhenAppRemovesInputBeforeTextIsDelivered() throws {
+    let textField = try launchRemovableInputFixture("--agent-device-text-entry-disappear-after-input")
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-disappearing-input", text: "123456", at: textField)
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "TEXT_INPUT_NOT_FOCUSED")
+    XCTAssertFalse(textField.exists)
+  }
+
   // Text past the delivery budget cannot be paced into a field the runner cannot resolve, so it goes
   // through application-wide typing. The budget is charged the whole command, warmup split included:
   // an append peels its first character for warmup, so a per-dispatch charge would find both of its
@@ -239,6 +279,33 @@ extension RunnerTests {
     XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
     XCTAssertFalse(textField.frame.isEmpty)
     return textField
+  }
+
+  /// Launches the soft-keyboard text-entry fixture with `removalArgument` choosing when the app
+  /// removes its input, and returns that input.
+  private func launchRemovableInputFixture(_ removalArgument: String) throws -> XCUIElement {
+    app.launchArguments = [
+      "--agent-device-text-entry-regression",
+      "--agent-device-text-entry-soft-keyboard",
+      removalArgument,
+    ]
+    app.launch()
+    addTeardownBlock { [self] in
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    let textField = app.textFields["agent-device-hardware-keyboard-input"]
+    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
+    return textField
+  }
+
+  /// The `type` command the daemon sends for `fill`: replace mode, addressed by the input's center.
+  private func fillCommandFixture(commandId: String, text: String, at element: XCUIElement) throws -> Command {
+    let frame = element.frame
+    return try runnerCommandFixture(
+      #"{"command":"type","commandId":"\#(commandId)","text":"\#(text)","textEntryMode":"replace","x":\#(frame.midX),"y":\#(frame.midY)}"#
+    )
   }
 
   @MainActor
