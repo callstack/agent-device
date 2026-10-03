@@ -8,6 +8,10 @@ is unsupported.
 ## Rules at a glance
 
 - Publication, reclaim and release hold the same non-expiring mutation guard.
+- The guard covers only filesystem compare-and-mutate steps. Owner liveness is judged before
+  the guard is taken; under it, a reclaim only confirms that the record it judged is unchanged.
+- Release waits a bounded time for a held guard. Only a guard still held after that bound makes
+  the release unverified.
 - A claim identifies an acquisition; a PID alone cannot authorize release.
 - Unknown owners and abandoned guards remain retained. Age never proves abandonment.
 - Before upgrading, stop every legacy process using the shared state or cache paths. Keep

@@ -4,11 +4,24 @@ import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 
-const { zombiePids } = vi.hoisted(() => ({ zombiePids: new Set<number>() }));
+const { zombiePids, processProbe } = vi.hoisted(() => ({
+  zombiePids: new Set<number>(),
+  processProbe: { observe: undefined as (() => void) | undefined },
+}));
 
 vi.mock('./host-process.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./host-process.ts')>();
-  return { ...actual, isProcessZombie: (pid: number) => zombiePids.has(pid) };
+  return {
+    ...actual,
+    isProcessZombie: (pid: number) => {
+      processProbe.observe?.();
+      return zombiePids.has(pid);
+    },
+    readProcessStartTime: (pid: number) => {
+      processProbe.observe?.();
+      return actual.readProcessStartTime(pid);
+    },
+  };
 });
 
 import {
@@ -31,6 +44,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  processProbe.observe = undefined;
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -982,4 +996,54 @@ test('incomplete release preserves owner evidence and can be retried', async () 
   const retry = tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
   assert.equal(retry.status, 'acquired');
   if (retry.status === 'acquired') await retry.acquisition.release();
+});
+
+test('release waits for a guard another process holds for a filesystem step', async () => {
+  const lockDirPath = path.join(tmpDir, 'contended-release.lock');
+  const mutexPath = path.join(tmpDir, 'contended-release.reclaim.lock');
+  const acquisition = await acquireProcessLockAcquisition({
+    lockDirPath,
+    owner: currentProcessOwner(),
+    timeoutMs: 0,
+  });
+  fs.writeFileSync(mutexPath, '');
+  const guardReleased = setTimeout(() => fs.unlinkSync(mutexPath), 50);
+  try {
+    await acquisition.release();
+  } finally {
+    clearTimeout(guardReleased);
+  }
+
+  assert.equal(fs.existsSync(lockDirPath), false);
+  const next = tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
+  assert.equal(next.status, 'acquired');
+  if (next.status === 'acquired') await next.acquisition.release();
+});
+
+test('a contender judges a live owner without holding the guard', async () => {
+  const lockDirPath = path.join(tmpDir, 'probed-outside-guard.lock');
+  const mutexPath = path.join(tmpDir, 'probed-outside-guard.reclaim.lock');
+  fs.mkdirSync(lockDirPath);
+  fs.writeFileSync(
+    path.join(lockDirPath, 'owner.json'),
+    JSON.stringify({
+      pid: process.ppid,
+      startTime: null,
+      acquiredAtMs: Date.now(),
+      claimToken: 'live-rival',
+    }),
+  );
+  let probes = 0;
+  let probesUnderGuard = 0;
+  processProbe.observe = () => {
+    probes += 1;
+    if (fs.existsSync(mutexPath)) probesUnderGuard += 1;
+  };
+
+  const attempt = tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
+
+  assert.equal(attempt.status, 'busy');
+  assert.ok(probes > 0, 'the live owner was never probed');
+  assert.equal(probesUnderGuard, 0);
+  assert.equal(fs.existsSync(mutexPath), false);
 });

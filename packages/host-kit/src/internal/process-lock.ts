@@ -16,6 +16,8 @@ const DEFAULT_LOCK_TIMEOUT_MS = 30_000;
 const DEFAULT_LOCK_POLL_MS = 100;
 const LOCK_DIRECTORY_SUFFIX = '.lock';
 const RECLAIM_MUTEX_SUFFIX = '.reclaim';
+const RELEASE_GUARD_WAIT_MS = 5_000;
+const RELEASE_GUARD_POLL_MS = 5;
 
 export type ProcessLockOwner = {
   pid: number;
@@ -138,70 +140,169 @@ export function inspectProcessLock(lockDirPath: string): ProcessLockInspection {
  * See docs/adr/0030-process-lock-exclusion.md for the migration contract.
  */
 export function tryAcquireProcessLock(params: ProcessLockOptions): ProcessLockAttempt {
-  const { lockDirPath, owner } = params;
-  const ownerFilePath = path.join(lockDirPath, OWNER_FILE_NAME);
+  const { lockDirPath } = params;
   fs.mkdirSync(path.dirname(lockDirPath), { recursive: true });
+  const judgment = judgeStandingClaim(path.join(lockDirPath, OWNER_FILE_NAME));
+  if (judgment.kind === 'live') return { status: 'busy', inspection: judgment.inspection };
   if (!holdReclaimMutex(lockDirPath)) {
     return { status: 'busy', inspection: inspectProcessLock(lockDirPath) };
   }
-  let claimToken: string | undefined;
-  let created = false;
-  let failed = false;
-  let primaryError: unknown;
-  let result: ProcessLockAttempt;
+  const outcome = withMutationGuardHeld(
+    lockDirPath,
+    () => acquireUnderMutationGuard(params, judgment),
+    (abandoned) => {
+      if (abandoned.status === 'acquired') liveClaimTokens.delete(abandoned.claimToken);
+    },
+  );
+  if (outcome.status === 'acquired') {
+    return { status: 'acquired', acquisition: outcome.acquisition };
+  }
+  return {
+    status: outcome.status,
+    inspection: outcome.inspection ?? inspectProcessLock(lockDirPath),
+  };
+}
+
+/** Runs `step` while this process holds the guard, then gives the guard back on every path. */
+function withMutationGuardHeld<Result>(
+  lockDirPath: string,
+  step: () => Result,
+  abandon: (result: Result) => void,
+): Result {
+  let result: Result;
   try {
-    result = acquireUnderMutationGuard();
+    result = step();
   } catch (error) {
-    failed = true;
-    primaryError = error;
-    if (claimToken) liveClaimTokens.delete(claimToken);
-    if (created) {
-      try {
-        fs.rmdirSync(lockDirPath);
-      } catch {}
+    try {
+      releaseReclaimMutex(lockDirPath);
+    } catch (releaseError) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'process_lock_guard_release_failed',
+        data: { lockDirPath, error: String(releaseError) },
+      });
     }
+    throw error;
   }
   try {
     releaseReclaimMutex(lockDirPath);
   } catch (error) {
-    if (claimToken) liveClaimTokens.delete(claimToken);
-    if (!failed) throw error;
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'process_lock_guard_release_failed',
-      data: { lockDirPath, error: String(error) },
-    });
+    abandon(result);
+    throw error;
   }
-  if (failed) throw primaryError;
-  return result!;
+  return result;
+}
 
-  function acquireUnderMutationGuard(): ProcessLockAttempt {
-    if (fs.existsSync(lockDirPath)) {
-      const inspection = inspectProcessLock(lockDirPath);
-      const reading = readProcessLockOwner(ownerFilePath);
-      if (inspection.state !== 'held' || reading.kind !== 'owner') {
-        return { status: 'unproven', inspection };
-      }
-      if (isLiveProcessLockOwner(reading.owner) && !isSpentOwnClaim(reading.owner)) {
-        return { status: 'busy', inspection };
-      }
-      if (releaseProcessLock(lockDirPath, ownerFilePath, reading.owner) !== 'removed') {
-        return { status: 'unproven', inspection };
-      }
-    }
-    try {
-      fs.mkdirSync(lockDirPath);
-      created = true;
-    } catch (error) {
-      if (errorCode(error) !== 'EEXIST') throw error;
-      return { status: 'unproven', inspection: inspectProcessLock(lockDirPath) };
-    }
-    claimToken = crypto.randomUUID();
-    const claim: ProcessLockOwnerRecord = { ...owner, claimToken, claimIssuerId: CLAIM_ISSUER_ID };
-    writeProcessLockOwner(ownerFilePath, claim);
-    liveClaimTokens.add(claimToken);
-    return { status: 'acquired', acquisition: createProcessLockAcquisition(params, claim) };
+// Only filesystem compare-and-mutate steps run here. A process probe holding the guard would turn
+// a waiter killed mid-probe into a guard nobody removes.
+function acquireUnderMutationGuard(
+  params: ProcessLockOptions,
+  judgment: StandingClaimJudgment,
+): GuardedAcquisitionOutcome {
+  const { lockDirPath } = params;
+  const ownerFilePath = path.join(lockDirPath, OWNER_FILE_NAME);
+  const standing = readLockDirectory(lockDirPath, ownerFilePath);
+  if (standing.kind === 'unproven') {
+    return { status: 'unproven', inspection: standing.inspection };
   }
+  if (standing.kind === 'owner') {
+    if (judgment.kind !== 'reclaimable' || !isSameClaim(standing.owner, judgment.owner)) {
+      return { status: 'busy' };
+    }
+    if (releaseProcessLock(lockDirPath, ownerFilePath, standing.owner) !== 'removed') {
+      return { status: 'unproven' };
+    }
+  }
+  return publishClaim(params, ownerFilePath);
+}
+
+function publishClaim(
+  params: ProcessLockOptions,
+  ownerFilePath: string,
+): GuardedAcquisitionOutcome {
+  const { lockDirPath, owner } = params;
+  try {
+    fs.mkdirSync(lockDirPath);
+  } catch (error) {
+    if (errorCode(error) !== 'EEXIST') throw error;
+    return { status: 'unproven' };
+  }
+  const claimToken = crypto.randomUUID();
+  const claim: ProcessLockOwnerRecord = { ...owner, claimToken, claimIssuerId: CLAIM_ISSUER_ID };
+  try {
+    writeProcessLockOwner(ownerFilePath, claim);
+  } catch (error) {
+    try {
+      fs.rmdirSync(lockDirPath);
+    } catch {}
+    throw error;
+  }
+  liveClaimTokens.add(claimToken);
+  return {
+    status: 'acquired',
+    claimToken,
+    acquisition: createProcessLockAcquisition(params, claim),
+  };
+}
+
+type GuardedAcquisitionOutcome =
+  | Readonly<{ status: 'acquired'; claimToken: string; acquisition: ProcessLockAcquisition }>
+  | Readonly<{ status: 'busy' | 'unproven'; inspection?: ProcessLockInspection }>;
+
+type StandingClaimJudgment =
+  | Readonly<{ kind: 'live'; inspection: ProcessLockInspection }>
+  | Readonly<{ kind: 'reclaimable'; owner: ProcessLockOwnerRecord }>
+  | Readonly<{ kind: 'none' }>;
+
+/**
+ * Judges liveness before the guard is taken. The guard then only confirms that the record it
+ * would remove is still the one judged here.
+ */
+function judgeStandingClaim(ownerFilePath: string): StandingClaimJudgment {
+  const reading = readProcessLockOwner(ownerFilePath);
+  if (reading.kind !== 'owner') return { kind: 'none' };
+  const liveness = classifyOwnerLiveness({ owner: reading.owner });
+  if (isLiveOwnerLiveness(liveness) && !isSpentOwnClaim(reading.owner)) {
+    const { pid, startTime, acquiredAtMs } = reading.owner;
+    return {
+      kind: 'live',
+      inspection: { state: 'held', owner: { pid, startTime, acquiredAtMs }, liveness },
+    };
+  }
+  return { kind: 'reclaimable', owner: reading.owner };
+}
+
+type LockDirectoryReading =
+  | Readonly<{ kind: 'absent' }>
+  | Readonly<{ kind: 'owner'; owner: ProcessLockOwnerRecord }>
+  | Readonly<{ kind: 'unproven'; inspection: ProcessLockInspection }>;
+
+/** Reads the lock path under the guard, where an unwritten record has no publisher to wait for. */
+function readLockDirectory(lockDirPath: string, ownerFilePath: string): LockDirectoryReading {
+  let stats: fs.Stats;
+  try {
+    stats = fs.lstatSync(lockDirPath);
+  } catch (error) {
+    if (errorCode(error) === 'ENOENT') return { kind: 'absent' };
+    return { kind: 'unproven', inspection: { state: 'unproven', reason: 'owner-unreadable' } };
+  }
+  if (!stats.isDirectory()) {
+    return { kind: 'unproven', inspection: { state: 'unproven', reason: 'non-directory' } };
+  }
+  const reading = readProcessLockOwner(ownerFilePath);
+  if (reading.kind === 'owner') return { kind: 'owner', owner: reading.owner };
+  const reason = reading.kind === 'unwritten' ? 'owner-unwritten' : 'owner-unreadable';
+  return { kind: 'unproven', inspection: { state: 'unproven', reason } };
+}
+
+function isSameClaim(left: ProcessLockOwnerRecord, right: ProcessLockOwnerRecord): boolean {
+  return (
+    left.pid === right.pid &&
+    left.startTime === right.startTime &&
+    left.acquiredAtMs === right.acquiredAtMs &&
+    left.claimToken === right.claimToken &&
+    left.claimIssuerId === right.claimIssuerId
+  );
 }
 
 export async function acquireProcessLock(
@@ -263,7 +364,7 @@ function createProcessLockAcquisition(
         return;
       }
       let outcome: 'removed' | 'not-owner' | 'unverified' = 'unverified';
-      if (holdReclaimMutex(lockDirPath)) {
+      if (await waitForReclaimMutex(lockDirPath)) {
         try {
           outcome = releaseProcessLock(lockDirPath, ownerFilePath, claim);
         } finally {
@@ -389,6 +490,19 @@ function holdReclaimMutex(lockDirPath: string): boolean {
   return true;
 }
 
+/**
+ * A held guard is a short filesystem step in progress, not evidence that ownership was lost, so a
+ * release waits for it. Only a guard still held after the bound counts as unverified.
+ */
+async function waitForReclaimMutex(lockDirPath: string): Promise<boolean> {
+  const deadline = Date.now() + RELEASE_GUARD_WAIT_MS;
+  while (!holdReclaimMutex(lockDirPath)) {
+    if (Date.now() >= deadline) return false;
+    await sleep(RELEASE_GUARD_POLL_MS);
+  }
+  return true;
+}
+
 function releaseReclaimMutex(lockDirPath: string): void {
   fs.unlinkSync(reclaimMutexPath(lockDirPath));
 }
@@ -468,8 +582,7 @@ function readProcessLockDiagnostics(
   };
 }
 
-function isLiveProcessLockOwner(owner: ProcessLockOwner): boolean {
-  const liveness = classifyOwnerLiveness({ owner });
+function isLiveOwnerLiveness(liveness: OwnerLiveness): boolean {
   return liveness !== 'owner-process-dead' && liveness !== 'owner-process-reused';
 }
 
