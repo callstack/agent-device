@@ -213,7 +213,7 @@ function detectWindowsAdb(versionOutput: string): WindowsAdbReport | undefined {
 }
 
 /**
- * A Windows adb.exe reached from a POSIX host (WSL interop, Wine, a mounted volume) answers
+ * A Windows adb.exe reached from a POSIX host through WSL interop or Wine answers
  * `adb version`, but it resolves every host path it is handed as a Windows path, so pulls, pushes,
  * and installs miss the host's files. Older and third-party adb builds omit the `Installed as`
  * banner, so the `Running on Windows` line is the fallback signal for them.
