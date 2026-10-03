@@ -122,6 +122,12 @@ struct AgentDeviceMacOSHelper {
       return try handleRead(arguments: Array(arguments.dropFirst()))
     case "press":
       return try handlePress(arguments: Array(arguments.dropFirst()))
+    case "type":
+      return try handleType(arguments: Array(arguments.dropFirst()))
+    case "fill":
+      return try handleFill(arguments: Array(arguments.dropFirst()))
+    case "scroll":
+      return try handleScroll(arguments: Array(arguments.dropFirst()))
     case "screenshot":
       return try handleScreenshot(arguments: Array(arguments.dropFirst()))
     case "audio-probe":
@@ -343,18 +349,16 @@ struct AgentDeviceMacOSHelper {
       .lowercased(),
       !surface.isEmpty
     else {
-      throw HelperError.invalidArgs("snapshot requires --surface <frontmost-app|desktop|menubar>")
+      throw HelperError.invalidArgs("snapshot requires --surface <app|frontmost-app|desktop|menubar>")
     }
 
     let bundleId = try optionValue(arguments: arguments, name: "--bundle-id").map(validatedBundleId)
 
     switch surface {
-    case "frontmost-app":
-      return SuccessEnvelope(data: try captureSnapshotResponse(surface: surface, bundleId: bundleId))
-    case "desktop", "menubar":
+    case "app", "frontmost-app", "desktop", "menubar":
       return SuccessEnvelope(data: try captureSnapshotResponse(surface: surface, bundleId: bundleId))
     default:
-      throw HelperError.invalidArgs("snapshot requires --surface <frontmost-app|desktop|menubar>")
+      throw HelperError.invalidArgs("snapshot requires --surface <app|frontmost-app|desktop|menubar>")
     }
   }
 
@@ -376,25 +380,25 @@ struct AgentDeviceMacOSHelper {
   static func handlePress(arguments: [String]) throws -> any Encodable {
     guard let rawX = optionValue(arguments: arguments, name: "--x"),
           let rawY = optionValue(arguments: arguments, name: "--y"),
-          let x = Double(rawX),
-          let y = Double(rawY)
+          let x = Double(rawX), x.isFinite,
+          let y = Double(rawY), y.isFinite
     else {
       throw HelperError.invalidArgs("press requires --x <number> --y <number>")
     }
 
-    let holdMs = try validatedPressInt(
+    let holdMs = try validatedIntOption(
       optionValue(arguments: arguments, name: "--hold-ms"),
       name: "--hold-ms",
       minimum: 0,
       default: 0
     )
-    let clicks = try validatedPressInt(
+    let clicks = try validatedIntOption(
       optionValue(arguments: arguments, name: "--clicks"),
       name: "--clicks",
       minimum: 1,
       default: 1
     )
-    let intervalMs = try validatedPressInt(
+    let intervalMs = try validatedIntOption(
       optionValue(arguments: arguments, name: "--interval-ms"),
       name: "--interval-ms",
       minimum: 0,
@@ -412,6 +416,12 @@ struct AgentDeviceMacOSHelper {
       doubleClick: doubleClick,
       intervalMs: intervalMs
     )
+    if surface == "app" {
+      let app = try requireSessionApplication(bundleId: bundleId)
+      return SuccessEnvelope(
+        data: try pressInBackground(request, app: app)
+      )
+    }
     try pressAtPosition(request)
     return SuccessEnvelope(
       data: PressResponse(
@@ -426,6 +436,63 @@ struct AgentDeviceMacOSHelper {
     )
   }
 
+  static func handleType(arguments: [String]) throws -> any Encodable {
+    guard let text = optionValue(arguments: arguments, name: "--text") else {
+      throw HelperError.invalidArgs("type requires --text <text>")
+    }
+    let delayMs = try validatedIntOption(
+      optionValue(arguments: arguments, name: "--delay-ms"),
+      name: "--delay-ms",
+      minimum: 0,
+      default: 0
+    )
+    let app = try requireSessionApplication(
+      bundleId: try optionValue(arguments: arguments, name: "--bundle-id").map(validatedBundleId)
+    )
+    return SuccessEnvelope(
+      data: try typeInBackground(text: text, delayMs: delayMs, app: app)
+    )
+  }
+
+  static func handleFill(arguments: [String]) throws -> any Encodable {
+    guard let rawX = optionValue(arguments: arguments, name: "--x"),
+          let rawY = optionValue(arguments: arguments, name: "--y"),
+          let x = Double(rawX), x.isFinite,
+          let y = Double(rawY), y.isFinite,
+          let text = optionValue(arguments: arguments, name: "--text")
+    else {
+      throw HelperError.invalidArgs("fill requires --x <number> --y <number> --text <text>")
+    }
+    let app = try requireSessionApplication(
+      bundleId: try optionValue(arguments: arguments, name: "--bundle-id").map(validatedBundleId)
+    )
+    return SuccessEnvelope(
+      data: try fillInBackground(point: CGPoint(x: x, y: y), text: text, app: app)
+    )
+  }
+
+  static func handleScroll(arguments: [String]) throws -> any Encodable {
+    guard let direction = optionValue(arguments: arguments, name: "--direction") else {
+      throw HelperError.invalidArgs("scroll requires --direction <up|down|left|right>")
+    }
+    let amount = try positiveDoubleOption(arguments: arguments, name: "--amount")
+    let pixels = try positiveDoubleOption(arguments: arguments, name: "--pixels")
+    if amount != nil, pixels != nil {
+      throw HelperError.invalidArgs("scroll accepts --amount or --pixels, not both")
+    }
+    let app = try requireSessionApplication(
+      bundleId: try optionValue(arguments: arguments, name: "--bundle-id").map(validatedBundleId)
+    )
+    return SuccessEnvelope(
+      data: try scrollInBackground(
+        direction: direction,
+        amount: amount,
+        pixels: pixels,
+        app: app
+      )
+    )
+  }
+
   static func handleScreenshot(arguments: [String]) throws -> any Encodable {
     guard let outPath = optionValue(arguments: arguments, name: "--out")?
       .trimmingCharacters(in: .whitespacesAndNewlines),
@@ -435,6 +502,13 @@ struct AgentDeviceMacOSHelper {
     }
 
     let surface = optionValue(arguments: arguments, name: "--surface")
+    if surface == "app" {
+      let app = try requireSessionApplication(
+        bundleId: try optionValue(arguments: arguments, name: "--bundle-id").map(validatedBundleId)
+      )
+      try captureAppWindowScreenshot(app: app, outPath: outPath)
+      return SuccessEnvelope(data: ScreenshotResponse(path: outPath, surface: surface))
+    }
     try captureSurfaceScreenshot(surface: surface, outPath: outPath)
     return SuccessEnvelope(data: ScreenshotResponse(path: outPath, surface: surface))
   }
@@ -468,6 +542,14 @@ private func optionValue(arguments: [String], name: String) -> String? {
   return arguments[index + 1]
 }
 
+private func positiveDoubleOption(arguments: [String], name: String) throws -> Double? {
+  guard let raw = optionValue(arguments: arguments, name: name) else { return nil }
+  guard let value = Double(raw), value.isFinite, value > 0 else {
+    throw HelperError.invalidArgs("\(name) must be a positive number")
+  }
+  return value
+}
+
 private func intOption(arguments: [String], name: String) -> Int? {
   guard let value = optionValue(arguments: arguments, name: name) else {
     return nil
@@ -475,7 +557,7 @@ private func intOption(arguments: [String], name: String) -> Int? {
   return Int(value)
 }
 
-private func validatedPressInt(
+private func validatedIntOption(
   _ raw: String?,
   name: String,
   minimum: Int,
@@ -485,22 +567,30 @@ private func validatedPressInt(
     return fallback
   }
   guard let value = Int(raw), value >= minimum else {
-    throw HelperError.invalidArgs("press \(name) must be an integer of at least \(minimum)")
+    throw HelperError.invalidArgs("\(name) must be an integer of at least \(minimum)")
   }
   return value
 }
 
 private func readTextAtPosition(bundleId: String?, surface: String?, x: Double, y: Double) throws -> String {
   let targetApp: NSRunningApplication?
-  if surface == "frontmost-app" || (surface == nil && bundleId != nil) {
+  if surface == "app" {
+    targetApp = try requireSessionApplication(bundleId: bundleId)
+  } else if surface == "frontmost-app" || (surface == nil && bundleId != nil) {
     targetApp = try resolveTargetApplication(bundleId: bundleId, surface: surface)
   } else {
     targetApp = nil
   }
 
-  let systemWide = AXUIElementCreateSystemWide()
+  // An app session's window may sit behind other apps, so it is hit-tested on its own.
+  let hitRoot =
+    if surface == "app", let targetApp {
+      AXUIElementCreateApplication(targetApp.processIdentifier)
+    } else {
+      AXUIElementCreateSystemWide()
+    }
   var hitElement: AXUIElement?
-  guard AXUIElementCopyElementAtPosition(systemWide, Float(x), Float(y), &hitElement) == .success,
+  guard AXUIElementCopyElementAtPosition(hitRoot, Float(x), Float(y), &hitElement) == .success,
         let hitElement
   else {
     throw HelperError.commandFailed("read did not resolve an accessibility element")
@@ -567,18 +657,25 @@ private func captureSurfaceScreenshot(surface: String?, outPath: String) throws 
   semaphore.wait()
 
   if let error = capturedError as NSError? {
-    if error.domain == "com.apple.ScreenCaptureKit.SCStreamErrorDomain", error.code == -3801 {
-      throw HelperError.commandFailed(
-        "screenshot requires Screen Recording permission on macOS desktop and menubar surfaces",
-        details: ["surface": surface ?? "", "permission": "screen-recording"]
-      )
-    }
-    throw HelperError.commandFailed("screenshot failed", details: ["error": error.localizedDescription])
+    throw screenshotFailure(error, surface: surface)
   }
   guard let capturedImage else {
     throw HelperError.commandFailed("screenshot failed")
   }
+  try writePNG(capturedImage, to: outPath)
+}
 
+func screenshotFailure(_ error: NSError, surface: String?) -> HelperError {
+  if error.domain == "com.apple.ScreenCaptureKit.SCStreamErrorDomain", error.code == -3801 {
+    return HelperError.commandFailed(
+      "screenshot requires Screen Recording permission on the macOS \(surface ?? "desktop") surface",
+      details: ["surface": surface ?? "", "permission": "screen-recording"]
+    )
+  }
+  return HelperError.commandFailed("screenshot failed", details: ["error": error.localizedDescription])
+}
+
+func writePNG(_ capturedImage: CGImage, to outPath: String) throws {
   let outputURL = URL(fileURLWithPath: outPath)
   if let parent = outputURL.deletingLastPathComponent().path.removingPercentEncoding, !parent.isEmpty {
     try FileManager.default.createDirectory(atPath: parent, withIntermediateDirectories: true)
