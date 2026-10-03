@@ -1,0 +1,18 @@
+{
+  "description": "Vocabulary the macOS helper reports for app-surface actions. Swift: BackgroundRefusal and BackgroundDeliveryMechanism in apple/macos-helper. TypeScript: the macOS helper client in packages/platform-apple/src/os/macos/helper.ts.",
+  "refusalReasons": [
+    "background-pointer-gesture",
+    "no-accessible-target",
+    "no-settable-text-input",
+    "no-scroll-bar"
+  ],
+  "deliveryMechanisms": [
+    "ax-press",
+    "ax-focus",
+    "ax-value",
+    "ax-selected-text",
+    "ax-confirm",
+    "ax-scroll-bar",
+    "key-events"
+  ]
+}
