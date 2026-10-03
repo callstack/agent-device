@@ -435,3 +435,40 @@ test('a refused timeout fallback preserves the timeout without an unhandled reje
     await closeLoopbackServer(daemon.server);
   }
 });
+
+test('request-timeout route: the reset acts on the resolved state paths, not the request flags', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  // Path resolution happens upstream of `sendRequest`, which receives the state paths the caller
+  // resolved. The reset must clear THAT registration and leave every other state dir alone — even
+  // one a request flag names, which this route never reads. (Moved from daemon-client-lifecycle
+  // coverage, where the timeout route lived before #3177 scoped it.)
+  const daemon = await startStandIn('http', 'refuse');
+  const resolvedPaths = dummyStatePaths();
+  const requestFlagPaths = dummyStatePaths();
+  seedRegistration(resolvedPaths, { pid: process.pid, startTime: TEST_DAEMON_START_TIME });
+  seedRegistration(requestFlagPaths, { pid: REPLACEMENT_DAEMON_PID, startTime: 'other-owner' });
+  try {
+    await expectRouteError(
+      sendRequest(
+        {
+          httpPort: daemon.port,
+          token: 'test-token',
+          pid: process.pid,
+          processStartTime: TEST_DAEMON_START_TIME,
+        },
+        {
+          ...buildRequest(RESET_POLICY_COMMAND, undefined),
+          flags: { stateDir: requestFlagPaths.baseDir },
+        },
+        'http',
+        resolvedPaths,
+        TIMEOUT_MS,
+      ),
+      /The daemon did not answer the liveness probe and was reset after the timeout/,
+    );
+    assert.ok(!fs.existsSync(resolvedPaths.infoPath), 'the resolved registration is cleared');
+    assert.ok(fs.existsSync(requestFlagPaths.infoPath), 'the flag-named state dir is untouched');
+  } finally {
+    await closeLoopbackServer(daemon.server);
+  }
+});

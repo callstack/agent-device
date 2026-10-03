@@ -5,10 +5,7 @@ import type { OwnerIdentity } from '@agent-device/host-kit/process';
 import { isAgentDeviceDaemonProcess } from '../daemon-process.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
-import {
-  readRegisteredDaemonOwnership,
-  type RegisteredDaemonOwnership,
-} from '../daemon-registration.ts';
+import type { RegisteredDaemonOwnership } from '../daemon-registration.ts';
 import type { DaemonPaths } from '../daemon-resolution.ts';
 import type { PlatformSelector } from '@agent-device/kernel/device';
 import {
@@ -16,7 +13,6 @@ import {
   stopDaemonProcessForTakeover,
   type DaemonInfo,
 } from './daemon-client-metadata.ts';
-import { probeDaemonResponsive } from './daemon-client-liveness-probe.ts';
 
 // Recovery for a timed-out request is scoped to that request or to nothing. The daemon owns
 // request-scoped recovery (#3177): destroying the timed-out connection cancels exactly that
@@ -25,7 +21,9 @@ import { probeDaemonResponsive } from './daemon-client-liveness-probe.ts';
 // which sabotaged that cancel path (a swept kill reads as a host failure, not a canceled request)
 // and duplicated cleanup the daemon scopes to its own leases — plus a daemon SIGKILL that ended
 // every sibling session. The SIGKILL survives only behind the liveness probe below: the question
-// the reset used to assume.
+// the reset used to assume. That probe and the registration fence load on demand: a timed-out
+// request is their only caller, and the CLI's eager closure (the ADR 0019 loading-shape probe)
+// must not pay for a recovery path a healthy invocation never runs.
 
 export async function handleRequestTimeout(
   params: Readonly<{
@@ -52,10 +50,16 @@ export async function handleRequestTimeout(
   // transport performed when this client's connection died is the recovery that request needed,
   // and sibling sessions survive. Only a daemon answering neither endpoint in the probe window is
   // the hung daemon a reset was designed for.
-  const probeAnswered = resetEligible ? await probeDaemonResponsive(info, { session }) : undefined;
+  const probeAnswered = resetEligible
+    ? await (
+        await import('./daemon-client-liveness-probe.ts')
+      ).probeDaemonResponsive(info, {
+        session,
+      })
+    : undefined;
   const unresponsive = probeAnswered === false;
   const daemonReset = unresponsive
-    ? resetDaemonAfterTimeout(info, statePaths)
+    ? await resetDaemonAfterTimeout(info, statePaths)
     : { performedReset: false, forcedKill: false, registration: undefined };
   emitDiagnostic({
     level: 'error',
@@ -176,7 +180,7 @@ type DaemonReset = Readonly<{
 // out-of-band is the legacy-reclaimer pattern the ADR refuses. A reset therefore ends the process
 // and its own registration only; the next acquirer reclaims the dead holder's lock through the
 // protocol.
-function resetDaemonAfterTimeout(info: DaemonInfo, paths: DaemonPaths): DaemonReset {
+async function resetDaemonAfterTimeout(info: DaemonInfo, paths: DaemonPaths): Promise<DaemonReset> {
   let forcedKill = false;
   try {
     if (isAgentDeviceDaemonProcess(info.pid, info.processStartTime)) {
@@ -192,6 +196,7 @@ function resetDaemonAfterTimeout(info: DaemonInfo, paths: DaemonPaths): DaemonRe
       });
     });
   }
+  const { readRegisteredDaemonOwnership } = await import('../daemon-registration.ts');
   const owner: OwnerIdentity = {
     pid: info.pid,
     startTime: info.processStartTime ?? null,

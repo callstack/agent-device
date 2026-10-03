@@ -19,9 +19,8 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
 }));
 
 import { resolveDaemonPaths, type DaemonPaths } from '../../daemon-resolution.ts';
-import { sendToDaemon, type DaemonRequest, type DaemonResponse } from '../daemon-client.ts';
+import { sendToDaemon, type DaemonResponse } from '../daemon-client.ts';
 import { attachActiveSessionAddressHint } from '../daemon-client-lifecycle.ts';
-import { sendRequest } from '../daemon-client-transport.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
@@ -158,48 +157,6 @@ function installSpawnedHttpDaemonAtOwnedStateDir(
     });
     return { pid: process.pid, exited: new Promise(() => {}) };
   });
-}
-
-// A daemon that accepts the RPC but never answers it, and then refuses every later connection —
-// the wedged daemon #3177's reset path exists for. The client's timeout route probes `/health`
-// before deciding to reset (so a merely-slow daemon is preserved); a daemon that answers THAT too
-// would correctly be kept alive and its metadata left in place, which is the opposite of what this
-// fixture's reset-path callers assert. Refusing the probe (rather than hanging it) fails the probe
-// fast instead of spending its full window.
-async function startHangingHttpDaemonFixture(): Promise<HttpDaemonFixture> {
-  const seenPaths: string[] = [];
-  const rpcRequests: Record<string, any>[] = [];
-  let requests = 0;
-  const server = http.createServer((req, res) => {
-    const url = new URL(req.url || '/', 'http://127.0.0.1');
-    seenPaths.push(`${req.method ?? 'GET'} ${url.pathname}`);
-    requests += 1;
-
-    if (req.method === 'POST' && url.pathname === '/rpc') {
-      const chunks: Buffer[] = [];
-      req.on('data', (chunk) => {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      });
-      req.on('end', () => {
-        rpcRequests.push(JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, any>);
-      });
-      // Never respond: the client's own envelope is the only completion path.
-      return;
-    }
-
-    // The liveness probe's fresh request after the RPC timed out: refuse it, so the route sees an
-    // unresponsive daemon and takes its reset branch.
-    if (requests > 1) {
-      res.destroy();
-      return;
-    }
-
-    res.writeHead(404);
-    res.end('not found');
-  });
-  server.on('clientError', (_err, socket) => socket.destroy());
-  const port = await listenOnLoopback(server);
-  return { server, port, seenPaths, rpcRequests };
 }
 
 function installSpawnedHttpDaemon(paths: DaemonPaths, httpPort: number): void {
@@ -599,82 +556,6 @@ test('sendToDaemon replaces socket-only daemon metadata when HTTP transport is r
     stderrCapture.restore();
     await closeLoopbackServer(freshDaemon.server);
     fs.rmSync(stateDir, { recursive: true, force: true });
-  }
-});
-
-test('sendRequest timeout cleanup uses resolved daemon paths instead of request flags', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
-
-  const daemonStateDir = makeTempStateDir('agent-device-daemon-timeout-active-');
-  const requestFlagStateDir = makeTempStateDir('agent-device-daemon-timeout-request-');
-  const daemonPaths = resolveDaemonPaths(daemonStateDir);
-  const requestFlagPaths = resolveDaemonPaths(requestFlagStateDir);
-  const daemon = await startHangingHttpDaemonFixture();
-  // The cleanup fence only clears a registration that still MATCHES the timed-out daemon on pid
-  // and start time (#3125), so this fixture names one identity on both sides: the record it
-  // publishes and the info `sendRequest` times out on.
-  const timedOutDaemonStartTime = 'timeout-daemon-start';
-  writeDaemonInfo(daemonPaths, {
-    httpPort: daemon.port,
-    transport: 'http',
-    pid: 999_999,
-    processStartTime: timedOutDaemonStartTime,
-  });
-  writeDaemonLock(daemonPaths, { pid: 999_999 });
-  writeDaemonInfo(requestFlagPaths, {
-    httpPort: daemon.port,
-    transport: 'http',
-    pid: 999_998,
-  });
-  writeDaemonLock(requestFlagPaths, { pid: 999_998 });
-
-  const request: DaemonRequest = {
-    session: 'default',
-    command: 'replay',
-    positionals: [],
-    flags: { stateDir: requestFlagStateDir, daemonTransport: 'http' },
-    token: 'local-secret',
-    meta: { requestId: 'req-timeout-paths' },
-  };
-
-  try {
-    let thrown: unknown;
-    try {
-      await sendRequest(
-        {
-          token: 'local-secret',
-          pid: 999_999,
-          httpPort: daemon.port,
-          transport: 'http',
-          processStartTime: timedOutDaemonStartTime,
-        },
-        request,
-        'http',
-        daemonPaths,
-        50,
-      );
-    } catch (error) {
-      thrown = error;
-    }
-
-    assert.ok(thrown instanceof AppError);
-    assert.equal(thrown.message, 'Daemon request timed out');
-    // The RPC first, then the liveness probe the timeout route asks before it is allowed to
-    // reset. The fixture refused that probe, which is what authorized the reset below.
-    assert.deepEqual(daemon.seenPaths, ['POST /rpc', 'GET /health']);
-    assert.equal(fs.existsSync(daemonPaths.infoPath), false);
-    // The reset owns its registration, not the protocol lock: reclaim belongs to the acquirer
-    // under ADR 0030's mutation guard, so neither state dir's lock is ever swept.
-    assert.equal(fs.existsSync(daemonPaths.lockPath), true);
-    assert.equal(fs.existsSync(requestFlagPaths.infoPath), true);
-    assert.equal(fs.existsSync(requestFlagPaths.lockPath), true);
-  } finally {
-    await closeLoopbackServer(daemon.server);
-    fs.rmSync(daemonStateDir, { recursive: true, force: true });
-    fs.rmSync(requestFlagStateDir, { recursive: true, force: true });
   }
 });
 
