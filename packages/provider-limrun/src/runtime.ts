@@ -18,16 +18,23 @@ import {
   cleanupLimrunAndroidAdbTunnel,
   configureLimrunAndroidPortReverse,
   createLimrunAndroidInteractor,
+  createLimrunAndroidSession,
   installLimrunAndroidApp,
   type LimrunAndroidSession,
 } from './android.ts';
 import {
+  buildLimrunDevice,
   LIMRUN_PROVIDER,
   parseLimrunDeviceId,
   platformForLimrunLeaseBackend,
   type LimrunPlatform,
 } from './device.ts';
-import { createLimrunIosInteractor, installLimrunIosApp, type LimrunIosSession } from './ios.ts';
+import {
+  createLimrunIosInteractor,
+  createLimrunIosSession,
+  installLimrunIosApp,
+  type LimrunIosSession,
+} from './ios.ts';
 import { createLimrunDeviceSession, type LimrunDeviceSession } from './device-session.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 import type {
@@ -42,7 +49,11 @@ import { buildLimrunClientOptions, LIMRUN_CLIENT_HEADER } from './client-options
 import { resolveLimrunRuntimeInstance } from './runtime-instance.ts';
 import type { LimrunRequestOperationDrain } from './request-cancellation.ts';
 import type { LimrunAppAsset } from './app-catalog.ts';
-import { isAttachedLimrunInstanceId, type LimrunInstanceAccess } from './instance-access.ts';
+import {
+  attachedLimrunInstanceId,
+  isAttachedLimrunInstanceId,
+  type LimrunInstanceAccess,
+} from './instance-access.ts';
 
 type LimrunRuntimeSession = LimrunIosSession | LimrunAndroidSession;
 
@@ -255,12 +266,22 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     lease: DeviceLease,
   ): Promise<LimrunRuntimeSession | undefined> {
     const { ios, android } = this.options.instances ?? {};
-    const { attachLimrunAndroidSession, attachLimrunIosSession } =
-      await import('./session-allocation.ts');
-    if (platform === 'ios') {
-      return ios && (await attachLimrunIosSession(lease, ios, this.dependencies));
+    const target = (apiUrl: string) => {
+      const instanceId = attachedLimrunInstanceId(apiUrl);
+      return { lease, instanceId, device: buildLimrunDevice(platform, lease, instanceId) };
+    };
+    if (platform === 'android') {
+      return (
+        android &&
+        (await createLimrunAndroidSession(
+          { ...target(android.apiUrl), ...android },
+          this.dependencies,
+        ))
+      );
     }
-    return android && (await attachLimrunAndroidSession(lease, android, this.dependencies));
+    return (
+      ios && (await createLimrunIosSession({ ...target(ios.apiUrl), ...ios }, this.dependencies))
+    );
   }
 
   private async createSession(

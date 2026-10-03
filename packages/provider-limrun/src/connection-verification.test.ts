@@ -104,39 +104,33 @@ test('Limrun verification connects to an attached instance instead of the contro
   assert.equal(mockState.androidList.mock.calls.length, 0);
 });
 
-test('Limrun verification reports a rejected instance token with the variables to check', async () => {
-  instanceClients.createIos.mockRejectedValueOnce(new Error('Unexpected server response: 401'));
-
-  await assert.rejects(
-    verifyLimrunConnection({
-      instances: { ios: { apiUrl: 'https://attached.example/api', token: 'lim_st_secret' } },
-      clientVersion: '1.2.3',
+test('Limrun verification names the variables to check when an instance rejects access', async () => {
+  const cases = [
+    {
       platform: 'ios',
-    }),
-    (error: unknown) => {
-      assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
-      assert.match(JSON.stringify(error), /LIM_IOS_INSTANCE_URL and LIM_IOS_INSTANCE_TOKEN,/);
-      assert.doesNotMatch(JSON.stringify(error), /lim_st_secret/);
-      return true;
+      instances: { ios: { apiUrl: 'https://attached/api', token: 'lim_st_secret' } },
+      create: instanceClients.createIos,
+      variables: /LIM_IOS_INSTANCE_URL and LIM_IOS_INSTANCE_TOKEN,/,
     },
-  );
-});
-
-test('Limrun Android verification failure names the ADB URL variable too', async () => {
-  instanceClients.createAndroid.mockRejectedValueOnce(new Error('adb endpoint refused'));
-
-  await assert.rejects(
-    verifyLimrunConnection({
-      instances: { android: { apiUrl: 'https://attached/api', token: 't', adbUrl: 'wss://adb' } },
-      clientVersion: '1.2.3',
+    {
       platform: 'android',
-    }),
-    (error: unknown) => {
-      assert.match(
-        JSON.stringify(error),
-        /LIM_ANDROID_INSTANCE_TOKEN, and LIM_ANDROID_INSTANCE_ADB_URL/,
-      );
-      return true;
+      instances: {
+        android: { apiUrl: 'https://attached/api', token: 'lim_st_secret', adbUrl: 'wss://adb' },
+      },
+      create: instanceClients.createAndroid,
+      variables: /LIM_ANDROID_INSTANCE_TOKEN, and LIM_ANDROID_INSTANCE_ADB_URL/,
     },
-  );
+  ] as const;
+  for (const { platform, instances, create, variables } of cases) {
+    create.mockRejectedValueOnce(new Error('Unexpected server response: 401'));
+    await assert.rejects(
+      verifyLimrunConnection({ instances, clientVersion: '1.2.3', platform }),
+      (error: unknown) => {
+        assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
+        assert.match(JSON.stringify(error), variables);
+        assert.doesNotMatch(JSON.stringify(error), /lim_st_secret/);
+        return true;
+      },
+    );
+  }
 });

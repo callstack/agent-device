@@ -30,8 +30,8 @@ export type LimrunConnectionVerificationOptions = {
 export async function verifyLimrunConnection(
   options: LimrunConnectionVerificationOptions,
 ): Promise<LimrunConnectionVerification> {
-  const connectAttached = attachedInstanceConnector(options);
-  if (connectAttached) return await verifyAttachedInstance(options.platform, connectAttached);
+  const attached = await verifyAttachedInstance(options);
+  if (attached) return attached;
   if (!options.apiKey) {
     throw new AppError(
       'INVALID_ARGS',
@@ -89,47 +89,44 @@ function readStatus(error: unknown): number | undefined {
   return typeof status === 'number' ? status : undefined;
 }
 
-type InstanceConnector = () => Promise<{ disconnect(): void }>;
-
-function attachedInstanceConnector(
+function connectAttachedInstance(
   options: LimrunConnectionVerificationOptions,
-): InstanceConnector | undefined {
+): Promise<{ disconnect(): void }> | undefined {
   const clientOptions = { logLevel: 'none', maxReconnectAttempts: 0 } as const;
-  const ios = options.instances?.ios;
-  if (options.platform === 'ios' && ios) {
-    return async () =>
-      await (
-        await import('@limrun/api/ios-client')
-      ).createInstanceClient({ ...clientOptions, ...ios });
+  const { ios, android } = options.instances ?? {};
+  if (options.platform === 'android') {
+    return (
+      android &&
+      import('@limrun/api/instance-client').then(({ createInstanceClient }) =>
+        createInstanceClient({ ...clientOptions, ...android }),
+      )
+    );
   }
-  const android = options.instances?.android;
-  if (options.platform === 'android' && android) {
-    return async () =>
-      await (
-        await import('@limrun/api/instance-client')
-      ).createInstanceClient({ ...clientOptions, ...android });
-  }
-  return undefined;
+  return (
+    ios &&
+    import('@limrun/api/ios-client').then(({ createInstanceClient }) =>
+      createInstanceClient({ ...clientOptions, ...ios }),
+    )
+  );
 }
 
 async function verifyAttachedInstance(
-  platform: 'android' | 'ios',
-  connect: InstanceConnector,
-): Promise<LimrunConnectionVerification> {
-  const platformName = platform === 'android' ? 'Android' : 'iOS';
-  const instanceVars =
-    platform === 'android'
-      ? 'LIM_ANDROID_INSTANCE_URL, LIM_ANDROID_INSTANCE_TOKEN, and LIM_ANDROID_INSTANCE_ADB_URL'
-      : 'LIM_IOS_INSTANCE_URL and LIM_IOS_INSTANCE_TOKEN';
+  options: LimrunConnectionVerificationOptions,
+): Promise<LimrunConnectionVerification | undefined> {
+  const connecting = connectAttachedInstance(options);
+  if (!connecting) return undefined;
+  const android = options.platform === 'android';
+  const platformName = android ? 'Android' : 'iOS';
   try {
-    const client = await connect();
-    client.disconnect();
+    (await connecting).disconnect();
   } catch (error) {
     throw new AppError(
       'COMMAND_FAILED',
       `Limrun ${platformName} instance access failed.`,
       {
-        hint: `Check ${instanceVars}, and that the instance is still running.`,
+        hint: android
+          ? 'Check LIM_ANDROID_INSTANCE_URL, LIM_ANDROID_INSTANCE_TOKEN, and LIM_ANDROID_INSTANCE_ADB_URL, and that the instance is still running.'
+          : 'Check LIM_IOS_INSTANCE_URL and LIM_IOS_INSTANCE_TOKEN, and that the instance is still running.',
       },
       error,
     );
@@ -140,8 +137,8 @@ async function verifyAttachedInstance(
     verificationMessage: `Existing ${platformName} instance access verified. agent-device will not create or delete it.`,
     device: {
       status: 'verified',
-      name: `Existing ${platformName} ${platform === 'android' ? 'emulator' : 'simulator'}`,
-      platform,
+      name: `Existing ${platformName} ${android ? 'emulator' : 'simulator'}`,
+      platform: options.platform,
     },
     app: {
       status: 'missing',

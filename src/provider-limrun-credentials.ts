@@ -8,12 +8,19 @@ export type LimrunCredentials = Readonly<{
   instances?: LimrunInstanceAccess;
 }>;
 
-const IOS_INSTANCE_VARS = ['LIM_IOS_INSTANCE_URL', 'LIM_IOS_INSTANCE_TOKEN'] as const;
-const ANDROID_INSTANCE_VARS = [
-  'LIM_ANDROID_INSTANCE_URL',
-  'LIM_ANDROID_INSTANCE_TOKEN',
-  'LIM_ANDROID_INSTANCE_ADB_URL',
-] as const;
+const INSTANCE_VARS = {
+  ios: ['LIM_IOS_INSTANCE_URL', 'LIM_IOS_INSTANCE_TOKEN'],
+  android: [
+    'LIM_ANDROID_INSTANCE_URL',
+    'LIM_ANDROID_INSTANCE_TOKEN',
+    'LIM_ANDROID_INSTANCE_ADB_URL',
+  ],
+} as const;
+
+/** The variables that give access to an existing instance of a platform. */
+export function limrunInstanceVariables(platform: 'ios' | 'android'): readonly string[] {
+  return INSTANCE_VARS[platform];
+}
 
 /**
  * The one reader of Limrun credentials in the environment. Instance variables use the `lim` CLI
@@ -22,25 +29,18 @@ const ANDROID_INSTANCE_VARS = [
 export function readLimrunCredentials(env: EnvMap): LimrunCredentials | undefined {
   const apiKey = env.LIMRUN_API_KEY?.trim() || undefined;
   const region = env.LIMRUN_REGION?.trim() || undefined;
-  const ios = readInstanceVars(env, IOS_INSTANCE_VARS);
-  const android = readInstanceVars(env, ANDROID_INSTANCE_VARS);
+  const ios = readInstanceVars(env, INSTANCE_VARS.ios);
+  const android = readInstanceVars(env, INSTANCE_VARS.android);
   if (!apiKey && !ios && !android) return undefined;
-  const instances: LimrunInstanceAccess | undefined =
-    ios || android
-      ? {
-          ...(ios && {
-            ios: { apiUrl: ios.LIM_IOS_INSTANCE_URL, token: ios.LIM_IOS_INSTANCE_TOKEN },
-          }),
-          ...(android && {
-            android: {
-              apiUrl: android.LIM_ANDROID_INSTANCE_URL,
-              token: android.LIM_ANDROID_INSTANCE_TOKEN,
-              adbUrl: android.LIM_ANDROID_INSTANCE_ADB_URL,
-            },
-          }),
-        }
-      : undefined;
-  return { apiKey, region, instances };
+  const instances: LimrunInstanceAccess = {
+    ios: ios && { apiUrl: ios.LIM_IOS_INSTANCE_URL, token: ios.LIM_IOS_INSTANCE_TOKEN },
+    android: android && {
+      apiUrl: android.LIM_ANDROID_INSTANCE_URL,
+      token: android.LIM_ANDROID_INSTANCE_TOKEN,
+      adbUrl: android.LIM_ANDROID_INSTANCE_ADB_URL,
+    },
+  };
+  return { apiKey, region, instances: ios || android ? instances : undefined };
 }
 
 function readInstanceVars<Name extends string>(

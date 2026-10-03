@@ -219,7 +219,7 @@ test('connect limrun attaches to an existing instance without storing its token'
     const state = readRequiredActiveState(stateDir);
     assert.equal(state.leaseBackend, 'ios-instance');
     assert.doesNotMatch(fs.readFileSync(state.remoteConfigPath, 'utf8'), /ios-instance-token/);
-    assert.deepEqual(mockedVerifyLimrunConnection.mock.calls[0]?.[0].instances, { ios });
+    assert.deepEqual(mockedVerifyLimrunConnection.mock.calls[0]?.[0].instances?.ios, ios);
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -301,7 +301,7 @@ test('connect limrun requires LIMRUN_API_KEY or access to an existing instance',
         },
         client: {} as AgentDeviceClient,
       }),
-      /connect limrun requires LIMRUN_API_KEY, or LIM_ANDROID_INSTANCE_URL, LIM_ANDROID_INSTANCE_TOKEN and LIM_ANDROID_INSTANCE_ADB_URL/,
+      /connect limrun requires LIMRUN_API_KEY, or LIM_ANDROID_INSTANCE_URL, LIM_ANDROID_INSTANCE_TOKEN, LIM_ANDROID_INSTANCE_ADB_URL/,
     );
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
