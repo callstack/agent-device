@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import { captureAndroidSnapshotWithHelper } from '../snapshot-helper-capture.ts';
 import { resetAndroidSnapshotHelperRetirements } from '../snapshot-helper-retirement.ts';
 import type { AndroidAdbExecutor } from '../snapshot-helper-types.ts';
@@ -128,6 +129,33 @@ test('canceled one-shot capture reports the cancellation and the next capture re
     'pidof',
     'instrument-2',
   ]);
+});
+
+test('a helper failure reported under a zero am exit status keeps its own reason', async () => {
+  // `am instrument` exits 0 after the helper finished with ok=false, as an emulator answered a
+  // capture of an app whose main thread never served its window.
+  const adb: AndroidAdbExecutor = async (args) => {
+    if (isAndroidHelperRuntimeProbe(args)) return androidHelperRuntimeProbeResult();
+    return {
+      exitCode: 0,
+      stdout: [
+        'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-snapshot-helper-v1',
+        'INSTRUMENTATION_RESULT: errorType=com.callstack.agentdevice.snapshothelper.AccessibilityCaptureStabilizer$IncompleteCaptureException',
+        'INSTRUMENTATION_RESULT: message=Android accessibility capture remained incomplete after 500 ms',
+        'INSTRUMENTATION_RESULT: ok=false',
+        'INSTRUMENTATION_CODE: 1',
+      ].join('\n'),
+      stderr: '',
+    };
+  };
+
+  await assert.rejects(
+    captureAndroidSnapshotWithHelper({ adb, deviceKey: 'android:emulator-5554' }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.message === 'Android accessibility capture remained incomplete after 500 ms' &&
+      typeof error.details?.helper === 'object',
+  );
 });
 
 function helperOutput(xml: string): string {

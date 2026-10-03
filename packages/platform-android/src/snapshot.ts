@@ -84,6 +84,12 @@ const HELPER_INSTALL_TIMEOUT_MS = 30_000;
  */
 const HELPER_CONTENT_CAPTURE_ATTEMPTS = 3;
 const HELPER_CONTENT_RECAPTURE_DELAY_MS = 250;
+/**
+ * No re-capture starts this long after the first attempt did. One attempt can spend a session start,
+ * a timed-out session request, and the whole one-shot command budget, so attempts counted alone let
+ * a busy screen run a snapshot past the daemon request envelope.
+ */
+const HELPER_CONTENT_RECAPTURE_WINDOW_MS = 10_000;
 export type AndroidSnapshotOptions = SnapshotOptions & {
   appBundleId?: string;
   signal?: AbortSignal;
@@ -283,6 +289,10 @@ async function captureAndroidUiHierarchyWithHelper(
   const helperDeviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
   const adbProvider = resolveAndroidAdbProvider(device, options.helperAdb);
   const releaseHelperSession = releasesHelperSessionAfterCapture(options, helperDeviceKey);
+  const recaptureDeadlineMs = Math.min(
+    Date.now() + HELPER_CONTENT_RECAPTURE_WINDOW_MS,
+    options.transient?.settleBy ?? Number.POSITIVE_INFINITY,
+  );
   try {
     let previousContentReason: AndroidContentRecoveryReason | undefined;
     for (let attempt = 0; ; attempt += 1) {
@@ -297,10 +307,7 @@ async function captureAndroidUiHierarchyWithHelper(
         previousContentReason,
       });
       if (settled.outcome === 'captured') return settled.capture;
-      if (
-        attempt + 1 >= HELPER_CONTENT_CAPTURE_ATTEMPTS ||
-        (options.transient !== undefined && Date.now() >= options.transient.settleBy)
-      ) {
+      if (attempt + 1 >= HELPER_CONTENT_CAPTURE_ATTEMPTS || Date.now() >= recaptureDeadlineMs) {
         return await rejectAndroidHelperContentUnavailable({
           contentRecovery: settled.decision,
           attempts: attempt + 1,
