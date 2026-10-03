@@ -86,8 +86,9 @@ function createProbeLeg(deadlineAtMs: number): {
 
 function probeHttpHealth(httpPort: number, deadlineAtMs: number): ProbeLeg {
   const probe = createProbeLeg(deadlineAtMs);
-  // A malformed record (a port `readDaemonInfo` accepted out of range) makes `transport.request`
-  // throw here; the detached build must not reach the caller as an unhandled rejection.
+  // `readDaemonInfo` accepts any positive integer port, and `transport.request` throws on one out
+  // of range; this leg builds detached, so the throw would reach the caller as an unhandled
+  // rejection.
   void (async () => {
     try {
       const transport = await loadNodeHttpRequester('http:');
@@ -118,7 +119,16 @@ function probeSocketRpc(
   deadlineAtMs: number,
 ): ProbeLeg {
   const probe = createProbeLeg(deadlineAtMs);
-  const socket = net.createConnection({ host: '127.0.0.1', port });
+  // The same malformed-record shape as the HTTP leg, and this one builds synchronously: a throw
+  // here would escape `probeDaemonResponsive` altogether, replacing the caller's timeout error
+  // with a crash from the recovery path and discarding the other leg's answer.
+  let socket: net.Socket;
+  try {
+    socket = net.createConnection({ host: '127.0.0.1', port });
+  } catch {
+    probe.settle(false);
+    return probe.leg;
+  }
   probe.attach(() => socket.destroy());
   const request = buildLivenessProbeRequest(token, session);
   let buffer = '';

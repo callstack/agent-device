@@ -145,22 +145,58 @@ test('a silent HTTP leg cannot veto a live socket leg', async (t) => {
   }
 });
 
-test('a malformed port makes the HTTP leg an endpoint that did not answer, not a crash', async () => {
-  // `readDaemonInfo` accepts any positive integer port, and `transport.request` THROWS
-  // synchronously on one out of range. Inside the leg's detached async build that throw would
-  // surface as an unhandled rejection — from a recovery path, killing the CLI that is still
-  // holding a timeout error. The leg must fold it into a negative answer instead.
-  const probe = probeDaemonResponsive(daemonInfo({ httpPort: 70_000 }));
-  const rejection = probe.then(
-    () => null,
-    (error: unknown) => error,
-  );
+test('a malformed port is an endpoint that did not answer, on either leg and never a crash', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  // `readDaemonInfo` accepts any positive integer port, and BOTH transports throw synchronously on
+  // one out of range (`ERR_SOCKET_BAD_PORT`). The HTTP leg builds detached, so its throw would
+  // surface as an unhandled rejection; the socket leg builds synchronously, so its throw would
+  // escape `probeDaemonResponsive` altogether — replacing the caller's timeout error with a crash
+  // from the recovery path and discarding the other leg's answer. A live peer proves the latter:
+  // the socket-port row must still read `true`.
+  const liveHttp = http.createServer((_req, res) => {
+    res.statusCode = 200;
+    res.end('{}');
+  });
+  const httpPort = await listenOnLoopback(liveHttp);
   process.on('unhandledRejection', failFastOnUnhandledRejection);
   try {
-    assert.equal(await probe, false);
-    assert.equal(await rejection, null, 'the probe never rejects on a malformed record');
+    const malformedRows = [
+      {
+        name: 'http leg malformed',
+        info: daemonInfo({ httpPort: 70_000 }),
+        expectResponsive: false,
+      },
+      {
+        name: 'socket leg malformed',
+        info: daemonInfo({ port: 70_000 }),
+        expectResponsive: false,
+      },
+      {
+        name: 'socket malformed alongside a live http peer',
+        info: daemonInfo({ port: 70_000, httpPort }),
+        expectResponsive: true,
+      },
+    ] as const;
+    for (const row of malformedRows) {
+      const probe = probeDaemonResponsive(row.info);
+      const rejection = probe.then(
+        () => null,
+        (error: unknown) => error,
+      );
+      assert.equal(
+        await probe,
+        row.expectResponsive,
+        `${row.name}: the malformed leg answers 'not this one'`,
+      );
+      assert.equal(
+        await rejection,
+        null,
+        `${row.name}: the probe never rejects on a malformed record`,
+      );
+    }
   } finally {
     process.off('unhandledRejection', failFastOnUnhandledRejection);
+    await closeLoopbackServer(liveHttp);
   }
 });
 function failFastOnUnhandledRejection(error: unknown): never {
