@@ -2,6 +2,8 @@
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
   "entry": [
     "tsdown.config.ts",
+    "packages/provider-doublespeed/tsdown.config.ts",
+    "packages/provider-doublespeed/src/plugin.ts",
     "vitest.mutation.config.ts",
     "src/sdk/index.ts",
     "src/sdk/io.ts",

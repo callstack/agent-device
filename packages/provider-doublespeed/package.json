@@ -1,18 +1,39 @@
 {
-  "name": "@agent-device/provider-doublespeed",
-  "version": "0.0.0",
-  "private": true,
+  "name": "@agent-device/doublespeed",
+  "version": "0.1.0",
+  "private": false,
   "type": "module",
-  "description": "Doublespeed provider runtime for agent-device. Internal workspace package bundled into the published artifact.",
-  "dependencies": {
-    "@agent-device/capture-kit": "workspace:*",
-    "@agent-device/contracts": "workspace:*",
-    "@agent-device/kernel": "workspace:*"
-  },
+  "description": "Doublespeed iOS simulator plugin for agent-device.",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "import": "./dist/plugin.mjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown --config tsdown.config.ts",
+    "prepack": "pnpm build"
+  },
+  "devDependencies": {
+    "@agent-device/capture-kit": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "agent-device": "workspace:*"
+  },
+  "agentDevicePlugin": {
+    "apiVersion": 1,
+    "provider": "doublespeed",
+    "entry": "./dist/plugin.mjs",
+    "connection": {
+      "leaseKind": "direct-device-provider",
+      "requiresAppAttachment": false,
+      "requiresRemoteDaemon": false,
+      "supportsArtifacts": false,
+      "supportsDeferredAppSelection": true,
+      "supportsDirectPortReverse": false,
+      "usesCloudWebDriverLease": false
     }
   }
 }

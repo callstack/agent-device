@@ -755,6 +755,7 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.ok(providerWebDriverPackage, 'provider-webdriver package must exist');
   assert.deepEqual([...providerWebDriverPackage.exportTargets.keys()].sort(), [
     '@agent-device/provider-webdriver',
+    '@agent-device/provider-webdriver/plugin',
     '@agent-device/provider-webdriver/providers',
   ]);
   assert.deepEqual([...providerWebDriverPackage.workspaceDependencies].sort(), [
@@ -779,17 +780,18 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/platform-android',
   ]);
   const providerDoublespeedPackage = packages.find(
-    (pkg) => pkg.name === '@agent-device/provider-doublespeed',
+    (pkg) => pkg.name === '@agent-device/doublespeed',
   );
   assert.ok(providerDoublespeedPackage, 'provider-doublespeed package must exist');
   assert.deepEqual(
     [...providerDoublespeedPackage.exportTargets.keys()],
-    ['@agent-device/provider-doublespeed'],
+    ['@agent-device/doublespeed'],
   );
   assert.deepEqual([...providerDoublespeedPackage.workspaceDependencies].sort(), [
     '@agent-device/capture-kit',
     '@agent-device/contracts',
     '@agent-device/kernel',
+    'agent-device',
   ]);
   assert.equal(providerDoublespeedPackage.externalDependencies.size, 0);
   const rootExternalDependencies = rootExternalDependencyRanges(repoRoot);
@@ -842,9 +844,10 @@ test('the real tree parses, declares, and passes R11', () => {
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/provider-limrun'),
     'root must declare the provider-limrun workspace dependency',
   );
-  assert.ok(
-    rootWorkspaceDependencyNames(repoRoot).has('@agent-device/provider-doublespeed'),
-    'root must declare the provider-doublespeed workspace dependency',
+  assert.equal(
+    rootWorkspaceDependencyNames(repoRoot).has('@agent-device/doublespeed'),
+    false,
+    'optional plugin is absent from the root dependency graph',
   );
   assert.ok(
     rootWorkspaceDependencyNames(repoRoot).has('@agent-device/xml'),
@@ -913,10 +916,10 @@ test('Node resolution enforces the exports map at runtime', () => {
     providerLimrunResolved.endsWith('packages/provider-limrun/src/index.ts'),
     providerLimrunResolved,
   );
-  const providerDoublespeedResolved = import.meta.resolve('@agent-device/provider-doublespeed');
-  assert.ok(
-    providerDoublespeedResolved.endsWith('packages/provider-doublespeed/src/index.ts'),
-    providerDoublespeedResolved,
+  assert.throws(
+    () => import.meta.resolve('@agent-device/doublespeed'),
+    /ERR_MODULE_NOT_FOUND/,
+    'core does not resolve optional providers before installation',
   );
   const xmlResolved = import.meta.resolve('@agent-device/xml');
   assert.ok(xmlResolved.endsWith('packages/xml/src/index.ts'), xmlResolved);
