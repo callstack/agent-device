@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
+import { createInstanceClient as createAndroidInstanceClient } from '@limrun/api/instance-client';
+import { createInstanceClient as createIosInstanceClient } from '@limrun/api/ios-client';
 import { LimrunRuntime } from '../sdk/limrun.ts';
 import { createExpiredProviderLeaseReleaser } from '../daemon/provider-lease-expiry.ts';
 import type { SimulatorLease } from '../daemon/lease-registry.ts';
@@ -732,4 +734,91 @@ test('Limrun keeps session tracked when release fails so release can be retried'
   } finally {
     await runtime.shutdown();
   }
+});
+
+const ATTACHED_IOS = {
+  apiUrl: 'https://region.limrun.example/v1/ios_attached/api',
+  token: 'ios-instance-token',
+};
+const ATTACHED_ANDROID = {
+  apiUrl: 'https://region.limrun.example/v1/android_attached/api',
+  token: 'android-instance-token',
+  adbUrl: 'wss://region.limrun.example/v1/android_attached/adb',
+};
+
+function iosLease(leaseId: string): SimulatorLease {
+  return { ...androidLease(), leaseId, backend: 'ios-instance' };
+}
+
+test('Limrun drives existing instances without an API key and never deletes them', async () => {
+  const runtime = new LimrunRuntime({
+    instances: { ios: ATTACHED_IOS, android: ATTACHED_ANDROID },
+  });
+  const releaseLease = runtime.leaseLifecycle.release;
+  const allocateLease = runtime.leaseLifecycle.allocate;
+  if (!allocateLease || !releaseLease) throw new Error('Limrun runtime must provide lease hooks');
+
+  try {
+    const ios = await allocateLease(iosLease('lease-attached-ios'), { initialApp: 'Example.ipa' });
+    await allocateLease({ ...androidLease(), leaseId: 'lease-attached-android' });
+
+    assert.match(String(ios?.limrunInstanceId), /^attached-[a-f0-9]{12}$/);
+    assert.deepEqual(vi.mocked(createIosInstanceClient).mock.calls, [
+      [{ ...ATTACHED_IOS, logLevel: 'warn' }],
+    ]);
+    assert.deepEqual(vi.mocked(createAndroidInstanceClient).mock.calls, [
+      [{ ...ATTACHED_ANDROID, logLevel: 'warn' }],
+    ]);
+
+    await releaseLease(iosLease('lease-attached-ios'));
+    await releaseLease({ ...androidLease(), leaseId: 'lease-attached-android' });
+    assert.equal(await releaseLease(iosLease('lease-before-daemon-restart')), undefined);
+    assert.equal(limrunMockState.androidDisconnect.mock.calls.length, 1);
+  } finally {
+    await runtime.shutdown();
+  }
+  assert.equal(limrunMockState.constructorOptions.length, 0);
+  for (const controlPlaneCall of [
+    limrunMockState.iosCreate,
+    limrunMockState.iosList,
+    limrunMockState.iosDelete,
+    limrunMockState.androidCreate,
+    limrunMockState.androidList,
+    limrunMockState.androidDelete,
+  ]) {
+    assert.equal(controlPlaneCall.mock.calls.length, 0);
+  }
+});
+
+test('Limrun instance access wins over the API key for its platform only', async () => {
+  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', instances: { ios: ATTACHED_IOS } });
+
+  await allocateLimrunDevice(runtime, iosLease('lease-attached-ios'));
+  await allocateLimrunDevice(runtime, androidLease());
+  await runtime.shutdown();
+
+  assert.equal(limrunMockState.iosCreate.mock.calls.length, 0);
+  assert.equal(limrunMockState.iosDelete.mock.calls.length, 0);
+  assert.equal(limrunMockState.androidCreate.mock.calls.length, 1);
+  assert.deepEqual(limrunMockState.androidDelete.mock.calls, [['android-instance-1']]);
+});
+
+test('Limrun without an API key refuses operations that need one', async () => {
+  const runtime = new LimrunRuntime({ instances: { ios: ATTACHED_IOS } });
+
+  try {
+    const device = await allocateLimrunDevice(runtime, iosLease('lease-attached-ios'));
+    await assert.rejects(runtime.installInstallablePath(device, '/tmp/Example.app'), {
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'Uploading an app requires a Limrun API key.',
+    });
+    await assert.rejects(allocateLimrunDevice(runtime, androidLease()), {
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'Creating an instance requires a Limrun API key.',
+    });
+    assert.equal(limrunMockState.assetsGetOrUpload.mock.calls.length, 0);
+  } finally {
+    await runtime.shutdown();
+  }
+  assert.throws(() => new LimrunRuntime({}), /requires an apiKey or instance access/);
 });

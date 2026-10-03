@@ -67,6 +67,18 @@ test('default provider runtimes load Limrun when a Limrun API key is configured'
   await Promise.all(runtimes.map(async (runtime) => await runtime.shutdown()));
 });
 
+test('default provider runtimes load Limrun for an existing instance without an API key', async () => {
+  const { runtimes, platformModules } = await createDefaultProviderRuntimeComposition({
+    LIM_IOS_INSTANCE_URL: 'https://region.limrun.example/v1/ios_x/api',
+    LIM_IOS_INSTANCE_TOKEN: 'ios-instance-token',
+  });
+
+  const limrun = runtimes.find((runtime) => runtime.provider === 'limrun');
+  assert.ok(limrun);
+  assertPlatformModuleCoverage(runtimes, platformModules, [limrun]);
+  await Promise.all(runtimes.map(async (runtime) => await runtime.shutdown()));
+});
+
 function assertPlatformModuleCoverage(
   runtimes: readonly object[],
   platformModules: ReadonlyArray<

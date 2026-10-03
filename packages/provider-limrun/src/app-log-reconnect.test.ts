@@ -30,7 +30,12 @@ import {
   serializeAndroidAdbInvocation,
   type AndroidAdbInvocation,
 } from '@agent-device/platform-android/mechanics';
-import { reconnectLimrunAppLogReader } from './app-log-reconnect.ts';
+import {
+  reconnectAttachedLimrunAppLogReader,
+  reconnectLimrunAppLogReader,
+} from './app-log-reconnect.ts';
+import { attachedLimrunInstanceId } from './instance-access.ts';
+import { createInstanceClient as createIosInstanceClient } from '@limrun/api/ios-client';
 import type {
   LimrunAdbCommandOptions,
   LimrunAdbExecutor,
@@ -208,4 +213,34 @@ test('addresses app-log adb traffic at the tunnel serial and hands cleanup a com
   });
   expect(closeTunnel).toHaveBeenCalledOnce();
   expect(androidClient.disconnect).toHaveBeenCalledOnce();
+});
+
+test('reattaches app logs to the attached instance the descriptor names', async () => {
+  const access = { apiUrl: 'https://attached.example/api', token: 'instance-token' };
+  const descriptor = {
+    transport: 'limrun-log-poller',
+    platform: 'ios',
+    leaseId: 'lease-a',
+    instanceId: attachedLimrunInstanceId(access.apiUrl),
+    appBundleId: 'com.example.app',
+    outputPath: '/sessions/one/app.log',
+  } as const;
+
+  const outcome = await reconnectAttachedLimrunAppLogReader({
+    instances: { ios: access },
+    descriptor,
+    dependencies: {} as LimrunRuntimeDependencies,
+  });
+  expect(vi.mocked(createIosInstanceClient)).toHaveBeenLastCalledWith({
+    ...access,
+    logLevel: 'warn',
+  });
+  expect(outcome.status).toBe('opened');
+
+  const replaced = await reconnectAttachedLimrunAppLogReader({
+    instances: { ios: { ...access, apiUrl: 'https://another-instance.example/api' } },
+    descriptor,
+    dependencies: {} as LimrunRuntimeDependencies,
+  });
+  expect(replaced).toEqual({ status: 'ownership-lost' });
 });

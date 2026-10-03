@@ -8,6 +8,7 @@ import type {
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { PlatformRuntimeProviderRegistration } from './platform-runtime-gateway.ts';
 import { providerWebDriver } from './provider-webdriver.ts';
+import { readLimrunCredentials } from './provider-limrun-credentials.ts';
 
 export type DefaultProviderDeviceRuntimeEnv = DefaultCloudWebDriverProviderRuntimeEnv &
   NodeJS.ProcessEnv;
@@ -65,18 +66,17 @@ export async function createDefaultProviderRuntimeComposition(
 ): Promise<DefaultProviderRuntimeComposition> {
   const runtimes = providerWebDriver.createDefaultRuntimes(env);
   const platformModules = [...createProviderPlatformRuntimeRegistrations(runtimes)];
-  const apiKey = env.LIMRUN_API_KEY?.trim();
-  if (!apiKey) return Object.freeze({ runtimes, platformModules: Object.freeze(platformModules) });
+  const limrunCredentials = readLimrunCredentials(env);
+  if (!limrunCredentials) {
+    return Object.freeze({ runtimes, platformModules: Object.freeze(platformModules) });
+  }
 
   const [limrunRuntime, dependencies] = await Promise.all([
     import('@agent-device/provider-limrun'),
     import('./sdk/limrun-runtime-dependencies.ts'),
   ]);
   const registration = limrunRuntime.createLimrunRuntime(
-    {
-      apiKey,
-      region: env.LIMRUN_REGION?.trim() || undefined,
-    },
+    limrunCredentials,
     dependencies.createLimrunRuntimeDependencies(),
     { includePlatformModule: true },
   );

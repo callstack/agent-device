@@ -11,6 +11,11 @@ import {
   type LimrunAppAsset,
 } from './app-catalog.ts';
 import { createLimrunDeviceSession } from './device-session.ts';
+import {
+  attachedLimrunInstanceId,
+  type LimrunAndroidInstanceAccess,
+  type LimrunIosInstanceAccess,
+} from './instance-access.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 
 type LimrunInstance = {
@@ -100,6 +105,43 @@ export async function allocateLimrunIosSession(
     await params.limrun.iosInstances.delete(instance.metadata.id).catch(() => {});
     throw error;
   }
+}
+
+export async function attachLimrunIosSession(
+  lease: DeviceLease,
+  access: LimrunIosInstanceAccess,
+  dependencies: LimrunRuntimeDependencies,
+): Promise<LimrunIosSession> {
+  const instanceId = attachedLimrunInstanceId(access.apiUrl);
+  return await createLimrunIosSession(
+    {
+      lease,
+      instanceId,
+      device: buildLimrunDevice('ios', lease, instanceId),
+      apiUrl: access.apiUrl,
+      token: access.token,
+    },
+    dependencies,
+  );
+}
+
+export async function attachLimrunAndroidSession(
+  lease: DeviceLease,
+  access: LimrunAndroidInstanceAccess,
+  dependencies: LimrunRuntimeDependencies,
+): Promise<LimrunAndroidSession> {
+  const instanceId = attachedLimrunInstanceId(access.apiUrl);
+  return await createLimrunAndroidSession(
+    {
+      lease,
+      instanceId,
+      device: buildLimrunDevice('android', lease, instanceId),
+      apiUrl: access.apiUrl,
+      token: access.token,
+      adbUrl: access.adbUrl,
+    },
+    dependencies,
+  );
 }
 
 export async function allocateLimrunAndroidSession(

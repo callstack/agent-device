@@ -6,6 +6,12 @@ import { AsyncCleanupStack } from '@agent-device/contracts/async-lifecycle';
 import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
 import type { LimrunAppLogReader } from './app-log-poller.ts';
 import type { LimrunAppLogReconnectOutcome } from './app-log-runtime.ts';
+import {
+  attachedLimrunInstanceId,
+  type LimrunAndroidInstanceAccess,
+  type LimrunInstanceAccess,
+  type LimrunIosInstanceAccess,
+} from './instance-access.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 
 export async function reconnectLimrunAppLogReader(options: {
@@ -24,6 +30,30 @@ export async function reconnectLimrunAppLogReader(options: {
   }
 }
 
+/** Reopens a reader on the attached instance, if it is still the one the descriptor names. */
+export async function reconnectAttachedLimrunAppLogReader(options: {
+  instances: LimrunInstanceAccess;
+  descriptor: LimrunAppLogDescriptor;
+  dependencies: LimrunRuntimeDependencies;
+}): Promise<LimrunAppLogReconnectOutcome> {
+  const { descriptor, instances } = options;
+  if (descriptor.platform === 'ios') {
+    return isDescribedInstance(instances.ios, descriptor)
+      ? await openIosReader(instances.ios, descriptor)
+      : { status: 'ownership-lost' };
+  }
+  return isDescribedInstance(instances.android, descriptor)
+    ? await openAndroidReader(instances.android, descriptor, options.dependencies)
+    : { status: 'ownership-lost' };
+}
+
+function isDescribedInstance<Access extends LimrunIosInstanceAccess>(
+  access: Access | undefined,
+  descriptor: LimrunAppLogDescriptor,
+): access is Access {
+  return access !== undefined && attachedLimrunInstanceId(access.apiUrl) === descriptor.instanceId;
+}
+
 async function reconnectIos(options: {
   limrun: Limrun;
   descriptor: LimrunAppLogDescriptor;
@@ -39,16 +69,25 @@ async function reconnectIos(options: {
     options.descriptor,
   );
   if (selected.status !== 'active') return selected;
-  const { instance } = selected;
+  return await openIosReader(
+    { apiUrl: selected.apiUrl, token: selected.instance.status.token },
+    options.descriptor,
+  );
+}
+
+async function openIosReader(
+  access: LimrunIosInstanceAccess,
+  descriptor: LimrunAppLogDescriptor,
+): Promise<LimrunAppLogReconnectOutcome> {
   const client = await createIosInstanceClient({
-    apiUrl: selected.apiUrl,
-    token: instance.status.token,
+    apiUrl: access.apiUrl,
+    token: access.token,
     logLevel: 'warn',
   });
   const reader: LimrunAppLogReader = {
     platform: 'ios',
-    leaseId: options.descriptor.leaseId,
-    instanceId: options.descriptor.instanceId,
+    leaseId: descriptor.leaseId,
+    instanceId: descriptor.instanceId,
     readLogs: async (appBundleId, lineLimit) => await client.appLogTail(appBundleId, lineLimit),
     [Symbol.asyncDispose]: async () => client.disconnect(),
   };
@@ -73,10 +112,26 @@ async function reconnectAndroid(options: {
   if (selected.status !== 'active') return selected;
   const { instance } = selected;
   if (!instance.status.adbWebSocketUrl) return { status: 'missing' };
+  return await openAndroidReader(
+    {
+      apiUrl: selected.apiUrl,
+      adbUrl: instance.status.adbWebSocketUrl,
+      token: instance.status.token,
+    },
+    options.descriptor,
+    options.dependencies,
+  );
+}
+
+async function openAndroidReader(
+  access: LimrunAndroidInstanceAccess,
+  descriptor: LimrunAppLogDescriptor,
+  dependencies: LimrunRuntimeDependencies,
+): Promise<LimrunAppLogReconnectOutcome> {
   const client = await createAndroidInstanceClient({
-    apiUrl: selected.apiUrl,
-    adbUrl: instance.status.adbWebSocketUrl,
-    token: instance.status.token,
+    apiUrl: access.apiUrl,
+    adbUrl: access.adbUrl,
+    token: access.token,
     logLevel: 'warn',
   });
   const rollback = new AsyncCleanupStack();
@@ -94,19 +149,19 @@ async function reconnectAndroid(options: {
       args: readonly string[],
       commandOptions?: Parameters<LimrunRuntimeDependencies['host']['runAdb']>[1],
     ) =>
-      await options.dependencies.host.runAdb(
-        options.dependencies.android.deviceAdbInvocation(serial, args),
+      await dependencies.host.runAdb(
+        dependencies.android.deviceAdbInvocation(serial, args),
         commandOptions,
       );
     const reader: LimrunAppLogReader = {
       platform: 'android',
-      leaseId: options.descriptor.leaseId,
-      instanceId: options.descriptor.instanceId,
+      leaseId: descriptor.leaseId,
+      instanceId: descriptor.instanceId,
       readLogs: async (_appBundleId, lineLimit) =>
-        await options.dependencies.android.readLogs(adb, lineLimit),
+        await dependencies.android.readLogs(adb, lineLimit),
       [Symbol.asyncDispose]: async () => {
-        await options.dependencies.host
-          .runAdb(options.dependencies.android.hostAdbInvocation(['disconnect', serial]), {
+        await dependencies.host
+          .runAdb(dependencies.android.hostAdbInvocation(['disconnect', serial]), {
             allowFailure: true,
             timeoutMs: 10_000,
           })

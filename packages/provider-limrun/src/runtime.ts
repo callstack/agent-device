@@ -21,7 +21,12 @@ import {
   installLimrunAndroidApp,
   type LimrunAndroidSession,
 } from './android.ts';
-import { LIMRUN_PROVIDER, parseLimrunDeviceId, platformForLimrunLeaseBackend } from './device.ts';
+import {
+  LIMRUN_PROVIDER,
+  parseLimrunDeviceId,
+  platformForLimrunLeaseBackend,
+  type LimrunPlatform,
+} from './device.ts';
 import { createLimrunIosInteractor, installLimrunIosApp, type LimrunIosSession } from './ios.ts';
 import { createLimrunDeviceSession, type LimrunDeviceSession } from './device-session.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
@@ -37,13 +42,16 @@ import { buildLimrunClientOptions, LIMRUN_CLIENT_HEADER } from './client-options
 import { resolveLimrunRuntimeInstance } from './runtime-instance.ts';
 import type { LimrunRequestOperationDrain } from './request-cancellation.ts';
 import type { LimrunAppAsset } from './app-catalog.ts';
+import type { LimrunInstanceAccess } from './instance-access.ts';
 
 type LimrunRuntimeSession = LimrunIosSession | LimrunAndroidSession;
 
 export type LimrunRuntimeOptions = {
-  apiKey: string;
+  /** Organization API key. It creates and deletes instances for platforms without `instances`. */
+  apiKey?: string;
   region?: string;
   runtimeInstance?: string;
+  instances?: LimrunInstanceAccess;
 };
 
 export type LimrunRuntime = ProviderDeviceRuntime & {
@@ -85,7 +93,7 @@ export function createLimrunRuntime(
 }
 
 class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
-  private readonly limrun: Limrun;
+  private readonly limrun: Limrun | undefined;
   private readonly sessions = new Map<string, LimrunRuntimeSession>();
   private readonly appAliases = new Map<
     string,
@@ -103,9 +111,11 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   readonly appCatalog: ProviderAppCatalogHandler = async (query, signal) => {
     const { assertLimrunUploadedAppAccess, listLimrunAppAssets } = await import('./app-catalog.ts');
     assertLimrunUploadedAppAccess(query.publicNetworkOnly);
-    return (await listLimrunAppAssets(this.limrun, query.platform, signal)).map(
-      (asset) => asset.name,
+    const limrun = this.orgClient(
+      'Listing uploaded apps',
+      'Run open <bundle-or-package-id> first; apps then lists the apps installed on the instance.',
     );
+    return (await listLimrunAppAssets(limrun, query.platform, signal)).map((asset) => asset.name);
   };
 
   readonly recoverExpiredLease: ProviderExpiredLeaseRecovery = async (lease) => {
@@ -128,14 +138,19 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   };
 
   constructor(options: LimrunRuntimeOptions, dependencies: LimrunRuntimeDependencies) {
+    if (!options.apiKey && !options.instances?.ios && !options.instances?.android) {
+      throw new TypeError('Limrun runtime requires an apiKey or instance access');
+    }
     this.options = options;
     this.dependencies = dependencies;
-    this.limrun = new Limrun(
-      buildLimrunClientOptions({
-        apiKey: options.apiKey,
-        clientVersion: dependencies.clientVersion,
-      }),
-    );
+    this.limrun = options.apiKey
+      ? new Limrun(
+          buildLimrunClientOptions({
+            apiKey: options.apiKey,
+            clientVersion: dependencies.clientVersion,
+          }),
+        )
+      : undefined;
   }
 
   ownsDevice(device: DeviceInfo): boolean {
@@ -189,17 +204,11 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   ): Promise<ProviderDeviceInstallResult | undefined> {
     const session = this.getSessionForDevice(device);
     if (!session) return undefined;
+    const limrun = this.orgClient('Uploading an app');
     return session.platform === 'ios'
-      ? await installLimrunIosApp(
-          this.limrun,
-          session,
-          installablePath,
-          options,
-          signal,
-          operationDrain,
-        )
+      ? await installLimrunIosApp(limrun, session, installablePath, options, signal, operationDrain)
       : await installLimrunAndroidApp(
-          this.limrun,
+          limrun,
           session,
           installablePath,
           options,
@@ -234,17 +243,44 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     const existing = this.sessions.get(lease.leaseId);
     if (existing) return { limrunInstanceId: existing.instanceId, device: existing.device };
 
+    const session =
+      (await this.attachSession(platform, lease)) ??
+      (await this.createSession(platform, lease, context));
+    this.sessions.set(lease.leaseId, session);
+    return { limrunInstanceId: session.instanceId, device: session.device };
+  }
+
+  private async attachSession(
+    platform: LimrunPlatform,
+    lease: DeviceLease,
+  ): Promise<LimrunRuntimeSession | undefined> {
+    const { ios, android } = this.options.instances ?? {};
+    const { attachLimrunAndroidSession, attachLimrunIosSession } =
+      await import('./session-allocation.ts');
+    if (platform === 'ios') {
+      return ios && (await attachLimrunIosSession(lease, ios, this.dependencies));
+    }
+    return android && (await attachLimrunAndroidSession(lease, android, this.dependencies));
+  }
+
+  private async createSession(
+    platform: LimrunPlatform,
+    lease: DeviceLease,
+    context?: LeaseLifecycleContext,
+  ): Promise<LimrunRuntimeSession> {
     const {
       allocateLimrunAndroidSession,
       allocateLimrunIosSession,
       resolvePreinstalledAppId,
       resolveRequestedLimrunAppAsset,
     } = await import('./session-allocation.ts');
-    const requestedAsset = await resolveRequestedLimrunAppAsset(this.limrun, platform, context);
+    const limrun = this.orgClient('Creating an instance');
+    const requestedAsset = await resolveRequestedLimrunAppAsset(limrun, platform, context);
+    const params = this.sessionAllocationParams(limrun, lease, requestedAsset);
     const session =
       platform === 'ios'
-        ? await allocateLimrunIosSession(this.sessionAllocationParams(lease, requestedAsset))
-        : await allocateLimrunAndroidSession(this.sessionAllocationParams(lease, requestedAsset));
+        ? await allocateLimrunIosSession(params)
+        : await allocateLimrunAndroidSession(params);
     if (requestedAsset) {
       try {
         const installedAppId = await resolvePreinstalledAppId(session, requestedAsset);
@@ -257,13 +293,12 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
         throw error;
       }
     }
-    this.sessions.set(lease.leaseId, session);
-    return { limrunInstanceId: session.instanceId, device: session.device };
+    return session;
   }
 
-  private sessionAllocationParams(lease: DeviceLease, app?: LimrunAppAsset) {
+  private sessionAllocationParams(limrun: Limrun, lease: DeviceLease, app?: LimrunAppAsset) {
     return {
-      limrun: this.limrun,
+      limrun,
       lease,
       metadata: this.buildInstanceMetadata(lease),
       region: this.options.region,
@@ -298,18 +333,19 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     lease: DeviceLease,
   ): Promise<Record<string, unknown> | undefined> {
     const platform = platformForLimrunLeaseBackend(lease.backend);
-    if (!platform) return undefined;
+    if (!platform || this.isAttached(platform)) return undefined;
+    const limrun = this.orgClient('Recovering an expired lease');
     const labelSelector = `provider=${LIMRUN_PROVIDER},leaseId=${lease.leaseId}`;
     const instances =
       platform === 'ios'
-        ? await this.limrun.iosInstances.list({ labelSelector })
-        : await this.limrun.androidInstances.list({ labelSelector });
+        ? await limrun.iosInstances.list({ labelSelector })
+        : await limrun.androidInstances.list({ labelSelector });
     const instanceIds = instances.getPaginatedItems().map((instance) => instance.metadata.id);
     for (const instanceId of instanceIds) {
       if (platform === 'ios') {
-        await this.limrun.iosInstances.delete(instanceId);
+        await limrun.iosInstances.delete(instanceId);
       } else {
-        await this.limrun.androidInstances.delete(instanceId);
+        await limrun.androidInstances.delete(instanceId);
       }
     }
     if (instanceIds.length === 0) return undefined;
@@ -318,12 +354,28 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
 
   private async terminateSession(session: LimrunRuntimeSession): Promise<void> {
     session.client.disconnect();
+    if (session.platform === 'android') await cleanupLimrunAndroidAdbTunnel(session);
+    if (this.isAttached(session.platform)) return;
+    const limrun = this.orgClient('Deleting an instance');
     if (session.platform === 'ios') {
-      await this.limrun.iosInstances.delete(session.instanceId);
-      return;
+      await limrun.iosInstances.delete(session.instanceId);
+    } else {
+      await limrun.androidInstances.delete(session.instanceId);
     }
-    await cleanupLimrunAndroidAdbTunnel(session);
-    await this.limrun.androidInstances.delete(session.instanceId);
+  }
+
+  private isAttached(platform: LimrunPlatform): boolean {
+    return this.options.instances?.[platform] !== undefined;
+  }
+
+  private orgClient(
+    operation: string,
+    hint = 'This daemon drives an existing Limrun instance with its own token. Set LIMRUN_API_KEY, or ask the instance owner to do this.',
+  ): Limrun {
+    if (this.limrun) return this.limrun;
+    throw new AppError('UNSUPPORTED_OPERATION', `${operation} requires a Limrun API key.`, {
+      hint,
+    });
   }
 
   private getSessionForDevice(device: DeviceInfo): LimrunRuntimeSession | undefined {
@@ -357,9 +409,18 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   }
 
   async reconnectAppLogReader(descriptor: LimrunAppLogDescriptor, signal?: AbortSignal) {
-    const { reconnectLimrunAppLogReader } = await import('./app-log-reconnect.ts');
+    const { reconnectAttachedLimrunAppLogReader, reconnectLimrunAppLogReader } =
+      await import('./app-log-reconnect.ts');
+    const instances = this.options.instances;
+    if (instances && this.isAttached(descriptor.platform)) {
+      return await reconnectAttachedLimrunAppLogReader({
+        instances,
+        descriptor,
+        dependencies: this.dependencies,
+      });
+    }
     return await reconnectLimrunAppLogReader({
-      limrun: this.limrun,
+      limrun: this.orgClient('Reconnecting app logs'),
       descriptor,
       dependencies: this.dependencies,
       signal,

@@ -8,6 +8,21 @@ const mockState = vi.hoisted(() => ({
   iosList: vi.fn(async () => ({ getPaginatedItems: () => [] })),
 }));
 
+const instanceClients = vi.hoisted(() => ({
+  disconnect: vi.fn(),
+  createIos: vi.fn(async (_options: Record<string, unknown>) => ({
+    disconnect: instanceClients.disconnect,
+  })),
+  createAndroid: vi.fn(async (_options: Record<string, unknown>) => ({
+    disconnect: instanceClients.disconnect,
+  })),
+}));
+
+vi.mock('@limrun/api/ios-client', () => ({ createInstanceClient: instanceClients.createIos }));
+vi.mock('@limrun/api/instance-client', () => ({
+  createInstanceClient: instanceClients.createAndroid,
+}));
+
 vi.mock('@limrun/api', () => ({
   default: class MockLimrun {
     readonly androidInstances = { list: mockState.androidList };
@@ -66,6 +81,42 @@ test('Limrun verification classifies authentication failures', async () => {
     (error: unknown) => {
       assert.equal((error as { code?: string }).code, 'UNAUTHORIZED');
       assert.doesNotMatch(JSON.stringify(error), /lim_bad_key/);
+      return true;
+    },
+  );
+});
+
+test('Limrun verification connects to an attached instance instead of the control plane', async () => {
+  const android = { apiUrl: 'https://attached.example/api', token: 'tok', adbUrl: 'wss://adb' };
+  const result = await verifyLimrunConnection({
+    apiKey: 'lim_test_key',
+    instances: { android },
+    clientVersion: '1.2.3',
+    platform: 'android',
+  });
+
+  assert.equal(result.device.status, 'verified');
+  assert.deepEqual(instanceClients.createAndroid.mock.calls, [
+    [{ ...android, logLevel: 'none', maxReconnectAttempts: 0 }],
+  ]);
+  assert.equal(instanceClients.disconnect.mock.calls.length, 1);
+  assert.equal(mockState.constructorOptions.length, 0);
+  assert.equal(mockState.androidList.mock.calls.length, 0);
+});
+
+test('Limrun verification reports a rejected instance token with the variables to check', async () => {
+  instanceClients.createIos.mockRejectedValueOnce(new Error('Unexpected server response: 401'));
+
+  await assert.rejects(
+    verifyLimrunConnection({
+      instances: { ios: { apiUrl: 'https://attached.example/api', token: 'lim_st_secret' } },
+      clientVersion: '1.2.3',
+      platform: 'ios',
+    }),
+    (error: unknown) => {
+      assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
+      assert.match(JSON.stringify(error), /LIM_IOS_INSTANCE_URL and LIM_IOS_INSTANCE_TOKEN/);
+      assert.doesNotMatch(JSON.stringify(error), /lim_st_secret/);
       return true;
     },
   );
