@@ -43,7 +43,8 @@ function canceledAwareHandler(seen: SeenRequest): DaemonInvokeFn {
     if (!signal) {
       return { ok: true, data: { answeredWithoutSignal: true } };
     }
-    return await new Promise<DaemonResponse>((resolve, reject) => {
+    // The long request never answers: only the client's disconnect ends it, through the abort.
+    return await new Promise<DaemonResponse>((_resolve, reject) => {
       signal.addEventListener(
         'abort',
         () => {
@@ -78,6 +79,7 @@ test('socket transport: an already-aborted signal sends nothing and refuses with
       sendRequest(
         { port, token: TOKEN, pid: 1 },
         {
+          token: TOKEN,
           command: 'devices',
           session: 'default',
           positionals: [],
@@ -108,6 +110,7 @@ test('socket transport: an abort mid-request closes the connection, the daemon m
     const inFlight = sendRequest(
       info,
       {
+        token: TOKEN,
         command: 'wait',
         session: 'default',
         positionals: [],
@@ -134,6 +137,7 @@ test('socket transport: an abort mid-request closes the connection, the daemon m
     const followUp = await sendRequest(
       info,
       {
+        token: TOKEN,
         command: 'devices',
         session: 'default',
         positionals: [],
