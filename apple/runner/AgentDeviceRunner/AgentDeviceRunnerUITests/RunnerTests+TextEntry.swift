@@ -58,8 +58,9 @@ extension RunnerTests {
     static let pollInterval: TimeInterval = 0.02
     static let warmupValueTimeout: TimeInterval = 0.4
     static let verificationStabilityWindow: TimeInterval = 0.2
-    /// How long an unechoed replacement value may keep changing before it must hold for
-    /// `verificationStabilityWindow`; the app renders the last characters' summary late.
+    /// How long a replacement value may take to move off its baseline, and then how long an unechoed
+    /// value may keep changing before it must hold for `verificationStabilityWindow`; the app renders
+    /// the last characters' summary late.
     static let unconfirmedSettleCeiling: TimeInterval = 1.0
     /// How long the commit wait tolerates seeing NO further progress toward the expected value.
     /// Numerically the flat deadline this replaced, so a pipeline that delivers nothing is

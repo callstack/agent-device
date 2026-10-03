@@ -478,15 +478,16 @@ extension RunnerTests {
     func evidence(_ observed: TextEntryObservation?) -> TextEntryUnconfirmedEvidence? {
       Self.unconfirmedTextEntryEvidence(requested: requested, baseline: baseline, observed: observed)
     }
-    let ceiling = Date().addingTimeInterval(TextEntryTiming.unconfirmedSettleCeiling)
+    let moveDeadline = Date().addingTimeInterval(TextEntryTiming.unconfirmedSettleCeiling)
     var latest = observe()
-    while let unmoved = latest, unmoved.isSettled(with: baseline), Date() < ceiling {
+    while let unmoved = latest, unmoved.isSettled(with: baseline), Date() < moveDeadline {
       sleepFor(TextEntryTiming.pollInterval)
       latest = observe()
     }
     guard evidence(latest) != nil else {
       return nil
     }
+    let ceiling = Date().addingTimeInterval(TextEntryTiming.unconfirmedSettleCeiling)
     var stableSince = Date()
     while Date().timeIntervalSince(stableSince) < TextEntryTiming.verificationStabilityWindow {
       guard Date() < ceiling else {

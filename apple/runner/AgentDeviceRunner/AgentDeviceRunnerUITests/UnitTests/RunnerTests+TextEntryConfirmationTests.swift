@@ -58,6 +58,8 @@ extension RunnerTests {
     XCTAssertTrue(Self.textEntryValueEchoes(observed: "66", expected: "6", baseline: "6"))
     XCTAssertTrue(Self.textEntryValueEchoes(observed: "0 of 6 digits6", expected: "6", baseline: "0 of 6 digits"))
     XCTAssertFalse(Self.textEntryValueEchoes(observed: "1 of 6 digits", expected: "6", baseline: "0 of 6 digits"))
+    XCTAssertFalse(Self.textEntryValueEchoes(observed: "6 of 6 digits", expected: "123456", baseline: "0 of 6 digits"))
+    XCTAssertTrue(Self.textEntryValueEchoes(observed: "abc123abc12", expected: "abc123", baseline: "abc123"))
   }
 
   func testEveryOtherReplacementMismatchStaysAFailure() {
@@ -70,6 +72,10 @@ extension RunnerTests {
     let cases: [(String, String, TextEntryObservation?, TextEntryObservation?)] = [
       ("value never moved", "123456", baseline, Self.otpObservation("0 of 6 digits")),
       ("dropped characters echo the request", "123456", baseline, Self.otpObservation("12456")),
+      (
+        "dropped characters echo a stale baseline plus the request", "abc123",
+        Self.otpObservation("abc123"), Self.otpObservation("abc123abc12")
+      ),
       ("another element took the entry", "123456", baseline, Self.otpObservation("6 of 6 digits", identity: otherField)),
       ("unreadable before the entry", "123456", nil, Self.otpObservation("6 of 6 digits")),
       ("unreadable after the entry", "123456", baseline, nil),

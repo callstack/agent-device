@@ -39,19 +39,17 @@ extension RunnerTests {
     let target: TextEntryElementIdentity
   }
 
-  /// Whether `observed` can be the field echoing `expected`, however degraded: an echo that dropped
-  /// characters is contained in the request, and one with residual text contains it. A request the
-  /// pre-entry `baseline` already contained proves nothing by containment, so that echo must hold
-  /// the baseline and the request together. A value related to the request in neither direction,
-  /// such as an OTP field announcing "6 of 6 digits", is the app's own representation, so retyping
-  /// cannot make it match.
+  /// Whether `observed` can be a degraded copy of the residual `baseline` plus the request: it is in
+  /// order inside baseline + request (dropped characters), or it contains the request in order and
+  /// the baseline did not already (residual text), or it contains baseline + request in order. A
+  /// value related to the entry in none of these ways, such as an OTP field announcing
+  /// "6 of 6 digits", is the app's own representation, so retyping cannot make it match.
   static func textEntryValueEchoes(observed: String, expected: String, baseline: String) -> Bool {
     let request = textEntryRequestWithoutSubmitKeys(expected)
-    if isOrderedSubsequence(observed, of: request) {
-      return true
-    }
-    let echoWithResidual = isOrderedSubsequence(request, of: baseline) ? baseline + request : request
-    return isOrderedSubsequence(echoWithResidual, of: observed)
+    let residualAndRequest = baseline + request
+    return isOrderedSubsequence(observed, of: residualAndRequest)
+      || (isOrderedSubsequence(request, of: observed) && !isOrderedSubsequence(request, of: baseline))
+      || isOrderedSubsequence(residualAndRequest, of: observed)
   }
 
   /// Classifies a replacement whose read-back never matched. The entry is unconfirmed, not failed,
