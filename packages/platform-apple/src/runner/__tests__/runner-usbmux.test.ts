@@ -174,6 +174,57 @@ test('never matches a different device whose UDID merely shares a prefix', async
   assert.equal(server.connectedDeviceId(), undefined);
 });
 
+test.each([
+  {
+    name: 'prefers USB when Network is listed first',
+    devices: [
+      { deviceId: 552, udid: DEVICE_UDID, connectionType: 'Network' },
+      { deviceId: 551, udid: DEVICE_UDID, connectionType: 'USB' },
+    ],
+    expectedDeviceId: 551,
+  },
+  {
+    name: 'prefers USB when USB is listed first',
+    devices: [
+      { deviceId: 551, udid: DEVICE_UDID, connectionType: 'USB' },
+      { deviceId: 552, udid: DEVICE_UDID, connectionType: 'Network' },
+    ],
+    expectedDeviceId: 551,
+  },
+  {
+    name: 'uses the first Network match when USB is absent',
+    devices: [
+      { deviceId: 552, udid: DEVICE_UDID, connectionType: 'Network' },
+      { deviceId: 553, udid: DEVICE_UDID, connectionType: 'Network' },
+    ],
+    expectedDeviceId: 552,
+  },
+  {
+    name: 'ignores USB entries for a different UDID',
+    devices: [
+      { deviceId: 552, udid: DEVICE_UDID, connectionType: 'Network' },
+      { deviceId: 551, udid: `${DEVICE_UDID}0`, connectionType: 'USB' },
+    ],
+    expectedDeviceId: 552,
+  },
+  {
+    name: 'ignores USB entries with an invalid device ID',
+    devices: [
+      { deviceId: 552, udid: DEVICE_UDID, connectionType: 'Network' },
+      { deviceId: 0, udid: DEVICE_UDID, connectionType: 'USB' },
+    ],
+    expectedDeviceId: 552,
+  },
+])('$name', async ({ devices, expectedDeviceId }) => {
+  const socketPath = await createSocketPath(socketDirectories);
+  const server = await serveUsbmuxDevices(socketPath, devices, 3);
+
+  const error = await postThroughFakeUsbmux(socketPath, DEVICE_UDID);
+
+  assert.equal((error as AppError).code, 'COMMAND_FAILED');
+  assert.equal(server.connectedDeviceId(), expectedDeviceId);
+});
+
 test('treats a device usbmuxd no longer knows as unattached so a tunnel fallback can run', async () => {
   const socketPath = await createSocketPath(socketDirectories);
   // Result 2 is what the real daemon answers for an unknown DeviceID.
