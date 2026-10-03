@@ -17,13 +17,13 @@ extension RunnerTests {
   }
 
   func testDegradedEchoesStayEchoesAndSummariesDoNot() {
-    XCTAssertTrue(Self.textEntryValueEchoes(observed: "", expected: "123456"))
-    XCTAssertTrue(Self.textEntryValueEchoes(observed: "12456", expected: "123456"))
-    XCTAssertTrue(Self.textEntryValueEchoes(observed: "old123456", expected: "123456"))
-    XCTAssertTrue(Self.textEntryValueEchoes(observed: "(555) 123-4567", expected: "5551234567"))
-    XCTAssertTrue(Self.textEntryValueEchoes(observed: "hello", expected: "hello\n"))
-    XCTAssertFalse(Self.textEntryValueEchoes(observed: "6 of 6 digits", expected: "123456"))
-    XCTAssertFalse(Self.textEntryValueEchoes(observed: "6 digits", expected: "123456"))
+    XCTAssertTrue(Self.textEntryValueEchoes(observed: "", expected: "123456", baseline: ""))
+    XCTAssertTrue(Self.textEntryValueEchoes(observed: "12456", expected: "123456", baseline: ""))
+    XCTAssertTrue(Self.textEntryValueEchoes(observed: "old123456", expected: "123456", baseline: ""))
+    XCTAssertTrue(Self.textEntryValueEchoes(observed: "(555) 123-4567", expected: "5551234567", baseline: ""))
+    XCTAssertTrue(Self.textEntryValueEchoes(observed: "hello", expected: "hello\n", baseline: ""))
+    XCTAssertFalse(Self.textEntryValueEchoes(observed: "6 of 6 digits", expected: "123456", baseline: ""))
+    XCTAssertFalse(Self.textEntryValueEchoes(observed: "6 digits", expected: "123456", baseline: ""))
   }
 
   func testDigitCountSummaryThatMovedOffItsBaselineIsUnconfirmed() {
@@ -42,6 +42,22 @@ extension RunnerTests {
         target: Self.otpFieldIdentity
       )
     )
+  }
+
+  func testSingleCharacterTheSummaryAlreadyContainedIsUnconfirmed() {
+    let evidence = Self.unconfirmedTextEntryEvidence(
+      requested: "6",
+      baseline: Self.otpObservation("0 of 6 digits"),
+      observed: Self.otpObservation("1 of 6 digits")
+    )
+
+    XCTAssertEqual(evidence?.after, "1 of 6 digits")
+  }
+
+  func testRequestTheBaselineContainedEchoesOnlyWithTheBaseline() {
+    XCTAssertTrue(Self.textEntryValueEchoes(observed: "66", expected: "6", baseline: "6"))
+    XCTAssertTrue(Self.textEntryValueEchoes(observed: "0 of 6 digits6", expected: "6", baseline: "0 of 6 digits"))
+    XCTAssertFalse(Self.textEntryValueEchoes(observed: "1 of 6 digits", expected: "6", baseline: "0 of 6 digits"))
   }
 
   func testEveryOtherReplacementMismatchStaysAFailure() {
@@ -101,6 +117,19 @@ extension RunnerTests {
   /// against the code, and the code is typed once rather than retyped by a repair.
   @MainActor
   func testFillIntoDigitCountFieldReportsUnconfirmedEvidence() throws {
+    try assertDigitCountFillIsUnconfirmed(code: "123456", summary: "6 of 6 digits")
+  }
+
+  /// A single digit the "0 of 6 digits" baseline already contains is not an echo of the summary,
+  /// so it is typed once instead of retyped into "66".
+  @MainActor
+  func testSingleDigitFillIntoDigitCountFieldIsTypedOnce() throws {
+    try assertDigitCountFillIsUnconfirmed(code: "6", summary: "1 of 6 digits")
+  }
+
+  /// Fills the digit-count fixture field with `code` and asserts unconfirmed evidence and one entry.
+  @MainActor
+  private func assertDigitCountFillIsUnconfirmed(code: String, summary: String) throws {
     app.launchArguments = [
       "--agent-device-text-entry-regression",
       "--agent-device-text-entry-digit-count-value",
@@ -118,7 +147,7 @@ extension RunnerTests {
       from: JSONSerialization.data(withJSONObject: [
         "command": "type",
         "commandId": "fill-digit-count",
-        "text": "123456",
+        "text": code,
         "textEntryMode": "replace",
         "x": frame.midX,
         "y": frame.midY,
@@ -133,13 +162,13 @@ extension RunnerTests {
     XCTAssertTrue(response.ok, String(describing: response.error))
     XCTAssertEqual(response.data?.message, "typed")
     XCTAssertEqual(response.data?.verification, "unconfirmed")
-    XCTAssertEqual(response.data?.requested, "123456")
+    XCTAssertEqual(response.data?.requested, code)
     XCTAssertEqual(response.data?.before, "0 of 6 digits")
-    XCTAssertEqual(response.data?.after, "6 of 6 digits")
+    XCTAssertEqual(response.data?.after, summary)
     XCTAssertEqual(response.data?.target?.resourceId, "agent-device-hardware-keyboard-input")
     XCTAssertEqual(response.data?.target?.className, "TextField")
     XCTAssertEqual(response.data?.target?.packageName, "com.callstack.agentdevice.runner")
-    XCTAssertEqual(app.staticTexts["agent-device-text-entry-digit-slots"].label, "123456")
+    XCTAssertEqual(app.staticTexts["agent-device-text-entry-digit-slots"].label, code)
   }
 #endif
 #endif

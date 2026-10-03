@@ -24,6 +24,11 @@ extension RunnerTests {
   struct TextEntryObservation: Equatable {
     let value: String
     let identity: TextEntryElementIdentity
+
+    /// Same value on the same element; a frame change alone on an identified field is not a change.
+    func isSettled(with other: TextEntryObservation) -> Bool {
+      value == other.value && identity.isSameElement(as: other.identity)
+    }
   }
 
   /// Target-bound evidence that the entry changed the field while its value cannot confirm the text.
@@ -35,12 +40,18 @@ extension RunnerTests {
   }
 
   /// Whether `observed` can be the field echoing `expected`, however degraded: an echo that dropped
-  /// characters is contained in the request, and one with residual text contains it. A value
-  /// related to the request in neither direction, such as an OTP field announcing "6 of 6 digits",
-  /// is the app's own representation, so retyping cannot make it match.
-  static func textEntryValueEchoes(observed: String, expected: String) -> Bool {
+  /// characters is contained in the request, and one with residual text contains it. A request the
+  /// pre-entry `baseline` already contained proves nothing by containment, so that echo must hold
+  /// the baseline and the request together. A value related to the request in neither direction,
+  /// such as an OTP field announcing "6 of 6 digits", is the app's own representation, so retyping
+  /// cannot make it match.
+  static func textEntryValueEchoes(observed: String, expected: String, baseline: String) -> Bool {
     let request = textEntryRequestWithoutSubmitKeys(expected)
-    return isOrderedSubsequence(observed, of: request) || isOrderedSubsequence(request, of: observed)
+    if isOrderedSubsequence(observed, of: request) {
+      return true
+    }
+    let echoWithResidual = isOrderedSubsequence(request, of: baseline) ? baseline + request : request
+    return isOrderedSubsequence(echoWithResidual, of: observed)
   }
 
   /// Classifies a replacement whose read-back never matched. The entry is unconfirmed, not failed,
@@ -56,7 +67,7 @@ extension RunnerTests {
           let observed,
           baseline.identity.isSameElement(as: observed.identity),
           observed.value != baseline.value,
-          !textEntryValueEchoes(observed: observed.value, expected: requested)
+          !textEntryValueEchoes(observed: observed.value, expected: requested, baseline: baseline.value)
     else {
       return nil
     }
@@ -87,7 +98,8 @@ extension RunnerTests {
     )
   }
 
-  private static func textEntryRequestWithoutSubmitKeys(_ text: String) -> String {
+  /// The text a request leaves in the field once trailing submit keys are pressed rather than typed.
+  static func textEntryRequestWithoutSubmitKeys(_ text: String) -> String {
     var request = text
     while request.hasSuffix("\n") || request.hasSuffix("\r") {
       request.removeLast()
@@ -95,7 +107,8 @@ extension RunnerTests {
     return request
   }
 
-  private static func isOrderedSubsequence(_ candidate: String, of text: String) -> Bool {
+  /// Whether every character of `candidate` appears in `text` in the same order.
+  static func isOrderedSubsequence(_ candidate: String, of text: String) -> Bool {
     var remaining = text[...]
     for character in candidate {
       guard let match = remaining.firstIndex(of: character) else {

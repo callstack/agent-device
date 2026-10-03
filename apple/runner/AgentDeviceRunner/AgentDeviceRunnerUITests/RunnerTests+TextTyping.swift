@@ -478,11 +478,15 @@ extension RunnerTests {
     func evidence(_ observed: TextEntryObservation?) -> TextEntryUnconfirmedEvidence? {
       Self.unconfirmedTextEntryEvidence(requested: requested, baseline: baseline, observed: observed)
     }
+    let ceiling = Date().addingTimeInterval(TextEntryTiming.unconfirmedSettleCeiling)
     var latest = observe()
+    while let unmoved = latest, unmoved.isSettled(with: baseline), Date() < ceiling {
+      sleepFor(TextEntryTiming.pollInterval)
+      latest = observe()
+    }
     guard evidence(latest) != nil else {
       return nil
     }
-    let ceiling = Date().addingTimeInterval(TextEntryTiming.unconfirmedSettleCeiling)
     var stableSince = Date()
     while Date().timeIntervalSince(stableSince) < TextEntryTiming.verificationStabilityWindow {
       guard Date() < ceiling else {
@@ -490,10 +494,12 @@ extension RunnerTests {
       }
       sleepFor(TextEntryTiming.pollInterval)
       let next = observe()
-      if next != latest {
+      if let next, let settled = latest, next.isSettled(with: settled) {
         latest = next
-        stableSince = Date()
+        continue
       }
+      latest = next
+      stableSince = Date()
     }
     guard let unconfirmed = evidence(latest) else {
       return nil
@@ -576,18 +582,10 @@ extension RunnerTests {
     if observedText == expectedText {
       return true
     }
-    guard hasTextEntrySubmitSuffix(expectedText), element?.elementType != .textView else {
+    guard element?.elementType != .textView else {
       return false
     }
-    var submittedText = expectedText
-    while hasTextEntrySubmitSuffix(submittedText) {
-      submittedText.removeLast()
-    }
-    return observedText == submittedText
-  }
-
-  private func hasTextEntrySubmitSuffix(_ text: String) -> Bool {
-    text.hasSuffix("\n") || text.hasSuffix("\r")
+    return observedText == Self.textEntryRequestWithoutSubmitKeys(expectedText)
   }
 
   private func expectedTextEntryValue(
@@ -684,13 +682,6 @@ extension RunnerTests {
     guard missingCharacterCount <= max(2, expectedText.count / 4) else {
       return false
     }
-    var expectedIndex = expectedText.startIndex
-    for character in observedText {
-      guard let matchIndex = expectedText[expectedIndex...].firstIndex(of: character) else {
-        return false
-      }
-      expectedIndex = expectedText.index(after: matchIndex)
-    }
-    return true
+    return Self.isOrderedSubsequence(observedText, of: expectedText)
   }
 }
