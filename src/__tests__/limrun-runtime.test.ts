@@ -37,6 +37,7 @@ const limrunMockState = vi.hoisted(() => {
     ]),
     androidOpenUrl: vi.fn(async () => undefined),
     androidDisconnect: vi.fn(),
+    androidKeepAlive: vi.fn(),
     androidSendAsset: vi.fn(async () => undefined),
     androidTunnelClose,
     androidStartAdbTunnel: vi.fn(async () => ({
@@ -110,6 +111,7 @@ vi.mock('@limrun/api/ios-client', () => ({
 vi.mock('@limrun/api/instance-client', () => ({
   createInstanceClient: vi.fn(async () => ({
     disconnect: limrunMockState.androidDisconnect,
+    keepAlive: limrunMockState.androidKeepAlive,
     openUrl: limrunMockState.androidOpenUrl,
     sendAsset: limrunMockState.androidSendAsset,
     startAdbTunnel: limrunMockState.androidStartAdbTunnel,
@@ -303,6 +305,52 @@ test('Limrun Android reverses localhost URL ports through the persistent ADB tun
     assertAndroidTunnelLifecycle('exp://127.0.0.1:8081');
   } finally {
     await runtime.shutdown();
+  }
+});
+
+test('Limrun keepAlive pings the session client every 30 s until release', async () => {
+  vi.useFakeTimers();
+  try {
+    const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', keepAlive: true });
+    const lease = androidLease();
+    await allocateLimrunDevice(runtime, lease);
+    await vi.advanceTimersByTimeAsync(60_000);
+    assert.equal(limrunMockState.androidKeepAlive.mock.calls.length, 2);
+
+    await runtime.leaseLifecycle.release?.(lease);
+    await vi.advanceTimersByTimeAsync(60_000);
+    assert.equal(limrunMockState.androidKeepAlive.mock.calls.length, 2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('Limrun keepAlive is off by default', async () => {
+  vi.useFakeTimers();
+  try {
+    const runtime = new LimrunRuntime({ apiKey: 'lim_test_key' });
+    await allocateLimrunDevice(runtime, androidLease());
+    await vi.advanceTimersByTimeAsync(60_000);
+    assert.equal(limrunMockState.androidKeepAlive.mock.calls.length, 0);
+    await runtime.shutdown();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('Limrun keepAlive keeps pinging after the client throws', async () => {
+  vi.useFakeTimers();
+  try {
+    limrunMockState.androidKeepAlive.mockImplementationOnce(() => {
+      throw new Error('socket closed');
+    });
+    const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', keepAlive: true });
+    await allocateLimrunDevice(runtime, androidLease());
+    await vi.advanceTimersByTimeAsync(60_000);
+    assert.equal(limrunMockState.androidKeepAlive.mock.calls.length, 2);
+    await runtime.shutdown();
+  } finally {
+    vi.useRealTimers();
   }
 });
 
