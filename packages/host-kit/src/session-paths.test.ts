@@ -7,8 +7,7 @@ import { expandSessionPath } from './session-paths.ts';
 
 test('expandSessionPath resolves tilde, relative-with-cwd, and absolute paths', () => {
   const homePath = expandSessionPath('~/flows/replay.ad');
-  assert.equal(homePath.startsWith(os.homedir()), true);
-  assert.equal(homePath.endsWith(path.join('flows', 'replay.ad')), true);
+  assert.equal(homePath, path.join(os.homedir(), 'flows', 'replay.ad'));
 
   const relativePath = expandSessionPath('workflows/replay.ad', '/tmp/agent-device-cwd');
   assert.equal(relativePath, path.resolve('/tmp/agent-device-cwd', 'workflows/replay.ad'));
