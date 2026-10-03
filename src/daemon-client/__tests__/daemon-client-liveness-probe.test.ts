@@ -61,12 +61,18 @@ test('the probe budget stays an order of magnitude under the narrowest reset-eli
 
 test('a daemon answering /health is responsive', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
-  const server = http.createServer((_req, res) => {
+  // The url is asserted, not just "an answer": a probe that drifted to any other route would
+  // still be answered by a server that answers everything, and the finding would then describe
+  // some other endpoint's liveness rather than the health route the transport also asks.
+  const requestedUrls: string[] = [];
+  const server = http.createServer((req, res) => {
+    requestedUrls.push(String(req.url));
     res.statusCode = 200;
     res.end('{}');
   });
   await withLoopback(server, async (port) => {
     assert.equal(await probeDaemonResponsive(daemonInfo({ httpPort: port })), true);
+    assert.deepEqual(requestedUrls, ['/health']);
   });
 });
 
@@ -96,13 +102,27 @@ test('a silent HTTP leg cannot veto a live socket leg', async (t) => {
   // second endpoint no window — and the all-negative verdict SIGKILLs a daemon the other
   // transport would have proven alive. The wrong verdict here kills every session on the host,
   // which is the bug #3177 is about.
-  const rpcHangingServer = http.createServer(() => {
+  // The HTTP leg must be OBSERVED, not assumed: a verdict reached with no /health request ever
+  // sent would also pass if the probe simply skipped the leg. So the socket waits for the receipt
+  // before it answers — if the HTTP leg never asks, the socket never answers, the probe spends
+  // its window, and the `true` assertion below fails for the right reason.
+  const healthRequested: { value: boolean } = { value: false };
+  const rpcHangingServer = http.createServer((req, res) => {
+    if (req.url === '/health') healthRequested.value = true;
     // Accepts and never answers: this leg will spend the full budget.
+    res.on('error', () => {});
   });
   const liveSocketServer = net.createServer((socket) => {
     socket.on('error', () => {});
     socket.on('data', () => {
-      socket.write(`${JSON.stringify({ jsonrpc: '2.0', id: 'probe', result: { ok: true } })}\n`);
+      const answer = () => {
+        socket.write(`${JSON.stringify({ jsonrpc: '2.0', id: 'probe', result: { ok: true } })}\n`);
+      };
+      const waitForHttpLeg = (): void => {
+        if (healthRequested.value) answer();
+        else setTimeout(waitForHttpLeg, 5);
+      };
+      waitForHttpLeg();
     });
   });
   const httpPort = await listenOnLoopback(rpcHangingServer);
@@ -114,6 +134,7 @@ test('a silent HTTP leg cannot veto a live socket leg', async (t) => {
         true,
         'the socket answer alone is the finding; the silent HTTP leg must not outweigh it',
       );
+      assert.ok(healthRequested.value, 'a verdict with no request on the HTTP leg skipped the leg');
       assert.ok(
         Date.now() - startedAt < LIVENESS_PROBE_BUDGET_MS,
         'the affirmative short-circuits instead of waiting the silent leg out',
@@ -123,6 +144,28 @@ test('a silent HTTP leg cannot veto a live socket leg', async (t) => {
     await closeLoopbackServer(rpcHangingServer);
   }
 });
+
+test('a malformed port makes the HTTP leg an endpoint that did not answer, not a crash', async () => {
+  // `readDaemonInfo` accepts any positive integer port, and `transport.request` THROWS
+  // synchronously on one out of range. Inside the leg's detached async build that throw would
+  // surface as an unhandled rejection — from a recovery path, killing the CLI that is still
+  // holding a timeout error. The leg must fold it into a negative answer instead.
+  const probe = probeDaemonResponsive(daemonInfo({ httpPort: 70_000 }));
+  const rejection = probe.then(
+    () => null,
+    (error: unknown) => error,
+  );
+  process.on('unhandledRejection', failFastOnUnhandledRejection);
+  try {
+    assert.equal(await probe, false);
+    assert.equal(await rejection, null, 'the probe never rejects on a malformed record');
+  } finally {
+    process.off('unhandledRejection', failFastOnUnhandledRejection);
+  }
+});
+function failFastOnUnhandledRejection(error: unknown): never {
+  throw error;
+}
 
 test('a slow-trickle endpoint is cut off by the absolute deadline, not extended by its dribble', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;

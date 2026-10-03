@@ -6,17 +6,14 @@ import type { DaemonRequest } from '../daemon/daemon-request.ts';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 
 // The post-timeout liveness probe (#3177): the question a daemon reset may no longer assume.
-// The daemon owns request-scoped recovery — destroying the timed-out connection cancels exactly
-// that request — so a reset is only justified for a daemon that answers nothing. The probe asks
-// on FRESH connections: the request that timed out proves nothing about the next round trip, and
-// a probe on the old connection would be canceled by the same teardown that recovers it.
+// The daemon owns request-scoped recovery, so a reset is only justified for a daemon that answers
+// nothing — and the question must be asked on FRESH connections, because the timed-out connection
+// is the one the transport tears down to cancel that request.
 
-// The probe's window, shared by both legs: the extra latency a caller of a reset-eligible
-// timed-out request can pay before its error lands. It sits beside the transport's
-// `LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS` (same endpoints, asked before an RPC) and stays an order
-// of magnitude under the narrowest reset-eligible envelope — pinned against the registry's 90s
-// default in `__tests__/daemon-client-liveness-probe.test.ts` — because a wrong "unresponsive"
-// verdict here kills a live shared daemon.
+// The extra latency a caller of a reset-eligible timed-out request can pay before its error lands.
+// An order of magnitude under the narrowest reset-eligible envelope (pinned in
+// `__tests__/daemon-client-liveness-probe.test.ts`): a wrong "unresponsive" verdict kills a live
+// shared daemon.
 export const LIVENESS_PROBE_BUDGET_MS = 1_000;
 
 /**
@@ -24,15 +21,12 @@ export const LIVENESS_PROBE_BUDGET_MS = 1_000;
  * one sessionless RPC on its socket. An answer on either leg proves the daemon's event loop serves
  * fresh requests; a refused or silent leg answers "not this one", not "not the daemon".
  *
- * Both legs run CONCURRENTLY against one shared deadline because the finding is per-daemon, not
- * per-leg: a sequential probe lets a silently-hanging leg spend the whole window and veto the
- * other leg's live answer — resetting a daemon the other transport proves alive. The first
- * AFFIRMATIVE is unrevocable, so it settles the probe at once instead of making the caller's
- * error wait on a leg that has nothing left to say. Each leg settles no later than the ABSOLUTE
- * deadline (not the transports' own idle timeouts, which a trickling endpoint resets forever),
- * so the negative verdict always arrives inside the window. A leg never rejects: a probe that
- * cannot ask is an endpoint that did not answer. `session` rides along so an isolation-scoped
- * daemon routes the probe like the request it follows.
+ * Both legs run CONCURRENTLY against one shared deadline: the finding is per-daemon, not per-leg,
+ * and a leg that hangs must not spend the window the other leg needs. The first AFFIRMATIVE is
+ * unrevocable and settles at once. The deadline is ABSOLUTE — the transports' own idle timeouts
+ * never fire while an endpoint trickles bytes — so the negative verdict always lands inside the
+ * window. A leg never rejects: a probe that cannot ask is an endpoint that did not answer.
+ * `session` rides along so an isolation-scoped daemon routes the probe like the request it follows.
  */
 export async function probeDaemonResponsive(
   info: DaemonInfo,
@@ -59,9 +53,6 @@ export async function probeDaemonResponsive(
 
 type ProbeLeg = Readonly<{ answer: Promise<boolean>; cancel: () => void }>;
 
-// One leg: settles once, no later than its deadline, and tears its transport down either way. The
-// deadline is ABSOLUTE — the transports' own idle timeouts never fire while an endpoint keeps
-// trickling bytes — so the caller's error always lands inside the probe window.
 function createProbeLeg(deadlineAtMs: number): {
   leg: ProbeLeg;
   settle: (answered: boolean) => void;
@@ -87,8 +78,7 @@ function createProbeLeg(deadlineAtMs: number): {
     settle,
     attach: (destroyTransport) => {
       destroy = destroyTransport;
-      // The deadline can close before a leg finishes building its transport (the HTTP leg awaits
-      // its requester), so a late arrival is torn down on the spot.
+      // The deadline can close before a leg builds its transport, so a late arrival is torn down.
       if (settled) destroyTransport();
     },
   };
@@ -96,21 +86,27 @@ function createProbeLeg(deadlineAtMs: number): {
 
 function probeHttpHealth(httpPort: number, deadlineAtMs: number): ProbeLeg {
   const probe = createProbeLeg(deadlineAtMs);
+  // A malformed record (a port `readDaemonInfo` accepted out of range) makes `transport.request`
+  // throw here; the detached build must not reach the caller as an unhandled rejection.
   void (async () => {
-    const transport = await loadNodeHttpRequester('http:');
-    const request = transport.request(
-      { host: '127.0.0.1', port: String(httpPort), path: '/health', method: 'GET' },
-      (res) => {
-        // Any status is an answer: the health route is served by the daemon's own event loop
-        // before any request handling, so reaching it at all proves it serves fresh requests.
-        // Drain so the response cannot hold the probe's socket open past its finding.
-        res.resume();
-        probe.settle(true);
-      },
-    );
-    request.on('error', () => probe.settle(false));
-    probe.attach(() => request.destroy());
-    request.end();
+    try {
+      const transport = await loadNodeHttpRequester('http:');
+      const request = transport.request(
+        { host: '127.0.0.1', port: String(httpPort), path: '/health', method: 'GET' },
+        (res) => {
+          // Any status is an answer: the health route is served before any request handling, so
+          // reaching it proves the event loop serves fresh requests. Drain so the response cannot
+          // hold the socket open past the finding.
+          res.resume();
+          probe.settle(true);
+        },
+      );
+      request.on('error', () => probe.settle(false));
+      probe.attach(() => request.destroy());
+      request.end();
+    } catch {
+      probe.settle(false);
+    }
   })();
   return probe.leg;
 }

@@ -613,10 +613,15 @@ test('sendRequest timeout cleanup uses resolved daemon paths instead of request 
   const daemonPaths = resolveDaemonPaths(daemonStateDir);
   const requestFlagPaths = resolveDaemonPaths(requestFlagStateDir);
   const daemon = await startHangingHttpDaemonFixture();
+  // The cleanup fence only clears a registration that still MATCHES the timed-out daemon on pid
+  // and start time (#3125), so this fixture names one identity on both sides: the record it
+  // publishes and the info `sendRequest` times out on.
+  const timedOutDaemonStartTime = 'timeout-daemon-start';
   writeDaemonInfo(daemonPaths, {
     httpPort: daemon.port,
     transport: 'http',
     pid: 999_999,
+    processStartTime: timedOutDaemonStartTime,
   });
   writeDaemonLock(daemonPaths, { pid: 999_999 });
   writeDaemonInfo(requestFlagPaths, {
@@ -644,6 +649,7 @@ test('sendRequest timeout cleanup uses resolved daemon paths instead of request 
           pid: 999_999,
           httpPort: daemon.port,
           transport: 'http',
+          processStartTime: timedOutDaemonStartTime,
         },
         request,
         'http',
@@ -660,7 +666,9 @@ test('sendRequest timeout cleanup uses resolved daemon paths instead of request 
     // reset. The fixture refused that probe, which is what authorized the reset below.
     assert.deepEqual(daemon.seenPaths, ['POST /rpc', 'GET /health']);
     assert.equal(fs.existsSync(daemonPaths.infoPath), false);
-    assert.equal(fs.existsSync(daemonPaths.lockPath), false);
+    // The reset owns its registration, not the protocol lock: reclaim belongs to the acquirer
+    // under ADR 0030's mutation guard, so neither state dir's lock is ever swept.
+    assert.equal(fs.existsSync(daemonPaths.lockPath), true);
     assert.equal(fs.existsSync(requestFlagPaths.infoPath), true);
     assert.equal(fs.existsSync(requestFlagPaths.lockPath), true);
   } finally {

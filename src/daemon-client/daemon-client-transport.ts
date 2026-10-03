@@ -676,6 +676,11 @@ async function sendHttpRequest(
 
     request.on('error', (err) => {
       if (timeoutHandle) clearTimeout(timeoutHandle);
+      // The timeout's `destroy()` surfaces HERE, on a later tick. The outcome is already claimed,
+      // and `handleTransportError` emits a diagnostic, so settling alone is not enough: building
+      // that error would describe a canceled request as a transport failure. When nothing has
+      // claimed the outcome (a real socket death), `reject` itself performs the claim.
+      if (settled) return;
       reject(handleTransportError(err, req.meta?.requestId, remote));
     });
 

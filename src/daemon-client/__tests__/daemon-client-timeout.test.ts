@@ -41,25 +41,20 @@ test('request timeout hint names an Apple runner only on a declared Apple platfo
     'Retry with --debug and check daemon diagnostics logs. The timed-out snapshot request was canceled; the daemon was kept alive so the session can still be closed or inspected.',
   );
 
-  // A reset is now reported as what it was decided from: an unanswered liveness probe.
-  assert.equal(
-    resolveRequestTimeoutHint({
-      remote: false,
-      resetDaemon: true,
-      command: 'open',
-      applePlatformDeclared: true,
-    }),
-    'Retry with --debug and check daemon diagnostics logs. The daemon did not answer the liveness probe and was reset after the timeout; any Apple runner work it owned was stopped with it.',
-  );
-  assert.equal(
-    resolveRequestTimeoutHint({
-      remote: false,
-      resetDaemon: true,
-      command: 'open',
-      applePlatformDeclared: false,
-    }),
-    'Retry with --debug and check daemon diagnostics logs. The daemon did not answer the liveness probe and was reset after the timeout.',
-  );
+  // A reset is now reported as what it was decided from: an unanswered liveness probe. The reset
+  // SIGKILLs the daemon pid only, so the hint claims nothing about runner children it cannot
+  // prove stopped — and a declared Apple platform changes the reset wording not at all.
+  for (const applePlatformDeclared of [true, false]) {
+    assert.equal(
+      resolveRequestTimeoutHint({
+        remote: false,
+        resetDaemon: true,
+        command: 'open',
+        applePlatformDeclared,
+      }),
+      'Retry with --debug and check daemon diagnostics logs. The daemon did not answer the liveness probe and was reset after the timeout.',
+    );
+  }
 
   // Remote requests were never Apple-specific and stay evidence-independent.
   assert.equal(

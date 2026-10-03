@@ -1,14 +1,18 @@
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import type { OwnerIdentity } from '@agent-device/host-kit/process';
 
 import { isAgentDeviceDaemonProcess } from '../daemon-process.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
+import {
+  readRegisteredDaemonOwnership,
+  type RegisteredDaemonOwnership,
+} from '../daemon-registration.ts';
 import type { DaemonPaths } from '../daemon-resolution.ts';
 import type { PlatformSelector } from '@agent-device/kernel/device';
 import {
   removeDaemonInfo,
-  removeDaemonLock,
   stopDaemonProcessForTakeover,
   type DaemonInfo,
 } from './daemon-client-metadata.ts';
@@ -52,7 +56,7 @@ export async function handleRequestTimeout(
   const unresponsive = probeAnswered === false;
   const daemonReset = unresponsive
     ? resetDaemonAfterTimeout(info, statePaths)
-    : { performedReset: false, forcedKill: false };
+    : { performedReset: false, forcedKill: false, registration: undefined };
   emitDiagnostic({
     level: 'error',
     phase: 'daemon_request_timeout',
@@ -62,6 +66,7 @@ export async function handleRequestTimeout(
       command,
       daemonPidReset: daemonReset.performedReset ? info.pid : undefined,
       daemonPidForceKilled: daemonReset.performedReset ? daemonReset.forcedKill : undefined,
+      daemonRegistrationOwnership: daemonReset.registration?.state,
       daemonPreservedAfterTimeout: !remote && !daemonReset.performedReset,
       daemonLivenessProbeAnswered: probeAnswered,
       daemonBaseUrl: info.baseUrl,
@@ -117,6 +122,7 @@ export function resolveRequestTimeoutHint(params: {
   remote: boolean;
   resetDaemon: boolean;
   command: string | undefined;
+  /** Only ever consulted on the kept-alive branch, where an Apple hint has evidence to stand on. */
   applePlatformDeclared: boolean;
   /** The request's first positional, for commands whose recovery depends on which action ran. */
   action?: string;
@@ -134,9 +140,9 @@ export function resolveRequestTimeoutHint(params: {
     return 'Retry with --debug and verify the remote daemon URL, auth token, and remote host logs.';
   }
   if (resetDaemon) {
-    return applePlatformDeclared
-      ? 'Retry with --debug and check daemon diagnostics logs. The daemon did not answer the liveness probe and was reset after the timeout; any Apple runner work it owned was stopped with it.'
-      : 'Retry with --debug and check daemon diagnostics logs. The daemon did not answer the liveness probe and was reset after the timeout.';
+    // The reset SIGKILLs the daemon pid only; child processes it owned (Apple runners included)
+    // are not proven stopped from here, so the hint claims nothing about them.
+    return 'Retry with --debug and check daemon diagnostics logs. The daemon did not answer the liveness probe and was reset after the timeout.';
   }
   const iosPrepareHint =
     applePlatformDeclared && command === PUBLIC_COMMANDS.snapshot
@@ -150,12 +156,26 @@ export function resolveRequestTimeoutHint(params: {
   } request was canceled; the daemon was kept alive so the session can still be closed or inspected.${iosPrepareHint}`;
 }
 
-type DaemonReset = Readonly<{ performedReset: boolean; forcedKill: boolean }>;
+type DaemonReset = Readonly<{
+  performedReset: boolean;
+  forcedKill: boolean;
+  /** The `daemon.json` verdict read AFTER the kill, against the identity this client started from. */
+  registration: RegisteredDaemonOwnership;
+}>;
 
 // The reset a liveness probe proved necessary: SIGKILL the daemon this client's metadata still
-// proves is ours, then clear the metadata and lock a dead daemon cannot release. Identity is
-// re-verified immediately before the signal so a recycled pid is never signaled, matching what
-// `stopDaemon` does for an ordinary stop.
+// proves is ours, then clear the registration the dead daemon can no longer release. Identity is
+// re-verified immediately before the signal so a recycled pid is never signaled, and the
+// registration is re-read afterward under the same proof (#3125): the probe window is exactly when
+// a replacement daemon can publish, and a reset that deleted on faith would orphan the
+// replacement's record. A `replaced` verdict leaves that record alone; a kill proves the OLD
+// daemon unconditionally, so the signal itself needed no such proof.
+//
+// The startup lock is deliberately untouched. ADR 0030 gives reclaim to the acquirer under its
+// mutation guard, and `daemon.lock` is now that protocol's directory — a client deleting it
+// out-of-band is the legacy-reclaimer pattern the ADR refuses. A reset therefore ends the process
+// and its own registration only; the next acquirer reclaims the dead holder's lock through the
+// protocol.
 function resetDaemonAfterTimeout(info: DaemonInfo, paths: DaemonPaths): DaemonReset {
   let forcedKill = false;
   try {
@@ -171,9 +191,17 @@ function resetDaemonAfterTimeout(info: DaemonInfo, paths: DaemonPaths): DaemonRe
         data: { error: normalizeError(error) },
       });
     });
-  } finally {
-    removeDaemonInfo(paths.infoPath);
-    removeDaemonLock(paths.lockPath);
   }
-  return { performedReset: true, forcedKill };
+  const owner: OwnerIdentity = {
+    pid: info.pid,
+    startTime: info.processStartTime ?? null,
+  };
+  const registration = readRegisteredDaemonOwnership(paths.infoPath, owner);
+  // Only `match` proves the record is still the killed daemon's; every other verdict — a
+  // replacement's record, a pid-only record the fence refuses to trust, an unreadable one — leaves
+  // it for the stale-metadata paths, which re-check liveness before acting on it.
+  if (registration.state === 'match') {
+    removeDaemonInfo(paths.infoPath);
+  }
+  return { performedReset: true, forcedKill, registration };
 }
