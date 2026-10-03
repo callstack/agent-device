@@ -287,12 +287,35 @@ async function captureAndroidUiHierarchyWithHelper(
   artifact: AndroidSnapshotHelperArtifact,
 ): Promise<{ xml: string; metadata: AndroidSnapshotBackendMetadata }> {
   const helperDeviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
-  const adbProvider = resolveAndroidAdbProvider(device, options.helperAdb);
   const releaseHelperSession = releasesHelperSessionAfterCapture(options, helperDeviceKey);
-  const recaptureDeadlineMs = Math.min(
-    Date.now() + HELPER_CONTENT_RECAPTURE_WINDOW_MS,
-    options.transient?.settleBy ?? Number.POSITIVE_INFINITY,
-  );
+  try {
+    return await captureAndroidHelperContentWithinWindow({
+      options,
+      adb,
+      adbProvider: resolveAndroidAdbProvider(device, options.helperAdb),
+      artifact,
+      helperDeviceKey,
+    });
+  } finally {
+    if (releaseHelperSession) {
+      await stopAndroidSnapshotHelperSession(helperDeviceKey);
+    }
+  }
+}
+
+/**
+ * Re-captures unusable content until a capture answers, the attempts run out, or the re-capture
+ * window has closed by the time the next attempt would start.
+ */
+async function captureAndroidHelperContentWithinWindow(params: {
+  options: AndroidSnapshotOptions;
+  adb: AndroidAdbExecutor;
+  adbProvider: AndroidAdbProvider;
+  artifact: AndroidSnapshotHelperArtifact;
+  helperDeviceKey: string;
+}): Promise<{ xml: string; metadata: AndroidSnapshotBackendMetadata }> {
+  const { options } = params;
+  const recaptureDeadlineMs = resolveContentRecaptureDeadlineMs(options);
   const rejectContentUnavailable = async (
     contentRecovery: AndroidHelperContentRecoveryDecision,
     attempts: number,
@@ -300,41 +323,39 @@ async function captureAndroidUiHierarchyWithHelper(
     await rejectAndroidHelperContentUnavailable({
       contentRecovery,
       attempts,
-      helperDeviceKey,
-      artifact,
-      adb,
+      helperDeviceKey: params.helperDeviceKey,
+      artifact: params.artifact,
+      adb: params.adb,
       signal: options.signal,
       retireHelper: options.transient === undefined,
     });
-  try {
-    let previousDecision: AndroidHelperContentRecoveryDecision | undefined;
-    for (let attempt = 0; ; attempt += 1) {
-      if (previousDecision) {
-        await delayBeforeContentRecapture(options.signal);
-        if (Date.now() >= recaptureDeadlineMs) {
-          return await rejectContentUnavailable(previousDecision, attempt);
-        }
+  let previousDecision: AndroidHelperContentRecoveryDecision | undefined;
+  for (let attempt = 0; ; attempt += 1) {
+    if (previousDecision) {
+      await delayBeforeContentRecapture(options.signal);
+      if (Date.now() >= recaptureDeadlineMs) {
+        return await rejectContentUnavailable(previousDecision, attempt);
       }
-      const settled = await captureAndroidHelperContentAttempt({
-        options,
-        adb,
-        adbProvider,
-        artifact,
-        helperDeviceKey,
-        attempt,
-        previousContentReason: previousDecision?.reason,
-      });
-      if (settled.outcome === 'captured') return settled.capture;
-      if (attempt + 1 >= HELPER_CONTENT_CAPTURE_ATTEMPTS || Date.now() >= recaptureDeadlineMs) {
-        return await rejectContentUnavailable(settled.decision, attempt + 1);
-      }
-      previousDecision = settled.decision;
     }
-  } finally {
-    if (releaseHelperSession) {
-      await stopAndroidSnapshotHelperSession(helperDeviceKey);
+    const settled = await captureAndroidHelperContentAttempt({
+      ...params,
+      attempt,
+      previousContentReason: previousDecision?.reason,
+    });
+    if (settled.outcome === 'captured') return settled.capture;
+    if (attempt + 1 >= HELPER_CONTENT_CAPTURE_ATTEMPTS || Date.now() >= recaptureDeadlineMs) {
+      return await rejectContentUnavailable(settled.decision, attempt + 1);
     }
+    previousDecision = settled.decision;
   }
+}
+
+/** No re-capture starts after this instant: the end of the window, or a transient read's settle-by. */
+function resolveContentRecaptureDeadlineMs(options: AndroidSnapshotOptions): number {
+  return Math.min(
+    Date.now() + HELPER_CONTENT_RECAPTURE_WINDOW_MS,
+    options.transient?.settleBy ?? Number.POSITIVE_INFINITY,
+  );
 }
 
 /** A transient read keeps a session it found running and releases one it had to start. */
