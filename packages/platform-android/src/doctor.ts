@@ -37,9 +37,9 @@ export async function androidToolchainCheck(
   const versionOutput = await commandOutput('adb', ['version']);
   const versionLine = versionOutput === undefined ? undefined : firstOutputLine(versionOutput);
   if (!versionOutput || !versionLine) return missingAndroidAdbCheck(sdkRoot, license);
-  const adbPath = androidAdbInstallPath(versionOutput);
-  if (hostPlatform !== 'win32' && adbPath && isWindowsHostPath(adbPath)) {
-    return windowsAdbOnPosixHostCheck({ adbPath, sdkRoot, versionLine });
+  const windowsAdb = hostPlatform === 'win32' ? undefined : detectWindowsAdb(versionOutput);
+  if (windowsAdb) {
+    return windowsAdbOnPosixHostCheck({ windowsAdb, sdkRoot, versionLine });
   }
 
   return androidAdbCheck({
@@ -190,21 +190,51 @@ function isWindowsHostPath(candidate: string): boolean {
   return /^(?:[A-Za-z]:[\\/]|\\\\)/.test(candidate);
 }
 
+/** Banner line naming the OS the running adb was built for; a native host binary never names Windows. */
+function reportsWindowsRuntime(versionOutput: string): boolean {
+  return /^Running on Windows\b/m.test(versionOutput);
+}
+
+/** adb's self-report that it is a Windows binary, plus the signal that revealed it. */
+type WindowsAdbReport = Readonly<{
+  detectedVia: 'installed-as-path' | 'running-on-line';
+  adbPath: string | undefined;
+}>;
+
+function detectWindowsAdb(versionOutput: string): WindowsAdbReport | undefined {
+  const installPath = androidAdbInstallPath(versionOutput);
+  if (installPath && isWindowsHostPath(installPath)) {
+    return { detectedVia: 'installed-as-path', adbPath: installPath };
+  }
+  if (reportsWindowsRuntime(versionOutput)) {
+    return { detectedVia: 'running-on-line', adbPath: undefined };
+  }
+  return undefined;
+}
+
 /**
- * A Windows adb.exe reached from a Linux host (WSL interop) answers `adb version`, but it resolves
- * every host path it is handed as a Windows path, so pulls, pushes, and installs miss the Linux files.
+ * A Windows adb.exe reached from a POSIX host (WSL interop, Wine, a mounted volume) answers
+ * `adb version`, but it resolves every host path it is handed as a Windows path, so pulls, pushes,
+ * and installs miss the host's files. Older and third-party adb builds omit the `Installed as`
+ * banner, so the `Running on Windows` line is the fallback signal for them.
  */
 function windowsAdbOnPosixHostCheck(
-  probe: Readonly<{ adbPath: string; sdkRoot: string | undefined; versionLine: string }>,
+  probe: Readonly<{
+    windowsAdb: WindowsAdbReport;
+    sdkRoot: string | undefined;
+    versionLine: string;
+  }>,
 ): DoctorCheck {
+  const { adbPath, detectedVia } = probe.windowsAdb;
   return {
     id: 'toolchain',
     status: 'fail',
-    summary: `Android toolchain: adb on PATH is the Windows binary ${probe.adbPath}, which cannot use this host's file paths.`,
-    hint: 'Under WSL, install Linux Android platform-tools, put them first on PATH, and point ANDROID_HOME at a Linux SDK instead of one under /mnt/<drive>.',
+    summary: `Android toolchain: adb on PATH${adbPath ? ` (${adbPath})` : ''} is a Windows binary, which cannot use this host's file paths.`,
+    hint: "adb must be a native binary for this host: install this host's Android platform-tools, put them first on PATH, and point ANDROID_HOME at an SDK on this host's filesystem. Under WSL that means a Linux SDK, not one under /mnt/<drive>.",
     evidence: {
       reason: WINDOWS_ADB_ON_POSIX_HOST_REASON,
-      adbPath: probe.adbPath,
+      detectedVia,
+      adbPath: adbPath ?? null,
       adbVersion: probe.versionLine,
       androidHome: probe.sdkRoot ?? null,
     },
