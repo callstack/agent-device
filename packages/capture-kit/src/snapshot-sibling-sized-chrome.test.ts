@@ -440,10 +440,13 @@ type CapturedNode = [
 
 /** Builds a tree from rows captured with `snapshot -i --json`, every node hittable as published. */
 function capturedTree(rows: CapturedNode[]): RawSnapshotNode[] {
-  const depthByIndex = new Map<number, number>();
+  const parentByIndex = new Map(rows.map(([index, parentIndex]) => [index, parentIndex]));
+  const depthOf = (index: number | undefined): number => {
+    const parentIndex = index === undefined ? undefined : parentByIndex.get(index);
+    return parentIndex === undefined ? 0 : depthOf(parentIndex) + 1;
+  };
   return rows.map(([index, parentIndex, type, role, label, [x, y, width, height]]) => {
-    const depth = parentIndex === undefined ? 0 : (depthByIndex.get(parentIndex) ?? 0) + 1;
-    depthByIndex.set(index, depth);
+    const depth = depthOf(index);
     return node({
       index,
       parentIndex,
@@ -686,6 +689,24 @@ test('a toolbar host enclosing only a scroll indicator still covers, so the scro
   ]);
 
   assert.ok(coveredLabels(nodes).includes('Barless primary'));
+});
+
+test.for([
+  {
+    name: 'an Android RecyclerView type',
+    type: 'androidx.recyclerview.widget.RecyclerView',
+    role: '',
+  },
+  { name: 'a scroll kind published only in role', type: 'Other', role: 'UIScrollView' },
+])('a toolbar host enclosing $name reads it as a scroll container', ({ type, role }) => {
+  const nodes = capturedTree([
+    [0, undefined, 'Other', 'SwiftUIApplication', 'SheetRepro', [0, 0, 402, 874]],
+    [1, 0, type, role, undefined, [0, 100, 402, 712]],
+    [3, 1, 'Button', 'SwiftUI.AccessibilityNode', 'Barless primary', [16, 100, 370, 49]],
+    [17, 0, 'Toolbar', '_UIFloatingBarContainerView', 'Toolbar', [0, 62, 402, 812]],
+  ]);
+
+  assert.deepEqual(coveredLabels(nodes), []);
 });
 
 test('a control the exempt toolbar host really hosts still covers the row it overlaps', () => {

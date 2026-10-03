@@ -2,7 +2,11 @@ import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import { centerOfRect } from '@agent-device/kernel/snapshot';
 import { areRectsApproximatelyEqual, normalizeRect } from '@agent-device/kernel/rect-center';
 import { containsPoint, rectContains } from '@agent-device/kernel/rect';
-import { normalizeType, isViewportRootNode } from '@agent-device/contracts/snapshot';
+import {
+  isScrollableNodeLike,
+  normalizeType,
+  isViewportRootNode,
+} from '@agent-device/contracts/snapshot';
 
 const COVERED_PRESENTATION_HINT = 'covered';
 const OVERLAY_KIND_FRAGMENTS = [
@@ -19,7 +23,7 @@ const OVERLAY_KIND_FRAGMENTS = [
 ];
 const VIEWPORT_CHROME_KIND_FRAGMENTS = ['tabbar', 'toolbar', 'navigationbar'];
 const TOOLBAR_HOST_KIND_FRAGMENTS = ['toolbar'];
-const SCROLL_CONTAINER_TYPES = new Set(['collectionview', 'table', 'scrollview']);
+const SCROLL_INDICATOR_KIND_FRAGMENTS = ['scrollbar', 'scrollindicator'];
 const SEMANTIC_TOUCH_KIND_FRAGMENTS = [
   'button',
   'link',
@@ -321,7 +325,9 @@ function isSiblingSizedChromeContainer(
   if (typeof node.parentIndex !== 'number') return false;
   const rect = positiveRect(node.rect);
   if (!rect) return false;
-  const { siblings, position } = listedSiblings(node, neighbourhood);
+  const listed = listedSiblings(node, neighbourhood);
+  if (!listed) return false;
+  const { siblings, position } = listed;
   return siblings.some(
     (sibling, siblingPosition) =>
       siblingPosition !== position && areRectsApproximatelyEqual(rect, sibling.rect),
@@ -345,7 +351,9 @@ function isOwnPresentationToolbarHost(
   if (!nodeKindIncludesAny(node, TOOLBAR_HOST_KIND_FRAGMENTS)) return false;
   const rect = positiveRect(node.rect);
   if (!rect) return false;
-  const { siblings, position } = listedSiblings(node, neighbourhood);
+  const listed = listedSiblings(node, neighbourhood);
+  if (!listed) return false;
+  const { siblings, position } = listed;
   const ownStart = ownPresentationStart(siblings, position);
   const enclosed = siblings.flatMap((sibling, siblingPosition) =>
     siblingPosition !== position && isEnclosedHostedRegion(rect, sibling) ? [siblingPosition] : [],
@@ -366,25 +374,24 @@ function ownPresentationStart(siblings: readonly RawSnapshotNode[], position: nu
   return start;
 }
 
-/** A bar or a scroll container (by type, so a scroll indicator does not count) inside `rect`. */
+/** A bar or a scroll container inside `rect`; a scroll indicator is not a container. */
 function isEnclosedHostedRegion(rect: Rect, node: RawSnapshotNode): boolean {
   const isHostedRegion =
     nodeKindIncludesAny(node, VIEWPORT_CHROME_KIND_FRAGMENTS) ||
-    SCROLL_CONTAINER_TYPES.has(normalizeType(node.type ?? ''));
+    (isScrollableNodeLike(node) && !nodeKindIncludesAny(node, SCROLL_INDICATOR_KIND_FRAGMENTS));
   const nodeRect = positiveRect(node.rect);
   return Boolean(isHostedRegion && nodeRect && rectContains(rect, nodeRect));
 }
 
-/** The siblings listed under the node's parent in document order, and the node's position among them. */
+/** The siblings listed under the node's parent in document order and the node's position, if listed. */
 function listedSiblings(
   node: RawSnapshotNode,
   neighbourhood: NeighbourhoodIndex,
-): { siblings: readonly RawSnapshotNode[]; position: number } {
-  const siblings =
-    typeof node.parentIndex === 'number'
-      ? (neighbourhood.childrenByParent.get(node.parentIndex) ?? [])
-      : [];
-  return { siblings, position: siblings.findIndex((sibling) => sibling.index === node.index) };
+): { siblings: readonly RawSnapshotNode[]; position: number } | undefined {
+  if (typeof node.parentIndex !== 'number') return undefined;
+  const siblings = neighbourhood.childrenByParent.get(node.parentIndex) ?? [];
+  const position = siblings.findIndex((sibling) => sibling.index === node.index);
+  return position < 0 ? undefined : { siblings, position };
 }
 
 function isFullViewportChromeContainer(
