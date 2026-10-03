@@ -666,7 +666,10 @@ test('buildSnapshotState carries the producer viewport into the stored state (#3
 });
 
 test('buildSnapshotState leaves an unmeasured viewport absent (#3182)', () => {
-  const state = buildSnapshotState({ nodes: [], backend: 'android' }, undefined);
+  const state = buildSnapshotState(
+    { nodes: [], backend: 'android', producer: 'android-uiautomator' },
+    undefined,
+  );
 
   expect('viewport' in state).toBe(false);
 });
