@@ -43,16 +43,49 @@ async function withTempSdkLayout(
 }
 
 test('resolveAndroidSdkRoots prefers configured roots before HOME default', () => {
-  const roots = resolveAndroidSdkRoots({
-    HOME: '/tmp/home',
-    ANDROID_HOME: '/tmp/android-home',
-    ANDROID_SDK_ROOT: '/tmp/android-sdk-root',
-  });
+  const roots = resolveAndroidSdkRoots(
+    {
+      HOME: '/tmp/home',
+      ANDROID_HOME: '/tmp/android-home',
+      ANDROID_SDK_ROOT: '/tmp/android-sdk-root',
+    },
+    'linux',
+  );
   assert.deepEqual(roots, [
     '/tmp/android-sdk-root',
     '/tmp/android-home',
     path.join('/tmp/home', 'Android', 'Sdk'),
   ]);
+});
+
+test('resolveAndroidSdkRoots searches the macOS Android Studio SDK after the environment roots', () => {
+  const roots = resolveAndroidSdkRoots(
+    {
+      HOME: '/Users/dev',
+      ANDROID_HOME: '/tmp/android-home',
+      ANDROID_SDK_ROOT: '/tmp/android-sdk-root',
+    },
+    'darwin',
+  );
+  assert.deepEqual(roots, [
+    '/tmp/android-sdk-root',
+    '/tmp/android-home',
+    path.join('/Users/dev', 'Library', 'Android', 'sdk'),
+    path.join('/Users/dev', 'Android', 'Sdk'),
+  ]);
+});
+
+test('resolveAndroidSdkRoots adds the macOS default with no configured roots', () => {
+  const roots = resolveAndroidSdkRoots({ HOME: '/Users/dev' }, 'darwin');
+  assert.deepEqual(roots, [
+    path.join('/Users/dev', 'Library', 'Android', 'sdk'),
+    path.join('/Users/dev', 'Android', 'Sdk'),
+  ]);
+});
+
+test('resolveAndroidSdkRoots skips the macOS default on Linux', () => {
+  const roots = resolveAndroidSdkRoots({ HOME: '/home/dev' }, 'linux');
+  assert.deepEqual(roots, [path.join('/home/dev', 'Android', 'Sdk')]);
 });
 
 test('ensureAndroidSdkPathConfigured mirrors a single configured SDK root into PATH and ANDROID_HOME', async () => {
