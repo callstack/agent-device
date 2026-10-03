@@ -271,7 +271,7 @@ async function retryAfterRemoteInstanceMismatch(
   options: SendRequestOptions,
 ): Promise<DaemonResponse> {
   invalidateRemoteDaemonHealth(info);
-  const probeTimeoutMs = remainingRemoteRequestTimeoutMs(
+  const probeTimeoutMs = await remainingRemoteRequestTimeoutMs(
     info,
     req,
     statePaths,
@@ -288,13 +288,19 @@ async function retryAfterRemoteInstanceMismatch(
     probeTimeoutMs !== undefined &&
     probeTimeoutMs <= REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS
   ) {
-    throw handleRequestTimeout({
+    throw await handleRequestTimeout({
       info,
       statePaths,
       ...timeoutRequestContext(req, true, timeoutMs),
     });
   }
-  const remainingMs = remainingRemoteRequestTimeoutMs(info, req, statePaths, timeoutMs, deadline);
+  const remainingMs = await remainingRemoteRequestTimeoutMs(
+    info,
+    req,
+    statePaths,
+    timeoutMs,
+    deadline,
+  );
   if (!health.reachable) {
     throw new AppError('COMMAND_FAILED', 'Remote daemon is unavailable', {
       daemonBaseUrl: info.baseUrl,
@@ -311,17 +317,17 @@ async function retryAfterRemoteInstanceMismatch(
   }
 }
 
-function remainingRemoteRequestTimeoutMs(
+async function remainingRemoteRequestTimeoutMs(
   info: DaemonInfo,
   req: DaemonRequest,
   statePaths: DaemonPaths,
   timeoutMs: number | undefined,
   deadline: number | undefined,
-): number | undefined {
+): Promise<number | undefined> {
   if (deadline === undefined || timeoutMs === undefined) return undefined;
   const remainingMs = deadline - performance.now();
   if (remainingMs > 0) return remainingMs;
-  throw handleRequestTimeout({
+  throw await handleRequestTimeout({
     info,
     statePaths,
     ...timeoutRequestContext(req, true, timeoutMs),
@@ -463,14 +469,15 @@ async function sendSocketRequest(
       typeof timeoutMs === 'number'
         ? setTimeout(() => {
             settled = true;
+            // Destroy first: the daemon cancels exactly this request when the connection dies, and
+            // that cancel is the recovery it needs (#3177). The liveness probe the timeout handler
+            // runs must be a FRESH connection, never the one being torn down.
             socket.destroy();
-            reject(
-              handleRequestTimeout({
-                info,
-                statePaths,
-                ...timeoutRequestContext(req, false, timeoutMs),
-              }),
-            );
+            void handleRequestTimeout({
+              info,
+              statePaths,
+              ...timeoutRequestContext(req, false, timeoutMs),
+            }).then(reject, reject);
           }, timeoutMs)
         : undefined;
 
@@ -564,7 +571,23 @@ async function sendHttpRequest(
   }
   const transport = await loadNodeHttpRequester(rpcUrl.protocol);
 
-  return await new Promise((resolve, reject) => {
+  return await new Promise<DaemonResponse>((rawResolve, rawReject) => {
+    // The timeout claim is synchronous, like the socket transport's: `request.destroy()` below
+    // surfaces as an `error` event on a later tick, and without this gate that transport error
+    // would outrank the timeout's error — which now lands even later, behind the liveness probe
+    // the handler runs (#3177). Every other settle path takes the guarded pair; only the
+    // timeout's own deferred reject bypasses it, for the outcome it already claimed.
+    let settled = false;
+    const resolve = (response: DaemonResponse | PromiseLike<DaemonResponse>): void => {
+      if (settled) return;
+      settled = true;
+      rawResolve(response);
+    };
+    const reject = (error: unknown): void => {
+      if (settled) return;
+      settled = true;
+      rawReject(error);
+    };
     const request = transport.request(
       {
         protocol: rpcUrl.protocol,
@@ -636,14 +659,18 @@ async function sendHttpRequest(
     const timeoutHandle =
       typeof timeoutMs === 'number'
         ? setTimeout(() => {
+            // Claim the settle before destroying: the transport error that `destroy()` surfaces
+            // must not describe this outcome. The daemon cancels exactly this request when the
+            // connection dies, and that request-scoped cancel is the recovery it needs (#3177).
+            settled = true;
+            // The timeout handler's liveness probe then asks on a FRESH connection, so the reset
+            // decision measures the daemon instead of assuming it.
             request.destroy();
-            reject(
-              handleRequestTimeout({
-                info,
-                statePaths,
-                ...timeoutRequestContext(req, remote, timeoutMs),
-              }),
-            );
+            void handleRequestTimeout({
+              info,
+              statePaths,
+              ...timeoutRequestContext(req, remote, timeoutMs),
+            }).then(rawReject, rawReject);
           }, timeoutMs)
         : undefined;
 

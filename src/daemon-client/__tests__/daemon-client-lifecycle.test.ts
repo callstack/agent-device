@@ -160,18 +160,20 @@ function installSpawnedHttpDaemonAtOwnedStateDir(
   });
 }
 
+// A daemon that accepts the RPC but never answers it, and then refuses every later connection —
+// the wedged daemon #3177's reset path exists for. The client's timeout route probes `/health`
+// before deciding to reset (so a merely-slow daemon is preserved); a daemon that answers THAT too
+// would correctly be kept alive and its metadata left in place, which is the opposite of what this
+// fixture's reset-path callers assert. Refusing the probe (rather than hanging it) fails the probe
+// fast instead of spending its full window.
 async function startHangingHttpDaemonFixture(): Promise<HttpDaemonFixture> {
   const seenPaths: string[] = [];
   const rpcRequests: Record<string, any>[] = [];
+  let requests = 0;
   const server = http.createServer((req, res) => {
     const url = new URL(req.url || '/', 'http://127.0.0.1');
     seenPaths.push(`${req.method ?? 'GET'} ${url.pathname}`);
-
-    if (req.method === 'GET' && url.pathname === '/health') {
-      res.writeHead(200);
-      res.end('ok');
-      return;
-    }
+    requests += 1;
 
     if (req.method === 'POST' && url.pathname === '/rpc') {
       const chunks: Buffer[] = [];
@@ -181,12 +183,21 @@ async function startHangingHttpDaemonFixture(): Promise<HttpDaemonFixture> {
       req.on('end', () => {
         rpcRequests.push(JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, any>);
       });
+      // Never respond: the client's own envelope is the only completion path.
+      return;
+    }
+
+    // The liveness probe's fresh request after the RPC timed out: refuse it, so the route sees an
+    // unresponsive daemon and takes its reset branch.
+    if (requests > 1) {
+      res.destroy();
       return;
     }
 
     res.writeHead(404);
     res.end('not found');
   });
+  server.on('clientError', (_err, socket) => socket.destroy());
   const port = await listenOnLoopback(server);
   return { server, port, seenPaths, rpcRequests };
 }
@@ -645,7 +656,9 @@ test('sendRequest timeout cleanup uses resolved daemon paths instead of request 
 
     assert.ok(thrown instanceof AppError);
     assert.equal(thrown.message, 'Daemon request timed out');
-    assert.deepEqual(daemon.seenPaths, ['POST /rpc']);
+    // The RPC first, then the liveness probe the timeout route asks before it is allowed to
+    // reset. The fixture refused that probe, which is what authorized the reset below.
+    assert.deepEqual(daemon.seenPaths, ['POST /rpc', 'GET /health']);
     assert.equal(fs.existsSync(daemonPaths.infoPath), false);
     assert.equal(fs.existsSync(daemonPaths.lockPath), false);
     assert.equal(fs.existsSync(requestFlagPaths.infoPath), true);
