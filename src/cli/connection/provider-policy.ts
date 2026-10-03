@@ -7,7 +7,6 @@ import {
 import { pluginConnectionCapabilities, pluginConnectionNames } from '../../plugins/connection.ts';
 
 export type DirectDeviceConnectProvider = CloudWebDriverKnownProviderName | 'limrun';
-export { RESERVED_PLUGIN_PROVIDERS as BUILTIN_CONNECT_PROVIDERS } from '../../plugins/manifest.ts';
 import { RESERVED_PLUGIN_PROVIDERS as BUILTIN_CONNECT_PROVIDERS } from '../../plugins/manifest.ts';
 export type BuiltinConnectProvider = (typeof BUILTIN_CONNECT_PROVIDERS)[number];
 export type ConnectProvider = BuiltinConnectProvider | (string & {});

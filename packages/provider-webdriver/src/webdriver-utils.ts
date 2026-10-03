@@ -6,10 +6,6 @@ import type {
   ProviderDeviceInstallOptions,
   ProviderDeviceInstallResult,
 } from '@agent-device/contracts/device';
-import {
-  PROVIDER_DEVICE_ORIENTATIONS,
-  type ProviderDeviceOrientation,
-} from '@agent-device/contracts/remote';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { agentDeviceRequestHeaders } from './request-headers.ts';
 
@@ -318,18 +314,4 @@ async function readProviderJsonBody(response: Response): Promise<unknown> {
 export function sameOsVersion(left: string, right: string): boolean {
   const normalize = (value: string) => value.replace(/(?:\.0)+$/, '');
   return normalize(left) === normalize(right);
-}
-
-/** Validates a device-orientation flag against the shared enum before it reaches a hub that would ignore it. */
-export function requireProviderDeviceOrientation(
-  spec: { flag: string; capability: string },
-  value: string,
-): ProviderDeviceOrientation {
-  const match = PROVIDER_DEVICE_ORIENTATIONS.find((orientation) => orientation === value);
-  if (match) return match;
-  throw new AppError('INVALID_ARGS', `Invalid ${spec.flag} value: ${value}.`, {
-    hint: `Use ${PROVIDER_DEVICE_ORIENTATIONS.join('|')}.`,
-    flag: spec.flag,
-    capability: spec.capability,
-  });
 }
