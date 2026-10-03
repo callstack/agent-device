@@ -11,15 +11,27 @@ import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
-import { macOsSurfaceBackend, type SessionSurface } from '@agent-device/contracts/session';
+import {
+  macOsHelperSurface,
+  macOsSurfaceBackend,
+  type MacOsAppBackend,
+  type SessionSurface,
+} from '@agent-device/contracts/session';
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { hasSimulatorBridge } from './snapshot-observability.ts';
 import type { AppleSnapshotRoute } from './snapshot-route.ts';
 
+/** A request binding, with the macOS app backend the owner resolved for the daemon. */
+type AppleSnapshotRequest = Readonly<{
+  device: DeviceInfo;
+  signal: AbortSignal;
+  appBackend: MacOsAppBackend;
+}>;
+
 /** Apple-owned selection between app snapshots and explicit macOS surface snapshots. */
 export function bindAppleSnapshotRuntime(
   host: PlatformRuntimeHost,
-  request: Readonly<{ device: DeviceInfo; signal: AbortSignal }>,
+  request: AppleSnapshotRequest,
   route?: AppleSnapshotRoute,
 ): SnapshotRuntimeOperation {
   const appSnapshot = bindLocalSnapshotInteractor({
@@ -28,10 +40,14 @@ export function bindAppleSnapshotRuntime(
     resolveInteractor: host.localInteractors.resolve,
   });
   const captureSnapshot = async (input: CaptureSnapshotInput) => {
-    if (isMacOs(request.device) && macOsSurfaceBackend(input.options?.surface) === 'macos-helper') {
+    const helperSurface = isMacOs(request.device)
+      ? macOsHelperSurface(input.options?.surface, request.appBackend)
+      : undefined;
+    if (helperSurface) {
+      // The routed surface travels explicitly: an app session reaches the helper only here.
       return await host.snapshot.captureSurface(
         request.device,
-        input.options,
+        { ...input.options, surface: helperSurface },
         captureSnapshotSignal(request.signal, input),
       );
     }
@@ -76,7 +92,7 @@ type SnapshotRuntimeOperation = Pick<
  */
 export function bindAppleFindTextRuntime(
   host: PlatformRuntimeHost,
-  request: Readonly<{ device: DeviceInfo; signal: AbortSignal }>,
+  request: AppleSnapshotRequest,
 ): Pick<PlatformRuntimeOperations, 'findText'> {
   return Object.freeze({
     findText: async (input: FindTextInput): Promise<FindTextResult> => {
@@ -101,7 +117,7 @@ type AdmittedAppleNativeFind = Readonly<{ appBundleId: string; signal: AbortSign
  */
 async function admitAppleNativeFind(
   host: Pick<PlatformRuntimeHost, 'appleApplications'>,
-  request: Readonly<{ device: DeviceInfo; signal: AbortSignal }>,
+  request: AppleSnapshotRequest,
   input: Readonly<{
     options?: Readonly<{ appBundleId?: string; surface?: SessionSurface }>;
     execution?: Readonly<{ requestId?: string }>;
@@ -110,7 +126,10 @@ async function admitAppleNativeFind(
 ): Promise<AdmittedAppleNativeFind | undefined> {
   const appBundleId = input.options?.appBundleId;
   if (appBundleId === undefined) return undefined;
-  if (isMacOs(request.device) && macOsSurfaceBackend(input.options?.surface) === 'macos-helper') {
+  if (
+    isMacOs(request.device) &&
+    macOsSurfaceBackend(input.options?.surface, request.appBackend) === 'macos-helper'
+  ) {
     return undefined;
   }
   const signal = input.signal ? AbortSignal.any([request.signal, input.signal]) : request.signal;

@@ -85,18 +85,15 @@ test('composes focused deployment executors instead of a cross-family deployment
   expect(existsSync(join(directory, 'platform-runtime-app-deployment-host.ts'))).toBe(false);
 });
 
-test.each([undefined, 'app'] as const)(
-  'the macOS surface loader refuses a %s surface the owner routes to the runner',
-  async (surface) => {
-    vi.mocked(captureMacOsSurfaceSnapshot).mockClear();
-    const refusal = loadMacOsSurfaceSnapshot({ surface });
-    await expect(refusal).rejects.toBeInstanceOf(TypeError);
-    await expect(refusal).rejects.toThrow(
-      'Apple surface capture requires a helper-routed macOS surface',
-    );
-    expect(captureMacOsSurfaceSnapshot).not.toHaveBeenCalled();
-  },
-);
+test('the macOS surface loader refuses a capture the owner did not route to it', async () => {
+  vi.mocked(captureMacOsSurfaceSnapshot).mockClear();
+  const refusal = loadMacOsSurfaceSnapshot({ depth: 2 });
+  await expect(refusal).rejects.toBeInstanceOf(TypeError);
+  await expect(refusal).rejects.toThrow(
+    'Apple surface capture requires a helper-routed macOS surface',
+  );
+  expect(captureMacOsSurfaceSnapshot).not.toHaveBeenCalled();
+});
 
 test('the macOS surface loader forwards a helper-routed surface unchanged', async () => {
   vi.mocked(captureMacOsSurfaceSnapshot).mockClear();
