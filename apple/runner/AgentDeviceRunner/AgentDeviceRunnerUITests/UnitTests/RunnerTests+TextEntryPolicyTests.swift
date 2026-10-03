@@ -198,6 +198,28 @@ extension RunnerTests {
     XCTAssertFalse(TextEntryFailure.commitNotObserved.message.contains("only part"))
   }
 
+  func testInputCountsAsRemovedOnlyWhenItsDeliveryIdentityIsGone() {
+    let codeField = TextEntryInputIdentity(elementType: .textField, identifier: "code")
+    let nextScreenField = TextEntryInputIdentity(elementType: .textField, identifier: "name")
+    let cases: [(deliveredTo: TextEntryInputIdentity?, after: TextEntryInputIdentity?, expected: Bool)] = [
+      (codeField, codeField, false),
+      (codeField, nil, true),
+      (codeField, nextScreenField, true),
+      (nil, nil, false),
+      (nil, nextScreenField, false),
+    ]
+    for testCase in cases {
+      XCTAssertEqual(
+        Self.textEntryInputRemovedAfterDelivery(
+          deliveredTo: testCase.deliveredTo,
+          afterDelivery: testCase.after
+        ),
+        testCase.expected,
+        String(describing: testCase)
+      )
+    }
+  }
+
 #if os(iOS)
   func testSynthesizedTextEntryFallsBackOnlyWhenPrivateSynthesisIsUnavailable() {
     XCTAssertEqual(

@@ -85,6 +85,7 @@ extension RunnerTests {
     let initialResolveStartedAt = Date()
     let initialTarget = resolveTextEntryElement(app: app, target: activeTarget)
     activeTarget = activeTarget.withElement(initialTarget)
+    let deliveredTo = activeTarget.inputIdentity
     let currentText = editableTextValue(for: initialTarget, treatingPlaceholderAsEmpty: true)
     let initialText = repairMode == .append ? currentText : nil
     let expectedText = expectedTextEntryValue(typedText: text, mode: repairMode, initialText: initialText)
@@ -345,6 +346,7 @@ extension RunnerTests {
     var result = verifyTextEntryWithRepairIfNeeded(
       app: app,
       target: activeTarget,
+      deliveredTo: deliveredTo,
       expectedText: expectedText,
       repairMode: repairMode,
       baseline: entryBaseline
@@ -392,10 +394,17 @@ extension RunnerTests {
   private func verifyTextEntryWithRepairIfNeeded(
     app: XCUIApplication,
     target: TextEntryTarget,
+    deliveredTo: TextEntryInputIdentity?,
     expectedText: String?,
     repairMode: TextTypingRepairMode,
     baseline: TextEntryObservation?
   ) -> TextEntryResult {
+    // The app reacted to the delivered text by removing the input. Its value can no longer be read
+    // back, and re-resolving by point or focus would verify, and possibly repair, another input.
+    if Self.textEntryInputRemovedAfterDelivery(deliveredTo: deliveredTo, afterDelivery: target.inputIdentity) {
+      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_INPUT_REMOVED_AFTER_DELIVERY")
+      return TextEntryResult(verified: nil, repaired: false, expectedText: expectedText, observedText: nil)
+    }
     let initialResult = verifyTextEntry(
       app: app,
       target: target,

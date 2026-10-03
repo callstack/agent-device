@@ -277,6 +277,7 @@ static NSTimeInterval AgentDeviceTextEntryAcknowledgeWindow(void) {
 // Edits further apart than this belong to different bursts: one runner command's characters arrive
 // well inside it, and two commands are separated by at least a commit-wait poll and a status read.
 static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
+static const NSUInteger AgentDeviceTextEntryAutoSubmitLength = 6;
 
 - (void)agentDeviceTextEntryDidChange:(UITextField *)textField {
   // A field whose app owns its value, the way a controlled React Native `TextInput` does. A burst
@@ -308,6 +309,16 @@ static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
   self.textEntryDigitSlots.text = textField.text;
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-disappear-after-input"] &&
       textField.text.length > 0) {
+    [textField removeFromSuperview];
+  }
+  // An auto-submitting one-time-code field: the last digit navigates to a screen whose own input sits
+  // where the code field was.
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-auto-submit"] &&
+      textField.text.length >= AgentDeviceTextEntryAutoSubmitLength && textField.superview != nil) {
+    UITextField *nextScreenField = [[UITextField alloc] initWithFrame:textField.frame];
+    nextScreenField.accessibilityIdentifier = @"agent-device-auto-submit-next-screen-input";
+    nextScreenField.borderStyle = UITextBorderStyleRoundedRect;
+    [textField.superview addSubview:nextScreenField];
     [textField removeFromSuperview];
   }
 }
