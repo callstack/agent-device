@@ -6,7 +6,11 @@ import type { DaemonRequest } from '../../daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
+import {
+  clearRequestCanceled,
+  markRequestCanceled,
+  registerRequestAbort,
+} from '@agent-device/host-kit/request';
 import {
   HUMAN_CONTROL_LEASE_REQUEST,
   HUMAN_CONTROL_SCOPE,
@@ -207,4 +211,59 @@ test("a refused repeat allocation keeps the run's live lease", async () => {
     registry.listActiveLeases().map((entry) => entry.leaseId),
     [lease.leaseId],
   );
+  assert.equal(
+    registry.resolveProviderSession({
+      provider: lease.leaseProvider,
+      providerSessionId: 'session-1',
+      tenantId: lease.tenantId,
+    })?.leaseId,
+    lease.leaseId,
+  );
+});
+
+// A requester that hangs up during its repeat allocation will never release the lease it reused, so
+// the provider rejecting with the cancellation must release that lease and its session.
+test('a repeat allocation canceled by its requester releases the reused lease', async () => {
+  const registry = new LeaseRegistry();
+  const sessionStore = makeSessionStore('agent-device-canceled-repeat-');
+  const requestId = 'canceled-repeat-allocation';
+  const releasedSessions: unknown[] = [];
+  let calls = 0;
+  const allocate = async (req: DaemonRequest) =>
+    await handleLeaseCommands({
+      req,
+      sessionName: 'lease-ttl-test',
+      sessionStore,
+      leaseRegistry: registry,
+      leaseLifecycleProvider: {
+        allocate: async (_lease, context) => {
+          calls += 1;
+          if (calls === 1) return { providerSessionId: 'session-1' };
+          markRequestCanceled(requestId);
+          context?.signal?.throwIfAborted();
+          throw new Error('the request signal was not aborted');
+        },
+        release: async (released) => {
+          releasedSessions.push(released.leaseId);
+          return { providerSessionId: 'session-1' };
+        },
+      },
+    });
+
+  const first = await allocate(allocateRequest());
+  const lease = (first?.ok ? first.data?.lease : undefined) as DeviceLease;
+  const repeat = allocateRequest();
+  repeat.meta = { ...repeat.meta, requestId };
+  const registration = registerRequestAbort(requestId);
+  try {
+    await assert.rejects(
+      allocate(repeat),
+      (error: unknown) => error instanceof AppError && error.details?.released === true,
+    );
+  } finally {
+    clearRequestCanceled(requestId, registration);
+  }
+  assert.equal(calls, 2);
+  assert.deepEqual(releasedSessions, [lease.leaseId]);
+  assert.deepEqual(registry.listActiveLeases(), []);
 });
