@@ -647,3 +647,26 @@ test('buildSnapshotState leaves an unmeasured keyboard unclaimed instead of abse
 
   expect('keyboard' in state).toBe(false);
 });
+
+// #3182: the stored tree keeps the box the producer measured, so a consumer of the session snapshot —
+// the find path, a later diff — reads the same box the response published instead of inferring one
+// from the largest rect still on screen. A capture with no box leaves it absent rather than minting one.
+test('buildSnapshotState carries the producer viewport into the stored state (#3182)', () => {
+  const state = buildSnapshotState(
+    {
+      nodes: [{ index: 0, type: 'Application' }],
+      backend: 'android',
+      producer: 'android-uiautomator',
+      viewport: { width: 1080, height: 2400 },
+    },
+    undefined,
+  );
+
+  expect(state.viewport).toEqual({ width: 1080, height: 2400 });
+});
+
+test('buildSnapshotState leaves an unmeasured viewport absent (#3182)', () => {
+  const state = buildSnapshotState({ nodes: [], backend: 'android' }, undefined);
+
+  expect('viewport' in state).toBe(false);
+});

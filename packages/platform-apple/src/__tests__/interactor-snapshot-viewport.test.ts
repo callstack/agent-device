@@ -11,7 +11,10 @@ test('an Apple runner capture publishes the app-window box its rects are measure
   const interactor = createAppleInteractor(
     IOS_SIMULATOR,
     {},
-    { hasLiveSession: () => true, runCommand: async () => runnerResultFor({ command: 'snapshot' }) },
+    {
+      hasLiveSession: () => true,
+      runCommand: async () => runnerResultFor({ command: 'snapshot' }),
+    },
   );
 
   const result = await interactor.snapshot();

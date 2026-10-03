@@ -807,3 +807,30 @@ test('runtime snapshot warns when its tree was read on a surface still moving af
 
   assert.deepEqual(result.warnings, [formatPostGestureOutcomeWarning(outcome)]);
 });
+
+// The box a capture's rects are measured in is public output (#3182) for the same reason the
+// keyboard band is: `snapshot --json` is how a caller learns the surface to scale against, and a
+// producer that measured no box has to leave the key off rather than claim a screen it never read.
+
+test('runtime snapshot publishes the viewport its producer measured', async () => {
+  const device = createSnapshotOnlyDevice({
+    nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Window', label: 'Home' }],
+    backend: 'android',
+    viewport: { width: 1080, height: 2400 },
+  });
+
+  const result = await device.capture.snapshot({ session: 'default' });
+
+  assert.deepEqual(result.viewport, { width: 1080, height: 2400 });
+});
+
+test('runtime snapshot leaves the viewport off when the producer measured no box', async () => {
+  const device = createSnapshotOnlyDevice({
+    nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Window', label: 'Home' }],
+    backend: 'android',
+  });
+
+  const result = await device.capture.snapshot({ session: 'default' });
+
+  assert.equal('viewport' in result, false);
+});
