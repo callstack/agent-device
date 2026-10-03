@@ -1,5 +1,6 @@
 import {
   AppError,
+  sessionAppRequiredDetails,
   summarizeCommandAttemptFailures,
   type CommandAttemptFailure,
 } from '@agent-device/kernel/errors';
@@ -162,7 +163,11 @@ export async function setAndroidSetting(
     }
     case 'permission': {
       if (!appPackage) {
-        throw new AppError('INVALID_ARGS', 'permission setting requires an active app in session');
+        throw new AppError(
+          'INVALID_ARGS',
+          'permission setting requires an active app in session',
+          sessionAppRequiredDetails(),
+        );
       }
       return await setAndroidPermission(device, appPackage, state, options);
     }
