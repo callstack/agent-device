@@ -133,6 +133,13 @@ const NOT_ENABLED_TRAIT = 1n << 8n;
 const SELECTED_TRAIT = 1n << 3n;
 
 /**
+ * The private is-editing trait UIKit sets on the text input that holds keyboard focus. XCTest
+ * derives `hasKeyboardFocus` from this word, and the runner path answers `focused: true` from that
+ * key, so the bridge derives the fact from this bit. Like `selected`, it is published only when set.
+ */
+const KEYBOARD_FOCUS_TRAIT = 1n << 21n;
+
+/**
  * A WebKit page — Safari's, or a `WKWebView`'s — lives in a WebContent process and reaches UIKit's
  * tree as an `AXRemoteElement` under the web view, with its children in that other process. The
  * guest reader snapshots one process, so it delivers that element as a leaf (#2484). Such a leaf
@@ -247,6 +254,7 @@ function nodeFacts(
   // Publishes `selected: true` only when the selected bit is set and omits it otherwise — the same
   // shape the XCTest tree produces, so a `selected:` selector cannot tell the producers apart.
   const selected = traits === undefined || (traits & SELECTED_TRAIT) === 0n ? undefined : true;
+  const focused = traits === undefined || (traits & KEYBOARD_FOCUS_TRAIT) === 0n ? undefined : true;
   const userInteractionEnabled = optionalBoolean(value[ATTRIBUTE.userInteractionEnabled]);
   // Trimmed like the runner's `placeholderText`: a whitespace placeholder is no placeholder.
   const placeholder = optionalString(value[ATTRIBUTE.placeholder])?.trim();
@@ -271,6 +279,7 @@ function nodeFacts(
     ...(frame ? { rect: frame } : {}),
     ...(enabled === undefined ? {} : { enabled }),
     ...(selected === undefined ? {} : { selected }),
+    ...(focused === undefined ? {} : { focused }),
     ...(userInteractionEnabled === undefined ? {} : { userInteractionEnabled }),
     depth,
   };
@@ -391,7 +400,7 @@ function optionalScalar(value: unknown): string | undefined {
 
 /**
  * The guest sends the uint64 traits word as a decimal string so no bit is lost to a double. One
- * parse feeds every trait fact the tree publishes — `enabled` and `selected` — so a malformed word
+ * parse feeds every trait fact the tree publishes — `enabled`, `selected`, and `focused` — so a malformed word
  * fails the same way no matter which fact is read.
  */
 function traitsFromGuest(value: unknown): bigint | undefined {
