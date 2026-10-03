@@ -25,10 +25,8 @@ import {
   type AgentDeviceClientConfig,
   type AgentDeviceDaemonTransport,
 } from './agent-device-client.ts';
-import { materializeRemoteConnectionForCommand } from './cli/commands/connection-runtime.ts';
 import { tryRunClientBackedCommand } from './cli/commands/router.ts';
 import { runAgentCdpCommand } from './cli/commands/agent-cdp.ts';
-import { runReactDevtoolsCommand } from './cli/commands/react-devtools.ts';
 import { readCliBatchStepsJson } from './commands/batch/batch-steps.ts';
 import {
   createRequestId,
@@ -353,6 +351,7 @@ async function resolveRunContextOrExit(
 }
 
 async function runReactDevtoolsCli(ctx: CliRunContext, deps: CliDeps): Promise<number> {
+  const { runReactDevtoolsCommand } = await import('./cli/commands/react-devtools.ts');
   const { daemonAuthToken, ...directRequestFlags } = ctx.effectiveFlags;
   return await runReactDevtoolsCommand(ctx.positionals, {
     flags: {
@@ -408,6 +407,8 @@ async function resolveRemoteContext(ctx: CliRunContext, deps: CliDeps): Promise<
     const materializationClient = createAgentDeviceClient(buildClientConfig(ctx), {
       transport: createClientDaemonTransport(deps.sendToDaemon),
     });
+    const { materializeRemoteConnectionForCommand } =
+      await import('./cli/commands/connection-runtime.ts');
     const materialized = await materializeRemoteConnectionForCommand({
       command: ctx.command,
       flags: ctx.effectiveFlags,

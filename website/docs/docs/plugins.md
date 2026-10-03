@@ -31,8 +31,7 @@ Use `agent-device` as a development dependency. The default factory accepts `Pro
 
 Keep initialization prompt and free of network I/O or device allocation; a stalled factory blocks startup. Load platform mechanics through `platformModule.loadRuntime` and perform remote work in request-bound operations. A failing factory cleans up its own resources; core shuts down previously returned runtimes if another plugin fails.
 
-Incompatible contract changes require a new API version. Plugins cannot replace bundled providers or register arbitrary commands. Installing a package does not add `connect <provider>`; provider-specific connect adapters need separate support. Limrun, BrowserStack, and AWS Device Farm remain bundled.
-
+Incompatible contract changes require a new API version. Plugins cannot replace bundled providers or register arbitrary commands. Plugins can add `connect <provider>` through the connection callbacks described below. Limrun, BrowserStack, and AWS Device Farm remain bundled.
 
 For an Appium or WebDriver service, return `{ webDriver: options }` instead of building an engine. `WebDriverPluginOptions` is available through the type-only `agent-device/plugins/webdriver` import. Core supplies the client version and creates the shared runtime. Provider callbacks prepare sessions, upload apps, and retrieve artifacts.
 

@@ -90,7 +90,7 @@ async function instantiateProviderPlugin(
       );
     }
     const { createCloudWebDriverRuntime } = await import('@agent-device/provider-webdriver/plugin');
-    const runtime = createCloudWebDriverRuntime({
+    const runtime = await createCloudWebDriverRuntime({
       ...result.webDriver,
       clientVersion: host.clientVersion,
     });

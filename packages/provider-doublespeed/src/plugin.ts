@@ -1,9 +1,9 @@
 import type { ProviderPluginHost } from 'agent-device/plugins';
-import { createDoublespeedRuntime } from './runtime.ts';
 import { verifyDoublespeedConnection } from './connection-verification.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 
-export default function doublespeedPlugin(host: ProviderPluginHost) {
+export default async function doublespeedPlugin(host: ProviderPluginHost) {
+  const { createDoublespeedRuntime } = await import('./runtime.ts');
   const apiKey = host.env.DOUBLESPEED_API_KEY?.trim() ?? '';
   const registration = createDoublespeedRuntime(
     {
