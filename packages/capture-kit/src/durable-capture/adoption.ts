@@ -61,9 +61,12 @@ async function recoverFailedAdoption<K extends string, H extends LiveResourceHan
       ? mayPersist && persistRecoveryTombstone(definition, params, resourcePath)
       : true;
   const initialCleanupError = await disposeFailedAdoption(params, state);
-  const transition = !params.binding.canPersist()
-    ? { confirmed: false, cleanupError: initialCleanupError }
-    : confirmFailedAdoptionTransition(definition, params, resourcePath, initialCleanupError);
+  const transition = confirmFailedAdoptionTransition(
+    definition,
+    params,
+    resourcePath,
+    initialCleanupError,
+  );
   params.reportUndurableCleanup(
     params.device,
     (!persisted && transition.cleanupError === undefined) || transition.confirmed

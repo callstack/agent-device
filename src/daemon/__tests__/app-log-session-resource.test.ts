@@ -379,13 +379,17 @@ test('failed adoption cannot terminalize successor evidence after its cleanup yi
   await cleaning;
   context.sessionStore.retire(context.ref);
   const successor = context.sessionStore.publish(context.sessionName, { ...context.session });
-  appLogResourceStore.write(context.resourcePath, runtime.result.envelope);
+  const successorEnvelope = {
+    ...runtime.result.envelope,
+    fence: { token: 'successor', generation: 2 },
+  };
+  appLogResourceStore.write(context.resourcePath, successorEnvelope);
   release();
   await rejected;
   expect(context.sessionStore.requireCurrent(successor).appLog).toBeUndefined();
-  expect(appLogResourceStore.read(context.resourcePath)).toMatchObject({
+  expect(appLogResourceStore.read(context.resourcePath)).toEqual({
     status: 'decoded',
-    envelope: { lifecycle: 'open' },
+    envelope: successorEnvelope,
   });
 });
 
