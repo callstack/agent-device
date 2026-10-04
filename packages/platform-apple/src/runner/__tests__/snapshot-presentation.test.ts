@@ -348,25 +348,41 @@ test('a capture with no usable viewport box publishes no viewport, never a zero 
     runnerFatal: true,
   });
   assert.equal('viewport' in rootless, false);
+
+  // The guard itself, off the early return: raw is the projection that validates no box, so it is the
+  // one that reaches publication still holding an unchecked root. A zero-extent Application there
+  // must answer with absence rather than the failed read's dimensions.
+  const rawZero = presentAppleRunnerSnapshot(
+    'device-1',
+    { raw: true },
+    {
+      nodes: [{ index: 0, type: 'Application', rect: { x: 0, y: 0, width: 0, height: 0 } }],
+    },
+  );
+  assert.equal('viewport' in rawZero, false);
 });
 
-test('the infinite viewport a failed Apple read crosses the wire as never publishes (#3182)', () => {
-  // `CGRectInfinite` is finite in every component and maximal in extent: without the shared guard
-  // it would publish the largest box on the wire as the screen.
-  const presented = presentAppleRunnerSnapshot('device-1', undefined, {
-    nodes: [
-      {
-        index: 0,
-        type: 'Application',
-        rect: {
-          x: -Number.MAX_VALUE / 2,
-          y: -Number.MAX_VALUE / 2,
-          width: Number.MAX_VALUE,
-          height: Number.MAX_VALUE,
+test('a raw projection publishes no viewport, because nothing validated its box (#3182)', () => {
+  // The engine validates the viewport only for the regular projection. Publishing the largest root
+  // under `raw` would hand the caller the same largest-rect guess #3182 exists to retire, labelled
+  // as a measured fact — and the regular path would refuse this very payload.
+  const presented = presentAppleRunnerSnapshot(
+    'device-1',
+    { raw: true },
+    {
+      nodes: [
+        { index: 0, type: 'Other', rect: { x: 0, y: 0, width: 120, height: 44 } },
+        {
+          index: 1,
+          parentIndex: 0,
+          type: 'Button',
+          label: 'Open',
+          rect: { x: 16, y: 900, width: 80, height: 32 },
+          hittable: true,
         },
-      },
-    ],
-    runnerFatal: true,
-  });
+      ],
+    },
+  );
+
   assert.equal('viewport' in presented, false);
 });

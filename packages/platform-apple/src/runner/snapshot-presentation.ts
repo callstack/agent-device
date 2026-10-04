@@ -88,12 +88,14 @@ function readSystemSurfaceProvenance(value: unknown): IosSystemSurfaceProvenance
 
 /**
  * What one Apple runner capture leaves behind after presentation: the presented tree, and the box
- * its rects are measured in (#3182). The viewport is the evidence the fold already resolved — the
- * app's own box when the runner read one, otherwise the largest window root in the payload, which on
- * tvOS is the screen every `XCUIApplication` rect is measured on — and it is published through the
+ * its rects are measured in (#3182). The viewport is the evidence the regular fold validated against —
+ * the app's own box when the runner read one, otherwise the largest window root in the payload, which
+ * on tvOS is the screen every `XCUIApplication` rect is measured on — and it is published through the
  * same guard every other producer passes, so an unusable box stays absent instead of reaching a
- * reader as zero. This is the host-side owner ADR 0004 gives the viewport question; the runner
- * itself never grows a second wire key for a fact the host already derives from the payload's roots.
+ * reader as zero. A raw projection and a runner-declared failure publish no box: neither had a
+ * viewport checked against its tree, so the roots alone would be a guess. This is the host-side owner
+ * ADR 0004 gives the viewport question; the runner itself never grows a second wire key for a fact
+ * the host already derives from the payload's roots.
  */
 export type AppleRunnerSnapshotPresentation = Readonly<{
   nodes: RawSnapshotNode[];
@@ -107,9 +109,8 @@ export function presentAppleRunnerSnapshot(
 ): AppleRunnerSnapshotPresentation {
   const nodes = result.nodes ?? [];
   const viewportEvidence = runnerViewportEvidence(nodes, result.qualityPayload?.nodes);
-  const viewport = viewportSize(viewportEvidence);
   if (result.runnerFatal === true || (nodes.length === 0 && result.qualityPayload === undefined)) {
-    return { nodes, ...(viewport ? { viewport } : {}) };
+    return { nodes };
   }
 
   const request = createIosSnapshotRequest({
@@ -119,6 +120,12 @@ export function presentAppleRunnerSnapshot(
     scope: options?.scope,
     customActions: options?.customActions,
   });
+  // The engine only validates a box for the regular projection (`presentIosRunnerSnapshot` reads the
+  // viewport evidence for `regular` and skips it for `raw`), so raw is the one projection where this
+  // host still holds a root it never checked. Publishing it would reinstate the largest-rect guess
+  // #3182 exists to retire, under the name of a measured fact.
+  const validatedViewport =
+    request.projection === 'regular' ? viewportSize(viewportEvidence) : undefined;
 
   const input: IosSnapshotInput = {
     stage: 'presented',
@@ -146,7 +153,7 @@ export function presentAppleRunnerSnapshot(
   try {
     return {
       nodes: presentIosRunnerSnapshot(input, request).nodes,
-      ...(viewport ? { viewport } : {}),
+      ...(validatedViewport ? { viewport: validatedViewport } : {}),
     };
   } catch (error) {
     throwSnapshotPresentationError(error, result);
