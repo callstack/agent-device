@@ -12,7 +12,6 @@ import { validateAgainstSchema } from './output-schema-validator.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 afterEach(() => {
-  vi.unstubAllEnvs();
   if (temporaryDirectory) {
     fs.rmSync(temporaryDirectory, { recursive: true, force: true });
     temporaryDirectory = undefined;

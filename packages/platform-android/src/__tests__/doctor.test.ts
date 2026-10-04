@@ -42,7 +42,6 @@ import type { DoctorCheck } from '@agent-device/contracts/observability';
 
 afterEach(() => {
   resetAndroidTestImeActivationCacheForTests();
-  vi.unstubAllEnvs();
 });
 
 function fakeAdb(currentIme: string, previousIme = 'null'): AndroidAdbExecutor {

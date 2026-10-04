@@ -46,7 +46,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  vi.unstubAllEnvs();
   vi.useRealTimers();
   Object.defineProperty(process.stderr, 'isTTY', {
     configurable: true,

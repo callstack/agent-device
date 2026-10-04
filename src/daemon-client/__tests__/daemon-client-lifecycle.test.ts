@@ -59,7 +59,6 @@ afterEach(() => {
   mockRunCmdDetached.mockReset();
   mockRunCmdSync.mockClear();
   mockSleep.mockClear();
-  vi.unstubAllEnvs();
 });
 
 function makeTempStateDir(prefix: string): string {
@@ -503,7 +502,6 @@ test('sendToDaemon does not reuse reachable daemon metadata with mismatched vers
       await closeLoopbackServer(staleDaemon.server);
       await closeLoopbackServer(freshDaemon.server);
       fs.rmSync(stateDir, { recursive: true, force: true });
-      vi.unstubAllEnvs();
     }
   }
 });

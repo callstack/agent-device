@@ -28,7 +28,6 @@ const mockSpawnDaemon = vi.mocked(runCmdDetachedMonitored);
 
 afterEach(() => {
   mockSpawnDaemon.mockReset();
-  vi.unstubAllEnvs();
 });
 
 test('a caller naming a policy refuses a running daemon without that policy', async (t) => {

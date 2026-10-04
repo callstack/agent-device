@@ -62,7 +62,6 @@ afterEach(() => {
   mockRunCmdDetached.mockReset();
   mockSleep.mockReset();
   mockSleep.mockImplementation(async () => {});
-  vi.unstubAllEnvs();
 });
 
 /** The code signature this client stamps on, and expects of, a daemon it may reuse. */

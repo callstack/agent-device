@@ -58,6 +58,10 @@ export const MUTATION_EXCLUDED_TESTS: readonly string[] = [
   ...FUZZ_WORKER_TESTS,
 ];
 
+// Env stubs never outlive the test that made them. Applied to every project below and imported by
+// vitest.mutation.config.ts, so no lane can leave it out.
+export const TEST_ISOLATION = { unstubEnvs: true } as const;
+
 // Imported by vitest.mutation.config.ts so the two lanes cannot drift: a guard
 // added here must reach the Stryker sandbox too.
 export const SETUP_FILES = [
@@ -245,7 +249,7 @@ export default defineConfig({
           setupFiles: SETUP_FILES,
         },
       },
-    ],
+    ].map((project) => ({ ...project, test: { ...TEST_ISOLATION, ...project.test } })),
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov', 'json-summary'],

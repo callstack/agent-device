@@ -57,7 +57,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  vi.unstubAllEnvs();
 });
 
 test('waitForRunner propagates request cancellation without fallback', async () => {
