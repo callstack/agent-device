@@ -13,6 +13,7 @@ function sessionWithClient(results: Array<{ code: number; stdout: string; stderr
   const session = {
     platform: 'ios',
     instanceId: 'limrun-settings-instance',
+    device: { id: 'limrun:ios:settings', platform: 'ios' },
     client,
     dependencies: { ios: { resolveAppAlias: async (app: string) => app } },
   } as unknown as LimrunIosSession;
@@ -92,6 +93,26 @@ test('a failing simctl rejects with typed setting, exit code and stderr', async 
   await expect(interactor.setSetting('appearance', 'dark')).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     details: { setting: 'appearance', exitCode: 3, stderr: 'denied' },
+  });
+});
+
+test('a permission service the runtime refuses is unsupported, like a local simulator', async () => {
+  const { interactor } = sessionWithClient([
+    { code: 1, stdout: '', stderr: 'Failed to set access\nOperation not permitted\n' },
+  ]);
+
+  await expect(
+    interactor.setSetting('permission', 'grant', 'com.example.app', {
+      permissionTarget: 'notifications',
+    }),
+  ).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    message: expect.stringContaining('notifications'),
+    details: {
+      deviceId: 'limrun:ios:settings',
+      appBundleId: 'com.example.app',
+      hint: expect.stringContaining('`all` target'),
+    },
   });
 });
 

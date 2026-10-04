@@ -2,6 +2,10 @@ import {
   APPLE_BIOMETRIC_LEAF_REFUSAL,
   getUnsupportedMacOsSettingMessage,
   parseAppearanceAction,
+  iosPrivacyAction,
+  type IosPrivacyAction,
+  iosPrivacyServiceRefusedError,
+  isIosPrivacyServiceRefusal,
   parseIosAppearance,
   parseIosPrivacyService,
   parsePermissionAction,
@@ -179,7 +183,7 @@ export async function setIosSetting(
           sessionAppRequiredDetails(),
         );
       }
-      const action = mapIosPermissionAction(parsePermissionAction(state));
+      const action = iosPrivacyAction(parsePermissionAction(state));
       const target = parseIosPrivacyService(options?.permissionTarget, options?.permissionMode);
       await runIosPrivacyCommand(device, action, target, appBundleId);
       return;
@@ -323,69 +327,24 @@ const IOS_BIOMETRIC_SETTINGS: Record<
   touchid: { notificationModality: 'fingerTouch' },
 };
 
-function mapIosPermissionAction(action: 'grant' | 'deny' | 'reset'): 'grant' | 'revoke' | 'reset' {
-  if (action === 'deny') return 'revoke';
-  return action;
-}
-
 async function runIosPrivacyCommand(
   device: DeviceInfo,
-  action: 'grant' | 'revoke' | 'reset',
+  action: IosPrivacyAction,
   target: string,
   appBundleId: string,
 ): Promise<void> {
   try {
     await runSimctlForDevice(device, ['privacy', device.id, action, target, appBundleId]);
   } catch (error) {
-    if (!isPrivacyServiceRefusedError(error)) throw error;
-    throw privacyServiceRefusedError(device, action, target, appBundleId, error);
-  }
-}
-
-/**
- * `simctl privacy` is its own capability check: a service the runtime cannot change answers
- * EPERM, whether or not it is spelled in the help text. The help text is not a capability
- * list — Xcode 26 omits `camera`, which it does change — so the verdict is read from the
- * command that would have made the change rather than from a probe that can only guess.
- */
-function isPrivacyServiceRefusedError(error: unknown): boolean {
-  if (!(error instanceof AppError) || error.code !== 'COMMAND_FAILED') return false;
-  const stderr = String(error.details?.stderr ?? '').toLowerCase();
-  return (
-    /failed to (set|grant|revoke|reset) access/.test(stderr) &&
-    stderr.includes('operation not permitted')
-  );
-}
-
-function privacyServiceRefusedError(
-  device: DeviceInfo,
-  action: 'grant' | 'revoke' | 'reset',
-  target: string,
-  appBundleId: string,
-  cause: unknown,
-): AppError {
-  if (action === 'reset') {
-    return new AppError(
-      'UNSUPPORTED_OPERATION',
-      `iOS simulator does not support resetting ${target} permission via simctl privacy on this runtime.`,
-      {
-        deviceId: device.id,
-        appBundleId,
-        hint: 'Use reinstall to force a fresh prompt, or reset simulator content and settings.',
-      },
-      cause,
-    );
-  }
-  return new AppError(
-    'UNSUPPORTED_OPERATION',
-    `iOS simulator does not support setting ${target} permission via simctl privacy on this runtime.`,
-    {
-      deviceId: device.id,
+    if (!isIosPrivacyServiceRefusal(error)) throw error;
+    throw iosPrivacyServiceRefusedError({
+      action,
+      target,
       appBundleId,
-      hint: 'Privacy support varies by Xcode runtime: run `xcrun simctl privacy help` for its documented services, or use the `all` target, which applies the action to every service this runtime can change.',
-    },
-    cause,
-  );
+      deviceId: device.id,
+      cause: error,
+    });
+  }
 }
 
 function parseBiometricAction(state: string, settingName: IosBiometricSetting): IosBiometricAction {

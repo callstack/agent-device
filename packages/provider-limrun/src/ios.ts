@@ -1,5 +1,8 @@
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import {
+  iosPrivacyAction,
+  iosPrivacyServiceRefusedError,
+  isIosPrivacyServiceRefusal,
   parseAppearanceAction,
   parseIosAppearance,
   parseIosPrivacyService,
@@ -413,15 +416,20 @@ class LimrunIosInteractor implements Interactor {
     options: SettingOptions | undefined,
   ): Promise<void> {
     const bundleId = await this.requireAppId(appId, 'permission setting');
-    const action = parsePermissionAction(state);
+    const action = iosPrivacyAction(parsePermissionAction(state));
     const service = parseIosPrivacyService(options?.permissionTarget, options?.permissionMode);
-    await this.simctl('permission', [
-      'privacy',
-      'booted',
-      action === 'deny' ? 'revoke' : action,
-      service,
-      bundleId,
-    ]);
+    try {
+      await this.simctl('permission', ['privacy', 'booted', action, service, bundleId]);
+    } catch (error) {
+      if (!isIosPrivacyServiceRefusal(error)) throw error;
+      throw iosPrivacyServiceRefusedError({
+        action,
+        target: service,
+        appBundleId: bundleId,
+        deviceId: this.session.device.id,
+        cause: error,
+      });
+    }
   }
 
   private async setLocation(
