@@ -1,3 +1,4 @@
+import { AppError } from '@agent-device/kernel/errors';
 import { bindSessionScreenRecording } from './session-capture-binding.ts';
 import type { SessionRef } from './session-state.ts';
 import type { SessionStore } from './session-store.ts';
@@ -7,27 +8,40 @@ export function bindRecordOnlyScreenRecording(
   address: string,
   draft: SessionRef['session'],
 ) {
-  let published: SessionRef | undefined;
+  let published:
+    | Readonly<{
+        ref: SessionRef;
+        binding: ReturnType<typeof bindSessionScreenRecording>;
+      }>
+    | undefined;
+  const assertAdoptable = (): void => {
+    if (published) {
+      sessionStore.requireCurrent(published.ref);
+      throw new AppError('COMMAND_FAILED', 'Recording draft has already been published', {
+        reason: 'session_resource_changed',
+        session: address,
+      });
+    }
+    sessionStore.assertPublishable(address);
+  };
   const binding: ReturnType<typeof bindSessionScreenRecording> = Object.freeze({
     address,
     sessionDir: sessionStore.resolveSessionDir(address),
-    read: () =>
-      published ? bindSessionScreenRecording(sessionStore, published).read() : undefined,
-    assertAdoptable: () => sessionStore.assertPublishable(address),
+    read: () => published?.binding.read(),
+    assertAdoptable,
     canPersist: () => !published && sessionStore.lookup(address) === undefined,
     adopt: (screenRecording) => {
-      sessionStore.assertPublishable(address);
-      draft.screenRecording = screenRecording;
-      published = sessionStore.publish(address, draft);
+      assertAdoptable();
+      const ref = sessionStore.publish(address, { ...draft, screenRecording });
+      published = Object.freeze({ ref, binding: bindSessionScreenRecording(sessionStore, ref) });
     },
-    clear: (expected) =>
-      published ? bindSessionScreenRecording(sessionStore, published).clear(expected) : 'retired',
+    clear: (expected) => published?.binding.clear(expected) ?? 'retired',
   });
   return Object.freeze({
     binding,
     requireRef: (): SessionRef => {
       if (!published) throw new TypeError('Screen recording did not publish its session');
-      return published;
+      return published.ref;
     },
   });
 }

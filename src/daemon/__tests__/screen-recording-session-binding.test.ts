@@ -58,3 +58,59 @@ test('shutdown refuses draft publication while retaining unconfirmed recording c
   if (record.status !== 'decoded') throw new Error('Expected recovery evidence');
   expect(record.envelope.metadata?.runtimeContractInvalid).toBeUndefined();
 });
+
+test('a draft binding retains its latest observed recording after retirement', () => {
+  const store = makeSessionStore();
+  const session = makeRecordingSession({
+    name: 'draft',
+    sessionStore: store,
+    finish: async () => ({ status: 'cleanup-pending', reason: 'cleanup-unconfirmed' }),
+  });
+  const first = session.screenRecording!;
+  const latest = makeRecordingSession({
+    name: 'draft',
+    sessionStore: store,
+    finish: async () => ({ status: 'cleanup-pending', reason: 'cleanup-unconfirmed' }),
+  }).screenRecording!;
+  const draft = bindRecordOnlyScreenRecording(store, 'draft', {
+    ...session,
+    screenRecording: undefined,
+  });
+  draft.binding.adopt(first);
+  const ref = draft.requireRef();
+  store.update(ref, { screenRecording: latest });
+  expect(draft.binding.read()).toBe(latest);
+  expect(store.retire(ref)).toBe(true);
+  expect(draft.binding.read()).toBe(latest);
+  expect(draft.binding.clear(latest)).toBe('retired');
+});
+
+test('a published draft cannot create another lifetime after retirement', () => {
+  const store = makeSessionStore();
+  const session = makeRecordingSession({
+    name: 'draft',
+    sessionStore: store,
+    finish: async () => ({ status: 'cleanup-pending', reason: 'cleanup-unconfirmed' }),
+  });
+  const recording = session.screenRecording!;
+  const draft = bindRecordOnlyScreenRecording(store, 'draft', {
+    ...session,
+    screenRecording: undefined,
+  });
+  draft.binding.adopt(recording);
+  const ref = draft.requireRef();
+  expect(store.retire(ref)).toBe(true);
+  expect(draft.binding.canPersist()).toBe(false);
+  expect(() => draft.binding.assertAdoptable()).toThrowError(
+    expect.objectContaining({
+      details: expect.objectContaining({ reason: 'session_lifetime_ended' }),
+    }),
+  );
+  expect(() => draft.binding.adopt(recording)).toThrowError(
+    expect.objectContaining({
+      details: expect.objectContaining({ reason: 'session_lifetime_ended' }),
+    }),
+  );
+  expect(store.lookup('draft')).toBeUndefined();
+  expect(draft.requireRef()).toBe(ref);
+});
