@@ -73,10 +73,19 @@ export const UNINFORMATIVE_OWNER_RECORDS = [
   '{"pid":999999999,"startTime":null}',
 ] as const;
 
-export function failRenameForPath(filePath: string, error: Error) {
+function failRenameForPath(filePath: string, error: Error) {
   const rename = fs.renameSync;
   return vi.spyOn(fs, 'renameSync').mockImplementation((source, destination) => {
     if (String(destination) === filePath) throw error;
     return rename(source, destination);
   });
+}
+
+export function failLockOwnerPublication(lockDirPath: string, releaseFails: boolean) {
+  const primary = Object.assign(new Error('publication failed'), { code: 'EIO' });
+  const releaseError = Object.assign(new Error('guard unlink refused'), { code: 'EPERM' });
+  const renameSpy = failRenameForPath(path.join(lockDirPath, 'owner.json'), primary);
+  const guardPath = lockDirPath.replace(/\.lock$/, '.reclaim.lock');
+  const unlinkSpy = releaseFails ? failUnlinkForPath(guardPath, releaseError) : undefined;
+  return { primary, renameSpy, unlinkSpy };
 }

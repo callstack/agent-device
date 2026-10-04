@@ -37,7 +37,7 @@ import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 import { holdLegacyReclaimMutex } from './legacy-process-lock.fixtures.ts';
 import {
   currentProcessOwner,
-  failRenameForPath,
+  failLockOwnerPublication,
   UNINFORMATIVE_OWNER_RECORDS,
   failUnlinkForPath,
   listReclaimSiblings,
@@ -864,10 +864,7 @@ for (const releaseFails of [false, true]) {
   test(`failed owner publication remains primary when guard release fails: ${releaseFails}`, async () => {
     const lockDirPath = path.join(tmpDir, 'failed-publication.lock');
     const guardPath = path.join(tmpDir, 'failed-publication.reclaim.lock');
-    const primary = Object.assign(new Error('publication failed'), { code: 'EIO' });
-    const releaseError = Object.assign(new Error('guard unlink refused'), { code: 'EPERM' });
-    const renameSpy = failRenameForPath(path.join(lockDirPath, 'owner.json'), primary);
-    const unlinkSpy = releaseFails ? failUnlinkForPath(guardPath, releaseError) : undefined;
+    const { primary, renameSpy, unlinkSpy } = failLockOwnerPublication(lockDirPath, releaseFails);
     const diagnosticSpy = vi.spyOn(diagnostics, 'emitDiagnostic');
     try {
       assert.throws(
