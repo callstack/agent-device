@@ -1,5 +1,6 @@
 import { attachActiveSessionAddressHint } from './daemon-client-address-hints.ts';
 import fs from 'node:fs';
+import { processLockHoldsDaemonIdentity } from '../daemon-registration.ts';
 import net from 'node:net';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { readReplayDivergenceResume } from '@agent-device/ad-replay/divergence';
@@ -233,11 +234,10 @@ function registrationAllowsDaemonObservation(
 ): boolean {
   return (
     inspection.state === 'absent' ||
-    (inspection.state === 'held' &&
-      inspection.owner.pid === info.pid &&
-      inspection.owner.startTime !== null &&
-      inspection.owner.startTime.trim().length > 0 &&
-      inspection.owner.startTime === info.processStartTime)
+    processLockHoldsDaemonIdentity(inspection, {
+      pid: info.pid,
+      startTime: info.processStartTime ?? null,
+    })
   );
 }
 

@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import type { ProcessLockInspection } from '@agent-device/host-kit/file';
 import {
   ownerIdentityDiffers,
   isProcessPid,
@@ -16,6 +17,18 @@ import { resolveDaemonPaths } from './daemon-resolution.ts';
 export function readRegisteredDaemonIdentity(infoPath: string): OwnerIdentity | null {
   const record = readRegistration(infoPath);
   return record.status === 'registered' ? record.identity : null;
+}
+
+export function processLockHoldsDaemonIdentity(
+  inspection: ProcessLockInspection,
+  identity: OwnerIdentity,
+): boolean {
+  return (
+    inspection.state === 'held' &&
+    typeof identity.startTime === 'string' &&
+    identity.startTime.trim().length > 0 &&
+    ownerIdentityMatches(inspection.owner, identity)
+  );
 }
 
 /** The raw record's identity. A pid of `null` is a file that names no owner, not owner zero. */

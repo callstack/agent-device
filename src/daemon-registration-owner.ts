@@ -10,7 +10,6 @@ import {
 } from './daemon-process.ts';
 import {
   readCurrentOwnerIdentity,
-  ownerIdentityMatches,
   readProcessStartTime,
   type OwnerIdentity,
 } from '@agent-device/host-kit/process';
@@ -31,6 +30,7 @@ import {
 } from './daemon-resolution.ts';
 import { findUnrecoveredRepairCommitFailure } from './session-repair-tombstone.ts';
 import {
+  processLockHoldsDaemonIdentity,
   readRegisteredDaemonOwnership,
   readRegisteredDaemonIdentity,
   type RegisteredDaemonOwnership,
@@ -261,7 +261,7 @@ function recoverStartupBirth(paths: DaemonPaths, startup: OwnedStartup): void {
   const registration = readRegisteredDaemonIdentity(paths.infoPath);
   if (registration?.pid !== startup.launch.pid || !registration.startTime) return;
   const lock = inspectProcessLock(paths.lockPath);
-  if (lock.state !== 'held' || !ownerIdentityMatches(lock.owner, registration)) return;
+  if (!processLockHoldsDaemonIdentity(lock, registration)) return;
   startup.startTime = registration.startTime;
 }
 

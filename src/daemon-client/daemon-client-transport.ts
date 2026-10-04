@@ -274,7 +274,9 @@ async function readDaemonHttpHealth(
     }),
   ]);
   if (!transport || signal.aborted || performance.now() >= deadline)
-    return { reachable: false, timedOut: healthProbeExpired(timeoutSignal, deadline) };
+    return healthProbeExpired(timeoutSignal, deadline)
+      ? { reachable: false, timedOut: true }
+      : { reachable: false };
   return await new Promise((resolve) => {
     const headers = info.baseUrl ? buildDaemonHttpAuthHeaders(info.token) : {};
     const unreachable = (): RemoteDaemonHealth =>
