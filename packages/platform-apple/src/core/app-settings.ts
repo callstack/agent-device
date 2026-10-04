@@ -205,6 +205,8 @@ const CONTAINER_MANAGER_METADATA_FILE = '.com.apple.mobile_container_manager.met
 /**
  * The directories a fresh install creates in the data container. iOS does not recreate them on
  * relaunch; without `tmp`, every URLSession download task fails until the app is reinstalled.
+ * The list matches the iOS 26.5 fresh-install layout; older runtimes and tvOS or visionOS
+ * simulators may differ, but an extra empty directory there is harmless.
  */
 const FRESH_INSTALL_DATA_DIRECTORIES = [
   'Documents',
