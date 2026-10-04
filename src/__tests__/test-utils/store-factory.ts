@@ -12,6 +12,7 @@ export function makeStoredSessionRef(session: SessionState, address = session.na
   return makeSessionStore().publish(address, session);
 }
 
+/** Publishes a fixture or reuses its current record. After an update, pass the rebuilt record. */
 export function storeSessionForTest(
   store: SessionStore,
   session: SessionState,
