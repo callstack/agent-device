@@ -400,7 +400,7 @@ extension RunnerTests {
   enum SynthesizedTextCommitOutcome: Equatable {
     /// The field holds exactly the expected text.
     case settled
-    /// There was nothing to wait for: the text carries a submit key.
+    /// There was nothing to wait for: the text carries a submit key, or the field is secure.
     case unobservable
     /// The deadline expired with the expected text still not observed.
     case notObserved
@@ -432,12 +432,18 @@ extension RunnerTests {
   static func awaitSynthesizedReplacementCommitOutcome(
     expectedText: String,
     placeholder: String?,
+    fieldIsSecure: Bool = false,
     stallBudget: TimeInterval = TextEntryTiming.synthesizedCommitStallTimeout,
     ceiling: TimeInterval = TextEntryTiming.synthesizedCommitCeiling,
     now: () -> Date = { Date() },
     observe: () -> String?,
     waitForNextObservation: () -> Void
   ) -> SynthesizedTextCommitOutcome {
+    // A secure field never exposes its value, so every read is nil and the wait could only expire.
+    // The element route leaves such a field unverified rather than failed; so does this one.
+    if fieldIsSecure {
+      return .unobservable
+    }
     // A placeholder-equal AX value cannot prove a commit: an input handler may clear the field
     // after dispatch, making the empty field render the same value. Refuse before polling because
     // no later read can distinguish those states.
