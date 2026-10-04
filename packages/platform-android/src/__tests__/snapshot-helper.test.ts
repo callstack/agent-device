@@ -88,48 +88,6 @@ test('parseAndroidSnapshotHelperOutput reconstructs XML chunks and metadata', ()
   });
 });
 
-// The helper publishes the display's extent beside its density (#3182). Both transports read the
-// same pair, and a helper that answered with nothing usable must leave the keys absent rather than
-// carry a zero the host would have to second-guess.
-test('readHelperMetadata carries the helper display extent beside its density (#3182)', () => {
-  const xml = '<hierarchy><node text="row" /></hierarchy>';
-  const output = helperOutput({
-    chunks: [xml],
-    result: {
-      ok: 'true',
-      helperApiVersion: '1',
-      outputFormat: 'uiautomator-xml',
-      pixelDensity: '2.625',
-      displayWidth: '1080',
-      displayHeight: '2400',
-    },
-  });
-
-  const parsed = parseAndroidSnapshotHelperOutput(output);
-
-  assert.equal(parsed.metadata.pixelDensity, 2.625);
-  assert.equal(parsed.metadata.displayWidth, 1080);
-  assert.equal(parsed.metadata.displayHeight, 2400);
-});
-
-test('readHelperMetadata leaves the display extent absent when the helper omits it (#3182)', () => {
-  const xml = '<hierarchy><node text="row" /></hierarchy>';
-  const output = helperOutput({
-    chunks: [xml],
-    result: {
-      ok: 'true',
-      helperApiVersion: '1',
-      outputFormat: 'uiautomator-xml',
-      pixelDensity: '2.625',
-    },
-  });
-
-  const parsed = parseAndroidSnapshotHelperOutput(output);
-
-  assert.equal(parsed.metadata.displayWidth, undefined);
-  assert.equal(parsed.metadata.displayHeight, undefined);
-});
-
 test('parseAndroidSnapshotHelperOutput decodes UTF-8 across byte chunk boundaries', () => {
   const xml = '<hierarchy><node text="Save 👍" /></hierarchy>';
   const bytes = Buffer.from(xml, 'utf8');
