@@ -16,18 +16,25 @@ export async function finalizeDaemonSessionLease(
   params: DaemonLeaseFinalization & { session: SessionState },
 ): Promise<void> {
   const { session, leaseRegistry } = params;
-  if (!session.lease) return;
-  const activeLease = leaseRegistry.getLease(
-    leaseScopeToReleaseRequest({
-      leaseId: session.lease.leaseId,
-      tenantId: session.lease.tenantId,
-      runId: session.lease.runId,
-      leaseBackend: session.lease.leaseBackend,
-      leaseProvider: session.lease.leaseProvider,
-      deviceKey: session.lease.deviceKey,
-      clientId: session.lease.clientId,
-    }),
-  );
+  const sessionLease = session.lease;
+  if (!sessionLease) return;
+  let activeLease: DeviceLease | undefined;
+  try {
+    activeLease = leaseRegistry.getLease(
+      leaseScopeToReleaseRequest({
+        leaseId: sessionLease.leaseId,
+        tenantId: sessionLease.tenantId,
+        runId: sessionLease.runId,
+        leaseBackend: sessionLease.leaseBackend,
+        leaseProvider: sessionLease.leaseProvider,
+        deviceKey: sessionLease.deviceKey,
+        clientId: sessionLease.clientId,
+      }),
+    );
+  } catch (error) {
+    reportLeaseReleaseFailure(sessionLease.leaseId, session.name, error);
+    return;
+  }
   if (activeLease) await finalizeDaemonLease(params, activeLease, session.name);
 }
 
@@ -58,16 +65,20 @@ async function finalizeDaemonLease(
       });
     }
   } catch (error) {
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'daemon_shutdown_session_lease_release_failed',
-      data: {
-        session,
-        leaseId: lease.leaseId,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    });
+    reportLeaseReleaseFailure(lease.leaseId, session, error);
   }
+}
+
+function reportLeaseReleaseFailure(
+  leaseId: string,
+  session: string | undefined,
+  error: unknown,
+): void {
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'daemon_shutdown_session_lease_release_failed',
+    data: { session, leaseId, error: error instanceof Error ? error.message : String(error) },
+  });
 }
 
 async function releaseWithinTimeout(release: Promise<void>, timeoutMs: number): Promise<boolean> {
