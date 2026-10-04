@@ -56,8 +56,8 @@ export function handleRequestTimeout(
 ): AppError {
   const { info, statePaths, remote, timeoutMs, requestId, command, platform, session, action } =
     params;
-  // Cleanup eligibility stays UNCONDITIONAL for every local (non-remote)
-  // timeout, on purpose: the request's declared --platform is not
+  // Cleanup eligibility never depends on the declared platform, on purpose:
+  // the request's declared --platform is not
   // authoritative for session-bound execution. An existing session's real
   // device platform can silently override a conflicting declared selector
   // (`applyStripLockPolicy` in request-lock-policy.ts, reached via
@@ -67,7 +67,10 @@ export function handleRequestTimeout(
   // Apple-process-name-specific, so sweeping them on a non-Apple host or
   // session matches nothing and costs a few no-op subprocess spawns, never
   // a wrong skip.
-  const cleanup = remote ? { terminated: 0 } : cleanupTimedOutIosRunnerBuilds();
+  // `record` is excluded by command, which is authoritative: on a physical iOS device or macOS the
+  // runner is the recorder, and the sweep would kill the export the preserved daemon is finishing.
+  const sweepRunnerBuilds = !remote && command !== PUBLIC_COMMANDS.record;
+  const cleanup = sweepRunnerBuilds ? cleanupTimedOutIosRunnerBuilds() : { terminated: 0 };
   const resetDaemon = !remote && shouldResetDaemonAfterRequestTimeout(command);
   const daemonReset = resetDaemon
     ? resetDaemonAfterTimeout(info, statePaths)
@@ -136,15 +139,15 @@ export function resolveRequestTimeoutHint(params: {
   session?: string;
 }): string {
   const { remote, resetDaemon, command, appleCleanupEvidence, session, action } = params;
+  // A daemon that survives this client window may still be exporting a `record stop` that ran out
+  // of time (a stop still queued for the device lock is dropped before any export starts), and a
+  // finished file stays retrievable by asking again. A reset daemon makes no such promise.
+  if (!resetDaemon && command === PUBLIC_COMMANDS.record && action === 'stop') {
+    return `The ${remote ? 'remote ' : ''}daemon may still be exporting the recording. Run agent-device record stop${
+      session ? ` --session ${session}` : ''
+    } again to wait for that export and receive the completed recording.`;
+  }
   if (remote) {
-    // A remote daemon survives this client window, so a `record stop` that ran out of time is still
-    // exporting there and its finished file stays retrievable by asking again. A local timeout
-    // resets the daemon mid-export, where that promise would be false.
-    if (command === PUBLIC_COMMANDS.record && action === 'stop') {
-      return `The remote daemon is still exporting the recording. Run agent-device record stop${
-        session ? ` --session ${session}` : ''
-      } again to wait for that export and receive the completed recording.`;
-    }
     return 'Retry with --debug and verify the remote daemon URL, auth token, and remote host logs.';
   }
   if (!resetDaemon) {

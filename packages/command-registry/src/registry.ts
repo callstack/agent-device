@@ -1234,7 +1234,10 @@ export const RAW_COMMAND_DESCRIPTORS = [
       allowSessionlessDefaultDevice: isRecordingStartRequest,
     },
     platformExecution: { kind: 'device-runtime', uses: screenRecordingRuntimePlanUses },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    // A `record stop` export can outlast the request envelope. Resetting the daemon mid-export
+    // left its recording manifest open with no owner, and every later `record start` on the
+    // device refused until that exact session ran `record stop`.
+    timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
   },
   {
