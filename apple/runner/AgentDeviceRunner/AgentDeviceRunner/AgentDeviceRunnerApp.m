@@ -267,6 +267,8 @@ static NSTimeInterval AgentDeviceTextEntryAcknowledgeWindow(void) {
 // well inside it, and two commands are separated by at least a commit-wait poll and a status read.
 static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
 
+static const CGFloat AgentDeviceTextEntryFieldTopInset = 24;
+static const CGFloat AgentDeviceTextEntryFieldHeight = 44;
 static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
 
 - (void)agentDeviceTextEntryDidChange:(UITextField *)textField {
@@ -306,7 +308,8 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
 // avoidance or a bottom sheet extending above the keyboard does, so the neighbouring field slides
 // into the point the focus tap hit.
 - (void)agentDeviceTextEntryDidBeginEditing:(UITextField *)textField {
-  self.textEntryFieldTop.constant = 24 - 44 - AgentDeviceTextEntryNeighbourGap;
+  self.textEntryFieldTop.constant =
+      AgentDeviceTextEntryFieldTopInset - AgentDeviceTextEntryFieldHeight - AgentDeviceTextEntryNeighbourGap;
   [self.view layoutIfNeeded];
 }
 #endif
@@ -365,12 +368,13 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         forControlEvents:UIControlEventEditingChanged];
     textField.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:textField];
-    self.textEntryFieldTop = [textField.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24];
+    self.textEntryFieldTop = [textField.topAnchor constraintEqualToAnchor:label.bottomAnchor
+                                                                 constant:AgentDeviceTextEntryFieldTopInset];
     [NSLayoutConstraint activateConstraints:@[
       [textField.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
       self.textEntryFieldTop,
       [textField.widthAnchor constraintEqualToConstant:240],
-      [textField.heightAnchor constraintEqualToConstant:44],
+      [textField.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
     ]];
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-moves-on-focus"]) {
       textField.text = @"stale";
@@ -388,7 +392,7 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [neighbour.topAnchor constraintEqualToAnchor:textField.bottomAnchor
                                             constant:AgentDeviceTextEntryNeighbourGap],
         [neighbour.widthAnchor constraintEqualToConstant:240],
-        [neighbour.heightAnchor constraintEqualToConstant:44],
+        [neighbour.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
       ]];
     }
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-app-owned-value"]) {
