@@ -1,5 +1,6 @@
 import type {
   IosTargetActivation,
+  IosSnapshotObservation,
   SnapshotCaptureBackend,
   SnapshotQualityState,
   SnapshotQualityVerdict,
@@ -43,11 +44,12 @@ export type SnapshotCaptureAnnotations = {
   warnings?: string[];
   /** The Apple runner re-activated the session app while serving this capture (#2682). */
   targetActivation?: IosTargetActivation;
+  observation?: IosSnapshotObservation;
 };
 
 export type PublicSnapshotCaptureAnnotations = Pick<
   SnapshotCaptureAnnotations,
-  'androidSnapshot' | 'warnings' | 'targetActivation'
+  'androidSnapshot' | 'warnings' | 'targetActivation' | 'observation'
 > & {
   snapshotQuality?: SnapshotQualityVerdict;
 };
@@ -63,6 +65,7 @@ export function snapshotCaptureAnnotationsFrom(
     ...(quality ? { quality } : {}),
     ...(source.warnings ? { warnings: source.warnings } : {}),
     ...(source.targetActivation ? { targetActivation: source.targetActivation } : {}),
+    ...(source.observation ? { observation: source.observation } : {}),
   };
 }
 
@@ -76,6 +79,7 @@ export function publicSnapshotCaptureAnnotations(
       ? { warnings: annotations.warnings }
       : {}),
     ...(annotations.targetActivation ? { targetActivation: annotations.targetActivation } : {}),
+    ...(annotations.observation ? { observation: annotations.observation } : {}),
   };
 }
 
@@ -91,6 +95,7 @@ export function readSerializedSnapshotCaptureAnnotations(
     : undefined;
   const quality = readPublishedSnapshotQualityVerdict(data.snapshotQuality);
   const targetActivation = readTargetActivation(data.targetActivation);
+  const observation = readSnapshotObservation(data.observation);
   return publicSnapshotCaptureAnnotations({
     ...(androidSnapshot
       ? { androidSnapshot: androidSnapshot as AndroidSnapshotBackendMetadata }
@@ -98,7 +103,24 @@ export function readSerializedSnapshotCaptureAnnotations(
     ...(quality ? { quality } : {}),
     ...(warnings ? { warnings } : {}),
     ...(targetActivation ? { targetActivation } : {}),
+    ...(observation ? { observation } : {}),
   });
+}
+
+export function readSnapshotObservation(value: unknown): IosSnapshotObservation | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  return raw.mode === 'observe-only' &&
+    raw.activationPerformed === false &&
+    raw.appState === 'runningForeground' &&
+    raw.appStateSource === 'xcuiapplication-state'
+    ? {
+        mode: 'observe-only',
+        activationPerformed: false,
+        appState: raw.appState,
+        appStateSource: raw.appStateSource,
+      }
+    : undefined;
 }
 
 /** Re-read of a fact this module projected; the declared keys are the only ones it publishes. */

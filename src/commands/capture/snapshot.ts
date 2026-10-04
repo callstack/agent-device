@@ -37,6 +37,7 @@ const snapshotCommandMetadata = defineFieldCommandMetadata(
     scope: stringField(),
     raw: booleanField(),
     customActions: optionField('snapshotCustomActions'),
+    observeOnly: optionField('snapshotObserveOnly'),
     forceFull: booleanField(),
     timeoutMs: integerField('Maximum wall-clock time for the snapshot command.'),
     // #1271 stage 2: `snapshot` is observation-only, so a repair-armed heal
@@ -55,6 +56,7 @@ const snapshotCliSchema = {
     'snapshotDiff',
     ...SNAPSHOT_FLAGS,
     'snapshotCustomActions',
+    'snapshotObserveOnly',
     'snapshotForceFull',
     'timeoutMs',
     'record',
@@ -74,7 +76,7 @@ export const snapshotCommandFacet = defineCommandFacet({
   name: SNAPSHOT_COMMAND_NAME,
   text: {
     summary: 'Capture or diff the accessibility tree',
-    cliDetail: `Repeated equivalent unfiltered Android snapshots return a compact unchanged acknowledgement. Use --force-full to re-emit the tree; --json and --raw retain full output. For iOS raw-coordinate fallback after a no-op ref press, inspect rects with snapshot -i --json, press the rect center, then verify with diff snapshot -i or snapshot --diff. iOS backend capability contract: ${snapshotBackendCapabilityHelp}.`,
+    cliDetail: `--observe-only is local iOS snapshot-only: an already-ready compatible runner reads the session app without activation or foreground repair, refuses unavailable observation, and reports XCUIApplication state rather than verified foreground ownership (#2696). Regular targetActivation disclosure stays unchanged (#2682, #2694). Repeated equivalent unfiltered Android snapshots return a compact unchanged acknowledgement. Use --force-full to re-emit the tree; --json and --raw retain full output. For iOS raw-coordinate fallback after a no-op ref press, inspect rects with snapshot -i --json, press the rect center, then verify with diff snapshot -i or snapshot --diff. iOS backend capability contract: ${snapshotBackendCapabilityHelp}.`,
   },
   metadata: snapshotCommandMetadata,
   run: (client, input) => client.capture.snapshot(input),

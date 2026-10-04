@@ -134,6 +134,7 @@ export type RunnerCommand = {
    * because no other backend can carry them.
    */
   customActions?: boolean;
+  observeOnly?: boolean;
   depth?: number;
   scope?: string;
   raw?: boolean;
@@ -289,6 +290,7 @@ const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new 
   [RUNNER_BUSY_RUNNER_CODE, 'no'],
   [RUNNER_WEDGED_RUNNER_CODE, 'no'],
   [APP_NOT_RUNNING_RUNNER_CODE, 'no'],
+  ['OBSERVATION_UNAVAILABLE', 'no'],
   [SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE, 'no'],
   [ALERT_NOT_FOUND_RUNNER_CODE, 'no'],
   ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, 'no'] as const),

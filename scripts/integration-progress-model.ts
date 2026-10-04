@@ -369,7 +369,7 @@ function summarizeProviderScenarioFlagExclusions() {
       // and disclosure) plus TS presentation and quality-verdict tests.
       name: 'Apple simulator private-AX capture options',
       owner: 'runner XCTest unit, snapshot-lines, and snapshot-quality tests',
-      keys: ['snapshotCustomActions'],
+      keys: ['snapshotCustomActions', 'snapshotObserveOnly'],
     },
     {
       // The crop is daemon-level post-processing: the platform write happens first, then the

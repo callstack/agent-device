@@ -116,6 +116,7 @@ function bindSnapshotInteractor(
   params: SnapshotInteractorBindingParams,
 ): SnapshotRuntimeOperations {
   const captureSnapshot = async (input: CaptureSnapshotInput) => {
+    assertSnapshotObservationOwner(params, input);
     const signal = captureSnapshotSignal(params.signal, input);
     const runner: RunnerContext = {
       ...input.execution,
@@ -149,6 +150,20 @@ function bindSnapshotInteractor(
     captureSnapshotWithCustomActions: captureSnapshot,
     captureSnapshotWithoutActiveApp: captureSnapshot,
   });
+}
+
+function assertSnapshotObservationOwner(
+  params: SnapshotInteractorBindingParams,
+  input: CaptureSnapshotInput,
+): void {
+  if (input.options?.observeOnly !== true) return;
+  if (
+    params.ownership === 'local' &&
+    params.device.platform === 'apple' &&
+    params.device.appleOs === 'ios'
+  )
+    return;
+  throw new AppError('UNSUPPORTED_OPERATION', 'observe-only snapshot requires a local iOS runner.');
 }
 
 export function bindLocalSnapshotInteractor(

@@ -19,19 +19,27 @@ extension RunnerTests {
         return .response(response)
       case .context(let context):
         return .capture(
-          self.takeSnapshotCaptureTarget(app: context.app),
-          systemSurface: context.systemSurface
+          context.observation == nil
+            ? self.takeSnapshotCaptureTarget(app: context.app)
+            : SnapshotCaptureTarget(
+              app: context.app,
+              bundleId: command.appBundleId?.trimmedNonEmpty,
+              processIdentifier: Self.processIdentifier(of: context.app)
+            ),
+          systemSurface: context.systemSurface,
+          observation: context.observation
         )
       }
     }
     switch preparation {
     case .response(let response):
       return response
-    case .capture(let target, let systemSurface):
+    case .capture(let target, let systemSurface, let observation):
       return try executeSnapshotPrepared(
         command: command,
         target: target,
-        systemSurface: systemSurface
+        systemSurface: systemSurface,
+        observation: observation
       )
     }
   }
@@ -86,7 +94,8 @@ extension RunnerTests {
   private func executeSnapshotPrepared(
     command: Command,
     target: SnapshotCaptureTarget,
-    systemSurface: SystemSurfaceHost?
+    systemSurface: SystemSurfaceHost?,
+    observation: SnapshotObservationPayload?
   ) throws -> Response {
     let options = Self.presentationOptions(from: command)
     do {
@@ -101,6 +110,18 @@ extension RunnerTests {
           bundleId: systemSurface.bundleId,
           kind: systemSurface.kind.rawValue
         )
+      }
+      if let observation {
+        let unchanged = try runMainThreadWork(
+          "observe_only_state",
+          timeout: Self.mainThreadExecutionTimeout,
+          timeoutError: Self.mainThreadExecutionTimeoutError
+        ) {
+          target.app.state == .runningForeground
+            && Self.processIdentifier(of: target.app) == target.processIdentifier
+        }
+        guard unchanged else { return observeOnlyUnavailableResponse() }
+        payload.observation = observation
       }
       setNeedsPostSnapshotInteractionDelay()
       return Response(ok: true, data: payload)

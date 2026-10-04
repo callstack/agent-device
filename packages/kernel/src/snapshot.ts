@@ -81,7 +81,16 @@ export type Point = {
   y: number;
 };
 
+export type IosSnapshotObservation = {
+  mode: 'observe-only';
+  activationPerformed: false;
+  /** XCTest's report, not proof of foreground ownership (#2696). */
+  appState: 'runningForeground';
+  appStateSource: 'xcuiapplication-state';
+};
+
 export type SnapshotOptions = {
+  observeOnly?: boolean;
   interactiveOnly?: boolean;
   depth?: number;
   scope?: string;
@@ -129,6 +138,7 @@ export const SNAPSHOT_OPTION_FLAGS = {
   depth: 'snapshotDepth',
   scope: 'snapshotScope',
   raw: 'snapshotRaw',
+  observeOnly: 'snapshotObserveOnly',
   customActions: 'snapshotCustomActions',
   forceFull: 'snapshotForceFull',
   includeHiddenContentHints: 'snapshotIncludeHiddenContentHints',
@@ -138,6 +148,7 @@ export const SNAPSHOT_OPTION_FLAGS = {
 export type SnapshotOptionKey = keyof typeof SNAPSHOT_OPTION_FLAGS;
 
 type SnapshotOptionValues = {
+  observeOnly: boolean;
   interactiveOnly: boolean;
   depth: number;
   scope: string;
@@ -164,6 +175,7 @@ export type SnapshotOptionFlagFields<TKeys extends SnapshotOptionKey = SnapshotO
  * this projection and then override that one key.
  */
 export const SNAPSHOT_COMMAND_OPTION_KEYS = [
+  'observeOnly',
   'interactiveOnly',
   'depth',
   'scope',
@@ -184,6 +196,7 @@ export type SnapshotCommandOptionFields = SnapshotOptionFields<
 
 /** Option keys a daemon runtime capture input carries; `forceFull` is a command-level concern. */
 export const SNAPSHOT_CAPTURE_OPTION_KEYS = [
+  'observeOnly',
   'interactiveOnly',
   'preferredBackend',
   'depth',
