@@ -1,3 +1,4 @@
+import { storeSessionForTest } from '../../__tests__/test-utils/store-factory.ts';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -83,7 +84,7 @@ function recordClose(store: SessionStore, session: SessionState): void {
 }
 
 function writeScript({ root, store, session }: SessionStoreFixture): string {
-  store.writeSessionLog(session);
+  store.writeSessionLog(storeSessionForTest(store, session));
   return readWrittenSessionScript(root);
 }
 
@@ -134,7 +135,7 @@ test('saveScript flag enables .ad session log writing', () => {
   recordOpen(store, session);
   recordClose(store, session);
 
-  store.writeSessionLog(session);
+  store.writeSessionLog(storeSessionForTest(store, session));
   assert.equal(listSessionScriptFiles(root).length, 1);
 });
 
@@ -397,7 +398,7 @@ test('saveScript path writes session log to custom location', async () => {
   recordOpen(store, session, { platform: 'ios', saveScript: customPath });
   recordClose(store, session);
 
-  store.writeSessionLog(session);
+  store.writeSessionLog(storeSessionForTest(store, session));
   await store.flushEvents(session.name);
   assert.equal(fs.existsSync(customPath), true);
   assert.equal(fs.existsSync(store.resolveEventLogPath(session.name)), true);
@@ -723,7 +724,7 @@ test('writeRepairTombstone/readRepairTombstone round-trips owner + source path',
     sourcePath: '/flows/login.ad',
   });
 
-  store.writeRepairTombstone(session);
+  store.writeRepairTombstone(storeSessionForTest(store, session));
   const tombstone = store.readRepairTombstone('default');
   assert.ok(tombstone);
   assert.equal(tombstone?.owner, 'default');
@@ -736,7 +737,7 @@ test('readRepairTombstone returns undefined once the tombstone has expired', () 
   const store = new SessionStore(path.join(root, 'sessions'));
   const session = makeSession('default');
   // TTL 0 => expiresAt <= now => already stale.
-  store.writeRepairTombstone(session, 0);
+  store.writeRepairTombstone(storeSessionForTest(store, session), 0);
   assert.equal(store.readRepairTombstone('default'), undefined);
 });
 
@@ -744,7 +745,7 @@ test('clearRepairTombstone removes a tombstone (a fresh replay --save-script cle
   const root = mkdtempForTestSync('agent-device-tombstone-clear-');
   const store = new SessionStore(path.join(root, 'sessions'));
   const session = makeSession('default');
-  store.writeRepairTombstone(session);
+  store.writeRepairTombstone(storeSessionForTest(store, session));
   assert.ok(store.readRepairTombstone('default'));
 
   store.clearRepairTombstone('default');
@@ -778,7 +779,7 @@ test('BLOCKER 2: finalizeRepairTeardown of a COMPLETE transaction whose commit F
   session.actions = [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }];
 
   // Idle-reap/shutdown teardown (never routes through close's handler).
-  store.finalizeRepairTeardown(session);
+  store.finalizeRepairTeardown(storeSessionForTest(store, session));
 
   // The prior complete artifact is untouched — teardown's failed commit
   // never clobbers it.
@@ -819,7 +820,7 @@ test('BLOCKER 3: finalizeRepairTeardown auto-commit records a terminal close, pr
   // The source plan's terminal `close` was already skipped-while-armed
   // (Fix 3) — `session.actions` never gained one. Idle-reap/shutdown teardown
   // must synthesize it itself before auto-committing.
-  store.finalizeRepairTeardown(session);
+  store.finalizeRepairTeardown(storeSessionForTest(store, session));
 
   assert.equal(
     session.scriptPublication?.kind === 'repair' ? session.scriptPublication.status : undefined,

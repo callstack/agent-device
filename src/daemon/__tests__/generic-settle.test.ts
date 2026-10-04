@@ -209,7 +209,8 @@ beforeEach(() => {
   mockCaptureSnapshotForSession.mockReset();
   mockCaptureSnapshotForSession.mockImplementation(
     (...args: Parameters<typeof captureSnapshotForSession>) => {
-      const [session, flags, sessionStore, _contextFromFlags, options] = args;
+      const [ref, flags, sessionStore, _contextFromFlags, options] = args;
+      const session = sessionStore.requireCurrent(ref);
       return emulateCaptureSnapshotForSession(session, flags, sessionStore, options);
     },
   );

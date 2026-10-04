@@ -1,5 +1,5 @@
 import type { DaemonResponse } from '../../daemon-request.ts';
-import type { SessionState } from '../../session-state.ts';
+import type { SessionRef, SessionState } from '../../session-state.ts';
 import { type RequestCaptureProof, withCaptureDisclosures } from '../../capture-disclosure.ts';
 import type { CaptureSnapshotForSession, InteractionRouteInput } from './types.ts';
 import { dispatchFillViaRuntime } from './interaction-touch-fill.ts';
@@ -22,10 +22,14 @@ import {
 import { errorResponse, noActiveSessionError } from '@agent-device/kernel/contracts';
 
 export async function handleInteractionCommands(
-  params: InteractionRouteInput & { captureSnapshotForSession: CaptureSnapshotForSession },
+  params: InteractionRouteInput & {
+    sessionRef: SessionRef | undefined;
+    captureSnapshotForSession: CaptureSnapshotForSession;
+  },
 ): Promise<DaemonResponse | null> {
   const captureProof: RequestCaptureProof = {};
-  const routed = { ...params, refSnapshotFlagGuardResponse, captureProof };
+  const sessionRef = params.sessionRef;
+  const routed = { ...params, sessionRef, refSnapshotFlagGuardResponse, captureProof };
   const response = await dispatchInteractionCommand(routed);
   return response
     ? withCaptureDisclosures({ response, consumedTree: captureProof, captureProof })

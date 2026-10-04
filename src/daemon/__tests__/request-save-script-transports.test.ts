@@ -1,3 +1,4 @@
+import { storeSessionForTest } from '../../__tests__/test-utils/store-factory.ts';
 import { isSessionRecording } from '../session-script-publication-capability.ts';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 /**
@@ -204,7 +205,9 @@ for (const [transport, send] of TRANSPORTS) {
     expect(isSessionRecording(session)).toBe(false);
     expect(session.scriptPublication).toBe(undefined);
     // No artifact: the write a later close/teardown would attempt publishes nothing.
-    expect(sessionStore.writeSessionLog(session)).toEqual({ written: false });
+    expect(sessionStore.writeSessionLog(storeSessionForTest(sessionStore, session))).toEqual({
+      written: false,
+    });
     expect(listAdArtifacts(root)).toEqual([]);
     expect(fs.existsSync(path.join(root, 'forged.ad'))).toBe(false);
 
@@ -295,7 +298,7 @@ test('an owner-armed session still records its target and publishes its script',
   expect(isSessionRecording(session)).toBe(true);
   expect(scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION)).toBe(target);
 
-  const result = sessionStore.writeSessionLog(session);
+  const result = sessionStore.writeSessionLog(storeSessionForTest(sessionStore, session));
   expect(result).toEqual({ written: true, path: target, actionCount: 1 });
   expect(fs.readFileSync(target, 'utf8')).toMatch(/^open /m);
 });

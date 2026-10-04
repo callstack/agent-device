@@ -1,3 +1,4 @@
+import { storeSessionForTest } from '../../__tests__/test-utils/store-factory.ts';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -158,7 +159,7 @@ function createSessionStoreFixture(root: string): FilesystemBoundaryFixture {
 
   return {
     targetPath,
-    run: async () => store.finalizeRepairTeardown(session),
+    run: async () => store.finalizeRepairTeardown(storeSessionForTest(store, session)),
     expected: 'return',
     verifyReturn: (_value, errno) => {
       const tombstone = store.readRepairTombstone(session.name);

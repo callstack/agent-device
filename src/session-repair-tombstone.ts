@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { AppError } from '@agent-device/kernel/errors';
 
 /**
  * ADR 0012 decision 6, R7 (C5a): a reaped repair session leaves this bounded
@@ -30,21 +31,64 @@ export function resolveRepairTombstonePath(sessionDir: string): string {
 }
 
 /** Parses/validates a tombstone file at `tombstonePath`; `undefined` if missing, malformed, or expired. */
-export function readRepairTombstoneFile(tombstonePath: string): RepairSessionTombstone | undefined {
+export function readRepairTombstoneFile(
+  tombstonePath: string,
+  owner: string,
+): RepairSessionTombstone | undefined {
+  try {
+    const tombstone = readRepairTombstone(tombstonePath);
+    return tombstone?.owner === owner && tombstone.expiresAt > Date.now() ? tombstone : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Removes only a parseable marker belonging to the requested session, including expired markers. */
+export function clearRepairTombstoneFile(tombstonePath: string, owner: string): void {
+  try {
+    if (readRepairTombstone(tombstonePath)?.owner === owner) {
+      fs.rmSync(tombstonePath, { force: true });
+    }
+  } catch {}
+}
+
+function readRepairTombstone(tombstonePath: string): RepairSessionTombstone | undefined {
   let raw: string;
   try {
     raw = fs.readFileSync(tombstonePath, 'utf8');
-  } catch {
-    return undefined;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
   }
-  let parsed: RepairSessionTombstone;
+  return parseRepairTombstone(raw, tombstonePath);
+}
+
+function parseRepairTombstone(raw: string, tombstonePath: string): RepairSessionTombstone {
   try {
-    parsed = JSON.parse(raw) as RepairSessionTombstone;
-  } catch {
-    return undefined;
+    const parsed = JSON.parse(raw) as RepairSessionTombstone;
+    if (
+      !Number.isFinite(parsed?.expiresAt) ||
+      typeof parsed?.owner !== 'string' ||
+      !validRepairCommitFailure(parsed.commitFailure)
+    )
+      throw new Error('Invalid repair tombstone fields');
+    return parsed;
+  } catch (error) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Repair evidence could not be inspected.',
+      { reason: 'repair_evidence_invalid', path: tombstonePath },
+      error instanceof Error ? error : undefined,
+    );
   }
-  if (typeof parsed?.expiresAt !== 'number' || parsed.expiresAt <= Date.now()) return undefined;
-  return parsed;
+}
+
+function validRepairCommitFailure(value: unknown): boolean {
+  const failure = value as RepairSessionTombstone['commitFailure'] | null;
+  return (
+    value === undefined ||
+    (typeof failure?.code === 'string' && typeof failure?.message === 'string')
+  );
 }
 
 /**
@@ -54,6 +98,7 @@ export function readRepairTombstoneFile(tombstonePath: string): RepairSessionTom
  * CLIENT side of the daemon boundary (`cleanupDaemonAfterRequest` in
  * `daemon-client-lifecycle.ts`), which has no live `SessionStore`/session name
  * to key off of, only the filesystem path an owned ephemeral daemon was given.
+ * Unreadable or malformed evidence throws so cleanup retains the directory.
  * An owned ephemeral state dir services exactly one repair transaction at a
  * time, so the first match found is returned.
  *
@@ -71,15 +116,16 @@ export function findUnrecoveredRepairCommitFailure(sessionsDir: string):
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(sessionsDir, { withFileTypes: true });
-  } catch {
-    return undefined;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
   }
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    const tombstone = readRepairTombstoneFile(
+    const tombstone = readRepairTombstone(
       resolveRepairTombstonePath(path.join(sessionsDir, entry.name)),
     );
-    if (tombstone?.commitFailure) {
+    if (tombstone?.commitFailure && tombstone.expiresAt > Date.now()) {
       return {
         sessionName: entry.name,
         tombstone: { ...tombstone, commitFailure: tombstone.commitFailure },

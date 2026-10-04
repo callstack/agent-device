@@ -52,6 +52,7 @@ test('selector capture cache is keyed by scoped presentation options', async () 
   }));
 
   const runtime = createSelectorCaptureRuntime({
+    ref: sessionStore.lookup(sessionName),
     device: session.device,
     session,
     sessionStore,
@@ -225,6 +226,7 @@ function proofRuntime(params: {
   const consumedSnapshot: { state?: SnapshotState } = {};
   const captureProof: RequestCaptureProof = {};
   const runtime = createSelectorCaptureRuntime({
+    ref: sessionStore.lookup(params.sessionName),
     device: session.device,
     session,
     sessionStore,
@@ -318,6 +320,7 @@ function makeCaptureRuntime(sessionName: string) {
   const session = makeIosSession(sessionName);
   sessionStore.set(sessionName, session);
   const runtime = createSelectorCaptureRuntime({
+    ref: sessionStore.lookup(sessionName),
     device: session.device,
     session,
     sessionStore,
@@ -333,3 +336,44 @@ function makeCaptureRuntime(sessionName: string) {
   });
   return { runtime, sessionName, sessionStore };
 }
+
+test('a held selector capture updates the matching rebuilt record without restoring its old fields', async () => {
+  const sessionStore = makeSessionStore();
+  const address = 'cwd:selector-capture:default';
+  const ref = sessionStore.publish(address, makeIosSession('default'));
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  boundCapture.mockImplementationOnce(async () => {
+    await held;
+    return {
+      backend: 'xctest',
+      producer: 'apple-runner',
+      nodes: [{ index: 0, type: 'Button', label: 'Late capture' }],
+    };
+  });
+  const runtime = createSelectorCaptureRuntime({
+    ref,
+    device: ref.session.device,
+    session: ref.session,
+    sessionStore,
+    sessionName: address,
+    capture: boundCapture,
+    req: { token: 't', session: address, command: 'get', positionals: [], flags: {} },
+  });
+  const running = runtime.capture({ flags: {} });
+  try {
+    await vi.waitFor(() => expect(boundCapture).toHaveBeenCalledOnce());
+    sessionStore.update(ref, { appName: 'Intervening rebuild' });
+    release();
+    await running;
+    expect(sessionStore.requireCurrent(ref).appName).toBe('Intervening rebuild');
+    expect(sessionStore.requireCurrent(ref).snapshot?.nodes[0]?.label).toBe('Late capture');
+    expect(ref.session.snapshot).toBeUndefined();
+    expect(sessionStore.get('default')).toBeUndefined();
+  } finally {
+    release();
+    await running.catch(() => {});
+  }
+});

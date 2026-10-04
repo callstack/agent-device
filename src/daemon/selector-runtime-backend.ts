@@ -15,7 +15,7 @@ import { setSessionSnapshot } from './session-snapshot.ts';
 import { markSessionSnapshotOutdated } from './ref-frame.ts';
 import { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
-import type { SessionState } from './session-state.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
 import { createSelectorCaptureRuntime } from './selector-capture-runtime.ts';
 import { buildRuntimeCaptureInput } from './snapshot-runtime-capture-input.ts';
 import {
@@ -51,6 +51,7 @@ export type SelectorRuntimeParams = {
 };
 
 export type SelectorRuntimeDeviceParams = SelectorRuntimeParams & {
+  ref: SessionRef | undefined;
   session: SessionState | undefined;
   device: SessionState['device'];
   /**
@@ -63,11 +64,20 @@ export type SelectorRuntimeDeviceParams = SelectorRuntimeParams & {
 };
 
 type ResolvedSelectorRuntime =
-  | { ok: true; runtime: ReturnType<typeof createSelectorRuntimeForDevice> }
+  | {
+      ok: true;
+      ref: SessionRef | undefined;
+      runtime: ReturnType<typeof createSelectorRuntimeForDevice>;
+    }
   | { ok: false; response: DaemonResponse };
 
 type ResolvedSelectorDevice =
-  | { ok: true; session: SessionState | undefined; device: SessionState['device'] }
+  | {
+      ok: true;
+      ref: SessionRef | undefined;
+      session: SessionState | undefined;
+      device: SessionState['device'];
+    }
   | { ok: false; response: DaemonResponse };
 
 export function createSelectorRuntimeForDevice(params: SelectorRuntimeDeviceParams) {
@@ -76,12 +86,12 @@ export function createSelectorRuntimeForDevice(params: SelectorRuntimeDevicePara
     ...createDaemonRuntimePolicy('selector commands', { plural: true }),
     sessions: createDaemonRuntimeSessionStore({
       sessionName: params.sessionName,
-      getSession: () => params.session,
+      sessionStore: params.sessionStore,
+      ref: params.ref,
       recordOptions: { includeSnapshot: true },
-      setRecord: (record) => {
-        if (!params.session || !record.snapshot) return;
-        setSessionSnapshot(params.session, record.snapshot);
-        params.sessionStore.set(params.sessionName, params.session);
+      setRecord: (record, current) => {
+        if (!current || !record.snapshot) return;
+        setSessionSnapshot(current, record.snapshot);
       },
     }),
     signal: params.signal ?? getRequestSignal(params.req.meta?.requestId),
@@ -95,10 +105,11 @@ async function resolveSelectorRuntimeDevice(
 ): Promise<ResolvedSelectorDevice> {
   params.consumedSnapshot ??= {};
   params.captureProof ??= {};
-  const session = params.sessionStore.get(params.sessionName);
+  const ref = params.sessionStore.lookup(params.sessionName);
+  const session = ref?.session;
   if (!session && requireSession) return { ok: false, response: noActiveSessionError() };
   const device = session?.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
-  return { ok: true, session, device };
+  return { ok: true, ref, session, device };
 }
 
 /**
@@ -130,8 +141,10 @@ export async function createBoundSelectorRuntime(
   if (!bound.ok) return { ok: false, response: bound.response };
   return {
     ok: true,
+    ref: resolved.ref,
     runtime: createSelectorRuntimeForDevice({
       ...params,
+      ref: resolved.ref,
       session: resolved.session,
       device: resolved.device,
       bound: bound.operations,
@@ -166,6 +179,7 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
     boundOperations === undefined
       ? undefined
       : createSelectorCaptureRuntime({
+          ref: params.ref,
           device,
           session,
           sessionStore,

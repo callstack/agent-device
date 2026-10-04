@@ -347,3 +347,35 @@ test('close expires the ref frame immediately before its admitted platform mutat
   expect(response?.ok).toBe(true);
   expect(mockDispatch).toHaveBeenCalledOnce();
 });
+
+test('app-only close expires the rebuilt record after admission, preserving the captured snapshot', async () => {
+  const sessionStore = makeSessionStore();
+  const address = 'cwd:close:default';
+  const session = makeSession('default', {
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator',
+    booted: true,
+  });
+  session.appBundleId = 'com.example.app';
+  activateCompleteRefFrame(session);
+  const ref = sessionStore.publish(address, session);
+  mockInspectDeviceRuntimeFacts.mockImplementationOnce(async (candidate) => {
+    sessionStore.update(ref, { appName: 'Updated during admission' });
+    return lifecycleRuntimeFacts(candidate);
+  });
+
+  const response = await close({
+    sessionName: address,
+    sessionStore,
+    positionals: ['com.example.app'],
+    internal: { closeAppOnly: true },
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(refFrameState(sessionStore.requireCurrent(ref))).toBe('expired');
+  expect(sessionStore.requireCurrent(ref).appName).toBe('Updated during admission');
+  expect(refFrameState(ref.session)).toBe('active');
+  expect(mockDispatch).toHaveBeenCalledOnce();
+});

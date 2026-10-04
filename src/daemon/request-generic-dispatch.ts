@@ -4,7 +4,7 @@ import { commandSupportsSettleObservation } from '@agent-device/command-registry
 import type { SessionStore } from './session-store.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
-import type { SessionState } from './session-state.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
 import {
   ensureAndroidBlockingSystemDialogReady,
   recoverAndroidBlockingSystemDialog,
@@ -75,6 +75,7 @@ export async function dispatchGenericCommand(params: {
   androidObservation?: AndroidObservationAdapter;
 }): Promise<DaemonResponse> {
   const { req, session, logPath, sessionStore, contextFromFlags } = params;
+  const sessionRef = sessionStore.lookup(params.sessionName);
   const platformCommand = req.command;
 
   const commandReadiness = await ensureGenericCommandReady(
@@ -86,6 +87,7 @@ export async function dispatchGenericCommand(params: {
   // #1638: freeze the settled diff's baseline before anything can mutate the
   // screen or the stored snapshot — including the Android dialog preflight.
   const settlePlan = await planGenericSettleObservation({
+    sessionRef,
     req,
     session,
     sessionName: params.sessionName,
@@ -234,6 +236,7 @@ function withReadinessWarnings(
  * without settle, and every non-settle generic leaf, load nothing.
  */
 async function planGenericSettleObservation(params: {
+  sessionRef: SessionRef | undefined;
   req: DaemonRequest;
   session: SessionState;
   sessionName: string;

@@ -14,7 +14,7 @@ import {
 } from '@agent-device/kernel/snapshot';
 import { expireRefFrame } from '../../ref-frame.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
-import type { SessionState } from '../../session-state.ts';
+import type { SessionRef, SessionState } from '../../session-state.ts';
 import { SessionStore } from '../../session-store.ts';
 import { contextFromFlags } from '../../context.ts';
 import { readCommandMessage, successText } from '@agent-device/kernel/success-text';
@@ -44,6 +44,7 @@ type FindContext = {
   logPath: string;
   sessionStore: SessionStore;
   invoke: DaemonInvokeFn;
+  sessionRef: SessionRef;
   session: SessionState;
   device: SessionState['device'];
   command: string;
@@ -75,6 +76,7 @@ type ResolvedMatch = {
 
 export async function handleFindCommands(params: FindRouteInput): Promise<DaemonResponse | null> {
   const { req, sessionName, logPath, sessionStore, invoke } = params;
+  const sessionRef = sessionStore.lookup(sessionName);
   const command = req.command;
   if (command !== 'find') return null;
 
@@ -106,8 +108,8 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
   // Read-only find actions (exists/wait/list/get_text/get_attrs) always return from
   // the selector runtime above, so only mutating actions (click/fill/focus/type)
   // reach this point — and every mutating find needs an active session.
-  const session = sessionStore.get(sessionName);
-  if (!session) return noActiveSessionError();
+  const session = sessionRef ? sessionStore.requireCurrent(sessionRef) : undefined;
+  if (!session || !sessionRef) return noActiveSessionError();
   const device = session.device;
   // R35 + ADR 0019 §9: ONE action-selected plan, ONE facts inspection, ONE bind. The plan
   // carries everything this action executes directly — the target capture always, plus
@@ -131,6 +133,7 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
   // that survives and gets answered from (#2682).
   const captureProof: RequestCaptureProof = {};
   const readTargetTree = createFindTargetCapture({
+    ref: sessionRef,
     device,
     session,
     req,
@@ -144,6 +147,7 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
   });
 
   const ctx: FindContext = {
+    sessionRef,
     req,
     sessionName,
     logPath,

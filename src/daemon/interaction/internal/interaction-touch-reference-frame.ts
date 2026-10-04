@@ -4,20 +4,21 @@ import type { GestureReferenceFrame } from '@agent-device/contracts/scroll-gestu
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionStore } from '../../session-store.ts';
 import { getSnapshotReferenceFrame } from '@agent-device/capture-kit/touch-reference-frame';
-import type { SessionState } from '../../session-state.ts';
+import type { SessionRef } from '../../session-state.ts';
 import type { BoundContextFromFlags, CaptureSnapshotForSession } from './types.ts';
 import { isActiveProviderDevice } from '../../provider-device-admission.ts';
 
 async function resolveDirectTouchReferenceFrame(params: {
-  session: SessionState;
+  ref: SessionRef;
   flags: CommandFlags | undefined;
   sessionStore: SessionStore;
   contextFromFlags: BoundContextFromFlags;
   captureSnapshotForSession: CaptureSnapshotForSession;
   observation?: AndroidObservationAdapter;
 }): Promise<GestureReferenceFrame | undefined> {
-  const { session, flags, sessionStore, contextFromFlags, captureSnapshotForSession, observation } =
+  const { ref, flags, sessionStore, contextFromFlags, captureSnapshotForSession, observation } =
     params;
+  const session = sessionStore.requireCurrent(ref);
   const recording = session.screenRecording?.handle;
   if (!recording) {
     return undefined;
@@ -48,7 +49,7 @@ async function resolveDirectTouchReferenceFrame(params: {
     return snapshotFrame;
   }
 
-  const snapshot = await captureSnapshotForSession(session, flags, sessionStore, contextFromFlags, {
+  const snapshot = await captureSnapshotForSession(ref, flags, sessionStore, contextFromFlags, {
     interactiveOnly: true,
   });
   const referenceFrame = getSnapshotReferenceFrame(snapshot);
@@ -57,7 +58,7 @@ async function resolveDirectTouchReferenceFrame(params: {
 }
 
 export async function resolveDirectTouchReferenceFrameSafely(params: {
-  session: SessionState;
+  ref: SessionRef;
   flags: CommandFlags | undefined;
   sessionStore: SessionStore;
   contextFromFlags: BoundContextFromFlags;
@@ -71,7 +72,7 @@ export async function resolveDirectTouchReferenceFrameSafely(params: {
       level: 'warn',
       phase: 'touch_reference_frame_resolve_failed',
       data: {
-        platform: params.session.device.platform,
+        platform: params.ref.session.device.platform,
         error: error instanceof Error ? error.message : String(error),
       },
     });

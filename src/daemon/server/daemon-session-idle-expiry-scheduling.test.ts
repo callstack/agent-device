@@ -47,7 +47,7 @@ test('a session still inside its window survives a sweep that actually ran', asy
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: new Map(),
-    settleSession: async (_session, sessionName) => {
+    settleSession: async ({ address: sessionName }) => {
       settledNames.push(sessionName);
     },
     withinDiagnosticsScope: sweeps.withinDiagnosticsScope,
@@ -300,7 +300,7 @@ test('a session that moved to another device is fenced by that device, not the s
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: locks,
-    settleSession: async (session) => {
+    settleSession: async ({ session }) => {
       settledDeviceIds.push(session.device.id);
     },
     withinDiagnosticsScope: sweeps.withinDiagnosticsScope,
@@ -479,7 +479,7 @@ test('a daemon beginning to leave does not start settling the next session', asy
     sessionStore,
     idleExpiryMs: WINDOW_MS,
     executionLocks: new Map(),
-    settleSession: async (_session, sessionName) => {
+    settleSession: async ({ address: sessionName }) => {
       settledNames.push(sessionName);
       if (sessionName === 'first') await firstHeld;
     },

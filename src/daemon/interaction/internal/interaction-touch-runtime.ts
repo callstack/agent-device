@@ -1,3 +1,4 @@
+import { bindInteractionSession } from './interaction-session.ts';
 import type {
   FillCommandResult,
   InteractionTarget,
@@ -67,8 +68,9 @@ export async function dispatchRuntimeInteraction<
     ): InteractionResponsePayloads | Promise<InteractionResponsePayloads>;
   },
 ): Promise<DaemonResponse> {
-  const session = params.sessionStore.get(params.sessionName);
-  if (!session) return noActiveSessionError();
+  params = bindInteractionSession(params);
+  if (!params.sessionRef) return noActiveSessionError();
+  const session = params.sessionStore.requireCurrent(params.sessionRef);
   const runtime = createInteractionRuntimeForRoute({
     ...params,
     touchExecutor: options.touchExecutor,
@@ -159,7 +161,7 @@ async function buildRuntimeIosCorroboratedResponse(params: {
     command: params.handlerParams.req.command,
     requestId: params.handlerParams.req.meta?.requestId,
     flags: params.handlerParams.req.flags,
-    session: params.session,
+    ref: params.handlerParams.sessionRef!,
     sessionStore: params.handlerParams.sessionStore,
     contextFromFlags: params.handlerParams.contextFromFlags,
     captureSnapshotForSession: params.handlerParams.captureSnapshotForSession,

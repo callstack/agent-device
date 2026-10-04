@@ -47,7 +47,7 @@ export async function runSessionCloseTeardown(params: {
   dispatchTargetedPlatformClose: PlatformCloseDispatcher;
   finalizeOrdinaryCloseScript(input: {
     req: DaemonRequest;
-    session: SessionState;
+    ref: SessionRef;
     sessionStore: SessionStore;
     platformCloseError: unknown;
   }): Error | undefined;
@@ -66,7 +66,7 @@ export async function runSessionCloseTeardown(params: {
     finalizeOrdinaryCloseScript,
   } = params;
   const { address: sessionName } = ref;
-  const session = sessionStore.requireCurrent(ref);
+  let session = sessionStore.requireCurrent(ref);
   const attemptCleanup = async <Result>(
     step: string,
     run: () => Promise<Result>,
@@ -91,6 +91,7 @@ export async function runSessionCloseTeardown(params: {
     attemptCleanup,
     params.platformResourceCleanup,
   );
+  session = sessionStore.requireCurrent(ref);
   const platformCloseError = repairArmed
     ? undefined
     : await dispatchTargetedPlatformClose({ req, session, logPath, lifecycle });
@@ -119,7 +120,7 @@ export async function runSessionCloseTeardown(params: {
   );
   const saveScriptError = repairArmed
     ? undefined
-    : finalizeOrdinaryCloseScript({ req, session, sessionStore, platformCloseError });
+    : finalizeOrdinaryCloseScript({ req, ref, sessionStore, platformCloseError });
   await attemptCleanup('materialized_paths', () =>
     cleanupRetainedMaterializedPathsForSession(sessionName),
   );

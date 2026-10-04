@@ -1,3 +1,4 @@
+import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
 /**
  * ADR 0012 decision 6, R2/R3, extended per #1262: behaviors introduced
  * alongside the `resume.from` / `repairHint` agreement fix
@@ -188,7 +189,7 @@ test('a record-and-heal divergence on the LAST step resumes with an empty tail a
   // --- Commit: the transaction is COMPLETE, so the healed script actually
   // publishes — the corrective press survives, "click" (never recorded) does
   // not. Proves the empty-tail resume did not lead to a discarded repair. ---
-  const writeResult = sessionStore.writeSessionLog(session);
+  const writeResult = sessionStore.writeSessionLog(storeSessionForTest(sessionStore, session));
   expect(writeResult.written).toBe(true);
   const healedPath = path.join(root, 'flow.healed.ad');
   expect(fs.existsSync(healedPath)).toBe(true);
@@ -312,7 +313,7 @@ test('a manual divergence (unannotated action-failure) on the LAST step resumes 
   // since a `manual` divergence never dispatched it) does not. Proves the
   // empty-tail resume did not lead to a discarded repair (the #1260
   // discard-at-close trap, now also closed for `manual`). ---
-  const writeResult = sessionStore.writeSessionLog(session);
+  const writeResult = sessionStore.writeSessionLog(storeSessionForTest(sessionStore, session));
   expect(writeResult.written).toBe(true);
   const healedPath = path.join(root, 'flow.healed.ad');
   expect(fs.existsSync(healedPath)).toBe(true);
@@ -436,7 +437,7 @@ test('a caution (identity-mismatch) divergence on the LAST step resumes with an 
 
   // --- Commit: COMPLETE, so the healed script publishes the corrective
   // press; the pre-action "click" (never dispatched) does not appear. ---
-  const writeResult = sessionStore.writeSessionLog(session);
+  const writeResult = sessionStore.writeSessionLog(storeSessionForTest(sessionStore, session));
   expect(writeResult.written).toBe(true);
   const healedPath = path.join(root, 'flow.healed.ad');
   expect(fs.existsSync(healedPath)).toBe(true);
