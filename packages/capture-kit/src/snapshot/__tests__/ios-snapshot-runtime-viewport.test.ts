@@ -66,3 +66,19 @@ test('a regular acquisition with no viewport evidence still refuses rather than 
     (error: unknown) => error instanceof AppError && error.code === 'COMMAND_FAILED',
   );
 });
+
+// The issue's second Done-when line: an empty screen still reports the box. The box is a property of
+// the surface the producer read, so a tree that names nothing on it still answers the question.
+test('an empty iOS acquisition still publishes the viewport it read (#3182)', () => {
+  const empty = createIosSnapshotAcquisition({
+    producer: 'appium-source',
+    nodes: [],
+    viewport: { kind: 'reported', rect: SCREEN },
+    lineage: { targetId: 'sim-1:com.example.app' },
+  });
+
+  const presented = presentIosSnapshotAcquisition(empty);
+
+  assert.deepEqual(presented.nodes, []);
+  assert.deepEqual(presented.viewport, { width: 390, height: 844 });
+});
