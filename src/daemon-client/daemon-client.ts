@@ -17,17 +17,7 @@ import {
   prepareRemoteRequestArtifacts,
   type PreparedRemoteRequest,
 } from '../remote/daemon-artifacts.ts';
-import {
-  attachActiveSessionAddressHint,
-  attachRepairSessionAddressHint,
-  cleanupDaemonAfterRequest,
-  ensureDaemon,
-  isActiveReplaySessionResponse,
-  isHeldRepairDivergence,
-  resolveClientSettings,
-  type DaemonClientSettings,
-  type EnsuredDaemon,
-} from './daemon-client-lifecycle.ts';
+import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
 import { createRequestGuard, sendRequest } from './daemon-client-transport.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
@@ -42,6 +32,8 @@ export async function sendToDaemon(
   req: Omit<DaemonRequest, 'token'>,
   options: DaemonTransportOptions = {},
 ): Promise<DaemonResponse> {
+  const { resolveClientSettings, ensureDaemon, attachSessionAddressHints } =
+    await import('./daemon-client-lifecycle.ts');
   const requestId = req.meta?.requestId ?? createRequestId();
   const debug = Boolean(req.meta?.debug || req.flags?.verbose);
   // A few internal callers build DaemonRequest directly instead of using the
@@ -116,11 +108,7 @@ export async function sendToDaemon(
           ),
         { requestId, command: req.command },
       );
-      return withActiveSessionAddressHint(
-        withRepairSessionAddressHintIfOwned(response, settings),
-        requestWithoutAuthFlag,
-        settings,
-      );
+      return attachSessionAddressHints(response, requestWithoutAuthFlag, settings);
     },
   );
 }
@@ -244,6 +232,7 @@ async function performDaemonRequestWithCleanup(
     requestFailed = true;
     requestError = error;
   }
+  const { cleanupDaemonAfterRequest } = await import('./daemon-client-lifecycle.ts');
   const finalResponse = await cleanupDaemonAfterRequest(req, daemon, settings, response);
   if (requestFailed) throw requestError;
   if (!finalResponse) {
@@ -253,48 +242,6 @@ async function performDaemonRequestWithCleanup(
     throw new AppError('COMMAND_FAILED', 'Daemon request produced no response after cleanup');
   }
   return finalResponse;
-}
-
-/**
- * ADR 0012 decision 6 (Fix 1): the owned ephemeral state dir this daemon was
- * started at is otherwise unaddressable by a later invocation — hint it here,
- * only when the daemon is actually being kept alive for it
- * (`settings.ownedStateDir` means `daemon.startedByClient` is also true).
- */
-function withRepairSessionAddressHintIfOwned(
-  response: DaemonResponse,
-  settings: DaemonClientSettings,
-): DaemonResponse {
-  if (response.ok || !settings.ownedStateDir || !isHeldRepairDivergence(response)) {
-    return response;
-  }
-  return attachRepairSessionAddressHint(response, settings.paths.baseDir);
-}
-
-/**
- * ADR 0016 counterpart to `withRepairSessionAddressHintIfOwned` — but unlike
- * that one, NOT gated on `settings.ownedStateDir`. An owned ephemeral state
- * dir is unaddressable by a later invocation either way, so it's included
- * when owned; an explicit `--state-dir`/`AGENT_DEVICE_STATE_DIR` caller
- * already knows their own dir, so it's omitted then. But the session's own
- * name is cwd-qualified and, per #1394, `session list` cannot rediscover it
- * either — so `--session` is still worth hinting even at an explicit state
- * dir, which is why this runs for every active-session response regardless
- * of `ownedStateDir` (`attachActiveSessionAddressHint` itself decides what,
- * if anything, is worth attaching).
- */
-function withActiveSessionAddressHint(
-  response: DaemonResponse,
-  req: Omit<DaemonRequest, 'token'>,
-  settings: DaemonClientSettings,
-): DaemonResponse {
-  if (!response.ok || !isActiveReplaySessionResponse(req, response)) {
-    return response;
-  }
-  return attachActiveSessionAddressHint(
-    response,
-    settings.ownedStateDir ? settings.paths.baseDir : undefined,
-  );
 }
 
 function writeInstallInProgressNotice(command: string | undefined): void {

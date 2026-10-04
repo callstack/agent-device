@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import net from 'node:net';
+import fs from 'node:fs';
+import path from 'node:path';
+import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { test, vi } from 'vitest';
+import * as hostTransport from '@agent-device/host-kit/transport';
+import { sleep } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   DAEMON_HTTP_INSTANCE_HEADER,
@@ -35,6 +42,64 @@ function sendWithStaleInstance(port: number, timeoutMs: number) {
     timeoutMs,
   );
 }
+
+test('auto health probing reserves time for a healthy fallback when HTTP hangs', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const httpServer = http.createServer(() => {});
+  const socketServer = net.createServer((socket) => socket.on('error', () => {}));
+  try {
+    const httpPort = await listenOnLoopback(httpServer);
+    const port = await listenOnLoopback(socketServer);
+    assert.equal(
+      await canConnect({ token: 'secret', pid: 1, transport: 'http', httpPort, port }, 'auto', 120),
+      true,
+    );
+  } finally {
+    await closeLoopbackServer(httpServer);
+    await closeLoopbackServer(socketServer);
+  }
+});
+
+test('the health deadline includes requester loading and forbids a late request', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let requests = 0;
+  const server = http.createServer((_req, res) => {
+    requests += 1;
+    res.end('{}');
+  });
+  let release!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const actualLoad = hostTransport.loadNodeHttpRequester;
+  const load = vi
+    .spyOn(hostTransport, 'loadNodeHttpRequester')
+    .mockImplementation(async (protocol) => {
+      await blocked;
+      return actualLoad(protocol);
+    });
+  let probing: Promise<boolean> | undefined;
+  try {
+    const httpPort = await listenOnLoopback(server);
+    let settled = false;
+    probing = canConnect({ token: 'secret', pid: 1, httpPort }, 'http', 40).then((reachable) => {
+      settled = true;
+      return reachable;
+    });
+    await sleep(90);
+    assert.equal(settled, true, 'loading must not extend the probe deadline');
+    assert.equal(await probing, false);
+    release();
+    await blocked;
+    await sleep(10);
+    assert.equal(requests, 0, 'a timed-out loader must not open a request later');
+  } finally {
+    release();
+    await probing;
+    load.mockRestore();
+    await closeLoopbackServer(server);
+  }
+});
 
 test('persistent remote client caches health and retries a refused stale instance before dispatch', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
@@ -412,3 +477,46 @@ test('the classifier ignores message text', () => {
     true,
   );
 });
+
+test.for(['timeout', 'reset'] as const)(
+  'HTTP %s reports only its own transport outcome',
+  async (mode, t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+    const server = http.createServer((request) => {
+      if (mode === 'reset') request.socket.destroy();
+    });
+    const paths = resolveDaemonPaths(mkdtempForTestSync('http-outcome-'));
+    const logPath = path.join(paths.baseDir, 'diagnostics.ndjson');
+    try {
+      const port = await listenOnLoopback(server);
+      await assert.rejects(
+        withDiagnosticsScope({ debug: true, logPath }, () =>
+          sendRequest(
+            { baseUrl: `http://127.0.0.1:${port}`, token: 'secret', pid: 1 },
+            { token: 'secret', command: 'devices', session: 'default', positionals: [], flags: {} },
+            'http',
+            paths,
+            mode === 'timeout' ? 40 : 1_000,
+          ),
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.details?.reason === 'daemon_transport_timeout', mode === 'timeout');
+          return true;
+        },
+      );
+      await sleep(30);
+      const events = fs
+        .readFileSync(logPath, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      assert.equal(
+        events.filter((event) => event.phase === 'daemon_request_socket_error').length,
+        mode === 'timeout' ? 0 : 1,
+      );
+    } finally {
+      await closeLoopbackServer(server);
+    }
+  },
+);

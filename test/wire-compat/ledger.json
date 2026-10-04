@@ -67,7 +67,7 @@
     "src/daemon-client/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
     "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:3bac36fa97090b273afe1128103e1bf476d05441fd9de41317f1b78775b88304",
     "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealthLink": "sha256:7702598468b4c82b4ffa93064cd6bdfec938c1c527f7e6007c0584f3884a6eea",
-    "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:a483fbdd845db39ffea596061ff04e9db4acdafd20b593dfed74e7c82a93e522",
+    "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:f40cc2f5bfb8add78f99b11db7842bc244735786aa390d10a38ef025e16dc53a",
     "src/daemon-client/daemon-client-transport.ts#readHealthLink": "sha256:f56404b94d73da57de7248719c9136b760d2be8b4a53cde5315a2311b088425b",
     "src/daemon-client/daemon-client-transport.ts#readHealthPayload": "sha256:4e85ffc3e35e02379c393e9312344757e003cf1f0ad9eb8d1f77d90c81c861f1",
     "src/daemon-client/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:df174d1ccf73851ca58bd75533fb4660424003b98bd9e41fe942cf3ab3698e5f",
@@ -431,8 +431,8 @@
     },
     {
       "declaration": "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth",
-      "digest": "sha256:a483fbdd845db39ffea596061ff04e9db4acdafd20b593dfed74e7c82a93e522",
-      "rationale": "A restart retry must tell a probe that ran out of time from one that failed, so the client can report the RPC deadline instead of 'Remote daemon is unavailable'. `timedOut` is client-local: the prober sets it on its own timeout and abort paths and never reads it from a /health payload. The #3178 caller signal joins the probe's own timeout in-process (AbortSignal.any) and never enters the /health request or the accepted payload fields, so a released daemon or proxy is probed and parsed exactly as before."
+      "digest": "sha256:f40cc2f5bfb8add78f99b11db7842bc244735786aa390d10a38ef025e16dc53a",
+      "rationale": "#3116 includes requester loading and response completion in the existing health-probe budget. `timedOut` remains client-local; it is never read from a /health payload. Request routes, authentication, accepted fields and protocol-version admission are unchanged, so released daemons and proxies still send payloads this client parses correctly. This is an implementation-only timing change under ADR 0006."
     }
   ]
 }

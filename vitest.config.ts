@@ -182,6 +182,8 @@ export default defineConfig({
             // decisions over fixture state-dir listings, so they need no daemon,
             // device, or subprocess.
             'test/integration/support/daemon-leak-model.test.ts',
+            // Cleanup uses real detached registration owners and process-exit proof; no device is needed.
+            'test/integration/support/daemon-test-cleanup.test.ts',
             // The Android failed-step evidence reader: it replays adb output through the probe
             // seam, so the crash/process/activity selectors need no emulator to be pinned.
             'test/integration/android-emulator-e2e/device-evidence.test.ts',

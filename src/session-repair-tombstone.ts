@@ -66,12 +66,7 @@ function readRepairTombstone(tombstonePath: string): RepairSessionTombstone | un
 function parseRepairTombstone(raw: string, tombstonePath: string): RepairSessionTombstone {
   try {
     const parsed = JSON.parse(raw) as RepairSessionTombstone;
-    if (
-      !Number.isFinite(parsed?.expiresAt) ||
-      typeof parsed?.owner !== 'string' ||
-      !validRepairCommitFailure(parsed.commitFailure)
-    )
-      throw new Error('Invalid repair tombstone fields');
+    if (!validRepairTombstone(parsed)) throw new Error('Invalid repair tombstone fields');
     return parsed;
   } catch (error) {
     throw new AppError(
@@ -81,6 +76,17 @@ function parseRepairTombstone(raw: string, tombstonePath: string): RepairSession
       error instanceof Error ? error : undefined,
     );
   }
+}
+
+function validRepairTombstone(value: unknown): value is RepairSessionTombstone {
+  const tombstone = value as RepairSessionTombstone | null;
+  return (
+    Number.isFinite(tombstone?.reapedAt) &&
+    Number.isFinite(tombstone?.expiresAt) &&
+    typeof tombstone?.owner === 'string' &&
+    (tombstone.sourcePath === undefined || typeof tombstone.sourcePath === 'string') &&
+    validRepairCommitFailure(tombstone.commitFailure)
+  );
 }
 
 function validRepairCommitFailure(value: unknown): boolean {

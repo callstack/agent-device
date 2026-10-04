@@ -12,6 +12,19 @@ const TAKEOVER_TIMEOUTS = { termTimeoutMs: 5_000, killTimeoutMs: 2_000 };
 const spawnedChildren: { child: ChildProcess; exited: Promise<void> }[] = [];
 const spawnedRoots: string[] = [];
 
+test.each([0, -1, 1.5, Number.NaN, '123', 2_147_483_648, Number.MAX_SAFE_INTEGER])(
+  'an invalid daemon pid %s cannot prove exit',
+  async (pid) => {
+    assert.deepEqual(
+      await stopDaemonProcess(
+        { pid: pid as number, startTime: 'captured-birth' },
+        { mode: 'force', termTimeoutMs: 0, killTimeoutMs: 0 },
+      ),
+      { status: 'retained', reason: 'identity-unverified' },
+    );
+  },
+);
+
 afterEach(async () => {
   for (const { child, exited } of spawnedChildren.splice(0)) {
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');

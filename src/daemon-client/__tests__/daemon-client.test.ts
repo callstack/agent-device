@@ -1,5 +1,5 @@
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
-import { test, vi } from 'vitest';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import net from 'node:net';
@@ -11,56 +11,17 @@ import {
   listenOnLoopback,
   supportsLoopbackBind,
 } from '../../__tests__/test-utils/loopback.ts';
-import { runCmdBackground } from '@agent-device/host-kit/command';
-import {
-  isProcessAlive,
-  readProcessCommand,
-  readProcessStartTime,
-  waitForProcessExit,
-} from '@agent-device/host-kit/process';
+import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { sendToDaemon } from '../daemon-client.ts';
 import { currentDaemonCodeSignature } from '../../__tests__/test-utils/daemon-http-fixture.ts';
 import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
 import { downloadRemoteArtifact } from '../../remote/daemon-artifacts.ts';
-import {
-  cleanupFailedDaemonStartupMetadata,
-  resolveDaemonStartupHint,
-} from '../daemon-client-metadata.ts';
+import { resolveDaemonStartupHint } from '../daemon-client-metadata.ts';
 import { canConnectSocket } from '../daemon-client-transport.ts';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
 import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-
-// readProcessStartTime/readProcessCommand shell out to `ps` with a 1s
-// timeout (see host-process.ts). isAgentDeviceDaemonProcess re-reads both for
-// every liveness check, so a spawned-daemon fixture that is proven live once
-// (a real read, right after the process starts) can still be misclassified
-// as dead later if a *subsequent* `ps` call happens to miss its deadline
-// under full-suite CPU contention. mockReadProcessStartTime/mockReadProcessCommand
-// default to `undefined`, which falls through to the real implementation for
-// every pid in every test in this file; only the one test below that needs a
-// stable answer for its spawned pid configures an override, and clears it
-// afterward.
-const { mockReadProcessStartTime, mockReadProcessCommand } = vi.hoisted(() => ({
-  mockReadProcessStartTime: vi.fn<(pid: number) => string | null | undefined>(),
-  mockReadProcessCommand: vi.fn<(pid: number) => string | null | undefined>(),
-}));
-
-vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
-  return {
-    ...actual,
-    readProcessStartTime: (pid: number) => {
-      const overridden = mockReadProcessStartTime(pid);
-      return overridden !== undefined ? overridden : actual.readProcessStartTime(pid);
-    },
-    readProcessCommand: (pid: number) => {
-      const overridden = mockReadProcessCommand(pid);
-      return overridden !== undefined ? overridden : actual.readProcessCommand(pid);
-    },
-  };
-});
 
 type MockHttpResponse = EventEmitter & {
   headers?: Record<string, string>;
@@ -179,181 +140,19 @@ function writeCurrentDaemonInfo(
   );
 }
 
-test('resolveDaemonStartupHint prefers stale lock guidance when lock exists without info', () => {
-  const hint = resolveDaemonStartupHint({ hasInfo: false, hasLock: true });
-  assert.match(hint, /daemon\.lock/i);
-  assert.match(hint, /automatically/i);
-  assert.match(hint, /rm -f '.+daemon\.json' '.+daemon\.lock'/);
-});
-
-test('resolveDaemonStartupHint covers stale info+lock pair', () => {
-  const hint = resolveDaemonStartupHint({ hasInfo: true, hasLock: true });
-  assert.match(hint, /daemon\.json/i);
-  assert.match(hint, /daemon\.lock/i);
-  assert.match(hint, /rm -f '.+daemon\.json' '.+daemon\.lock'/);
-});
-
-test('resolveDaemonStartupHint falls back to daemon.json guidance', () => {
-  const hint = resolveDaemonStartupHint({ hasInfo: true, hasLock: false });
-  assert.match(hint, /daemon\.json/i);
-  assert.match(hint, /rm -f '.+daemon\.json' '.+daemon\.lock'/);
-});
-
-test('resolveDaemonStartupHint includes configured state directory paths', () => {
-  const paths = resolveDaemonPaths('/tmp/ad-custom-state');
-  const hint = resolveDaemonStartupHint({ hasInfo: false, hasLock: true }, paths);
-  assert.match(hint, /\/tmp\/ad-custom-state\/daemon\.lock/);
-  assert.match(hint, /\/tmp\/ad-custom-state\/daemon\.json/);
-  assert.match(
-    hint,
-    /rm -f '\/tmp\/ad-custom-state\/daemon\.json' '\/tmp\/ad-custom-state\/daemon\.lock'/,
-  );
-});
-
-test('resolveDaemonStartupHint shell-quotes cleanup paths', () => {
+test('startup recovery guidance retains configured paths and requires stopping every user', () => {
   const paths = resolveDaemonPaths("/tmp/ad custom's state");
-  const hint = resolveDaemonStartupHint({ hasInfo: true, hasLock: true }, paths);
-  assert.match(
-    hint,
-    /rm -f '\/tmp\/ad custom'\\''s state\/daemon\.json' '\/tmp\/ad custom'\\''s state\/daemon\.lock'/,
-  );
-});
-
-test('cleanupFailedDaemonStartupMetadata removes partial startup metadata', async () => {
-  const stateDir = mkdtempForTestSync('agent-device-daemon-cleanup-');
-  const paths = resolveDaemonPaths(stateDir);
-  try {
-    fs.mkdirSync(paths.baseDir, { recursive: true });
-    fs.writeFileSync(paths.infoPath, '{"invalid":true}\n', 'utf8');
-    fs.writeFileSync(paths.lockPath, 'not-json\n', 'utf8');
-
-    const result = await cleanupFailedDaemonStartupMetadata(paths, 'startup_timeout');
-
-    assert.deepEqual(result, {
-      reason: 'startup_timeout',
-      removedInfo: true,
-      removedLock: true,
-      stoppedInfoProcess: false,
-      stoppedLockProcess: false,
-    });
-    assert.equal(fs.existsSync(paths.infoPath), false);
-    assert.equal(fs.existsSync(paths.lockPath), false);
-  } finally {
-    fs.rmSync(stateDir, { recursive: true, force: true });
-  }
-});
-
-test('cleanupFailedDaemonStartupMetadata retains live startup daemon on timeout', async (t) => {
-  const stateDir = mkdtempForTestSync('agent-device-daemon-live-cleanup-');
-  const root = mkdtempForTestSync('agent-device-live-daemon-');
-  const daemonDir = path.join(root, 'agent-device', 'dist', 'src', 'internal');
-  const daemonScriptPath = path.join(daemonDir, 'daemon.js');
-  fs.mkdirSync(daemonDir, { recursive: true });
-  fs.writeFileSync(daemonScriptPath, 'setInterval(() => {}, 1000);\n', 'utf8');
-  const daemonProcess = runCmdBackground(process.execPath, [daemonScriptPath], {
-    stdio: 'ignore',
-    allowFailure: true,
-    captureOutput: false,
-  });
-  void daemonProcess.wait.catch(() => {});
-  const pid = daemonProcess.child.pid;
-  assert.ok(pid, 'spawned child should have a pid');
-
-  try {
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    // Read the spawned daemon's real identity once (ground truth: it is
-    // genuinely alive, with this real start time and command line), then
-    // pin readProcessStartTime/readProcessCommand to keep returning these
-    // same proven-real values for this pid. isAgentDeviceDaemonProcess reads
-    // both again internally on every call inside cleanupFailedDaemonStartupMetadata;
-    // without pinning, a second real `ps` call could miss its 1s timeout
-    // under load and misclassify this genuinely-live daemon as dead.
-    const processStartTime = readProcessStartTime(pid) ?? undefined;
-    const command = readProcessCommand(pid);
-    if (command === null || processStartTime === undefined) {
-      t.skip('process command/start inspection is unavailable in this environment');
-      return;
-    }
-    mockReadProcessStartTime.mockImplementation((queriedPid: number) =>
-      queriedPid === pid ? processStartTime : undefined,
-    );
-    mockReadProcessCommand.mockImplementation((queriedPid: number) =>
-      queriedPid === pid ? command : undefined,
-    );
-
-    const paths = resolveDaemonPaths(stateDir);
-    fs.mkdirSync(paths.baseDir, { recursive: true });
-    fs.writeFileSync(
-      paths.infoPath,
-      `${JSON.stringify({
-        token: 'startup-secret',
-        port: 65530,
-        transport: 'socket',
-        pid,
-        processStartTime,
-      })}\n`,
-      'utf8',
-    );
-    fs.writeFileSync(
-      paths.lockPath,
-      `${JSON.stringify({ pid, processStartTime, startedAt: Date.now() })}\n`,
-      'utf8',
-    );
-
-    const result = await cleanupFailedDaemonStartupMetadata(paths, 'startup_timeout', {
-      stopLiveProcesses: false,
-    });
-
-    assert.equal(result.retainedInfoProcess, true);
-    assert.equal(result.retainedLockProcess, true);
-    assert.equal(result.removedInfo, false);
-    assert.equal(result.removedLock, false);
-    assert.equal(isProcessAlive(pid), true);
-    assert.equal(fs.existsSync(paths.infoPath), true);
-    assert.equal(fs.existsSync(paths.lockPath), true);
-  } finally {
-    mockReadProcessStartTime.mockReset();
-    mockReadProcessCommand.mockReset();
-    if (isProcessAlive(pid)) {
-      process.kill(pid, 'SIGKILL');
-      await waitForProcessExit(pid, 1_500);
-    }
-    fs.rmSync(stateDir, { recursive: true, force: true });
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('cleanupFailedDaemonStartupMetadata removes stale daemon metadata on timeout', async () => {
-  const stateDir = mkdtempForTestSync('agent-device-daemon-stale-cleanup-');
-  const paths = resolveDaemonPaths(stateDir);
-  try {
-    fs.mkdirSync(paths.baseDir, { recursive: true });
-    fs.writeFileSync(
-      paths.infoPath,
-      `${JSON.stringify({
-        token: 'startup-secret',
-        port: 65530,
-        transport: 'socket',
-        pid: 999_999,
-      })}\n`,
-      'utf8',
-    );
-    fs.writeFileSync(
-      paths.lockPath,
-      `${JSON.stringify({ pid: 999_999, startedAt: Date.now() })}\n`,
-      'utf8',
-    );
-
-    const result = await cleanupFailedDaemonStartupMetadata(paths, 'startup_timeout', {
-      stopLiveProcesses: false,
-    });
-
-    assert.equal(result.removedInfo, true);
-    assert.equal(result.removedLock, true);
-    assert.equal(fs.existsSync(paths.infoPath), false);
-    assert.equal(fs.existsSync(paths.lockPath), false);
-  } finally {
-    fs.rmSync(stateDir, { recursive: true, force: true });
+  for (const state of [
+    { hasInfo: false, hasLock: true },
+    { hasInfo: true, hasLock: true },
+    { hasInfo: true, hasLock: false },
+    { hasInfo: false, hasLock: false },
+  ]) {
+    const hint = resolveDaemonStartupHint(state, paths);
+    if (state.hasInfo) assert.ok(hint.includes(paths.infoPath));
+    if (state.hasLock) assert.ok(hint.includes(paths.lockPath));
+    assert.match(hint, /stop all older clients and daemons/);
+    assert.doesNotMatch(hint, /rm -f/);
   }
 });
 

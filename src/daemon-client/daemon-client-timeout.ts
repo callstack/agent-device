@@ -1,18 +1,13 @@
-import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { AppError } from '@agent-device/kernel/errors';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 
-import { isAgentDeviceDaemonProcess } from '../daemon-process.ts';
+import type { DaemonRetirementResult } from '../daemon-registration-owner.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
 import type { DaemonPaths } from '../daemon-resolution.ts';
 import type { PlatformSelector } from '@agent-device/kernel/device';
-import {
-  removeDaemonInfo,
-  removeDaemonLock,
-  stopDaemonProcessForTakeover,
-  type DaemonInfo,
-} from './daemon-client-metadata.ts';
+import type { DaemonInfo } from './daemon-client-metadata.ts';
 
 const IOS_RUNNER_XCODEBUILD_KILL_PATTERNS = [
   'xcodebuild .*AgentDeviceRunnerUITests/RunnerTests/testCommand',
@@ -40,7 +35,7 @@ function isAffirmativelyApplePlatform(platform: PlatformSelector | undefined): b
   return platform !== undefined && AFFIRMATIVE_APPLE_PLATFORM_SELECTORS.has(platform);
 }
 
-export function handleRequestTimeout(
+export async function handleRequestTimeout(
   params: Readonly<{
     info: DaemonInfo;
     statePaths: DaemonPaths;
@@ -53,7 +48,7 @@ export function handleRequestTimeout(
     session?: string;
     action?: string;
   }>,
-): AppError {
+): Promise<AppError> {
   const { info, statePaths, remote, timeoutMs, requestId, command, platform, session, action } =
     params;
   // Cleanup eligibility never depends on the declared platform, on purpose:
@@ -72,9 +67,17 @@ export function handleRequestTimeout(
   const sweepRunnerBuilds = !remote && command !== PUBLIC_COMMANDS.record;
   const cleanup = sweepRunnerBuilds ? cleanupTimedOutIosRunnerBuilds() : { terminated: 0 };
   const resetDaemon = !remote && shouldResetDaemonAfterRequestTimeout(command);
-  const daemonReset = resetDaemon
-    ? resetDaemonAfterTimeout(info, statePaths)
-    : { forcedKill: false };
+  let retirement: DaemonRetirementResult | undefined;
+  if (resetDaemon) {
+    const { stopAndRetireDaemon } = await import('../daemon-registration-owner.ts');
+    retirement = await stopAndRetireDaemon({
+      paths: statePaths,
+      observed: { pid: info.pid, startTime: info.processStartTime ?? null },
+      mode: 'force',
+    });
+  }
+  const preserved =
+    retirement?.status === 'retained' && retirement.termination?.status !== 'exited';
   // The HINT, unlike cleanup, may only name Apple-runner involvement on
   // evidence this call site actually has: an explicitly declared Apple
   // platform selector, or the cleanup itself having terminated a matching
@@ -92,9 +95,10 @@ export function handleRequestTimeout(
       command,
       timedOutRunnerPidsTerminated: cleanup.terminated,
       timedOutRunnerCleanupError: cleanup.error,
-      daemonPidReset: resetDaemon ? info.pid : undefined,
-      daemonPidForceKilled: resetDaemon ? daemonReset.forcedKill : undefined,
-      daemonPreservedAfterTimeout: !remote && !resetDaemon,
+      daemonPidReset: retirement?.status === 'retired' ? info.pid : undefined,
+      daemonPidForceKilled: resetDaemon ? daemonWasForceKilled(retirement) : undefined,
+      daemonRetirement: retirement,
+      daemonPreservedAfterTimeout: preserved || (!remote && !resetDaemon),
       daemonBaseUrl: info.baseUrl,
     },
   });
@@ -102,15 +106,25 @@ export function handleRequestTimeout(
     timeoutMs,
     requestId,
     reason: 'daemon_transport_timeout',
-    hint: resolveRequestTimeoutHint({
-      remote,
-      resetDaemon,
-      command,
-      appleCleanupEvidence,
-      session,
-      action,
-    }),
+    ...(retirement ? { retirement, stateDir: statePaths.baseDir } : {}),
+    hint:
+      retirement?.status === 'retained'
+        ? `The daemon could not be safely retired. State was retained at ${statePaths.baseDir}. ${retirement.error?.hint ?? 'Retry with --debug and inspect daemon diagnostics before retrying.'}`
+        : resolveRequestTimeoutHint({
+            remote,
+            resetDaemon,
+            command,
+            appleCleanupEvidence,
+            session,
+            action,
+          }),
   });
+}
+
+function daemonWasForceKilled(retirement: DaemonRetirementResult | undefined): boolean {
+  if (!retirement || retirement.status === 'absent') return false;
+  const termination = retirement.termination;
+  return termination?.status === 'exited' && termination.mode === 'forced';
 }
 
 // Whether a timed-out request tears down the local daemon is declared on the
@@ -179,26 +193,4 @@ function cleanupTimedOutIosRunnerBuilds(): { terminated: number; error?: string 
       error: error instanceof Error ? error.message : String(error),
     };
   }
-}
-
-function resetDaemonAfterTimeout(info: DaemonInfo, paths: DaemonPaths): { forcedKill: boolean } {
-  let forcedKill = false;
-  try {
-    if (isAgentDeviceDaemonProcess(info.pid, info.processStartTime)) {
-      process.kill(info.pid, 'SIGKILL');
-      forcedKill = true;
-    }
-  } catch {
-    void stopDaemonProcessForTakeover(info).catch((error: unknown) => {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'daemon_timeout_stop_failed',
-        data: { error: normalizeError(error) },
-      });
-    });
-  } finally {
-    removeDaemonInfo(paths.infoPath);
-    removeDaemonLock(paths.lockPath);
-  }
-  return { forcedKill };
 }

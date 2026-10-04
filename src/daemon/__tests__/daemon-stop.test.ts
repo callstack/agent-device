@@ -2,15 +2,9 @@ import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
-const mocks = vi.hoisted(() => ({
-  stopDaemonProcess: vi.fn(),
-  sleep: vi.fn(async () => undefined),
-}));
-
-vi.mock('../../daemon-process.ts', () => ({ stopDaemonProcess: mocks.stopDaemonProcess }));
-vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/host-kit/retry')>()),
-  sleep: mocks.sleep,
+const mocks = vi.hoisted(() => ({ stopAndRetireDaemon: vi.fn() }));
+vi.mock('../../daemon-registration-owner.ts', () => ({
+  stopAndRetireDaemon: mocks.stopAndRetireDaemon,
 }));
 
 import { resolveDaemonPaths } from '../../daemon-resolution.ts';
@@ -45,40 +39,34 @@ test('reports not-running when daemon metadata is absent', async () => {
 
 test('retained identity verification is reported as failure without known cleanup', async () => {
   const paths = createDaemonPaths();
-  mocks.stopDaemonProcess.mockResolvedValue({ status: 'retained', reason: 'identity-unverified' });
+  mocks.stopAndRetireDaemon.mockResolvedValue(retainedExit('identity-unverified'));
   await expect(stopDaemon({ paths })).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     details: { reason: 'daemon_exit_unconfirmed', terminationReason: 'identity-unverified' },
   });
-  expect(mocks.stopDaemonProcess).toHaveBeenCalledWith(
-    { pid: 123, startTime: 'start-time' },
-    {
-      mode: 'graceful',
-      termTimeoutMs: 10_000,
-      killTimeoutMs: 2_000,
-    },
-  );
+  expect(mocks.stopAndRetireDaemon).toHaveBeenCalledWith({
+    paths,
+    observed: { pid: 123, startTime: 'start-time' },
+    mode: 'graceful',
+    termTimeoutMs: 10_000,
+    killTimeoutMs: 2_000,
+  });
 });
 
 test('missing start-time identity is passed to the owning termination operation', async () => {
   const paths = createDaemonPaths();
   fs.writeFileSync(paths.infoPath, JSON.stringify({ pid: 123, processStartTime: ' ' }));
-  mocks.stopDaemonProcess.mockResolvedValue({ status: 'retained', reason: 'missing-start-time' });
+  mocks.stopAndRetireDaemon.mockResolvedValue(retainedExit('missing-start-time'));
   await expect(stopDaemon({ paths })).rejects.toMatchObject({
     details: { terminationReason: 'missing-start-time' },
   });
-  expect(mocks.stopDaemonProcess).toHaveBeenCalledWith(
-    { pid: 123, startTime: null },
-    expect.anything(),
+  expect(mocks.stopAndRetireDaemon).toHaveBeenCalledWith(
+    expect.objectContaining({ paths, observed: { pid: 123, startTime: null } }),
   );
 });
 
 test('a previously exited verified lifetime is reported as not-running', async () => {
-  mocks.stopDaemonProcess.mockResolvedValue({
-    status: 'exited',
-    mode: 'already-exited',
-    identity: { pid: 123, startTime: 'start-time' },
-  });
+  mocks.stopAndRetireDaemon.mockResolvedValue(retired('already-exited'));
   expect(await stopDaemon({ paths: createDaemonPaths() })).toMatchObject({
     stopped: false,
     mode: 'not-running',
@@ -86,8 +74,15 @@ test('a previously exited verified lifetime is reported as not-running', async (
 });
 
 test('an already released pid without start time remains not-running without cleanup proof', async () => {
-  mocks.stopDaemonProcess.mockResolvedValue({ status: 'not-running' });
-  expect(await stopDaemon({ paths: createDaemonPaths() })).toMatchObject({
+  const paths = createDaemonPaths();
+  fs.writeFileSync(paths.infoPath, JSON.stringify({ pid: 123 }));
+  mocks.stopAndRetireDaemon.mockResolvedValue({
+    status: 'retained',
+    reason: 'exit-unconfirmed',
+    removedInfo: false,
+    termination: { status: 'not-running' },
+  });
+  expect(await stopDaemon({ paths })).toMatchObject({
     stopped: false,
     mode: 'not-running',
   });
@@ -95,32 +90,24 @@ test('an already released pid without start time remains not-running without cle
 
 test('confirmed TERM exit preserves graceful report behavior and configured budgets', async () => {
   const paths = createDaemonPaths();
-  mocks.stopDaemonProcess.mockImplementation(async () => {
-    fs.rmSync(paths.infoPath, { force: true });
-    return { status: 'exited', mode: 'graceful', identity: { pid: 123, startTime: 'start-time' } };
-  });
+  mocks.stopAndRetireDaemon.mockResolvedValue(retired('graceful'));
   expect(await stopDaemon({ paths, graceTimeoutMs: 11, killTimeoutMs: 7 })).toMatchObject({
     stopped: true,
     mode: 'graceful',
     cleanupConfidence: 'known',
     providerReleases: { pending: [] },
   });
-  expect(mocks.stopDaemonProcess).toHaveBeenCalledWith(
-    { pid: 123, startTime: 'start-time' },
-    {
-      mode: 'graceful',
-      termTimeoutMs: 11,
-      killTimeoutMs: 7,
-    },
-  );
+  expect(mocks.stopAndRetireDaemon).toHaveBeenCalledWith({
+    paths,
+    observed: { pid: 123, startTime: 'start-time' },
+    mode: 'graceful',
+    termTimeoutMs: 11,
+    killTimeoutMs: 7,
+  });
 });
 
 test('confirmed KILL exit preserves unknown provider cleanup', async () => {
-  mocks.stopDaemonProcess.mockResolvedValue({
-    status: 'exited',
-    mode: 'forced',
-    identity: { pid: 123, startTime: 'start-time' },
-  });
+  mocks.stopAndRetireDaemon.mockResolvedValue(retired('forced'));
   expect(await stopDaemon({ paths: createDaemonPaths() })).toMatchObject({
     stopped: true,
     mode: 'forced',
@@ -133,10 +120,58 @@ test('confirmed KILL exit preserves unknown provider cleanup', async () => {
 test.each(['signal-failed', 'exit-timeout'])(
   '%s cannot become a successful stop',
   async (reason) => {
-    mocks.stopDaemonProcess.mockResolvedValue({ status: 'retained', reason });
+    mocks.stopAndRetireDaemon.mockResolvedValue(retainedExit(reason));
     await expect(stopDaemon({ paths: createDaemonPaths() })).rejects.toMatchObject({
       code: 'COMMAND_FAILED',
       details: { reason: 'daemon_exit_unconfirmed', terminationReason: reason },
     });
+  },
+);
+
+function retainedExit(reason: string) {
+  return {
+    status: 'retained',
+    reason: 'exit-unconfirmed',
+    removedInfo: false,
+    termination: { status: 'retained', reason },
+  };
+}
+
+function retired(mode: string) {
+  return {
+    status: 'retired',
+    removedInfo: true,
+    termination: { status: 'exited', mode, identity: { pid: 123, startTime: 'start-time' } },
+  };
+}
+
+test.each(['registration-replaced', 'retirement-unconfirmed'])(
+  '%s after confirmed exit cannot report a completed retirement',
+  async (reason) => {
+    const paths = createDaemonPaths();
+    mocks.stopAndRetireDaemon.mockResolvedValue({
+      ...retired('forced'),
+      status: 'retained',
+      reason,
+      removedInfo: false,
+      error: {
+        code: 'UNKNOWN',
+        message: 'retained',
+        hint: 'Inspect retained state.',
+        diagnosticId: 'diag-retire',
+        logPath: '/retained/daemon.log',
+      },
+    });
+    await expect(stopDaemon({ paths })).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: {
+        reason: 'daemon_retirement_unconfirmed',
+        retirement: { status: 'retained', reason },
+        hint: 'Inspect retained state.',
+        diagnosticId: 'diag-retire',
+        logPath: '/retained/daemon.log',
+      },
+    });
+    expect(fs.existsSync(paths.infoPath)).toBe(true);
   },
 );

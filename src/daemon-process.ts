@@ -1,5 +1,6 @@
 import {
   isProcessAlive,
+  isProcessPid,
   readHostProcessIdentityObservations,
   readProcessCommand,
   readProcessStartTime,
@@ -72,6 +73,7 @@ export async function waitForDaemonExit(
   identity: DaemonProcessIdentity,
   options: { timeoutMs: number; pollMs?: number },
 ): Promise<DaemonExitWait> {
+  if (!isProcessPid(identity.pid)) return { exited: false, elapsedMs: 0 };
   const startedAt = Date.now();
   const deadline = startedAt + options.timeoutMs;
   const pollMs = options.pollMs ?? DAEMON_EXIT_POLL_MS;
@@ -114,6 +116,7 @@ export async function stopDaemonProcess(
     killTimeoutMs: number;
   },
 ): Promise<DaemonTerminationResult> {
+  if (!isProcessPid(observed.pid)) return { status: 'retained', reason: 'identity-unverified' };
   if (!observed.startTime?.trim()) {
     if (!isProcessAlive(observed.pid)) return { status: 'not-running' };
     return { status: 'retained', reason: 'missing-start-time' };
