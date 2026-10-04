@@ -27,9 +27,13 @@ import {
 import { resolveBoundGestureRuntime, type BoundGestureExecutor } from '../../gesture-runtime.ts';
 import { isActiveProviderDevice } from '../../provider-device-admission.ts';
 import { sleep } from '@agent-device/host-kit/retry';
-import { ensureAndroidBlockingSystemDialogReady } from '../../android-system-dialog.ts';
+import {
+  ensureAndroidBlockingSystemDialogReady,
+  type AndroidBlockingDialogReadinessResult,
+} from '../../android-system-dialog.ts';
 import { readRefMutationFrame } from '../../ref-frame.ts';
 import type { DaemonResponse } from '../../daemon-request.ts';
+import { thrownBeforeDispatch } from '../../request-dispatch-disclosure.ts';
 import type { SessionState } from '../../session-state.ts';
 import { assertRefMutationAdmitted } from './interaction-ref-policy.ts';
 import {
@@ -73,17 +77,18 @@ export async function dispatchGestureViaRuntime(
   params: GestureHandlerParams,
 ): Promise<DaemonResponse> {
   params = bindInteractionSession(params);
-  return await dispatchGestureInteraction(params, 'gesture', async (session) =>
-    runGestureInteraction(params, session),
+  return await dispatchGestureInteraction(params, 'gesture', async (session, readiness) =>
+    runGestureInteraction(params, session, readiness),
   );
 }
 
 async function runGestureInteraction(
   params: GestureHandlerParams,
   session: SessionState,
+  readiness: AndroidBlockingDialogReadinessResult,
 ): Promise<GestureInteractionResult> {
   const input = readGesturePayload(params.req.input);
-  const gesture = prepareGestureCommandInput(input, session);
+  const gesture = prepareGestureCommandInput(input, session, readiness);
   if (gesture.intent === 'pan' && params.req.internal?.gestureExecutionProfile) {
     gesture.executionProfile = params.req.internal.gestureExecutionProfile;
   }
@@ -207,7 +212,10 @@ function createGestureRuntime(params: GestureHandlerParams, gestures: BoundGestu
 async function dispatchGestureInteraction(
   params: GestureHandlerParams,
   command: 'gesture' | 'swipe',
-  run: (session: SessionState) => Promise<GestureInteractionResult>,
+  run: (
+    session: SessionState,
+    readiness: AndroidBlockingDialogReadinessResult,
+  ) => Promise<GestureInteractionResult>,
 ): Promise<DaemonResponse> {
   const session = params.sessionStore.get(params.sessionName);
   if (!session) return noActiveSessionError();
@@ -222,7 +230,7 @@ async function dispatchGestureInteraction(
           phase: 'before-command',
           observation: params.androidObservation,
         });
-    const outcome = await run(session);
+    const outcome = await run(session, readiness);
     if (isRefusal(outcome)) return outcome.refused;
     if (!providerDevice) {
       await ensureAndroidBlockingSystemDialogReady({
@@ -268,14 +276,20 @@ function resolveExecutionProfile(
 function prepareGestureCommandInput(
   input: GesturePayload,
   session: SessionState,
+  readiness: AndroidBlockingDialogReadinessResult,
 ): GestureCommandInput {
   const normalized = normalizeGestureCommandInput(input);
   if (normalized.intent !== 'drag') return normalized;
-  return {
-    ...normalized,
-    source: prepareDragTarget(normalized.source, session),
-    destination: prepareDragTarget(normalized.destination, session),
-  };
+  try {
+    return {
+      ...normalized,
+      source: prepareDragTarget(normalized.source, session),
+      destination: prepareDragTarget(normalized.destination, session),
+    };
+  } catch (error) {
+    if (readiness.status === 'recovered') throw error;
+    throw thrownBeforeDispatch(error);
+  }
 }
 
 function prepareDragTarget(target: string, session: SessionState): string {
