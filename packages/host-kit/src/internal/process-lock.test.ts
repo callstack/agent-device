@@ -863,13 +863,12 @@ test('an acquisition cannot authorize a successor record', async () => {
 for (const releaseFails of [false, true]) {
   test(`failed owner publication remains primary when guard release fails: ${releaseFails}`, async () => {
     const lockDirPath = path.join(tmpDir, 'failed-publication.lock');
-    const guardPath = path.join(tmpDir, 'failed-publication.reclaim.lock');
-    const { primary, renameSpy, unlinkSpy } = failLockOwnerPublication(lockDirPath, releaseFails);
+    const faults = failLockOwnerPublication(lockDirPath, releaseFails);
     const diagnosticSpy = vi.spyOn(diagnostics, 'emitDiagnostic');
     try {
       assert.throws(
         () => tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() }),
-        (error) => error === primary,
+        (error) => error === faults.primary,
       );
       if (releaseFails) {
         const data = diagnosticSpy.mock.calls.find(
@@ -879,14 +878,14 @@ for (const releaseFails of [false, true]) {
         assert.equal(failure.cause?.code, 'EPERM');
         assert.equal(failure.details?.reason, 'process_lock_guard_release_failed');
         assert.match(failure.hint ?? '', /confirming all users/);
-        assert.equal(fs.existsSync(guardPath), true);
+        assert.equal(fs.existsSync(faults.guardPath), true);
       }
     } finally {
-      renameSpy.mockRestore();
-      unlinkSpy?.mockRestore();
+      faults.renameSpy.mockRestore();
+      faults.unlinkSpy?.mockRestore();
       diagnosticSpy.mockRestore();
     }
-    if (releaseFails) fs.unlinkSync(guardPath);
+    if (releaseFails) fs.unlinkSync(faults.guardPath);
     const retry = tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
     assert.equal(retry.status, 'acquired');
     if (retry.status === 'acquired') await retry.acquisition.release();

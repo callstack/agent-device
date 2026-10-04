@@ -87,5 +87,5 @@ export function failLockOwnerPublication(lockDirPath: string, releaseFails: bool
   const renameSpy = failRenameForPath(path.join(lockDirPath, 'owner.json'), primary);
   const guardPath = lockDirPath.replace(/\.lock$/, '.reclaim.lock');
   const unlinkSpy = releaseFails ? failUnlinkForPath(guardPath, releaseError) : undefined;
-  return { primary, renameSpy, unlinkSpy };
+  return { primary, renameSpy, unlinkSpy, guardPath };
 }
