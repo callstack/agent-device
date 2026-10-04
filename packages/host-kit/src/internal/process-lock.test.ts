@@ -527,8 +527,7 @@ test('a lock directory made anew while a reclaim holds the mutex is not the one 
   fs.mkdirSync(lockDirPath);
   stampDirectoryAbandoned(lockDirPath);
 
-  // Replacing the directory rather than filling it is what a contender that won the path looks
-  // like from the inside: same name, same emptiness, and an age that says it was never abandoned.
+  // A replacement directory has a new identity and a fresh age.
   let refilledAtMs = 0;
   const guard = onFirstGuardOpen(mutexPath, () => {
     fs.rmSync(lockDirPath, { recursive: true, force: true });
