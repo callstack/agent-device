@@ -69,7 +69,6 @@ export function makeDurableCaptureContext(
       replace: (session, appLog) => ({ ...session, appLog, appLogFailure: undefined }),
     }),
     admissionLedger: createDurableCaptureAdmissionLedger({ displayName: 'test capture' }),
-    session,
     sessionName,
     sessionStore,
     device,
