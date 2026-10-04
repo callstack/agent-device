@@ -207,8 +207,9 @@ advertise reverse support automatically; call `createAndroidPortReverseManager(p
 only when the provider supports `adb reverse` argument semantics. The manager makes duplicate setup
 idempotent for the same owner and rejects conflicting owners for the same local endpoint. For a
 device that other adb clients also drive, pass an executor with `{ noRebind: true }`: the manager
-runs `adb reverse --no-rebind` and does not replace a mapping it did not create. A refusal fails with
-`COMMAND_FAILED` and `details.reason: 'android_port_reverse_rebind_refused'`.
+runs `adb reverse --no-rebind` and never replaces an existing device mapping, including one it
+created. When `adb reverse --list` shows the mapping, the refusal fails with `COMMAND_FAILED` and
+`details.reason: 'android_port_reverse_rebind_refused'`. Otherwise it fails as an ordinary adb error.
 
 The device shell re-parses whatever follows `shell` or `exec-out`, so those commands are built for you:
 every dynamic word is rendered for the quoting its transport applies before it reaches the device. `adb`

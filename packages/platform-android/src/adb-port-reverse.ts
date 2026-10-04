@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
 import { androidAdbResultError } from './adb-failure.ts';
 import { normalizeAndroidAdbProvider } from './adb-provider-normalization.ts';
 import type {
@@ -15,8 +16,9 @@ import type {
 
 export type AndroidExecPortReverseOptions = Readonly<{
   /**
-   * Refuses to replace a device mapping this provider did not create (`adb reverse --no-rebind`),
-   * for a device that other adb clients also drive. A refusal throws `COMMAND_FAILED` with
+   * Refuses to replace any existing device mapping, including one this provider created
+   * (`adb reverse --no-rebind`), for a device that other adb clients also drive. A refusal the
+   * device listing confirms throws `COMMAND_FAILED` with
    * `details.reason: 'android_port_reverse_rebind_refused'`.
    */
   noRebind?: boolean;
@@ -45,21 +47,24 @@ export function createAndroidPortReverseManager(
   const reverse =
     normalized.reverse ?? createExecAndroidPortReverseProvider(normalized.exec, options);
   const active = new Map<AndroidPortReverseEndpoint, AndroidPortReverseMapping>();
+  const ensuring = new Map<string, Promise<unknown>>();
   const manager: AndroidPortReverseProvider = {
     async ensure(mapping, options) {
-      const current = active.get(mapping.local);
-      if (current && current.ownerId !== mapping.ownerId) {
-        throw new AppError(
-          'COMMAND_FAILED',
-          `Android port reverse ${mapping.local} is already owned by ${current.ownerId ?? 'another session'}`,
-          { current, requested: mapping },
-        );
-      }
-      if (current?.remote === mapping.remote) {
-        return;
-      }
-      await reverse.ensure(mapping, options);
-      active.set(mapping.local, { ...mapping });
+      await withKeyedLock(ensuring, mapping.local, async () => {
+        const current = active.get(mapping.local);
+        if (current && current.ownerId !== mapping.ownerId) {
+          throw new AppError(
+            'COMMAND_FAILED',
+            `Android port reverse ${mapping.local} is already owned by ${current.ownerId ?? 'another session'}`,
+            { current, requested: mapping },
+          );
+        }
+        if (current?.remote === mapping.remote) {
+          return;
+        }
+        await reverse.ensure(mapping, options);
+        active.set(mapping.local, { ...mapping });
+      });
     },
     async remove(local, options) {
       if (!active.has(local)) {
@@ -122,8 +127,7 @@ export function createExecAndroidPortReverseProvider(
   };
   return {
     async ensure(mapping, options) {
-      // A mapping this provider created stays rebindable; --no-rebind protects only foreign ones.
-      const noRebind = providerOptions.noRebind === true && !bound.has(mapping.local);
+      const noRebind = providerOptions.noRebind === true;
       const result = await adb(
         ['reverse', ...(noRebind ? ['--no-rebind'] : []), mapping.local, mapping.remote],
         { allowFailure: noRebind, signal: options?.signal, timeoutMs: options?.timeoutMs },
@@ -162,12 +166,12 @@ function rebindRefusedError(
 ): AppError {
   return new AppError(
     'COMMAND_FAILED',
-    `Android port reverse ${requested.local} is already mapped on the device by another adb client`,
+    `Android port reverse ${requested.local} is already mapped on the device`,
     {
       reason: ANDROID_PORT_REVERSE_REBIND_REFUSED_REASON,
       requested,
-      existing: { local: existing.local, remote: existing.remote },
-      hint: `agent-device does not replace a mapping it did not create on a shared device. Free device ${requested.local} or use another device port.`,
+      existing,
+      hint: `agent-device does not replace an existing reverse mapping on a shared device. Remove the mapping that holds device ${requested.local}, or use another device port.`,
     },
   );
 }
