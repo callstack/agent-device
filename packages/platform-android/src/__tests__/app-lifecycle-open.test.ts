@@ -171,7 +171,8 @@ test('openAndroidApp ensures Android reverse before localhost deep link launch',
     booted: true,
   };
   const calls: Array<
-    { kind: 'exec'; args: readonly string[] } | { kind: 'reverse'; local: string; remote: string }
+    | { kind: 'exec'; args: readonly string[] }
+    | { kind: 'reverse'; local: string; remote: string; ownerId?: string }
   > = [];
 
   await withAndroidAdbProvider(
@@ -182,7 +183,12 @@ test('openAndroidApp ensures Android reverse before localhost deep link launch',
       },
       reverse: {
         ensure: async (mapping) => {
-          calls.push({ kind: 'reverse', local: mapping.local, remote: mapping.remote });
+          calls.push({
+            kind: 'reverse',
+            local: mapping.local,
+            remote: mapping.remote,
+            ownerId: mapping.ownerId,
+          });
         },
         remove: async () => {},
         removeAllOwned: async () => {},
@@ -193,7 +199,7 @@ test('openAndroidApp ensures Android reverse before localhost deep link launch',
   );
 
   assert.deepEqual(calls, [
-    { kind: 'reverse', local: 'tcp:8083', remote: 'tcp:8083' },
+    { kind: 'reverse', local: 'tcp:8083', remote: 'tcp:8083', ownerId: 'localhost-url' },
     {
       kind: 'exec',
       args: [
