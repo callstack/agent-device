@@ -89,8 +89,8 @@ extension RunnerTests {
     /// One post. `characterCount` characters of the text, taken in order, are what it types.
     struct Step: Equatable {
       let characterCount: Int
-      /// True when this post selects the field's existing value away first. That selection is its
-      /// own synthesize record, so the post costs one call more than typing characters.
+      /// True when this post clears the field's existing value before typing its text in a
+      /// record of its own; `clearPassCount` says how.
       var replacesExistingText = false
       /// Seconds charged for what follows this post: the `--delay-ms` gap before the next post, or
       /// the warmup read-back after a peeled first character. The read-back costs one poll, because
@@ -100,9 +100,22 @@ extension RunnerTests {
       /// Set on the post whose value the loop waits for before the rest is posted.
       var warmsUpField = false
 
+      /// Clears a replacing post runs, each a select-all record and a delete key record. In a React
+      /// Native app launched moments earlier (iOS 26.5 simulator) the first select-all was dropped,
+      /// so one clear deleted only the last character ("Client" filled with "Cold" became
+      /// "ClienCold", 5 of 5 launches), and typing over the selection instead of deleting it kept
+      /// the old value ("ClientCold"). The second clear empties what the first left, and does
+      /// nothing to a field the first emptied.
+      static let clearPassCount = 2
+
       /// How many private synthesize records this post runs.
       var synthesizeCallCount: Int {
-        replacesExistingText ? 2 : 1
+        replacesExistingText ? 2 * Self.clearPassCount + 1 : 1
+      }
+
+      /// Keystrokes this post types at the synthesized pace, the clears' delete keys included.
+      var keystrokeCount: Int {
+        characterCount + (replacesExistingText ? Self.clearPassCount : 0)
       }
     }
 
@@ -129,7 +142,7 @@ extension RunnerTests {
     var seconds: TimeInterval {
       steps.reduce(0) { total, step in
         total
-          + Double(step.characterCount) * TextEntryTiming.synthesizedCharacterInterval
+          + Double(step.keystrokeCount) * TextEntryTiming.synthesizedCharacterInterval
           + Double(step.synthesizeCallCount) * TextEntryTiming.synthesizeCallOverhead
           + step.pauseAfterSeconds
       }
@@ -304,22 +317,31 @@ extension RunnerTests {
       plan,
       text: request.text,
       post: { slice, step in
-        switch request.synthesizer.enterText(
-          app: request.app,
-          text: slice,
-          replacingExistingText: step.replacesExistingText
-        ) {
-        case .continueTyping:
-          return .posted
-        case .fallback:
-          return .stop
-        case .raise(let message):
-          NSException(
-            name: NSExceptionName.internalInconsistencyException,
-            reason: message ?? "private XCTest text synthesis failed"
-          ).raise()
-          return .stop
+        func enter(_ text: String, replacingExistingText: Bool) -> SynthesizedStepDispatch {
+          switch request.synthesizer.enterText(
+            app: request.app,
+            text: text,
+            replacingExistingText: replacingExistingText
+          ) {
+          case .continueTyping:
+            return .posted
+          case .fallback:
+            return .stop
+          case .raise(let message):
+            NSException(
+              name: NSExceptionName.internalInconsistencyException,
+              reason: message ?? "private XCTest text synthesis failed"
+            ).raise()
+            return .stop
+          }
         }
+        if step.replacesExistingText {
+          for _ in 0..<SynthesizedTextPlan.Step.clearPassCount
+          where enter(XCUIKeyboardKey.delete.rawValue, replacingExistingText: true) == .stop {
+            return .stop
+          }
+        }
+        return enter(slice, replacingExistingText: false)
       },
       // A replacement never peels a warmup character, so no step asks for a read-back.
       waitAfterWarmupCharacter: { _ in }
@@ -400,7 +422,7 @@ extension RunnerTests {
   enum SynthesizedTextCommitOutcome: Equatable {
     /// The field holds exactly the expected text.
     case settled
-    /// There was nothing to wait for: the text carries a submit key.
+    /// There was nothing to wait for: the text carries a submit key, or the field is secure.
     case unobservable
     /// The deadline expired with the expected text still not observed.
     case notObserved
@@ -432,12 +454,18 @@ extension RunnerTests {
   static func awaitSynthesizedReplacementCommitOutcome(
     expectedText: String,
     placeholder: String?,
+    fieldIsSecure: Bool = false,
     stallBudget: TimeInterval = TextEntryTiming.synthesizedCommitStallTimeout,
     ceiling: TimeInterval = TextEntryTiming.synthesizedCommitCeiling,
     now: () -> Date = { Date() },
     observe: () -> String?,
     waitForNextObservation: () -> Void
   ) -> SynthesizedTextCommitOutcome {
+    // A secure field never exposes its value, so every read is nil and the wait could only expire.
+    // The element route leaves such a field unverified rather than failed; so does this one.
+    if fieldIsSecure {
+      return .unobservable
+    }
     // A placeholder-equal AX value cannot prove a commit: an input handler may clear the field
     // after dispatch, making the empty field render the same value. Refuse before polling because
     // no later read can distinguish those states.

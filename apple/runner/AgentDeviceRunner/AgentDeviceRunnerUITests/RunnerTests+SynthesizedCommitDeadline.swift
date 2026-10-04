@@ -67,7 +67,8 @@ extension RunnerTests {
   /// already reported success. The expected value is the
   /// final text itself, and a settled mismatch is always reported: see
   /// `awaitSynthesizedReplacementCommitOutcome`'s doc comment. Text carrying a submit key is
-  /// skipped outright: the app may clear or rewrite the field on submit.
+  /// skipped outright: the app may clear or rewrite the field on submit. So is a secure field,
+  /// whose value is never readable.
   func awaitSynthesizedReplacementCommit(
     app: XCUIApplication,
     target: TextEntryTarget,
@@ -82,6 +83,7 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: expectedText,
       placeholder: ingredients.placeholder,
+      fieldIsSecure: ingredients.fieldIsSecure,
       now: { Date() },
       observe: ingredients.observe,
       waitForNextObservation: ingredients.waitForNextObservation
@@ -132,13 +134,16 @@ extension RunnerTests {
     expectedText: String
   ) -> (
     placeholder: String?,
+    fieldIsSecure: Bool,
     observe: () -> String?,
     waitForNextObservation: () -> Void
   ) {
-    let placeholder = resolveTextEntryElement(app: app, target: target)?.placeholderValue
+    let field = resolveTextEntryElement(app: app, target: target)
+    let placeholder = field?.placeholderValue
     let waitStartedAt = Date()
     return (
       placeholder: placeholder,
+      fieldIsSecure: field?.elementType == .secureTextField,
       observe: {
         let observedText = self.editableTextValue(
           for: self.resolveTextEntryElement(app: app, target: target),

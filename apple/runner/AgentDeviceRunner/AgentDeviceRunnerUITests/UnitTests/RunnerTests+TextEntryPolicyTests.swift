@@ -181,6 +181,32 @@ extension RunnerTests {
     XCTAssertEqual(observations, 0, "no post-dispatch read can resolve this collision")
   }
 
+  // A secure field reads nil on every poll, so the wait could only expire: every penalized-route
+  // password `fill` failed with TEXT_INPUT_COMMIT_NOT_OBSERVED. It is left unverified instead, as
+  // the element route leaves it, also when the text equals its placeholder; an ordinary field
+  // that reads nil, or whose text equals its placeholder, still fails.
+  func testSynthesizedReplacementCommitLeavesASecureFieldUnverified() {
+    for placeholder in [nil, "hunter2"] {
+      for fieldIsSecure in [true, false] {
+        let label = "secure: \(fieldIsSecure), placeholder: \(placeholder ?? "none")"
+        var observations = 0
+        let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
+          expectedText: "hunter2",
+          placeholder: placeholder,
+          fieldIsSecure: fieldIsSecure,
+          stallBudget: 0,
+          observe: {
+            observations += 1
+            return nil
+          },
+          waitForNextObservation: {}
+        )
+        XCTAssertEqual(outcome, fieldIsSecure ? .unobservable : .notObserved, label)
+        XCTAssertEqual(observations, fieldIsSecure || placeholder != nil ? 0 : 1, label)
+      }
+    }
+  }
+
   // The mapping the command actually refuses on. `.unobservable` must stay a success: it is the
   // contract for submit-key text, so inverting it would fail every `fill` ending in a submit key.
   func testOnlyAnUnobservedCommitBecomesACommandFailure() {
@@ -258,20 +284,22 @@ extension RunnerTests {
     )
   }
 
-  // A select-and-type post runs two synthesize records — the Command-A selection and the text — so a
-  // burst that replaces costs more than the characters it types. Charging one call per post is the
-  // projection defect this plan exists to remove, one level down.
-  func testSynthesizedPlanChargesAReplacingPostTwoSynthesizeCalls() {
+  // A replacing post clears twice — a select-all record and a delete-key record each, because a
+  // freshly launched app drops the first select-all — before its text record, so it costs five
+  // synthesize records and two keystrokes more than the characters it types. Charging one call per
+  // post is the projection defect this plan exists to remove, one level down.
+  func testSynthesizedPlanChargesAReplacingPostItsClears() {
     let replacing = SynthesizedTextPlan.Step(characterCount: 1, replacesExistingText: true)
-    XCTAssertEqual(replacing.synthesizeCallCount, 2)
+    XCTAssertEqual(replacing.synthesizeCallCount, 5)
+    XCTAssertEqual(replacing.keystrokeCount, 3)
     XCTAssertEqual(
       SynthesizedTextPlan.Step(characterCount: 1).synthesizeCallCount,
       1
     )
     XCTAssertEqual(
       Self.synthesizedTextPlan(characterCount: 1, delaySeconds: 0, selectsExistingText: true).seconds,
-      TextEntryTiming.synthesizedCharacterInterval
-        + 2 * TextEntryTiming.synthesizeCallOverhead
+      3 * TextEntryTiming.synthesizedCharacterInterval
+        + 5 * TextEntryTiming.synthesizeCallOverhead
     )
   }
 
@@ -537,10 +565,16 @@ extension RunnerTests {
       synthesizer: synthesizer
     )
 
+    let clear = RecordingTextEntrySynthesizer.Post(
+      text: XCUIKeyboardKey.delete.rawValue,
+      replacesExistingText: true
+    )
     XCTAssertEqual(
       synthesizer.posts,
       [
-        RecordingTextEntrySynthesizer.Post(text: "a", replacesExistingText: true),
+        clear,
+        clear,
+        RecordingTextEntrySynthesizer.Post(text: "a", replacesExistingText: false),
         RecordingTextEntrySynthesizer.Post(text: "b", replacesExistingText: false),
         RecordingTextEntrySynthesizer.Post(text: "c", replacesExistingText: false),
       ]
