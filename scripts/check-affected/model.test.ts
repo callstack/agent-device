@@ -160,9 +160,28 @@ test('Android package test fixture selects the unit suite instead of failing ope
         check: 'unit',
         path: fixture,
         rule: 'own:android-package-test-fixture',
-        detail: 'the Android package test fixture is consumed by the unit suite',
+        detail: 'Android package test fixtures are consumed by the unit suite',
       },
     ],
+  );
+});
+
+test('colocated Android binary fixtures select the unit suite instead of failing open', () => {
+  const fixtures = [
+    'packages/platform-android/src/fixtures/android-manifest-binary.fixture',
+    'packages/platform-android/src/fixtures/android-manifest-apk.apk',
+  ];
+  const result = plan(fixtures);
+  assert.equal(result.failOpen, false);
+  assert.deepEqual(result.checks, ['unit']);
+  assert.deepEqual(
+    result.reasons.map((reason) => reason.path),
+    fixtures,
+  );
+  // The rule is scoped to the Android package: the same shape elsewhere stays unowned.
+  assert.equal(
+    plan(['packages/platform-harmonyos/src/fixtures/android-manifest-binary.fixture']).failOpen,
+    true,
   );
 });
 
