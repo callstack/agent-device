@@ -129,15 +129,6 @@ export function recordSessionAppLogFailure(params: {
   return normalized;
 }
 
-export function clearSessionAppLogFailure(params: {
-  ref: SessionRef;
-  sessionStore: SessionStore;
-}): void {
-  params.sessionStore.update(params.ref, {
-    appLogFailure: undefined,
-  });
-}
-
 export function bindSessionAppLog(sessionStore: SessionStore, ref: SessionRef) {
   return bindSessionCapture(sessionStore, ref, {
     read: (session) => session.appLog,
@@ -156,6 +147,6 @@ export function clearStoppedSessionAppLog(params: { ref: SessionRef; sessionStor
     );
   }
   const cleared = clearAppLogFiles(params.sessionStore.resolveAppLogPath(params.ref.address));
-  clearSessionAppLogFailure(params);
+  params.sessionStore.update(params.ref, { appLogFailure: undefined });
   return cleared;
 }

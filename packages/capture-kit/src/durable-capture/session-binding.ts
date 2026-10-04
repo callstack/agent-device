@@ -28,7 +28,7 @@ export function createDurableCaptureSessionBinding<S, K extends string, H extend
     sessionDir: port.sessionDir,
     read: () => {
       const current = port.resolveCurrent();
-      if (current) retained = port.read(current);
+      if (current !== undefined) retained = port.read(current);
       return retained;
     },
     assertAdoptable,
@@ -43,7 +43,7 @@ export function createDurableCaptureSessionBinding<S, K extends string, H extend
     },
     clear: (expected) => {
       const current = port.resolveCurrent();
-      if (!current) return 'retired';
+      if (current === undefined) return 'retired';
       const active = port.read(current);
       if (
         active?.handle !== expected.handle ||
