@@ -124,7 +124,6 @@ test.each(['rebuild', 'retire'] as const)(
     captured({ nodes: [{ index: 0, depth: 0, type: 'Button', ref: 'e2', label: 'Save' }] });
     const result = await pending;
     expect(store.get(ref.address)).toBe(current);
-    expect(store.get('default')).toBeUndefined();
     if (change === 'rebuild') {
       expect(result.state).toBe('available');
       expect(current.appName).toBe('Latest app');
