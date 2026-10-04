@@ -67,3 +67,78 @@ test('a provider-owned reverse implementation is reused as-is when already manag
   const second = createAndroidPortReverseManager({ exec: async () => ok(), reverse: first });
   expect(second).toBe(first);
 });
+
+test('no-rebind refuses a device mapping another client owns with a typed reason', async () => {
+  bindAndroidAdbHostStub();
+  const calls: (readonly string[])[] = [];
+  const manager = createAndroidPortReverseManager(
+    async (args) => {
+      calls.push(args);
+      if (args.includes('--no-rebind')) {
+        return { exitCode: 1, stdout: '', stderr: 'adb: error: cannot rebind existing socket' };
+      }
+      return ok(args[1] === '--list' ? 'owner-host tcp:8081 tcp:8081\n' : '');
+    },
+    { noRebind: true },
+  );
+
+  await expect(
+    manager.ensure({ local: 'tcp:8081', remote: 'tcp:8081', ownerId: 'metro' }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: {
+      reason: 'android_port_reverse_rebind_refused',
+      existing: { local: 'tcp:8081', remote: 'tcp:8081' },
+    },
+  });
+  await manager.removeAllOwned('metro');
+
+  expect(calls).toEqual([
+    ['reverse', '--no-rebind', 'tcp:8081', 'tcp:8081'],
+    ['reverse', '--list'],
+  ]);
+});
+
+test('no-rebind still rebinds a mapping the same provider created', async () => {
+  bindAndroidAdbHostStub();
+  const calls: (readonly string[])[] = [];
+  const manager = createAndroidPortReverseManager(
+    async (args) => {
+      calls.push(args);
+      return ok();
+    },
+    { noRebind: true },
+  );
+
+  await manager.ensure({ local: 'tcp:8081', remote: 'tcp:8081', ownerId: 'metro' });
+  await manager.ensure({ local: 'tcp:8081', remote: 'tcp:9090', ownerId: 'metro' });
+
+  expect(calls).toEqual([
+    ['reverse', '--no-rebind', 'tcp:8081', 'tcp:8081'],
+    ['reverse', 'tcp:8081', 'tcp:9090'],
+  ]);
+});
+
+test('no-rebind reports an adb failure when the device lists no mapping for the endpoint', async () => {
+  bindAndroidAdbHostStub();
+  const manager = createAndroidPortReverseManager(
+    async (args) =>
+      args.includes('--no-rebind')
+        ? { exitCode: 1, stdout: '', stderr: 'error: device offline' }
+        : ok(),
+    { noRebind: true },
+  );
+
+  const failure = await manager
+    .ensure({ local: 'tcp:8081', remote: 'tcp:8081', ownerId: 'metro' })
+    .then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+  expect(failure).toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { adbFailure: 'device_offline' },
+  });
+  expect(failure).not.toMatchObject({ details: { reason: 'android_port_reverse_rebind_refused' } });
+});

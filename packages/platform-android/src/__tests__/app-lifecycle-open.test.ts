@@ -210,6 +210,43 @@ test('openAndroidApp ensures Android reverse before localhost deep link launch',
   ]);
 });
 
+test('openAndroidApp keeps the typed reason of a refused localhost reverse', async () => {
+  const device: DeviceInfo = {
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator',
+    booted: true,
+  };
+  const launches: (readonly string[])[] = [];
+
+  await assert.rejects(
+    () =>
+      withAndroidAdbProvider(
+        {
+          exec: async (args) => {
+            launches.push(args);
+            return { stdout: '', stderr: '', exitCode: 0 };
+          },
+          reverse: {
+            ensure: async () => {
+              throw new AppError('COMMAND_FAILED', 'already mapped', {
+                reason: 'android_port_reverse_rebind_refused',
+              });
+            },
+            remove: async () => {},
+            removeAllOwned: async () => {},
+          },
+        },
+        { serial: 'emulator-5554' },
+        async () => await openAndroidApp(device, 'exp://127.0.0.1:8081'),
+      ),
+    (error: unknown) =>
+      error instanceof AppError && error.details?.reason === 'android_port_reverse_rebind_refused',
+  );
+  assert.deepEqual(launches, []);
+});
+
 test('openAndroidApp ensures Android reverse before localhost app-bound deep link launch', async () => {
   const device: DeviceInfo = {
     platform: 'android',

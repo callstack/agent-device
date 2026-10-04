@@ -132,6 +132,7 @@ async function ensureAndroidLocalhostReverse(device: DeviceInfo, target: string)
     };
     if (error instanceof AppError) {
       Object.assign(details, {
+        reason: error.details?.reason,
         hint: error.details?.hint,
         diagnosticId: error.details?.diagnosticId,
         logPath: error.details?.logPath,
