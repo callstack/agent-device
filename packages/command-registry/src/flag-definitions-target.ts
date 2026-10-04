@@ -69,7 +69,7 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--surface app|frontmost-app|desktop|menubar',
     usageDescription: 'macOS session surface for open (defaults to app)',
     projectConfig: true,
-    recorded: false,
+    recorded: true,
   },
   {
     key: 'headless',

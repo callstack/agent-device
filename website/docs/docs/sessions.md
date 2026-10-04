@@ -30,6 +30,7 @@ Session artifact directories contain per-run evidence for concurrent agents:
 `events.ndjson` is privacy-shaped for automation timelines. It preserves command names, status,
 durations, bounded device/app inventory previews, lifecycle outcomes, artifact basenames, and
 structural action details such as scroll distance/direction, safe refs, and coordinates.
+An explicitly supplied macOS `open --surface` is preserved in recorded action flags and saved `.ad` scripts; an omitted surface stays omitted.
 User-entered text, clipboard contents, push/event payloads, selector values, free-form
 flags/messages/paths, and raw unknown command arguments are omitted or replaced with content-free
 placeholders. `--no-record` suppresses recorded action entries; request start/finish entries still

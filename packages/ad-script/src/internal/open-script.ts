@@ -1,4 +1,5 @@
 import type { SessionAction } from '@agent-device/contracts/session';
+import { parseSessionSurface } from '@agent-device/contracts/session';
 import {
   appendRuntimeHintFlags,
   formatScriptArg,
@@ -46,6 +47,9 @@ export function appendOpenActionScriptArgs(
   if (action.flags?.relaunch) {
     parts.push('--relaunch');
   }
+  if (action.flags?.surface !== undefined) {
+    parts.push('--surface', action.flags.surface);
+  }
   if (action.flags?.testIme === true) {
     parts.push('--test-ime');
   } else if (action.flags?.testIme === false) {
@@ -61,7 +65,13 @@ export function parseReplayOpenFlags(args: string[]): {
 } {
   const argsWithoutRelaunch: string[] = [];
   const flags: SessionAction['flags'] = {};
-  for (const token of args) {
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index]!;
+    if (token === '--surface') {
+      flags.surface = parseSessionSurface(args[index + 1]);
+      index += 1;
+      continue;
+    }
     if (token === '--relaunch') {
       flags.relaunch = true;
       continue;
