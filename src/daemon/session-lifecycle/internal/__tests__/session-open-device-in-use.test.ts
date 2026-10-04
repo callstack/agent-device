@@ -1,3 +1,4 @@
+import { makeStoredSessionRef } from '../../../../__tests__/test-utils/store-factory.ts';
 import { test, expect } from 'vitest';
 import {
   buildDeviceInUseBySessionError,
@@ -13,16 +14,16 @@ import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.
 
 const SCOPED_ADDRESS = 'cwd:8bea844ab16aa9b3:default';
 
-const scopedRef: SessionRef = {
-  address: SCOPED_ADDRESS,
-  session: {
+const scopedRef: SessionRef = makeStoredSessionRef(
+  {
     name: 'default',
     sessionScope: { kind: 'cwd', id: '8bea844ab16aa9b3' },
     device: IOS_SIMULATOR,
     createdAt: 0,
     actions: [],
   },
-};
+  SCOPED_ADDRESS,
+);
 
 test('the by-session conflict reports the address, in the message, details and hint', () => {
   const response = buildDeviceInUseBySessionError(scopedRef, IOS_SIMULATOR);
@@ -41,16 +42,16 @@ test('the by-session conflict reports the address, in the message, details and h
 // --session, nor close.
 test('the foreign-workspace conflict names the owning session address', () => {
   const foreignAddress = 'cwd:1d9b7c2f4a6e8b03:default';
-  const foreignRef: SessionRef = {
-    address: foreignAddress,
-    session: {
+  const foreignRef: SessionRef = makeStoredSessionRef(
+    {
       name: 'default',
       sessionScope: { kind: 'cwd', id: '1d9b7c2f4a6e8b03' },
       device: IOS_SIMULATOR,
       createdAt: 0,
       actions: [],
     },
-  };
+    foreignAddress,
+  );
 
   const response = buildForeignWorkspaceSessionConflict(foreignRef, IOS_SIMULATOR);
 

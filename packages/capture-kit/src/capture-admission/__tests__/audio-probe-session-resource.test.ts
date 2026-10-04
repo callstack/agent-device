@@ -1,3 +1,4 @@
+import { makeCaptureSessionBinding } from '../../durable-capture/session-binding.fixtures.ts';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
@@ -44,6 +45,10 @@ test('audio-probe disposes on a failed finish because terminating the helper is 
   );
   const session: DurableCaptureSessionState = {};
   sessionStore.set(sessionName, session);
+  const binding = makeCaptureSessionBinding(sessionStore, sessionName, {
+    read: (session) => session.audioProbe,
+    replace: (session, audioProbe) => ({ ...session, audioProbe }),
+  });
   const statusPath = path.join(sessionStore.resolveSessionDir(sessionName), 'audio-probe.json');
   const terminate = vi.fn(async () => {});
   let resolveExit!: (result: HostCommandResult) => void;
@@ -85,9 +90,7 @@ test('audio-probe disposes on a failed finish because terminating the helper is 
   });
   await adoptStartedAudioProbe({
     admissionLedger: createAudioProbeAdmissionLedger(),
-    session,
-    sessionName,
-    sessionStore,
+    binding,
     device,
     owner: localRuntimeOwner('apple'),
     fence,
@@ -101,9 +104,7 @@ test('audio-probe disposes on a failed finish because terminating the helper is 
   await expect(
     finishLiveAudioProbe({
       intent: 'capture',
-      session: sessionStore.get(sessionName) ?? session,
-      sessionName,
-      sessionStore,
+      binding,
     }),
   ).rejects.toThrow('helper exited before completing the capture');
 

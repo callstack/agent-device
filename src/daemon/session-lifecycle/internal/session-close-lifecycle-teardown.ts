@@ -37,8 +37,7 @@ export type SessionCloseTeardownResult = Readonly<{
 /** Runs owned resources, native close, native hint cleanup, and final lifecycle disposal. */
 export async function runSessionCloseTeardown(params: {
   req: DaemonRequest;
-  session: SessionState;
-  sessionName: string;
+  ref: SessionRef;
   logPath: string;
   sessionStore: SessionStore;
   lifecycle: CloseRuntime | CloseRuntimeWithRuntimeHintClear;
@@ -56,8 +55,7 @@ export async function runSessionCloseTeardown(params: {
 }): Promise<SessionCloseTeardownResult> {
   const {
     req,
-    session,
-    sessionName,
+    ref,
     logPath,
     sessionStore,
     lifecycle,
@@ -67,6 +65,8 @@ export async function runSessionCloseTeardown(params: {
     dispatchTargetedPlatformClose,
     finalizeOrdinaryCloseScript,
   } = params;
+  const { address: sessionName } = ref;
+  const session = sessionStore.requireCurrent(ref);
   const attemptCleanup = async <Result>(
     step: string,
     run: () => Promise<Result>,
@@ -86,7 +86,7 @@ export async function runSessionCloseTeardown(params: {
   });
   const configuredRuntimeHints = sessionStore.getRuntimeHints(sessionName);
   await stopBestEffortSessionResources(
-    { address: sessionName, session },
+    ref,
     sessionStore,
     attemptCleanup,
     params.platformResourceCleanup,
@@ -134,21 +134,11 @@ async function stopBestEffortSessionResources(
   attemptCleanup: CleanupRunner,
   platformCleanup: PlatformResourceCleanup,
 ): Promise<void> {
-  const { address: sessionName, session } = ref;
-  // Recording overlay finalization needs the Apple runner, so it runs first.
-  // `finishSessionScreenRecording` re-reads the stored session by address and
-  // returns when there is no recording; a second lookup here would only be a
-  // place to mis-address it.
-  await attemptCleanup('recording', () =>
-    finishSessionScreenRecording({ session, sessionName, sessionStore }),
-  );
-  await attemptCleanup('app_log', () => stopSessionAppLog({ session, sessionName, sessionStore }));
-  await attemptCleanup('audio_probe', () =>
-    finishSessionAudioProbe({ session, sessionName, sessionStore }),
-  );
-  await attemptCleanup('perf_capture', () =>
-    stopSessionPerfCapture({ session, sessionName, sessionStore }),
-  );
+  const session = sessionStore.resolveCurrent(ref) ?? ref.session;
+  await attemptCleanup('recording', () => finishSessionScreenRecording({ ref, sessionStore }));
+  await attemptCleanup('app_log', () => stopSessionAppLog({ ref, sessionStore }));
+  await attemptCleanup('audio_probe', () => finishSessionAudioProbe({ ref, sessionStore }));
+  await attemptCleanup('perf_capture', () => stopSessionPerfCapture({ ref, sessionStore }));
   await attemptCleanup('platform_snapshot_helper', () =>
     stopSessionSnapshotHelper(session, platformCleanup),
   );

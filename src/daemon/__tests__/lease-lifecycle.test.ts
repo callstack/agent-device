@@ -83,7 +83,9 @@ test('cleanupExpiredLeasedSession consumes expired lease and deletes the session
   });
 
   expect(cleaned).toBe(true);
-  expect(teardownSession).toHaveBeenCalledWith(session, 'default');
+  expect(teardownSession).toHaveBeenCalledWith(
+    expect.objectContaining({ address: 'default', session }),
+  );
   expect(sessionStore.get('default')).toBeUndefined();
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
 });

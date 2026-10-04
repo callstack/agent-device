@@ -35,7 +35,7 @@ import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecy
 import { runtimeHintValues } from '../session-runtime.ts';
 import { closeDaemonServers } from './server-shutdown.ts';
 import type { DaemonInvokeFn } from '../daemon-request.ts';
-import type { SessionState } from '../session-state.ts';
+import type { SessionRef, SessionState } from '../session-state.ts';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
 import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
 import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
@@ -133,7 +133,7 @@ async function settleDaemonTeardownStep(params: {
  * silently swallowed.
  */
 export async function teardownDaemonSessionForShutdown(params: {
-  session: SessionState;
+  ref: SessionRef;
   sessionStore: SessionStore;
   stateDir?: string;
   stderr: WritableOutput;
@@ -142,7 +142,7 @@ export async function teardownDaemonSessionForShutdown(params: {
   afterSuccessfulTeardown?: (session: SessionState) => Promise<void>;
 }): Promise<void> {
   const {
-    session,
+    ref,
     sessionStore,
     stateDir,
     stderr,
@@ -150,7 +150,7 @@ export async function teardownDaemonSessionForShutdown(params: {
     beforeDelete,
     afterSuccessfulTeardown,
   } = params;
-  const sessionName = sessionStore.resolveStoredSessionName(session);
+  const session = sessionStore.resolveCurrent(ref) ?? ref.session;
   const timeoutMs = resolveDaemonSessionTeardownTimeoutMs(session);
   // The ownership-fenced app-log side effect must settle while this process
   // still owns the daemon lock. It is intentionally outside the generic
@@ -160,9 +160,9 @@ export async function teardownDaemonSessionForShutdown(params: {
     session,
     stderr,
     resource: 'app-log',
-    teardown: async () => await stopSessionAppLog({ session, sessionName, sessionStore }),
+    teardown: async () => await stopSessionAppLog({ ref, sessionStore }),
   });
-  const sessionAfterAppLog = sessionStore.get(sessionName) ?? session;
+  const sessionAfterAppLog = sessionStore.resolveCurrent(ref) ?? session;
   const teardown = (async () => {
     const genericTeardownSucceeded = await settleDaemonTeardownStep({
       session,
@@ -171,8 +171,7 @@ export async function teardownDaemonSessionForShutdown(params: {
       teardown: async () =>
         await teardownSessionResources({
           appLog: 'already-settled',
-          session: sessionAfterAppLog,
-          sessionName,
+          ref,
           sessionStore,
           stateDir,
           platformCleanup: platformResourceCleanup,
@@ -202,7 +201,7 @@ export async function teardownDaemonSessionForShutdown(params: {
   sessionStore.finalizeRepairTeardown(session);
   await beforeDelete?.(session);
   if (teardownSucceeded) await afterSuccessfulTeardown?.(session);
-  sessionStore.delete(sessionName);
+  sessionStore.retire(ref);
 }
 
 export type DaemonRuntimeOptions = {
@@ -457,10 +456,11 @@ export async function startDaemonRuntime(
 
   const shutdownClaimLedger = createDaemonShutdownClaimLedger();
 
-  const teardownDaemonSession = async (session: SessionState): Promise<void> => {
+  const teardownDaemonSession = async (ref: SessionRef): Promise<void> => {
+    const session = sessionStore.resolveCurrent(ref) ?? ref.session;
     try {
       await teardownDaemonSessionForShutdown({
-        session,
+        ref,
         sessionStore,
         stderr,
         finalizeApplicationLifecycle: async (sessionToFinalize) =>
@@ -487,7 +487,7 @@ export async function startDaemonRuntime(
   };
 
   const teardownDaemonSessions = async (): Promise<void> => {
-    const sessionsToStop = sessionStore.toArray();
+    const sessionsToStop = sessionStore.listRefs();
     await Promise.all(sessionsToStop.map(teardownDaemonSession));
   };
 
@@ -503,10 +503,11 @@ export async function startDaemonRuntime(
     session: SessionState,
     sessionName: string,
   ): Promise<void> => {
+    const ref = sessionStore.lookup(sessionName);
+    if (!ref) return;
     await teardownSessionResources({
       appLog: 'run',
-      session,
-      sessionName,
+      ref,
       sessionStore,
       stateDir: baseDir,
       platformCleanup: platformResourceCleanup,
@@ -754,6 +755,7 @@ export async function startDaemonRuntime(
     sessionIdleExpiry.cancel();
     if (shuttingDown) return;
     shuttingDown = true;
+    sessionStore.closeAdmission();
     stopMetadataLossWatch();
     if (shutdownOptions.cause) {
       await emitFatalDiagnostic(shutdownOptions.cause);

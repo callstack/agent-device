@@ -12,9 +12,8 @@ export type {
   AdoptStartedDurableCaptureParams,
   DurableCaptureFinishIntent,
   DurableCaptureRecordDefinition,
-  DurableCaptureResourceDefinition,
   DurableCaptureSessionResource,
-  DurableCaptureSessionStore,
+  DurableCaptureSessionBinding,
 } from './definition.ts';
 export type { FinishRecoveredDurableCaptureParams } from './finish-recovered.ts';
 export type {

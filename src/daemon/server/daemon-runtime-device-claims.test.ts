@@ -47,7 +47,7 @@ test('finalizes provider state but does not clear a claim after shutdown teardow
   const afterSuccessfulTeardown = vi.fn(async () => {});
 
   await teardownDaemonSessionForShutdown({
-    session,
+    ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stderr: { write: () => {} },
     beforeDelete,
@@ -67,7 +67,7 @@ test('finalizes provider state but does not clear a claim after shutdown teardow
   const afterSuccessfulTeardown = vi.fn(async () => {});
 
   const teardown = teardownDaemonSessionForShutdown({
-    session,
+    ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stderr: { write: () => {} },
     beforeDelete,

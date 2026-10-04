@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionRef, SessionRuntimeHints, SessionState } from './session-state.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
@@ -42,9 +43,12 @@ import {
 } from '@agent-device/session-journal/session-event-log';
 
 const REPAIR_TOMBSTONE_TTL_MS = 60 * 60_000;
+type SessionEntry = { current: SessionState };
+type SessionPatch = Partial<SessionState> | ((current: SessionState) => Partial<SessionState>);
 
 export class SessionStore {
-  private readonly sessions = new Map<string, SessionState>();
+  private readonly sessions = new Map<string, SessionEntry>();
+  private acceptingSessions = true;
   private readonly runtimeHints = new Map<string, SessionRuntimeHints>();
   private readonly sessionsDir: string;
   private readonly scriptWriter: SessionScriptWriter;
@@ -62,7 +66,80 @@ export class SessionStore {
    * nothing here can check the invariant a given field carries.
    */
   get(name: string): SessionState | undefined {
-    return this.sessions.get(name);
+    return this.sessions.get(name)?.current;
+  }
+
+  closeAdmission(): void {
+    this.acceptingSessions = false;
+  }
+
+  assertAdmissionOpen(address: string): void {
+    if (!this.acceptingSessions) {
+      throw new AppError('COMMAND_FAILED', 'Daemon is shutting down', {
+        reason: 'daemon_shutting_down',
+        session: address,
+      });
+    }
+  }
+
+  assertPublishable(address: string): void {
+    this.assertAdmissionOpen(address);
+    if (this.sessions.has(address)) {
+      throw new AppError('COMMAND_FAILED', 'Session address is already occupied', {
+        reason: 'session_address_occupied',
+        session: address,
+      });
+    }
+  }
+
+  publish(address: string, session: SessionState): SessionRef {
+    this.assertPublishable(address);
+    const entry = { current: session };
+    this.sessions.set(address, entry);
+    this.clearIdleExpiryTombstone(address);
+    return this.captureRef(address, entry);
+  }
+
+  resolveCurrent(ref: SessionRef): SessionState | undefined {
+    const entry = this.sessions.get(ref.address);
+    return entry === ref.lifetime ? entry.current : undefined;
+  }
+
+  refresh(ref: SessionRef): SessionRef {
+    const entry = this.sessions.get(ref.address);
+    return entry === ref.lifetime ? this.captureRef(ref.address, entry) : ref;
+  }
+
+  requireCurrent(ref: SessionRef): SessionState {
+    const session = this.resolveCurrent(ref);
+    if (!session) {
+      throw new AppError('COMMAND_FAILED', 'Session lifetime has ended', {
+        reason: 'session_lifetime_ended',
+        session: ref.address,
+        hint: 'Open a new session before retrying the command.',
+      });
+    }
+    return session;
+  }
+
+  /** Patch callbacks are synchronous and must not call back into the store. */
+  update(ref: SessionRef, patch: SessionPatch): SessionState {
+    const current = this.requireCurrent(ref);
+    const entry = this.sessions.get(ref.address)!;
+    const changes = typeof patch === 'function' ? patch(current) : patch;
+    const next = { ...current, ...changes };
+    entry.current = next;
+    return next;
+  }
+
+  retire(ref: SessionRef): boolean {
+    if (!this.resolveCurrent(ref)) return false;
+    this.runtimeHints.delete(ref.address);
+    return this.sessions.delete(ref.address);
+  }
+
+  private captureRef(address: string, entry: SessionEntry): SessionRef {
+    return Object.freeze({ address, session: entry.current, lifetime: entry });
   }
 
   /**
@@ -76,9 +153,9 @@ export class SessionStore {
     // every way a record arrives — `open`'s provisional record, a record-only `record` session — and
     // cannot be forgotten by a future insertion path. A replacing `open` on a live session takes the
     // other branch and keeps whatever marker that session will earn for itself.
-    const occupying = this.sessions.has(name);
-    this.sessions.set(name, session);
-    if (!occupying) this.clearIdleExpiryTombstone(name);
+    const entry = this.sessions.get(name);
+    if (entry) entry.current = session;
+    else this.publish(name, session);
   }
 
   delete(name: string): boolean {
@@ -86,12 +163,12 @@ export class SessionStore {
     return this.sessions.delete(name);
   }
 
-  values(): IterableIterator<SessionState> {
-    return this.sessions.values();
+  *values(): IterableIterator<SessionState> {
+    for (const entry of this.sessions.values()) yield entry.current;
   }
 
   toArray(): SessionState[] {
-    return Array.from(this.sessions.values());
+    return Array.from(this.values());
   }
 
   /**
@@ -100,21 +177,21 @@ export class SessionStore {
    * falls back to `SessionState.name` (#2031/#1394).
    */
   lookup(address: string): SessionRef | undefined {
-    const session = this.sessions.get(address);
-    return session ? { address, session } : undefined;
+    const entry = this.sessions.get(address);
+    return entry ? this.captureRef(address, entry) : undefined;
   }
 
   /** The session currently bound to `deviceId`, with its address, or `undefined` if none is. */
   findByDevice(deviceId: string): SessionRef | undefined {
-    for (const [address, session] of this.sessions) {
-      if (session.device.id === deviceId) return { address, session };
+    for (const [address, entry] of this.sessions) {
+      if (entry.current.device.id === deviceId) return this.captureRef(address, entry);
     }
     return undefined;
   }
 
   /** Every live session with its address, for surfaces that must report what `--session` accepts. */
   listRefs(): SessionRef[] {
-    return Array.from(this.sessions, ([address, session]) => ({ address, session }));
+    return Array.from(this.sessions, ([address, entry]) => this.captureRef(address, entry));
   }
 
   getRuntimeHints(name: string): SessionRuntimeHints | undefined {
@@ -298,7 +375,7 @@ export class SessionStore {
    * never built, and its own `createdAt` already starts that session's deadline clock.
    */
   noteSessionActivity(address: string, atMs: number = Date.now()): void {
-    const session = this.sessions.get(address);
+    const session = this.get(address);
     if (!session) return;
     session.lastActivityAtMs = atMs;
   }
@@ -415,8 +492,8 @@ export class SessionStore {
    * public session name, while the map key may include cwd/tenant isolation.
    */
   resolveStoredSessionName(session: SessionState): string {
-    for (const [name, value] of this.sessions) {
-      if (value === session) return name;
+    for (const [name, entry] of this.sessions) {
+      if (entry.current === session) return name;
     }
     return session.name;
   }

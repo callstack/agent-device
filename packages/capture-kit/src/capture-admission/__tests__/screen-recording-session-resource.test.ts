@@ -1,3 +1,4 @@
+import { makeCaptureSessionBinding } from '../../durable-capture/session-binding.fixtures.ts';
 import { expect, test, vi } from 'vitest';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
@@ -35,6 +36,10 @@ test('screen recording persists durable truth before adopting only handle and en
   const sessionName = 'recording';
   const session: TestRecordingSession = { name: sessionName, device };
   sessionStore.set(sessionName, session);
+  const binding = makeCaptureSessionBinding(sessionStore, sessionName, {
+    read: (session) => session.screenRecording,
+    replace: (session, screenRecording) => ({ ...session, screenRecording }),
+  });
   const owner = localRuntimeOwner('android');
   const fence = { token: 'recording-fence', generation: 1 } as const;
   const finish = vi.fn(async () => ({
@@ -79,9 +84,7 @@ test('screen recording persists durable truth before adopting only handle and en
 
   await adoptStartedScreenRecording({
     admissionLedger: createScreenRecordingAdmissionLedger(),
-    session,
-    sessionName,
-    sessionStore,
+    binding,
     device: session.device,
     owner,
     fence,
@@ -101,9 +104,10 @@ test('screen recording persists durable truth before adopting only handle and en
 
   const active = sessionStore.get(sessionName);
   if (!active) throw new Error('Expected screen-recording session');
-  await expect(
-    finishLiveScreenRecording({ intent: 'capture', session: active, sessionName, sessionStore }),
-  ).resolves.toMatchObject({ backend: 'android', outPath: '/tmp/recording.mp4' });
+  await expect(finishLiveScreenRecording({ intent: 'capture', binding })).resolves.toMatchObject({
+    backend: 'android',
+    outPath: '/tmp/recording.mp4',
+  });
   expect(finish).toHaveBeenCalledOnce();
   expect(sessionStore.get(sessionName)?.screenRecording).toBeUndefined();
 });
@@ -115,6 +119,10 @@ test('a failed recording finish keeps the record open and never disposes the rec
   const sessionName = 'recording';
   const session: TestRecordingSession = { name: sessionName, device };
   sessionStore.set(sessionName, session);
+  const binding = makeCaptureSessionBinding(sessionStore, sessionName, {
+    read: (session) => session.screenRecording,
+    replace: (session, screenRecording) => ({ ...session, screenRecording }),
+  });
   const owner = localRuntimeOwner('android');
   const fence = { token: 'recording-fence', generation: 1 } as const;
   const finishError = new Error('failed to retrieve playable Android recording');
@@ -150,9 +158,7 @@ test('a failed recording finish keeps the record open and never disposes the rec
   });
   await adoptStartedScreenRecording({
     admissionLedger: createScreenRecordingAdmissionLedger(),
-    session,
-    sessionName,
-    sessionStore,
+    binding,
     device: session.device,
     owner,
     fence,
@@ -163,9 +169,7 @@ test('a failed recording finish keeps the record open and never disposes the rec
 
   const active = sessionStore.get(sessionName);
   if (!active) throw new Error('Expected screen-recording session');
-  await expect(
-    finishLiveScreenRecording({ intent: 'capture', session: active, sessionName, sessionStore }),
-  ).rejects.toBe(finishError);
+  await expect(finishLiveScreenRecording({ intent: 'capture', binding })).rejects.toBe(finishError);
 
   expect(forceCleanup).not.toHaveBeenCalled();
   expect(sessionStore.get(sessionName)?.screenRecording?.handle).toBe(handle);
@@ -182,6 +186,10 @@ test('a record stop that fails after collecting resumes through the fence withou
   const sessionName = 'recording';
   const session: TestRecordingSession = { name: sessionName, device };
   sessionStore.set(sessionName, session);
+  const binding = makeCaptureSessionBinding(sessionStore, sessionName, {
+    read: (session) => session.screenRecording,
+    replace: (session, screenRecording) => ({ ...session, screenRecording }),
+  });
   const owner = localRuntimeOwner('android');
   const fence = { token: 'recording-fence', generation: 1 } as const;
   const signals = vi.fn(async () => ({ observation: { recorder: 'confirmed' as const } }));
@@ -216,9 +224,7 @@ test('a record stop that fails after collecting resumes through the fence withou
   );
   await adoptStartedScreenRecording({
     admissionLedger: createScreenRecordingAdmissionLedger(),
-    session,
-    sessionName,
-    sessionStore,
+    binding,
     device: session.device,
     owner,
     fence,
@@ -239,9 +245,7 @@ test('a record stop that fails after collecting resumes through the fence withou
     if (!active) throw new Error('Expected screen-recording session');
     return finishLiveScreenRecording({
       intent: 'capture',
-      session: active,
-      sessionName,
-      sessionStore,
+      binding,
     });
   };
 
