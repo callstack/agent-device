@@ -305,6 +305,10 @@
     "./touch-reference-frame": {
       "types": "./src/snapshot/touch-reference-frame.ts",
       "default": "./src/snapshot/touch-reference-frame.ts"
+    },
+    "./durable-capture/session-binding": {
+      "types": "./src/durable-capture/session-binding.ts",
+      "default": "./src/durable-capture/session-binding.ts"
     }
   },
   "devDependencies": {

@@ -1,4 +1,4 @@
-import { createDurableCaptureSessionBinding } from '@agent-device/capture-kit/durable-capture';
+import { createDurableCaptureSessionBinding } from '@agent-device/capture-kit/durable-capture/session-binding';
 import type {
   DurableCaptureSessionBinding,
   DurableCaptureSessionResource,
