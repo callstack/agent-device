@@ -18,6 +18,7 @@ import {
   snapshotRuntimeFixture,
 } from '../../__tests__/snapshot-runtime-fixture.ts';
 import {
+  androidDevice,
   iosSimulatorDevice,
   macOsDevice,
   makeSession,
@@ -374,5 +375,250 @@ test('settings on macOS rejects wifi before dispatch with explicit subset guidan
     expect(response.error.message).toMatch(
       /wifi\|airplane\|location\|animations\|text-size remain unsupported on macOS/i,
     );
+  }
+});
+
+// #3179: an app-scoped change can name an app the session never opened. The app rides the request
+// input; the owner receives it as the resolved app id whether or not a session is bound.
+test('settings permission grant targets an explicit app with no session app bound', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-permission-explicit-app';
+  sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
+
+  const response = await handleSnapshotCommands({
+    req: snapshotRequest(sessionName, 'settings', {
+      positionals: ['permission', 'grant', 'camera'],
+      input: { app: 'com.example.app' },
+    }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(fixtureSettingsMutations.at(-1)).toMatchObject({
+    setting: 'permission',
+    state: 'grant',
+    appBundleId: 'com.example.app',
+    options: { permissionTarget: 'camera' },
+  });
+});
+
+test('settings permission grant keeps the session app when no app is named', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-permission-session-app';
+  sessionStore.publish(
+    sessionName,
+    makeSession(sessionName, iosSimulatorDevice, {
+      appBundleId: 'com.session.app',
+    }),
+  );
+
+  const response = await handleSnapshotCommands({
+    req: snapshotRequest(sessionName, 'settings', {
+      positionals: ['permission', 'grant', 'camera'],
+    }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(fixtureSettingsMutations.at(-1)).toMatchObject({ appBundleId: 'com.session.app' });
+});
+
+test('settings permission grant prefers an explicit app over the session app', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-permission-explicit-over-session';
+  sessionStore.publish(
+    sessionName,
+    makeSession(sessionName, iosSimulatorDevice, {
+      appBundleId: 'com.session.app',
+    }),
+  );
+
+  const response = await handleSnapshotCommands({
+    req: snapshotRequest(sessionName, 'settings', {
+      positionals: ['permission', 'grant', 'camera'],
+      input: { app: 'com.other.app' },
+    }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(fixtureSettingsMutations.at(-1)).toMatchObject({ appBundleId: 'com.other.app' });
+});
+
+test('settings location on targets an explicit app on an iOS simulator', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-location-explicit-app';
+  sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
+
+  const response = await handleSnapshotCommands({
+    req: snapshotRequest(sessionName, 'settings', {
+      positionals: ['location', 'on'],
+      input: { app: 'com.example.app' },
+    }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(fixtureSettingsMutations.at(-1)).toMatchObject({
+    setting: 'location',
+    state: 'on',
+    appBundleId: 'com.example.app',
+  });
+});
+
+test('settings Android permission grant targets an explicit app with no session app', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-permission-explicit-app';
+  sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
+
+  const response = await handleSnapshotCommands({
+    req: snapshotRequest(sessionName, 'settings', {
+      positionals: ['permission', 'grant', 'camera'],
+      input: { app: 'com.example.app' },
+    }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(fixtureSettingsMutations.at(-1)).toMatchObject({
+    setting: 'permission',
+    state: 'grant',
+    appBundleId: 'com.example.app',
+  });
+});
+
+// Android's on/off location writes the device-wide location_mode, so a named app names nothing it
+// can grant: the refusal lands before the owner is reached and before the session ref frame is spent.
+test('settings Android location on refuses a named app before reaching the owner', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-location-app-refused';
+  sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
+
+  const response = await handleSnapshotCommands({
+    req: snapshotRequest(sessionName, 'settings', {
+      positionals: ['location', 'on'],
+      input: { app: 'com.example.app' },
+    }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(false);
+  expect(fixtureSettingsMutations).toHaveLength(0);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('INVALID_ARGS');
+    expect(response.error.message).toMatch(/location on applies to the target itself/);
+    expect(response.error.details?.reason).toBe('setting_app_not_consumed');
+    expect(response.error.details?.dispatched).toBe('no');
+  }
+});
+
+// A boolean alias is the same toggle to the owner's parser, so it must carry the app the same way:
+// classifying `1` as unknown used to grant location to the session app while reporting success.
+test('settings iOS location 1 targets an explicit app over the session app', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-location-alias-explicit-app';
+  sessionStore.publish(
+    sessionName,
+    makeSession(sessionName, iosSimulatorDevice, {
+      appBundleId: 'com.session.app',
+    }),
+  );
+
+  const response = await handleSnapshotCommands({
+    req: snapshotRequest(sessionName, 'settings', {
+      positionals: ['location', '1'],
+      input: { app: 'com.example.app' },
+    }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(fixtureSettingsMutations.at(-1)).toMatchObject({
+    setting: 'location',
+    state: '1',
+    appBundleId: 'com.example.app',
+  });
+});
+
+test('settings Android location true refuses a named app before reaching the owner', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-location-alias-refused';
+  sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
+
+  const response = await handleSnapshotCommands({
+    req: snapshotRequest(sessionName, 'settings', {
+      positionals: ['location', 'true'],
+      input: { app: 'com.example.app' },
+    }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(false);
+  expect(fixtureSettingsMutations).toHaveLength(0);
+  if (response && !response.ok) {
+    expect(response.error.details?.reason).toBe('setting_app_not_consumed');
+    expect(response.error.details?.app).toBe('com.example.app');
+  }
+});
+
+test('settings Android location 0 refuses a named app before reaching the owner', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-location-zero-refused';
+  sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
+
+  const response = await handleSnapshotCommands({
+    req: snapshotRequest(sessionName, 'settings', {
+      positionals: ['location', '0'],
+      input: { app: 'com.example.app' },
+    }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(false);
+  expect(fixtureSettingsMutations).toHaveLength(0);
+  if (response && !response.ok) {
+    expect(response.error.details?.reason).toBe('setting_app_not_consumed');
+  }
+});
+
+// A macOS permission is a host-level TCC grant, so naming an app is refused rather than dropped.
+test('settings macOS permission grant refuses a named app before reaching the owner', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'macos-permission-app-refused';
+  sessionStore.publish(sessionName, makeSession(sessionName, macOsDevice));
+
+  const response = await handleSnapshotCommands({
+    req: snapshotRequest(sessionName, 'settings', {
+      positionals: ['permission', 'grant', 'screen-recording'],
+      input: { app: 'com.example.app' },
+    }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(false);
+  expect(fixtureSettingsMutations).toHaveLength(0);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('INVALID_ARGS');
+    expect(response.error.details?.reason).toBe('setting_app_not_consumed');
   }
 });
