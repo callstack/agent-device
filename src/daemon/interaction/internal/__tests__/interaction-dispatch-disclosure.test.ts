@@ -270,6 +270,7 @@ async function refRefusedAfterAndroidRecovery(command: 'press' | 'gesture'): Pro
     readSnapshotNodes: async () => [
       {
         index: 0,
+        ref: 'e0',
         type: 'Button',
         label: 'Close app',
         rect: { x: 10, y: 20, width: 100, height: 40 },
