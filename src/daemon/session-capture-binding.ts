@@ -85,3 +85,12 @@ export function bindSessionScreenRecording(sessionStore: SessionStore, ref: Sess
     },
   });
 }
+
+export function publishRecordOnlyScreenRecording(
+  sessionStore: SessionStore,
+  address: string,
+  draft: SessionState,
+  screenRecording: NonNullable<SessionState['screenRecording']>,
+): SessionRef {
+  return sessionStore.publish(address, { ...draft, screenRecording });
+}
