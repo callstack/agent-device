@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { AppLogRuntimeOperations } from '@agent-device/contracts/app-log-runtime';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
@@ -470,4 +471,35 @@ function createRuntimeHarness(options: { inspectAvailable?: boolean } = {}) {
 const unavailableRecording = Object.freeze({
   available: false as const,
   reason: 'owner-capability-missing' as const,
+});
+
+test('logs clear --restart leaves successor files intact after finish outlives its lifetime', async () => {
+  const { sessionStore, sessionName } = openSession();
+  await expectStarted(await runLogs(sessionStore, sessionName, ['start'], {}, runtime.bindDevice));
+  const ref = sessionStore.lookup(sessionName)!;
+  const logPath = sessionStore.resolveAppLogPath(sessionName);
+  runtime.finish.mockImplementationOnce(async () => {
+    sessionStore.retire(ref);
+    sessionStore.publish(sessionName, { ...ref.session, appLog: undefined });
+    fs.writeFileSync(logPath, 'successor log');
+    fs.writeFileSync(`${logPath}.1`, 'successor rotated log');
+    return {
+      status: 'completed',
+      result: { backend: 'ios-simulator', outputPath: logPath, completedAt: Date.now() },
+    };
+  });
+  const response = await runLogs(
+    sessionStore,
+    sessionName,
+    ['clear'],
+    { restart: true },
+    runtime.bindDevice,
+  );
+  expect(response).toMatchObject({
+    ok: false,
+    error: { details: { reason: 'session_lifetime_ended' } },
+  });
+  expect(fs.readFileSync(logPath, 'utf8')).toBe('successor log');
+  expect(fs.readFileSync(`${logPath}.1`, 'utf8')).toBe('successor rotated log');
+  expect(runtime.start).toHaveBeenCalledOnce();
 });

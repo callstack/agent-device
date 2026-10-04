@@ -11,7 +11,7 @@ import {
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { appendAppLogMarker, clearAppLogFiles, getAppLogPathMetadata } from '../../app-log.ts';
+import { appendAppLogMarker, getAppLogPathMetadata } from '../../app-log.ts';
 import type { AppLogAdmissionLedger } from '../../app-log-admission-ledger.ts';
 import { type AudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { type PerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
@@ -19,7 +19,7 @@ import { appLogResourceStore } from '../../app-log-resource-store.ts';
 import {
   adoptStartedSessionAppLog,
   bindSessionAppLog,
-  clearSessionAppLogFailure,
+  clearStoppedSessionAppLog,
   finishSessionAppLog,
   inspectSessionAppLog,
   recordSessionAppLogFailure,
@@ -299,17 +299,7 @@ function handleLogsMark(
 }
 
 function handleLogsClear(params: LogsHandlerParams): DaemonResponse {
-  const { session, sessionName, sessionStore } = params;
-  if (session.appLog) {
-    return errorResponse(
-      'INVALID_ARGS',
-      'logs clear requires logs to be stopped first; run logs stop',
-    );
-  }
-  const logPath = sessionStore.resolveAppLogPath(sessionName);
-  const cleared = clearAppLogFiles(logPath);
-  clearSessionAppLogFailure({ ref: params.ref, sessionStore });
-  return { ok: true, data: cleared };
+  return { ok: true, data: clearStoppedSessionAppLog(params) };
 }
 
 async function handleLogsClearRestart(
@@ -318,7 +308,7 @@ async function handleLogsClearRestart(
   owner: RuntimeOwnerRef,
   start: AppLogRuntimeOperations['appLogStart'],
 ): Promise<DaemonResponse> {
-  const { session, sessionName, sessionStore } = params;
+  const { session, sessionStore } = params;
   if (session.appLog) {
     // The stream is replaced and its files cleared behind it: nobody captures that completion, and
     // an open record left here would refuse the start this path exists to serve.
@@ -328,8 +318,7 @@ async function handleLogsClearRestart(
       sessionStore,
     });
   }
-  const logPath = sessionStore.resolveAppLogPath(sessionName);
-  const cleared = clearAppLogFiles(logPath);
+  const cleared = clearStoppedSessionAppLog(params);
   const started = await startSessionAppLog(params, appBundleId, start, owner);
   return started.ok ? { ok: true, data: { ...cleared, restarted: true } } : started;
 }

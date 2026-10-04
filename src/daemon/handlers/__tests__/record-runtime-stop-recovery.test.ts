@@ -205,3 +205,19 @@ function writeRecording(prefix: string): string {
   fs.writeFileSync(outPath, 'mp4');
   return outPath;
 }
+
+test('live record stop writes its action under the captured scoped address after rebuilding the record', async () => {
+  const harness = makeRecordRuntimeHarness('record-runtime-scoped-stop-', {
+    sessionName: 'cwd:0123456789abcdef:default',
+  });
+  harness.session.name = 'default';
+  await expect(harness.run(['start', 'capture.mp4'])).resolves.toMatchObject({ ok: true });
+  await expect(harness.run(['stop'])).resolves.toMatchObject({ ok: true });
+  await harness.sessionStore.flushEvents();
+  expect(
+    harness.sessionStore
+      .readEvents(harness.sessionName)
+      .events.filter((event) => event.kind === 'action.recorded'),
+  ).toHaveLength(2);
+  expect(harness.sessionStore.readEvents('default').events).toEqual([]);
+});

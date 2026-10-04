@@ -501,6 +501,7 @@ export async function startDaemonRuntime(
   };
 
   const teardownDaemonSessions = async (): Promise<void> => {
+    sessionStore.closeAdmission();
     const sessionsToStop = sessionStore.listRefs();
     await Promise.all(sessionsToStop.map(teardownDaemonSession));
   };
@@ -770,7 +771,6 @@ export async function startDaemonRuntime(
     sessionIdleExpiry.cancel();
     if (shuttingDown) return;
     shuttingDown = true;
-    sessionStore.closeAdmission();
     stopMetadataLossWatch();
     if (shutdownOptions.cause) {
       await emitFatalDiagnostic(shutdownOptions.cause);

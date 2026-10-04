@@ -7,7 +7,7 @@ import type {
   RuntimeOwnerRef,
 } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { normalizeError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { AppLogAdmissionLedger } from './app-log-admission-ledger.ts';
 import {
   createDurableCaptureResource,
@@ -16,6 +16,7 @@ import {
 import { appLogResourceStore } from './app-log-resource-store.ts';
 import type { SessionStore } from './session-store.ts';
 import type { SessionRef, SessionState } from './session-state.ts';
+import { clearAppLogFiles } from './app-log.ts';
 import { bindSessionCapture } from './session-capture-binding.ts';
 
 export type AppLogSessionSnapshot = Readonly<{
@@ -144,4 +145,17 @@ export function bindSessionAppLog(sessionStore: SessionStore, ref: SessionRef) {
       sessionStore.update(ref, { appLog, appLogFailure: undefined });
     },
   });
+}
+
+export function clearStoppedSessionAppLog(params: { ref: SessionRef; sessionStore: SessionStore }) {
+  const session = params.sessionStore.requireCurrent(params.ref);
+  if (session.appLog) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'logs clear requires logs to be stopped first; run logs stop',
+    );
+  }
+  const cleared = clearAppLogFiles(params.sessionStore.resolveAppLogPath(params.ref.address));
+  clearSessionAppLogFailure(params);
+  return cleared;
 }

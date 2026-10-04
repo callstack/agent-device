@@ -260,14 +260,20 @@ async function stopRecording(
   const completion = stopped.completion;
   const response = buildRecordingStopResponse(completion);
   if (stopped.recordsSessionAction) {
-    recordSessionAction(params.sessionStore, session, params.req, params.req.command, {
-      action: 'stop',
-      outPath: completion.outPath,
-      ...(completion.clientOutPath
-        ? { requestedFileName: path.basename(completion.clientOutPath) }
-        : {}),
-      showTouches: completion.showTouches,
-    });
+    recordSessionAction(
+      params.sessionStore,
+      ref ? params.sessionStore.resolveCurrent(ref) : undefined,
+      params.req,
+      params.req.command,
+      {
+        action: 'stop',
+        outPath: completion.outPath,
+        ...(completion.clientOutPath
+          ? { requestedFileName: path.basename(completion.clientOutPath) }
+          : {}),
+        showTouches: completion.showTouches,
+      },
+    );
   }
   if (session.recordOnlySession && ref) params.sessionStore.retire(ref);
   return response;

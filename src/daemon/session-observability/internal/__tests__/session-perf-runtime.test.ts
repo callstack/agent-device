@@ -306,3 +306,24 @@ function createPerfRuntime(
   };
   return { inspectFacts, bindDevice, uses };
 }
+
+test('a perf result does not record into a successor occupying the same address', async () => {
+  const sessionStore = makeStore();
+  const ref = sessionStore.lookup('android')!;
+  const perfFrames = vi.fn(async () => {
+    sessionStore.retire(ref);
+    sessionStore.publish('android', makeAndroidSession('successor'));
+    return { metric: { available: true, fps: 59.8 }, sampling: { method: 'fixture' } };
+  });
+  const runtime = createPerfRuntime({ perfFrames });
+  const response = await handleSessionObservabilityCommands({
+    req: { token: 't', session: 'android', command: 'perf', positionals: ['frames'] },
+    sessionName: 'android',
+    sessionStore,
+    inspectFacts: runtime.inspectFacts,
+    bindDevice: runtime.bindDevice,
+    perfCaptureAdmissionLedger: createPerfCaptureAdmissionLedger(),
+  });
+  assert.equal(response?.ok, true, JSON.stringify(response));
+  assert.deepEqual(sessionStore.get('android')!.actions, []);
+});
