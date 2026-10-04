@@ -51,6 +51,7 @@ test('session resources are constructed only by their durable domain owners', ()
       'src/daemon/handlers/planted.ts: session audioProbe record constructed outside its owner',
       'src/daemon/handlers/planted.ts: session perfCapture record constructed outside its owner',
       'src/daemon/handlers/planted.ts: session screenRecording record constructed outside its owner',
+      'src/daemon/screen-recording-session-binding.ts: session screenRecording record constructed outside its owner',
       'packages/capture-kit/src/capture-admission/audio-probe-session-resource.ts: session audioProbe record constructed outside its owner',
       'packages/capture-kit/src/capture-admission/perf-capture-session-resource.ts: session perfCapture record constructed outside its owner',
     ],

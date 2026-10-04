@@ -30,7 +30,6 @@ const RESOURCE_OWNERS: Readonly<Record<string, ReadonlySet<string>>> = {
   audioProbe: new Set(['src/daemon/session-capture-binding.ts', 'src/daemon/session-state.ts']),
   screenRecording: new Set([
     'src/daemon/session-capture-binding.ts',
-    'src/daemon/screen-recording-session-binding.ts',
     'src/daemon/session-state.ts',
   ]),
   perfCapture: new Set(['src/daemon/session-capture-binding.ts', 'src/daemon/session-state.ts']),
