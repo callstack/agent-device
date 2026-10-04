@@ -247,16 +247,20 @@ export async function readRemoteDaemonHealth(
   return health;
 }
 
+function daemonHealthEndpoint(info: DaemonInfo): string | null {
+  return info.baseUrl
+    ? buildDaemonHttpUrl(info.baseUrl, 'health')
+    : info.httpPort
+      ? `http://127.0.0.1:${info.httpPort}/health`
+      : null;
+}
+
 async function readDaemonHttpHealth(
   info: DaemonInfo,
   probeTimeoutMs?: number,
   callerSignal?: AbortSignal,
 ): Promise<RemoteDaemonHealth> {
-  const endpoint = info.baseUrl
-    ? buildDaemonHttpUrl(info.baseUrl, 'health')
-    : info.httpPort
-      ? `http://127.0.0.1:${info.httpPort}/health`
-      : null;
+  const endpoint = daemonHealthEndpoint(info);
   if (!endpoint) return { reachable: false };
   const url = new URL(endpoint);
   const timeoutMs = Math.min(
@@ -273,16 +277,10 @@ async function readDaemonHttpHealth(
       signal.addEventListener('abort', () => resolve(null), { once: true });
     }),
   ]);
-  if (!transport || signal.aborted || performance.now() >= deadline)
-    return healthProbeExpired(timeoutSignal, deadline)
-      ? { reachable: false, timedOut: true }
-      : { reachable: false };
+  const unreachable = (): RemoteDaemonHealth => unreachableDaemonHealth(timeoutSignal, deadline);
+  if (!transport || healthProbeExpired(signal, deadline)) return unreachable();
   return await new Promise((resolve) => {
     const headers = info.baseUrl ? buildDaemonHttpAuthHeaders(info.token) : {};
-    const unreachable = (): RemoteDaemonHealth =>
-      healthProbeExpired(timeoutSignal, deadline)
-        ? { reachable: false, timedOut: true }
-        : { reachable: false };
     const req = transport.request(
       {
         protocol: url.protocol,
@@ -321,6 +319,12 @@ async function readDaemonHttpHealth(
     });
     req.end();
   });
+}
+
+function unreachableDaemonHealth(timeoutSignal: AbortSignal, deadline: number): RemoteDaemonHealth {
+  return healthProbeExpired(timeoutSignal, deadline)
+    ? { reachable: false, timedOut: true }
+    : { reachable: false };
 }
 
 function healthProbeExpired(signal: AbortSignal, deadline: number): boolean {
