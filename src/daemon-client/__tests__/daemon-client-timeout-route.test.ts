@@ -19,8 +19,9 @@
 // (the "unknown-session" case) is the common route the original bug misled.
 // A design that skips the pkill sweep based on the declared flag alone would
 // skip real cleanup in the rebound case — the dangerous direction. This test
-// proves the sweep always fires for local timeouts, and that the HINT text
-// (not the cleanup) is what carries the platform-evidence gating.
+// proves the sweep fires for every local timeout except `record` (excluded by
+// command, never by platform), and that the HINT text (not the cleanup) is
+// what carries the platform-evidence gating.
 
 import net from 'node:net';
 import http from 'node:http';
@@ -309,8 +310,9 @@ test('a refused timeout fallback preserves the timeout without an unhandled reje
   }
 });
 
-test('a local record stop timeout keeps the exporting daemon alive and names the retry', async () => {
-  mockRunCmdSync.mockReturnValue({ exitCode: 1, stdout: '', stderr: '' });
+test('a local record stop timeout leaves the exporting daemon and runner alive and names the retry', async () => {
+  // A match would terminate the runner, which is the recorder on a physical iOS device or macOS.
+  mockRunCmdSync.mockReturnValue({ exitCode: 0, stdout: '', stderr: '' });
   mockIsDaemon.mockReturnValue(true);
   const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
   const { server, port } = await startHangingSocketServer();
@@ -341,6 +343,7 @@ test('a local record stop timeout keeps the exporting daemon alive and names the
   } finally {
     server.close();
   }
+  assert.equal(mockRunCmdSync.mock.calls.length, 0);
   assert.equal(kill.mock.calls.length, 0);
   assert.equal(mockStop.mock.calls.length, 0);
 });

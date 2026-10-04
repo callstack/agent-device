@@ -56,8 +56,8 @@ export function handleRequestTimeout(
 ): AppError {
   const { info, statePaths, remote, timeoutMs, requestId, command, platform, session, action } =
     params;
-  // Cleanup eligibility stays UNCONDITIONAL for every local (non-remote)
-  // timeout, on purpose: the request's declared --platform is not
+  // Cleanup eligibility never depends on the declared platform, on purpose:
+  // the request's declared --platform is not
   // authoritative for session-bound execution. An existing session's real
   // device platform can silently override a conflicting declared selector
   // (`applyStripLockPolicy` in request-lock-policy.ts, reached via
@@ -67,7 +67,10 @@ export function handleRequestTimeout(
   // Apple-process-name-specific, so sweeping them on a non-Apple host or
   // session matches nothing and costs a few no-op subprocess spawns, never
   // a wrong skip.
-  const cleanup = remote ? { terminated: 0 } : cleanupTimedOutIosRunnerBuilds();
+  // `record` is excluded by command, which is authoritative: on a physical iOS device or macOS the
+  // runner is the recorder, and the sweep would kill the export the preserved daemon is finishing.
+  const sweepRunnerBuilds = !remote && command !== PUBLIC_COMMANDS.record;
+  const cleanup = sweepRunnerBuilds ? cleanupTimedOutIosRunnerBuilds() : { terminated: 0 };
   const resetDaemon = !remote && shouldResetDaemonAfterRequestTimeout(command);
   const daemonReset = resetDaemon
     ? resetDaemonAfterTimeout(info, statePaths)
