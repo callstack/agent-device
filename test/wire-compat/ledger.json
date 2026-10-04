@@ -21,7 +21,7 @@
     "packages/kernel/src/contracts.ts#DaemonInstallSource": "sha256:fe26e202e62d997cdd3855fd96002511783a6c26a9ce27210d7c6cc084c66e4e",
     "packages/kernel/src/contracts.ts#DaemonLockPolicy": "sha256:f33d0ce7200a7d97c11e91bd2889b5d9bc7f35935a5370a29930118d091468f4",
     "packages/kernel/src/contracts.ts#DaemonRequest": "sha256:911d93245b8dc557db897c4cac051030db673711bf3af51baa8b82248d509c57",
-    "packages/kernel/src/contracts.ts#DaemonRequestMeta": "sha256:58f71959e597ceb3d6284d4b68533c6c6bbc214c069ffefa4a1a47be068e2314",
+    "packages/kernel/src/contracts.ts#DaemonRequestMeta": "sha256:668e635f88f651f6cebeb5f6505976729e598c0be35327ad00f314f151cb601c",
     "packages/kernel/src/contracts.ts#DaemonResponse": "sha256:5f6cc08ed43f40c1cf17e33dd2b6b879dda1ac383de9c6c9a2c653929c21346b",
     "packages/kernel/src/contracts.ts#DaemonResponseData": "sha256:f16e61b7f0ea8cdae82349508383af2f97a4c16c8aa21952d833094673f86afc",
     "packages/kernel/src/contracts.ts#JsonRpcId": "sha256:5a5fdff1cd85971214117d69a8278d0ecaf21a6fa3f4582155d9b3d9cad1fbd0",
@@ -121,7 +121,7 @@
     "src/daemon/server/http-server.ts#sendJson": "sha256:a1de00da3f1db8c98e69a85dfe2e11b626a4d2ce472840e3b8f519aa8a207a8f",
     "src/daemon/server/http-server.ts#toDaemonRequest": "sha256:f3861d2d4f67f66e83800616926f6bbb0595de4ecbb0072b5b78971ebeb0705b",
     "src/daemon/server/http-server.ts#toInstallFromSourceDaemonRequest": "sha256:dff093758b433043816dfc1e2e9658078875e46b887fdc530fb9380158d629f5",
-    "src/daemon/server/http-server.ts#toLeaseDaemonRequest": "sha256:bee83566f9c5da4ede12b4844fae0930d09439ba7586123609637107b61f8644",
+    "src/daemon/server/http-server.ts#toLeaseDaemonRequest": "sha256:33052eb8a6521febee30a99d6c281e72fcaf3e7515188f7c926097dfc891d948",
     "src/daemon/server/http-server.ts#toReleaseMaterializedPathsDaemonRequest": "sha256:708736ca03d6a3fc449bb408382dbd509e490de1f84ecc8771fd77d4adda0154",
     "src/daemon/server/http-server.ts#writeProgressEnvelope": "sha256:7be778b3902c72d7aa6282c16dc7106fdd64e99c0b5daf9f413ff5dd3fb044f1",
     "src/daemon/server/http-server.ts#writeRpcResponseEnvelope": "sha256:7a8155e9fcbb53485489728250a85109b5dab0d96cdd4aa8b7e7eb87a4898ddb",
@@ -196,8 +196,8 @@
   "compatibleChanges": [
     {
       "declaration": "packages/kernel/src/contracts.ts#DaemonRequestMeta",
-      "digest": "sha256:58f71959e597ceb3d6284d4b68533c6c6bbc214c069ffefa4a1a47be068e2314",
-      "rationale": "Adds the optional developerDir field: a local client's DEVELOPER_DIR, overlaid on the env of commands the daemon spawns for that request. A released daemon ignores the unknown meta key and keeps its own environment, exactly as before; a released client never sends it, so the new daemon inherits its own environment for that request. The remote HTTP surface strips it."
+      "digest": "sha256:668e635f88f651f6cebeb5f6505976729e598c0be35327ad00f314f151cb601c",
+      "rationale": "Adds the optional developerDir field: a local client's DEVELOPER_DIR, overlaid on the env of commands the daemon spawns for that request. A released daemon ignores the unknown meta key and keeps its own environment, exactly as before; a released client never sends it, so the new daemon inherits its own environment for that request. The remote HTTP surface strips it. Also adds the optional leaseRetainOnClose field, sent only on lease_allocate when the caller opts in: a released daemon ignores the unknown meta key and releases the lease on session close as before, and a released client never sends it."
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#DaemonArtifactKnownType",
@@ -226,8 +226,8 @@
     },
     {
       "declaration": "src/daemon/server/http-server.ts#toLeaseDaemonRequest",
-      "digest": "sha256:bee83566f9c5da4ede12b4844fae0930d09439ba7586123609637107b61f8644",
-      "rationale": "#2110 read the optional providerApp lease-allocation parameter into the existing flags bag; #2494 reads the full provider-allocation flag set into that same bag through the shared readLeaseAllocateProviderFlags projection, so the reconstructed req.flags handed to prepareSession match what the line transport forwards for free. Released protocol-2 clients omit these and follow the unchanged allocation path; no existing field is required or reinterpreted."
+      "digest": "sha256:33052eb8a6521febee30a99d6c281e72fcaf3e7515188f7c926097dfc891d948",
+      "rationale": "#2110 read the optional providerApp lease-allocation parameter into the existing flags bag; #2494 reads the full provider-allocation flag set into that same bag through the shared readLeaseAllocateProviderFlags projection, so the reconstructed req.flags handed to prepareSession match what the line transport forwards for free. Released protocol-2 clients omit these and follow the unchanged allocation path; no existing field is required or reinterpreted. The optional retainOnClose boolean parameter is read into meta.leaseRetainOnClose; a released daemon ignores it and keeps releasing on session close."
     },
     {
       "declaration": "packages/kernel/src/errors.ts#DaemonError",
