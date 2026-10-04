@@ -137,6 +137,7 @@ function limrunDependencies(): LimrunRuntimeDependencies {
       archiveDirectory: async () => {},
     },
     ios: {
+      settings: {} as LimrunRuntimeDependencies['ios']['settings'],
       resolveAppAlias: async (app) => app,
       readBundleAppName: async () => undefined,
     },

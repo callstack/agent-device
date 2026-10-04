@@ -133,7 +133,30 @@ export type LimrunHostAdapter = {
   downloadFile(options: LimrunFileDownload): Promise<void>;
 };
 
+/**
+ * The Apple simctl settings vocabulary a Limrun iOS session shares with a local simulator. The
+ * composition root supplies it from the Apple package, which owns the parsing, so the provider
+ * does not import a platform package.
+ */
+export type LimrunIosSettingsAdapter = {
+  privacyAction(action: 'grant' | 'deny' | 'reset'): 'grant' | 'revoke' | 'reset';
+  parsePrivacyService(
+    permissionTarget: string | undefined,
+    permissionMode: string | undefined,
+  ): string;
+  parseAppearance(stdout: string, stderr: string): 'light' | 'dark' | null;
+  isPrivacyServiceRefusal(error: unknown): boolean;
+  privacyServiceRefusedError(params: {
+    action: 'grant' | 'revoke' | 'reset';
+    target: string;
+    appBundleId: string;
+    deviceId: string;
+    cause: unknown;
+  }): AppError;
+};
+
 export type LimrunIosRuntimeAdapter = {
+  settings: LimrunIosSettingsAdapter;
   resolveAppAlias(app: string): Promise<string>;
   readBundleAppName(appPath: string): Promise<string | undefined>;
 };

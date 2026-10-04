@@ -9,13 +9,30 @@ function sessionWithClient(results: Array<{ code: number; stdout: string; stderr
       wait: async () => queue.shift() ?? { code: 0, stdout: '', stderr: '' },
     })),
     softReset: vi.fn(async (_bundleId: string, _options?: unknown) => ({})),
+    terminateApp: vi.fn(async (_bundleId: string) => {}),
   };
   const session = {
     platform: 'ios',
     instanceId: 'limrun-settings-instance',
     device: { id: 'limrun:ios:settings', platform: 'ios' },
     client,
-    dependencies: { ios: { resolveAppAlias: async (app: string) => app } },
+    dependencies: {
+      ios: {
+        resolveAppAlias: async (app: string) => app,
+        settings: {
+          privacyAction: (action: string) => (action === 'deny' ? 'revoke' : action),
+          parsePrivacyService: (target?: string, mode?: string) =>
+            target === 'photos' && mode === 'limited' ? 'photos-add' : target,
+          parseAppearance: (stdout: string) => (/dark/.test(stdout) ? 'dark' : 'light'),
+          isPrivacyServiceRefusal: (error: unknown) =>
+            error instanceof AppError && error.details?.stderr === 'refused',
+          privacyServiceRefusedError: (params: { target: string; appBundleId: string }) =>
+            new AppError('UNSUPPORTED_OPERATION', `refused ${params.target}`, {
+              appBundleId: params.appBundleId,
+            }),
+        },
+      },
+    },
   } as unknown as LimrunIosSession;
   return { interactor: createLimrunIosInteractor(session), client };
 }
@@ -83,8 +100,31 @@ test('clear-app-state soft resets the app data through Limrun', async () => {
   const result = await interactor.setSetting('clear-app-state', 'clear', 'com.example.app');
 
   expect(client.softReset).toHaveBeenCalledWith('com.example.app', { strategy: 'data' });
+  expect(client.terminateApp).toHaveBeenCalledWith('com.example.app');
+  expect(client.softReset.mock.invocationCallOrder[0]).toBeLessThan(
+    client.terminateApp.mock.invocationCallOrder[0]!,
+  );
   expect(client.simctl).not.toHaveBeenCalled();
   expect(result).toEqual({ bundleId: 'com.example.app', cleared: true });
+});
+
+test('a plain SDK failure while clearing app state becomes a typed COMMAND_FAILED', async () => {
+  const reset = sessionWithClient();
+  const cause = new Error('HTTP 500');
+  reset.client.softReset.mockRejectedValueOnce(cause);
+  const stop = sessionWithClient();
+  stop.client.terminateApp.mockRejectedValueOnce(cause);
+
+  for (const { interactor } of [reset, stop]) {
+    await expect(
+      interactor.setSetting('clear-app-state', 'clear', 'com.example.app'),
+    ).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      message: 'Limrun iOS could not clear app state.',
+      details: { setting: 'clear-app-state', bundleId: 'com.example.app' },
+      cause,
+    });
+  }
 });
 
 test('a failing simctl rejects with typed setting, exit code and stderr', async () => {
@@ -96,10 +136,8 @@ test('a failing simctl rejects with typed setting, exit code and stderr', async 
   });
 });
 
-test('a permission service the runtime refuses is unsupported, like a local simulator', async () => {
-  const { interactor } = sessionWithClient([
-    { code: 1, stdout: '', stderr: 'Failed to set access\nOperation not permitted\n' },
-  ]);
+test('a permission service the runtime refuses is mapped by the injected Apple adapter', async () => {
+  const { interactor } = sessionWithClient([{ code: 1, stdout: '', stderr: 'refused' }]);
 
   await expect(
     interactor.setSetting('permission', 'grant', 'com.example.app', {
@@ -107,26 +145,27 @@ test('a permission service the runtime refuses is unsupported, like a local simu
     }),
   ).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
-    message: expect.stringContaining('notifications'),
-    details: {
-      deviceId: 'limrun:ios:settings',
-      appBundleId: 'com.example.app',
-      hint: expect.stringContaining('`all` target'),
-    },
+    message: 'refused notifications',
+    details: { appBundleId: 'com.example.app' },
   });
 });
 
-test('settings that need an app refuse without one', async () => {
+test('settings that need an app refuse with the local simulator message', async () => {
   const { interactor, client } = sessionWithClient();
 
-  for (const [setting, state] of [
-    ['permission', 'grant'],
-    ['location', 'on'],
-    ['clear-app-state', 'clear'],
+  for (const [setting, state, message] of [
+    ['permission', 'grant', 'permission setting requires an active app in session'],
+    ['location', 'on', 'location setting requires an active app in session'],
+    ['location', 'off', 'location setting requires an active app in session'],
+    [
+      'clear-app-state',
+      'clear',
+      'settings clear-app-state requires an app id or an active app session.',
+    ],
   ] as const) {
     await expect(
       interactor.setSetting(setting, state, undefined, { permissionTarget: 'camera' }),
-    ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+    ).rejects.toMatchObject({ code: 'INVALID_ARGS', message });
   }
   expect(client.simctl).not.toHaveBeenCalled();
   expect(client.softReset).not.toHaveBeenCalled();

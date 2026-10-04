@@ -4,6 +4,13 @@ import { buildSimctlArgsForDevice } from './core/simctl.ts';
 import type { ScopedSimctlCommand } from './core/tool-provider.ts';
 
 export { buildSimctlArgsForDevice };
+export {
+  iosPrivacyAction,
+  iosPrivacyServiceRefusedError,
+  isIosPrivacyServiceRefusal,
+  parseIosAppearance,
+  parseIosPrivacyService,
+} from './core/simctl-settings.ts';
 
 /**
  * Builds the `simctl io recordVideo` argv for one Apple simulator, naming the panel the device

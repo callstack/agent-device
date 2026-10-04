@@ -2,12 +2,6 @@ import {
   APPLE_BIOMETRIC_LEAF_REFUSAL,
   getUnsupportedMacOsSettingMessage,
   parseAppearanceAction,
-  iosPrivacyAction,
-  type IosPrivacyAction,
-  iosPrivacyServiceRefusedError,
-  isIosPrivacyServiceRefusal,
-  parseIosAppearance,
-  parseIosPrivacyService,
   parsePermissionAction,
   parseSettingState,
   type ReadableSetting,
@@ -32,6 +26,14 @@ import { requireLocationCoordinates } from '@agent-device/kernel/location-coordi
 import { setMacOsAppearance } from '../os/macos/apps.ts';
 import { runMacOsPermissionAction, type MacOsPermissionTarget } from '../os/macos/helper.ts';
 import { closeIosApp } from './app-launch.ts';
+import {
+  iosPrivacyAction,
+  type IosPrivacyAction,
+  iosPrivacyServiceRefusedError,
+  isIosPrivacyServiceRefusal,
+  parseIosAppearance,
+  parseIosPrivacyService,
+} from './simctl-settings.ts';
 import { readIosTextSize, setIosTextSize } from './settings-text-size.ts';
 import { requireHandheldAppleSimulatorLeaf } from './settings-leaf.ts';
 import { resolveIosApp } from './app-resolution.ts';

@@ -314,6 +314,7 @@ function createContractFixture() {
       downloadFile: async () => undefined,
     },
     ios: {
+      settings: {} as LimrunRuntimeDependencies['ios']['settings'],
       resolveAppAlias: async (app: string) => app,
       readBundleAppName: async () => undefined,
     },

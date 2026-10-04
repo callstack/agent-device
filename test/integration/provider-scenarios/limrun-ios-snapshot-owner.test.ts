@@ -167,6 +167,7 @@ function limrunRuntimeDependencies(): LimrunRuntimeDependencies {
     android: {} as LimrunRuntimeDependencies['android'],
     host: {} as LimrunRuntimeDependencies['host'],
     ios: {
+      settings: {} as LimrunRuntimeDependencies['ios']['settings'],
       resolveAppAlias: async (app) => app,
       readBundleAppName: async () => undefined,
     },

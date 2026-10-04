@@ -1,11 +1,6 @@
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import {
-  iosPrivacyAction,
-  iosPrivacyServiceRefusedError,
-  isIosPrivacyServiceRefusal,
   parseAppearanceAction,
-  parseIosAppearance,
-  parseIosPrivacyService,
   parsePermissionAction,
   parseSettingState,
   type SettingOptions,
@@ -415,14 +410,21 @@ class LimrunIosInteractor implements Interactor {
     appId: string | undefined,
     options: SettingOptions | undefined,
   ): Promise<void> {
-    const bundleId = await this.requireAppId(appId, 'permission setting');
-    const action = iosPrivacyAction(parsePermissionAction(state));
-    const service = parseIosPrivacyService(options?.permissionTarget, options?.permissionMode);
+    const bundleId = await this.requireAppId(
+      appId,
+      'permission setting requires an active app in session',
+    );
+    const { settings } = this.session.dependencies.ios;
+    const action = settings.privacyAction(parsePermissionAction(state));
+    const service = settings.parsePrivacyService(
+      options?.permissionTarget,
+      options?.permissionMode,
+    );
     try {
       await this.simctl('permission', ['privacy', 'booted', action, service, bundleId]);
     } catch (error) {
-      if (!isIosPrivacyServiceRefusal(error)) throw error;
-      throw iosPrivacyServiceRefusedError({
+      if (!settings.isPrivacyServiceRefusal(error)) throw error;
+      throw settings.privacyServiceRefusedError({
         action,
         target: service,
         appBundleId: bundleId,
@@ -443,7 +445,10 @@ class LimrunIosInteractor implements Interactor {
       return { latitude, longitude };
     }
     const enabled = parseSettingState(state);
-    const bundleId = await this.requireAppId(appId, 'location setting');
+    const bundleId = await this.requireAppId(
+      appId,
+      'location setting requires an active app in session',
+    );
     await this.simctl('location', [
       'privacy',
       'booted',
@@ -460,25 +465,37 @@ class LimrunIosInteractor implements Interactor {
     if (state.toLowerCase() !== 'clear') {
       throw new AppError('INVALID_ARGS', 'settings clear-app-state only supports clear.');
     }
-    const bundleId = await this.requireAppId(appId, 'settings clear-app-state');
-    await this.session.client.softReset(bundleId, { strategy: 'data' });
+    const bundleId = await this.requireAppId(
+      appId,
+      'settings clear-app-state requires an app id or an active app session.',
+    );
+    try {
+      await this.session.client.softReset(bundleId, { strategy: 'data' });
+      // Limrun's reset relaunches the app. A local clear leaves it stopped, so stop it here too.
+      await this.session.client.terminateApp(bundleId);
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError(
+        'COMMAND_FAILED',
+        'Limrun iOS could not clear app state.',
+        { setting: 'clear-app-state', bundleId },
+        error,
+      );
+    }
     return { bundleId, cleared: true };
   }
 
-  private async requireAppId(appId: string | undefined, subject: string): Promise<string> {
-    if (!appId) {
-      throw new AppError(
-        'INVALID_ARGS',
-        `${subject} requires an app id or an active app session.`,
-        sessionAppRequiredDetails(),
-      );
-    }
+  private async requireAppId(appId: string | undefined, message: string): Promise<string> {
+    if (!appId) throw new AppError('INVALID_ARGS', message, sessionAppRequiredDetails());
     return await this.session.dependencies.ios.resolveAppAlias(appId);
   }
 
   private async toggledAppearance(): Promise<'light' | 'dark'> {
     const current = await this.simctl('appearance', ['ui', 'booted', 'appearance']);
-    const appearance = parseIosAppearance(current.stdout, current.stderr);
+    const appearance = this.session.dependencies.ios.settings.parseAppearance(
+      current.stdout,
+      current.stderr,
+    );
     if (!appearance) {
       throw new AppError(
         'COMMAND_FAILED',

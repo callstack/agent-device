@@ -239,3 +239,12 @@ test('the adb invocation adapters address through the platform builders', async 
   assert.deepEqual(host, androidAdbInvocation(androidAdbHostTarget(), host.command));
   assert.deepEqual(serializeAndroidAdbInvocation(host), ['disconnect', '127.0.0.1:62001']);
 });
+
+test('Limrun iOS settings come from the Apple simctl vocabulary', async () => {
+  const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
+  const { settings } = createLimrunRuntimeDependencies().ios;
+
+  assert.equal(settings.privacyAction('deny'), 'revoke');
+  assert.equal(settings.parsePrivacyService('photos', 'limited'), 'photos-add');
+  assert.equal(settings.parseAppearance('dark\n', ''), 'dark');
+});
