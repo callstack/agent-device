@@ -23,6 +23,7 @@ export type AllocateLeaseRequest = {
   deviceKey?: string;
   clientId?: string;
   ttlMs?: number;
+  retainOnClose?: boolean;
 };
 
 export type HeartbeatLeaseRequest = {
@@ -82,6 +83,7 @@ export type NormalizedAllocateLeaseRequest = {
   deviceKey?: string;
   clientId?: string;
   ttlMs?: number;
+  retainOnClose?: boolean;
 };
 
 const DEFAULT_LEASE_TTL_MS = 60_000;
@@ -204,6 +206,7 @@ export function normalizeAllocateLeaseRequest(
     tenantId: normalizeRequiredTenantId(request.tenantId),
     runId: normalizeRequiredRunId(request.runId),
     ttlMs: request.ttlMs,
+    retainOnClose: request.retainOnClose,
   };
 }
 
@@ -322,6 +325,7 @@ export function createDeviceLease(
     ...(request.leaseProvider ? { leaseProvider: request.leaseProvider } : {}),
     ...(request.deviceKey ? { deviceKey: request.deviceKey } : {}),
     ...(request.clientId ? { clientId: request.clientId } : {}),
+    ...(request.retainOnClose ? { retainOnClose: true as const } : {}),
     createdAt: now,
     heartbeatAt: now,
     expiresAt: now + leaseTtlMs,

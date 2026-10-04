@@ -430,6 +430,51 @@ test('close releases the session lease', async () => {
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
 });
 
+test('close keeps a lease allocated with retainOnClose', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-open-');
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    clientId: 'client-a',
+    retainOnClose: true,
+  });
+  sessionStore.set('default', {
+    name: 'default',
+    device: makeIosDevice('SIM-CLOSE-RETAIN'),
+    createdAt: Date.now(),
+    actions: [],
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      clientId: 'client-a',
+    },
+  });
+  const handler = createOpenHandler(sessionStore, leaseRegistry);
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'close',
+    positionals: [],
+    meta: { requestId: 'req-close-retain-lease' },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(sessionStore.get('default')).toBeUndefined();
+  expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
+  expect(
+    leaseRegistry.heartbeatLease({
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      clientId: 'client-a',
+    }).leaseId,
+  ).toBe(lease.leaseId);
+});
+
 test('close fails synchronously when root composition omits platform resource cleanup', async () => {
   const sessionStore = makeSessionStore('agent-device-router-open-');
   sessionStore.set('default', {

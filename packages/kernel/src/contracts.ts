@@ -143,6 +143,7 @@ export type DaemonRequestMeta = {
   runId?: string;
   leaseId?: string;
   leaseTtlMs?: number;
+  leaseRetainOnClose?: boolean;
   leaseBackend?: LeaseBackend;
   leaseProvider?: string;
   deviceKey?: string;

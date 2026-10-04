@@ -326,6 +326,39 @@ test('local command RPC keeps host paths unrestricted', async (t) => {
   }
 });
 
+test('lease.allocate forwards retainOnClose to the handler as lease meta', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const received: DaemonRequest[] = [];
+  const server = await createDaemonHttpServer({
+    handleRequest: async (request): Promise<DaemonResponse> => {
+      received.push(request);
+      return { ok: true, data: {} };
+    },
+  });
+  try {
+    const port = await listenOnLoopback(server);
+    for (const retainOnClose of [true, undefined]) {
+      const response = await fetch(`http://127.0.0.1:${port}/rpc`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'req-1',
+          method: 'agent_device.lease.allocate',
+          params: { tenantId: 'tenant-a', runId: 'run-1', retainOnClose },
+        }),
+      });
+      assert.equal(response.status, 200);
+    }
+    assert.deepEqual(
+      received.map((request) => request.meta?.leaseRetainOnClose),
+      [true, undefined],
+    );
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
 test('only local command RPC keeps the client developer dir', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const root = mkdtempForTestSync('agent-device-http-developer-dir-');

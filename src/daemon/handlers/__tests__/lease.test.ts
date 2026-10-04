@@ -50,6 +50,65 @@ for (const operation of ['allocate', 'release'] as const) {
   });
 }
 
+test('lease_release still releases a retainOnClose lease through the provider', async () => {
+  const registry = new LeaseRegistry();
+  const lease = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    clientId: 'client-a',
+    retainOnClose: true,
+  });
+  const released: DeviceLease[] = [];
+  const request: DaemonRequest = {
+    token: 'test-token',
+    session: 'default',
+    command: 'lease_release',
+    positionals: [],
+    meta: { tenantId: 'tenant-a', runId: 'run-1', leaseId: lease.leaseId, clientId: 'client-a' },
+  };
+
+  const response = await handleLeaseCommands({
+    req: request,
+    sessionName: 'default',
+    sessionStore: makeSessionStore('agent-device-retained-release-'),
+    leaseRegistry: registry,
+    leaseLifecycleProvider: {
+      release: async (active) => {
+        released.push(active);
+        return { providerSessionId: 'provider-1' };
+      },
+    },
+  });
+
+  assert.equal(response?.ok, true);
+  assert.deepEqual(
+    released.map((active) => active.leaseId),
+    [lease.leaseId],
+  );
+  assert.equal(registry.listActiveLeases().length, 0);
+});
+
+test('lease_allocate stores retainOnClose from the request meta', async () => {
+  const registry = new LeaseRegistry();
+  const request: DaemonRequest = {
+    token: 'test-token',
+    session: 'default',
+    command: 'lease_allocate',
+    positionals: [],
+    meta: { tenantId: 'tenant-a', runId: 'run-1', leaseRetainOnClose: true },
+  };
+
+  const response = await handleLeaseCommands({
+    req: request,
+    sessionName: 'default',
+    sessionStore: makeSessionStore('agent-device-retained-allocate-'),
+    leaseRegistry: registry,
+  });
+
+  assert.equal(response?.ok, true);
+  assert.equal(registry.listActiveLeases()[0]?.retainOnClose, true);
+});
+
 test('activation drains canceled provider allocation and its release cleanup', async () => {
   const registry = new LeaseRegistry();
   const lease = registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST);

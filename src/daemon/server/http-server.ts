@@ -329,6 +329,7 @@ function toLeaseDaemonRequest(
       runId: readStringParam(params, 'runId'),
       leaseId: readStringParam(params, 'leaseId'),
       leaseTtlMs: readIntParam(params, 'ttlMs'),
+      leaseRetainOnClose: readBooleanParam(params, 'retainOnClose'),
       leaseBackend: readStringParam(params, 'backend') as LeaseBackend | undefined,
       leaseProvider:
         readStringParam(params, 'leaseProvider') ?? readStringParam(params, 'provider'),

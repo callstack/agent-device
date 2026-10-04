@@ -122,6 +122,36 @@ test('releaseSessionLease releases with the stored session owner scope', async (
   expect(provider).toEqual({ provider: 'proxy' });
 });
 
+test('releaseSessionLease leaves a retainOnClose lease and its provider device alone', async () => {
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    clientId: 'client-a',
+    retainOnClose: true,
+  });
+  const session = makeIosSession('default', {
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      clientId: lease.clientId,
+    },
+  });
+  const release = vi.fn(async () => ({ released: true }));
+
+  const provider = await releaseSessionLease({
+    session,
+    leaseRegistry,
+    leaseLifecycleProvider: { release },
+  });
+
+  expect(provider).toBeUndefined();
+  expect(release).not.toHaveBeenCalled();
+  expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
+});
+
 test('releaseSessionLease retains provider session ownership for artifact lookup', async () => {
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({

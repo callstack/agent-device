@@ -42,6 +42,12 @@ paths.
 The proxy process is expected to be long-lived and self-serve. Recovery from a
 stale or expired device lease should not require restarting the proxy.
 
+A caller that owns a lease's lifetime, allocating it and releasing it itself,
+can allocate with `retainOnClose`. Session `close` then leaves that lease and
+its provider device in place, and only `leases.release`, expiry, or daemon
+shutdown ends it. The default is unchanged so the CLI's proxy sharing still
+frees devices on `close`.
+
 ## Consequences
 
 Device contention can fail before platform execution with an explicit

@@ -32,6 +32,8 @@ export type LeaseAllocateOptions = LeaseOptions & {
   provider?: string;
   deviceKey?: string;
   clientId?: string;
+  /** Keeps the lease through session `close`; it then ends only through `leases.release` or expiry. */
+  retainOnClose?: boolean;
 };
 
 export type LeaseScopedOptions = LeaseOptions & {
