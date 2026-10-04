@@ -7,7 +7,9 @@ import type {
   PlatformRuntimeProviderModule,
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { PlatformRuntimeProviderRegistration } from './platform-runtime-gateway.ts';
+import { asAppError, type AppError } from '@agent-device/kernel/errors';
 import { providerWebDriver } from './provider-webdriver.ts';
+import { readLimrunCredentials, type LimrunCredentials } from './provider-limrun-credentials.ts';
 
 export type DefaultProviderDeviceRuntimeEnv = DefaultCloudWebDriverProviderRuntimeEnv &
   NodeJS.ProcessEnv;
@@ -20,6 +22,8 @@ export const DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS = [
 export type DefaultProviderRuntimeComposition = Readonly<{
   runtimes: readonly ProviderDeviceRuntime[];
   platformModules: readonly PlatformRuntimeProviderRegistration[];
+  /** Providers left out because their environment configuration is invalid; the rest still load. */
+  skipped?: readonly Readonly<{ provider: string; error: AppError }>[];
 }>;
 
 /**
@@ -48,6 +52,7 @@ export async function createDaemonProviderRuntimeComposition(
     const { loadProviderPlugins } = await import('./plugins/load.ts');
     const plugins = await loadProviderPlugins(env, DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS);
     return Object.freeze({
+      ...bundled,
       runtimes: Object.freeze([...bundled.runtimes, ...plugins.map(({ runtime }) => runtime)]),
       platformModules: Object.freeze([
         ...bundled.platformModules,
@@ -65,18 +70,26 @@ export async function createDefaultProviderRuntimeComposition(
 ): Promise<DefaultProviderRuntimeComposition> {
   const runtimes = providerWebDriver.createDefaultRuntimes(env);
   const platformModules = [...createProviderPlatformRuntimeRegistrations(runtimes)];
-  const apiKey = env.LIMRUN_API_KEY?.trim();
-  if (!apiKey) return Object.freeze({ runtimes, platformModules: Object.freeze(platformModules) });
+  let limrunCredentials: LimrunCredentials | undefined;
+  try {
+    limrunCredentials = readLimrunCredentials(env);
+  } catch (error) {
+    return Object.freeze({
+      runtimes,
+      platformModules: Object.freeze(platformModules),
+      skipped: [{ provider: 'limrun', error: asAppError(error) }],
+    });
+  }
+  if (!limrunCredentials) {
+    return Object.freeze({ runtimes, platformModules: Object.freeze(platformModules) });
+  }
 
   const [limrunRuntime, dependencies] = await Promise.all([
     import('@agent-device/provider-limrun'),
     import('./sdk/limrun-runtime-dependencies.ts'),
   ]);
   const registration = limrunRuntime.createLimrunRuntime(
-    {
-      apiKey,
-      region: env.LIMRUN_REGION?.trim() || undefined,
-    },
+    limrunCredentials,
     dependencies.createLimrunRuntimeDependencies(),
     { includePlatformModule: true },
   );

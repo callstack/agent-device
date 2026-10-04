@@ -6,6 +6,9 @@ import { publishDaemonRegistration } from '../../__tests__/test-utils/device-cla
 
 const lifecycleEvents = vi.hoisted(() => [] as string[]);
 const startupFailure = vi.hoisted(() => ({ active: false }));
+const providerComposition = vi.hoisted(() => ({
+  skipped: [] as Array<{ provider: string; error: Error & { code: string } }>,
+}));
 
 vi.mock('../../platform-runtime.ts', () => ({
   androidObservation: {},
@@ -33,7 +36,11 @@ vi.mock('../../platform-runtime.ts', () => ({
 
 vi.mock('../../provider-device-runtimes.ts', () => ({
   DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS: [],
-  createDaemonProviderRuntimeComposition: async () => ({ runtimes: [], platformModules: [] }),
+  createDaemonProviderRuntimeComposition: async () => ({
+    runtimes: [],
+    platformModules: [],
+    skipped: providerComposition.skipped,
+  }),
 }));
 
 // The post-lock, pre-publication step the runtime awaits first. Making it throw lands the runtime in
@@ -92,6 +99,7 @@ function publishSuccessor(paths: DaemonPaths): void {
 afterEach(() => {
   startupFailure.active = false;
   lifecycleEvents.length = 0;
+  providerComposition.skipped = [];
   vi.restoreAllMocks();
 });
 
@@ -160,6 +168,21 @@ test('a shutdown removes its own metadata and reports an unverified release', as
     );
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('a skipped provider runtime is logged after this daemon publishes its record', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-provider-skip-');
+  const error = Object.assign(new Error('Limrun instance access is missing X.'), {
+    code: 'INVALID_ARGS',
+  });
+  providerComposition.skipped = [{ provider: 'limrun', error }];
+  const runtime = await startRuntime(stateDir, () => {});
+  try {
+    const skipped = logEvents(stateDir).find(({ phase }) => phase === 'provider_runtime_skipped');
+    expect(skipped?.data).toMatchObject({ provider: 'limrun', code: 'INVALID_ARGS' });
+  } finally {
+    await runtime?.shutdown();
   }
 });
 

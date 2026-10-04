@@ -35,6 +35,7 @@ vi.mock('../provider-webdriver.ts', () => ({
 afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 const mockedResolveCloudAccessForConnect = vi.mocked(resolveCloudAccessForConnect);
@@ -198,6 +199,27 @@ test('connect limrun generates a local daemon remote profile', async () => {
   }
 });
 
+test('connect limrun attaches to an existing instance without storing its token', async () => {
+  const stateDir = path.join(mkdtempForTestSync('agent-device-connect-limrun-attach-'), '.state');
+  const ios = { apiUrl: 'https://region.limrun.example/v1/ios_x/api', token: 'ios-instance-token' };
+  vi.stubEnv('LIMRUN_API_KEY', '');
+  vi.stubEnv('LIM_IOS_INSTANCE_URL', ios.apiUrl);
+  vi.stubEnv('LIM_IOS_INSTANCE_TOKEN', ios.token);
+
+  await captureConnectStdout(async () => {
+    await connectCommand({
+      positionals: ['limrun'],
+      flags: { json: true, help: false, version: false, stateDir, platform: 'ios' },
+      client: {} as AgentDeviceClient,
+    });
+  });
+
+  const state = readRequiredActiveState(stateDir);
+  assert.equal(state.leaseBackend, 'ios-instance');
+  assert.doesNotMatch(fs.readFileSync(state.remoteConfigPath, 'utf8'), /ios-instance-token/);
+  assert.deepEqual(mockedVerifyLimrunConnection.mock.calls[0]?.[0].instances?.ios, ios);
+});
+
 test('connect limrun persists deferred Metro bridge settings', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-limrun-metro-');
   const stateDir = path.join(tempRoot, '.state');
@@ -253,11 +275,13 @@ test('connect limrun persists deferred Metro bridge settings', async () => {
   }
 });
 
-test('connect limrun requires LIMRUN_API_KEY', async () => {
+test('connect limrun requires LIMRUN_API_KEY or access to an existing instance', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-limrun-env-');
   const stateDir = path.join(tempRoot, '.state');
   vi.stubEnv('LIMRUN_API_KEY', '');
   vi.stubEnv('LIM_API_KEY', 'lim_test_key');
+  vi.stubEnv('LIM_IOS_INSTANCE_URL', 'https://region.limrun.example/v1/ios_x/api');
+  vi.stubEnv('LIM_IOS_INSTANCE_TOKEN', 'ios-instance-token');
 
   try {
     await assert.rejects(
@@ -268,10 +292,11 @@ test('connect limrun requires LIMRUN_API_KEY', async () => {
           help: false,
           version: false,
           stateDir,
+          platform: 'android',
         },
         client: {} as AgentDeviceClient,
       }),
-      /connect limrun requires LIMRUN_API_KEY/,
+      /connect limrun requires LIMRUN_API_KEY, or LIM_ANDROID_INSTANCE_URL, LIM_ANDROID_INSTANCE_TOKEN, LIM_ANDROID_INSTANCE_ADB_URL/,
     );
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });

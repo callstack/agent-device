@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
+import { createInstanceClient as createAndroidInstanceClient } from '@limrun/api/instance-client';
+import { createInstanceClient as createIosInstanceClient } from '@limrun/api/ios-client';
 import { LimrunRuntime } from '../sdk/limrun.ts';
 import { createExpiredProviderLeaseReleaser } from '../daemon/provider-lease-expiry.ts';
 import type { SimulatorLease } from '../daemon/lease-registry.ts';
@@ -35,6 +37,7 @@ const limrunMockState = vi.hoisted(() => {
     ]),
     androidOpenUrl: vi.fn(async () => undefined),
     androidDisconnect: vi.fn(),
+    androidKeepAlive: vi.fn(),
     androidSendAsset: vi.fn(async () => undefined),
     androidTunnelClose,
     androidStartAdbTunnel: vi.fn(async () => ({
@@ -108,6 +111,7 @@ vi.mock('@limrun/api/ios-client', () => ({
 vi.mock('@limrun/api/instance-client', () => ({
   createInstanceClient: vi.fn(async () => ({
     disconnect: limrunMockState.androidDisconnect,
+    keepAlive: limrunMockState.androidKeepAlive,
     openUrl: limrunMockState.androidOpenUrl,
     sendAsset: limrunMockState.androidSendAsset,
     startAdbTunnel: limrunMockState.androidStartAdbTunnel,
@@ -125,6 +129,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
 afterEach(() => {
   limrunMockState.constructorOptions.length = 0;
   vi.clearAllMocks();
+  vi.mocked(runCmd).mockReset();
 });
 
 test('Limrun runtime identifies direct CLI usage to the Limrun API', async () => {
@@ -301,6 +306,52 @@ test('Limrun Android reverses localhost URL ports through the persistent ADB tun
     assertAndroidTunnelLifecycle('exp://127.0.0.1:8081');
   } finally {
     await runtime.shutdown();
+  }
+});
+
+test('Limrun keepAlive pings the session client every 30 s until release', async () => {
+  vi.useFakeTimers();
+  try {
+    const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', keepAlive: true });
+    const lease = androidLease();
+    await allocateLimrunDevice(runtime, lease);
+    await vi.advanceTimersByTimeAsync(60_000);
+    assert.equal(limrunMockState.androidKeepAlive.mock.calls.length, 2);
+
+    await runtime.leaseLifecycle.release?.(lease);
+    await vi.advanceTimersByTimeAsync(60_000);
+    assert.equal(limrunMockState.androidKeepAlive.mock.calls.length, 2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('Limrun keepAlive is off by default', async () => {
+  vi.useFakeTimers();
+  try {
+    const runtime = new LimrunRuntime({ apiKey: 'lim_test_key' });
+    await allocateLimrunDevice(runtime, androidLease());
+    await vi.advanceTimersByTimeAsync(60_000);
+    assert.equal(limrunMockState.androidKeepAlive.mock.calls.length, 0);
+    await runtime.shutdown();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('Limrun keepAlive keeps pinging after the client throws', async () => {
+  vi.useFakeTimers();
+  try {
+    limrunMockState.androidKeepAlive.mockImplementationOnce(() => {
+      throw new Error('socket closed');
+    });
+    const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', keepAlive: true });
+    await allocateLimrunDevice(runtime, androidLease());
+    await vi.advanceTimersByTimeAsync(60_000);
+    assert.equal(limrunMockState.androidKeepAlive.mock.calls.length, 2);
+    await runtime.shutdown();
+  } finally {
+    vi.useRealTimers();
   }
 });
 
@@ -732,4 +783,116 @@ test('Limrun keeps session tracked when release fails so release can be retried'
   } finally {
     await runtime.shutdown();
   }
+});
+
+const ATTACHED_IOS = {
+  apiUrl: 'https://region.limrun.example/v1/ios_attached/api',
+  token: 'ios-instance-token',
+};
+const ATTACHED_ANDROID = {
+  apiUrl: 'https://region.limrun.example/v1/android_attached/api',
+  token: 'android-instance-token',
+  adbUrl: 'wss://region.limrun.example/v1/android_attached/adb',
+};
+
+function iosLease(leaseId: string): SimulatorLease {
+  return { ...androidLease(), leaseId, backend: 'ios-instance' };
+}
+
+test('Limrun drives existing instances without an API key and never deletes them', async () => {
+  const runtime = new LimrunRuntime({
+    instances: { ios: ATTACHED_IOS, android: ATTACHED_ANDROID },
+  });
+  const releaseLease = runtime.leaseLifecycle.release;
+  const allocateLease = runtime.leaseLifecycle.allocate;
+  if (!allocateLease || !releaseLease) throw new Error('Limrun runtime must provide lease hooks');
+
+  try {
+    const ios = await allocateLease(iosLease('lease-attached-ios'), { initialApp: 'Example.ipa' });
+    await allocateLease({ ...androidLease(), leaseId: 'lease-attached-android' });
+
+    assert.match(String(ios?.limrunInstanceId), /^attached-[a-f0-9]{12}$/);
+    assert.deepEqual(vi.mocked(createIosInstanceClient).mock.calls, [
+      [{ ...ATTACHED_IOS, logLevel: 'warn' }],
+    ]);
+    assert.deepEqual(vi.mocked(createAndroidInstanceClient).mock.calls, [
+      [{ ...ATTACHED_ANDROID, logLevel: 'warn' }],
+    ]);
+
+    await releaseLease(iosLease('lease-attached-ios'));
+    await releaseLease({ ...androidLease(), leaseId: 'lease-attached-android' });
+    assert.equal(await releaseLease(iosLease('lease-before-daemon-restart')), undefined);
+    assert.equal(limrunMockState.androidDisconnect.mock.calls.length, 1);
+  } finally {
+    await runtime.shutdown();
+  }
+  assert.equal(limrunMockState.constructorOptions.length, 0);
+  for (const controlPlaneCall of [
+    limrunMockState.iosCreate,
+    limrunMockState.iosList,
+    limrunMockState.iosDelete,
+    limrunMockState.androidCreate,
+    limrunMockState.androidList,
+    limrunMockState.androidDelete,
+  ]) {
+    assert.equal(controlPlaneCall.mock.calls.length, 0);
+  }
+});
+
+test('Limrun removes only its own port reverse mappings from an attached Android instance', async () => {
+  const runtime = new LimrunRuntime({ instances: { android: ATTACHED_ANDROID } });
+  const lease = { ...androidLease(), leaseId: 'lease-attached-android' };
+  vi.mocked(runCmd).mockImplementation(async (_command, args) => ({
+    stdout: args.includes('--list') ? 'host-7 tcp:8081 tcp:8081\nhost-9 tcp:8097 tcp:8097\n' : '',
+    stderr: '',
+    exitCode: 0,
+  }));
+
+  await allocateLimrunDevice(runtime, lease);
+  await runtime.configurePortReverse({
+    leaseId: lease.leaseId,
+    devicePort: 8097,
+    hostPort: 8097,
+    name: 'react-devtools',
+  });
+  await runtime.shutdown();
+
+  const removals = vi
+    .mocked(runCmd)
+    .mock.calls.map(([, args]) => args)
+    .filter((args) => args.includes('--remove'));
+  assert.deepEqual(removals, [['-s', '127.0.0.1:62001', 'reverse', '--remove', 'tcp:8097']]);
+});
+
+test('Limrun instance access wins over the API key for its platform only', async () => {
+  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', instances: { ios: ATTACHED_IOS } });
+
+  await allocateLimrunDevice(runtime, iosLease('lease-attached-ios'));
+  await allocateLimrunDevice(runtime, androidLease());
+  await runtime.shutdown();
+
+  assert.equal(limrunMockState.iosCreate.mock.calls.length, 0);
+  assert.equal(limrunMockState.iosDelete.mock.calls.length, 0);
+  assert.equal(limrunMockState.androidCreate.mock.calls.length, 1);
+  assert.deepEqual(limrunMockState.androidDelete.mock.calls, [['android-instance-1']]);
+});
+
+test('Limrun without an API key refuses operations that need one', async () => {
+  const runtime = new LimrunRuntime({ instances: { ios: ATTACHED_IOS } });
+
+  try {
+    const device = await allocateLimrunDevice(runtime, iosLease('lease-attached-ios'));
+    await assert.rejects(runtime.installInstallablePath(device, '/tmp/Example.app'), {
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'Uploading an app requires a Limrun API key.',
+    });
+    await assert.rejects(allocateLimrunDevice(runtime, androidLease()), {
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'Creating an instance requires a Limrun API key.',
+    });
+    assert.equal(limrunMockState.assetsGetOrUpload.mock.calls.length, 0);
+  } finally {
+    await runtime.shutdown();
+  }
+  assert.throws(() => new LimrunRuntime({}), /requires an apiKey or instance access/);
 });

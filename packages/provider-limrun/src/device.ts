@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
@@ -27,6 +28,14 @@ export function buildLimrunDevice(
     target: 'mobile',
     booted: true,
   };
+}
+
+/**
+ * A stable local id for an attached instance, derived from the API URL that identifies it, so the
+ * same instance keeps the same id across daemon restarts.
+ */
+export function attachedLimrunInstanceId(apiUrl: string): string {
+  return `attached-${createHash('sha256').update(apiUrl).digest('hex').slice(0, 12)}`;
 }
 
 export function parseLimrunDeviceId(

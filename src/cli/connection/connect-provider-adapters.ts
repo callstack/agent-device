@@ -10,6 +10,7 @@ import { type EnvMap } from '@agent-device/kernel/source-value';
 import { resolveCloudConnectProfile } from './cloud-profile.ts';
 import { resolveCloudWebDriverConnectProfile } from './cloud-webdriver-profile.ts';
 import { resolveLimrunConnectProfile } from './limrun-profile.ts';
+import { readLimrunCredentials } from '../../provider-limrun-credentials.ts';
 import { resolveProxyConnectProfile } from './proxy-profile.ts';
 import { profileToCliFlags } from '../remote-config-flags.ts';
 import { isConnectProviderName, type ConnectProvider } from './provider-policy.ts';
@@ -177,13 +178,9 @@ async function verifyLimrun(
   context: Pick<AdapterContext, 'flags' | 'env'>,
 ): Promise<ConnectVerification> {
   return await verifyLimrunConnection({
-    apiKey: requiredResolvedValue(
-      context.env.LIMRUN_API_KEY,
-      'Limrun profile missed LIMRUN_API_KEY.',
-    ),
+    ...readLimrunCredentials(context.env),
     clientVersion: readVersion(),
     platform: requiredResolvedPlatform(context.flags.platform, 'Limrun'),
-    region: context.env.LIMRUN_REGION?.trim() || undefined,
   });
 }
 

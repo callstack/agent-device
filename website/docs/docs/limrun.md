@@ -18,6 +18,35 @@ agent-device connect limrun --platform android
 
 Pass `android` or `ios` to select the instance type. `connect` verifies the selected service without creating an instance.
 
+## Drive an existing instance
+
+An agent in a sandbox can drive an instance that someone else created, such as the instance behind a live preview, without your organization API key. Create the instance where the API key lives, then give the sandbox that instance's own URL and token from its `status`:
+
+| Platform | Environment variables |
+| --- | --- |
+| iOS | `LIM_IOS_INSTANCE_URL` (`status.apiUrl`), `LIM_IOS_INSTANCE_TOKEN` (`status.token`) |
+| Android | `LIM_ANDROID_INSTANCE_URL` (`status.apiUrl`), `LIM_ANDROID_INSTANCE_TOKEN` (`status.token`), `LIM_ANDROID_INSTANCE_ADB_URL` (`status.adbWebSocketUrl`) |
+
+These are the same variables the `lim` CLI reads, so one set works for both tools.
+
+```bash
+export LIM_IOS_INSTANCE_URL=...
+export LIM_IOS_INSTANCE_TOKEN=...
+
+agent-device connect limrun --platform ios
+agent-device open com.example.app
+agent-device snapshot -i
+agent-device disconnect
+```
+
+`connect` checks the instance credentials. agent-device never creates or deletes that instance: `disconnect` leaves it running, and its owner deletes it. When the variables for a platform are set, they take precedence over `LIMRUN_API_KEY` for that platform.
+
+`install`, and `apps` before the first `open`, still need `LIMRUN_API_KEY`, because they use Limrun asset storage. After `open`, `apps` lists the apps installed on the instance without the key. Install the app before you hand over the instance. From the Node.js runtime, `getDeviceSession(device).installRemoteApp(url)` installs from a signed asset URL without the API key.
+
+## Keeping idle sessions alive
+
+Limrun ends an instance after its inactivity timeout, which an idle session reaches while a model thinks between steps. Set `LIMRUN_KEEP_ALIVE=1` (or `true`) to ping the instance every 30 seconds while a session is open. It is off by default, so instance lifetime is unchanged unless you ask for it. In the Node.js runtime, pass `keepAlive: true`.
+
 ## CLI workflow
 
 A new Limrun instance does not contain your app. Run `install <package-or-bundle-id> <app-path-or-url>` before `open`. The install command allocates the instance when needed, so you do not need to run `devices` first.
@@ -58,8 +87,10 @@ const runtime = new LimrunRuntime({
 });
 ```
 
+To drive existing instances, pass `instances: { ios: { apiUrl, token } }` (Android also takes `adbUrl`), with or without `apiKey`. A platform listed there never creates or deletes instances.
+
 After allocating a lease, an embedding bridge can call `runtime.getDeviceSession(device)` for the allocated device's reusable semantic capabilities. The facade includes app inventory, foreground state where Limrun exposes it, key input, bounded log reads, recording, remote asset installation, and the existing interactor. Android also exposes agent-device's `AndroidAdbProvider` abstraction for helpers and reversible port forwarding. iOS exposes a typed `simctl` execution handle for bridge-owned runner lifecycle and launch policy. Raw Limrun clients remain private to the provider runtime.
 
 ## Artifacts and troubleshooting
 
-Limrun does not currently expose provider artifacts through `agent-device artifacts`. If connect fails, check `LIMRUN_API_KEY` and the optional `LIMRUN_REGION`.
+Limrun does not currently expose provider artifacts through `agent-device artifacts`. If connect fails, check `LIMRUN_API_KEY` and the optional `LIMRUN_REGION`. For an existing instance, check its URL and token variables, and that the instance is still running.

@@ -31,6 +31,8 @@ import {
   type AndroidAdbInvocation,
 } from '@agent-device/platform-android/mechanics';
 import { reconnectLimrunAppLogReader } from './app-log-reconnect.ts';
+import { attachedLimrunInstanceId } from './device.ts';
+import { createInstanceClient as createIosInstanceClient } from '@limrun/api/ios-client';
 import type {
   LimrunAdbCommandOptions,
   LimrunAdbExecutor,
@@ -54,6 +56,7 @@ test('reattaches an owned Limrun instance without persisting credentials', async
       platform: 'ios',
       leaseId: 'lease-a',
       instanceId: 'instance-a',
+      ownership: 'created',
       appBundleId: 'com.example.app',
       outputPath: '/sessions/one/app.log',
     },
@@ -83,6 +86,7 @@ test('fails closed when the instance labels do not match the descriptor lease', 
       platform: 'ios',
       leaseId: 'lease-a',
       instanceId: 'instance-a',
+      ownership: 'created',
       appBundleId: 'com.example.app',
       outputPath: '/sessions/one/app.log',
     },
@@ -113,6 +117,7 @@ test('disconnects the Android instance client when tunnel acquisition fails', as
         platform: 'android',
         leaseId: 'lease-a',
         instanceId: 'instance-a',
+        ownership: 'created',
         appBundleId: 'com.example.app',
         outputPath: '/sessions/one/app.log',
       },
@@ -154,6 +159,7 @@ test('addresses app-log adb traffic at the tunnel serial and hands cleanup a com
       platform: 'android',
       leaseId: 'lease-a',
       instanceId: 'instance-a',
+      ownership: 'created',
       appBundleId: 'com.example.app',
       outputPath: '/sessions/one/app.log',
     },
@@ -208,4 +214,71 @@ test('addresses app-log adb traffic at the tunnel serial and hands cleanup a com
   });
   expect(closeTunnel).toHaveBeenCalledOnce();
   expect(androidClient.disconnect).toHaveBeenCalledOnce();
+});
+
+const ATTACHED_ACCESS = { apiUrl: 'https://attached.example/api', token: 'instance-token' };
+
+function attachedDescriptor(
+  instanceId = attachedLimrunInstanceId(ATTACHED_ACCESS.apiUrl),
+  ownership: 'created' | 'attached' = 'attached',
+) {
+  return {
+    transport: 'limrun-log-poller',
+    platform: 'ios',
+    leaseId: 'lease-a',
+    instanceId,
+    ownership,
+    appBundleId: 'com.example.app',
+    outputPath: '/sessions/one/app.log',
+  } as const;
+}
+
+test('reattaches app logs to the attached instance the descriptor names', async () => {
+  const outcome = await reconnectLimrunAppLogReader({
+    instances: { ios: ATTACHED_ACCESS },
+    descriptor: attachedDescriptor(),
+    dependencies: {} as LimrunRuntimeDependencies,
+  });
+  expect(vi.mocked(createIosInstanceClient)).toHaveBeenLastCalledWith({
+    ...ATTACHED_ACCESS,
+    logLevel: 'warn',
+  });
+  expect(outcome.status).toBe('opened');
+
+  const replaced = await reconnectLimrunAppLogReader({
+    instances: { ios: { ...ATTACHED_ACCESS, apiUrl: 'https://another-instance.example/api' } },
+    descriptor: attachedDescriptor(),
+    dependencies: {} as LimrunRuntimeDependencies,
+  });
+  expect(replaced).toEqual({ status: 'ownership-lost' });
+});
+
+test('reattaches a created instance through the organization API while another is attached', async () => {
+  const get = vi.fn(async () => ({
+    metadata: { labels: { provider: 'limrun', leaseId: 'lease-a' } },
+    status: { state: 'ready', apiUrl: 'https://created.example/api', token: 'created-token' },
+  }));
+  const outcome = await reconnectLimrunAppLogReader({
+    limrun: { iosInstances: { get } } as never,
+    instances: { ios: ATTACHED_ACCESS },
+    descriptor: attachedDescriptor('ios_created_instance', 'created'),
+    dependencies: {} as LimrunRuntimeDependencies,
+  });
+  expect(get).toHaveBeenCalledOnce();
+  expect(outcome.status).toBe('opened');
+});
+
+test('does not connect once the reconnect request is aborted', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  vi.mocked(createIosInstanceClient).mockClear();
+  await expect(
+    reconnectLimrunAppLogReader({
+      instances: { ios: ATTACHED_ACCESS },
+      descriptor: attachedDescriptor(),
+      dependencies: {} as LimrunRuntimeDependencies,
+      signal: controller.signal,
+    }),
+  ).rejects.toThrow();
+  expect(vi.mocked(createIosInstanceClient)).not.toHaveBeenCalled();
 });
