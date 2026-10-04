@@ -142,10 +142,6 @@ async function adoptAndroidRecording(params: {
   const sessionsDir = mkdtempForTestSync('agent-device-android-failed-finish-session-');
   let session: AndroidRecordingSession = {};
   const sessionStore = {
-    get: () => session,
-    set: (_name: string, next: AndroidRecordingSession) => {
-      session = next;
-    },
     resolveSessionDir: (name: string) => path.join(sessionsDir, name),
   };
   const binding = {
