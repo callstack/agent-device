@@ -79,6 +79,29 @@ function closeHttpConnections(server: LoopbackServer): void {
   maybeHttpServer.closeIdleConnections?.();
 }
 
+/**
+ * `net.Server.close()` waits for every accepted connection to finish, and a request handler that
+ * never answers keeps its connection open forever — `http.Server` has `closeAllConnections()` and
+ * `net.Server` has no equivalent. Track the accepted sockets so a test whose assertion already
+ * failed can destroy them instead of hanging in teardown: a regression in cancellation wiring must
+ * surface as the failed assertion, not as the test timeout swallowing it.
+ */
+export function trackLoopbackSockets(server: net.Server): () => void {
+  const sockets = new Set<net.Socket>();
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => {
+      sockets.delete(socket);
+    });
+  });
+  return () => {
+    for (const socket of sockets) {
+      socket.destroy();
+    }
+    sockets.clear();
+  };
+}
+
 export function waitForHttpOk(url: string, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   return new Promise((resolve, reject) => {

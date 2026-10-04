@@ -21,6 +21,7 @@ import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import {
   closeLoopbackServer,
   skipWhenLoopbackUnavailable,
+  trackLoopbackSockets,
   type SkippableTestContext,
 } from '../../__tests__/test-utils/loopback.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
@@ -62,6 +63,9 @@ async function runTimerDiscipline(
   const aborted = outcome === 'aborted';
   handleRequestTimeoutCalls.length = 0;
   const server = createSocketServer(hangingHandler());
+  // The hanging handler never answers, so whichever way the request ends, a failed assertion
+  // before that would leave the connection open and `net.Server.close()` would hang the lane.
+  const destroySockets = trackLoopbackSockets(server);
   try {
     const port = await listenNetServer(server);
     const controller = new AbortController();
@@ -95,6 +99,7 @@ async function runTimerDiscipline(
     await new Promise((resolve) => setTimeout(resolve, OUTLIVE_MS));
     if (aborted) assert.deepEqual(handleRequestTimeoutCalls, []);
   } finally {
+    destroySockets();
     await closeLoopbackServer(server);
   }
 }

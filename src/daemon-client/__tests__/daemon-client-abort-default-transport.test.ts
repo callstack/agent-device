@@ -31,6 +31,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
+  trackLoopbackSockets,
   type SkippableTestContext,
 } from '../../__tests__/test-utils/loopback.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
@@ -91,14 +92,16 @@ async function waitFor(condition: () => boolean, what: string): Promise<void> {
 async function runDefaultTransportAbort(
   t: SkippableTestContext,
   transport: 'socket' | 'http',
-  serve: (
-    handleRequest: DaemonInvokeFn,
-  ) => Promise<{ server: Parameters<typeof closeLoopbackServer>[0]; port: number }>,
+  serve: (handleRequest: DaemonInvokeFn) => Promise<{
+    server: Parameters<typeof closeLoopbackServer>[0];
+    port: number;
+    destroyConnections?: () => void;
+  }>,
 ): Promise<void> {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const seen: SeenRequest = { started: false, canceled: [] };
   const stateDir = mkdtempForTestSync(`agent-device-abort-default-${transport}-`);
-  const { server, port } = await serve(hangingWaitHandler(seen));
+  const { server, port, destroyConnections } = await serve(hangingWaitHandler(seen));
   try {
     publishLoopbackDaemonInfo(
       stateDir,
@@ -134,6 +137,7 @@ async function runDefaultTransportAbort(
     assert.equal(typeof details.requestId, 'string');
     assert.equal(details.requestId, seen.requestId);
   } finally {
+    destroyConnections?.();
     await closeLoopbackServer(server);
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
@@ -142,7 +146,11 @@ async function runDefaultTransportAbort(
 test('the default socket transport carries the caller signal: the daemon cancels the request the client aborted', async (t) => {
   await runDefaultTransportAbort(t, 'socket', async (handleRequest) => {
     const server = createSocketServer(handleRequest);
-    return { server, port: await listenNetServer(server) };
+    // A canceled request's connection is destroyed by the client, but if an assertion above fails
+    // before that, the handler waits forever on an open connection and `net.Server.close()` would
+    // never return. Destroying the tracked sockets turns that into the failed assertion it is.
+    const destroyConnections = trackLoopbackSockets(server);
+    return { server, port: await listenNetServer(server), destroyConnections };
   });
 });
 

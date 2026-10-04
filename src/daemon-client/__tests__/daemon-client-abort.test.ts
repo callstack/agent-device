@@ -20,6 +20,7 @@ import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  trackLoopbackSockets,
   skipWhenLoopbackUnavailable,
 } from '../../__tests__/test-utils/loopback.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
@@ -110,6 +111,10 @@ test('socket transport: an abort mid-request closes the connection, the daemon m
   if (await skipWhenLoopbackUnavailable(t)) return;
   const seen: SeenRequest = { started: false, canceled: [] };
   const server = createSocketServer(canceledAwareHandler(seen));
+  // The mid-request case's connection only closes through the client's abort; if an assertion
+  // above that fails, the daemon-side handler waits forever and `net.Server.close()` would hang
+  // the whole lane instead of reporting the failure.
+  const destroySockets = trackLoopbackSockets(server);
   try {
     const port = await listenNetServer(server);
     const info = { port, token: TOKEN, pid: 1 };
@@ -159,6 +164,7 @@ test('socket transport: an abort mid-request closes the connection, the daemon m
     assert.equal(followUp.ok, true);
     assert.equal(seen.servedCommand, 'devices');
   } finally {
+    destroySockets();
     await closeLoopbackServer(server);
   }
 });
