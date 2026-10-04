@@ -50,6 +50,8 @@ const shutdownProbe = vi.hoisted(() => ({
   store: undefined as import('../session-store.ts').SessionStore | undefined,
   drain: undefined as (() => Promise<void>) | undefined,
   finalize: vi.fn(async () => {}),
+  dispatch: undefined as import('../daemon-request.ts').DaemonInvokeFn | undefined,
+  closeTimeout: undefined as number | undefined,
 }));
 vi.mock('../session-store.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../session-store.ts')>();
@@ -68,8 +70,19 @@ vi.mock('./server-shutdown.ts', async (importOriginal) => {
   return {
     ...actual,
     closeDaemonServers: async (...args: Parameters<typeof actual.closeDaemonServers>) => {
-      await actual.closeDaemonServers(...args);
+      await actual.closeDaemonServers(args[0], shutdownProbe.closeTimeout ?? args[1]);
       await shutdownProbe.drain?.();
+    },
+  };
+});
+vi.mock('../request-router.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../request-router.ts')>();
+  return {
+    ...actual,
+    createRequestHandler: (...args: Parameters<typeof actual.createRequestHandler>) => {
+      const dispatch = actual.createRequestHandler(...args);
+      return async (...request: Parameters<typeof dispatch>) =>
+        await (shutdownProbe.dispatch ?? dispatch)(...request);
     },
   };
 });
@@ -84,11 +97,15 @@ import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
 } from '../../__tests__/test-utils/device-claim-store.ts';
+import { sendRequest } from '../../daemon-client/daemon-client-transport.ts';
+import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { startDaemonRuntime } from './daemon-runtime.ts';
 
 afterEach(() => {
   lifecycleEvents.length = 0;
   shutdownProbe.drain = undefined;
+  shutdownProbe.dispatch = undefined;
+  shutdownProbe.closeTimeout = undefined;
   shutdownProbe.finalize.mockReset();
 });
 
@@ -165,40 +182,136 @@ test('shutdown includes drain publications, releases their claims and refuses po
     stderr: { write: () => {} },
     stdout: { write: () => {} },
   });
-  expect(runtime).not.toBeNull();
-  const store = shutdownProbe.store!;
-  const acquired = await acquireDeviceClaim({
-    device: ANDROID_EMULATOR,
-    session: 'draining',
-    workspace: stateDir,
-    stateDir,
-    reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
-  });
-  if (acquired.status !== 'acquired') throw new Error('Expected acquired claim');
-  const session = {
-    name: 'draining',
-    device: ANDROID_EMULATOR,
-    createdAt: Date.now(),
-    actions: [],
-    deviceClaim: acquired.ownership,
-  };
-  shutdownProbe.drain = async () => {
-    store.publish('draining', session);
-  };
-  shutdownProbe.finalize.mockImplementationOnce(async () => {
-    expect(() => store.publish('late', { ...session, name: 'late' })).toThrowError(
-      expect.objectContaining({
-        details: expect.objectContaining({ reason: 'daemon_shutting_down' }),
-      }),
-    );
-  });
   try {
+    expect(runtime).not.toBeNull();
+    const store = shutdownProbe.store!;
+    const acquired = await acquireDeviceClaim({
+      device: ANDROID_EMULATOR,
+      session: 'draining',
+      workspace: stateDir,
+      stateDir,
+      reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+    });
+    if (acquired.status !== 'acquired') throw new Error('Expected acquired claim');
+    const session = {
+      name: 'draining',
+      device: ANDROID_EMULATOR,
+      createdAt: Date.now(),
+      actions: [],
+      deviceClaim: acquired.ownership,
+    };
+    shutdownProbe.drain = async () => {
+      store.publish('draining', session);
+    };
+    let refusal: unknown;
+    shutdownProbe.finalize.mockImplementationOnce(async () => {
+      try {
+        store.publish('late', { ...session, name: 'late' });
+      } catch (error) {
+        refusal = error;
+      }
+    });
     await runtime!.shutdown();
     expect(shutdownProbe.finalize).toHaveBeenCalledOnce();
+    expect(refusal).toMatchObject({ details: { reason: 'daemon_shutting_down' } });
     expect(store.lookup('draining')).toBeUndefined();
     expect(store.lookup('late')).toBeUndefined();
     expect(fs.existsSync(resolveDeviceClaimPath(acquired.ownership.deviceKey))).toBe(false);
   } finally {
-    await runtime!.shutdown();
+    await runtime?.shutdown();
+  }
+});
+
+test('shutdown joins dispatch completion after force-closing the client before taking its snapshot', async () => {
+  const { stateDir } = claimStores();
+  const runtime = await startDaemonRuntime({
+    env: {
+      ...process.env,
+      AGENT_DEVICE_STATE_DIR: stateDir,
+      AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+      AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+    },
+    exit: () => {},
+    registerProcessHandlers: false,
+    stderr: { write: () => {} },
+    stdout: { write: () => {} },
+  });
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  let closed!: () => void;
+  const serversClosed = new Promise<void>((resolve) => {
+    closed = resolve;
+  });
+  let request: Promise<unknown> | undefined;
+  let shutdown: Promise<void> | undefined;
+  try {
+    expect(runtime).not.toBeNull();
+    const store = shutdownProbe.store!;
+    const acquired = await acquireDeviceClaim({
+      device: ANDROID_EMULATOR,
+      session: 'dispatching',
+      workspace: stateDir,
+      stateDir,
+      reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+    });
+    if (acquired.status !== 'acquired') throw new Error('Expected acquired claim');
+    let publicationError: unknown;
+    shutdownProbe.dispatch = async () => {
+      entered();
+      await held;
+      try {
+        store.publish('dispatching', {
+          name: 'dispatching',
+          device: ANDROID_EMULATOR,
+          createdAt: Date.now(),
+          actions: [],
+          deviceClaim: acquired.ownership,
+        });
+      } catch (error) {
+        publicationError = error;
+      }
+      return { ok: true };
+    };
+    request = sendRequest(
+      { httpPort: runtime!.httpPort, pid: process.pid, token: runtime!.token },
+      {
+        token: runtime!.token,
+        session: 'dispatching',
+        command: 'open',
+        positionals: [],
+        flags: {},
+      },
+      'http',
+      resolveDaemonPaths(stateDir),
+      10_000,
+    ).catch((error: unknown) => error);
+    await started;
+    shutdownProbe.closeTimeout = 1;
+    shutdownProbe.drain = async () => {
+      closed();
+    };
+    shutdown = runtime!.shutdown();
+    await serversClosed;
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(lifecycleEvents).not.toContain('detach');
+    expect(shutdownProbe.finalize).not.toHaveBeenCalled();
+    release();
+    await shutdown;
+    await request;
+    expect(publicationError).toBeUndefined();
+    expect(shutdownProbe.finalize).toHaveBeenCalledOnce();
+    expect(store.lookup('dispatching')).toBeUndefined();
+    expect(fs.existsSync(resolveDeviceClaimPath(acquired.ownership.deviceKey))).toBe(false);
+  } finally {
+    release();
+    await request;
+    await shutdown;
+    await runtime?.shutdown();
   }
 });

@@ -45,6 +45,7 @@ export function createDurableCaptureSessionBinding<S, K extends string, H extend
       const current = port.resolveCurrent();
       if (current === undefined) return 'retired';
       const active = port.read(current);
+      retained = active;
       if (
         active?.handle !== expected.handle ||
         active.envelope.fence.token !== expected.envelope.fence.token ||

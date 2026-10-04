@@ -578,10 +578,11 @@ export async function startDaemonRuntime(
   // in-flight requests, no active recording) past AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS.
   // `shutdown` is defined below but only invoked asynchronously by the timer,
   // well after this closure captures it.
-  let inFlightRequestCount = 0;
+  let shuttingDown = false;
+  const inFlightRequests = new Set<ReturnType<DaemonInvokeFn>>();
   const idleReap = createDaemonIdleReap({
     sessionStore,
-    getInFlightRequestCount: () => inFlightRequestCount,
+    getInFlightRequestCount: () => inFlightRequests.size,
     onIdleReap: () => {
       void shutdown();
     },
@@ -589,12 +590,22 @@ export async function startDaemonRuntime(
   });
 
   const handleRequest: DaemonInvokeFn = async (req) => {
-    inFlightRequestCount++;
+    if (shuttingDown)
+      return {
+        ok: false,
+        error: {
+          code: 'COMMAND_FAILED',
+          message: 'Daemon is shutting down.',
+          details: { reason: 'daemon_shutting_down' },
+        },
+      };
     idleReap.cancel();
+    const dispatch = dispatchRequest(req);
+    inFlightRequests.add(dispatch);
     try {
-      return await dispatchRequest(req);
+      return await dispatch;
     } finally {
-      inFlightRequestCount--;
+      inFlightRequests.delete(dispatch);
       idleReap.noteActivity();
       // One hook covers every way a deadline changes: an `open` has added one, a `close` has removed
       // one, and any other command has just re-stamped the session it ran on. Reading the session set
@@ -765,7 +776,6 @@ export async function startDaemonRuntime(
   // cannot start, PNG processing falls back to the in-process sync path.
   prewarmPngWorker();
 
-  let shuttingDown = false;
   const shutdown = async (shutdownOptions: { exitCode?: number; cause?: unknown } = {}) => {
     idleReap.cancel();
     sessionIdleExpiry.cancel();
@@ -776,6 +786,7 @@ export async function startDaemonRuntime(
       await emitFatalDiagnostic(shutdownOptions.cause);
     }
     await closeDaemonServers(servers);
+    await Promise.allSettled(inFlightRequests);
     // Hand healthy runners off before durable session teardown. The lifecycle gateway later
     // terminates only still-owned generations once all resources have finalized.
     //
