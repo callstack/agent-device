@@ -86,11 +86,53 @@ export function bindSessionScreenRecording(sessionStore: SessionStore, ref: Sess
   });
 }
 
-export function publishRecordOnlyScreenRecording(
+export function bindRecordOnlyScreenRecording(
   sessionStore: SessionStore,
   address: string,
-  draft: SessionState,
-  screenRecording: NonNullable<SessionState['screenRecording']>,
-): SessionRef {
-  return sessionStore.publish(address, { ...draft, screenRecording });
+  draft: SessionRef['session'],
+) {
+  let published:
+    | Readonly<{
+        ref: SessionRef;
+        binding: ReturnType<typeof bindSessionScreenRecording>;
+      }>
+    | undefined;
+  const assertAdoptable = (): void => {
+    if (published) {
+      sessionStore.requireCurrent(published.ref);
+      throw new AppError('COMMAND_FAILED', 'Recording draft has already been published', {
+        reason: 'session_resource_changed',
+        session: address,
+      });
+    }
+    sessionStore.assertPublishable(address);
+  };
+  const binding: ReturnType<typeof bindSessionScreenRecording> = Object.freeze({
+    address,
+    sessionDir: sessionStore.resolveSessionDir(address),
+    read: () => published?.binding.read(),
+    assertAdoptable,
+    canPersist: () => !published && sessionStore.lookup(address) === undefined,
+    adopt: (screenRecording) => {
+      assertAdoptable();
+      if (draft.screenRecording) {
+        throw new AppError('COMMAND_FAILED', 'Recording draft already owns a resource', {
+          reason: 'session_resource_changed',
+          session: address,
+        });
+      }
+      const ref = sessionStore.publish(address, draft);
+      const binding = bindSessionScreenRecording(sessionStore, ref);
+      binding.adopt(screenRecording);
+      published = Object.freeze({ ref, binding });
+    },
+    clear: (expected) => published?.binding.clear(expected) ?? 'retired',
+  });
+  return Object.freeze({
+    binding,
+    requireRef: (): SessionRef => {
+      if (!published) throw new TypeError('Screen recording did not publish its session');
+      return published.ref;
+    },
+  });
 }

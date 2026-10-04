@@ -32,7 +32,7 @@ import type { SessionStore } from '../session-store.ts';
 import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { SessionRef, SessionState } from '../session-state.ts';
-import { bindRecordOnlyScreenRecording } from '../screen-recording-session-binding.ts';
+import { bindRecordOnlyScreenRecording } from '../session-capture-binding.ts';
 import { recordSessionAction } from '../session-action-recorder.ts';
 import {
   missingAppSessionResponse,
