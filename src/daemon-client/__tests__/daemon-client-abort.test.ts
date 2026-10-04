@@ -27,7 +27,13 @@ import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 const TOKEN = 'abort-signal-token';
 const STATE_PATHS = resolveDaemonPaths(mkdtempForTestSync('agent-device-client-abort-'));
 
-type SeenRequest = { started: boolean; requestId?: string; canceled: boolean[] };
+type SeenRequest = {
+  started: boolean;
+  requestId?: string;
+  canceled: boolean[];
+  /** The command of the last non-`wait` request the RPC handler itself served. */
+  servedCommand?: string;
+};
 
 // `wait` models the long request the caller abandons; every other command answers immediately, so
 // the same handler also proves the daemon still serves requests after one was canceled.
@@ -36,6 +42,7 @@ function canceledAwareHandler(seen: SeenRequest): DaemonInvokeFn {
     const requestId = req.meta?.requestId;
     seen.requestId = requestId;
     if (req.command !== 'wait') {
+      seen.servedCommand = req.command;
       return { ok: true, data: {} };
     }
     seen.started = true;
@@ -150,6 +157,7 @@ test('socket transport: an abort mid-request closes the connection, the daemon m
       {},
     );
     assert.equal(followUp.ok, true);
+    assert.equal(seen.servedCommand, 'devices');
   } finally {
     await closeLoopbackServer(server);
   }
@@ -226,8 +234,25 @@ test('http transport: an abort mid-request closes that request, the daemon marks
     assert.deepEqual(seen.canceled, [true]);
     assert.equal(seen.requestId, 'req-http-abort-in-flight');
 
-    const health = await fetch(`http://127.0.0.1:${port}/health`);
-    assert.equal(health.ok, true);
+    const followUp = await sendRequest(
+      info,
+      {
+        token: TOKEN,
+        command: 'devices',
+        session: 'default',
+        positionals: [],
+        flags: {},
+        meta: { requestId: 'req-http-follow-up' },
+      },
+      'http',
+      STATE_PATHS,
+      5000,
+      {},
+    );
+    assert.equal(followUp.ok, true);
+    // The follow-up ran through the RPC path `/health` does not: an aborted request's cancel must
+    // leave `handleRequest` serving, not just the health endpoint answering.
+    assert.equal(seen.servedCommand, 'devices');
   } finally {
     await closeLoopbackServer(server);
   }

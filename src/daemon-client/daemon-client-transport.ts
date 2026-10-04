@@ -1,8 +1,7 @@
 import type { RequestProgressSink } from '@agent-device/contracts/progress';
 import net from 'node:net';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
-import { abortedRequestError, refuseAbortedRequest } from '@agent-device/host-kit/request';
 import type { DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DaemonPaths, DaemonTransportPreference } from '../daemon-resolution.ts';
@@ -35,6 +34,93 @@ type SendRequestOptions = {
    */
   signal?: AbortSignal;
 };
+
+/**
+ * The requester-side half of a per-call `AbortSignal` (#3178), kept beside the transport that
+ * enforces it so cancellation has one owner across both halves. The transport half closes the
+ * request's connection (which is what makes the daemon mark the request canceled); this half
+ * answers for the cases a transport cannot observe:
+ *
+ * - a signal already aborted before anything is sent — nothing may leave the process, so the refusal
+ *   carries `details.dispatched: 'no'`;
+ * - an abort during a phase with no connection to close, or a custom transport that ignores the
+ *   signal — the caller's promise still settles, with `details.dispatched: 'unknown'` because the
+ *   request may already have been written.
+ *
+ * Both reject with the typed canceled-request error (`details.reason: 'request_canceled'`) whatever
+ * reason the caller aborted with, so every layer dispatches on the same reason and never on the
+ * caller's arbitrary abort reason or on error text. An abort is never a timeout: nothing here reads
+ * or extends a request deadline, and no timeout path may produce this rejection.
+ */
+
+/**
+ * The typed canceled-request error for a caller's own abort. The reason the caller aborted with
+ * survives unchanged as the cause — `AbortController.abort()` accepts any value — while the
+ * rejection itself dispatches on `reason: 'request_canceled'` with the delivery evidence the
+ * aborting layer can prove. A built-in transport rejects every abort through this, so a caller's
+ * arbitrary abort reason never escapes as the outcome of a daemon request.
+ */
+export function abortedRequestError(
+  signal: AbortSignal,
+  dispatched: 'no' | 'unknown',
+  requestId?: string,
+): AppError {
+  return createRequestCanceledError({ requestId, dispatched }, signal.reason);
+}
+
+/**
+ * Refuses a send attempt that starts while the caller's signal is already aborted: nothing may leave
+ * the process, so this never touches a connection and the refusal carries `details.dispatched: 'no'`.
+ */
+export function refuseAbortedRequest(signal: AbortSignal | undefined, requestId?: string): void {
+  if (!signal?.aborted) return;
+  throw abortedRequestError(signal, 'no', requestId);
+}
+
+export type RequestGuard = {
+  /** Refuses an already-aborted call before anything is sent. No-op without a signal. */
+  refuseIfAborted(): void;
+  /** Settles `send`'s outcome against the signal, winning with the typed canceled error on abort. */
+  guard<T>(send: () => Promise<T>): Promise<T>;
+};
+
+const NO_REQUEST_GUARD: RequestGuard = {
+  refuseIfAborted: () => {},
+  guard: async <T>(send: () => Promise<T>) => await send(),
+};
+
+export function createRequestGuard(params: {
+  signal: AbortSignal | undefined;
+  requestId?: string;
+}): RequestGuard {
+  const { signal, requestId } = params;
+  if (!signal) return NO_REQUEST_GUARD;
+  return {
+    refuseIfAborted() {
+      if (signal.aborted) throw abortedRequestError(signal, 'no', requestId);
+    },
+    guard: async <T>(send: () => Promise<T>): Promise<T> => {
+      // Checked before `send` runs, so nothing has been dispatched yet — the honest evidence is
+      // 'no'. An abort listener attached to an already-aborted signal never fires, so this check is
+      // what keeps a late `guard` call rejecting rather than pending forever.
+      if (signal.aborted) throw abortedRequestError(signal, 'no', requestId);
+      return await new Promise<T>((resolve, reject) => {
+        const onAbort = (): void => reject(abortedRequestError(signal, 'unknown', requestId));
+        signal.addEventListener('abort', onAbort, { once: true });
+        void send().then(
+          (value) => {
+            signal.removeEventListener('abort', onAbort);
+            resolve(value);
+          },
+          (error: unknown) => {
+            signal.removeEventListener('abort', onAbort);
+            reject(error);
+          },
+        );
+      });
+    },
+  };
+}
 
 const LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS = 500;
 const REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS = 3000;
@@ -125,8 +211,9 @@ function canConnectHttp(info: DaemonInfo): Promise<boolean> {
 export async function readRemoteDaemonHealth(
   info: DaemonInfo,
   probeTimeoutMs?: number,
+  callerSignal?: AbortSignal,
 ): Promise<RemoteDaemonHealth> {
-  const health = await readDaemonHttpHealth(info, probeTimeoutMs);
+  const health = await readDaemonHttpHealth(info, probeTimeoutMs, callerSignal);
   if (!info.baseUrl || !health.reachable) return health;
   // Every link a command RPC crosses has to speak the client's protocol: a proxy that reports a
   // skewed daemon behind it fails here, before the RPC, exactly like a skewed proxy does.
@@ -152,6 +239,7 @@ export async function readRemoteDaemonHealth(
 async function readDaemonHttpHealth(
   info: DaemonInfo,
   probeTimeoutMs?: number,
+  callerSignal?: AbortSignal,
 ): Promise<RemoteDaemonHealth> {
   const endpoint = info.baseUrl
     ? buildDaemonHttpUrl(info.baseUrl, 'health')
@@ -166,11 +254,14 @@ async function readDaemonHttpHealth(
     probeTimeoutMs ?? Number.POSITIVE_INFINITY,
   );
   if (timeoutMs <= 0) return { reachable: false, timedOut: true };
-  const signal = AbortSignal.timeout(Math.ceil(timeoutMs));
+  // `timedOut` is keyed on the probe's own budget alone: a caller abort must never read as a
+  // timeout, because a timed-out probe on an RPC-capped budget is answered as the RPC timing out.
+  const timeoutSignal = AbortSignal.timeout(Math.ceil(timeoutMs));
+  const signal = callerSignal ? AbortSignal.any([timeoutSignal, callerSignal]) : timeoutSignal;
   return await new Promise((resolve) => {
     const headers = info.baseUrl ? buildDaemonHttpAuthHeaders(info.token) : {};
     const unreachable = (): RemoteDaemonHealth =>
-      signal.aborted ? { reachable: false, timedOut: true } : { reachable: false };
+      timeoutSignal.aborted ? { reachable: false, timedOut: true } : { reachable: false };
     const req = transport.request(
       {
         protocol: url.protocol,
@@ -289,7 +380,11 @@ async function retryAfterRemoteInstanceMismatch(
     timeoutMs,
     deadline,
   );
-  const health = await readRemoteDaemonHealth(info, probeTimeoutMs);
+  const health = await readRemoteDaemonHealth(info, probeTimeoutMs, options.signal);
+  // An abort that landed during the probe is this caller's cancellation, not the probe's outcome:
+  // it is answered before the timed-out-probe and unreachable-daemon branches, so a canceled call
+  // never borrows the timeout's shape or a daemon-unavailable error.
+  refuseAbortedRequest(options.signal, req.meta?.requestId);
   // The probe's timer starts from the event loop's cached clock, so it can expire while
   // performance.now() is still short of the deadline: a probe the RPC deadline capped that ran out
   // of time is the RPC timing out.
@@ -493,8 +588,7 @@ async function sendSocketRequest(
             );
           }, timeoutMs)
         : undefined;
-    // Destroying the connection is what makes the daemon mark the request canceled; the rejection
-    // keeps the typed canceled-request error, never a socket-error or timeout shape. The timeout
+    // Destroying the connection is what makes the daemon mark the request canceled. The timeout
     // timer is cleared here because an abort is never a timeout: nothing may run the timeout's
     // runner sweep or daemon reset after the caller canceled.
     const rejectAborted = (signal: AbortSignal): void => {
@@ -699,7 +793,6 @@ async function sendHttpRequest(
     const timeoutHandle =
       typeof timeoutMs === 'number'
         ? setTimeout(() => {
-            request.destroy();
             rejectOnce(
               handleRequestTimeout({
                 info,
@@ -707,20 +800,22 @@ async function sendHttpRequest(
                 ...timeoutRequestContext(req, remote, timeoutMs),
               }),
             );
+            request.destroy();
           }, timeoutMs)
         : undefined;
 
     // Destroying the request closes this one connection, which is what makes the daemon mark the
     // request canceled. The timeout timer is cleared because an abort is never a timeout: nothing
-    // may run the timeout's runner sweep or daemon reset after the caller canceled. The destroy
-    // surfaces as a request `error`, which `settled` keeps out of the already-typed rejection.
+    // may run the timeout's runner sweep or daemon reset after the caller canceled. The settle goes
+    // first so the `error` the destroy surfaces arrives after `settled` and cannot rewrite the
+    // typed cancellation into a transport failure.
     const onCallerAbort = (): void => {
       if (settled) return;
       if (timeoutHandle) clearTimeout(timeoutHandle);
-      request.destroy();
       rejectOnce(
         abortedRequestError(callerSignal!, requestEnded ? 'unknown' : 'no', req.meta?.requestId),
       );
+      request.destroy();
     };
     if (callerSignal) {
       callerSignal.addEventListener('abort', onCallerAbort, { once: true });
@@ -728,6 +823,11 @@ async function sendHttpRequest(
 
     request.on('error', (err) => {
       if (timeoutHandle) clearTimeout(timeoutHandle);
+      // `request.destroy()` surfaces an `error` after an intentional abort or timeout has already
+      // settled this promise. Returning before `handleTransportError` keeps that expected teardown
+      // from emitting a `daemon_request_socket_error` diagnostic; a genuine transport error still
+      // arrives before the settle and rejects.
+      if (settled) return;
       rejectOnce(handleTransportError(err, req.meta?.requestId, remote));
     });
 

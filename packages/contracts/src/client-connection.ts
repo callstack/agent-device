@@ -102,6 +102,12 @@ export type AgentDeviceRequestOverrides = Pick<
    * marks the request canceled, and the promise rejects with the typed canceled-request error
    * (`details.reason: 'request_canceled'`). An abort is never a timeout: no runner sweep, no
    * daemon reset.
+   *
+   * The guarantee covers the daemon request, and the built-in transports enforce it; a custom
+   * transport receives the signal on its context and may implement cancellation differently. Two
+   * phases run outside it: a response-artifact download started after the response begins is not
+   * canceled, and a canceled one-shot replay still runs the existing cleanup that may tear down a
+   * daemon this client started.
    */
   signal?: AbortSignal;
 };

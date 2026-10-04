@@ -92,7 +92,12 @@ test('a signal on one call does not cancel another', async () => {
   const canceled = new AbortController();
   const doomed = client.command.wait({ durationMs: 5000, signal: canceled.signal });
   const survivor = client.command.wait({ durationMs: 1 });
+  // Deferred so the doomed call is genuinely in flight when the abort fires: a synchronous abort
+  // would land before `execute` installs the guard and reject through the pre-abort `no` path that
+  // the first test already covers. The guard answers for a transport that ignores the signal, so
+  // this exercises the in-flight `unknown` rejection while the survivor runs untouched.
+  await new Promise((resolve) => setTimeout(resolve, 10));
   canceled.abort();
-  await assert.rejects(doomed, (error: unknown) => isRequestCanceledError(error));
+  await assert.rejects(doomed, (error: unknown) => canceledWith(error, 'unknown'));
   assert.deepEqual(await survivor, {});
 });

@@ -239,14 +239,14 @@ Results are daemon-shaped objects with typed known fields, so command semantics 
 
 A failed interaction rejects with the same error the CLI prints. Read `error.details.dispatched` before you retry; [Commands](./commands.md) explains the two values.
 
-Every client call accepts `signal?: AbortSignal` to cancel that one call:
+Every client call that dispatches to the daemon accepts `signal?: AbortSignal` to cancel that one call:
 
 ```ts
 const controller = new AbortController();
 await client.interactions.press({ ref: '@e12', signal: controller.signal });
 ```
 
-A signal that is already aborted rejects the call without sending anything (`error.details.dispatched: 'no'`). Aborting while the request is in flight closes that request's connection, the daemon marks the request canceled, and the promise rejects with the typed canceled-request error (`error.details.reason: 'request_canceled'`, `error.details.dispatched: 'unknown'`). The daemon and the session stay alive for other requests. An abort is never a timeout: it never triggers the timeout path's runner cleanup or daemon reset.
+With the built-in transport, a signal that is already aborted rejects the call without sending anything (`error.details.dispatched: 'no'`). Aborting while the request is in flight closes that request's connection, the daemon marks the request canceled, and the promise rejects with the typed canceled-request error (`error.details.reason: 'request_canceled'`, `error.details.dispatched: 'unknown'`). A custom transport receives the signal on its context and may cancel differently. The daemon and the session stay alive for other requests, and an abort is never a timeout: it never triggers the timeout path's runner cleanup or daemon reset. Cancellation covers the daemon request itself, so a response-artifact download already underway is not stopped, and a canceled one-shot replay still runs the existing cleanup that can tear down a daemon this client started.
 
 ```ts
 await client.command.wait({

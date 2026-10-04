@@ -10,7 +10,6 @@ import {
   emitDiagnostic,
   withDiagnosticTimer,
 } from '@agent-device/host-kit/diagnostics';
-import { createRequestGuard } from '@agent-device/host-kit/request';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
 import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/timeout-policy';
@@ -29,7 +28,7 @@ import {
   type DaemonClientSettings,
   type EnsuredDaemon,
 } from './daemon-client-lifecycle.ts';
-import { sendRequest } from './daemon-client-transport.ts';
+import { createRequestGuard, sendRequest } from './daemon-client-transport.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
@@ -61,11 +60,8 @@ export async function sendToDaemon(
     resolveCommandTimeoutPolicy(requestWithoutAuthFlag.command),
     requestWithoutAuthFlag,
   );
-  // The caller's signal covers every phase of this one request: an already-aborted call is
-  // refused before the daemon is even started or an artifact byte is uploaded, and an abort that
-  // arrives mid-phase stops the upload and the request. Each phase's own machinery (the upload
-  // client, the transports below) honors the signal; the guard turns any of those outcomes into
-  // the typed canceled-request error, so an abort never borrows a timeout's shape.
+  // The caller's signal covers every phase of this one request, and the guard turns any phase's
+  // cancellation into the typed canceled-request error — so an abort never borrows a timeout's shape.
   const cancellation = createRequestGuard({ signal: options.signal, requestId });
   cancellation.refuseIfAborted();
   const daemon = await cancellation.guard(async () => {
@@ -351,5 +347,6 @@ async function protectArtifactUploadWithLeaseBeats(
         info,
         callerSignal ? AbortSignal.any([leaseSignal, callerSignal]) : leaseSignal,
       ),
+    callerSignal,
   });
 }
