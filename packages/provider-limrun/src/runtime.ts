@@ -58,10 +58,14 @@ import type { LimrunInstanceAccess } from './instance-access.ts';
 
 type LimrunRuntimeSession = LimrunIosSession | LimrunAndroidSession;
 
+const KEEP_ALIVE_INTERVAL_MS = 30_000;
+
 export type LimrunRuntimeOptions = {
   /** Organization API key. It creates and deletes instances for platforms without `instances`. */
   apiKey?: string;
   region?: string;
+  /** Pings each leased instance every 30 s so Limrun's inactivity timeout does not end idle sessions. */
+  keepAlive?: boolean;
   runtimeInstance?: string;
   instances?: LimrunInstanceAccess;
 };
@@ -107,6 +111,7 @@ export function createLimrunRuntime(
 class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
   private readonly limrun: Limrun | undefined;
   private readonly sessions = new Map<string, LimrunRuntimeSession>();
+  private readonly keepAliveTimers = new Map<string, NodeJS.Timeout>();
   private readonly appAliases = new Map<
     string,
     Readonly<{ assetName: string; installedAppId: string }>
@@ -259,6 +264,7 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
       (await this.attachSession(platform, lease)) ??
       (await this.createSession(platform, lease, context));
     this.sessions.set(lease.leaseId, session);
+    if (this.options.keepAlive) this.startKeepAlive(lease.leaseId, session);
     return { limrunInstanceId: session.instanceId, device: session.device };
   }
 
@@ -375,7 +381,22 @@ class LimrunRuntimeImplementation implements ProviderDeviceRuntime {
     return { limrunInstanceId: instanceIds[0], limrunInstanceCount: instanceIds.length };
   }
 
+  private startKeepAlive(leaseId: string, session: LimrunRuntimeSession): void {
+    const timer = setInterval(() => {
+      try {
+        session.client.keepAlive();
+      } catch {
+        // A dead connection surfaces on the next real command.
+      }
+    }, KEEP_ALIVE_INTERVAL_MS);
+    timer.unref();
+    this.keepAliveTimers.set(leaseId, timer);
+  }
+
   private async terminateSession(session: LimrunRuntimeSession): Promise<void> {
+    const leaseId = session.lease.leaseId;
+    clearInterval(this.keepAliveTimers.get(leaseId));
+    this.keepAliveTimers.delete(leaseId);
     session.client.disconnect();
     if (session.platform === 'android') await cleanupLimrunAndroidAdbTunnel(session);
     if (session.ownership === 'attached') return;

@@ -43,6 +43,10 @@ agent-device disconnect
 
 `install`, and `apps` before the first `open`, still need `LIMRUN_API_KEY`, because they use Limrun asset storage. After `open`, `apps` lists the apps installed on the instance without the key. Install the app before you hand over the instance. From the Node.js runtime, `getDeviceSession(device).installRemoteApp(url)` installs from a signed asset URL without the API key.
 
+## Keeping idle sessions alive
+
+Limrun ends an instance after its inactivity timeout, which an idle session reaches while a model thinks between steps. Set `LIMRUN_KEEP_ALIVE=1` (or `true`) to ping the instance every 30 seconds while a session is open. It is off by default, so instance lifetime is unchanged unless you ask for it. In the Node.js runtime, pass `keepAlive: true`.
+
 ## CLI workflow
 
 A new Limrun instance does not contain your app. Run `install <package-or-bundle-id> <app-path-or-url>` before `open`. The install command allocates the instance when needed, so you do not need to run `devices` first.

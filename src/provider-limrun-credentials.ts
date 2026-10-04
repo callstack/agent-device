@@ -5,6 +5,7 @@ import type { EnvMap } from '@agent-device/kernel/source-value';
 export type LimrunCredentials = Readonly<{
   apiKey?: string;
   region?: string;
+  keepAlive?: boolean;
   instances?: LimrunInstanceAccess;
 }>;
 
@@ -29,6 +30,7 @@ export function limrunInstanceVariables(platform: 'ios' | 'android'): readonly s
 export function readLimrunCredentials(env: EnvMap): LimrunCredentials | undefined {
   const apiKey = env.LIMRUN_API_KEY?.trim() || undefined;
   const region = env.LIMRUN_REGION?.trim() || undefined;
+  const keepAlive = ['1', 'true'].includes(env.LIMRUN_KEEP_ALIVE?.trim().toLowerCase() ?? '');
   const ios = readInstanceVars(env, INSTANCE_VARS.ios);
   const android = readInstanceVars(env, INSTANCE_VARS.android);
   if (!apiKey && !ios && !android) return undefined;
@@ -40,7 +42,7 @@ export function readLimrunCredentials(env: EnvMap): LimrunCredentials | undefine
       adbUrl: android.LIM_ANDROID_INSTANCE_ADB_URL,
     },
   };
-  return { apiKey, region, instances: ios || android ? instances : undefined };
+  return { apiKey, region, keepAlive, instances: ios || android ? instances : undefined };
 }
 
 function readInstanceVars<Name extends string>(
