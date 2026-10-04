@@ -134,7 +134,7 @@ test('a session without a tracked app selects the without-active-app plan', asyn
 test('the bound construction path admits and binds before it builds a runtime', async () => {
   const fixture = selectorCaptureFixture();
   const sessionStore = makeSessionStore();
-  sessionStore.set('bound', makeAndroidSession('bound'));
+  sessionStore.publish('bound', makeAndroidSession('bound'));
 
   const resolved = await createBoundSelectorRuntime(
     {
@@ -158,7 +158,7 @@ test('the bound construction path refuses an unavailable operation without build
     capture: { available: false, reason: 'unsupported-platform-leaf' },
   });
   const sessionStore = makeSessionStore();
-  sessionStore.set('bound', makeAndroidSession('bound'));
+  sessionStore.publish('bound', makeAndroidSession('bound'));
 
   const resolved = await createBoundSelectorRuntime(
     {

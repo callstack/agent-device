@@ -52,7 +52,7 @@ function expectShutdownFailure(
 test('close --shutdown calls shutdownSimulator for iOS simulator and includes result in response', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-shutdown-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       platform: 'apple',
@@ -111,7 +111,7 @@ test('close --shutdown keeps a selected provider-owned iOS simulator off local s
     kind: 'simulator' as const,
     booted: true,
   };
-  sessionStore.set(sessionName, makeSession(sessionName, device));
+  sessionStore.publish(sessionName, makeSession(sessionName, device));
   const providerClose = vi.fn(async () => undefined);
   const providerFinalize = vi.fn(async () => ({}));
   mockInspectDeviceRuntimeFacts.mockImplementationOnce(async (candidate) => {
@@ -159,7 +159,7 @@ test('close --shutdown keeps a selected provider-owned iOS simulator off local s
 test('close --shutdown calls shutdownAndroidEmulator for Android emulator and includes result in response', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-shutdown-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       platform: 'android',
@@ -209,7 +209,7 @@ test('close --shutdown calls shutdownAndroidEmulator for Android emulator and in
 test('close --shutdown is ignored for non-simulator iOS devices', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-device-shutdown-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       platform: 'apple',
@@ -247,7 +247,7 @@ test('close --shutdown is ignored for non-simulator iOS devices', async () => {
 test('close --shutdown is ignored for Android devices', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-device-shutdown-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       platform: 'android',
@@ -285,7 +285,7 @@ test('close --shutdown is ignored for Android devices', async () => {
 test('close --shutdown returns success and failure payload when shutdownAndroidEmulator throws', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-shutdown-failure-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       platform: 'android',
@@ -325,7 +325,7 @@ test('close --shutdown returns success and failure payload when shutdownAndroidE
 test('close --shutdown returns success and failure payload when shutdownSimulator throws', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-shutdown-failure-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       platform: 'apple',

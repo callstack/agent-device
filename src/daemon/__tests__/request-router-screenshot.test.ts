@@ -75,7 +75,7 @@ function screenshotRouter(
   options: ScreenshotRuntimeFixtureOptions = {},
 ): ScreenshotRouter {
   const sessionStore = makeSessionStore('agent-device-router-screenshot-');
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const runtime = screenshotRuntimeFixture(options);
   const handler = createRequestHandler({
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
@@ -202,8 +202,8 @@ test('click forwards macOS menubar session surface to the bound runtime', async 
 
 test('router serializes concurrent commands for the same device across sessions', async () => {
   const sessionStore = makeSessionStore('agent-device-router-screenshot-');
-  sessionStore.set('session-a', makeSession('session-a'));
-  sessionStore.set('session-b', makeSession('session-b'));
+  sessionStore.publish('session-a', makeSession('session-a'));
+  sessionStore.publish('session-b', makeSession('session-b'));
 
   const order: string[] = [];
   let active = 0;

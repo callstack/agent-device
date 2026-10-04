@@ -46,7 +46,7 @@ test('a repair-armed session excludes get/is/find by default but keeps recording
       boundary: 0,
     },
   });
-  store.set('default', session);
+  store.publish('default', session);
 
   recordIfSession(store, store.lookup('default'), req('get'), {});
   recordIfSession(store, store.lookup('default'), req('is'), {});
@@ -71,7 +71,7 @@ test('a repair-armed session still records get/is/find dispatched as replay plan
       boundary: 0,
     },
   });
-  store.set('default', session);
+  store.publish('default', session);
 
   recordIfSession(store, store.lookup('default'), planStepReq('get'), {});
   recordIfSession(store, store.lookup('default'), planStepReq('is'), {});
@@ -90,7 +90,7 @@ test('--record forces get/is/find through even while repair-armed', () => {
       boundary: 0,
     },
   });
-  store.set('default', session);
+  store.publish('default', session);
 
   recordIfSession(store, store.lookup('default'), req('get', { record: true }), {});
   recordIfSession(store, store.lookup('default'), req('is', { record: true }), {});
@@ -103,7 +103,7 @@ test('outside a repair-armed session, get/is/find/wait all record normally', () 
   const store = makeStore();
   const session = makeIosSession('default');
   expect(session.scriptPublication).toBeUndefined();
-  store.set('default', session);
+  store.publish('default', session);
 
   recordIfSession(store, store.lookup('default'), req('get'), {});
   recordIfSession(store, store.lookup('default'), req('is'), {});
@@ -120,7 +120,7 @@ test('outside a repair-armed session, get/is/find/wait all record normally', () 
 
 test('wait absent records positionals without target-v1 annotation', () => {
   const store = makeStore();
-  store.set('default', makeIosSession('default'));
+  store.publish('default', makeIosSession('default'));
 
   recordIfSession(store, store.lookup('default'), waitAbsentReq(), { waitedMs: 0 });
 

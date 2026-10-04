@@ -65,9 +65,9 @@ test('record stop after daemon-state loss reattaches only through the persisted 
     'capture.mp4',
   );
   await harness.run(['start', outPath]);
-  const adopted = harness.sessionStore.get(harness.sessionName);
-  if (!adopted) throw new Error('Expected adopted recording session');
-  harness.sessionStore.set(harness.sessionName, { ...adopted, screenRecording: undefined });
+  const ref = harness.sessionStore.lookup(harness.sessionName);
+  if (!ref) throw new Error('Expected adopted recording session');
+  harness.sessionStore.update(ref, { screenRecording: undefined });
 
   const stopped = await harness.run(['stop']);
 
@@ -87,9 +87,9 @@ test('record stop terminalizes cleanup-only exact recovery without starting a re
     'capture.mp4',
   );
   await harness.run(['start', outPath]);
-  const adopted = harness.sessionStore.get(harness.sessionName);
-  if (!adopted) throw new Error('Expected adopted recording session');
-  harness.sessionStore.set(harness.sessionName, { ...adopted, screenRecording: undefined });
+  const ref = harness.sessionStore.lookup(harness.sessionName);
+  if (!ref) throw new Error('Expected adopted recording session');
+  harness.sessionStore.update(ref, { screenRecording: undefined });
 
   const stopped = await harness.run(['stop']);
 
@@ -120,9 +120,9 @@ test('record stop rejects a cross-session recovery manifest before exact-owner b
     ...record.envelope,
     sessionId: 'recording-b',
   });
-  const adopted = harness.sessionStore.get(harness.sessionName);
-  if (!adopted) throw new Error('Expected adopted recording session');
-  harness.sessionStore.set(harness.sessionName, { ...adopted, screenRecording: undefined });
+  const ref = harness.sessionStore.lookup(harness.sessionName);
+  if (!ref) throw new Error('Expected adopted recording session');
+  harness.sessionStore.update(ref, { screenRecording: undefined });
 
   const stopped = await harness.run(['stop']);
 

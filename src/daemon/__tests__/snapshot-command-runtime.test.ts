@@ -39,7 +39,7 @@ for (const command of ['snapshot', 'diff snapshot'] as const) {
   test(`${command} forwards request cancellation into snapshot dispatch`, async () => {
     const sessionName = 'default';
     const sessionStore = makeSessionStore('agent-device-snapshot-cancellation-');
-    sessionStore.set(sessionName, makeAndroidSession(sessionName));
+    sessionStore.publish(sessionName, makeAndroidSession(sessionName));
     const requestId = `snapshot-cancellation-${command.replace(' ', '-')}`;
     const registration = registerRequestAbort(requestId);
     if (!registration) throw new Error('expected request abort registration');

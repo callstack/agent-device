@@ -89,7 +89,7 @@ test('recorded ref drag dispatches once and stores portable selectors with both 
   const sessionStore = makeSessionStore();
   const sessionName = 'recorded-drag';
   const session = makeDragSession(sessionName);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const response = await runDrag(sessionStore, sessionName);
 
@@ -140,7 +140,7 @@ test('recorded ref drag dispatches once and stores portable selectors with both 
 test('a second ref drag is rejected before dispatch after the first drag expires the frame', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'stale-drag';
-  sessionStore.set(sessionName, makeDragSession(sessionName));
+  sessionStore.publish(sessionName, makeDragSession(sessionName));
 
   expect((await runDrag(sessionStore, sessionName))?.ok).toBe(true);
   const response = await runDrag(sessionStore, sessionName);

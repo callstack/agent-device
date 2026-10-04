@@ -27,7 +27,7 @@ function scopedSession(): SessionState {
 
 async function runSessionList(): Promise<DaemonResponse | null> {
   const sessionStore = makeSessionStore('agent-device-inventory-scoped-');
-  sessionStore.set(SCOPED_KEY, scopedSession());
+  sessionStore.publish(SCOPED_KEY, scopedSession());
   const req: DaemonRequest = {
     token: 't',
     session: 'default',
@@ -54,30 +54,30 @@ test('session list returns the caller cwd and local named sessions without cross
   };
   const callerScope = resolveImplicitSessionScope(req)!;
   const callerSessionAddress = `cwd:${callerScope.id}:default`;
-  sessionStore.set(callerSessionAddress, {
+  sessionStore.publish(callerSessionAddress, {
     ...scopedSession(),
     sessionScope: callerScope,
   });
-  sessionStore.set('qa-cart-integrity', {
+  sessionStore.publish('qa-cart-integrity', {
     ...scopedSession(),
     name: 'qa-cart-integrity',
     sessionScope: { kind: 'named-local' },
   });
-  sessionStore.set('tenant-a:qa', {
+  sessionStore.publish('tenant-a:qa', {
     ...scopedSession(),
     name: 'tenant-a:qa',
     sessionScope: { kind: 'named-local' },
   });
-  sessionStore.set('default', {
+  sessionStore.publish('default', {
     ...scopedSession(),
     sessionScope: { kind: 'global-default' },
   });
-  sessionStore.set('cwd:other:default', {
+  sessionStore.publish('cwd:other:default', {
     ...scopedSession(),
     sessionScope: { kind: 'cwd', id: 'other' },
   });
   const tenantSessionAddress = tenantScopedSessionName('tenant-a', 'remote-recording');
-  sessionStore.set(tenantSessionAddress, {
+  sessionStore.publish(tenantSessionAddress, {
     ...scopedSession(),
     name: tenantSessionAddress,
     sessionScope: { kind: 'tenant', id: 'tenant-a' },
@@ -103,14 +103,14 @@ test('session list returns only sessions owned by the requesting tenant', async 
   const sessionStore = makeSessionStore('agent-device-inventory-tenant-');
   for (const tenantId of ['tenant-a', 'tenant-b']) {
     const address = tenantScopedSessionName(tenantId, 'default');
-    sessionStore.set(address, {
+    sessionStore.publish(address, {
       ...scopedSession(),
       name: address,
       sessionScope: { kind: 'tenant', id: tenantId },
     });
   }
   for (const address of ['qa-cart-integrity', 'tenant-a:qa']) {
-    sessionStore.set(address, {
+    sessionStore.publish(address, {
       ...scopedSession(),
       name: address,
       sessionScope: { kind: 'named-local' },

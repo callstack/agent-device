@@ -39,7 +39,7 @@ test('replay executes selector reads before reporting a covered-target divergenc
   const root = mkdtempForTestSync('agent-device-replay-selector-routes-');
   const sessionName = 'default';
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, [
     'open "Demo"',
     String.raw`get text "id=\"field-name\""`,

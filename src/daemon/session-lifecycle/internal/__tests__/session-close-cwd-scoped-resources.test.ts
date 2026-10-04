@@ -75,7 +75,7 @@ test('close finishes the recording of a cwd-scoped session by store address', as
   const sessionStore = makeSessionStore();
   const session = makeIosSimulatorRecordingSession(sessionStore, ADDRESS, { name: NAME });
   const finish = recordingFinishMock(session);
-  sessionStore.set(ADDRESS, session);
+  sessionStore.publish(ADDRESS, session);
   const resourcePath = screenRecordingResourceStore.resolvePath(
     sessionStore.resolveSessionDir(ADDRESS),
   );
@@ -86,7 +86,7 @@ test('close finishes the recording of a cwd-scoped session by store address', as
     device: { ...IOS_SIM, id: 'decoy-udid', name: 'iPhone 15' },
   });
   const decoyFinish = recordingFinishMock(decoy);
-  sessionStore.set(NAME, decoy);
+  sessionStore.publish(NAME, decoy);
   const decoyResourcePath = screenRecordingResourceStore.resolvePath(
     sessionStore.resolveSessionDir(NAME),
   );
@@ -143,7 +143,7 @@ test('close stops the app log of a cwd-scoped session by store address', async (
     },
     metadata: { phase: 'active' },
   });
-  sessionStore.set(ADDRESS, {
+  sessionStore.publish(ADDRESS, {
     ...makeSession(NAME, IOS_SIM),
     appBundleId: 'com.apple.Preferences',
     appLog: { handle, envelope },
@@ -215,7 +215,10 @@ test('close finishes the audio probe of a cwd-scoped session by store address', 
       marker: { pid: 4242, startTime: 'boot+1', command: 'helper' },
     }),
   });
-  sessionStore.set(ADDRESS, { ...makeSession(NAME, IOS_SIM), audioProbe: { handle, envelope } });
+  sessionStore.publish(ADDRESS, {
+    ...makeSession(NAME, IOS_SIM),
+    audioProbe: { handle, envelope },
+  });
   const resourcePath = audioProbeResourceStore.resolvePath(sessionDir);
   audioProbeResourceStore.write(resourcePath, envelope);
 
@@ -255,7 +258,10 @@ test('close stops the perf capture of a cwd-scoped session by store address', as
     lifecycle: 'open',
     descriptor: { version: 1, body: { kind: 'fixture' } },
   });
-  sessionStore.set(ADDRESS, { ...makeSession(NAME, IOS_SIM), perfCapture: { handle, envelope } });
+  sessionStore.publish(ADDRESS, {
+    ...makeSession(NAME, IOS_SIM),
+    perfCapture: { handle, envelope },
+  });
   const resourcePath = perfCaptureResourceStore.resolvePath(sessionDir);
   perfCaptureResourceStore.write(resourcePath, envelope);
 

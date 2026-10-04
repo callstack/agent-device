@@ -43,7 +43,7 @@ function scenario(refCount = 20) {
   };
   setSessionSnapshot(session, prior);
   markSessionPartialRefsIssued(session, ['old']);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   const replaySession = replaySessionForTest(sessionStore, sessionName);
   const snapshot: SnapshotState = {
     createdAt: 2,

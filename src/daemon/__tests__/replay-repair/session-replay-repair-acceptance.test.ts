@@ -77,7 +77,10 @@ test('a healed script survives repair + fresh-session replay: self-contained ope
   const root = mkdtempForTestSync('agent-device-replay-repair-accept-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const filePath = writeReplayFile(root, [
     'open "Demo" --relaunch --platform ios --metro-port 8081',
     SAVE_ANNOTATION,
@@ -163,7 +166,7 @@ test('a healed script survives repair + fresh-session replay: self-contained ope
     invoke: makeRecordingReplayInvoke({
       sessionStore: freshSessionStore,
       sessionName: freshSessionName,
-      openReplacesSession: true,
+      openRebuildsActions: true,
       spy: invokedFresh,
     }),
   });

@@ -122,7 +122,7 @@ async function route(
   androidObservation: AndroidObservationAdapter = clearAndroidObservationFixture,
 ) {
   const sessionStore = makeSessionStore('agent-device-dispatch-route-');
-  sessionStore.set(SESSION, session);
+  sessionStore.publish(SESSION, session);
   const handler = createRequestHandler({
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',

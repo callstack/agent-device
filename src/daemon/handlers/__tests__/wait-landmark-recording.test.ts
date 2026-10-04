@@ -89,7 +89,7 @@ async function runWait(options: { recording?: boolean; req?: DaemonRequest } = {
     'default',
     options.recording ? { scriptPublication: authoringPublication('armed') } : {},
   );
-  sessionStore.set('default', session);
+  sessionStore.publish('default', session);
   const response = await dispatchWaitViaRuntime({
     req: options.req ?? waitReq(),
     sessionName: 'default',

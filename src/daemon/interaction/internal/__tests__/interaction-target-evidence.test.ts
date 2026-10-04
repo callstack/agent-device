@@ -101,7 +101,7 @@ async function runCommand(
 test('press @ref while recording attaches target-v1 evidence to the recorded action, never to the public response', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'recording-press';
-  sessionStore.set(sessionName, makeSessionWithSnapshot(sessionName, { recording: true }));
+  sessionStore.publish(sessionName, makeSessionWithSnapshot(sessionName, { recording: true }));
 
   // verify:true forces full runtime resolution, which captures node/tree.
   const response = await runCommand(sessionStore, sessionName, 'press', ['@e1'], { verify: true });
@@ -131,7 +131,7 @@ test('press @ref while recording attaches target-v1 evidence to the recorded act
 test('press @ref without recording never computes target-v1 evidence', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'non-recording-press';
-  sessionStore.set(sessionName, makeSessionWithSnapshot(sessionName, { recording: false }));
+  sessionStore.publish(sessionName, makeSessionWithSnapshot(sessionName, { recording: false }));
 
   const response = await runCommand(sessionStore, sessionName, 'press', ['@e1'], { verify: true });
 
@@ -145,7 +145,7 @@ test('press @ref without recording never computes target-v1 evidence', async () 
 test('get text @ref while recording attaches target-v1 evidence to the recorded action, never to session history payloads', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'recording-get-ref';
-  sessionStore.set(sessionName, makeSessionWithSnapshot(sessionName, { recording: true }));
+  sessionStore.publish(sessionName, makeSessionWithSnapshot(sessionName, { recording: true }));
 
   const response = await runCommand(sessionStore, sessionName, 'get', ['text', '@e1']);
 
@@ -173,7 +173,7 @@ test('get text @ref while recording attaches target-v1 evidence to the recorded 
 test('get text @ref without recording never computes target-v1 evidence', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'non-recording-get-ref';
-  sessionStore.set(sessionName, makeSessionWithSnapshot(sessionName, { recording: false }));
+  sessionStore.publish(sessionName, makeSessionWithSnapshot(sessionName, { recording: false }));
 
   const response = await runCommand(sessionStore, sessionName, 'get', ['text', '@e1']);
 
@@ -186,7 +186,7 @@ test('get text simple iOS id selector while recording skips the direct runner qu
   const sessionStore = makeSessionStore();
   const sessionName = 'recording-get-direct-gate';
   const session = makeAuthoringSession(sessionName, { appBundleId: 'com.example.app' });
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'snapshot') {
       return {
@@ -325,7 +325,7 @@ test('press on an identity-empty container: container-based daemon response, des
   // recording) without Android's real-adb dialog-readiness probes, which
   // would burn wall-clock time this unit lane must not spend.
   const session = makeAuthoringSession(sessionName, { appBundleId: 'com.example.app' });
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command === 'snapshot') {
       return { backend: 'xctest', nodes: IDENTITY_EMPTY_ROW_NODES };
@@ -370,7 +370,7 @@ function mockSnapshotWithSaveButton() {
 test('is visible while recording attaches target-v1 evidence and strips the resolution payload everywhere', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'recording-is';
-  sessionStore.set(sessionName, makeSessionWithSnapshot(sessionName, { recording: true }));
+  sessionStore.publish(sessionName, makeSessionWithSnapshot(sessionName, { recording: true }));
   mockSnapshotWithSaveButton();
 
   const response = await runCommand(sessionStore, sessionName, 'is', ['visible', 'label="Save"']);
@@ -402,7 +402,7 @@ test('is visible while recording attaches target-v1 evidence and strips the reso
 test('is exists while recording stays intentionally unannotated (deferred coverage)', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'recording-is-exists';
-  sessionStore.set(sessionName, makeSessionWithSnapshot(sessionName, { recording: true }));
+  sessionStore.publish(sessionName, makeSessionWithSnapshot(sessionName, { recording: true }));
   mockSnapshotWithSaveButton();
 
   const response = await runCommand(sessionStore, sessionName, 'is', ['exists', 'label="Save"']);
@@ -416,7 +416,7 @@ test('is exists while recording stays intentionally unannotated (deferred covera
 test('is absent while recording stays an ordinary unannotated observation', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'recording-is-absent';
-  sessionStore.set(sessionName, makeSessionWithSnapshot(sessionName, { recording: true }));
+  sessionStore.publish(sessionName, makeSessionWithSnapshot(sessionName, { recording: true }));
   mockSnapshotWithSaveButton();
 
   const response = await runCommand(sessionStore, sessionName, 'is', [
@@ -447,7 +447,7 @@ test('is absent while recording stays an ordinary unannotated observation', asyn
 test('is visible without recording never computes target-v1 evidence', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'non-recording-is';
-  sessionStore.set(sessionName, makeSessionWithSnapshot(sessionName, { recording: false }));
+  sessionStore.publish(sessionName, makeSessionWithSnapshot(sessionName, { recording: false }));
   mockSnapshotWithSaveButton();
 
   const response = await runCommand(sessionStore, sessionName, 'is', ['visible', 'label="Save"']);

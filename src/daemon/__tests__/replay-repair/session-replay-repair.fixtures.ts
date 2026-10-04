@@ -1,5 +1,6 @@
 import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
 import { isSessionRecording } from '../../session-script-publication-capability.ts';
+import { NO_SCRIPT_PUBLICATION } from '../../session-script-publication-state.ts';
 /**
  * Shared fixtures for the ADR 0012 decision 6 repair-loop tests. The mock
  * `invoke` in these tests must ACTUALLY record via `sessionStore.recordAction`
@@ -32,11 +33,10 @@ export type RecordingReplayInvokeConfig = {
   /** Records every request seen, in order — for asserting dispatch order/flags. */
   spy?: DaemonRequest[];
   /**
-   * When true, `open` REPLACES the session with a fresh `actions: []` one —
-   * mimicking `session-open-surface.ts`'s new-session branch. Default records
-   * onto the existing session (creating one only if none exists yet).
+   * Rebuild the same lifetime with an empty action list during open, exercising
+   * healed-slice boundaries when the underlying record changes.
    */
-  openReplacesSession?: boolean;
+  openRebuildsActions?: boolean;
   /**
    * Steps that fail: return `{ ok: false }` WITHOUT recording — mimicking a
    * dispatch failure that never reaches `finalizeTouchInteraction`. Keyed by
@@ -86,10 +86,13 @@ function isFailStep(failSteps: ReadonlySet<string> | undefined, req: DaemonReque
 }
 
 function resolveInvokeSession(config: RecordingReplayInvokeConfig, req: DaemonRequest) {
-  const existing = config.sessionStore.get(config.sessionName);
-  const mustCreate = req.command === 'open' && (config.openReplacesSession || !existing);
-  if (!mustCreate && existing) return existing;
+  const ref = config.sessionStore.lookup(config.sessionName);
+  if (ref) {
+    return req.command === 'open' && config.openRebuildsActions
+      ? config.sessionStore.update(ref, { actions: [], scriptPublication: NO_SCRIPT_PUBLICATION })
+      : config.sessionStore.requireCurrent(ref);
+  }
   const created = makeIosSession(config.sessionName);
-  config.sessionStore.set(config.sessionName, created);
+  config.sessionStore.publish(config.sessionName, created);
   return created;
 }

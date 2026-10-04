@@ -80,7 +80,7 @@ async function findClick(captures: Record<string, unknown>[] | CaptureScript, af
   const session = makeIosSession('default', { appBundleId: 'com.example.app' });
   if (afterScroll)
     markDeferredInteractionOutcome({ session, command: 'scroll', positionals: [], flags: {} });
-  sessionStore.set('default', session);
+  sessionStore.publish('default', session);
   let call = 0;
   legacyDispatchCapture.mockImplementation(
     async (_device, _command, _positionals, _out, context) =>

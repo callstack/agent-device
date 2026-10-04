@@ -38,7 +38,7 @@ test('parameterized fill scrubs backend and nested settle echoes at the response
   const placeholder = '${PASSWORD}';
   const sessionStore = makeSessionStore();
   const session = makeAuthoringSession('parameterized-fill');
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const payload = {
     text: secret,
     message: `prefix${secret}suffix`,
@@ -148,7 +148,7 @@ test('parameterized fill scrubs concatenated backend values and object keys thro
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   legacyDispatchCapture.mockImplementation(async (_device, command) =>
     command === 'fill'
       ? {
@@ -209,7 +209,7 @@ test('parameterized fill collapses whitespace-only backend echoes through the ha
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   legacyDispatchCapture.mockResolvedValue({
     [`prefix${secret}suffix`]: {
       [`key${secret}tail`]: `value${secret}tail`,
@@ -255,7 +255,7 @@ test.each([
     const placeholder = `\${${recordAs}}`;
     const sessionStore = makeSessionStore();
     const session = makeAuthoringSession(`parameterized-overlap-${recordAs}`);
-    sessionStore.set(session.name, session);
+    sessionStore.publish(session.name, session);
     const payload = {
       text: literal,
       refLabel: `prefix${literal}suffix`,

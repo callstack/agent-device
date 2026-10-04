@@ -59,7 +59,7 @@ async function buildFailureScenario(
   const root = mkdtempForTestSync('agent-device-maestro-suggestions-');
   const sessionName = 'default';
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const replaySession = replaySessionForTest(sessionStore, sessionName);
   mockDispatchCommand.mockResolvedValue({ nodes, truncated: false, backend: 'xctest' });
   const failure = await captureMaestroFailure(command, path.join(root, 'flow.yaml'));
@@ -177,7 +177,7 @@ test('typed Maestro failure diagnostics render expanded selector values without 
   const root = mkdtempForTestSync('agent-device-maestro-expanded-selector-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const flowPath = path.join(root, 'flow.yaml');
   const label = 'Continue checkout';
   fs.writeFileSync(
@@ -240,7 +240,7 @@ test('typed Maestro nested scopes retain resolved target values after unwind', a
   const root = mkdtempForTestSync('agent-device-maestro-nested-redaction-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const flowPath = path.join(root, 'flow.yaml');
   const tracePath = path.join(root, 'replay-timing.ndjson');
   const targetLabel = 'Nested checkout target';
@@ -336,7 +336,7 @@ test('typed Maestro renders flow-local values when static include resolution fai
   const root = mkdtempForTestSync('agent-device-maestro-include-redaction-');
   const sessionName = 'default';
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const flowPath = path.join(root, 'flow.yaml');
   const flowName = 'checkout-details';
   fs.writeFileSync(

@@ -29,7 +29,7 @@ test('the owning interface binds exactly the session device the facts were admit
   };
   const sessionStore = makeSessionStore();
   // An active app: the fixture admits captureSnapshot for a local iOS simulator only with one.
-  sessionStore.set(
+  sessionStore.publish(
     'bind-test',
     makeIosSession('bind-test', { device: IOS_SIMULATOR, appBundleId: 'com.example.app' }),
   );

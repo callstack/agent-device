@@ -75,7 +75,7 @@ beforeEach(() => {
 test('mutating find on a system-surface capture discloses the occlusion on the found outcome', async () => {
   const sessionStore = makeSessionStore();
   const session = makeAndroidSession('default');
-  sessionStore.set('default', session);
+  sessionStore.publish('default', session);
 
   const response = await handleFindCommands({
     req: {
@@ -102,7 +102,7 @@ test('mutating find on a system-surface capture discloses the occlusion on the f
 test('read-only find exists on a system-surface capture discloses the occlusion', async () => {
   const sessionStore = makeSessionStore();
   const session = makeAndroidSession('default');
-  sessionStore.set('default', session);
+  sessionStore.publish('default', session);
 
   const response = await dispatchFindReadOnlyViaRuntime({
     req: {
@@ -128,7 +128,7 @@ test('read-only find exists on a system-surface capture discloses the occlusion'
 test('wait timeout for app text hidden behind a system surface discloses the occlusion', async () => {
   const sessionStore = makeSessionStore();
   const session = makeAndroidSession('default');
-  sessionStore.set('default', session);
+  sessionStore.publish('default', session);
 
   const response = await dispatchWaitViaRuntime({
     req: {
@@ -304,7 +304,7 @@ function serveSheetCapture(): void {
 test('mutating find on an in-place system surface discloses it on the found outcome', async () => {
   serveSheetCapture();
   const sessionStore = makeSessionStore();
-  sessionStore.set('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
+  sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
 
   const response = await handleFindCommands({
     req: {
@@ -331,7 +331,7 @@ test('mutating find on an in-place system surface discloses it on the found outc
 test('mutating find that misses on an in-place system surface still discloses it', async () => {
   serveSheetCapture();
   const sessionStore = makeSessionStore();
-  sessionStore.set('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
+  sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
 
   const response = await handleFindCommands({
     req: {
@@ -378,7 +378,7 @@ test('the shared disclosure helper reports an iOS system surface on both outcome
  */
 test('wait timeout whose polls required a foreground repair discloses the repair', async () => {
   const sessionStore = makeSessionStore();
-  sessionStore.set('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
+  sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
   legacyDispatchCapture.mockResolvedValue({
     backend: 'xctest',
     truncated: false,

@@ -94,8 +94,7 @@ test('logs path binds only inspect and preserves public status projection', asyn
 test('logs doctor binds only doctor and merges live-state notes', async () => {
   const { sessionStore, sessionName } = openSession();
   const session = sessionStore.get(sessionName)!;
-  sessionStore.set(sessionName, {
-    ...session,
+  sessionStore.update(sessionStore.lookup(sessionName)!, {
     appLog: makeTestAppLogResource(session, {
       backend: 'ios-simulator',
       state: 'ended',
@@ -176,8 +175,7 @@ test.each([
   '$action proves the app session before binding start operations',
   async ({ action, flags = {}, message }) => {
     const { sessionStore, sessionName } = openSession();
-    const session = sessionStore.get(sessionName)!;
-    sessionStore.set(sessionName, { ...session, appBundleId: undefined });
+    sessionStore.update(sessionStore.lookup(sessionName)!, { appBundleId: undefined });
 
     const response = await runLogs(
       sessionStore,
@@ -281,7 +279,7 @@ test('post-transfer SessionStore failure disposes the transferred handle and pre
 function openSession() {
   const sessionStore = makeSessionStore();
   const sessionName = 'logs-session';
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, DEVICE),
     appBundleId: 'com.example.app',
   });

@@ -61,7 +61,7 @@ test('buildReplayFailureDivergence: routes through the freshness-retry wrapper a
     baselineCount: 20,
     routeComparable: false,
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   // Capture 1: stale, near-empty dump (a single bare view — no hittable/label/
   // id) → `sharp-drop` vs the 20-node baseline → triggers a retry.
@@ -149,7 +149,7 @@ test('buildReplayFailureDivergence: divergence capture drops the action snapshot
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   const appBundleId = 'com.callstack.agentdevicelab';
-  sessionStore.set(sessionName, makeAndroidSession(sessionName, { appBundleId }));
+  sessionStore.publish(sessionName, makeAndroidSession(sessionName, { appBundleId }));
 
   mockDispatchCommand.mockReset();
   mockDispatchCommand.mockResolvedValue({

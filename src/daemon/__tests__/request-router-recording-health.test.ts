@@ -53,7 +53,7 @@ test('router blocks non-record commands when recording was invalidated', async (
     startedAt: Date.now() - 1_000,
     invalidatedReason: 'iOS runner session restarted during recording',
   });
-  sessionStore.set('default', session);
+  sessionStore.publish('default', session);
 
   const handler = createRequestHandler({
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
@@ -104,7 +104,7 @@ test('router allows canonical iOS simulator gestures during overlay recording af
     startedAt: Date.now() - 1_000,
     runnerSessionId: 'runner-before',
   });
-  sessionStore.set('default', session);
+  sessionStore.publish('default', session);
   mockObserveRunnerSession.mockResolvedValue({
     alive: true,
     sessionId: 'runner-after',

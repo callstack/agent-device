@@ -56,7 +56,7 @@ function session(address: string): SessionState {
 
 function storeWithHolder(): SessionStore {
   const store = makeSessionStore('agent-device-open-wait-');
-  store.set(HOLDER_ADDRESS, session(HOLDER_ADDRESS));
+  store.publish(HOLDER_ADDRESS, session(HOLDER_ADDRESS));
   return store;
 }
 
@@ -161,7 +161,7 @@ test('only a fresh open with a budget and a resolved device gets a wait', () => 
   ).toBeUndefined();
 
   // An open onto a session that already exists is bound to a device nobody else is refused for.
-  sessionStore.set(OPENER_ADDRESS, session(OPENER_ADDRESS));
+  sessionStore.publish(OPENER_ADDRESS, session(OPENER_ADDRESS));
   expect(
     beginWait({
       req: budget,
@@ -193,7 +193,8 @@ test('a device that frees up ends the wait without claiming a spent budget', asy
   vi.useFakeTimers();
   const req = openRequest({ waitMs: 30_000 });
   const store = storeWithHolder();
-  const release = setTimeout(() => store.delete(HOLDER_ADDRESS), 600);
+  const holder = store.lookup(HOLDER_ADDRESS)!;
+  const release = setTimeout(() => store.retire(holder), 600);
 
   await waitUntil(
     () =>
@@ -223,10 +224,12 @@ test('an open yields the device lock to a session that took the device after the
   })!;
   // A competing open puts its session on the device in the window between this open's look at the
   // free store and its first pass under the locks, and hands it back 300ms later.
-  setTimeout(() => store.delete(HOLDER_ADDRESS), 300);
   const trace = lockTrace({
     onAcquire: (pass) => {
-      if (pass === 1) store.set(HOLDER_ADDRESS, session(HOLDER_ADDRESS));
+      if (pass === 1) {
+        const holder = store.publish(HOLDER_ADDRESS, session(HOLDER_ADDRESS));
+        setTimeout(() => store.retire(holder), 300);
+      }
     },
   });
 

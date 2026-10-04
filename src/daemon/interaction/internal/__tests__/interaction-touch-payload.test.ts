@@ -88,7 +88,7 @@ test('press coordinates appends touch-visualization events while recording', asy
     startedAt: Date.now() - 1_000,
     showTouches: true,
   });
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockTapPoint.mockResolvedValue({
     ok: true,
@@ -139,7 +139,7 @@ test('press coordinates on iOS recording captures a full snapshot for the touch 
     startedAt: Date.now() - 1_000,
     showTouches: true,
   });
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockTapPoint.mockResolvedValue({ x: 220, y: 600 });
   // Regression: a filtered snapshot has no Application/Window node, so viewport inference would
@@ -198,7 +198,7 @@ test('press coordinates on Android recording uses physical screen size when no s
     showTouches: true,
   });
   session.snapshot = undefined;
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockTapPoint.mockResolvedValue({ x: 300, y: 2300 });
 
@@ -234,7 +234,7 @@ test('press coordinates on Android recording caches physical screen size across 
     showTouches: true,
   });
   session.snapshot = undefined;
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockTapPoint.mockResolvedValue({ x: 300, y: 2300 });
 
@@ -281,7 +281,7 @@ test('press coordinates without recording skips Android screen-size lookup', asy
   const sessionName = 'android-direct-press-no-recording';
   const session = makeAndroidSession(sessionName);
   session.snapshot = undefined;
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockTapPoint.mockResolvedValue({ x: 300, y: 2300 });
 
@@ -314,7 +314,7 @@ test('press coordinates during recording still dispatches when Android screen-si
     showTouches: true,
   });
   session.snapshot = undefined;
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockTapPoint.mockResolvedValue({ x: 300, y: 2300 });
   mockGetAndroidScreenSize.mockRejectedValue(new Error('adb unavailable'));
@@ -368,7 +368,7 @@ test('press @ref preserves native timing in recorded result and touch visualizat
     startedAt: 1_000,
     showTouches: true,
   });
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const originalNow = Date.now;
   let now = 1_500;

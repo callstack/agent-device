@@ -68,7 +68,7 @@ function setup(): Harness {
   roots.push(root);
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const session = makeIosSession(SESSION);
-  sessionStore.set(SESSION, session);
+  sessionStore.publish(SESSION, session);
   const handleRequest = createRequestHandler({
     logPath: path.join(root, 'daemon.log'),
     token: TOKEN,

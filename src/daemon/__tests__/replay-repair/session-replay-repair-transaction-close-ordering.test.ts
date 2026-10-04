@@ -94,6 +94,7 @@ test('BLOCKER 2 (new): a repair close whose PLATFORM close fails never commits a
   const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-platform-close-fail-',
   );
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   const session = makeCompleteRepairSession(sessionStore, sessionName, root);
   const healedPath = path.join(root, 'flow.healed.ad');
 
@@ -175,6 +176,7 @@ test('BLOCKER 3 (second follow-up): a retry after a SUCCESSFUL platform close bu
   const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-close-idempotent-',
   );
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   makeCompleteRepairSession(sessionStore, sessionName, root);
   const healedPath = path.join(root, 'flow.healed.ad');
   // A prior COMPLETE (sentinel-marked) healed artifact already sits at the
@@ -273,6 +275,7 @@ test('BLOCKER 3 (third follow-up): an untargeted close that performed NO platfor
   const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-close-identity-untargeted-',
   );
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   makeCompleteRepairSession(sessionStore, sessionName, root);
   const healedPath = path.join(root, 'flow.healed.ad');
   // A prior COMPLETE artifact already sits at the default path so the commit
@@ -318,6 +321,7 @@ test('BLOCKER 3 (third follow-up): a retry targeting a DIFFERENT app than the su
   const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-close-identity-changed-target-',
   );
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   makeCompleteRepairSession(sessionStore, sessionName, root);
   const healedPath = path.join(root, 'flow.healed.ad');
   fs.writeFileSync(

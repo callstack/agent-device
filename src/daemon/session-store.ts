@@ -60,11 +60,8 @@ export class SessionStore {
   }
 
   /**
-   * Returns the LIVE record, not a copy: mutating a field on the result is a durable write
-   * to store state whether or not {@link SessionStore.set} is called afterwards. Which
-   * modules may do that is declared in `SESSION_STATE_FIELD_OWNERS`
-   * (`scripts/layering/session-state.ts`) and enforced by the layering gate's R7, because
-   * nothing here can check the invariant a given field carries.
+   * Returns the live record. Field owners may mutate it through their transitions;
+   * record rebuilds use a lifetime-checked update. R7 enforces field ownership.
    */
   get(name: string): SessionState | undefined {
     return this.sessions.get(name)?.current;
@@ -141,27 +138,6 @@ export class SessionStore {
 
   private captureRef(address: string, entry: SessionEntry): SessionRef {
     return Object.freeze({ address, session: entry.current, lifetime: entry });
-  }
-
-  /**
-   * Insert or replace a session. Calling this with a record obtained from
-   * {@link SessionStore.get} is a no-op — the reference is already stored — so the call
-   * documents intent rather than committing anything; a genuinely new record needs it.
-   */
-  set(name: string, session: SessionState): void {
-    // A key with no record is a NEW occupant, and the previous occupant's idle-expiry marker must
-    // stop explaining this key's absences from now on. Clearing it here rather than at `open` covers
-    // every way a record arrives — `open`'s provisional record, a record-only `record` session — and
-    // cannot be forgotten by a future insertion path. A replacing `open` on a live session takes the
-    // other branch and keeps whatever marker that session will earn for itself.
-    const entry = this.sessions.get(name);
-    if (entry) entry.current = session;
-    else this.publish(name, session);
-  }
-
-  delete(name: string): boolean {
-    this.runtimeHints.delete(name);
-    return this.sessions.delete(name);
   }
 
   *values(): IterableIterator<SessionState> {

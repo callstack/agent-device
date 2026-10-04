@@ -96,7 +96,7 @@ test('runtime clear removes applied transport hints for the active app', async (
     metroHost: '10.0.0.10',
     metroPort: 8081,
   });
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, {
       platform: 'android',
       id: 'emulator-5554',
@@ -146,7 +146,7 @@ test('runtime clear expires the ref frame at the admitted hint mutation boundary
     }),
     appBundleId: 'com.example.demo',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   sessionStore.setRuntimeHints(sessionName, {
     platform: 'android',
     metroHost: '10.0.2.2',
@@ -190,7 +190,7 @@ test('runtime clear rejects a false runtime-hints fact before its one implementa
     metroHost: '10.0.0.10',
     metroPort: 8081,
   });
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, device),
     appBundleId: 'com.example.demo',
   });
@@ -247,7 +247,7 @@ test('runtime gesture-viewport admits and binds the exact viewport operation onc
     mkdtempForTestSync('runtime-gesture-viewport'),
     'runtime-gesture-viewport.log',
   );
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       platform: 'android',

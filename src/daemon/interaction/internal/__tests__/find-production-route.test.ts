@@ -93,7 +93,7 @@ async function runFindThroughLeaf(options: {
   const sessionStore = makeSessionStore();
   const sessionName = 'default';
   const session = makeSession(sessionName);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockDispatch.mockImplementation(async (_device, command) =>
     command === 'snapshot' ? { nodes: freshFindTree(), backend: 'xctest' } : {},
@@ -110,7 +110,6 @@ async function runFindThroughLeaf(options: {
         const current = sessionStore.get(sessionName);
         if (current) {
           current.snapshot = divergedSessionTree();
-          sessionStore.set(sessionName, current);
         }
       }
       // The real leaf, not a stub.

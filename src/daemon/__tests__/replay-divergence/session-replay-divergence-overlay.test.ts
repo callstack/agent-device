@@ -49,7 +49,7 @@ test('buildReplayFailureDivergence: a system-overlay window survives into screen
   const root = mkdtempForTestSync('agent-device-replay-divergence-overlay-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeAndroidSession(sessionName, { appBundleId: 'com.callstack.agentdevicelab' }),
   );
@@ -163,7 +163,7 @@ test('buildReplayFailureDivergence: a fully-captured overlay dismiss-target enum
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   const appBundleId = 'com.callstack.agentdevicelab';
-  sessionStore.set(sessionName, makeAndroidSession(sessionName, { appBundleId }));
+  sessionStore.publish(sessionName, makeAndroidSession(sessionName, { appBundleId }));
 
   mockDispatchCommand.mockResolvedValue({
     nodes: appSwampWithTrailingOverlay(appBundleId),
@@ -259,7 +259,7 @@ test('buildReplayFailureDivergence: when a system overlay mass-covers the app, t
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   const appBundleId = 'com.callstack.agentdevicelab';
-  sessionStore.set(sessionName, makeAndroidSession(sessionName, { appBundleId }));
+  sessionStore.publish(sessionName, makeAndroidSession(sessionName, { appBundleId }));
 
   mockDispatchCommand.mockResolvedValue({
     nodes: overlayMassCoveringApp(appBundleId),
@@ -334,7 +334,7 @@ test('buildReplayFailureDivergence: a mass-covered app with no actionable overla
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   const appBundleId = 'com.callstack.agentdevicelab';
-  sessionStore.set(sessionName, makeAndroidSession(sessionName, { appBundleId }));
+  sessionStore.publish(sessionName, makeAndroidSession(sessionName, { appBundleId }));
 
   mockDispatchCommand.mockResolvedValue({
     nodes: bareScrimMassCoveringApp(appBundleId),
@@ -384,7 +384,7 @@ test('buildReplayFailureDivergence: the partial ref frame authorizes exactly the
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   const appBundleId = 'com.callstack.agentdevicelab';
-  sessionStore.set(sessionName, makeAndroidSession(sessionName, { appBundleId }));
+  sessionStore.publish(sessionName, makeAndroidSession(sessionName, { appBundleId }));
 
   mockDispatchCommand.mockReset();
   mockDispatchCommand.mockResolvedValue({

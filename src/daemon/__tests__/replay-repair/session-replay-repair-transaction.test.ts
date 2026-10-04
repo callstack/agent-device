@@ -306,7 +306,7 @@ test('C5a: an incomplete repair reaped by idle-reap leaves a tombstone (no heale
   // nothing (not complete) and a tombstone is left behind (the exact teardown
   // step daemon-runtime.ts's teardownDaemonSession runs).
   sessionStore.finalizeRepairTeardown(storeSessionForTest(sessionStore, session));
-  sessionStore.delete(sessionName);
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   expect(fs.existsSync(path.join(root, 'flow.healed.ad'))).toBe(false);
 
   const tombstone = sessionStore.readRepairTombstone(sessionName);
@@ -400,7 +400,7 @@ test('BLOCKER 1: a --from continuation on a reaped session returns SESSION_NOT_F
 
   // Idle-reap tears the incomplete repair down, leaving a tombstone.
   sessionStore.finalizeRepairTeardown(sessionStore.lookup(sessionName)!);
-  sessionStore.delete(sessionName);
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   expect(sessionStore.readRepairTombstone(sessionName)).toBeDefined();
 
   // A `--from` continuation targeting the (now reaped) session must surface
@@ -423,6 +423,7 @@ test('BLOCKER 2b/2c: a close whose commit FAILS (no-clobber) keeps the session f
   const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-commit-fail-',
   );
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   makeCompleteRepairSession(sessionStore, sessionName, root);
   // A prior COMPLETE (sentinel-marked) healed artifact already sits at the
   // default path — the commit must refuse to clobber it.
