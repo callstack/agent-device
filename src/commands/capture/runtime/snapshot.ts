@@ -206,7 +206,16 @@ function normalizeBackendSnapshot(
   result: BackendSnapshotResult,
   runtime: AgentDeviceRuntime,
 ): SnapshotState {
-  if (result.snapshot) return result.snapshot;
+  // A backend may hand over state it built itself, and the response-level facts it publishes beside
+  // that state travel with this capture: returning the state alone would drop a producer's own
+  // keyboard band or viewport box (#3182) on the one path where the backend named them itself.
+  if (result.snapshot) {
+    return {
+      ...result.snapshot,
+      ...(result.keyboard ? { keyboard: result.keyboard } : {}),
+      ...(result.viewport ? { viewport: result.viewport } : {}),
+    };
+  }
   return {
     nodes: result.nodes ?? [],
     truncated: result.truncated,

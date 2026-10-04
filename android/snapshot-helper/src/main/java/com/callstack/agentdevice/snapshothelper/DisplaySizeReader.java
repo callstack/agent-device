@@ -11,10 +11,12 @@ package com.callstack.agentdevice.snapshothelper;
  * because a rect's coordinates answer to the screen rather than to the app's window.
  *
  * The caller hands in the extent of the same {@code DisplayMetrics} whose {@code density} this helper
- * publishes, so size and density cannot describe two different configurations — it is the one the
- * framework laid the captured nodes out with, a {@code wm size} or {@code wm density} override
- * included, and it rotates with the screen. {@code getRealSize} is deliberately not consulted: it is
- * deprecated and rotates inconsistently across the devices this helper runs on.
+ * publishes, and it is the configuration the framework lays out with, a {@code wm size} or
+ * {@code wm density} override included, rotating with the screen. The helper reads that metrics once,
+ * when it assembles a capture's metadata, so density and extent always describe one configuration —
+ * exactly the guarantee the density key already makes, and no stronger: a rotation landing between
+ * the dump and this read changes both keys together. {@code getRealSize} is deliberately not
+ * consulted: it is deprecated and rotates inconsistently across the devices this helper runs on.
  *
  * A display that answers with nothing usable publishes no fact at all. Absence is the only way to say
  * "unknown", so the host never sees a zero.

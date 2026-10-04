@@ -25,7 +25,10 @@ afterEach(async () => {
   await resetAndroidSnapshotHelperSessions();
 });
 
-function helperAdbServing(display: { width?: number; height?: number } = {}): AndroidAdbExecutor {
+function helperAdbServing(
+  display: { width?: number; height?: number } = {},
+  xml: string = SCREEN_XML,
+): AndroidAdbExecutor {
   const displayKeys =
     display.width !== undefined && display.height !== undefined
       ? [
@@ -39,7 +42,7 @@ function helperAdbServing(display: { width?: number; height?: number } = {}): An
     'INSTRUMENTATION_STATUS: outputFormat=uiautomator-xml',
     'INSTRUMENTATION_STATUS: chunkIndex=0',
     'INSTRUMENTATION_STATUS: chunkCount=1',
-    `INSTRUMENTATION_STATUS: payloadBase64=${Buffer.from(SCREEN_XML, 'utf8').toString('base64')}`,
+    `INSTRUMENTATION_STATUS: payloadBase64=${Buffer.from(xml, 'utf8').toString('base64')}`,
     'INSTRUMENTATION_STATUS_CODE: 1',
     'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-snapshot-helper-v1',
     'INSTRUMENTATION_RESULT: helperApiVersion=1',
@@ -150,4 +153,24 @@ test('androidSnapshotViewportFromHelperMetadata refuses an unusable display read
       JSON.stringify(unusable),
     );
   }
+});
+
+// The consumer this issue came from takes the extent of all rects as the screen. A display read
+// answers that question without the tree, so a capture whose nodes carry no bounds at all still
+// names the box those bounds would be measured in.
+test('an Android capture with geometry-free nodes still publishes the display it read (#3182)', async () => {
+  const capture = await snapshotAndroid(device, {
+    helperAdb: helperAdbServing(
+      { width: 1080, height: 2400 },
+      '<hierarchy><node text="row" /></hierarchy>',
+    ),
+    helperArtifact,
+  });
+
+  assert.deepEqual(capture.viewport, { width: 1080, height: 2400 });
+  assert.equal(
+    capture.nodes.every((node) => node.rect === undefined),
+    true,
+    'the tree really carries no geometry',
+  );
 });

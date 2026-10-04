@@ -601,7 +601,7 @@ async function rejectAndroidHelperContentUnavailable(params: {
   signal?: AbortSignal;
   /** A transient capture does not own the helper, so its content verdict leaves the helper alone. */
   retireHelper: boolean;
-}): Promise<AndroidUiHierarchyCapture> {
+}): Promise<never> {
   emitDiagnostic({
     level: 'error',
     phase: 'android_snapshot_helper_content_invalid',
@@ -643,7 +643,7 @@ async function rejectAndroidHelperCaptureFailure(params: {
   helperDeviceKey: string;
   artifact: AndroidSnapshotHelperArtifact;
   adb: AndroidAdbExecutor;
-}): Promise<AndroidUiHierarchyCapture> {
+}): Promise<never> {
   const failureReason = formatAndroidSnapshotHelperFailureReason(params.error);
   emitDiagnostic({
     level: 'error',
