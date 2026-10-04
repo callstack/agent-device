@@ -257,12 +257,40 @@ extension RunnerTests {
     XCTAssertEqual(editableTextValue(for: app.textFields.element(boundBy: 0), treatingPlaceholderAsEmpty: true), "")
   }
 
-  // The known limit: neither input has an identifier, and the successor takes the code field's index
-  // in the query that bound it, so the remaining posts resolve to it. Refusing point and focus
-  // re-resolution would not help, because the index-bound query itself returns the successor. The
-  // command must still fail typed, never report success or repair into the successor.
+  // A one-time-code field whose value is a digit-count summary auto-submits on the last digit and a
+  // named input takes its place. The bound field is gone, so the fill is the plain unverified
+  // "typed": no unconfirmed evidence read off the successor, and no text in it.
   @MainActor
-  func testFillFailsTypedWhenAnIndistinguishableInputReplacesItMidDelivery() throws {
+  func testFillIntoAutoSubmittingDigitCountFieldReportsNoEvidenceFromItsSuccessor() throws {
+    let textField = try launchRemovableInputFixture(
+      "--agent-device-text-entry-digit-count-value",
+      "--agent-device-text-entry-auto-submit"
+    )
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-digit-count-auto-submit", text: "123456", at: textField)
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(response.data?.message, "typed")
+    XCTAssertNil(response.data?.verification)
+    XCTAssertFalse(textField.exists)
+    let nextScreenField = app.textFields["agent-device-auto-submit-next-screen-input"]
+    XCTAssertTrue(nextScreenField.exists)
+    XCTAssertEqual(editableTextValue(for: nextScreenField, treatingPlaceholderAsEmpty: true), "")
+  }
+
+  // Pins a known limit, not desired behavior: neither input has an identifier, and the successor
+  // takes the code field's index in the query that bound it, so the remaining posts resolve to it
+  // and land in the successor. Refusing point and focus re-resolution would not help, because the
+  // index-bound query itself returns the successor. What must hold is a typed failure, never success
+  // or a repair into the successor. The successor's "23456" records the wrong-target side effect; a
+  // per-instance identity would make that assertion fail, and the test should then change with it.
+  @MainActor
+  func testFillPinsKnownLimitWhenAnIndistinguishableInputReplacesItMidDelivery() throws {
     let textField = try launchRemovableInputFixture(
       "--agent-device-text-entry-replace-after-input",
       "--agent-device-text-entry-unnamed-input"

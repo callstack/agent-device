@@ -117,7 +117,9 @@ extension RunnerTests {
 
   /// The input a text entry command bound to. XCUIElement exposes no per-instance id, and a query
   /// bound by index or point re-resolves to whatever input occupies that slot now, so element type
-  /// plus identifier is the identity. It is unique only when the identifier is non-empty.
+  /// plus identifier is the identity. It is unique only when the identifier is non-empty. Unlike
+  /// `TextEntryElementIdentity` it leaves out the frame: it must hold across every post of a fill,
+  /// while the field can still be moving with the keyboard.
   struct TextEntryInputIdentity: Equatable {
     let elementType: XCUIElement.ElementType
     let identifier: String
