@@ -42,6 +42,9 @@ test('client capture.snapshot restates an unusable viewport payload as absence (
       x: -Number.MAX_VALUE / 2,
       y: -Number.MAX_VALUE / 2,
     },
+    // The published shape carries no origin, so a broken producer's failed-read box usually arrives
+    // as bare maximal extents; minting an origin for them must not mint a screen either.
+    { width: Number.MAX_VALUE, height: Number.MAX_VALUE },
   ]) {
     const client = clientAnswering({ truncated: false, viewport });
     const result = await client.capture.snapshot();

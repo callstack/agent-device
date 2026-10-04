@@ -41,6 +41,16 @@ export function isPositiveFiniteRect(rect: Rect | undefined): rect is Rect {
 }
 
 /**
+ * A failed read keeps the maximal extents of `CGRectInfinite` whatever happened to its origin, and a
+ * size field carries no origin of its own: a producer that hands over the box it still holds after a
+ * refused read, or a wire payload that arrives with the extents and no coordinates, would otherwise
+ * publish the largest number on the wire as the screen every rect is measured in (#2891, #3182).
+ */
+function reportsFailedReadExtents(width: number, height: number): boolean {
+  return width >= CG_RECT_INFINITE.width || height >= CG_RECT_INFINITE.height;
+}
+
+/**
  * The ONE construction path for the viewport a snapshot response publishes (#3182): a producer hands
  * over the box it read, and a box this guard refuses yields `undefined` — the absence that means
  * unknown — instead of a size with a zero in it. A producer that published a zero would be
@@ -49,6 +59,7 @@ export function isPositiveFiniteRect(rect: Rect | undefined): rect is Rect {
  */
 export function snapshotViewportSizeFrom(box: Rect | undefined): SnapshotViewportSize | undefined {
   if (!isPositiveFiniteRect(box)) return undefined;
+  if (reportsFailedReadExtents(box.width, box.height)) return undefined;
   return { width: box.width, height: box.height };
 }
 
@@ -58,10 +69,9 @@ export function snapshotViewportSizeFrom(box: Rect | undefined): SnapshotViewpor
  * unknown. A reader that trusted the payload could otherwise hand a consumer the `width: 0` a broken
  * producer wrote, which is the claim {@link snapshotViewportSizeFrom} exists to make unrepresentable.
  *
- * The published shape carries no origin, but a producer shipping the failed-read box it still holds
- * would ship the `CGRectInfinite` origin beside the maximal extents; when an `x`/`y` is present the
- * guard sees it, so the sentinel #2891 exists for is refused here too rather than being flattened
- * into the largest finite box on the wire.
+ * The published shape carries no origin, so the failed read has to be recognised from its extents
+ * alone: the extents check covers the payload with no coordinates as well as one that arrived with
+ * the `CGRectInfinite` origin beside them.
  */
 export function readSnapshotViewportSize(value: unknown): SnapshotViewportSize | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
@@ -69,6 +79,7 @@ export function readSnapshotViewportSize(value: unknown): SnapshotViewportSize |
   if (typeof width !== 'number' || typeof height !== 'number') return undefined;
   if (x !== undefined && typeof x !== 'number') return undefined;
   if (y !== undefined && typeof y !== 'number') return undefined;
+  if (reportsFailedReadExtents(width, height)) return undefined;
   const box = { x: x ?? 0, y: y ?? 0, width, height };
   return isPositiveFiniteRect(box) ? { width, height } : undefined;
 }
