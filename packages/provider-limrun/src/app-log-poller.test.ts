@@ -2,152 +2,89 @@ import type { AppLogRuntimeHost } from '@agent-device/contracts/app-log-runtime'
 import { describe, expect, test, vi } from 'vitest';
 import { startLimrunAppLogPoller, type LimrunAppLogReader } from './app-log-poller.ts';
 
+function reader(
+  platform: LimrunAppLogReader['platform'],
+  overrides: Partial<LimrunAppLogReader> = {},
+): LimrunAppLogReader {
+  return {
+    platform,
+    leaseId: 'lease-1',
+    instanceId: 'instance-1',
+    readLogs: async () => 'one line\n',
+    [Symbol.asyncDispose]: async () => {},
+    ...overrides,
+  };
+}
+
 describe('Limrun app-log poller', () => {
-  test('deduplicates the persisted tail and stops before disposing its resources', async () => {
-    const sleeps = deferredSleeps();
-    const writes: string[] = [];
-    let outputDisposed = false;
-    let readerDisposed = false;
-    const reader: LimrunAppLogReader = {
-      platform: 'ios',
-      leaseId: 'lease-1',
-      instanceId: 'instance-1',
-      readLogs: vi.fn(async () => 'old line\nshared\nnew line\n'),
-      [Symbol.asyncDispose]: async () => {
-        readerDisposed = true;
-      },
-    };
-    const handle = await startLimrunAppLogPoller({
-      host: pollerHost({
-        existingTail: 'old line\nshared\n[agent-device][mark][time] checkpoint\n',
-        writes,
-        sleeps,
-        onOutputDispose: () => {
-          outputDisposed = true;
-        },
-      }),
-      reader,
-      appBundleId: 'com.example.app',
-      outputPath: '/sessions/one/app.log',
-    });
-    await vi.waitFor(() => expect(writes).toEqual(['new line\n']));
-
-    const finishing = handle.finish();
-    expect(readerDisposed).toBe(false);
-    expect(outputDisposed).toBe(false);
-    sleeps.resolveNext(1_000);
-    await finishing;
-    expect(reader.readLogs).toHaveBeenCalledTimes(1);
-    expect(readerDisposed).toBe(true);
-    expect(outputDisposed).toBe(true);
-  });
-
-  test.each(['readTail', 'openAppend'] as const)(
-    'rolls back the reader when %s fails during acquisition',
-    async (failure) => {
-      const dispose = vi.fn(async () => {});
-      const reader: LimrunAppLogReader = {
-        platform: 'ios',
-        leaseId: 'lease-1',
-        instanceId: 'instance-1',
-        readLogs: async () => '',
-        [Symbol.asyncDispose]: dispose,
-      };
-      const host = pollerHost({
-        existingTail: '',
-        writes: [],
-        sleeps: deferredSleeps(),
-        failure,
+  test.each([
+    ['ios', 'ios-simulator'],
+    ['android', 'android'],
+  ] as const)(
+    'derives the %s backend identity independently of the shared poller',
+    async (platform, backend) => {
+      const sleeps = deferredSleeps();
+      const writes: string[] = [];
+      const handle = await startLimrunAppLogPoller({
+        host: pollerHost({ existingTail: '', writes, sleeps }),
+        reader: reader(platform),
+        appBundleId: 'com.example.app',
+        outputPath: '/sessions/one/app.log',
       });
-      await expect(
-        startLimrunAppLogPoller({
-          host,
-          reader,
-          appBundleId: 'com.example.app',
-          outputPath: '/sessions/one/app.log',
-        }),
-      ).rejects.toThrow(`${failure === 'readTail' ? 'tail' : 'open'} failed`);
-      expect(dispose).toHaveBeenCalledOnce();
+      await vi.waitFor(() => expect(writes).toEqual(['one line\n']));
+      expect(handle.inspect().backend).toBe(backend);
+      const finishing = handle.finish();
+      sleeps.resolveNext(1_000);
+      await expect(finishing).resolves.toMatchObject({
+        status: 'completed',
+        result: { backend },
+      });
     },
   );
 
-  test('uses linear overlap matching for a near-limit tail without overlap', async () => {
+  test('keeps the Limrun cleanup wording when disposal fails', async () => {
     const sleeps = deferredSleeps();
-    const writes: string[] = [];
-    const reader: LimrunAppLogReader = {
-      platform: 'ios',
-      leaseId: 'lease-1',
-      instanceId: 'instance-1',
-      readLogs: async () => `${'b'.repeat(240_000)}\n`,
-      [Symbol.asyncDispose]: async () => {},
-    };
     const handle = await startLimrunAppLogPoller({
-      host: pollerHost({ existingTail: `${'a'.repeat(240_000)}\n`, writes, sleeps }),
-      reader,
-      appBundleId: 'com.example.app',
-      outputPath: '/sessions/one/app.log',
-    });
-    await vi.waitFor(() => expect(writes[0]?.length).toBe(240_001));
-    const finishing = handle.finish();
-    sleeps.resolveNext(1_000);
-    await finishing;
-  });
-
-  test('still disposes the output when reader cleanup rejects', async () => {
-    const sleeps = deferredSleeps();
-    let outputDisposed = false;
-    const reader: LimrunAppLogReader = {
-      platform: 'ios',
-      leaseId: 'lease-1',
-      instanceId: 'instance-1',
-      readLogs: async () => '',
-      [Symbol.asyncDispose]: async () => {
-        throw new Error('reader cleanup failed');
-      },
-    };
-    const handle = await startLimrunAppLogPoller({
-      host: pollerHost({
-        existingTail: '',
-        writes: [],
-        sleeps,
-        onOutputDispose: () => {
-          outputDisposed = true;
+      host: pollerHost({ existingTail: '', writes: [], sleeps }),
+      reader: reader('ios', {
+        [Symbol.asyncDispose]: async () => {
+          throw new Error('reader cleanup failed');
         },
       }),
-      reader,
       appBundleId: 'com.example.app',
       outputPath: '/sessions/one/app.log',
     });
     await vi.waitFor(() => expect(sleeps.hasPending(1_000)).toBe(true));
     const finishing = handle.finish();
     sleeps.resolveNext(1_000);
-    await expect(finishing).resolves.toMatchObject({ status: 'cleanup-pending' });
-    expect(outputDisposed).toBe(true);
+    await expect(finishing).resolves.toMatchObject({
+      status: 'cleanup-pending',
+      message: 'Limrun app-log cleanup did not settle every owned resource',
+    });
   });
 
-  test('allows one bounded read only and settles it before disposal', async () => {
+  test('settles an uncancelable read whose reader ignores the poller signal', async () => {
     const sleeps = deferredSleeps();
     let readerDisposed = false;
-    const reader: LimrunAppLogReader = {
-      platform: 'android',
-      leaseId: 'lease-1',
-      instanceId: 'instance-1',
-      readLogs: vi.fn(async () => await new Promise<string>(() => {})),
-      [Symbol.asyncDispose]: async () => {
-        readerDisposed = true;
-      },
-    };
+    const readLogs = vi.fn(async (_appBundleId: string, _lineLimit: number) => {
+      return await new Promise<string>(() => {});
+    });
     const handle = await startLimrunAppLogPoller({
       host: pollerHost({ existingTail: '', writes: [], sleeps }),
-      reader,
+      reader: reader('android', {
+        readLogs,
+        [Symbol.asyncDispose]: async () => {
+          readerDisposed = true;
+        },
+      }),
       appBundleId: 'com.example.app',
       outputPath: '/sessions/one/app.log',
     });
-    const finishing = handle.finish();
-    expect(readerDisposed).toBe(false);
+    await vi.waitFor(() => expect(sleeps.hasPending(5_000)).toBe(true));
     sleeps.resolveNext(5_000);
-    await finishing;
-    expect(reader.readLogs).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(handle.inspect().state).toBe('failed'));
+    expect(readLogs).toHaveBeenCalledTimes(1);
+    await expect(handle.finish()).resolves.toMatchObject({ status: 'completed' });
     expect(readerDisposed).toBe(true);
   });
 });
@@ -156,8 +93,6 @@ function pollerHost(options: {
   existingTail: string;
   writes: string[];
   sleeps: ReturnType<typeof deferredSleeps>;
-  onOutputDispose?: () => void;
-  failure?: 'readTail' | 'openAppend';
 }): AppLogRuntimeHost {
   return {
     appleTools: {
@@ -178,19 +113,13 @@ function pollerHost(options: {
       run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
     },
     outputs: {
-      readTail: async () => {
-        if (options.failure === 'readTail') throw new Error('tail failed');
-        return options.existingTail;
-      },
-      openAppend: async () => {
-        if (options.failure === 'openAppend') throw new Error('open failed');
-        return {
-          write: async (chunk) => {
-            options.writes.push(String(chunk));
-          },
-          [Symbol.asyncDispose]: async () => options.onOutputDispose?.(),
-        };
-      },
+      readTail: async () => options.existingTail,
+      openAppend: async () => ({
+        write: async (chunk) => {
+          options.writes.push(String(chunk));
+        },
+        [Symbol.asyncDispose]: async () => {},
+      }),
     },
     processTransports: {
       resolve: async () => ({ mode: 'local' }),
