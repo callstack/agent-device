@@ -325,7 +325,7 @@ async function captureAndroidHelperContentWithinWindow(params: {
   adbProvider: AndroidAdbProvider;
   artifact: AndroidSnapshotHelperArtifact;
   helperDeviceKey: string;
-}): Promise<{ xml: string; metadata: AndroidSnapshotBackendMetadata }> {
+}): Promise<AndroidUiHierarchyCapture> {
   const { options } = params;
   const recaptureDeadlineMs = resolveContentRecaptureDeadlineMs(options);
   const rejectContentUnavailable = async (
