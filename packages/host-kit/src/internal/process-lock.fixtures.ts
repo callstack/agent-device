@@ -1,7 +1,28 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { vi } from 'vitest';
 import { readProcessStartTime } from './host-process.ts';
-import type { ProcessLockOwner } from './process-lock.ts';
+import type { ProcessLockOwner, ProcessLockOwnerRecord } from './process-lock.ts';
+
+export function writeLockOwnerFixture(
+  lockDirPath: string,
+  owner: ProcessLockOwner | ProcessLockOwnerRecord,
+): void {
+  fs.mkdirSync(lockDirPath);
+  fs.writeFileSync(path.join(lockDirPath, 'owner.json'), JSON.stringify(owner));
+}
+
+export function writeDeadLockFixture(lockDirPath: string, acquiredAtMs = Date.now()): void {
+  writeLockOwnerFixture(lockDirPath, { pid: 999_999_999, startTime: null, acquiredAtMs });
+}
+
+export function failUnlinkForPath(filePath: string, error: Error) {
+  const unlink = fs.unlinkSync;
+  return vi.spyOn(fs, 'unlinkSync').mockImplementation((target) => {
+    if (String(target) === filePath) throw error;
+    return unlink(target);
+  });
+}
 
 export function currentProcessOwner(): ProcessLockOwner {
   return {

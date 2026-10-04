@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 
 const { zombiePids, processProbe } = vi.hoisted(() => ({
   zombiePids: new Set<number>(),
@@ -36,9 +36,12 @@ import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 import { holdLegacyReclaimMutex } from './legacy-process-lock.fixtures.ts';
 import {
   currentProcessOwner,
+  failUnlinkForPath,
   listReclaimSiblings,
   onFirstGuardOpen,
   stampDirectoryAbandoned,
+  writeDeadLockFixture,
+  writeLockOwnerFixture,
 } from './process-lock.fixtures.ts';
 
 let tmpDir: string;
@@ -67,15 +70,7 @@ test('acquireProcessLock creates and releases a lock directory', async () => {
 
 test('acquireProcessLock reclaims locks owned by dead processes', async () => {
   const lockDirPath = path.join(tmpDir, 'stale.lock');
-  fs.mkdirSync(lockDirPath);
-  fs.writeFileSync(
-    path.join(lockDirPath, 'owner.json'),
-    JSON.stringify({
-      pid: 999_999_999,
-      startTime: null,
-      acquiredAtMs: Date.now() - 10_000,
-    }),
-  );
+  writeDeadLockFixture(lockDirPath, Date.now() - 10_000);
 
   const release = await acquireProcessLock({
     lockDirPath,
@@ -113,18 +108,14 @@ test('acquireProcessLock reclaims locks owned by zombie processes', async () => 
 
 test('acquireProcessLock never steals a null-start-time lock from an alive pid', async () => {
   const lockDirPath = path.join(tmpDir, 'null-start.lock');
-  fs.mkdirSync(lockDirPath);
   // An acquiredAtMs far older than this process simulates what a wall-clock
   // step makes a live null-start owner look like; age is not proof of death,
   // so the waiter must time out instead of reclaiming the held lock.
-  fs.writeFileSync(
-    path.join(lockDirPath, 'owner.json'),
-    JSON.stringify({
-      pid: process.pid,
-      startTime: null,
-      acquiredAtMs: Date.now() - 365 * 24 * 60 * 60_000,
-    }),
-  );
+  writeLockOwnerFixture(lockDirPath, {
+    pid: process.pid,
+    startTime: null,
+    acquiredAtMs: Date.now() - 365 * 24 * 60 * 60_000,
+  });
 
   await assert.rejects(
     () =>
@@ -144,9 +135,8 @@ test('acquireProcessLock never steals a null-start-time lock from an alive pid',
 
 test('acquireProcessLock reports live lock owner details on timeout', async () => {
   const lockDirPath = path.join(tmpDir, 'busy.lock');
-  fs.mkdirSync(lockDirPath);
   const owner = currentProcessOwner();
-  fs.writeFileSync(path.join(lockDirPath, 'owner.json'), JSON.stringify(owner));
+  writeLockOwnerFixture(lockDirPath, owner);
 
   await assert.rejects(
     () =>
@@ -268,15 +258,7 @@ test('acquireProcessLock retains an owner whose record was never written', async
 
 test('one abandoned lock offered to two contenders is held by exactly one of them', async () => {
   const lockDirPath = path.join(tmpDir, 'contended.lock');
-  fs.mkdirSync(lockDirPath);
-  fs.writeFileSync(
-    path.join(lockDirPath, 'owner.json'),
-    JSON.stringify({
-      pid: 999_999_999,
-      startTime: null,
-      acquiredAtMs: Date.now(),
-    }),
-  );
+  writeDeadLockFixture(lockDirPath);
   stampDirectoryAbandoned(lockDirPath);
 
   const attempts = await Promise.allSettled([
@@ -371,13 +353,10 @@ test('a release that could not verify ownership does not wedge the next acquire 
   const release = await acquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
 
   // The unlink the release needs is refused, which is what an EACCES or EMFILE looks like here.
-  const realUnlink = fs.unlinkSync;
-  const unlinkSpy = vi.spyOn(fs, 'unlinkSync').mockImplementation(((target: fs.PathLike) => {
-    if (String(target) === ownerFilePath) {
-      throw Object.assign(new Error('EACCES: permission denied, unlink'), { code: 'EACCES' });
-    }
-    return realUnlink(target as string);
-  }) as typeof fs.unlinkSync);
+  const unlinkSpy = failUnlinkForPath(
+    ownerFilePath,
+    Object.assign(new Error('EACCES: permission denied, unlink'), { code: 'EACCES' }),
+  );
   try {
     await assert.rejects(
       () => release(),
@@ -408,15 +387,11 @@ test('a release that could not verify ownership does not wedge the next acquire 
 // somebody is holding, which is worse than the wait the rule exists to end.
 test('a claim issued by another loading of this module is not read as spent', async () => {
   const lockDirPath = path.join(tmpDir, 'other-issuer.lock');
-  fs.mkdirSync(lockDirPath);
-  fs.writeFileSync(
-    path.join(lockDirPath, 'owner.json'),
-    JSON.stringify({
-      ...currentProcessOwner(),
-      claimToken: 'a-token-this-loading-never-issued',
-      claimIssuerId: 'another-loading-of-this-module',
-    }),
-  );
+  writeLockOwnerFixture(lockDirPath, {
+    ...currentProcessOwner(),
+    claimToken: 'a-token-this-loading-never-issued',
+    claimIssuerId: 'another-loading-of-this-module',
+  });
 
   await assert.rejects(
     () =>
@@ -454,11 +429,7 @@ test('a contender that claims the path during a reclaim keeps its lock', async (
   const lockDirPath = path.join(tmpDir, 'claimed-during-reclaim.lock');
   const mutexPath = path.join(tmpDir, 'claimed-during-reclaim.reclaim.lock');
   const ownerFilePath = path.join(lockDirPath, 'owner.json');
-  fs.mkdirSync(lockDirPath);
-  fs.writeFileSync(
-    ownerFilePath,
-    JSON.stringify({ pid: 999_999_999, startTime: null, acquiredAtMs: Date.now() }),
-  );
+  writeDeadLockFixture(lockDirPath);
   stampDirectoryAbandoned(lockDirPath);
 
   // The moment a contender is admitted to judging this lock, another process clears the dead
@@ -642,11 +613,7 @@ test('a reclaim mutex another contender holds leaves the abandoned lock standing
 test('age alone never authorizes taking a publication or reclaim mutex', async () => {
   const lockDirPath = path.join(tmpDir, 'dead-janitor.lock');
   const mutexPath = path.join(tmpDir, 'dead-janitor.reclaim.lock');
-  fs.mkdirSync(lockDirPath);
-  fs.writeFileSync(
-    path.join(lockDirPath, 'owner.json'),
-    JSON.stringify({ pid: 999_999_999, startTime: null, acquiredAtMs: Date.now() }),
-  );
+  writeDeadLockFixture(lockDirPath);
   fs.mkdirSync(mutexPath);
   stampDirectoryAbandoned(lockDirPath);
   stampDirectoryAbandoned(mutexPath);
@@ -665,11 +632,7 @@ test('age alone never authorizes taking a publication or reclaim mutex', async (
 test('a reclaim that cannot clear the lock directory leaves the record it judged', async () => {
   const lockDirPath = path.join(tmpDir, 'immovable.lock');
   const ownerFilePath = path.join(lockDirPath, 'owner.json');
-  fs.mkdirSync(lockDirPath);
-  fs.writeFileSync(
-    ownerFilePath,
-    JSON.stringify({ pid: 999_999_999, startTime: null, acquiredAtMs: Date.now() }),
-  );
+  writeDeadLockFixture(lockDirPath);
   stampDirectoryAbandoned(lockDirPath);
 
   const realRemove = fs.rmdirSync;
@@ -926,6 +889,46 @@ test('failed owner publication rolls back only the attempted empty directory', a
   if (retry.status === 'acquired') await retry.acquisition.release();
 });
 
+test('a failed guard release reports retained exclusion and supports verified manual recovery', async () => {
+  const lockDirPath = path.join(tmpDir, 'guard-release.lock');
+  const guardPath = path.join(tmpDir, 'guard-release.reclaim.lock');
+  const primary = Object.assign(new Error('guard unlink refused'), { code: 'EPERM' });
+  const unlinkSpy = failUnlinkForPath(guardPath, primary);
+  try {
+    assert.throws(
+      () => tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() }),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'COMMAND_FAILED');
+        assert.equal(error.details?.reason, 'process_lock_guard_release_failed');
+        assert.equal(error.details?.lockDirPath, lockDirPath);
+        assert.equal(error.cause, primary);
+        const failure = normalizeError(error);
+        assert.equal(failure.cause?.code, 'EPERM');
+        assert.equal(
+          failure.hint,
+          `Restore process inspection or stop the verified owner, then retry. Remove ${lockDirPath} and ${guardPath} only after confirming all users of this state directory have stopped.`,
+        );
+        return true;
+      },
+    );
+    assert.equal(fs.existsSync(guardPath), true);
+    const ownerRecord = fs.readFileSync(path.join(lockDirPath, 'owner.json'), 'utf8');
+    assert.equal(JSON.parse(ownerRecord).pid, process.pid);
+    assert.equal(
+      tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() }).status,
+      'busy',
+    );
+    assert.equal(fs.readFileSync(path.join(lockDirPath, 'owner.json'), 'utf8'), ownerRecord);
+  } finally {
+    unlinkSpy.mockRestore();
+  }
+  fs.unlinkSync(guardPath);
+  const retry = tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
+  assert.equal(retry.status, 'acquired');
+  if (retry.status === 'acquired') await retry.acquisition.release();
+});
+
 test('incomplete release preserves owner evidence and can be retried', async () => {
   const lockDirPath = path.join(tmpDir, 'partial-release.lock');
   const attempt = tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
@@ -973,16 +976,12 @@ test('release waits for a guard another process holds for a filesystem step', as
 test('a contender judges a live owner without holding the guard', async () => {
   const lockDirPath = path.join(tmpDir, 'probed-outside-guard.lock');
   const mutexPath = path.join(tmpDir, 'probed-outside-guard.reclaim.lock');
-  fs.mkdirSync(lockDirPath);
-  fs.writeFileSync(
-    path.join(lockDirPath, 'owner.json'),
-    JSON.stringify({
-      pid: process.ppid,
-      startTime: null,
-      acquiredAtMs: Date.now(),
-      claimToken: 'live-rival',
-    }),
-  );
+  writeLockOwnerFixture(lockDirPath, {
+    pid: process.ppid,
+    startTime: null,
+    acquiredAtMs: Date.now(),
+    claimToken: 'live-rival',
+  });
   let probes = 0;
   let probesUnderGuard = 0;
   processProbe.observe = () => {

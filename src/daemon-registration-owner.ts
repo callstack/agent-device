@@ -280,7 +280,7 @@ export type DaemonRetirementResult =
       removedStateDir?: boolean;
       repairCommitFailure?: RepairCommitFailure;
     }>
-  | Readonly<{ status: 'absent'; removedInfo: false }>
+  | Readonly<{ status: 'absent'; removedInfo: false; removedStateDir?: boolean }>
   | Readonly<{
       status: 'retained';
       termination?: DaemonTerminationResult;
@@ -317,7 +317,7 @@ export async function stopAndRetireDaemon(
         ({ launch }) =>
           launch.pid === input.observed?.pid && launch.startTime === input.observed?.startTime,
       )?.launch;
-      if (!launch?.startTime)
+      if (!launch?.startTime && (input.observed || owned.startups.length > 0))
         throw new AppError(
           'COMMAND_FAILED',
           'The observed daemon is not an owned startup lifetime.',
@@ -518,11 +518,24 @@ function retirePrivateStateIfEligible(
   acquisition: ProcessLockAcquisition,
   result: DaemonRetirementResult,
 ): DaemonRetirementResult {
-  if (!owned || result.status !== 'retired') return result;
+  if (
+    !owned ||
+    (result.status !== 'retired' && !(result.status === 'absent' && owned.startups.length === 0))
+  )
+    return result;
   try {
     acquisition.assertHeld();
     const failure = findUnrecoveredRepairCommitFailure(owned.paths.sessionsDir);
-    if (failure) return { ...result, removedStateDir: false, repairCommitFailure: failure };
+    if (failure)
+      return result.status === 'retired'
+        ? { ...result, removedStateDir: false, repairCommitFailure: failure }
+        : {
+            status: 'retained',
+            reason: 'retirement-unconfirmed',
+            removedInfo: false,
+            removedStateDir: false,
+            repairCommitFailure: failure,
+          };
     acquisition.assertHeld();
     fs.rmSync(owned.paths.baseDir, { recursive: true, force: true });
     return { ...result, removedStateDir: true };

@@ -505,7 +505,20 @@ async function waitForReclaimMutex(lockDirPath: string): Promise<boolean> {
 }
 
 function releaseReclaimMutex(lockDirPath: string): void {
-  fs.unlinkSync(reclaimMutexPath(lockDirPath));
+  try {
+    fs.unlinkSync(reclaimMutexPath(lockDirPath));
+  } catch (error) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Process lock mutation guard release could not be confirmed.',
+      {
+        reason: 'process_lock_guard_release_failed',
+        lockDirPath,
+        hint: staleLockHint(lockDirPath),
+      },
+      error,
+    );
+  }
 }
 
 function errorCode(error: unknown): string | undefined {

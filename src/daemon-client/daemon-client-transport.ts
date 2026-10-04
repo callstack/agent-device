@@ -667,9 +667,11 @@ async function sendHttpRequest(
     );
 
     const remote = isRemoteDaemon(info);
+    let timedOut = false;
     const timeoutHandle =
       typeof timeoutMs === 'number'
         ? setTimeout(() => {
+            timedOut = true;
             reject(requestTimeoutError(timeoutMs, req.meta?.requestId));
             request.destroy();
           }, timeoutMs)
@@ -677,6 +679,7 @@ async function sendHttpRequest(
 
     request.on('error', (err) => {
       if (timeoutHandle) clearTimeout(timeoutHandle);
+      if (timedOut) return;
       reject(handleTransportError(err, req.meta?.requestId, remote));
     });
 

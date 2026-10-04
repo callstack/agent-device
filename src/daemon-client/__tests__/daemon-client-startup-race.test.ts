@@ -161,6 +161,28 @@ test.for([
   },
 );
 
+test('a synchronous private startup failure removes its never-started owned directory', async () => {
+  let paths: DaemonPaths | undefined;
+  spawn.mockImplementation((_command, _args, options) => {
+    paths = resolveDaemonPaths(String(options?.env?.AGENT_DEVICE_STATE_DIR));
+    throw new Error('cannot launch fixture');
+  });
+  await assert.rejects(
+    sendToDaemon({ session: 'default', command: 'test', positionals: [], flags: {} }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.kind, 'daemon_startup_failed');
+      const cleanup = error.details?.cleanupResults;
+      assert.ok(Array.isArray(cleanup));
+      assert.equal(cleanup[0]?.removedStateDir, true);
+      return true;
+    },
+  );
+  assert.ok(paths);
+  assert.equal(fs.existsSync(paths.baseDir), false);
+  assert.equal(spawn.mock.calls.length, 1);
+});
+
 test.for(['early exit', 'timeout'] as const)(
   'a private startup $0 retires its owned directory after joining the child',
   async (failure) => {

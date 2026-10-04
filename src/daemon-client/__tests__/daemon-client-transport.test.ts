@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import net from 'node:net';
+import fs from 'node:fs';
+import path from 'node:path';
+import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
+import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { test, vi } from 'vitest';
 import * as hostTransport from '@agent-device/host-kit/transport';
 import { sleep } from '@agent-device/host-kit/retry';
@@ -473,3 +477,46 @@ test('the classifier ignores message text', () => {
     true,
   );
 });
+
+test.for(['timeout', 'reset'] as const)(
+  'HTTP %s reports only its own transport outcome',
+  async (mode, t) => {
+    if (await skipWhenLoopbackUnavailable(t)) return;
+    const server = http.createServer((request) => {
+      if (mode === 'reset') request.socket.destroy();
+    });
+    const paths = resolveDaemonPaths(mkdtempForTestSync('http-outcome-'));
+    const logPath = path.join(paths.baseDir, 'diagnostics.ndjson');
+    try {
+      const port = await listenOnLoopback(server);
+      await assert.rejects(
+        withDiagnosticsScope({ debug: true, logPath }, () =>
+          sendRequest(
+            { baseUrl: `http://127.0.0.1:${port}`, token: 'secret', pid: 1 },
+            { token: 'secret', command: 'devices', session: 'default', positionals: [], flags: {} },
+            'http',
+            paths,
+            mode === 'timeout' ? 40 : 1_000,
+          ),
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.details?.reason === 'daemon_transport_timeout', mode === 'timeout');
+          return true;
+        },
+      );
+      await sleep(30);
+      const events = fs
+        .readFileSync(logPath, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      assert.equal(
+        events.filter((event) => event.phase === 'daemon_request_socket_error').length,
+        mode === 'timeout' ? 0 : 1,
+      );
+    } finally {
+      await closeLoopbackServer(server);
+    }
+  },
+);

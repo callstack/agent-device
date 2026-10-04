@@ -571,10 +571,15 @@ test('private startup completion stays bounded without birth proof and retains t
 
 for (const contents of [
   '{broken',
-  '{"owner":"default","expiresAt":1e400}',
-  '{"owner":"default","expiresAt":-1e400}',
+  '{"owner":"default","reapedAt":1,"expiresAt":1e400}',
+  '{"owner":"default","reapedAt":1,"expiresAt":-1e400}',
   ...[false, null, 0, {}].map((commitFailure) =>
-    JSON.stringify({ owner: 'default', expiresAt: Date.now() + 60_000, commitFailure }),
+    JSON.stringify({
+      owner: 'default',
+      reapedAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      commitFailure,
+    }),
   ),
 ]) {
   test(`malformed repair evidence (${contents}) retains private state after the actual child has exited`, async () => {

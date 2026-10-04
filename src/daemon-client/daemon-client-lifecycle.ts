@@ -198,11 +198,7 @@ async function readReusableLocalDaemon(
   const existing = readDaemonInfo(settings.paths.infoPath);
   if (!existing) return null;
   if (!registrationAllowsDaemonObservation(inspection, existing)) return null;
-  if (
-    options.waitForLiveStartup &&
-    isProcessAlive(existing.pid) &&
-    !(await canConnect(existing, 'auto', remainingStartupBudget(deadline)))
-  )
+  if (options.waitForLiveStartup && (await isAwaitingDaemonStartup(existing, deadline)))
     return null;
 
   const decision = await resolveDaemonTakeover(existing, {
@@ -219,6 +215,15 @@ async function readReusableLocalDaemon(
   emitDaemonTakeoverNotice(existing, decision.reason, settings.paths.baseDir);
   await retireDaemonForTakeover(existing, settings.paths);
   return null;
+}
+
+async function isAwaitingDaemonStartup(
+  info: DaemonInfo,
+  deadline: number | undefined,
+): Promise<boolean> {
+  return (
+    isProcessAlive(info.pid) && !(await canConnect(info, 'auto', remainingStartupBudget(deadline)))
+  );
 }
 
 function registrationAllowsDaemonObservation(
@@ -405,16 +410,7 @@ async function attemptLocalDaemonStartup(
   try {
     launch = startDaemon(settings);
   } catch (error) {
-    const cleanup = await recoverAbandonedDaemonRegistration({
-      paths: settings.paths,
-      observed: null,
-      lockTimeoutMs: 0,
-    });
-    return {
-      cleanup,
-      startError: normalizeError(error).message,
-      retry: cleanup.status !== 'retained',
-    };
+    return await recoverFailedDaemonLaunch(settings, error);
   }
   const startup = await waitForDaemonStartup(deadline, settings, launch);
   if (startup.kind === 'ready') return { daemon: startup.daemon };
@@ -435,6 +431,30 @@ async function attemptLocalDaemonStartup(
     retry: joined && startup.kind === 'early_exit' && available,
     startError: startup.kind === 'early_exit' ? describeDaemonEarlyExit(startup.exit) : undefined,
     daemonProcess: startup.kind === 'early_exit' ? startup.exit : { pid: launch.pid },
+  };
+}
+
+async function recoverFailedDaemonLaunch(
+  settings: DaemonClientSettings,
+  error: unknown,
+): Promise<FailedDaemonStartup> {
+  const cleanup = settings.ownedStateDir
+    ? await stopAndRetireDaemon({
+        paths: settings.paths,
+        observed: null,
+        mode: 'graceful',
+        ownedStateDir: settings.ownedStateDir,
+        lockTimeoutMs: 0,
+      })
+    : await recoverAbandonedDaemonRegistration({
+        paths: settings.paths,
+        observed: null,
+        lockTimeoutMs: 0,
+      });
+  return {
+    cleanup,
+    startError: normalizeError(error).message,
+    retry: !settings.ownedStateDir && cleanup.status !== 'retained',
   };
 }
 
@@ -711,10 +731,14 @@ function isActiveReplaySessionResponse(
 export function attachActiveSessionAddressHint(
   response: Extract<DaemonResponse, { ok: true }>,
   stateDir: string | undefined,
+  remoteBaseUrl?: string,
 ): Extract<DaemonResponse, { ok: true }> {
   const data = response.data ?? {};
   const sessionName = typeof data.session === 'string' ? data.session : undefined;
   const addressFlags = [
+    ...(remoteBaseUrl
+      ? [`--daemon-base-url ${shellQuoteIfNeeded(publicRemoteEndpoint(remoteBaseUrl))}`]
+      : []),
     ...(stateDir ? [`--state-dir ${shellQuoteIfNeeded(stateDir)}`] : []),
     ...(sessionName ? [`--session ${shellQuoteIfNeeded(sessionName)}`] : []),
   ];
@@ -873,6 +897,15 @@ function readRecentLogTail(logPath: string): string | undefined {
   }
 }
 
+function publicRemoteEndpoint(baseUrl: string): string {
+  const endpoint = new URL(baseUrl);
+  endpoint.username = '';
+  endpoint.password = '';
+  endpoint.search = '';
+  endpoint.hash = '';
+  return endpoint.toString().replace(/\/+$/, '');
+}
+
 function resolveRemoteDaemonBaseUrl(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
   let parsed: URL;
@@ -939,6 +972,7 @@ export function attachSessionAddressHints(
     ? attachActiveSessionAddressHint(
         response,
         settings.ownedStateDir ? settings.paths.baseDir : undefined,
+        settings.remoteBaseUrl,
       )
     : response;
 }
