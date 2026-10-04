@@ -283,11 +283,39 @@ function createRecordingPlatformRuntimeGateway(params: {
             ),
           // R59 does the same for `alert`: the scenario's gateway states and serves the four
           // legs, reusing the Apple family's own module so the runner transcript this scenario
-          // scripts — including its retry and poll windows — is what actually runs.
-          readAlert: async (input) => await interactor.readAlert!(alertOptions(input)),
-          awaitAlert: async (input) => await interactor.awaitAlert!(alertOptions(input)),
-          acceptAlert: async (input) => await interactor.acceptAlert!(alertOptions(input)),
-          dismissAlert: async (input) => await interactor.dismissAlert!(alertOptions(input)),
+          // scripts — including its retry and poll windows — is what actually runs. Each leg
+          // resolves its interactor per call from the input's execution metadata, exactly like
+          // the production alert binding: the request-scoped runner provider is keyed by the
+          // request id that metadata carries, so a bind-time interactor would fall back to the
+          // local runner instead of reaching the scripted provider.
+          readAlert: async (input) =>
+            await (
+              await applePlugin.createInteractor(device, {
+                ...input.execution,
+                appBundleId: input.appBundleId,
+              })
+            ).readAlert!(alertOptions(input)),
+          awaitAlert: async (input) =>
+            await (
+              await applePlugin.createInteractor(device, {
+                ...input.execution,
+                appBundleId: input.appBundleId,
+              })
+            ).awaitAlert!(alertOptions(input)),
+          acceptAlert: async (input) =>
+            await (
+              await applePlugin.createInteractor(device, {
+                ...input.execution,
+                appBundleId: input.appBundleId,
+              })
+            ).acceptAlert!(alertOptions(input)),
+          dismissAlert: async (input) =>
+            await (
+              await applePlugin.createInteractor(device, {
+                ...input.execution,
+                appBundleId: input.appBundleId,
+              })
+            ).dismissAlert!(alertOptions(input)),
           appLogReattach: async () => ({ status: 'missing' }),
           appLogCleanup: async () => ({ status: 'already-missing' }),
           resolveOpenTarget: async (input) => ({
