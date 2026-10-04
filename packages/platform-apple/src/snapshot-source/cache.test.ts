@@ -134,6 +134,63 @@ test('the runtime clang build never uses -Werror', () => {
   assert.ok(!argv.includes('-Werror'));
 });
 
+test('watchOS runtime compiles the bridge against watchsimulator', () => {
+  const argv = buildSnapshotBridgeCompileArgv({
+    architecture: 'arm64',
+    runtime: 'com.apple.CoreSimulator.SimRuntime.watchOS-27-0',
+    sourceRoot: '/source',
+    outputPath: '/output',
+  });
+  assert.deepEqual(argv.slice(0, 7), [
+    '--sdk',
+    'watchsimulator',
+    'clang',
+    '-arch',
+    'arm64',
+    '-mwatchos-simulator-version-min=10.0',
+    '-fobjc-arc',
+  ]);
+});
+
+test('the named iOS-simulator preparation profile compiles against iphonesimulator', () => {
+  const argv = buildSnapshotBridgeCompileArgv({
+    architecture: 'arm64',
+    runtime: 'ios-simulator',
+    sourceRoot: '/source',
+    outputPath: '/output',
+  });
+  assert.deepEqual(argv.slice(0, 6), [
+    '--sdk',
+    'iphonesimulator',
+    'clang',
+    '-arch',
+    'arm64',
+    '-mios-simulator-version-min=15.0',
+  ]);
+});
+
+test('snapshot bridge runtime selection rejects non-iOS and non-watchOS simulator runtimes', () => {
+  for (const runtime of [
+    'com.apple.CoreSimulator.SimRuntime.tvOS-27-0',
+    'com.apple.CoreSimulator.SimRuntime.xrOS-27-0',
+    'not-a-watchOS-runtime',
+  ]) {
+    assert.throws(
+      () =>
+        buildSnapshotBridgeCompileArgv({
+          architecture: 'arm64',
+          runtime,
+          sourceRoot: '/source',
+          outputPath: '/output',
+        }),
+      (error: unknown) =>
+        error instanceof SnapshotSourceError &&
+        error.failureKind === 'unsupported' &&
+        error.failureCode === 'unsupported-simulator-runtime',
+    );
+  }
+});
+
 test('concurrent snapshot bridge preparation publishes one cache entry', async () => {
   const root = await mkdtempForTest('agent-device-snapshot-source-concurrent-');
   const sourceRoot = path.join(root, 'source');

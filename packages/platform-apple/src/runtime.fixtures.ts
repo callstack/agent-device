@@ -4,8 +4,24 @@ import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { hostFixture } from './logs/runtime.fixtures.ts';
 
 export function platformRuntimeHostFixture(): PlatformRuntimeHost {
+  const base = hostFixture().host;
   return {
-    ...hostFixture().host,
+    ...base,
+    appleTools: {
+      ...base.appleTools,
+      run: async (
+        request: Parameters<typeof base.appleTools.run>[0],
+        signal?: Parameters<typeof base.appleTools.run>[1],
+      ) =>
+        request.tool === 'simctl' && request.args.includes('enumerate')
+          ? {
+              stdout:
+                'Default width: 396\nDefault height: 484\nPreferred UI Scale: 2\ncom.apple.CoreSimulator.HID.LegacyHID',
+              stderr: '',
+              exitCode: 0,
+            }
+          : await base.appleTools.run(request, signal),
+    },
     appLogs: {
       readRecent: async () => ({
         path: '/sessions/one/app.log',

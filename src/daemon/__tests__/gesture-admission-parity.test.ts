@@ -124,7 +124,6 @@ test('target-authored drag is admitted only where adapters preserve every author
     device({ platform: 'apple', appleOs: 'tvos', kind: 'simulator', target: 'tv' }),
     device({ platform: 'apple', appleOs: 'macos', kind: 'device', target: 'desktop' }),
     device({ platform: 'apple', appleOs: 'visionos', kind: 'simulator' }),
-    device({ platform: 'apple', appleOs: 'watchos', kind: 'simulator' }),
     device({ platform: 'linux', kind: 'device', target: 'desktop' }),
     device({ platform: 'vega', kind: 'device', target: 'tv' }),
     device({ platform: 'web', kind: 'device', target: 'desktop' }),
@@ -137,6 +136,11 @@ test('target-authored drag is admitted only where adapters preserve every author
       /source hold, timed movement, and destination hold/,
     );
   }
+  await expectRefused(
+    drag,
+    device({ platform: 'apple', appleOs: 'watchos', kind: 'simulator' }),
+    /not supported on watchos/,
+  );
 });
 
 test('iOS and iPadOS simulators admit multi-touch while physical devices do not', async () => {
@@ -165,7 +169,8 @@ test('TV, spatial, watch, desktop, Linux, and web gesture policy stays explicit'
   await expectRefused(twoFingerPan, androidTv, /Android TV/, /Android TV has no touch input/);
   await expectRefused(twoFingerPan, tvOs, /tvOS/);
   await expectRefused(twoFingerPan, visionOs, /visionOS/);
-  await expectRefused(oneFingerPan, watchOs, /watchos/);
+  await expectRefused(oneFingerPan, watchOs, /not supported on watchos/);
+  await expectRefused(twoFingerPan, watchOs, /not supported on watchos/);
   await expectAdmitted(oneFingerPan, macOs);
   await expectRefused(twoFingerPan, macOs, /macOS/);
   await expectAdmitted(oneFingerPan, linux);

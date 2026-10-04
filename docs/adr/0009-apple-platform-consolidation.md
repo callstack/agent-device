@@ -9,6 +9,11 @@ Accepted
 > `src/platforms/**` location are superseded by the lazy platform-module registry and private
 > `@agent-device/platform-*` packages. Execution cuts over command-atomically; shared physical
 > mechanics move only through ADR 0019's legal injected transition or after their last legacy user.
+>
+> **Amended in 2026-09:** watchOS Simulator is no longer an unsupported sentinel. Discovery,
+> application lifecycle, screenshots, accessibility snapshots, single-pointer input, Digital Crown
+> scrolling, and Crown navigation are owned by an isolated CoreSimulator backend. Physical watchOS
+> devices and operations outside that explicit fact set remain unsupported.
 
 ## Context
 
@@ -51,16 +56,17 @@ non-breaking `appleOs` discriminant — the groundwork for this — shipped in #
 Adding a first-class Apple OS becomes cheap: a leaf module plus a runner-profile row. iOS/iPadOS/tvOS/macOS
 are mostly relocate-and-rename (the engine never needed to know which Apple OS it drives); visionOS is scoped
 net-new work (XCUITest supports it — a profile row, a build case, `#if os(visionOS)`, a widened discovery
-filter, plus real spatial-input QA); watchOS is an explicit **unsupported sentinel** because XCUITest cannot
-drive watchOS UI. macOS stays a distinct AppKit leaf (its helper binary and menubar/desktop surface model are
-preserved). The tvOS focus-only interaction contract (no coordinate `tap`) must not be flattened across OSes,
-and snapshot fidelity is uneven (the deep-RN AX-server fallback is iOS-simulator-only). The internal
+filter, plus real spatial-input QA). watchOS Simulator uses an isolated CoreSimulator backend because XCUITest
+cannot drive watchOS UI; its command facts are narrower than the iOS runner and are advertised only after the
+selected runtime proves the required HID display. macOS stays a distinct AppKit leaf (its helper binary and
+menubar/desktop surface model are preserved). The tvOS focus-only interaction contract (no coordinate `tap`)
+must not be flattened across OSes, and snapshot fidelity is uneven. The internal
 `Platform` collapse of `ios`+`macos` into `apple` was the last, highest-diff step; public leaf output
 remains a separate compatibility projection.
 
 This composes with ADR 0008 (the descriptor's capability facet) and ADR 0003.
 
-Implementation status as of 2026-08:
+Implementation status as of 2026-09:
 
 - Shipped: the internal `Platform` collapse to `apple`; additive `appleOs` groundwork; the shared
   Apple engine under `packages/platform-apple/src/core`; macOS leaf files under
@@ -68,16 +74,20 @@ Implementation status as of 2026-08:
   `packages/platform-apple/src/os/tvos`;
   direct internal imports to the Apple modules; the per-`AppleOS` runtime facts (including
   `packages/platform-apple/src/gesture-facts.ts`; the former capability projection was retired after
-  its predicates moved into request-bound facts); the watchOS **unsupported sentinel** (reserved in the `AppleOS` type and interactor-rejected —
-  XCUITest cannot drive watchOS UI — `isSupportedAppleDeploymentLeaf`, the Apple interactor, and
-  gesture admission reject it — never produced by discovery); and visionOS profile/build/discovery
-  plus simulator-deployment evidence.
+  its predicates moved into request-bound facts); watchOS Simulator discovery and the isolated
+  CoreSimulator runtime for lifecycle, screenshots, host AX snapshots, and input/navigation only after
+  a successful LegacyHID display probe on the default simulator set; the physical-watchOS unsupported sentinel; and visionOS
+  profile/build/discovery plus simulator-deployment evidence.
 - Decision-only support boundary: visionOS discovery and simulator deployment are supported and
   unit-tested (`packages/platform-apple/src/inventory-classification.ts` and
   `packages/platform-apple/src/deployment/runtime.test.ts`); app deployment is also admitted for
   CoreDevice-backed physical devices, while XCTest-backed physical deployment is unsupported and
-  push remains simulator-only. No public-command coverage is claimed for visionOS or watchOS. This
-  boundary is recorded here without creating a command-coverage manifest for either leaf.
+  push remains simulator-only. watchOS simulator app deployment is admitted; `networkDump` remains
+  available on every Apple leaf. No public-command coverage is claimed for visionOS. watchOS public-command
+  coverage is limited to the Simulator operations named above; non-default simulator sets, text entry,
+  app switcher, orientation, settings, multi-touch, physical devices, and other unadvertised operations
+  fail closed. Crown scrolling is vertical amount-only; pixel-density screenshot normalization is not
+  supported by the watchOS backend.
 - Retained compatibility: the public wire still emits `ios`/`macos` leaves through
   `PUBLIC_PLATFORMS`; internal family ownership must not leak into that projection.
 - Deferred: net-new visionOS spatial-input QA.

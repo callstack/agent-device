@@ -324,9 +324,10 @@ not make a difficult legacy-supported cell disappear. Behavior changes require a
 
 Apple coverage uses an exhaustive `AppleOS` fixture table and explicitly exercises iOS simulator and
 physical backends where they differ, iPadOS, tvOS focus-only/no-coordinate behavior, macOS desktop,
-visionOS deferred or supported cells, and the watchOS unsupported/discovery-absence sentinel. Every
-fixture matches exactly one family. A loop over six families with one generic `platform: 'apple'`
-device is not leaf coverage.
+visionOS deferred or supported cells, the watchOS Simulator CoreSimulator/host-AX fact set gated by a
+successful `simctl io <udid> enumerate` LegacyHID display probe, and the physical-watchOS unsupported
+sentinel. Watch input is unavailable for non-default simulator sets. Every fixture matches exactly one family. A loop over six families
+with one generic `platform: 'apple'` device is not leaf coverage.
 
 ### 3. Provider ownership is exact and fail-closed
 

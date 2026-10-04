@@ -192,9 +192,9 @@ test.each([
     'unsupported-platform-leaf',
   ],
   [
-    'watchOS sentinel',
+    'watchOS simulator',
     appleDevice({ appleOs: 'watchos' }),
-    false,
+    true,
     false,
     'unsupported-platform-leaf',
   ],

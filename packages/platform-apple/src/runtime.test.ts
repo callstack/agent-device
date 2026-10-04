@@ -16,6 +16,7 @@ import {
 } from '@agent-device/contracts/session';
 import { HOVER_UNAVAILABLE_HINT } from '@agent-device/contracts/touch-runtime';
 import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
+import { resolveApplePlatformName } from '@agent-device/kernel/device';
 import { createApplePlatformRuntime } from './runtime.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
 
@@ -126,13 +127,13 @@ test.each([
   expect(facts.operations.listApps.available).toBe(
     device.appleOs !== 'watchos' && device.iosPhysicalDeviceBackend !== 'xctest',
   );
-  // R40/R41: touch and text ride the Apple interactor, which exists for the simulator and
-  // physical device kinds — every leaf in this table is one of those two, so both cells are
-  // available across it (parity with the retired buckets).
+  // The watch host backend drives touch but deliberately exposes no text-entry route.
   expect(facts.operations.focusPoint).toEqual({ available: true });
-  expect(facts.operations.typeText).toEqual({ available: true });
+  expect(facts.operations.typeText.available).toBe(device.appleOs !== 'watchos');
   expect(binding.operations.focusPoint).toBeTypeOf('function');
-  expect(binding.operations.typeText).toBeTypeOf('function');
+  expect(binding.operations.typeText).toBeTypeOf(
+    device.appleOs === 'watchos' ? 'undefined' : 'function',
+  );
   for (const operation of ['appLogInspect', 'appLogDoctor', 'appLogStart'] as const) {
     const fact = facts.operations[operation];
     expect(fact.available).toBe(available);
@@ -156,10 +157,8 @@ test.each([
       hint: 'watchOS recording is not supported.',
     });
   }
-  expect(facts.operations.ensureReady.available).toBe(device.appleOs !== 'watchos');
-  expect(facts.operations.bootTarget.available).toBe(
-    device.appleOs !== 'macos' && device.appleOs !== 'watchos',
-  );
+  expect(facts.operations.ensureReady.available).toBe(true);
+  expect(facts.operations.bootTarget.available).toBe(device.appleOs !== 'macos');
   expect(facts.operations.bootTargetHeadless.available).toBe(false);
   expect(facts.operations.setViewport).toEqual({
     available: false,
@@ -190,14 +189,13 @@ function expectApplePerfAvailability(
 }
 
 /**
- * watchOS is admitted by no capture cell: the Apple interactor cannot even be constructed for it,
- * so the refusal is a fact rather than a throw from inside the leaf.
+ * watchOS Simulator screenshots use simctl directly, without an XCTest runner.
  */
 function expectAppleCaptureAvailability(
   binding: DeviceBinding<PlatformRuntimeOperations>,
   device: DeviceInfo,
 ): void {
-  const available = device.appleOs !== 'watchos';
+  const available = device.appleOs !== 'watchos' || device.kind === 'simulator';
   expect(binding.facts.operations.captureScreenshot.available).toBe(available);
   expect(binding.operations.captureScreenshot).toBeTypeOf(available ? 'function' : 'undefined');
 }
@@ -206,7 +204,7 @@ function expectAppleSnapshotAvailability(
   binding: DeviceBinding<PlatformRuntimeOperations>,
   device: DeviceInfo,
 ): void {
-  const available = device.appleOs !== 'watchos';
+  const available = device.appleOs !== 'watchos' || device.kind === 'simulator';
   expect(binding.facts.operations.captureSnapshot.available).toBe(available);
   expect(binding.facts.operations.captureSnapshotWithCustomActions.available).toBe(
     device.appleOs !== 'macos' && device.appleOs !== 'watchos' && device.kind === 'simulator',
@@ -215,10 +213,12 @@ function expectAppleSnapshotAvailability(
     device.appleOs === 'macos',
   );
   expect(binding.operations.captureSnapshot).toBeTypeOf(available ? 'function' : 'undefined');
-  // The live point read needs a driveable Apple UI, so it follows the same watchOS sentinel the
-  // capture does; every other supported leaf advertises and binds it.
-  expect(binding.facts.operations.readTextAtPoint.available).toBe(available);
-  expect(binding.operations.readTextAtPoint).toBeTypeOf(available ? 'function' : 'undefined');
+  // The watch bridge captures the tree but exposes no separate live point-text probe.
+  const pointTextAvailable = available && device.appleOs !== 'watchos';
+  expect(binding.facts.operations.readTextAtPoint.available).toBe(pointTextAvailable);
+  expect(binding.operations.readTextAtPoint).toBeTypeOf(
+    pointTextAvailable ? 'function' : 'undefined',
+  );
 }
 
 test.each(Object.entries(leaves))(
@@ -236,6 +236,39 @@ test.each(Object.entries(leaves))(
     expectNavigationAndKeyboardFacts(binding, device);
   },
 );
+
+test('physical watchOS refuses lifecycle and touch facts before dispatch', async () => {
+  const device = appleDevice({ appleOs: 'watchos', kind: 'device' });
+  const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
+    device,
+    intent: { kind: 'ordinary' },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+  const facts = await createApplePlatformRuntime(platformRuntimeHostFixture()).inspectFacts(device);
+  expectAppleCaptureAvailability(binding, device);
+  expectAppleSnapshotAvailability(binding, device);
+  expectNavigationAndKeyboardFacts(binding, device);
+  expect(facts.operations.ensureReady).toMatchObject({
+    available: false,
+    reason: 'unsupported-device-kind',
+  });
+  expect(facts.operations.bootTarget).toMatchObject({
+    available: false,
+    reason: 'unsupported-device-kind',
+  });
+  expect(facts.operations.back).toMatchObject({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
+});
+
+test('watchOS never resolves to an XCTest iOS runner profile', () => {
+  expect(() => resolveApplePlatformName('mobile', 'watchos')).toThrow('no XCTest runner platform');
+});
 
 test('hover has no Apple interactor route on macOS, iOS, or tvOS; the touch family reports its typed denial', async () => {
   for (const device of [leaves.macos, leaves.ios, leaves.tvos]) {
@@ -355,35 +388,62 @@ function expectOperationAvailability(
 }
 
 /**
- * watchOS has no constructible Apple interactor (XCUITest cannot drive its UI, ADR-0009), so every
- * interactor-backed operation here stays unavailable there regardless of what else gates it.
+ * watchOS Simulator maps back/home to the Digital Crown; it has no app switcher or keyboard.
  */
 function expectNavigationAndKeyboardFacts(
   binding: DeviceBinding<PlatformRuntimeOperations>,
   device: DeviceInfo,
 ): void {
-  // Every simulator/device leaf supports back except watchOS, tvOS's Menu remote press
-  // included — no apple-family closure ever gated it beyond device kind and interactor
-  // constructibility.
-  expectOperationAvailability(binding, 'back', device.appleOs !== 'watchos');
+  expectOperationAvailability(binding, 'back', supportsBackNavigation(binding, device));
 
   // home and app-switcher share one springboard reading (R56): both are unavailable on macOS,
   // which drives an already-running app with no springboard, and on watchOS. That is parity, not
   // convenience — the retired `supportsAppAndDeviceLifecycle` closure gated both off the same row.
-  const springboard = device.appleOs !== 'macos' && device.appleOs !== 'watchos';
-  expectOperationAvailability(binding, 'home', springboard);
-  expectOperationAvailability(binding, 'appSwitcher', springboard);
+  expectOperationAvailability(binding, 'home', supportsHomeNavigation(binding, device));
+  expectOperationAvailability(binding, 'appSwitcher', supportsAppSwitcher(device));
 
   // orientation and keyboard dismiss/enter share mobile-input eligibility: unavailable on tvOS
   // (focus-only XCUIRemote navigation), macOS (an AppKit desktop host), and watchOS.
-  const mobileInputEligible =
-    device.appleOs !== 'tvos' && device.appleOs !== 'macos' && device.appleOs !== 'watchos';
+  const mobileInputEligible = supportsAppleMobileInput(device);
   expectOperationAvailability(binding, 'setOrientation', mobileInputEligible);
   expectOperationAvailability(binding, 'keyboardDismiss', mobileInputEligible);
   expectOperationAvailability(binding, 'keyboardEnter', mobileInputEligible);
 
   expectKeyboardStatusFact(binding, mobileInputEligible);
   expectTvRemoteFact(binding, device);
+}
+
+function supportsBackNavigation(
+  binding: DeviceBinding<PlatformRuntimeOperations>,
+  device: DeviceInfo,
+): boolean {
+  return device.appleOs !== 'watchos' || supportsWatchCrownNavigation(binding, device);
+}
+
+function supportsHomeNavigation(
+  binding: DeviceBinding<PlatformRuntimeOperations>,
+  device: DeviceInfo,
+): boolean {
+  return device.appleOs !== 'macos' && supportsBackNavigation(binding, device);
+}
+
+function supportsWatchCrownNavigation(
+  binding: DeviceBinding<PlatformRuntimeOperations>,
+  device: DeviceInfo,
+): boolean {
+  return (
+    device.kind === 'simulator' &&
+    !device.simulatorSetPath &&
+    binding.facts.operations.tapPoint.available
+  );
+}
+
+function supportsAppSwitcher(device: DeviceInfo): boolean {
+  return device.appleOs !== 'macos' && device.appleOs !== 'watchos';
+}
+
+function supportsAppleMobileInput(device: DeviceInfo): boolean {
+  return device.appleOs !== 'tvos' && device.appleOs !== 'macos' && device.appleOs !== 'watchos';
 }
 
 /** Apple never had a live keyboard status read: every eligible leaf still refuses status/get with
@@ -591,6 +651,10 @@ test('macOS readiness is a no-op while boot remains unavailable', async () => {
 
   await expect(binding.operations.ensureReady?.({})).resolves.toMatchObject({ booted: true });
   expect(ensureConnected).not.toHaveBeenCalled();
+  expect(binding.facts.operations.bootTarget).toMatchObject({
+    available: false,
+    reason: 'unsupported-platform-leaf',
+  });
   expect(binding.operations.bootTarget).toBeUndefined();
 });
 
@@ -674,7 +738,13 @@ const LEGACY_APPLE_LIFECYCLE_CELLS = {
     device: LEGACY_APPLE_DEVICE,
   },
   watchos: {
-    simulator: LEGACY_UNSUPPORTED,
+    simulator: {
+      openTarget: true,
+      prepareAppleRunner: false,
+      closeTarget: true,
+      runtimeHints: false,
+      portReverse: false,
+    },
     emulator: LEGACY_UNSUPPORTED,
     device: LEGACY_UNSUPPORTED,
   },
@@ -768,10 +838,12 @@ function expectLegacyLifecycleFactCell(
     }
   }
   const snapshotAvailable =
-    facts.device.appleOs !== 'watchos' &&
+    (facts.device.appleOs !== 'watchos' || facts.device.kind === 'simulator') &&
     (facts.device.kind === 'simulator' || facts.device.kind === 'device');
   expect(facts.operations.captureSnapshot.available).toBe(snapshotAvailable);
-  expect(facts.operations.readTextAtPoint.available).toBe(snapshotAvailable);
+  expect(facts.operations.readTextAtPoint.available).toBe(
+    snapshotAvailable && facts.device.appleOs !== 'watchos',
+  );
 }
 
 // The macOS non-app surface branch calls `captureSurface` directly instead of going through

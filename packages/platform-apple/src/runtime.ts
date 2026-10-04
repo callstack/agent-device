@@ -72,6 +72,8 @@ import { appleSystemFacts, createAppleSystemOperations } from './system/runtime.
 import { appleFoldableFacts, createAppleFoldableOperations } from './foldable/runtime.ts';
 import { bindAppleFindTextRuntime, bindAppleSnapshotRuntime } from './runtime-snapshot.ts';
 import { createAppleSnapshotRoute } from './snapshot-route.ts';
+import { scopeSimctlArgsForDevice } from './core/simctl.ts';
+import { hasWatchSimulatorHidDisplay } from './watch/hid.ts';
 
 const owner = localRuntimeOwner('apple');
 const available = Object.freeze({ available: true } as const);
@@ -134,20 +136,10 @@ const elementTextKindUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-device-kind',
 } as const);
-const watchOpenTargetUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'watchOS open is not supported because XCUITest cannot drive watchOS UI.',
-} as const);
 const watchPrepareUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
   hint: 'watchOS runner preparation is not supported because XCUITest cannot drive watchOS UI.',
-} as const);
-const watchCloseTargetUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'watchOS close is not supported because XCUITest cannot drive watchOS UI.',
 } as const);
 const runtimeHintsUnavailable = Object.freeze({
   available: false,
@@ -181,11 +173,6 @@ const snapshotCustomActionsUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',
   hint: 'Re-run without --actions, or target an iOS simulator.',
-} as const);
-const screenshotWatchOsUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'screenshot is not supported on watchOS because XCUITest cannot drive watchOS UI.',
 } as const);
 const screenshotKindUnavailable = unsupportedAppleDeviceKind(
   'screenshot is supported only for Apple simulators and devices.',
@@ -223,7 +210,9 @@ function appleApplicationLifecycleFacts(device: DeviceInfo) {
 }
 
 function appleOpenTargetFact(device: DeviceInfo) {
-  if (resolveDeviceAppleOs(device) === 'watchos') return watchOpenTargetUnavailable;
+  if (resolveDeviceAppleOs(device) === 'watchos') {
+    return device.kind === 'simulator' ? available : appleOpenTargetKindUnavailable;
+  }
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : appleOpenTargetKindUnavailable;
@@ -237,7 +226,9 @@ function applePrepareAppleRunnerFact(device: DeviceInfo) {
 }
 
 function appleCloseTargetFact(device: DeviceInfo) {
-  if (resolveDeviceAppleOs(device) === 'watchos') return watchCloseTargetUnavailable;
+  if (resolveDeviceAppleOs(device) === 'watchos') {
+    return device.kind === 'simulator' ? available : appleCloseTargetKindUnavailable;
+  }
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : appleCloseTargetKindUnavailable;
@@ -269,7 +260,12 @@ function appInventoryFacts(device: DeviceInfo) {
   return available;
 }
 
-function appleFocusFact(device: DeviceInfo): RuntimeOperationFact {
+function appleFocusFact(device: DeviceInfo, watchHidAvailable = false): RuntimeOperationFact {
+  if (device.appleOs === 'watchos') {
+    return device.kind === 'simulator' && !device.simulatorSetPath && watchHidAvailable
+      ? available
+      : focusKindUnavailable;
+  }
   return device.kind === 'simulator' || device.kind === 'device' ? available : focusKindUnavailable;
 }
 
@@ -278,21 +274,10 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
   const snapshotRoute = createAppleSnapshotRoute(host);
   const inspectFacts = async (device: DeviceInfo) => {
     const logs = await appLogs.inspectFacts(device);
+    const watchHidAvailable = await inspectWatchHidAvailability(host, device);
     const deployment = appleAppDeploymentFacts(device);
-    const leafRecordingFacts = appleScreenRecordingFacts(device);
-    const hostAvailability = leafRecordingFacts.available
-      ? await host.screenRecording.apple.availability(device)
-      : undefined;
-    const recordingFacts =
-      leafRecordingFacts.available && hostAvailability?.available === false
-        ? Object.freeze({
-            available: false,
-            reason: 'unsupported-provider-mode' as const,
-            hint: hostAvailability.hint,
-          })
-        : leafRecordingFacts;
-    const readiness = device.appleOs === 'watchos' ? unavailable : available;
-    const boot = isMacOs(device) || device.appleOs === 'watchos' ? unavailable : available;
+    const recordingFacts = await resolvedScreenRecordingFacts(host, device);
+    const { readiness, boot } = appleLifecycleReadinessFacts(device);
     const apps = appInventoryFacts(device);
     return Object.freeze({
       device: logs.device,
@@ -310,20 +295,25 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
           findText: appleSnapshotFact(device),
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
-        ...focusRuntimeOperationFacts({ focus: appleFocusFact(device) }),
-        ...appleGestureAndScrollFacts(device),
-        // Text entry rides the same interactor authority the point focus does, so it shares the
-        // exact kind cell (parity with the retired `type` bucket, `{ simulator, device }`).
-        ...typeTextRuntimeOperationFacts({ type: appleFocusFact(device) }),
+        ...focusRuntimeOperationFacts({ focus: appleFocusFact(device, watchHidAvailable) }),
+        ...appleGestureAndScrollFacts(device, watchHidAvailable),
+        // The watchOS host HID backend has no text-entry route, so this remains unavailable there.
+        ...typeTextRuntimeOperationFacts({
+          type:
+            device.appleOs === 'watchos' ? unavailable : appleFocusFact(device, watchHidAvailable),
+        }),
         ...touchRuntimeOperationFacts({
           unsupported: unavailable,
-          tap: appleFocusFact(device),
-          longPress: appleFocusFact(device),
-          fill: appleFocusFact(device),
-          ...(isIosFamily(device) ? { tapElementSelector: appleFocusFact(device) } : {}),
+          tap: appleFocusFact(device, watchHidAvailable),
+          longPress: appleFocusFact(device, watchHidAvailable),
+          fill:
+            device.appleOs === 'watchos' ? unavailable : appleFocusFact(device, watchHidAvailable),
+          ...(isIosFamily(device) && device.appleOs !== 'watchos'
+            ? { tapElementSelector: appleFocusFact(device, watchHidAvailable) }
+            : {}),
         }),
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: appleElementTextFact(device) }),
-        ...appleNavigationFacts(device),
+        ...appleNavigationFacts(device, watchHidAvailable),
         ...appleFoldableFacts(device),
         ...appleSystemFacts(device),
         ...audioProbeRuntimeOperationFacts({
@@ -461,6 +451,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
           host,
           device: request.device,
           signal: request.scope.signal,
+          watchHidAvailable: facts.operations.tapPoint.available,
         }),
         ...createAppleSystemOperations({
           host,
@@ -519,6 +510,61 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
   });
 }
 
+async function resolvedScreenRecordingFacts(
+  host: PlatformRuntimeHost,
+  device: DeviceInfo,
+): Promise<RuntimeOperationFact> {
+  const leafFact = appleScreenRecordingFacts(device);
+  if (!leafFact.available) return leafFact;
+  const hostFact = await host.screenRecording.apple.availability(device);
+  if (hostFact?.available !== false) return leafFact;
+  return Object.freeze({
+    available: false,
+    reason: 'unsupported-provider-mode' as const,
+    hint: hostFact.hint,
+  });
+}
+
+function appleLifecycleReadinessFacts(device: DeviceInfo): Readonly<{
+  readiness: RuntimeOperationFact;
+  boot: RuntimeOperationFact;
+}> {
+  const physicalWatchUnavailable = Object.freeze({
+    available: false,
+    reason: 'unsupported-device-kind' as const,
+    hint: 'watchOS lifecycle is supported on Simulator targets only.',
+  });
+  const watchNeedsSimulator = device.appleOs === 'watchos' && device.kind !== 'simulator';
+  return {
+    readiness: watchNeedsSimulator ? physicalWatchUnavailable : available,
+    boot: isMacOs(device)
+      ? unavailable
+      : watchNeedsSimulator
+        ? physicalWatchUnavailable
+        : available,
+  };
+}
+
+async function inspectWatchHidAvailability(
+  host: PlatformRuntimeHost,
+  device: DeviceInfo,
+): Promise<boolean> {
+  if (device.appleOs !== 'watchos' || device.kind !== 'simulator' || device.simulatorSetPath) {
+    return false;
+  }
+  try {
+    const result = await host.appleTools.run({
+      tool: 'simctl',
+      args: scopeSimctlArgsForDevice(device, ['io', device.id, 'enumerate']),
+      allowFailure: true,
+      timeoutMs: 1_500,
+    });
+    return hasWatchSimulatorHidDisplay(result);
+  } catch {
+    return false;
+  }
+}
+
 function applePerfFacts(device: DeviceInfo): Readonly<{
   frames: RuntimeOperationFact;
   memorySample: RuntimeOperationFact;
@@ -551,7 +597,9 @@ function appleElementTextFact(device: DeviceInfo) {
 }
 
 function appleSnapshotFact(device: DeviceInfo) {
-  if (resolveDeviceAppleOs(device) === 'watchos') return snapshotKindUnavailable;
+  if (resolveDeviceAppleOs(device) === 'watchos') {
+    return device.kind === 'simulator' ? available : snapshotKindUnavailable;
+  }
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : snapshotKindUnavailable;
@@ -563,7 +611,9 @@ function appleSnapshotFact(device: DeviceInfo) {
  * snapshot, whose desktop surfaces come from a separate host port.
  */
 function appleScreenshotFact(device: DeviceInfo) {
-  if (resolveDeviceAppleOs(device) === 'watchos') return screenshotWatchOsUnavailable;
+  if (resolveDeviceAppleOs(device) === 'watchos') {
+    return device.kind === 'simulator' ? available : screenshotKindUnavailable;
+  }
   return device.kind === 'simulator' || device.kind === 'device'
     ? available
     : screenshotKindUnavailable;
@@ -574,7 +624,10 @@ function appleSnapshotFacts(device: DeviceInfo) {
   return snapshotRuntimeOperationFacts({
     capture,
     customActions:
-      capture.available && isIosFamily(device) && device.kind === 'simulator'
+      capture.available &&
+      isIosFamily(device) &&
+      device.appleOs !== 'watchos' &&
+      device.kind === 'simulator'
         ? available
         : snapshotCustomActionsUnavailable,
     withoutActiveApp: isIosFamily(device) ? snapshotActiveAppRequired : capture,

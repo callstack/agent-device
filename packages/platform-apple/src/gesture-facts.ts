@@ -38,35 +38,43 @@ function unsupportedAppleDeviceKind(hint: string) {
 }
 
 /** The gesture and scroll cells one Apple leaf declares, ready to spread into its fact catalog. */
-export function appleGestureAndScrollFacts(device: DeviceInfo) {
+export function appleGestureAndScrollFacts(device: DeviceInfo, watchHidAvailable = false) {
   return {
     ...gestureRuntimeOperationFacts({
-      unsupported: appleGestureFamilyUnavailable(device),
-      plan: appleGesturePlanFact(device),
-      directionalFling: appleGesturePlanFact(device),
-      multiTouch: appleMultiTouchGestureFact(device),
-      targetAuthoredDrag: appleTargetAuthoredDragFact(device),
-      viewport: appleGestureViewportFact(device),
+      unsupported: appleGestureFamilyUnavailable(device, watchHidAvailable),
+      plan: appleGesturePlanFact(device, watchHidAvailable),
+      directionalFling: appleGesturePlanFact(device, watchHidAvailable),
+      multiTouch: appleMultiTouchGestureFact(device, watchHidAvailable),
+      targetAuthoredDrag: appleTargetAuthoredDragFact(device, watchHidAvailable),
+      viewport: appleGestureViewportFact(device, watchHidAvailable),
     }),
-    ...scrollRuntimeOperationFacts({ scroll: appleScrollFact(device) }),
+    ...scrollRuntimeOperationFacts({ scroll: appleScrollFact(device, watchHidAvailable) }),
   };
 }
 
 /** The reason this leaf refuses gestures it does not name, before any tier is consulted. */
-function appleGestureFamilyUnavailable(device: DeviceInfo): RuntimeOperationUnavailability {
-  return device.appleOs === 'watchos' || device.appleOs === 'visionos'
-    ? gestureLeafUnavailable
-    : gestureKindUnavailable;
+function appleGestureFamilyUnavailable(
+  device: DeviceInfo,
+  watchHidAvailable: boolean,
+): RuntimeOperationUnavailability {
+  if (device.appleOs === 'watchos' && !watchHidAvailable) return gestureLeafUnavailable;
+  return device.appleOs === 'visionos' ? gestureLeafUnavailable : gestureKindUnavailable;
 }
 
-function appleGesturePlanFact(device: DeviceInfo): RuntimeOperationFact {
-  if (device.appleOs === 'watchos' || device.appleOs === 'visionos') return gestureLeafUnavailable;
-  return appleTouchKind(device) ? available : gestureKindUnavailable;
+function appleGesturePlanFact(
+  device: DeviceInfo,
+  watchHidAvailable: boolean,
+): RuntimeOperationFact {
+  if (device.appleOs === 'visionos') return gestureLeafUnavailable;
+  return appleTouchKind(device, watchHidAvailable) ? available : gestureKindUnavailable;
 }
 
-function appleMultiTouchGestureFact(device: DeviceInfo): RuntimeOperationFact {
+function appleMultiTouchGestureFact(
+  device: DeviceInfo,
+  watchHidAvailable: boolean,
+): RuntimeOperationFact {
   if (device.appleOs === 'watchos') return gestureLeafUnavailable;
-  if (!appleTouchKind(device)) return gestureKindUnavailable;
+  if (!appleTouchKind(device, watchHidAvailable)) return gestureKindUnavailable;
   const appleOs = resolveDeviceAppleOs(device);
   if (appleOs !== 'ios' && appleOs !== 'ipados') {
     const hint = APPLE_MULTI_TOUCH_UNSUPPORTED_HINTS[appleOs];
@@ -79,8 +87,11 @@ function appleMultiTouchGestureFact(device: DeviceInfo): RuntimeOperationFact {
   return device.kind === 'simulator' ? available : physicalIosMultiTouchUnavailable;
 }
 
-function appleTargetAuthoredDragFact(device: DeviceInfo): RuntimeOperationFact {
-  if (!appleTouchKind(device)) return gestureKindUnavailable;
+function appleTargetAuthoredDragFact(
+  device: DeviceInfo,
+  watchHidAvailable: boolean,
+): RuntimeOperationFact {
+  if (!appleTouchKind(device, watchHidAvailable)) return gestureKindUnavailable;
   const supported =
     device.appleOs === undefined
       ? device.target !== 'desktop' && device.target !== 'tv'
@@ -88,15 +99,20 @@ function appleTargetAuthoredDragFact(device: DeviceInfo): RuntimeOperationFact {
   return supported ? available : targetAuthoredDragUnavailable;
 }
 
-function appleGestureViewportFact(device: DeviceInfo): RuntimeOperationFact {
-  if (device.appleOs === 'watchos') return gestureLeafUnavailable;
-  return appleTouchKind(device) ? available : gestureKindUnavailable;
+function appleGestureViewportFact(
+  device: DeviceInfo,
+  watchHidAvailable: boolean,
+): RuntimeOperationFact {
+  return appleTouchKind(device, watchHidAvailable) ? available : gestureKindUnavailable;
 }
 
-function appleScrollFact(device: DeviceInfo): RuntimeOperationFact {
-  return appleTouchKind(device) ? available : scrollKindUnavailable;
+function appleScrollFact(device: DeviceInfo, watchHidAvailable: boolean): RuntimeOperationFact {
+  return appleTouchKind(device, watchHidAvailable) ? available : scrollKindUnavailable;
 }
 
-function appleTouchKind(device: DeviceInfo): boolean {
+function appleTouchKind(device: DeviceInfo, watchHidAvailable = false): boolean {
+  if (device.appleOs === 'watchos') {
+    return device.kind === 'simulator' && !device.simulatorSetPath && watchHidAvailable;
+  }
   return device.kind === 'simulator' || device.kind === 'device';
 }
