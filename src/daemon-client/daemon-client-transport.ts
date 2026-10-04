@@ -60,7 +60,7 @@ type SendRequestOptions = {
  * aborting layer can prove. A built-in transport rejects every abort through this, so a caller's
  * arbitrary abort reason never escapes as the outcome of a daemon request.
  */
-export function abortedRequestError(
+function abortedRequestError(
   signal: AbortSignal,
   dispatched: 'no' | 'unknown',
   requestId?: string,
@@ -72,12 +72,12 @@ export function abortedRequestError(
  * Refuses a send attempt that starts while the caller's signal is already aborted: nothing may leave
  * the process, so this never touches a connection and the refusal carries `details.dispatched: 'no'`.
  */
-export function refuseAbortedRequest(signal: AbortSignal | undefined, requestId?: string): void {
+function refuseAbortedRequest(signal: AbortSignal | undefined, requestId?: string): void {
   if (!signal?.aborted) return;
   throw abortedRequestError(signal, 'no', requestId);
 }
 
-export type RequestGuard = {
+type RequestGuard = {
   /** Refuses an already-aborted call before anything is sent. No-op without a signal. */
   refuseIfAborted(): void;
   /** Settles `send`'s outcome against the signal, winning with the typed canceled error on abort. */
@@ -385,19 +385,12 @@ async function retryAfterRemoteInstanceMismatch(
   // it is answered before the timed-out-probe and unreachable-daemon branches, so a canceled call
   // never borrows the timeout's shape or a daemon-unavailable error.
   refuseAbortedRequest(options.signal, req.meta?.requestId);
-  // The probe's timer starts from the event loop's cached clock, so it can expire while
-  // performance.now() is still short of the deadline: a probe the RPC deadline capped that ran out
-  // of time is the RPC timing out.
-  if (
-    health.timedOut &&
-    timeoutMs !== undefined &&
-    probeTimeoutMs !== undefined &&
-    probeTimeoutMs <= REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS
-  ) {
+  const timedOutRpcBudgetMs = deadlineCappedProbeTimeoutBudgetMs(health, timeoutMs, probeTimeoutMs);
+  if (timedOutRpcBudgetMs !== undefined) {
     throw handleRequestTimeout({
       info,
       statePaths,
-      ...timeoutRequestContext(req, true, timeoutMs),
+      ...timeoutRequestContext(req, true, timedOutRpcBudgetMs),
     });
   }
   const remainingMs = remainingRemoteRequestTimeoutMs(info, req, statePaths, timeoutMs, deadline);
@@ -415,6 +408,22 @@ async function retryAfterRemoteInstanceMismatch(
     if (isRemoteTransportFailure(error)) invalidateRemoteDaemonHealth(info);
     throw error;
   }
+}
+
+/**
+ * The RPC budget a probe that ran out of time proves, or `undefined` when the probe's timeout was
+ * its own. The probe's timer starts from the event loop's cached clock, so it can expire while
+ * `performance.now()` is still short of the deadline; a probe capped by the RPC deadline is
+ * therefore the deadline speaking, not a slow daemon.
+ */
+function deadlineCappedProbeTimeoutBudgetMs(
+  health: RemoteDaemonHealth,
+  timeoutMs: number | undefined,
+  probeTimeoutMs: number | undefined,
+): number | undefined {
+  if (!health.timedOut || timeoutMs === undefined) return undefined;
+  if (probeTimeoutMs === undefined) return undefined;
+  return probeTimeoutMs <= REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS ? timeoutMs : undefined;
 }
 
 function remainingRemoteRequestTimeoutMs(

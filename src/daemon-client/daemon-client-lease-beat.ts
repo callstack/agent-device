@@ -148,6 +148,34 @@ export async function runProtectedLeaseWork<T>(
       if (timer) clearTimeout(timer);
       timer = setTimeout(runBeat, delayMs);
     };
+    // A beat that finds the lease gone (or finds this client can never renew it) ends the
+    // protection: the upload is pointed at a device nobody owns, so it is stopped rather than
+    // allowed to finish bytes nobody will use. A beat that ends after the phase settled cannot
+    // change that outcome, but a lease this client just learned is gone is still worth one
+    // diagnostic on the way out.
+    const reportTerminalBeatFailure = (error: unknown): void => {
+      terminalError = error;
+      if (stopped) {
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'lease_lost_after_phase',
+          data: { message: error instanceof Error ? error.message : String(error) },
+        });
+        return;
+      }
+      control.abort();
+      reportTerminal?.(error);
+    };
+    const reportTransientBeatFailure = (error: unknown): void => {
+      // A beat the loop itself canceled — for a caller that has already given up — failed for a
+      // reason that says nothing about the lease, so it is not worth a warning.
+      if (stopped) return;
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'lease_heartbeat_failed',
+        data: { message: error instanceof Error ? error.message : String(error) },
+      });
+    };
     arm(intervalMs);
     const settle = (async () => {
       const budgetMs = windowMs;
@@ -157,8 +185,7 @@ export async function runProtectedLeaseWork<T>(
         );
         // An answer that names no window keeps the cadence it was asked at: the loop only ever
         // moves on evidence of how long the lease is good for, and never on the absence of it.
-        if (renewed === undefined) return;
-        if (renewed === windowMs) return;
+        if (renewed === undefined || renewed === windowMs) return;
         const cadence = leaseBeatIntervalMs(renewed);
         windowMs = renewed;
         intervalMs = cadence;
@@ -166,31 +193,10 @@ export async function runProtectedLeaseWork<T>(
         arm(cadence);
       } catch (error) {
         if (isTerminalLeaseBeatError(error)) {
-          terminalError = error;
-          if (stopped) {
-            // The phase settled first; the outcome it returned already stands, but a lease this
-            // client just learned is gone is worth one diagnostic on the way out.
-            emitDiagnostic({
-              level: 'warn',
-              phase: 'lease_lost_after_phase',
-              data: { message: error instanceof Error ? error.message : String(error) },
-            });
-            return;
-          }
-          // The upload is the only thing still consuming this phase's time, and it is pointed at a
-          // device this client can no longer renew. Stop it rather than finish bytes nobody owns.
-          control.abort();
-          reportTerminal?.(error);
+          reportTerminalBeatFailure(error);
           return;
         }
-        // A beat the loop itself canceled — for a caller that has already given up — failed for a
-        // reason that says nothing about the lease, so it is not worth a warning.
-        if (stopped) return;
-        emitDiagnostic({
-          level: 'warn',
-          phase: 'lease_heartbeat_failed',
-          data: { message: error instanceof Error ? error.message : String(error) },
-        });
+        reportTransientBeatFailure(error);
       }
     })();
     // A beat the loop has moved on from is still listened to, and nothing awaits it: its outcome is
