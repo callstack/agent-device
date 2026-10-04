@@ -98,7 +98,10 @@ export function recordActionEntry(
   return action;
 }
 
-type SessionActionStore = { recordAction(ref: SessionRef, entry: RecordActionEntry): void };
+type SessionActionStore = {
+  resolveCurrent(ref: SessionRef): SessionState | undefined;
+  recordAction(ref: SessionRef, entry: RecordActionEntry): void;
+};
 
 /**
  * Record an action in its admitted lifetime. No-op when no session was admitted.
@@ -114,7 +117,7 @@ export function recordSessionAction(
   result: Record<string, unknown> | undefined,
   overrides?: { positionals?: string[]; flags?: CommandFlags },
 ): void {
-  if (!ref) return;
+  if (!ref || !sessionStore.resolveCurrent(ref)) return;
   sessionStore.recordAction(ref, {
     command,
     positionals: overrides?.positionals ?? req.positionals ?? [],
