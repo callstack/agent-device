@@ -112,6 +112,18 @@ extension RunnerTests {
     var failure: TextEntryFailure? = nil
   }
 
+  /// A text input found under a point, and the identifier it carried when found. The element is
+  /// an index-bound query handle: an input inserted or reordered ahead of it later re-binds the
+  /// handle to that input, and the identifier is what notices.
+  struct TextInputAtPoint {
+    let element: XCUIElement
+    let identifier: String
+
+    var stillResolvesToTheFieldFound: Bool {
+      element.exists && element.identifier == identifier
+    }
+  }
+
   struct TextEntryTarget {
     let element: XCUIElement?
     let refreshPoint: CGPoint?
@@ -119,16 +131,16 @@ extension RunnerTests {
     let fromTapWitness: Bool
     /// The text input that sat under `refreshPoint` before the focus tap. Focusing a field can move
     /// the layout (keyboard avoidance, a bottom sheet extending above the keyboard), after which the
-    /// point hits a different field or none; this index-bound query handle still names the field
-    /// the command was aimed at. It identifies the field for reads and clears, never for routing.
-    let inputAtRefreshPoint: XCUIElement?
+    /// point hits a different field or none, so once this is set the point no longer names the
+    /// field. It identifies the field for reads and clears, never for routing.
+    let inputAtRefreshPoint: TextInputAtPoint?
 
     init(
       element: XCUIElement?,
       refreshPoint: CGPoint?,
       prefersFocusedElement: Bool,
       fromTapWitness: Bool = false,
-      inputAtRefreshPoint: XCUIElement? = nil
+      inputAtRefreshPoint: TextInputAtPoint? = nil
     ) {
       self.element = element
       self.refreshPoint = refreshPoint
@@ -222,8 +234,8 @@ extension RunnerTests {
         return element
       }
     }
-    if let input = target.inputAtRefreshPoint, input.exists {
-      return input
+    if let input = target.inputAtRefreshPoint {
+      return input.stillResolvesToTheFieldFound ? input.element : focusedTextInput(app: app)
     }
     if let refreshPoint = target.refreshPoint,
        let refreshed = textInputAt(app: app, x: refreshPoint.x, y: refreshPoint.y) {

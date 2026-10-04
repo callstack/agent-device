@@ -205,5 +205,65 @@ extension RunnerTests {
     XCTAssertEqual(String(describing: field.value ?? ""), "")
     XCTAssertEqual(String(describing: neighbour.value ?? ""), "neighbour")
   }
+
+  /// Once the input under the point was found before the tap, the point no longer names the field.
+  /// A handle that re-bound to another input (one inserted or reordered ahead of it) or no longer
+  /// resolves used to fall through to that input, or to whatever sat under the point, and `fill ""`
+  /// cleared it.
+  @MainActor
+  func testSynthesizedClearFailsClosedWhenTheInputFoundUnderThePointIsGone() throws {
+    let (field, neighbour) = try launchFieldThatMovesOnFocus()
+    defer { tearDownSynthesizedReplacementField() }
+    let rebound = app.textFields.element(boundBy: 1)
+    XCTAssertEqual(rebound.identifier, "agent-device-text-entry-neighbour")
+    let neighbourFrame = neighbour.frame
+    let found = [
+      "re-bound": TextInputAtPoint(element: rebound, identifier: field.identifier),
+      "missing": TextInputAtPoint(element: app.textFields["agent-device-gone"], identifier: "agent-device-gone"),
+    ]
+
+    for (handle, inputAtRefreshPoint) in found {
+      let result = typeTextReliably(
+        app: app,
+        target: TextEntryTarget(
+          element: nil,
+          refreshPoint: CGPoint(x: neighbourFrame.midX, y: neighbourFrame.midY),
+          prefersFocusedElement: false,
+          inputAtRefreshPoint: inputAtRefreshPoint
+        ),
+        text: "",
+        delaySeconds: 0,
+        repairMode: .replacement,
+        xCTestChannelPenalized: true,
+        synthesizer: RecordingTextEntrySynthesizer()
+      )
+
+      XCTAssertEqual(result.failure, .notFocused, handle)
+      XCTAssertEqual(String(describing: neighbour.value ?? ""), "neighbour", handle)
+      XCTAssertEqual(String(describing: field.value ?? ""), "stale", handle)
+    }
+  }
+
+  /// The pre-tap lookup runs on a channel already penalized for failing XCTest reads. A lookup that
+  /// fails leaves the fill to the point; it used to record the failure, which fails the command
+  /// and ends the runner.
+  @MainActor
+  func testSynthesizedReplacementContainsAFailedLookupOfTheInputUnderThePoint() throws {
+    let textField = try focusSynthesizedReplacementField()
+    defer {
+      textInputProbeIssueForTesting = nil
+      tearDownSynthesizedReplacementField()
+    }
+    textInputProbeIssueForTesting = XCTIssue(
+      type: .assertionFailure,
+      compactDescription: "Injected pre-tap text input query failure"
+    )
+
+    let response = try replaceSynthesizedFieldText(textField, text: "fresh", commandId: "fill-lookup-failed")
+
+    XCTAssertNil(textInputProbeIssueForTesting, "the fill made no lookup")
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(String(describing: textField.value ?? ""), "fresh")
+  }
 #endif
 }

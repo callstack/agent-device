@@ -28,7 +28,7 @@ extension RunnerTests {
       xCTestChannelPenalized: xCTestChannelPenalized
     ), let x = command.x, let y = command.y {
       // Resolved before the tap: the focus it causes can move the field away from this point.
-      let inputAtPoint = textInputAt(app: activeApp, x: x, y: y)
+      let inputAtPoint = coordinateTapTextInputIdentityAt(app: activeApp, x: x, y: y)
       let policyKind = SynthesizedGesturePolicyKind.coordinateTap
       let context = synthesizedCoordinateContext(
         app: activeApp,
