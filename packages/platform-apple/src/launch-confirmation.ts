@@ -106,14 +106,17 @@ async function verifyFailedAcceptance(
   original: Record<string, unknown>,
   error: unknown,
 ): Promise<LaunchConfirmationAttempt> {
-  const failure = unreadable('alert-accept')(error);
   const read = await readAlert(port);
-  if ('outcome' in read) return failure;
-  return read.alert &&
+  if ('outcome' in read) return unreadable('alert-accept')(error);
+  if (
+    read.alert &&
     isLaunchConfirmation(read.alert) &&
     read.alert['message'] === original['message']
-    ? { outcome: 'unanswered', reason: 'alert-still-present' }
-    : failure;
+  ) {
+    reportUnanswered('alert-still-present', {});
+    return { outcome: 'unanswered', reason: 'alert-still-present' };
+  }
+  return unreadable('alert-accept')(error);
 }
 
 async function readAlert(

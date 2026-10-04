@@ -137,7 +137,8 @@ export function recordIfSession(
   evidenceMode?: TargetEvidenceMode,
 ): void {
   if (!ref) return;
-  const session = sessionStore.requireCurrent(ref);
+  const session = sessionStore.resolveCurrent(ref);
+  if (!session) return;
   const targetEvidence =
     isSessionRecording(session) && recordedTarget
       ? computeTargetEvidence(recordedTarget, { mode: evidenceMode })

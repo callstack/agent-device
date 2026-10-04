@@ -412,3 +412,21 @@ test('a runner that cannot be resolved reports an unreadable attempt', async () 
     ),
   ).resolves.toEqual({ outcome: 'unreadable', step: 'runner' });
 });
+
+test('a confirmed persistent prompt reports its observed outcome without an accept-failure diagnostic', async () => {
+  vi.mocked(emitDiagnostic).mockClear();
+  const { port: device } = port(async () => CONFIRMATION, {
+    acceptAlert: async () => {
+      throw spawnTimeout();
+    },
+  });
+  await expect(answerLaunchConfirmation(device)).resolves.toEqual({
+    outcome: 'unanswered',
+    reason: 'alert-still-present',
+  });
+  expect(emitDiagnostic).toHaveBeenCalledExactlyOnceWith({
+    level: 'debug',
+    phase: 'ios_launch_confirmation_unanswered',
+    data: { reason: 'alert-still-present' },
+  });
+});

@@ -140,3 +140,12 @@ test('sessionless recording cannot acquire a newly published address', () => {
   recordIfSession(store, admitted, req('wait'), { waitedMs: 100 });
   expect(session.actions).toEqual([]);
 });
+
+test('optional recording cannot adopt a successor lifetime', () => {
+  const store = makeStore();
+  const retired = store.publish('default', makeIosSession('default'));
+  store.retire(retired);
+  const successor = store.publish('default', makeIosSession('default'));
+  expect(() => recordIfSession(store, retired, req('wait'), { completed: true })).not.toThrow();
+  expect(store.requireCurrent(successor).actions).toEqual([]);
+});

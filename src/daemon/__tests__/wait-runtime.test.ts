@@ -185,10 +185,8 @@ test.each(['rebuild', 'retire'] as const)(
         expect(ref.session.actions).toEqual([]);
         expect(current.appName).toBe('Updated during sleep');
       } else {
-        expect(response).toMatchObject({
-          ok: false,
-          error: { details: { reason: 'session_lifetime_ended' } },
-        });
+        expect(response).toMatchObject({ ok: true, data: { waitedMs: 100 } });
+        expect(ref.session.actions).toEqual([]);
         expect(current.actions).toEqual([]);
       }
     } finally {

@@ -129,10 +129,8 @@ test.each(['rebuild', 'retire'] as const)(
       expect(current.appName).toBe('Rebuilt during read');
       expect(ref.session.actions).toEqual([]);
     } else {
-      expect(response).toMatchObject({
-        ok: false,
-        error: { details: { reason: 'session_lifetime_ended' } },
-      });
+      expect(response).toMatchObject({ ok: true, data: { text: 'Native value' } });
+      expect(ref.session.actions).toEqual([]);
       expect(current.actions).toEqual([]);
     }
   },
