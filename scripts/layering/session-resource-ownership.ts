@@ -6,7 +6,7 @@
 //   the runtime-command migration; 4454aef139 (#2092) removed what it retired.
 // Cost: 115 LOC (57 rule + 58 test).
 // Kill criterion: none enforced today; retire only by maintainer decision that per-owner write
-//   authority over appLog/appLogFailure/audioProbe/perfCapture no longer matters. The fields
+//   authority over appLog/appLogFailure/audioProbe/perfCapture/screenRecording no longer matters. The fields
 //   are plain mutable properties on the shared session record, so an outside write type-checks.
 
 import { parseSync } from 'oxc-parser';
