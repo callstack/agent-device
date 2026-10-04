@@ -347,9 +347,11 @@ export type SnapshotKeyboardBandFact =
  * It is the box of the surface the producer read, which is not always the physical panel. iOS
  * reports the app window in the app's orientation space (ADR 0004), which is smaller than the panel
  * under iPad Split View and is never the foldable panel `fold` reports (ADR 0025); Android and the
- * Apple TV runner report the screen the bounds were measured on; web reports the browser viewport
- * the box model is relative to. A consumer that needs a *gesture* band inside those bounds still
- * reads `keyboard` and the app window, which is #1821's remaining scope.
+ * Apple TV runner report the screen the bounds were measured on. A producer that has no box of its
+ * own to answer with leaves the field off: the macOS desktop, whose rects are absolute in window
+ * space and answer to no single frame, and the web and Linux backends, which read a tree without
+ * reading a screen. A consumer that needs a *gesture* band inside those bounds still reads `keyboard`
+ * and the app window, which is #1821's remaining scope.
  *
  * Absent means the producer measured no box. Absence is never `0`: `snapshotViewportSizeFrom` from
  * `@agent-device/kernel/rect` is the sole construction path and refuses a box
@@ -665,9 +667,10 @@ export type SnapshotState = {
    */
   keyboard?: SnapshotKeyboardBandFact;
   /**
-   * The box these rects are measured in, as the producer measured it (#3182). The session keeps it so
-   * a consumer of the stored tree — the find-path viewport, a later diff — reads the same box the
-   * response published instead of inferring one from the largest rect still on screen.
+   * The box these rects are measured in, as the producer measured it (#3182). The state is the carrier
+   * the response reads, so the stored tree and the published `viewport` are one fact rather than two:
+   * a consumer of a stored capture — a later diff, a re-read of the session's tree — gets the box the
+   * producer measured instead of inferring one from the largest rect still on screen.
    */
   viewport?: SnapshotViewportSize;
   /**

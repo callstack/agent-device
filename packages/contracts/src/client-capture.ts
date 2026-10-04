@@ -72,10 +72,10 @@ export type CaptureSnapshotResult = {
    *
    * Which surface it names is the producer's answer, not always the physical panel: the app window
    * for iOS (so iPad Split View and a foldable panel do not inflate it), the screen the bounds were
-   * measured on for Android and Apple TV, the browser viewport on web. Absent means the producer
-   * measured no box — a provider handing over a bare tree, or a desktop capture with no single
-   * window behind it — and never a zero. This is the full screen size only; content-safe gesture
-   * bounds stay with #1821.
+   * measured on for Android and Apple TV. Absent means the producer measured no box — a desktop
+   * capture whose rects are absolute in window space, a backend that reads a tree without reading a
+   * screen, or a raw projection nothing validated a box against — and never a zero. This is the full
+   * screen size only; content-safe gesture bounds stay with #1821.
    */
   viewport?: SnapshotViewportSize;
   /**

@@ -415,9 +415,10 @@ agent-device get attrs @e1
   space and orientation as the rects beside it, so a consumer scales and clips against the screen it
   was shown instead of inferring one from the largest rect on screen. Which surface it names is the
   producer's answer: the app window on iOS (so iPad Split View and a foldable panel do not inflate
-  it), the measured screen on Android and Apple TV, the browser viewport on web. It is absent when
-  the producer measured no box — a bare provider tree, a desktop capture with no single window —
-  and never reported as a zero. It is the full size only; content-safe gesture bounds are separate.
+  it), the measured screen on Android and Apple TV. It is absent when the producer measured no box —
+  a macOS capture whose rects are absolute in window space, a web or Linux capture that reads a tree
+  without reading a screen, or `--raw`, which validates no box — and never reported as a zero. It is
+  the full size only; content-safe gesture bounds are separate.
 - `--scope <text|@ref>` returns the subtree of the first node in document order whose label, value,
   or identifier contains the scope text (case-insensitive) and whose subtree still has content in
   the requested projection, re-rooted at depth 0; no match returns an empty snapshot rather than the

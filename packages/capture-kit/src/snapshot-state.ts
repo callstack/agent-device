@@ -52,7 +52,7 @@ export function buildSnapshotState(
     targetActivation?: IosTargetActivation;
     /** The keyboard band the producer measured, carried to the state the tap guards read (#2660). */
     keyboard?: SnapshotKeyboardBandFact;
-    /** The box the producer measured the rects in (#3182), carried to the response and the find path. */
+    /** The box the producer measured the rects in (#3182), carried to the response that reads this state. */
     viewport?: SnapshotViewportSize;
   } & SnapshotCaptureProvenance,
   flags:
