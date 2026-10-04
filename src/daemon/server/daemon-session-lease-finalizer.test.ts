@@ -5,7 +5,10 @@ import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts'
 import { LeaseRegistry } from '../lease-registry.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
-import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts';
+import {
+  finalizeDaemonLeases,
+  finalizeDaemonSessionLease,
+} from './daemon-session-lease-finalizer.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 test('journals and bounds a hung recoverable session lease release before the final drain', async () => {
@@ -178,3 +181,41 @@ function sessionLease(lease: DeviceLease) {
     expiresAt: lease.expiresAt,
   };
 }
+
+test('journals and bounds the release of a lease no session holds', async () => {
+  vi.useFakeTimers();
+  const stateDir = mkdtempForTestSync('agent-device-daemon-lease-finalizer-');
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'limrun',
+    retainOnClose: true,
+  });
+  const recoverExpiredLease = vi.fn(() => new Promise<void>(() => {}));
+  const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
+    recoverExpiredLease,
+    recoverableProviderIds: ['limrun'],
+    stateDir,
+  });
+
+  try {
+    expiredProviderLeaseReleaser.beginShutdown();
+    const finalization = finalizeDaemonLeases({
+      leaseRegistry,
+      expiredProviderLeaseReleaser,
+      timeoutMs: 10,
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+    await finalization;
+
+    expect(recoverExpiredLease).toHaveBeenCalledWith(lease);
+    expect(leaseRegistry.listActiveLeases()).toEqual([]);
+    expect(fs.existsSync(path.join(stateDir, 'expired-provider-leases.json'))).toBe(true);
+  } finally {
+    expiredProviderLeaseReleaser.shutdown();
+    vi.useRealTimers();
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});

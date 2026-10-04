@@ -10,7 +10,7 @@ import type {
 } from '@agent-device/contracts/observability';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
-import type { ReleaseLeaseRequest } from '../lease-registry-scope.ts';
+import { leaseReleaseRequestFor, type ReleaseLeaseRequest } from '../lease-registry-scope.ts';
 import type { SessionStore } from '../session-store.ts';
 import {
   isProxyLeaseScope,
@@ -145,18 +145,6 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     default:
       return null;
   }
-}
-
-function leaseReleaseRequestFor(lease: DeviceLease): ReleaseLeaseRequest {
-  return leaseScopeToReleaseRequest({
-    leaseId: lease.leaseId,
-    tenantId: lease.tenantId,
-    runId: lease.runId,
-    leaseBackend: lease.backend,
-    leaseProvider: lease.leaseProvider,
-    deviceKey: lease.deviceKey,
-    clientId: lease.clientId,
-  });
 }
 
 type LeaseReleaseOutcome = {

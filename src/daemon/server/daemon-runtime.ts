@@ -39,7 +39,10 @@ import type { SessionState } from '../session-state.ts';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
 import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
 import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
-import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts';
+import {
+  finalizeDaemonLeases,
+  finalizeDaemonSessionLease,
+} from './daemon-session-lease-finalizer.ts';
 import {
   processOwnsActiveDeviceClaim,
   reconcileOrphanedDeviceClaims,
@@ -792,6 +795,11 @@ export async function startDaemonRuntime(
     } catch {}
     expiredProviderLeaseReleaser.beginShutdown();
     await teardownDaemonSessions();
+    await finalizeDaemonLeases({
+      leaseRegistry,
+      expiredProviderLeaseReleaser,
+      timeoutMs: DAEMON_SESSION_LEASE_RELEASE_TIMEOUT_MS,
+    });
     try {
       await platformDaemonLifecycleOwners.resetAndroidSnapshotHelper();
     } catch (error) {

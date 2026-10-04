@@ -430,7 +430,10 @@ test('close releases the session lease', async () => {
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
 });
 
-test('close keeps a lease allocated with retainOnClose', async () => {
+test.each([
+  ['close', []],
+  ['close <app>', ['com.example.app']],
+])('%s keeps a lease allocated with retainOnClose', async (_name, positionals) => {
   const sessionStore = makeSessionStore('agent-device-router-open-');
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({
@@ -458,7 +461,7 @@ test('close keeps a lease allocated with retainOnClose', async () => {
     token: 'test-token',
     session: 'default',
     command: 'close',
-    positionals: [],
+    positionals,
     meta: { requestId: 'req-close-retain-lease' },
   });
 

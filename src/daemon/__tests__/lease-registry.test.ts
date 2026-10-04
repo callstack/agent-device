@@ -44,6 +44,21 @@ test('allocateLease is idempotent per tenant/run/backend and refreshes expiry', 
   assert.equal(second.expiresAt, 12_000);
 });
 
+test('a later allocation asking for retainOnClose turns it on for the reused lease', () => {
+  const registry = new LeaseRegistry();
+  const first = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+  const second = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    retainOnClose: true,
+  });
+  const third = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+  assert.equal(second.leaseId, first.leaseId);
+  assert.equal(first.retainOnClose, undefined);
+  assert.equal(second.retainOnClose, true);
+  assert.equal(third.retainOnClose, true);
+});
+
 test('heartbeatLease extends active lease and releaseLease is idempotent', () => {
   let now = 1_000;
   const registry = new LeaseRegistry({

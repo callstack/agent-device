@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { MIN_LEASE_WINDOW_MS } from '@agent-device/contracts/lease-scope';
+import {
+  MIN_LEASE_WINDOW_MS,
+  leaseScopeToReleaseRequest,
+} from '@agent-device/contracts/lease-scope';
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { normalizeTenantId } from './config.ts';
@@ -352,5 +355,17 @@ export function deviceLeaseBusyError(activeLease: DeviceLease): AppError {
     leaseProvider: activeLease.leaseProvider,
     expiresAt: activeLease.expiresAt,
     hint: 'Retry after the lease expires or close the owning session.',
+  });
+}
+
+export function leaseReleaseRequestFor(lease: DeviceLease): ReleaseLeaseRequest {
+  return leaseScopeToReleaseRequest({
+    leaseId: lease.leaseId,
+    tenantId: lease.tenantId,
+    runId: lease.runId,
+    leaseBackend: lease.backend,
+    leaseProvider: lease.leaseProvider,
+    deviceKey: lease.deviceKey,
+    clientId: lease.clientId,
   });
 }
