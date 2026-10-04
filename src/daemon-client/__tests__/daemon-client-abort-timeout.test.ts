@@ -11,6 +11,8 @@
  * abort path's `clearTimeout` and only the abort case fails.
  */
 import assert from 'node:assert/strict';
+import http from 'node:http';
+import { DAEMON_HTTP_INSTANCE_MISMATCH_HEADER } from '@agent-device/contracts/daemon-http';
 import { test, vi } from 'vitest';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { getRequestSignal } from '@agent-device/host-kit/request';
@@ -20,6 +22,7 @@ import { sendRequest } from '../daemon-client-transport.ts';
 import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import {
   closeLoopbackServer,
+  listenOnLoopback,
   skipWhenLoopbackUnavailable,
   trackLoopbackSockets,
   type SkippableTestContext,
@@ -110,4 +113,55 @@ test('an abort with a timeout armed clears the timer instead of running the time
 
 test('the same budget without a signal reaches the timeout seam', async (t) => {
   await runTimerDiscipline(t, 'timed-out');
+});
+
+test('an abort during a restart health probe never retires the daemon or redispatches', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  handleRequestTimeoutCalls.length = 0;
+  const controller = new AbortController();
+  let rpcCount = 0;
+  let healthCount = 0;
+  let reachedHealth!: () => void;
+  const healthStarted = new Promise<void>((resolve) => {
+    reachedHealth = resolve;
+  });
+  const server = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      healthCount += 1;
+      reachedHealth();
+      return;
+    }
+    rpcCount += 1;
+    res.statusCode = 409;
+    res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
+    res.end();
+  });
+  const destroySockets = trackLoopbackSockets(server);
+  try {
+    const port = await listenOnLoopback(server);
+    const request = sendRequest(
+      {
+        baseUrl: `http://127.0.0.1:${port}`,
+        token: 'secret',
+        pid: 1,
+        remoteInstanceId: 'previous-instance',
+      },
+      { token: 'secret', command: 'devices', session: 'default', positionals: [], flags: {} },
+      'auto',
+      STATE_PATHS,
+      1_000,
+      { signal: controller.signal },
+    );
+    const rejection = assert.rejects(request, (error: unknown) => isRequestCanceledError(error));
+    await healthStarted;
+    controller.abort();
+    await rejection;
+    assert.equal(rpcCount, 1);
+    assert.equal(healthCount, 1);
+    assert.deepEqual(handleRequestTimeoutCalls, []);
+  } finally {
+    controller.abort();
+    destroySockets();
+    await closeLoopbackServer(server);
+  }
 });

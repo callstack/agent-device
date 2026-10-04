@@ -44,7 +44,7 @@ test.each([
   };
   const { sessionsDir, tombstonePath } = writeRepairTombstone(`${JSON.stringify(tombstone)}\n`);
 
-  expect(readRepairTombstoneFile(tombstonePath)).toEqual(tombstone);
+  expect(readRepairTombstoneFile(tombstonePath, 'session-a')).toEqual(tombstone);
   expect(findUnrecoveredRepairCommitFailure(sessionsDir)).toEqual({
     sessionName: 'session-a',
     tombstone,
@@ -61,7 +61,7 @@ test.each([
   const raw = rawRepairTombstone(fields);
   const { sessionsDir, tombstonePath } = writeRepairTombstone(raw);
 
-  expect(readRepairTombstoneFile(tombstonePath)).toBeUndefined();
+  expect(readRepairTombstoneFile(tombstonePath, 'session-a')).toBeUndefined();
   assert.throws(
     () => findUnrecoveredRepairCommitFailure(sessionsDir),
     (error: unknown) => {
