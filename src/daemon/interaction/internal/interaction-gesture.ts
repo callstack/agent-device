@@ -18,7 +18,7 @@ import {
   SWIPE_REPETITION_MAX,
   SWIPE_SERIES_MAX_SCHEDULED_DURATION_MS,
 } from '@agent-device/contracts/scroll-gesture';
-import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { AppError, asAppError, normalizeError } from '@agent-device/kernel/errors';
 import {
   REF_GRAMMAR_HINT,
   splitRefGenerationSuffix,
@@ -287,7 +287,13 @@ function prepareGestureCommandInput(
       destination: prepareDragTarget(normalized.destination, session),
     };
   } catch (error) {
-    if (readiness.status === 'recovered') throw error;
+    if (readiness.status === 'recovered') {
+      const failure = asAppError(error);
+      const existingWarning =
+        typeof failure.details?.warning === 'string' ? failure.details.warning + ' ' : '';
+      failure.details = { ...failure.details, warning: existingWarning + readiness.warning };
+      throw failure;
+    }
     throw thrownBeforeDispatch(error);
   }
 }

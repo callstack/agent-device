@@ -308,7 +308,14 @@ async function refRefusedAfterAndroidRecovery(command: 'press' | 'gesture'): Pro
   assert.equal(tap.mock.calls.length, 1);
   assert.equal(openApp.mock.calls.length, 1);
   assert.equal(mockTapPoint.mock.calls.length, 0);
-  if (command === 'gesture') assert.equal(gestures.bindDevice.mock.calls.length, 0);
+  if (command === 'gesture') {
+    assert.equal(gestures.bindDevice.mock.calls.length, 0);
+    assert.equal(
+      response.error.details?.warning,
+      'Recovered Android app ANR before gesture: closed and relaunched com.example.app.',
+    );
+    assert.match(response.error.hint ?? '', /Capture a fresh interactive snapshot/);
+  }
   throw new AppError(response.error.code, response.error.message, response.error.details);
 }
 
