@@ -18,6 +18,8 @@ import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { resolveEffectiveSessionName } from '../session-routing.ts';
+import { scopeRequestSession } from '../request-admission.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { inspectAdReplay } from '@agent-device/ad-replay';
@@ -169,4 +171,46 @@ test('a replay --from continuation on a reaped repair session gets REPAIR_SESSIO
   expect(response.error.message).toMatch(/replay \/flows\/login\.ad --save-script/);
 
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test.each(['cwd', 'tenant'] as const)(
+  'repair markers use the resolved %s address for expiry and commit failure',
+  async (scope) => {
+    for (const failedCommit of [false, true]) {
+      const { sessionStore, handler } = makeHandler(`router-repair-${scope}-`);
+      const req = closeRequest('default');
+      req.meta =
+        scope === 'cwd'
+          ? { cwd: mkdtempForTestSync('repair-workspace-') }
+          : { tenantId: 'tenant-a', sessionIsolation: 'tenant' };
+      const address = resolveEffectiveSessionName(scopeRequestSession(req), sessionStore, {
+        attachesToSession: false,
+      });
+      expect(address).not.toBe('default');
+      const ref = sessionStore.publish(address, tombstonedSession('default'));
+      sessionStore.writeRepairTombstone(
+        ref,
+        undefined,
+        failedCommit ? { code: 'EACCES', message: 'script publication denied' } : undefined,
+      );
+      sessionStore.retire(ref);
+      const response = await handler(req);
+      expect(response).toMatchObject({
+        ok: false,
+        error: { code: failedCommit ? 'REPAIR_COMMIT_FAILED' : 'REPAIR_SESSION_EXPIRED' },
+      });
+      if (!response.ok && failedCommit)
+        expect(response.error.message).toContain('script publication denied');
+    }
+  },
+);
+
+test('a raw default repair marker cannot explain a different workspace session', async () => {
+  const { sessionStore, handler } = makeHandler('router-repair-workspace-isolation-');
+  const ref = sessionStore.publish('default', tombstonedSession('default'));
+  sessionStore.writeRepairTombstone(ref);
+  sessionStore.retire(ref);
+  const req = closeRequest('default');
+  req.meta = { cwd: mkdtempForTestSync('different-repair-workspace-') };
+  expect(await handler(req)).toMatchObject({ ok: false, error: { code: 'SESSION_NOT_FOUND' } });
 });

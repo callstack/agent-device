@@ -616,7 +616,9 @@ function repairExpiredIfTombstoned(
   sessionStore: SessionStore,
 ): DaemonError {
   if (error.code !== 'SESSION_NOT_FOUND') return error;
-  const tombstone = sessionStore.readRepairTombstone(req.session);
+  const address = resolveTombstoneSessionAddress(req, sessionStore);
+  if (address === undefined) return error;
+  const tombstone = sessionStore.readRepairTombstone(address);
   if (!tombstone) return error;
   const reRun = tombstone.sourcePath
     ? `re-run: replay ${tombstone.sourcePath} --save-script`
@@ -659,22 +661,27 @@ function idleExpiredIfTombstoned(
   return normalizeError(sessionIdleExpiredError(tombstone.owner, tombstone));
 }
 
+function resolveTombstoneSessionAddress(
+  req: DaemonRequest,
+  sessionStore: SessionStore,
+): string | undefined {
+  try {
+    return resolveEffectiveSessionName(scopeRequestSession(req), sessionStore, {
+      attachesToSession: false,
+    });
+  } catch {
+    return undefined;
+  }
+}
+
 function readIdleExpiryTombstoneSafely(
   req: DaemonRequest,
   sessionStore: SessionStore,
 ): IdleSessionTombstone | undefined {
+  const address = resolveTombstoneSessionAddress(req, sessionStore);
+  if (address === undefined) return undefined;
   try {
-    // The address is resolved exactly as the request itself resolved it, tenant scope included: a
-    // tenant-isolated request keeps its sessions under `<tenant>:<name>`, so reading the raw name
-    // would miss this request's own marker and could instead surface another tenant's, reporting an
-    // unrelated device as the one this caller just lost.
-    const scopedReq = scopeRequestSession(req);
-    // `attachesToSession: false` is the inventory reading: it never refuses an ambiguous workspace,
-    // which is right here because this read is a question about an absent session, not a request to
-    // act through one.
-    return sessionStore.readIdleExpiryTombstone(
-      resolveEffectiveSessionName(scopedReq, sessionStore, { attachesToSession: false }),
-    );
+    return sessionStore.readIdleExpiryTombstone(address);
   } catch {
     return undefined;
   }
