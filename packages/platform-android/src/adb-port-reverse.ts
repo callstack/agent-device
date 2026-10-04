@@ -17,9 +17,10 @@ import type {
 export type AndroidExecPortReverseOptions = Readonly<{
   /**
    * Refuses to replace any existing device mapping, including one this provider created
-   * (`adb reverse --no-rebind`), for a device that other adb clients also drive. A refusal the
-   * device listing confirms throws `COMMAND_FAILED` with
-   * `details.reason: 'android_port_reverse_rebind_refused'`.
+   * (`adb reverse --no-rebind`), for a device that other adb clients also drive. When
+   * `adb reverse --list` shows the endpoint after a refusal, the provider throws `COMMAND_FAILED`
+   * with `details.reason: 'android_port_reverse_rebind_refused'`; otherwise it throws the adb
+   * failure.
    */
   noRebind?: boolean;
 }>;
