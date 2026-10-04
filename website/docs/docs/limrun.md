@@ -27,7 +27,7 @@ An agent in a sandbox can drive an instance that someone else created, such as t
 | iOS | `LIM_IOS_INSTANCE_URL` (`status.apiUrl`), `LIM_IOS_INSTANCE_TOKEN` (`status.token`) |
 | Android | `LIM_ANDROID_INSTANCE_URL` (`status.apiUrl`), `LIM_ANDROID_INSTANCE_TOKEN` (`status.token`), `LIM_ANDROID_INSTANCE_ADB_URL` (`status.adbWebSocketUrl`) |
 
-These are the same variables the `lim` CLI reads, so one set works for both tools.
+These are the same variables the `lim` CLI reads, so one set works for both tools. Set all of a platform's variables or none: with a partial set, `connect` fails, and the daemon disables Limrun and records `provider_runtime_skipped` in `daemon.log`.
 
 ```bash
 export LIM_IOS_INSTANCE_URL=...
