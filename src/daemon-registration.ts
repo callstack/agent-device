@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import {
   ownerIdentityDiffers,
+  isProcessPid,
   ownerIdentityMatches,
   type OwnerIdentity,
 } from '@agent-device/host-kit/process';
@@ -53,7 +54,7 @@ function parseRegistration(parsed: {
   processStartTime?: unknown;
 }): ParsedRegistration {
   const pid = parsed.pid;
-  if (typeof pid !== 'number' || !Number.isInteger(pid) || pid <= 0) {
+  if (!isProcessPid(pid)) {
     return { pid: null, startTime: null };
   }
   return { pid, startTime: readableStartTime(parsed.processStartTime) };

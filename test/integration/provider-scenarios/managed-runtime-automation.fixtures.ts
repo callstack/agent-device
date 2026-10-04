@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
 import { Deadline } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
@@ -159,6 +160,7 @@ export async function withManagedAdbFixture<T>(
     ].join('\n'),
   );
   fs.chmodSync(adbPath, 0o755);
+  const restoreGroupSignals = refuseVanishedFixtureGroups();
   const previousPath = process.env.PATH;
   process.env.PATH = `${root}${path.delimiter}${previousPath ?? ''}`;
   try {
@@ -174,7 +176,18 @@ export async function withManagedAdbFixture<T>(
           : [],
     });
   } finally {
+    restoreGroupSignals();
     if (previousPath === undefined) delete process.env.PATH;
     else process.env.PATH = previousPath;
   }
+}
+
+/** The fake adb has no descendants; an exited leader leaves no group to signal. */
+function refuseVanishedFixtureGroups(): () => void {
+  const signal = process.kill.bind(process);
+  const spy = vi.spyOn(process, 'kill').mockImplementation((pid, kind = 'SIGTERM') => {
+    if (pid < 0) signal(-pid, 0);
+    return signal(pid, kind);
+  });
+  return () => spy.mockRestore();
 }

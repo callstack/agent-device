@@ -59,3 +59,13 @@ test('a missing entry in a completed process snapshot stays fail-closed without 
   assert.equal(mockIsProcessZombie.mock.calls.length, 0);
   assert.equal(mockReadProcessStartTime.mock.calls.length, 0);
 });
+
+test('a pid outside the native range is unknown without a liveness probe', () => {
+  assert.equal(
+    classifyOwnerLiveness({ owner: { pid: 2_147_483_648, startTime: 'start-a' } }),
+    'unknown',
+  );
+  assert.equal(mockIsProcessAlive.mock.calls.length, 0);
+  assert.equal(mockIsProcessZombie.mock.calls.length, 0);
+  assert.equal(mockReadProcessStartTime.mock.calls.length, 0);
+});

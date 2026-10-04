@@ -11,6 +11,11 @@ export type OwnerIdentity = {
   startTime: string | null;
 };
 
+/** A process id accepted by Node's native signal API. */
+export function isProcessPid(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 0x7fff_ffff;
+}
+
 export type OwnerLiveness =
   | 'live'
   | 'owner-process-dead'
@@ -75,6 +80,7 @@ export function classifyOwnerLivenessFromObservation(
   observation?: HostProcessIdentityObservation | null,
 ): OwnerLiveness {
   const { owner, stateDir } = params;
+  if (!isProcessPid(owner.pid)) return 'unknown';
   if (!isProcessAlive(owner.pid)) return 'owner-process-dead';
   if (observation !== undefined ? observation?.state.startsWith('Z') : isProcessZombie(owner.pid)) {
     return 'owner-process-dead';
@@ -88,7 +94,10 @@ export function classifyOwnerLivenessFromObservation(
       return 'owner-process-reused';
     }
   }
-  if (!stateDir) return 'live';
+  return stateDir ? classifyOwnerStateDirectory(stateDir) : 'live';
+}
+
+function classifyOwnerStateDirectory(stateDir: string): OwnerLiveness {
   try {
     fs.statSync(stateDir);
     return 'live';

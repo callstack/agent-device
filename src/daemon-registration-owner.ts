@@ -1,11 +1,18 @@
 import fs from 'node:fs';
-import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
+import os from 'node:os';
+import path from 'node:path';
+import { runCmdDetachedMonitored, type ExecDetachedExit } from '@agent-device/host-kit/command';
+import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import {
   stopDaemonProcess,
   waitForDaemonExit,
   type DaemonTerminationResult,
 } from './daemon-process.ts';
-import { readCurrentOwnerIdentity, type OwnerIdentity } from '@agent-device/host-kit/process';
+import {
+  readCurrentOwnerIdentity,
+  readProcessStartTime,
+  type OwnerIdentity,
+} from '@agent-device/host-kit/process';
 import {
   publishFileSync,
   tryAcquireProcessLock,
@@ -15,7 +22,12 @@ import {
 } from '@agent-device/host-kit/file';
 import { emitDiagnostic, withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
-import type { DaemonPaths } from './daemon-resolution.ts';
+import {
+  resolveDaemonPaths,
+  type DaemonPaths,
+  type DaemonServerMode,
+} from './daemon-resolution.ts';
+import { findUnrecoveredRepairCommitFailure } from './session-repair-tombstone.ts';
 import {
   readRegisteredDaemonOwnership,
   type RegisteredDaemonOwnership,
@@ -161,6 +173,95 @@ function truncateDaemonLog(logPath: string): void {
   }
 }
 
+declare const privateReplayState: unique symbol;
+export type OwnedReplayStateDir = Readonly<{
+  paths: Readonly<DaemonPaths>;
+  [privateReplayState]: true;
+}>;
+export type DaemonStartupLaunch = Readonly<{
+  pid: number;
+  startTime?: string;
+  exited: Promise<ExecDetachedExit>;
+}>;
+type OwnedStartup = { launch: DaemonStartupLaunch; joined: boolean };
+type PrivateReplayState = {
+  paths: Readonly<DaemonPaths>;
+  startups: OwnedStartup[];
+  sealed: boolean;
+  retirement?: Promise<DaemonRetirementResult>;
+};
+const privateReplayStates = new WeakMap<OwnedReplayStateDir, PrivateReplayState>();
+
+/** Creates deletion authority only for a fresh private replay directory. */
+export function createOwnedReplayStateDir(): OwnedReplayStateDir {
+  const paths = Object.freeze(
+    resolveDaemonPaths(fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-daemon-'))),
+  );
+  const owned = Object.freeze({ paths }) as OwnedReplayStateDir;
+  privateReplayStates.set(owned, { paths, startups: [], sealed: false });
+  return owned;
+}
+
+/** Launches and monitors the actual child before recording its private-directory authority. */
+export function launchDaemonProcess(
+  input: Readonly<{
+    paths: DaemonPaths;
+    args: string[];
+    serverMode: DaemonServerMode;
+    ownedStateDir?: OwnedReplayStateDir;
+  }>,
+): DaemonStartupLaunch {
+  const owned = input.ownedStateDir && requirePrivateReplayState(input.ownedStateDir, input.paths);
+  if (owned?.sealed)
+    throw new AppError('COMMAND_FAILED', 'Replay daemon startup admission is closed.', {
+      reason: 'daemon_startup_admission_closed',
+    });
+  fs.mkdirSync(input.paths.baseDir, { recursive: true });
+  const logFd = fs.openSync(input.paths.logPath, 'a');
+  try {
+    const monitored = runCmdDetachedMonitored(process.execPath, input.args, {
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: input.paths.baseDir,
+        AGENT_DEVICE_DAEMON_SERVER_MODE: input.serverMode,
+      },
+      stdio: ['ignore', logFd, logFd],
+    });
+    const startup: OwnedStartup = { launch: Object.freeze({ ...monitored }), joined: false };
+    if (owned) {
+      owned.startups.push(startup);
+      void monitored.exited.then(() => {
+        startup.joined = true;
+      });
+    }
+    startup.launch = Object.freeze({
+      ...startup.launch,
+      startTime: readProcessStartTime(monitored.pid) ?? undefined,
+    });
+    return startup.launch;
+  } finally {
+    fs.closeSync(logFd);
+  }
+}
+
+function requirePrivateReplayState(
+  capability: OwnedReplayStateDir,
+  paths: DaemonPaths,
+): PrivateReplayState {
+  const owned = privateReplayStates.get(capability);
+  if (
+    !owned ||
+    Object.entries(owned.paths).some(([key, value]) => paths[key as keyof DaemonPaths] !== value)
+  ) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Private replay directory ownership could not be verified.',
+      { reason: 'daemon_private_state_unowned' },
+    );
+  }
+  return owned;
+}
+
 export type DaemonRetirementInput = Readonly<{
   paths: DaemonPaths;
   observed: OwnerIdentity | null;
@@ -169,16 +270,25 @@ export type DaemonRetirementInput = Readonly<{
   lockTimeoutMs?: number;
 }>;
 
+type RepairCommitFailure = NonNullable<ReturnType<typeof findUnrecoveredRepairCommitFailure>>;
 type ConfirmedDaemonTermination = Extract<DaemonTerminationResult, { status: 'exited' }>;
 export type DaemonRetirementResult =
-  | Readonly<{ status: 'retired'; termination: ConfirmedDaemonTermination; removedInfo: boolean }>
-  | Readonly<{ status: 'absent'; removedInfo: false }>
+  | Readonly<{
+      status: 'retired';
+      termination: ConfirmedDaemonTermination;
+      removedInfo: boolean;
+      removedStateDir?: boolean;
+      repairCommitFailure?: RepairCommitFailure;
+    }>
+  | Readonly<{ status: 'absent'; removedInfo: false; removedStateDir?: boolean }>
   | Readonly<{
       status: 'retained';
       termination?: DaemonTerminationResult;
       removedInfo: boolean;
+      removedStateDir?: boolean;
       reason:
         | 'ownership-unproven'
+        | 'startup-unconfirmed'
         | 'exit-unconfirmed'
         | 'stop-failed'
         | 'lock-busy'
@@ -186,19 +296,60 @@ export type DaemonRetirementResult =
         | 'metadata-unreadable'
         | 'retirement-unconfirmed';
       error?: NormalizedError;
+      repairCommitFailure?: RepairCommitFailure;
     }>;
 
 /** Stops only the captured daemon lifetime, then retires its registration under the startup lock. */
 export async function stopAndRetireDaemon(
-  input: DaemonRetirementInput & Readonly<{ mode: 'graceful' | 'force' }>,
+  input: DaemonRetirementInput &
+    Readonly<{
+      mode: 'graceful' | 'force';
+      ownedStateDir?: OwnedReplayStateDir;
+      startupJoinTimeoutMs?: number;
+    }>,
 ): Promise<DaemonRetirementResult> {
-  return await retireObservedDaemon(input, (identity) =>
-    stopDaemonProcess(identity, {
-      mode: input.mode,
-      termTimeoutMs: input.termTimeoutMs ?? 3_000,
-      killTimeoutMs: input.killTimeoutMs ?? 1_000,
-    }),
+  let owned: PrivateReplayState | undefined;
+  try {
+    if (input.ownedStateDir) {
+      owned = requirePrivateReplayState(input.ownedStateDir, input.paths);
+      owned.sealed = true;
+      const launch = owned.startups.find(
+        ({ launch }) =>
+          launch.pid === input.observed?.pid && launch.startTime === input.observed?.startTime,
+      )?.launch;
+      if (!launch?.startTime && (input.observed || owned.startups.length > 0))
+        throw new AppError(
+          'COMMAND_FAILED',
+          'The observed daemon is not an owned startup lifetime.',
+          { reason: 'daemon_private_startup_unowned' },
+        );
+      if (owned.retirement) return await owned.retirement;
+    }
+  } catch (error) {
+    await joinOwnedStartups(owned, input.startupJoinTimeoutMs ?? 1_000);
+    return {
+      status: 'retained',
+      reason: 'ownership-unproven',
+      removedInfo: false,
+      error: normalizeError(error),
+    };
+  }
+  const retirement = retireObservedDaemon(
+    input,
+    (identity) =>
+      stopDaemonProcess(identity, {
+        mode: input.mode,
+        termTimeoutMs: input.termTimeoutMs ?? 3_000,
+        killTimeoutMs: input.killTimeoutMs ?? 1_000,
+      }),
+    owned,
+    input.startupJoinTimeoutMs ?? 1_000,
   );
+  if (owned) owned.retirement = retirement;
+  const result = await retirement;
+  if (owned && (result.status === 'absent' || !result.removedStateDir))
+    owned.retirement = undefined;
+  return result;
 }
 
 /** Recovers a confirmed abandoned registration without signaling a live process. */
@@ -217,36 +368,35 @@ export async function recoverAbandonedDaemonRegistration(
 async function retireObservedDaemon(
   input: DaemonRetirementInput,
   terminate: (identity: OwnerIdentity) => Promise<DaemonTerminationResult>,
+  owned?: PrivateReplayState,
+  startupJoinTimeoutMs = 1_000,
 ): Promise<DaemonRetirementResult> {
   const paths = { ...input.paths };
   const observed = input.observed && { ...input.observed };
-  let termination: ConfirmedDaemonTermination | undefined;
+  let termination: DaemonTerminationResult | undefined;
+  let stopFailure: NormalizedError | undefined;
   if (observed) {
     try {
-      const result = await terminate(observed);
-      if (result.status !== 'exited')
-        return {
-          status: 'retained',
-          reason: 'exit-unconfirmed',
-          termination: result,
-          removedInfo: false,
-        };
-      termination = result;
+      termination = await terminate(observed);
     } catch (error) {
-      return {
-        status: 'retained',
-        reason: 'stop-failed',
-        removedInfo: false,
-        error: normalizeError(error),
-      };
+      stopFailure = normalizeError(error);
     }
   }
-  return await retireDaemonRegistration({ ...input, paths }, termination);
+  const joined = await joinOwnedStartups(owned, startupJoinTimeoutMs);
+  if (stopFailure)
+    return { status: 'retained', reason: 'stop-failed', removedInfo: false, error: stopFailure };
+  if (termination && termination.status !== 'exited')
+    return { status: 'retained', reason: 'exit-unconfirmed', termination, removedInfo: false };
+  if (!joined) {
+    return { status: 'retained', reason: 'startup-unconfirmed', termination, removedInfo: false };
+  }
+  return await retireDaemonRegistration({ ...input, paths }, termination, owned);
 }
 
 async function retireDaemonRegistration(
   input: DaemonRetirementInput,
   termination: ConfirmedDaemonTermination | undefined,
+  owned?: PrivateReplayState,
 ): Promise<DaemonRetirementResult> {
   const paths = input.paths;
   let acquisition: ProcessLockAcquisition;
@@ -268,7 +418,11 @@ async function retireDaemonRegistration(
       error: failure,
     };
   }
-  let result: DaemonRetirementResult;
+  let result: DaemonRetirementResult = {
+    status: 'retained',
+    reason: 'retirement-unconfirmed',
+    removedInfo: false,
+  };
   try {
     const removal = removeRegistrationUnderLock(
       paths.infoPath,
@@ -276,12 +430,13 @@ async function retireDaemonRegistration(
       acquisition,
     );
     result = retirementAfterRemoval(removal, termination);
+    result = retirePrivateStateIfEligible(owned, acquisition, result);
   } catch (error) {
     result = {
       status: 'retained',
       reason: 'retirement-unconfirmed',
       termination,
-      removedInfo: false,
+      removedInfo: result.removedInfo,
       error: normalizeError(error),
     };
   }
@@ -338,4 +493,59 @@ async function recordRegistrationWarning(
   await withDiagnosticsScope({ command: 'daemon', session: 'daemon', logPath, debug: true }, () => {
     emitDiagnostic({ level: 'warn', phase, data: { error: normalizeError(error) } });
   });
+}
+
+async function joinOwnedStartups(
+  owned: PrivateReplayState | undefined,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (!owned || owned.startups.every((startup) => startup.joined)) return true;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.all(owned.startups.map(({ launch }) => launch.exited)).then(() => true),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function retirePrivateStateIfEligible(
+  owned: PrivateReplayState | undefined,
+  acquisition: ProcessLockAcquisition,
+  result: DaemonRetirementResult,
+): DaemonRetirementResult {
+  if (
+    !owned ||
+    (result.status !== 'retired' && !(result.status === 'absent' && owned.startups.length === 0))
+  )
+    return result;
+  try {
+    acquisition.assertHeld();
+    const failure = findUnrecoveredRepairCommitFailure(owned.paths.sessionsDir);
+    if (failure)
+      return result.status === 'retired'
+        ? { ...result, removedStateDir: false, repairCommitFailure: failure }
+        : {
+            status: 'retained',
+            reason: 'retirement-unconfirmed',
+            removedInfo: false,
+            removedStateDir: false,
+            repairCommitFailure: failure,
+          };
+    acquisition.assertHeld();
+    fs.rmSync(owned.paths.baseDir, { recursive: true, force: true });
+    return { ...result, removedStateDir: true };
+  } catch (error) {
+    return {
+      ...result,
+      status: 'retained',
+      reason: 'retirement-unconfirmed',
+      removedStateDir: false,
+      error: normalizeError(error),
+    };
+  }
 }
