@@ -74,6 +74,7 @@ int main(int argc, const char *argv[]) {
 @property(nonatomic, assign) NSUInteger textEntryBurstEdits;
 @property(nonatomic, assign) NSTimeInterval textEntryBurstMinGap;
 @property(nonatomic, assign) NSTimeInterval textEntryAcknowledgeWindowSeconds;
+@property(nonatomic, strong) NSLayoutConstraint *textEntryFieldTop;
 @property(nonatomic, assign) BOOL alertFixtureStarted;
 @property(nonatomic, strong) NSTimer *alertActivationBusyBackstop;
 @property(nonatomic, strong) NSTimer *alertBannerRepost;
@@ -279,6 +280,10 @@ static NSTimeInterval AgentDeviceTextEntryAcknowledgeWindow(void) {
 static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
 static const NSUInteger AgentDeviceTextEntryAutoSubmitLength = 6;
 
+static const CGFloat AgentDeviceTextEntryFieldTopInset = 24;
+static const CGFloat AgentDeviceTextEntryFieldHeight = 44;
+static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
+
 - (void)agentDeviceTextEntryDidChange:(UITextField *)textField {
   // A field whose app owns its value, the way a controlled React Native `TextInput` does. A burst
   // typed faster than the app renders loses the characters that arrived while a render was in
@@ -333,6 +338,15 @@ static const NSUInteger AgentDeviceTextEntryAutoSubmitLength = 6;
              [arguments containsObject:@"--agent-device-text-entry-auto-submit-without-successor"]) {
     [textField removeFromSuperview];
   }
+}
+
+// Moves the field up by its own height plus the gap below it when it gains focus, the way keyboard
+// avoidance or a bottom sheet extending above the keyboard does, so the neighbouring field slides
+// into the point the focus tap hit.
+- (void)agentDeviceTextEntryDidBeginEditing:(UITextField *)textField {
+  self.textEntryFieldTop.constant =
+      AgentDeviceTextEntryFieldTopInset - AgentDeviceTextEntryFieldHeight - AgentDeviceTextEntryNeighbourGap;
+  [self.view layoutIfNeeded];
 }
 #endif
 
@@ -395,12 +409,33 @@ static const NSUInteger AgentDeviceTextEntryAutoSubmitLength = 6;
         forControlEvents:UIControlEventEditingChanged];
     textField.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:textField];
+    self.textEntryFieldTop = [textField.topAnchor constraintEqualToAnchor:label.bottomAnchor
+                                                                 constant:AgentDeviceTextEntryFieldTopInset];
     [NSLayoutConstraint activateConstraints:@[
       [textField.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-      [textField.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24],
+      self.textEntryFieldTop,
       [textField.widthAnchor constraintEqualToConstant:240],
-      [textField.heightAnchor constraintEqualToConstant:44],
+      [textField.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
     ]];
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-moves-on-focus"]) {
+      textField.text = @"stale";
+      [textField addTarget:self
+                    action:@selector(agentDeviceTextEntryDidBeginEditing:)
+          forControlEvents:UIControlEventEditingDidBegin];
+      UITextField *neighbour = [[UITextField alloc] init];
+      neighbour.accessibilityIdentifier = @"agent-device-text-entry-neighbour";
+      neighbour.borderStyle = UITextBorderStyleRoundedRect;
+      neighbour.text = @"neighbour";
+      neighbour.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:neighbour];
+      [NSLayoutConstraint activateConstraints:@[
+        [neighbour.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [neighbour.topAnchor constraintEqualToAnchor:textField.bottomAnchor
+                                            constant:AgentDeviceTextEntryNeighbourGap],
+        [neighbour.widthAnchor constraintEqualToConstant:240],
+        [neighbour.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
+      ]];
+    }
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-app-owned-value"]) {
       self.textEntryAcknowledgeWindowSeconds = AgentDeviceTextEntryAcknowledgeWindow();
       // Reports how many edits this app rendered and how many writes it had to make because a

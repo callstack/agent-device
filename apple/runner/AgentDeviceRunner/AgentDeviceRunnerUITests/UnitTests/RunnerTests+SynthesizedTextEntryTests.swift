@@ -155,5 +155,188 @@ extension RunnerTests {
     XCTAssertEqual(response.error?.code, "TEXT_INPUT_SYNTHESIS_BUDGET_EXCEEDED")
     XCTAssertEqual(String(describing: textField.value ?? ""), "")
   }
+
+  /// Launches the fixture whose field moves away when focused and leaves a neighbouring field under
+  /// the point the focus tap hit, the way a React Native bottom sheet extends above the keyboard.
+  /// The field is not focused yet, so the replacement's own tap starts the move.
+  @MainActor
+  func launchFieldThatMovesOnFocus() throws -> (field: XCUIElement, neighbour: XCUIElement) {
+    app.launchArguments = ["--agent-device-text-entry-regression", "--agent-device-text-entry-moves-on-focus"]
+    app.launch()
+    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    let field = app.textFields["agent-device-hardware-keyboard-input"]
+    let neighbour = app.textFields["agent-device-text-entry-neighbour"]
+    XCTAssertTrue(field.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertTrue(neighbour.waitForExistence(timeout: appExistenceTimeout))
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
+    penalizeSnapshotXCTestChannel(bundleId: nil, reason: "test")
+    return (field, neighbour)
+  }
+
+  /// The commit wait used to re-read whatever field sat under the pre-focus point, which after the
+  /// move is the neighbour, so a replacement that landed was reported as
+  /// TEXT_INPUT_COMMIT_NOT_OBSERVED.
+  @MainActor
+  func testSynthesizedReplacementConfirmsAFieldThatMovedOnFocus() throws {
+    let (field, neighbour) = try launchFieldThatMovesOnFocus()
+    defer { tearDownSynthesizedReplacementField() }
+    let pointBeforeFocus = field.frame
+
+    let response = try replaceSynthesizedFieldText(field, text: "fresh", commandId: "fill-moved-field")
+
+    XCTAssertNotEqual(field.frame.midY, pointBeforeFocus.midY, "the fixture field did not move")
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(String(describing: field.value ?? ""), "fresh")
+    XCTAssertEqual(String(describing: neighbour.value ?? ""), "neighbour")
+  }
+
+  /// `fill ""` used to clear whatever field the move left under the pre-focus point, and report
+  /// success because that field was then empty.
+  @MainActor
+  func testSynthesizedClearEmptiesTheFieldThatMovedOnFocus() throws {
+    let (field, neighbour) = try launchFieldThatMovesOnFocus()
+    defer { tearDownSynthesizedReplacementField() }
+
+    let response = try replaceSynthesizedFieldText(field, text: "", commandId: "clear-moved-field")
+
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(String(describing: field.value ?? ""), "")
+    XCTAssertEqual(String(describing: neighbour.value ?? ""), "neighbour")
+  }
+
+  /// Once the input under the point was found before the tap, the point no longer names the field.
+  /// A handle that re-bound to another input (one inserted or reordered ahead of it) or no longer
+  /// resolves used to fall through to that input, or to whatever sat under the point, and `fill ""`
+  /// cleared it. Without an identifier, as on a React Native input with no testID, nothing else can
+  /// name the input, so the clear fails closed.
+  @MainActor
+  func testSynthesizedClearFailsClosedWhenTheInputFoundUnderThePointIsGone() throws {
+    let (field, neighbour) = try launchFieldThatMovesOnFocus()
+    defer { tearDownSynthesizedReplacementField() }
+    let rebound = app.textFields.element(boundBy: 1)
+    XCTAssertEqual(rebound.identifier, "agent-device-text-entry-neighbour")
+    let neighbourFrame = neighbour.frame
+    let found = [
+      "re-bound": TextInputAtPoint(element: rebound, identity: TextEntryInputIdentity(elementType: .textField, identifier: "")),
+      "missing": TextInputAtPoint(
+        element: app.textFields["agent-device-gone"],
+        identity: TextEntryInputIdentity(elementType: .textField, identifier: "agent-device-gone")
+      ),
+    ]
+
+    for (handle, inputAtRefreshPoint) in found {
+      let result = typeTextReliably(
+        app: app,
+        target: TextEntryTarget(
+          element: nil,
+          refreshPoint: CGPoint(x: neighbourFrame.midX, y: neighbourFrame.midY),
+          prefersFocusedElement: false,
+          inputAtRefreshPoint: inputAtRefreshPoint
+        ),
+        text: "",
+        delaySeconds: 0,
+        repairMode: .replacement,
+        xCTestChannelPenalized: true,
+        synthesizer: RecordingTextEntrySynthesizer()
+      )
+
+      XCTAssertEqual(result.failure, .notFocused, handle)
+      XCTAssertEqual(String(describing: neighbour.value ?? ""), "neighbour", handle)
+      XCTAssertEqual(String(describing: field.value ?? ""), "stale", handle)
+    }
+  }
+
+  /// An input found with an identifier stays reachable after its handle re-binds: the bound
+  /// identity finds it app-wide, so `fill ""` clears it, and never the input the handle now names
+  /// or the one under the point.
+  @MainActor
+  func testSynthesizedClearFindsAnIdentifiedInputWhoseHandleReBound() throws {
+    let (field, neighbour) = try launchFieldThatMovesOnFocus()
+    defer { tearDownSynthesizedReplacementField() }
+    let rebound = app.textFields.element(boundBy: 1)
+    XCTAssertEqual(rebound.identifier, "agent-device-text-entry-neighbour")
+    let neighbourFrame = neighbour.frame
+
+    let result = typeTextReliably(
+      app: app,
+      target: TextEntryTarget(
+        element: nil,
+        refreshPoint: CGPoint(x: neighbourFrame.midX, y: neighbourFrame.midY),
+        prefersFocusedElement: false,
+        inputAtRefreshPoint: TextInputAtPoint(
+          element: rebound,
+          identity: TextEntryInputIdentity(elementType: .textField, identifier: field.identifier)
+        )
+      ),
+      text: "",
+      delaySeconds: 0,
+      repairMode: .replacement,
+      xCTestChannelPenalized: true,
+      synthesizer: RecordingTextEntrySynthesizer()
+    )
+
+    XCTAssertNil(result.failure)
+    XCTAssertEqual(String(describing: field.value ?? ""), "")
+    XCTAssertEqual(String(describing: neighbour.value ?? ""), "neighbour")
+  }
+
+  /// Checking that the found input still resolves reads its handle again on the penalized channel.
+  /// A read that cannot answer used to record the failure, which fails the command and ends the
+  /// runner. The handle here matches both inputs, so its snapshot cannot answer, and the input has
+  /// no identifier to be found by instead.
+  @MainActor
+  func testSynthesizedClearFailsClosedWhenTheInputFoundUnderThePointCannotBeRead() throws {
+    let (field, neighbour) = try launchFieldThatMovesOnFocus()
+    defer { tearDownSynthesizedReplacementField() }
+    let neighbourFrame = neighbour.frame
+    let failures = currentXCTestFailureCount()
+
+    let result = typeTextReliably(
+      app: app,
+      target: TextEntryTarget(
+        element: nil,
+        refreshPoint: CGPoint(x: neighbourFrame.midX, y: neighbourFrame.midY),
+        prefersFocusedElement: false,
+        inputAtRefreshPoint: TextInputAtPoint(
+          element: app.textFields.element,
+          identity: TextEntryInputIdentity(elementType: .textField, identifier: "")
+        )
+      ),
+      text: "",
+      delaySeconds: 0,
+      repairMode: .replacement,
+      xCTestChannelPenalized: true,
+      synthesizer: RecordingTextEntrySynthesizer()
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failures))
+    XCTAssertEqual(result.failure, .notFocused)
+    XCTAssertEqual(String(describing: neighbour.value ?? ""), "neighbour")
+    XCTAssertEqual(String(describing: field.value ?? ""), "stale")
+  }
+
+  /// The pre-tap lookup runs on a channel already penalized for failing XCTest reads. A lookup that
+  /// fails leaves the fill to the point; it used to record the failure, which fails the command
+  /// and ends the runner.
+  @MainActor
+  func testSynthesizedReplacementContainsAFailedLookupOfTheInputUnderThePoint() throws {
+    let textField = try focusSynthesizedReplacementField()
+    defer {
+      textInputProbeIssueForTesting = nil
+      tearDownSynthesizedReplacementField()
+    }
+    textInputProbeIssueForTesting = XCTIssue(
+      type: .assertionFailure,
+      compactDescription: "Injected pre-tap text input query failure"
+    )
+
+    let response = try replaceSynthesizedFieldText(textField, text: "fresh", commandId: "fill-lookup-failed")
+
+    XCTAssertNil(textInputProbeIssueForTesting, "the fill made no lookup")
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(String(describing: textField.value ?? ""), "fresh")
+  }
 #endif
 }
