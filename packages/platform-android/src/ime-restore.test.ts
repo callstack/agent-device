@@ -57,6 +57,32 @@ test('close-time restore puts the previous IME back and clears record and marker
   expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([]);
 });
 
+test('an unreadable rebind record keeps the restore record and the marker for a retry', async () => {
+  const host = bindAndroidAdbHostStub();
+  await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
+  setAndroidTestImeActiveForTests(DEVICE, true);
+  // An unconfirmed rebind left Android on its fallback IME; the close-time record read times out.
+  const state = stuckDeviceState();
+  state.settings.set('default_input_method', 'com.android.inputmethod.latin/.LatinIME');
+  state.settings.set('agent_device_ime_helper_rebind_displaced', '1');
+  const deviceAdb = fakeImeDeviceAdb(state);
+
+  const result = await withAndroidAdbProvider(
+    {
+      exec: async (args) =>
+        args[2] === 'get' && args[4] === 'agent_device_ime_helper_rebind_displaced'
+          ? { exitCode: 1, stdout: '', stderr: 'timed out' }
+          : await deviceAdb(args),
+    },
+    { serial: DEVICE.id },
+    async () => await restoreAndroidTestIme(DEVICE, { stateDir: STATE_DIR }),
+  );
+
+  expect(result).toMatchObject({ restored: false, reason: 'record-unreadable' });
+  expect(state.settings.get('agent_device_ime_helper_previous_ime')).toBe('com.samsung/.Keyboard');
+  expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
+});
+
 test('a failed restore keeps the record and the marker for a later retry', async () => {
   const host = bindAndroidAdbHostStub();
   await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
@@ -69,6 +95,30 @@ test('a failed restore keeps the record and the marker for a later retry', async
   expect(result).toMatchObject({ restored: false, reason: 'set-failed' });
   expect(state.settings.get('agent_device_ime_helper_previous_ime')).toBe('com.samsung/.Keyboard');
   expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
+});
+
+test("close-time restore undoes a rebind's fallback IME, but not the user's own switch", async () => {
+  const host = bindAndroidAdbHostStub();
+  await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
+  setAndroidTestImeActiveForTests(DEVICE, true);
+  const displaced = stuckDeviceState();
+  displaced.settings.set('default_input_method', 'com.android.inputmethod.latin/.LatinIME');
+  displaced.settings.set('agent_device_ime_helper_rebind_displaced', '1');
+
+  expect(await restoreWith(displaced)).toMatchObject({ restored: true, reason: 'ok' });
+  expect(displaced.settings.get('default_input_method')).toBe('com.samsung/.Keyboard');
+  expect(displaced.settings.has('agent_device_ime_helper_previous_ime')).toBe(false);
+  expect(displaced.settings.has('agent_device_ime_helper_rebind_displaced')).toBe(false);
+  expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([]);
+
+  setAndroidTestImeActiveForTests(DEVICE, true);
+  const switched = stuckDeviceState();
+  switched.settings.set('default_input_method', 'com.android.inputmethod.latin/.LatinIME');
+
+  expect(await restoreWith(switched)).toMatchObject({ reason: 'helper-not-active' });
+  expect(switched.settings.get('default_input_method')).toBe(
+    'com.android.inputmethod.latin/.LatinIME',
+  );
 });
 
 test('devices this process never activated are left alone', async () => {
@@ -118,4 +168,27 @@ test('startup recovery restores a stuck orphan through the scoped transport and 
     phase: 'android_test_ime_orphan_restored',
     level: 'warn',
   });
+});
+
+test("startup recovery undoes a crashed daemon's unconfirmed rebind", async () => {
+  const host = bindAndroidAdbHostStub();
+  await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
+  const state = stuckDeviceState();
+  state.settings.set('default_input_method', 'com.android.inputmethod.latin/.LatinIME');
+  state.settings.set('agent_device_ime_helper_rebind_displaced', '1');
+
+  await withAndroidAdbProvider(
+    { exec: fakeImeDeviceAdb(state) },
+    { serial: DEVICE.id },
+    async () =>
+      await restoreOrphanedAndroidTestImeOnDaemonStartup({
+        stateDir: STATE_DIR,
+        listSerials: async () => [DEVICE.id],
+      }),
+  );
+
+  expect(state.settings.get('default_input_method')).toBe('com.samsung/.Keyboard');
+  expect(state.settings.has('agent_device_ime_helper_rebind_displaced')).toBe(false);
+  expect(state.settings.has('agent_device_ime_helper_previous_ime')).toBe(false);
+  expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([]);
 });

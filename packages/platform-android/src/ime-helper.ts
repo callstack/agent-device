@@ -163,6 +163,20 @@ export async function clearAndroidImeHelperText(
   await sendAndroidImeHelperBroadcast(adb, packageName, ACTION_CLEAR_TEXT, {});
 }
 
+/**
+ * Rebinds the test IME, so the focused field starts a fresh input session with it. Android can leave
+ * the IME holding a session the app has already replaced; the app then drops every commit ("Session
+ * id mismatch"), and refocusing a field that already has focus does not start a new session.
+ */
+export async function rebindAndroidImeHelper(adb: AndroidAdbExecutor): Promise<void> {
+  for (const verb of ['disable', 'enable', 'set'] as const) {
+    await runAdbShell(adb, ['ime', verb, ANDROID_IME_HELPER_SERVICE], {
+      allowFailure: true,
+      timeoutMs: ANDROID_IME_HELPER_BROADCAST_TIMEOUT_MS,
+    });
+  }
+}
+
 async function sendAndroidImeHelperBroadcast(
   adb: AndroidAdbExecutor,
   packageName: string,
