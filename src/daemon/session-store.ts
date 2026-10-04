@@ -202,6 +202,10 @@ export class SessionStore {
     this.runtimeHints.set(name, hints);
   }
 
+  clearRuntimeHints(name: string): boolean {
+    return this.runtimeHints.delete(name);
+  }
+
   recordAction(session: SessionState, entry: RecordActionEntry): void {
     const action = recordActionEntry(session, entry);
     if (action) {
