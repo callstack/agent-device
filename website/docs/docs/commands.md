@@ -411,6 +411,13 @@ agent-device get attrs @e1
   last: footers, tab bars, items after a long list, even when on screen. The snapshot carries a
   warning that says so; navigate or scroll so fewer elements render and re-run, and use
   `screenshot` as visual truth for the rest.
+- `viewport: { width, height }` names the box the node rects are measured in, in the same coordinate
+  space and orientation as the rects beside it, so a consumer scales and clips against the screen it
+  was shown instead of inferring one from the largest rect on screen. Which surface it names is the
+  producer's answer: the app window on iOS (so iPad Split View and a foldable panel do not inflate
+  it), the measured screen on Android and Apple TV, the browser viewport on web. It is absent when
+  the producer measured no box — a bare provider tree, a desktop capture with no single window —
+  and never reported as a zero. It is the full size only; content-safe gesture bounds are separate.
 - `--scope <text|@ref>` returns the subtree of the first node in document order whose label, value,
   or identifier contains the scope text (case-insensitive) and whose subtree still has content in
   the requested projection, re-rooted at depth 0; no match returns an empty snapshot rather than the
