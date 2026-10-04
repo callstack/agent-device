@@ -25,7 +25,7 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
 }));
 
 import { resolveDaemonPaths, type DaemonPaths } from '../../daemon-resolution.ts';
-import { sendToDaemon, type DaemonRequest, type DaemonResponse } from '../daemon-client.ts';
+import { sendToDaemon, type DaemonRequest } from '../daemon-client.ts';
 import { sendRequest } from '../daemon-client-transport.ts';
 import type { DaemonRetirementResult } from '../../daemon-registration-owner.ts';
 import {
