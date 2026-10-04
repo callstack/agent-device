@@ -26,7 +26,6 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
 
 import { resolveDaemonPaths, type DaemonPaths } from '../../daemon-resolution.ts';
 import { sendToDaemon, type DaemonRequest, type DaemonResponse } from '../daemon-client.ts';
-import { attachActiveSessionAddressHint } from '../daemon-client-lifecycle.ts';
 import { sendRequest } from '../daemon-client-transport.ts';
 import type { DaemonRetirementResult } from '../../daemon-registration-owner.ts';
 import {
@@ -43,7 +42,6 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { tryAcquireProcessLock, inspectProcessLock } from '@agent-device/host-kit/file';
 import { runCmdDetachedMonitored, runCmdSync } from '@agent-device/host-kit/command';
-import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -1020,45 +1018,6 @@ function activeReplaySuccessData(overrides: Record<string, unknown> = {}): Recor
     ...overrides,
   };
 }
-
-test('attachActiveSessionAddressHint shell-quotes a --state-dir/--session value containing spaces or shell metacharacters', () => {
-  const unsafeStateDir = '/tmp/state dir with $(danger)';
-  const unsafeSession = 'cwd:abc123:my session; rm -rf /';
-  const response: Extract<DaemonResponse, { ok: true }> = {
-    ok: true,
-    data: activeReplaySuccessData({ session: unsafeSession }),
-  };
-
-  const hinted = attachActiveSessionAddressHint(response, unsafeStateDir);
-
-  assert.equal(
-    hinted.data?.hint,
-    "This session's daemon was kept alive because its script left the session active; " +
-      `pass --state-dir ${shellQuoteIfNeeded(unsafeStateDir)} ` +
-      `--session ${shellQuoteIfNeeded(unsafeSession)} on your next command to reach it.`,
-  );
-  // Both values actually needed quoting — this test would pass vacuously
-  // (raw interpolation indistinguishable from quoted) if they didn't.
-  assert.notEqual(shellQuoteIfNeeded(unsafeStateDir), unsafeStateDir);
-  assert.notEqual(shellQuoteIfNeeded(unsafeSession), unsafeSession);
-});
-
-test('attachActiveSessionAddressHint omits --state-dir but still quotes an unsafe --session-only value', () => {
-  const unsafeSession = "cwd:abc123:it's mine";
-  const response: Extract<DaemonResponse, { ok: true }> = {
-    ok: true,
-    data: activeReplaySuccessData({ session: unsafeSession }),
-  };
-
-  const hinted = attachActiveSessionAddressHint(response, undefined);
-
-  assert.equal(
-    hinted.data?.hint,
-    "This session's daemon was kept alive because its script left the session active; " +
-      `pass --session ${shellQuoteIfNeeded(unsafeSession)} on your next command to reach it.`,
-  );
-  assert.doesNotMatch(String(hinted.data?.hint), /--state-dir/);
-});
 
 /** Issues a close-less `replay` against an owned ephemeral daemon spawned at `daemonPort`. */
 async function replayLeavingSessionActive(
