@@ -251,7 +251,7 @@ export default defineConfig({
           setupFiles: SETUP_FILES,
         },
       },
-    ].map((project) => ({ ...project, test: { ...TEST_ISOLATION, ...project.test } })),
+    ].map((project) => ({ ...project, test: { ...project.test, ...TEST_ISOLATION } })),
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov', 'json-summary'],
