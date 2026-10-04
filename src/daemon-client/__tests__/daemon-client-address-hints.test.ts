@@ -16,6 +16,7 @@ test('remote active-session guidance retains the endpoint without URL credential
   assert.ok(!JSON.stringify(hinted).includes('private'));
   assert.ok(!JSON.stringify(hinted).includes('hidden'));
   assert.ok(!String(hinted.data?.hint).includes('--state-dir'));
+  assert.ok(String(hinted.data?.hint).includes('provide or configure --daemon-auth-token'));
 });
 
 test('attachActiveSessionAddressHint shell-quotes a --state-dir/--session value containing spaces or shell metacharacters', () => {

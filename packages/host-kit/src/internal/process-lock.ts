@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { publishFileSync } from './atomic-file.ts';
 import { emitDiagnostic } from './diagnostics.ts';
 import {
@@ -180,7 +180,7 @@ function withMutationGuardHeld<Result>(
       emitDiagnostic({
         level: 'warn',
         phase: 'process_lock_guard_release_failed',
-        data: { lockDirPath, error: String(releaseError) },
+        data: { lockDirPath, error: normalizeError(releaseError) },
       });
     }
     throw error;

@@ -62,3 +62,21 @@ export function onFirstGuardOpen(mutexPath: string, action: () => void) {
   }) as typeof fs.openSync);
   return { fired: () => fired, restore: () => spy.mockRestore() };
 }
+
+export const UNINFORMATIVE_OWNER_RECORDS = [
+  '{ pid: ',
+  'null',
+  '"999999999"',
+  '{"pid":"999999999","startTime":null,"acquiredAtMs":1}',
+  '{"pid":0,"startTime":null,"acquiredAtMs":1}',
+  '{"pid":999999999,"startTime":7,"acquiredAtMs":1}',
+  '{"pid":999999999,"startTime":null}',
+] as const;
+
+export function failRenameForPath(filePath: string, error: Error) {
+  const rename = fs.renameSync;
+  return vi.spyOn(fs, 'renameSync').mockImplementation((source, destination) => {
+    if (String(destination) === filePath) throw error;
+    return rename(source, destination);
+  });
+}

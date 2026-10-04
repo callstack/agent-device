@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import * as diagnostics from './diagnostics.ts';
 
 const { zombiePids, processProbe } = vi.hoisted(() => ({
   zombiePids: new Set<number>(),
@@ -36,6 +37,8 @@ import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 import { holdLegacyReclaimMutex } from './legacy-process-lock.fixtures.ts';
 import {
   currentProcessOwner,
+  failRenameForPath,
+  UNINFORMATIVE_OWNER_RECORDS,
   failUnlinkForPath,
   listReclaimSiblings,
   onFirstGuardOpen,
@@ -286,16 +289,6 @@ test('one abandoned lock offered to two contenders is held by exactly one of the
   await (acquired[0] as PromiseFulfilledResult<() => Promise<void>>).value();
   assert.deepEqual(listReclaimSiblings(tmpDir), []);
 });
-
-const UNINFORMATIVE_OWNER_RECORDS = [
-  '{ pid: ',
-  'null',
-  '"999999999"',
-  '{"pid":"999999999","startTime":null,"acquiredAtMs":1}',
-  '{"pid":0,"startTime":null,"acquiredAtMs":1}',
-  '{"pid":999999999,"startTime":7,"acquiredAtMs":1}',
-  '{"pid":999999999,"startTime":null}',
-] as const;
 
 for (const [index, record] of UNINFORMATIVE_OWNER_RECORDS.entries()) {
   test(`acquireProcessLock does not evict the lock behind the record ${record}`, async () => {
@@ -867,27 +860,41 @@ test('an acquisition cannot authorize a successor record', async () => {
   assert.deepEqual(JSON.parse(fs.readFileSync(ownerPath, 'utf8')), successor);
 });
 
-test('failed owner publication rolls back only the attempted empty directory', async () => {
-  const lockDirPath = path.join(tmpDir, 'failed-publication.lock');
-  const realRename = fs.renameSync;
-  const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation((source, destination) => {
-    if (String(destination) === path.join(lockDirPath, 'owner.json')) {
-      throw Object.assign(new Error('publication failed'), { code: 'EIO' });
+for (const releaseFails of [false, true]) {
+  test(`failed owner publication remains primary when guard release fails: ${releaseFails}`, async () => {
+    const lockDirPath = path.join(tmpDir, 'failed-publication.lock');
+    const guardPath = path.join(tmpDir, 'failed-publication.reclaim.lock');
+    const primary = Object.assign(new Error('publication failed'), { code: 'EIO' });
+    const releaseError = Object.assign(new Error('guard unlink refused'), { code: 'EPERM' });
+    const renameSpy = failRenameForPath(path.join(lockDirPath, 'owner.json'), primary);
+    const unlinkSpy = releaseFails ? failUnlinkForPath(guardPath, releaseError) : undefined;
+    const diagnosticSpy = vi.spyOn(diagnostics, 'emitDiagnostic');
+    try {
+      assert.throws(
+        () => tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() }),
+        (error) => error === primary,
+      );
+      if (releaseFails) {
+        const data = diagnosticSpy.mock.calls.find(
+          ([event]) => event.phase === 'process_lock_guard_release_failed',
+        )?.[0].data;
+        const failure = data?.error as ReturnType<typeof normalizeError>;
+        assert.equal(failure.cause?.code, 'EPERM');
+        assert.equal(failure.details?.reason, 'process_lock_guard_release_failed');
+        assert.match(failure.hint ?? '', /confirming all users/);
+        assert.equal(fs.existsSync(guardPath), true);
+      }
+    } finally {
+      renameSpy.mockRestore();
+      unlinkSpy?.mockRestore();
+      diagnosticSpy.mockRestore();
     }
-    return realRename(source, destination);
+    if (releaseFails) fs.unlinkSync(guardPath);
+    const retry = tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
+    assert.equal(retry.status, 'acquired');
+    if (retry.status === 'acquired') await retry.acquisition.release();
   });
-  try {
-    assert.throws(
-      () => tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() }),
-      /publication failed/,
-    );
-  } finally {
-    renameSpy.mockRestore();
-  }
-  const retry = tryAcquireProcessLock({ lockDirPath, owner: currentProcessOwner() });
-  assert.equal(retry.status, 'acquired');
-  if (retry.status === 'acquired') await retry.acquisition.release();
-});
+}
 
 test('a failed guard release reports retained exclusion and supports verified manual recovery', async () => {
   const lockDirPath = path.join(tmpDir, 'guard-release.lock');

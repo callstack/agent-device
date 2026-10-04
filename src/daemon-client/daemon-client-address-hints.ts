@@ -19,7 +19,10 @@ export function attachActiveSessionAddressHint(
   if (addressFlags.length === 0) return response;
   const addressHint =
     `This session's daemon was kept alive because its script left the session active; ` +
-    `pass ${addressFlags.join(' ')} on your next command to reach it.`;
+    `pass ${addressFlags.join(' ')} on your next command to reach it.` +
+    (remoteBaseUrl
+      ? ' If authentication is required, provide or configure --daemon-auth-token.'
+      : '');
   const existingMessage = typeof data.message === 'string' ? data.message : undefined;
   return {
     ...response,
