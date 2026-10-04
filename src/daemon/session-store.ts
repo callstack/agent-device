@@ -489,5 +489,4 @@ export class SessionStore {
   resolveEventLogPath(sessionName: string): string {
     return resolveSessionEventLogPath(this.resolveSessionDir(sessionName));
   }
-
 }
