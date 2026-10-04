@@ -1,3 +1,4 @@
+import { createDurableCaptureSessionBinding } from '@agent-device/capture-kit/durable-capture';
 import type {
   DurableCaptureSessionBinding,
   DurableCaptureSessionResource,
@@ -14,48 +15,14 @@ export function bindSessionCapture<K extends string, H extends AsyncDisposable>(
     write(resource: DurableCaptureSessionResource<K, H> | undefined): void;
   }>,
 ): DurableCaptureSessionBinding<K, H> {
-  let retained = slot.read(sessionStore.resolveCurrent(ref) ?? ref.session);
-  const assertAdoptable = (): void => {
-    sessionStore.assertAdmissionOpen(ref.address);
-    if (slot.read(sessionStore.requireCurrent(ref))) {
-      throw new AppError('COMMAND_FAILED', 'Session capture resource has changed', {
-        reason: 'session_resource_changed',
-        session: ref.address,
-      });
-    }
-  };
-  return Object.freeze({
+  return createDurableCaptureSessionBinding({
     address: ref.address,
     sessionDir: sessionStore.resolveSessionDir(ref.address),
-    read: () => {
-      const current = sessionStore.resolveCurrent(ref);
-      if (current) retained = slot.read(current);
-      return retained;
-    },
-    assertAdoptable,
-    canPersist: () => {
-      const current = sessionStore.resolveCurrent(ref);
-      return current !== undefined && slot.read(current) === undefined;
-    },
-    adopt: (resource) => {
-      assertAdoptable();
-      slot.write(resource);
-      retained = resource;
-    },
-    clear: (expected) => {
-      const current = sessionStore.resolveCurrent(ref);
-      if (!current) return 'retired';
-      const active = slot.read(current);
-      if (
-        active?.handle !== expected.handle ||
-        active.envelope.fence.token !== expected.envelope.fence.token ||
-        active.envelope.fence.generation !== expected.envelope.fence.generation
-      )
-        return 'resource-changed';
-      slot.write(undefined);
-      retained = undefined;
-      return 'cleared';
-    },
+    initialSession: ref.session,
+    resolveCurrent: () => sessionStore.resolveCurrent(ref),
+    requireCurrent: () => sessionStore.requireCurrent(ref),
+    assertAdmissionOpen: () => sessionStore.assertAdmissionOpen(ref.address),
+    ...slot,
   });
 }
 

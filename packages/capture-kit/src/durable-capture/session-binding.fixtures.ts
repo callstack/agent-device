@@ -1,3 +1,4 @@
+import { createDurableCaptureSessionBinding } from './session-binding.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DurableCaptureSessionBinding, DurableCaptureSessionResource } from './definition.ts';
 
@@ -42,46 +43,18 @@ export function makeCaptureSessionBinding<K extends string, H extends AsyncDispo
   }>,
 ): DurableCaptureSessionBinding<K, H> {
   const ref = store.lookup(address);
-  let retained = slot.read(ref.session);
-  const requireSession = (): S => {
-    const session = store.resolveCurrent(ref);
-    if (session === undefined) throw new AppError('COMMAND_FAILED', 'Test session retired');
-    return session;
-  };
-  const assertAdoptable = (): void => {
-    if (slot.read(requireSession())) throw new AppError('COMMAND_FAILED', 'Test resource changed');
-  };
-  return Object.freeze({
+  return createDurableCaptureSessionBinding({
     address,
     sessionDir: store.resolveSessionDir(address),
-    read: () => {
+    initialSession: ref.session,
+    resolveCurrent: () => store.resolveCurrent(ref),
+    requireCurrent: () => {
       const session = store.resolveCurrent(ref);
-      if (session !== undefined) retained = slot.read(session);
-      return retained;
+      if (session === undefined) throw new AppError('COMMAND_FAILED', 'Test session retired');
+      return session;
     },
-    assertAdoptable,
-    canPersist: () => {
-      const session = store.resolveCurrent(ref);
-      return session !== undefined && slot.read(session) === undefined;
-    },
-    adopt: (resource) => {
-      assertAdoptable();
-      store.update(ref, (current) => slot.replace(current, resource));
-      retained = resource;
-    },
-    clear: (expected) => {
-      const current = store.resolveCurrent(ref);
-      if (current === undefined) return 'retired';
-      const active = slot.read(current);
-      if (
-        active?.handle !== expected.handle ||
-        active.envelope.fence.token !== expected.envelope.fence.token ||
-        active.envelope.fence.generation !== expected.envelope.fence.generation
-      )
-        return 'resource-changed';
-      store.update(ref, (session) => slot.replace(session, undefined));
-      retained = undefined;
-      return 'cleared';
-    },
+    assertAdmissionOpen: () => {},
+    read: slot.read,
+    write: (resource) => store.update(ref, (current) => slot.replace(current, resource)),
   });
 }

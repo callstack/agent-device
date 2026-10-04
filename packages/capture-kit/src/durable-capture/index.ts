@@ -23,3 +23,5 @@ export type {
 } from './recovery.ts';
 export type { DurableCaptureRecoveryControl } from './recovery-authority.ts';
 export type { DurableCaptureResourceRecord, DurableCaptureResourceStore } from './store.ts';
+
+export { createDurableCaptureSessionBinding } from './session-binding.ts';
