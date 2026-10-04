@@ -22,7 +22,7 @@
 //   - Over the RANKED SPINE only: rejection of every spine back-edge (R5), i.e.
 //     an import whose source zone outranks its target zone, plus a ratchet on the
 //     same inversion measured over TYPE-ONLY edges (R6).
-//   - Over the DAEMON only: SessionState field ownership (R7), because the session
+//   - Over the DAEMON and its capture-admission adapters: SessionState field ownership (R7), because the session
 //     record is store-owned mutable state that any daemon module can write; and the terminal
 //     concrete-platform boundary (R65), which rejects every import form into the retired
 //     src/platforms path or a platform package.
@@ -315,6 +315,24 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Layer
       });
       continue;
     }
+    const syntaxFailures: Readonly<Record<string, string>> = {
+      '[patch-shape]':
+        'Session updates require an explicit patch literal or inline synchronous callback returning named keys. Computed keys, spreads, getters, async callbacks and opaque patches cannot establish field ownership.',
+      '[reentrant-patch]':
+        'A session patch callback must not call back into the store. Read the supplied current record and return named fields synchronously.',
+      '[whole-record-spread]':
+        'Whole SessionState copies are allowed only inside the store or declared draft constructors. Update an existing lifetime through its field owner with a named patch.',
+    };
+    const syntaxFailure = syntaxFailures[write.field];
+    if (syntaxFailure) {
+      violations.push({
+        rule: 'R7 session-state-ownership',
+        file: write.file,
+        line: write.line,
+        message: syntaxFailure,
+      });
+      continue;
+    }
     if (owners === undefined) {
       const storeOwned = STORE_OWNED_SESSION_STATE_FIELDS.has(write.field);
       violations.push({
@@ -324,7 +342,7 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Layer
         message: storeOwned
           ? `session.${write.field} is classified store-established ` +
             `(STORE_OWNED_SESSION_STATE_FIELDS), meaning nothing mutates it after construction — ` +
-            `but this is a direct write. Route it through the store, or move the field into ` +
+            `but this is a write. Route it through the store, or move the field into ` +
             `SESSION_STATE_FIELD_OWNERS with this module as its owner.`
           : `session.${write.field} has no declared owner. SessionStore hands out the live ` +
             `record, so this write is durable: name the owning module in ` +
