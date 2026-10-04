@@ -16,7 +16,11 @@ import {
   summarizeCommandAttemptFailures,
   type CommandAttemptFailure,
 } from '@agent-device/kernel/errors';
-import { readHostDirectory, removeHostPath } from '@agent-device/host-kit/host-file';
+import {
+  ensureHostDirectory,
+  readHostDirectory,
+  removeHostPath,
+} from '@agent-device/host-kit/host-file';
 import path from 'node:path';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
 import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
@@ -198,6 +202,20 @@ export async function readIosSetting(
  */
 const CONTAINER_MANAGER_METADATA_FILE = '.com.apple.mobile_container_manager.metadata.plist';
 
+/**
+ * The directories a fresh install creates in the data container. iOS does not recreate them on
+ * relaunch; without `tmp`, every URLSession download task fails until the app is reinstalled.
+ * The list matches the iOS 26.5 fresh-install layout; older runtimes and tvOS or visionOS
+ * simulators may differ, but an extra empty directory there is harmless.
+ */
+const FRESH_INSTALL_DATA_DIRECTORIES = [
+  'Documents',
+  'Library/Caches',
+  'Library/Preferences',
+  'SystemData',
+  'tmp',
+];
+
 async function clearIosSimulatorAppState(
   device: DeviceInfo,
   app: string,
@@ -233,6 +251,11 @@ async function clearIosSimulatorAppState(
     entries
       .filter((entry) => entry !== CONTAINER_MANAGER_METADATA_FILE)
       .map((entry) => removeHostPath(path.join(containerPath, entry))),
+  );
+  await Promise.all(
+    FRESH_INSTALL_DATA_DIRECTORIES.map((directory) =>
+      ensureHostDirectory(path.join(containerPath, directory)),
+    ),
   );
 
   return { bundleId, containerPath };
