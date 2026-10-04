@@ -337,10 +337,20 @@ extension RunnerTests {
     XCTAssertTrue(tapResponse.ok, String(describing: tapResponse.error))
     try skipUnlessSoftwareKeyboardIsVisible()
 
-    let text = String(
-      repeating: "x",
-      count: SynthesizedDeliveryBudget.maxTextLength(delaySeconds: 0) + 1
-    )
+    // The shortest append the budget refuses. `maxTextLength` answers for a replacement, whose
+    // clears cost more than an append's warmup split, so it names a shorter text than this one.
+    var count = 1
+    while !SynthesizedDeliveryBudget.exceeds(
+      Self.synthesizedTextPlan(
+        characterCount: count,
+        delaySeconds: 0,
+        selectsExistingText: false,
+        peelsWarmupCharacter: true
+      )
+    ) {
+      count += 1
+    }
+    let text = String(repeating: "x", count: count)
     let failureCountBefore = currentXCTestFailureCount()
     // The target the `type` command builds when it cannot resolve an input but the keyboard is up:
     // no element, no refresh point, focused-element preference.

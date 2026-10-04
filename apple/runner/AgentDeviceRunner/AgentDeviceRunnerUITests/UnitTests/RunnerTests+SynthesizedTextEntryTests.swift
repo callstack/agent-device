@@ -156,6 +156,74 @@ extension RunnerTests {
     XCTAssertEqual(String(describing: textField.value ?? ""), "")
   }
 
+  /// Drops the select-all of the first `remaining` replacing posts, the way a React Native field in
+  /// a freshly launched app does, so each of those passes deletes only the last character.
+  final class SelectAllDroppingSynthesizer: TextEntrySynthesizing {
+    var remaining: Int
+
+    init(dropping count: Int) {
+      remaining = count
+    }
+
+    func enterText(
+      app: XCUIApplication,
+      text: String,
+      replacingExistingText: Bool
+    ) -> SynthesizedTextEntryAction {
+      let dropsSelectAll = replacingExistingText && remaining > 0
+      if dropsSelectAll { remaining -= 1 }
+      return PrivateXCTestTextEntrySynthesizer().enterText(
+        app: app,
+        text: text,
+        replacingExistingText: replacingExistingText && !dropsSelectAll
+      )
+    }
+  }
+
+  /// Two fixed clear passes left "Clie" of "Client" in 3 of 5 fills on a freshly launched React
+  /// Native app that dropped its select-alls, and the fill typed after it. The clear now repeats
+  /// until the field reads empty, and types nothing over text it could not remove.
+  @MainActor
+  func testSynthesizedReplacementClearsPastDroppedSelectAlls() throws {
+    let field = try focusSynthesizedReplacementField()
+    defer { tearDownSynthesizedReplacementField() }
+    let frame = field.frame
+    let found = try XCTUnwrap(coordinateTapTextInputIdentityAt(app: app, x: frame.midX, y: frame.midY))
+    let cases: [(dropped: Int, failure: TextEntryFailure?)] = [
+      (2, nil),
+      (SynthesizedTextPlan.Step.maxClearPassCount, .clearNotObserved),
+    ]
+
+    for testCase in cases {
+      let label = "\(testCase.dropped) select-alls dropped"
+      let seeded = try replaceSynthesizedFieldText(field, text: "stale", commandId: "seed-\(testCase.dropped)")
+      XCTAssertTrue(seeded.ok, String(describing: seeded.error))
+      let result = typeTextReliably(
+        app: app,
+        target: TextEntryTarget(
+          element: nil,
+          refreshPoint: CGPoint(x: frame.midX, y: frame.midY),
+          prefersFocusedElement: false,
+          inputAtRefreshPoint: found
+        ),
+        text: "fresh",
+        delaySeconds: 0,
+        repairMode: .replacement,
+        xCTestChannelPenalized: true,
+        synthesizer: SelectAllDroppingSynthesizer(dropping: testCase.dropped)
+      )
+
+      let value = String(describing: field.value ?? "")
+      XCTAssertEqual(result.failure, testCase.failure, label)
+      if testCase.failure == nil {
+        XCTAssertEqual(value, "fresh", label)
+      } else {
+        XCTAssertFalse(value.contains("fresh"), "typed over text it could not clear: \(value)")
+        XCTAssertFalse(value.isEmpty, label)
+      }
+    }
+  }
+
   /// Launches the fixture whose field moves away when focused and leaves a neighbouring field under
   /// the point the focus tap hit, the way a React Native bottom sheet extends above the keyboard.
   /// The field is not focused yet, so the replacement's own tap starts the move.

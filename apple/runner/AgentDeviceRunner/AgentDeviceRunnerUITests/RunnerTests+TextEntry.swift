@@ -8,6 +8,7 @@ extension RunnerTests {
     case notFocused = "TEXT_INPUT_NOT_FOCUSED"
     case synthesisUnavailable = "TEXT_INPUT_SYNTHESIS_UNAVAILABLE"
     case commitNotObserved = "TEXT_INPUT_COMMIT_NOT_OBSERVED"
+    case clearNotObserved = "TEXT_INPUT_CLEAR_NOT_OBSERVED"
     case synthesisBudgetExceeded = "TEXT_INPUT_SYNTHESIS_BUDGET_EXCEEDED"
 
     var message: String {
@@ -18,6 +19,8 @@ extension RunnerTests {
         return "Reliable text synthesis is unavailable while the software keyboard is hidden."
       case .commitNotObserved:
         return "The runner could not confirm the typed text reached the field."
+      case .clearNotObserved:
+        return "The runner could not clear the field before typing, so it typed nothing."
       case .synthesisBudgetExceeded:
         return "The text is longer than one runner command can type at this pace."
       }
@@ -31,6 +34,8 @@ extension RunnerTests {
         return "Show the software keyboard, then retry type."
       case .commitNotObserved:
         return "The field may hold none, part, or all of the text. Run snapshot -i and inspect the field: if it already matches, continue; otherwise retry fill with the full text quoted and --delay-ms \(TextEntryTiming.recoveryDelayMilliseconds). Do not use type, which appends to whatever committed."
+      case .clearNotObserved:
+        return "The field may still hold some or all of its old text. Run snapshot -i and inspect the field, then retry fill. Do not use type, which appends to whatever the field holds."
       case .synthesisBudgetExceeded:
         let recoveryDelay = TextEntryTiming.recoveryDelayMilliseconds
         let recoveryBudget = SynthesizedDeliveryBudget.maxTextLength(
@@ -74,6 +79,11 @@ extension RunnerTests {
     /// point before that tap took up to 2.0 s more on a React Native bottom sheet (iPhone 17 Pro
     /// Max, iOS 26.5).
     static let synthesizedReplacementFocusAllowance: TimeInterval = 4.0
+    /// What one read of the field between a replacement's clear passes is charged. On a penalized
+    /// channel, a clear pass on a React Native bottom-sheet field took 1.18–1.26 s over 22 passes
+    /// (iPhone 17 Pro Max, iOS 26.5); less the pass's charged synthesize calls and delete key, the
+    /// read took 0.80–0.88 s. A login field read in 0.26–0.40 s.
+    static let synthesizedClearReadAllowance: TimeInterval = 0.9
     /// How long a synthesized burst may spend posting its characters: what the command's
     /// main-thread watchdog leaves after focus and the longest commit wait. The private synthesize
     /// call delivers as it returns, so text that does not fit is refused before the first character
