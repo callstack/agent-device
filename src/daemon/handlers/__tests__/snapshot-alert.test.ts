@@ -118,3 +118,23 @@ test('alert dismiss retries a typed absence whatever the message says', async ()
   expect(response?.ok).toBe(true);
   expect(calls).toBe(3);
 });
+
+for (const action of ['accept', 'dismiss']) {
+  test(`alert ${action} succeeds without journaling after its admitted lifetime ends`, async () => {
+    const store = makeSessionStore();
+    const name = 'ios-alert-retirement';
+    const retired = store.publish(name, makeSession(name));
+    let successor: SessionState | undefined;
+    mockRunnerCommand.mockImplementationOnce(async () => {
+      store.retire(retired);
+      successor = makeSession(name);
+      store.publish(name, successor);
+      return { [action === 'accept' ? 'accepted' : 'dismissed']: true };
+    });
+    const response = await handleSnapshotCommands(name, store, [action]);
+    expect(response?.ok).toBe(true);
+    expect(mockRunnerCommand).toHaveBeenCalledOnce();
+    expect(retired.session.actions).toEqual([]);
+    expect(successor?.actions).toEqual([]);
+  });
+}

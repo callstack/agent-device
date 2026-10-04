@@ -27,7 +27,7 @@ import { contextFromFlags } from '../context.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { SessionRef, SessionState } from '../session-state.ts';
-import { recordIfSession } from '../snapshot-session.ts';
+import { recordSessionAction } from '../session-action-recorder.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { readLocationCoordinate } from '@agent-device/kernel/location-coordinates';
@@ -252,7 +252,7 @@ async function executeSettingsRead(
     ...payload,
     ...successText(describeSettingRead(payload)),
   };
-  recordIfSession(sessionStore, ref, req, data);
+  recordSessionAction(sessionStore, ref, req, req.command, data);
   return { ok: true, data };
 }
 
@@ -297,7 +297,7 @@ async function executeSettingsWrite(
     ),
     describeSettingWrite(setting, state, appBundleId),
   );
-  recordIfSession(sessionStore, ref, req, data);
+  recordSessionAction(sessionStore, ref, req, req.command, data);
   return { ok: true, data };
 }
 

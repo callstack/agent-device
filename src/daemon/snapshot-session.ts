@@ -39,21 +39,6 @@ export async function withSessionlessRunnerCleanup<T>(
   }
 }
 
-export function recordIfSession(
-  sessionStore: SessionStore,
-  ref: SessionRef | undefined,
-  req: DaemonRequest,
-  result: Record<string, unknown>,
-): void {
-  if (!ref) return;
-  sessionStore.recordAction(ref, {
-    command: req.command,
-    positionals: req.positionals ?? [],
-    flags: req.flags ?? {},
-    result,
-  });
-}
-
 export function createSnapshotSession(params: {
   sessionName: string;
   sessionScope: SessionScope;

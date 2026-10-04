@@ -430,3 +430,16 @@ test('a confirmed persistent prompt reports its observed outcome without an acce
     data: { reason: 'alert-still-present' },
   });
 });
+
+test('a matching launch title with other buttons is left unanswered on the first read', async () => {
+  const { port: device, acceptAlert } = port(async () => ({
+    ...CONFIRMATION,
+    items: ['Cancel', 'Continue'],
+  }));
+  await expect(answerLaunchConfirmation(device)).resolves.toMatchObject({
+    outcome: 'unanswered',
+    reason: 'alert-unrecognized',
+  });
+  expect(device.readAlert).toHaveBeenCalledOnce();
+  expect(acceptAlert).not.toHaveBeenCalled();
+});

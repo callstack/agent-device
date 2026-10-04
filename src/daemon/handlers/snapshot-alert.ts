@@ -15,7 +15,7 @@ import { contextFromFlags } from '../context.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { SessionRef, SessionState } from '../session-state.ts';
 import { SessionStore } from '../session-store.ts';
-import { recordIfSession } from '../snapshot-session.ts';
+import { recordSessionAction } from '../session-action-recorder.ts';
 import { parseTimeout } from '@agent-device/command-registry/parse-timeout';
 import { resolveRefFrameEffect } from '../daemon-command-registry.ts';
 import { expireRefFrame } from '../ref-frame.ts';
@@ -147,7 +147,7 @@ export async function handleAlertCommand(
     ...alertTarget(session),
     execution: runtimeExecutionFromContext(context),
   });
-  recordIfSession(sessionStore, ref, req, data);
+  recordSessionAction(sessionStore, ref, req, req.command, data);
   return { ok: true, data };
 }
 

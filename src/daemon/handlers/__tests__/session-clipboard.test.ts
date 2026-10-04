@@ -241,3 +241,20 @@ for (const action of ['read', 'write'] as const) {
     expect(spies.writeClipboard).not.toHaveBeenCalled();
   });
 }
+
+test('clipboard read succeeds without journaling after its admitted lifetime ends', async () => {
+  const spies = harness({ read: available, write: available });
+  const input = request(['read']);
+  const retired = input.sessionStore.lookup(input.sessionName)!;
+  const successor = makeSession(input.sessionName, androidDevice);
+  spies.readClipboard.mockImplementationOnce(async () => {
+    input.sessionStore.retire(retired);
+    input.sessionStore.publish(input.sessionName, successor);
+    return 'copied text';
+  });
+  const response = await handleSessionClipboardCommand({ ...input, ...spies });
+  expect(response?.ok).toBe(true);
+  expect(spies.readClipboard).toHaveBeenCalledOnce();
+  expect(retired.session.actions).toEqual([]);
+  expect(successor.actions).toEqual([]);
+});
