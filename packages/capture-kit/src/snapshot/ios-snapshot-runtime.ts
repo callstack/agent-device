@@ -15,6 +15,7 @@ import type {
   SnapshotRuntimeAcquiredResult,
 } from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
+import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 
 const IOS_SNAPSHOT_FACT_WARNINGS: Partial<Record<IosSnapshotFact, string>> = {
   'acquisition-depth':
@@ -41,6 +42,17 @@ export function presentIosSnapshotAcquisition(
 
   try {
     const presentation = publishIosSnapshot(input, request);
+    // A raw projection never validates a box (`presentAcquiredSnapshot` validates the graph alone),
+    // so this seam publishes only the viewport the regular fold measured its rects against — the same
+    // rule the runner presentation follows (#3182).
+    const validatedViewport =
+      request.projection === 'regular'
+        ? snapshotViewportSizeFrom(
+            acquired.acquisition.viewport.kind === 'missing'
+              ? undefined
+              : acquired.acquisition.viewport.rect,
+          )
+        : undefined;
     return {
       backend: 'xctest',
       producer: acquired.acquisition.producer,
@@ -49,6 +61,7 @@ export function presentIosSnapshotAcquisition(
       ...(acquired.acquisition.truncated === undefined
         ? {}
         : { truncated: acquired.acquisition.truncated }),
+      ...(validatedViewport ? { viewport: validatedViewport } : {}),
       ...snapshotWarnings(acquired.acquisition.residue),
     };
   } catch (error) {
