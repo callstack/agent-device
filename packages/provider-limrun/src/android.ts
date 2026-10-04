@@ -83,7 +83,9 @@ export async function createLimrunAndroidSession(
       await client.setText(request.target, request.text);
     },
   };
-  adbProvider.reverse = await dependencies.android.createPortReverse(adbProvider.exec);
+  adbProvider.reverse = await dependencies.android.createPortReverse(adbProvider.exec, {
+    noRebind: options.ownership === 'attached',
+  });
   return Object.assign(session, { adbProvider });
 }
 

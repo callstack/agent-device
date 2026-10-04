@@ -75,7 +75,14 @@ export type LimrunAndroidKeyboardDismissResult = LimrunAndroidKeyboardState & {
 export type LimrunAndroidRuntimeAdapter = {
   // Interactors need provider-scoped capabilities; command helpers below need only ADB execution.
   createInteractor(device: DeviceInfo, adb: LimrunAdbProvider): Interactor;
-  createPortReverse(adb: LimrunAdbExecutor): Promise<LimrunPortReverse>;
+  /**
+   * `noRebind` refuses to replace a device mapping this session did not create, for an instance
+   * whose owner may hold reverse mappings of their own.
+   */
+  createPortReverse(
+    adb: LimrunAdbExecutor,
+    options: Readonly<{ noRebind: boolean }>,
+  ): Promise<LimrunPortReverse>;
   inferAppName(packageName: string): Promise<string>;
   listApps(
     adb: LimrunAdbExecutor,

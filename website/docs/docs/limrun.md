@@ -41,6 +41,8 @@ agent-device disconnect
 
 `connect` checks the instance credentials. agent-device never creates or deletes that instance: `disconnect` leaves it running, and its owner deletes it. When the variables for a platform are set, they take precedence over `LIMRUN_API_KEY` for that platform.
 
+On Android, agent-device does not replace a port reverse mapping it did not create. If the owner already maps a device port, such as `tcp:8081` for their Metro server, a reverse to that port fails with `details.reason: 'android_port_reverse_rebind_refused'`, and the owner's mapping stays in place.
+
 `install`, and `apps` before the first `open`, still need `LIMRUN_API_KEY`, because they use Limrun asset storage. After `open`, `apps` lists the apps installed on the instance without the key. Install the app before you hand over the instance. From the Node.js runtime, `getDeviceSession(device).installRemoteApp(url)` installs from a signed asset URL without the API key.
 
 ## Keeping idle sessions alive
