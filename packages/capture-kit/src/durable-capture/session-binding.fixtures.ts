@@ -20,7 +20,7 @@ export function makeCaptureFixtureStore<S>(resolveSessionDir: (address: string) 
     },
     lookup: (address: string): FixtureSessionRef<S> => {
       const entry = entries.get(address);
-      if (!entry) throw new AppError('COMMAND_FAILED', 'Test session retired');
+      if (!entry) throw new AppError('COMMAND_FAILED', 'Test session not found');
       return Object.freeze({ address, session: entry.current, lifetime: entry });
     },
     resolveCurrent,
