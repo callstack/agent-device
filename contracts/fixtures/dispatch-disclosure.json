@@ -90,6 +90,12 @@
     "dispatched": "no"
   },
   {
+    "id": "daemon.route.session-or-selector-refusal",
+    "producer": "daemon",
+    "trigger": "a device-bound command with no active session and no device selector: requireSessionOrExplicitSelector refuses before any target resolves, carrying details.reason session_or_device_selector_required",
+    "dispatched": "no"
+  },
+  {
     "id": "daemon.route.find-type-refused-after-focus",
     "producer": "daemon",
     "trigger": "find <q> type: the focus tap returned, then the typeText send was refused before send (no); the request reports unknown with details.dispatchedSteps 1",

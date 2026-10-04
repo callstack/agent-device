@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { TEXT_SIZE_CATEGORIES } from '@agent-device/contracts/settings';
-import { PUBLISHED_ERROR_REASONS } from '@agent-device/kernel/errors';
+import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 import { readAndroidSetting, setAndroidSetting } from '../settings.ts';
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import { assertRejectsAppError } from './test-utils/app-error.ts';
@@ -70,7 +70,7 @@ test('setAndroidSetting clear-app-state refuses an appless session with the publ
     async ({ device }) => {
       await assertRejectsAppError(() => setAndroidSetting(device, 'clear-app-state', 'clear'), {
         code: 'INVALID_ARGS',
-        reason: PUBLISHED_ERROR_REASONS.sessionAppRequired,
+        reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired,
         dispatched: 'no',
       });
     },

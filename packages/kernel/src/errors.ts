@@ -252,18 +252,20 @@ export function throwDaemonError(error: DaemonError): never {
 }
 
 /**
- * The `details.reason` values a refusal answers with when the caller must know *why* a request was
- * stopped rather than read the prose: what a caller does to recover is the reason's meaning, and it
- * is public surface. Every refusal that names a reason here states its `dispatched` disclosure too,
- * because a refusal that reached no device is exactly what makes a retry safe.
+ * The `details.reason` values a pre-dispatch refusal answers with when the caller must know *why* a
+ * request was stopped rather than read the prose: what a caller does to recover is the reason's
+ * meaning, and the reason strings are wire vocabulary (documented in
+ * `website/docs/docs/commands.md`). This map is the kernel-owned subset whose refusals always
+ * state `dispatched: 'no'` too — a refusal that provably reached no device is exactly what makes a
+ * retry safe. Other producers own their own reason strings beside their own disclosures.
  */
-export const PUBLISHED_ERROR_REASONS = {
+export const PRE_DISPATCH_REFUSAL_REASONS = {
   /**
-   * A per-app setting was asked for while the request carries no app — the session binds none and
-   * none was named for this request. Recovery: `open` the app (or name it for the request), then
-   * retry. The daemon's `clear-app-state` pre-check and the Apple, Android, and HarmonyOS owners
-   * all answer with this one reason for every per-app setting, because the recovery is the same
-   * whichever setting asked.
+   * A per-app setting was asked for while the request carries no app — the session binds none and,
+   * for a setting that takes an app id, none was named for this request. Recovery: `open` the app
+   * (or name the app id on the request), then retry. The daemon's `clear-app-state` pre-check and
+   * the Apple, Android, and HarmonyOS owners all answer with this one reason for every per-app
+   * setting, because the recovery is the same whichever setting asked.
    */
   sessionAppRequired: 'session_app_required',
   /**
@@ -275,31 +277,31 @@ export const PUBLISHED_ERROR_REASONS = {
   sessionOrDeviceSelectorRequired: 'session_or_device_selector_required',
 } as const;
 
-export type PublishedErrorReason =
-  (typeof PUBLISHED_ERROR_REASONS)[keyof typeof PUBLISHED_ERROR_REASONS];
+export type PreDispatchRefusalReason =
+  (typeof PRE_DISPATCH_REFUSAL_REASONS)[keyof typeof PRE_DISPATCH_REFUSAL_REASONS];
 
 /** The details of a refusal that stopped a request before anything could reach a device. */
-export type RefusalDetails<TReason extends PublishedErrorReason> = AppErrorDetails & {
+export type RefusalDetails<TReason extends PreDispatchRefusalReason> = AppErrorDetails & {
   reason: TReason;
   dispatched: 'no';
 };
 
 /** The details of a per-app setting refused for want of an app. */
 export function sessionAppRequiredDetails(): RefusalDetails<
-  (typeof PUBLISHED_ERROR_REASONS)['sessionAppRequired']
+  (typeof PRE_DISPATCH_REFUSAL_REASONS)['sessionAppRequired']
 > {
   return {
-    reason: PUBLISHED_ERROR_REASONS.sessionAppRequired,
+    reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired,
     dispatched: 'no',
   };
 }
 
 /** The details of a command refused for want of a target to route to. */
 export function sessionOrDeviceSelectorRequiredDetails(): RefusalDetails<
-  (typeof PUBLISHED_ERROR_REASONS)['sessionOrDeviceSelectorRequired']
+  (typeof PRE_DISPATCH_REFUSAL_REASONS)['sessionOrDeviceSelectorRequired']
 > {
   return {
-    reason: PUBLISHED_ERROR_REASONS.sessionOrDeviceSelectorRequired,
+    reason: PRE_DISPATCH_REFUSAL_REASONS.sessionOrDeviceSelectorRequired,
     dispatched: 'no',
   };
 }

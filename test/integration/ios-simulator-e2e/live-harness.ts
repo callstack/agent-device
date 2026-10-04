@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { resolveDaemonPaths } from '../../../src/daemon-resolution.ts';
-import { PUBLISHED_ERROR_REASONS } from '@agent-device/kernel/errors';
+import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 import type { CliJsonResult } from '../cli-json.ts';
 import {
   createLiveDeviceContext,
@@ -138,6 +138,6 @@ function sessionAlreadyClean(step: string, result: CliJsonResult): boolean {
   return (
     step === MICROPHONE_PERMISSION_RESET_STEP &&
     result.json?.error?.code === 'INVALID_ARGS' &&
-    result.json?.error?.details?.reason === PUBLISHED_ERROR_REASONS.sessionAppRequired
+    result.json?.error?.details?.reason === PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired
   );
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { PUBLISHED_ERROR_REASONS } from '@agent-device/kernel/errors';
+import { sessionAppRequiredDetails } from '@agent-device/kernel/errors';
 import type { CliJsonResult } from './cli-json.ts';
 import type { LiveContext } from './ios-simulator-e2e/live-harness.ts';
 import { retryCleanupStep } from './ios-simulator-e2e/live-harness.ts';
@@ -17,13 +17,13 @@ const MIC_STEP = 'reset microphone permission';
 const OTHER_STEP = 'restore portrait orientation';
 const MIC_APPLESS_MESSAGE = 'permission setting requires an active app in session';
 
-function invalidArgsResult(message: string, reason?: string): CliJsonResult {
+function invalidArgsResult(message: string, details?: Record<string, unknown>): CliJsonResult {
   return {
     json: {
       error: {
         code: 'INVALID_ARGS',
         message,
-        ...(reason === undefined ? {} : { details: { reason, dispatched: 'no' } }),
+        ...(details === undefined ? {} : { details }),
       },
     },
     status: 1,
@@ -75,7 +75,7 @@ test('the known mic-permission appless refusal stops retrying immediately', asyn
     attempts += 1;
     // Message wording deliberately differs from the shipped refusal: only the typed reason may
     // trigger the skip, so a guard that also matched the message would fail here.
-    return invalidArgsResult('updated wording', PUBLISHED_ERROR_REASONS.sessionAppRequired);
+    return invalidArgsResult('updated wording', sessionAppRequiredDetails());
   });
   assert.equal(failure, undefined);
   assert.equal(attempts, 1, 'should not retry the known appless refusal');
@@ -90,8 +90,7 @@ test('a different INVALID_ARGS still fails after exhausting retries', async (t) 
     t,
     retryCleanupStep(OTHER_STEP, async (attempt) => {
       attempts += 1;
-      if (attempt < 3)
-        return invalidArgsResult(MIC_APPLESS_MESSAGE, PUBLISHED_ERROR_REASONS.sessionAppRequired);
+      if (attempt < 3) return invalidArgsResult(MIC_APPLESS_MESSAGE, sessionAppRequiredDetails());
       // Mirrors runStep(..., { allowFailure: false }) on the final attempt: it throws
       // instead of returning a failed result.
       throw new Error(`cleanup: ${OTHER_STEP} (attempt 3) failed`);

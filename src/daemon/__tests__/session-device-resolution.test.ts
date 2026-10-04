@@ -11,7 +11,7 @@ import { appleSessionObservation } from '../../platform-runtime-apple-resources.
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { isActiveProviderDevice } from '../provider-device-admission.ts';
 import { ensureDeviceReady } from '../device/device-ready.ts';
-import { PUBLISHED_ERROR_REASONS } from '@agent-device/kernel/errors';
+import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 
 vi.mock('../../platform-runtime-apple-resources.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../platform-runtime-apple-resources.ts')>()),
@@ -166,7 +166,7 @@ test('requireSessionOrExplicitSelector refuses with the published reason and dis
   if (!refusal || refusal.ok) return;
   expect(refusal.error.code).toBe('INVALID_ARGS');
   expect(refusal.error.details?.reason).toBe(
-    PUBLISHED_ERROR_REASONS.sessionOrDeviceSelectorRequired,
+    PRE_DISPATCH_REFUSAL_REASONS.sessionOrDeviceSelectorRequired,
   );
   expect(refusal.error.details?.dispatched).toBe('no');
 });

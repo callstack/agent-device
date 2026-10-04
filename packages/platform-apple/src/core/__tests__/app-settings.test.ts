@@ -28,7 +28,7 @@ const simulatorActual = await vi.importActual<typeof import('../simulator.ts')>(
 import { setIosSetting } from '../app-settings.ts';
 import { withMockedMacOsHelper } from './macos-helper-test-utils.ts';
 import { ensureBootedSimulator } from '../simulator.ts';
-import { AppError, PUBLISHED_ERROR_REASONS } from '@agent-device/kernel/errors';
+import { AppError, PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import { retryWithPolicy } from '@agent-device/host-kit/retry';
 import { assertRejectsAppError } from '../../__tests__/app-error.ts';
@@ -329,7 +329,7 @@ test('setIosSetting permission requires an app in session with the published rea
           }),
         {
           code: 'INVALID_ARGS',
-          reason: PUBLISHED_ERROR_REASONS.sessionAppRequired,
+          reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired,
           dispatched: 'no',
         },
       );
@@ -345,7 +345,7 @@ test('setIosSetting location refuses an appless session with the published reaso
     async () => {
       await assertRejectsAppError(() => setIosSetting(IOS_TEST_SIMULATOR, 'location', 'on'), {
         code: 'INVALID_ARGS',
-        reason: PUBLISHED_ERROR_REASONS.sessionAppRequired,
+        reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired,
         dispatched: 'no',
       });
     },
@@ -362,7 +362,7 @@ test('setIosSetting clear-app-state refuses an appless session with the publishe
         () => setIosSetting(IOS_TEST_SIMULATOR, 'clear-app-state', 'clear'),
         {
           code: 'INVALID_ARGS',
-          reason: PUBLISHED_ERROR_REASONS.sessionAppRequired,
+          reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired,
           dispatched: 'no',
         },
       );

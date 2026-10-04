@@ -32,7 +32,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   AppError,
   defaultHintForCode,
-  PUBLISHED_ERROR_REASONS,
+  PRE_DISPATCH_REFUSAL_REASONS,
   retriableForErrorCode,
 } from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
@@ -259,7 +259,7 @@ test('#3181: the session-or-selector refusal reaches the caller with its reason 
     'capabilities requires an active session or an explicit device selector (e.g. --platform ios).',
   );
   expect(response.error.details?.reason).toBe(
-    PUBLISHED_ERROR_REASONS.sessionOrDeviceSelectorRequired,
+    PRE_DISPATCH_REFUSAL_REASONS.sessionOrDeviceSelectorRequired,
   );
   expect(response.error.details?.dispatched).toBe('no');
   // The hint stays the INVALID_ARGS default: the reason, not the prose, is the new information.

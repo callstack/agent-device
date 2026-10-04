@@ -236,6 +236,20 @@ async function readOnlyGet(): Promise<unknown> {
   });
 }
 
+/**
+ * The named session is absent from the store, which is what "no active session" means for a
+ * request: the CLI asks the daemon to find a device and none resolves. The row's command carries
+ * no declared recording effect, so the `no` under test is the producer's own, not the seam's.
+ */
+async function sessionOrSelectorRefusedBeforeRouting(): Promise<unknown> {
+  const failure = await route(makeSession(SESSION), {
+    command: 'capabilities',
+    positionals: [],
+    session: 'session-never-opened',
+  });
+  assert.fail(`expected the routing refusal, got ${String(failure)}`);
+}
+
 function captureNodes(nodes: readonly unknown[]): void {
   gestureRuntimeSpies.captureSnapshot.mockResolvedValue({
     backend: 'xctest',
@@ -336,6 +350,7 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
   'daemon.route.scroll-edge-third-pass-refused': () => scrollRefusedOnThirdPass({}, ['bottom']),
   'daemon.route.scroll-then-dialog-read-refused': androidScrollThenDialogReadRefused,
   'daemon.route.read-only-get': readOnlyGet,
+  'daemon.route.session-or-selector-refusal': sessionOrSelectorRefusedBeforeRouting,
 };
 
 const ROWS = dispatchDisclosureRowsOwnedBy(
