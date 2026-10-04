@@ -461,16 +461,16 @@ extension RunnerTests {
     observe: () -> String?,
     waitForNextObservation: () -> Void
   ) -> SynthesizedTextCommitOutcome {
+    // A secure field never exposes its value, so every read is nil and the wait could only expire.
+    // The element route leaves such a field unverified rather than failed; so does this one.
+    if fieldIsSecure {
+      return .unobservable
+    }
     // A placeholder-equal AX value cannot prove a commit: an input handler may clear the field
     // after dispatch, making the empty field render the same value. Refuse before polling because
     // no later read can distinguish those states.
     if Self.textMatchesPlaceholder(expectedText, placeholder: placeholder) {
       return .notObserved
-    }
-    // A secure field never exposes its value, so every read is nil and the wait could only expire.
-    // The element route leaves such a field unverified rather than failed; so does this one.
-    if fieldIsSecure {
-      return .unobservable
     }
     var deadline = SynthesizedCommitDeadline(startedAt: now(), stallBudget: stallBudget, ceiling: ceiling)
     // The deadline is checked AFTER an observation, never before one, so the last thing that

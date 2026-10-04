@@ -183,23 +183,27 @@ extension RunnerTests {
 
   // A secure field reads nil on every poll, so the wait could only expire: every penalized-route
   // password `fill` failed with TEXT_INPUT_COMMIT_NOT_OBSERVED. It is left unverified instead, as
-  // the element route leaves it; an ordinary field that reads nil still fails.
+  // the element route leaves it, also when the text equals its placeholder; an ordinary field
+  // that reads nil, or whose text equals its placeholder, still fails.
   func testSynthesizedReplacementCommitLeavesASecureFieldUnverified() {
-    for fieldIsSecure in [true, false] {
-      var observations = 0
-      let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
-        expectedText: "hunter2",
-        placeholder: nil,
-        fieldIsSecure: fieldIsSecure,
-        stallBudget: 0,
-        observe: {
-          observations += 1
-          return nil
-        },
-        waitForNextObservation: {}
-      )
-      XCTAssertEqual(outcome, fieldIsSecure ? .unobservable : .notObserved, "secure: \(fieldIsSecure)")
-      XCTAssertEqual(observations, fieldIsSecure ? 0 : 1, "secure: \(fieldIsSecure)")
+    for placeholder in [nil, "hunter2"] {
+      for fieldIsSecure in [true, false] {
+        let label = "secure: \(fieldIsSecure), placeholder: \(placeholder ?? "none")"
+        var observations = 0
+        let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
+          expectedText: "hunter2",
+          placeholder: placeholder,
+          fieldIsSecure: fieldIsSecure,
+          stallBudget: 0,
+          observe: {
+            observations += 1
+            return nil
+          },
+          waitForNextObservation: {}
+        )
+        XCTAssertEqual(outcome, fieldIsSecure ? .unobservable : .notObserved, label)
+        XCTAssertEqual(observations, fieldIsSecure || placeholder != nil ? 0 : 1, label)
+      }
     }
   }
 
