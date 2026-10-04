@@ -333,7 +333,7 @@ test('a local record stop timeout keeps the exporting daemon alive and names the
         assert.equal(error.details?.reason, 'daemon_transport_timeout');
         assert.match(
           error.details?.hint as string,
-          /^The daemon is still exporting the recording\. Run agent-device record stop --session e2e-ios-0 again/,
+          /^The daemon may still be exporting the recording\. Run agent-device record stop --session e2e-ios-0 again/,
         );
         return true;
       },

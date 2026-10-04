@@ -107,7 +107,7 @@ test('a timed-out record stop on a surviving daemon names the retry that returns
       action: 'stop',
       session: 'recording',
     }),
-    'The remote daemon is still exporting the recording. Run agent-device record stop --session recording again to wait for that export and receive the completed recording.',
+    'The remote daemon may still be exporting the recording. Run agent-device record stop --session recording again to wait for that export and receive the completed recording.',
   );
   assert.equal(
     resolveRequestTimeoutHint({
@@ -117,9 +117,9 @@ test('a timed-out record stop on a surviving daemon names the retry that returns
       appleCleanupEvidence: false,
       action: 'stop',
     }),
-    'The remote daemon is still exporting the recording. Run agent-device record stop again to wait for that export and receive the completed recording.',
+    'The remote daemon may still be exporting the recording. Run agent-device record stop again to wait for that export and receive the completed recording.',
   );
-  // A local daemon preserved across the timeout is still exporting too.
+  // A local daemon preserved across the timeout may still be exporting too.
   assert.equal(
     resolveRequestTimeoutHint({
       remote: false,
@@ -129,7 +129,7 @@ test('a timed-out record stop on a surviving daemon names the retry that returns
       action: 'stop',
       session: 'recording',
     }),
-    'The daemon is still exporting the recording. Run agent-device record stop --session recording again to wait for that export and receive the completed recording.',
+    'The daemon may still be exporting the recording. Run agent-device record stop --session recording again to wait for that export and receive the completed recording.',
   );
   // A reset daemon is no longer exporting, so no keep-exporting promise is made.
   assert.equal(

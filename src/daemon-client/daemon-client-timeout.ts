@@ -136,11 +136,11 @@ export function resolveRequestTimeoutHint(params: {
   session?: string;
 }): string {
   const { remote, resetDaemon, command, appleCleanupEvidence, session, action } = params;
-  // A daemon that survives this client window is still exporting a `record stop` that ran out of
-  // time, and its finished file stays retrievable by asking again. A reset daemon makes no such
-  // promise.
+  // A daemon that survives this client window may still be exporting a `record stop` that ran out
+  // of time (a stop still queued for the device lock is dropped before any export starts), and a
+  // finished file stays retrievable by asking again. A reset daemon makes no such promise.
   if (!resetDaemon && command === PUBLIC_COMMANDS.record && action === 'stop') {
-    return `The ${remote ? 'remote ' : ''}daemon is still exporting the recording. Run agent-device record stop${
+    return `The ${remote ? 'remote ' : ''}daemon may still be exporting the recording. Run agent-device record stop${
       session ? ` --session ${session}` : ''
     } again to wait for that export and receive the completed recording.`;
   }
