@@ -23,6 +23,17 @@ export function getRecordingOverlaySupportWarning(
   return 'touch overlay burn-in is only available on macOS hosts; returning raw video plus gesture telemetry';
 }
 
+/**
+ * `record stop` is one daemon request, which the client abandons after 90 s and then resets the
+ * daemon (`DEFAULT_TIMEOUT_POLICY`), so the overlay must end well inside it. Compiling the helper,
+ * its export and its exit all come out of this budget; past it the stop keeps the raw video and its
+ * gesture telemetry, with a warning.
+ */
+export const OVERLAY_BUDGET_MS = 70_000;
+
+/** How long the helper has to cancel its export and exit once the export's time is spent. */
+const HELPER_EXIT_GRACE_MS = 5_000;
+
 let overlayScriptPath: string | undefined;
 let exportSupportScriptPath: string | undefined;
 
@@ -44,8 +55,10 @@ async function exportProcessedVideo(params: {
   scriptPath: string;
   scriptArgs: string[];
   commandDescription: string;
+  budgetMs: number;
 }): Promise<void> {
   const { videoPath, scriptPath, scriptArgs, commandDescription } = params;
+  const deadline = Date.now() + params.budgetMs;
   await waitForStableFile(videoPath);
   await waitForPlayableVideo(videoPath);
 
@@ -54,11 +67,29 @@ async function exportProcessedVideo(params: {
     const executablePath = await compileSwiftSourceFile({
       sourcePath: scriptPath,
       extraSourcePaths: [getExportSupportScriptPath()],
+      timeoutMs: Math.max(1, deadline - Date.now()),
     });
-    await runCmd(executablePath, ['--input', videoPath, '--output', outputPath, ...scriptArgs], {
-      timeoutMs: 120_000,
-      env: buildSwiftToolEnv(),
-    });
+    const helperMs = deadline - Date.now();
+    const exportMs = helperMs - HELPER_EXIT_GRACE_MS;
+    if (exportMs <= 0) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `No time was left for the export within the ${params.budgetMs}ms budget`,
+      );
+    }
+    await runCmd(
+      executablePath,
+      [
+        '--input',
+        videoPath,
+        '--output',
+        outputPath,
+        ...scriptArgs,
+        '--timeout-ms',
+        String(Math.round(exportMs)),
+      ],
+      { timeoutMs: helperMs, env: buildSwiftToolEnv() },
+    );
     await waitForPlayableVideo(outputPath);
     fs.renameSync(outputPath, videoPath);
   } catch (error) {
@@ -109,5 +140,6 @@ export async function overlayRecordingTouches(params: {
     scriptPath: getOverlayScriptPath(),
     scriptArgs: ['--events', telemetryPath, '--quality', exportQuality],
     commandDescription: `Failed to add touch overlays to the ${targetLabel}`,
+    budgetMs: OVERLAY_BUDGET_MS,
   });
 }

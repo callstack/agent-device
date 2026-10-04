@@ -88,10 +88,15 @@ func makeRecordingExporter(
   return exporter
 }
 
-/// Bounded asynchronous export: signals completion through a semaphore and cancels after 120s so a
-/// wedged encoder cannot hang the recording pipeline past the caller's own timeout budget.
+/// How long an export may run when the caller names no budget of its own.
+let defaultRecordingExportTimeoutSeconds: Double = 120
+
+/// Bounded asynchronous export: signals completion through a semaphore and cancels after
+/// `timeoutSeconds` so a wedged or slow encoder cannot hang the recording pipeline past the
+/// caller's own timeout budget.
 func runRecordingExport(
   _ exporter: AVAssetExportSession,
+  timeoutSeconds: Double = defaultRecordingExportTimeoutSeconds,
   timeoutMessage: String,
   failureMessage: String
 ) throws {
@@ -99,7 +104,7 @@ func runRecordingExport(
   exporter.exportAsynchronously {
     semaphore.signal()
   }
-  if semaphore.wait(timeout: .now() + 120) == .timedOut {
+  if semaphore.wait(timeout: .now() + timeoutSeconds) == .timedOut {
     exporter.cancelExport()
     throw RecordingScriptError.exportFailed(timeoutMessage)
   }
