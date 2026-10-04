@@ -429,7 +429,7 @@ for (const [failure, reason, expectedSignals] of privateStartupFailures) {
     const args = registeredDaemonFixtureArgs(paths, fields);
     fs.appendFileSync(
       args[1]!,
-      `setInterval(() => { if (fs.existsSync(${JSON.stringify(exitPath)})) process.exit(0); }, 10);`,
+      'setInterval(() => { if (fs.existsSync(path.join(paths.baseDir, "exit-startup"))) process.exit(0); }, 10);',
     );
     const birthProbe =
       failure === 'missing-birth'

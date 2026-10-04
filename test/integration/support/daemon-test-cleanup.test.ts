@@ -143,3 +143,34 @@ test('cleanup retains an unpublished successor holding the registration lock', a
     await finishRegisteredDaemonFixture(paths.baseDir);
   }
 });
+
+test.for(['same-pid', 'different-pid'] as const)(
+  'registered birth proof supersedes only a %s unproven observation',
+  async (kind) => {
+    const paths = resolveDaemonPaths(mkdtempForTestSync('daemon-test-pid-observation-'));
+    const otherPaths = resolveDaemonPaths(mkdtempForTestSync('daemon-test-other-observation-'));
+    const child = spawnRegisteredDaemonFixture(paths, fields, undefined);
+    const other = spawnRegisteredDaemonFixture(otherPaths, fields, undefined);
+    const warnings = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await waitForRegisteredDaemonFixture(paths, child);
+      await waitForRegisteredDaemonFixture(otherPaths, other);
+      await cleanupDaemonTestState(paths.baseDir, {
+        pid: kind === 'same-pid' ? child.pid : other.pid,
+      });
+      assert.ok(
+        !isProcessAlive(child.pid) ||
+          readHostProcessIdentityObservations([child.pid]).get(child.pid)?.state.startsWith('Z'),
+        'the birth-proven registered child must be terminated before cleanup returns',
+      );
+      await child.exited;
+      assert.equal(fs.existsSync(paths.baseDir), kind === 'different-pid');
+      assert.equal(warnings.mock.calls.length, kind === 'different-pid' ? 1 : 0);
+      assert.equal(isProcessAlive(other.pid), true);
+    } finally {
+      warnings.mockRestore();
+      await finishRegisteredDaemonFixture(paths.baseDir);
+      await finishRegisteredDaemonFixture(otherPaths.baseDir);
+    }
+  },
+);

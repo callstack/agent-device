@@ -33,7 +33,7 @@ export async function cleanupDaemonTestState(
       registrationFailure = error;
     }
     const confirmed: OwnerIdentity[] = [];
-    let retained = false;
+    const retained: OwnerIdentity[] = [];
     for (const identity of identities) {
       const termination = await stopDaemonProcess(identity, {
         mode: 'graceful',
@@ -41,10 +41,17 @@ export async function cleanupDaemonTestState(
         killTimeoutMs: 1_500,
       });
       if (termination.status === 'exited') confirmed.push(identity);
-      else if (termination.status === 'retained') retained = true;
+      else if (termination.status === 'retained') retained.push(identity);
     }
     if (registrationFailure) throw registrationFailure;
-    if (retained || confirmed.length === 0)
+    if (
+      retained.some(
+        (identity) =>
+          Boolean(identity.startTime?.trim()) ||
+          !confirmed.some((proof) => proof.pid === identity.pid),
+      ) ||
+      confirmed.length === 0
+    )
       throw new Error('Daemon termination could not be confirmed');
     const attempt = tryAcquireProcessLock({
       lockDirPath: paths.lockPath,
