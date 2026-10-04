@@ -306,3 +306,51 @@ export function parseSettingState(state: string): boolean {
   if (SETTING_STATE_OFF.includes(normalized)) return false;
   throw new AppError('INVALID_ARGS', `Invalid setting state: ${state}`);
 }
+
+/** The `simctl privacy` service for every target except `photos`, whose service depends on its mode. */
+const IOS_PRIVACY_SERVICES: Record<Exclude<MobilePermissionTarget, 'photos'>, string> = {
+  all: 'all',
+  camera: 'camera',
+  microphone: 'microphone',
+  contacts: 'contacts',
+  'contacts-limited': 'contacts-limited',
+  notifications: 'notifications',
+  calendar: 'calendar',
+  location: 'location',
+  'location-always': 'location-always',
+  'media-library': 'media-library',
+  motion: 'motion',
+  reminders: 'reminders',
+  siri: 'siri',
+};
+
+/** The `simctl privacy` service a permission target and optional photos mode select. */
+export function parseIosPrivacyService(
+  permissionTarget: string | undefined,
+  permissionMode: string | undefined,
+): string {
+  const normalized = parsePermissionTarget(permissionTarget);
+  if (normalized === 'photos') {
+    const mode = permissionMode?.trim().toLowerCase();
+    if (!mode || mode === 'full') return 'photos';
+    if (mode === 'limited') return 'photos-add';
+    throw new AppError('INVALID_ARGS', `Invalid photos mode: ${permissionMode}. Use full|limited.`);
+  }
+  if (permissionMode?.trim()) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `Permission mode is only supported for photos. Received: ${permissionMode}.`,
+    );
+  }
+  return IOS_PRIVACY_SERVICES[normalized];
+}
+
+/** The appearance `simctl ui appearance` printed, or null when it reported none. */
+export function parseIosAppearance(stdout: string, stderr: string): 'light' | 'dark' | null {
+  const match = /\b(light|dark|unsupported|unknown)\b/i.exec(`${stdout}\n${stderr}`);
+  if (!match) return null;
+  const value = match[1]?.toLowerCase();
+  if (value === 'dark') return 'dark';
+  if (value === 'light') return 'light';
+  return null;
+}

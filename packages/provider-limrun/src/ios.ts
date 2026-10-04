@@ -1,4 +1,12 @@
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
+import {
+  parseAppearanceAction,
+  parseIosAppearance,
+  parseIosPrivacyService,
+  parsePermissionAction,
+  parseSettingState,
+  type SettingOptions,
+} from '@agent-device/contracts/settings';
 import type {
   DeviceLease,
   DeviceRotation,
@@ -7,7 +15,12 @@ import type {
 } from '@agent-device/contracts/device';
 import type { FillBackendResult, Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  discloseDispatchAfterSteps,
+  sessionAppRequiredDetails,
+} from '@agent-device/kernel/errors';
+import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
 import type Limrun from '@limrun/api';
 import {
   createInstanceClient as createIosInstanceClient,
@@ -365,8 +378,122 @@ class LimrunIosInteractor implements Interactor {
     await this.session.client.setOrientation(orientation === 'portrait' ? 'Portrait' : 'Landscape');
   }
 
-  async setSetting(): Promise<never> {
-    throw unsupported('settings', 'Limrun iOS direct sessions do not expose settings changes yet.');
+  async setSetting(
+    setting: string,
+    state: string,
+    appId?: string,
+    options?: SettingOptions,
+  ): Promise<Record<string, unknown> | void> {
+    switch (setting.toLowerCase()) {
+      case 'appearance':
+        return await this.setAppearance(state);
+      case 'permission':
+        return await this.setPermission(state, appId, options);
+      case 'location':
+        return await this.setLocation(state, appId, options);
+      case 'clear-app-state':
+        return await this.clearAppState(state, appId);
+      default:
+        throw unsupported(
+          'settings',
+          `Limrun iOS direct sessions support appearance, permission, location, and clear-app-state settings, not ${setting}.`,
+        );
+    }
+  }
+
+  private async setAppearance(state: string): Promise<void> {
+    const action = parseAppearanceAction(state);
+    const target = action === 'toggle' ? await this.toggledAppearance() : action;
+    await this.simctl('appearance', ['ui', 'booted', 'appearance', target]);
+  }
+
+  private async setPermission(
+    state: string,
+    appId: string | undefined,
+    options: SettingOptions | undefined,
+  ): Promise<void> {
+    const bundleId = await this.requireAppId(appId, 'permission setting');
+    const action = parsePermissionAction(state);
+    const service = parseIosPrivacyService(options?.permissionTarget, options?.permissionMode);
+    await this.simctl('permission', [
+      'privacy',
+      'booted',
+      action === 'deny' ? 'revoke' : action,
+      service,
+      bundleId,
+    ]);
+  }
+
+  private async setLocation(
+    state: string,
+    appId: string | undefined,
+    options: SettingOptions | undefined,
+  ): Promise<Record<string, unknown> | void> {
+    if (state.toLowerCase() === 'set') {
+      const { latitude, longitude } = requireLocationCoordinates(options);
+      await this.simctl('location', ['location', 'booted', 'set', `${latitude},${longitude}`]);
+      return { latitude, longitude };
+    }
+    const enabled = parseSettingState(state);
+    const bundleId = await this.requireAppId(appId, 'location setting');
+    await this.simctl('location', [
+      'privacy',
+      'booted',
+      enabled ? 'grant' : 'revoke',
+      'location',
+      bundleId,
+    ]);
+  }
+
+  private async clearAppState(
+    state: string,
+    appId: string | undefined,
+  ): Promise<Record<string, unknown>> {
+    if (state.toLowerCase() !== 'clear') {
+      throw new AppError('INVALID_ARGS', 'settings clear-app-state only supports clear.');
+    }
+    const bundleId = await this.requireAppId(appId, 'settings clear-app-state');
+    await this.session.client.softReset(bundleId, { strategy: 'data' });
+    return { bundleId, cleared: true };
+  }
+
+  private async requireAppId(appId: string | undefined, subject: string): Promise<string> {
+    if (!appId) {
+      throw new AppError(
+        'INVALID_ARGS',
+        `${subject} requires an app id or an active app session.`,
+        sessionAppRequiredDetails(),
+      );
+    }
+    return await this.session.dependencies.ios.resolveAppAlias(appId);
+  }
+
+  private async toggledAppearance(): Promise<'light' | 'dark'> {
+    const current = await this.simctl('appearance', ['ui', 'booted', 'appearance']);
+    const appearance = parseIosAppearance(current.stdout, current.stderr);
+    if (!appearance) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        'Unable to determine current iOS appearance for toggle',
+        {
+          stdout: current.stdout,
+          stderr: current.stderr,
+        },
+      );
+    }
+    return appearance === 'dark' ? 'light' : 'dark';
+  }
+
+  private async simctl(setting: string, argv: string[]) {
+    const result = await this.session.client.simctl(argv).wait();
+    if (result.code !== 0) {
+      throw new AppError('COMMAND_FAILED', `Limrun iOS could not change the ${setting} setting.`, {
+        setting,
+        exitCode: result.code,
+        stderr: result.stderr.trim(),
+      });
+    }
+    return result;
   }
 }
 

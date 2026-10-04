@@ -1,0 +1,129 @@
+import { expect, test, vi } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
+import { createLimrunIosInteractor, type LimrunIosSession } from './ios.ts';
+
+function sessionWithClient(results: Array<{ code: number; stdout: string; stderr: string }> = []) {
+  const queue = [...results];
+  const client = {
+    simctl: vi.fn((_argv: string[]) => ({
+      wait: async () => queue.shift() ?? { code: 0, stdout: '', stderr: '' },
+    })),
+    softReset: vi.fn(async (_bundleId: string, _options?: unknown) => ({})),
+  };
+  const session = {
+    platform: 'ios',
+    instanceId: 'limrun-settings-instance',
+    client,
+    dependencies: { ios: { resolveAppAlias: async (app: string) => app } },
+  } as unknown as LimrunIosSession;
+  return { interactor: createLimrunIosInteractor(session), client };
+}
+
+const argvOf = (client: { simctl: { mock: { calls: unknown[][] } } }) =>
+  client.simctl.mock.calls.map((call) => call[0]);
+
+test('appearance sets the requested value on the booted simulator', async () => {
+  const { interactor, client } = sessionWithClient();
+
+  await interactor.setSetting('appearance', 'dark');
+
+  expect(argvOf(client)).toEqual([['ui', 'booted', 'appearance', 'dark']]);
+});
+
+test('appearance toggle reads the current value then sets the opposite', async () => {
+  const { interactor, client } = sessionWithClient([{ code: 0, stdout: 'dark\n', stderr: '' }]);
+
+  await interactor.setSetting('appearance', 'toggle');
+
+  expect(argvOf(client)).toEqual([
+    ['ui', 'booted', 'appearance'],
+    ['ui', 'booted', 'appearance', 'light'],
+  ]);
+});
+
+test('permission deny revokes the mapped service for the app', async () => {
+  const { interactor, client } = sessionWithClient();
+
+  await interactor.setSetting('permission', 'deny', 'com.example.app', {
+    permissionTarget: 'photos',
+    permissionMode: 'limited',
+  });
+  await interactor.setSetting('permission', 'grant', 'com.example.app', {
+    permissionTarget: 'all',
+  });
+
+  expect(argvOf(client)).toEqual([
+    ['privacy', 'booted', 'revoke', 'photos-add', 'com.example.app'],
+    ['privacy', 'booted', 'grant', 'all', 'com.example.app'],
+  ]);
+});
+
+test('location set sends coordinates, on and off grant and revoke the app', async () => {
+  const { interactor, client } = sessionWithClient();
+
+  const result = await interactor.setSetting('location', 'set', undefined, {
+    latitude: 37.77,
+    longitude: -122.42,
+  });
+  await interactor.setSetting('location', 'on', 'com.example.app');
+  await interactor.setSetting('location', 'off', 'com.example.app');
+
+  expect(result).toEqual({ latitude: 37.77, longitude: -122.42 });
+  expect(argvOf(client)).toEqual([
+    ['location', 'booted', 'set', '37.77,-122.42'],
+    ['privacy', 'booted', 'grant', 'location', 'com.example.app'],
+    ['privacy', 'booted', 'revoke', 'location', 'com.example.app'],
+  ]);
+});
+
+test('clear-app-state soft resets the app data through Limrun', async () => {
+  const { interactor, client } = sessionWithClient();
+
+  const result = await interactor.setSetting('clear-app-state', 'clear', 'com.example.app');
+
+  expect(client.softReset).toHaveBeenCalledWith('com.example.app', { strategy: 'data' });
+  expect(client.simctl).not.toHaveBeenCalled();
+  expect(result).toEqual({ bundleId: 'com.example.app', cleared: true });
+});
+
+test('a failing simctl rejects with typed setting, exit code and stderr', async () => {
+  const { interactor } = sessionWithClient([{ code: 3, stdout: '', stderr: 'denied\n' }]);
+
+  await expect(interactor.setSetting('appearance', 'dark')).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { setting: 'appearance', exitCode: 3, stderr: 'denied' },
+  });
+});
+
+test('settings that need an app refuse without one', async () => {
+  const { interactor, client } = sessionWithClient();
+
+  for (const [setting, state] of [
+    ['permission', 'grant'],
+    ['location', 'on'],
+    ['clear-app-state', 'clear'],
+  ] as const) {
+    await expect(
+      interactor.setSetting(setting, state, undefined, { permissionTarget: 'camera' }),
+    ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+  }
+  expect(client.simctl).not.toHaveBeenCalled();
+  expect(client.softReset).not.toHaveBeenCalled();
+});
+
+test('settings Limrun cannot serve are refused with the supported list', async () => {
+  const { interactor, client } = sessionWithClient();
+
+  for (const [setting, state] of [
+    ['wifi', 'off'],
+    ['reset-keychain', 'clear'],
+  ] as const) {
+    const rejection = interactor.setSetting(setting, state);
+    await expect(rejection).rejects.toBeInstanceOf(AppError);
+    await expect(rejection).rejects.toMatchObject({
+      code: 'UNSUPPORTED_OPERATION',
+      message: expect.stringContaining('appearance, permission, location'),
+    });
+  }
+  expect(client.simctl).not.toHaveBeenCalled();
+});

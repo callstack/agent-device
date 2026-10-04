@@ -1,10 +1,10 @@
 import {
   APPLE_BIOMETRIC_LEAF_REFUSAL,
   getUnsupportedMacOsSettingMessage,
-  type MobilePermissionTarget,
   parseAppearanceAction,
+  parseIosAppearance,
+  parseIosPrivacyService,
   parsePermissionAction,
-  parsePermissionTarget,
   parseSettingState,
   type ReadableSetting,
   type ReadSettingResult,
@@ -180,7 +180,7 @@ export async function setIosSetting(
         );
       }
       const action = mapIosPermissionAction(parsePermissionAction(state));
-      const target = parseIosPermissionTarget(options?.permissionTarget, options?.permissionMode);
+      const target = parseIosPrivacyService(options?.permissionTarget, options?.permissionMode);
       await runIosPrivacyCommand(device, action, target, appBundleId);
       return;
     }
@@ -309,15 +309,6 @@ async function resolveIosAppearanceTarget(
   return current === 'dark' ? 'light' : 'dark';
 }
 
-function parseIosAppearance(stdout: string, stderr: string): 'light' | 'dark' | null {
-  const match = /\b(light|dark|unsupported|unknown)\b/i.exec(`${stdout}\n${stderr}`);
-  if (!match) return null;
-  const value = match[1]?.toLowerCase();
-  if (value === 'dark') return 'dark';
-  if (value === 'light') return 'light';
-  return null;
-}
-
 type IosBiometricAction = 'match' | 'nonmatch' | 'enroll' | 'unenroll';
 type IosBiometricSetting = 'faceid' | 'touchid';
 
@@ -395,43 +386,6 @@ function privacyServiceRefusedError(
     },
     cause,
   );
-}
-
-/** The `simctl privacy` service for every target except `photos`, whose service depends on its mode. */
-const IOS_PRIVACY_SERVICES: Record<Exclude<MobilePermissionTarget, 'photos'>, string> = {
-  all: 'all',
-  camera: 'camera',
-  microphone: 'microphone',
-  contacts: 'contacts',
-  'contacts-limited': 'contacts-limited',
-  notifications: 'notifications',
-  calendar: 'calendar',
-  location: 'location',
-  'location-always': 'location-always',
-  'media-library': 'media-library',
-  motion: 'motion',
-  reminders: 'reminders',
-  siri: 'siri',
-};
-
-function parseIosPermissionTarget(
-  permissionTarget: string | undefined,
-  permissionMode: string | undefined,
-): string {
-  const normalized = parsePermissionTarget(permissionTarget);
-  if (normalized === 'photos') {
-    const mode = permissionMode?.trim().toLowerCase();
-    if (!mode || mode === 'full') return 'photos';
-    if (mode === 'limited') return 'photos-add';
-    throw new AppError('INVALID_ARGS', `Invalid photos mode: ${permissionMode}. Use full|limited.`);
-  }
-  if (permissionMode?.trim()) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Permission mode is only supported for photos. Received: ${permissionMode}.`,
-    );
-  }
-  return IOS_PRIVACY_SERVICES[normalized];
 }
 
 function parseBiometricAction(state: string, settingName: IosBiometricSetting): IosBiometricAction {

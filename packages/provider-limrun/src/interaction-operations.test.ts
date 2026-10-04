@@ -119,23 +119,18 @@ test('app-event delivery is admitted on both direct-session legs', () => {
   );
 });
 
-// R58: back to the app-switcher split — the Android leg reuses the local family's interactor,
-// and the iOS direct session's own `setSetting` throws. Both cells are pinned: the Android leg
-// genuinely carries the read too (same `createAndroidInteractor`), and the iOS leg refuses it.
-test('settings ride the Android interactor and are refused on the iOS leg', () => {
+// R58: the Android leg reuses the local family's interactor and serves both cells. The iOS leg
+// writes through simctl and cannot read a setting back.
+test('settings write on both legs and read back only on Android', () => {
   expect(limrunSettingsOperationFacts(androidMobileDevice).setSetting).toEqual({ available: true });
   expect(limrunSettingsOperationFacts(androidMobileDevice).readSetting).toEqual({
     available: true,
   });
-  expect(limrunSettingsOperationFacts(iosDevice).setSetting).toEqual({
-    available: false,
-    reason: 'unsupported-provider-mode',
-    hint: 'Limrun iOS direct sessions do not expose settings changes yet.',
-  });
+  expect(limrunSettingsOperationFacts(iosDevice).setSetting).toEqual({ available: true });
   expect(limrunSettingsOperationFacts(iosDevice).readSetting).toEqual({
     available: false,
     reason: 'unsupported-provider-mode',
-    hint: 'Limrun iOS direct sessions do not expose settings changes yet.',
+    hint: 'Limrun iOS direct sessions cannot read settings back.',
   });
   expect(
     limrunSettingsOperationFacts(androidMobileDevice, liveSessionUnavailable).setSetting,
