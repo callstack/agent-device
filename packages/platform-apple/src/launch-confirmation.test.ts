@@ -185,13 +185,13 @@ test.each([
     { outcome: 'unreadable', step: 'url-owner' },
   ],
   [
-    'the accept rejects',
+    'the accept rejects and the confirmation remains',
     port(async () => CONFIRMATION, {
       acceptAlert: async () => {
         throw spawnTimeout();
       },
     }),
-    { outcome: 'unreadable', step: 'alert-accept' },
+    { outcome: 'unanswered', reason: 'alert-still-present' },
   ],
 ])('an answer attempt where %s reports %j', async (_case, { port: device }, expected) => {
   await expect(answerLaunchConfirmation(device)).resolves.toEqual(expected);

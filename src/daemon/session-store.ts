@@ -199,19 +199,20 @@ export class SessionStore {
     return this.runtimeHints.get(name);
   }
 
-  setRuntimeHints(name: string, hints: SessionRuntimeHints): void {
-    this.runtimeHints.set(name, hints);
+  setRuntimeHints(address: string, hints: SessionRuntimeHints | undefined): void {
+    if (hints) this.runtimeHints.set(address, hints);
+    else this.runtimeHints.delete(address);
   }
 
-  clearRuntimeHints(name: string): boolean {
-    return this.runtimeHints.delete(name);
+  clearRuntimeHints(ref: SessionRef): boolean {
+    this.requireCurrent(ref);
+    return this.runtimeHints.delete(ref.address);
   }
 
-  recordAction(session: SessionState, entry: RecordActionEntry): void {
-    const action = recordActionEntry(session, entry);
+  recordAction(ref: SessionRef, entry: RecordActionEntry): void {
+    const action = recordActionEntry(this.requireCurrent(ref), entry);
     if (action) {
-      const sessionName = this.resolveStoredSessionName(session);
-      appendActionEvent(this.resolveEventLogPath(sessionName), sessionName, action);
+      appendActionEvent(this.resolveEventLogPath(ref.address), ref.address, action);
     }
   }
 
@@ -275,7 +276,7 @@ export class SessionStore {
   finalizeRepairTeardown(ref: SessionRef): void {
     const session = this.resolveCurrent(ref);
     if (!session) return;
-    this.recordRepairFinalizeCloseIfCommitting(session);
+    this.recordRepairFinalizeCloseIfCommitting(ref);
     // #1258: no live request here (idle-reap/daemon-shutdown teardown), so
     // the only source of `force` is whatever was persisted on the session at
     // arm time.
@@ -302,10 +303,11 @@ export class SessionStore {
    * (incomplete) transaction's write is a no-op regardless, so there is
    * nothing to make self-contained.
    */
-  private recordRepairFinalizeCloseIfCommitting(session: SessionState): void {
+  private recordRepairFinalizeCloseIfCommitting(ref: SessionRef): void {
+    const session = this.requireCurrent(ref);
     const state = session.scriptPublication ?? NO_SCRIPT_PUBLICATION;
     if (!isRepairCommittable(state)) return;
-    this.recordAction(session, {
+    this.recordAction(ref, {
       command: 'close',
       positionals: [],
       flags: {},
@@ -486,16 +488,5 @@ export class SessionStore {
 
   resolveEventLogPath(sessionName: string): string {
     return resolveSessionEventLogPath(this.resolveSessionDir(sessionName));
-  }
-
-  /**
-   * Resolve the map key for a live session object. SessionState.name is the
-   * public session name, while the map key may include cwd/tenant isolation.
-   */
-  resolveStoredSessionName(session: SessionState): string {
-    for (const [name, entry] of this.sessions) {
-      if (entry.current === session) return name;
-    }
-    return session.name;
   }
 }

@@ -153,7 +153,7 @@ test('a record-and-heal divergence on the LAST step resumes with an empty tail a
   expect(session.actions.map((a) => a.command)).toEqual(['open']);
 
   // --- Agent performs the corrective press (blessed @ref), recorded live. ---
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e6'],
     flags: {},
@@ -280,7 +280,7 @@ test('a manual divergence (unannotated action-failure) on the LAST step resumes 
 
   // --- Agent performs the step's intent as a recorded action (blessed
   // @ref), recorded live. ---
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e6'],
     flags: {},
@@ -408,7 +408,7 @@ test('a caution (identity-mismatch) divergence on the LAST step resumes with an 
   // --- Agent presses the actual (renamed) control via a blessed @ref,
   // recorded live — the record-and-heal-shaped repair for path (a) from
   // #1262 ("selector binds the wrong node on the right screen"). ---
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e6'],
     flags: {},
@@ -659,7 +659,7 @@ test('a stale --plan-digest on an empty-tail resume is rejected WITHOUT consumin
   expect(divergence.resume.from).toBe(3);
 
   const session = sessionStore.get(sessionName)!;
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e6'],
     flags: {},

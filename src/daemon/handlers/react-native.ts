@@ -30,12 +30,12 @@ export async function handleReactNativeCommands(
   params: InteractionRouteInput,
 ): Promise<DaemonResponse | null> {
   params = bindInteractionSession(params);
-  const { req, sessionName, sessionStore } = params;
+  const { req, sessionStore } = params;
   if (req.command !== PUBLIC_COMMANDS.reactNative) return null;
   const parsed = parseReactNativeArgs(req.positionals ?? []);
   if (!parsed.ok) return parsed.response;
 
-  const session = sessionStore.get(sessionName);
+  const session = params.sessionRef ? sessionStore.requireCurrent(params.sessionRef) : undefined;
   if (!session) return noActiveSessionError();
   // R61: admission is the owner's own `tapPoint` fact — the one operation this command executes.
   // It runs before the observing capture, exactly where the retired capability gate ran, so an
@@ -182,7 +182,7 @@ async function executeReactNativeOverlayDismiss(
     ...successText(formatDismissMessage(verification)),
   });
   return finalizeTouchInteraction({
-    session,
+    ref: params.sessionRef!,
     sessionStore,
     command: req.command,
     positionals: req.positionals ?? [],

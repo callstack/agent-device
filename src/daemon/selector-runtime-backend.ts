@@ -181,7 +181,6 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
       : createSelectorCaptureRuntime({
           ref: params.ref,
           device,
-          session,
           sessionStore,
           sessionName,
           req,

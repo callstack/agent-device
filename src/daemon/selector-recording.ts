@@ -3,6 +3,7 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { FindReadResult } from '@agent-device/contracts/interaction';
 import { stripAndroidSystemChromeProvenanceFromNode } from '@agent-device/contracts/android-system-chrome';
 import { SessionStore } from './session-store.ts';
+import type { SessionRef } from './session-state.ts';
 import { isInteractiveObservation } from './session-action-recorder.ts';
 import { isSessionRecording } from './session-script-publication-capability.ts';
 import {
@@ -127,7 +128,7 @@ export function stripSelectorChain<T extends Record<string, unknown>>(result: T)
 
 export function recordIfSession(
   sessionStore: SessionStore,
-  sessionName: string,
+  ref: SessionRef | undefined,
   req: DaemonRequest,
   result: Record<string, unknown>,
   /** ADR 0012 decision 3: record-time input for the `target-v1` annotation. */
@@ -135,13 +136,13 @@ export function recordIfSession(
   /** #1349: `landmark` for wait's existence-semantics evidence; defaults to `action`. */
   evidenceMode?: TargetEvidenceMode,
 ): void {
-  const session = sessionStore.get(sessionName);
-  if (!session) return;
+  if (!ref) return;
+  const session = sessionStore.requireCurrent(ref);
   const targetEvidence =
     isSessionRecording(session) && recordedTarget
       ? computeTargetEvidence(recordedTarget, { mode: evidenceMode })
       : undefined;
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(ref, {
     command: req.command,
     positionals: req.positionals ?? [],
     flags: req.flags ?? {},

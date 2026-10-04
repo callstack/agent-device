@@ -745,3 +745,32 @@ test('corroborated runtime taps retain target evidence through save and replay',
   expect(pressCount).toBe(2);
   expect(snapshotCount).toBeGreaterThanOrEqual(4);
 });
+
+test('a tap corroborates against its admitted snapshot after a same-lifetime record rebuild', async () => {
+  const store = makeSessionStore();
+  const name = 'ios-admitted-tap-baseline';
+  const ref = store.publish(
+    name,
+    makeIosSession(name, {
+      appBundleId: 'com.example.app',
+      snapshot: snapshot(imageViewerNodes),
+    }),
+  );
+  store.update(ref, { snapshot: snapshot(profileNodes) });
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
+    if (command === 'press') throw new AppError('XCTEST_RECORDED_FAILURE', 'tap failed');
+    if (command === 'snapshot') return snapshotPayload(imageViewerNodes);
+    return {};
+  });
+  const response = await handleInteractionCommands({
+    req: { token: 'test', session: name, command: 'click', positionals: ['104', '222'], flags: {} },
+    sessionName: name,
+    sessionRef: ref,
+    sessionStore: store,
+    contextFromFlags,
+    ...getRuntimeBindings(),
+  });
+  expect(response?.ok).toBe(true);
+  if (!response?.ok) throw new Error('landed tap should be corroborated');
+  expect(response.data?.warning).toMatch(/same-scope post-action accessibility capture changed/);
+});

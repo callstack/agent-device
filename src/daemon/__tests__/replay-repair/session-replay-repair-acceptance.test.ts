@@ -114,7 +114,7 @@ test('a healed script survives repair + fresh-session replay: self-contained ope
   expect(session.actions.map((a) => a.command)).toEqual(['open']);
 
   // --- Agent presses the blessed @ref (record-and-heal): recorded live. ---
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e7'],
     flags: {},

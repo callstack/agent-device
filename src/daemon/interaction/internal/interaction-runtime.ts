@@ -29,7 +29,7 @@ import { isSessionRecording } from '../../session-script-publication-capability.
 import { recordTouchVisualizationEvent } from '../../recording-gestures.ts';
 import type { SessionStore } from '../../session-store.ts';
 import type { DaemonResponse } from '../../daemon-request.ts';
-import type { SessionState } from '../../session-state.ts';
+import type { SessionRef } from '../../session-state.ts';
 import type { BoundTouchExecutor } from '../../touch-runtime.ts';
 import type { BoundGestureExecutor } from '../../gesture-runtime.ts';
 import { NO_ACTIVE_SESSION_MESSAGE } from '@agent-device/kernel/contracts';
@@ -99,16 +99,17 @@ type FinalizeTouchInteractionInput = Omit<
   Parameters<typeof finalizeInteraction>[0],
   'operations'
 > & {
-  session: SessionState;
+  ref: SessionRef;
   sessionStore: SessionStore;
 };
 
 export function finalizeTouchInteraction(params: FinalizeTouchInteractionInput): DaemonResponse {
-  const { session, sessionStore, ...finalization } = params;
+  const { ref, sessionStore, ...finalization } = params;
+  const session = sessionStore.requireCurrent(ref);
   return finalizeInteraction({
     ...finalization,
     operations: {
-      recordAction: sessionStore.recordAction.bind(sessionStore, session),
+      recordAction: sessionStore.recordAction.bind(sessionStore, ref),
       markDeferredOutcome: (mark) => markDeferredInteractionOutcome({ session, ...mark }),
       isSessionRecording: isSessionRecording.bind(null, session),
       recordGestureVisualization: recordTouchVisualizationEvent.bind(null, session),

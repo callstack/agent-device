@@ -256,10 +256,11 @@ export async function captureDivergenceObservation(params: {
   // shrinks the retry budget rather than getting a free `DEADLINE_MS` on top
   // of however long it took.
   const deadline = Date.now() + DIVERGENCE_CAPTURE_RETRY_DEADLINE_MS;
+  const observation = observationStore.bindAuthority();
 
   let attempt = await captureDivergenceObservationAttempt({
     session,
-    observationStore,
+    observation,
     logPath,
     flags,
   });
@@ -272,7 +273,7 @@ export async function captureDivergenceObservation(params: {
     await sleep(Math.min(delayMs, remainingMs));
     attempt = await captureDivergenceObservationAttempt({
       session,
-      observationStore,
+      observation,
       logPath,
       flags,
     });
@@ -298,13 +299,13 @@ type DivergenceCaptureAttempt = {
 
 async function captureDivergenceObservationAttempt(params: {
   session: ReplaySessionState;
-  observationStore: ReplaySessionObservation;
+  observation: ReturnType<ReplaySessionObservation['bindAuthority']>;
   logPath: string;
   flags: CommandFlags;
 }): Promise<DivergenceCaptureAttempt> {
-  const { session, observationStore, logPath, flags } = params;
+  const { session, observation, logPath, flags } = params;
   try {
-    const capture = await observationStore.capture({ flags, logPath });
+    const capture = await observation.capture({ flags, logPath });
     const snapshot = capture.snapshot;
     if (isSparseSnapshotQualityVerdict(snapshot.snapshotQuality)) {
       return {
@@ -316,8 +317,7 @@ async function captureDivergenceObservationAttempt(params: {
         retryable: true,
       };
     }
-    const observationAuthority = observationStore.bindAuthority();
-    const stored = observationAuthority.store(snapshot);
+    const stored = observation.store(snapshot);
     return {
       observation: {
         state: 'available',

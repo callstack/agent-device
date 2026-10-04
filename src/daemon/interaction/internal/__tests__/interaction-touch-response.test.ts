@@ -1,9 +1,17 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {
+  withDiagnosticsScope,
+  flushDiagnosticsToSessionFile,
+} from '@agent-device/host-kit/diagnostics';
+import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../../index.ts';
 import {
   buildInteractionResponseData,
+  buildTargetedTouchResponsePayloads,
   transformTouchResponseData,
 } from '../interaction-touch-response.ts';
 import type { PressCommandResult } from '@agent-device/contracts/interaction';
@@ -99,6 +107,155 @@ function selectorResult(readiness?: { polls: number; waitedMs: number }): PressC
 }
 
 const WAITED_SELECTOR_RESULT = selectorResult({ polls: 3, waitedMs: 400 });
+
+test.each([false, true])('selector-touch observation after retirement=%s', async (retired) => {
+  const sessionStore = makeSessionStore();
+  const address = 'cwd:selector-touch-response:default';
+  const session = makeSession('default');
+  session.snapshot = {
+    nodes: attachRefs([{ index: 0, type: 'Button', label: 'Continue' }]),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+  session.snapshotGeneration = 3;
+  const ref = sessionStore.publish(address, session);
+  const result: PressCommandResult = {
+    ...selectorResult(),
+    settle: {
+      settled: true,
+      waitedMs: 25,
+      captures: 2,
+      quietMs: 25,
+      timeoutMs: 2000,
+      diff: {
+        summary: { additions: 1, removals: 0, unchanged: 0 },
+        lines: [{ kind: 'added', text: 'Continue', ref: 'e1' }],
+      },
+    },
+  };
+  let successor;
+  if (retired) {
+    sessionStore.retire(ref);
+    successor = sessionStore.publish(address, makeSession('default'));
+  }
+  const payloads = await buildTargetedTouchResponsePayloads({
+    params: {
+      req: { token: 't', command: 'press', positionals: ['@e1'], session: 'default' },
+      sessionName: address,
+      sessionRef: ref,
+      sessionStore,
+      contextFromFlags,
+      captureSnapshotForSession: vi.fn(),
+    },
+    result,
+    staleRefsWarning: undefined,
+    extra: {},
+  });
+  if (retired) {
+    expect(payloads.responseData.settle).toBeUndefined();
+    expect(payloads.result.settle).toBeUndefined();
+    expect(sessionStore.lookup(address)).toEqual(successor);
+    expect(successor?.session.snapshot).toBeUndefined();
+  } else {
+    expect(payloads.responseData.settle).toMatchObject({ refsGeneration: 3, settled: true });
+  }
+});
+
+test.each([
+  [false, false],
+  [false, true],
+  [true, false],
+  [true, true],
+])(
+  'point-touch publication after a held frame probe, retired=%s, fails=%s',
+  async (retired, fails) => {
+    const sessionStore = makeSessionStore();
+    const address = 'cwd:held-touch-response:default';
+    const session = makeSession('default');
+    session.snapshot = {
+      nodes: attachRefs([{ index: 0, type: 'Button', label: 'Continue' }]),
+      createdAt: Date.now(),
+      backend: 'xctest',
+    };
+    session.snapshotGeneration = 3;
+    installTestScreenRecording(session);
+    const ref = sessionStore.publish(address, session);
+    let startProbe!: () => void;
+    let releaseProbe!: () => void;
+    const probing = new Promise<void>((resolve) => {
+      startProbe = resolve;
+    });
+    const released = new Promise<void>((resolve) => {
+      releaseProbe = resolve;
+    });
+    const result: PressCommandResult = {
+      kind: 'point',
+      point: { x: 10, y: 20 },
+      settle: {
+        settled: true,
+        waitedMs: 25,
+        captures: 2,
+        quietMs: 25,
+        timeoutMs: 2000,
+        diff: {
+          summary: { additions: 1, removals: 0, unchanged: 0 },
+          lines: [{ kind: 'added', text: 'Continue', ref: 'e1' }],
+        },
+      },
+    };
+    const logPath = path.join(mkdtempForTestSync('held-point-'), 'request.log');
+    const running = withDiagnosticsScope(
+      { command: 'press', session: address, logPath, debug: true },
+      async () => {
+        const payloads = await buildTargetedTouchResponsePayloads({
+          params: {
+            req: {
+              token: 't',
+              command: 'press',
+              positionals: ['10', '20'],
+              session: 'default',
+              flags: {},
+            },
+            sessionName: address,
+            sessionRef: ref,
+            sessionStore,
+            contextFromFlags,
+            captureSnapshotForSession: async () => {
+              startProbe();
+              await released;
+              if (fails) throw new Error('frame capture failed');
+              return sessionStore.requireCurrent(ref).snapshot!;
+            },
+          },
+          result,
+          staleRefsWarning: undefined,
+          extra: {},
+        });
+        flushDiagnosticsToSessionFile({ force: true });
+        return payloads;
+      },
+    );
+    await probing;
+    let successor;
+    if (retired) {
+      sessionStore.retire(ref);
+      successor = sessionStore.publish(address, makeSession('default'));
+    }
+    releaseProbe();
+    const payloads = await running;
+    const diagnostics = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
+    expect(diagnostics.includes('touch_reference_frame_resolve_failed')).toBe(!retired && fails);
+    expect(payloads.responseData.x).toBe(10);
+    if (retired) {
+      expect(payloads.responseData.settle).toBeUndefined();
+      expect(payloads.result.settle).toBeUndefined();
+      expect(sessionStore.lookup(address)).toEqual(successor);
+      expect(successor?.session.snapshot).toBeUndefined();
+    } else {
+      expect(payloads.responseData.settle).toMatchObject({ refsGeneration: 3, settled: true });
+    }
+  },
+);
 
 test('the response builder reports the resolved wait and keeps the prior warning', () => {
   const { responseData, result } = buildInteractionResponseData({
@@ -477,4 +634,36 @@ test('fill @ref preserves fallback coordinates for recording when platform resul
   expect(event?.kind).toBe('tap');
   expect(event?.x).toBe(60);
   expect(event?.y).toBe(40);
+});
+
+test('an already retired coordinate touch skips its frame probe without a warning', async () => {
+  const sessionStore = makeSessionStore();
+  const ref = sessionStore.publish('retired-point', makeSession('retired-point'));
+  sessionStore.retire(ref);
+  const capture = vi.fn();
+  const logPath = path.join(mkdtempForTestSync('retired-point-'), 'request.log');
+  await withDiagnosticsScope(
+    { command: 'click', session: ref.address, logPath, debug: true },
+    async () => {
+      const payloads = await buildTargetedTouchResponsePayloads({
+        params: {
+          req: { token: 't', command: 'click', positionals: ['1', '2'], session: ref.address },
+          sessionName: ref.address,
+          sessionRef: ref,
+          sessionStore,
+          contextFromFlags,
+          captureSnapshotForSession: capture,
+        },
+        result: { kind: 'point', point: { x: 1, y: 2 } },
+        staleRefsWarning: undefined,
+        extra: {},
+      });
+      expect(payloads.responseData).toMatchObject({ x: 1, y: 2 });
+      flushDiagnosticsToSessionFile({ force: true });
+    },
+  );
+  expect(capture).not.toHaveBeenCalled();
+  expect(fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '').not.toContain(
+    'touch_reference_frame_resolve_failed',
+  );
 });

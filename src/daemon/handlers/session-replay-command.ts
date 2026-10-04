@@ -112,7 +112,6 @@ export function createReplaySession(
     const session = store.get(name);
     if (!session) return false;
     mutate(session);
-    store.set(name, session);
     return true;
   };
   // One read set for both views: the narrowed one the port binds over, and the full-record one the
@@ -147,23 +146,24 @@ export function createReplaySession(
         device,
         platform,
       }),
-    bindAuthority: (signal) =>
-      bindInternalObservationAuthority({
-        sessionStore: { get: () => store.get(name), update: updateSession },
-        sessionName: name,
-        ...(signal ? { signal } : {}),
-      }),
-    capture: async ({ flags, logPath: captureLogPath }) => {
-      const session = store.get(name);
-      if (!session) {
-        throw new AppError('NO_ACTIVE_SESSION', `Session "${name}" is no longer active.`);
-      }
-      return await captureSnapshot({
-        device: session.device,
-        session,
-        flags,
-        logPath: captureLogPath,
-      });
+    bindAuthority: (signal) => {
+      const ref = store.lookup(name);
+      return {
+        ...bindInternalObservationAuthority({ sessionStore: store, ref, signal }),
+        capture: async ({ flags, logPath: captureLogPath }) => {
+          const session = ref ? store.requireCurrent(ref) : undefined;
+          if (!session) {
+            throw new AppError('NO_ACTIVE_SESSION', `Session "${name}" is no longer active.`);
+          }
+          return await captureSnapshot({
+            device: session.device,
+            session,
+            flags,
+            logPath: captureLogPath,
+            signal,
+          });
+        },
+      };
     },
   });
 }

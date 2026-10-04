@@ -54,7 +54,6 @@ test('selector capture cache is keyed by scoped presentation options', async () 
   const runtime = createSelectorCaptureRuntime({
     ref: sessionStore.lookup(sessionName),
     device: session.device,
-    session,
     sessionStore,
     sessionName,
     capture: boundCapture,
@@ -228,7 +227,6 @@ function proofRuntime(params: {
   const runtime = createSelectorCaptureRuntime({
     ref: sessionStore.lookup(params.sessionName),
     device: session.device,
-    session,
     sessionStore,
     sessionName: params.sessionName,
     consumedSnapshot,
@@ -322,7 +320,6 @@ function makeCaptureRuntime(sessionName: string) {
   const runtime = createSelectorCaptureRuntime({
     ref: sessionStore.lookup(sessionName),
     device: session.device,
-    session,
     sessionStore,
     sessionName,
     capture: boundCapture,
@@ -356,7 +353,6 @@ test('a held selector capture updates the matching rebuilt record without restor
   const runtime = createSelectorCaptureRuntime({
     ref,
     device: ref.session.device,
-    session: ref.session,
     sessionStore,
     sessionName: address,
     capture: boundCapture,
@@ -376,4 +372,49 @@ test('a held selector capture updates the matching rebuilt record without restor
     release();
     await running.catch(() => {});
   }
+});
+
+test('selector capture and sparse recovery both use current same-lifetime app metadata', async () => {
+  const { runtime, sessionName, sessionStore } = makeCaptureRuntime('selector-current-metadata');
+  const ref = sessionStore.lookup(sessionName)!;
+  sessionStore.update(ref, { appBundleId: 'before-first-capture' });
+  boundCapture
+    .mockImplementationOnce(async () => {
+      sessionStore.update(ref, { appBundleId: 'before-recovery-capture' });
+      return {
+        backend: 'xctest',
+        producer: 'apple-runner',
+        nodes: [{ index: 0, type: 'Application' }],
+      };
+    })
+    .mockResolvedValueOnce({
+      backend: 'xctest',
+      producer: 'apple-runner',
+      nodes: [{ index: 0, type: 'Button', label: 'Recovered' }],
+    });
+  const result = await runtime.capture({
+    flags: { snapshotInteractiveOnly: true },
+    recovery: { legacyIosSparse: { query: 'Search', shouldScope: false } },
+  });
+  expect(result.snapshot.nodes[0]?.label).toBe('Recovered');
+  expect(boundCapture.mock.calls.map(([input]) => input.options?.appBundleId)).toEqual([
+    'before-first-capture',
+    'before-recovery-capture',
+  ]);
+  expect(sessionStore.requireCurrent(ref).appBundleId).toBe('before-recovery-capture');
+});
+
+test('a retired selector runtime refuses even a reusable cached capture without touching its successor', async () => {
+  const { runtime, sessionName, sessionStore } = makeCaptureRuntime('selector-retired-cache');
+  const ref = sessionStore.lookup(sessionName)!;
+  await runtime.capture({ flags: {} });
+  sessionStore.retire(ref);
+  const successor = sessionStore.publish(sessionName, ref.session);
+  await expect(runtime.capture({ flags: {} })).rejects.toThrow(
+    expect.objectContaining({
+      details: expect.objectContaining({ reason: 'session_lifetime_ended' }),
+    }),
+  );
+  expect(boundCapture).toHaveBeenCalledOnce();
+  expect(sessionStore.requireCurrent(successor)).toBe(ref.session);
 });

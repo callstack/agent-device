@@ -2,6 +2,7 @@ import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { sleep } from '@agent-device/host-kit/retry';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { SessionStore } from '../../session-store.ts';
 import { captureDivergenceObservation } from '@agent-device/replay-port/session-replay-divergence';
@@ -29,7 +30,10 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => {
 });
 
 const mockDispatchCommand = legacyDispatchCapture;
-beforeEach(() => resetLegacySnapshotCapture(vi.mocked(captureSnapshotWithInteractor)));
+beforeEach(() => {
+  resetLegacySnapshotCapture(vi.mocked(captureSnapshotWithInteractor));
+  vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
+});
 
 // #1385 P2: the retry deadline is a DELAY-ONLY budget, not a per-attempt
 // capture timeout — this loop does not itself bound how long a single
@@ -82,3 +86,110 @@ test('captureDivergenceObservation retryLaunchRace: the 12s deadline bounds retr
     vi.useRealTimers();
   }
 });
+
+test.each(['rebuild', 'retire'] as const)(
+  'divergence capture binds observation authority before awaiting the native capture: %s',
+  async (change) => {
+    const root = mkdtempForTestSync('agent-device-divergence-lifetime-');
+    const store = new SessionStore(path.join(root, 'sessions'));
+    const session = makeIosSession('default', { appBundleId: 'com.example.app' });
+    const ref = store.publish('cwd:worktree:default', session);
+    const replay = replayDivergenceForTest(store, ref.address);
+    let captured!: (value: Record<string, unknown>) => void;
+    let started!: () => void;
+    const capturing = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    mockDispatchCommand.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          captured = resolve;
+          started();
+        }),
+    );
+    const pending = captureDivergenceObservation({
+      session: replay.session!,
+      observationStore: replay.observationStore,
+      logPath: path.join(root, 'daemon.log'),
+      action: { command: 'click', positionals: ['label="Save"'], flags: {} },
+    });
+    await capturing;
+    let current;
+    if (change === 'rebuild') current = store.update(ref, { appName: 'Latest app' });
+    else {
+      store.retire(ref);
+      current = makeIosSession('default', { appBundleId: 'com.example.successor' });
+      store.publish(ref.address, current);
+    }
+    captured({ nodes: [{ index: 0, depth: 0, type: 'Button', ref: 'e2', label: 'Save' }] });
+    const result = await pending;
+    expect(store.get(ref.address)).toBe(current);
+    if (change === 'rebuild') {
+      expect(result.state).toBe('available');
+      expect(current.appName).toBe('Latest app');
+      expect(current.snapshot?.nodes[0]?.label).toBe('Save');
+    } else {
+      expect(result.state).toBe('unavailable');
+      expect(current.snapshot).toBeUndefined();
+    }
+  },
+);
+
+test.each(['rebuild', 'retire'] as const)(
+  'capture retries retain their original lifetime through backoff: %s',
+  async (change) => {
+    const root = mkdtempForTestSync('agent-device-divergence-retry-lifetime-');
+    const store = new SessionStore(path.join(root, 'sessions'));
+    const session = makeIosSession('default', { appBundleId: 'com.example.app' });
+    const ref = store.publish('cwd:worktree:default', session);
+    const replay = replayDivergenceForTest(store, ref.address);
+    let sleeping!: () => void;
+    let resume!: () => void;
+    const backoff = new Promise<void>((resolve) => {
+      sleeping = resolve;
+    });
+    vi.mocked(sleep).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resume = resolve;
+          sleeping();
+        }),
+    );
+    mockDispatchCommand
+      .mockResolvedValueOnce({
+        nodes: [],
+        quality: { state: 'sparse', backend: 'tree' },
+      })
+      .mockResolvedValueOnce({
+        nodes: [{ index: 0, depth: 0, type: 'Button', ref: 'e2', label: 'Save' }],
+      });
+    const pending = captureDivergenceObservation({
+      session: replay.session!,
+      observationStore: replay.observationStore,
+      logPath: path.join(root, 'daemon.log'),
+      retryLaunchRace: true,
+      action: { command: 'click', positionals: ['label="Save"'], flags: {} },
+    });
+    await backoff;
+    let current;
+    if (change === 'rebuild') current = store.update(ref, { appName: 'Latest app' });
+    else {
+      store.retire(ref);
+      current = makeIosSession('default', { appBundleId: 'com.example.successor' });
+      store.publish(ref.address, current);
+    }
+    resume();
+    const result = await pending;
+    expect(store.get(ref.address)).toBe(current);
+    if (change === 'rebuild') {
+      expect(mockDispatchCommand).toHaveBeenCalledTimes(2);
+      expect(result.state).toBe('available');
+      expect(current.appName).toBe('Latest app');
+      expect(current.snapshot?.nodes[0]?.label).toBe('Save');
+    } else {
+      expect(mockDispatchCommand).toHaveBeenCalledTimes(1);
+      expect(result.state).toBe('unavailable');
+      expect(current.snapshot).toBeUndefined();
+    }
+  },
+);

@@ -4,6 +4,11 @@ const dispatchSnapshotViaRuntime = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../snapshot-runtime.ts', () => ({ dispatchSnapshotViaRuntime }));
 
+import {
+  makeSessionStore,
+  makeSession,
+  makeAndroidEmulator,
+} from './session-open-runtime.fixtures.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import {
@@ -13,6 +18,8 @@ import {
 
 const inspectFacts = vi.fn();
 const bindDevice = vi.fn();
+let sessionStore: ReturnType<typeof makeSessionStore>;
+let ref: ReturnType<typeof sessionStore.publish>;
 
 function baseRequest(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
   return {
@@ -26,6 +33,8 @@ function baseRequest(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
 }
 
 beforeEach(() => {
+  sessionStore = makeSessionStore();
+  ref = sessionStore.publish('default', makeSession('default', makeAndroidEmulator()));
   dispatchSnapshotViaRuntime.mockReset();
   inspectFacts.mockReset();
   bindDevice.mockReset();
@@ -142,9 +151,9 @@ const failedOpenResponse: DaemonResponse = {
 test('passes a failed open response through untouched', async () => {
   const result = await composeOpenWithInitialSnapshot({
     req: baseRequest({ flags: { foreground: true } }),
-    sessionName: 'default',
+    ref,
     logPath: '/tmp/daemon.log',
-    sessionStore: {} as never,
+    sessionStore,
     openResponse: failedOpenResponse,
     inspectFacts,
     bindDevice,
@@ -157,9 +166,9 @@ test('passes a failed open response through untouched', async () => {
 test('leaves a successful open response untouched when --foreground was not requested', async () => {
   const result = await composeOpenWithInitialSnapshot({
     req: baseRequest(),
-    sessionName: 'default',
+    ref,
     logPath: '/tmp/daemon.log',
-    sessionStore: {} as never,
+    sessionStore,
     openResponse: okOpenResponse,
     inspectFacts,
     bindDevice,
@@ -175,9 +184,9 @@ test('attaches the initial INTERACTIVE snapshot by delegating to the existing sn
   const req = baseRequest({ flags: { foreground: true }, positionals: ['xyz.blueskyweb.app'] });
   const result = await composeOpenWithInitialSnapshot({
     req,
-    sessionName: 'default',
+    ref,
     logPath: '/tmp/daemon.log',
-    sessionStore: {} as never,
+    sessionStore,
     openResponse: okOpenResponse,
     inspectFacts,
     bindDevice,
@@ -193,8 +202,9 @@ test('attaches the initial INTERACTIVE snapshot by delegating to the existing sn
       flags: { ...req.flags, snapshotInteractiveOnly: true },
     },
     sessionName: 'default',
+    sessionRef: ref,
     logPath: '/tmp/daemon.log',
-    sessionStore: {},
+    sessionStore,
     inspectFacts,
     bindDevice,
   });
@@ -224,9 +234,9 @@ test('a snapshot-capture failure never masks the successful open', async () => {
 
   const result = await composeOpenWithInitialSnapshot({
     req: baseRequest({ flags: { foreground: true } }),
-    sessionName: 'default',
+    ref,
     logPath: '/tmp/daemon.log',
-    sessionStore: {} as never,
+    sessionStore,
     openResponse: { ok: true, data: { session: 'default', warnings: ['pre-existing warning'] } },
     inspectFacts,
     bindDevice,
@@ -266,9 +276,9 @@ test('a THROWN snapshot-capture failure never masks the successful open either',
 
   const result = await composeOpenWithInitialSnapshot({
     req: baseRequest({ flags: { foreground: true } }),
-    sessionName: 'default',
+    ref,
     logPath: '/tmp/daemon.log',
-    sessionStore: {} as never,
+    sessionStore,
     openResponse: { ok: true, data: { session: 'default' } },
     inspectFacts,
     bindDevice,

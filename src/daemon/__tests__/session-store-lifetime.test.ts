@@ -149,6 +149,55 @@ test('script writes use the latest matching record and refuse a retired lifetime
   assert.equal(successor.session.actions.length, 0);
 });
 
+test('action recording uses the latest matching record and its scoped journal', async () => {
+  const store = makeSessionStore();
+  const ref = store.publish(ADDRESS, makeSession('default'));
+  const publicSlot = store.publish('default', makeSession('default'));
+  const current = store.update(ref, { actions: [] });
+  store.recordAction(ref, {
+    command: 'click',
+    positionals: ['id="continue"'],
+    flags: { saveScript: true },
+  });
+  await store.flushEvents();
+  assert.deepEqual(
+    current.actions.map((action) => action.command),
+    ['click'],
+  );
+  assert.equal(ref.session.actions.length, 0);
+  assert.equal(ref.session.scriptPublication, undefined);
+  assert.equal(current.scriptPublication?.kind, 'authoring');
+  assert.equal(publicSlot.session.actions.length, 0);
+  assert.equal(fs.existsSync(store.resolveEventLogPath('default')), false);
+  assert.equal(store.readEvents(ADDRESS).events[0]?.session, ADDRESS);
+});
+
+test.each([{}, { noRecord: true }])(
+  'retired action recording refuses before flags or journal writes, flags=%j',
+  async (flags) => {
+    const store = makeSessionStore();
+    const session = makeSession('default');
+    const ref = store.publish(ADDRESS, session);
+    store.retire(ref);
+    const successor = store.publish(ADDRESS, session);
+    assert.throws(
+      () =>
+        store.recordAction(ref, {
+          command: 'click',
+          positionals: ['id="continue"'],
+          flags: { saveScript: true, ...flags },
+        }),
+      ended,
+    );
+    await store.flushEvents();
+    assert.equal(store.requireCurrent(successor), session);
+    assert.equal(session.actions.length, 0);
+    assert.equal(session.scriptPublication, undefined);
+    assert.equal(fs.existsSync(store.resolveEventLogPath(ADDRESS)), false);
+    assert.equal(fs.existsSync(store.resolveEventLogPath('default')), false);
+  },
+);
+
 test('repair tombstones follow the scoped address and cannot be written by a retired ref', () => {
   const store = makeSessionStore();
   const ref = store.publish(ADDRESS, makeRepairArmedSession('default'));
