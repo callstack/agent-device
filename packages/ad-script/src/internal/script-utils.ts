@@ -75,9 +75,11 @@ const SCROLL_SCRIPT_FLAG_MAP = new Map<string, ScriptFlagEntry>([
  * (`SELECTOR_SNAPSHOT_FLAGS`) and they are recorded, so the script grammar
  * recognizes them too. Otherwise they land inside the positional list and the
  * wait parser refuses the line as selector-shaped text. Long spellings only:
- * the `-d`/`-s` CLI aliases would reclassify pre-existing positional data
- * (`wait text -s so funny` once meant the text `-s so funny`), and the writer
- * only ever emits the long form.
+ * this is the spelling the writer emits for `wait`, so nothing the recorder can
+ * write needs an alias, and matching `-d`/`-s` would reclassify realistic
+ * waited text (`wait text -s so funny`) to buy almost nothing — the only line
+ * losing its old reading is one whose whole token is a literal long flag word,
+ * which a hand-written script can spell with the selector wrapped instead.
  */
 const WAIT_SCRIPT_FLAG_MAP = new Map<string, ScriptFlagEntry>([
   ['--raw', { key: 'snapshotRaw', kind: 'boolean' }],

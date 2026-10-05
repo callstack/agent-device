@@ -557,11 +557,15 @@ function readQuotedReplayToken(
  * A single-quoted token: `'id="far-button"'` or `'label="Sign in"'` (#3197). The
  * shell's single quotes strip to one argument and keep `"` literal; a hand-written
  * `.ad` line is the same text, so the tokenizer must agree or the identical command
- * parses at the CLI and fails in a script. The candidate must close immediately
- * before whitespace or end of line: a quote that stops mid-word was punctuation in
- * the old bare reading (`wait text it's fine`, `'don't do this'`), so the whole run
- * keeps its old meaning and nothing that parsed before changes meaning. Inside the
- * quotes only `\'` and `\\` escape.
+ * parses at the CLI and fails in a script. The guarantee is scoped: a run the shell
+ * reads as one quoted argument NOW reads as one argument (`'Sign in'` was two bare
+ * tokens before, and taking the shell reading is the point), while a run it would
+ * not — an unclosed quote or a quote that stops mid-word (`wait text it's fine`,
+ * `'don't do this'`) — keeps its old bare meaning, so no line relied on before this
+ * change is re-tokenized. Inside the quotes only `\'` escapes, as in the shell, where
+ * a `\` keeps its own character; `\'` itself is the one deliberate extension, because
+ * a shell's single quotes carry no apostrophe at all and a selector like
+ * `label="don't"` has to be writable in a script without JSON double quotes.
  */
 function readSingleQuotedReplayToken(
   line: string,
@@ -571,7 +575,7 @@ function readSingleQuotedReplayToken(
   let end = cursor + 1;
   while (end < line.length) {
     const char = line.charAt(end);
-    if (char === '\\') {
+    if (char === '\\' && line.charAt(end + 1) === "'") {
       end += 2;
       continue;
     }
@@ -590,19 +594,7 @@ function isReplayTokenBoundary(line: string, index: number): boolean {
 }
 
 function decodeSingleQuotedReplayLiteral(value: string): string {
-  let decoded = '';
-  let cursor = 0;
-  while (cursor < value.length) {
-    const char = value.charAt(cursor);
-    if (char === '\\' && (value.charAt(cursor + 1) === "'" || value.charAt(cursor + 1) === '\\')) {
-      decoded += value.charAt(cursor + 1);
-      cursor += 2;
-      continue;
-    }
-    decoded += char;
-    cursor += 1;
-  }
-  return decoded;
+  return value.replaceAll(String.raw`\'`, "'");
 }
 
 function readBareReplayToken(line: string, cursor: number): { value: string; nextCursor: number } {

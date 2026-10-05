@@ -350,7 +350,20 @@ test('an unclosed single quote never turns a previously valid line into an error
   assert.deepEqual(parsed[0]?.positionals, ['text', "don't"]);
 });
 
-test("apostrophes that survive decoding keep the bare reading, not the shell's split", () => {
+test("single quotes carry an apostrophe through ', and a backslash stays itself", () => {
+  // Shell parity: `agent-device wait 'label="don\'t"'` hands over the backslash-
+  // apostrophe pair, so the script has to read the same selector. A shell keeps a
+  // bare `\` inside single quotes, and so does the script line.
+  const parsed = parseReplayScriptDetailed(
+    [String.raw`wait 'label="don\'t"'`, String.raw`snapshot --scope 'root\.section'`].join('\n') +
+      '\n',
+  ).actions;
+
+  assert.deepEqual(parsed[0]?.positionals, ['label="don\'t"']);
+  assert.equal(parsed[1]?.flags.snapshotScope, String.raw`root\.section`);
+});
+
+test('apostrophes that survive decoding keep the old bare reading', () => {
   // The shell reads `'don't do this'` as three arguments. A script line has no
   // second reader to hand it to, so re-tokenizing would change what a
   // previously-valid line means; it stays one bare token run, as it always was.

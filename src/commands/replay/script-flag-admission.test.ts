@@ -51,9 +51,12 @@ describe.each(SCRIPT_FLAG_COMMANDS)('%s script flags', (command) => {
   });
 
   test('every script token matches the declaration spelling and kind exactly', () => {
-    // The long spelling only: an alias the grammar invented that the CLI does not
-    // declare would parse a line `agent-device <command>` itself would refuse.
+    // Long spelling only, and only a spelling the CLI itself declares: a short
+    // alias invented here would parse a line the recording never writes, and a
+    // single-letter token would reclassify positional data the grammar used to
+    // leave alone.
     for (const entry of entries) {
+      expect(entry.token.startsWith('--')).toBe(true);
       const definitions = getFlagDefinitionsForKey(entry.key as never);
       const declaredNames = new Set(definitions.flatMap((definition) => [...definition.names]));
       expect(declaredNames.has(entry.token)).toBe(true);

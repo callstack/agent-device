@@ -53,8 +53,8 @@ close
 ```
 
 - A token quoted with `"` or `'` is one argument. Single quotes keep a `"` literal, so `'id="far-button"'` and `"id=\"far-button\""` are the same selector — write whichever matches how you typed the command at the shell.
-- Values in double quotes are JSON strings, so escape `\\`, `\"`, `\t`, and `\n`. Values in single quotes are literal except for `\'` and `\\`.
-- A command accepts only its own flags. A flag the CLI accepts is available in a script when it belongs to the step; per-request options are not part of a step. `--settle`, `--verify`, and the device-selection flags (`--platform`, `--serial`, `--device`) are the common ones a script does not carry.
+- Values in double quotes are JSON strings, so escape `\\`, `\"`, `\t`, and `\n`. Values in single quotes are literal, as at the shell: a backslash keeps its own character, and the only escape is `\'` for an apostrophe.
+- A script carries only the flags declared for that command and marked recorded; CLI-only spellings and per-request options are not part of a step. `--settle`, `--verify`, `scroll --pixels`/`--duration-ms`, and the device-selection flags (`--platform`, `--serial`, `--device`) are the common ones a script does not carry.
 - `help <command>` prints the flags each command accepts. `help scripting` prints this grammar.
 
 Reaching an off-screen element is viewport-independent in a script exactly as it is at the CLI. Prefer the stop condition over a fixed amount, which passes on one screen size and fails on another:
@@ -68,7 +68,7 @@ scroll down 0.8
 scroll bottom
 ```
 
-A `#` only starts a comment at the beginning of a line. A scroll line carries `--until` and keeps its distance as a positional; `--pixels` and `--duration-ms` belong to the CLI invocation, not to a step. `wait` carries `--raw`, `--depth <n>`, and `--scope <selector|@ref>` to choose the capture its target is read from.
+A `#` only starts a comment at the beginning of a line. A scroll line carries `--until` and keeps its distance as a positional (`scroll down 0.8 --until <selector>`). `wait` carries `--raw`, `--depth <n>`, and `--scope <selector|@ref>` (long spellings; the `-d`/`-s` CLI aliases stay out of scripts so a hand-written line like `wait text -s so funny` keeps meaning its literal text) to choose the capture its target is read from.
 
 ## Run replay
 
@@ -160,7 +160,7 @@ agent-device test ./workflows --reporter default --reporter junit:./tmp/junit.xm
 - `test` discovers `.ad` files from files, directories, or globs and runs them serially.
 - Quote relative globs to expand them on the caller from its working directory, including when the directory name contains glob characters such as `[` or `{`. A missing file input without glob characters reports an error.
 - `context platform=...` inside each `.ad` file is the target source of truth for suite execution.
-- `--platform` is a filter for suite discovery; files without platform metadata are skipped when a filter is present, and the run reports how many sources were skipped for having no `context platform=` header versus how many declared another platform. Add the header to run a file under a filter, or omit `--platform` and let the selected device decide.
+- `--platform` is a filter for suite discovery; files without platform metadata are skipped when a filter is present. When filtering leaves no runnable sources, the no-match error reports how many sources were skipped for having no `context platform=` header versus how many declared another platform. Add the header to run a file under a filter, or omit `--platform` and let the selected device decide.
 - `context timeout=...` and `context retries=...` can be declared per script; CLI flags override metadata. Retries are capped at `3`, and duplicate keys in the context header fail fast instead of silently overriding each other.
 - By default, suite artifacts are written under `.agent-device/test-artifacts/<run-id>/...`. Each attempt writes `replay.ad`, `result.txt`, and `replay-timing.ndjson`. Failed attempts also keep copied logs and artifact files when the replay produced them.
 - Copied diagnostic artifacts receive numbered filenames when their names collide with another artifact, a replay source, timing trace, or attempt manifest. `result.txt` lists the retained names in `copiedArtifacts`.
