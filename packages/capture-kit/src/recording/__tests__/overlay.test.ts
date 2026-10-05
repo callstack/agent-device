@@ -144,12 +144,11 @@ test('overlay hands the helper what is left of its budget, inside the record req
   const args = helperScriptArgs();
   const exportMs = Number(args[args.indexOf('--timeout-ms') + 1]);
   expect(exportMs).toBeGreaterThan(0);
-  // The compile, the export and the helper's exit all fit in the budget, which leaves `record`'s
-  // default 90s request envelope room for the stop around it.
+  // The compile, the export and the helper's exit all fit in the budget. That the budget fits in
+  // `record`'s request envelope is checked where the envelope is declared.
   expect(compileCall?.[2]?.timeoutMs).toBeLessThanOrEqual(OVERLAY_BUDGET_MS);
   expect(helperCall?.[2]?.timeoutMs).toBeLessThanOrEqual(OVERLAY_BUDGET_MS);
   expect(exportMs).toBeLessThan(helperCall?.[2]?.timeoutMs ?? 0);
-  expect(OVERLAY_BUDGET_MS).toBeLessThan(90_000);
 });
 
 test('overlay leaves the video as recorded when compiling the helper spent its budget', async () => {

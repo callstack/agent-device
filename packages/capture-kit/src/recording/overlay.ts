@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { runCmd } from '@agent-device/host-kit/command';
+import { Deadline } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 import { findProjectRoot } from '@agent-device/host-kit/version';
 import {
@@ -24,14 +25,17 @@ export function getRecordingOverlaySupportWarning(
 }
 
 /**
- * `record stop` is one daemon request, which the client abandons after 90 s and then resets the
- * daemon (`DEFAULT_TIMEOUT_POLICY`), so the overlay must end well inside it. Compiling the helper,
- * its export and its exit all come out of this budget; past it the stop keeps the raw video and its
- * gesture telemetry, with a warning.
+ * `record stop` is one daemon request, which the client abandons after `record`'s 90 s envelope:
+ * the caller gets "Daemon request timed out" while the daemon finishes the stop. So the overlay must
+ * end well inside it. Compiling the helper, its export and its exit all come out of this budget;
+ * past it the stop keeps the raw video and its gesture telemetry, with a warning.
  */
 export const OVERLAY_BUDGET_MS = 70_000;
 
-/** How long the helper has to cancel its export and exit once the export's time is spent. */
+/**
+ * The helper's time outside its export: starting up, then verifying the composited output or
+ * cancelling the export, and exiting.
+ */
 const HELPER_EXIT_GRACE_MS = 5_000;
 
 let overlayScriptPath: string | undefined;
@@ -58,7 +62,7 @@ async function exportProcessedVideo(params: {
   budgetMs: number;
 }): Promise<void> {
   const { videoPath, scriptPath, scriptArgs, commandDescription } = params;
-  const deadline = Date.now() + params.budgetMs;
+  const deadline = Deadline.fromTimeoutMs(params.budgetMs);
   await waitForStableFile(videoPath);
   await waitForPlayableVideo(videoPath);
 
@@ -67,9 +71,10 @@ async function exportProcessedVideo(params: {
     const executablePath = await compileSwiftSourceFile({
       sourcePath: scriptPath,
       extraSourcePaths: [getExportSupportScriptPath()],
-      timeoutMs: Math.max(1, deadline - Date.now()),
+      // `runCmd` reads a timeout of 0 as none.
+      timeoutMs: Math.max(1, deadline.remainingMs()),
     });
-    const helperMs = deadline - Date.now();
+    const helperMs = deadline.remainingMs();
     const exportMs = helperMs - HELPER_EXIT_GRACE_MS;
     if (exportMs <= 0) {
       throw new AppError(

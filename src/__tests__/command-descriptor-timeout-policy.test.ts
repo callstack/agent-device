@@ -9,6 +9,7 @@ import {
 } from '@agent-device/command-registry/registry';
 import { INTERACTION_DISPATCH_PATHS } from '@agent-device/contracts/interaction-guarantees';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
+import { OVERLAY_BUDGET_MS } from '@agent-device/capture-kit/recording-overlay';
 import {
   DEFAULT_TIMEOUT_POLICY,
   READINESS_BUDGET_MAX_MS,
@@ -332,6 +333,16 @@ test('snapshot uses the standard daemon request timeout with an explicit overrid
     resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('test'), { ...base }),
     undefined,
   );
+});
+
+test('the touch overlay budget leaves record stop room inside its request envelope', () => {
+  // The recorder stop, the copies and the playability checks around the overlay are outside its
+  // budget, so the budget alone must end before the client abandons the stop.
+  const envelopeMs = resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('record'), {
+    positionals: ['stop'],
+    flags: {},
+  });
+  assert.ok(envelopeMs !== undefined && OVERLAY_BUDGET_MS < envelopeMs);
 });
 
 test('open and prepare startup budgets keep a client-envelope margin over the daemon deadline', () => {
