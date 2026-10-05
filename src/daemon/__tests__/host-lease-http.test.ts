@@ -115,11 +115,23 @@ test('DELETE revokes the lease so the next admission fails', async (t) => {
   });
 });
 
-test('/health names the lease backends the daemon admits', async (t) => {
-  await withServer(t, async (origin) => {
-    const health = (await (await fetch(`${origin}/health`)).json()) as {
-      leaseBackends?: string[];
-    };
-    assert.ok(health.leaseBackends?.includes('macos-app'));
-  });
+test('/health names macos-app among the lease backends only on a macOS host', async (t) => {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  try {
+    for (const [hostPlatform, advertised] of [
+      ['darwin', true],
+      ['linux', false],
+    ] as const) {
+      Object.defineProperty(process, 'platform', { ...platform, value: hostPlatform });
+      await withServer(t, async (origin) => {
+        const health = (await (await fetch(`${origin}/health`)).json()) as {
+          leaseBackends?: string[];
+        };
+        assert.ok(health.leaseBackends?.includes('ios-simulator'));
+        assert.equal(health.leaseBackends?.includes('macos-app'), advertised);
+      });
+    }
+  } finally {
+    Object.defineProperty(process, 'platform', platform);
+  }
 });

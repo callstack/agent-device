@@ -590,6 +590,9 @@ export async function createDaemonHttpServer(options: {
 }): Promise<http.Server> {
   const instanceId = randomUUID();
   const hostArch = await readHostCpuArch();
+  const leaseBackends = LEASE_BACKENDS.filter(
+    (backend) => backend !== 'macos-app' || process.platform === 'darwin',
+  );
   const environment = options.env ?? process.env;
   const authHook = await loadHttpAuthHook(environment);
   const { handleRequest, token, retainArtifacts = false, resolveRequestDiagnosticsPath } = options;
@@ -602,7 +605,7 @@ export async function createDaemonHttpServer(options: {
           buildDaemonHealthPayload('agent-device-daemon', readVersion(), {
             instanceId,
             hostArch,
-            leaseBackends: LEASE_BACKENDS,
+            leaseBackends,
           }),
         ),
       );
