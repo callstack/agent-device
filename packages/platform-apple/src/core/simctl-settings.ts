@@ -10,13 +10,13 @@ import { AppError, sessionAppRequiredDetails } from '@agent-device/kernel/errors
 import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
 
 /** The settings a simulator changes through `simctl` alone, whichever host runs that `simctl`. */
-export type SimctlSetting = 'appearance' | 'permission' | 'location';
+type SimctlSetting = 'appearance' | 'permission' | 'location';
 
 /**
  * Runs one `simctl` argv on the simulator. It resolves with the output when `simctl` exits 0 and
  * rejects with a `COMMAND_FAILED` AppError whose `details.stderr` is the `simctl` stderr otherwise.
  */
-export type SimctlSettingRunner = (
+type SimctlSettingRunner = (
   args: string[],
 ) => Promise<{ readonly stdout: string; readonly stderr: string }>;
 
