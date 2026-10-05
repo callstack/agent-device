@@ -148,6 +148,8 @@ export type DaemonRequestMeta = {
   leaseProvider?: string;
   deviceKey?: string;
   clientId?: string;
+  /** A local caller's digest of its lease-provider credential variables, compared on allocation. */
+  providerCredentialFingerprint?: string;
   sessionIsolation?: SessionIsolationMode;
   uploadedArtifactId?: string;
   clientArtifactPaths?: Record<string, string>;

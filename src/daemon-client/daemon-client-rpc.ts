@@ -185,6 +185,9 @@ export function buildHttpRpcPayload(
     params: {
       ...buildLeaseRpcParams(req, req.command, options),
       ...(req.command === 'lease_allocate' ? readLeaseAllocateProviderFlags(req.flags) : {}),
+      ...(req.command === 'lease_allocate' && req.meta?.providerCredentialFingerprint
+        ? { providerCredentialFingerprint: req.meta.providerCredentialFingerprint }
+        : {}),
     },
   };
 }

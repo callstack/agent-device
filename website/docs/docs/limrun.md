@@ -43,6 +43,8 @@ agent-device disconnect
 
 On an attached Android instance, agent-device does not replace an existing port reverse mapping. If the owner already maps a device port, such as `tcp:8081` for their Metro server, a reverse to that port fails and the owner's mapping stays in place. The error has `details.reason: 'android_port_reverse_rebind_refused'` when `adb reverse --list` shows the mapping. Otherwise it is a plain ADB failure.
 
+A running daemon keeps the Limrun variables it started with. If your shell holds different ones, the first command that allocates a lease, such as `install` or `open`, refuses before it creates or attaches to an instance; run `agent-device daemon stop` (with the same `--state-dir`) and rerun the command. A shell that sets none of these variables uses the daemon's.
+
 `install`, and `apps` before the first `open`, still need `LIMRUN_API_KEY`, because they use Limrun asset storage. After `open`, `apps` lists the apps installed on the instance without the key. Install the app before you hand over the instance. From the Node.js runtime, `getDeviceSession(device).installRemoteApp(url)` installs from a signed asset URL without the API key.
 
 ## Keeping idle sessions alive

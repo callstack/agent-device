@@ -80,6 +80,7 @@ export async function sendToDaemon(
     info,
     requestId,
     debug,
+    await readLocalProviderCredentialFingerprint(requestWithoutAuthFlag, info),
   );
   emitDiagnostic({
     level: 'info',
@@ -119,6 +120,7 @@ function buildTransportRequest(
   info: DaemonInfo,
   requestId: string,
   debug: boolean,
+  providerCredentialFingerprint: string | undefined,
 ): DaemonRequest {
   return {
     ...request,
@@ -128,8 +130,22 @@ function buildTransportRequest(
     meta: {
       ...buildTransportRequestMeta(request, preparedRemoteRequest, requestId, debug),
       ...buildLocalHostEnvMeta(info),
+      providerCredentialFingerprint,
     },
   };
+}
+
+// A remote daemon reads provider credentials from its own host, so only a local daemon is asked
+// to compare them, and only when a lease is allocated.
+async function readLocalProviderCredentialFingerprint(
+  request: Omit<DaemonRequest, 'token'>,
+  info: DaemonInfo,
+): Promise<string | undefined> {
+  if (isRemoteDaemon(info) || request.command !== 'lease_allocate') return undefined;
+  const provider = leaseScopeFromRequest(request).leaseProvider;
+  if (!provider) return undefined;
+  const { providerCredentialFingerprint } = await import('../provider-credential-fingerprint.ts');
+  return providerCredentialFingerprint(provider, process.env);
 }
 
 // A developer dir is a path on the client's host, so only a local daemon can use it.

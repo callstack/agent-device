@@ -56,7 +56,7 @@
     "src/daemon-client/daemon-client-progress.ts#createInvalidDaemonResponseError": "sha256:0af812346b667a23fdfef641b242cd86d07edaa05eb928c4c531628c09a4031b",
     "src/daemon-client/daemon-client-progress.ts#shouldReadDaemonProgressStream": "sha256:6811404f41d8db3fa6fc751332c7186a2399ec7ecbc4e9c547d9cb9f14dbb350",
     "src/daemon-client/daemon-client-rpc.ts#appErrorFromDaemonError": "sha256:ac4761006c71d93ccba9f8e37cbd4cf48283dbb22737c163dc9c1a878e154eea",
-    "src/daemon-client/daemon-client-rpc.ts#buildHttpRpcPayload": "sha256:caddf184cd57a41d9910c414bba72ce5a0503e22a2a4ef3a47f95fed67037127",
+    "src/daemon-client/daemon-client-rpc.ts#buildHttpRpcPayload": "sha256:a8311d02126c51c0205be29d5deae68298b5dca223851a68f03aac95a4add5c6",
     "src/daemon-client/daemon-client-rpc.ts#buildLeaseRpcParams": "sha256:1755f46be8c62e7a8eb409e9a94d61781c96ccbef3306702121aa94264d63267",
     "src/daemon-client/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:8f1c4bba1918545db6296ad29b95f0baa9f949e7c23bc04d59e261130f14611e",
     "src/daemon-client/daemon-client-rpc.ts#isLeaseRpcCommand": "sha256:955dc1b73462d40593e5728dbcbaeec1307944b08262a22627e84cc5dc507e8f",
@@ -197,7 +197,7 @@
     {
       "declaration": "packages/kernel/src/contracts.ts#DaemonRequestMeta",
       "digest": "sha256:668e635f88f651f6cebeb5f6505976729e598c0be35327ad00f314f151cb601c",
-      "rationale": "Adds the optional developerDir field: a local client's DEVELOPER_DIR, overlaid on the env of commands the daemon spawns for that request. A released daemon ignores the unknown meta key and keeps its own environment, exactly as before; a released client never sends it, so the new daemon inherits its own environment for that request. The remote HTTP surface strips it. Also adds the optional leaseRetainOnClose field, sent only on lease_allocate when the caller opts in: a released daemon ignores the unknown meta key and releases the lease on session close as before, and a released client never sends it."
+      "rationale": "Adds the optional developerDir field: a local client's DEVELOPER_DIR, overlaid on the env of commands the daemon spawns for that request. A released daemon ignores the unknown meta key and keeps its own environment, exactly as before; a released client never sends it, so the new daemon inherits its own environment for that request. The remote HTTP surface strips it. Also adds the optional leaseRetainOnClose field, sent only on lease_allocate when the caller opts in: a released daemon ignores the unknown meta key and releases the lease on session close as before, and a released client never sends it. Adds the optional providerCredentialFingerprint field: a digest of the local caller's provider credential variables, which the daemon compares with its own on lease_allocate. A released daemon ignores the unknown meta key and allocates as before; a released client never sends it, so the new daemon skips the comparison. The client sends it only to a local daemon, and the remote HTTP surface strips it."
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#DaemonArtifactKnownType",
@@ -221,13 +221,13 @@
     },
     {
       "declaration": "src/daemon-client/daemon-client-rpc.ts#buildHttpRpcPayload",
-      "digest": "sha256:caddf184cd57a41d9910c414bba72ce5a0503e22a2a4ef3a47f95fed67037127",
-      "rationale": "#2110 added the optional providerApp parameter to lease allocation; #2494 extends the same additive projection to the full provider-allocation flag set the lease-lifecycle provider reads in prepareSession — device selection (platform, device), the app/os, the session-naming fields, and the configured device-feature and AWS knobs — so a fresh remote allocation reaches BrowserStack/AWS with a named, configured session instead of failing on a missing --device/--platform or landing in Untitled Project/Build. Producer and consumer both read one shared projection (readLeaseAllocateProviderFlags). Every field is optional and forwarded only when the caller supplied it: a released protocol-2 daemon ignores unknown JSON-RPC parameters, and a request carrying none of these retains the previous payload byte-for-byte."
+      "digest": "sha256:a8311d02126c51c0205be29d5deae68298b5dca223851a68f03aac95a4add5c6",
+      "rationale": "Adds the optional providerCredentialFingerprint parameter to agent_device.lease.allocate, forwarded only when the request meta carries one, which the client sets only for a local daemon. A released protocol-2 daemon ignores unknown JSON-RPC parameters, and a request without a fingerprint keeps the previous payload byte-for-byte."
     },
     {
       "declaration": "src/daemon/server/http-server.ts#toLeaseDaemonRequest",
       "digest": "sha256:33052eb8a6521febee30a99d6c281e72fcaf3e7515188f7c926097dfc891d948",
-      "rationale": "#2110 read the optional providerApp lease-allocation parameter into the existing flags bag; #2494 reads the full provider-allocation flag set into that same bag through the shared readLeaseAllocateProviderFlags projection, so the reconstructed req.flags handed to prepareSession match what the line transport forwards for free. Released protocol-2 clients omit these and follow the unchanged allocation path; no existing field is required or reinterpreted. The optional retainOnClose boolean parameter is read into meta.leaseRetainOnClose; a released daemon ignores it and keeps releasing on session close."
+      "rationale": "#2110 read the optional providerApp lease-allocation parameter into the existing flags bag; #2494 reads the full provider-allocation flag set into that same bag through the shared readLeaseAllocateProviderFlags projection, so the reconstructed req.flags handed to prepareSession match what the line transport forwards for free. Released protocol-2 clients omit these and follow the unchanged allocation path; no existing field is required or reinterpreted. The optional retainOnClose boolean parameter is read into meta.leaseRetainOnClose; a released daemon ignores it and keeps releasing on session close. Reads the optional providerCredentialFingerprint lease-allocation parameter into request meta, so a local caller over HTTP gets the same credential check as over the socket. A daemon with an auth hook treats every HTTP caller as remote and strips it, as it does developerDir. Released protocol-2 clients omit it and follow the unchanged allocation path; no existing field is required or reinterpreted."
     },
     {
       "declaration": "packages/kernel/src/errors.ts#DaemonError",

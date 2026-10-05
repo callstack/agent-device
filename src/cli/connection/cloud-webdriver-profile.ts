@@ -3,6 +3,7 @@ import {
   CLOUD_WEBDRIVER_PROVIDERS,
   parseBrowserStackAppReference,
   readAwsDeviceFarmRegionFromArn,
+  requireBrowserStackCredentials,
   type CloudWebDriverKnownProviderName,
 } from '@agent-device/provider-webdriver';
 import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/provider-profile-fields';
@@ -99,8 +100,7 @@ function browserStackProfileFields(options: {
   env?: EnvMap;
   cwd: string;
 }): RemoteConfigProfile {
-  requireEnv(options.env, 'BROWSERSTACK_USERNAME', 'connect browserstack');
-  requireEnv(options.env, 'BROWSERSTACK_ACCESS_KEY', 'connect browserstack');
+  requireBrowserStackCredentials(options.env ?? {}, 'connect browserstack');
   const platform = requireCloudWebDriverPlatform(
     options.flags.platform,
     'connect browserstack requires --platform ios|android.',
@@ -193,12 +193,6 @@ function requireCloudWebDriverPlatform(
 function requireFlag(value: string | undefined, message: string): string {
   if (value) return value;
   throw new AppError('INVALID_ARGS', message);
-}
-
-function requireEnv(env: EnvMap | undefined, name: string, command: string): string {
-  const value = env?.[name];
-  if (value) return value;
-  throw new AppError('INVALID_ARGS', `${command} requires ${name} in the environment.`);
 }
 
 function requireAwsProfileValue(

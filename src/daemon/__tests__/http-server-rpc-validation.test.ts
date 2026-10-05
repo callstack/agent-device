@@ -399,6 +399,54 @@ test('only local command RPC keeps the client developer dir', async (t) => {
   }
 });
 
+test('only local lease allocation RPC keeps the provider credential fingerprint', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const root = mkdtempForTestSync('agent-device-http-provider-credentials-');
+  const fingerprintSeenBy = async (env: NodeJS.ProcessEnv): Promise<unknown> => {
+    const received: DaemonRequest[] = [];
+    const server = await createDaemonHttpServer({
+      env,
+      handleRequest: async (request): Promise<DaemonResponse> => {
+        received.push(request);
+        return { ok: true, data: {} };
+      },
+    });
+    try {
+      const response = await fetch(`http://127.0.0.1:${await listenOnLoopback(server)}/rpc`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'lease-allocate-fingerprint',
+          method: 'agent_device.lease.allocate',
+          params: {
+            tenantId: 'tenant-test',
+            runId: 'run-a',
+            backend: 'ios-instance',
+            provider: 'limrun',
+            providerCredentialFingerprint: 'v1:0123456789abcdef',
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+      assert.equal(received[0]?.command, 'lease_allocate');
+      return received[0]?.meta?.providerCredentialFingerprint;
+    } finally {
+      await closeLoopbackServer(server);
+    }
+  };
+
+  try {
+    assert.equal(await fingerprintSeenBy(localHttpEnvironment()), 'v1:0123456789abcdef');
+    assert.equal(
+      await fingerprintSeenBy(remoteHttpEnvironment(writeAllowingAuthHook(root))),
+      undefined,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function writeAllowingAuthHook(root: string): string {
   const hookPath = path.join(root, 'auth-hook.mjs');
   fs.writeFileSync(hookPath, "export default () => ({ tenantId: 'tenant-test' });\n");

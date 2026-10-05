@@ -27,6 +27,8 @@ import { LEASE_ALLOCATION_BUDGET_MS } from '@agent-device/command-registry/timeo
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
 import { listDownloadableArtifacts } from '../artifact-tracking.ts';
 import { providerSessionIdFromData } from '../provider-session-ownership.ts';
+import type { DaemonProviderCredentials } from '../../provider-credential-fingerprint.ts';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 
 type LeaseHandlerArgs = {
   req: DaemonRequest;
@@ -35,6 +37,7 @@ type LeaseHandlerArgs = {
   leaseRegistry: LeaseRegistry;
   providerRuntimeIds?: readonly string[];
   providerRuntimeRequiredIds?: readonly string[];
+  providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
 };
@@ -47,6 +50,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     leaseRegistry,
     providerRuntimeIds,
     providerRuntimeRequiredIds,
+    providerCredentials,
     leaseLifecycleProvider,
     cloudArtifactProvider,
   } = args;
@@ -69,6 +73,11 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         leaseScope.leaseProvider,
         providerRuntimeIds,
         providerRuntimeRequiredIds,
+      );
+      assertProviderCredentialsUnchanged(
+        leaseScope.leaseProvider,
+        req.meta?.providerCredentialFingerprint,
+        providerCredentials,
       );
       const activeLeaseIds = new Set(
         leaseRegistry.listActiveLeases().map((entry) => entry.leaseId),
@@ -282,6 +291,27 @@ function assertProviderRuntimeAvailable(
     {
       provider,
       hint: `Restart the daemon with ${provider} configured, then retry lease allocation.`,
+    },
+  );
+}
+
+function assertProviderCredentialsUnchanged(
+  provider: string | undefined,
+  requested: string | undefined,
+  daemon: DaemonProviderCredentials | undefined,
+): void {
+  if (!daemon || !provider || !requested) return;
+  const current = daemon.fingerprints[provider];
+  if (requested === current) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    current
+      ? `The running daemon holds different ${provider} credentials than this shell.`
+      : `The running daemon was started without the ${provider} credentials this shell holds.`,
+    {
+      reason: 'provider-credentials-changed',
+      provider,
+      hint: `Stop it with agent-device daemon stop --state-dir ${shellQuoteIfNeeded(daemon.stateDir)}, then rerun the command so a new daemon starts with this shell's environment.`,
     },
   );
 }

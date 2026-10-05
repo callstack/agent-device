@@ -17,6 +17,7 @@ import {
   type PlatformProviderResolvers,
 } from '../../../src/platform-runtime.ts';
 import { platformResourceCleanup } from '../../../src/platform-runtime-resource-cleanup.ts';
+import { readDaemonProviderCredentials } from '../../../src/provider-credential-fingerprint.ts';
 import type { AppleSimulatorScreenRecordingProcess } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
 import { trackDownloadableArtifact } from '../../../src/daemon/artifact-tracking.ts';
 import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
@@ -137,6 +138,7 @@ export async function createProviderScenarioHarness(
     vegaToolProvider,
     webProvider,
     appleSimulatorScreenRecordingTransport,
+    providerCredentials = readDaemonProviderCredentials({}, path.dirname(sessionDir)),
     ...routerDeps
   } = deps;
   const platformRuntimeOptions =
@@ -196,6 +198,7 @@ export async function createProviderScenarioHarness(
           ownedProcessRecords,
         },
       }),
+    providerCredentials,
     ...routerDeps,
   });
   const handleRequest: typeof requestHandler = async (request) => {

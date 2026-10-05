@@ -84,6 +84,7 @@ import { discloseRequestDispatch, refusedBeforeDispatch } from './request-dispat
 import { recordNestedRequests } from './request-dispatch-ledger.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
+import type { DaemonProviderCredentials } from '../provider-credential-fingerprint.ts';
 import { restrictDeviceInventoryToDaemonPolicy } from './daemon-policy.ts';
 import type { DaemonPolicy } from '../daemon-policy-file.ts';
 
@@ -106,6 +107,7 @@ export type RequestRouterDeps = {
   hostDiagnostics?: HostDiagnostics;
   providerRuntimeIds?: readonly string[];
   providerRuntimeRequiredIds?: readonly string[];
+  providerCredentials: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
   providerAppCatalog?: ProviderAppCatalog;
@@ -163,6 +165,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     hostDiagnostics,
     providerRuntimeIds,
     providerRuntimeRequiredIds,
+    providerCredentials,
     leaseLifecycleProvider,
     cloudArtifactProvider,
     providerAppCatalog,
@@ -328,6 +331,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       leaseLifecycleProvider,
       providerRuntimeIds,
       providerRuntimeRequiredIds,
+      providerCredentials,
       cloudArtifactProvider,
       providerAppCatalog,
       invoke: recordNestedRequests(handleRequest, dispatchLedger),

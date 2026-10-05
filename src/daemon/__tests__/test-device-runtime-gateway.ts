@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { vi } from 'vitest';
 import {
   type ApplicationLifecycleOperationFacts,
@@ -25,6 +26,7 @@ import { withClientReplayScriptSources } from '../../__tests__/test-utils/replay
 import type { DaemonInvokeFn } from '../daemon-request.ts';
 import { clearAndroidObservationFixture } from './android-observation-fixture.ts';
 import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
+import { readDaemonProviderCredentials } from '../../provider-credential-fingerprint.ts';
 
 const unavailable = Object.freeze({
   available: false as const,
@@ -220,15 +222,20 @@ export const unavailableBindExactDevice: BindExactDeviceRuntime = async (
   );
 
 export function createRequestHandler(
-  deps: Omit<RequestRouterDeps, 'deviceRuntimeGateway'> &
-    Partial<Pick<RequestRouterDeps, 'deviceRuntimeGateway'>>,
+  deps: Omit<RequestRouterDeps, 'deviceRuntimeGateway' | 'providerCredentials'> &
+    Partial<Pick<RequestRouterDeps, 'deviceRuntimeGateway' | 'providerCredentials'>>,
 ) {
-  const { deviceRuntimeGateway = unavailableDeviceRuntimeGateway, ...rest } = deps;
+  const {
+    deviceRuntimeGateway = unavailableDeviceRuntimeGateway,
+    providerCredentials = readDaemonProviderCredentials({}, path.dirname(deps.logPath)),
+    ...rest
+  } = deps;
   const handle = createProductionRequestHandler({
     androidObservation: clearAndroidObservationFixture,
     platformResourceCleanup,
     ...rest,
     deviceRuntimeGateway,
+    providerCredentials,
   });
   // #1802: stand in for the client that reads a replay script and sends its content, so router
   // cases keep naming a path while the daemon still sees only bundled sources.

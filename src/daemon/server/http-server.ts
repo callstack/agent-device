@@ -138,8 +138,14 @@ function restrictRemoteHttpRequest(
       'Invalid params: path install sources are disabled on the remote HTTP surface',
     );
   }
-  // A developer dir is a host path whose tools the daemon would run, so only local callers set it.
-  const { developerDir: _developerDir, ...meta } = request.meta ?? {};
+  // A developer dir is a host path whose tools the daemon would run, and a credential fingerprint
+  // would let a remote caller probe the daemon's credentials. A daemon with an auth hook serves
+  // remote callers and runs on its operator's credentials, so it treats every caller as remote.
+  const {
+    developerDir: _developerDir,
+    providerCredentialFingerprint: _providerCredentialFingerprint,
+    ...meta
+  } = request.meta ?? {};
   return {
     ...request,
     ...(request.meta ? { meta } : {}),
@@ -335,6 +341,10 @@ function toLeaseDaemonRequest(
         readStringParam(params, 'leaseProvider') ?? readStringParam(params, 'provider'),
       deviceKey: readStringParam(params, 'deviceKey'),
       clientId: readStringParam(params, 'clientId'),
+      providerCredentialFingerprint:
+        command === 'lease_allocate'
+          ? readStringParam(params, 'providerCredentialFingerprint')
+          : undefined,
     },
   };
 }

@@ -22,7 +22,12 @@ import {
   buildBrowserStackDeviceFeatureCapabilities,
   readBrowserStackDeviceFeatureFields,
 } from './browserstack-device-features.ts';
-import { CLOUD_WEBDRIVER_PROVIDERS, type CloudWebDriverKnownProviderName } from './providers.ts';
+import {
+  BROWSERSTACK_CREDENTIAL_VARIABLES,
+  CLOUD_WEBDRIVER_PROVIDERS,
+  readBrowserStackCredentials,
+  type CloudWebDriverKnownProviderName,
+} from './providers.ts';
 import { readAwsDeviceFarmRegionFromArn } from './connection-verification.ts';
 import {
   buildCloudWebDriverBaseCapabilities,
@@ -142,14 +147,8 @@ export function createCloudWebDriverProviderDefinitions(
           endpoint: env.BROWSERSTACK_WEBDRIVER_ENDPOINT ?? BROWSERSTACK_APP_AUTOMATE_ENDPOINT,
           capabilityOverrides: BROWSERSTACK_CAPABILITY_OVERRIDES,
           listArtifacts: async ({ provider, providerSessionId }) => {
-            const username = requireEnv(
+            const { username, accessKey } = requireBrowserStackCredentials(
               env,
-              'BROWSERSTACK_USERNAME',
-              'BrowserStack artifact lookup',
-            );
-            const accessKey = requireEnv(
-              env,
-              'BROWSERSTACK_ACCESS_KEY',
               'BrowserStack artifact lookup',
             );
             return await listBrowserStackCloudArtifacts(provider, providerSessionId, {
@@ -161,8 +160,7 @@ export function createCloudWebDriverProviderDefinitions(
           },
           prepareSession: async ({ req, lease, base }) => {
             const request = requireRequest(req, 'BrowserStack');
-            const username = requireEnv(env, 'BROWSERSTACK_USERNAME', 'BrowserStack');
-            const accessKey = requireEnv(env, 'BROWSERSTACK_ACCESS_KEY', 'BrowserStack');
+            const { username, accessKey } = requireBrowserStackCredentials(env, 'BrowserStack');
             const platform = requireRequestPlatform(request, 'BrowserStack');
             const deviceName = requireFlag(
               request,
@@ -220,10 +218,8 @@ export function createCloudWebDriverProviderDefinitions(
           },
         }),
       listArtifactsFromEnv: async (providerSessionId, env) => {
-        const username = requireEnv(env, 'BROWSERSTACK_USERNAME', 'BrowserStack artifact lookup');
-        const accessKey = requireEnv(
+        const { username, accessKey } = requireBrowserStackCredentials(
           env,
-          'BROWSERSTACK_ACCESS_KEY',
           'BrowserStack artifact lookup',
         );
         return await listBrowserStackCloudArtifacts(
@@ -343,16 +339,6 @@ function readFlag(req: LeaseLifecycleContext, key: string): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-function requireEnv(
-  env: DefaultCloudWebDriverProviderRuntimeEnv,
-  key: keyof DefaultCloudWebDriverProviderRuntimeEnv,
-  providerLabel: string,
-): string {
-  const value = env[key];
-  if (value) return value;
-  throw new AppError('INVALID_ARGS', `${providerLabel} requires ${key} in the environment.`);
-}
-
 function requireAwsValue(
   req: LeaseLifecycleContext,
   env: DefaultCloudWebDriverProviderRuntimeEnv,
@@ -378,4 +364,16 @@ function readAwsInteractionMode(
 
 function dasherize(value: string): string {
   return value.replaceAll(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
+}
+
+export function requireBrowserStackCredentials(
+  env: Readonly<Record<string, string | undefined>>,
+  consumer: string,
+): { username: string; accessKey: string } {
+  const { username, accessKey } = readBrowserStackCredentials(env);
+  if (username && accessKey) return { username, accessKey };
+  const missing = username
+    ? BROWSERSTACK_CREDENTIAL_VARIABLES.accessKey
+    : BROWSERSTACK_CREDENTIAL_VARIABLES.username;
+  throw new AppError('INVALID_ARGS', `${consumer} requires ${missing} in the environment.`);
 }

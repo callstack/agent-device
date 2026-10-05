@@ -14,6 +14,22 @@ export function isCloudWebDriverProviderName(
   return provider !== undefined && CLOUD_WEBDRIVER_KNOWN_PROVIDERS.has(provider);
 }
 
+/** The environment variables that hold BrowserStack credentials. */
+export const BROWSERSTACK_CREDENTIAL_VARIABLES = {
+  username: 'BROWSERSTACK_USERNAME',
+  accessKey: 'BROWSERSTACK_ACCESS_KEY',
+} as const;
+
+/** The BrowserStack credentials in the environment, exactly as every consumer and the fingerprint use them. */
+export function readBrowserStackCredentials(
+  env: Readonly<Record<string, string | undefined>>,
+): Readonly<{ username?: string; accessKey?: string }> {
+  return {
+    username: env[BROWSERSTACK_CREDENTIAL_VARIABLES.username] || undefined,
+    accessKey: env[BROWSERSTACK_CREDENTIAL_VARIABLES.accessKey] || undefined,
+  };
+}
+
 const BROWSERSTACK_APP_SCHEME = 'bs://';
 
 /**
