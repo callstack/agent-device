@@ -12,35 +12,41 @@ type CredentialValues = Readonly<Record<string, string | undefined>>;
 
 // Each provider's own reader, so the fingerprint sees exactly the values the provider uses. AWS
 // Device Farm is absent: it reads the AWS CLI credential chain, which no env hash identifies.
-const PROVIDER_CREDENTIAL_READERS: ReadonlyMap<string, (env: EnvMap) => CredentialValues> = new Map(
+const PROVIDER_CREDENTIAL_READERS: ReadonlyMap<
+  string,
+  (env: EnvMap, leaseBackend?: string) => CredentialValues
+> = new Map([
+  ['limrun' satisfies typeof LIMRUN_PROVIDER, readLimrunCredentialValues],
   [
-    ['limrun' satisfies typeof LIMRUN_PROVIDER, readLimrunCredentialValues],
-    [
-      CLOUD_WEBDRIVER_PROVIDERS.browserStack,
-      (env: EnvMap): CredentialValues => {
-        const { username, accessKey } = readBrowserStackCredentials(env);
-        return {
-          [BROWSERSTACK_CREDENTIAL_VARIABLES.username]: username,
-          [BROWSERSTACK_CREDENTIAL_VARIABLES.accessKey]: accessKey,
-        };
-      },
-    ],
+    CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+    (env: EnvMap): CredentialValues => {
+      const { username, accessKey } = readBrowserStackCredentials(env);
+      return {
+        [BROWSERSTACK_CREDENTIAL_VARIABLES.username]: username,
+        [BROWSERSTACK_CREDENTIAL_VARIABLES.accessKey]: accessKey,
+      };
+    },
   ],
-);
+]);
 
 /**
- * A versioned, non-reversible digest of the credentials a provider reads from `env`, or undefined
- * when `env` holds none of them or the provider's credentials do not come from the environment.
+ * A versioned, non-reversible digest of the credentials a lease on `leaseBackend` reads from `env`,
+ * or undefined when `env` holds none of them or the provider's credentials do not come from the
+ * environment.
  */
-export function providerCredentialFingerprint(provider: string, env: EnvMap): string | undefined {
+export function providerCredentialFingerprint(
+  provider: string,
+  env: EnvMap,
+  leaseBackend?: string,
+): string | undefined {
   const read = PROVIDER_CREDENTIAL_READERS.get(provider);
-  return read ? digest(read(env)) : undefined;
+  return read ? digest(read(env, leaseBackend)) : undefined;
 }
 
 /** The provider credentials a daemon started with, and the state dir that names that daemon. */
 export type DaemonProviderCredentials = Readonly<{
-  /** Undefined for a provider whose credentials the daemon's environment does not hold. */
-  fingerprints: Readonly<Record<string, string | undefined>>;
+  /** Undefined when the daemon's environment holds none of the credentials such a lease reads. */
+  fingerprint(provider: string, leaseBackend?: string): string | undefined;
   stateDir: string;
 }>;
 
@@ -48,13 +54,12 @@ export function readDaemonProviderCredentials(
   env: EnvMap,
   stateDir: string,
 ): DaemonProviderCredentials {
-  const fingerprints = Object.fromEntries(
-    [...PROVIDER_CREDENTIAL_READERS.keys()].map((provider) => [
-      provider,
-      providerCredentialFingerprint(provider, env),
-    ]),
-  );
-  return { fingerprints, stateDir };
+  const startupEnv = { ...env };
+  return {
+    fingerprint: (provider, leaseBackend) =>
+      providerCredentialFingerprint(provider, startupEnv, leaseBackend),
+    stateDir,
+  };
 }
 
 function digest(values: CredentialValues): string | undefined {

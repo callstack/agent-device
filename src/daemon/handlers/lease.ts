@@ -75,7 +75,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         providerRuntimeRequiredIds,
       );
       assertProviderCredentialsUnchanged(
-        leaseScope.leaseProvider,
+        leaseScope,
         req.meta?.providerCredentialFingerprint,
         providerCredentials,
       );
@@ -296,12 +296,15 @@ function assertProviderRuntimeAvailable(
 }
 
 function assertProviderCredentialsUnchanged(
-  provider: string | undefined,
+  {
+    leaseProvider: provider,
+    leaseBackend,
+  }: Pick<ReturnType<typeof resolveLeaseScope>, 'leaseProvider' | 'leaseBackend'>,
   requested: string | undefined,
   daemon: DaemonProviderCredentials | undefined,
 ): void {
   if (!daemon || !provider || !requested) return;
-  const current = daemon.fingerprints[provider];
+  const current = daemon.fingerprint(provider, leaseBackend);
   if (requested === current) return;
   throw new AppError(
     'INVALID_ARGS',

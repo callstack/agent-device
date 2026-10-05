@@ -10,6 +10,7 @@ import { persistAndResolveGeneratedProfile } from './generated-config.ts';
 import { resolveRequestedLeaseBackend } from '../commands/connection-runtime.ts';
 import {
   limrunInstanceVariables,
+  limrunPlatformForLeaseBackend,
   readLimrunCredentials,
 } from '../../provider-limrun-credentials.ts';
 
@@ -23,7 +24,7 @@ export function resolveLimrunConnectProfile(options: {
   const env = options.env ?? process.env;
   const profile = buildLimrunRemoteProfile({ flags: options.flags });
   const credentials = readLimrunCredentials(env);
-  const platform = profile.leaseBackend === 'ios-instance' ? 'ios' : 'android';
+  const platform = limrunPlatformForLeaseBackend(profile.leaseBackend) ?? 'android';
   if (!credentials?.apiKey && !credentials?.instances?.[platform]) {
     throw new AppError(
       'INVALID_ARGS',

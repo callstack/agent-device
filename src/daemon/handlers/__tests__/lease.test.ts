@@ -344,6 +344,7 @@ const BROWSERSTACK_ENV = { BROWSERSTACK_USERNAME: 'user', BROWSERSTACK_ACCESS_KE
 function providerAllocateRequest(
   leaseProvider: string,
   providerCredentialFingerprint: string | undefined,
+  leaseBackend: 'ios-instance' | 'android-instance' = 'ios-instance',
 ): DaemonRequest {
   const request = allocateRequest();
   return {
@@ -351,7 +352,7 @@ function providerAllocateRequest(
     meta: {
       ...request.meta,
       leaseProvider,
-      leaseBackend: 'ios-instance',
+      leaseBackend,
       providerCredentialFingerprint,
     },
   };
@@ -397,6 +398,31 @@ test('a daemon started with only LIMRUN_API_KEY refuses a shell with instance va
   assert.match(
     String(outcome.error?.details?.hint),
     /agent-device daemon stop --state-dir '\/tmp\/agent device state'/,
+  );
+});
+
+test('a Limrun lease compares only the leased platform instance variables', async () => {
+  const daemonEnv = {
+    ...LIMRUN_ATTACH_ENV,
+    LIM_ANDROID_INSTANCE_URL: 'https://region.limrun.example/v1/android_x/api',
+    LIM_ANDROID_INSTANCE_TOKEN: 'android-token',
+    LIM_ANDROID_INSTANCE_ADB_URL: 'wss://region.limrun.example/v1/android_x/adb',
+  };
+  const shellEnv = { ...daemonEnv, LIM_ANDROID_INSTANCE_TOKEN: 'android-token-2' };
+  const allocate = async (leaseBackend: 'ios-instance' | 'android-instance') =>
+    await allocateWithDaemonEnv(
+      providerAllocateRequest(
+        'limrun',
+        providerCredentialFingerprint('limrun', shellEnv, leaseBackend),
+        leaseBackend,
+      ),
+      daemonEnv,
+    );
+
+  assert.equal((await allocate('ios-instance')).error, undefined);
+  assert.equal(
+    (await allocate('android-instance')).error?.details?.reason,
+    'provider-credentials-changed',
   );
 });
 
