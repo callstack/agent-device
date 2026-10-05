@@ -193,18 +193,41 @@ describe('settings CLI permission vocabulary', () => {
     });
   });
 
-  // The flag bag carries a configured default app the parser strips for settings; the reader still
-  // gets exercised with one present, so the clear-app-state branch cannot regress into letting
-  // `--app` redirect this destructive mutation away from the positional id.
+  // The parser strips a configured default before the reader runs, so a `--app` the reader sees was
+  // typed on this invocation. A destructive clear must land on the app the caller named, never fall
+  // through to the session app or pick one of two named apps.
   test('keeps a clear-app-state app positional and out of the request input', () => {
-    const input = settingsCliReader(['clear-app-state', 'com.example.app'], {
-      targetApp: 'com.example.other',
-    } as CliFlags);
+    const input = settingsCliReader(['clear-app-state', 'com.example.app'], flags());
     const writer = settingsDaemonWriter(input);
     expect(writer.positionals).toEqual(['clear-app-state', 'com.example.app']);
     expect(writer.input).toBeUndefined();
-    // The app the input carries is the positional, never the flag bag's default.
     expect(input).toMatchObject({ app: 'com.example.app' });
+  });
+
+  test.each([[['clear-app-state']], [['clear-app-state', 'clear']]])(
+    'aims %j at the --app it names when no positional does',
+    (positionals) => {
+      const input = settingsCliReader(positionals, { targetApp: 'com.example.app' } as CliFlags);
+      expect(settingsDaemonWriter(input).positionals).toEqual([
+        'clear-app-state',
+        'com.example.app',
+      ]);
+    },
+  );
+
+  test('accepts the same app named positionally and with --app', () => {
+    const input = settingsCliReader(['clear-app-state', 'clear', 'com.example.app'], {
+      targetApp: 'com.example.app',
+    } as CliFlags);
+    expect(settingsDaemonWriter(input).positionals).toEqual(['clear-app-state', 'com.example.app']);
+  });
+
+  test('refuses a clear-app-state that names two different apps', () => {
+    expect(() =>
+      settingsCliReader(['clear-app-state', 'com.example.app'], {
+        targetApp: 'com.example.other',
+      } as CliFlags),
+    ).toThrow(/names two apps: com.example.app and com.example.other/);
   });
 
   test('omits the request input when no app is named', () => {
