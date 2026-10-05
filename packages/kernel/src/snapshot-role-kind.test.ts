@@ -14,6 +14,18 @@ test('roleSpellingsOfNode leads with the kind the capture published', () => {
   assert.deepEqual(roleSpellingsOfNode(node), ['text', 'statictext']);
 });
 
+test('roleSpellingsOfNode reads a published kind even when it diverges from the type', () => {
+  // Distinguishes kind-reading from type-only matching: a node whose `kind`
+  // is NOT what formatRole(type) would derive must lead with the published
+  // kind, with the type-derived spellings riding only as the window. A
+  // regression to deriving the canonical spelling from `type` fails here even
+  // though the alias rides along in both directions.
+  assert.deepEqual(roleSpellingsOfNode({ type: 'XCUIElementTypeButton', kind: 'text' }), [
+    'text',
+    'button',
+  ]);
+});
+
 test('roleSpellingsOfNode reuses formatRole for a node that predates kind publication', () => {
   // Fixtures that never route through `attachRefs` carry no `kind`; the reader
   // computes it with the SAME function that publishes it, not a second

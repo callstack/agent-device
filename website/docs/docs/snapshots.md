@@ -106,8 +106,9 @@ Every node in `snapshot --json` output carries `kind`, next to `type` when the p
 On iOS, `role` (when present) is the native AX class (`UIButton`) — a different fact carried only
 on iOS nodes; `kind` is the cross-platform one, present on every node on every platform.
 
-`role=` selectors (and `find role=...`) match `kind`'s vocabulary: `role=text` and `role=text-field`
-match exactly what the snapshot shows in brackets for that node
+`role=` selectors (and `find role=...`) match `kind`'s vocabulary: a node whose `kind` is `text`
+or `text-field` always matches `role=text` / `role=text-field` — the bracketed word a snapshot
+shows for that node
 ([#3021](https://github.com/callstack/agent-device/issues/3021)). Spellings from before that
 reconciliation — the raw leaf classes `role=statictext`, `role=edittext`, `role=textview`,
 `role=searchfield`, and the rest of the leaf vocabulary — stay accepted during a deprecation window,
