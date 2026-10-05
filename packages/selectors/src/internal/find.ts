@@ -1,5 +1,6 @@
-import { roleSpellingsOfNode, type SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
+import { roleSpellingsOfNode } from './node.ts';
 import { tryParseSelectorChain } from './parse.ts';
 
 export const FIND_LOCATORS = ['any', 'text', 'label', 'value', 'role', 'id'] as const;
@@ -122,13 +123,13 @@ function matchText(value: string | undefined, query: string): number {
 }
 
 function matchRole(node: SnapshotNode, query: string): number {
-  // The kernel's one role-spelling reader (#3021): the node's canonical `kind`
-  // first, then its windowed legacy leaf. Exact scoring is against the whole
-  // spellings; substring scoring stays on the leaf segment because the retired
-  // locator substring-matched a last-`.`-segment leaf, and an unrecognized
-  // dotted class keeps its package path in its `kind` — substringing the full
-  // kind would let `find role=fenix` score `org.mozilla.fenix.ReaderView`
-  // where the released query refused it.
+  // The package's one role-spelling reader (#3021, `node.ts`): the node's
+  // canonical `kind` first, then its windowed legacy spelling. Exact scoring
+  // is against the whole spellings; substring scoring stays on the leaf
+  // segment because the retired locator substring-matched a last-`.`-segment
+  // leaf, and an unrecognized dotted class keeps its package path in its
+  // `kind` — substringing the full kind would let `find role=fenix` score
+  // `org.mozilla.fenix.ReaderView` where the released query refused it.
   const spellings = roleSpellingsOfNode(node);
   // The query arrives `normalizeText`-ed, so the exact compare normalizes the
   // spellings the same way the selector term's `textEquals` does — that is the

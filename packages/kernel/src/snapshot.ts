@@ -450,117 +450,26 @@ function lookupRoleLabel(normalized: string): string | undefined {
     : undefined;
 }
 
-function isAndroidRoleClass(type: string): boolean {
-  return (
-    type.includes('.') &&
-    (type.startsWith('android.') || type.startsWith('androidx.') || type.startsWith('com.'))
-  );
-}
-
-/**
- * The leaf normalization {@link formatRole} runs before it consults
- * {@link ROLE_LABELS}: strip `XCUIElementType`, lowercase, and reduce Android
- * class packages to their leaf. Factored out for readability; the `role=`
- * deprecation window below deliberately does NOT share this step — it replays
- * the retired normalizer's spelling, not formatRole's leaf.
- */
-function normalizeRoleLeaf(type: string): string {
-  let normalized = type.replaceAll(/XCUIElementType/gi, '').toLowerCase();
-  if (!normalized.includes('.')) {
-    return normalized;
-  }
-  const isAndroidClass = isAndroidRoleClass(type);
-  normalized = normalized
-    .replace(/^android\.widget\./, '')
-    .replace(/^android\.view\./, '')
-    .replace(/^android\.webkit\./, '')
-    .replace(/^androidx\./, '')
-    .replace(/^com\.google\.android\./, '')
-    .replace(/^com\.android\./, '');
-  if (isAndroidClass && normalized.includes('.')) {
-    normalized = normalized.slice(normalized.lastIndexOf('.') + 1);
-  }
-  return normalized;
-}
-
-/**
- * The `role=` deprecation window (#3021): the legacy spellings this node still
- * accepts beside its canonical {@link roleKindOfNode} kind. One entry: the
- * node's retired role spelling — what `role=` compared before #3021 — computed
- * by {@link legacyRoleSpellingOfType} below and dropped when it already equals
- * the canonical kind (the vocabulary-identity case, which needs no window).
- *
- * The window is deliberately NODE-scoped, not a kind→leaves alias table. One
- * coarse kind renames many distinct leaves (`group` covers `framelayout`,
- * `linearlayout`, `viewgroup`, …); a kind-keyed table would make
- * `role=linearlayout` match a `FrameLayout` — silently WIDENING every released
- * script that names a leaf, which is a new breaking change measured against
- * the old matcher rather than a compatibility window. So the leaf stays
- * matchable only on the nodes that actually carried it: the window is exactly
- * the old spelling of THIS node, never a sibling's.
- */
-function legacyRoleAliasesForNode(
-  node: Pick<RawSnapshotNode, 'type'> & { kind?: string },
-): readonly string[] {
-  const alias = legacyRoleSpellingOfType(node.type ?? '');
-  return alias && alias !== roleKindOfNode(node) ? [alias] : [];
-}
-
-/**
- * The ONE owner of the pre-#3021 `role=` spelling: the retired normalizer's
- * exact step — strip `XCUIElementType` and a leading `AX`, lowercase, take the
- * last `.`/`/`-separated segment — kept here so the deprecation window can
- * replay the old meaning of `role=` for the nodes that carry it while the
- * canonical vocabulary stays `formatRole` alone. The retired matcher consumers
- * (the selector term and `find`'s deleted `normalizeRole`) are gone; this
- * window is their spelling's only remaining reader, and when the window closes
- * this function leaves with it — and only once the chain builder in
- * `@agent-device/selectors` stops emitting leaf spellings into recorded
- * chains: `buildSelectorChainForNode` still writes the retired spelling into
- * every recorded `role=` chain, so closing the window first would break
- * replay of freshly recorded scripts on the next release.
- */
-function legacyRoleSpellingOfType(type: string): string {
-  let normalized = type
-    .trim()
-    .replaceAll(/XCUIElementType/gi, '')
-    .replace(/^AX/, '')
-    .toLowerCase();
-  const lastSeparator = Math.max(normalized.lastIndexOf('.'), normalized.lastIndexOf('/'));
-  if (lastSeparator !== -1) {
-    normalized = normalized.slice(lastSeparator + 1);
-  }
-  return normalized;
-}
-
-/**
- * Every `role=` spelling this node accepts, in ONE place (#3021): the
- * canonical kind first, then its windowed legacy aliases. The `role=` selector
- * term and the `find role=` locator both read this and nothing else, which is
- * what keeps the two — and `kind` itself — unable to disagree.
- */
-export function roleSpellingsOfNode(
-  node: Pick<RawSnapshotNode, 'type'> & { kind?: string },
-): readonly string[] {
-  return [roleKindOfNode(node), ...legacyRoleAliasesForNode(node)];
-}
-
-/**
- * The canonical role kind of a snapshot node — the ONE node-role reader for
- * `role=` selector matching (#3021). It prefers the `kind` the capture
- * published through {@link attachRefs} and reuses this module's own
- * {@link formatRole} when a node predates or bypasses that construction path;
- * `kind` is by definition `formatRole(type)`, so there is no second
- * normalization to drift from.
- */
-function roleKindOfNode(node: Pick<RawSnapshotNode, 'type'> & { kind?: string }): string {
-  return node.kind ?? formatRole(node.type ?? 'Element');
-}
-
 export function formatRole(type: string): string {
-  const normalized = normalizeRoleLeaf(type);
+  const raw = type;
+  let normalized = type.replaceAll(/XCUIElementType/gi, '').toLowerCase();
+  const isAndroidClass =
+    raw.includes('.') &&
+    (raw.startsWith('android.') || raw.startsWith('androidx.') || raw.startsWith('com.'));
+  if (normalized.includes('.')) {
+    normalized = normalized
+      .replace(/^android\.widget\./, '')
+      .replace(/^android\.view\./, '')
+      .replace(/^android\.webkit\./, '')
+      .replace(/^androidx\./, '')
+      .replace(/^com\.google\.android\./, '')
+      .replace(/^com\.android\./, '');
+    if (isAndroidClass && normalized.includes('.')) {
+      normalized = normalized.slice(normalized.lastIndexOf('.') + 1);
+    }
+  }
   if (normalized === 'textview') {
-    return isAndroidRoleClass(type) ? 'text' : 'text-view';
+    return isAndroidClass ? 'text' : 'text-view';
   }
   return lookupRoleLabel(normalized) || normalized || 'element';
 }

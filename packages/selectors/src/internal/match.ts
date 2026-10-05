@@ -1,6 +1,6 @@
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
-import { roleSpellingsOfNode, type SnapshotNode } from '@agent-device/kernel/snapshot';
-import { isNodeEditable, isNodeVisible } from './node.ts';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import { isNodeEditable, isNodeVisible, roleSpellingsOfNode } from './node.ts';
 import { extractNodeText } from '@agent-device/contracts/snapshot';
 import { normalizeText } from './find.ts';
 import type { Selector, SelectorTerm } from './parse.ts';
@@ -58,11 +58,11 @@ function textEquals(value: string | undefined, query: string): boolean {
 
 /**
  * `role=` matches the canonical `kind` vocabulary (#3021): a term value equals
- * the node's role kind, or one of the legacy leaf spellings still windowed for
- * that node. The kind and the window both come from the kernel's role
- * vocabulary — the same authority `attachRefs` uses to publish `kind` — so the
- * selector, the `find role=` locator, and snapshot output cannot disagree
- * about a node's role again.
+ * the node's role kind, or one of the legacy spellings still windowed for that
+ * node. Both come from {@link roleSpellingsOfNode} — the same `kind`
+ * `attachRefs` publishes and the same `normalizeType` that RECORDS selector
+ * chains — so the selector, the `find role=` locator, snapshot output, and
+ * recorded scripts cannot disagree about a node's role.
  */
 function matchesRoleKind(node: SnapshotNode, query: string): boolean {
   const normalizedQuery = normalizeText(query);
