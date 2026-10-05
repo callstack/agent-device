@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
+import {
+  withTestDeviceInventory,
+  withTestDeviceInventoryProvider as withDeviceInventoryProvider,
+} from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { attachAdbFailureHint } from '@agent-device/platform-android/mechanics';
@@ -57,4 +60,37 @@ test('doctor android inventory timeout surfaces the wedged-adb-server hint', asy
   assert.match(androidCheck?.summary ?? '', /Android device inventory could not be read/);
   assert.match(androidCheck?.summary ?? '', /timed out after 10000ms/);
   assert.match(androidCheck?.hint ?? '', /adb kill-server && adb start-server/);
+});
+
+test('doctor inventory names as host devices only the platforms this host discovered', async () => {
+  const androidEmulator: DeviceInfo = {
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator',
+    booted: true,
+  };
+  const req = { token: 't', session: 'default', command: 'doctor' } as DaemonRequest;
+
+  const inventory = await withTestDeviceInventory(
+    {
+      provider: {
+        discover: async (request) =>
+          request.platform === 'apple'
+            ? { kind: 'inventory', devices: [BOOTED_IOS_SIMULATOR] }
+            : { kind: 'declined' },
+      },
+      local: async () => [androidEmulator],
+    },
+    async () => await appendDeviceInventoryCheck([], req, undefined),
+  );
+
+  assert.deepEqual(
+    inventory?.devices.map((device) => device.id),
+    [androidEmulator.id, BOOTED_IOS_SIMULATOR.id],
+  );
+  assert.deepEqual(
+    inventory?.hostDevices.map((device) => device.id),
+    [androidEmulator.id],
+  );
 });
