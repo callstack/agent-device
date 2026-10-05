@@ -52,11 +52,12 @@ test("Android WebDriver facts read a text field's content as its value, not its 
   );
 });
 
-test('Android WebDriver facts read a hinted field as empty and a masked field as a password', () => {
-  const [hinted, secure] = parseWebDriverSourceFacts(
+test('Android WebDriver facts read a hinted field as empty, a masked field as a password, and a disabled field as not editable', () => {
+  const [hinted, secure, disabled] = parseWebDriverSourceFacts(
     '<hierarchy>' +
       '<android.widget.EditText text="Your name" hint="Your name" bounds="[0,40][100,80]" />' +
       '<android.widget.EditText text="••••••" password="true" bounds="[0,80][100,120]" />' +
+      '<android.widget.EditText text="locked" enabled="false" bounds="[0,120][100,160]" />' +
       '</hierarchy>',
     'android',
   ).nodes;
@@ -66,6 +67,7 @@ test('Android WebDriver facts read a hinted field as empty and a masked field as
     [undefined, undefined, 'Your name', true],
   );
   assert.deepEqual([secure!.password, secure!.editable], [true, true]);
+  assert.deepEqual([disabled!.value, disabled!.editable], ['locked', false]);
 });
 
 // UiAutomator2 writes `checkable="false" checked="false"` on every node, so `checked` is a fact

@@ -174,7 +174,7 @@ function sourceNodeFromAttributes(
         ? ['content-desc', 'label', 'text', 'name']
         : ['content-desc', 'label', 'name'],
     ),
-    value: field?.value ?? nonEmptyWebDriverAttribute(attrs.value),
+    value: field === undefined ? nonEmptyWebDriverAttribute(attrs.value) : field.value,
     identifier: firstWebDriverAttribute(attrs, ['resource-id', 'id', 'accessibility-id', 'name']),
     rect,
     ...sourceStateFacts(attrs, rect, platform),
@@ -216,7 +216,12 @@ function textFieldFacts(
     : iosTextFieldFacts(type, attrs);
 }
 
-/** A field showing its hint reports the hint as its text, so that text is the placeholder, not a value. */
+/**
+ * A field showing its hint reports the hint as its text, so that text is the placeholder, not a
+ * value. The page source offers no other signal, so a typed value equal to the hint reads as the
+ * hint showing; the native helper's `hint-showing` fact has no counterpart here. A disabled field
+ * is not editable, whatever its class.
+ */
 function androidTextFieldFacts(
   type: string,
   attrs: Record<string, string>,
@@ -229,7 +234,7 @@ function androidTextFieldFacts(
   return {
     value: hintShowing ? undefined : text,
     facts: {
-      editable: true,
+      editable: parseWebDriverBoolean(attrs.enabled, true) === true,
       ...optionalFact('password', password),
       ...(placeholder === undefined ? {} : { placeholder, hintShowing }),
     },
@@ -244,7 +249,7 @@ function iosTextFieldFacts(
   return {
     value: nonEmptyWebDriverAttribute(attrs.value),
     facts: {
-      editable: true,
+      editable: parseWebDriverBoolean(attrs.enabled, true) === true,
       ...optionalFact('password', type === 'XCUIElementTypeSecureTextField' || undefined),
     },
   };
