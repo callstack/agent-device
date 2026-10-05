@@ -52,8 +52,10 @@ were accepted by Calculator and by Electron apps in the background. A fallback t
 observed to work would turn "nothing happened" into success, so pointer actions have no event
 fallback.
 
-**Target resolution.** The helper hit-tests inside the session app (other apps' windows above it do
-not answer) and walks at most four ancestors for a text input or a pressable control role.
+**Target resolution.** The helper acts only on a point inside one of the session app's own on-screen
+windows (its menus and sheets included) and never on its menu bar, whose Apple menu acts for the whole Mac
+(Sleep, Lock Screen, Recent Items); other points are refused with `no-accessible-target`. It
+hit-tests inside the session app (other apps' windows above it do not answer) and walks at most four ancestors for a text input or a pressable control role.
 Chromium answers a hit test with wrapper groups that all claim `AXPress`, so when the chain names
 no control the helper picks the smallest such element whose frame contains the point, searching
 only the window the hit landed in (the app's front on-screen window when the hit names none). A

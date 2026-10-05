@@ -95,10 +95,13 @@ func pressInBackground(
     )
   }
   let point = CGPoint(x: request.x, y: request.y)
+  try requireAppWindowPoint(point, app: app)
   cursor?.move(to: point)
-  guard let target = resolvePressTarget(app: app, point: point),
-    let mechanism = perform(target)
-  else {
+  let target = resolvePressTarget(app: app, point: point)
+  if let target, isInMenuBar(target.element) {
+    throw refusal(.noAccessibleTarget, "the point is on the app's menu bar", app: app)
+  }
+  guard let target, let mechanism = perform(target) else {
     throw refusal(.noAccessibleTarget, "no pressable accessibility element at the point", app: app)
   }
   var clicks = 1
@@ -165,11 +168,15 @@ func fillInBackground(
   app: NSRunningApplication,
   cursor: GhostCursor?
 ) throws -> BackgroundTextResponse {
+  try requireAppWindowPoint(point, app: app)
   cursor?.move(to: point)
   let hit = elementAtPoint(in: app, point: point)
   let chain = hit.map(pressSearchChain) ?? []
   let fallback = actionWindow(app: app, hit: hit).flatMap { window in
     smallestElement(in: window, containing: point, where: isTextInput)
+  }
+  if let input = chain.first(where: isTextInput) ?? fallback, isInMenuBar(input) {
+    throw refusal(.noAccessibleTarget, "the point is on the app's menu bar", app: app)
   }
   guard let input = chain.first(where: isTextInput) ?? fallback,
     isAttributeSettable(input, attribute: kAXValueAttribute as String)
@@ -292,6 +299,44 @@ private func perform(_ target: PressTarget) -> BackgroundDeliveryMechanism? {
   case .press(let element):
     return AXUIElementPerformAction(element, kAXPressAction as CFString) == .success ? .axPress : nil
   }
+}
+
+/// The app's accessibility tree also holds its menu bar, whose Apple menu acts for the whole Mac
+/// (Sleep, Lock Screen, Recent Items). A point action therefore lands only inside one of the app's
+/// own on-screen windows, its menus and sheets included, and never on a menu bar element: the app
+/// owns its menu bar's window too, so the window check alone does not exclude it.
+private func requireAppWindowPoint(_ point: CGPoint, app: NSRunningApplication) throws {
+  guard
+    let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+      as? [[String: Any]]
+  else {
+    throw refusal(.noAccessibleTarget, "the app's on-screen windows could not be read", app: app)
+  }
+  let inAppWindow = info.contains { entry in
+    guard (entry[kCGWindowOwnerPID as String] as? Int32) == app.processIdentifier,
+      let boundsDict = entry[kCGWindowBounds as String] as? NSDictionary,
+      let bounds = CGRect(dictionaryRepresentation: boundsDict as CFDictionary)
+    else {
+      return false
+    }
+    return bounds.contains(point)
+  }
+  guard inAppWindow else {
+    throw refusal(.noAccessibleTarget, "the point is outside the app's on-screen windows", app: app)
+  }
+}
+
+private func isInMenuBar(_ element: AXUIElement) -> Bool {
+  var current: AXUIElement? = element
+  var depth = 0
+  while let node = current, depth < 32 {
+    let nodeRole = role(of: node)
+    if nodeRole == "AXMenuBar" || nodeRole == "AXMenuBarItem" { return true }
+    if nodeRole == "AXApplication" { return false }
+    current = elementAttribute(node, attribute: kAXParentAttribute as String)
+    depth += 1
+  }
+  return false
 }
 
 /// The app's own hit test, scoped to the app so windows of other apps above it do not answer.
