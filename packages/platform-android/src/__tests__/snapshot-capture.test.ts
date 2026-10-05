@@ -174,3 +174,23 @@ test('an Android capture with geometry-free nodes still publishes the display it
     'the tree really carries no geometry',
   );
 });
+
+test('the Android keyboard band survives the publication adapter into the daemon capture', async () => {
+  const capture = await snapshotAndroid(device, {
+    helperAdb: helperAdbServing(
+      { width: 1080, height: 2400 },
+      [
+        '<hierarchy>',
+        '<node window-index="0" window-type="2" window-bounds="[0,1500][1080,2400]" class="android.widget.FrameLayout" package="com.google.android.inputmethod.latin" bounds="[0,1500][1080,2400]" />',
+        '<node window-index="1" window-type="1" window-active="true" window-bounds="[0,0][1080,2400]" class="android.widget.FrameLayout" package="com.example" bounds="[0,0][1080,2400]"><node text="Name" package="com.example" bounds="[0,0][1080,200]" /><node text="Email" package="com.example" bounds="[0,200][1080,400]" /></node>',
+        '</hierarchy>',
+      ].join(''),
+    ),
+    helperArtifact,
+  });
+
+  assert.deepEqual(androidSnapshotPublicationInput(capture).keyboard, {
+    kind: 'visible',
+    frame: { x: 0, y: 1500, width: 1080, height: 900 },
+  });
+});

@@ -12,6 +12,7 @@ import {
   attachRefs,
   type HiddenContentHint,
   type RawSnapshotNode,
+  type SnapshotKeyboardBandFact,
   type SnapshotOptions,
   type SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
@@ -77,6 +78,7 @@ import {
   type AndroidSnapshotPresentationOptions,
 } from './snapshot-presentation.ts';
 import { readAndroidSiblingOrder } from './ui-hierarchy-node.ts';
+import { androidSnapshotKeyboardFromTree } from './snapshot-keyboard.ts';
 import {
   androidSnapshotViewportFromHelperMetadata,
   createAndroidSnapshotCapture,
@@ -133,6 +135,7 @@ export async function snapshotAndroid(
   const xml = capture.xml;
   const tree = parseUiHierarchyTree(xml);
   const androidSnapshot = withOcclusionScanDisclosure(capture.metadata, tree);
+  const keyboard = androidSnapshotKeyboardFromTree(tree, capture.metadata);
   const presentationOptions: AndroidUiHierarchySnapshotOptions = {
     ...options,
     androidPresentation: {
@@ -160,6 +163,7 @@ export async function snapshotAndroid(
       ...androidSnapshotTruncationFields(truncated),
       androidSnapshot,
       quality: { state: 'healthy', backend: 'android-helper' } as const,
+      keyboard,
       ...(viewport ? { viewport } : {}),
     };
     return createAndroidSnapshotCapture(result, {
@@ -171,6 +175,7 @@ export async function snapshotAndroid(
     return attachAndroidPresentationFailureEvidence({
       failure: error,
       androidSnapshot,
+      keyboard,
       ...(viewport ? { viewport } : {}),
     });
   }
@@ -179,6 +184,7 @@ export async function snapshotAndroid(
 function attachAndroidPresentationFailureEvidence(params: {
   failure: AndroidSnapshotPresentationFailure;
   androidSnapshot: AndroidSnapshotBackendMetadata;
+  keyboard: SnapshotKeyboardBandFact;
   viewport?: SnapshotViewportSize;
 }): AndroidSnapshotCapture {
   return createAndroidSnapshotCapture(
@@ -202,6 +208,7 @@ function attachAndroidPresentationFailureEvidence(params: {
         reason: params.failure.message,
         reasonCode: params.failure.qualityReasonCode,
       },
+      keyboard: params.keyboard,
       ...(params.viewport ? { viewport: params.viewport } : {}),
     },
     {

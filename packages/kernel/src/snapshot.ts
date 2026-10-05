@@ -316,7 +316,8 @@ export type HiddenContentHint = {
  * A keyboard is its own system surface, so it never reaches the tree as a covering sibling of app
  * content, and a consumer that wants to refuse a tap behind it has to learn where it is from
  * somewhere (#2589). A producer that can measure the band directly — the Apple runner, from its
- * `app.keyboards` query — publishes one fact per capture and says nothing else about it. A consumer therefore gets three
+ * `app.keyboards` query, and the Android helper, from the input method window in the window list it
+ * captures — publishes one fact per capture and says nothing else about it. A consumer therefore gets three
  * answers and no fourth: a band in the same space as every node rect, a proven absence, or a
  * producer that could not look.
  *
@@ -669,9 +670,9 @@ export type SnapshotState = {
    */
   iosSystemSurfaceBundleId?: string;
   /**
-   * iOS: the keyboard band this capture's producer measured, when it measured one. The tap-path
-   * keyboard guard prefers this over the band it would otherwise derive from `nodes`, because a
-   * producer that can query the keyboard directly answers in the app's own orientation space and
+   * iOS and Android: the keyboard band this capture's producer measured, when it measured one. The
+   * tap-path keyboard guard prefers this over the band it would otherwise derive from `nodes`,
+   * because a producer that can query the keyboard directly answers in the tree's own space and
    * needs no geometry to be plausible (#2660). Absent means the guard measures the tree as before.
    */
   keyboard?: SnapshotKeyboardBandFact;
