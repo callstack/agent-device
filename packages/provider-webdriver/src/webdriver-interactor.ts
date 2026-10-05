@@ -382,7 +382,7 @@ class WebDriverInteractor implements Interactor {
     const visible = await this.keyboardVisibility();
     const echo = {
       ...(wasVisible === undefined ? {} : { wasVisible }),
-      ...(visible === undefined ? {} : { visible, dismissed: !visible }),
+      ...(visible === undefined ? {} : { visible, dismissed: wasVisible === true && !visible }),
     };
     return this.backend === 'android'
       ? { kind: 'ime-probe', ...echo }

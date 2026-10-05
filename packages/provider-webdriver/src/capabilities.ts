@@ -87,7 +87,7 @@ const BASE_WEBDRIVER_CAPABILITIES: CloudWebDriverCapabilityMap = {
   type: supported,
   keyboard: {
     support: 'partial',
-    note: 'Enter presses Android keycode 66 through `mobile: pressKey` and types a newline into the focused iOS field; dismiss and status use the Appium keyboard routes.',
+    note: 'Enter presses Android keycode 66 through `mobile: pressKey` and types a newline into the focused iOS field; dismiss uses the Appium hide-keyboard route, and Android status uses the Appium keyboard probe.',
   },
   back: supported,
   home: {

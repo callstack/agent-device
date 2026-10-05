@@ -616,6 +616,21 @@ test('keyboard dismiss names the Appium route as the mechanism on iOS', async ()
   });
 });
 
+// `dismissed` is the transition, as the Android IME probe defines it: a keyboard that was never
+// up was not dismissed by this call.
+test('keyboard dismiss does not claim a dismissal when the keyboard was already down', async () => {
+  const world = createKeyboardWorld([false, false]);
+
+  const result = await keyboardInteractor(world, 'android').keyboardDismiss!();
+
+  assert.deepEqual(result, {
+    kind: 'ime-probe',
+    wasVisible: false,
+    visible: false,
+    dismissed: false,
+  });
+});
+
 test('keyboard status reads the Appium probe, and refuses a driver without one', async () => {
   const shown = createKeyboardWorld([false]);
   assert.deepEqual(await keyboardInteractor(shown, 'android').keyboardStatus!(), {
