@@ -15,7 +15,7 @@ function request(
   runSimctl: SimctlSettingRequest['runSimctl'],
   overrides: Partial<SimctlSettingRequest>,
 ): SimctlSettingRequest {
-  return { runSimctl, udid: 'booted', setting: 'appearance', state: 'dark', ...overrides };
+  return { runSimctl, udid: 'SIM-1', setting: 'appearance', state: 'dark', ...overrides };
 }
 
 test('every simctl argv addresses the udid the runner was given', async () => {
@@ -39,10 +39,10 @@ test('every simctl argv addresses the udid the runner was given', async () => {
   );
 
   expect(runSimctl.mock.calls.map(([args]) => args)).toEqual([
-    ['ui', 'booted', 'appearance'],
-    ['ui', 'booted', 'appearance', 'dark'],
-    ['privacy', 'booted', 'revoke', 'photos-add', 'com.example.app'],
-    ['location', 'booted', 'set', '1,2'],
+    ['ui', 'SIM-1', 'appearance'],
+    ['ui', 'SIM-1', 'appearance', 'dark'],
+    ['privacy', 'SIM-1', 'revoke', 'photos-add', 'com.example.app'],
+    ['location', 'SIM-1', 'set', '1,2'],
   ]);
   expect(location).toEqual({ latitude: 1, longitude: 2 });
 });
@@ -66,7 +66,7 @@ test('a privacy service the runtime refuses is unsupported; other failures pass 
     code: 'UNSUPPORTED_OPERATION',
     message:
       'iOS simulator does not support setting notifications permission via simctl privacy on this runtime.',
-    details: { deviceId: 'booted', appBundleId: 'com.example.app' },
+    details: { deviceId: 'SIM-1', appBundleId: 'com.example.app' },
     cause: refused,
   });
   await expect(applySimctlSetting(grant)).rejects.toBe(failed);
