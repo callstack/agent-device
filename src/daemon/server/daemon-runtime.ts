@@ -39,6 +39,7 @@ import type { DaemonInvokeFn } from '../daemon-request.ts';
 import type { SessionRef, SessionState } from '../session-state.ts';
 import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
+import { withDaemonDiagnosticsScope } from './daemon-diagnostics-scope.ts';
 import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
 import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
 import { finalizeDaemonLeases } from './daemon-lease-finalizer.ts';
@@ -52,12 +53,7 @@ import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
 import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
-import {
-  emitDiagnostic,
-  flushDiagnosticsToSessionFile,
-  withDiagnosticsScope,
-  type ResourceDiagnostic,
-} from '@agent-device/host-kit/diagnostics';
+import { emitDiagnostic, type ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   createOwnedProcessRecordStore,
   type OwnedProcessRecordStore,
@@ -231,19 +227,15 @@ export async function flushDaemonStartupDiagnostics(
   diagnostics: readonly ResourceDiagnostic[],
 ): Promise<void> {
   if (diagnostics.length === 0) return;
-  await withDiagnosticsScope(
-    { command: 'daemon-startup', session: 'daemon', logPath, debug: false },
-    async () => {
-      for (const diagnostic of diagnostics) {
-        emitDiagnostic({
-          level: 'warn',
-          phase: diagnostic.phase,
-          data: { resourcePath: diagnostic.resourcePath, ...diagnostic.data },
-        });
-      }
-      flushDiagnosticsToSessionFile({ force: true });
-    },
-  );
+  await withDaemonDiagnosticsScope({ logPath, command: 'daemon-startup', debug: false }, () => {
+    for (const diagnostic of diagnostics) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: diagnostic.phase,
+        data: { resourcePath: diagnostic.resourcePath, ...diagnostic.data },
+      });
+    }
+  });
 }
 
 async function noteSkippedProviderRuntimes(
@@ -270,13 +262,9 @@ async function emitDaemonDiagnostic(
   phase: string,
   data: Record<string, unknown>,
 ): Promise<void> {
-  await withDiagnosticsScope(
-    { command: 'daemon', session: 'daemon', logPath, debug: true },
-    async () => {
-      emitDiagnostic({ level: 'warn', phase, data });
-      flushDiagnosticsToSessionFile({ force: true });
-    },
-  );
+  await withDaemonDiagnosticsScope({ logPath }, () => {
+    emitDiagnostic({ level: 'warn', phase, data });
+  });
 }
 
 async function finishDaemonRegistration(params: {
@@ -461,19 +449,15 @@ export async function startDaemonRuntime(
   let stopMetadataLossWatch: () => void = () => {};
 
   const emitFatalDiagnostic = async (error: unknown): Promise<void> => {
-    await withDiagnosticsScope(
-      { command: 'daemon', session: 'daemon', logPath, debug: true },
-      async () => {
-        emitDiagnostic({
-          level: 'error',
-          phase: 'daemon_fatal',
-          data: {
-            error: error instanceof Error ? error.message : String(error),
-          },
-        });
-        flushDiagnosticsToSessionFile({ force: true });
-      },
-    );
+    await withDaemonDiagnosticsScope({ logPath }, () => {
+      emitDiagnostic({
+        level: 'error',
+        phase: 'daemon_fatal',
+        data: {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    });
   };
 
   const shutdownClaimLedger = createDaemonShutdownClaimLedger();
@@ -555,16 +539,7 @@ export async function startDaemonRuntime(
     // A sweep is out-of-request work, so it has no request scope and `emitDiagnostic` would drop
     // everything it reports — including the record of what was reclaimed and why a reclaim failed.
     withinDiagnosticsScope: async (run) =>
-      await withDiagnosticsScope(
-        { command: 'daemon', session: 'daemon', logPath, debug: true },
-        async () => {
-          try {
-            return await run();
-          } finally {
-            flushDiagnosticsToSessionFile({ force: true });
-          }
-        },
-      ),
+      await withDaemonDiagnosticsScope({ logPath, flushOnThrow: true }, run),
     // An expiry can be the event that makes this daemon fully idle, and no request follows it to
     // arm the process-level reap.
     onSessionExpired: () => {
@@ -794,27 +769,19 @@ export async function startDaemonRuntime(
     // forced on here because the declines are the point of the record — a handoff that silently
     // skipped is indistinguishable from a rebuild (#2681).
     try {
-      await withDiagnosticsScope(
-        { command: 'daemon', session: 'daemon', logPath, debug: true },
-        async () => {
-          await applicationLifecycle.detachForDaemonShutdown();
-          flushDiagnosticsToSessionFile({ force: true });
-        },
-      );
+      await withDaemonDiagnosticsScope({ logPath }, async () => {
+        await applicationLifecycle.detachForDaemonShutdown();
+      });
     } catch {}
     expiredProviderLeaseReleaser.beginShutdown();
     await teardownDaemonSessions();
-    await withDiagnosticsScope(
-      { command: 'daemon', session: 'daemon', logPath, debug: true },
-      async () => {
-        await finalizeDaemonLeases({
-          leaseRegistry,
-          expiredProviderLeaseReleaser,
-          timeoutMs: DAEMON_LEASE_RELEASE_TIMEOUT_MS,
-        });
-        flushDiagnosticsToSessionFile({ force: true });
-      },
-    );
+    await withDaemonDiagnosticsScope({ logPath }, async () => {
+      await finalizeDaemonLeases({
+        leaseRegistry,
+        expiredProviderLeaseReleaser,
+        timeoutMs: DAEMON_LEASE_RELEASE_TIMEOUT_MS,
+      });
+    });
     try {
       await platformDaemonLifecycleOwners.resetAndroidSnapshotHelper();
     } catch (error) {
@@ -896,25 +863,20 @@ async function reconcileDeviceClaimsForDaemonStartup(
 ): Promise<void> {
   // Startup runs outside any diagnostics scope, where emitDiagnostic is a no-op,
   // so reconciliation has to open one of its own for its events to be recorded.
-  await withDiagnosticsScope(
-    { command: 'daemon', session: 'daemon', logPath, debug: true },
-    async () => {
-      try {
-        const summary = await reconcileOrphanedDeviceClaims(reconcile, stateDir);
-        if (summary.examined > 0) {
-          emitDiagnostic({ phase: 'device_claim_reconcile', data: summary });
-          flushDiagnosticsToSessionFile({ force: true });
-        }
-      } catch (error) {
-        emitDiagnostic({
-          level: 'warn',
-          phase: 'device_claim_reconcile_failed',
-          data: { error: error instanceof Error ? error.message : String(error) },
-        });
-        flushDiagnosticsToSessionFile({ force: true });
+  await withDaemonDiagnosticsScope({ logPath }, async () => {
+    try {
+      const summary = await reconcileOrphanedDeviceClaims(reconcile, stateDir);
+      if (summary.examined > 0) {
+        emitDiagnostic({ phase: 'device_claim_reconcile', data: summary });
       }
-    },
-  );
+    } catch (error) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'device_claim_reconcile_failed',
+        data: { error: error instanceof Error ? error.message : String(error) },
+      });
+    }
+  });
 }
 
 export async function cleanupWebBrowserOrphansForDaemonStartup(params: {
