@@ -661,15 +661,19 @@ function webDriverFacts(
         orientation: declared('orientation', orientationUnavailable),
       }),
       ...tvRemoteRuntimeOperationFacts({ tvRemote: tvRemoteUnavailable }),
-      // Enter and dismiss ride the same reachable interactor `back`/`home` do, over the driver's
-      // key press and hide-keyboard routes. Status is the Appium keyboard probe, whose result
-      // shape is Android's IME probe, so only an Android device serves it.
+      // Dismiss rides the same reachable interactor `back`/`home` do, over the driver's
+      // hide-keyboard route. Status is the Appium keyboard probe, whose result shape is Android's
+      // IME probe, so only an Android device serves it.
       ...keyboardRuntimeOperationFacts({
         unsupported: keyboardUnavailable,
-        enter: declared('keyboard', keyboardUnavailable),
         dismiss: declared('keyboard', keyboardUnavailable),
+        // Enter is proven on Android only: the newline-through-`/keys` route is written for
+        // XCUITest but has not run against it, so an iOS device refuses until it has.
         ...(device.platform === 'android'
-          ? { status: declared('keyboard', keyboardUnavailable) }
+          ? {
+              enter: declared('keyboard', keyboardUnavailable),
+              status: declared('keyboard', keyboardUnavailable),
+            }
           : {}),
       }),
       // Clipboard rides the same reachable interactor `back`/`home` do; the declared-capability

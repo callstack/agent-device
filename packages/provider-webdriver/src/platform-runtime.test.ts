@@ -661,7 +661,7 @@ test('an Apple WebDriver dump bounded to one entry reports unnamed traffic witho
   expect(result.dump).not.toHaveProperty('unnamedRequestIds');
 });
 
-test('an iOS WebDriver device serves keyboard enter and dismiss but not the Android IME probe', async () => {
+test('an iOS WebDriver device serves keyboard dismiss, and neither the unproven enter nor the Android IME probe', async () => {
   const iosDevice: DeviceInfo = {
     ...device,
     platform: 'apple',
@@ -677,12 +677,13 @@ test('an iOS WebDriver device serves keyboard enter and dismiss but not the Andr
     getInteractor: vi.fn(() => ({}) as unknown as Interactor),
   });
   const facts = await owner.inspectFacts(iosDevice);
-  expect(facts.operations.keyboardEnter).toEqual({ available: true });
   expect(facts.operations.keyboardDismiss).toEqual({ available: true });
-  expect(facts.operations.keyboardStatus).toMatchObject({
-    available: false,
-    reason: 'unsupported-provider-mode',
-  });
+  for (const operation of ['keyboardEnter', 'keyboardStatus'] as const) {
+    expect(facts.operations[operation]).toMatchObject({
+      available: false,
+      reason: 'unsupported-provider-mode',
+    });
+  }
 });
 
 test('a provider that declares no keyboard capability closes the keyboard family', async () => {

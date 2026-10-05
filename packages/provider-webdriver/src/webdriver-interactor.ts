@@ -375,15 +375,29 @@ class WebDriverInteractor implements Interactor {
     return { kind: 'ime-probe', visible: await this.keyboardVisible() };
   }
 
+  /**
+   * A keyboard that is not up is left alone: Appium refuses the hide-keyboard route when no soft
+   * keyboard shows, and native dismiss answers an already-hidden keyboard with success. Only a
+   * keyboard seen up, or one the driver cannot report, is asked down.
+   */
   async keyboardDismiss(): Promise<KeyboardDismissResult> {
     this.requireSupport('keyboard');
     const wasVisible = await this.keyboardVisibility();
+    if (wasVisible === false)
+      return this.dismissResult({ wasVisible, visible: false, dismissed: false });
     await this.client.hideKeyboard();
-    const visible = await this.keyboardVisibility();
-    const echo = {
+    const visible = await this.keyboardVisibilityAfterMutation();
+    return this.dismissResult({
       ...(wasVisible === undefined ? {} : { wasVisible }),
       ...(visible === undefined ? {} : { visible, dismissed: wasVisible === true && !visible }),
-    };
+    });
+  }
+
+  private dismissResult(echo: {
+    wasVisible?: boolean;
+    visible?: boolean;
+    dismissed?: boolean;
+  }): KeyboardDismissResult {
     return this.backend === 'android'
       ? { kind: 'ime-probe', ...echo }
       : { kind: 'mechanism', mechanism: WEBDRIVER_DISMISS_MECHANISM, ...echo };
@@ -403,12 +417,24 @@ class WebDriverInteractor implements Interactor {
     }
     const wasVisible = await this.keyboardVisibility();
     await this.client.sendKeys('\n');
-    const visible = await this.keyboardVisibility();
+    const visible = await this.keyboardVisibilityAfterMutation();
     return {
       kind: 'visibility-echo',
       ...(wasVisible === undefined ? {} : { wasVisible }),
       ...(visible === undefined ? {} : { visible }),
     };
+  }
+
+  /**
+   * The echo read after a key press or dismiss landed. A probe that fails there must not turn
+   * the landed mutation into a failure a caller would retry, so it reads as no echo.
+   */
+  private async keyboardVisibilityAfterMutation(): Promise<boolean | undefined> {
+    try {
+      return await this.keyboardVisibility();
+    } catch {
+      return undefined;
+    }
   }
 
   /** The keyboard probe's answer, or `undefined` when this driver has no such route. */

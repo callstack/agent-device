@@ -529,8 +529,9 @@ test('endpoint plans become one timed W3C pointer move', async () => {
 });
 
 /** A client that records the keyboard routes the interactor drives, answering the probe from `shown`. */
-function createKeyboardWorld(shown: Array<boolean | 'unsupported'>) {
+function createKeyboardWorld(shown: Array<boolean | 'unsupported' | 'failing'>) {
   const transcript: string[] = [];
+  const upAtStart = shown[0] !== false;
   const client = {
     executeScript: async (script: string, args: unknown[]) => {
       transcript.push(`${script} ${JSON.stringify(args)}`);
@@ -540,10 +541,18 @@ function createKeyboardWorld(shown: Array<boolean | 'unsupported'>) {
     },
     hideKeyboard: async () => {
       transcript.push('hide');
+      // The driver refuses the route when no soft keyboard shows.
+      if (!upAtStart) {
+        throw new AppError('COMMAND_FAILED', 'Soft keyboard not present', { status: 500 });
+      }
     },
     isKeyboardShown: async () => {
       transcript.push('probe');
-      return shown.length > 1 ? shown.shift()! : shown[0]!;
+      const next = shown.length > 1 ? shown.shift()! : shown[0]!;
+      if (next === 'failing') {
+        throw new AppError('COMMAND_FAILED', 'is_keyboard_shown timed out', { status: 504 });
+      }
+      return next;
     },
   } as unknown as WebDriverClient;
   return { transcript, client };
@@ -616,21 +625,6 @@ test('keyboard dismiss names the Appium route as the mechanism on iOS', async ()
   });
 });
 
-// `dismissed` is the transition, as the Android IME probe defines it: a keyboard that was never
-// up was not dismissed by this call.
-test('keyboard dismiss does not claim a dismissal when the keyboard was already down', async () => {
-  const world = createKeyboardWorld([false, false]);
-
-  const result = await keyboardInteractor(world, 'android').keyboardDismiss!();
-
-  assert.deepEqual(result, {
-    kind: 'ime-probe',
-    wasVisible: false,
-    visible: false,
-    dismissed: false,
-  });
-});
-
 test('keyboard status reads the Appium probe, and refuses a driver without one', async () => {
   const shown = createKeyboardWorld([false]);
   assert.deepEqual(await keyboardInteractor(shown, 'android').keyboardStatus!(), {
@@ -673,4 +667,39 @@ test('a provider that declares no keyboard capability refuses every keyboard act
     });
   }
   assert.deepEqual(world.transcript, []);
+});
+
+// Appium refuses hide-keyboard when nothing is up; native dismiss answers "already hidden" with
+// success, so a script's idempotent dismiss must not break on a cloud device. The fake driver
+// throws on that call, so this test fails if the call is made.
+test('keyboard dismiss leaves a keyboard that is already down alone', async () => {
+  const world = createKeyboardWorld([false]);
+
+  const result = await keyboardInteractor(world, 'android').keyboardDismiss!();
+
+  assert.deepEqual(result, {
+    kind: 'ime-probe',
+    wasVisible: false,
+    visible: false,
+    dismissed: false,
+  });
+  assert.deepEqual(world.transcript, ['probe']);
+});
+
+// The probe after a landed mutation is an echo: a gateway that times it out must not make the
+// caller retry a key press that already happened.
+test('a failing echo probe after enter or dismiss leaves the visibility unknown instead of failing', async () => {
+  const entered = createKeyboardWorld([true, 'failing']);
+  assert.deepEqual(await keyboardInteractor(entered, 'ios').keyboardEnter!(), {
+    kind: 'visibility-echo',
+    wasVisible: true,
+  });
+  assert.deepEqual(entered.transcript, ['probe', String.raw`keys "\n"`, 'probe']);
+
+  const dismissed = createKeyboardWorld([true, 'failing']);
+  assert.deepEqual(await keyboardInteractor(dismissed, 'android').keyboardDismiss!(), {
+    kind: 'ime-probe',
+    wasVisible: true,
+  });
+  assert.deepEqual(dismissed.transcript, ['probe', 'hide', 'probe']);
 });
