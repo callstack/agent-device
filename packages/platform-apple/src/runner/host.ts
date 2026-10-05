@@ -81,7 +81,10 @@ export type AppleRunnerHost = Pick<
   Pick<typeof KernelSourceValue, 'parseBooleanLiteral'> &
   Pick<typeof KernelDeviceShell, 'shellQuote'> &
   Pick<typeof BootDiagnostics, 'classifyBootFailure' | 'bootFailureHint'> &
-  Pick<typeof AppleToolProvider, 'runAppleToolCommand' | 'runXcrun' | 'readApplePlistJson'> &
+  Pick<
+    typeof AppleToolProvider,
+    'runAppleToolCommand' | 'runXcrun' | 'readApplePlistJson' | 'hasScopedAppleToolProvider'
+  > &
   Pick<typeof AppleSimctl, 'buildSimctlArgsForDevice' | 'simulatorAddressFor'> &
   Pick<typeof ApplePlistXml, 'visitXmlPlistEntries'> & {
     /**
@@ -185,6 +188,7 @@ export const bootFailureHint = delegate('bootFailureHint');
 export const runAppleToolCommand = delegate('runAppleToolCommand');
 export const runXcrun = delegate('runXcrun');
 export const readApplePlistJson = delegate('readApplePlistJson');
+export const hasScopedAppleToolProvider = delegate('hasScopedAppleToolProvider');
 export const buildSimctlArgsForDevice = delegate('buildSimctlArgsForDevice');
 export const simulatorAddressFor = delegate('simulatorAddressFor');
 export const visitXmlPlistEntries = delegate('visitXmlPlistEntries');
