@@ -229,11 +229,18 @@ function buildPlistMessage(
 }
 
 function readDeviceIdFromList(xml: string, udid: string): number | undefined {
+  let fallback: number | undefined;
   for (const node of walkXmlNodes(parseXmlDocumentSync(xml))) {
     const device = readListedDevice(node);
-    if (device?.udid === udid) return device.id;
+    if (device?.udid !== udid) continue;
+    const connectionType = readDictEntry(
+      readDictEntry(node, 'Properties')!,
+      'ConnectionType',
+    )?.text;
+    if (connectionType === 'USB') return device.id;
+    fallback ??= device.id;
   }
-  return undefined;
+  return fallback;
 }
 
 function readListedDevice(node: XmlNode): { udid: string; id: number } | undefined {

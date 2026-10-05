@@ -1,3 +1,4 @@
+import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
 /**
  * ADR 0012 decision 6, R2/R3, extended per #1262: behaviors introduced
  * alongside the `resume.from` / `repairHint` agreement fix
@@ -85,7 +86,10 @@ test('a record-and-heal divergence on the LAST step resumes with an empty tail a
   const root = mkdtempForTestSync('agent-device-replay-empty-tail-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const evidence = await recordArticleEvidence();
   const filePath = writeReplayFile(root, [
     'open "Demo" --relaunch',
@@ -152,7 +156,7 @@ test('a record-and-heal divergence on the LAST step resumes with an empty tail a
   expect(session.actions.map((a) => a.command)).toEqual(['open']);
 
   // --- Agent performs the corrective press (blessed @ref), recorded live. ---
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e6'],
     flags: {},
@@ -188,7 +192,7 @@ test('a record-and-heal divergence on the LAST step resumes with an empty tail a
   // --- Commit: the transaction is COMPLETE, so the healed script actually
   // publishes — the corrective press survives, "click" (never recorded) does
   // not. Proves the empty-tail resume did not lead to a discarded repair. ---
-  const writeResult = sessionStore.writeSessionLog(session);
+  const writeResult = sessionStore.writeSessionLog(storeSessionForTest(sessionStore, session));
   expect(writeResult.written).toBe(true);
   const healedPath = path.join(root, 'flow.healed.ad');
   expect(fs.existsSync(healedPath)).toBe(true);
@@ -212,7 +216,10 @@ test('a manual divergence (unannotated action-failure) on the LAST step resumes 
   const root = mkdtempForTestSync('agent-device-replay-empty-tail-manual-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   // No target-v1 annotation: an unannotated action-failure always routes to
   // the `manual` fail-safe (no recorded targetEvidence).
   const filePath = writeReplayFile(root, ['open "Demo" --relaunch', 'click label="Save"']);
@@ -279,7 +286,7 @@ test('a manual divergence (unannotated action-failure) on the LAST step resumes 
 
   // --- Agent performs the step's intent as a recorded action (blessed
   // @ref), recorded live. ---
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e6'],
     flags: {},
@@ -312,7 +319,7 @@ test('a manual divergence (unannotated action-failure) on the LAST step resumes 
   // since a `manual` divergence never dispatched it) does not. Proves the
   // empty-tail resume did not lead to a discarded repair (the #1260
   // discard-at-close trap, now also closed for `manual`). ---
-  const writeResult = sessionStore.writeSessionLog(session);
+  const writeResult = sessionStore.writeSessionLog(storeSessionForTest(sessionStore, session));
   expect(writeResult.written).toBe(true);
   const healedPath = path.join(root, 'flow.healed.ad');
   expect(fs.existsSync(healedPath)).toBe(true);
@@ -326,7 +333,10 @@ test('a caution (identity-mismatch) divergence on the LAST step resumes with an 
   const root = mkdtempForTestSync('agent-device-replay-empty-tail-caution-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const SAVE_ANNOTATION =
     '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}';
   const filePath = writeReplayFile(root, [
@@ -407,7 +417,7 @@ test('a caution (identity-mismatch) divergence on the LAST step resumes with an 
   // --- Agent presses the actual (renamed) control via a blessed @ref,
   // recorded live — the record-and-heal-shaped repair for path (a) from
   // #1262 ("selector binds the wrong node on the right screen"). ---
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e6'],
     flags: {},
@@ -436,7 +446,7 @@ test('a caution (identity-mismatch) divergence on the LAST step resumes with an 
 
   // --- Commit: COMPLETE, so the healed script publishes the corrective
   // press; the pre-action "click" (never dispatched) does not appear. ---
-  const writeResult = sessionStore.writeSessionLog(session);
+  const writeResult = sessionStore.writeSessionLog(storeSessionForTest(sessionStore, session));
   expect(writeResult.written).toBe(true);
   const healedPath = path.join(root, 'flow.healed.ad');
   expect(fs.existsSync(healedPath)).toBe(true);
@@ -450,7 +460,10 @@ test('--from N stays legal for a caution divergence even after the N + 1 empty-t
   const root = mkdtempForTestSync('agent-device-replay-empty-tail-caution-from-n-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const SAVE_ANNOTATION =
     '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}';
   const filePath = writeReplayFile(root, [
@@ -544,7 +557,10 @@ test('an unauthorized --from one past the plan end is rejected on an ARMED sessi
   const root = mkdtempForTestSync('agent-device-replay-empty-tail-state-repair-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const evidence = await recordArticleEvidence();
   const filePath = writeReplayFile(root, [
     'open "Demo" --relaunch',
@@ -627,7 +643,10 @@ test('a stale --plan-digest on an empty-tail resume is rejected WITHOUT consumin
   const root = mkdtempForTestSync('agent-device-replay-empty-tail-digest-retry-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const evidence = await recordArticleEvidence();
   const filePath = writeReplayFile(root, [
     'open "Demo" --relaunch',
@@ -658,7 +677,7 @@ test('a stale --plan-digest on an empty-tail resume is rejected WITHOUT consumin
   expect(divergence.resume.from).toBe(3);
 
   const session = sessionStore.get(sessionName)!;
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e6'],
     flags: {},

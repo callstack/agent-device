@@ -39,7 +39,7 @@ test('network validates the legacy limit after runtime-fact admission', async ()
     name: 'Pixel',
     kind: 'emulator',
   });
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const runtime = createNetworkRuntime(session.device, async (input) =>
     emptyAppLogResult('android', input),
   );

@@ -39,7 +39,7 @@ for (const command of ['snapshot', 'diff snapshot'] as const) {
   test(`${command} forwards request cancellation into snapshot dispatch`, async () => {
     const sessionName = 'default';
     const sessionStore = makeSessionStore('agent-device-snapshot-cancellation-');
-    sessionStore.set(sessionName, makeAndroidSession(sessionName));
+    sessionStore.publish(sessionName, makeAndroidSession(sessionName));
     const requestId = `snapshot-cancellation-${command.replace(' ', '-')}`;
     const registration = registerRequestAbort(requestId);
     if (!registration) throw new Error('expected request abort registration');
@@ -85,3 +85,94 @@ for (const command of ['snapshot', 'diff snapshot'] as const) {
     }
   });
 }
+
+for (const change of ['unchanged', 'rebuild', 'replace'] as const) {
+  test(`snapshot completion respects a scoped lifetime after ${change}`, async () => {
+    const sessionStore = makeSessionStore();
+    const address = 'cwd:snapshot-completion:default';
+    const ref = sessionStore.publish(
+      address,
+      makeAndroidSession('default', { trace: { outPath: 'prior-trace', startedAt: 0 } }),
+    );
+    const entered = deferred();
+    const release = deferred();
+    captureMock.mockImplementation(async () => {
+      entered.resolve();
+      await release.promise;
+      return {
+        backend: 'uiautomator',
+        nodes: [{ index: 0, type: 'Button', label: 'Captured' }],
+      };
+    });
+    const running = dispatchSnapshotViaRuntime({
+      req: { command: 'snapshot', positionals: [], token: 't', session: address },
+      sessionName: address,
+      logPath: '/dev/null',
+      sessionStore,
+      ...snapshotRuntimeFixture(),
+    });
+    const result = running.then(
+      (response) => ({ response }),
+      (error: unknown) => ({ error }),
+    );
+    try {
+      await entered.promise;
+      if (change !== 'replace') {
+        const trace =
+          change === 'rebuild' ? { outPath: 'intervening-trace', startedAt: 1 } : ref.session.trace;
+        if (change === 'rebuild') sessionStore.update(ref, { trace });
+        const priorRecord = sessionStore.requireCurrent(ref);
+        release.resolve();
+        expect(await result).toMatchObject({ response: { ok: true } });
+        const current = sessionStore.requireCurrent(ref);
+        expect(current.trace).toBe(trace);
+        expect(current).not.toBe(priorRecord);
+        expect(priorRecord.snapshot).toBeUndefined();
+        expect(ref.session.snapshot).toBeUndefined();
+        expect(current.snapshot?.nodes[0]?.label).toBe('Captured');
+      } else {
+        sessionStore.retire(ref);
+        const successor = sessionStore.publish(address, makeAndroidSession('default'));
+        release.resolve();
+        expect(await result).toMatchObject({
+          error: { details: { reason: 'session_lifetime_ended' } },
+        });
+        expect(sessionStore.requireCurrent(successor)).toBe(successor.session);
+        expect(successor.session.snapshot).toBeUndefined();
+      }
+      expect(sessionStore.lookup('default')).toBeUndefined();
+    } finally {
+      release.resolve();
+      await result;
+    }
+  });
+}
+
+test('a composed snapshot refuses its supplied retired lifetime before facts or capture', async () => {
+  const sessionStore = makeSessionStore();
+  const address = 'cwd:composed-snapshot:default';
+  const ref = sessionStore.publish(address, makeAndroidSession('default'));
+  sessionStore.retire(ref);
+  const successor = sessionStore.publish(address, makeAndroidSession('default'));
+  const fixture = snapshotRuntimeFixture();
+  const facts = fixture.inspectFacts;
+  let inspections = 0;
+  captureMock.mockResolvedValue({ nodes: [], truncated: false, backend: 'uiautomator' });
+  await expect(
+    dispatchSnapshotViaRuntime({
+      req: { command: 'snapshot', positionals: [], token: 't', session: 'default' },
+      sessionName: address,
+      sessionRef: ref,
+      logPath: '/dev/null',
+      sessionStore,
+      ...fixture,
+      inspectFacts: async (device) => {
+        inspections++;
+        return await facts(device);
+      },
+    }),
+  ).rejects.toMatchObject({ details: { reason: 'session_lifetime_ended' } });
+  expect(inspections).toBe(0);
+  expect(captureMock).not.toHaveBeenCalled();
+  expect(sessionStore.requireCurrent(successor)).toBe(successor.session);
+});

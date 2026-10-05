@@ -181,6 +181,32 @@ extension RunnerTests {
     XCTAssertEqual(observations, 0, "no post-dispatch read can resolve this collision")
   }
 
+  // A secure field reads nil on every poll, so the wait could only expire: every penalized-route
+  // password `fill` failed with TEXT_INPUT_COMMIT_NOT_OBSERVED. It is left unverified instead, as
+  // the element route leaves it, also when the text equals its placeholder; an ordinary field
+  // that reads nil, or whose text equals its placeholder, still fails.
+  func testSynthesizedReplacementCommitLeavesASecureFieldUnverified() {
+    for placeholder in [nil, "hunter2"] {
+      for fieldIsSecure in [true, false] {
+        let label = "secure: \(fieldIsSecure), placeholder: \(placeholder ?? "none")"
+        var observations = 0
+        let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
+          expectedText: "hunter2",
+          placeholder: placeholder,
+          fieldIsSecure: fieldIsSecure,
+          stallBudget: 0,
+          observe: {
+            observations += 1
+            return nil
+          },
+          waitForNextObservation: {}
+        )
+        XCTAssertEqual(outcome, fieldIsSecure ? .unobservable : .notObserved, label)
+        XCTAssertEqual(observations, fieldIsSecure || placeholder != nil ? 0 : 1, label)
+      }
+    }
+  }
+
   // The mapping the command actually refuses on. `.unobservable` must stay a success: it is the
   // contract for submit-key text, so inverting it would fail every `fill` ending in a submit key.
   func testOnlyAnUnobservedCommitBecomesACommandFailure() {
@@ -283,20 +309,55 @@ extension RunnerTests {
     )
   }
 
-  // A select-and-type post runs two synthesize records — the Command-A selection and the text — so a
-  // burst that replaces costs more than the characters it types. Charging one call per post is the
-  // projection defect this plan exists to remove, one level down.
-  func testSynthesizedPlanChargesAReplacingPostTwoSynthesizeCalls() {
+  // A replacing post may clear up to four times — a select-all record, a delete-key record and a
+  // read of the field each, because a freshly launched app drops select-alls — before its text
+  // record, so it is charged nine synthesize records, four keystrokes and four reads more than the
+  // characters it types. Charging one call per post is the projection defect this plan exists to
+  // remove, one level down.
+  func testSynthesizedPlanChargesAReplacingPostItsClears() {
     let replacing = SynthesizedTextPlan.Step(characterCount: 1, replacesExistingText: true)
-    XCTAssertEqual(replacing.synthesizeCallCount, 2)
+    XCTAssertEqual(replacing.synthesizeCallCount, 9)
+    XCTAssertEqual(replacing.keystrokeCount, 5)
+    XCTAssertEqual(replacing.clearReadCount, 4)
     XCTAssertEqual(
       SynthesizedTextPlan.Step(characterCount: 1).synthesizeCallCount,
       1
     )
     XCTAssertEqual(
       Self.synthesizedTextPlan(characterCount: 1, delaySeconds: 0, selectsExistingText: true).seconds,
-      TextEntryTiming.synthesizedCharacterInterval
-        + 2 * TextEntryTiming.synthesizeCallOverhead
+      5 * TextEntryTiming.synthesizedCharacterInterval
+        + 9 * TextEntryTiming.synthesizeCallOverhead
+        + 4 * TextEntryTiming.synthesizedClearReadAllowance
+    )
+  }
+
+  // Each pass's select-all can be dropped, deleting only the last character, so the clear repeats
+  // until the field reads empty, and types nothing over text it could not remove or could not read.
+  // A field that never exposes its value gets the unread passes and is typed into unverified.
+  func testSynthesizedClearRepeatsUntilTheFieldReadsEmpty() {
+    let cases: [(reads: [ClearedFieldRead], outcome: SynthesizedClearOutcome, passes: Int)] = [
+      ([.text("")], .cleared, 1),
+      ([.text("Clien"), .text("Clie"), .text("")], .cleared, 3),
+      ([.text("Clien"), .text("Clie"), .text("Cli"), .text("Cl")], .notCleared, 4),
+      ([.text("Clien"), .unavailable], .notCleared, 2),
+      ([.unreadable, .unreadable], .unverified, 2),
+    ]
+    for testCase in cases {
+      var passes = 0
+      var reads = testCase.reads[...]
+      let outcome = Self.clearForSynthesizedReplacement(
+        clearOnce: {
+          passes += 1
+          return .posted
+        },
+        read: { reads.popFirst() ?? .unavailable }
+      )
+      XCTAssertEqual(outcome, testCase.outcome, "\(testCase.reads)")
+      XCTAssertEqual(passes, testCase.passes, "\(testCase.reads)")
+    }
+    XCTAssertEqual(
+      Self.clearForSynthesizedReplacement(clearOnce: { .stop }, read: { .text("") }),
+      .stopped
     )
   }
 
@@ -535,25 +596,18 @@ extension RunnerTests {
 
 #if os(iOS)
   @MainActor
-  func testTypeTextReliablyPacesSynthesizedReplacementThroughProductionCaller() {
+  func testTypeTextReliablyPacesSynthesizedReplacementThroughProductionCaller() throws {
+    let field = try focusSynthesizedReplacementField()
+    defer { tearDownSynthesizedReplacementField() }
     let synthesizer = RecordingTextEntrySynthesizer()
-    // Springboard, not a bare `XCUIApplication()`: the commit wait now really polls (see below),
-    // and each poll resolves `target.refreshPoint` through `textInputAt`, which queries the real
-    // XCTest element-query channel. Against a bare, never-`.launch()`ed `XCUIApplication()` that
-    // query throws `_XCTestCaseInterruptionException` ("Application ... is not running") on every
-    // single poll — caught by `safely(...)` so production code never sees it, but XCTest's own
-    // instrumentation independently records each occurrence as a test failure regardless, which
-    // faked this test red under `xcodebuild test-without-building` despite every assertion below
-    // passing (verified locally: 15 recorded failures, 0 of them from an XCTAssert). Springboard is
-    // always running on a booted simulator without an explicit launch, so the same query instead
-    // resolves normally to zero matching elements — this is not a workaround for a flaky query, it
-    // is giving the query a fixture it can actually answer.
+    let frame = field.frame
     let result = typeTextReliably(
-      app: springboard,
+      app: app,
       target: TextEntryTarget(
         element: nil,
-        refreshPoint: CGPoint(x: 10, y: 20),
-        prefersFocusedElement: false
+        refreshPoint: CGPoint(x: frame.midX, y: frame.midY),
+        prefersFocusedElement: false,
+        inputAtRefreshPoint: try XCTUnwrap(coordinateTapTextInputIdentityAt(app: app, x: frame.midX, y: frame.midY))
       ),
       text: "abc",
       delaySeconds: 0.001,
@@ -565,7 +619,8 @@ extension RunnerTests {
     XCTAssertEqual(
       synthesizer.posts,
       [
-        RecordingTextEntrySynthesizer.Post(text: "a", replacesExistingText: true),
+        RecordingTextEntrySynthesizer.Post(text: XCUIKeyboardKey.delete.rawValue, replacesExistingText: true),
+        RecordingTextEntrySynthesizer.Post(text: "a", replacesExistingText: false),
         RecordingTextEntrySynthesizer.Post(text: "b", replacesExistingText: false),
         RecordingTextEntrySynthesizer.Post(text: "c", replacesExistingText: false),
       ]
@@ -575,19 +630,44 @@ extension RunnerTests {
     XCTAssertEqual(result.textEntryRoute, "synthesized-first-responder-replacement")
     // The regression this pins: this route used to return here with no commit wait at all, so a
     // dropped or still-in-flight character was indistinguishable from success (the "ada@example"
-    // landing as "aexample" CI signature). The fake synthesizer never actually writes into
-    // Springboard, so the wait's `observe()` reads nil (no matching field at that point) on every
-    // poll and the value never becomes "abc" — under the replacement-mode outcome function that is
-    // correctly a failure (see `testSynthesizedReplacementCommitCatchesMiddleRunMissingFromTheField`
-    // for why it must NOT be waved through as success), so this call runs the real 3-second deadline
-    // (`TextEntryTiming.synthesizedCommitStallTimeout`; a nil read never advances the expected
-    // prefix, so `SynthesizedCommitDeadline` grants it no extra time) before returning. That is
-    // deliberate here, not a flake: this test only runs in the nightly XCUITest lane (see
-    // `runner-xctest-local-run-gotchas` memory / ios.yml's `-only-testing:` allowlist), where a
-    // few extra seconds is a non-issue, and the alternative — asserting `nil` on a wiring path
-    // that can never actually observe the expected text — would silently reintroduce the exact
-    // bug this fix closes.
+    // landing as "aexample" CI signature). The fake synthesizer never writes into the field, so the
+    // wait reads "" on every poll and the value never becomes "abc" — under the replacement-mode
+    // outcome function that is correctly a failure (see
+    // `testSynthesizedReplacementCommitCatchesMiddleRunMissingFromTheField` for why it must NOT be
+    // waved through as success), so this call runs the real 3-second deadline
+    // (`TextEntryTiming.synthesizedCommitStallTimeout`) before returning.
     XCTAssertEqual(result.failure, .commitNotObserved)
+  }
+
+  // A replacement whose clear cannot read the field back cannot tell whether the old text is gone,
+  // so it types nothing: it used to type over whatever was left. Springboard, not a bare
+  // `XCUIApplication()`: against a never-`.launch()`ed app every element query throws
+  // `_XCTestCaseInterruptionException`, which XCTest records as a test failure even when production
+  // code catches it. Springboard is always running, so the query resolves to no input at the point.
+  @MainActor
+  func testSynthesizedReplacementTypesNothingWhenItCannotReadTheFieldBack() {
+    let synthesizer = RecordingTextEntrySynthesizer()
+    let failures = currentXCTestFailureCount()
+    let result = typeTextReliably(
+      app: springboard,
+      target: TextEntryTarget(
+        element: nil,
+        refreshPoint: CGPoint(x: 10, y: 20),
+        prefersFocusedElement: false
+      ),
+      text: "abc",
+      delaySeconds: 0,
+      repairMode: .replacement,
+      xCTestChannelPenalized: true,
+      synthesizer: synthesizer
+    )
+
+    XCTAssertEqual(
+      synthesizer.posts,
+      [RecordingTextEntrySynthesizer.Post(text: XCUIKeyboardKey.delete.rawValue, replacesExistingText: true)]
+    )
+    XCTAssertEqual(result.failure, .clearNotObserved)
+    XCTAssertFalse(didRecordXCTestFailure(since: failures))
   }
 
   // `fill <target> ""` is the clear-field primitive (#2063). When no clear target resolves —

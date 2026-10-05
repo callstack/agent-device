@@ -74,7 +74,10 @@ function isRequest(
 test('an admitted is inspects once, binds once, and answers through the bound capture', async () => {
   const fixture = selectorCaptureFixture({ snapshot: () => buttonSnapshot() });
   const sessionStore = makeSessionStore();
-  sessionStore.set('is-bound', makeAndroidSession('is-bound', { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    'is-bound',
+    makeAndroidSession('is-bound', { appBundleId: 'com.example.app' }),
+  );
 
   const response = await dispatchIsViaRuntime({
     req: isRequest('is-bound', ['visible', 'id=auth_continue']),
@@ -95,7 +98,7 @@ test('is absent uses the bound readAny capture for selector-first input without 
     snapshot: () => ({ nodes: [], backend: 'xctest', producer: 'apple-runner' }),
   });
   const sessionStore = makeSessionStore();
-  sessionStore.set('is-absent', makeIosAppSession('is-absent'));
+  sessionStore.publish('is-absent', makeIosAppSession('is-absent'));
 
   const response = await dispatchIsViaRuntime({
     req: isRequest('is-absent', ['label="Removed row"', 'absent']),
@@ -133,7 +136,7 @@ test('is absent bypasses a cached no-match snapshot before evaluating the bound 
     }),
   });
   const sessionStore = makeSessionStore();
-  sessionStore.set(
+  sessionStore.publish(
     'is-absent-fresh',
     makeIosAppSession('is-absent-fresh', { snapshot: cachedAbsent }),
   );
@@ -168,7 +171,7 @@ test('is absent fails closed for a quality-less legacy iOS root-only capture', a
     }),
   });
   const sessionStore = makeSessionStore();
-  sessionStore.set('is-legacy-sparse', makeIosAppSession('is-legacy-sparse'));
+  sessionStore.publish('is-legacy-sparse', makeIosAppSession('is-legacy-sparse'));
 
   const response = await dispatchIsViaRuntime({
     req: isRequest('is-legacy-sparse', ['absent', 'label="Removed row"']),
@@ -200,7 +203,7 @@ test('is absent fails closed for a quality-less legacy iOS root-only capture', a
 test('is absent rejects depth and scope before binding with typed invalid arguments', async () => {
   const fixture = selectorCaptureFixture();
   const sessionStore = makeSessionStore();
-  sessionStore.set('is-absent-flags', makeIosAppSession('is-absent-flags'));
+  sessionStore.publish('is-absent-flags', makeIosAppSession('is-absent-flags'));
 
   for (const [flag, value] of [
     ['snapshotScope', 'Login'],
@@ -233,7 +236,7 @@ test('an unavailable capture fact refuses before any bind', async () => {
   // The watchOS sentinel shape: capability-supported today, no snapshot backend at the owner.
   const fixture = selectorCaptureFixture({ capture: unavailableCapture });
   const sessionStore = makeSessionStore();
-  sessionStore.set('is-refused', makeAndroidSession('is-refused', { appBundleId: 'com.a' }));
+  sessionStore.publish('is-refused', makeAndroidSession('is-refused', { appBundleId: 'com.a' }));
 
   const response = await dispatchIsViaRuntime({
     req: isRequest('is-refused', ['visible', 'id=auth_continue']),
@@ -262,7 +265,7 @@ test('an iOS session with no tracked app is refused with the open hint, not answ
     snapshot: () => buttonSnapshot(),
   });
   const sessionStore = makeSessionStore();
-  sessionStore.set('is-no-app', makeIosSession('is-no-app'));
+  sessionStore.publish('is-no-app', makeIosSession('is-no-app'));
 
   const response = await withTestDeviceInventory(
     {},
@@ -291,7 +294,7 @@ test('an iOS session WITH a tracked app still answers, so the refusal is the pla
     snapshot: () => buttonSnapshot(),
   });
   const sessionStore = makeSessionStore();
-  sessionStore.set('is-with-app', makeIosAppSession('is-with-app'));
+  sessionStore.publish('is-with-app', makeIosAppSession('is-with-app'));
 
   const response = await dispatchIsViaRuntime({
     req: isRequest('is-with-app', ['visible', 'label=Continue']),
@@ -308,7 +311,7 @@ test('an iOS session WITH a tracked app still answers, so the refusal is the pla
 test('an Android session with no tracked app proceeds, because the owner advertises the without-active-app capture', async () => {
   const fixture = selectorCaptureFixture({ snapshot: () => buttonSnapshot() });
   const sessionStore = makeSessionStore();
-  sessionStore.set('is-android-no-app', makeAndroidSession('is-android-no-app'));
+  sessionStore.publish('is-android-no-app', makeAndroidSession('is-android-no-app'));
 
   const response = await dispatchIsViaRuntime({
     req: isRequest('is-android-no-app', ['visible', 'id=auth_continue']),
@@ -329,7 +332,7 @@ test('an Android session with no tracked app proceeds, because the owner adverti
 test('a refused request reaches the device by no route at all', async () => {
   const fixture = selectorCaptureFixture({ capture: unavailableCapture });
   const sessionStore = makeSessionStore();
-  sessionStore.set('is-direct-refused', makeIosAppSession('is-direct-refused'));
+  sessionStore.publish('is-direct-refused', makeIosAppSession('is-direct-refused'));
   mockRunAppleRunnerCommand.mockResolvedValue({
     found: true,
     nodes: [
@@ -389,7 +392,7 @@ test('a failing predicate answers COMMAND_FAILED from the bound capture', async 
     }),
   });
   const sessionStore = makeSessionStore();
-  sessionStore.set('is-direct-false', makeIosAppSession('is-direct-false'));
+  sessionStore.publish('is-direct-false', makeIosAppSession('is-direct-false'));
   mockRunAppleRunnerCommand.mockResolvedValue({
     found: true,
     text: 'Apple Account',
@@ -444,7 +447,7 @@ test('a miss on a surface that never settled carries the unsettled fact, and the
   const sessionStore = makeSessionStore();
   const session = makeIosAppSession('is-unsettled');
   markDeferredInteractionOutcome({ session, command: 'scroll', positionals: [], flags: {} });
-  sessionStore.set('is-unsettled', session);
+  sessionStore.publish('is-unsettled', session);
   const isVisible = () =>
     dispatchIsViaRuntime({
       req: isRequest('is-unsettled', ['visible', 'id=target']),
@@ -486,7 +489,7 @@ test('a read after a scroll that moved nothing carries the no-effect outcome, an
   const sessionStore = makeSessionStore();
   const session = makeIosAppSession('is-no-effect', { snapshot: makeSnapshotState([row]) });
   markDeferredInteractionOutcome({ session, command: 'scroll', positionals: ['down'], flags: {} });
-  sessionStore.set('is-no-effect', session);
+  sessionStore.publish('is-no-effect', session);
   const isVisible = () =>
     dispatchIsViaRuntime({
       req: isRequest('is-no-effect', ['visible', 'id=row']),

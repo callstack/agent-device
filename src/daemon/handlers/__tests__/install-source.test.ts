@@ -75,7 +75,7 @@ test('install_source materializes and deploys through one admitted runtime bindi
     kind: 'emulator',
     booted: true,
   });
-  store.set(session.name, session);
+  store.publish(session.name, session);
   const materialize = vi.fn(async (): Promise<MaterializedAppSource> => ({
     installablePath: '/tmp/materialized/app.apk',
     cleanup: async () => {},
@@ -123,7 +123,7 @@ test('install_source rejects unavailable facts before binding or materializing',
     kind: 'emulator',
     booted: true,
   });
-  store.set(session.name, session);
+  store.publish(session.name, session);
   const materialize = vi.fn(async (): Promise<MaterializedAppSource> => ({
     installablePath: '/tmp/materialized/app.apk',
     cleanup: async () => {},
@@ -159,7 +159,7 @@ test('install_source fails closed when a provider owner does not expose readines
     kind: 'emulator',
     booted: true,
   });
-  store.set(session.name, session);
+  store.publish(session.name, session);
   const localMaterialization = vi.fn(async (): Promise<MaterializedAppSource> => ({
     installablePath: '/tmp/local-fallback.apk',
     cleanup: async () => {},
@@ -215,7 +215,7 @@ test('install_source cleans materialized paths when deployment fails after admis
     kind: 'emulator',
     booted: true,
   });
-  store.set(session.name, session);
+  store.publish(session.name, session);
   const cleanup = vi.fn(async () => {});
   const runtime = createSourceRuntime(
     session.device,
@@ -249,7 +249,7 @@ test('install_source preserves the Android identity failure when its runtime can
     kind: 'emulator',
     booted: true,
   });
-  store.set(session.name, session);
+  store.publish(session.name, session);
   const runtime = createSourceRuntime(
     session.device,
     async () => ({ installablePath: '/tmp/materialized/app.apk', cleanup: async () => {} }),
@@ -279,7 +279,7 @@ test('install_source returns the typed iOS artifact identity supplied by its run
     kind: 'simulator',
     booted: true,
   });
-  store.set(session.name, session);
+  store.publish(session.name, session);
   const runtime = createSourceRuntime(
     session.device,
     async () => ({
@@ -325,7 +325,7 @@ test('install_source accepts the public leaf selector of an Apple session it is 
     kind: 'simulator',
     booted: true,
   });
-  store.set(session.name, session);
+  store.publish(session.name, session);
   const runtime = createSourceRuntime(
     session.device,
     async () => ({
@@ -358,7 +358,7 @@ test('install_source still refuses a leaf selector that names a different platfo
     kind: 'simulator',
     booted: true,
   });
-  store.set(session.name, session);
+  store.publish(session.name, session);
   const runtime = createSourceRuntime(
     session.device,
     async () => ({ installablePath: '/tmp/App.app', cleanup: async () => {} }),

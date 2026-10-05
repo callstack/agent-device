@@ -47,7 +47,7 @@ async function runWithNetworkFlag(publicNetworkOnly: boolean | undefined) {
   const root = mkdtempForTestSync('agent-device-maestro-remote-wire-');
   const flowPath = writeFlow(root, 'flow.yaml');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  sessionStore.set('default', makeIosSession('default'));
+  sessionStore.publish('default', makeIosSession('default'));
 
   const req = {
     token: 'test-token',

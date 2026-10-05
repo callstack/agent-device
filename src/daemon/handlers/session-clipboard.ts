@@ -143,7 +143,8 @@ export async function handleSessionClipboardCommand(params: {
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
   const { req, sessionName, logPath, sessionStore, inspectFacts, bindDevice } = params;
-  const session = sessionStore.get(sessionName);
+  const ref = sessionStore.lookup(sessionName);
+  const session = ref?.session;
   const flags = req.flags ?? {};
   const guard = requireSessionOrExplicitSelector(PUBLIC_COMMANDS.clipboard, session, flags);
   if (guard) return guard;
@@ -155,6 +156,7 @@ export async function handleSessionClipboardCommand(params: {
   }
 
   const device = await resolveCommandDevice({ session, flags });
+  if (ref) sessionStore.requireCurrent(ref);
   const bound = await resolveBoundClipboardRuntime({
     device,
     action,
@@ -163,10 +165,10 @@ export async function handleSessionClipboardCommand(params: {
     bindDevice,
   });
   if (!bound.ok) return bound.response;
-
+  const current = ref ? sessionStore.requireCurrent(ref) : undefined;
   const result = await bound.execute(
-    contextFromFlags(logPath, req.flags, session?.appBundleId, session?.trace?.outPath),
+    contextFromFlags(logPath, req.flags, current?.appBundleId, current?.trace?.outPath),
   );
-  recordSessionAction(sessionStore, session, req, req.command, result);
+  recordSessionAction(sessionStore, ref, req, req.command, result);
   return { ok: true, data: { platform: publicPlatformString(device), ...result } };
 }

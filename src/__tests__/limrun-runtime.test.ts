@@ -843,25 +843,72 @@ test('Limrun removes only its own port reverse mappings from an attached Android
   const runtime = new LimrunRuntime({ instances: { android: ATTACHED_ANDROID } });
   const lease = { ...androidLease(), leaseId: 'lease-attached-android' };
   vi.mocked(runCmd).mockImplementation(async (_command, args) => ({
-    stdout: args.includes('--list') ? 'host-7 tcp:8081 tcp:8081\nhost-9 tcp:8097 tcp:8097\n' : '',
+    stdout: args.includes('--list')
+      ? 'host-7 tcp:8081 tcp:8081\nhost-9 tcp:8097 tcp:8097\nhost-9 tcp:8099 tcp:8099\n'
+      : '',
     stderr: '',
     exitCode: 0,
   }));
 
-  await allocateLimrunDevice(runtime, lease);
+  const device = await allocateLimrunDevice(runtime, lease);
   await runtime.configurePortReverse({
     leaseId: lease.leaseId,
     devicePort: 8097,
     hostPort: 8097,
     name: 'react-devtools',
   });
+  await runtime.getInteractor(device)?.open('http://127.0.0.1:8099/');
   await runtime.shutdown();
 
   const removals = vi
     .mocked(runCmd)
     .mock.calls.map(([, args]) => args)
-    .filter((args) => args.includes('--remove'));
-  assert.deepEqual(removals, [['-s', '127.0.0.1:62001', 'reverse', '--remove', 'tcp:8097']]);
+    .filter((args) => args.includes('--remove'))
+    .map((args) => args.at(-1))
+    .sort();
+  assert.deepEqual(removals, ['tcp:8097', 'tcp:8099']);
+});
+
+test('Limrun refuses to replace an owner port reverse on an attached Android instance', async () => {
+  const runtime = new LimrunRuntime({ instances: { android: ATTACHED_ANDROID } });
+  const lease = { ...androidLease(), leaseId: 'lease-attached-android' };
+  vi.mocked(runCmd).mockImplementation(async (_command, args) =>
+    args.includes('--no-rebind')
+      ? { stdout: '', stderr: 'adb: error: cannot rebind existing socket', exitCode: 1 }
+      : {
+          stdout: args.includes('--list') ? 'owner-host tcp:8081 tcp:8081\n' : '',
+          stderr: '',
+          exitCode: 0,
+        },
+  );
+  const isRebindRefusal = (error: unknown) =>
+    (error as { details?: { reason?: unknown } }).details?.reason ===
+    'android_port_reverse_rebind_refused';
+
+  const device = await allocateLimrunDevice(runtime, lease);
+  await assert.rejects(
+    () =>
+      runtime.configurePortReverse({
+        leaseId: lease.leaseId,
+        devicePort: 8081,
+        hostPort: 8081,
+        name: 'metro',
+      }),
+    isRebindRefusal,
+  );
+  const interactor = runtime.getInteractor(device);
+  if (!interactor) throw new Error('Limrun runtime must return an interactor');
+  await assert.rejects(() => interactor.open('exp://127.0.0.1:8081'), isRebindRefusal);
+  await runtime.shutdown();
+
+  const reverseCalls = vi
+    .mocked(runCmd)
+    .mock.calls.map(([, args]) => args.slice(2))
+    .filter((args) => args[0] === 'reverse' && args[1] !== '--list');
+  assert.deepEqual(reverseCalls, [
+    ['reverse', '--no-rebind', 'tcp:8081', 'tcp:8081'],
+    ['reverse', '--no-rebind', 'tcp:8081', 'tcp:8081'],
+  ]);
 });
 
 test('Limrun instance access wins over the API key for its platform only', async () => {

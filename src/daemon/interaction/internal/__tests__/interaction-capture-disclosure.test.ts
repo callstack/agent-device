@@ -55,7 +55,7 @@ async function pressSelector(params: {
   captureCalls: { count: number };
 }) {
   const sessionStore = makeSessionStore();
-  sessionStore.set(params.sessionName, makeSession(params.sessionName));
+  sessionStore.publish(params.sessionName, makeSession(params.sessionName));
   const response = await handleInteractionCommands({
     req: {
       token: 't',
@@ -106,7 +106,7 @@ test('a press that consumes no capture is not disclosed against an older tree', 
   const sessionStore = makeSessionStore();
   const session = makeSession(sessionName);
   session.snapshot = capturedTree({ sessionName, targetActivation: FACT });
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
     req: {
@@ -144,7 +144,7 @@ async function pressAfterUnsettledScroll(selector: string) {
   const sessionStore = makeSessionStore();
   const session = makeSession('default');
   markDeferredInteractionOutcome({ session, command: 'scroll', positionals: ['down'], flags: {} });
-  sessionStore.set('default', session);
+  sessionStore.publish('default', session);
   let call = 0;
   legacyDispatchCapture.mockImplementation(async () => {
     call += 1;

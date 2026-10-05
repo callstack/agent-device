@@ -62,7 +62,7 @@ beforeEach(() => {
 
 async function runDoctorWithSessionDevice(device: DeviceInfo): Promise<DaemonResponse | null> {
   const sessionStore = makeSessionStore('agent-device-doctor-warmup-');
-  sessionStore.set('doctor-session', {
+  sessionStore.publish('doctor-session', {
     name: 'doctor-session',
     createdAt: Date.now(),
     device,

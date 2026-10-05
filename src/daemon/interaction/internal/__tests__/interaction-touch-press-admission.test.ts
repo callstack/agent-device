@@ -85,7 +85,7 @@ test('click --button middle on macOS fails with an explicit unsupported-operatio
     kind: 'device',
     booted: true,
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockTapPoint.mockRejectedValue(
     new Error('dispatch should not be called for unsupported middle click'),
@@ -116,7 +116,7 @@ test('click --button middle on macOS fails with an explicit unsupported-operatio
 test('press coordinates does not treat extra trailing args as selector', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
 
   const response = await handleInteractionCommands({
     req: {
@@ -141,7 +141,7 @@ test('press coordinates does not treat extra trailing args as selector', async (
 test('#1654: the resolved-target payload fails closed when its ref provenance disagrees', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'find-preresolved-mismatched-ref';
-  sessionStore.set(sessionName, makeStaleRefSession(sessionName));
+  sessionStore.publish(sessionName, makeStaleRefSession(sessionName));
   const preresolved = makeFindPreresolvedTree();
 
   const response = await runFindInternalClick(sessionStore, sessionName, {
@@ -160,7 +160,7 @@ test('press selector then press @ref rejects refs that outlived the stored snaps
   const sessionStore = makeSessionStore();
   const sessionName = 'stale-ref-warns';
   const session = makeStaleRefSession(sessionName);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   mockCaptureSnapshotForSession.mockResolvedValue({
     nodes: makeTwoButtonNodes(),
     backend: 'xctest',
@@ -196,7 +196,7 @@ test('a ref press crosses the ADR 0014 side-effect seam and expires the ref fram
   const sessionStore = makeSessionStore();
   const sessionName = 'seam-expiry';
   const session = makeStaleRefSession(sessionName);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   mockCaptureSnapshotForSession.mockResolvedValue({
     nodes: makeTwoButtonNodes(),
     backend: 'xctest',
@@ -219,7 +219,7 @@ test('ADR 0014 evidence #1: a second ref mutation rejects (bare and pinned) unti
   session.snapshotGeneration = 500;
   // A complete snapshot issued the frame at generation 500.
   activateCompleteRefFrame(session);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   mockCaptureSnapshotForSession.mockResolvedValue({
     nodes: makeTwoButtonNodes(),
     backend: 'xctest',
@@ -251,7 +251,7 @@ test('press @ref directly after refs were issued does not warn', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'fresh-ref-no-warning';
   const session = makeStaleRefSession(sessionName);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
   expect(response?.ok).toBe(true);
@@ -264,7 +264,7 @@ test('re-issuing a complete frame lets press @ref succeed again without warning'
   const sessionStore = makeSessionStore();
   const sessionName = 'reissued-refs-no-warning';
   const session = makeStaleRefSession(sessionName);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   mockCaptureSnapshotForSession.mockResolvedValue({
     nodes: makeTwoButtonNodes(),
     backend: 'xctest',
@@ -283,7 +283,6 @@ test('re-issuing a complete frame lets press @ref succeed again without warning'
   // snapshot-handler tests). Without it the frame would stay expired.
   const stored = sessionStore.get(sessionName)!;
   activateCompleteRefFrame(stored);
-  sessionStore.set(sessionName, stored);
 
   const refPress = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
   expect(refPress?.ok).toBe(true);
@@ -299,7 +298,7 @@ test('press with a pinned ref matching the current frame epoch is clean', async 
   const sessionName = 'pinned-current-clean';
   const session = makeStaleRefSession(sessionName);
   session.snapshotGeneration = 5;
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1~s5']);
   expect(response?.ok).toBe(true);
@@ -313,7 +312,7 @@ test('press with a pinned ref from an older generation rejects with the precise 
   const sessionName = 'pinned-stale-precise';
   const session = makeStaleRefSession(sessionName);
   session.snapshotGeneration = 15;
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   mockTapPoint.mockRejectedValue(new Error('touch should not be called for a stale iOS ref'));
 
   const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1~s12']);
@@ -343,7 +342,7 @@ test('ADR 0014 evidence #6: a read-only capture does not invalidate a mutation r
     backend: 'xctest',
   });
   expect(refFrameState(session)).toBe('active');
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   mockTapPoint.mockResolvedValue({ pressed: true });
 
   const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
@@ -362,7 +361,7 @@ test('a malformed generation suffix is INVALID_ARGS with the ref grammar hint', 
   const sessionStore = makeSessionStore();
   const sessionName = 'pinned-malformed';
   const session = makeStaleRefSession(sessionName);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   for (const [command, positionals] of [
     ['press', ['@e1~x3']],
@@ -392,7 +391,7 @@ test('after a session reopen, a pin from the previous lifetime rejects (reseeded
   // one replacement deep (a per-lifetime count from 1 would collide here).
   const reopened = makeStaleRefSession(sessionName);
   setSessionSnapshot(reopened, { ...reopened.snapshot! });
-  sessionStore.set(sessionName, reopened);
+  sessionStore.publish(sessionName, reopened);
   // Probabilistic (~1/900000 collision) — accepted residual risk.
   expect(reopened.snapshotGeneration).not.toBe(oldGeneration);
   mockTapPoint.mockRejectedValue(new Error('touch should not be called for a stale iOS ref'));

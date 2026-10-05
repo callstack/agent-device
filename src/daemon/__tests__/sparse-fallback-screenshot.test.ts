@@ -25,7 +25,10 @@ async function scenario() {
   const root = await mkdtempForTest('agent-device-sparse-fallback-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   return { sessionStore, sessionName, logPath: path.join(root, 'daemon.log') };
 }
 

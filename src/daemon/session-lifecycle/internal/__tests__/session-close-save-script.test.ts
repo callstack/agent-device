@@ -32,7 +32,7 @@ test('close --save-script on a never-armed session is rejected before teardown, 
   // teardown to observably touch.
   const session = makeIosSimulatorRecordingSession(sessionStore, sessionName);
   const finish = recordingFinishMock(session);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   await expect(
     handleSessionCommands({
@@ -106,7 +106,7 @@ test('close --save-script on a session with an active .ad repair transaction is 
       boundary: 0,
     },
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const response = await handleSessionCommands({
     req: {

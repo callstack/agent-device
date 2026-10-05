@@ -11,11 +11,11 @@ import {
   sessionIdleDeadlineMs,
   type SessionIdleExpiryOutcome,
 } from '../session-idle-expiry.ts';
-import type { SessionState } from '../session-state.ts';
+import type { SessionRef, SessionState } from '../session-state.ts';
 import type { SessionStore } from '../session-store.ts';
 
 /** Settles one expired session's owned resources. Supplied by the runtime, which owns the seams. */
-export type IdleSessionSettler = (session: SessionState, sessionName: string) => Promise<void>;
+export type IdleSessionSettler = (ref: SessionRef) => Promise<void>;
 
 /** The one outcome this reaper invents: the clear threw, so nothing about the claim is known. */
 const CLAIM_CLEAR_FAILED = 'claim-clear-failed';
@@ -105,7 +105,7 @@ export function createSessionIdleExpiry(params: {
   // without taking any execution lock, so it is the one remover that can finalize a session out from
   // under a settle. A sweep already inside a settle cannot be recalled, and settles there because
   // stopping mid-teardown would strand a resource; what it must not do is write an idle-expiry
-  // marker over a shutdown's close, which `SessionStore.delete`'s answer detects.
+  // marker over a shutdown's close; retiring the captured lifetime detects that case.
   let closing = false;
   // Addresses with a settle in flight. A settle whose budget expired stopped being WAITED on, not
   // stopped: it keeps holding the session's execution lock until it actually finishes. Without this
@@ -254,7 +254,7 @@ async function expireIdleSessions(params: IdleExpirySweepParams): Promise<void> 
  * that lands after the budget still counts.
  */
 async function expireIdleSession(
-  params: IdleExpirySweepParams & { ref: { address: string; session: SessionState } },
+  params: IdleExpirySweepParams & { ref: SessionRef },
 ): Promise<void> {
   const { address } = params.ref;
   // A release still in flight holds this session's locks, so queueing on them would have the sweep wait
@@ -332,7 +332,7 @@ function budgetElapsedAfter(ms: number): Readonly<{
  */
 async function settleIdleSessionUnderLock(
   params: IdleExpirySweepParams & {
-    ref: { address: string; session: SessionState };
+    ref: SessionRef;
     lockKeys: readonly RequestExecutionLockKey[];
   },
 ): Promise<SessionIdleExpiryOutcome | undefined> {
@@ -349,7 +349,7 @@ async function settleIdleSessionUnderLock(
         if (params.closing()) return NOTHING_TO_RETRY;
         // Re-read under the locks rather than trusting the swept reference: the device may have moved,
         // and the lock keys were chosen from the pre-lock reading.
-        const settled = params.sessionStore.get(address);
+        const settled = params.sessionStore.resolveCurrent(params.ref);
         if (!settled) return NOTHING_TO_RETRY;
         if (settled.device.id !== session.device.id) return NOTHING_TO_RETRY;
         // Re-clocked here too: a command that admitted while this expiry was queuing has finished and
@@ -357,8 +357,7 @@ async function settleIdleSessionUnderLock(
         const atMs = params.now();
         if (!isSessionIdleExpired(settled, params.idleExpiryMs, atMs)) return NOTHING_TO_RETRY;
         const outcome = await settleExpiredSession({
-          sessionName: address,
-          session: settled,
+          ref: params.sessionStore.refresh(params.ref),
           idleExpiryMs: params.idleExpiryMs,
           expiredAtMs: atMs,
           sessionStore: params.sessionStore,
@@ -450,14 +449,14 @@ function rememberRetry(
  * successor owns the device now, and never blocks the expiry.
  */
 async function settleExpiredSession(params: {
-  sessionName: string;
-  session: SessionState;
+  ref: SessionRef;
   idleExpiryMs: number;
   expiredAtMs: number;
   sessionStore: SessionStore;
   settleSession: IdleSessionSettler;
 }): Promise<SessionIdleExpiryOutcome | undefined> {
-  const { sessionName, session, idleExpiryMs, expiredAtMs } = params;
+  const { ref, idleExpiryMs, expiredAtMs } = params;
+  const { address: sessionName, session } = ref;
   const deviceKey = session.deviceClaim?.deviceKey;
   const identity = { session: sessionName, idleExpiryMs, ...(deviceKey ? { deviceKey } : {}) };
   if (!(await releaseExpiredSessionResources(params, identity))) return undefined;
@@ -477,21 +476,8 @@ async function settleExpiredSession(params: {
   // stamps COMMITTED onto the record, and a write onto an already-committed transaction is an
   // idempotent no-op. Finalizing a settle that is being held back would therefore mark a still-live
   // session's healed script as already published, and no later teardown would ever publish it.
-  params.sessionStore.finalizeRepairTeardown(session);
-  // `delete` reports whether a record was still here to remove. Every request-path remover — `close`,
-  // a replacing `open`, a lease-expiry teardown — removes a session from inside `runAdmitted`, which
-  // holds the same lock pair this settle holds, and a settle budget bounds only the sweep's WAIT and
-  // never these locks, so no request can reach this record while the release is running. Daemon
-  // shutdown is the one remover that takes no lock at all, and it is therefore the only way here.
-  // The session was ended by someone else, and that owner has already explained it; a marker written
-  // now would tell the next agent the session died of idleness when something else closed it.
-  //
-  // The finalize above already published this session's repair transaction, which is why "a failed
-  // settle changes nothing" is not this function's contract: publishing belongs to whoever ENDS the
-  // session, and shutdown ends it by finalizing the same live record, onto which this commit is an
-  // idempotent no-op. Deferring the finalize to below this guard would instead resolve the healed
-  // script's event-log directory by map identity, which a deleted record no longer answers correctly.
-  if (!params.sessionStore.delete(sessionName)) {
+  params.sessionStore.finalizeRepairTeardown(ref);
+  if (!params.sessionStore.retire(ref)) {
     emitDiagnostic({
       level: 'info',
       phase: 'session_idle_expiry_superseded',
@@ -528,11 +514,11 @@ async function settleExpiredSession(params: {
  * this step's diagnostic.
  */
 async function releaseExpiredSessionResources(
-  params: { session: SessionState; sessionName: string; settleSession: IdleSessionSettler },
+  params: { ref: SessionRef; settleSession: IdleSessionSettler },
   identity: Readonly<Record<string, unknown>>,
 ): Promise<boolean> {
   try {
-    await params.settleSession(params.session, params.sessionName);
+    await params.settleSession(params.ref);
     return true;
   } catch (error) {
     emitDiagnostic({

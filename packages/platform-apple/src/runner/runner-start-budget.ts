@@ -4,7 +4,8 @@ import {
   isRequestCanceledError,
 } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from './host.ts';
-import { resolveRunnerStartupSignal } from './runner-contract.ts';
+import { isCallerDeadlineAbortReason, resolveRunnerStartupSignal } from './runner-contract.ts';
+import { stopRunnerPrepProcessesWithoutActiveOwner } from './runner-disposal.ts';
 import { createRunnerPhaseBudget, type RunnerPhaseBudget } from './runner-xctestrun.ts';
 import { normalizeRunnerStartupTimeoutMs, type RunnerSession } from './runner-session-types.ts';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
@@ -85,18 +86,34 @@ function runnerStartBudgetExhaustedError(timeoutMs: number, explicit: boolean): 
  * signal allows. A caller whose deadline lands during a cold xctestrun build leaves on time, the
  * build keeps going under the lock, and the next request for the device queues behind it and joins
  * the session it registers (#2894). Whatever the abort reason, the caller sees the same cancelled
- * request it would have seen from any later step; a cancelled request's abort also reaches the
- * start through its own startup signal, so nothing here decides whether the start survives. A
- * start that fails after its caller left has nobody to report to, so its failure is logged here.
+ * request it would have seen from any later step. A start that fails after its caller left has
+ * nobody to report to, so its failure is logged here.
+ *
+ * The two abort reasons get opposite treatment of the detached start, and the difference is the
+ * whole point (#2894 vs #3177). A caller's own deadline (a bounded poll) must leave the start
+ * running: it is the start the retry joins. A cancelled request means the client is gone, and the
+ * start it was waiting for belongs to nobody — its spawn carried the *waiting request's*
+ * cancellation signal only when that request opened the start, so a request that merely joined a
+ * start another request spawned has no path to it otherwise. On cancel the waiter stops the
+ * device's prep subprocesses through the same tree-kill path a session stop uses, so a timed-out
+ * `open` cannot orphan a `build-for-testing` on the shared runner derived-data root where a
+ * retried `open` would race it. Only builds whose owning start is detached are stopped: a build
+ * still owned by an in-flight request belongs to its owner and dies through the owner's own
+ * signal, never under a canceled waiter. The start itself keeps running under the lock (bounded
+ * by its own budget); its build is left running only while its owner is still there to cancel it.
  */
 export async function raceRunnerStartAgainstCaller(
   start: Promise<RunnerSession>,
   signal: AbortSignal | undefined,
+  deviceId: string,
 ): Promise<RunnerSession> {
   if (!signal) return await start;
   return await new Promise<RunnerSession>((resolve, reject) => {
     const abort = () => {
       reject(createRequestCanceledError(undefined, signal.reason));
+      if (!isCallerDeadlineAbortReason(signal.reason)) {
+        void stopRunnerPrepProcessesWithoutActiveOwner(deviceId);
+      }
       start.catch(emitDetachedRunnerStartFailed);
     };
     if (signal.aborted) {

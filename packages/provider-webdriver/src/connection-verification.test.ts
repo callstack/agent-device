@@ -102,6 +102,7 @@ test('BrowserStack points HTTP failures at its service status and transport fail
     }),
   );
   await assert.rejects(createProvider().verifyConnection(browserStackOptions), (error: unknown) => {
+    assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
     assert.equal(
       (error as { details?: { hint?: string } }).details?.hint,
       'Check network access to api-cloud.browserstack.com and retry connect.',

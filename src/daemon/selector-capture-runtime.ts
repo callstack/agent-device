@@ -8,7 +8,7 @@ import {
 } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import type { DaemonRequest } from './daemon-request.ts';
-import type { SessionState } from './session-state.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
 import { SessionStore } from './session-store.ts';
 import { recordCaptureProof } from './capture-disclosure.ts';
 import type { RequestCaptureProof } from './capture-disclosure.ts';
@@ -24,8 +24,8 @@ import { isLegacySparseIosInteractiveSnapshot } from '@agent-device/selectors/ab
 const SELECTOR_CAPTURE_CACHE_TTL_MS = 750;
 
 export type SelectorCaptureRuntimeParams = {
+  ref: SessionRef | undefined;
   device: SessionState['device'];
-  session: SessionState | undefined;
   sessionStore: SessionStore;
   sessionName: string;
   req: DaemonRequest;
@@ -81,7 +81,7 @@ type SelectorCaptureRequest = {
 type SelectorCaptureResult = BackendSnapshotResult & { snapshot: SnapshotState };
 
 export function createSelectorCaptureRuntime(params: SelectorCaptureRuntimeParams) {
-  const { session, sessionStore, sessionName } = params;
+  const { sessionStore, ref } = params;
   let lastSnapshotAt = 0;
   let lastSnapshotResult: SelectorCaptureResult | undefined;
   let lastSnapshotCacheKey: string | undefined;
@@ -92,6 +92,7 @@ export function createSelectorCaptureRuntime(params: SelectorCaptureRuntimeParam
   };
 
   const capture = async (request: SelectorCaptureRequest): Promise<SelectorCaptureResult> => {
+    const session = ref ? sessionStore.requireCurrent(ref) : undefined;
     const timestamp = Date.now();
     const cacheKey = selectorCaptureCacheKey(request, params.req.flags?.out);
     const reusableLastSnapshot = readReusableLastSnapshot({
@@ -118,7 +119,7 @@ export function createSelectorCaptureRuntime(params: SelectorCaptureRuntimeParam
     const snapshot = await captureSelectorSnapshot({ params, request });
     request.signal?.throwIfAborted();
     const result = { snapshot };
-    updateSessionSnapshot({ session, sessionStore, sessionName, snapshot });
+    updateSessionSnapshot({ ref, sessionStore, snapshot });
     lastSnapshotAt = timestamp;
     lastSnapshotResult = result;
     lastSnapshotCacheKey = cacheKey;
@@ -195,6 +196,7 @@ async function runCapture(
   snapshotScope: string | undefined,
   interactiveOnly = request.flags?.snapshotInteractiveOnly,
 ): Promise<SnapshotState> {
+  const session = params.ref ? params.sessionStore.requireCurrent(params.ref) : undefined;
   const flags = {
     ...request.flags,
     snapshotInteractiveOnly: interactiveOnly,
@@ -202,7 +204,7 @@ async function runCapture(
   const boundCapture = params.capture;
   const capture = await captureSnapshot({
     device: params.device,
-    session: params.session,
+    session,
     flags,
     outPath: request.outPath ?? params.req.flags?.out,
     logPath: params.logPath ?? '',
@@ -215,7 +217,7 @@ async function runCapture(
           flags,
           logPath: params.logPath ?? '',
           meta: params.req.meta,
-          session: params.session,
+          session,
           snapshotScope,
           includeRects: request.includeRects,
           // The POLL's remaining budget, not the request's. A binding's signal is fixed at
@@ -324,13 +326,11 @@ function flagsForPresentation(request: SelectorCaptureRequest): CommandFlags | u
 }
 
 function updateSessionSnapshot(params: {
-  session: SessionState | undefined;
+  ref: SessionRef | undefined;
   sessionStore: SessionStore;
-  sessionName: string;
   snapshot: SnapshotState;
 }): void {
-  const { session, sessionStore, sessionName, snapshot } = params;
-  if (!session || isSparseSnapshotQualityVerdict(snapshot.snapshotQuality)) return;
-  setSessionSnapshot(session, snapshot);
-  sessionStore.set(sessionName, session);
+  const { ref, sessionStore, snapshot } = params;
+  if (!ref || isSparseSnapshotQualityVerdict(snapshot.snapshotQuality)) return;
+  setSessionSnapshot(sessionStore.requireCurrent(ref), snapshot);
 }

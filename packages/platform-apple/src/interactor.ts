@@ -39,9 +39,10 @@ import { hostMacOsAppBackend } from './os/macos/app-backend.ts';
 import { macOsNativeAppInteractor } from './os/macos/native-app-interactor.ts';
 import {
   presentAppleRunnerSnapshot,
+  type AppleRunnerSnapshotPresentation,
   readAppleSnapshotResult,
+  type AppleRunnerSnapshotResult,
 } from './runner/snapshot-presentation.ts';
-import type { AppleRunnerSnapshotResult } from './runner/snapshot-presentation.ts';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 
@@ -260,11 +261,13 @@ async function captureAppleRunnerSnapshot(
   );
   assertReportedRunnerSnapshotNodes(device, options, result);
   const warnings = runnerSnapshotWarnings(result);
+  const presentation = presentRunnerSnapshotForDevice(device, options, result);
   return {
-    nodes: presentRunnerSnapshotForDevice(device, options, result),
+    nodes: presentation.nodes,
     truncated: result.truncated ?? false,
     backend: 'xctest' as const,
     producer: 'apple-runner' as const,
+    ...(presentation.viewport ? { viewport: presentation.viewport } : {}),
     ...(result.quality ? { quality: result.quality } : {}),
     ...(result.systemSurface ? { systemSurface: result.systemSurface } : {}),
     ...(result.keyboard ? { keyboard: result.keyboard } : {}),
@@ -308,8 +311,10 @@ function presentRunnerSnapshotForDevice(
   device: DeviceInfo,
   options: SnapshotOptions | undefined,
   result: AppleRunnerSnapshotResult,
-) {
-  if (isMacOs(device)) return result.nodes ?? [];
+): AppleRunnerSnapshotPresentation {
+  // The desktop runner's nodes are already presented and carry absolute window-space rects, which
+  // no single box describes (#3182); the macOS surface capture publishes its own space instead.
+  if (isMacOs(device)) return { nodes: result.nodes ?? [] };
   return presentAppleRunnerSnapshot(device.id, options, result);
 }
 

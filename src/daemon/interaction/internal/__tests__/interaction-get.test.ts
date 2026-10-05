@@ -92,7 +92,7 @@ test('get text prefers underlying value for text surfaces and avoids recording g
     backend: 'xctest',
     producer: 'apple-runner',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   legacyDispatchCapture.mockRejectedValue(
     new Error('dispatch should not be called for snapshot-derived get text'),
@@ -143,7 +143,7 @@ test('get text uses backend read expansion when the resolved node has a rect', a
     backend: 'xctest',
     producer: 'apple-runner',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockReadTextAtPoint.mockResolvedValue(
     elementTextRead('package com.example.app\nclass MainActivity {}'),
@@ -192,7 +192,7 @@ test('get text answers from the captured tree when the bound owner advertises no
     backend: 'xctest',
     producer: 'apple-runner',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   elementReadFixtureState.readTextAtPointAvailable = false;
 
   const response = await handleInteractionCommands({
@@ -226,7 +226,10 @@ test('get text answers from the captured tree when the bound owner advertises no
 test('an eligible direct iOS selector cannot operate before admission', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'get-text-direct-before-admission';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   elementReadFixtureState.captureSnapshotAvailable = false;
   mockRunAppleRunnerCommand.mockResolvedValue({
     found: true,
@@ -262,7 +265,10 @@ test('an eligible direct iOS selector cannot operate before admission', async ()
 test('get text simple iOS id selector resolves through the bound capture, not a runner query', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'get-text-ios-direct-selector';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   legacyDispatchCapture.mockResolvedValue({
     backend: 'xctest',
     producer: 'apple-runner',
@@ -320,7 +326,10 @@ test('get text simple iOS id selector resolves through the bound capture, not a 
 test('get text iOS label selector uses snapshot disambiguation instead of runner query', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'get-text-ios-label-selector';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   legacyDispatchCapture.mockResolvedValue({
     backend: 'xctest',
     producer: 'apple-runner',
@@ -393,7 +402,7 @@ test('get text iOS label selector uses snapshot disambiguation instead of runner
 test('is visible preserves CLI snapshot flags during runtime snapshot capture', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'snapshot-flags';
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
 
   legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command !== 'snapshot') throw new Error(`unexpected command: ${command}`);
@@ -456,7 +465,7 @@ test('is visible reuses fresh cached iOS snapshots with rects', async () => {
     backend: 'xctest',
     producer: 'apple-runner',
   });
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   legacyDispatchCapture.mockRejectedValue(new Error('unexpected fresh snapshot'));
 
   const response = await handleInteractionCommands({
@@ -490,7 +499,7 @@ test('is visible recaptures web snapshots when cached nodes may lack rects', asy
     },
     { snapshotInteractiveOnly: false },
   );
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   legacyDispatchCapture.mockResolvedValue(
     makeVisibleButtonSnapshot('Submit order', {
       backend: 'web',
@@ -528,7 +537,10 @@ test('is visible recaptures web snapshots when cached nodes may lack rects', asy
 test('a failing is predicate is COMMAND_FAILED, never a zero-exit pass', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'is-selected-ios-direct-selector-false';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   mockRunAppleRunnerCommand.mockResolvedValue({
     found: true,
     nodes: [
@@ -570,7 +582,7 @@ test('a failing is predicate is COMMAND_FAILED, never a zero-exit pass', async (
 test('is visible passes for list text that inherits viewport visibility from an ancestor', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'visible-list-item';
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
 
   legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command !== 'snapshot') throw new Error(`unexpected command: ${command}`);
@@ -623,7 +635,7 @@ test('is visible passes for list text that inherits viewport visibility from an 
 test('is visible fails for nodes outside the current viewport', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'visible-offscreen';
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
 
   legacyDispatchCapture.mockImplementation(async (_device, command) => {
     if (command !== 'snapshot') throw new Error(`unexpected command: ${command}`);
@@ -669,7 +681,7 @@ test('is visible fails for nodes outside the current viewport', async () => {
 test('is reports Android permission dialog blocker when app content assertion fails', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-permission-blocked';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeBaseAndroidSession(sessionName, { appBundleId: 'com.example.demo' }),
   );
@@ -734,7 +746,7 @@ test('ADR 0014 evidence #17: get text @ref reads the retained frame tree, not a 
     backend: 'xctest',
     producer: 'apple-runner',
   });
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   legacyDispatchCapture.mockRejectedValue(new Error('get text @ref must not recapture'));
 
   // Resolves against the frame tree's @e2 (Continue), never the observation's
@@ -764,7 +776,7 @@ test('get text @ref warns while the frame is expired (retained evidence still re
   // A device action expired the frame; the read still resolves against the
   // retained frame tree and stays fail-open with a warning (ADR 0014).
   expireRefFrame(session);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   legacyDispatchCapture.mockRejectedValue(
     new Error('dispatch should not be called for snapshot-derived get text'),
   );
@@ -782,7 +794,7 @@ test('get text with a pinned stale ref gets the precise warning', async () => {
   const sessionName = 'pinned-get-text';
   const session = makeStaleRefSession(sessionName);
   session.snapshotGeneration = 4;
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   legacyDispatchCapture.mockRejectedValue(
     new Error('dispatch should not be called for snapshot-derived get text'),
   );

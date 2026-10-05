@@ -1,4 +1,4 @@
-import type { Rect } from './snapshot.ts';
+import type { Rect, SnapshotViewportSize } from './snapshot.ts';
 
 /**
  * CoreGraphics' `CGRectInfinite`, spelled in the four doubles Apple builds it from. This is what a
@@ -38,6 +38,48 @@ export function isPositiveFiniteRect(rect: Rect | undefined): rect is Rect {
   if (!Number.isFinite(x + width) || !Number.isFinite(y + height)) return false;
   if (width <= 0 || height <= 0) return false;
   return !isCGRectInfinite(rect);
+}
+
+/**
+ * A failed read keeps the maximal extents of `CGRectInfinite` whatever happened to its origin, and a
+ * size field carries no origin of its own: a producer that hands over the box it still holds after a
+ * refused read, or a wire payload that arrives with the extents and no coordinates, would otherwise
+ * publish the largest number on the wire as the screen every rect is measured in (#2891, #3182).
+ */
+function reportsFailedReadExtents(width: number, height: number): boolean {
+  return width >= CG_RECT_INFINITE.width || height >= CG_RECT_INFINITE.height;
+}
+
+/**
+ * The ONE construction path for the viewport a snapshot response publishes (#3182): a producer hands
+ * over the box it read, and a box this guard refuses yields `undefined` — the absence that means
+ * unknown — instead of a size with a zero in it. A producer that published a zero would be
+ * answering "this screen has no width", which no producer measured; a reader that has to tell the
+ * two apart can only do it when one of them is unrepresentable.
+ */
+export function snapshotViewportSizeFrom(box: Rect | undefined): SnapshotViewportSize | undefined {
+  if (!isPositiveFiniteRect(box)) return undefined;
+  if (reportsFailedReadExtents(box.width, box.height)) return undefined;
+  return { width: box.width, height: box.height } as SnapshotViewportSize;
+}
+
+/**
+ * Re-read of a viewport this repo already published, out of an untyped wire payload: only a
+ * `{ width, height }` pair the guard accepts survives, and anything else is the absence that means
+ * unknown. A reader that trusted the payload could otherwise hand a consumer the `width: 0` a broken
+ * producer wrote, which is the claim {@link snapshotViewportSizeFrom} exists to make unrepresentable.
+ *
+ * The published shape carries no origin, so the failed read has to be recognised from its extents
+ * alone: the extents check covers the payload with no coordinates as well as one that arrived with
+ * the `CGRectInfinite` origin beside them.
+ */
+export function readSnapshotViewportSize(value: unknown): SnapshotViewportSize | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const { x, y, width, height } = value as Record<string, unknown>;
+  if (typeof width !== 'number' || typeof height !== 'number') return undefined;
+  if (x !== undefined && typeof x !== 'number') return undefined;
+  if (y !== undefined && typeof y !== 'number') return undefined;
+  return snapshotViewportSizeFrom({ x: x ?? 0, y: y ?? 0, width, height });
 }
 
 export function rectContains(container: Rect, nested: Rect): boolean {

@@ -51,7 +51,8 @@ export async function handleInstallFromSourceDeploymentCommand(params: {
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
-  const session = sessionStore.get(sessionName);
+  const ref = sessionStore.lookup(sessionName);
+  const session = ref?.session;
   let resolvedSource: ReturnType<typeof resolveInstallSource> | undefined;
   let materialized: MaterializedAppSource | undefined;
   let retained: RetainedMaterializedPaths | undefined;
@@ -88,14 +89,14 @@ export async function handleInstallFromSourceDeploymentCommand(params: {
     // ADR 0014 side-effect seam: materialization is request-local, but deployment can
     // replace the visible app surface. Expire immediately before its sole bound dispatch,
     // so admission or materialization failures preserve refs while a dispatch rejection does not.
-    if (session) expireRefFrame(session);
+    if (ref) expireRefFrame(sessionStore.requireCurrent(ref));
     const deployment = await runtime.operations.deployMaterializedApp({ artifact: materialized });
     const result = buildInstallFromSourceResult(device, materialized, deployment, retained);
     const data = withSuccessText(
       result,
       `Installed: ${resolveInstallFromSourceResultTarget(result)}`,
     );
-    recordSessionAction(sessionStore, session, req, 'install_source', data, { positionals: [] });
+    recordSessionAction(sessionStore, ref, req, 'install_source', data, { positionals: [] });
     return { ok: true, data };
   } catch (error) {
     if (retained) {

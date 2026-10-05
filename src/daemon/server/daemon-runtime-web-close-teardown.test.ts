@@ -31,7 +31,7 @@ test('daemon shutdown awaits a slow web close inside its extended budget', async
   await installFakeManagedAgentBrowser(root);
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const session = makeWebSession('shutdown-slow-web-session');
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   mockRunCmd.mockImplementation(
     async () =>
       await new Promise((resolve) => {
@@ -49,7 +49,7 @@ test('daemon shutdown awaits a slow web close inside its extended budget', async
   const stderrChunks: string[] = [];
 
   const teardown = teardownDaemonSessionForShutdown({
-    session,
+    ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stateDir: root,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },
@@ -74,7 +74,7 @@ test('daemon shutdown closes an open web session immediately, without waiting fo
   // Teardown runs while the session it is tearing down is still in the store (session deletion
   // happens after), which is also what keeps agent-browser's provider-startup orphan sweep from
   // treating this session's own browser as an orphan and scanning real host processes for it.
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   mockRunCmd.mockResolvedValue({
     stdout: JSON.stringify({ success: true, data: {} }),
     stderr: '',
@@ -83,7 +83,7 @@ test('daemon shutdown closes an open web session immediately, without waiting fo
   const stderrChunks: string[] = [];
 
   await teardownDaemonSessionForShutdown({
-    session,
+    ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stateDir: root,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },
@@ -107,7 +107,7 @@ test('daemon shutdown reports a web close failure on stderr instead of losing it
   await installFakeManagedAgentBrowser(root);
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const session = makeWebSession('shutdown-web-close-failure-session');
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   mockRunCmd.mockResolvedValue({
     stdout: JSON.stringify({ success: false, error: 'no active browser session' }),
     stderr: '',
@@ -116,7 +116,7 @@ test('daemon shutdown reports a web close failure on stderr instead of losing it
   const stderrChunks: string[] = [];
 
   await teardownDaemonSessionForShutdown({
-    session,
+    ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stateDir: root,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },

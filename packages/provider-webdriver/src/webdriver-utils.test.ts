@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
+import { runCmd } from '@agent-device/host-kit/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { asOptionalRecord } from '@agent-device/kernel/record';
 import {
@@ -118,6 +119,7 @@ test('the hub app resolver passes references through, uploads local files, and p
     assert.equal(await resolve('hub://APP3'), 'hub://APP3');
     assert.equal(await resolve('HUB://APP3'), 'hub://APP3');
     assert.equal(await resolve('https://builds.example/App.apk'), 'https://builds.example/App.apk');
+    assert.equal(await resolve('HTTPS://builds.example/App.apk'), 'HTTPS://builds.example/App.apk');
     assert.equal(await resolve('App.apk'), 'hub://App.apk');
     assert.deepEqual(uploadFile.mock.calls, [[path.join(tempDir, 'App.apk'), undefined]]);
     await assert.rejects(resolve('missing.apk'), (error: unknown) => {
@@ -203,3 +205,27 @@ test('the hub app resolver surfaces the grammar rejection of a malformed referen
     await fs.rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test.skipIf(process.platform === 'win32')(
+  'appFileUploadForm refuses a named pipe without reading it',
+  async () => {
+    const tempDir = await mkdtempForTest('agent-device-upload-form-fifo-');
+    try {
+      const fifoPath = path.join(tempDir, 'App.ipa');
+      await runCmd('mkfifo', [fifoPath]);
+
+      await assert.rejects(
+        appFileUploadForm(fifoPath, 'file', { provider: 'hub', service: 'Hub' }),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'INVALID_ARGS');
+          assert.equal(error.message, `Hub can only upload a regular app file: ${fifoPath}`);
+          assert.equal(error.details?.appPath, fifoPath);
+          return true;
+        },
+      );
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  },
+);

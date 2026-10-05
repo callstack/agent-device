@@ -52,7 +52,7 @@ async function runPrepare(flags: { timeoutMs?: number }): Promise<{
 }> {
   const sessionName = 'prepare-envelope-margin';
   const sessionStore = makeSessionStore('agent-device-prepare-handler-');
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     name: sessionName,
     device: IOS_SIMULATOR,
     createdAt: Date.now(),

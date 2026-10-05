@@ -83,7 +83,7 @@ export type ProviderScenarioHarness = {
   token: string;
   session: (name?: string) => SessionState | undefined;
   sessionDir: (name?: string) => string;
-  setSession: (name: string, session: SessionState) => void;
+  publishSession: (name: string, session: SessionState) => void;
   close: () => Promise<void>;
 };
 
@@ -229,7 +229,7 @@ export async function createProviderScenarioHarness(
     token: PROVIDER_SCENARIO_TOKEN,
     session: (name = 'default') => sessionStore.get(name),
     sessionDir: (name = 'default') => sessionStore.resolveSessionDir(name),
-    setSession: (name, session) => sessionStore.set(name, session),
+    publishSession: (name, session) => sessionStore.publish(name, session),
     close: async () => {
       await deviceRuntimeGateway.shutdown();
       await removeProviderScenarioTempDir(sessionDir);

@@ -37,6 +37,7 @@ import {
   makeMacOsSession,
 } from '../../../__tests__/test-utils/session-factories.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
 
 const ANDROID_ONE: DeviceInfo = {
   platform: 'android',
@@ -354,7 +355,11 @@ test('test stops before retrying when a rejected close leaves the prior macOS se
     },
     invoke: async (req) => {
       replayAttempts += 1;
-      sessionStore.set(req.session, makeMacOsSession(req.session));
+      storeSessionForTest(
+        sessionStore,
+        sessionStore.get(req.session) ?? makeMacOsSession(req.session),
+        req.session,
+      );
       return {
         ok: false,
         error: { code: 'COMMAND_FAILED', message: 'open "System Settings" failed' },
@@ -497,7 +502,7 @@ test('test aggregates snapshot diagnostics from replay session samples', async (
         backend: 'android',
         platform: 'android',
       });
-      sessionStore.set(req.session, session);
+      storeSessionForTest(sessionStore, session, req.session);
       return { ok: true, data: { replayed: 1, healed: 0 } };
     },
   });
@@ -554,7 +559,7 @@ test('test aggregates snapshot diagnostics from failed replay session samples', 
         backend: 'android',
         platform: 'android',
       });
-      sessionStore.set(req.session, session);
+      storeSessionForTest(sessionStore, session, req.session);
       return {
         ok: false,
         error: { code: 'COMMAND_FAILED', message: 'open failed' },

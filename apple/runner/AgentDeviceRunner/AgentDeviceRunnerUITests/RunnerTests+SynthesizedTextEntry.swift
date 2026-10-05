@@ -89,8 +89,8 @@ extension RunnerTests {
     /// One post. `characterCount` characters of the text, taken in order, are what it types.
     struct Step: Equatable {
       let characterCount: Int
-      /// True when this post selects the field's existing value away first. That selection is its
-      /// own synthesize record, so the post costs one call more than typing characters.
+      /// True when this post clears the field's existing value before typing its text in a
+      /// record of its own; `maxClearPassCount` says how.
       var replacesExistingText = false
       /// Seconds charged for what follows this post: the `--delay-ms` gap before the next post, or
       /// the warmup read-back after a peeled first character. The read-back costs one poll, because
@@ -100,9 +100,28 @@ extension RunnerTests {
       /// Set on the post whose value the loop waits for before the rest is posted.
       var warmsUpField = false
 
+      /// Most clear passes a replacing post runs, each a select-all record and a delete key record
+      /// followed by a read of the field. In a React Native app launched moments earlier (iOS 26.5
+      /// simulator) select-alls were dropped, so a pass deleted only the last character, and two
+      /// fixed passes still left "Clie" of "Client" in 3 of 5 runs. The post clears until the field
+      /// reads empty; typing over text still there would append to it.
+      static let maxClearPassCount = 4
+      /// Clear passes a field that never exposes its value gets before it is typed into unverified.
+      static let unreadableClearPassCount = 2
+
       /// How many private synthesize records this post runs.
       var synthesizeCallCount: Int {
-        replacesExistingText ? 2 : 1
+        replacesExistingText ? 2 * Self.maxClearPassCount + 1 : 1
+      }
+
+      /// Keystrokes this post types at the synthesized pace, the clears' delete keys included.
+      var keystrokeCount: Int {
+        characterCount + clearReadCount
+      }
+
+      /// Reads of the field this post makes between its clear passes.
+      var clearReadCount: Int {
+        replacesExistingText ? Self.maxClearPassCount : 0
       }
     }
 
@@ -129,8 +148,9 @@ extension RunnerTests {
     var seconds: TimeInterval {
       steps.reduce(0) { total, step in
         total
-          + Double(step.characterCount) * TextEntryTiming.synthesizedCharacterInterval
+          + Double(step.keystrokeCount) * TextEntryTiming.synthesizedCharacterInterval
           + Double(step.synthesizeCallCount) * TextEntryTiming.synthesizeCallOverhead
+          + Double(step.clearReadCount) * TextEntryTiming.synthesizedClearReadAllowance
           + step.pauseAfterSeconds
       }
     }
@@ -226,6 +246,48 @@ extension RunnerTests {
     case stop
   }
 
+  /// What the field reads between a replacement's clear passes.
+  enum ClearedFieldRead: Equatable {
+    case text(String)
+    /// The field never exposes its value: a secure field.
+    case unreadable
+    /// The read could not answer, or no input resolves.
+    case unavailable
+  }
+
+  /// How a replacing post's clear ended.
+  enum SynthesizedClearOutcome: Equatable {
+    case cleared
+    /// The field never exposes its value, so it is typed into unverified, as the commit wait leaves it.
+    case unverified
+    /// The field still held text after the last pass, or could not be read. Nothing is typed.
+    case notCleared
+    /// A clear post stopped the plan.
+    case stopped
+  }
+
+  /// Clears until the field reads empty, at most `maxClearPassCount` passes. A read that cannot
+  /// answer ends the clear, so the post never types over text it could not see removed.
+  static func clearForSynthesizedReplacement(
+    clearOnce: () -> SynthesizedStepDispatch,
+    read: () -> ClearedFieldRead
+  ) -> SynthesizedClearOutcome {
+    for pass in 1...SynthesizedTextPlan.Step.maxClearPassCount {
+      guard clearOnce() == .posted else { return .stopped }
+      switch read() {
+      case .text(let value) where value.isEmpty:
+        return .cleared
+      case .text:
+        continue
+      case .unreadable:
+        if pass >= SynthesizedTextPlan.Step.unreadableClearPassCount { return .unverified }
+      case .unavailable:
+        return .notCleared
+      }
+    }
+    return .notCleared
+  }
+
   struct SynthesizedPlanRun {
     let postedCharacterCount: Int
     /// True when a post stopped the plan before its last step.
@@ -298,32 +360,68 @@ extension RunnerTests {
         )
       )
     }
+    var clearOutcome: SynthesizedClearOutcome?
     // A private synthesis channel that is gone mid-plan leaves the command the same
     // point-and-focus fallback it had before the plan existed.
     let synthesisAvailable = runSynthesizedTextPlan(
       plan,
       text: request.text,
       post: { slice, step in
-        switch request.synthesizer.enterText(
-          app: request.app,
-          text: slice,
-          replacingExistingText: step.replacesExistingText
-        ) {
-        case .continueTyping:
-          return .posted
-        case .fallback:
-          return .stop
-        case .raise(let message):
-          NSException(
-            name: NSExceptionName.internalInconsistencyException,
-            reason: message ?? "private XCTest text synthesis failed"
-          ).raise()
-          return .stop
+        func enter(_ text: String, replacingExistingText: Bool) -> SynthesizedStepDispatch {
+          switch request.synthesizer.enterText(
+            app: request.app,
+            text: text,
+            replacingExistingText: replacingExistingText
+          ) {
+          case .continueTyping:
+            return .posted
+          case .fallback:
+            return .stop
+          case .raise(let message):
+            NSException(
+              name: NSExceptionName.internalInconsistencyException,
+              reason: message ?? "private XCTest text synthesis failed"
+            ).raise()
+            return .stop
+          }
         }
+        if step.replacesExistingText {
+          var passes = 0
+          let outcome = Self.clearForSynthesizedReplacement(
+            clearOnce: {
+              passes += 1
+              return enter(XCUIKeyboardKey.delete.rawValue, replacingExistingText: true)
+            },
+            read: { self.clearedFieldRead(app: request.app, target: request.target) }
+          )
+          clearOutcome = outcome
+          NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_CLEAR passes=%d outcome=%@", passes, String(describing: outcome))
+          guard outcome == .cleared || outcome == .unverified else { return .stop }
+        }
+        return enter(slice, replacingExistingText: false)
       },
       // A replacement never peels a warmup character, so no step asks for a read-back.
       waitAfterWarmupCharacter: { _ in }
     )
+    if clearOutcome == .notCleared {
+      logTextEntryPhase(
+        commandId: request.commandId,
+        phase: "total",
+        startedAt: request.startedAt,
+        chars: request.text.count,
+        mode: .replacement
+      )
+      return .completed(
+        TextEntryResult(
+          verified: nil,
+          repaired: false,
+          expectedText: request.text,
+          observedText: nil,
+          textEntryRoute: "synthesized-first-responder-replacement",
+          failure: .clearNotObserved
+        )
+      )
+    }
     if synthesisAvailable.stoppedEarly {
       NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_ROUTE route=verified-fallback reason=synthesis-unavailable")
       guard let point = request.target.refreshPoint else { return .notApplicable }
@@ -400,7 +498,7 @@ extension RunnerTests {
   enum SynthesizedTextCommitOutcome: Equatable {
     /// The field holds exactly the expected text.
     case settled
-    /// There was nothing to wait for: the text carries a submit key.
+    /// There was nothing to wait for: the text carries a submit key, or the field is secure.
     case unobservable
     /// The deadline expired with the expected text still not observed.
     case notObserved
@@ -432,12 +530,18 @@ extension RunnerTests {
   static func awaitSynthesizedReplacementCommitOutcome(
     expectedText: String,
     placeholder: String?,
+    fieldIsSecure: Bool = false,
     stallBudget: TimeInterval = TextEntryTiming.synthesizedCommitStallTimeout,
     ceiling: TimeInterval = TextEntryTiming.synthesizedCommitCeiling,
     now: () -> Date = { Date() },
     observe: () -> String?,
     waitForNextObservation: () -> Void
   ) -> SynthesizedTextCommitOutcome {
+    // A secure field never exposes its value, so every read is nil and the wait could only expire.
+    // The element route leaves such a field unverified rather than failed; so does this one.
+    if fieldIsSecure {
+      return .unobservable
+    }
     // A placeholder-equal AX value cannot prove a commit: an input handler may clear the field
     // after dispatch, making the empty field render the same value. Refuse before polling because
     // no later read can distinguish those states.

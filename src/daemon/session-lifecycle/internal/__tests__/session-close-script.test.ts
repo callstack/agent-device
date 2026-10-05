@@ -34,7 +34,7 @@ function setup(name: string, session = makeIosSession(name, { appBundleId: 'com.
   roots.push(root);
   const sessionsDir = path.join(root, 'sessions');
   const sessionStore = new SessionStore(sessionsDir);
-  sessionStore.set(name, session);
+  const ref = sessionStore.publish(name, session);
   const req: DaemonRequest = {
     token: 'token',
     session: name,
@@ -42,18 +42,18 @@ function setup(name: string, session = makeIosSession(name, { appBundleId: 'com.
     positionals: [],
     flags: {},
   };
-  return { req, session, sessionStore, sessionsDir };
+  return { req, ref, session, sessionStore, sessionsDir };
 }
 
 test('failed repair publication removes only its synthetic close before retry', () => {
-  const { req, session, sessionStore } = setup(
+  const { req, ref, session, sessionStore } = setup(
     'repair',
     makeRepairCompleteSession('repair', { appBundleId: 'com.example.app' }),
   );
   const failure = new AppError('COMMAND_FAILED', 'publish failed');
   vi.spyOn(sessionStore, 'writeSessionLog').mockReturnValue({ written: false, error: failure });
 
-  expect(commitRepairScriptBeforeClose(sessionStore, session, req)).toEqual({
+  expect(commitRepairScriptBeforeClose(sessionStore, ref, req)).toEqual({
     kind: 'failed',
     error: failure,
   });
@@ -92,7 +92,7 @@ test('repair close failure keeps normalized metadata and is explicitly retriable
 });
 
 test('ordinary publication failure retains its close action after making the error non-retriable', () => {
-  const { req, session, sessionStore } = setup('ordinary');
+  const { req, ref, session, sessionStore } = setup('ordinary');
   const failure = new AppError('COMMAND_FAILED', 'target exists', {
     reason: 'target-exists',
     hint: 'Retry close.',
@@ -103,7 +103,7 @@ test('ordinary publication failure retains its close action after making the err
 
   const result = finalizeOrdinaryCloseScript({
     req: { ...req, flags: { saveScript: true } },
-    session,
+    ref,
     sessionStore,
     platformCloseError: undefined,
   });
@@ -126,7 +126,7 @@ test('ordinary publication failure retains its close action after making the err
 // that promise: the plain-close teardown path must write nothing.
 
 test('#1533: bare close on an aborted authoring session writes no script', () => {
-  const { req, session, sessionStore, sessionsDir } = setup(
+  const { req, ref, sessionStore, sessionsDir } = setup(
     'aborted',
     makeIosSession('aborted', {
       appBundleId: 'com.example.app',
@@ -139,7 +139,7 @@ test('#1533: bare close on an aborted authoring session writes no script', () =>
   expect(
     finalizeOrdinaryCloseScript({
       req,
-      session,
+      ref,
       sessionStore,
       platformCloseError: undefined,
     }),
@@ -150,7 +150,7 @@ test('#1533: bare close on an aborted authoring session writes no script', () =>
 });
 
 test('#1533: an ordinary armed authoring session still publishes on bare close', () => {
-  const { req, session, sessionStore, sessionsDir } = setup(
+  const { req, ref, sessionStore, sessionsDir } = setup(
     'armed',
     makeIosSession('armed', {
       appBundleId: 'com.example.app',
@@ -162,7 +162,7 @@ test('#1533: an ordinary armed authoring session still publishes on bare close',
   expect(
     finalizeOrdinaryCloseScript({
       req,
-      session,
+      ref,
       sessionStore,
       platformCloseError: undefined,
     }),

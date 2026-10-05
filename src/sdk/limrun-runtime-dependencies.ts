@@ -18,10 +18,10 @@ export function createLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
     clientVersion: readVersion(),
     android: {
       createInteractor: (device, adb) => createAndroidInteractor(device, adb),
-      createPortReverse: async (adb) => {
+      createPortReverse: async (adb, options) => {
         const { createAndroidPortReverseManager } =
           await import('@agent-device/platform-android/mechanics');
-        return createAndroidPortReverseManager(adb);
+        return createAndroidPortReverseManager(adb, options);
       },
       inferAppName: async (packageName) => {
         const { inferAndroidAppName } = await import('@agent-device/platform-android/mechanics');

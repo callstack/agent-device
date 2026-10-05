@@ -22,7 +22,7 @@ test('a typed Maestro selector conflict names the session store key, not "defaul
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const session = makeIosSession('default');
   session.sessionScope = { kind: 'cwd', id: '8bea844ab16aa9b3' };
-  sessionStore.set(SCOPED_ADDRESS, session);
+  sessionStore.publish(SCOPED_ADDRESS, session);
 
   const req = {
     token: 'test-token',

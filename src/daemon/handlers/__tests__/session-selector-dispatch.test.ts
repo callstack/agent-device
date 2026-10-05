@@ -28,12 +28,98 @@ import type { SessionState } from '../../session-state.ts';
 import { handleSessionCommands } from './session-command-harness.ts';
 import { refFrameState } from '../../ref-frame.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { createUnavailableRuntimeFactsForTest } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
 
 const available = Object.freeze({ available: true } as const);
 const keyboardFamilyDenial = Object.freeze({
   available: false,
   reason: 'owner-capability-missing' as const,
 });
+
+test.each(['rebuild', 'retire'] as const)(
+  'app-event metadata and action stay in the admitted lifetime across %s',
+  async (transition) => {
+    vi.stubEnv('AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE', 'https://example.test/{event}');
+    try {
+      const sessionStore = makeSessionStore();
+      const address = 'cwd:held-app-event:default';
+      const ref = sessionStore.publish(address, makeIosSession('default'));
+      const device = ref.session.device;
+      mockResolveTargetDevice.mockResolvedValue(device);
+      const owner = localRuntimeOwner(device.platform);
+      const base = createUnavailableRuntimeFactsForTest(device, owner);
+      const facts = {
+        ...base,
+        operations: { ...base.operations, triggerAppEvent: available, ensureReady: available },
+      };
+      let start!: () => void;
+      let release!: () => void;
+      const started = new Promise<void>((resolve) => {
+        start = resolve;
+      });
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const binding: DeviceBinding<PlatformRuntimeOperations> = {
+        device,
+        owner,
+        facts,
+        operations: {
+          ensureReady: async () => device,
+          triggerAppEvent: async () => {
+            start();
+            await released;
+          },
+        },
+        [Symbol.asyncDispose]: async () => {},
+      };
+      const running = handleSessionCommands({
+        req: {
+          token: 't',
+          session: 'default',
+          command: 'trigger-app-event',
+          positionals: ['ready'],
+          flags: {},
+        },
+        sessionName: address,
+        sessionStore,
+        logPath: '/tmp/daemon.log',
+        invoke: noopInvoke,
+        inspectFacts: async () => facts,
+        bindDevice: async (_device, use) => narrowDeviceBinding(binding, use),
+      });
+      await started;
+      let current = ref.session;
+      if (transition === 'rebuild')
+        current = sessionStore.update(ref, {
+          actions: [],
+          trace: { outPath: '/latest.trace', startedAt: 1 },
+        });
+      else {
+        sessionStore.retire(ref);
+        current = sessionStore.publish(address, makeIosSession('default')).session;
+      }
+      release();
+      if (transition === 'rebuild') {
+        expect(await running).toMatchObject({ ok: true });
+        expect(sessionStore.requireCurrent(ref).trace).toEqual(current.trace);
+        expect(sessionStore.requireCurrent(ref).appBundleId).toBe('com.apple.mobilesafari');
+        expect(current.actions.map((action) => action.command)).toEqual(['trigger-app-event']);
+        expect(ref.session.actions).toEqual([]);
+      } else {
+        await expect(running).rejects.toMatchObject({
+          details: { reason: 'session_lifetime_ended' },
+        });
+        expect(sessionStore.get(address)).toBe(current);
+        expect(current.appBundleId).toBeUndefined();
+        expect(current.actions).toEqual([]);
+      }
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  },
+);
 
 /** Admits every keyboard operation so the ADR 0014 seam runs on real admission, not a rejection.
  * `keyboardDismiss` is overridable so a test can force the invocation itself to reject, proving
@@ -87,7 +173,7 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
   const { inspectFacts, bindDevice } = keyboardCapableRuntime(device);
 
   // dismiss mutates the device → frame expires.
-  sessionStore.set(sessionName, makeSession(sessionName, device));
+  const dismissRef = sessionStore.publish(sessionName, makeSession(sessionName, device));
   await handleSessionCommands({
     req: {
       token: 't',
@@ -106,7 +192,8 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
   expect(refFrameState(sessionStore.get(sessionName)!)).toBe('expired');
 
   // status is a read-only probe → frame preserved (undefined === active).
-  sessionStore.set(sessionName, makeSession(sessionName, device));
+  sessionStore.retire(dismissRef);
+  sessionStore.publish(sessionName, makeSession(sessionName, device));
   await handleSessionCommands({
     req: {
       token: 't',
@@ -148,7 +235,7 @@ test('keyboard dismiss expires the frame before the invocation runs, even when i
     },
   });
 
-  sessionStore.set(sessionName, makeSession(sessionName, device));
+  sessionStore.publish(sessionName, makeSession(sessionName, device));
   await expect(
     handleSessionCommands({
       req: {

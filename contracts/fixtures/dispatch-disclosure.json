@@ -18,6 +18,24 @@
     "dispatched": "no"
   },
   {
+    "id": "daemon.refusal.gesture-drag-admission",
+    "producer": "daemon",
+    "trigger": "a drag target's @ref admission refused before the gesture runtime was bound, without an earlier readiness recovery",
+    "dispatched": "no"
+  },
+  {
+    "id": "daemon.post-dispatch.gesture-drag-after-recovery",
+    "producer": "daemon",
+    "trigger": "Android readiness tapped Close app and relaunched the app, then drag ref admission refused before the gesture runtime was bound",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "daemon.post-dispatch.ref-after-android-recovery",
+    "producer": "daemon",
+    "trigger": "Android blocking-dialog readiness tapped Close app and relaunched the app, then re-admission aborted the requested ref press",
+    "dispatched": "unknown"
+  },
+  {
     "id": "daemon.refusal.selector-readiness-exhausted",
     "producer": "daemon",
     "trigger": "press with readinessTimeoutMs whose selector target never appears: the readiness wait (pollForSelectorReadiness) spends its budget over two or more polls and refuses with selector_not_found before any backend touch",

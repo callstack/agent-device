@@ -82,7 +82,7 @@ test('press @ref taps the resolved point once and records the ref', async () => 
     },
   ]);
   session.snapshot = { nodes, createdAt: Date.now(), backend: 'xctest' };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
     req: {
@@ -123,7 +123,7 @@ test('press @ref fails closed when the authorized ref has no usable bounds (ADR 
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockTapPoint.mockRejectedValue(
     new Error('dispatch must not run: no positional recapture on missing frame evidence'),
@@ -180,7 +180,7 @@ test('press @ref fails closed when stored ref bounds are invalid (ADR 0014)', as
     createdAt: Date.now(),
     backend: 'android',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockTapPoint.mockRejectedValue(
     new Error('dispatch must not run: no positional recapture on unusable frame evidence'),
@@ -236,7 +236,7 @@ test('press @ref fails fast when the target is off-screen', async () => {
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const response = await withRunner(() =>
     handleInteractionCommands({
@@ -307,7 +307,7 @@ test('press @ref with a trailing label recovers within the authorized frame (no 
     createdAt: Date.now(),
     backend: 'android',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockCaptureSnapshotForSession.mockRejectedValue(
     new Error('no positional recapture: recovery stays in-frame'),

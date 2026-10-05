@@ -61,7 +61,7 @@ beforeEach(() => {
 test('alert accept retries a typed alert absence and succeeds on the second attempt', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim';
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
 
   let calls = 0;
   mockRunnerCommand.mockImplementation(async () => {
@@ -85,7 +85,7 @@ test('alert accept retries a typed alert absence and succeeds on the second atte
 test('alert accept adds a scoped-snapshot hint after retrying alert-not-found failures', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim';
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
   mockRunnerCommand.mockRejectedValue(alertAbsence());
 
   let thrown: unknown;
@@ -103,7 +103,7 @@ test('alert accept adds a scoped-snapshot hint after retrying alert-not-found fa
 test('alert dismiss retries a typed absence whatever the message says', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim';
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
 
   let calls = 0;
   mockRunnerCommand.mockImplementation(async () => {
@@ -118,3 +118,23 @@ test('alert dismiss retries a typed absence whatever the message says', async ()
   expect(response?.ok).toBe(true);
   expect(calls).toBe(3);
 });
+
+for (const action of ['accept', 'dismiss']) {
+  test(`alert ${action} succeeds without journaling after its admitted lifetime ends`, async () => {
+    const store = makeSessionStore();
+    const name = 'ios-alert-retirement';
+    const retired = store.publish(name, makeSession(name));
+    let successor: SessionState | undefined;
+    mockRunnerCommand.mockImplementationOnce(async () => {
+      store.retire(retired);
+      successor = makeSession(name);
+      store.publish(name, successor);
+      return { [action === 'accept' ? 'accepted' : 'dismissed']: true };
+    });
+    const response = await handleSnapshotCommands(name, store, [action]);
+    expect(response?.ok).toBe(true);
+    expect(mockRunnerCommand).toHaveBeenCalledOnce();
+    expect(retired.session.actions).toEqual([]);
+    expect(successor?.actions).toEqual([]);
+  });
+}

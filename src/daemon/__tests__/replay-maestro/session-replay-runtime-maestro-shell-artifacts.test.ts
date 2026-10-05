@@ -46,7 +46,7 @@ test('runReplayCommand writes per-action timing events to active trace', async (
   fs.writeFileSync(tracePath, '');
 
   const sessionStore = new SessionStore(path.join(root, 'state'));
-  sessionStore.set('s', {
+  sessionStore.publish('s', {
     name: 's',
     device: {
       platform: 'apple',

@@ -25,7 +25,7 @@ async function runMutatingFind(positionals: string[], node: Record<string, unkno
   const sessionStore = makeSessionStore();
   const sessionName = 'default';
   const session = makeIosSession(sessionName);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   legacyDispatchCapture.mockImplementation(async (_device, command) =>
     command === 'snapshot' ? { nodes: [node] } : {},
   );

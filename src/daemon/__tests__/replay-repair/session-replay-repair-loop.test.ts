@@ -1,3 +1,4 @@
+import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
 import { isSessionRecording } from '../../session-script-publication-capability.ts';
 /**
  * ADR 0012 decision 6: `replay --save-script` arming (R1), the repair-run
@@ -83,7 +84,7 @@ function setup(prefix: string, sessionOverrides = {}) {
   const root = mkdtempForTestSync(prefix);
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, sessionOverrides));
+  sessionStore.publish(sessionName, makeIosSession(sessionName, sessionOverrides));
   return { root, sessionStore, sessionName, logPath: path.join(root, 'daemon.log') };
 }
 
@@ -134,7 +135,7 @@ test('R1/R2/R6: prefix steps get fresh evidence, corrective + resumed steps land
   expect(divergence.resume.from).toBe(3);
 
   // --- Agent performs the corrective action live (recorded). ---
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e9'],
     flags: {},
@@ -242,7 +243,7 @@ test('R2 bypass guard: a PLAIN full replay (no --save-script) on an armed sessio
   expect(sessionStore.get(sessionName)!.actions.length).toBe(armedActionCount);
 });
 
-test('R6 no amputation: a pre-populated session whose step-1 open REPLACES the session healed-slices exactly this run', async () => {
+test('R6 no amputation: rebuilding the action list during open heals exactly this run', async () => {
   // Pre-seed with 2 prior, unrelated actions.
   const { root, sessionStore, sessionName, logPath } = setup(
     'agent-device-replay-repair-amputate-',
@@ -259,13 +260,12 @@ test('R6 no amputation: a pre-populated session whose step-1 open REPLACES the s
     'click id="b"',
   ]);
 
-  // open REPLACES the session with a fresh `actions: []` one (the real
-  // new-session branch, session-open-surface.ts) — the case the old pre-loop
-  // boundary=N would amputate (slice(2) drops the healed open + first click).
+  // Resetting the action list would make the pre-loop boundary amputate the
+  // healed open and first click. The coordinator must use the rebuilt record.
   const invoke = makeRecordingReplayInvoke({
     sessionStore,
     sessionName,
-    openReplacesSession: true,
+    openRebuildsActions: true,
     evidence: (req) => (req.command === 'click' ? freshEvidence('x', 'X') : undefined),
   });
 
@@ -381,13 +381,13 @@ test('a --no-record state-fix action never enters session.actions', () => {
 
   // Agent fixes app state with --no-record, then performs the real corrective
   // action (recorded).
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['100', '200'],
     flags: { noRecord: true },
     result: {},
   });
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e9'],
     flags: {},
@@ -527,7 +527,7 @@ test('Fix 3: only the TERMINAL close is skipped during a repair — a mid-plan c
     sessionStore,
     sessionName,
     spy,
-    openReplacesSession: true,
+    openRebuildsActions: true,
   });
 
   const response = await runReplayForTest({
@@ -578,7 +578,7 @@ test('Fix 3: a --from resume that lands on the terminal close skips it too, lett
   expect(divergence.resume.from).toBe(2);
 
   const session = sessionStore.get(sessionName)!;
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e9'],
     flags: {},

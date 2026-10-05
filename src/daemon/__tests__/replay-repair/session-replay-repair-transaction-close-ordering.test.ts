@@ -1,3 +1,4 @@
+import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
 /**
  * ADR 0012 decision 6 repair-transaction close-ordering guarantees (BLOCKER 2/3 sequencing): the
  * platform close must run and succeed BEFORE the healed `.ad` commits (never claim a successful
@@ -93,6 +94,7 @@ test('BLOCKER 2 (new): a repair close whose PLATFORM close fails never commits a
   const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-platform-close-fail-',
   );
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   const session = makeCompleteRepairSession(sessionStore, sessionName, root);
   const healedPath = path.join(root, 'flow.healed.ad');
 
@@ -174,6 +176,7 @@ test('BLOCKER 3 (second follow-up): a retry after a SUCCESSFUL platform close bu
   const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-close-idempotent-',
   );
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   makeCompleteRepairSession(sessionStore, sessionName, root);
   const healedPath = path.join(root, 'flow.healed.ad');
   // A prior COMPLETE (sentinel-marked) healed artifact already sits at the
@@ -244,7 +247,7 @@ test('BLOCKER 3: a competing second writer never overwrites a COMPLETE artifact 
 
   // Writer 1 commits a complete artifact at the default healed path.
   const first = makeCompleteRepairSession(sessionStore, `${sessionName}-1`, root);
-  const r1 = sessionStore.writeSessionLog(first);
+  const r1 = sessionStore.writeSessionLog(storeSessionForTest(sessionStore, first));
   expect(r1.written).toBe(true);
   const committed = fs.readFileSync(healedPath, 'utf8');
   expect(committed).toContain(HEAL_COMPLETE_SENTINEL);
@@ -261,7 +264,7 @@ test('BLOCKER 3: a competing second writer never overwrites a COMPLETE artifact 
     result: { selectorChain: ['id="different"'] },
     targetEvidence: freshEvidence('different', 'Different'),
   };
-  const r2 = sessionStore.writeSessionLog(second);
+  const r2 = sessionStore.writeSessionLog(storeSessionForTest(sessionStore, second));
   expect(r2.written).toBe(false);
   expect(r2.written === false && r2.error?.message).toMatch(/already exists/);
   // The first writer's complete artifact is byte-for-byte intact.
@@ -272,6 +275,7 @@ test('BLOCKER 3 (third follow-up): an untargeted close that performed NO platfor
   const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-close-identity-untargeted-',
   );
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   makeCompleteRepairSession(sessionStore, sessionName, root);
   const healedPath = path.join(root, 'flow.healed.ad');
   // A prior COMPLETE artifact already sits at the default path so the commit
@@ -317,6 +321,7 @@ test('BLOCKER 3 (third follow-up): a retry targeting a DIFFERENT app than the su
   const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-close-identity-changed-target-',
   );
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   makeCompleteRepairSession(sessionStore, sessionName, root);
   const healedPath = path.join(root, 'flow.healed.ad');
   fs.writeFileSync(

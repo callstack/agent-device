@@ -29,14 +29,30 @@ export type SettingsUpdateOptions =
       state: 'clear';
     })
   | (DeviceCommandBaseOptions & {
-      setting: 'wifi' | 'airplane' | 'location';
+      setting: 'wifi' | 'airplane';
       state: 'on' | 'off';
     })
+  /**
+   * On Apple simulators `on`/`off` grants or revokes the app's location permission, so this leg
+   * takes the same explicit `app` as `permission` and defaults to the session app. On Android the
+   * toggle writes the global `location_mode` and consumes no app, so naming one there is refused
+   * rather than dropped; `settingsAppScope` is the declaration.
+   */
+  | (DeviceCommandBaseOptions & {
+      setting: 'location';
+      state: 'on' | 'off';
+      app?: string;
+    })
+  /**
+   * `set` moves the device's own location for every target, so naming an app here is a contradiction
+   * the daemon refuses with `setting_app_not_consumed` rather than a value it silently drops.
+   */
   | (DeviceCommandBaseOptions & {
       setting: 'location';
       state: 'set';
       latitude: number;
       longitude: number;
+      app?: string;
     })
   | (DeviceCommandBaseOptions & {
       setting: 'animations';
@@ -68,4 +84,11 @@ export type SettingsUpdateOptions =
       state: PermissionAction;
       permission: PermissionTarget;
       mode?: PermissionMode;
+      /**
+       * The app the permission changes, by bundle id or package name. Without it the app bound to
+       * the session is used; with it no app has to be running or open, because `simctl privacy` and
+       * Android's `pm` need only the id. macOS permissions are host-level TCC grants, so naming an
+       * app there is refused rather than dropped.
+       */
+      app?: string;
     });

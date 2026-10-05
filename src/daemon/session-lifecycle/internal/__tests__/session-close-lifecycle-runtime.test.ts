@@ -89,7 +89,7 @@ test('an app-only close without a target fails before admission or ref-frame exp
   };
   const session = makeSession(sessionName, device);
   activateCompleteRefFrame(session);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   const revisionBeforeClose = readSessionRuntimeRevision(session);
 
   const response = await close({
@@ -120,7 +120,7 @@ test('close rejects a false close-target fact before its one implementation bind
     kind: 'emulator' as const,
     booted: true,
   };
-  sessionStore.set(sessionName, makeSession(sessionName, device));
+  sessionStore.publish(sessionName, makeSession(sessionName, device));
   mockInspectDeviceRuntimeFacts.mockImplementationOnce(async (candidate) => {
     const facts = lifecycleRuntimeFacts(candidate);
     const unavailable = {
@@ -163,7 +163,7 @@ test('a close-capable runtime with false runtime-hints facts never loads the run
   };
   const session = makeSession(sessionName, device);
   session.appBundleId = 'com.example.harmony';
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   mockInspectDeviceRuntimeFacts.mockImplementationOnce(async (candidate) => {
     const facts = lifecycleRuntimeFacts(candidate);
     return {
@@ -205,7 +205,7 @@ test('an app-only close with stored hints selects no runtime-hint cleanup siblin
   };
   const session = makeSession(sessionName, device);
   session.appBundleId = 'com.example.app';
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   sessionStore.setRuntimeHints(sessionName, { platform: 'android', metroHost: '10.0.2.2' });
   mockInspectDeviceRuntimeFacts.mockImplementationOnce(async (candidate) => {
     const facts = lifecycleRuntimeFacts(candidate);
@@ -254,7 +254,7 @@ test('a close with persisted native hints fails closed when the distinct cleanup
   };
   const session = makeSession(sessionName, device);
   session.appBundleId = 'com.example.app';
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   sessionStore.setRuntimeHints(sessionName, { platform: 'ios', metroHost: '10.0.2.2' });
   mockInspectDeviceRuntimeFacts.mockImplementationOnce(async (candidate) => {
     const facts = lifecycleRuntimeFacts(candidate);
@@ -296,7 +296,7 @@ test('a supported Android close clears admitted runtime hints exactly once', asy
   };
   const session = makeSession(sessionName, device);
   session.appBundleId = 'com.example.app';
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   sessionStore.setRuntimeHints(sessionName, {
     platform: 'android',
     metroHost: '10.0.2.2',
@@ -332,7 +332,7 @@ test('close expires the ref frame immediately before its admitted platform mutat
   };
   const session = makeSession(sessionName, device);
   session.appBundleId = 'com.example.app';
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   mockDispatch.mockImplementationOnce(async () => {
     expect(refFrameState(session)).toBe('expired');
   });
@@ -345,5 +345,37 @@ test('close expires the ref frame immediately before its admitted platform mutat
   });
 
   expect(response?.ok).toBe(true);
+  expect(mockDispatch).toHaveBeenCalledOnce();
+});
+
+test('app-only close expires the rebuilt record after admission, preserving the captured snapshot', async () => {
+  const sessionStore = makeSessionStore();
+  const address = 'cwd:close:default';
+  const session = makeSession('default', {
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator',
+    booted: true,
+  });
+  session.appBundleId = 'com.example.app';
+  activateCompleteRefFrame(session);
+  const ref = sessionStore.publish(address, session);
+  mockInspectDeviceRuntimeFacts.mockImplementationOnce(async (candidate) => {
+    sessionStore.update(ref, { appName: 'Updated during admission' });
+    return lifecycleRuntimeFacts(candidate);
+  });
+
+  const response = await close({
+    sessionName: address,
+    sessionStore,
+    positionals: ['com.example.app'],
+    internal: { closeAppOnly: true },
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(refFrameState(sessionStore.requireCurrent(ref))).toBe('expired');
+  expect(sessionStore.requireCurrent(ref).appName).toBe('Updated during admission');
+  expect(refFrameState(ref.session)).toBe('active');
   expect(mockDispatch).toHaveBeenCalledOnce();
 });

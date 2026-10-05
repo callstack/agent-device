@@ -151,7 +151,7 @@ test('generic Android gesture commands dismiss blocking system dialogs during re
   gestureRuntimeSpies.scrollDirection.mockClear();
 
   const sessionStore = makeSessionStore('agent-device-router-android-modal-');
-  sessionStore.set('default', makeAndroidSession('default'));
+  sessionStore.publish('default', makeAndroidSession('default'));
 
   const { openAndroidApp } = await import('@agent-device/platform-android/mechanics');
 
@@ -202,7 +202,7 @@ test('generic Android gesture commands continue when recording dialog inspection
   });
 
   const sessionStore = makeSessionStore('agent-device-router-android-modal-');
-  sessionStore.set('default', makeAndroidSession('default'));
+  sessionStore.publish('default', makeAndroidSession('default'));
 
   const { openAndroidApp } = await import('@agent-device/platform-android/mechanics');
   vi.mocked(openAndroidApp).mockClear();
@@ -254,7 +254,7 @@ test('generic Android gesture commands skip local dialog recovery for provider d
 
   const sessionStore = makeSessionStore('agent-device-router-android-modal-provider-');
   const session = makeAndroidSession('default');
-  sessionStore.set('default', session);
+  sessionStore.publish('default', session);
 
   const runtime: ProviderDeviceRuntime = {
     provider: 'webdriver-fake',

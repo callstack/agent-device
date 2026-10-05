@@ -9,17 +9,19 @@ import { resolveIosSimulatorDeepLinkBundleId } from './core/app-resolution.ts';
 export const LAUNCH_CONFIRMATION_FOREIGN_APP_REASON = 'launch_confirmation_foreign_app';
 
 /**
- * How one launch-confirmation answer attempt ended. Two endings mean the launch URL left the
- * caller's hands and only that caller knows whether it landed: `accepted`, and the `unreadable`
- * whose step is `alert-accept`, where the accept was attempted and its outcome never arrived. Every
- * other ending leaves the launch exactly as it was — `absent` found no prompt, `unanswered` found a
- * prompt this answer must not accept, and any other `unreadable` step failed before one. A caller
- * acts on these outcomes and its own proof about the process, never on text.
+ * How one launch-confirmation answer attempt ended. `accepted` verifies dismissal; an unreadable
+ * `alert-accept` has an unknown outcome. `alert-still-present` proves the recognized prompt remains
+ * after an accept failed. Other endings precede acceptance: no prompt, an unrecognized prompt, an
+ * unresolved URL owner, or an unreadable prerequisite. A caller acts on these typed outcomes and
+ * its own proof about the process, never on error text.
  */
 export type LaunchConfirmationAttempt =
   | Readonly<{ outcome: 'accepted' }>
   | Readonly<{ outcome: 'absent' }>
-  | Readonly<{ outcome: 'unanswered'; reason: 'alert-unrecognized' | 'url-owner-unresolved' }>
+  | Readonly<{
+      outcome: 'unanswered';
+      reason: 'alert-unrecognized' | 'url-owner-unresolved' | 'alert-still-present';
+    }>
   | Readonly<{ outcome: 'unreadable'; step: LaunchConfirmationStep }>;
 
 /** A step of the answer that failed, keyed for diagnostics and tests. */
@@ -55,7 +57,7 @@ export type LaunchConfirmationPort = Readonly<{
 }>;
 
 /**
- * Answers a launch confirmation. The title only recognizes the confirmation; the app it opens is
+ * Answers a launch confirmation. The title and buttons recognize the confirmation; the app it opens is
  * the URL scheme's owner. An owner that is the session app is accepted; any other owner is never
  * accepted and fails the open, because accepting would hand it the launch URL. Every other ending
  * is reported as its typed attempt so the settle can decide what the launch still needs. Each step
@@ -66,15 +68,16 @@ export async function answerLaunchConfirmation(
 ): Promise<LaunchConfirmationAttempt> {
   const read = await readAlert(port);
   if ('outcome' in read) return read;
-  if (!read.alert) return { outcome: 'absent' };
-  if (!isLaunchConfirmation(read.alert)) {
+  const alert = read.alert;
+  if (!alert) return { outcome: 'absent' };
+  if (!isLaunchConfirmation(alert)) {
     emitDiagnostic({
       level: 'warn',
       phase: 'ios_launch_confirmation_unanswered',
       data: {
         reason: 'alert-unrecognized',
-        title: read.alert['message'],
-        buttons: read.alert['items'],
+        title: alert['message'],
+        buttons: alert['items'],
       },
     });
     return { outcome: 'unanswered', reason: 'alert-unrecognized' };
@@ -93,7 +96,27 @@ export async function answerLaunchConfirmation(
       hint: `iOS is asking whether to open ${owner.owner}. Answer it with alert accept or alert dismiss, and pass a launch URL whose scheme belongs to the session app.`,
     });
   }
-  return await port.acceptAlert().then(accepted, unreadable('alert-accept'));
+  return await port
+    .acceptAlert()
+    .then(accepted, async (error: unknown) => await verifyFailedAcceptance(port, alert, error));
+}
+
+async function verifyFailedAcceptance(
+  port: LaunchConfirmationPort,
+  original: Record<string, unknown>,
+  error: unknown,
+): Promise<LaunchConfirmationAttempt> {
+  const read = await readAlert(port);
+  if ('outcome' in read) return unreadable('alert-accept')(error);
+  if (
+    read.alert &&
+    isLaunchConfirmation(read.alert) &&
+    read.alert['message'] === original['message']
+  ) {
+    reportUnanswered('alert-still-present', {});
+    return { outcome: 'unanswered', reason: 'alert-still-present' };
+  }
+  return unreadable('alert-accept')(error);
 }
 
 async function readAlert(
@@ -114,7 +137,15 @@ function accepted(): LaunchConfirmationAttempt {
 
 function isLaunchConfirmation(alert: Record<string, unknown>): boolean {
   const title = alert['message'];
-  return typeof title === 'string' && LAUNCH_CONFIRMATION_TITLE.test(title);
+  const buttons = alert['items'];
+  return (
+    typeof title === 'string' &&
+    LAUNCH_CONFIRMATION_TITLE.test(title) &&
+    Array.isArray(buttons) &&
+    buttons.length === 2 &&
+    buttons.includes('Cancel') &&
+    buttons.includes('Open')
+  );
 }
 
 /** A failed step leaves the open unanswered; the failure is reported, not thrown. */

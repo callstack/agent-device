@@ -14,6 +14,11 @@ import {
 } from '../../../runtime.ts';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import type { PostGestureOutcome } from '@agent-device/kernel/snapshot';
+import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
+import {
+  attachSnapshotClickabilityEvidence,
+  readSnapshotClickabilityEvidence,
+} from '@agent-device/contracts/capture';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 
 test('runtime snapshot captures nodes and updates the session baseline', async () => {
@@ -806,4 +811,63 @@ test('runtime snapshot warns when its tree was read on a surface still moving af
   const result = await device.capture.snapshot({ session: 'default' });
 
   assert.deepEqual(result.warnings, [formatPostGestureOutcomeWarning(outcome)]);
+});
+
+// The box a capture's rects are measured in is public output (#3182) for the same reason the
+// keyboard band is: `snapshot --json` is how a caller learns the surface to scale against, and a
+// producer that measured no box has to leave the key off rather than claim a screen it never read.
+
+test('runtime snapshot publishes the viewport its producer measured', async () => {
+  const device = createSnapshotOnlyDevice({
+    nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Window', label: 'Home' }],
+    backend: 'android',
+    viewport: snapshotViewportSizeFrom({ x: 0, y: 0, width: 1080, height: 2400 }),
+  });
+
+  const result = await device.capture.snapshot({ session: 'default' });
+
+  assert.deepEqual(result.viewport, { width: 1080, height: 2400 });
+});
+
+test('runtime snapshot leaves the viewport off when the producer measured no box', async () => {
+  const device = createSnapshotOnlyDevice({
+    nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Window', label: 'Home' }],
+    backend: 'android',
+  });
+
+  const result = await device.capture.snapshot({ session: 'default' });
+
+  assert.equal('viewport' in result, false);
+});
+
+// The Android helper's clickability evidence is retained by object identity, and this command
+// merges the backend's facts into a copy of the state it hands over (#3182). A copy that forgets
+// the evidence is silent until Maestro's clickable-first ordering finds no exact evidence, falls
+// back to document order, and taps an inert duplicate of a tapped id (Android smoke lane).
+test('runtime snapshot carries backend clickability evidence through the response merge', async () => {
+  const clickability = {
+    kind: 'exact',
+    provider: 'android-helper',
+    clickableByNodeIndex: new Map([
+      [0, false],
+      [1, true],
+    ]),
+  } as const;
+  const state = makeSnapshotState(
+    [
+      { index: 0, depth: 0, type: 'TextView', label: 'Inert duplicate target' },
+      { index: 1, depth: 0, type: 'Button', label: 'Clickable duplicate target' },
+    ],
+    { backend: 'android', producer: 'android-uiautomator' },
+  );
+  attachSnapshotClickabilityEvidence(state, clickability);
+  const device = createSnapshotOnlyDevice({
+    snapshot: state,
+    viewport: snapshotViewportSizeFrom({ x: 0, y: 0, width: 1080, height: 2400 }),
+  });
+
+  const result = await device.capture.snapshot({ session: 'default' });
+
+  assert.deepEqual(readSnapshotClickabilityEvidence(result), clickability);
+  assert.deepEqual(result.viewport, { width: 1080, height: 2400 });
 });

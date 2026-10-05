@@ -1,7 +1,6 @@
-import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
-import { stopDaemonProcess } from '../daemon-process.ts';
-import { sleep } from '@agent-device/host-kit/retry';
+import type { DaemonRetirementResult } from '../daemon-registration-owner.ts';
+import type { OwnerIdentity } from '@agent-device/host-kit/process';
 
 import type { DaemonPaths } from '../daemon-resolution.ts';
 import { readRegisteredDaemonIdentity } from '../daemon-registration.ts';
@@ -9,7 +8,6 @@ import type { DeviceClaimRecord, ProviderReleaseRecord } from '../daemon-shutdow
 
 const DAEMON_STOP_GRACE_TIMEOUT_MS = 10_000;
 const DAEMON_STOP_KILL_TIMEOUT_MS = 2_000;
-const DAEMON_STOP_METADATA_WAIT_MS = 1_000;
 
 export type DaemonStopResult = {
   stopped: boolean;
@@ -45,25 +43,19 @@ export async function stopDaemon(params: {
 }): Promise<DaemonStopResult> {
   const info = readRegisteredDaemonIdentity(params.paths.infoPath);
   if (!info) return notRunningResult();
-  const termination = await stopDaemonProcess(info, {
+  const { stopAndRetireDaemon } = await import('../daemon-registration-owner.ts');
+  const retirement = await stopAndRetireDaemon({
+    paths: params.paths,
+    observed: info,
     mode: 'graceful',
     termTimeoutMs: params.graceTimeoutMs ?? DAEMON_STOP_GRACE_TIMEOUT_MS,
     killTimeoutMs: params.killTimeoutMs ?? DAEMON_STOP_KILL_TIMEOUT_MS,
   });
-  if (termination.status === 'retained') {
-    throw new AppError('COMMAND_FAILED', 'Daemon termination could not be confirmed.', {
-      pid: info.pid,
-      processStartTime: info.startTime,
-      reason: 'daemon_exit_unconfirmed',
-      terminationReason: termination.reason,
-      signal: termination.signal,
-    });
-  }
-  if (termination.status === 'not-running' || termination.mode === 'already-exited') {
+  if (retirement.status === 'retained' && retirement.termination?.status === 'not-running')
     return notRunningResult();
-  }
-  if (termination.mode === 'graceful') {
-    await waitForDaemonMetadataRemoval(params.paths, DAEMON_STOP_METADATA_WAIT_MS);
+  if (retirement.status !== 'retired') throw daemonRetirementError(info, retirement);
+  if (retirement.termination.mode === 'already-exited') return notRunningResult();
+  if (retirement.termination.mode === 'graceful') {
     return {
       stopped: true,
       mode: 'graceful',
@@ -92,20 +84,33 @@ export async function stopDaemon(params: {
   };
 }
 
+function daemonRetirementError(
+  info: OwnerIdentity,
+  retirement: Exclude<DaemonRetirementResult, { status: 'retired' }>,
+): AppError {
+  const termination = retirement.status === 'retained' ? retirement.termination : undefined;
+  const failure = termination?.status === 'retained' ? termination : undefined;
+  const error = retirement.status === 'retained' ? retirement.error : undefined;
+  const { hint, diagnosticId, logPath } = error ?? {};
+  return new AppError('COMMAND_FAILED', 'Daemon retirement could not be confirmed.', {
+    pid: info.pid,
+    processStartTime: info.startTime,
+    reason: failure ? 'daemon_exit_unconfirmed' : 'daemon_retirement_unconfirmed',
+    terminationReason: failure?.reason,
+    signal: failure?.signal,
+    retirement,
+    hint,
+    diagnosticId,
+    logPath,
+  });
+}
+
 export function readDaemonStopIdentity(
   infoPath: string,
 ): { pid: number; processStartTime: string } | null {
   const info = readRegisteredDaemonIdentity(infoPath);
   if (!info?.startTime) return null;
   return { pid: info.pid, processStartTime: info.startTime };
-}
-
-async function waitForDaemonMetadataRemoval(paths: DaemonPaths, timeoutMs: number): Promise<void> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    if (!fs.existsSync(paths.infoPath) && !fs.existsSync(paths.lockPath)) return;
-    await sleep(25);
-  }
 }
 
 function notRunningResult(): DaemonStopResult {

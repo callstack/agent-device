@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import { beforeEach, test, vi } from 'vitest';
+import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import {
@@ -105,6 +107,8 @@ import {
   readRunnerSessionLiveness,
   releaseIosRunnerOnClose,
 } from '../runner-session.ts';
+import { registerRunnerPrepProcess } from '../runner-artifact.ts';
+import { runnerPrepProcessChildren } from '../runner-xctestrun.ts';
 
 // Test-only stand-in for the daemon's runtime lease-owner-state-dir setter (root-only; the package
 // cannot import it). Backs the host.leaseOwnerStateDir() getter the package reads instead.
@@ -316,4 +320,78 @@ test('releaseIosRunnerOnClose retains an idle runner, disposes a busy one, and t
   // Non-retained close: stops regardless of occupancy.
   await releaseIosRunnerOnClose(device.id, { retain: false });
   assert.equal(readRunnerSessionLiveness(device.id), null);
+});
+
+/**
+ * A close that stops the device stops its in-flight runner build too (#3177). The build behind a
+ * cold start is the resource a session teardown promises to leave behind, not an orphan for the
+ * next `open` to race on the shared runner derived-data root.
+ */
+test('releaseIosRunnerOnClose stops the device build still in flight (#3177)', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-close-build-sim' };
+  await ensureRunnerSession(device, {});
+  const build = Object.assign(new EventEmitter(), {
+    pid: 4747,
+    exitCode: null,
+  }) as ExecBackgroundResult['child'];
+  registerRunnerPrepProcess(device.id, build);
+
+  await releaseIosRunnerOnClose(device.id, { retain: false });
+
+  const signaledPids = mockSignalProcessGroupBestEffort.mock.calls.map(([pid]) => pid);
+  assert.ok(
+    signaledPids.includes(4747),
+    'the non-retained close tree-killed the build still in flight',
+  );
+  assert.equal(runnerPrepProcessChildren(device.id).length, 0, 'the build left the prep ledger');
+});
+
+/**
+ * A close arriving during `build-for-testing` stops the build BEFORE waiting for the session
+ * lock (#3177 review). The start holds that lock for its whole cold build, so a close that stopped
+ * the session first would only reach the build after it finished — exactly the orphan close is
+ * supposed to prevent. Here the start is parked mid-build (the lock held), and the build must be
+ * signaled without the session stop completing first.
+ */
+test('releaseIosRunnerOnClose stops the build while the start still holds the session lock (#3177)', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-close-ordering-sim' };
+  let releaseBuild: () => void = () => {};
+  mockEnsureXctestrunArtifact.mockImplementationOnce(
+    () =>
+      new Promise<Awaited<ReturnType<typeof mockEnsureXctestrunArtifact>>>((resolve) => {
+        releaseBuild = () =>
+          resolve({
+            xctestrunPath: '/tmp/base-runner.xctestrun',
+            derived: '/tmp/derived',
+            cacheKey: RUNNER_CACHE_KEY_FIXTURE,
+            cache: 'miss',
+            artifact: 'rebuilt',
+            buildMs: 12,
+            xctestrunPathSource: 'build',
+          });
+      }),
+  );
+  const starting = ensureRunnerSession(device, {}).catch(() => undefined);
+  await vi.waitFor(() => {
+    assert.equal(mockEnsureXctestrunArtifact.mock.calls.length, 1);
+  });
+
+  const build = Object.assign(new EventEmitter(), {
+    pid: 4748,
+    exitCode: null,
+  }) as ExecBackgroundResult['child'];
+  registerRunnerPrepProcess(device.id, build);
+  const closing = releaseIosRunnerOnClose(device.id, { retain: false });
+
+  await vi.waitFor(() => {
+    const signaledPids = mockSignalProcessGroupBestEffort.mock.calls.map(([pid]) => pid);
+    assert.ok(
+      signaledPids.includes(4748),
+      'the close killed the build while the start still held the session lock',
+    );
+  });
+
+  releaseBuild();
+  await closing;
+  await starting;
 });

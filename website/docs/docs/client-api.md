@@ -83,7 +83,7 @@ Supported public entry points for Node consumers:
 - `agent-device/artifacts`
   - `resolveAndroidArchivePackageName(archivePath)`
 - `agent-device/android-adb`
-  - `createAndroidPortReverseManager(provider)`
+  - `createAndroidPortReverseManager(provider)` / `createAndroidPortReverseManager(executor, { noRebind })`
   - `captureAndroidLogcatWithAdb(executor, options?)`
   - `readAndroidClipboardWithAdb(executor)` / `writeAndroidClipboardWithAdb(executor, text)`
   - `getAndroidKeyboardStatusWithAdb(executor)` / `dismissAndroidKeyboardWithAdb(executor)`
@@ -205,7 +205,11 @@ bounded logcat capture.
 Providers can also expose `reverse` for first-class port reverse ownership. Plain executors do not
 advertise reverse support automatically; call `createAndroidPortReverseManager(providerOrExecutor)`
 only when the provider supports `adb reverse` argument semantics. The manager makes duplicate setup
-idempotent for the same owner and rejects conflicting owners for the same local endpoint.
+idempotent for the same owner and rejects conflicting owners for the same local endpoint. For a
+device that other adb clients also drive, pass an executor with `{ noRebind: true }`: the manager
+runs `adb reverse --no-rebind` and never replaces an existing device mapping, including one it
+created. When `adb reverse --list` shows the mapping, the refusal fails with `COMMAND_FAILED` and
+`details.reason: 'android_port_reverse_rebind_refused'`. Otherwise it fails as an ordinary adb error.
 
 The device shell re-parses whatever follows `shell` or `exec-out`, so those commands are built for you:
 every dynamic word is rendered for the quoting its transport applies before it reaches the device. `adb`
@@ -354,6 +358,8 @@ The complete domain-client method map is:
 - `client.settings.update()`
 
 `client.devices.list()` returns `AgentDeviceDevice` entries. Their optional `model` and `osVersion` fields describe the hardware and OS when discovery reports them; see [Device discovery](/docs/commands#device-discovery) for the sources.
+
+`client.capture.snapshot()` carries an optional `viewport: { width, height }` beside `nodes`: the box those rects are measured in, in the same coordinate space and orientation, so a consumer scales and clips against the screen it was shown instead of inferring one from the largest rect on screen. It is absent when the producer measured no box and never reported as a zero; see [`snapshot`](/docs/commands) for what each producer answers with.
 
 `client.observability.events({ cursor, limit })` reads the session event timeline as paged JSON entries. Use `nextCursor` from the previous page to continue from the daemon-owned `events.ndjson` file without replaying already uploaded/displayed events. Cursors are absolute and survive the file's size rotation; a cursor older than the retained window rejects with `COMMAND_FAILED`, `details.reason: "EVENT_LOG_CURSOR_EXPIRED"`, and `details.earliestCursor` to resume from.
 The event timeline keeps operational context such as command/status/timing, paths, session/device/app identifiers, refs/selectors, and coordinates. Typed text, clipboard writes, push/event payloads, raw unknown command arguments, and matching raw message fragments are replaced with length-only placeholders.

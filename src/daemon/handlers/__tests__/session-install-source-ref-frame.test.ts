@@ -19,7 +19,7 @@ const invoke = async (): Promise<never> => {
 test('install_source admission failure preserves an active ref frame', async () => {
   const sessionStore = makeSessionStore('agent-device-session-install-source-ref-admission-');
   const session = activeSession();
-  sessionStore.set('default', session);
+  sessionStore.publish('default', session);
   const inspectFacts = vi.fn(async (device) => {
     const facts = await mockInspectDeviceRuntimeFacts(device);
     return {
@@ -46,7 +46,7 @@ test('install_source admission failure preserves an active ref frame', async () 
 test('install_source materialization failure preserves an active ref frame', async () => {
   const sessionStore = makeSessionStore('agent-device-session-install-source-ref-materialization-');
   const session = activeSession();
-  sessionStore.set('default', session);
+  sessionStore.publish('default', session);
   mockMaterializeAppSourceRuntime.mockRejectedValueOnce(new Error('artifact download failed'));
 
   const response = await dispatchInstallSource({ sessionStore });
@@ -63,7 +63,7 @@ test('install_source materialization failure preserves an active ref frame', asy
 test('install_source deploy attempt expires an active ref frame when the bound operation fails', async () => {
   const sessionStore = makeSessionStore('agent-device-session-install-source-ref-deploy-');
   const session = activeSession();
-  sessionStore.set('default', session);
+  sessionStore.publish('default', session);
   mockDeployMaterializedAppRuntime.mockImplementationOnce(async () => {
     expect(refFrameState(session)).toBe('expired');
     expect(session.snapshotScopeSource).toBeUndefined();

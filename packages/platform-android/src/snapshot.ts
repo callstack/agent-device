@@ -13,6 +13,7 @@ import {
   type HiddenContentHint,
   type RawSnapshotNode,
   type SnapshotOptions,
+  type SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
 import { deriveMobileSnapshotHiddenContentHints } from '@agent-device/capture-kit/mobile-snapshot-semantics';
 import { findProjectRoot, readVersion } from '@agent-device/host-kit/version';
@@ -52,7 +53,10 @@ import {
 } from './snapshot-helper-retirement.ts';
 import { requireAndroidAdbHost } from './adb-host.ts';
 import { parseAndroidSnapshotHelperManifest } from './snapshot-helper-artifact.ts';
-import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
+import type {
+  AndroidSnapshotBackendMetadata,
+  AndroidUiHierarchyCapture,
+} from './snapshot-types.ts';
 import {
   classifyAndroidHelperContent,
   type AndroidHelperContentRecoveryDecision,
@@ -73,7 +77,11 @@ import {
   type AndroidSnapshotPresentationOptions,
 } from './snapshot-presentation.ts';
 import { readAndroidSiblingOrder } from './ui-hierarchy-node.ts';
-import { createAndroidSnapshotCapture, type AndroidSnapshotCapture } from './snapshot-capture.ts';
+import {
+  androidSnapshotViewportFromHelperMetadata,
+  createAndroidSnapshotCapture,
+  type AndroidSnapshotCapture,
+} from './snapshot-capture.ts';
 
 const HELPER_INSTALL_TIMEOUT_MS = 30_000;
 /**
@@ -117,6 +125,11 @@ export async function snapshotAndroid(
 ): Promise<AndroidSnapshotCapture> {
   const adb = resolveAndroidAdbProvider(device, options.helperAdb).exec;
   const capture = await captureAndroidUiHierarchy(device, options, adb);
+  // The one place Android answers the viewport question (#3182): the helper's own display read,
+  // through the shared guard, so both the healthy and the presentation-failed capture below publish
+  // the same box the tree was measured against, and a display the helper could not address stays
+  // absent rather than becoming a zero.
+  const viewport = androidSnapshotViewportFromHelperMetadata(capture.helperMetadata);
   const xml = capture.xml;
   const tree = parseUiHierarchyTree(xml);
   const androidSnapshot = withOcclusionScanDisclosure(capture.metadata, tree);
@@ -147,6 +160,7 @@ export async function snapshotAndroid(
       ...androidSnapshotTruncationFields(truncated),
       androidSnapshot,
       quality: { state: 'healthy', backend: 'android-helper' } as const,
+      ...(viewport ? { viewport } : {}),
     };
     return createAndroidSnapshotCapture(result, {
       clickability: buildAndroidSnapshotClickabilityEvidence(built),
@@ -157,6 +171,7 @@ export async function snapshotAndroid(
     return attachAndroidPresentationFailureEvidence({
       failure: error,
       androidSnapshot,
+      ...(viewport ? { viewport } : {}),
     });
   }
 }
@@ -164,6 +179,7 @@ export async function snapshotAndroid(
 function attachAndroidPresentationFailureEvidence(params: {
   failure: AndroidSnapshotPresentationFailure;
   androidSnapshot: AndroidSnapshotBackendMetadata;
+  viewport?: SnapshotViewportSize;
 }): AndroidSnapshotCapture {
   return createAndroidSnapshotCapture(
     {
@@ -186,6 +202,7 @@ function attachAndroidPresentationFailureEvidence(params: {
         reason: params.failure.message,
         reasonCode: params.failure.qualityReasonCode,
       },
+      ...(params.viewport ? { viewport: params.viewport } : {}),
     },
     {
       clickability: {
@@ -259,7 +276,7 @@ async function captureAndroidUiHierarchy(
   device: DeviceInfo,
   options: AndroidSnapshotOptions,
   adb: AndroidAdbExecutor,
-): Promise<{ xml: string; metadata: AndroidSnapshotBackendMetadata }> {
+): Promise<AndroidUiHierarchyCapture> {
   const adbProvider = resolveAndroidAdbProvider(device, options.helperAdb);
   const helper = await withDiagnosticTimer(
     'android_snapshot_helper_artifact_resolution',
@@ -285,7 +302,7 @@ async function captureAndroidUiHierarchyWithHelper(
   options: AndroidSnapshotOptions,
   adb: AndroidAdbExecutor,
   artifact: AndroidSnapshotHelperArtifact,
-): Promise<{ xml: string; metadata: AndroidSnapshotBackendMetadata }> {
+): Promise<AndroidUiHierarchyCapture> {
   const helperDeviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
   const releaseHelperSession = releasesHelperSessionAfterCapture(options, helperDeviceKey);
   try {
@@ -313,7 +330,7 @@ async function captureAndroidHelperContentWithinWindow(params: {
   adbProvider: AndroidAdbProvider;
   artifact: AndroidSnapshotHelperArtifact;
   helperDeviceKey: string;
-}): Promise<{ xml: string; metadata: AndroidSnapshotBackendMetadata }> {
+}): Promise<AndroidUiHierarchyCapture> {
   const { options } = params;
   const recaptureDeadlineMs = resolveContentRecaptureDeadlineMs(options);
   const rejectContentUnavailable = async (
@@ -470,9 +487,10 @@ function formatAndroidHelperCaptureResult(
   capture: AndroidSnapshotHelperOutput,
   artifact: AndroidSnapshotHelperArtifact,
   installReason: AndroidSnapshotHelperInstallResult['reason'],
-): { xml: string; metadata: AndroidSnapshotBackendMetadata } {
+): AndroidUiHierarchyCapture {
   return {
     xml: capture.xml,
+    helperMetadata: capture.metadata,
     metadata: {
       backend: 'android-helper',
       pixelDensity: capture.metadata.pixelDensity,
@@ -497,7 +515,7 @@ function formatAndroidHelperCaptureResult(
 }
 
 type AndroidHelperContentAttempt =
-  | { outcome: 'captured'; capture: { xml: string; metadata: AndroidSnapshotBackendMetadata } }
+  | { outcome: 'captured'; capture: AndroidUiHierarchyCapture }
   | { outcome: 'unusable'; decision: AndroidHelperContentRecoveryDecision };
 
 async function captureAndroidHelperContentAttempt(params: {
@@ -510,7 +528,7 @@ async function captureAndroidHelperContentAttempt(params: {
   previousContentReason: AndroidContentRecoveryReason | undefined;
 }): Promise<AndroidHelperContentAttempt> {
   const { options, adb, adbProvider, artifact, helperDeviceKey, attempt } = params;
-  let helperCapture: { xml: string; metadata: AndroidSnapshotBackendMetadata };
+  let helperCapture: AndroidUiHierarchyCapture;
   try {
     const install = await installAndroidSnapshotHelper(
       options,
@@ -564,6 +582,7 @@ async function captureAndroidHelperContentAttempt(params: {
     outcome: 'captured',
     capture: {
       xml: helperCapture.xml,
+      helperMetadata: helperCapture.helperMetadata,
       metadata: systemSurfaceOnly
         ? { ...helperCapture.metadata, systemSurfaceOnly: true }
         : helperCapture.metadata,
@@ -586,7 +605,7 @@ async function rejectAndroidHelperContentUnavailable(params: {
   signal?: AbortSignal;
   /** A transient capture does not own the helper, so its content verdict leaves the helper alone. */
   retireHelper: boolean;
-}): Promise<{ xml: string; metadata: AndroidSnapshotBackendMetadata }> {
+}): Promise<never> {
   emitDiagnostic({
     level: 'error',
     phase: 'android_snapshot_helper_content_invalid',
@@ -628,7 +647,7 @@ async function rejectAndroidHelperCaptureFailure(params: {
   helperDeviceKey: string;
   artifact: AndroidSnapshotHelperArtifact;
   adb: AndroidAdbExecutor;
-}): Promise<{ xml: string; metadata: AndroidSnapshotBackendMetadata }> {
+}): Promise<never> {
   const failureReason = formatAndroidSnapshotHelperFailureReason(params.error);
   emitDiagnostic({
     level: 'error',

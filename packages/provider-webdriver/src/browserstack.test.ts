@@ -90,6 +90,7 @@ test('BrowserStack passes bs:// ids and URLs to the hub and uploads only local p
 
     assert.equal(await resolve('bs://preuploaded'), 'bs://preuploaded');
     assert.equal(await resolve('https://builds.example/App.apk'), 'https://builds.example/App.apk');
+    assert.equal(await resolve('HTTPS://builds.example/App.apk'), 'HTTPS://builds.example/App.apk');
     assert.equal(fetched.length, 0);
     assert.equal(await resolve('App.apk'), 'bs://uploaded');
     assert.deepEqual(fetched, ['https://api-cloud.browserstack.com/app-automate/upload']);

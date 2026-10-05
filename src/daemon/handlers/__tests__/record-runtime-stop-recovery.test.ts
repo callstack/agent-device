@@ -65,9 +65,9 @@ test('record stop after daemon-state loss reattaches only through the persisted 
     'capture.mp4',
   );
   await harness.run(['start', outPath]);
-  const adopted = harness.sessionStore.get(harness.sessionName);
-  if (!adopted) throw new Error('Expected adopted recording session');
-  harness.sessionStore.set(harness.sessionName, { ...adopted, screenRecording: undefined });
+  const ref = harness.sessionStore.lookup(harness.sessionName);
+  if (!ref) throw new Error('Expected adopted recording session');
+  harness.sessionStore.update(ref, { screenRecording: undefined });
 
   const stopped = await harness.run(['stop']);
 
@@ -87,9 +87,9 @@ test('record stop terminalizes cleanup-only exact recovery without starting a re
     'capture.mp4',
   );
   await harness.run(['start', outPath]);
-  const adopted = harness.sessionStore.get(harness.sessionName);
-  if (!adopted) throw new Error('Expected adopted recording session');
-  harness.sessionStore.set(harness.sessionName, { ...adopted, screenRecording: undefined });
+  const ref = harness.sessionStore.lookup(harness.sessionName);
+  if (!ref) throw new Error('Expected adopted recording session');
+  harness.sessionStore.update(ref, { screenRecording: undefined });
 
   const stopped = await harness.run(['stop']);
 
@@ -120,9 +120,9 @@ test('record stop rejects a cross-session recovery manifest before exact-owner b
     ...record.envelope,
     sessionId: 'recording-b',
   });
-  const adopted = harness.sessionStore.get(harness.sessionName);
-  if (!adopted) throw new Error('Expected adopted recording session');
-  harness.sessionStore.set(harness.sessionName, { ...adopted, screenRecording: undefined });
+  const ref = harness.sessionStore.lookup(harness.sessionName);
+  if (!ref) throw new Error('Expected adopted recording session');
+  harness.sessionStore.update(ref, { screenRecording: undefined });
 
   const stopped = await harness.run(['stop']);
 
@@ -205,3 +205,19 @@ function writeRecording(prefix: string): string {
   fs.writeFileSync(outPath, 'mp4');
   return outPath;
 }
+
+test('live record stop writes its action under the captured scoped address after rebuilding the record', async () => {
+  const harness = makeRecordRuntimeHarness('record-runtime-scoped-stop-', {
+    sessionName: 'cwd:0123456789abcdef:default',
+  });
+  harness.session.name = 'default';
+  await expect(harness.run(['start', 'capture.mp4'])).resolves.toMatchObject({ ok: true });
+  await expect(harness.run(['stop'])).resolves.toMatchObject({ ok: true });
+  await harness.sessionStore.flushEvents();
+  expect(
+    harness.sessionStore
+      .readEvents(harness.sessionName)
+      .events.filter((event) => event.kind === 'action.recorded'),
+  ).toHaveLength(2);
+  expect(harness.sessionStore.readEvents('default').events).toEqual([]);
+});

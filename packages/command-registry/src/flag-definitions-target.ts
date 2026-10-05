@@ -85,7 +85,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     names: ['--app', '--target-app'],
     type: 'string',
     usageLabel: '--app <id-or-name>',
-    usageDescription: 'Doctor: verify an installed target app without opening a session',
+    usageDescription:
+      'Target an app without opening it: doctor verifies an installed app by id or name; settings applies an app-scoped change (permission, iOS location) to a bundle id or package',
     projectConfig: false,
     recorded: false,
   },

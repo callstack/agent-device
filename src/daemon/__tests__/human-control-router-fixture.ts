@@ -13,7 +13,7 @@ export function createHumanControlHarness() {
   const lease = registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST);
   const sessionStore = makeSessionStore('agent-device-human-control-');
   const sessionName = tenantScopedSessionName(lease.tenantId, 'takeover-test');
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeIosAppSession(sessionName, {
       lease: buildSessionLeaseFromRequest(humanControlRequest(lease), lease),

@@ -67,7 +67,7 @@ test('replay runs active-session actions inside the parent request provider scop
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(replayPath, 'app-switcher\nscroll down\n');
   const sessionStore = makeSessionStore('agent-device-replay-scope-');
-  sessionStore.set('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
+  sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
   const appleRunnerProvider = vi.fn(() => undefined);
 
   const handler = createRequestHandler({
@@ -105,7 +105,7 @@ test('replay routes session-changing actions through the full request path', asy
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(replayPath, 'runtime set --platform ios --metro-host localhost\napp-switcher\n');
   const sessionStore = makeSessionStore('agent-device-replay-full-route-');
-  sessionStore.set('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
+  sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
   const appleRunnerProvider = vi.fn(() => undefined);
 
   const handler = createRequestHandler({
@@ -231,7 +231,7 @@ test('fresh replay retains a dynamically selected device through finalization', 
   });
   await readinessEntered;
 
-  sessionStore.set('external', makeIosSession('external'));
+  sessionStore.publish('external', makeIosSession('external'));
   let externalRequestSettled = false;
   const externalResponse = handler({
     token: 'test-token',

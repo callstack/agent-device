@@ -1,10 +1,13 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { cleanupRetainedMaterializedPathsForSession } from './materialized-path-registry.ts';
-import type { SessionState } from './session-state.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
+import {
+  bindSessionAudioProbe,
+  bindSessionPerfCapture,
+  bindSessionScreenRecording,
+} from './session-capture-binding.ts';
 import type { SessionStore } from './session-store.ts';
-import { forceCleanupSessionAppLog } from './app-log-session-resource.ts';
-import { appLogResourceStore } from './app-log-resource-store.ts';
 import { finishLiveAudioProbe } from '@agent-device/capture-kit/audio-probe-session-resource';
 import { finishLivePerfCapture } from '@agent-device/capture-kit/perf-capture-session-resource';
 import { finishLiveScreenRecording } from '@agent-device/capture-kit/screen-recording-session-resource';
@@ -12,28 +15,21 @@ import { openWebSessionNames } from './web-session-names.ts';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 
 export async function stopSessionAppLog(params: {
-  session: SessionState;
-  sessionName: string;
+  ref: SessionRef;
   sessionStore: SessionStore;
 }): Promise<void> {
-  const { session, sessionName, sessionStore } = params;
-  if (!session.appLog) return;
-  await forceCleanupSessionAppLog({
-    session,
-    sessionName,
-    sessionStore,
-    resourcePath: appLogResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName)),
-  });
+  const ref = params.sessionStore.refresh(params.ref);
+  if (!ref.session.appLog) return;
+  const { forceCleanupSessionAppLog } = await import('./app-log-session-resource.ts');
+  await forceCleanupSessionAppLog({ ...params, ref });
 }
 
 export async function stopSessionPerfCapture(params: {
-  session: SessionState;
-  sessionName: string;
+  ref: SessionRef;
   sessionStore: SessionStore;
 }): Promise<void> {
-  const currentSession = params.sessionStore.get(params.sessionName) ?? params.session;
-  if (!currentSession.perfCapture) return;
-  await finishLivePerfCapture({ ...params, session: currentSession, intent: 'disposal' });
+  const binding = bindSessionPerfCapture(params.sessionStore, params.ref);
+  if (binding.read()) await finishLivePerfCapture({ binding, intent: 'disposal' });
 }
 
 export async function stopSessionSnapshotHelper(
@@ -51,12 +47,13 @@ export async function stopSessionSnapshotHelper(
 // siblings above, this has no second caller in the ordinary-close path (that path already
 // reaches the browser through `dispatchTargetedPlatformClose`), so it stays module-private.
 async function stopSessionWebBrowser(params: {
-  session: SessionState;
-  sessionName: string;
+  ref: SessionRef;
   sessionStore: SessionStore;
   platformCleanup: PlatformResourceCleanup;
 }): Promise<void> {
-  const { session, sessionName, sessionStore, platformCleanup } = params;
+  const { ref, sessionStore, platformCleanup } = params;
+  const session = sessionStore.resolveCurrent(ref) ?? ref.session;
+  const sessionName = ref.address;
   await platformCleanup.closeManagedBrowser({
     device: session.device,
     sessionName,
@@ -120,8 +117,7 @@ export function reportSessionCleanupFailures(params: {
 }
 
 type SessionResourceTeardownRequest = {
-  session: SessionState;
-  sessionName: string;
+  ref: SessionRef;
   sessionStore: SessionStore;
   stateDir?: string;
   appLog: 'run' | 'already-settled';
@@ -131,7 +127,9 @@ type SessionResourceTeardownRequest = {
 export async function teardownSessionResources(
   request: SessionResourceTeardownRequest,
 ): Promise<void> {
-  const { session, sessionName, sessionStore } = request;
+  const { ref, sessionStore } = request;
+  const session = sessionStore.resolveCurrent(ref) ?? ref.session;
+  const sessionName = ref.address;
   if (!request.platformCleanup) {
     throw new AppError(
       'INTERNAL_ERROR',
@@ -144,7 +142,7 @@ export async function teardownSessionResources(
       ? [
           {
             step: 'app_log',
-            run: () => stopSessionAppLog({ session, sessionName, sessionStore }),
+            run: () => stopSessionAppLog({ ref, sessionStore }),
           },
         ]
       : [];
@@ -158,19 +156,18 @@ export async function teardownSessionResources(
       step: 'recording',
       run: () =>
         finishSessionScreenRecording({
-          session,
-          sessionName,
+          ref,
           sessionStore,
         }),
     },
     ...appLogSteps,
     {
       step: 'audio_probe',
-      run: () => finishSessionAudioProbe({ session, sessionName, sessionStore }),
+      run: () => finishSessionAudioProbe({ ref, sessionStore }),
     },
     {
       step: 'perf_capture',
-      run: () => stopSessionPerfCapture({ session, sessionName, sessionStore }),
+      run: () => stopSessionPerfCapture({ ref, sessionStore }),
     },
     {
       step: 'platform_snapshot_helper',
@@ -183,8 +180,7 @@ export async function teardownSessionResources(
       step: 'web_browser',
       run: () =>
         stopSessionWebBrowser({
-          session,
-          sessionName,
+          ref,
           sessionStore,
           platformCleanup,
         }),
@@ -204,31 +200,17 @@ export async function teardownSessionResources(
 }
 
 export async function finishSessionScreenRecording(params: {
-  session: SessionState;
-  sessionName: string;
+  ref: SessionRef;
   sessionStore: SessionStore;
 }): Promise<void> {
-  const currentSession = params.sessionStore.get(params.sessionName) ?? params.session;
-  if (!currentSession.screenRecording) return;
-  await finishLiveScreenRecording({
-    intent: 'disposal',
-    session: currentSession,
-    sessionName: params.sessionName,
-    sessionStore: params.sessionStore,
-  });
+  const binding = bindSessionScreenRecording(params.sessionStore, params.ref);
+  if (binding.read()) await finishLiveScreenRecording({ binding, intent: 'disposal' });
 }
 
 export async function finishSessionAudioProbe(params: {
-  session: SessionState;
-  sessionName: string;
+  ref: SessionRef;
   sessionStore: SessionStore;
 }): Promise<void> {
-  const currentSession = params.sessionStore.get(params.sessionName) ?? params.session;
-  if (!currentSession.audioProbe) return;
-  await finishLiveAudioProbe({
-    intent: 'disposal',
-    session: currentSession,
-    sessionName: params.sessionName,
-    sessionStore: params.sessionStore,
-  });
+  const binding = bindSessionAudioProbe(params.sessionStore, params.ref);
+  if (binding.read()) await finishLiveAudioProbe({ binding, intent: 'disposal' });
 }

@@ -32,7 +32,7 @@ beforeEach(() => {
 test('react-native dismiss-overlay taps collapsed warning close affordance instead of banner center', async () => {
   const sessionName = 'rn-session';
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
   mockCaptureSnapshot
     .mockResolvedValueOnce({
       snapshot: {
@@ -97,7 +97,7 @@ test('react-native dismiss-overlay taps collapsed warning close affordance inste
 test('react-native dismiss-overlay prefers non-trailing collapsed warning close controls', async () => {
   const sessionName = 'rn-session';
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
   mockCaptureSnapshot.mockResolvedValue({
     snapshot: {
       nodes: [
@@ -151,7 +151,7 @@ test('react-native dismiss-overlay prefers non-trailing collapsed warning close 
 test('react-native dismiss-overlay does not confuse app dismiss buttons with overlay controls', async () => {
   const sessionName = 'rn-collapsed-with-app-dismiss-session';
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
   mockCaptureSnapshot
     .mockResolvedValueOnce({
       snapshot: {
@@ -222,7 +222,7 @@ test('react-native dismiss-overlay does not confuse app dismiss buttons with ove
 test('react-native dismiss-overlay rejects unsafe collapsed warning coordinate fallback', async () => {
   const sessionName = 'rn-session';
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
   mockCaptureSnapshot.mockResolvedValue({
     snapshot: {
       nodes: [
@@ -266,7 +266,7 @@ test('react-native dismiss-overlay rejects unsafe collapsed warning coordinate f
 test('react-native dismiss-overlay dismisses RedBox error overlays instead of minimizing them', async () => {
   const sessionName = 'rn-redbox-session';
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
   mockCaptureSnapshot
     .mockResolvedValueOnce({
       snapshot: {
@@ -336,7 +336,7 @@ test('react-native dismiss-overlay dismisses RedBox error overlays instead of mi
 test('react-native dismiss-overlay reports unverified dismiss when RedBox controls remain', async () => {
   const sessionName = 'rn-redbox-still-full-session';
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
   const fullRedBoxSnapshot = {
     snapshot: {
       nodes: [
@@ -397,7 +397,7 @@ test('react-native dismiss-overlay reports unverified dismiss when RedBox contro
 test('react-native dismiss-overlay uses Dismiss when RedBox Minimize is absent', async () => {
   const sessionName = 'rn-redbox-dismiss-session';
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
   mockCaptureSnapshot.mockResolvedValue({
     snapshot: {
       nodes: [
@@ -448,7 +448,7 @@ test('react-native dismiss-overlay uses Dismiss when RedBox Minimize is absent',
 test('react-native dismiss-overlay accepts RedBox control labels with keyboard shortcut suffixes', async () => {
   const sessionName = 'rn-redbox-shortcut-session';
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
   mockCaptureSnapshot.mockResolvedValue({
     snapshot: {
       nodes: [
@@ -499,7 +499,7 @@ test('react-native dismiss-overlay accepts RedBox control labels with keyboard s
 test('react-native dismiss-overlay prefers concrete RedBox buttons over labeled wrappers', async () => {
   const sessionName = 'rn-redbox-wrapper-session';
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
   mockCaptureSnapshot.mockResolvedValue({
     snapshot: {
       nodes: [
@@ -556,7 +556,7 @@ test('react-native dismiss-overlay prefers concrete RedBox buttons over labeled 
 test('react-native dismiss-overlay reports verified success after a clean post-dismiss snapshot', async () => {
   const sessionName = 'rn-verify-session';
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName, 'android'));
+  sessionStore.publish(sessionName, makeSession(sessionName, 'android'));
   mockCaptureSnapshot
     .mockResolvedValueOnce({
       snapshot: {
@@ -635,7 +635,7 @@ test('react-native dismiss-overlay reports sparse verdict instead of no overlay 
     createdAt: Date.now(),
   };
   const previousSnapshot = session.snapshot;
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   mockCaptureSnapshot.mockResolvedValue({
     snapshot: {
       nodes: [
@@ -687,7 +687,7 @@ test('react-native dismiss-overlay reports sparse verdict instead of no overlay 
 test('react-native dismiss-overlay reports unverified dismiss when post-dismiss snapshot is sparse', async () => {
   const sessionName = 'rn-verify-sparse-session';
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
   mockCaptureSnapshot
     .mockResolvedValueOnce({
       snapshot: {
@@ -755,7 +755,7 @@ test('react-native dismiss-overlay reports unverified dismiss when post-dismiss 
 test('react-native dismiss-overlay reports still-visible overlays with recovery guidance', async () => {
   const sessionName = 'rn-verify-still-visible-session';
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName, 'android'));
+  sessionStore.publish(sessionName, makeSession(sessionName, 'android'));
   const overlaySnapshot = {
     snapshot: {
       nodes: [
@@ -805,7 +805,7 @@ test('react-native dismiss-overlay reports still-visible overlays with recovery 
 test('react-native dismiss-overlay ignores app copy that only mentions RN overlay terms', async () => {
   const sessionName = 'rn-copy-session';
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
   mockCaptureSnapshot.mockResolvedValue({
     snapshot: {
       nodes: [

@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { serializeSnapshotResult } from './result-serialization.ts';
+import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 
 test('serializeSnapshotResult includes Android backend metadata', () => {
   const data = serializeSnapshotResult({
@@ -93,4 +94,27 @@ test('serializeSnapshotResult includes snapshot diagnostics', () => {
     truncated: false,
     snapshotDiagnostics,
   });
+});
+
+// #3182: the viewport rides the response once, beside the tree. An absent one stays absent rather
+// than serializing as an empty box.
+test('serializeSnapshotResult publishes the viewport beside the tree (#3182)', () => {
+  const data = serializeSnapshotResult({
+    nodes: [],
+    truncated: false,
+    viewport: snapshotViewportSizeFrom({ x: 0, y: 0, width: 390, height: 844 }),
+    identifiers: { session: 'qa' },
+  });
+
+  assert.deepEqual(data.viewport, { width: 390, height: 844 });
+});
+
+test('serializeSnapshotResult omits an absent viewport instead of minting one (#3182)', () => {
+  const data = serializeSnapshotResult({
+    nodes: [],
+    truncated: false,
+    identifiers: { session: 'qa' },
+  });
+
+  assert.equal('viewport' in data, false);
 });

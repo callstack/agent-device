@@ -402,7 +402,7 @@ test('close releases the session lease', async () => {
     runId: 'run-1',
     clientId: 'client-a',
   });
-  sessionStore.set('default', {
+  sessionStore.publish('default', {
     name: 'default',
     device: makeIosDevice('SIM-CLOSE'),
     createdAt: Date.now(),
@@ -442,7 +442,7 @@ test.each([
     clientId: 'client-a',
     retainOnClose: true,
   });
-  sessionStore.set('default', {
+  sessionStore.publish('default', {
     name: 'default',
     device: makeIosDevice('SIM-CLOSE-RETAIN'),
     createdAt: Date.now(),
@@ -480,7 +480,7 @@ test.each([
 
 test('close fails synchronously when root composition omits platform resource cleanup', async () => {
   const sessionStore = makeSessionStore('agent-device-router-open-');
-  sessionStore.set('default', {
+  sessionStore.publish('default', {
     name: 'default',
     device: makeIosDevice('SIM-CLOSE-MISSING-CLEANUP'),
     createdAt: Date.now(),
@@ -523,7 +523,7 @@ test('close rejects a different client before cleanup', async () => {
     runId: 'run-1',
     clientId: 'client-a',
   });
-  sessionStore.set('default', {
+  sessionStore.publish('default', {
     name: 'default',
     device: makeIosDevice('SIM-CLOSE-CLIENT'),
     createdAt: Date.now(),

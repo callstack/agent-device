@@ -1,17 +1,28 @@
+import { attachActiveSessionAddressHint } from './daemon-client-address-hints.ts';
 import fs from 'node:fs';
+import { processLockHoldsDaemonIdentity } from '../daemon-registration.ts';
 import net from 'node:net';
-import os from 'node:os';
-import path from 'node:path';
-import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { readReplayDivergenceResume } from '@agent-device/ad-replay/divergence';
 import type { DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts';
-import { runCmdDetachedMonitored, type ExecDetachedExit } from '@agent-device/host-kit/command';
+import { type ExecDetachedExit } from '@agent-device/host-kit/command';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { isProcessAlive, readProcessStartTime } from '@agent-device/host-kit/process';
+import { isProcessAlive } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
+import { inspectProcessLock, type ProcessLockInspection } from '@agent-device/host-kit/file';
 
-import { findUnrecoveredRepairCommitFailure } from '../session-repair-tombstone.ts';
+import type { findUnrecoveredRepairCommitFailure } from '../session-repair-tombstone.ts';
+import {
+  DAEMON_STARTUP_EXIT_CODES,
+  createOwnedReplayStateDir,
+  recoverAbandonedDaemonRegistration,
+  type DaemonRetirementResult,
+  launchDaemonProcess,
+  stopAndRetireDaemon,
+  type OwnedReplayStateDir,
+  type DaemonStartupLaunch,
+} from '../daemon-registration-owner.ts';
 import {
   resolveDaemonPaths,
   resolveDaemonServerMode,
@@ -28,19 +39,11 @@ import {
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 
 import {
-  cleanupFailedDaemonStartupMetadata,
-  cleanupStaleDaemonLockIfSafe,
   getDaemonMetadataState,
-  isDaemonLockHeldByAnotherDaemon,
   isRemoteDaemon,
   readDaemonInfo,
-  recoverDaemonLockHolder,
-  removeDaemonInfo,
-  removeDaemonLock,
   resolveDaemonStartupHint,
-  stopDaemonProcessForTakeover,
   type DaemonInfo,
-  type DaemonStartupCleanupResult,
 } from './daemon-client-metadata.ts';
 import {
   canConnect,
@@ -52,7 +55,7 @@ export type DaemonClientSettings = {
   paths: DaemonPaths;
   transportPreference: DaemonTransportPreference;
   serverMode: DaemonServerMode;
-  ownedStateDir?: boolean;
+  ownedStateDir?: OwnedReplayStateDir;
   remoteBaseUrl?: string;
   remoteAuthToken?: string;
 };
@@ -62,19 +65,14 @@ export type EnsuredDaemon = {
   startedByClient: boolean;
 };
 
-type DaemonStartupLaunch = {
-  pid: number;
-  /** The launched process's start time, so a reused pid is never taken for it. */
-  startTime?: string;
-  exited: Promise<ExecDetachedExit>;
-};
-
 type DaemonStartupWaitResult =
   | { kind: 'ready'; daemon: EnsuredDaemon }
   | { kind: 'early_exit'; exit: ExecDetachedExit }
-  | { kind: 'timeout' };
+  | { kind: 'unproven'; error: AppError }
+  | { kind: 'retry' | 'timeout' };
 
 const DAEMON_STARTUP_TIMEOUT_MS = 15_000;
+const MINIMUM_DAEMON_TAKEOVER_BUDGET_MS = 5_000;
 const LIVE_DAEMON_PROBE_RETRIES = 3;
 const LIVE_DAEMON_PROBE_RETRY_DELAY_MS = 200;
 const DAEMON_STARTUP_ATTEMPTS = 2;
@@ -91,10 +89,11 @@ export function resolveClientSettings(
   const explicitStateDir = resolveExplicitStateDir(req);
   const remote = resolveRemoteClientSettings(req, suppliedAuthToken);
   const transport = resolveTransportClientSettings(req, remote.remoteBaseUrl);
-  const ownedStateDir = shouldUseOwnedReplayStateDir(req, explicitStateDir, remote.rawBaseUrl);
-  const stateDir = ownedStateDir ? createOwnedReplayStateDir() : explicitStateDir;
+  const ownedStateDir = shouldUseOwnedReplayStateDir(req, explicitStateDir, remote.rawBaseUrl)
+    ? createOwnedReplayStateDir()
+    : undefined;
   return {
-    paths: resolveDaemonPaths(stateDir),
+    paths: ownedStateDir?.paths ?? resolveDaemonPaths(explicitStateDir),
     transportPreference: transport.preference,
     serverMode: transport.serverMode,
     ownedStateDir,
@@ -153,10 +152,6 @@ function shouldUseOwnedReplayStateDir(
   return isOneShotReplayCommand(req.command) && !explicitStateDir && !rawRemoteBaseUrl;
 }
 
-function createOwnedReplayStateDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-daemon-'));
-}
-
 export async function ensureDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {
   if (settings.remoteBaseUrl) {
     return await ensureRemoteDaemon(settings);
@@ -172,7 +167,6 @@ async function ensureLocalDaemon(settings: DaemonClientSettings): Promise<Ensure
   const reusable = await readReusableLocalDaemon(settings);
   if (reusable) return { info: reusable, startedByClient: false };
 
-  cleanupStaleDaemonLockIfSafe(settings.paths);
   return await startLocalDaemon(settings);
 }
 
@@ -196,23 +190,83 @@ async function ensureRemoteDaemon(settings: DaemonClientSettings): Promise<Ensur
   });
 }
 
-async function readReusableLocalDaemon(settings: DaemonClientSettings): Promise<DaemonInfo | null> {
+async function readReusableLocalDaemon(
+  settings: DaemonClientSettings,
+  options: { deadline?: number; waitForLiveStartup?: boolean } = {},
+): Promise<DaemonInfo | null> {
+  const { deadline } = options;
+  const inspection = inspectProcessLock(settings.paths.lockPath);
+  if (inspection.state === 'unproven') throw daemonRegistrationUnprovenError(settings, inspection);
   const existing = readDaemonInfo(settings.paths.infoPath);
   if (!existing) return null;
+  if (!registrationAllowsDaemonObservation(inspection, existing)) return null;
+  if (options.waitForLiveStartup && (await isAwaitingDaemonStartup(existing, deadline)))
+    return null;
 
   const decision = await resolveDaemonTakeover(existing, {
-    onClientTransport: () => canReachReusableDaemon(existing, settings.transportPreference),
-    onAnyAdvertisedTransport: () => canReachReusableDaemon(existing, 'auto'),
+    onClientTransport: () =>
+      canReachReusableDaemon(existing, settings.transportPreference, deadline),
+    onAnyAdvertisedTransport: () => canReachReusableDaemon(existing, 'auto', deadline),
   });
   if (decision.kind === 'reuse') return existing;
   if (decision.kind === 'refuseNewer') {
     throw newerDaemonRefusedError(existing, decision, settings.paths.baseDir);
   }
 
+  if (remainingStartupBudget(deadline) < MINIMUM_DAEMON_TAKEOVER_BUDGET_MS) return null;
   emitDaemonTakeoverNotice(existing, decision.reason, settings.paths.baseDir);
-  await stopDaemonProcessForTakeover(existing);
-  removeDaemonInfo(settings.paths.infoPath);
+  await retireDaemonForTakeover(existing, settings.paths);
   return null;
+}
+
+async function isAwaitingDaemonStartup(
+  info: DaemonInfo,
+  deadline: number | undefined,
+): Promise<boolean> {
+  return (
+    isProcessAlive(info.pid) && !(await canConnect(info, 'auto', remainingStartupBudget(deadline)))
+  );
+}
+
+function registrationAllowsDaemonObservation(
+  inspection: ProcessLockInspection,
+  info: DaemonInfo,
+): boolean {
+  return (
+    inspection.state === 'absent' ||
+    processLockHoldsDaemonIdentity(inspection, {
+      pid: info.pid,
+      startTime: info.processStartTime ?? null,
+    })
+  );
+}
+
+function daemonRegistrationUnprovenError(
+  settings: DaemonClientSettings,
+  inspection?: ProcessLockInspection,
+): AppError {
+  return new AppError('COMMAND_FAILED', 'Daemon registration ownership could not be verified.', {
+    reason: 'daemon_registration_unproven',
+    inspection,
+    stateDir: settings.paths.baseDir,
+    hint: resolveDaemonStartupHint(getDaemonMetadataState(settings.paths), settings.paths),
+  });
+}
+
+async function retireDaemonForTakeover(existing: DaemonInfo, paths: DaemonPaths): Promise<void> {
+  const retirement = await stopAndRetireDaemon({
+    paths: paths,
+    observed: { pid: existing.pid, startTime: existing.processStartTime ?? null },
+    mode: 'graceful',
+  });
+  if (retirement.status === 'retained') {
+    throw new AppError('COMMAND_FAILED', 'Daemon replacement could not be confirmed.', {
+      reason: 'daemon_retirement_unconfirmed',
+      retirement,
+      hint:
+        retirement.error?.hint ?? resolveDaemonStartupHint(getDaemonMetadataState(paths), paths),
+    });
+  }
 }
 
 /**
@@ -226,12 +280,14 @@ async function readReusableLocalDaemon(settings: DaemonClientSettings): Promise<
 async function canReachReusableDaemon(
   info: DaemonInfo,
   preference: DaemonTransportPreference,
+  deadline?: number,
 ): Promise<boolean> {
-  if (await canConnectReusableDaemon(info, preference)) return true;
+  if (await canConnectReusableDaemon(info, preference, deadline)) return true;
   for (let retry = 1; retry <= LIVE_DAEMON_PROBE_RETRIES; retry += 1) {
-    if (!isProcessAlive(info.pid)) return false;
-    await sleep(LIVE_DAEMON_PROBE_RETRY_DELAY_MS);
-    if (await canConnectReusableDaemon(info, preference)) {
+    if (!isProcessAlive(info.pid) || (deadline !== undefined && Date.now() >= deadline))
+      return false;
+    await sleep(Math.min(LIVE_DAEMON_PROBE_RETRY_DELAY_MS, remainingStartupBudget(deadline)));
+    if (await canConnectReusableDaemon(info, preference, deadline)) {
       emitDiagnostic({
         level: 'warn',
         phase: 'daemon_probe_recovered',
@@ -267,9 +323,10 @@ async function assertDaemonPolicyMatches(existing: DaemonInfo, stateDir: string)
 async function canConnectReusableDaemon(
   info: DaemonInfo,
   preference: DaemonTransportPreference,
+  deadline?: number,
 ): Promise<boolean> {
   try {
-    return await canConnect(info, preference);
+    return await canConnect(info, preference, remainingStartupBudget(deadline));
   } catch (error) {
     if (isDaemonTransportUnavailableError(error)) return false;
     throw error;
@@ -303,65 +360,29 @@ function emitDaemonTakeoverNotice(info: DaemonInfo, reason: string, stateDir: st
   }
 }
 
+type FailedDaemonStartup = {
+  cleanup?: DaemonRetirementResult;
+  startError?: string;
+  startupError?: NormalizedError;
+  daemonProcess?: ExecDetachedExit | { pid: number };
+  retry: boolean;
+};
+
 async function startLocalDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {
-  let lockRecoveryCount = 0;
-  const cleanupResults: DaemonStartupCleanupResult[] = [];
-  let startError: string | undefined;
-  let daemonProcess: ExecDetachedExit | { pid: number } | undefined;
-  for (let attempt = 1; attempt <= DAEMON_STARTUP_ATTEMPTS; attempt += 1) {
-    let launch: DaemonStartupLaunch;
-    try {
-      launch = startDaemon(settings);
-      daemonProcess = { pid: launch.pid };
-    } catch (error) {
-      startError = error instanceof Error ? error.message : String(error);
-      cleanupResults.push(await cleanupFailedDaemonStartupMetadata(settings.paths, 'start_error'));
-      if (attempt < DAEMON_STARTUP_ATTEMPTS) {
-        await sleep(150);
-        continue;
-      }
-      break;
-    }
-
-    const startup = await waitForDaemonStartup(DAEMON_STARTUP_TIMEOUT_MS, settings, launch);
-    if (startup.kind === 'ready') return startup.daemon;
-    if (startup.kind === 'early_exit') {
-      daemonProcess = startup.exit;
-      startError = describeDaemonEarlyExit(startup.exit);
-      cleanupResults.push(await cleanupFailedDaemonStartupMetadata(settings.paths, 'start_error'));
-      if (attempt < DAEMON_STARTUP_ATTEMPTS) {
-        await sleep(150);
-        continue;
-      }
-      break;
-    }
-
-    if (await recoverDaemonLockHolder(settings.paths)) {
-      lockRecoveryCount += 1;
-      continue;
-    }
-
-    const metadataState = getDaemonMetadataState(settings.paths);
-    const hasAnotherAttempt = attempt < DAEMON_STARTUP_ATTEMPTS;
-    const cleanup = await cleanupFailedDaemonStartupMetadata(settings.paths, 'startup_timeout', {
-      stopLiveProcesses: false,
-    });
-    cleanupResults.push(cleanup);
-    if (cleanup.retainedInfoProcess || cleanup.retainedLockProcess) {
-      const extended = await waitForDaemonStartup(DAEMON_STARTUP_TIMEOUT_MS, settings, launch);
-      if (extended.kind === 'ready') return extended.daemon;
-      if (extended.kind === 'early_exit') {
-        daemonProcess = extended.exit;
-        startError = describeDaemonEarlyExit(extended.exit);
-      }
-      break;
-    }
-    if (!hasAnotherAttempt) break;
-
-    // Detached daemon startup can race on busy CI hosts; retry when no metadata exists yet.
-    if (!metadataState.hasInfo && !metadataState.hasLock) await sleep(150);
+  const deadline = Date.now() + DAEMON_STARTUP_TIMEOUT_MS;
+  const cleanupResults: DaemonRetirementResult[] = [];
+  let failure: FailedDaemonStartup | undefined;
+  let attempts = 0;
+  while (attempts < DAEMON_STARTUP_ATTEMPTS && Date.now() < deadline) {
+    attempts += 1;
+    const result = await attemptLocalDaemonStartup(settings, deadline);
+    if ('daemon' in result) return result.daemon;
+    failure = result;
+    if (result.cleanup) cleanupResults.push(result.cleanup);
+    if (!result.retry) break;
+    await sleep(Math.min(150, Math.max(0, deadline - Date.now())));
   }
-
+  const { startError, startupError, daemonProcess }: Partial<FailedDaemonStartup> = failure ?? {};
   const state = getDaemonMetadataState(settings.paths);
   const daemonLogTail = readRecentLogTail(settings.paths.logPath);
   throw new AppError('COMMAND_FAILED', 'Failed to start daemon', {
@@ -371,10 +392,10 @@ async function startLocalDaemon(settings: DaemonClientSettings): Promise<Ensured
     lockPath: settings.paths.lockPath,
     logPath: settings.paths.logPath,
     startupTimeoutMs: DAEMON_STARTUP_TIMEOUT_MS,
-    startupAttempts: DAEMON_STARTUP_ATTEMPTS,
-    lockRecoveryCount,
+    startupAttempts: attempts,
     cleanupResults,
     startError,
+    startupError,
     daemonProcess,
     ...(daemonLogTail ? { daemonLogTail } : {}),
     metadataState: state,
@@ -382,12 +403,113 @@ async function startLocalDaemon(settings: DaemonClientSettings): Promise<Ensured
   });
 }
 
+async function attemptLocalDaemonStartup(
+  settings: DaemonClientSettings,
+  deadline: number,
+): Promise<{ daemon: EnsuredDaemon } | FailedDaemonStartup> {
+  let launch: DaemonStartupLaunch;
+  try {
+    launch = startDaemon(settings);
+  } catch (error) {
+    return await recoverFailedDaemonLaunch(settings, error);
+  }
+  const startup = await waitForDaemonStartup(deadline, settings, launch);
+  if (startup.kind === 'ready') return { daemon: startup.daemon };
+  if (startup.kind === 'retry') return { retry: true };
+  if (startup.kind === 'unproven') {
+    const startupError = normalizeError(startup.error);
+    return {
+      retry: false,
+      startError: startupError.message,
+      startupError,
+      daemonProcess: { pid: launch.pid },
+    };
+  }
+  const { cleanup, joined } = await retireStartupAttempt(settings, launch, deadline);
+  const available = isRegistrationAvailable(inspectProcessLock(settings.paths.lockPath));
+  return {
+    cleanup,
+    retry: joined && startup.kind === 'early_exit' && available,
+    startError: startup.kind === 'early_exit' ? describeDaemonEarlyExit(startup.exit) : undefined,
+    daemonProcess: startup.kind === 'early_exit' ? startup.exit : { pid: launch.pid },
+  };
+}
+
+async function recoverFailedDaemonLaunch(
+  settings: DaemonClientSettings,
+  error: unknown,
+): Promise<FailedDaemonStartup> {
+  const cleanup = settings.ownedStateDir
+    ? await stopAndRetireDaemon({
+        paths: settings.paths,
+        observed: null,
+        mode: 'graceful',
+        ownedStateDir: settings.ownedStateDir,
+        lockTimeoutMs: 0,
+      })
+    : await recoverAbandonedDaemonRegistration({
+        paths: settings.paths,
+        observed: null,
+        lockTimeoutMs: 0,
+      });
+  return {
+    cleanup,
+    startError: normalizeError(error).message,
+    retry: !settings.ownedStateDir && cleanup.status !== 'retained',
+  };
+}
+
+async function retireStartupAttempt(
+  settings: DaemonClientSettings,
+  launch: DaemonStartupLaunch,
+  deadline: number,
+): Promise<{ cleanup: DaemonRetirementResult; joined: boolean }> {
+  const cleanup = await stopAndRetireDaemon({
+    paths: settings.paths,
+    observed: launch.readIdentity(),
+    mode: 'graceful',
+    ownedStateDir: settings.ownedStateDir,
+    termTimeoutMs: Math.min(3_000, remainingStartupBudget(deadline)),
+    killTimeoutMs: 1_000,
+    lockTimeoutMs: 0,
+  });
+  const joined = await joinStartup(launch);
+  return { cleanup, joined };
+}
+
+async function joinStartup(launch: DaemonStartupLaunch): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      launch.exited.then(() => true),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), 1_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function remainingStartupBudget(deadline?: number): number {
+  return deadline === undefined ? Number.POSITIVE_INFINITY : Math.max(0, deadline - Date.now());
+}
+
+function isRegistrationAvailable(inspection: ProcessLockInspection): boolean {
+  return (
+    inspection.state === 'absent' ||
+    (inspection.state === 'held' &&
+      (inspection.liveness === 'owner-process-dead' ||
+        inspection.liveness === 'owner-process-reused'))
+  );
+}
+
 /**
  * ADR 0012 decision 6 (BLOCKER 2, third follow-up): a one-shot repair
  * (`replay --save-script`) that COMPLETES without diverging returns SUCCESS
  * here — the actual healed-script COMMIT is deferred to daemon teardown
  * (`finalizeRepairTeardown`, run inside the daemon process's own shutdown
- * handler, triggered by `stopDaemonProcessForTakeover` below). If that
+ * handler, triggered by `stopAndRetireDaemon`). If that
  * deferred commit then FAILS, the daemon leaves a `REPAIR_COMMIT_FAILED`
  * tombstone in this owned state dir — the only surviving record of the
  * failure, since the daemon process (and its in-memory session) is gone by
@@ -435,49 +557,44 @@ export async function cleanupDaemonAfterRequest(
     return response;
   }
 
-  const result = {
-    pid: daemon.info.pid,
-    removedInfo: false,
-    removedLock: false,
-    removedStateDir: false,
-    error: undefined as string | undefined,
-  };
-  let surfacedResponse = response;
-
-  try {
-    await stopDaemonProcessForTakeover(daemon.info);
-  } catch (error) {
-    result.error = error instanceof Error ? error.message : String(error);
-  } finally {
-    const infoExists = fs.existsSync(settings.paths.infoPath);
-    removeDaemonInfo(settings.paths.infoPath);
-    result.removedInfo = infoExists && !fs.existsSync(settings.paths.infoPath);
-
-    const lockExists = fs.existsSync(settings.paths.lockPath);
-    removeDaemonLock(settings.paths.lockPath);
-    result.removedLock = lockExists && !fs.existsSync(settings.paths.lockPath);
-
-    if (settings.ownedStateDir) {
-      // `stopDaemonProcessForTakeover` above waits for the (real) daemon
-      // process to actually exit, which only happens AFTER its shutdown
-      // handler finishes `finalizeRepairTeardown` for every session — so by
-      // now any commit-failure tombstone it would leave is already on disk.
-      const unrecovered = findUnrecoveredRepairCommitFailure(settings.paths.sessionsDir);
-      if (unrecovered) {
-        surfacedResponse = surfaceUnrecoveredRepairCommitFailure(response, unrecovered);
-      } else {
-        fs.rmSync(settings.paths.baseDir, { recursive: true, force: true });
-        result.removedStateDir = !fs.existsSync(settings.paths.baseDir);
-      }
-    }
-  }
-
-  emitDiagnostic({
-    level: result.error ? 'warn' : 'info',
-    phase: 'daemon_replay_cleanup',
-    data: result,
+  const result = await stopAndRetireDaemon({
+    paths: settings.paths,
+    observed: { pid: daemon.info.pid, startTime: daemon.info.processStartTime ?? null },
+    mode: 'graceful',
+    ownedStateDir: settings.ownedStateDir,
   });
-  return surfacedResponse;
+  emitDiagnostic({
+    level: result.status === 'retained' ? 'warn' : 'info',
+    phase: 'daemon_replay_cleanup',
+    data: { pid: daemon.info.pid, ...result },
+  });
+  if (result.status !== 'absent' && result.repairCommitFailure) {
+    return surfaceUnrecoveredRepairCommitFailure(
+      response,
+      result.repairCommitFailure,
+      result.status === 'retained' ? result.error : undefined,
+    );
+  }
+  if (result.status === 'retained' && response?.ok) {
+    return {
+      ok: false,
+      error: normalizeError(
+        new AppError(
+          'COMMAND_FAILED',
+          'Replay completed, but daemon cleanup could not be confirmed.',
+          {
+            reason: 'daemon_retirement_unconfirmed',
+            retirement: result,
+            stateDir: settings.paths.baseDir,
+            hint:
+              result.error?.hint ??
+              `State and diagnostics were retained at ${settings.paths.baseDir}. Resolve the reported cleanup failure before retrying.`,
+          },
+        ),
+      ),
+    };
+  }
+  return response;
 }
 
 /**
@@ -498,6 +615,7 @@ export async function cleanupDaemonAfterRequest(
 function surfaceUnrecoveredRepairCommitFailure(
   response: DaemonResponse | undefined,
   unrecovered: NonNullable<ReturnType<typeof findUnrecoveredRepairCommitFailure>>,
+  cleanupFailure?: NormalizedError,
 ): DaemonResponse {
   if (response && !response.ok) return response;
   const { sessionName, tombstone } = unrecovered;
@@ -507,7 +625,16 @@ function surfaceUnrecoveredRepairCommitFailure(
   const message =
     `The repair transaction for session "${sessionName}" completed, but committing its ` +
     `healed script failed at teardown: ${tombstone.commitFailure.message}. ${reRun}.`;
-  return { ok: false, error: normalizeError(new AppError('REPAIR_COMMIT_FAILED', message)) };
+  return {
+    ok: false,
+    error: normalizeError(
+      new AppError(
+        'REPAIR_COMMIT_FAILED',
+        message,
+        cleanupFailure ? { cleanupFailure } : undefined,
+      ),
+    ),
+  };
 }
 
 /**
@@ -524,7 +651,7 @@ function surfaceUnrecoveredRepairCommitFailure(
  * `resume.allowed` (plan-resumability): a held divergence with `allowed: false`
  * still holds the session so the agent can inspect and `close` cleanly.
  */
-export function isHeldRepairDivergence(response: DaemonResponse | undefined): boolean {
+function isHeldRepairDivergence(response: DaemonResponse | undefined): boolean {
   if (!response || response.ok) return false;
   if (response.error.code !== 'REPLAY_DIVERGENCE') return false;
   const resume = readReplayDivergenceResume(response.error.details?.divergence);
@@ -539,7 +666,7 @@ export function isHeldRepairDivergence(response: DaemonResponse | undefined): bo
  * selector-miss's own guidance) so the agent's next command knows to target
  * the SAME daemon instead of resolving to the default one.
  */
-export function attachRepairSessionAddressHint(
+function attachRepairSessionAddressHint(
   response: Extract<DaemonResponse, { ok: false }>,
   stateDir: string,
 ): Extract<DaemonResponse, { ok: false }> {
@@ -571,7 +698,7 @@ function isOneShotReplayCommand(command: string | undefined): boolean {
  * anyway, but the explicit command check keeps that carve-out a decision
  * rather than an accident of the response shape.
  */
-export function isActiveReplaySessionResponse(
+function isActiveReplaySessionResponse(
   req: Omit<DaemonRequest, 'token'>,
   response: DaemonResponse | undefined,
 ): boolean {
@@ -580,117 +707,118 @@ export function isActiveReplaySessionResponse(
   return response.data?.sessionActive === true;
 }
 
-/**
- * ADR 0016 counterpart to `attachRepairSessionAddressHint`: a still-active
- * replay session is only unaddressable by `--state-dir` when it lives on an
- * OWNED, randomly generated one (`stateDir` undefined otherwise — an explicit
- * `--state-dir`/`AGENT_DEVICE_STATE_DIR` caller already knows it). But the
- * SESSION name is always cwd-qualified (`cwd:<hash>:default`) and, per #1394,
- * `session list` cannot rediscover it either — so `--session` is always
- * emitted when a name is available, explicit state dir or not. Attached to
- * both a structured `hint` field (for `--json` consumers) and appended to
- * `message` — the only field the default text renderer surfaces
- * (`@agent-device/kernel/success-text`) — so the hint reaches a caller in either mode.
- *
- * `data.session` is used verbatim, never reconstructed as `default`: an
- * EXPLICIT `--session <value>` is used as-is by `resolveEffectiveSessionName`,
- * skipping cwd-scoping entirely (`hasExplicitSessionFlag`), so passing the
- * qualified name back unchanged is what actually reaches the same session
- * from any cwd — a bare `--session default` would only match by coincidence
- * (an implicit, no-`--session` follow-up run from the identical cwd). Both
- * the state dir and the session name are shell-quoted (only when needed) so
- * the hint stays literally copy-pasteable even if either contains spaces or
- * shell metacharacters.
- */
-export function attachActiveSessionAddressHint(
-  response: Extract<DaemonResponse, { ok: true }>,
-  stateDir: string | undefined,
-): Extract<DaemonResponse, { ok: true }> {
-  const data = response.data ?? {};
-  const sessionName = typeof data.session === 'string' ? data.session : undefined;
-  const addressFlags = [
-    ...(stateDir ? [`--state-dir ${shellQuoteIfNeeded(stateDir)}`] : []),
-    ...(sessionName ? [`--session ${shellQuoteIfNeeded(sessionName)}`] : []),
-  ];
-  if (addressFlags.length === 0) return response;
-  const addressHint =
-    `This session's daemon was kept alive because its script left the session active; ` +
-    `pass ${addressFlags.join(' ')} on your next command to reach it.`;
-  const existingMessage = typeof data.message === 'string' ? data.message : undefined;
-  return {
-    ...response,
-    data: {
-      ...data,
-      hint: addressHint,
-      message: existingMessage ? `${existingMessage} ${addressHint}` : addressHint,
-    },
-  };
-}
-
 async function waitForDaemonStartup(
-  timeoutMs: number,
+  deadline: number,
   settings: DaemonClientSettings,
   launch: DaemonStartupLaunch,
 ): Promise<DaemonStartupWaitResult> {
-  const start = Date.now();
   let earlyExit: ExecDetachedExit | undefined;
   void launch.exited.then((exit) => {
     earlyExit = exit;
   });
-
-  while (Date.now() - start < timeoutMs) {
-    const info = readDaemonInfo(settings.paths.infoPath);
-    if (info && (await canConnect(info, settings.transportPreference))) {
-      if (isLaunchedDaemon(info, launch)) {
-        return { kind: 'ready', daemon: { info, startedByClient: true } };
-      }
-      // Another client's daemon won the start: adopt it only as a reusable daemon would be. An
-      // incompatible one is replaced, and this wait then sees its own daemon's early exit.
-      const winner = await readReusableLocalDaemon(settings);
-      if (winner) return { kind: 'ready', daemon: { info: winner, startedByClient: false } };
+  while (Date.now() < deadline) {
+    if (earlyExit) {
+      const kind = classifyDaemonStartupExit(earlyExit);
+      if (kind === 'unproven')
+        return { kind: 'unproven', error: daemonRegistrationUnprovenError(settings) };
+      if (kind === 'failed') return { kind: 'early_exit', exit: earlyExit };
+      const contender = await observeContendingDaemon(settings, deadline);
+      if (contender) return contender;
+    } else {
+      const info = await readReadyLaunchedDaemon(settings, launch, deadline);
+      if (info && !earlyExit) return { kind: 'ready', daemon: { info, startedByClient: true } };
     }
-    // A daemon that lost the startup lock exits cleanly; the daemon that won it is still starting.
-    if (earlyExit && !isDaemonLockHeldByAnotherDaemon(settings.paths, earlyExit.pid)) {
-      return { kind: 'early_exit', exit: earlyExit };
-    }
-    await sleep(100);
+    await sleep(Math.min(100, remainingStartupBudget(deadline)));
   }
   return { kind: 'timeout' };
 }
 
+function classifyDaemonStartupExit(exit: ExecDetachedExit): 'busy' | 'unproven' | 'failed' {
+  if (exit.error || exit.signal) return 'failed';
+  switch (exit.exitCode) {
+    case DAEMON_STARTUP_EXIT_CODES.busy:
+      return 'busy';
+    case DAEMON_STARTUP_EXIT_CODES.unproven:
+      return 'unproven';
+    default:
+      return 'failed';
+  }
+}
+
+async function observeContendingDaemon(
+  settings: DaemonClientSettings,
+  deadline: number,
+): Promise<DaemonStartupWaitResult | null> {
+  let winner: DaemonInfo | null;
+  try {
+    winner = await readReusableLocalDaemon(settings, { deadline, waitForLiveStartup: true });
+  } catch (error) {
+    if (error instanceof AppError && error.details?.reason === 'daemon_registration_unproven')
+      return { kind: 'unproven', error };
+    throw error;
+  }
+  if (Date.now() >= deadline) return null;
+  if (winner) return { kind: 'ready', daemon: { info: winner, startedByClient: false } };
+  const inspection = inspectProcessLock(settings.paths.lockPath);
+  if (inspection.state === 'unproven')
+    return { kind: 'unproven', error: daemonRegistrationUnprovenError(settings, inspection) };
+  return isRegistrationAvailable(inspection) ? { kind: 'retry' } : null;
+}
+
+async function readReadyLaunchedDaemon(
+  settings: DaemonClientSettings,
+  launch: DaemonStartupLaunch,
+  deadline: number,
+): Promise<DaemonInfo | null> {
+  const info = readDaemonInfo(settings.paths.infoPath);
+  if (!info || !isLaunchedDaemon(info, launch)) return null;
+  try {
+    return (await canConnect(
+      info,
+      settings.transportPreference,
+      remainingStartupBudget(deadline),
+    )) && Date.now() < deadline
+      ? info
+      : null;
+  } catch (error) {
+    const { cleanup, joined } = await retireStartupAttempt(settings, launch, deadline);
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'daemon_startup_observation_failed',
+      data: { stateDir: settings.paths.baseDir, cleanup, joined, error: normalizeError(error) },
+    });
+    if (error instanceof AppError) {
+      error.details = {
+        ...error.details,
+        stateDir: settings.paths.baseDir,
+        cleanupResults: [cleanup],
+        startupJoined: joined,
+      };
+    }
+    throw error;
+  }
+}
+
 /** Whether `info` names the daemon process this client launched: same pid and start time. */
 function isLaunchedDaemon(info: DaemonInfo, launch: DaemonStartupLaunch): boolean {
+  const identity = launch.readIdentity();
   return (
-    info.pid === launch.pid &&
-    launch.startTime !== undefined &&
-    info.processStartTime === launch.startTime
+    info.pid === identity.pid &&
+    identity.startTime !== null &&
+    info.processStartTime === identity.startTime
   );
 }
 
 function startDaemon(settings: DaemonClientSettings): DaemonStartupLaunch {
   const launchSpec = resolveDaemonLaunchSpec();
-  const args = launchSpec.useSrc
-    ? ['--experimental-strip-types', launchSpec.srcPath]
-    : [launchSpec.distPath];
-  const env = {
-    ...process.env,
-    AGENT_DEVICE_STATE_DIR: settings.paths.baseDir,
-    AGENT_DEVICE_DAEMON_SERVER_MODE: settings.serverMode,
-  };
-
-  fs.mkdirSync(settings.paths.baseDir, { recursive: true });
-  const stdoutFd = fs.openSync(settings.paths.logPath, 'a');
-  const stderrFd = fs.openSync(settings.paths.logPath, 'a');
-  try {
-    const launched = runCmdDetachedMonitored(process.execPath, args, {
-      env,
-      stdio: ['ignore', stdoutFd, stderrFd],
-    });
-    return { ...launched, startTime: readProcessStartTime(launched.pid) ?? undefined };
-  } finally {
-    fs.closeSync(stdoutFd);
-    fs.closeSync(stderrFd);
-  }
+  return launchDaemonProcess({
+    paths: settings.paths,
+    serverMode: settings.serverMode,
+    ownedStateDir: settings.ownedStateDir,
+    args: launchSpec.useSrc
+      ? ['--experimental-strip-types', launchSpec.srcPath]
+      : [launchSpec.distPath],
+  });
 }
 
 function describeDaemonEarlyExit(exit: ExecDetachedExit): string {
@@ -770,4 +898,23 @@ function isLoopbackHostname(hostname: string): boolean {
   if (net.isIPv4(normalized)) return LOOPBACK_BLOCK_LIST.check(normalized, 'ipv4');
   if (net.isIPv6(normalized)) return LOOPBACK_BLOCK_LIST.check(normalized, 'ipv6');
   return false;
+}
+
+export function attachSessionAddressHints(
+  response: DaemonResponse,
+  req: Omit<DaemonRequest, 'token'>,
+  settings: DaemonClientSettings,
+): DaemonResponse {
+  if (!response.ok) {
+    return settings.ownedStateDir && isHeldRepairDivergence(response)
+      ? attachRepairSessionAddressHint(response, settings.paths.baseDir)
+      : response;
+  }
+  return isActiveReplaySessionResponse(req, response)
+    ? attachActiveSessionAddressHint(
+        response,
+        settings.ownedStateDir ? settings.paths.baseDir : undefined,
+        settings.remoteBaseUrl,
+      )
+    : response;
 }

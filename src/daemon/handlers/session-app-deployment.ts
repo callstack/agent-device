@@ -12,7 +12,7 @@ import { expireRefFrame } from '../ref-frame.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
-import type { SessionState } from '../session-state.ts';
+import type { SessionRef, SessionState } from '../session-state.ts';
 import { resolvePayloadInput } from '../payload-input.ts';
 import { resolveDeployResultTarget } from '../../core/deploy-result-target.ts';
 import { withSuccessText } from '@agent-device/kernel/success-text';
@@ -52,7 +52,8 @@ export async function handleAppDeploymentCommand(params: {
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
   const { req, command, sessionName, sessionStore } = params;
-  const session = sessionStore.get(sessionName);
+  const ref = sessionStore.lookup(sessionName);
+  const session = ref?.session;
   const flags = req.flags ?? {};
   const guard = requireSessionOrExplicitSelector(command, session, flags);
   if (guard) return guard;
@@ -76,7 +77,7 @@ export async function handleAppDeploymentCommand(params: {
     const runtime = await requireRuntimeBinding(params.bindDevice)(device, deployAppUse);
     // ADR 0014: deployment can replace the visible surface. Do this immediately before the
     // bound operation so an admission failure never discards a still-valid reference frame.
-    if (session) expireRefFrame(session);
+    if (ref) expireRefFrame(sessionStore.requireCurrent(ref));
     const deployment = await runtime.operations.deployApp({
       app: target.app,
       appPath,
@@ -87,11 +88,8 @@ export async function handleAppDeploymentCommand(params: {
       result,
       `Installed: ${result.appName ?? resolveDeployResultTarget(result)}`,
     );
-    const sessionForRecord = updateHarmonyDeploymentSession(session, result);
-    if (sessionForRecord && sessionForRecord !== session) {
-      sessionStore.set(sessionName, sessionForRecord);
-    }
-    recordSessionAction(sessionStore, sessionForRecord, req, command, data);
+    updateHarmonyDeploymentSession(sessionStore, ref, result);
+    recordSessionAction(sessionStore, ref, req, command, data);
     return { ok: true, data };
   } finally {
     if (uploadedArtifactId) cleanupUploadedArtifact(uploadedArtifactId);
@@ -102,7 +100,8 @@ export async function handlePushNotificationCommand(
   params: RuntimeCommandHandlerParams,
 ): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
-  const session = sessionStore.get(sessionName);
+  const ref = sessionStore.lookup(sessionName);
+  const session = ref?.session;
   const flags = req.flags ?? {};
   const guard = requireSessionOrExplicitSelector('push', session, flags);
   if (guard) return guard;
@@ -131,7 +130,7 @@ export async function handlePushNotificationCommand(
   // ADR 0014: a notification dispatch may change the visible surface. Keep an admission failure
   // non-destructive, but expire immediately before dispatch so an attempted provider operation
   // that fails after crossing the side-effect seam cannot leave stale refs authorized.
-  if (session) expireRefFrame(session);
+  if (ref) expireRefFrame(sessionStore.requireCurrent(ref));
   const result = await runtime.operations.sendPushNotification({ appId, payload });
   const data = isIosFamily(device)
     ? withSuccessText({ platform: 'ios', bundleId: appId }, `Pushed notification to ${appId}`)
@@ -144,7 +143,7 @@ export async function handlePushNotificationCommand(
         },
         `Pushed notification to ${appId}`,
       );
-  recordSessionAction(sessionStore, session, req, 'push', data, {
+  recordSessionAction(sessionStore, ref, req, 'push', data, {
     positionals: [appId, payloadArg],
   });
   return { ok: true, data };
@@ -198,15 +197,15 @@ function buildNonIosDeployResult(
 }
 
 function updateHarmonyDeploymentSession(
-  session: SessionState | undefined,
+  sessionStore: SessionStore,
+  ref: SessionRef | undefined,
   result: DeployResult,
-): SessionState | undefined {
-  if (!session || result.platform !== 'harmonyos' || !result.appId) return session;
-  return {
-    ...session,
+): void {
+  if (!ref || result.platform !== 'harmonyos' || !result.appId) return;
+  sessionStore.update(ref, {
     appBundleId: result.appId,
     appName: result.appName ?? result.app,
-  };
+  });
 }
 
 function resolveDeployTarget(

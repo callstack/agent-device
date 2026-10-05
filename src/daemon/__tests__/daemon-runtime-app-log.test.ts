@@ -123,7 +123,7 @@ test('daemon shutdown settles fenced app-log cleanup before finalization can rel
     forceCleanup,
   });
   session.appLog = { handle, envelope };
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const resourcePath = appLogResourceStore.resolvePath(
     sessionStore.resolveSessionDir(session.name),
   );
@@ -131,7 +131,7 @@ test('daemon shutdown settles fenced app-log cleanup before finalization can rel
   fs.writeFileSync(resourcePath, `${JSON.stringify(envelope)}\n`);
 
   const teardown = teardownDaemonSessionForShutdown({
-    session,
+    ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stderr: { write: () => {} },
   });

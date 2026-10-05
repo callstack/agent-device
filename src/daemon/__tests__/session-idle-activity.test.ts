@@ -46,7 +46,7 @@ function makeRequest(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
 
 function storeWithSession() {
   const sessionStore = makeSessionStore('agent-device-idle-activity-');
-  sessionStore.set('default', makeIosSession('default'));
+  sessionStore.publish('default', makeIosSession('default'));
   return sessionStore;
 }
 

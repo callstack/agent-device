@@ -87,7 +87,7 @@ function request(outputPath?: string, force?: boolean): DaemonRequest {
 test('publishes without close, returns the path/count, and leaves a terminal live session', () => {
   const outputPath = path.join(root, 'screen-x.ad');
   const session = armedSession();
-  store.set('authoring', session);
+  store.publish('authoring', session);
 
   const response = handleSessionScriptPublication({
     req: request(outputPath),
@@ -120,7 +120,7 @@ test('no-clobber failure preserves bytes and armed state, then --force retries s
   const outputPath = path.join(root, 'screen-x.ad');
   fs.writeFileSync(outputPath, 'original\n');
   const session = armedSession();
-  store.set('authoring', session);
+  store.publish('authoring', session);
 
   const refused = handleSessionScriptPublication({
     req: request(outputPath),
@@ -149,7 +149,7 @@ test('retargeting without --force clears force authorization from the previous t
   const session = armedSession({
     scriptPublication: authoringPublication('armed', { path: originalPath, force: true }),
   });
-  store.set('authoring', session);
+  store.publish('authoring', session);
 
   const response = handleSessionScriptPublication({
     req: request(retargetPath),
@@ -166,7 +166,7 @@ test('retargeting without --force clears force authorization from the previous t
 
 test('refuses unarmed and repair-owned sessions before filesystem work', () => {
   const outputPath = path.join(root, 'missing', 'screen-x.ad');
-  store.set('authoring', makeIosSession('authoring'));
+  const unarmedRef = store.publish('authoring', makeIosSession('authoring'));
   const unarmed = handleSessionScriptPublication({
     req: request(outputPath),
     sessionName: 'authoring',
@@ -178,7 +178,8 @@ test('refuses unarmed and repair-owned sessions before filesystem work', () => {
   });
   expect(fs.existsSync(path.dirname(outputPath))).toBe(false);
 
-  store.set(
+  store.retire(unarmedRef);
+  store.publish(
     'authoring',
     armedSession({ scriptPublication: repairPublication('armed', { boundary: 0 }) }),
   );
@@ -196,7 +197,7 @@ test('refuses unarmed and repair-owned sessions before filesystem work', () => {
 
 test('rejects an explicitly empty destination path', () => {
   const session = armedSession();
-  store.set('authoring', session);
+  store.publish('authoring', session);
 
   const response = handleSessionScriptPublication({
     req: request(''),
@@ -219,7 +220,7 @@ test('invalid destination guard remains armed and creates no target directory', 
       { ts: 2, command: 'wait', positionals: ['stable'], flags: {} },
     ],
   });
-  store.set('authoring', session);
+  store.publish('authoring', session);
 
   const response = handleSessionScriptPublication({
     req: request(outputPath),
@@ -247,7 +248,7 @@ test('missing initial open is non-retriable within the armed session', () => {
       },
     ],
   });
-  store.set('authoring', session);
+  store.publish('authoring', session);
 
   const response = handleSessionScriptPublication({
     req: request(outputPath),
@@ -295,7 +296,7 @@ test('publishes leading-at typed values without mistaking them for session refs'
       },
     ],
   });
-  store.set('authoring', session);
+  store.publish('authoring', session);
 
   const response = handleSessionScriptPublication({
     req: request(outputPath),
@@ -330,7 +331,7 @@ test('refuses mutating find steps that cannot enforce target identity on replay'
       },
     ],
   });
-  store.set('authoring', session);
+  store.publish('authoring', session);
 
   const response = handleSessionScriptPublication({
     req: request(outputPath),

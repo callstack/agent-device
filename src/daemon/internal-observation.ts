@@ -9,12 +9,11 @@ import type {
 import { readSessionRuntimeRevision, refFrame } from './ref-frame.ts';
 import type { RefFrame } from './ref-frame-slot.ts';
 import { markSessionPartialRefsIssued, setSessionSnapshot } from './session-snapshot.ts';
-import type { SessionState } from './session-state.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
+import type { SessionStore } from './session-store.ts';
 
 type InternalObservationLineage = Readonly<{
-  sessionName: string;
-  session: SessionState;
-  sessionCreatedAt: number;
+  ref: SessionRef;
   snapshot: SnapshotState;
   snapshotGeneration: number;
   runtimeRevision: number;
@@ -24,14 +23,9 @@ type InternalObservationLineage = Readonly<{
 const evidenceLineage = new WeakMap<object, InternalObservationLineage>();
 
 type BoundInternalObservationSession = Readonly<{
-  sessionStore: InternalObservationSessionStore;
-  sessionName: string;
+  sessionStore: SessionStore;
+  ref: SessionRef | undefined;
   signal?: AbortSignal;
-}>;
-
-type InternalObservationSessionStore = Readonly<{
-  get: () => SessionState | undefined;
-  update: (mutate: (session: SessionState) => void) => boolean;
 }>;
 
 /**
@@ -58,21 +52,15 @@ export function bindInternalObservationAuthority(
  * without activating, replacing, or expiring client ref authority.
  */
 function storeInternalObservation(
-  params: Pick<BoundInternalObservationSession, 'sessionStore' | 'sessionName'>,
+  params: Pick<BoundInternalObservationSession, 'sessionStore' | 'ref'>,
   snapshot: SnapshotState,
 ): ReplayObservationCapture {
-  const { sessionStore, sessionName } = params;
-  let storedSession: SessionState | undefined;
-  if (
-    !sessionStore.update((session) => {
-      setSessionSnapshot(session, snapshot);
-      storedSession = session;
-    }) ||
-    !storedSession
-  ) {
+  const { sessionStore, ref } = params;
+  if (!ref) {
     throw new Error('Internal observation session is no longer available.');
   }
-  const session = storedSession;
+  const session = sessionStore.requireCurrent(ref);
+  setSessionSnapshot(session, snapshot);
   const snapshotGeneration = session.snapshotGeneration;
   if (snapshotGeneration === undefined) {
     throw new Error('Internal observation did not establish a snapshot generation.');
@@ -80,9 +68,7 @@ function storeInternalObservation(
 
   const evidence = {} as ReplayObservationEvidence;
   evidenceLineage.set(evidence, {
-    sessionName,
-    session,
-    sessionCreatedAt: session.createdAt,
+    ref,
     snapshot,
     snapshotGeneration,
     runtimeRevision: readSessionRuntimeRevision(session),
@@ -100,8 +86,8 @@ function storeInternalObservation(
  * before the response returns to the client.
  */
 function finalizeClientRefPublication(params: {
-  sessionStore: InternalObservationSessionStore;
-  sessionName: string;
+  sessionStore: SessionStore;
+  ref: SessionRef | undefined;
   evidence: ReplayObservationEvidence;
   projection: ReplayRefPublicationProjection;
   signal?: AbortSignal;
@@ -115,7 +101,8 @@ function finalizeClientRefPublication(params: {
   if (refs.size === 0) return { published: false, reason: 'empty' };
   if (params.signal?.aborted === true) return { published: false, reason: 'cancelled' };
 
-  if (!lineage || !isCurrentLineage(params, lineage)) {
+  const session = lineage && resolveCurrentLineage(params, lineage);
+  if (!lineage || !session) {
     return { published: false, reason: 'stale-capture' };
   }
   if (
@@ -125,7 +112,7 @@ function finalizeClientRefPublication(params: {
     return { published: false, reason: 'invalid-projection' };
   }
 
-  markSessionPartialRefsIssued(lineage.session, refs);
+  markSessionPartialRefsIssued(session, refs);
   return {
     published: true,
     refsGeneration: lineage.snapshotGeneration,
@@ -133,20 +120,19 @@ function finalizeClientRefPublication(params: {
   };
 }
 
-function isCurrentLineage(
-  params: Pick<BoundInternalObservationSession, 'sessionStore' | 'sessionName'>,
+function resolveCurrentLineage(
+  params: Pick<BoundInternalObservationSession, 'sessionStore' | 'ref'>,
   lineage: InternalObservationLineage,
-): boolean {
-  const current = params.sessionStore.get();
-  return (
-    params.sessionName === lineage.sessionName &&
-    current === lineage.session &&
-    current.createdAt === lineage.sessionCreatedAt &&
+): SessionState | undefined {
+  if (!params.ref || params.ref.lifetime !== lineage.ref.lifetime) return undefined;
+  const current = params.sessionStore.resolveCurrent(params.ref);
+  return current &&
     current.snapshot === lineage.snapshot &&
     current.snapshotGeneration === lineage.snapshotGeneration &&
     readSessionRuntimeRevision(current) === lineage.runtimeRevision &&
     refFrame(current) === lineage.refFrame
-  );
+    ? current
+    : undefined;
 }
 
 function normalizeRefBodies(refs: readonly string[]): Set<string> {

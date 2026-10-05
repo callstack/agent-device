@@ -15,6 +15,7 @@ import {
   type SnapshotCaptureProvenance,
   type SnapshotKeyboardBandFact,
   type SnapshotState,
+  type SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
 import { resolveRefLabel } from '@agent-device/capture-kit/snapshot-node-lookup';
 import { STALE_REF_HINT } from '@agent-device/selectors';
@@ -52,6 +53,8 @@ type SnapshotData = {
   quality?: unknown;
   /** The keyboard band the capture's producer measured (#2660), carried to the state guards read. */
   keyboard?: SnapshotKeyboardBandFact;
+  /** The box the capture's rects are measured in (#3182), carried to the state the response reads. */
+  viewport?: SnapshotViewportSize;
 } & Omit<SnapshotCaptureAnnotations, 'quality'> &
   SnapshotCaptureProvenance;
 

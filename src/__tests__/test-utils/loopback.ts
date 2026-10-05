@@ -44,7 +44,18 @@ export async function skipWhenLoopbackUnavailable(
   return true;
 }
 
+// Connections the test server accepted after it started listening. A `net.Server` refuses to close
+// while a connection is live, and a hung-request stand-in keeps one open past the client's RST, so
+// teardown destroys them — the job `DaemonServer.destroyConnections` does for the real daemon.
+const acceptedConnections = new WeakMap<LoopbackServer, Set<net.Socket>>();
+
 export async function listenOnLoopback(server: LoopbackServer): Promise<number> {
+  const sockets = new Set<net.Socket>();
+  acceptedConnections.set(server, sockets);
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+  });
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', () => {
@@ -60,6 +71,10 @@ export async function listenOnLoopback(server: LoopbackServer): Promise<number> 
 }
 
 export async function closeLoopbackServer(server: LoopbackServer): Promise<void> {
+  for (const socket of acceptedConnections.get(server) ?? []) {
+    socket.destroy();
+  }
+  acceptedConnections.delete(server);
   if (!server.listening) return;
   closeHttpConnections(server);
   await new Promise<void>((resolve, reject) => {

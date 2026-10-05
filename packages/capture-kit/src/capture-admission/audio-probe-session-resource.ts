@@ -9,26 +9,20 @@ import type {
   RuntimeOwnerRef,
 } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DurableCaptureSessionStore } from '../durable-capture/index.ts';
+import type { DurableCaptureSessionBinding } from '../durable-capture/index.ts';
 import { createDurableCaptureResource } from './durable-capture-resource.ts';
 import type { DurableCaptureFinishIntent } from './durable-capture-resource.ts';
 import type { AudioProbeAdmissionLedger } from './audio-probe-admission-ledger.ts';
 import { audioProbeResourceStore } from './audio-probe-resource-store.ts';
-import type { DurableCaptureSessionState } from './session-state-slice.ts';
 
 export const audioProbeDurableResource = createDurableCaptureResource<
   'audio-probe',
   AudioProbeLiveHandle,
-  AudioProbeCompletion,
-  DurableCaptureSessionState
+  AudioProbeCompletion
 >({
   resourceKind: 'audio-probe',
   displayName: 'audio probe',
   store: audioProbeResourceStore,
-  sessionSlot: {
-    read: (session) => session.audioProbe,
-    replace: (session, audioProbe) => ({ ...session, audioProbe }),
-  },
   completionMetadata: (completion) => ({
     backend: completion.backend ?? 'unknown',
     source: completion.source,
@@ -48,9 +42,7 @@ export const audioProbeDurableResource = createDurableCaptureResource<
 
 export function adoptStartedAudioProbe(params: {
   admissionLedger: AudioProbeAdmissionLedger;
-  session: DurableCaptureSessionState;
-  sessionName: string;
-  sessionStore: DurableCaptureSessionStore<DurableCaptureSessionState>;
+  binding: DurableCaptureSessionBinding<'audio-probe', AudioProbeLiveHandle>;
   device: DeviceInfo;
   owner: RuntimeOwnerRef;
   fence: ResourceOwnershipFence;
@@ -62,9 +54,7 @@ export function adoptStartedAudioProbe(params: {
 }
 
 export function finishLiveAudioProbe(params: {
-  session: DurableCaptureSessionState;
-  sessionName: string;
-  sessionStore: DurableCaptureSessionStore<DurableCaptureSessionState>;
+  binding: DurableCaptureSessionBinding<'audio-probe', AudioProbeLiveHandle>;
   intent: DurableCaptureFinishIntent;
 }): Promise<AudioProbeCompletion> {
   return audioProbeDurableResource.finishLive(params);

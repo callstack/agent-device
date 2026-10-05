@@ -34,6 +34,7 @@ export function presentIosRunnerSnapshot(
   );
   return {
     nodes: compacted.nodes,
+    ...(viewport ? { validatedViewport: viewport } : {}),
     ...(input.presentation.qualityPayload
       ? { qualityNodes: [...input.presentation.qualityPayload.nodes] }
       : {}),

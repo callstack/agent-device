@@ -136,7 +136,6 @@ function startMockRecording(params: {
         metadata: { phase: 'active' },
       }),
     };
-    sessionStore.set(req.session, session);
   }
   return { ok: true, data: { recording: 'started', outPath: state.recordingPath } };
 }
@@ -152,7 +151,6 @@ async function stopMockRecording(params: {
   if (session) {
     await session.screenRecording?.handle.finish();
     session.screenRecording = undefined;
-    sessionStore.set(req.session, session);
     state.liveSlotCleared = sessionStore.get(req.session)?.screenRecording === undefined;
   }
   fs.writeFileSync(state.recordingPath, 'video');
@@ -290,7 +288,7 @@ test('test finalizes replay video exactly once when cancellation arrives after s
       nestedRequests.push(nestedReq);
       if (nestedReq.command === 'open') {
         const provisionalSession = makeIosSession(nestedReq.session);
-        sessionStore.set(nestedReq.session, provisionalSession);
+        sessionStore.publish(nestedReq.session, provisionalSession);
         const hookResponse = await nestedReq.internal?.openLifecycle?.beforeDispatch?.();
         if (hookResponse && !hookResponse.ok) return hookResponse;
         events.push('open:dispatch');

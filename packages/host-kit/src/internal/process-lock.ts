@@ -1,11 +1,12 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { publishFileSync } from './atomic-file.ts';
 import { emitDiagnostic } from './diagnostics.ts';
 import {
   classifyOwnerLiveness,
+  isProcessPid,
   ownerIdentityMatches,
   type OwnerLiveness,
 } from './owner-identity.ts';
@@ -179,7 +180,7 @@ function withMutationGuardHeld<Result>(
       emitDiagnostic({
         level: 'warn',
         phase: 'process_lock_guard_release_failed',
-        data: { lockDirPath, error: String(releaseError) },
+        data: { lockDirPath, error: normalizeError(releaseError) },
       });
     }
     throw error;
@@ -504,7 +505,20 @@ async function waitForReclaimMutex(lockDirPath: string): Promise<boolean> {
 }
 
 function releaseReclaimMutex(lockDirPath: string): void {
-  fs.unlinkSync(reclaimMutexPath(lockDirPath));
+  try {
+    fs.unlinkSync(reclaimMutexPath(lockDirPath));
+  } catch (error) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Process lock mutation guard release could not be confirmed.',
+      {
+        reason: 'process_lock_guard_release_failed',
+        lockDirPath,
+        hint: staleLockHint(lockDirPath),
+      },
+      error,
+    );
+  }
 }
 
 function errorCode(error: unknown): string | undefined {
@@ -553,7 +567,7 @@ function parseProcessLockOwner(contents: string): ProcessLockOwnerRecord | null 
 
 const PROCESS_LOCK_OWNER_FIELD_SHAPES: Record<keyof ProcessLockOwner, (value: unknown) => boolean> =
   {
-    pid: (value) => typeof value === 'number' && Number.isInteger(value) && value > 0,
+    pid: isProcessPid,
     acquiredAtMs: (value) => typeof value === 'number' && Number.isFinite(value),
     startTime: (value) => value === undefined || value === null || typeof value === 'string',
   };

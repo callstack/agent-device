@@ -38,3 +38,40 @@ test('a frame rate the caller typed stays a typed flag', () => {
     ['fps'],
   );
 });
+
+// #3179: settings consumes --app only when this invocation typed it. A mutation that silently
+// landed on AGENT_DEVICE_TARGET_APP would change permissions for an app the caller never named,
+// while `doctor --app` (and its env default) still reads a configured default app by design.
+test('an app from the environment never reaches a settings mutation', () => {
+  const parsed = resolveCliOptions(['settings', 'permission', 'grant', 'camera'], {
+    cwd: process.cwd(),
+    env: isolatedEnv({ AGENT_DEVICE_TARGET_APP: 'com.example.configured' }),
+  });
+
+  assert.equal(parsed.flags.targetApp, undefined);
+  assert.deepEqual(
+    parsed.providedFlags.map((entry) => entry.key),
+    [],
+  );
+});
+
+test('a typed --app still reaches a settings mutation', () => {
+  const parsed = resolveCliOptions(
+    ['settings', 'permission', 'grant', 'camera', '--app', 'com.example.typed'],
+    {
+      cwd: process.cwd(),
+      env: isolatedEnv({ AGENT_DEVICE_TARGET_APP: 'com.example.configured' }),
+    },
+  );
+
+  assert.equal(parsed.flags.targetApp, 'com.example.typed');
+});
+
+test('the same env default keeps filling doctor, which reads a configured app without a mutation', () => {
+  const parsed = resolveCliOptions(['doctor'], {
+    cwd: process.cwd(),
+    env: isolatedEnv({ AGENT_DEVICE_TARGET_APP: 'com.example.configured' }),
+  });
+
+  assert.equal(parsed.flags.targetApp, 'com.example.configured');
+});

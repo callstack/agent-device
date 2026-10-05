@@ -57,6 +57,16 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+test.each([0, -1, 1.5, 2_147_483_648, Number.MAX_SAFE_INTEGER])(
+  'an invalid native pid %s cannot prove exit during recovery',
+  async (pid) => {
+    expect(await waitForDaemonExit({ pid, startTime: OURS }, { timeoutMs: 0 })).toEqual({
+      exited: false,
+      elapsedMs: 0,
+    });
+  },
+);
+
 test('waitForDaemonExit reports a pid recycled mid-wait as exited, without burning the deadline', async () => {
   setTimeout(() => state.starts.set(PID, RECYCLED), 20);
   const wait = await waitForDaemonExit(
@@ -205,16 +215,15 @@ test('force termination delivers KILL first and returns its confirmed exit', asy
   });
 });
 
-test('a daemon reaped after the TERM budget retains graceful mode without signaling its zombie', async () => {
+test('a daemon that becomes a zombie on TERM retains graceful mode without SIGKILL', async () => {
   onSignal = (signal) => {
     if (signal !== 'SIGTERM') return;
     state.states.set(PID, 'Z');
     state.commands.set(PID, '<defunct>');
-    setTimeout(() => state.alive.set(PID, false), 10);
   };
   const result = await stopDaemonProcess(
     { pid: PID, startTime: OURS },
-    { mode: 'graceful', termTimeoutMs: 0, killTimeoutMs: 40 },
+    { mode: 'graceful', termTimeoutMs: 0, killTimeoutMs: 0 },
   );
   expect(signals).toEqual(['SIGTERM']);
   expect(result).toMatchObject({ status: 'exited', mode: 'graceful' });

@@ -156,6 +156,77 @@ describe('settings CLI permission vocabulary', () => {
       positionals: ['permission', 'deny', 'screen-recording', 'full'],
     });
   });
+
+  // #3179: an app-scoped change can name an app the session never opened. `app` is no CLI flag key,
+  // so the request carries it as input the way a gesture payload does.
+  test('carries --app on a permission grant to the daemon request input', () => {
+    const input = settingsCliReader(['permission', 'grant', 'camera'], {
+      targetApp: 'com.example.app',
+    } as CliFlags);
+    expect(input).toMatchObject({ app: 'com.example.app' });
+    expect(settingsDaemonWriter(input)).toMatchObject({
+      command: 'settings',
+      positionals: ['permission', 'grant', 'camera'],
+      input: { app: 'com.example.app' },
+    });
+  });
+
+  test('carries an app on an iOS location toggle to the daemon request input', () => {
+    const input = settingsCliReader(['location', 'on'], {
+      targetApp: 'com.example.app',
+    } as CliFlags);
+    expect(settingsDaemonWriter(input)).toMatchObject({
+      positionals: ['location', 'on'],
+      input: { app: 'com.example.app' },
+    });
+  });
+
+  // r4176656835: the writer used to drop the app, so `location set ... --app X` ignored X silently.
+  // It now forwards, and the daemon's device-level refusal answers it (handler test below).
+  test('forwards the app on a location set to the device-level refusal', () => {
+    const input = settingsCliReader(['location', 'set', '37.7', '-122.4'], {
+      targetApp: 'com.example.app',
+    } as CliFlags);
+    expect(settingsDaemonWriter(input)).toMatchObject({
+      positionals: ['location', 'set', '37.7', '-122.4'],
+      input: { app: 'com.example.app' },
+    });
+  });
+
+  // The flag bag carries a configured default app the parser strips for settings; the reader still
+  // gets exercised with one present, so the clear-app-state branch cannot regress into letting
+  // `--app` redirect this destructive mutation away from the positional id.
+  test('keeps a clear-app-state app positional and out of the request input', () => {
+    const input = settingsCliReader(['clear-app-state', 'com.example.app'], {
+      targetApp: 'com.example.other',
+    } as CliFlags);
+    const writer = settingsDaemonWriter(input);
+    expect(writer.positionals).toEqual(['clear-app-state', 'com.example.app']);
+    expect(writer.input).toBeUndefined();
+    // The app the input carries is the positional, never the flag bag's default.
+    expect(input).toMatchObject({ app: 'com.example.app' });
+  });
+
+  test('omits the request input when no app is named', () => {
+    expect(
+      settingsDaemonWriter(settingsCliReader(['animations', 'off'], flags())).input,
+    ).toBeUndefined();
+  });
+
+  test('accepts --app for its app-scoped settings', () => {
+    expect(settingsCommandFacet.cliSchema.allowedFlags).toEqual(['targetApp']);
+  });
+
+  test('carries an app named through the client input to the daemon request input', () => {
+    expect(
+      settingsDaemonWriter({
+        setting: 'permission',
+        state: 'grant',
+        permission: 'camera',
+        app: 'com.example.app',
+      }),
+    ).toMatchObject({ input: { app: 'com.example.app' } });
+  });
 });
 
 describe('settings CLI text-size', () => {

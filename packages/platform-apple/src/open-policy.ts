@@ -16,7 +16,7 @@ import {
 } from './snapshot-observability.ts';
 import type { LaunchConfirmationAttempt } from './launch-confirmation.ts';
 
-/** Why an open failed because its launch URL never reached the app it names. */
+/** Why an open failed because its launch URL has not completed for the app it names. */
 const LAUNCH_CONFIRMATION_UNANSWERED_REASON = 'launch_confirmation_unanswered';
 
 const POST_OPEN_SETTLE_MS = 300;
@@ -32,7 +32,7 @@ const LAUNCH_CONFIRMATION_ROUNDS = 2;
 type HeldLaunchOutcome = Readonly<{
   observed: LaunchObservation | undefined;
   launchConfirmation?: LaunchConfirmation;
-  /** The launch was proven to have no process after every round this open can spend on it. */
+  /** The launch has no process, or its recognized confirmation remains visible. */
   unanswered: boolean;
 }>;
 
@@ -41,6 +41,7 @@ type HeldLaunchRound = Readonly<{
   launchConfirmation?: LaunchConfirmation;
   /** Whether an accept has run or been attempted; only an accept can change what the bridge sees. */
   acceptAttempted: boolean;
+  confirmationStillPresent: boolean;
 }>;
 
 export type MutableOpenTiming = {
@@ -117,7 +118,8 @@ export function releaseSpeculativeRunner(
  * proven not running, the accept died with the runner session that raised it or the device dropped a
  * held URL, and the URL is handed over again and read once more. A launch still proven not running
  * afterwards fails the open with `launch_confirmation_unanswered` rather than returning green to a
- * session whose every later command then fails `app is not running`. A read that found no prompt, an
+ * session whose every later command then fails `app is not running`. A recognized prompt still
+ * visible after a failed accept also fails the open, even if the app is running. A read that found no prompt, an
  * unrecognized prompt and an unresolved URL owner all leave the open as green as it was, with only
  * the one extra runner command spent.
  */
@@ -150,11 +152,11 @@ export async function settleAppleOpen(
     if (held.unanswered) {
       throw new AppError(
         'COMMAND_FAILED',
-        `The launch URL was handed to the Simulator but ${input.appBundleId} never came up.`,
+        `The Simulator has not completed the launch URL for ${input.appBundleId}.`,
         {
           reason: LAUNCH_CONFIRMATION_UNANSWERED_REASON,
           appBundleId: input.appBundleId,
-          hint: 'iOS may still be holding an "Open in" prompt, or the answer died with the runner session that raised it. Answer it with alert accept, or re-run open with the same --launch-url.',
+          hint: 'iOS may still be holding an "Open in" prompt, or the answer died with the runner session that raised it. Inspect the current alert before deciding on another action.',
         },
       );
     }
@@ -191,20 +193,27 @@ async function answerHeldLaunch(
   observe: () => Promise<LaunchObservation | undefined>,
   observed: LaunchObservation | undefined,
 ): Promise<HeldLaunchOutcome> {
-  let round: HeldLaunchRound = { observed, acceptAttempted: false };
+  let round: HeldLaunchRound = {
+    observed,
+    acceptAttempted: false,
+    confirmationStillPresent: false,
+  };
   for (let roundIndex = 0; roundIndex < LAUNCH_CONFIRMATION_ROUNDS; roundIndex += 1) {
     round = await answerConfirmationOnce(answer, observe, round);
     const lastRound = roundIndex === LAUNCH_CONFIRMATION_ROUNDS - 1;
-    if (lastRound || !acceptLeftTheUrlInFlight(round) || !redispatchLaunchUrl) break;
+    if (
+      round.confirmationStillPresent ||
+      lastRound ||
+      !acceptLeftTheUrlInFlight(round) ||
+      !redispatchLaunchUrl
+    )
+      break;
     await redispatchLaunchUrl();
   }
-  // A second hand-off and another read later, a launch with no process is one this open cannot
-  // complete. An expired launch-transition window leaves the open green: it proves only that the
-  // app was still coming up.
   return {
     observed: round.observed,
     launchConfirmation: round.launchConfirmation,
-    unanswered: acceptLeftTheUrlInFlight(round),
+    unanswered: acceptLeftTheUrlInFlight(round) || round.confirmationStillPresent,
   };
 }
 
@@ -214,15 +223,27 @@ async function answerConfirmationOnce(
   round: HeldLaunchRound,
 ): Promise<HeldLaunchRound> {
   const attempt = await answer();
+  const confirmationStillPresent =
+    attempt.outcome === 'unanswered' && attempt.reason === 'alert-still-present';
   const acceptAttempted = round.acceptAttempted || acceptWasAttempted(attempt);
   const launchConfirmation =
     attempt.outcome === 'accepted' ? ('accepted' as const) : round.launchConfirmation;
   if (!acceptAttempted) {
     // Only an accept changes the device, so a read that found no prompt, an unrecognized prompt or
     // an unresolved URL owner leaves the launch as the verdict before it already described it.
-    return { observed: round.observed, launchConfirmation, acceptAttempted };
+    return {
+      observed: round.observed,
+      launchConfirmation,
+      acceptAttempted,
+      confirmationStillPresent,
+    };
   }
-  return { observed: await observe(), launchConfirmation, acceptAttempted };
+  return {
+    observed: await observe(),
+    launchConfirmation,
+    acceptAttempted,
+    confirmationStillPresent,
+  };
 }
 
 /**
@@ -236,6 +257,7 @@ function acceptLeftTheUrlInFlight(round: HeldLaunchRound): boolean {
 function acceptWasAttempted(attempt: LaunchConfirmationAttempt): boolean {
   return (
     attempt.outcome === 'accepted' ||
+    (attempt.outcome === 'unanswered' && attempt.reason === 'alert-still-present') ||
     (attempt.outcome === 'unreadable' && attempt.step === 'alert-accept')
   );
 }

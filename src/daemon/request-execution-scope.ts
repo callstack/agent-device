@@ -45,7 +45,7 @@ import type { LeaseRegistry } from './lease-registry.ts';
 import { type SessionStore } from './session-store.ts';
 import { resolveSessionRequestLog, resolveSessionRunnerLogPath } from './session-artifact-paths.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
-import type { SessionState } from './session-state.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
 import { teardownSessionResources } from './session-teardown.ts';
 import { finalizeBoundSessionApplicationLifecycle } from './application-lifecycle-recovery.ts';
 import { runtimeHintValues } from './session-runtime.ts';
@@ -273,10 +273,9 @@ export async function createRequestExecutionScope(params: {
             sessionName,
             sessionStore,
             leaseRegistry,
-            teardownSession: async (session, expiredSessionName) =>
+            teardownSession: async (ref) =>
               await teardownExpiredSession({
-                session,
-                sessionName: expiredSessionName,
+                ref,
                 sessionStore,
                 inspectFacts: scope.inspectFacts,
                 bindDevice: scope.bindDevice,
@@ -410,20 +409,21 @@ function createRequestDeviceAccess(params: {
 }
 
 async function teardownExpiredSession(params: {
-  session: SessionState;
-  sessionName: string;
+  ref: SessionRef;
   sessionStore: SessionStore;
   inspectFacts: InspectDeviceRuntimeFacts;
   bindDevice: BindDeviceRuntime;
   platformCleanup: PlatformResourceCleanup;
 }): Promise<void> {
-  const { session, sessionName, sessionStore, inspectFacts, bindDevice, platformCleanup } = params;
+  const { ref, sessionStore, inspectFacts, bindDevice, platformCleanup } = params;
+  const session = sessionStore.resolveCurrent(ref) ?? ref.session;
+  const sessionName = ref.address;
+  const runtimeHints = runtimeHintValues(sessionStore.getRuntimeHints(ref.address));
   let primaryError: unknown;
   try {
     await teardownSessionResources({
       appLog: 'run',
-      session,
-      sessionName,
+      ref,
       sessionStore,
       platformCleanup,
     });
@@ -436,7 +436,7 @@ async function teardownExpiredSession(params: {
       bindDevice,
       session,
       stateDir: sessionStore.resolveDaemonStateDir(),
-      runtimeHints: runtimeHintValues(sessionStore.getRuntimeHints(sessionName)),
+      runtimeHints,
     });
   } catch (cleanupError) {
     if (primaryError !== undefined) {
@@ -486,16 +486,15 @@ export async function prepareLockedRequestScope(params: {
   const { scope, sessionStore, trackDownloadableArtifact } = params;
   const logPath = scope.runnerLogPath;
   scope.throwIfCanceled();
-  const seededSession = sessionStore.get(scope.sessionName);
-  if (seededSession) {
-    // Called under runLocked: refreshRecordingHealth may mutate session recording state.
-    await refreshRecordingHealth(seededSession);
-    sessionStore.set(scope.sessionName, seededSession);
+  const seededRef = sessionStore.lookup(scope.sessionName);
+  if (seededRef) {
+    await refreshRecordingHealth(sessionStore, seededRef);
+    scope.throwIfCanceled();
+    sessionStore.requireCurrent(seededRef);
   }
   const binding = prepareLockedRequestBinding({
     req: scope.req,
-    sessionName: scope.sessionName,
-    sessionStore,
+    existingRef: seededRef ? sessionStore.refresh(seededRef) : undefined,
   });
   const lockedReq = binding.req;
   // `scope.sessionName` is the resolved store key, so `existingRef` carries the address every
@@ -563,7 +562,10 @@ export async function prepareLockedRequestScope(params: {
         ({
           ...contextFromFlags(flags, appBundleId, traceLogPath),
           // Handlers may update surface during the request, so read the current session state.
-          surface: sessionStore.get(scope.sessionName)?.surface,
+          surface: (seededRef
+            ? sessionStore.resolveCurrent(seededRef)
+            : sessionStore.get(scope.sessionName)
+          )?.surface,
         }) satisfies DaemonCommandContext,
     },
   };

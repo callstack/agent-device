@@ -37,7 +37,7 @@ test('divergence cause and action strings pass through the central redactor at c
   const root = mkdtempForTestSync('agent-device-replay-divergence-redact-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['click "Save"']);
   mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
 
@@ -71,7 +71,10 @@ test('a fill divergence never serializes the typed text at any response level', 
     const root = mkdtempForTestSync('agent-device-replay-fill-leak-');
     const sessionStore = new SessionStore(path.join(root, 'sessions'));
     const sessionName = 'default';
-    sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+    sessionStore.publish(
+      sessionName,
+      makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+    );
     const filePath = writeReplayFile(root, [`fill 'label="Email"' ${JSON.stringify(sentinel)}`]);
     // Selector miss forces the divergence on the fill step; the failure
     // message is a realistic selector error, not an echo of the typed text.
@@ -125,7 +128,10 @@ test('a capture-failed screen hint redacts a secret in the capture error', async
   const root = mkdtempForTestSync('agent-device-replay-screen-redact-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const filePath = writeReplayFile(root, ['click "Save"']);
   // The post-failure snapshot capture throws with a secret-bearing message.
   mockDispatchCommand.mockRejectedValue(new Error('snapshot failed: api_key=sk-live-abc123def456'));
@@ -159,7 +165,10 @@ test('an expanded ${VAR} value echoed by a selector error never reaches the publ
   const root = mkdtempForTestSync('agent-device-replay-var-leak-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const filePath = writeReplayFile(root, ['press label="${SECRET}"']);
   mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
 
@@ -203,7 +212,10 @@ test('an expanded built-in AD_DEVICE_ID never reaches the public divergence', as
   const sessionName = 'static-session-context';
   const root = mkdtempForTestSync('agent-device-replay-builtin-var-leak-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const filePath = writeReplayFile(root, ['press label="${AD_DEVICE_ID}"']);
   mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
 

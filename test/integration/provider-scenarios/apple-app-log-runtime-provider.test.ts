@@ -16,7 +16,7 @@ test('provider-inventory Apple logs doctor stays on the scoped Apple tool provid
     appleToolProvider: () => appleTool.provider,
     deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
   });
-  daemon.setSession('default', {
+  daemon.publishSession('default', {
     name: 'default',
     device: PROVIDER_SCENARIO_IOS_SIMULATOR,
     appBundleId: 'com.example.app',

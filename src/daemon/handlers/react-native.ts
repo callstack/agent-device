@@ -17,6 +17,7 @@ import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapsh
 import type { DaemonResponse } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
 import {
+  bindInteractionSession,
   captureSnapshotForSession,
   finalizeTouchInteraction,
   type InteractionRouteInput,
@@ -28,12 +29,13 @@ import { errorResponse, noActiveSessionError } from '@agent-device/kernel/contra
 export async function handleReactNativeCommands(
   params: InteractionRouteInput,
 ): Promise<DaemonResponse | null> {
-  const { req, sessionName, sessionStore } = params;
+  params = bindInteractionSession(params);
+  const { req, sessionStore } = params;
   if (req.command !== PUBLIC_COMMANDS.reactNative) return null;
   const parsed = parseReactNativeArgs(req.positionals ?? []);
   if (!parsed.ok) return parsed.response;
 
-  const session = sessionStore.get(sessionName);
+  const session = params.sessionRef ? sessionStore.requireCurrent(params.sessionRef) : undefined;
   if (!session) return noActiveSessionError();
   // R61: admission is the owner's own `tapPoint` fact — the one operation this command executes.
   // It runs before the observing capture, exactly where the retired capability gate ran, so an
@@ -62,7 +64,7 @@ export async function handleReactNativeCommands(
 
   try {
     const snapshot = await captureSnapshotForSession(
-      session,
+      params.sessionRef!,
       req.flags,
       sessionStore,
       params.contextFromFlags,
@@ -161,7 +163,7 @@ async function executeReactNativeOverlayDismiss(
   expireRefFrame(session);
   const data = await tapPoint(target.point);
   const actionFinishedAt = Date.now();
-  const verification = await verifyReactNativeOverlayDismissal(params, session);
+  const verification = await verifyReactNativeOverlayDismissal(params);
   const responseData = stripUndefined({
     ...readSnapshotNodesReferenceFrame(snapshot.nodes),
     ...data,
@@ -180,7 +182,7 @@ async function executeReactNativeOverlayDismiss(
     ...successText(formatDismissMessage(verification)),
   });
   return finalizeTouchInteraction({
-    session,
+    ref: params.sessionRef!,
     sessionStore,
     command: req.command,
     positionals: req.positionals ?? [],
@@ -192,17 +194,14 @@ async function executeReactNativeOverlayDismiss(
   });
 }
 
-async function verifyReactNativeOverlayDismissal(
-  params: InteractionRouteInput,
-  session: SessionState,
-): Promise<{
+async function verifyReactNativeOverlayDismissal(params: InteractionRouteInput): Promise<{
   verified: boolean;
   verificationWarning?: string;
   nextCommand?: string;
 }> {
   const { req, sessionStore } = params;
   const verificationSnapshot = await captureSnapshotForSession(
-    session,
+    params.sessionRef!,
     req.flags,
     sessionStore,
     params.contextFromFlags,

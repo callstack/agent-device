@@ -52,6 +52,6 @@ export function seedReplayFixtureSession(
   sessionStore: SessionStore,
   platform: 'android' | 'ios' | undefined,
 ): void {
-  if (platform === 'android') sessionStore.set('s', makeAndroidSession('s'));
-  if (platform === 'ios') sessionStore.set('s', makeIosSession('s'));
+  if (platform === 'android') sessionStore.publish('s', makeAndroidSession('s'));
+  if (platform === 'ios') sessionStore.publish('s', makeIosSession('s'));
 }

@@ -108,10 +108,11 @@ export type PostGestureStabilization = {
  * target takes this pair rather than a bare record, so it cannot be handed a session whose address
  * was never resolved.
  */
-export type SessionRef = {
+export type SessionRef = Readonly<{
   address: string;
   session: SessionState;
-};
+  lifetime: object;
+}>;
 
 export type SessionState = {
   name: string;
