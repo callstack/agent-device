@@ -98,17 +98,17 @@ export class LeaseRegistry {
       this.runBindings.delete(bindingKey);
       return undefined;
     }
-    const reusedLease: DeviceLease = request.retainOnClose
-      ? { ...existingLease, retainOnClose: true }
-      : existingLease;
     if (existingLease.clientId === request.clientId) {
-      return this.refreshLease(reusedLease, leaseTtlMs);
+      return this.refreshLease(
+        request.retainOnClose ? { ...existingLease, retainOnClose: true } : existingLease,
+        leaseTtlMs,
+      );
     }
     if (existingLease.deviceKey) {
       throw deviceLeaseBusyError(existingLease);
     }
     assertLeaseScopeMatch(existingLease, request);
-    return this.refreshLease(reusedLease, leaseTtlMs);
+    return this.refreshLease(existingLease, leaseTtlMs);
   }
 
   /**

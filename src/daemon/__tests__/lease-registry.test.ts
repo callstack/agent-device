@@ -59,6 +59,18 @@ test('a later allocation asking for retainOnClose turns it on for the reused lea
   assert.equal(third.retainOnClose, true);
 });
 
+test('a request without the owning clientId cannot turn retainOnClose on for a run lease', () => {
+  const registry = new LeaseRegistry();
+  const owned = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1', clientId: 'a' });
+  const reused = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    retainOnClose: true,
+  });
+  assert.equal(reused.leaseId, owned.leaseId);
+  assert.equal(reused.retainOnClose, undefined);
+});
+
 test('heartbeatLease extends active lease and releaseLease is idempotent', () => {
   let now = 1_000;
   const registry = new LeaseRegistry({

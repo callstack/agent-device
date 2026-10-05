@@ -1,4 +1,5 @@
 import { test, expect, vi } from 'vitest';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
@@ -10,6 +11,11 @@ import {
   resolveSessionLeaseForRequest,
 } from '../lease-lifecycle.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
+
+vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
+  return { ...actual, emitDiagnostic: vi.fn() };
+});
 
 test('admitRequestLeaseForLockedScope heartbeats and stores admitted lease on the request', () => {
   let now = 1_000;
@@ -150,6 +156,11 @@ test('releaseSessionLease leaves a retainOnClose lease and its provider device a
   expect(provider).toBeUndefined();
   expect(release).not.toHaveBeenCalled();
   expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
+  expect(vi.mocked(emitDiagnostic)).toHaveBeenCalledWith({
+    level: 'info',
+    phase: 'session_lease_released',
+    data: { session: 'default', leaseId: lease.leaseId, released: false, retained: true },
+  });
 });
 
 test('releaseSessionLease retains provider session ownership for artifact lookup', async () => {
