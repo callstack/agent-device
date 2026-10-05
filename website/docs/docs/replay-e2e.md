@@ -44,7 +44,7 @@ agent-device open Settings --platform ios --session e2e --save-script ./workflow
 
 A `.ad` line is the CLI spelling of one command: `<command> [positional ...] [flag ...]`. Whitespace separates tokens, so a value with a space needs quotes.
 
-```ad
+```sh
 open "com.example.app" --relaunch
 scroll down --until 'id="far-button"'
 press id="far-button"
@@ -59,7 +59,7 @@ close
 
 Reaching an off-screen element is viewport-independent in a script exactly as it is at the CLI. Prefer the stop condition over a fixed amount, which passes on one screen size and fails on another:
 
-```ad
+```sh
 # repeats until the element is on screen
 scroll down --until 'id="checkout-submit"'
 # one gesture, viewport-relative

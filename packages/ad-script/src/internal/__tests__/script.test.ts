@@ -353,14 +353,20 @@ test('an unclosed single quote never turns a previously valid line into an error
 test("single quotes carry an apostrophe through ', and a backslash stays itself", () => {
   // Shell parity: `agent-device wait 'label="don\'t"'` hands over the backslash-
   // apostrophe pair, so the script has to read the same selector. A shell keeps a
-  // bare `\` inside single quotes, and so does the script line.
+  // bare `\` inside single quotes, and so does the script line — including a `\\`
+  // pair, which the superseded decoder collapsed to one backslash; this assertion
+  // is what that regression would fail on.
   const parsed = parseReplayScriptDetailed(
-    [String.raw`wait 'label="don\'t"'`, String.raw`snapshot --scope 'root\.section'`].join('\n') +
-      '\n',
+    [
+      String.raw`wait 'label="don\'t"'`,
+      String.raw`snapshot --scope 'a\\b'`,
+      String.raw`snapshot --scope 'root\.section'`,
+    ].join('\n') + '\n',
   ).actions;
 
   assert.deepEqual(parsed[0]?.positionals, ['label="don\'t"']);
-  assert.equal(parsed[1]?.flags.snapshotScope, String.raw`root\.section`);
+  assert.equal(parsed[1]?.flags.snapshotScope, String.raw`a\\b`);
+  assert.equal(parsed[2]?.flags.snapshotScope, String.raw`root\.section`);
 });
 
 test('a quoted value ending in an even backslash run still closes', () => {
