@@ -46,10 +46,47 @@ vi.mock('../../provider-device-runtimes.ts', () => ({
   createDaemonProviderRuntimeComposition: async () => ({ runtimes: [], platformModules: [] }),
 }));
 
+const leaseProbe = vi.hoisted(() => ({
+  registries: [] as import('../lease-registry.ts').LeaseRegistry[],
+  released: [] as import('@agent-device/contracts/device').DeviceLease[],
+}));
+
+vi.mock('../lease-registry.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lease-registry.ts')>();
+  class RecordedLeaseRegistry extends actual.LeaseRegistry {
+    constructor(...args: ConstructorParameters<typeof actual.LeaseRegistry>) {
+      super(...args);
+      leaseProbe.registries.push(this);
+    }
+  }
+  return { ...actual, LeaseRegistry: RecordedLeaseRegistry };
+});
+
+vi.mock('../provider-lease-expiry.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../provider-lease-expiry.ts')>();
+  return {
+    ...actual,
+    createExpiredProviderLeaseReleaser: (
+      ...args: Parameters<typeof actual.createExpiredProviderLeaseReleaser>
+    ) => {
+      const releaser = actual.createExpiredProviderLeaseReleaser(...args);
+      return {
+        ...releaser,
+        release: async (lease: import('@agent-device/contracts/device').DeviceLease) => {
+          leaseProbe.released.push(lease);
+          await releaser.release(lease);
+        },
+      };
+    },
+  };
+});
+
 import { startDaemonRuntime } from './daemon-runtime.ts';
 
 afterEach(() => {
   lifecycleEvents.length = 0;
+  leaseProbe.registries.length = 0;
+  leaseProbe.released.length = 0;
 });
 
 test('daemon shutdown detaches before session teardown and force-finalizes only after gateway resources', async () => {
@@ -104,6 +141,39 @@ test('a SIGTERM shutdown gives the handoff a diagnostics scope to write its reas
     const daemonLog = fs.readFileSync(path.join(stateDir, 'daemon.log'), 'utf8');
     expect(daemonLog).toMatch(/"phase":"detach_scope_probe"/);
     expect(daemonLog).toMatch(/"lane":"physical_coredevice"/);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('daemon shutdown releases a retainOnClose lease that no session holds', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-retained-lease-shutdown-');
+  try {
+    const runtime = await startDaemonRuntime({
+      env: {
+        ...process.env,
+        AGENT_DEVICE_STATE_DIR: stateDir,
+        AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+        AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+      },
+      exit: () => {},
+      registerProcessHandlers: false,
+      stderr: { write: () => {} },
+      stdout: { write: () => {} },
+    });
+    expect(runtime).not.toBeNull();
+    const [leaseRegistry] = leaseProbe.registries;
+    const lease = leaseRegistry!.allocateLease({
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      leaseProvider: 'limrun',
+      retainOnClose: true,
+    });
+
+    await runtime?.shutdown();
+
+    expect(leaseProbe.released).toEqual([lease]);
+    expect(leaseRegistry!.listActiveLeases()).toEqual([]);
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

@@ -39,10 +39,7 @@ import type { SessionState } from '../session-state.ts';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
 import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
 import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
-import {
-  finalizeDaemonLeases,
-  finalizeDaemonSessionLease,
-} from './daemon-session-lease-finalizer.ts';
+import { finalizeDaemonLeases } from './daemon-lease-finalizer.ts';
 import {
   processOwnsActiveDeviceClaim,
   reconcileOrphanedDeviceClaims,
@@ -95,7 +92,7 @@ import { recoverAppLogResourcesAfterDaemonLock } from '../app-log-resource-recov
 import { createDaemonRecoveryPlatformScope } from '../platform-request-scope.ts';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 
-const DAEMON_SESSION_LEASE_RELEASE_TIMEOUT_MS = 1_000;
+const DAEMON_LEASE_RELEASE_TIMEOUT_MS = 1_000;
 const DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS = 1_000;
 const DAEMON_PROVIDER_RELEASE_DRAIN_TIMEOUT_MS = 2_000;
 // An orphaned `simctl recordVideo` releases the host-wide recording lock only after it finishes
@@ -141,7 +138,6 @@ export async function teardownDaemonSessionForShutdown(params: {
   stateDir?: string;
   stderr: WritableOutput;
   finalizeApplicationLifecycle?: (session: SessionState) => Promise<void>;
-  beforeDelete?: (session: SessionState) => Promise<void>;
   afterSuccessfulTeardown?: (session: SessionState) => Promise<void>;
 }): Promise<void> {
   const {
@@ -150,7 +146,6 @@ export async function teardownDaemonSessionForShutdown(params: {
     stateDir,
     stderr,
     finalizeApplicationLifecycle,
-    beforeDelete,
     afterSuccessfulTeardown,
   } = params;
   const sessionName = sessionStore.resolveStoredSessionName(session);
@@ -203,7 +198,6 @@ export async function teardownDaemonSessionForShutdown(params: {
   // `.ad` iff the repair transaction completed, else leave a bounded
   // `REPAIR_SESSION_EXPIRED` tombstone for the reaped-before-finalize case.
   sessionStore.finalizeRepairTeardown(session);
-  await beforeDelete?.(session);
   if (teardownSucceeded) await afterSuccessfulTeardown?.(session);
   sessionStore.delete(sessionName);
 }
@@ -488,14 +482,6 @@ export async function startDaemonRuntime(
             stateDir: baseDir,
             runtimeHints: runtimeHintValues(sessionStore.getRuntimeHints(sessionToFinalize.name)),
           }),
-        beforeDelete: async (sessionToFinalize) => {
-          await finalizeDaemonSessionLease({
-            session: sessionToFinalize,
-            leaseRegistry,
-            expiredProviderLeaseReleaser,
-            timeoutMs: DAEMON_SESSION_LEASE_RELEASE_TIMEOUT_MS,
-          });
-        },
         afterSuccessfulTeardown: shutdownClaimLedger.releaseClaim,
       });
     } finally {
@@ -510,7 +496,7 @@ export async function startDaemonRuntime(
 
   // #2833: settles the resources of a session this daemon expires for idleness. Deliberately NOT
   // `teardownDaemonSession`: that one exists for a daemon that is leaving, so it hands a healthy
-  // execution host to its successor, finalizes a remote lease, and deletes the session whether the
+  // execution host to its successor and deletes the session whether the
   // bounded teardown finished or not. An idle expiry is the opposite situation — the daemon is
   // staying alive, there is no successor, and a session whose resources would not release has to
   // survive so the next pass can retry rather than leave a claim owned by a process that no longer
@@ -795,11 +781,17 @@ export async function startDaemonRuntime(
     } catch {}
     expiredProviderLeaseReleaser.beginShutdown();
     await teardownDaemonSessions();
-    await finalizeDaemonLeases({
-      leaseRegistry,
-      expiredProviderLeaseReleaser,
-      timeoutMs: DAEMON_SESSION_LEASE_RELEASE_TIMEOUT_MS,
-    });
+    await withDiagnosticsScope(
+      { command: 'daemon', session: 'daemon', logPath, debug: true },
+      async () => {
+        await finalizeDaemonLeases({
+          leaseRegistry,
+          expiredProviderLeaseReleaser,
+          timeoutMs: DAEMON_LEASE_RELEASE_TIMEOUT_MS,
+        });
+        flushDiagnosticsToSessionFile({ force: true });
+      },
+    );
     try {
       await platformDaemonLifecycleOwners.resetAndroidSnapshotHelper();
     } catch (error) {

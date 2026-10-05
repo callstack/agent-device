@@ -129,23 +129,19 @@ test('daemon shutdown settles fenced app-log cleanup before finalization can rel
   );
   fs.mkdirSync(sessionStore.resolveSessionDir(session.name), { recursive: true });
   fs.writeFileSync(resourcePath, `${JSON.stringify(envelope)}\n`);
-  const beforeDelete = vi.fn(async () => {});
 
   const teardown = teardownDaemonSessionForShutdown({
     session,
     sessionStore,
     stderr: { write: () => {} },
-    beforeDelete,
   });
   await cleanupStarted;
 
-  expect(beforeDelete).not.toHaveBeenCalled();
   expect(sessionStore.get(session.name)).toBeDefined();
   releaseCleanup();
   await teardown;
 
   expect(forceCleanup).toHaveBeenCalledOnce();
-  expect(beforeDelete).toHaveBeenCalledOnce();
   expect(sessionStore.get(session.name)).toBeUndefined();
   expect(appLogResourceStore.read(resourcePath)).toMatchObject({
     status: 'decoded',
