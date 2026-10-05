@@ -106,6 +106,15 @@ test('find role= reaches AX-stripped queries through the exact window alias', ()
   assert.equal(roleMatches('axlink', ['AXLink']).score, 2);
 });
 
+test('find role= exact-scores whitespace-normalized spellings like the term does', () => {
+  // Same parity rule for the term's other normalization step: the selector
+  // term compared `normalizeText` on both sides, so `role="some widget"`
+  // always matched the class `Some  Widget`; the retired locator scored that
+  // query 0. One shared authority means the locator agrees — exact score, not
+  // a substring rescue.
+  assert.equal(roleMatches('some widget', ['Some  Widget']).score, 2);
+});
+
 test('find role= refuses sibling vocabulary words with no kind or alias match', () => {
   // Nearest-negative: a kind one dash away and an unrelated kind score 0.
   assert.equal(roleMatches('text-field', ['XCUIElementTypeStaticText']).score, 0);

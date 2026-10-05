@@ -130,7 +130,11 @@ function matchRole(node: SnapshotNode, query: string): number {
   // kind would let `find role=fenix` score `org.mozilla.fenix.ReaderView`
   // where the released query refused it.
   const spellings = roleSpellingsOfNode(node);
-  if (spellings.includes(query)) return 2;
+  // The query arrives `normalizeText`-ed, so the exact compare normalizes the
+  // spellings the same way the selector term's `textEquals` does — that is the
+  // locator/term agreement #3021 demands for whitespace-bearing class names.
+  // Substring scoring stays on the raw spelling (the retired locator's leaf).
+  if (spellings.some((spelling) => normalizeText(spelling) === query)) return 2;
   if (spellings.some((spelling) => roleLeafSegment(spelling).includes(query))) return 1;
   return 0;
 }
