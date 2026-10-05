@@ -599,6 +599,34 @@ test('settings Android location 0 refuses a named app before reaching the owner'
   }
 });
 
+// `location set` moves the device's own location for every family, so a named app contradicts the
+// mutation everywhere. The writer forwards it (r4176656835) and this refusal answers it; the
+// coordinates stay unparsed because the request must never reach the owner.
+test('settings iOS location set refuses a named app before reaching the owner', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-location-set-refused';
+  sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
+
+  const response = await handleSnapshotCommands({
+    req: snapshotRequest(sessionName, 'settings', {
+      positionals: ['location', 'set', '37.7', '-122.4'],
+      input: { app: 'com.example.app' },
+    }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(false);
+  expect(fixtureSettingsMutations).toHaveLength(0);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('INVALID_ARGS');
+    expect(response.error.message).toMatch(/location set applies to the target itself/);
+    expect(response.error.details?.reason).toBe('setting_app_not_consumed');
+    expect(response.error.details?.dispatched).toBe('no');
+  }
+});
+
 // A macOS permission is a host-level TCC grant, so naming an app is refused rather than dropped.
 test('settings macOS permission grant refuses a named app before reaching the owner', async () => {
   const sessionStore = makeSessionStore();

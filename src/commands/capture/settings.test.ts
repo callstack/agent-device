@@ -181,14 +181,16 @@ describe('settings CLI permission vocabulary', () => {
     });
   });
 
-  test('keeps a location set device-wide and drops the app it never reads', () => {
+  // r4176656835: the writer used to drop the app, so `location set ... --app X` ignored X silently.
+  // It now forwards, and the daemon's device-level refusal answers it (handler test below).
+  test('forwards the app on a location set to the device-level refusal', () => {
     const input = settingsCliReader(['location', 'set', '37.7', '-122.4'], {
       targetApp: 'com.example.app',
     } as CliFlags);
     expect(settingsDaemonWriter(input)).toMatchObject({
       positionals: ['location', 'set', '37.7', '-122.4'],
+      input: { app: 'com.example.app' },
     });
-    expect(settingsDaemonWriter(input).input).toBeUndefined();
   });
 
   // The flag bag carries a configured default app the parser strips for settings; the reader still

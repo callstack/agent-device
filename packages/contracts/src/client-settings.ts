@@ -43,11 +43,16 @@ export type SettingsUpdateOptions =
       state: 'on' | 'off';
       app?: string;
     })
+  /**
+   * `set` moves the device's own location for every target, so naming an app here is a contradiction
+   * the daemon refuses with `setting_app_not_consumed` rather than a value it silently drops.
+   */
   | (DeviceCommandBaseOptions & {
       setting: 'location';
       state: 'set';
       latitude: number;
       longitude: number;
+      app?: string;
     })
   | (DeviceCommandBaseOptions & {
       setting: 'animations';
