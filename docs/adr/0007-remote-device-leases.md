@@ -172,7 +172,8 @@ A `macos-app` lease's device key is a bundle id, optionally pinned to one proces
 only a host administrator allocates one, over the loopback `/admin/leases` route that uses the daemon
 token like host holds; tenant `lease_allocate` refuses the backend. The host picks the lease id, a
 repeated PUT renews it, and a PUT naming another scope for an existing id is refused rather than
-rewritten. Heartbeat, expiry, release, and the loss on daemon restart are those of any lease.
+rewritten. Heartbeat, expiry, release, and the loss on daemon restart are those of any lease, except
+that a tenant heartbeat or request cannot renew it for longer than the window of the host's last PUT.
 
 Request admission confines every request admitted under the lease, so `batch` steps and `replay`
 actions are confined when they re-enter it: an allow list of commands, the ones whose command

@@ -53,6 +53,8 @@ export class LeaseRegistry {
   private readonly leases = new Map<string, DeviceLease>();
   private readonly runBindings = new Map<string, string>();
   private readonly deviceBindings = new Map<string, string>();
+  /** The inactivity window the host chose for each lease it allocated; a tenant cannot exceed it. */
+  private readonly hostTtlMsByLeaseId = new Map<string, number>();
   private readonly maxActiveSimulatorLeases: number;
   private readonly resolveLeaseTtlMs: ReturnType<typeof createLeaseTtlResolver>;
   private readonly now: () => number;
@@ -104,6 +106,7 @@ export class LeaseRegistry {
           reason: 'LEASE_SCOPE_MISMATCH',
         });
       }
+      this.hostTtlMsByLeaseId.set(id, leaseTtlMs);
       return this.refreshLease(existing, leaseTtlMs);
     }
     this.assertHumanControlAdmission(normalized);
@@ -116,6 +119,7 @@ export class LeaseRegistry {
     this.enforceCapacity(normalized.backend);
     const lease = { ...createDeviceLease(normalized, leaseTtlMs, this.now()), leaseId: id };
     this.leases.set(lease.leaseId, lease);
+    this.hostTtlMsByLeaseId.set(id, leaseTtlMs);
     this.bindLease(lease);
     return { ...lease };
   }
@@ -158,9 +162,13 @@ export class LeaseRegistry {
     const lease = this.getActiveLease(leaseId);
     assertLeaseOwnerScope(lease, request);
     assertLeaseScopeMatch(lease, request);
-    const leaseTtlMs =
+    const requestedTtlMs =
       request.ttlMs === undefined ? leaseOwnTtlMs(lease) : this.resolveLeaseTtlMs(request.ttlMs);
-    return this.refreshLease(lease, leaseTtlMs);
+    const hostTtlMs = this.hostTtlMsByLeaseId.get(leaseId);
+    return this.refreshLease(
+      lease,
+      hostTtlMs === undefined ? requestedTtlMs : Math.min(requestedTtlMs, hostTtlMs),
+    );
   }
 
   /**
@@ -563,6 +571,7 @@ export class LeaseRegistry {
   }
 
   private unbindLease(lease: DeviceLease, releasedAt = this.now()): void {
+    this.hostTtlMsByLeaseId.delete(lease.leaseId);
     this.runBindings.delete(leaseRunBindingKey(lease));
     const deviceBindingKey = leaseDeviceBindingKey(lease);
     if (deviceBindingKey) {

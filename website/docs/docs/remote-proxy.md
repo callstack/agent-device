@@ -140,7 +140,8 @@ DELETE /admin/leases/<lease-id>
 The lease id is 16 to 128 hex characters the host chooses. Repeating the PUT renews the lease; a PUT
 that names another scope for an existing id is refused. The lease stays allocated across the
 client's `close` unless the body sets `retainOnClose: false`, and DELETE revokes it at once. It
-expires after `ttlMs` without a renewal or a client request, like any lease.
+expires after `ttlMs` without a renewal or a client request, like any lease. A client heartbeat can
+shorten that window but never extend it past the `ttlMs` of the last PUT.
 
 The client connects with a remote config that names the lease, and runs `open <bundleId>`:
 
