@@ -147,6 +147,7 @@ test('idle reap fires after the idle window when nothing is using the daemon', a
   const idleReap = createDaemonIdleReap({
     sessionStore,
     getInFlightRequestCount: () => 0,
+    hasActiveLeases: () => false,
     onIdleReap: () => {
       reaped++;
     },
@@ -161,6 +162,29 @@ test('idle reap fires after the idle window when nothing is using the daemon', a
   assert.equal(reaped, 1);
 });
 
+test('idle reap waits another window while a lease no session holds is still active', async () => {
+  vi.useFakeTimers();
+  let reaped = 0;
+  let leaseActive = true;
+  const idleReap = createDaemonIdleReap({
+    sessionStore,
+    getInFlightRequestCount: () => 0,
+    hasActiveLeases: () => leaseActive,
+    onIdleReap: () => {
+      reaped++;
+    },
+    env: { AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '40' },
+  });
+
+  idleReap.noteActivity();
+  await vi.advanceTimersByTimeAsync(120);
+  assert.equal(reaped, 0);
+  leaseActive = false;
+  await vi.advanceTimersByTimeAsync(40);
+
+  assert.equal(reaped, 1);
+});
+
 test('idle reap does not fire while a session is open', async () => {
   vi.useFakeTimers();
   let reaped = 0;
@@ -168,6 +192,7 @@ test('idle reap does not fire while a session is open', async () => {
   const idleReap = createDaemonIdleReap({
     sessionStore,
     getInFlightRequestCount: () => 0,
+    hasActiveLeases: () => false,
     onIdleReap: () => {
       reaped++;
     },
@@ -196,6 +221,7 @@ test('idle reap does not fire while a recording is active', async () => {
   const idleReap = createDaemonIdleReap({
     sessionStore,
     getInFlightRequestCount: () => 0,
+    hasActiveLeases: () => false,
     onIdleReap: () => {
       reaped++;
     },
@@ -215,6 +241,7 @@ test('idle reap does not fire while a request is in flight', async () => {
   const idleReap = createDaemonIdleReap({
     sessionStore,
     getInFlightRequestCount: () => inFlightRequestCount,
+    hasActiveLeases: () => false,
     onIdleReap: () => {
       reaped++;
     },
@@ -237,6 +264,7 @@ test('idle reap is disabled when the window is zero', async () => {
   const idleReap = createDaemonIdleReap({
     sessionStore,
     getInFlightRequestCount: () => 0,
+    hasActiveLeases: () => false,
     onIdleReap: () => {
       reaped++;
     },
@@ -255,6 +283,7 @@ test('cancel prevents a scheduled reap from firing', async () => {
   const idleReap = createDaemonIdleReap({
     sessionStore,
     getInFlightRequestCount: () => 0,
+    hasActiveLeases: () => false,
     onIdleReap: () => {
       reaped++;
     },

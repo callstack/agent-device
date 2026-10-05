@@ -83,6 +83,11 @@ export type DaemonIdleReapController = {
 export function createDaemonIdleReap(params: {
   sessionStore: SessionStore;
   getInFlightRequestCount: () => number;
+  /**
+   * An unexpired lease is a client's claim on this daemon, so a reap that finds one waits another
+   * idle window. The check must also expire leases past their window, or none would ever end.
+   */
+  hasActiveLeases: () => boolean;
   onIdleReap: () => void;
   env?: NodeJS.ProcessEnv;
 }): DaemonIdleReapController {
@@ -110,6 +115,10 @@ export function createDaemonIdleReap(params: {
       // session open or new request must never lose a race against a
       // previously scheduled reap.
       if (!isIdleNow()) return;
+      if (params.hasActiveLeases()) {
+        schedule();
+        return;
+      }
       emitDiagnostic({ level: 'info', phase: 'daemon_idle_reap', data: { idleMs } });
       params.onIdleReap();
     }, idleMs);

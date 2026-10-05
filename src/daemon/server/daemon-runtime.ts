@@ -569,6 +569,7 @@ export async function startDaemonRuntime(
   const idleReap = createDaemonIdleReap({
     sessionStore,
     getInFlightRequestCount: () => inFlightRequestCount,
+    hasActiveLeases: () => leaseRegistry.listActiveLeases().length > 0,
     onIdleReap: () => {
       void shutdown();
     },
