@@ -16,7 +16,14 @@ function request(
   runSimctl: SimctlSettingRequest['runSimctl'],
   overrides: Partial<SimctlSettingRequest>,
 ): SimctlSettingRequest {
-  return { runSimctl, udid: 'SIM-1', setting: 'appearance', state: 'dark', ...overrides };
+  return {
+    runSimctl,
+    udid: 'SIM-1',
+    deviceId: 'SIM-1',
+    setting: 'appearance',
+    state: 'dark',
+    ...overrides,
+  };
 }
 
 test('every simctl argv addresses the udid the runner was given', async () => {

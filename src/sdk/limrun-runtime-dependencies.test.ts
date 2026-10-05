@@ -254,6 +254,7 @@ test('Limrun iOS settings evaluate the Apple simctl plan module on the first set
   const grantPhotos = {
     runSimctl,
     udid: 'booted',
+    deviceId: 'limrun:ios:lease-a',
     setting: 'permission',
     state: 'grant',
     appBundleId: 'com.example.app',

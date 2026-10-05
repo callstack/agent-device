@@ -167,8 +167,8 @@ export type SimctlSettingRequest = {
   runSimctl: SimctlSettingRunner;
   /** The simulator UDID `simctl` addresses, or `booted` where the runner reaches one simulator. */
   udid: string;
-  /** The device id a refusal reports; defaults to `udid`. */
-  deviceId?: string;
+  /** The device id a refusal reports to the caller, which `udid` is not on every runner. */
+  deviceId: string;
   setting: SimctlSetting;
   state: string;
   appBundleId?: string;

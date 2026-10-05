@@ -47,7 +47,7 @@ async function setAppearance({ runSimctl, udid, state }: SimctlSettingRequest): 
 }
 
 async function setPermission(request: SimctlSettingRequest): Promise<void> {
-  const { runSimctl, udid, deviceId = udid, state, options } = request;
+  const { runSimctl, udid, deviceId, state, options } = request;
   const appBundleId = requireAppBundleId(request);
   const permissionAction = parsePermissionAction(state);
   const action = permissionAction === 'deny' ? 'revoke' : permissionAction;
