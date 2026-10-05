@@ -156,6 +156,27 @@ wait 500
     ]);
   });
 
+  // #3197: `scroll --until` became part of a scroll action, so the export names
+  // the stop condition it cannot carry instead of exporting a bare page scroll.
+  test('warns when scroll --until exports as a bare Maestro scroll', () => {
+    const result = exportReplayScriptToMaestro(`open com.example.app
+scroll down --until 'id="far-button"'
+`);
+
+    expect(parseYamlDocs(result.yaml)).toEqual([
+      { appId: 'com.example.app' },
+      [{ launchApp: { appId: 'com.example.app' } }, 'scroll'],
+    ]);
+    expect(result.warnings).toEqual([
+      {
+        line: 2,
+        // The action label names positionals only, so the flag shows in the message.
+        action: 'scroll down',
+        message: 'scroll --until id="far-button" is not represented by Maestro scroll',
+      },
+    ]);
+  });
+
   test('warns when explicit long-press durations export to Maestro defaults', () => {
     const result = exportReplayScriptToMaestro(`open com.example.app
 longpress "label=\\"Last message\\"" 800

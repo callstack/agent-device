@@ -187,9 +187,31 @@ const scriptTextArb: fc.Arbitrary<string> = fc.oneof(
 const scriptTargetArb: fc.Arbitrary<string> = fc.oneof(
   refArb.map(formatRef),
   scriptTextArb.map((text) => JSON.stringify(`label=${text}`)),
+  // #3197: a hand-written line quotes a selector with single quotes the way the
+  // shell does. The formatter always rewrites to the JSON spelling, so this tests
+  // the tokenizer's reading without expecting the single-quote form back.
+  fc.constantFrom('Sign in', 'Log in', 'Submit').map((label) => `'label=${JSON.stringify(label)}'`),
 );
 
 const coordinateArb = fc.integer({ min: 0, max: 1200 }).map(String);
+
+/**
+ * The `wait` line tails the script grammar accepts after the target: its budget
+ * positional, and the capture-scope flags it declares (#3197). Both may appear on
+ * one line, positional before flags, which is the order the writer emits them in.
+ */
+const WAIT_TIMEOUT_ARB: fc.Arbitrary<string> = fc
+  .integer({ min: 100, max: 5000 })
+  .map((timeout) => ` ${timeout}`);
+
+const WAIT_CAPTURE_FLAG_ARB: fc.Arbitrary<string> = fc.oneof(
+  fc.constant(' --raw'),
+  fc.integer({ min: 0, max: 6 }).map((depth) => ` --depth ${depth}`),
+  scriptTextArb.map((scope) => ` --scope ${JSON.stringify(scope)}`),
+);
+
+/** The `scroll` flags the script grammar carries (#3197): the stop condition. */
+const SCROLL_FLAG_ARB: fc.Arbitrary<string> = scriptTargetArb.map((target) => ` --until ${target}`);
 
 /**
  * A command is either generated from a line template or explicitly waived with
@@ -234,8 +256,12 @@ const REPLAY_SCRIPT_LINE_PLANS = {
   longpress: scriptTargetArb.map((target) => `longpress ${target}`),
   hover: scriptTargetArb.map((target) => `hover ${target}`),
   wait: fc
-    .tuple(scriptTargetArb, fc.integer({ min: 100, max: 5000 }))
-    .map(([target, timeout]) => `wait ${target} ${timeout}`),
+    .tuple(
+      scriptTargetArb,
+      fc.option(WAIT_TIMEOUT_ARB, { nil: '' }),
+      fc.option(WAIT_CAPTURE_FLAG_ARB, { nil: '' }),
+    )
+    .map(([target, timeout, capture]) => `wait ${target}${timeout}${capture}`),
   fill: fc
     .tuple(scriptTargetArb, scriptTextArb)
     .map(([target, text]) => `fill ${target} ${JSON.stringify(text)}`),
@@ -313,7 +339,16 @@ const REPLAY_SCRIPT_LINE_PLANS = {
   'react-native': GENERIC_REPLAY_LINE,
   reinstall: GENERIC_REPLAY_LINE,
   replay: GENERIC_REPLAY_LINE,
-  scroll: GENERIC_REPLAY_LINE,
+  scroll: fc
+    .tuple(
+      fc.constantFrom(...SCROLL_DIRECTIONS),
+      fc.option(fc.constantFrom('0.5', '0.8'), { nil: undefined }),
+      fc.option(SCROLL_FLAG_ARB, { nil: undefined }),
+    )
+    .map(
+      ([direction, amount, flags]) =>
+        `scroll ${direction}${amount === undefined ? '' : ` ${amount}`}${flags ?? ''}`,
+    ),
   settings: GENERIC_REPLAY_LINE,
   shutdown: GENERIC_REPLAY_LINE,
   test: GENERIC_REPLAY_LINE,

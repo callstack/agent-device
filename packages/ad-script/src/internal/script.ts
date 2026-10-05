@@ -11,6 +11,7 @@ import { parseReplayOpenFlags } from './open-script.ts';
 import type { SessionAction } from '@agent-device/contracts/session';
 import {
   isClickLikeCommand,
+  parseReplayCommandFlags,
   parseReplaySeriesFlags,
   parseReplayRuntimeFlags,
   stripRecordedRefGeneration,
@@ -462,11 +463,21 @@ function parseReplayScriptLine(line: string): SessionAction | null {
     return action;
   }
 
-  // wait @ref [timeout], longpress @ref [durationMs], and hover @ref flow
-  // through this generic branch: strip recorded generation pins like the
-  // branches above.
+  if (command === 'scroll' || command === 'wait') {
+    // #3197: these two commands carry their own flags in the script grammar, so
+    // a script can hunt for an off-screen target (`scroll down --until <selector>`)
+    // and scope a capture (`wait <selector> --raw`) the same way the CLI does.
+    const parsed = parseReplayCommandFlags(command, args);
+
+    Object.assign(action.flags, parsed.flags);
+    action.positionals = parsed.positionals.map((token) => stripRecordedRefGeneration(token));
+    return action;
+  }
+
+  // wait @ref, longpress @ref, and hover @ref flow through the generic branch:
+  // strip recorded generation pins like the branches above.
   action.positionals =
-    command === 'wait' || command === 'longpress' || command === 'hover'
+    command === 'longpress' || command === 'hover'
       ? args.map((token) => stripRecordedRefGeneration(token))
       : args;
   return action;
@@ -490,7 +501,7 @@ function tokenizeReplayLine(line: string): string[] {
     const parsed =
       line[cursor] === '"'
         ? readQuotedReplayToken(line, cursor)
-        : readBareReplayToken(line, cursor);
+        : (readSingleQuotedReplayToken(line, cursor) ?? readBareReplayToken(line, cursor));
     tokens.push(parsed.value);
     cursor = parsed.nextCursor;
   }
@@ -540,6 +551,58 @@ function readQuotedReplayToken(
     );
   }
   return { value: value as string, nextCursor: end + 1 };
+}
+
+/**
+ * A single-quoted token: `'id="far-button"'` or `'label="Sign in"'` (#3197). The
+ * shell's single quotes strip to one argument and keep `"` literal; a hand-written
+ * `.ad` line is the same text, so the tokenizer must agree or the identical command
+ * parses at the CLI and fails in a script. The candidate must close immediately
+ * before whitespace or end of line: a quote that stops mid-word was punctuation in
+ * the old bare reading (`wait text it's fine`, `'don't do this'`), so the whole run
+ * keeps its old meaning and nothing that parsed before changes meaning. Inside the
+ * quotes only `\'` and `\\` escape.
+ */
+function readSingleQuotedReplayToken(
+  line: string,
+  cursor: number,
+): { value: string; nextCursor: number } | null {
+  if (line[cursor] !== "'") return null;
+  let end = cursor + 1;
+  while (end < line.length) {
+    const char = line.charAt(end);
+    if (char === '\\') {
+      end += 2;
+      continue;
+    }
+    if (char === "'") break;
+    end += 1;
+  }
+  if (end >= line.length || !isReplayTokenBoundary(line, end + 1)) return null;
+  return {
+    value: decodeSingleQuotedReplayLiteral(line.slice(cursor + 1, end)),
+    nextCursor: end + 1,
+  };
+}
+
+function isReplayTokenBoundary(line: string, index: number): boolean {
+  return index >= line.length || /\s/.test(line.charAt(index));
+}
+
+function decodeSingleQuotedReplayLiteral(value: string): string {
+  let decoded = '';
+  let cursor = 0;
+  while (cursor < value.length) {
+    const char = value.charAt(cursor);
+    if (char === '\\' && (value.charAt(cursor + 1) === "'" || value.charAt(cursor + 1) === '\\')) {
+      decoded += value.charAt(cursor + 1);
+      cursor += 2;
+      continue;
+    }
+    decoded += char;
+    cursor += 1;
+  }
+  return decoded;
 }
 
 function readBareReplayToken(line: string, cursor: number): { value: string; nextCursor: number } {

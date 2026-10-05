@@ -903,6 +903,10 @@ test('test sharding does not require devices when every entry is skipped', async
   expect(response?.ok).toBe(false);
   if (response?.ok !== false) throw new Error('Expected failed daemon response.');
   expect(response.error.code).toBe('INVALID_ARGS');
-  expect(response.error.message).toBe('No replay tests matched for --platform android.');
+  expect(response.error.message).toBe(
+    'No replay tests matched for --platform android: 1 without a platform declaration. ' +
+      'Add "context platform=android" to the first line of a script that has none, ' +
+      'or drop --platform when the device is already selected.',
+  );
   expect(inventoryResolved).toBe(false);
 });

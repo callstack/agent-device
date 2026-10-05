@@ -194,3 +194,35 @@ test('replay never defaults readinessTimeoutMs onto a non-acting step', async ()
   expect(response.ok).toBe(true);
   expect(dispatchedFlags?.readinessTimeoutMs).toBeUndefined();
 });
+
+// #3197: a script line now parses `scroll down --until <selector>` into a flag, and the
+// dispatch reads the stop condition off the request flags. If the replay dispatch dropped
+// action flags for this command, the hunt would degrade to one fixed gesture again.
+test('a scroll step carries its parsed --until flag onto the dispatch', async () => {
+  const action: SessionAction = {
+    ts: 0,
+    command: 'scroll',
+    positionals: ['down'],
+    flags: { until: 'label="Checkout"' },
+  };
+  let dispatched: { positionals?: string[]; flags?: Record<string, unknown> } | undefined;
+  const response = await invokeReplayAction({
+    req: REPLAY_REQUEST,
+    sessionName: 'default',
+    action,
+    resolved: action,
+    filePath: 'flow.ad',
+    line: 1,
+    step: 1,
+    resolvedSessionScope: undefined,
+    dependencies: replayDaemonDependencies,
+    invoke: async (request) => {
+      dispatched = request;
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(dispatched?.positionals).toEqual(['down']);
+  expect(dispatched?.flags?.until).toBe('label="Checkout"');
+});
