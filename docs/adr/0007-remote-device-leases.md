@@ -179,7 +179,9 @@ actions are confined when they re-enter it: an allow list of commands, the ones 
 registry descriptor declares `appLease: 'allowed'` (later commands are refused, and of the commands
 lease admission otherwise exempts only `lease_heartbeat` and `lease_release` declare it),
 `open` and `close` of the leased bundle only, the `app` surface only, window-only screenshots, no
-input that names a host path or launches beside the app, and a session that is the leased app. `open` requires the native app backend (ADR 0031), because XCTest
+input that names a host path or launches beside the app, and an existing session that is the leased
+app for every request but `open`, the `batch` envelope, and the lease's heartbeat and release, so a
+request naming no session cannot fall back to the host Mac. `open` requires the native app backend (ADR 0031), because XCTest
 posts screen events that can land outside the app's window. A pid-pinned lease is checked against the
 running process before each admitted request. A session opened under the lease holds its app, not
 the Mac: it takes no host device claim, and other app-leased sessions on the same Mac do not conflict

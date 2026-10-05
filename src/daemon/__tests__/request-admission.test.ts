@@ -319,6 +319,25 @@ test('a request under a macos-app lease is confined to the leased app', () => {
   );
 });
 
+test('a request under a macos-app lease that names no existing session is refused', () => {
+  const registry = new LeaseRegistry();
+  const lease = hostMacOsAppLease(registry);
+  for (const command of ['snapshot', 'screenshot', 'wait', 'find', 'get', 'is']) {
+    assert.throws(
+      () =>
+        assertRequestLeaseAdmission(
+          makeRequest({ command, flags: { platform: 'macos' }, meta: leaseMeta(lease) }),
+          registry,
+          undefined,
+        ),
+      (error: { code?: string; details?: Record<string, unknown> }) =>
+        error.code === 'UNAUTHORIZED' &&
+        error.details?.reason === 'MACOS_APP_LEASE_DENIED' &&
+        error.details.rule === 'session',
+    );
+  }
+});
+
 test('a daemon policy that requires a macos-app lease refuses unleased and other-backend requests', () => {
   const policy = parseDaemonPolicy(
     { version: 1, leases: { require: 'macos-app' } },

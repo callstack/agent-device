@@ -33,8 +33,16 @@ export function parseMacOsAppLeaseKey(deviceKey: string | undefined): MacOsAppLe
   return pidText === undefined ? { bundleId } : { bundleId, pid: Number(pidText) };
 }
 
-/** Commands that can resolve a device when no session exists yet; a batch's steps inherit its platform. */
-const DEVICE_RESOLVING_COMMANDS: ReadonlySet<string> = new Set(['open', 'batch']);
+/**
+ * The requests that run without the leased app's session: `open` creates it, each `batch` step is
+ * admitted again when it runs, and a heartbeat or release acts on the lease alone.
+ */
+const SESSIONLESS_COMMANDS: ReadonlySet<string> = new Set([
+  'open',
+  'batch',
+  'lease_heartbeat',
+  'lease_release',
+]);
 
 type MacOsAppLeaseRule =
   | 'command'
@@ -44,7 +52,8 @@ type MacOsAppLeaseRule =
   | 'host-path'
   | 'device'
   | 'backend'
-  | 'process';
+  | 'process'
+  | 'session';
 
 /**
  * Inputs that name a path on the daemon host or launch something beside the app. A client of a
@@ -116,7 +125,7 @@ export function assertMacOsAppLeaseAdmitsRequest(
     req.positionals ?? [],
     withRuntimeInputs(req.runtime, { ...req.input, ...req.flags }),
   );
-  if (DEVICE_RESOLVING_COMMANDS.has(req.command) && req.flags?.platform !== 'macos') {
+  if ((req.command === 'open' || req.command === 'batch') && req.flags?.platform !== 'macos') {
     throw macOsAppLeaseDenied(
       'device',
       `A macos-app lease needs platform macos on ${req.command}.`,
@@ -137,6 +146,13 @@ export function assertMacOsAppLeaseAdmitsRequest(
     }
   }
   if (session) assertSessionIsLeasedApp(key, session);
+  else if (!SESSIONLESS_COMMANDS.has(req.command)) {
+    throw macOsAppLeaseDenied(
+      'session',
+      `A macos-app lease runs ${req.command} only in a session of ${key.bundleId}; open it first.`,
+      { command: req.command, bundleId: key.bundleId },
+    );
+  }
 }
 
 function withRuntimeInputs(
