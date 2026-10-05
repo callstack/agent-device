@@ -148,6 +148,12 @@ report it (a 420 dpi phone reports `2.625`, a `wm density` override included); a
 in dp divides rects by it and multiplies its points. An older helper omits it. iOS reports points
 already, so it carries no such factor.
 
+`androidSnapshot.missingRootWindowTypes` lists the `AccessibilityWindowInfo` types of windows the
+helper listed but could not serialize, because reading the window's root returned nothing or failed
+(`2` is an input method window); `windowCount` counts only the windows it did serialize. It is empty
+when every listed window was read. When it names an input method window, the capture reports the
+keyboard band as unmeasurable rather than absent. An older helper omits it.
+
 Android snapshot nodes and `get attrs` (including the digest response) carry the native
 `selected`, `checked`, `heading`, `roleDescription`, `editable`, `password`, `hintShowing`,
 `placeholder`, `selectionStart`, and `selectionEnd` facts whenever the accessibility tree reports

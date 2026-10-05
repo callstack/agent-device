@@ -92,6 +92,16 @@ export function readInstrumentationResultNumber(value: string | undefined): numb
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+/** A comma-separated integer list; an empty value is an empty list, a malformed one is absent. */
+export function readInstrumentationResultIntegerList(
+  value: string | undefined,
+): number[] | undefined {
+  if (value === undefined) return undefined;
+  if (value === '') return [];
+  const entries = value.split(',').map(Number);
+  return entries.every(Number.isInteger) ? entries : undefined;
+}
+
 export function readInstrumentationResultBoolean(value: string | undefined): boolean | undefined {
   if (value === 'true') {
     return true;

@@ -515,6 +515,7 @@ function formatAndroidHelperCaptureResult(
       rootPresent: capture.metadata.rootPresent,
       captureMode: capture.metadata.captureMode,
       windowCount: capture.metadata.windowCount,
+      missingRootWindowTypes: capture.metadata.missingRootWindowTypes,
       nodeCount: capture.metadata.nodeCount,
       helperTruncated: capture.metadata.truncated,
       elapsedMs: capture.metadata.elapsedMs,
@@ -878,15 +879,19 @@ const ANDROID_WINDOW_TYPE_INPUT_METHOD = 2;
  * An input method that draws nothing (agent-device's test IME) puts no window on screen and reads as
  * `absent`, and so does an input method window whose bounds parsed to an empty box. One whose bounds
  * did not parse, or parsed to non-finite numbers, was seen but not measured, so the band is
- * unmeasurable even when another input method window did measure. Absence is only read from a
- * window-list capture: the active-window fallback never saw the window list, a root without window
- * metadata cannot be ruled out as the input method, and a truncated capture may have stopped before
- * it. Even then `absent` means no input method window among the roots the helper serialized: the
- * helper skips a window whose root is null without a record, which this cannot detect.
+ * unmeasurable even when another input method window did measure. The same holds for an input method
+ * window the helper listed but could not serialize because its root read null or threw: the helper
+ * names those windows' types in `missingRootWindowTypes`. Absence is only read from a window-list
+ * capture: the active-window fallback never saw the window list, a root without window metadata
+ * cannot be ruled out as the input method, and a truncated capture may have stopped before it. A
+ * helper too old to report `missingRootWindowTypes` is trusted on the roots it serialized.
  */
 export function androidSnapshotKeyboardFromTree(
   tree: AndroidUiHierarchy,
-  metadata: Pick<AndroidSnapshotBackendMetadata, 'captureMode' | 'helperTruncated'>,
+  metadata: Pick<
+    AndroidSnapshotBackendMetadata,
+    'captureMode' | 'helperTruncated' | 'missingRootWindowTypes'
+  >,
 ): SnapshotKeyboardBandFact {
   const windows = tree.children;
   const inputMethodWindows = windows.filter(
@@ -898,6 +903,9 @@ export function androidSnapshotKeyboardFromTree(
     else if (!isEmptyFiniteRect(windowRect)) {
       return { kind: 'unmeasurable', reason: 'window-bounds-unavailable' };
     }
+  }
+  if (metadata.missingRootWindowTypes?.includes(ANDROID_WINDOW_TYPE_INPUT_METHOD)) {
+    return { kind: 'unmeasurable', reason: 'window-root-unavailable' };
   }
   if (inputMethodRects.length > 0) return { kind: 'visible', frame: unionRects(inputMethodRects) };
   if (

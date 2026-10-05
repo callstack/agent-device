@@ -78,6 +78,7 @@ test('parseAndroidSnapshotHelperOutput reconstructs XML chunks and metadata', ()
     rootPresent: true,
     captureMode: 'interactive-windows',
     windowCount: 2,
+    missingRootWindowTypes: undefined,
     nodeCount: 1,
     truncated: false,
     elapsedMs: 42,

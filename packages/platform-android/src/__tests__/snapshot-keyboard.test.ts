@@ -106,3 +106,34 @@ test('a truncated capture without an input method window cannot prove absence', 
     'a window the capture did reach is still measured',
   );
 });
+
+test('an input method window the helper could not read cannot prove absence', () => {
+  const skippedInputMethod = { ...WINDOW_LIST, missingRootWindowTypes: [1, 2] };
+  assert.deepEqual(androidSnapshotKeyboardFromTree(tree(APP_WINDOW), skippedInputMethod), {
+    kind: 'unmeasurable',
+    reason: 'window-root-unavailable',
+  });
+  assert.deepEqual(
+    androidSnapshotKeyboardFromTree(tree(GBOARD_WINDOW, APP_WINDOW), skippedInputMethod),
+    { kind: 'unmeasurable', reason: 'window-root-unavailable' },
+    'a measured input method window does not hide one the helper could not read',
+  );
+});
+
+test('a skipped window that is not an input method leaves the keyboard answer alone', () => {
+  const skippedApp = { ...WINDOW_LIST, missingRootWindowTypes: [1, 3] };
+  assert.deepEqual(androidSnapshotKeyboardFromTree(tree(APP_WINDOW), skippedApp), {
+    kind: 'absent',
+  });
+  assert.deepEqual(androidSnapshotKeyboardFromTree(tree(GBOARD_WINDOW, APP_WINDOW), skippedApp), {
+    kind: 'visible',
+    frame: { x: 0, y: 1500, width: 1080, height: 900 },
+  });
+  assert.deepEqual(
+    androidSnapshotKeyboardFromTree(tree(APP_WINDOW), {
+      ...WINDOW_LIST,
+      missingRootWindowTypes: [],
+    }),
+    { kind: 'absent' },
+  );
+});

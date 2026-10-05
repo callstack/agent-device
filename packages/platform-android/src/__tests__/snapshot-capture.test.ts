@@ -29,6 +29,7 @@ function helperAdbServing(
   display: { width?: number; height?: number } = {},
   xml: string = SCREEN_XML,
   counts: { windowCount: number; nodeCount: number } = { windowCount: 1, nodeCount: 1 },
+  resultLines: readonly string[] = [],
 ): AndroidAdbExecutor {
   const displayKeys =
     display.width !== undefined && display.height !== undefined
@@ -61,6 +62,7 @@ function helperAdbServing(
     'INSTRUMENTATION_RESULT: elapsedMs=12',
     'INSTRUMENTATION_RESULT: pixelDensity=2.625',
     ...displayKeys,
+    ...resultLines,
     'INSTRUMENTATION_CODE: 0',
   ].join('\n');
   return async (args) => {
@@ -194,5 +196,28 @@ test('the Android keyboard band survives the publication adapter into the daemon
   assert.deepEqual(androidSnapshotPublicationInput(capture).keyboard, {
     kind: 'visible',
     frame: { x: 0, y: 1500, width: 1080, height: 900 },
+  });
+});
+
+test('an input method window the helper could not read makes the published keyboard unmeasurable', async () => {
+  const capture = await snapshotAndroid(device, {
+    helperAdb: helperAdbServing(
+      { width: 1080, height: 2400 },
+      [
+        '<hierarchy>',
+        '<node window-index="0" window-type="1" window-active="true" window-bounds="[0,0][1080,2400]" class="android.widget.FrameLayout" package="com.example" bounds="[0,0][1080,2400]"><node text="Name" package="com.example" bounds="[0,0][1080,200]" /><node text="Email" package="com.example" bounds="[0,200][1080,400]" /></node>',
+        '</hierarchy>',
+      ].join(''),
+      { windowCount: 1, nodeCount: 3 },
+      ['INSTRUMENTATION_RESULT: missingRootWindowTypes=2'],
+    ),
+    helperArtifact,
+  });
+
+  const published = androidSnapshotPublicationInput(capture);
+  assert.deepEqual(published.androidSnapshot?.missingRootWindowTypes, [2]);
+  assert.deepEqual(published.keyboard, {
+    kind: 'unmeasurable',
+    reason: 'window-root-unavailable',
   });
 });

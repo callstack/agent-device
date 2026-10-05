@@ -15,6 +15,7 @@ test('parses the session envelope and snapshot metadata', () => {
     metadata: {
       captureMode: 'interactive-windows',
       windowCount: '2',
+      missingRootWindowTypes: '2',
       nodeCount: '1',
       pixelDensity: '2.625',
     },
@@ -27,6 +28,7 @@ test('parses the session envelope and snapshot metadata', () => {
       outputFormat: 'uiautomator-xml',
       captureMode: 'interactive-windows',
       windowCount: 2,
+      missingRootWindowTypes: [2],
       nodeCount: 1,
       pixelDensity: 2.625,
       waitForIdleTimeoutMs: undefined,
@@ -67,6 +69,20 @@ test('parses the session display extent beside its density and absent headers st
   const sparse = parseAndroidSnapshotHelperSessionSnapshotResponse(withoutDisplay, 'snapshot-1');
   assert.equal(sparse.metadata.displayWidth, undefined);
   assert.equal(sparse.metadata.displayHeight, undefined);
+});
+
+test('reads the session window types the helper could not serialize, absent from an older helper', () => {
+  const xml = '<hierarchy><node text="catalog" /></hierarchy>';
+  const read = (metadata: Record<string, string>) =>
+    parseAndroidSnapshotHelperSessionSnapshotResponse(
+      sessionResponse({ requestId: 'snapshot-1', xml, metadata }),
+      'snapshot-1',
+    ).metadata.missingRootWindowTypes;
+
+  assert.deepEqual(read({ missingRootWindowTypes: '1,2' }), [1, 2]);
+  assert.deepEqual(read({ missingRootWindowTypes: '' }), []);
+  assert.equal(read({ missingRootWindowTypes: '1,x' }), undefined);
+  assert.equal(read({}), undefined);
 });
 
 test('rejects stale and truncated session snapshot responses', () => {
