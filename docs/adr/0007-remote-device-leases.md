@@ -48,8 +48,9 @@ its provider device in place, and only `leases.release`, expiry, or daemon
 shutdown ends it. The default is unchanged so the CLI's proxy sharing still
 frees devices on `close`. The allocated lease reports `retainOnClose: true`
 only when the daemon honored it, and only the lease's own client can turn it
-on for a lease the run already holds. An unexpired lease keeps an idle daemon
-alive; one the caller stops heartbeating expires after its `ttlMs`, and idle
+on for a lease the run already holds. An unexpired `retainOnClose` lease keeps
+an idle daemon alive; other leases, including human-control holds, do not. A
+retained lease the caller stops heartbeating expires after its `ttlMs`, and idle
 reap then shuts the daemon down within one more idle window.
 
 ## Consequences

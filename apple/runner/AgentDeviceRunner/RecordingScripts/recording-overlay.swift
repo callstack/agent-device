@@ -145,6 +145,7 @@ func run() throws {
   )
   try runRecordingExport(
     exporter,
+    timeoutSeconds: parsedArgs.timeoutSeconds,
     timeoutMessage: "Touch overlay export timed out.",
     failureMessage: "Touch overlay export failed."
   )
@@ -157,10 +158,11 @@ func run() throws {
 
 func parseArguments(
   _ arguments: [String]
-) throws -> (inputPath: String, outputPath: String, eventsPath: String) {
+) throws -> (inputPath: String, outputPath: String, eventsPath: String, timeoutSeconds: Double) {
   var inputPath: String?
   var outputPath: String?
   var eventsPath: String?
+  var timeoutSeconds = defaultRecordingExportTimeoutSeconds
   var index = 0
 
   while index < arguments.count {
@@ -185,6 +187,13 @@ func parseArguments(
         throw RecordingScriptError.invalidArgs("--quality must be one of: medium, high")
       }
       index += 2
+    case "--timeout-ms":
+      let rawValue = try recordingOptionValue(arguments, nextIndex, "--timeout-ms")
+      guard let milliseconds = Double(rawValue), milliseconds > 0 else {
+        throw RecordingScriptError.invalidArgs("--timeout-ms must be a positive number")
+      }
+      timeoutSeconds = milliseconds / 1000
+      index += 2
     default:
       throw RecordingScriptError.invalidArgs("Unknown argument: \(argument)")
     }
@@ -192,10 +201,10 @@ func parseArguments(
 
   guard let inputPath, let outputPath, let eventsPath else {
     throw RecordingScriptError.invalidArgs(
-      "Usage: recording-overlay.swift --input <video> --output <video> --events <json> [--quality <medium|high>]"
+      "Usage: recording-overlay.swift --input <video> --output <video> --events <json> [--quality <medium|high>] [--timeout-ms <ms>]"
     )
   }
-  return (inputPath, outputPath, eventsPath)
+  return (inputPath, outputPath, eventsPath, timeoutSeconds)
 }
 
 /// The composited overlay must keep the captured track's dimensions, so it can only use a preset
@@ -329,19 +338,26 @@ func frameMeanLuma(_ image: CGImage) -> Double? {
   return total / Double(count)
 }
 
+/// The composited export renders at most this many frames a second, which is smooth for a touch
+/// that stays visible for 0.45s.
+let maximumCompositedFrameRate: Int32 = 30
+
+/// A variable-frame-rate capture (simctl recordVideo, adb screenrecord) reports one tick of its
+/// timescale as `minFrameDuration` (1/600s from simctl). Rendering at that asked the compositor for
+/// every frame the encoder could make, 75 a second from an iOS simulator and 60 from an Android
+/// emulator, about three times the frames the capture holds; a 5-minute recording's export then
+/// outlasted the `record stop` request. So the frame duration is the capture's, but never shorter
+/// than one frame at `maximumCompositedFrameRate`. A capture that reports none renders at that
+/// rate: its average (`nominalFrameRate`) can be a couple of frames a second over a still screen,
+/// which would skip a touch.
 func resolvedFrameDuration(for track: AVAssetTrack) -> CMTime {
+  let shortest = CMTime(value: 1, timescale: maximumCompositedFrameRate)
   let minFrameDuration = track.minFrameDuration
   if minFrameDuration.isValid && !minFrameDuration.isIndefinite && minFrameDuration.seconds > 0 {
-    return minFrameDuration
+    return CMTimeMaximum(minFrameDuration, shortest)
   }
 
-  let nominalFrameRate = track.nominalFrameRate
-  if nominalFrameRate > 0 {
-    let timescale = Int32(max(1, round(nominalFrameRate)))
-    return CMTime(value: 1, timescale: timescale)
-  }
-
-  return CMTime(value: 1, timescale: 60)
+  return shortest
 }
 
 func overlayPoint(event: GestureEvent, x: Double, y: Double, renderSize: CGSize) -> CGPoint {

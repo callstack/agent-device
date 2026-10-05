@@ -399,6 +399,39 @@ test.each([false, true])(
   },
 );
 
+test('daemon shutdown releases a session lease whose session teardown rejects', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-session-lease-shutdown-');
+  const runtime = await startDaemonRuntime({
+    env: {
+      ...process.env,
+      AGENT_DEVICE_STATE_DIR: stateDir,
+      AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+      AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+    },
+    exit: () => {},
+    registerProcessHandlers: false,
+    stderr: { write: () => {} },
+    stdout: { write: () => {} },
+  });
+  const [leaseRegistry] = leaseProbe.registries;
+  const lease = leaseRegistry!.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'limrun',
+  });
+  shutdownProbe.store!.publish('bound', {
+    ...makeIosSession('bound'),
+    lease: { leaseId: lease.leaseId, tenantId: lease.tenantId, runId: lease.runId },
+  });
+  shutdownProbe.finalize.mockRejectedValueOnce(new Error('teardown failed'));
+
+  await runtime?.shutdown();
+
+  expect(shutdownProbe.finalize).toHaveBeenCalledOnce();
+  expect(leaseProbe.released).toEqual([lease]);
+  expect(leaseRegistry!.listActiveLeases()).toEqual([]);
+});
+
 test('daemon shutdown releases a retainOnClose lease that no session holds', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-retained-lease-shutdown-');
   try {

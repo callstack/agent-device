@@ -232,6 +232,18 @@ export class LeaseRegistry {
     return this.leases.get(id)?.backend;
   }
 
+  /**
+   * Whether a `retainOnClose` lease is still inside its own window. A human-control hold or admitted
+   * work can keep a past-due lease registered, but only the lease's `expiresAt` bounds how long it
+   * keeps an idle daemon alive.
+   */
+  hasRetainedLeases(): boolean {
+    const now = this.now();
+    return this.listActiveLeases().some(
+      (lease) => lease.retainOnClose === true && lease.expiresAt > now,
+    );
+  }
+
   listActiveLeases(): DeviceLease[] {
     this.cleanupExpiredLeases();
     return Array.from(this.leases.values()).map((entry) => ({ ...entry }));
