@@ -154,6 +154,12 @@ const MUTATING_ROUTES: Record<string, MutatingRouteRow> = {
       await interactor.writeClipboard('copied');
     },
   },
+  'mobile: pressKey': {
+    act: async ({ interactor }) => {
+      assert.ok(interactor.keyboardEnter);
+      await interactor.keyboardEnter();
+    },
+  },
 };
 
 /**

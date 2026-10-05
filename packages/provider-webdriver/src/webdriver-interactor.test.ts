@@ -527,3 +527,135 @@ test('endpoint plans become one timed W3C pointer move', async () => {
     ],
   ]);
 });
+
+/** A client that records the keyboard routes the interactor drives, answering the probe from `shown`. */
+function createKeyboardWorld(shown: Array<boolean | 'unsupported'>) {
+  const transcript: string[] = [];
+  const client = {
+    executeScript: async (script: string, args: unknown[]) => {
+      transcript.push(`${script} ${JSON.stringify(args)}`);
+    },
+    sendKeys: async (text: string) => {
+      transcript.push(`keys ${JSON.stringify(text)}`);
+    },
+    hideKeyboard: async () => {
+      transcript.push('hide');
+    },
+    isKeyboardShown: async () => {
+      transcript.push('probe');
+      return shown.length > 1 ? shown.shift()! : shown[0]!;
+    },
+  } as unknown as WebDriverClient;
+  return { transcript, client };
+}
+
+function keyboardInteractor(
+  world: ReturnType<typeof createKeyboardWorld>,
+  platform: 'android' | 'ios',
+) {
+  return createWebDriverInteractor({
+    client: world.client,
+    backend: platform === 'android' ? 'android' : 'xctest',
+    capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform }),
+  });
+}
+
+// Found on an AWS Device Farm Pixel 8: `press('Enter')` after a fill failed with "keyboard
+// enter is not supported on this device" because the runtime declared no keyboard leg at all.
+test('keyboard enter presses the Enter keycode through the driver on Android', async () => {
+  const world = createKeyboardWorld([true]);
+
+  const result = await keyboardInteractor(world, 'android').keyboardEnter!();
+
+  assert.deepEqual(result, { kind: 'android-acknowledged' });
+  assert.deepEqual(world.transcript, ['mobile: pressKey [{"keycode":66}]']);
+});
+
+test('keyboard enter types a newline on iOS and echoes the keyboard visibility around it', async () => {
+  const world = createKeyboardWorld([true, false]);
+
+  const result = await keyboardInteractor(world, 'ios').keyboardEnter!();
+
+  assert.deepEqual(result, { kind: 'visibility-echo', wasVisible: true, visible: false });
+  assert.deepEqual(world.transcript, ['probe', String.raw`keys "\n"`, 'probe']);
+});
+
+test('keyboard enter on iOS reports no visibility when the driver has no keyboard probe', async () => {
+  const world = createKeyboardWorld(['unsupported']);
+
+  const result = await keyboardInteractor(world, 'ios').keyboardEnter!();
+
+  assert.deepEqual(result, { kind: 'visibility-echo' });
+});
+
+test('keyboard dismiss hides the keyboard and reports the IME probe on Android', async () => {
+  const world = createKeyboardWorld([true, false]);
+
+  const result = await keyboardInteractor(world, 'android').keyboardDismiss!();
+
+  assert.deepEqual(result, {
+    kind: 'ime-probe',
+    wasVisible: true,
+    visible: false,
+    dismissed: true,
+  });
+  assert.deepEqual(world.transcript, ['probe', 'hide', 'probe']);
+});
+
+test('keyboard dismiss names the Appium route as the mechanism on iOS', async () => {
+  const world = createKeyboardWorld([true, true]);
+
+  const result = await keyboardInteractor(world, 'ios').keyboardDismiss!();
+
+  assert.deepEqual(result, {
+    kind: 'mechanism',
+    mechanism: 'appium-hide-keyboard',
+    wasVisible: true,
+    visible: true,
+    dismissed: false,
+  });
+});
+
+test('keyboard status reads the Appium probe, and refuses a driver without one', async () => {
+  const shown = createKeyboardWorld([false]);
+  assert.deepEqual(await keyboardInteractor(shown, 'android').keyboardStatus!(), {
+    kind: 'ime-probe',
+    visible: false,
+  });
+
+  const probeless = createKeyboardWorld(['unsupported']);
+  await assert.rejects(
+    keyboardInteractor(probeless, 'android').keyboardStatus!(),
+    (error: AppError) => {
+      assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+      assert.equal(error.details?.operation, 'keyboard');
+      return true;
+    },
+  );
+});
+
+test('a provider that declares no keyboard capability refuses every keyboard action before the driver', async () => {
+  const world = createKeyboardWorld([true]);
+  const interactor = createWebDriverInteractor({
+    client: world.client,
+    backend: 'android',
+    capabilities: createCloudWebDriverCapabilities({
+      provider: 'test',
+      platform: 'android',
+      overrides: { keyboard: 'unsupported' },
+    }),
+  });
+
+  for (const action of [
+    () => interactor.keyboardEnter!(),
+    () => interactor.keyboardDismiss!(),
+    () => interactor.keyboardStatus!(),
+  ]) {
+    await assert.rejects(action(), (error: AppError) => {
+      assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+      assert.equal(error.details?.operation, 'keyboard');
+      return true;
+    });
+  }
+  assert.deepEqual(world.transcript, []);
+});
