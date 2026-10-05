@@ -92,14 +92,17 @@ export function readInstrumentationResultNumber(value: string | undefined): numb
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-/** A comma-separated integer list; an empty value is an empty list, a malformed one is absent. */
+/**
+ * A comma-separated list of non-negative decimal integers; an empty value is an empty list, and any
+ * entry that is not plain decimal digits (an empty entry, hex, a sign, a fraction) makes it absent.
+ */
 export function readInstrumentationResultIntegerList(
   value: string | undefined,
 ): number[] | undefined {
   if (value === undefined) return undefined;
   if (value === '') return [];
-  const entries = value.split(',').map(Number);
-  return entries.every(Number.isInteger) ? entries : undefined;
+  const entries = value.split(',');
+  return entries.every((entry) => /^\d+$/.test(entry)) ? entries.map(Number) : undefined;
 }
 
 export function readInstrumentationResultBoolean(value: string | undefined): boolean | undefined {

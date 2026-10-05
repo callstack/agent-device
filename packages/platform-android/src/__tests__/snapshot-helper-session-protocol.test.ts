@@ -82,6 +82,11 @@ test('reads the session window types the helper could not serialize, absent from
   assert.deepEqual(read({ missingRootWindowTypes: '1,2' }), [1, 2]);
   assert.deepEqual(read({ missingRootWindowTypes: '' }), []);
   assert.equal(read({ missingRootWindowTypes: '1,x' }), undefined);
+  // Number() would read these as 0 or 2; only plain decimal digits count.
+  assert.equal(read({ missingRootWindowTypes: '1,,2' }), undefined);
+  assert.equal(read({ missingRootWindowTypes: '0x2' }), undefined);
+  assert.equal(read({ missingRootWindowTypes: ' 2' }), undefined);
+  assert.equal(read({ missingRootWindowTypes: '-2' }), undefined);
   assert.equal(read({}), undefined);
 });
 
