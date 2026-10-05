@@ -514,7 +514,11 @@ function legacyRoleAliasesForNode(
  * canonical vocabulary stays `formatRole` alone. The retired matcher consumers
  * (the selector term and `find`'s deleted `normalizeRole`) are gone; this
  * window is their spelling's only remaining reader, and when the window closes
- * this function leaves with it.
+ * this function leaves with it — and only once the chain builder in
+ * `@agent-device/selectors` stops emitting leaf spellings into recorded
+ * chains: `buildSelectorChainForNode` still writes the retired spelling into
+ * every recorded `role=` chain, so closing the window first would break
+ * replay of freshly recorded scripts on the next release.
  */
 function legacyRoleSpellingOfType(type: string): string {
   let normalized = type
