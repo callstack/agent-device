@@ -16,6 +16,7 @@ import type { SessionStore } from './session-store.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionRef, SessionState } from './session-state.ts';
 import { providerSessionIdFromData } from './provider-session-ownership.ts';
+import type { DaemonPolicy } from '../daemon-policy-file.ts';
 
 export type ExpiredProviderLeaseRecovery = (lease: DeviceLease) => Promise<void>;
 
@@ -111,12 +112,14 @@ export function admitRequestLeaseForLockedScope(params: {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   providerAppCatalog?: ProviderAppCatalog;
+  daemonPolicy?: DaemonPolicy;
 }): DaemonRequest {
   const { sessionName, sessionStore, leaseRegistry } = params;
   const ref = sessionStore.lookup(sessionName);
   const existingSession = ref?.session;
   const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, existingSession, {
     providerAppCatalog: params.providerAppCatalog,
+    daemonPolicy: params.daemonPolicy,
   });
   if (!activeLease) return params.req;
 

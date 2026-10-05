@@ -377,13 +377,29 @@ async function prepareOpenDispatchSession(params: {
  * `--wait` budget spent is carried into the recovery text, because a caller that waited is not
  * helped by being told to wait.
  */
+/**
+ * A session admitted under a `macos-app` lease holds one app, which its lease already holds
+ * (ADR 0007), not the host Mac: it takes no host device claim, and other app-leased sessions on
+ * the same Mac do not stand in its way.
+ */
+function isMacOsAppLeaseOpen(req: DaemonRequest): boolean {
+  return req.internal?.admittedLease?.backend === 'macos-app';
+}
+
 function findNewSessionDeviceConflict(params: {
   req: DaemonRequest;
   device: DeviceInfo;
   sessionStore: SessionStore;
 }): DaemonFailureResponse | undefined {
   const { req, device, sessionStore } = params;
-  const inUse = sessionStore.findByDevice(device.id);
+  const inUse = isMacOsAppLeaseOpen(req)
+    ? sessionStore
+        .listRefs()
+        .find(
+          (ref) =>
+            ref.session.device.id === device.id && ref.session.lease?.leaseBackend !== 'macos-app',
+        )
+    : sessionStore.findByDevice(device.id);
   if (!inUse) return undefined;
   // The wait the caller paid for belongs to `open` alone: an interaction that hits the same busy
   // device cannot wait for it, and would be sent off with a flag its own command rejects.
@@ -407,6 +423,7 @@ async function acquireDeviceClaimForOwner(params: {
   | { status: 'refused'; response: DaemonResponse }
 > {
   const { req, device, owner, sessionName, sessionStore, reconcileOrphanedDeviceClaim } = params;
+  if (isMacOsAppLeaseOpen(req)) return { status: 'not-required' };
   switch (deviceClaimRuleForOwner(owner)) {
     case 'none':
       return { status: 'not-required' };

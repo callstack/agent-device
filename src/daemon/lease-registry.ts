@@ -17,6 +17,7 @@ import {
   normalizeAllocateLeaseRequest,
   createDeviceLease,
   deviceLeaseBusyError,
+  hasAllocatedScope,
   normalizeLeaseId,
   normalizeRequiredLeaseId,
   normalizeLeaseAdmissionRequest,
@@ -81,6 +82,39 @@ export class LeaseRegistry {
     this.assertDeviceAvailable(normalized);
     this.enforceCapacity(normalized.backend);
     const lease = createDeviceLease(normalized, leaseTtlMs, this.now());
+    this.leases.set(lease.leaseId, lease);
+    this.bindLease(lease);
+    return { ...lease };
+  }
+
+  /**
+   * Host administration: allocates the lease `leaseId` with exactly this scope, or renews it when
+   * it already holds this scope. A tenant never reaches this; it is how a host pins the device a
+   * client may use, so an existing lease with another scope is refused rather than rewritten.
+   */
+  putHostLease(leaseId: string, request: AllocateLeaseRequest): DeviceLease {
+    const id = normalizeRequiredLeaseId(leaseId);
+    const normalized = normalizeAllocateLeaseRequest(request);
+    this.cleanupExpiredLeases();
+    const leaseTtlMs = this.resolveLeaseTtlMs(normalized.ttlMs);
+    const existing = this.leases.get(id);
+    if (existing) {
+      if (!hasAllocatedScope(existing, normalized)) {
+        throw new AppError('INVALID_ARGS', 'Lease id already names a lease with another scope.', {
+          reason: 'LEASE_SCOPE_MISMATCH',
+        });
+      }
+      return this.refreshLease(existing, leaseTtlMs);
+    }
+    this.assertHumanControlAdmission(normalized);
+    this.assertDeviceAvailable(normalized);
+    if (this.runBindings.has(leaseRunBindingKey(normalized))) {
+      throw new AppError('DEVICE_IN_USE', 'This tenant run already holds a lease for the device.', {
+        reason: 'DEVICE_LEASE_BUSY',
+      });
+    }
+    this.enforceCapacity(normalized.backend);
+    const lease = { ...createDeviceLease(normalized, leaseTtlMs, this.now()), leaseId: id };
     this.leases.set(lease.leaseId, lease);
     this.bindLease(lease);
     return { ...lease };

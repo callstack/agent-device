@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { commandDescriptors } from '@agent-device/command-registry/registry';
 import type { CommandDescriptor } from '@agent-device/command-registry/types';
+import { LEASE_BACKENDS, type LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 
 /**
@@ -23,6 +24,8 @@ export type DaemonPolicy = Readonly<{
   deviceIds?: ReadonlySet<string>;
   commands?: Readonly<{ mode: 'allow' | 'deny'; names: ReadonlySet<string> }>;
   deniedCapabilities: ReadonlySet<DaemonPolicyCapability>;
+  /** Every lease-gated request must be admitted under a lease of this backend. */
+  requiredLeaseBackend?: LeaseBackend;
 }>;
 
 const DESCRIPTORS = commandDescriptors as readonly CommandDescriptor[];
@@ -68,7 +71,7 @@ export function resolveDaemonPolicyCommandName(command: string): string | undefi
   return POLICY_COMMAND_NAMES.get(command) ?? command;
 }
 
-const POLICY_KEYS = new Set(['version', 'devices', 'commands', 'capabilities']);
+const POLICY_KEYS = new Set(['version', 'devices', 'commands', 'capabilities', 'leases']);
 
 export function loadDaemonPolicy(env: NodeJS.ProcessEnv = process.env): DaemonPolicy | undefined {
   const configured = env[DAEMON_POLICY_ENV]?.trim();
@@ -96,10 +99,13 @@ export function parseDaemonPolicy(raw: unknown, sourcePath: string): DaemonPolic
     root.capabilities === undefined
       ? new Set<DaemonPolicyCapability>()
       : parseCapabilities(root.capabilities, sourcePath);
+  const requiredLeaseBackend =
+    root.leases === undefined ? undefined : parseLeases(root.leases, sourcePath);
   const canonical = JSON.stringify({
     devices: deviceIds ? [...deviceIds].sort() : null,
     commands: commands ? { mode: commands.mode, names: [...commands.names].sort() } : null,
     capabilities: [...deniedCapabilities].sort(),
+    ...(requiredLeaseBackend ? { leases: { require: requiredLeaseBackend } } : {}),
   });
   return Object.freeze({
     sourcePath,
@@ -107,6 +113,7 @@ export function parseDaemonPolicy(raw: unknown, sourcePath: string): DaemonPolic
     deviceIds,
     commands,
     deniedCapabilities,
+    ...(requiredLeaseBackend ? { requiredLeaseBackend } : {}),
   });
 }
 
@@ -167,6 +174,19 @@ function parseCapabilities(value: unknown, sourcePath: string): Set<DaemonPolicy
       return capability as DaemonPolicyCapability;
     }),
   );
+}
+
+function parseLeases(value: unknown, sourcePath: string): LeaseBackend {
+  const leases = readObject(value, 'leases', sourcePath);
+  assertOnlyKeys(leases, ['require'], 'leases', sourcePath);
+  const known: readonly string[] = LEASE_BACKENDS;
+  if (typeof leases.require !== 'string' || !known.includes(leases.require)) {
+    throw invalidPolicy(
+      sourcePath,
+      `"leases.require" must name a lease backend: ${LEASE_BACKENDS.join(', ')}`,
+    );
+  }
+  return leases.require as LeaseBackend;
 }
 
 function readObject(value: unknown, label: string, sourcePath: string): Record<string, unknown> {

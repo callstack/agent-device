@@ -23,7 +23,7 @@ Accepted (2026-09-29).
      command asks for it. The one exception is Apple readiness rolling back a Simulator boot that
      the same request started and then canceled: the Simulator was not running before.
 4. A denial is `UNAUTHORIZED` with `details.reason: 'DAEMON_POLICY_DENIED'`, the `rule`
-   (`command`, `device`, or `capability`), the policy digest, `retriable: false`, and a hint. It
+   (`command`, `device`, `capability`, or `lease`), the policy digest, `retriable: false`, and a hint. It
    never names the policy's host path.
 5. The daemon publishes the policy digest in `daemon.json`. A client that names a policy refuses to
    reuse a daemon that enforces a different one, or none. A client that names no policy reuses
@@ -36,7 +36,8 @@ Accepted (2026-09-29).
   "version": 1,
   "devices": { "allow": [{ "udid": "8F1C…" }, { "serial": "emulator-5554" }] },
   "commands": { "deny": ["boot", "shutdown"] },
-  "capabilities": { "deny": ["device-shutdown"] }
+  "capabilities": { "deny": ["device-shutdown"] },
+  "leases": { "require": "macos-app" }
 }
 ```
 
@@ -56,6 +57,10 @@ Accepted (2026-09-29).
   upgrade are denied by default.
 - `capabilities.deny` — operations denied whichever command reaches them. `device-shutdown` is the
   only capability today.
+- `leases.require` — a lease backend. Every request that lease admission gates must be admitted
+  under a lease of that backend; a request naming no lease is refused instead of being admitted
+  unleased. A denial carries `rule: 'lease'`. A host that confines clients to `macos-app` leases
+  (ADR 0007) sets it so a client cannot drop its lease to reach the desktop.
 
 Unknown keys are errors, so a misspelled rule cannot silently become no rule.
 

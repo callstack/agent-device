@@ -16,7 +16,7 @@ import type {
   JsonRpcRequestEnvelope,
   LeaseBackend,
 } from '@agent-device/kernel/contracts';
-import { commandRpcParamsSchema } from '@agent-device/kernel/contracts';
+import { commandRpcParamsSchema, LEASE_BACKENDS } from '@agent-device/kernel/contracts';
 import type { DaemonInvokeFn, DaemonRequest } from '../daemon-request.ts';
 import { normalizeTenantId } from '../config.ts';
 import {
@@ -50,7 +50,7 @@ import { tryHandleRequestDiagnosticsHttpRoute } from '../request-diagnostics-htt
 import { resolveTrustedTenant, tenantTrustRejectionError } from './tenant-trust.ts';
 import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
 import type { TenantSessionNamespace } from '../session-tenant-scope.ts';
-import { tryHandleHumanControlHttpRoute } from '../human-control-http.ts';
+import { tryHandleHostAdminHttpRoute } from '../host-lease-http.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 
 type JsonRpcRequest = JsonRpcRequestEnvelope;
@@ -602,6 +602,7 @@ export async function createDaemonHttpServer(options: {
           buildDaemonHealthPayload('agent-device-daemon', readVersion(), {
             instanceId,
             hostArch,
+            leaseBackends: LEASE_BACKENDS,
           }),
         ),
       );
@@ -611,7 +612,7 @@ export async function createDaemonHttpServer(options: {
     if (
       token &&
       options.leaseRegistry &&
-      tryHandleHumanControlHttpRoute({
+      tryHandleHostAdminHttpRoute({
         req,
         res,
         expectedToken: token,

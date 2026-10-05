@@ -482,3 +482,33 @@ test('a daemon started without BrowserStack credentials refuses a shell that has
   assert.equal(outcome.error?.details?.reason, 'provider-credentials-changed');
   assert.match(String(outcome.error?.message), /started without the browserstack credentials/);
 });
+
+test('a tenant cannot allocate a macos-app lease', async () => {
+  const registry = new LeaseRegistry();
+  const request: DaemonRequest = {
+    token: 'token',
+    session: 'default',
+    command: 'lease_allocate',
+    positionals: [],
+    flags: {},
+    meta: {
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      leaseBackend: 'macos-app',
+      leaseProvider: 'proxy',
+      clientId: 'client-1',
+      deviceKey: 'com.apple.finder',
+    },
+  };
+  await assert.rejects(
+    handleLeaseCommands({
+      req: request,
+      sessionName: request.session,
+      sessionStore: makeSessionStore('agent-device-macos-app-allocate-'),
+      leaseRegistry: registry,
+    }),
+    (error: AppError) =>
+      error.code === 'UNAUTHORIZED' && error.details?.reason === 'MACOS_APP_LEASE_HOST_ALLOCATED',
+  );
+  assert.deepEqual(registry.listActiveLeases(), []);
+});

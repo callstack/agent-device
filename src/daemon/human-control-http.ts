@@ -38,7 +38,7 @@ async function handleHumanControlRoute(
 ): Promise<void> {
   const { req, res, expectedToken } = params;
   try {
-    assertAuthorized(req, expectedToken);
+    assertHostAdminAuthorized(req, expectedToken);
     await executeHumanControlRoute(route, params);
   } catch (error) {
     sendRestJsonError(res, normalizeError(error));
@@ -157,7 +157,8 @@ async function readHoldInput(req: http.IncomingMessage): Promise<HumanControlHol
   return parseHumanControlHoldInput(parsed);
 }
 
-function assertAuthorized(req: http.IncomingMessage, expectedToken: string): void {
+/** Host administration routes take the local daemon token, never a tenant credential. */
+export function assertHostAdminAuthorized(req: http.IncomingMessage, expectedToken: string): void {
   const authorization =
     typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
   const bearer = authorization.toLowerCase().startsWith('bearer ')

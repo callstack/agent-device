@@ -61,7 +61,13 @@ export const REMOTE_CONFIG_FIELD_SPECS = [
   {
     key: 'leaseBackend',
     type: 'enum',
-    enumValues: ['ios-simulator', 'ios-instance', 'android-instance', 'harmonyos-instance'],
+    enumValues: [
+      'ios-simulator',
+      'ios-instance',
+      'android-instance',
+      'harmonyos-instance',
+      'macos-app',
+    ],
   },
   { key: 'platform', type: 'enum', enumValues: PLATFORM_SELECTORS },
   { key: 'target', type: 'enum', enumValues: ['mobile', 'tv', 'desktop'] },
