@@ -162,18 +162,131 @@ function sourceNodeFromAttributes(
   rect: RawSnapshotNode['rect'],
   platform: WebDriverSourcePlatform,
 ): RawSnapshotNode {
+  const field = textFieldFacts(type, attrs, platform);
   return {
     index,
     type,
     role: roleFromWebDriverType(type, attrs),
-    label: firstWebDriverAttribute(attrs, ['content-desc', 'label', 'text', 'name']),
-    value: nonEmptyWebDriverAttribute(attrs.value),
+    // A text field's `text` is what it holds, not what it is called.
+    label: firstWebDriverAttribute(
+      attrs,
+      field === undefined
+        ? ['content-desc', 'label', 'text', 'name']
+        : ['content-desc', 'label', 'name'],
+    ),
+    value: field?.value ?? nonEmptyWebDriverAttribute(attrs.value),
     identifier: firstWebDriverAttribute(attrs, ['resource-id', 'id', 'accessibility-id', 'name']),
     rect,
     ...sourceStateFacts(attrs, rect, platform),
+    ...(field === undefined ? {} : field.facts),
+    ...checkedFact(type, attrs, platform),
     depth,
     parentIndex,
   };
+}
+
+/** Android classes whose `text` is the value a user typed; the page source names the class as the element and as `class`. */
+const ANDROID_TEXT_FIELD_CLASS = /(EditText|AutoCompleteTextView|SearchView)$/;
+
+/** XCUITest element types that hold typed text. */
+const IOS_TEXT_FIELD_TYPES: ReadonlySet<string> = new Set([
+  'XCUIElementTypeTextField',
+  'XCUIElementTypeSecureTextField',
+  'XCUIElementTypeTextView',
+  'XCUIElementTypeSearchField',
+]);
+
+type TextFieldFacts = Readonly<{
+  value: string | undefined;
+  facts: Pick<RawSnapshotNode, 'editable' | 'password' | 'placeholder' | 'hintShowing'>;
+}>;
+
+/**
+ * The field facts a text entry control carries. UiAutomator2 reports a field's content as `text`
+ * (the same attribute a label carries on every other node), its hint as `hint`, and whether it
+ * masks input as `password`. XCUITest reports content as `value` and masking by type.
+ */
+function textFieldFacts(
+  type: string,
+  attrs: Record<string, string>,
+  platform: WebDriverSourcePlatform,
+): TextFieldFacts | undefined {
+  return platform === 'android'
+    ? androidTextFieldFacts(type, attrs)
+    : iosTextFieldFacts(type, attrs);
+}
+
+/** A field showing its hint reports the hint as its text, so that text is the placeholder, not a value. */
+function androidTextFieldFacts(
+  type: string,
+  attrs: Record<string, string>,
+): TextFieldFacts | undefined {
+  const password = parseWebDriverBoolean(attrs.password);
+  if (!ANDROID_TEXT_FIELD_CLASS.test(attrs.class ?? type) && password !== true) return undefined;
+  const placeholder = nonEmptyWebDriverAttribute(attrs.hint);
+  const text = nonEmptyWebDriverAttribute(attrs.text);
+  const hintShowing = placeholder !== undefined && text === placeholder;
+  return {
+    value: hintShowing ? undefined : text,
+    facts: {
+      editable: true,
+      ...optionalFact('password', password),
+      ...(placeholder === undefined ? {} : { placeholder, hintShowing }),
+    },
+  };
+}
+
+function iosTextFieldFacts(
+  type: string,
+  attrs: Record<string, string>,
+): TextFieldFacts | undefined {
+  if (!IOS_TEXT_FIELD_TYPES.has(type)) return undefined;
+  return {
+    value: nonEmptyWebDriverAttribute(attrs.value),
+    facts: {
+      editable: true,
+      ...optionalFact('password', type === 'XCUIElementTypeSecureTextField' || undefined),
+    },
+  };
+}
+
+function optionalFact<Key extends keyof RawSnapshotNode>(
+  key: Key,
+  value: RawSnapshotNode[Key] | undefined,
+): Partial<Pick<RawSnapshotNode, Key>> {
+  return value === undefined ? {} : ({ [key]: value } as Pick<RawSnapshotNode, Key>);
+}
+
+/** Android classes that are checkable when the page source names no `checkable` attribute. */
+const ANDROID_CHECKABLE_CLASS = /(CheckBox|RadioButton|Switch|ToggleButton|CheckedTextView)$/;
+
+/** XCUITest element types whose `value` is a checked state, `1` or `0`. */
+const IOS_CHECKABLE_TYPES: ReadonlySet<string> = new Set([
+  'XCUIElementTypeSwitch',
+  'XCUIElementTypeToggle',
+  'XCUIElementTypeCheckBox',
+  'XCUIElementTypeRadioButton',
+]);
+
+/**
+ * The checked state of a checkable control. UiAutomator2 reports `checkable` and `checked` on
+ * every node, `false` on the many that cannot be checked, so only a checkable node carries the
+ * fact. XCUITest reports a switch's state as its `value`.
+ */
+function checkedFact(
+  type: string,
+  attrs: Record<string, string>,
+  platform: WebDriverSourcePlatform,
+): Pick<RawSnapshotNode, 'checked'> {
+  if (platform === 'android') {
+    const checkable =
+      parseWebDriverBoolean(attrs.checkable) ?? ANDROID_CHECKABLE_CLASS.test(attrs.class ?? type);
+    const checked = parseWebDriverBoolean(attrs.checked);
+    return checkable && checked !== undefined ? { checked } : {};
+  }
+  if (!IOS_CHECKABLE_TYPES.has(type)) return {};
+  const checked = parseWebDriverBoolean(attrs.value);
+  return checked === undefined ? {} : { checked };
 }
 
 function sourceStateFacts(

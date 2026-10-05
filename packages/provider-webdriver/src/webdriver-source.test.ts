@@ -30,6 +30,81 @@ test('Android WebDriver facts treat invalid state attributes as false', () => {
   assert.equal(node?.hittable, false);
 });
 
+// UiAutomator2 reports a field's content as `text`, the attribute every other node is labelled
+// by, so a filled field used to read as a node labelled with its own value and no value at all:
+// `toHaveValue` saw "" on a field holding "Ada Lovelace".
+test("Android WebDriver facts read a text field's content as its value, not its label", () => {
+  const [field, label] = parseWebDriverSourceFacts(
+    '<hierarchy>' +
+      '<android.widget.EditText text="Ada Lovelace" content-desc="Name field" hint="Your name" bounds="[0,0][100,40]" />' +
+      '<android.widget.TextView text="Ada Lovelace" bounds="[0,120][100,160]" />' +
+      '</hierarchy>',
+    'android',
+  ).nodes;
+
+  assert.deepEqual(
+    [field!.value, field!.label, field!.placeholder, field!.hintShowing, field!.editable],
+    ['Ada Lovelace', 'Name field', 'Your name', false, true],
+  );
+  assert.deepEqual(
+    [label!.label, label!.value, 'editable' in label!],
+    ['Ada Lovelace', undefined, false],
+  );
+});
+
+test('Android WebDriver facts read a hinted field as empty and a masked field as a password', () => {
+  const [hinted, secure] = parseWebDriverSourceFacts(
+    '<hierarchy>' +
+      '<android.widget.EditText text="Your name" hint="Your name" bounds="[0,40][100,80]" />' +
+      '<android.widget.EditText text="••••••" password="true" bounds="[0,80][100,120]" />' +
+      '</hierarchy>',
+    'android',
+  ).nodes;
+
+  assert.deepEqual(
+    [hinted!.value, hinted!.label, hinted!.placeholder, hinted!.hintShowing],
+    [undefined, undefined, 'Your name', true],
+  );
+  assert.deepEqual([secure!.password, secure!.editable], [true, true]);
+});
+
+// UiAutomator2 writes `checkable="false" checked="false"` on every node, so `checked` is a fact
+// only where `checkable` says the node can be.
+test('Android WebDriver facts carry the checked state of checkable controls only', () => {
+  const [on, off, button, legacySwitch] = parseWebDriverSourceFacts(
+    '<hierarchy>' +
+      '<android.widget.Switch checkable="true" checked="true" bounds="[0,0][100,40]" />' +
+      '<android.widget.CheckBox checkable="true" checked="false" bounds="[0,40][100,80]" />' +
+      '<android.widget.Button checkable="false" checked="false" bounds="[0,80][100,120]" />' +
+      '<android.widget.Switch checked="true" bounds="[0,120][100,160]" />' +
+      '</hierarchy>',
+    'android',
+  ).nodes;
+
+  assert.deepEqual(
+    [on!.checked, off!.checked, 'checked' in button!, legacySwitch!.checked],
+    [true, false, false, true],
+  );
+});
+
+test('iOS WebDriver facts read a switch value as checked and mark text fields editable', () => {
+  const [toggle, field, secure, button] = parseWebDriverSourceFacts(
+    '<AppiumAUT>' +
+      '<XCUIElementTypeSwitch name="Wi-Fi" value="1" x="0" y="0" width="50" height="30" />' +
+      '<XCUIElementTypeTextField name="email" value="ada@example.com" x="0" y="40" width="100" height="40" />' +
+      '<XCUIElementTypeSecureTextField name="password" value="••••" x="0" y="80" width="100" height="40" />' +
+      '<XCUIElementTypeButton name="Continue" value="1" x="0" y="120" width="100" height="40" />' +
+      '</AppiumAUT>',
+  ).nodes;
+
+  assert.deepEqual(
+    [toggle!.checked, field!.value, field!.editable, 'password' in field!],
+    [true, 'ada@example.com', true, false],
+  );
+  assert.deepEqual([secure!.password, secure!.editable], [true, true]);
+  assert.deepEqual(['checked' in button!, button!.value], [false, '1']);
+});
+
 test('WebDriver iOS facts preserve hardened attributes and geometry', () => {
   const facts = parseWebDriverSourceFacts(
     '<hierarchy><node text="A &gt; B" resource-id="login" bounds="[0,0][10,10]" displayed="true" enabled="true" /></hierarchy>',
