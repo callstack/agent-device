@@ -67,6 +67,7 @@ async function exportProcessedVideo(params: {
   await waitForPlayableVideo(videoPath);
 
   const outputPath = temporarySiblingVideoPath(videoPath);
+  let exportOverran = false;
   try {
     const executablePath = await compileSwiftSourceFile({
       sourcePath: scriptPath,
@@ -82,26 +83,30 @@ async function exportProcessedVideo(params: {
         `No time was left for the export within the ${params.budgetMs}ms budget`,
       );
     }
-    await runCmd(
-      executablePath,
-      [
-        '--input',
-        videoPath,
-        '--output',
-        outputPath,
-        ...scriptArgs,
-        '--timeout-ms',
-        String(Math.round(exportMs)),
-      ],
-      { timeoutMs: helperMs, env: buildSwiftToolEnv() },
-    );
+    try {
+      await runCmd(
+        executablePath,
+        [
+          '--input',
+          videoPath,
+          '--output',
+          outputPath,
+          ...scriptArgs,
+          '--timeout-ms',
+          String(Math.round(exportMs)),
+        ],
+        { timeoutMs: helperMs, env: buildSwiftToolEnv() },
+      );
+    } catch (error) {
+      exportOverran = deadline.remainingMs() <= HELPER_EXIT_GRACE_MS;
+      throw error;
+    }
     await waitForPlayableVideo(outputPath);
     fs.renameSync(outputPath, videoPath);
   } catch (error) {
-    const description =
-      deadline.remainingMs() <= HELPER_EXIT_GRACE_MS
-        ? `${commandDescription}: the export did not finish within its ${params.budgetMs}ms budget; a lower --fps renders faster`
-        : commandDescription;
+    const description = exportOverran
+      ? `${commandDescription}: the export did not finish within its ${params.budgetMs}ms budget; a lower --fps renders faster`
+      : commandDescription;
     const cause =
       error instanceof AppError
         ? error

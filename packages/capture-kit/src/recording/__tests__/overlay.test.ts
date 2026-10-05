@@ -183,8 +183,45 @@ test('overlay leaves the video as recorded when compiling the helper spent its b
 
   await expect(overlayRecordingTouches({ videoPath, telemetryPath })).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
-    message: `Failed to add touch overlays to the recording: the export did not finish within its ${OVERLAY_BUDGET_MS}ms budget; a lower --fps renders faster`,
+    message: 'Failed to add touch overlays to the recording',
   });
   expect(mockRunCmd.mock.calls.filter(([cmd]) => cmd !== 'xcrun')).toHaveLength(0);
   expect(fs.readFileSync(videoPath, 'utf8')).toBe('original');
+});
+
+test('overlay names its budget when the export ran out of it', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const videoPath = path.join(tmpDir, 'recording.mp4');
+  const telemetryPath = path.join(tmpDir, 'recording.gesture-telemetry.json');
+  fs.writeFileSync(videoPath, 'original');
+  fs.writeFileSync(telemetryPath, '{"events":[]}');
+
+  await overlayRecordingTouches({ videoPath, telemetryPath });
+  fs.writeFileSync(videoPath, 'original');
+  mockRunCmd.mockImplementationOnce(async () => {
+    vi.setSystemTime(Date.now() + OVERLAY_BUDGET_MS);
+    throw new AppError('COMMAND_FAILED', 'recording-overlay exited with code 1');
+  });
+
+  await expect(overlayRecordingTouches({ videoPath, telemetryPath })).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: `Failed to add touch overlays to the recording: the export did not finish within its ${OVERLAY_BUDGET_MS}ms budget; a lower --fps renders faster`,
+  });
+  expect(fs.readFileSync(videoPath, 'utf8')).toBe('original');
+});
+
+test('overlay keeps the plain failure when the export failed with budget to spare', async () => {
+  const videoPath = path.join(tmpDir, 'recording.mp4');
+  const telemetryPath = path.join(tmpDir, 'recording.gesture-telemetry.json');
+  fs.writeFileSync(videoPath, 'original');
+  fs.writeFileSync(telemetryPath, '{"events":[]}');
+
+  await overlayRecordingTouches({ videoPath, telemetryPath });
+  mockRunCmd.mockImplementationOnce(async () => {
+    throw new AppError('COMMAND_FAILED', 'recording-overlay exited with code 1');
+  });
+
+  await expect(overlayRecordingTouches({ videoPath, telemetryPath })).rejects.toMatchObject({
+    message: 'Failed to add touch overlays to the recording',
+  });
 });
