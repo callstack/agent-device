@@ -125,6 +125,11 @@ export async function snapshotAndroid(
 ): Promise<AndroidSnapshotCapture> {
   const adb = resolveAndroidAdbProvider(device, options.helperAdb).exec;
   const capture = await captureAndroidUiHierarchy(device, options, adb);
+  // The one place Android answers the viewport question (#3182): the helper's own display read,
+  // through the shared guard, so both the healthy and the presentation-failed capture below publish
+  // the same box the tree was measured against, and a display the helper could not address stays
+  // absent rather than becoming a zero.
+  const viewport = androidSnapshotViewportFromHelperMetadata(capture.helperMetadata);
   const xml = capture.xml;
   const tree = parseUiHierarchyTree(xml);
   const androidSnapshot = withOcclusionScanDisclosure(capture.metadata, tree);
@@ -155,7 +160,7 @@ export async function snapshotAndroid(
       ...androidSnapshotTruncationFields(truncated),
       androidSnapshot,
       quality: { state: 'healthy', backend: 'android-helper' } as const,
-      ...(capture.viewport ? { viewport: capture.viewport } : {}),
+      ...(viewport ? { viewport } : {}),
     };
     return createAndroidSnapshotCapture(result, {
       clickability: buildAndroidSnapshotClickabilityEvidence(built),
@@ -166,7 +171,7 @@ export async function snapshotAndroid(
     return attachAndroidPresentationFailureEvidence({
       failure: error,
       androidSnapshot,
-      ...(capture.viewport ? { viewport: capture.viewport } : {}),
+      ...(viewport ? { viewport } : {}),
     });
   }
 }
@@ -483,9 +488,9 @@ function formatAndroidHelperCaptureResult(
   artifact: AndroidSnapshotHelperArtifact,
   installReason: AndroidSnapshotHelperInstallResult['reason'],
 ): AndroidUiHierarchyCapture {
-  const viewport = androidSnapshotViewportFromHelperMetadata(capture.metadata);
   return {
     xml: capture.xml,
+    helperMetadata: capture.metadata,
     metadata: {
       backend: 'android-helper',
       pixelDensity: capture.metadata.pixelDensity,
@@ -506,7 +511,6 @@ function formatAndroidHelperCaptureResult(
       helperTruncated: capture.metadata.truncated,
       elapsedMs: capture.metadata.elapsedMs,
     },
-    ...(viewport ? { viewport } : {}),
   };
 }
 
@@ -578,10 +582,10 @@ async function captureAndroidHelperContentAttempt(params: {
     outcome: 'captured',
     capture: {
       xml: helperCapture.xml,
+      helperMetadata: helperCapture.helperMetadata,
       metadata: systemSurfaceOnly
         ? { ...helperCapture.metadata, systemSurfaceOnly: true }
         : helperCapture.metadata,
-      ...(helperCapture.viewport ? { viewport: helperCapture.viewport } : {}),
     },
   };
 }
