@@ -40,6 +40,10 @@
       "types": "./src/android-system-surface-disclosure.ts",
       "default": "./src/android-system-surface-disclosure.ts"
     },
+    "./android-text-input": {
+      "types": "./src/android-text-input.ts",
+      "default": "./src/android-text-input.ts"
+    },
     "./app-deployment-runtime": {
       "types": "./src/app-deployment-runtime.ts",
       "default": "./src/app-deployment-runtime.ts"
