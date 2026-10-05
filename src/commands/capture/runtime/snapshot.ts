@@ -209,12 +209,15 @@ function normalizeBackendSnapshot(
   // A backend may hand over state it built itself, and the response-level facts it publishes beside
   // that state travel with this capture: returning the state alone would drop a producer's own
   // keyboard band or viewport box (#3182) on the one path where the backend named them itself.
+  // The copy must carry the private clickability evidence with it: that fact is retained by object
+  // identity, so a spread that forgets it makes Maestro's clickable-first ordering fall back to
+  // divergence and tap the document-order (inert) duplicate of a tapped id.
   if (result.snapshot) {
-    return {
+    return copySnapshotClickabilityEvidence(result.snapshot, {
       ...result.snapshot,
       ...(result.keyboard ? { keyboard: result.keyboard } : {}),
       ...(result.viewport ? { viewport: result.viewport } : {}),
-    };
+    });
   }
   return {
     nodes: result.nodes ?? [],
