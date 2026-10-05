@@ -97,22 +97,22 @@ test('Android WebDriver facts carry the checked state of checkable controls only
   );
 });
 
-test('iOS WebDriver facts read a switch value as checked and mark text fields editable', () => {
-  const [toggle, field, secure, button] = parseWebDriverSourceFacts(
+// The native iOS runner reports no checked, editable, or password facts, so the WebDriver
+// projection stays at that parity: a switch keeps its state as its value.
+test('iOS WebDriver facts keep a switch value as a value and add no field facts', () => {
+  const [toggle, field, secure] = parseWebDriverSourceFacts(
     '<AppiumAUT>' +
       '<XCUIElementTypeSwitch name="Wi-Fi" value="1" x="0" y="0" width="50" height="30" />' +
       '<XCUIElementTypeTextField name="email" value="ada@example.com" x="0" y="40" width="100" height="40" />' +
       '<XCUIElementTypeSecureTextField name="password" value="••••" x="0" y="80" width="100" height="40" />' +
-      '<XCUIElementTypeButton name="Continue" value="1" x="0" y="120" width="100" height="40" />' +
       '</AppiumAUT>',
   ).nodes;
 
+  assert.deepEqual([toggle!.value, 'checked' in toggle!], ['1', false]);
   assert.deepEqual(
-    [toggle!.checked, field!.value, field!.editable, 'password' in field!],
-    [true, 'ada@example.com', true, false],
+    [field!.value, 'editable' in field!, 'password' in secure!],
+    ['ada@example.com', false, false],
   );
-  assert.deepEqual([secure!.password, secure!.editable], [true, true]);
-  assert.deepEqual(['checked' in button!, button!.value], [false, '1']);
 });
 
 test('WebDriver iOS facts preserve hardened attributes and geometry', () => {

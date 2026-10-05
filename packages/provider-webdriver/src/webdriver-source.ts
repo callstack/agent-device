@@ -180,12 +180,11 @@ function sourceNodeFromAttributes(
 }
 
 /**
- * The text entry classes and types, the same set `isFillableType` in
- * `@agent-device/contracts/snapshot-text` admits for each platform; that module is not a
- * package subpath, so the rule is restated here.
+ * The Android text entry classes, the same set `isFillableType` in
+ * `@agent-device/contracts/snapshot-text` admits; that module is not a package subpath, so the
+ * rule is restated here.
  */
 const ANDROID_TEXT_FIELD_CLASS = /(edittext|autocompletetextview)/i;
-const IOS_TEXT_FIELD_TYPE = /(textfield|securetextfield|searchfield|textview|textarea)$/i;
 
 /**
  * How a node is named. An Android node is labelled by its text and falls back to the content
@@ -218,16 +217,15 @@ type TextFieldFacts = Readonly<{
 /**
  * The field facts a text entry control carries. UiAutomator2 reports a field's content as `text`
  * (the same attribute a label carries on every other node), its hint as `hint`, and whether it
- * masks input as `password`. XCUITest reports content as `value` and masking by type.
+ * masks input as `password`. XCUITest reports content as `value`, which every node already
+ * carries, and the native iOS runner reports no field facts, so none are derived there.
  */
 function textFieldFacts(
   type: string,
   attrs: Record<string, string>,
   platform: WebDriverSourcePlatform,
 ): TextFieldFacts | undefined {
-  return platform === 'android'
-    ? androidTextFieldFacts(type, attrs)
-    : iosTextFieldFacts(type, attrs);
+  return platform === 'android' ? androidTextFieldFacts(type, attrs) : undefined;
 }
 
 /**
@@ -255,20 +253,6 @@ function androidTextFieldFacts(
   };
 }
 
-function iosTextFieldFacts(
-  type: string,
-  attrs: Record<string, string>,
-): TextFieldFacts | undefined {
-  if (!IOS_TEXT_FIELD_TYPE.test(type)) return undefined;
-  return {
-    value: nonEmptyWebDriverAttribute(attrs.value),
-    facts: {
-      editable: parseWebDriverBoolean(attrs.enabled, true) === true,
-      ...optionalFact('password', type === 'XCUIElementTypeSecureTextField' || undefined),
-    },
-  };
-}
-
 function optionalFact<Key extends keyof RawSnapshotNode>(
   key: Key,
   value: RawSnapshotNode[Key] | undefined,
@@ -279,33 +263,22 @@ function optionalFact<Key extends keyof RawSnapshotNode>(
 /** Android classes that are checkable when the page source names no `checkable` attribute. */
 const ANDROID_CHECKABLE_CLASS = /(CheckBox|RadioButton|Switch|ToggleButton|CheckedTextView)$/;
 
-/** XCUITest element types whose `value` is a checked state, `1` or `0`. */
-const IOS_CHECKABLE_TYPES: ReadonlySet<string> = new Set([
-  'XCUIElementTypeSwitch',
-  'XCUIElementTypeToggle',
-  'XCUIElementTypeCheckBox',
-  'XCUIElementTypeRadioButton',
-]);
-
 /**
- * The checked state of a checkable control. UiAutomator2 reports `checkable` and `checked` on
- * every node, `false` on the many that cannot be checked, so only a checkable node carries the
- * fact. XCUITest reports a switch's state as its `value`.
+ * The checked state of a checkable Android control. UiAutomator2 reports `checkable` and
+ * `checked` on every node, `false` on the many that cannot be checked, so only a checkable node
+ * carries the fact. XCUITest reports a switch's state as its `value`, which stays a value, as the
+ * native iOS runner reports it.
  */
 function checkedFact(
   type: string,
   attrs: Record<string, string>,
   platform: WebDriverSourcePlatform,
 ): Pick<RawSnapshotNode, 'checked'> {
-  if (platform === 'android') {
-    const checkable =
-      parseWebDriverBoolean(attrs.checkable) ?? ANDROID_CHECKABLE_CLASS.test(attrs.class ?? type);
-    const checked = parseWebDriverBoolean(attrs.checked);
-    return checkable && checked !== undefined ? { checked } : {};
-  }
-  if (!IOS_CHECKABLE_TYPES.has(type)) return {};
-  const checked = parseWebDriverBoolean(attrs.value);
-  return checked === undefined ? {} : { checked };
+  if (platform !== 'android') return {};
+  const checkable =
+    parseWebDriverBoolean(attrs.checkable) ?? ANDROID_CHECKABLE_CLASS.test(attrs.class ?? type);
+  const checked = parseWebDriverBoolean(attrs.checked);
+  return checkable && checked !== undefined ? { checked } : {};
 }
 
 function sourceStateFacts(
