@@ -60,7 +60,7 @@ function reportsFailedReadExtents(width: number, height: number): boolean {
 export function snapshotViewportSizeFrom(box: Rect | undefined): SnapshotViewportSize | undefined {
   if (!isPositiveFiniteRect(box)) return undefined;
   if (reportsFailedReadExtents(box.width, box.height)) return undefined;
-  return { width: box.width, height: box.height };
+  return { width: box.width, height: box.height } as SnapshotViewportSize;
 }
 
 /**
@@ -79,9 +79,7 @@ export function readSnapshotViewportSize(value: unknown): SnapshotViewportSize |
   if (typeof width !== 'number' || typeof height !== 'number') return undefined;
   if (x !== undefined && typeof x !== 'number') return undefined;
   if (y !== undefined && typeof y !== 'number') return undefined;
-  if (reportsFailedReadExtents(width, height)) return undefined;
-  const box = { x: x ?? 0, y: y ?? 0, width, height };
-  return isPositiveFiniteRect(box) ? { width, height } : undefined;
+  return snapshotViewportSizeFrom({ x: x ?? 0, y: y ?? 0, width, height });
 }
 
 export function rectContains(container: Rect, nested: Rect): boolean {

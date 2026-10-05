@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { resolveActionableTouchResolution } from '@agent-device/selectors/interaction-targeting';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
+import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import { attachSnapshotOcclusionContextEvidence } from '@agent-device/contracts/capture';
 import {
   buildUiHierarchySnapshot,
@@ -657,7 +658,7 @@ test('buildSnapshotState carries the producer viewport into the stored state (#3
       nodes: [{ index: 0, type: 'Application' }],
       backend: 'android',
       producer: 'android-uiautomator',
-      viewport: { width: 1080, height: 2400 },
+      viewport: snapshotViewportSizeFrom({ x: 0, y: 0, width: 1080, height: 2400 }),
     },
     undefined,
   );

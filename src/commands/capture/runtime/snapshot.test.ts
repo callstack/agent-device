@@ -14,6 +14,7 @@ import {
 } from '../../../runtime.ts';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import type { PostGestureOutcome } from '@agent-device/kernel/snapshot';
+import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 
 test('runtime snapshot captures nodes and updates the session baseline', async () => {
@@ -816,7 +817,7 @@ test('runtime snapshot publishes the viewport its producer measured', async () =
   const device = createSnapshotOnlyDevice({
     nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Window', label: 'Home' }],
     backend: 'android',
-    viewport: { width: 1080, height: 2400 },
+    viewport: snapshotViewportSizeFrom({ x: 0, y: 0, width: 1080, height: 2400 }),
   });
 
   const result = await device.capture.snapshot({ session: 'default' });

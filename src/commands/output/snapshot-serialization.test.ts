@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { serializeSnapshotResult } from './result-serialization.ts';
+import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 
 test('serializeSnapshotResult includes Android backend metadata', () => {
   const data = serializeSnapshotResult({
@@ -101,7 +102,7 @@ test('serializeSnapshotResult publishes the viewport beside the tree (#3182)', (
   const data = serializeSnapshotResult({
     nodes: [],
     truncated: false,
-    viewport: { width: 390, height: 844 },
+    viewport: snapshotViewportSizeFrom({ x: 0, y: 0, width: 390, height: 844 }),
     identifiers: { session: 'qa' },
   });
 

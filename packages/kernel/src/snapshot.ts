@@ -355,11 +355,20 @@ export type SnapshotKeyboardBandFact =
  *
  * Absent means the producer measured no box. Absence is never `0`: `snapshotViewportSizeFrom` from
  * `@agent-device/kernel/rect` is the sole construction path and refuses a box
- * `isPositiveFiniteRect` refuses, so a zero-size viewport is not a value this type can hold.
+ * `isPositiveFiniteRect` refuses. The brand makes that invariant part of the type: a plain
+ * `{ width, height }` literal — including one with a zero in it — is not assignable here, so only
+ * modules that import the brand token from `kernel/rect` can build one, and they build it through
+ * the guard.
  */
 export type SnapshotViewportSize = {
   width: number;
   height: number;
+} & SnapshotViewportSizeBrand;
+
+/** @internal Exported only so `kernel/rect` can mint values of {@link SnapshotViewportSize}. */
+export declare const SNAPSHOT_VIEWPORT_SIZE_BRAND: unique symbol;
+export type SnapshotViewportSizeBrand = {
+  readonly [SNAPSHOT_VIEWPORT_SIZE_BRAND]: 'validated';
 };
 
 export type SnapshotNode = RawSnapshotNode & {
