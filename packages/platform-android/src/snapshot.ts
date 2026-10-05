@@ -877,10 +877,12 @@ const ANDROID_WINDOW_TYPE_INPUT_METHOD = 2;
  *
  * An input method that draws nothing (agent-device's test IME) puts no window on screen and reads as
  * `absent`, and so does an input method window whose bounds parsed to an empty box. One whose bounds
- * did not parse, or parsed to non-finite numbers, was seen but not measured. Only a capture that
- * listed every window can prove absence: the active-window fallback never saw the window list, a
- * root without window metadata cannot be ruled out as the input method, and a truncated capture may
- * have stopped before it.
+ * did not parse, or parsed to non-finite numbers, was seen but not measured, so the band is
+ * unmeasurable even when another input method window did measure. Absence is only read from a
+ * window-list capture: the active-window fallback never saw the window list, a root without window
+ * metadata cannot be ruled out as the input method, and a truncated capture may have stopped before
+ * it. Even then `absent` means no input method window among the roots the helper serialized: the
+ * helper skips a window whose root is null without a record, which this cannot detect.
  */
 export function androidSnapshotKeyboardFromTree(
   tree: AndroidUiHierarchy,
@@ -890,13 +892,14 @@ export function androidSnapshotKeyboardFromTree(
   const inputMethodWindows = windows.filter(
     (window) => window.windowType === ANDROID_WINDOW_TYPE_INPUT_METHOD,
   );
-  const inputMethodRects = inputMethodWindows
-    .map((window) => window.windowRect)
-    .filter(isPositiveFiniteRect);
-  if (inputMethodRects.length > 0) return { kind: 'visible', frame: unionRects(inputMethodRects) };
-  if (!inputMethodWindows.every((window) => isEmptyFiniteRect(window.windowRect))) {
-    return { kind: 'unmeasurable', reason: 'window-bounds-unavailable' };
+  const inputMethodRects: Rect[] = [];
+  for (const { windowRect } of inputMethodWindows) {
+    if (isPositiveFiniteRect(windowRect)) inputMethodRects.push(windowRect);
+    else if (!isEmptyFiniteRect(windowRect)) {
+      return { kind: 'unmeasurable', reason: 'window-bounds-unavailable' };
+    }
   }
+  if (inputMethodRects.length > 0) return { kind: 'visible', frame: unionRects(inputMethodRects) };
   if (
     metadata.captureMode !== 'interactive-windows' ||
     windows.some((window) => window.windowType === undefined)

@@ -60,6 +60,24 @@ test('an input method window whose bounds did not measure cannot prove absence',
   }
 });
 
+test('a measured input method window does not hide another one that did not measure', () => {
+  const unmeasured =
+    '<node window-index="0" window-type="2" window-bounds="unknown" class="android.widget.FrameLayout" />';
+  assert.deepEqual(
+    androidSnapshotKeyboardFromTree(tree(unmeasured, GBOARD_WINDOW, APP_WINDOW), WINDOW_LIST),
+    { kind: 'unmeasurable', reason: 'window-bounds-unavailable' },
+  );
+});
+
+test('an empty input method window beside a measured one leaves the measured band', () => {
+  const empty =
+    '<node window-index="0" window-type="2" window-bounds="[0,2400][1080,2400]" class="android.widget.FrameLayout" />';
+  assert.deepEqual(
+    androidSnapshotKeyboardFromTree(tree(empty, GBOARD_WINDOW, APP_WINDOW), WINDOW_LIST),
+    { kind: 'visible', frame: { x: 0, y: 1500, width: 1080, height: 900 } },
+  );
+});
+
 test('a capture that never listed the windows cannot prove absence', () => {
   assert.deepEqual(
     androidSnapshotKeyboardFromTree(tree(APP_WINDOW), { captureMode: 'active-window' }),
