@@ -6,9 +6,16 @@ import XCTest
 // is RunnerTests+TextEntryReadiness.swift's question, and this file asks it rather than answering
 // it.
 extension RunnerTests {
+  /// Books the tap as the address for the next bare `type`. `element` is a text input the caller
+  /// classified BEFORE dispatching, or nil when the tap hit nothing worth typing into; that is the whole
+  /// contract, and this function must not re-check it. A tap holds a handle bound to the query that
+  /// resolved the element, so asking the handle re-runs that query, and an element that stopped answering
+  /// it — a Flutter password field once focus makes its accessibility attributes disagree — makes XCTest
+  /// record a failure. That failure ends the runner session for a tap the dispatch had already landed
+  /// (#3060), and ADR 0005 already keeps a tap's outcome independent of this bookkeeping.
   @MainActor
   func rememberTextEntryTap(_ element: XCUIElement?) {
-    guard let element, isTextEntryElement(element) else {
+    guard let element else {
       clearRememberedTextEntryTap()
       return
     }
