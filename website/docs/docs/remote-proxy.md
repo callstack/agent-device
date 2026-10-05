@@ -160,7 +160,9 @@ The client connects with a remote config that names the lease, and runs `open <b
 ```
 
 Requests under a `macos-app` lease are limited to `open`, `close`, `snapshot`, `wait`,
-`find`, `get`, `is`, `click`, `fill`, `press`, `type`, `focus`, `scroll`, `screenshot`, and `batch`.
+`find`, `get`, `is`, `click`, `fill`, `press`, `type`, `focus`, `scroll`, `screenshot`, and `batch`,
+plus the lease's own heartbeat and release; `doctor`, `devices`, `session list` and the other
+inventory commands are refused too.
 `open` and `close` accept only the leased bundle id, only the `app` surface is allowed, screenshots
 capture only the app window, inputs that name a host path or a launch (`--save-script`,
 `--launch-url`, `--launch-console`, a screenshot path other than the client's own temp file) are
@@ -199,8 +201,9 @@ AGENT_DEVICE_DAEMON_POLICY=./policy.json agent-device proxy
   `react-devtools` and Maestro flows, and `install-from-source` for remote installs.
 - `capabilities.deny: ["device-shutdown"]` blocks `shutdown`, `close --shutdown`, and any other path
   that would shut the device down.
-- `leases.require: "macos-app"` refuses every request that lease admission gates unless it is made
-  under a lease of that backend, including requests that name no lease.
+- `leases.require: "macos-app"` (the only accepted value) refuses every request that is not made
+  under a `macos-app` lease or that its allow list does not cover, including requests that name no
+  lease and inventory commands such as `doctor` and `session list`.
 
 The daemon reads the file once at start and refuses to start if it is invalid. If a daemon is
 already running for the state directory with a different policy, the proxy refuses to reuse it;

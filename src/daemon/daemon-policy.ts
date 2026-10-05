@@ -75,8 +75,8 @@ export function assertDaemonPolicyAllowsCapability(
 }
 
 /**
- * `leases.require`: a request that lease admission gates must be admitted under a lease of the
- * required backend. A request that names no lease is refused rather than admitted unleased.
+ * `leases.require`: a request must be admitted under a lease of the required backend. A request
+ * that names no lease is refused rather than admitted unleased.
  */
 export function assertDaemonPolicyAdmitsLease(
   policy: DaemonPolicy,

@@ -36,10 +36,7 @@ test.each([
   [{ version: 1, devices: { allow: [] } }, /must not be empty/],
   [{ version: 1, devices: { allow: [{ udid: 'a', serial: 'b' }] } }, /exactly one "udid"/],
   [{ version: 1, capabilities: { deny: ['device-erase'] } }, /unknown capability "device-erase"/],
-  [
-    { version: 1, leases: { require: 'macos-desktop' } },
-    /"leases.require" must name a lease backend/,
-  ],
+  [{ version: 1, leases: { require: 'ios-instance' } }, /"leases.require" must be macos-app/],
   [{ version: 1, leases: { allow: ['macos-app'] } }, /unknown key "leases.allow"/],
 ])('rejects an invalid policy %j', (raw, message) => {
   expect(() => parseDaemonPolicy(raw, SOURCE)).toThrow(message);

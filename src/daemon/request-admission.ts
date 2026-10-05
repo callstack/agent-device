@@ -2,6 +2,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { normalizeTenantId, resolveSessionIsolationMode } from './config.ts';
 import { isTenantOwnedSessionName, tenantScopedSessionName } from './session-tenant-scope.ts';
 import {
+  isAppLeaseAllowed,
   isLeaseAdmissionExempt,
   isHumanControlMutation,
   resolveSessionlessLeaseAdmissionExemption,
@@ -73,7 +74,7 @@ export function assertRequestLeaseAdmission(
     daemonPolicy?: DaemonPolicy;
   }> = {},
 ): DeviceLease | undefined {
-  if (isLeaseAdmissionExempt(req.command)) {
+  if (isExemptFromLeaseAdmission(req, leaseRegistry, session, options.daemonPolicy)) {
     return undefined;
   }
   const requestLeaseScope = resolveLeaseScope(req);
@@ -120,6 +121,36 @@ function admitLease(
   assertMacOsAppLeaseAdmitsRequest(lease, req, session);
   if (isHumanControlMutation(req)) leaseRegistry.assertHumanControlAdmission(lease);
   return lease;
+}
+
+/**
+ * A daemon that requires a lease, or a request in a `macos-app` lease's scope, admits only the
+ * commands that opt into app leases; a lease-admission exemption does not carry past it.
+ */
+function isExemptFromLeaseAdmission(
+  req: DaemonRequest,
+  leaseRegistry: LeaseRegistry,
+  session: SessionState | undefined,
+  daemonPolicy: DaemonPolicy | undefined,
+): boolean {
+  if (!isLeaseAdmissionExempt(req.command)) return false;
+  if (isAppLeaseAllowed(req.command)) return true;
+  return !isConfinedToAppLease(req, leaseRegistry, session, daemonPolicy);
+}
+
+function isConfinedToAppLease(
+  req: DaemonRequest,
+  leaseRegistry: LeaseRegistry,
+  session: SessionState | undefined,
+  daemonPolicy: DaemonPolicy | undefined,
+): boolean {
+  if (daemonPolicy?.requiredLeaseBackend) return true;
+  const scope = resolveRequestOrSessionLeaseScope(req, session);
+  if (scope.leaseBackend === 'macos-app') return true;
+  return (
+    scope.leaseId !== undefined &&
+    leaseRegistry.findActiveLeaseBackend(scope.leaseId) === 'macos-app'
+  );
 }
 
 function hasSessionlessLeaseAdmissionExemption(

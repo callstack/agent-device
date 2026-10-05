@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { commandDescriptors } from '@agent-device/command-registry/registry';
 import type { CommandDescriptor } from '@agent-device/command-registry/types';
-import { LEASE_BACKENDS, type LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 
 /**
@@ -24,8 +23,8 @@ export type DaemonPolicy = Readonly<{
   deviceIds?: ReadonlySet<string>;
   commands?: Readonly<{ mode: 'allow' | 'deny'; names: ReadonlySet<string> }>;
   deniedCapabilities: ReadonlySet<DaemonPolicyCapability>;
-  /** Every lease-gated request must be admitted under a lease of this backend. */
-  requiredLeaseBackend?: LeaseBackend;
+  /** Every request must be admitted under a lease of this backend, the one host-allocated backend. */
+  requiredLeaseBackend?: 'macos-app';
 }>;
 
 const DESCRIPTORS = commandDescriptors as readonly CommandDescriptor[];
@@ -176,17 +175,13 @@ function parseCapabilities(value: unknown, sourcePath: string): Set<DaemonPolicy
   );
 }
 
-function parseLeases(value: unknown, sourcePath: string): LeaseBackend {
+function parseLeases(value: unknown, sourcePath: string): 'macos-app' {
   const leases = readObject(value, 'leases', sourcePath);
   assertOnlyKeys(leases, ['require'], 'leases', sourcePath);
-  const known: readonly string[] = LEASE_BACKENDS;
-  if (typeof leases.require !== 'string' || !known.includes(leases.require)) {
-    throw invalidPolicy(
-      sourcePath,
-      `"leases.require" must name a lease backend: ${LEASE_BACKENDS.join(', ')}`,
-    );
+  if (leases.require !== 'macos-app') {
+    throw invalidPolicy(sourcePath, '"leases.require" must be macos-app');
   }
-  return leases.require as LeaseBackend;
+  return leases.require;
 }
 
 function readObject(value: unknown, label: string, sourcePath: string): Record<string, unknown> {

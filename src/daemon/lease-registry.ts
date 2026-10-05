@@ -216,6 +216,14 @@ export class LeaseRegistry {
     assertLeaseScopeMatch(this.getActiveLease(scope.leaseId), scope);
   }
 
+  /** The backend of the active lease `leaseId` names, read without an owner check. */
+  findActiveLeaseBackend(leaseId: string): LeaseBackend | undefined {
+    const id = normalizeLeaseId(leaseId);
+    if (!id) return undefined;
+    this.cleanupExpiredLeases();
+    return this.leases.get(id)?.backend;
+  }
+
   listActiveLeases(): DeviceLease[] {
     this.cleanupExpiredLeases();
     return Array.from(this.leases.values()).map((entry) => ({ ...entry }));

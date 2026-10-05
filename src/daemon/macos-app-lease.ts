@@ -5,6 +5,7 @@ import { runCmd } from '@agent-device/host-kit/command';
 import { isProcessAlive, readHostEnvironmentVariable } from '@agent-device/host-kit/process';
 import { isMacOs } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { isAppLeaseAllowed } from './daemon-command-registry.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
 
@@ -31,30 +32,6 @@ export function parseMacOsAppLeaseKey(deviceKey: string | undefined): MacOsAppLe
   }
   return pidText === undefined ? { bundleId } : { bundleId, pid: Number(pidText) };
 }
-
-/**
- * The commands a `macos-app` lease admits. Every other command, including any added later, is
- * refused: an allow list fails closed the way a daemon policy allow list does (ADR 0029).
- */
-const MACOS_APP_LEASE_COMMANDS: ReadonlySet<string> = new Set([
-  'open',
-  'close',
-  'snapshot',
-  'wait',
-  'find',
-  'get',
-  'is',
-  'click',
-  'fill',
-  'press',
-  'type',
-  'focus',
-  'scroll',
-  'screenshot',
-  'batch',
-  'lease_heartbeat',
-  'lease_release',
-]);
 
 /** Commands that can resolve a device when no session exists yet; a batch's steps inherit its platform. */
 const DEVICE_RESOLVING_COMMANDS: ReadonlySet<string> = new Set(['open', 'batch']);
@@ -179,7 +156,7 @@ function assertInvocation(
   positionals: readonly string[],
   fields: Readonly<Record<string, unknown>>,
 ): void {
-  if (!MACOS_APP_LEASE_COMMANDS.has(command)) {
+  if (!isAppLeaseAllowed(command)) {
     throw macOsAppLeaseDenied('command', `A macos-app lease does not allow ${command}.`, {
       command,
     });

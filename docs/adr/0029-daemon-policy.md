@@ -57,10 +57,11 @@ Accepted (2026-09-29).
   upgrade are denied by default.
 - `capabilities.deny` — operations denied whichever command reaches them. `device-shutdown` is the
   only capability today.
-- `leases.require` — a lease backend. Every request that lease admission gates must be admitted
-  under a lease of that backend; a request naming no lease is refused instead of being admitted
-  unleased. A denial carries `rule: 'lease'`. A host that confines clients to `macos-app` leases
-  (ADR 0007) sets it so a client cannot drop its lease to reach the desktop.
+- `leases.require` — `macos-app`, the only accepted value. Every request must be admitted under a
+  `macos-app` lease and pass its command allow list (ADR 0007), including commands lease admission
+  otherwise exempts; of those, only `lease_heartbeat` and `lease_release` pass. A request naming no
+  lease is refused instead of being admitted unleased, with `rule: 'lease'`. A host that confines
+  clients to `macos-app` leases sets it so a client cannot drop its lease to reach the desktop.
 
 Unknown keys are errors, so a misspelled rule cannot silently become no rule.
 

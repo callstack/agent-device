@@ -548,6 +548,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       route: 'lease',
       refFrameEffect: 'preserve',
       ...ADMISSION_AND_LOCK_EXEMPT,
+      appLease: 'allowed',
     },
     timeoutPolicy: LEASE_TIMEOUT_POLICY,
     batchable: false,
@@ -563,6 +564,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       route: 'lease',
       refFrameEffect: 'preserve',
       ...ADMISSION_AND_LOCK_EXEMPT,
+      appLease: 'allowed',
     },
     timeoutPolicy: LEASE_TIMEOUT_POLICY,
     batchable: false,
@@ -1025,6 +1027,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       refFrameEffect: 'may-invalidate',
       allowSessionlessDefaultDevice: allowAnyDeviceSessionless,
       saveScriptFlagOwner: true,
+      appLease: 'allowed',
     },
     // --timeout is a startup budget: it reaches the Simulator boot wait (#2324).
     timeoutPolicy: { ...DEFAULT_TIMEOUT_POLICY, budget: { source: 'flag', envelope: 'margin' } },
@@ -1057,7 +1060,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     catalog: { group: 'public' },
     frameworkTier: 'extended',
     recordsSessionAction: false,
-    daemon: { route: 'session', refFrameEffect: 'delegated' },
+    daemon: { route: 'session', refFrameEffect: 'delegated', appLease: 'allowed' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
     // Wave 6 residue: every step runs as its own daemon request under its own descriptor, which
@@ -1078,6 +1081,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       allowInvalidRecording: true,
       saveScriptFlagOwner: true,
       sessionlessLeaseAdmissionExemption: resolvePlainCloseLeaseAdmissionExemption,
+      appLease: 'allowed',
     },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
@@ -1093,7 +1097,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
-    daemon: { route: 'snapshot', refFrameEffect: 'preserve' },
+    daemon: { route: 'snapshot', refFrameEffect: 'preserve', appLease: 'allowed' },
     // First Apple snapshot on a device can sit behind runner startup; --timeout
     // widens the envelope, and a timeout must not tear down the daemon.
     timeoutPolicy: { ...PRESERVE_DAEMON_TIMEOUT_POLICY, budget: { source: 'flag' } },
@@ -1132,7 +1136,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // #1349: a wait's landmark may legitimately be absent when the step
     // starts, so identity verification runs inside its polling resolution.
     targetIdentityVerification: 'post-resolution',
-    daemon: { route: 'snapshot', refFrameEffect: 'preserve' },
+    daemon: { route: 'snapshot', refFrameEffect: 'preserve', appLease: 'allowed' },
     // The wait budget travels as a positional, not a flag; parse it the same
     // way the daemon will so the request envelope extends past it (#1075).
     timeoutPolicy: {
@@ -1271,6 +1275,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: {
       route: 'find',
       refFrameEffect: 'may-invalidate',
+      appLease: 'allowed',
     },
     timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
@@ -1301,6 +1306,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       route: 'interaction',
       refFrameEffect: 'may-invalidate',
       androidBlockingDialogGuard: true,
+      appLease: 'allowed',
     },
     timeoutPolicy: postActionObservationTimeoutPolicy('click', PRESERVE_DAEMON_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('click'),
@@ -1313,6 +1319,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'fill',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     ...TARGETED_TOUCH_INTERACTION_TRAITS,
+    daemon: { ...TARGETED_TOUCH_INTERACTION_TRAITS.daemon, appLease: 'allowed' },
     frameworkTier: 'core',
     timeoutPolicy: postActionObservationTimeoutPolicy('fill', PRESERVE_DAEMON_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('fill'),
@@ -1360,6 +1367,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'press',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/interaction/index.ts'] as const } : {}),
     ...TARGETED_TOUCH_INTERACTION_TRAITS,
+    daemon: { ...TARGETED_TOUCH_INTERACTION_TRAITS.daemon, appLease: 'allowed' },
     frameworkTier: 'core',
     timeoutPolicy: postActionObservationTimeoutPolicy('press', PRESERVE_DAEMON_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('press'),
@@ -1380,6 +1388,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       route: 'interaction',
       refFrameEffect: 'may-invalidate',
       androidBlockingDialogGuard: true,
+      appLease: 'allowed',
     },
     timeoutPolicy: postActionObservationTimeoutPolicy('type', PRESERVE_DAEMON_TIMEOUT_POLICY),
     batchable: true,
@@ -1394,7 +1403,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
-    daemon: { route: 'interaction', refFrameEffect: 'preserve' },
+    daemon: { route: 'interaction', refFrameEffect: 'preserve', appLease: 'allowed' },
     timeoutPolicy: postActionObservationTimeoutPolicy('get', PRESERVE_DAEMON_TIMEOUT_POLICY),
     batchable: true,
     platformExecution: { kind: 'device-runtime', uses: selectorTextCaptureRuntimePlanUses },
@@ -1408,7 +1417,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
-    daemon: { route: 'interaction', refFrameEffect: 'preserve' },
+    daemon: { route: 'interaction', refFrameEffect: 'preserve', appLease: 'allowed' },
     timeoutPolicy: postActionObservationTimeoutPolicy('is', PRESERVE_DAEMON_TIMEOUT_POLICY),
     batchable: true,
     platformExecution: { kind: 'device-runtime', uses: selectorCaptureRuntimePlanUses },
@@ -1500,6 +1509,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // the owner's `scrollDirection` fact, and the only execution is the bound operation. `scroll`
     // was the last holder of the legacy `dispatch`/`capability` pair, which retires with it.
     ...GENERIC_MUTATING_COMMAND_TRAITS,
+    daemon: { ...GENERIC_MUTATING_COMMAND_TRAITS.daemon, appLease: 'allowed' },
     timeoutPolicy: postActionObservationTimeoutPolicy('scroll', DEFAULT_TIMEOUT_POLICY),
     postActionObservation: postActionObservation('scroll'),
     platformExecution: { kind: 'device-runtime', uses: scrollRuntimePlanUses },
@@ -1531,6 +1541,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     // R40 retires this command's capability bucket and its `dispatch` leaf together: admission is
     // the owner's `focusPoint` fact, and the only execution is the bound operation.
     ...GENERIC_MUTATING_COMMAND_TRAITS,
+    daemon: { ...GENERIC_MUTATING_COMMAND_TRAITS.daemon, appLease: 'allowed' },
     platformExecution: { kind: 'device-runtime', uses: [focusRuntimeUse] },
   },
   {
@@ -1548,7 +1559,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     frameworkTier: 'core',
     recordsSessionAction: true,
     recordingEffect: 'observes-app',
-    daemon: { route: 'generic', refFrameEffect: 'preserve' },
+    daemon: { route: 'generic', refFrameEffect: 'preserve', appLease: 'allowed' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
     platformExecution: { kind: 'device-runtime', uses: screenshotRuntimePlanUses },

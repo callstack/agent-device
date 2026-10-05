@@ -175,7 +175,9 @@ repeated PUT renews it, and a PUT naming another scope for an existing id is ref
 rewritten. Heartbeat, expiry, release, and the loss on daemon restart are those of any lease.
 
 Request admission confines every request admitted under the lease, so `batch` steps and `replay`
-actions are confined when they re-enter it: an allow list of commands (later commands are refused),
+actions are confined when they re-enter it: an allow list of commands, the ones whose command
+registry descriptor declares `appLease: 'allowed'` (later commands are refused, and of the commands
+lease admission otherwise exempts only `lease_heartbeat` and `lease_release` declare it),
 `open` and `close` of the leased bundle only, the `app` surface only, window-only screenshots, no
 input that names a host path or launches beside the app, and a session that is the leased app. `open` requires the native app backend (ADR 0031), because XCTest
 posts screen events that can land outside the app's window. A pid-pinned lease is checked against the
