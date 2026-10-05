@@ -27,6 +27,8 @@ export const LIMRUN_CREDENTIAL_VARIABLES: readonly string[] = [
   ...INSTANCE_VARS.android,
 ];
 
+// Mirrors platformForLimrunLeaseBackend in provider-limrun, which exposes only its root entry, and
+// that entry loads the Limrun SDK; importing it here would load the SDK on every credential read.
 const LEASE_BACKEND_PLATFORMS: ReadonlyMap<string, 'ios' | 'android'> = new Map([
   ['ios-instance', 'ios'],
   ['android-instance', 'android'],
