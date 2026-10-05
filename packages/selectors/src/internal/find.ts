@@ -143,11 +143,11 @@ function matchRole(node: SnapshotNode, query: string): number {
 /**
  * The substring-scoring view of one role spelling: its last `.`-separated
  * segment. This is deliberately the RETIRED LOCATOR's leaf (`split('.').pop()`
- * only), not the kernel's retired-term spelling — the term also reduced a
- * trailing `/` segment, and mirroring that here would drop substring hits the
- * released locator kept (query `y/z` still scores 1 against kind `x.y/z`
- * today). The term's `/`-reduced spelling rides as the windowed exact alias
- * instead, so term/locator agreement comes from the exact side, and each
+ * only), not the retired term spelling (`normalizeType`) — the term also
+ * reduced a trailing `/` segment, and mirroring that here would drop substring
+ * hits the released locator kept (query `y/z` still scores 1 against kind
+ * `x.y/z` today). The term's `/`-reduced spelling rides as the windowed exact
+ * alias instead, so term/locator agreement comes from the exact side, and each
  * surface's historical substring meaning is preserved. An AX-stripped query
  * (`link` against an `AXLink` node) likewise reaches the exact score through
  * the windowed alias, not through substring — the retired term already matched
