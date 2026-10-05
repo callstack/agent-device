@@ -164,7 +164,8 @@ Requests under a `macos-app` lease are limited to `open`, `close`, `snapshot`, `
 `open` and `close` accept only the leased bundle id, only the `app` surface is allowed, screenshots
 capture only the app window, inputs that name a host path or a launch (`--save-script`,
 `--launch-url`, `--launch-console`, a screenshot path other than the client's own temp file) are
-refused, and a pid-pinned lease stops working when that process exits. `open`
+refused, device selectors (`--udid`, `--serial`, `--device`, `--target`) are refused, `open` and
+`batch` must carry `--platform macos`, and a pid-pinned lease stops working when that process exits. `open`
 requires the daemon to run the native macOS app backend (`AGENT_DEVICE_MACOS_APP_BACKEND=native`).
 A refusal fails with `UNAUTHORIZED` and `details.reason: "MACOS_APP_LEASE_DENIED"`.
 

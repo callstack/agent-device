@@ -56,12 +56,16 @@ const MACOS_APP_LEASE_COMMANDS: ReadonlySet<string> = new Set([
   'lease_release',
 ]);
 
+/** Commands that can resolve a device when no session exists yet; a batch's steps inherit its platform. */
+const DEVICE_RESOLVING_COMMANDS: ReadonlySet<string> = new Set(['open', 'batch']);
+
 type MacOsAppLeaseRule =
   | 'command'
   | 'app'
   | 'surface'
   | 'capture'
   | 'host-path'
+  | 'device'
   | 'backend'
   | 'process';
 
@@ -88,6 +92,16 @@ const HOST_INPUT_KEYS = [
   'iosXctestrunFile',
   'iosXctestDerivedDataPath',
   'iosXctestEnvDir',
+] as const;
+
+/** Flags that pick a device other than the leased app's own; a lease never takes a device selector. */
+const DEVICE_SELECTOR_KEYS = [
+  'device',
+  'udid',
+  'serial',
+  'target',
+  'iosSimulatorDeviceSet',
+  'androidDeviceAllowlist',
 ] as const;
 
 /** The only screenshot path a remote client sends: the temp file `agent-device` names for it. */
@@ -119,22 +133,44 @@ export function assertMacOsAppLeaseAdmitsRequest(
 ): void {
   if (lease.backend !== 'macos-app') return;
   const key = parseMacOsAppLeaseKey(lease.deviceKey);
-  assertInvocation(key, req.command, req.positionals ?? [], {
-    ...req.input,
-    ...req.flags,
-    ...(req.runtime?.launchUrl ? { launchUrl: req.runtime.launchUrl } : {}),
-    ...(req.runtime?.bundleUrl ? { bundleUrl: req.runtime.bundleUrl } : {}),
-  });
+  assertInvocation(
+    key,
+    req.command,
+    req.positionals ?? [],
+    withRuntimeInputs(req.runtime, { ...req.input, ...req.flags }),
+  );
+  if (DEVICE_RESOLVING_COMMANDS.has(req.command) && req.flags?.platform !== 'macos') {
+    throw macOsAppLeaseDenied(
+      'device',
+      `A macos-app lease needs platform macos on ${req.command}.`,
+    );
+  }
   if (req.command === 'batch') {
     for (const step of (req.flags?.batchSteps ?? []) as readonly Record<string, unknown>[]) {
       const positionals = Array.isArray(step.positionals) ? step.positionals.map(String) : [];
-      assertInvocation(key, normalizeBatchCommandName(step.command), positionals, {
-        ...(step.input as Record<string, unknown> | undefined),
-        ...(step.flags as Record<string, unknown> | undefined),
-      });
+      assertInvocation(
+        key,
+        normalizeBatchCommandName(step.command),
+        positionals,
+        withRuntimeInputs(step.runtime as DaemonRequest['runtime'], {
+          ...(step.input as Record<string, unknown> | undefined),
+          ...(step.flags as Record<string, unknown> | undefined),
+        }),
+      );
     }
   }
   if (session) assertSessionIsLeasedApp(key, session);
+}
+
+function withRuntimeInputs(
+  runtime: DaemonRequest['runtime'],
+  fields: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    ...fields,
+    ...(runtime?.launchUrl ? { launchUrl: runtime.launchUrl } : {}),
+    ...(runtime?.bundleUrl ? { bundleUrl: runtime.bundleUrl } : {}),
+  };
 }
 
 function assertInvocation(
@@ -149,6 +185,7 @@ function assertInvocation(
     });
   }
   assertAppSurface(fields);
+  assertNoDeviceSelector(fields);
   if (command === 'screenshot') assertWindowCapture(positionals, fields);
   else assertNoHostInputs(fields);
   if (command === 'open') assertOpensLeasedApp(key, positionals);
@@ -182,6 +219,18 @@ function assertNoHostInputs(fields: Readonly<Record<string, unknown>>): void {
     'host-path',
     `A macos-app lease does not accept ${named}, which names a host path or launch.`,
     { field: named },
+  );
+}
+
+function assertNoDeviceSelector(fields: Readonly<Record<string, unknown>>): void {
+  const named = DEVICE_SELECTOR_KEYS.find((key) => fields[key] !== undefined && fields[key] !== '');
+  if (!named) return;
+  throw macOsAppLeaseDenied(
+    'device',
+    `A macos-app lease does not accept the ${named} device selector.`,
+    {
+      field: named,
+    },
   );
 }
 

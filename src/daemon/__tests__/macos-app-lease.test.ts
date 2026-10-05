@@ -21,7 +21,12 @@ function request(
   flags: Record<string, unknown> = {},
   extra: Pick<DaemonRequest, 'input' | 'runtime'> = {},
 ): Pick<DaemonRequest, 'command' | 'positionals' | 'flags' | 'input' | 'runtime'> {
-  return { command, positionals, flags: flags as DaemonRequest['flags'], ...extra };
+  return {
+    command,
+    positionals,
+    flags: { platform: 'macos', ...flags } as DaemonRequest['flags'],
+    ...extra,
+  };
 }
 
 function assertDenied(run: () => unknown, rule: string): void {
@@ -241,6 +246,66 @@ test('a batch is refused whole when any step is not allowed', () => {
         leasedSession,
       ),
     'surface',
+  );
+});
+
+test('no device selector reaches a host device, and open and batch must name platform macos', () => {
+  for (const selector of [
+    { udid: 'ABCD-1234' },
+    { serial: 'emulator-5554' },
+    { device: 'iPhone 17' },
+    { target: 'mobile' },
+    { iosSimulatorDeviceSet: '/tmp/set' },
+    { androidDeviceAllowlist: 'emulator-5554' },
+  ]) {
+    assertDenied(
+      () => assertMacOsAppLeaseAdmitsRequest(lease, request('open', ['com.example.app'], selector)),
+      'device',
+    );
+    assertDenied(
+      () =>
+        assertMacOsAppLeaseAdmitsRequest(lease, request('snapshot', [], selector), leasedSession),
+      'device',
+    );
+    assertDenied(
+      () =>
+        assertMacOsAppLeaseAdmitsRequest(
+          lease,
+          request('batch', [], {
+            batchSteps: [{ command: 'snapshot', input: {}, flags: selector }],
+          }),
+          leasedSession,
+        ),
+      'device',
+    );
+  }
+  for (const command of ['open', 'batch']) {
+    assertDenied(
+      () =>
+        assertMacOsAppLeaseAdmitsRequest(lease, {
+          command,
+          positionals: command === 'open' ? ['com.example.app'] : [],
+          flags: {},
+        }),
+      'device',
+    );
+  }
+});
+
+test('a batch is refused whole when a later step carries a launch URL in its runtime', () => {
+  assertDenied(
+    () =>
+      assertMacOsAppLeaseAdmitsRequest(
+        lease,
+        request('batch', [], {
+          batchSteps: [
+            { command: 'snapshot', input: {} },
+            { command: 'open', positionals: ['com.example.app'], runtime: { launchUrl: 'x://y' } },
+          ],
+        }),
+        leasedSession,
+      ),
+    'host-path',
   );
 });
 
