@@ -1,4 +1,4 @@
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import { roleSpellingsOfNode, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import { tryParseSelectorChain } from './parse.ts';
 
@@ -95,7 +95,7 @@ export function findBestMatchesByLocator(
 function matchNode(node: SnapshotNode, locator: FindLocator, query: string): number {
   switch (locator) {
     case 'role':
-      return matchRole(node.type, query);
+      return matchRole(node, query);
     case 'label':
       return matchText(node.label, query);
     case 'value':
@@ -121,24 +121,19 @@ function matchText(value: string | undefined, query: string): number {
   return 0;
 }
 
-function matchRole(value: string | undefined, query: string): number {
-  const normalized = normalizeRole(value ?? '');
-  if (!normalized) return 0;
-  if (normalized === query) return 2;
-  if (normalized.includes(query)) return 1;
+function matchRole(node: SnapshotNode, query: string): number {
+  // The kernel's one role-spelling reader (#3021): the node's canonical `kind`
+  // first, then its windowed legacy leaf. Exact-vs-substring scoring is the
+  // historical one, so `find role=static` keeps ranking exactly as it did
+  // before the kind vocabulary arrived.
+  const spellings = roleSpellingsOfNode(node);
+  if (spellings.includes(query)) return 2;
+  if (spellings.some((spelling) => spelling.includes(query))) return 1;
   return 0;
 }
 
 export function normalizeText(value: string): string {
   return value.trim().toLowerCase().replaceAll(/\s+/g, ' ');
-}
-
-function normalizeRole(value: string): string {
-  let normalized = value.trim();
-  if (!normalized) return '';
-  const lastSegment = normalized.split('.').pop() ?? normalized;
-  normalized = lastSegment.replaceAll(/XCUIElementType/gi, '').toLowerCase();
-  return normalized;
 }
 
 export type ParsedFindArgs = {
