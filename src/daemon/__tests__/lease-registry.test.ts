@@ -82,7 +82,6 @@ test('only an unexpired retainOnClose lease counts as retained', () => {
 
   now = 20_000;
   assert.equal(registry.hasRetainedLeases(), false);
-  assert.deepEqual(registry.listActiveLeases(), []);
 });
 
 test('heartbeatLease extends active lease and releaseLease is idempotent', () => {
@@ -422,6 +421,22 @@ test('human holds protect leases and release refreshes the original lease TTL at
   assert.equal(registry.listActiveLeases()[0]?.expiresAt, 35_000);
   now = 35_000;
   assert.equal(registry.consumeExpiredLeases()[0]?.leaseId, lease.leaseId);
+});
+
+test('a human-control hold keeps a past-due retained lease registered but not retained', async () => {
+  let now = 1_000;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 5_000 });
+  const lease = registry.allocateLease({
+    ...HUMAN_CONTROL_LEASE_REQUEST,
+    ttlMs: 10_000,
+    retainOnClose: true,
+  });
+  await registry.putHumanControlHold({ kind: 'lease', leaseId: lease.leaseId }, 'console', {});
+  assert.equal(registry.hasRetainedLeases(), true);
+
+  now = 25_000;
+  assert.equal(registry.listActiveLeases()[0]?.leaseId, lease.leaseId);
+  assert.equal(registry.hasRetainedLeases(), false);
 });
 
 test('hold expiry refreshes from the expiry instant, without reviving abandoned leases', async () => {

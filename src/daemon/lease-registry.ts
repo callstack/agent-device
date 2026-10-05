@@ -183,11 +183,15 @@ export class LeaseRegistry {
   }
 
   /**
-   * Whether an unexpired `retainOnClose` lease outlives its sessions. Reading it also expires leases
-   * past their window, so an abandoned retained lease still ends.
+   * Whether a `retainOnClose` lease is still inside its own window. A human-control hold or admitted
+   * work can keep a past-due lease registered, but only the lease's `expiresAt` bounds how long it
+   * keeps an idle daemon alive.
    */
   hasRetainedLeases(): boolean {
-    return this.listActiveLeases().some((lease) => lease.retainOnClose === true);
+    const now = this.now();
+    return this.listActiveLeases().some(
+      (lease) => lease.retainOnClose === true && lease.expiresAt > now,
+    );
   }
 
   listActiveLeases(): DeviceLease[] {
