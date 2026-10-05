@@ -15,6 +15,8 @@ import { afterEach } from 'vitest';
 // daemonBaseUrl/daemonAuthToken keys, and daemon-client tests take the remote
 // path ("Remote daemon is unavailable") instead of the local one they exercise.
 //
+// An HTTP auth hook likewise makes a local daemon treat every HTTP caller as remote.
+//
 // CI runs with these unset. Delete them here so a configured host matches CI.
 // Tests that genuinely need them assign their own value or pass an explicit env
 // object; that happens inside the test, after this module has loaded, so this
@@ -22,6 +24,8 @@ import { afterEach } from 'vitest';
 const AMBIENT_DAEMON_ENV_VARS = [
   'AGENT_DEVICE_DAEMON_BASE_URL',
   'AGENT_DEVICE_DAEMON_AUTH_TOKEN',
+  'AGENT_DEVICE_HTTP_AUTH_HOOK',
+  'AGENT_DEVICE_HTTP_AUTH_EXPORT',
 ] as const;
 
 for (const name of AMBIENT_DAEMON_ENV_VARS) {

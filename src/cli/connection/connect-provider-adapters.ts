@@ -2,7 +2,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
 import { verifyLimrunConnection } from '@agent-device/provider-limrun';
 import { AppError } from '@agent-device/kernel/errors';
-import { requireBrowserStackCredentials } from '@agent-device/provider-webdriver';
+import { readBrowserStackCredentials } from '@agent-device/provider-webdriver/providers';
 import { providerWebDriver } from '../../provider-webdriver.ts';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -135,9 +135,17 @@ async function verifyBrowserStack(
   context: Pick<AdapterContext, 'flags' | 'env'>,
 ): Promise<ConnectVerification> {
   const { flags, env } = context;
+  const credentials = readBrowserStackCredentials(env);
   return await providerWebDriver.verifyConnection({
     provider: 'browserstack',
-    ...requireBrowserStackCredentials(env, 'BrowserStack'),
+    username: requiredResolvedValue(
+      credentials.username,
+      'BrowserStack profile missed BROWSERSTACK_USERNAME.',
+    ),
+    accessKey: requiredResolvedValue(
+      credentials.accessKey,
+      'BrowserStack profile missed BROWSERSTACK_ACCESS_KEY.',
+    ),
     platform: requiredResolvedPlatform(flags.platform, 'BrowserStack'),
     deviceName: requiredResolvedValue(flags.device, 'BrowserStack profile missed device.'),
     osVersion: requiredResolvedValue(
