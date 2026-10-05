@@ -1083,7 +1083,7 @@ agent-device diff screenshot --baseline baseline.png --out diff.png --overlay-re
 agent-device record start               # Start app-scoped recording after open <app>
 agent-device record start session.mp4   # Start app-scoped recording to explicit path
 agent-device record start session.mp4 --scope device  # Intentionally record the full simulator/device screen
-agent-device record start session.mp4 --fps 30  # Override iOS device runner FPS
+agent-device record start session.mp4 --fps 15  # Runner capture rate and touch-overlay frame cap
 agent-device record start session.mp4 --quality high # Higher-quality export (slower)
 agent-device record stop                # Stop active recording
 ```
@@ -1104,6 +1104,7 @@ agent-device record stop                # Stop active recording
 - In `--json` mode, each overlay ref also includes a screenshot-space `center` point for coordinate fallback like `press <x> <y>`.
 - Burned-in touch overlays are exported only on macOS hosts, because the overlay pipeline depends on Swift + AVFoundation helpers.
 - On Linux or other non-macOS hosts, `record stop` still succeeds and returns the raw video plus telemetry sidecar, and includes `overlayWarning` when burn-in overlays were skipped.
+- The touch overlay renders at most 30 frames a second, or at `--fps` when it is lower, so a lower `--fps` makes a long recording's `record stop` faster. The overlay has a fixed budget inside the `record stop` request; an export that runs past it returns the raw video and telemetry with an `overlayWarning` naming the budget.
 - On iOS simulators, a busy CoreSimulator host recording slot makes `record start` return non-retriable `DEVICE_IN_USE` with `details.reason: apple_simulator_recording_busy`. Use `record stop` in the session that owns the active recording. If a previous recorder died and no recording is active, ask the host operator to restart the CoreSimulator stream service before retrying.
 - When the Apple runner records (`--fps` sets its frame rate), it captures a frame only while no command is using the runner's main thread; a frame that falls during that work is skipped instead of queued behind it. A capture slower than the frame interval lowers the frame rate, and a capture still running after one second is dropped. A busy app or a long command can therefore yield fewer frames than `--fps` requests.
 - Android uses `adb shell screenrecord`, which has a 180s platform limit. `record start` publishes a durable device manifest. Longer recordings are split into MP4 chunks while the daemon stays alive; after daemon restart, `record stop` recovers only manifest-owned chunks and warns when gesture overlay telemetry was lost.

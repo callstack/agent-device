@@ -34,6 +34,7 @@ export async function completeAppleRecording(params: {
       showTouches: snapshot.invalidatedReason ? false : snapshot.showTouches,
       gestureEvents: snapshot.gestureEvents,
       exportQuality: snapshot.exportQuality ?? 'medium',
+      ...(snapshot.fps === undefined ? {} : { fps: snapshot.fps }),
       targetLabel,
     });
   } catch (error) {
@@ -95,6 +96,7 @@ export async function finalizeAppleRecordingFromCollected(
         showTouches: overlayUnavailability === undefined && snapshot.showTouches,
         gestureEvents: snapshot.gestureEvents,
         exportQuality: snapshot.exportQuality ?? 'medium',
+        ...(snapshot.fps === undefined ? {} : { fps: snapshot.fps }),
         targetLabel,
       }),
     );

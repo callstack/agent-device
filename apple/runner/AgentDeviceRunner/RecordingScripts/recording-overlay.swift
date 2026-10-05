@@ -88,7 +88,10 @@ func run() throws {
   let renderSize = resolvedRenderSize(for: sourceVideoTrack)
   let videoComposition = AVMutableVideoComposition()
   videoComposition.renderSize = renderSize
-  videoComposition.frameDuration = resolvedFrameDuration(for: sourceVideoTrack)
+  videoComposition.frameDuration = resolvedFrameDuration(
+    for: sourceVideoTrack,
+    maximumFrameRate: parsedArgs.maximumFrameRate
+  )
 
   let instruction = AVMutableVideoCompositionInstruction()
   instruction.timeRange = fullRange
@@ -158,11 +161,15 @@ func run() throws {
 
 func parseArguments(
   _ arguments: [String]
-) throws -> (inputPath: String, outputPath: String, eventsPath: String, timeoutSeconds: Double) {
+) throws -> (
+  inputPath: String, outputPath: String, eventsPath: String, timeoutSeconds: Double,
+  maximumFrameRate: Int32
+) {
   var inputPath: String?
   var outputPath: String?
   var eventsPath: String?
   var timeoutSeconds = defaultRecordingExportTimeoutSeconds
+  var maximumFrameRate = maximumCompositedFrameRate
   var index = 0
 
   while index < arguments.count {
@@ -194,6 +201,13 @@ func parseArguments(
       }
       timeoutSeconds = milliseconds / 1000
       index += 2
+    case "--max-fps":
+      let rawValue = try recordingOptionValue(arguments, nextIndex, "--max-fps")
+      guard let framesPerSecond = Int32(rawValue), framesPerSecond > 0 else {
+        throw RecordingScriptError.invalidArgs("--max-fps must be a positive integer")
+      }
+      maximumFrameRate = min(framesPerSecond, maximumCompositedFrameRate)
+      index += 2
     default:
       throw RecordingScriptError.invalidArgs("Unknown argument: \(argument)")
     }
@@ -201,10 +215,10 @@ func parseArguments(
 
   guard let inputPath, let outputPath, let eventsPath else {
     throw RecordingScriptError.invalidArgs(
-      "Usage: recording-overlay.swift --input <video> --output <video> --events <json> [--quality <medium|high>] [--timeout-ms <ms>]"
+      "Usage: recording-overlay.swift --input <video> --output <video> --events <json> [--quality <medium|high>] [--timeout-ms <ms>] [--max-fps <n>]"
     )
   }
-  return (inputPath, outputPath, eventsPath, timeoutSeconds)
+  return (inputPath, outputPath, eventsPath, timeoutSeconds, maximumFrameRate)
 }
 
 /// The composited overlay must keep the captured track's dimensions, so it can only use a preset
@@ -339,7 +353,7 @@ func frameMeanLuma(_ image: CGImage) -> Double? {
 }
 
 /// The composited export renders at most this many frames a second, which is smooth for a touch
-/// that stays visible for 0.45s.
+/// that stays visible for 0.45s. `--max-fps` lowers it, never raises it.
 let maximumCompositedFrameRate: Int32 = 30
 
 /// A variable-frame-rate capture (simctl recordVideo, adb screenrecord) reports one tick of its
@@ -347,11 +361,11 @@ let maximumCompositedFrameRate: Int32 = 30
 /// every frame the encoder could make, 75 a second from an iOS simulator and 60 from an Android
 /// emulator, about three times the frames the capture holds; a 5-minute recording's export then
 /// outlasted the `record stop` request. So the frame duration is the capture's, but never shorter
-/// than one frame at `maximumCompositedFrameRate`. A capture that reports none renders at that
+/// than one frame at `maximumFrameRate`. A capture that reports none renders at that
 /// rate: its average (`nominalFrameRate`) can be a couple of frames a second over a still screen,
 /// which would skip a touch.
-func resolvedFrameDuration(for track: AVAssetTrack) -> CMTime {
-  let shortest = CMTime(value: 1, timescale: maximumCompositedFrameRate)
+func resolvedFrameDuration(for track: AVAssetTrack, maximumFrameRate: Int32) -> CMTime {
+  let shortest = CMTime(value: 1, timescale: maximumFrameRate)
   let minFrameDuration = track.minFrameDuration
   if minFrameDuration.isValid && !minFrameDuration.isIndefinite && minFrameDuration.seconds > 0 {
     return CMTimeMaximum(minFrameDuration, shortest)

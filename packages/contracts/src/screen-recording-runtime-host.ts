@@ -253,6 +253,8 @@ export type ScreenRecordingFinalizer = Readonly<{
       showTouches: boolean;
       gestureEvents: readonly RecordingGestureEvent[];
       exportQuality?: RecordingExportQuality;
+      /** The touch overlay renders at no more frames a second than this. */
+      fps?: number;
       targetLabel: string;
     }>,
     signal?: AbortSignal,

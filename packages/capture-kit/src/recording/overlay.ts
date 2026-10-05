@@ -98,6 +98,10 @@ async function exportProcessedVideo(params: {
     await waitForPlayableVideo(outputPath);
     fs.renameSync(outputPath, videoPath);
   } catch (error) {
+    const description =
+      deadline.remainingMs() <= HELPER_EXIT_GRACE_MS
+        ? `${commandDescription}: the export did not finish within its ${params.budgetMs}ms budget; a lower --fps renders faster`
+        : commandDescription;
     const cause =
       error instanceof AppError
         ? error
@@ -109,7 +113,7 @@ async function exportProcessedVideo(params: {
           );
     throw new AppError(
       'COMMAND_FAILED',
-      commandDescription,
+      description,
       {
         ...cause.details,
         videoPath,
@@ -132,6 +136,8 @@ export async function overlayRecordingTouches(params: {
   videoPath: string;
   telemetryPath: string;
   exportQuality?: RecordingExportQuality;
+  /** The caller's `--fps`; the helper renders at most this many frames a second, capped at 30. */
+  fps?: number;
   targetLabel?: string;
 }): Promise<void> {
   const {
@@ -143,7 +149,13 @@ export async function overlayRecordingTouches(params: {
   await exportProcessedVideo({
     videoPath,
     scriptPath: getOverlayScriptPath(),
-    scriptArgs: ['--events', telemetryPath, '--quality', exportQuality],
+    scriptArgs: [
+      '--events',
+      telemetryPath,
+      '--quality',
+      exportQuality,
+      ...(params.fps === undefined ? [] : ['--max-fps', String(params.fps)]),
+    ],
     commandDescription: `Failed to add touch overlays to the ${targetLabel}`,
     budgetMs: OVERLAY_BUDGET_MS,
   });

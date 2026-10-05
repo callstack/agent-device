@@ -28,6 +28,7 @@ test('reattaches complete matching evidence and refuses fence, session, or devic
     recordOnlySession: true,
     activeSessionApp: { bundleId: 'com.example.app', name: 'Example' },
     exportQuality: 'high',
+    fps: 15,
   });
   const active = await runtime.screenRecordingReattach({ envelope: started.envelope });
   expect(active.status).toBe('active');
@@ -38,6 +39,7 @@ test('reattaches complete matching evidence and refuses fence, session, or devic
       scope: 'system',
       recordOnlySession: true,
       exportQuality: 'high',
+      fps: 15,
     });
   for (const envelope of [
     { ...started.envelope, fence: { token: 'other', generation: 2 } },

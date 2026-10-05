@@ -208,6 +208,7 @@ async function startAndroidRecording(params: {
           ? {}
           : { activeSessionApp: input.activeSessionApp }),
         ...(input.exportQuality === undefined ? {} : { exportQuality: input.exportQuality }),
+        ...(input.fps === undefined ? {} : { fps: input.fps }),
         transportMode: transport.mode,
       }),
     }),
