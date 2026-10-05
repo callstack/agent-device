@@ -38,7 +38,7 @@ test('a Limrun iOS permission the runtime refuses reports the local unsupported 
       code: 1,
       stdout: '',
       stderr:
-        'Failed to grant access to com.example.ios for notifications\nAn error was encountered processing the command (domain=NSPOSIXErrorDomain, code=1):\nOperation not permitted',
+        'An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=1):\nSimulator device failed to complete the requested operation.\nOperation not permitted\nUnderlying error (domain=NSPOSIXErrorDomain, code=1):\n\tFailed to set access\n\tOperation not permitted',
     }),
   }));
   const { binding, dispose } = await bindLimrunDeployment('ios', new AbortController().signal);
