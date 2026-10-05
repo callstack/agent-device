@@ -1,9 +1,10 @@
 export {
   ensureXctestrunArtifact,
+  forgetRunnerPrepProcess,
   hasCachedAppleRunnerArtifact,
   prepareXctestrunWithEnv,
-  runnerPrepProcesses,
-  type ExternalXctestRunnerOptions,
+  runnerPrepProcessChildren,
+  runnerPrepProcessChildrenWithoutActiveOwner,
   type RunnerXctestrunArtifact,
   type RunnerXctestrunArtifactState,
 } from './runner-artifact.ts';

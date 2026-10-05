@@ -120,7 +120,7 @@ export async function ensureRunnerSession(
     }
   });
   const { raceRunnerStartAgainstCaller } = await import('./runner-start-budget.ts');
-  return await raceRunnerStartAgainstCaller(start, options.signal);
+  return await raceRunnerStartAgainstCaller(start, options.signal, device.id);
 }
 
 /** How long the device-readiness probe may take, bounded by the startup budget it runs inside. */
@@ -675,6 +675,8 @@ export async function stopIosRunnerSession(deviceId: string): Promise<void> {
  * or wedges, so pooling it back hands the same stalled process to the next `open` (#2552). An idle
  * retained runner keeps warm reuse via the idle-stop timer. The decision is owned here because the
  * occupancy fact lives on the session, and awaited so `close` returns only once the lease is gone.
+ * Non-retained close stops the device's current prep processes before taking the session lock,
+ * which an in-flight cold start holds through its build. Later prep spawns are not fenced here.
  */
 export async function releaseIosRunnerOnClose(
   deviceId: string,
@@ -692,6 +694,7 @@ export async function releaseIosRunnerOnClose(
       data: { deviceId },
     });
   }
+  await stopRunnerPrepProcesses(deviceId);
   await stopIosRunnerSession(deviceId);
 }
 

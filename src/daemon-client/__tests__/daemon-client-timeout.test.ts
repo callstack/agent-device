@@ -1,89 +1,60 @@
 // The pure hint formatter in src/daemon-client/daemon-client-timeout.ts: what a timed-out request
 // tells the caller to do next. daemon-client-timeout-route.test.ts covers the same route at its
-// production seam, where cleanup eligibility is decided; these assertions only fix the wording.
+// production seam, where the liveness-gated recovery is decided; these assertions only fix wording.
 
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { resolveRequestTimeoutHint } from '../daemon-client-timeout.ts';
 
-test('request timeout hint only names Apple runner cleanup on actual evidence', () => {
-  // Before this change, handleRequestTimeout emitted Apple-specific hint
-  // wording for EVERY local timeout, regardless of the request's
-  // --platform. That was misleading for Android/web/Harmony sessions, which
-  // never had any Apple runner work to abort.
-  //
-  // The fix is evidence-based, not platform-guess-based:
-  // `appleCleanupEvidence` is true only when the request declared an
-  // AFFIRMATIVELY Apple platform (apple/ios/macos) or the pkill cleanup
-  // itself terminated a matching process — never from an undeclared or
-  // declared-non-Apple platform alone. (Why not trust the declared platform
-  // directly: it is not authoritative for session-bound execution — see
-  // `handleRequestTimeout`'s comment and the production-seam coverage in
-  // daemon-client-timeout-route.test.ts for the cleanup-eligibility half of
-  // this contract that this pure formatter test cannot prove.)
-
-  // appleCleanupEvidence: true keeps the exact historical wording — nothing
-  // regresses for the true-Apple case.
+test('request timeout hint names an Apple runner only on a declared Apple platform', () => {
+  // The hint used to derive its Apple claim partly from a host-wide `pkill` sweep that counted
+  // whatever it terminated (#1751). That sweep ended every session on the host and is gone
+  // (#3177), so the only Apple evidence this route has left is a selector that says so outright.
   assert.equal(
     resolveRequestTimeoutHint({
       remote: false,
       resetDaemon: false,
       command: 'press',
-      appleCleanupEvidence: true,
-    }),
-    'Retry with --debug and check daemon diagnostics logs. The timed-out press request was canceled and Apple runner work was aborted when detected; the daemon was kept alive so the session can still be closed or inspected.',
-  );
-  assert.equal(
-    resolveRequestTimeoutHint({
-      remote: false,
-      resetDaemon: true,
-      command: 'open',
-      appleCleanupEvidence: true,
-    }),
-    'Retry with --debug and check daemon diagnostics logs. Timed-out Apple runner xcodebuild processes were terminated when detected.',
-  );
-  assert.equal(
-    resolveRequestTimeoutHint({
-      remote: false,
-      resetDaemon: false,
-      command: 'snapshot',
-      appleCleanupEvidence: true,
-    }),
-    'Retry with --debug and check daemon diagnostics logs. The timed-out snapshot request was canceled and Apple runner work was aborted when detected; the daemon was kept alive so the session can still be closed or inspected. If this was the first Apple-platform snapshot on the device, run agent-device prepare ios-runner with the same --platform before snapshot/test so runner startup is handled explicitly.',
-  );
-
-  // appleCleanupEvidence: false — no Apple-runner claim in any branch, and
-  // the Apple-only iOS-prepare follow-up drops entirely. This is the
-  // motivating fix: it fires equally whether the platform was declared
-  // non-Apple OR left undeclared (the common session-bound case), because
-  // neither is Apple evidence on its own.
-  assert.equal(
-    resolveRequestTimeoutHint({
-      remote: false,
-      resetDaemon: false,
-      command: 'press',
-      appleCleanupEvidence: false,
+      applePlatformDeclared: true,
     }),
     'Retry with --debug and check daemon diagnostics logs. The timed-out press request was canceled; the daemon was kept alive so the session can still be closed or inspected.',
   );
   assert.equal(
     resolveRequestTimeoutHint({
       remote: false,
-      resetDaemon: true,
-      command: 'open',
-      appleCleanupEvidence: false,
+      resetDaemon: false,
+      command: 'snapshot',
+      applePlatformDeclared: true,
     }),
-    'Retry with --debug and check daemon diagnostics logs. The daemon was reset after the timeout.',
+    'Retry with --debug and check daemon diagnostics logs. The timed-out snapshot request was canceled; the daemon was kept alive so the session can still be closed or inspected. If this was the first Apple-platform snapshot on the device, run agent-device prepare ios-runner with the same --platform before snapshot/test so runner startup is handled explicitly.',
   );
+
+  // An undeclared or declared non-Apple platform names no Apple runner in any branch, and the
+  // Apple-only prepare follow-up drops entirely.
   assert.equal(
     resolveRequestTimeoutHint({
       remote: false,
       resetDaemon: false,
       command: 'snapshot',
-      appleCleanupEvidence: false,
+      applePlatformDeclared: false,
     }),
     'Retry with --debug and check daemon diagnostics logs. The timed-out snapshot request was canceled; the daemon was kept alive so the session can still be closed or inspected.',
   );
+
+  // A reset is now reported as what it was decided from: an unanswered liveness probe. The reset
+  // SIGKILLs the daemon pid only, so the hint claims nothing about runner children it cannot
+  // prove stopped — and a declared Apple platform changes the reset wording not at all.
+  for (const applePlatformDeclared of [true, false]) {
+    assert.equal(
+      resolveRequestTimeoutHint({
+        remote: false,
+        resetDaemon: true,
+        command: 'open',
+        applePlatformDeclared,
+      }),
+      'Retry with --debug and check daemon diagnostics logs. The daemon did not answer the liveness probe and was reset after the timeout.',
+    );
+  }
 
   // Remote requests were never Apple-specific and stay evidence-independent.
   assert.equal(
@@ -91,19 +62,20 @@ test('request timeout hint only names Apple runner cleanup on actual evidence', 
       remote: true,
       resetDaemon: false,
       command: 'press',
-      appleCleanupEvidence: false,
+      applePlatformDeclared: false,
     }),
     'Retry with --debug and verify the remote daemon URL, auth token, and remote host logs.',
   );
 });
 
 test('a timed-out record stop on a surviving daemon names the retry that returns the export', () => {
+  // A remote client never touches the daemon's host, so its daemon survives by construction.
   assert.equal(
     resolveRequestTimeoutHint({
       remote: true,
       resetDaemon: false,
       command: 'record',
-      appleCleanupEvidence: false,
+      applePlatformDeclared: false,
       action: 'stop',
       session: 'recording',
     }),
@@ -114,34 +86,36 @@ test('a timed-out record stop on a surviving daemon names the retry that returns
       remote: true,
       resetDaemon: false,
       command: 'record',
-      appleCleanupEvidence: false,
+      applePlatformDeclared: false,
       action: 'stop',
     }),
     'The remote daemon may still be exporting the recording. Run agent-device record stop again to wait for that export and receive the completed recording.',
   );
-  // A local daemon preserved across the timeout may still be exporting too.
+  // A LOCAL daemon preserved across the timeout (#3199 declares `record` preserve-daemon) may
+  // still be exporting too, so it gets the same retry instead of the generic kept-alive wording.
   assert.equal(
     resolveRequestTimeoutHint({
       remote: false,
       resetDaemon: false,
       command: 'record',
-      appleCleanupEvidence: true,
+      applePlatformDeclared: false,
       action: 'stop',
       session: 'recording',
     }),
     'The daemon may still be exporting the recording. Run agent-device record stop --session recording again to wait for that export and receive the completed recording.',
   );
-  // A reset daemon is no longer exporting, so no keep-exporting promise is made.
+  // A daemon the probe proved unresponsive was reset, and a reset daemon is no longer exporting:
+  // no keep-exporting promise is made, and the wording says what happened to it instead.
   assert.equal(
     resolveRequestTimeoutHint({
       remote: false,
       resetDaemon: true,
       command: 'record',
-      appleCleanupEvidence: false,
+      applePlatformDeclared: false,
       action: 'stop',
       session: 'recording',
     }),
-    'Retry with --debug and check daemon diagnostics logs. The daemon was reset after the timeout.',
+    'Retry with --debug and check daemon diagnostics logs. The daemon did not answer the liveness probe and was reset after the timeout.',
   );
   // `record start` runs no export, so it keeps the generic remote wording.
   assert.equal(
@@ -149,7 +123,7 @@ test('a timed-out record stop on a surviving daemon names the retry that returns
       remote: true,
       resetDaemon: false,
       command: 'record',
-      appleCleanupEvidence: false,
+      applePlatformDeclared: false,
       action: 'start',
       session: 'recording',
     }),

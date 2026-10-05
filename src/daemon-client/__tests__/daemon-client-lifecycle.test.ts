@@ -8,7 +8,6 @@ import { afterEach, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import {
   spawnRegisteredDaemonFixture,
-  waitForRegisteredDaemonFixture,
   finishRegisteredDaemonFixture,
   finishRegisteredDaemonFixtures,
 } from '../../__tests__/test-utils/registered-daemon-fixture.ts';
@@ -25,9 +24,7 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
 }));
 
 import { resolveDaemonPaths, type DaemonPaths } from '../../daemon-resolution.ts';
-import { sendToDaemon, type DaemonRequest } from '../daemon-client.ts';
-import { sendRequest } from '../daemon-client-transport.ts';
-import type { DaemonRetirementResult } from '../../daemon-registration-owner.ts';
+import { sendToDaemon } from '../daemon-client.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
@@ -91,18 +88,6 @@ function writeDaemonInfo(paths: DaemonPaths, info: DaemonInfoFixture): void {
       httpPort: info.httpPort,
       transport: info.transport,
     })}\n`,
-    'utf8',
-  );
-}
-
-function writeDaemonLock(
-  paths: DaemonPaths,
-  lock: { pid: number; processStartTime?: string; startedAt?: number },
-): void {
-  fs.mkdirSync(paths.baseDir, { recursive: true });
-  fs.writeFileSync(
-    paths.lockPath,
-    `${JSON.stringify({ startedAt: Date.now(), ...lock })}\n`,
     'utf8',
   );
 }
@@ -175,37 +160,6 @@ function installSpawnedHttpDaemonAtOwnedStateDir(
       options,
     );
   });
-}
-
-async function startHangingHttpDaemonFixture(): Promise<HttpDaemonFixture> {
-  const seenPaths: string[] = [];
-  const rpcRequests: Record<string, any>[] = [];
-  const server = http.createServer((req, res) => {
-    const url = new URL(req.url || '/', 'http://127.0.0.1');
-    seenPaths.push(`${req.method ?? 'GET'} ${url.pathname}`);
-
-    if (req.method === 'GET' && url.pathname === '/health') {
-      res.writeHead(200);
-      res.end('ok');
-      return;
-    }
-
-    if (req.method === 'POST' && url.pathname === '/rpc') {
-      const chunks: Buffer[] = [];
-      req.on('data', (chunk) => {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      });
-      req.on('end', () => {
-        rpcRequests.push(JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, any>);
-      });
-      return;
-    }
-
-    res.writeHead(404);
-    res.end('not found');
-  });
-  const port = await listenOnLoopback(server);
-  return { server, port, seenPaths, rpcRequests };
 }
 
 function installSpawnedHttpDaemon(paths: DaemonPaths, httpPort: number): void {
@@ -601,73 +555,6 @@ test('sendToDaemon replaces socket-only daemon metadata when HTTP transport is r
     stderrCapture.restore();
     await closeLoopbackServer(freshDaemon.server);
     await finishRegisteredDaemonFixture(stateDir);
-  }
-});
-
-test('sendRequest timeout cleanup uses resolved daemon paths instead of request flags', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
-
-  const daemonStateDir = makeTempStateDir('agent-device-daemon-timeout-active-');
-  const requestFlagStateDir = makeTempStateDir('agent-device-daemon-timeout-request-');
-  const daemonPaths = resolveDaemonPaths(daemonStateDir);
-  const requestFlagPaths = resolveDaemonPaths(requestFlagStateDir);
-  const daemon = await startHangingHttpDaemonFixture();
-  mockSleep.mockImplementation(actualRetry.sleep);
-  const child = spawnRegisteredDaemonFixture(
-    daemonPaths,
-    {
-      httpPort: daemon.port,
-      token: 'local-secret',
-      version: readVersion(),
-      codeOrigin: 'checkout',
-      codeSignature: currentDaemonCodeSignature(),
-    },
-    undefined,
-  );
-  writeDaemonInfo(requestFlagPaths, {
-    httpPort: daemon.port,
-    transport: 'http',
-    pid: 999_998,
-  });
-  writeDaemonLock(requestFlagPaths, { pid: 999_998 });
-
-  const request: DaemonRequest = {
-    session: 'default',
-    command: 'replay',
-    positionals: [],
-    flags: { stateDir: requestFlagStateDir, daemonTransport: 'http' },
-    token: 'local-secret',
-    meta: { requestId: 'req-timeout-paths' },
-  };
-
-  try {
-    const info = await waitForRegisteredDaemonFixture(daemonPaths, child);
-    let thrown: unknown;
-    try {
-      await sendRequest(info, request, 'http', daemonPaths, 50);
-    } catch (error) {
-      thrown = error;
-    }
-
-    assert.ok(thrown instanceof AppError);
-    assert.equal(thrown.message, 'Daemon request timed out');
-    assert.equal(
-      (thrown.details?.retirement as DaemonRetirementResult | undefined)?.status,
-      'retired',
-    );
-    await child.exited;
-    assert.deepEqual(daemon.seenPaths, ['POST /rpc']);
-    assert.equal(fs.existsSync(daemonPaths.infoPath), false);
-    assert.equal(fs.existsSync(daemonPaths.lockPath), false);
-    assert.equal(fs.existsSync(requestFlagPaths.infoPath), true);
-    assert.equal(fs.existsSync(requestFlagPaths.lockPath), true);
-  } finally {
-    await closeLoopbackServer(daemon.server);
-    await finishRegisteredDaemonFixture(daemonStateDir);
-    fs.rmSync(requestFlagStateDir, { recursive: true, force: true });
   }
 });
 

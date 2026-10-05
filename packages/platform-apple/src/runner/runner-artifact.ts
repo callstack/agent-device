@@ -9,6 +9,7 @@ import {
   withProcessLock,
   emitRequestProgress,
   findProjectRoot,
+  getRequestSignal,
   isCommandTimeoutError,
 } from './host.ts';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
@@ -60,7 +61,78 @@ import { resolveAppleRunnerProjectPath } from './runner-source.ts';
 export { prepareXctestrunWithEnv } from './runner-artifact-env.ts';
 
 const runnerXctestrunBuildLocks = new Map<string, Promise<unknown>>();
-export const runnerPrepProcesses = new Set<ExecBackgroundResult['child']>();
+
+type RunnerPrepProcess = Readonly<{
+  deviceId: string;
+  requestId: string | undefined;
+  child: ExecBackgroundResult['child'];
+}>;
+
+const runnerPrepProcessLedger = new Set<RunnerPrepProcess>();
+
+/**
+ * Records a prep subprocess (`xcodebuild build-for-testing`) against the device it builds for and
+ * the request whose start spawned it, so a request canceled while waiting on that build can stop
+ * it (#3177). The build child keeps its owning start's signal as its first cancel path; this
+ * ledger is the device-scoped second one, for the waiters whose cancellation the spawn never saw.
+ * The owner is what keeps the second path from reaching a build another, still-active request
+ * launched: a canceled waiter stops only builds whose owner can no longer cancel them.
+ */
+export function registerRunnerPrepProcess(
+  deviceId: string,
+  child: ExecBackgroundResult['child'],
+  requestId?: string,
+): void {
+  const entry: RunnerPrepProcess = { deviceId, requestId, child };
+  runnerPrepProcessLedger.add(entry);
+  child.on('close', () => {
+    runnerPrepProcessLedger.delete(entry);
+  });
+}
+
+/** The prep subprocesses still running, for one device or for every device when none is named. */
+export function runnerPrepProcessChildren(
+  deviceId?: string,
+): readonly ExecBackgroundResult['child'][] {
+  return prepProcessEntries(deviceId).map((entry) => entry.child);
+}
+
+/**
+ * The prep subprocesses whose owning start is detached: the request that spawned it has finished,
+ * was canceled, or never existed (an in-process build with no request), so no live cancellation
+ * can reach the build anymore. A canceled waiter stops exactly these, never a build still owned by
+ * an in-flight request — that one belongs to its owner and dies through the owner's own signal.
+ */
+export function runnerPrepProcessChildrenWithoutActiveOwner(
+  deviceId?: string,
+): readonly ExecBackgroundResult['child'][] {
+  return prepProcessEntries(deviceId)
+    .filter((entry) => !isRunnerPrepOwnerActive(entry.requestId))
+    .map((entry) => entry.child);
+}
+
+function prepProcessEntries(deviceId?: string): readonly RunnerPrepProcess[] {
+  return [...runnerPrepProcessLedger].filter(
+    (entry) => deviceId === undefined || entry.deviceId === deviceId,
+  );
+}
+
+/**
+ * Whether the request owning a prep build can still cancel it: a registered, un-aborted request
+ * signal means the owner is in flight and its cancellation reaches the build through the exec
+ * layer directly.
+ */
+function isRunnerPrepOwnerActive(requestId: string | undefined): boolean {
+  if (!requestId) return false;
+  const ownerSignal = getRequestSignal(requestId);
+  return ownerSignal !== undefined && !ownerSignal.aborted;
+}
+
+export function forgetRunnerPrepProcess(child: ExecBackgroundResult['child']): void {
+  for (const entry of runnerPrepProcessLedger) {
+    if (entry.child === child) runnerPrepProcessLedger.delete(entry);
+  }
+}
 
 export type RunnerXctestrunArtifactState = 'valid' | 'rebuilt';
 
@@ -87,6 +159,8 @@ type RunnerXctestrunBuildOptions = {
   verbose?: boolean;
   logPath?: string;
   traceLogPath?: string;
+  /** The request whose start owns this build; recorded so cancel rules respect the owner. */
+  requestId?: string;
   /**
    * The build phase's one budget, opened by whoever owns the build: the cache decision's
    * blocking toolchain probes and `xcodebuild` spend the same clock, and the owning
@@ -484,10 +558,7 @@ async function buildRunnerXctestrun(
         timeoutMs: buildTimeoutMs,
         signal: options.budget?.signal,
         onSpawn: (child) => {
-          runnerPrepProcesses.add(child);
-          child.on('close', () => {
-            runnerPrepProcesses.delete(child);
-          });
+          registerRunnerPrepProcess(device.id, child, options.requestId);
         },
         onStdoutChunk: (chunk) => {
           logChunk(chunk, options.logPath, options.traceLogPath, options.verbose);

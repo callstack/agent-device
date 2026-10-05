@@ -34,7 +34,7 @@ const { handleRequestTimeoutCalls } = vi.hoisted(() => ({
 }));
 
 vi.mock('../daemon-client-timeout.ts', () => ({
-  handleRequestTimeout: (params: unknown) => {
+  handleRequestTimeout: async (params: unknown) => {
     handleRequestTimeoutCalls.push(params);
     return new AppError('COMMAND_FAILED', 'Daemon request timed out', {
       reason: 'daemon_transport_timeout',

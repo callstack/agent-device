@@ -25,7 +25,12 @@ import {
   type RunnerLeaseCleanupAdapter,
   type RunnerXcodebuildCleanupTarget,
 } from './runner-lease.ts';
-import { IOS_RUNNER_CONTAINER_BUNDLE_IDS, runnerPrepProcesses } from './runner-xctestrun.ts';
+import {
+  forgetRunnerPrepProcess,
+  IOS_RUNNER_CONTAINER_BUNDLE_IDS,
+  runnerPrepProcessChildren,
+  runnerPrepProcessChildrenWithoutActiveOwner,
+} from './runner-xctestrun.ts';
 import { advanceRunnerSessionState, type RunnerSession } from './runner-session-types.ts';
 
 export const RUNNER_INVALIDATE_WAIT_TIMEOUT_MS = 1_000;
@@ -88,7 +93,7 @@ export async function cleanupOwnedIosRunnerLease(deviceId: string): Promise<void
 export async function abortRunnerSessionsAndPrepProcesses(
   activeSessions: readonly RunnerSession[],
 ): Promise<void> {
-  const prepProcesses = Array.from(runnerPrepProcesses);
+  const prepProcesses = runnerPrepProcessChildren();
   const macOsSessions = activeSessions.filter((session) => isMacOs(session.device));
   const otherSessions = activeSessions.filter((session) => !isMacOs(session.device));
   for (const session of activeSessions) {
@@ -108,15 +113,35 @@ export async function abortRunnerSessionsAndPrepProcesses(
   );
 }
 
-export async function stopRunnerPrepProcesses(): Promise<void> {
-  const prepProcesses = Array.from(runnerPrepProcesses);
+/**
+ * Stops the prep subprocesses (the `xcodebuild build-for-testing` behind a cold runner start)
+ * with the tree-kill escalation the sessions get. A device stops only its own builds: the caller
+ * that stops device A's session must not sweep device B's in-flight build (#3177).
+ */
+export async function stopRunnerPrepProcesses(deviceId?: string): Promise<void> {
+  await stopPrepProcessList(runnerPrepProcessChildren(deviceId));
+}
+
+/**
+ * Stops the device builds no active request owns anymore (#3177). A canceled waiter may stop the
+ * build it waited on only once that build's owning start is detached; a build still owned by an
+ * in-flight request belongs to its owner, which cancels it through its own signal, and a waiter
+ * must not SIGTERM another request's work out from under it.
+ */
+export async function stopRunnerPrepProcessesWithoutActiveOwner(deviceId?: string): Promise<void> {
+  await stopPrepProcessList(runnerPrepProcessChildrenWithoutActiveOwner(deviceId));
+}
+
+async function stopPrepProcessList(
+  prepProcesses: readonly ExecBackgroundResult['child'][],
+): Promise<void> {
   await Promise.allSettled(
     prepProcesses.map(async (child) => {
       try {
         await killRunnerProcessTree(child.pid, 'SIGTERM');
         await killRunnerProcessTree(child.pid, 'SIGKILL');
       } finally {
-        runnerPrepProcesses.delete(child);
+        forgetRunnerPrepProcess(child);
       }
     }),
   );
@@ -311,7 +336,7 @@ async function signalRunnerPrepProcesses(
     prepProcesses.map(async (child) => {
       await killRunnerProcessTree(child.pid, signal);
       if (signal === 'SIGKILL') {
-        runnerPrepProcesses.delete(child);
+        forgetRunnerPrepProcess(child);
       }
     }),
   );
