@@ -22,6 +22,7 @@ export async function setLimrunIosSetting(
       return await session.dependencies.ios.applySimctlSetting({
         runSimctl: (args) => runLimrunSimctl(session, args),
         udid: 'booted',
+        deviceId: session.device.id,
         setting: normalized,
         state,
         appBundleId:

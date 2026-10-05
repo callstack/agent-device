@@ -1,6 +1,7 @@
 import { expect, test, vi } from 'vitest';
+import type { SimctlSettingRequest } from '@agent-device/contracts/settings';
 import { AppError } from '@agent-device/kernel/errors';
-import { applySimctlSetting, type SimctlSettingRequest } from '../simctl-settings.ts';
+import { applySimctlSetting } from '../simctl-settings.ts';
 
 function recordingRunner(outputs: Array<{ stdout: string; stderr: string } | AppError> = []) {
   const queue = [...outputs];
@@ -70,6 +71,32 @@ test('a privacy service the runtime refuses is unsupported; other failures pass 
     cause: refused,
   });
   await expect(applySimctlSetting(grant)).rejects.toBe(failed);
+});
+
+test('a refused privacy service reports the device id the caller names, not the udid', async () => {
+  const refused = new AppError('COMMAND_FAILED', 'simctl exited with code 1', {
+    stderr: 'Failed to grant access to com.example.app\nOperation not permitted',
+  });
+  const runSimctl = recordingRunner([refused]);
+
+  await expect(
+    applySimctlSetting(
+      request(runSimctl, {
+        udid: 'booted',
+        deviceId: 'limrun:ios:lease-a',
+        setting: 'permission',
+        state: 'grant',
+        appBundleId: 'com.example.app',
+        options: { permissionTarget: 'notifications' },
+      }),
+    ),
+  ).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    details: { deviceId: 'limrun:ios:lease-a', appBundleId: 'com.example.app' },
+  });
+  expect(runSimctl.mock.calls).toEqual([
+    [['privacy', 'booted', 'grant', 'notifications', 'com.example.app']],
+  ]);
 });
 
 test('an app-scoped setting without an app refuses before running simctl', async () => {
