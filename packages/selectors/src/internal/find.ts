@@ -123,13 +123,29 @@ function matchText(value: string | undefined, query: string): number {
 
 function matchRole(node: SnapshotNode, query: string): number {
   // The kernel's one role-spelling reader (#3021): the node's canonical `kind`
-  // first, then its windowed legacy leaf. Exact-vs-substring scoring is the
-  // historical one, so `find role=static` keeps ranking exactly as it did
-  // before the kind vocabulary arrived.
+  // first, then its windowed legacy leaf. Exact scoring is against the whole
+  // spellings; substring scoring stays on the leaf segment because the retired
+  // locator substring-matched a last-`.`-segment leaf, and an unrecognized
+  // dotted class keeps its package path in its `kind` — substringing the full
+  // kind would let `find role=fenix` score `org.mozilla.fenix.ReaderView`
+  // where the released query refused it.
   const spellings = roleSpellingsOfNode(node);
   if (spellings.includes(query)) return 2;
-  if (spellings.some((spelling) => spelling.includes(query))) return 1;
+  if (spellings.some((spelling) => roleLeafSegment(spelling).includes(query))) return 1;
   return 0;
+}
+
+/**
+ * The substring-scoring view of one role spelling: its last `.`-separated
+ * segment, matching the retired locator's leaf. An AX-stripped query (`link`
+ * against an `AXLink` node) reaches the exact score through the windowed
+ * alias, not through substring — the retired selector TERM already matched
+ * that spelling exactly (`contracts` `normalizeType` stripped the prefix), so
+ * promoting it here is the locator/term parity #3021 requires.
+ */
+function roleLeafSegment(spelling: string): string {
+  const lastDot = spelling.lastIndexOf('.');
+  return lastDot === -1 ? spelling : spelling.slice(lastDot + 1);
 }
 
 export function normalizeText(value: string): string {

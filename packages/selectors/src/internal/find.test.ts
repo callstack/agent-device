@@ -81,6 +81,31 @@ test('find role= keeps the historical substring score for legacy prefixes', () =
   assert.equal(partial.matches[0]?.ref, 'e1');
 });
 
+test('find role= substring-scores the leaf segment, never a dotted kind package path', () => {
+  // An unrecognized custom class keeps its full dotted lowercase as its kind.
+  // The retired locator substring-matched the LAST segment only, so a released
+  // `find role=fenix` refused `org.mozilla.fenix.ReaderView`; substringing the
+  // whole kind would silently pull such nodes into the best set. Exact-kind
+  // scoring still answers the full spelling when the query names it.
+  const type = 'org.mozilla.fenix.ReaderView';
+  assert.equal(roleMatches('fenix', [type]).score, 0);
+  assert.equal(roleMatches('readerview', [type]).score, 2); // windowed legacy leaf
+  assert.equal(roleMatches(type.toLowerCase(), [type]).score, 2); // the exact kind
+});
+
+test('find role= reaches AX-stripped queries through the exact window alias', () => {
+  // Pinned parity decision (#3021 finding): the retired selector TERM stripped
+  // a leading `AX` (`contracts` normalizeType) while the retired LOCATOR did
+  // not, so `find role link click` on a macOS-helper `AXLink` node scored 1
+  // there while `role=link` matched exactly. Adopting one shared authority
+  // promotes the locator's AX-stripped query to the exact score — the locator
+  // and the term cannot disagree about a node's role anymore.
+  const axNode = roleMatches('link', ['AXLink']);
+  assert.equal(axNode.score, 2);
+  // The prefix-kept spelling keeps its historical exact score.
+  assert.equal(roleMatches('axlink', ['AXLink']).score, 2);
+});
+
 test('find role= refuses sibling vocabulary words with no kind or alias match', () => {
   // Nearest-negative: a kind one dash away and an unrelated kind score 0.
   assert.equal(roleMatches('text-field', ['XCUIElementTypeStaticText']).score, 0);
