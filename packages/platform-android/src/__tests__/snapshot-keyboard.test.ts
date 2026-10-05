@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { androidSnapshotKeyboardFromTree } from '../snapshot-keyboard.ts';
+import { androidSnapshotKeyboardFromTree } from '../snapshot.ts';
 import { parseUiHierarchyTree } from '../ui-hierarchy.ts';
 
 const APP_WINDOW =
