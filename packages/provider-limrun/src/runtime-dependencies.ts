@@ -4,6 +4,7 @@ import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { AndroidInputOwner } from '@agent-device/contracts/android-input-ownership';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppError } from '@agent-device/kernel/errors';
+import type { SettingOptions } from '@agent-device/contracts/settings';
 
 export type LimrunAdbCommandOptions = {
   allowFailure?: boolean;
@@ -134,29 +135,22 @@ export type LimrunHostAdapter = {
 };
 
 /**
- * The Apple simctl settings vocabulary a Limrun iOS session shares with a local simulator. The
- * composition root supplies it from the Apple package, which owns the parsing, so the provider
- * does not import a platform package.
+ * One simulator setting the Apple package changes through `simctl`, in that package's terms. The
+ * composition root supplies the Apple plan, so the provider does not import a platform package.
  */
-export type LimrunIosSettingsAdapter = {
-  privacyAction(action: 'grant' | 'deny' | 'reset'): 'grant' | 'revoke' | 'reset';
-  parsePrivacyService(
-    permissionTarget: string | undefined,
-    permissionMode: string | undefined,
-  ): string;
-  parseAppearance(stdout: string, stderr: string): 'light' | 'dark' | null;
-  isPrivacyServiceRefusal(error: unknown): boolean;
-  privacyServiceRefusedError(params: {
-    action: 'grant' | 'revoke' | 'reset';
-    target: string;
-    appBundleId: string;
-    deviceId: string;
-    cause: unknown;
-  }): AppError;
+export type LimrunIosSimctlSettingRequest = {
+  runSimctl(args: string[]): Promise<{ readonly stdout: string; readonly stderr: string }>;
+  udid: string;
+  setting: 'appearance' | 'permission' | 'location';
+  state: string;
+  appBundleId?: string;
+  options?: SettingOptions;
 };
 
 export type LimrunIosRuntimeAdapter = {
-  settings: LimrunIosSettingsAdapter;
+  applySimctlSetting(
+    request: LimrunIosSimctlSettingRequest,
+  ): Promise<Record<string, unknown> | void>;
   resolveAppAlias(app: string): Promise<string>;
   readBundleAppName(appPath: string): Promise<string | undefined>;
 };

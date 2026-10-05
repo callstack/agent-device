@@ -1,8 +1,105 @@
 import {
   type MobilePermissionTarget,
+  parseAppearanceAction,
+  parsePermissionAction,
   parsePermissionTarget,
+  parseSettingState,
+  type SettingOptions,
 } from '@agent-device/contracts/settings';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, sessionAppRequiredDetails } from '@agent-device/kernel/errors';
+import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
+
+/** The settings a simulator changes through `simctl` alone, whichever host runs that `simctl`. */
+export type SimctlSetting = 'appearance' | 'permission' | 'location';
+
+/**
+ * Runs one `simctl` argv on the simulator. It resolves with the output when `simctl` exits 0 and
+ * rejects with a `COMMAND_FAILED` AppError whose `details.stderr` is the `simctl` stderr otherwise.
+ */
+export type SimctlSettingRunner = (
+  args: string[],
+) => Promise<{ readonly stdout: string; readonly stderr: string }>;
+
+export type SimctlSettingRequest = {
+  runSimctl: SimctlSettingRunner;
+  /** The simulator UDID `simctl` addresses, or `booted` where the runner reaches one simulator. */
+  udid: string;
+  setting: SimctlSetting;
+  state: string;
+  appBundleId?: string;
+  options?: SettingOptions;
+};
+
+/** Changes one simulator setting through `simctl`; the Apple package owns this plan for every runner. */
+export async function applySimctlSetting(
+  request: SimctlSettingRequest,
+): Promise<Record<string, unknown> | void> {
+  switch (request.setting) {
+    case 'appearance':
+      return await setAppearance(request);
+    case 'permission':
+      return await setPermission(request);
+    case 'location':
+      return await setLocation(request);
+  }
+}
+
+async function setAppearance({ runSimctl, udid, state }: SimctlSettingRequest): Promise<void> {
+  const action = parseAppearanceAction(state);
+  let target: 'light' | 'dark';
+  if (action === 'toggle') {
+    const current = await runSimctl(['ui', udid, 'appearance']);
+    const appearance = parseIosAppearance(current.stdout, current.stderr);
+    if (!appearance) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        'Unable to determine current iOS appearance for toggle',
+        {
+          stdout: current.stdout,
+          stderr: current.stderr,
+        },
+      );
+    }
+    target = appearance === 'dark' ? 'light' : 'dark';
+  } else {
+    target = action;
+  }
+  await runSimctl(['ui', udid, 'appearance', target]);
+}
+
+async function setPermission(request: SimctlSettingRequest): Promise<void> {
+  const { runSimctl, udid, state, options } = request;
+  const appBundleId = requireAppBundleId(request);
+  const permissionAction = parsePermissionAction(state);
+  const action = permissionAction === 'deny' ? 'revoke' : permissionAction;
+  const target = parseIosPrivacyService(options?.permissionTarget, options?.permissionMode);
+  try {
+    await runSimctl(['privacy', udid, action, target, appBundleId]);
+  } catch (error) {
+    if (!isIosPrivacyServiceRefusal(error)) throw error;
+    throw iosPrivacyServiceRefusedError(action, target, appBundleId, udid, error);
+  }
+}
+
+async function setLocation(request: SimctlSettingRequest): Promise<Record<string, unknown> | void> {
+  const { runSimctl, udid, state, options } = request;
+  if (state.toLowerCase() === 'set') {
+    const { latitude, longitude } = requireLocationCoordinates(options);
+    await runSimctl(['location', udid, 'set', `${latitude},${longitude}`]);
+    return { latitude, longitude };
+  }
+  const action = parseSettingState(state) ? 'grant' : 'revoke';
+  await runSimctl(['privacy', udid, action, 'location', requireAppBundleId(request)]);
+}
+
+function requireAppBundleId({ setting, appBundleId }: SimctlSettingRequest): string {
+  if (appBundleId) return appBundleId;
+  throw new AppError(
+    'INVALID_ARGS',
+    `${setting} setting requires an active app in session`,
+    sessionAppRequiredDetails(),
+  );
+}
 
 /** The `simctl privacy` service for every target except `photos`, whose service depends on its mode. */
 const IOS_PRIVACY_SERVICES: Record<Exclude<MobilePermissionTarget, 'photos'>, string> = {
@@ -21,8 +118,7 @@ const IOS_PRIVACY_SERVICES: Record<Exclude<MobilePermissionTarget, 'photos'>, st
   siri: 'siri',
 };
 
-/** The `simctl privacy` service a permission target and optional photos mode select. */
-export function parseIosPrivacyService(
+function parseIosPrivacyService(
   permissionTarget: string | undefined,
   permissionMode: string | undefined,
 ): string {
@@ -42,8 +138,7 @@ export function parseIosPrivacyService(
   return IOS_PRIVACY_SERVICES[normalized];
 }
 
-/** The appearance `simctl ui appearance` printed, or null when it reported none. */
-export function parseIosAppearance(stdout: string, stderr: string): 'light' | 'dark' | null {
+function parseIosAppearance(stdout: string, stderr: string): 'light' | 'dark' | null {
   const match = /\b(light|dark|unsupported|unknown)\b/i.exec(`${stdout}\n${stderr}`);
   if (!match) return null;
   const value = match[1]?.toLowerCase();
@@ -52,20 +147,13 @@ export function parseIosAppearance(stdout: string, stderr: string): 'light' | 'd
   return null;
 }
 
-export type IosPrivacyAction = 'grant' | 'revoke' | 'reset';
-
-/** The `simctl privacy` action a permission state applies. */
-export function iosPrivacyAction(action: 'grant' | 'deny' | 'reset'): IosPrivacyAction {
-  return action === 'deny' ? 'revoke' : action;
-}
-
 /**
  * `simctl privacy` is its own capability check: a service the runtime cannot change answers
  * EPERM, whether or not it is spelled in the help text. The help text is not a capability
  * list — Xcode 26 omits `camera`, which it does change — so the verdict is read from the
  * command that would have made the change rather than from a probe that can only guess.
  */
-export function isIosPrivacyServiceRefusal(error: unknown): boolean {
+function isIosPrivacyServiceRefusal(error: unknown): boolean {
   if (!(error instanceof AppError) || error.code !== 'COMMAND_FAILED') return false;
   const stderr = String(error.details?.stderr ?? '').toLowerCase();
   return (
@@ -74,15 +162,13 @@ export function isIosPrivacyServiceRefusal(error: unknown): boolean {
   );
 }
 
-/** The refusal for a `simctl privacy` service the simulator runtime cannot change. */
-export function iosPrivacyServiceRefusedError(params: {
-  action: IosPrivacyAction;
-  target: string;
-  appBundleId: string;
-  deviceId: string;
-  cause: unknown;
-}): AppError {
-  const { action, target, appBundleId, deviceId, cause } = params;
+function iosPrivacyServiceRefusedError(
+  action: 'grant' | 'revoke' | 'reset',
+  target: string,
+  appBundleId: string,
+  deviceId: string,
+  cause: unknown,
+): AppError {
   if (action === 'reset') {
     return new AppError(
       'UNSUPPORTED_OPERATION',

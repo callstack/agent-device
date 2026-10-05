@@ -6,6 +6,7 @@ const moduleLoads = vi.hoisted(() => ({
   androidLogcat: 0,
   appleAppResolution: 0,
   appleInstallArtifact: 0,
+  appleSimctlSettings: 0,
 }));
 
 vi.mock('@limrun/api', () => ({
@@ -35,6 +36,18 @@ vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) =>
   }),
 }));
 
+vi.mock('@agent-device/platform-apple/simctl-settings', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/platform-apple/simctl-settings')>();
+  return {
+    ...actual,
+    applySimctlSetting: vi.fn(async (request: Parameters<typeof actual.applySimctlSetting>[0]) => {
+      moduleLoads.appleSimctlSettings += 1;
+      return await actual.applySimctlSetting(request);
+    }),
+  };
+});
+
 vi.mock('@agent-device/platform-apple/install-artifact', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/platform-apple/install-artifact')>()),
   readIosBundleInfo: vi.fn(async () => {
@@ -52,6 +65,7 @@ test('Limrun construction defers operation and opposite-platform helper modules'
     androidLogcat: 0,
     appleAppResolution: 0,
     appleInstallArtifact: 0,
+    appleSimctlSettings: 0,
   });
   await runtime.shutdown();
 
@@ -240,11 +254,22 @@ test('the adb invocation adapters address through the platform builders', async 
   assert.deepEqual(serializeAndroidAdbInvocation(host), ['disconnect', '127.0.0.1:62001']);
 });
 
-test('Limrun iOS settings come from the Apple simctl vocabulary', async () => {
+test('Limrun iOS settings run the Apple simctl plan, loaded on the first setting', async () => {
   const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
-  const { settings } = createLimrunRuntimeDependencies().ios;
+  const dependencies = createLimrunRuntimeDependencies();
+  const runSimctl = vi.fn(async (_args: string[]) => ({ stdout: '', stderr: '' }));
 
-  assert.equal(settings.privacyAction('deny'), 'revoke');
-  assert.equal(settings.parsePrivacyService('photos', 'limited'), 'photos-add');
-  assert.equal(settings.parseAppearance('dark\n', ''), 'dark');
+  await dependencies.ios.applySimctlSetting({
+    runSimctl,
+    udid: 'booted',
+    setting: 'permission',
+    state: 'grant',
+    appBundleId: 'com.example.app',
+    options: { permissionTarget: 'photos', permissionMode: 'limited' },
+  });
+
+  assert.equal(moduleLoads.appleSimctlSettings, 1);
+  assert.deepEqual(runSimctl.mock.calls, [
+    [['privacy', 'booted', 'grant', 'photos-add', 'com.example.app']],
+  ]);
 });

@@ -1,10 +1,5 @@
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
-import {
-  parseAppearanceAction,
-  parsePermissionAction,
-  parseSettingState,
-  type SettingOptions,
-} from '@agent-device/contracts/settings';
+import type { SettingOptions } from '@agent-device/contracts/settings';
 import type {
   DeviceLease,
   DeviceRotation,
@@ -13,12 +8,7 @@ import type {
 } from '@agent-device/contracts/device';
 import type { FillBackendResult, Interactor } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  AppError,
-  discloseDispatchAfterSteps,
-  sessionAppRequiredDetails,
-} from '@agent-device/kernel/errors';
-import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
+import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 import type Limrun from '@limrun/api';
 import {
   createInstanceClient as createIosInstanceClient,
@@ -382,143 +372,8 @@ class LimrunIosInteractor implements Interactor {
     appId?: string,
     options?: SettingOptions,
   ): Promise<Record<string, unknown> | void> {
-    switch (setting.toLowerCase()) {
-      case 'appearance':
-        return await this.setAppearance(state);
-      case 'permission':
-        return await this.setPermission(state, appId, options);
-      case 'location':
-        return await this.setLocation(state, appId, options);
-      case 'clear-app-state':
-        return await this.clearAppState(state, appId);
-      default:
-        throw unsupported(
-          'settings',
-          `Limrun iOS direct sessions support appearance, permission, location, and clear-app-state settings, not ${setting}.`,
-        );
-    }
-  }
-
-  private async setAppearance(state: string): Promise<void> {
-    const action = parseAppearanceAction(state);
-    const target = action === 'toggle' ? await this.toggledAppearance() : action;
-    await this.simctl('appearance', ['ui', 'booted', 'appearance', target]);
-  }
-
-  private async setPermission(
-    state: string,
-    appId: string | undefined,
-    options: SettingOptions | undefined,
-  ): Promise<void> {
-    const bundleId = await this.requireAppId(
-      appId,
-      'permission setting requires an active app in session',
-    );
-    const { settings } = this.session.dependencies.ios;
-    const action = settings.privacyAction(parsePermissionAction(state));
-    const service = settings.parsePrivacyService(
-      options?.permissionTarget,
-      options?.permissionMode,
-    );
-    try {
-      await this.simctl('permission', ['privacy', 'booted', action, service, bundleId]);
-    } catch (error) {
-      if (!settings.isPrivacyServiceRefusal(error)) throw error;
-      throw settings.privacyServiceRefusedError({
-        action,
-        target: service,
-        appBundleId: bundleId,
-        deviceId: this.session.device.id,
-        cause: error,
-      });
-    }
-  }
-
-  private async setLocation(
-    state: string,
-    appId: string | undefined,
-    options: SettingOptions | undefined,
-  ): Promise<Record<string, unknown> | void> {
-    if (state.toLowerCase() === 'set') {
-      const { latitude, longitude } = requireLocationCoordinates(options);
-      await this.simctl('location', ['location', 'booted', 'set', `${latitude},${longitude}`]);
-      return { latitude, longitude };
-    }
-    const enabled = parseSettingState(state);
-    const bundleId = await this.requireAppId(
-      appId,
-      'location setting requires an active app in session',
-    );
-    await this.simctl('location', [
-      'privacy',
-      'booted',
-      enabled ? 'grant' : 'revoke',
-      'location',
-      bundleId,
-    ]);
-  }
-
-  private async clearAppState(
-    state: string,
-    appId: string | undefined,
-  ): Promise<Record<string, unknown>> {
-    if (state.toLowerCase() !== 'clear') {
-      throw new AppError('INVALID_ARGS', 'settings clear-app-state only supports clear.');
-    }
-    const bundleId = await this.requireAppId(
-      appId,
-      'settings clear-app-state requires an app id or an active app session.',
-    );
-    try {
-      await this.session.client.softReset(bundleId, { strategy: 'data' });
-      // Limrun's reset relaunches the app. A local clear leaves it stopped, so stop it here too.
-      await this.session.client.terminateApp(bundleId);
-    } catch (error) {
-      if (error instanceof AppError) throw error;
-      throw new AppError(
-        'COMMAND_FAILED',
-        'Limrun iOS could not clear app state.',
-        { setting: 'clear-app-state', bundleId },
-        error,
-      );
-    }
-    return { bundleId, cleared: true };
-  }
-
-  private async requireAppId(appId: string | undefined, message: string): Promise<string> {
-    if (!appId) throw new AppError('INVALID_ARGS', message, sessionAppRequiredDetails());
-    return await this.session.dependencies.ios.resolveAppAlias(appId);
-  }
-
-  private async toggledAppearance(): Promise<'light' | 'dark'> {
-    const current = await this.simctl('appearance', ['ui', 'booted', 'appearance']);
-    const appearance = this.session.dependencies.ios.settings.parseAppearance(
-      current.stdout,
-      current.stderr,
-    );
-    if (!appearance) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        'Unable to determine current iOS appearance for toggle',
-        {
-          stdout: current.stdout,
-          stderr: current.stderr,
-        },
-      );
-    }
-    return appearance === 'dark' ? 'light' : 'dark';
-  }
-
-  private async simctl(setting: string, argv: string[]) {
-    const result = await this.session.client.simctl(argv).wait();
-    if (result.code !== 0) {
-      throw new AppError('COMMAND_FAILED', `Limrun iOS could not change the ${setting} setting.`, {
-        setting,
-        exitCode: result.code,
-        stderr: result.stderr.trim(),
-      });
-    }
-    return result;
+    const { setLimrunIosSetting } = await import('./ios-settings.ts');
+    return await setLimrunIosSetting(this.session, setting, state, appId, options);
   }
 }
 

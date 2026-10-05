@@ -25,6 +25,7 @@ import type {
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { DeviceInfo, Platform } from '@agent-device/kernel/device';
 import type { LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
+import { applySimctlSetting } from '@agent-device/platform-apple/simctl-settings';
 import {
   createUnavailableRuntimeFactsForTest,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
@@ -335,7 +336,7 @@ export const limrunTestDependencies = {
     archiveDirectory: async () => {},
   },
   ios: {
-    settings: {} as LimrunRuntimeDependencies['ios']['settings'],
+    applySimctlSetting,
     resolveAppAlias: async (app: string) => app,
     readBundleAppName: async () => undefined,
   },

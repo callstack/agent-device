@@ -1,7 +1,6 @@
 import {
   APPLE_BIOMETRIC_LEAF_REFUSAL,
   getUnsupportedMacOsSettingMessage,
-  parseAppearanceAction,
   parsePermissionAction,
   parseSettingState,
   type ReadableSetting,
@@ -22,18 +21,10 @@ import {
 } from '@agent-device/host-kit/host-file';
 import path from 'node:path';
 import { requireExecSuccess } from '@agent-device/host-kit/command';
-import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
 import { setMacOsAppearance } from '../os/macos/apps.ts';
 import { runMacOsPermissionAction, type MacOsPermissionTarget } from '../os/macos/helper.ts';
 import { closeIosApp } from './app-launch.ts';
-import {
-  iosPrivacyAction,
-  type IosPrivacyAction,
-  iosPrivacyServiceRefusedError,
-  isIosPrivacyServiceRefusal,
-  parseIosAppearance,
-  parseIosPrivacyService,
-} from './simctl-settings.ts';
+import { applySimctlSetting } from './simctl-settings.ts';
 import { readIosTextSize, setIosTextSize } from './settings-text-size.ts';
 import { requireHandheldAppleSimulatorLeaf } from './settings-leaf.ts';
 import { resolveIosApp } from './app-resolution.ts';
@@ -134,29 +125,6 @@ export async function setIosSetting(
       }
       return;
     }
-    case 'location': {
-      if (state.toLowerCase() === 'set') {
-        const { latitude, longitude } = requireLocationCoordinates(options);
-        await runSimctlForDevice(device, [
-          'location',
-          device.id,
-          'set',
-          `${latitude},${longitude}`,
-        ]);
-        return { latitude, longitude };
-      }
-      const enabled = parseSettingState(state);
-      if (!appBundleId) {
-        throw new AppError(
-          'INVALID_ARGS',
-          'location setting requires an active app in session',
-          sessionAppRequiredDetails(),
-        );
-      }
-      const action = enabled ? 'grant' : 'revoke';
-      await runSimctlForDevice(device, ['privacy', device.id, action, 'location', appBundleId]);
-      return;
-    }
     case 'faceid':
     case 'touchid': {
       requireHandheldAppleSimulatorLeaf(device, APPLE_BIOMETRIC_LEAF_REFUSAL);
@@ -169,27 +137,20 @@ export async function setIosSetting(
       });
       return;
     }
-    case 'appearance': {
-      const target = await resolveIosAppearanceTarget(device, state);
-      await runSimctlForDevice(device, ['ui', device.id, 'appearance', target]);
-      return;
-    }
     case 'text-size': {
       return await setIosTextSize(device, state);
     }
-    case 'permission': {
-      if (!appBundleId) {
-        throw new AppError(
-          'INVALID_ARGS',
-          'permission setting requires an active app in session',
-          sessionAppRequiredDetails(),
-        );
-      }
-      const action = iosPrivacyAction(parsePermissionAction(state));
-      const target = parseIosPrivacyService(options?.permissionTarget, options?.permissionMode);
-      await runIosPrivacyCommand(device, action, target, appBundleId);
-      return;
-    }
+    case 'appearance':
+    case 'permission':
+    case 'location':
+      return await applySimctlSetting({
+        runSimctl: (args) => runSimctlForDevice(device, args),
+        udid: device.id,
+        setting: normalized,
+        state,
+        appBundleId,
+        options,
+      });
     default:
       throw new AppError('INVALID_ARGS', `Unsupported setting: ${setting}`);
   }
@@ -292,29 +253,6 @@ function parseMacOsPermissionTarget(value: string | undefined): MacOsPermissionT
   );
 }
 
-async function resolveIosAppearanceTarget(
-  device: DeviceInfo,
-  state: string,
-): Promise<'light' | 'dark'> {
-  const action = parseAppearanceAction(state);
-  if (action !== 'toggle') return action;
-
-  const currentResult = requireExecSuccess(
-    await runSimctlForDevice(device, ['ui', device.id, 'appearance'], {
-      allowFailure: true,
-    }),
-    'Failed to read current iOS appearance',
-  );
-  const current = parseIosAppearance(currentResult.stdout, currentResult.stderr);
-  if (!current) {
-    throw new AppError('COMMAND_FAILED', 'Unable to determine current iOS appearance for toggle', {
-      stdout: currentResult.stdout,
-      stderr: currentResult.stderr,
-    });
-  }
-  return current === 'dark' ? 'light' : 'dark';
-}
-
 type IosBiometricAction = 'match' | 'nonmatch' | 'enroll' | 'unenroll';
 type IosBiometricSetting = 'faceid' | 'touchid';
 
@@ -328,26 +266,6 @@ const IOS_BIOMETRIC_SETTINGS: Record<
   faceid: { notificationModality: 'pearl' },
   touchid: { notificationModality: 'fingerTouch' },
 };
-
-async function runIosPrivacyCommand(
-  device: DeviceInfo,
-  action: IosPrivacyAction,
-  target: string,
-  appBundleId: string,
-): Promise<void> {
-  try {
-    await runSimctlForDevice(device, ['privacy', device.id, action, target, appBundleId]);
-  } catch (error) {
-    if (!isIosPrivacyServiceRefusal(error)) throw error;
-    throw iosPrivacyServiceRefusedError({
-      action,
-      target,
-      appBundleId,
-      deviceId: device.id,
-      cause: error,
-    });
-  }
-}
 
 function parseBiometricAction(state: string, settingName: IosBiometricSetting): IosBiometricAction {
   const normalized = state.trim().toLowerCase();

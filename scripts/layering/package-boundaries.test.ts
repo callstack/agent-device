@@ -547,6 +547,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/platform-apple/runner/test-host',
     '@agent-device/platform-apple/session-observation',
     '@agent-device/platform-apple/simctl',
+    '@agent-device/platform-apple/simctl-settings',
     '@agent-device/platform-apple/simulator',
     '@agent-device/platform-apple/simulator-boot',
     '@agent-device/platform-apple/snapshot-source',

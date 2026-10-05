@@ -64,7 +64,7 @@ const TEST_DEPENDENCIES = {
     downloadFile,
   },
   ios: {
-    settings: {} as LimrunRuntimeDependencies['ios']['settings'],
+    applySimctlSetting: vi.fn(async () => undefined),
     resolveAppAlias: async (app: string) => app,
     readBundleAppName: async () => undefined,
   },

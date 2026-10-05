@@ -10,13 +10,6 @@ import {
   androidAdbSerialTarget,
   runAndroidHostAdb,
 } from '@agent-device/platform-android/mechanics';
-import {
-  iosPrivacyAction,
-  iosPrivacyServiceRefusedError,
-  isIosPrivacyServiceRefusal,
-  parseIosAppearance,
-  parseIosPrivacyService,
-} from '@agent-device/platform-apple/simctl';
 import { execFailureDetails, runCmd } from '@agent-device/host-kit/command';
 import { readVersion } from '@agent-device/host-kit/version';
 
@@ -114,12 +107,9 @@ export function createLimrunRuntimeDependencies(): LimrunRuntimeDependencies {
       },
     },
     ios: {
-      settings: {
-        privacyAction: iosPrivacyAction,
-        parsePrivacyService: parseIosPrivacyService,
-        parseAppearance: parseIosAppearance,
-        isPrivacyServiceRefusal: isIosPrivacyServiceRefusal,
-        privacyServiceRefusedError: iosPrivacyServiceRefusedError,
+      applySimctlSetting: async (request) => {
+        const { applySimctlSetting } = await import('@agent-device/platform-apple/simctl-settings');
+        return await applySimctlSetting(request);
       },
       resolveAppAlias: async (app) => {
         const { resolveIosAppAlias } = await import('@agent-device/platform-apple/app-resolution');
