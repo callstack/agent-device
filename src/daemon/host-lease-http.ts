@@ -1,9 +1,13 @@
 import type http from 'node:http';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { readNodeHttpRequestBody } from '@agent-device/host-kit/transport';
 import { sendRestJsonError } from './http-errors.ts';
-import { assertHostAdminAuthorized, tryHandleHumanControlHttpRoute } from './human-control-http.ts';
+import {
+  assertHostAdminAuthorized,
+  readHostAdminJsonBody,
+  sendJson,
+  tryHandleHumanControlHttpRoute,
+} from './human-control-http.ts';
 import type { LeaseRegistry } from './lease-registry.ts';
 import {
   leaseReleaseRequestFor,
@@ -19,7 +23,6 @@ import { parseMacOsAppLeaseKey } from './macos-app-lease.ts';
  */
 export const HOST_LEASE_HTTP_PREFIX = '/admin/leases';
 
-const MAX_HOST_LEASE_BODY_BYTES = 16 * 1024;
 const HOST_LEASE_FIELDS = new Set([
   'tenantId',
   'runId',
@@ -69,7 +72,7 @@ async function handleHostLeaseRoute(
       sendJson(res, { ok: true, leases: registry.listActiveLeases().filter(isMacOsAppLease) });
       return;
     case 'put': {
-      const request = parseHostLeaseRequest(await readJsonBody(req));
+      const request = parseHostLeaseRequest(await readHostAdminJsonBody(req, 'Host lease'));
       sendJson(res, { ok: true, lease: registry.putHostLease(route.leaseId, request) });
       return;
     }
@@ -113,19 +116,6 @@ const HOST_LEASE_METHODS: Readonly<Record<string, 'put' | 'remove'>> = {
   PUT: 'put',
   DELETE: 'remove',
 };
-
-async function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
-  const raw = await readNodeHttpRequestBody(
-    req,
-    MAX_HOST_LEASE_BODY_BYTES,
-    'Host lease request body is too large.',
-  );
-  try {
-    return JSON.parse(raw.toString('utf8'));
-  } catch (error) {
-    throw new AppError('INVALID_ARGS', 'Host lease request body must be valid JSON.', {}, error);
-  }
-}
 
 /**
  * Only `macos-app` leases are allocated here today. The lease outlives its client's `close` unless
@@ -179,10 +169,4 @@ function readString(body: Record<string, unknown>, key: string): string | undefi
   if (typeof value !== 'string')
     throw new AppError('INVALID_ARGS', `Host lease ${key} must be a string.`);
   return value;
-}
-
-function sendJson(res: http.ServerResponse, body: Record<string, unknown>): void {
-  res.statusCode ||= 200;
-  res.setHeader('content-type', 'application/json');
-  res.end(JSON.stringify(body));
 }
