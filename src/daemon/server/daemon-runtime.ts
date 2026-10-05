@@ -639,8 +639,13 @@ export async function startDaemonRuntime(
         env,
         // #1801: the same record `DaemonError.logPath` names, addressed by its
         // locator so a remote caller can fetch what it cannot read by path.
-        resolveRequestDiagnosticsPath: (ref) =>
-          resolveSessionRequestLogPath(sessionStore.resolveSessionDir(ref.session), ref.requestId),
+        resolveRequestDiagnosticsPath: daemonPolicy?.requiredLeaseBackend
+          ? undefined
+          : (ref) =>
+              resolveSessionRequestLogPath(
+                sessionStore.resolveSessionDir(ref.session),
+                ref.requestId,
+              ),
       });
       servers.push(httpServer);
       httpPort = await listenHttpServer(httpServer);

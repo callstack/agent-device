@@ -7,6 +7,7 @@ import { createDaemonHttpServer } from '../server/http-server.ts';
 import { resolveSessionRequestLogPath } from '../session-artifact-paths.ts';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
 import type { DaemonResponse } from '../daemon-request.ts';
+import { LeaseRegistry } from '../lease-registry.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
@@ -28,11 +29,13 @@ function writeRecord(sessionsDir: string, session: string, requestId: string): s
 
 async function withDiagnosticsServer(
   run: (context: { baseUrl: string; sessionsDir: string }) => Promise<void>,
+  leaseRegistry?: LeaseRegistry,
 ): Promise<void> {
   const stateDir = mkdtempForTestSync('agent-device-request-diagnostics-');
   const sessionsDir = path.join(stateDir, 'sessions');
   const server = await createDaemonHttpServer({
     token: 'daemon-secret',
+    leaseRegistry,
     handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
     resolveRequestDiagnosticsPath: (ref) =>
       resolveSessionRequestLogPath(
@@ -195,4 +198,41 @@ test('request diagnostics route serves the cwd-scoped session its owner ran in',
     assert.equal(response.status, 200);
     assert.equal(await response.text(), RECORD);
   });
+});
+
+test('request diagnostics route does not serve a tenant that held a macos-app lease, even after it ended', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const leaseRegistry = new LeaseRegistry();
+  const leaseId = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
+  leaseRegistry.putHostLease(leaseId, {
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'proxy',
+    clientId: 'client-a',
+    leaseBackend: 'macos-app',
+    deviceKey: 'com.example.app',
+  });
+  leaseRegistry.releaseLease({
+    leaseId,
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    clientId: 'client-a',
+    leaseProvider: 'proxy',
+    leaseBackend: 'macos-app',
+    deviceKey: 'com.example.app',
+  });
+  await withDiagnosticsServer(async ({ baseUrl, sessionsDir }) => {
+    writeRecord(sessionsDir, 'default', 'abc123');
+    const auth = { authorization: 'Bearer daemon-secret' };
+    const leased = await fetch(diagnosticsUrl(baseUrl, 'default', 'abc123'), {
+      headers: { ...auth, 'x-agent-device-tenant': 'tenant-a' },
+    });
+    assert.equal(leased.status, 401, await leased.clone().text());
+    assert.equal((await leased.text()).includes('request_start'), false);
+    const other = await fetch(diagnosticsUrl(baseUrl, 'default', 'abc123'), {
+      headers: { ...auth, 'x-agent-device-tenant': 'tenant-b' },
+    });
+    assert.equal(other.status, 200);
+  }, leaseRegistry);
 });

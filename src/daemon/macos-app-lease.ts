@@ -1,13 +1,15 @@
+import os from 'node:os';
 import { normalizeBatchCommandName } from '@agent-device/command-registry/batch-policy';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { readMacOsAppBackend } from '@agent-device/contracts/session';
 import { runCmd } from '@agent-device/host-kit/command';
 import { isProcessAlive, readHostEnvironmentVariable } from '@agent-device/host-kit/process';
 import { isMacOs } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import { isAppLeaseAllowed } from './daemon-command-registry.ts';
 import { isRemoteTempArtifactPath } from '../remote/daemon-artifacts.ts';
-import type { DaemonRequest } from './daemon-request.ts';
+import type { DaemonRequest, DaemonResponse, DaemonResponseData } from './daemon-request.ts';
+import type { LeaseRegistry } from './lease-registry.ts';
 import type { SessionState } from './session-state.ts';
 
 /**
@@ -54,7 +56,8 @@ type MacOsAppLeaseRule =
   | 'device'
   | 'backend'
   | 'process'
-  | 'session';
+  | 'session'
+  | 'diagnostics';
 
 /**
  * Inputs that name a path on the daemon host or launch something beside the app. A client of a
@@ -311,4 +314,108 @@ export async function assertMacOsAppLeaseProcess(
     `The leased app process ${key.bundleId}@${key.pid} is no longer running.`,
     { bundleId: key.bundleId, pid: key.pid },
   );
+}
+
+/**
+ * What `open` reports about the host that runs the app: the session state paths and the device the
+ * session is bound to, whose name is the host's own. A tenant needs none of them.
+ */
+const HOST_OPEN_RESULT_KEYS = [
+  'sessionStateDir',
+  'runnerLogPath',
+  'requestLogPath',
+  'eventLogPath',
+  'device',
+  'id',
+  'kind',
+  'serial',
+  'device_udid',
+  'ios_simulator_device_set',
+] as const;
+
+const HOST_PATH =
+  /(?<![\p{L}\p{N}_./])\/(?:Users|home|private|var|tmp|Volumes|Library|Applications|opt|System|usr|etc|Network|cores)(?:\/[\p{L}\p{N}_.@%+~-]+)*\/?/gu;
+const MIN_HOST_NAME_LENGTH = 4;
+
+export type MacOsAppLeaseHost = Readonly<{ hostName: string; homeDirectory: string }>;
+
+function readHost(): MacOsAppLeaseHost {
+  return { hostName: os.hostname(), homeDirectory: os.homedir() };
+}
+
+/**
+ * Shapes a response for a tenant under a `macos-app` lease so it names nothing about the host
+ * beyond the leased app: `open` drops the session paths and the device and redacts its warnings and
+ * initial snapshot failure, any success drops the fallback screenshot path (the artifact handle
+ * carries the file), and a failure drops its log locators and has every host path, the home
+ * directory and the host name replaced in its text. Other success data is the app's own content and
+ * passes through.
+ */
+export function redactMacOsAppLeaseResponse(
+  command: string,
+  response: DaemonResponse,
+  host: MacOsAppLeaseHost = readHost(),
+): DaemonResponse {
+  if (response.ok) return { ok: true, data: redactSuccessData(command, response.data, host) };
+  return { ok: false, error: redactError(response.error, host) };
+}
+
+function redactSuccessData(
+  command: string,
+  data: DaemonResponseData | undefined,
+  host: MacOsAppLeaseHost,
+): DaemonResponseData | undefined {
+  if (!data) return data;
+  const { fallbackScreenshotPath: _fallback, ...rest } = data;
+  if (command !== 'open') return rest;
+  for (const key of HOST_OPEN_RESULT_KEYS) delete rest[key];
+  const { snapshot, initialSnapshotError, warnings, ...open } = rest;
+  return {
+    ...open,
+    ...(snapshot === undefined
+      ? {}
+      : { snapshot: redactSuccessData('snapshot', snapshot as DaemonResponseData, host) }),
+    ...(initialSnapshotError === undefined
+      ? {}
+      : { initialSnapshotError: redactError(initialSnapshotError as DaemonError, host) }),
+    ...(warnings === undefined ? {} : { warnings: redactHostText(warnings, host) }),
+  };
+}
+
+function redactError(error: DaemonError, host: MacOsAppLeaseHost): DaemonError {
+  const { logPath: _logPath, diagnosticsRecord: _diagnosticsRecord, ...rest } = error;
+  return redactHostText(rest, host);
+}
+
+function redactHostText<T>(value: T, host: MacOsAppLeaseHost): T {
+  if (typeof value === 'string') return redactHostString(value, host) as T;
+  if (Array.isArray(value)) return value.map((item) => redactHostText(item, host)) as T;
+  if (value === null || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, redactHostText(item, host)]),
+  ) as T;
+}
+
+function redactHostString(text: string, host: MacOsAppLeaseHost): string {
+  let redacted = text;
+  if (host.homeDirectory.length > 1) {
+    const home = host.homeDirectory.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+    redacted = redacted.replaceAll(new RegExp(`${home}[\\w.@%+~/-]*`, 'g'), '<host-path>');
+  }
+  for (const name of new Set([host.hostName, host.hostName.split('.')[0]!])) {
+    if (name.length >= MIN_HOST_NAME_LENGTH) redacted = redacted.replaceAll(name, '<host>');
+  }
+  return redacted.replace(HOST_PATH, '<host-path>');
+}
+
+/**
+ * A request's diagnostics record is the host's own log, which names the host's paths throughout, so
+ * a tenant that held a `macos-app` lease is not served one, even after the lease ended.
+ */
+export function assertMacOsAppLeaseTenantMayReadDiagnostics(
+  registry: LeaseRegistry,
+  tenantId: string | undefined,
+): void {
+  if (tenantId === undefined || !registry.hasHeldMacOsAppLease(tenantId)) return;
+  throw macOsAppLeaseDenied('diagnostics', 'A macos-app lease does not serve request diagnostics.');
 }

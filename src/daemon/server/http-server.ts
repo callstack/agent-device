@@ -52,6 +52,7 @@ import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
 import type { TenantSessionNamespace } from '../session-tenant-scope.ts';
 import { tryHandleHostAdminHttpRoute } from '../host-lease-http.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
+import { assertMacOsAppLeaseTenantMayReadDiagnostics } from '../macos-app-lease.ts';
 
 type JsonRpcRequest = JsonRpcRequestEnvelope;
 
@@ -668,12 +669,11 @@ export async function createDaemonHttpServer(options: {
         res,
         resolveRecordPath: resolveRequestDiagnosticsPath,
         authorize: async (request) =>
-          await authorizeAuxiliaryHttpRequest({
-            req: request.req,
-            res: request.res,
+          await authorizeDiagnosticsHttpRequest({
+            ...request,
             authHook,
             expectedToken: token,
-            daemonRequest: request.daemonRequest,
+            leaseRegistry: options.leaseRegistry,
           }),
       })
     ) {
@@ -980,6 +980,21 @@ async function authorizeAuxiliaryHttpRequest(params: {
       ? { sessionNamespace: { tenant: trustedTenant, partitioned: tenantTrust.attested } }
       : {}),
   };
+}
+
+async function authorizeDiagnosticsHttpRequest(
+  params: Parameters<typeof authorizeAuxiliaryHttpRequest>[0] & { leaseRegistry?: LeaseRegistry },
+): ReturnType<typeof authorizeAuxiliaryHttpRequest> {
+  const { leaseRegistry, ...gate } = params;
+  const auth = await authorizeAuxiliaryHttpRequest(gate);
+  if (!auth || !leaseRegistry) return auth;
+  try {
+    assertMacOsAppLeaseTenantMayReadDiagnostics(leaseRegistry, auth.tenantId);
+  } catch (error) {
+    sendRestJsonError(gate.res, normalizeError(error));
+    return null;
+  }
+  return auth;
 }
 
 /**

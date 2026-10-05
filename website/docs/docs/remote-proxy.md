@@ -173,6 +173,13 @@ the leased app, and a pid-pinned lease stops working when that process exits. `o
 requires the daemon to run the native macOS app backend (`AGENT_DEVICE_MACOS_APP_BACKEND=native`).
 A refusal fails with `UNAUTHORIZED` and `details.reason: "MACOS_APP_LEASE_DENIED"`.
 
+Responses under the lease name nothing else about the host. `open` omits the session state and log
+paths and the device (`device`, `id`, `kind`), a failure omits `logPath` and `diagnosticsRecord` and
+replaces host paths and the host name in its text with `<host-path>` and `<host>`, and a snapshot's
+fallback screenshot path stays on the host; the screenshot arrives through the artifact route. The
+request diagnostics route is not served to a tenant that held the lease, and a daemon started with
+`leases.require` does not serve it at all.
+
 These rules apply to requests made under the lease. To refuse requests that name no lease at all,
 start the daemon with a policy that requires one (`leases.require`, below). The proxy token is shared
 by every client of the proxy, so a host serving several clients through one proxy authenticates each

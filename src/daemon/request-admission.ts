@@ -138,7 +138,7 @@ function isExemptFromLeaseAdmission(
   return !isConfinedToAppLease(req, leaseRegistry, session, daemonPolicy);
 }
 
-function isConfinedToAppLease(
+export function isConfinedToAppLease(
   req: DaemonRequest,
   leaseRegistry: LeaseRegistry,
   session: SessionState | undefined,

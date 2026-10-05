@@ -6,8 +6,10 @@ import {
   assertMacOsAppLeaseAdmitsRequest,
   assertMacOsAppLeaseProcess,
   parseMacOsAppLeaseKey,
+  redactMacOsAppLeaseResponse,
 } from '../macos-app-lease.ts';
-import type { DaemonRequest } from '../daemon-request.ts';
+import { buildOpenResult } from '../session-lifecycle/internal/session-open-surface.ts';
+import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 
 const lease: Pick<DeviceLease, 'backend' | 'deviceKey'> = {
   backend: 'macos-app',
@@ -338,4 +340,192 @@ test('a bundle-only lease follows whichever process of the bundle runs', async (
       throw new Error('a bundle-only key reads no process');
     },
   );
+});
+
+const host = { hostName: 'janics-mac-mini', homeDirectory: '/Users/janic' };
+
+test('open under the lease keeps the session and app and drops the host paths and device', () => {
+  const stateDir = '/Users/janic/.agent-device/sessions/tenant-a_default';
+  const open: DaemonResponse = {
+    ok: true,
+    data: buildOpenResult({
+      sessionName: 'tenant-a:default',
+      sessionStateDir: stateDir,
+      runnerLogPath: `${stateDir}/runner.log`,
+      requestLogPath: `${stateDir}/requests/r1.ndjson`,
+      eventLogPath: `${stateDir}/events.ndjson`,
+      appName: 'Leased',
+      appBundleId: 'com.example.app',
+      surface: 'app',
+      device: {
+        platform: 'apple',
+        appleOs: 'macos',
+        id: 'host-macos-local',
+        name: host.hostName,
+        kind: 'device',
+        target: 'desktop',
+        booted: true,
+      },
+      runtimeHintCount: () => 0,
+      sessionReused: false,
+    }),
+  };
+
+  const redacted = redactMacOsAppLeaseResponse('open', open, host);
+
+  assert.deepEqual(redacted, {
+    ok: true,
+    data: {
+      session: 'tenant-a:default',
+      surface: 'app',
+      sessionReused: false,
+      appName: 'Leased',
+      appBundleId: 'com.example.app',
+      platform: 'macos',
+      target: 'desktop',
+      message: 'Opened: Leased',
+    },
+  });
+});
+
+test('success data of the other leased commands is the app content and passes through', () => {
+  for (const command of ['snapshot', 'screenshot', 'close', 'click']) {
+    const response: DaemonResponse = {
+      ok: true,
+      data: { path: '/tmp/agent-device-screenshot-1-a.png', message: `${command} janics-mac-mini` },
+    };
+    assert.deepEqual(redactMacOsAppLeaseResponse(command, response, host), response);
+  }
+});
+
+test('a sparse snapshot fallback screenshot path stays on the host', () => {
+  const redacted = redactMacOsAppLeaseResponse(
+    'snapshot',
+    {
+      ok: true,
+      data: {
+        nodes: [],
+        fallbackScreenshotPath: '/var/folders/zz/T/agent-device-screenshot-x/screenshot.png',
+        artifacts: [
+          { field: 'fallbackScreenshotPath', artifactId: 'a1', fileName: 'screenshot.png' },
+        ],
+      },
+    },
+    host,
+  );
+
+  assert.deepEqual(redacted, {
+    ok: true,
+    data: {
+      nodes: [],
+      artifacts: [
+        { field: 'fallbackScreenshotPath', artifactId: 'a1', fileName: 'screenshot.png' },
+      ],
+    },
+  });
+});
+
+test('open --foreground redacts its warnings and the initial snapshot failure it carries', () => {
+  const failure = {
+    code: 'COMMAND_FAILED',
+    message: 'runner died at /Users/janic/Library/Logs/runner.log',
+    logPath: '/Users/janic/.agent-device/sessions/s/requests/r.ndjson',
+    diagnosticsRecord: { session: 's', requestId: 'r' },
+    details: { stderr: 'janics-mac-mini: no display' },
+  };
+
+  const redacted = redactMacOsAppLeaseResponse(
+    'open',
+    {
+      ok: true,
+      data: {
+        appBundleId: 'com.example.app',
+        warnings: [`The initial snapshot failed (${failure.message}).`],
+        initialSnapshotError: failure,
+        snapshot: { nodes: [], fallbackScreenshotPath: '/tmp/x/screenshot.png' },
+      },
+    },
+    host,
+  );
+
+  assert.deepEqual(redacted, {
+    ok: true,
+    data: {
+      appBundleId: 'com.example.app',
+      warnings: ['The initial snapshot failed (runner died at <host-path>).'],
+      initialSnapshotError: {
+        code: 'COMMAND_FAILED',
+        message: 'runner died at <host-path>',
+        details: { stderr: '<host>: no display' },
+      },
+      snapshot: { nodes: [] },
+    },
+  });
+});
+
+test('host text redaction leaves app content that only looks like a path alone', () => {
+  const redacted = redactMacOsAppLeaseResponse(
+    'click',
+    {
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        message:
+          'no match for label=/Settings/General; ENOENT:/private/var/x/y in /Users/jérôme/dev',
+      },
+    },
+    host,
+  );
+
+  assert.deepEqual(redacted, {
+    ok: false,
+    error: {
+      code: 'COMMAND_FAILED',
+      message: 'no match for label=/Settings/General; ENOENT:<host-path> in <host-path>',
+    },
+  });
+});
+
+test('a failure under the lease drops its log locators and every host path and the host name', () => {
+  const redacted = redactMacOsAppLeaseResponse(
+    'click',
+    {
+      ok: false,
+      error: {
+        code: 'UNSUPPORTED_OPERATION',
+        message: 'helper failed in /Users/janic/Library/Caches/helper on janics-mac-mini',
+        hint: 'See /private/tmp/agent-device/x.log',
+        logPath: '/Users/janic/.agent-device/sessions/s/requests/r.ndjson',
+        diagnosticsRecord: { session: 's', requestId: 'r' },
+        diagnosticId: 'abc',
+        retriable: false,
+        details: {
+          helperPath: '/Users/janic/Library/Caches/agent-device/helper',
+          args: ['press', '--out=/var/folders/zz/T/shot.png'],
+          deviceName: 'janics-mac-mini',
+          bundleId: 'com.example.app',
+          reason: 'unsupported-device-backend',
+        },
+      },
+    },
+    host,
+  );
+
+  assert.deepEqual(redacted, {
+    ok: false,
+    error: {
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'helper failed in <host-path> on <host>',
+      hint: 'See <host-path>',
+      diagnosticId: 'abc',
+      retriable: false,
+      details: {
+        helperPath: '<host-path>',
+        args: ['press', '--out=<host-path>'],
+        deviceName: '<host>',
+        bundleId: 'com.example.app',
+        reason: 'unsupported-device-backend',
+      },
+    },
+  });
 });
