@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, test } from 'vitest';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { withDaemonDiagnosticsScope } from './daemon-diagnostics-scope.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from './__tests__/test-utils/tmp-dir.ts';
 
 let dir: string;
 let logPath: string;
@@ -56,21 +56,9 @@ test('forces the buffered events of a non-debug scope out once the body returns'
   assert.ok(events.every((event) => event.command === 'daemon-startup'));
 });
 
-test('leaves buffered events unwritten when the body throws', async () => {
+test('keeps the record of a failed body and still rethrows', async () => {
   await assert.rejects(
-    withDaemonDiagnosticsScope({ logPath, debug: false }, () => {
-      emitDiagnostic({ level: 'warn', phase: 'lost' });
-      throw new Error('boom');
-    }),
-    /boom/,
-  );
-
-  assert.deepEqual(readLoggedEvents(), []);
-});
-
-test('flushOnThrow keeps the record of a failed body and still rethrows', async () => {
-  await assert.rejects(
-    withDaemonDiagnosticsScope({ logPath, debug: false, flushOnThrow: true }, async () => {
+    withDaemonDiagnosticsScope({ logPath, debug: false }, async () => {
       emitDiagnostic({ level: 'warn', phase: 'kept' });
       throw new Error('boom');
     }),

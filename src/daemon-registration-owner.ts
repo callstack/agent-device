@@ -21,7 +21,8 @@ import {
   type ProcessLockAttempt,
   type ProcessLockAcquisition,
 } from '@agent-device/host-kit/file';
-import { emitDiagnostic, withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { withDaemonDiagnosticsScope } from './daemon-diagnostics-scope.ts';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import {
   resolveDaemonPaths,
@@ -525,7 +526,7 @@ async function recordRegistrationWarning(
   phase: string,
   error: unknown,
 ): Promise<void> {
-  await withDiagnosticsScope({ command: 'daemon', session: 'daemon', logPath, debug: true }, () => {
+  await withDaemonDiagnosticsScope({ logPath }, () => {
     emitDiagnostic({ level: 'warn', phase, data: { error: normalizeError(error) } });
   });
 }

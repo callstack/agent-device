@@ -39,7 +39,7 @@ import type { DaemonInvokeFn } from '../daemon-request.ts';
 import type { SessionRef, SessionState } from '../session-state.ts';
 import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
-import { withDaemonDiagnosticsScope } from './daemon-diagnostics-scope.ts';
+import { withDaemonDiagnosticsScope } from '../../daemon-diagnostics-scope.ts';
 import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
 import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
 import { finalizeDaemonLeases } from './daemon-lease-finalizer.ts';
@@ -536,10 +536,7 @@ export async function startDaemonRuntime(
     // sweep waits, never the settle itself, so a stuck recorder cannot make a sweep hang but also
     // cannot make an expiry give up on a device that does come free.
     settleBudgetMs: (session) => resolveDaemonSessionTeardownTimeoutMs(session),
-    // A sweep is out-of-request work, so it has no request scope and `emitDiagnostic` would drop
-    // everything it reports — including the record of what was reclaimed and why a reclaim failed.
-    withinDiagnosticsScope: async (run) =>
-      await withDaemonDiagnosticsScope({ logPath, flushOnThrow: true }, run),
+    withinDiagnosticsScope: async (run) => await withDaemonDiagnosticsScope({ logPath }, run),
     // An expiry can be the event that makes this daemon fully idle, and no request follows it to
     // arm the process-level reap.
     onSessionExpired: () => {
@@ -861,8 +858,6 @@ async function reconcileDeviceClaimsForDaemonStartup(
   reconcile: DeviceClaimReconciler,
   stateDir: string,
 ): Promise<void> {
-  // Startup runs outside any diagnostics scope, where emitDiagnostic is a no-op,
-  // so reconciliation has to open one of its own for its events to be recorded.
   await withDaemonDiagnosticsScope({ logPath }, async () => {
     try {
       const summary = await reconcileOrphanedDeviceClaims(reconcile, stateDir);
