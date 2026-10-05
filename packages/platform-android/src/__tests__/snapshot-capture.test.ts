@@ -28,6 +28,7 @@ afterEach(async () => {
 function helperAdbServing(
   display: { width?: number; height?: number } = {},
   xml: string = SCREEN_XML,
+  counts: { windowCount: number; nodeCount: number } = { windowCount: 1, nodeCount: 1 },
 ): AndroidAdbExecutor {
   const displayKeys =
     display.width !== undefined && display.height !== undefined
@@ -54,8 +55,8 @@ function helperAdbServing(
     'INSTRUMENTATION_RESULT: maxNodes=5000',
     'INSTRUMENTATION_RESULT: rootPresent=true',
     'INSTRUMENTATION_RESULT: captureMode=interactive-windows',
-    'INSTRUMENTATION_RESULT: windowCount=1',
-    'INSTRUMENTATION_RESULT: nodeCount=1',
+    `INSTRUMENTATION_RESULT: windowCount=${counts.windowCount}`,
+    `INSTRUMENTATION_RESULT: nodeCount=${counts.nodeCount}`,
     'INSTRUMENTATION_RESULT: truncated=false',
     'INSTRUMENTATION_RESULT: elapsedMs=12',
     'INSTRUMENTATION_RESULT: pixelDensity=2.625',
@@ -185,6 +186,7 @@ test('the Android keyboard band survives the publication adapter into the daemon
         '<node window-index="1" window-type="1" window-active="true" window-bounds="[0,0][1080,2400]" class="android.widget.FrameLayout" package="com.example" bounds="[0,0][1080,2400]"><node text="Name" package="com.example" bounds="[0,0][1080,200]" /><node text="Email" package="com.example" bounds="[0,200][1080,400]" /></node>',
         '</hierarchy>',
       ].join(''),
+      { windowCount: 2, nodeCount: 4 },
     ),
     helperArtifact,
   });
