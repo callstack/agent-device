@@ -5,7 +5,7 @@
  * `fill-verification.ts`.
  */
 import type { FillUnconfirmedVerification } from '@agent-device/contracts/fill-evidence';
-import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/input-validation';
+import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
