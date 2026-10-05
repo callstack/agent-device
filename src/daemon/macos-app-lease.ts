@@ -6,7 +6,7 @@ import { isProcessAlive, readHostEnvironmentVariable } from '@agent-device/host-
 import { isMacOs } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { isAppLeaseAllowed } from './daemon-command-registry.ts';
-import { isRemoteTempArtifactPath } from '../remote/remote-temp-artifact-path.ts';
+import { isRemoteTempArtifactPath } from '../remote/daemon-artifacts.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
 

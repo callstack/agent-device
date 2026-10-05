@@ -8,7 +8,6 @@ import {
   parseMacOsAppLeaseKey,
 } from '../macos-app-lease.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
-import { buildRemoteTempArtifactPath } from '../../remote/remote-temp-artifact-path.ts';
 
 const lease: Pick<DeviceLease, 'backend' | 'deviceKey'> = {
   backend: 'macos-app',
@@ -114,7 +113,7 @@ test('open accepts only the leased bundle and nothing it could launch beside it'
 });
 
 test('nothing under the lease names a host path or launches beside the app', () => {
-  const temp = buildRemoteTempArtifactPath('screenshot', '.png');
+  const temp = '/tmp/agent-device-screenshot-1791219384278-ab12cd.png';
   assertMacOsAppLeaseAdmitsRequest(lease, request('screenshot', [temp]), leasedSession);
   assertMacOsAppLeaseAdmitsRequest(lease, request('screenshot', [], { out: temp }), leasedSession);
   for (const target of [['/Users/me/.zshrc'], ['/tmp/agent-device-screenshot-1-a.png/../x']]) {
