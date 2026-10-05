@@ -33,7 +33,7 @@ test('Android WebDriver facts treat invalid state attributes as false', () => {
 // UiAutomator2 reports a field's content as `text`, the attribute every other node is labelled
 // by, so a filled field used to read as a node labelled with its own value and no value at all:
 // `toHaveValue` saw "" on a field holding "Ada Lovelace".
-test("Android WebDriver facts read a text field's content as its value, not its label", () => {
+test("Android WebDriver facts name a node by its text, carry a content description beside it, and read a field's text as its value", () => {
   const [field, label] = parseWebDriverSourceFacts(
     '<hierarchy>' +
       '<android.widget.EditText text="Ada Lovelace" content-desc="Name field" hint="Your name" bounds="[0,0][100,40]" />' +
@@ -43,8 +43,15 @@ test("Android WebDriver facts read a text field's content as its value, not its 
   ).nodes;
 
   assert.deepEqual(
-    [field!.value, field!.label, field!.placeholder, field!.hintShowing, field!.editable],
-    ['Ada Lovelace', 'Name field', 'Your name', false, true],
+    [
+      field!.value,
+      field!.label,
+      field!.contentDescription,
+      field!.placeholder,
+      field!.hintShowing,
+      field!.editable,
+    ],
+    ['Ada Lovelace', 'Ada Lovelace', 'Name field', 'Your name', false, true],
   );
   assert.deepEqual(
     [label!.label, label!.value, 'editable' in label!],
@@ -62,9 +69,10 @@ test('Android WebDriver facts read a hinted field as empty, a masked field as a 
     'android',
   ).nodes;
 
+  // The hint is the label, as the native helper reads it, so `label="Your name"` still finds the field.
   assert.deepEqual(
     [hinted!.value, hinted!.label, hinted!.placeholder, hinted!.hintShowing],
-    [undefined, undefined, 'Your name', true],
+    [undefined, 'Your name', 'Your name', true],
   );
   assert.deepEqual([secure!.password, secure!.editable], [true, true]);
   assert.deepEqual([disabled!.value, disabled!.editable], ['locked', false]);

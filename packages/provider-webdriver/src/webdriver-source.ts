@@ -167,13 +167,7 @@ function sourceNodeFromAttributes(
     index,
     type,
     role: roleFromWebDriverType(type, attrs),
-    // A text field's `text` is what it holds, not what it is called.
-    label: firstWebDriverAttribute(
-      attrs,
-      field === undefined
-        ? ['content-desc', 'label', 'text', 'name']
-        : ['content-desc', 'label', 'name'],
-    ),
+    ...labelFacts(attrs, platform),
     value: field === undefined ? nonEmptyWebDriverAttribute(attrs.value) : field.value,
     identifier: firstWebDriverAttribute(attrs, ['resource-id', 'id', 'accessibility-id', 'name']),
     rect,
@@ -185,16 +179,36 @@ function sourceNodeFromAttributes(
   };
 }
 
-/** Android classes whose `text` is the value a user typed; the page source names the class as the element and as `class`. */
-const ANDROID_TEXT_FIELD_CLASS = /(EditText|AutoCompleteTextView|SearchView)$/;
+/**
+ * The text entry classes and types, the same set `isFillableType` in
+ * `@agent-device/contracts/snapshot-text` admits for each platform; that module is not a
+ * package subpath, so the rule is restated here.
+ */
+const ANDROID_TEXT_FIELD_CLASS = /(edittext|autocompletetextview)/i;
+const IOS_TEXT_FIELD_TYPE = /(textfield|securetextfield|searchfield|textview|textarea)$/i;
 
-/** XCUITest element types that hold typed text. */
-const IOS_TEXT_FIELD_TYPES: ReadonlySet<string> = new Set([
-  'XCUIElementTypeTextField',
-  'XCUIElementTypeSecureTextField',
-  'XCUIElementTypeTextView',
-  'XCUIElementTypeSearchField',
-]);
+/**
+ * How a node is named. An Android node is labelled by its text and falls back to the content
+ * description only when it has none, as `normalizeAndroidUiHierarchyNode` reads the same
+ * attributes for the native helper; a content description beside visible text travels as
+ * `contentDescription`. A hinted empty field is labelled by its hint, which is its text. XCUITest
+ * names a node by `label`, else `name`.
+ */
+function labelFacts(
+  attrs: Record<string, string>,
+  platform: WebDriverSourcePlatform,
+): Pick<RawSnapshotNode, 'label' | 'contentDescription'> {
+  if (platform === 'ios')
+    return { label: firstWebDriverAttribute(attrs, ['label', 'text', 'name']) };
+  const description = nonEmptyWebDriverAttribute(attrs['content-desc']);
+  const label = nonEmptyWebDriverAttribute(attrs.text) ?? description;
+  return {
+    label,
+    ...(description !== undefined && description !== label
+      ? { contentDescription: description }
+      : {}),
+  };
+}
 
 type TextFieldFacts = Readonly<{
   value: string | undefined;
@@ -217,10 +231,10 @@ function textFieldFacts(
 }
 
 /**
- * A field showing its hint reports the hint as its text, so that text is the placeholder, not a
- * value. The page source offers no other signal, so a typed value equal to the hint reads as the
- * hint showing; the native helper's `hint-showing` fact has no counterpart here. A disabled field
- * is not editable, whatever its class.
+ * A field showing its hint reports the hint as its text, so that text is the placeholder and the
+ * label, not a value. The page source offers no other signal, so a typed value equal to the hint
+ * reads as the hint showing; the native helper's `hint-showing` fact has no counterpart here. A
+ * disabled field is not editable, whatever its class.
  */
 function androidTextFieldFacts(
   type: string,
@@ -245,7 +259,7 @@ function iosTextFieldFacts(
   type: string,
   attrs: Record<string, string>,
 ): TextFieldFacts | undefined {
-  if (!IOS_TEXT_FIELD_TYPES.has(type)) return undefined;
+  if (!IOS_TEXT_FIELD_TYPE.test(type)) return undefined;
   return {
     value: nonEmptyWebDriverAttribute(attrs.value),
     facts: {
