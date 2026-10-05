@@ -6,6 +6,7 @@ import { isProcessAlive, readHostEnvironmentVariable } from '@agent-device/host-
 import { isMacOs } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { isAppLeaseAllowed } from './daemon-command-registry.ts';
+import { isRemoteTempArtifactPath } from '../remote/remote-temp-artifact-path.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
 
@@ -89,9 +90,6 @@ const DEVICE_SELECTOR_KEYS = [
   'iosSimulatorDeviceSet',
   'androidDeviceAllowlist',
 ] as const;
-
-/** The only screenshot path a remote client sends: the temp file `agent-device` names for it. */
-const REMOTE_SCREENSHOT_PATH = /^\/tmp\/agent-device-screenshot-[0-9]+-[a-z0-9]+\.png$/;
 
 function macOsAppLeaseDenied(
   rule: MacOsAppLeaseRule,
@@ -199,7 +197,10 @@ function assertWindowCapture(
   const { out, ...rest } = fields;
   assertNoHostInputs(rest);
   for (const target of [positionals[0], out]) {
-    if (target === undefined || (typeof target === 'string' && REMOTE_SCREENSHOT_PATH.test(target)))
+    if (
+      target === undefined ||
+      (typeof target === 'string' && isRemoteTempArtifactPath(target, 'screenshot', '.png'))
+    )
       continue;
     throw macOsAppLeaseDenied('host-path', 'A macos-app lease does not write files on the host.');
   }

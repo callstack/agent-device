@@ -6,6 +6,10 @@ import {
   appendRecordingExtensionWhenMissing,
   recordingExtensionForPlatform,
 } from '@agent-device/capture-kit/recording-output-path';
+import {
+  buildRemoteTempArtifactDirPath,
+  buildRemoteTempArtifactPath,
+} from './remote-temp-artifact-path.ts';
 import { uploadArtifact } from './upload-client.ts';
 import { createStderrUploadProgressReporter, type UploadProgressSink } from './upload-progress.ts';
 
@@ -339,22 +343,6 @@ function resolveAbsoluteClientPath(rawPath: string, cwd: string | undefined): st
 
 function hasNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
-}
-
-function buildRemoteTempArtifactPath(prefix: string, extension: string): string {
-  const safeExtension = extension.startsWith('.') ? extension : `.${extension}`;
-  return path.posix.join(
-    '/tmp',
-    `agent-device-${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${safeExtension}`,
-  );
-}
-
-/** A directory temp path — unlike `buildRemoteTempArtifactPath`, no extension is ever appended. */
-function buildRemoteTempArtifactDirPath(prefix: string): string {
-  return path.posix.join(
-    '/tmp',
-    `agent-device-${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-  );
 }
 
 export async function materializeRemoteArtifacts(
