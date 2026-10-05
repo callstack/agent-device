@@ -71,6 +71,20 @@ test('a request without the owning clientId cannot turn retainOnClose on for a r
   assert.equal(reused.retainOnClose, undefined);
 });
 
+test('only an unexpired retainOnClose lease counts as retained', () => {
+  let now = 1_000;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 10_000 });
+  registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-plain' });
+  assert.equal(registry.hasRetainedLeases(), false);
+
+  registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-retained', retainOnClose: true });
+  assert.equal(registry.hasRetainedLeases(), true);
+
+  now = 20_000;
+  assert.equal(registry.hasRetainedLeases(), false);
+  assert.deepEqual(registry.listActiveLeases(), []);
+});
+
 test('heartbeatLease extends active lease and releaseLease is idempotent', () => {
   let now = 1_000;
   const registry = new LeaseRegistry({

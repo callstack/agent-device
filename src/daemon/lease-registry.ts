@@ -182,6 +182,14 @@ export class LeaseRegistry {
     assertLeaseScopeMatch(this.getActiveLease(scope.leaseId), scope);
   }
 
+  /**
+   * Whether an unexpired `retainOnClose` lease outlives its sessions. Reading it also expires leases
+   * past their window, so an abandoned retained lease still ends.
+   */
+  hasRetainedLeases(): boolean {
+    return this.listActiveLeases().some((lease) => lease.retainOnClose === true);
+  }
+
   listActiveLeases(): DeviceLease[] {
     this.cleanupExpiredLeases();
     return Array.from(this.leases.values()).map((entry) => ({ ...entry }));
