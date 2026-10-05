@@ -1,8 +1,5 @@
 import type { SessionAction } from '@agent-device/contracts/session';
-import {
-  ANDROID_SHELL_TEXT_UNSUPPORTED_REASON,
-  ANDROID_TEST_IME_FLOW_HINT,
-} from '@agent-device/contracts/android-text-input';
+import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/input-validation';
 import { scrubReplayVarValues, type ReplayVarScrubEntry } from '@agent-device/ad-replay/divergence';
 import { formatDivergenceActionLabel } from '@agent-device/ad-script';
 import type { SnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
@@ -10,6 +7,13 @@ import { buildDisplayPositionals } from '@agent-device/session-journal/session-e
 import { type DaemonResponse } from '@agent-device/kernel/contracts';
 
 export type ReplayFailureCause = Extract<DaemonResponse, { ok: false }>['error'];
+
+/**
+ * Recovery hint for flow-owned session opens: `replay`/`test` accept `--test-ime` themselves
+ * and pass the opt-in to the sessions their flow opens.
+ */
+export const ANDROID_TEST_IME_FLOW_HINT =
+  'On emulators the test IME activates automatically; on real devices pass `--test-ime` to this test/replay run to enable it for the sessions the flow opens (see `agent-device doctor` for the current IME state).';
 
 export function hoistReplayFailureCauseDiagnosticMeta(
   error: ReplayFailureCause,

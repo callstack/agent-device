@@ -5,10 +5,7 @@
  * `fill-verification.ts`.
  */
 import type { FillUnconfirmedVerification } from '@agent-device/contracts/fill-evidence';
-import {
-  ANDROID_SHELL_TEXT_UNSUPPORTED_REASON,
-  ANDROID_TEST_IME_OPEN_HINT,
-} from '@agent-device/contracts/android-text-input';
+import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/input-validation';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -466,6 +463,14 @@ function isAndroidInputTextUnsupported(error: unknown): boolean {
     return true;
   return false;
 }
+
+/**
+ * The direct-interaction route's recovery (`open`, then a failing `fill`/`press`). The replay
+ * failure boundary replaces it for flow runs off the typed reason below, so a flow caller is
+ * never sent to a flag only `open` accepts.
+ */
+export const ANDROID_TEST_IME_OPEN_HINT =
+  'On emulators the test IME activates automatically; on real devices pass `open --test-ime` to enable it (see `agent-device doctor` for the current IME state).';
 
 function unsupportedAndroidShellTextError(text: string, cause?: unknown): AppError {
   return new AppError(

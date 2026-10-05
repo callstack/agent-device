@@ -40,10 +40,6 @@
       "types": "./src/android-system-surface-disclosure.ts",
       "default": "./src/android-system-surface-disclosure.ts"
     },
-    "./android-text-input": {
-      "types": "./src/android-text-input.ts",
-      "default": "./src/android-text-input.ts"
-    },
     "./app-deployment-runtime": {
       "types": "./src/app-deployment-runtime.ts",
       "default": "./src/app-deployment-runtime.ts"
@@ -239,6 +235,10 @@
     "./interaction": {
       "types": "./src/interaction.ts",
       "default": "./src/interaction.ts"
+    },
+    "./input-validation": {
+      "types": "./src/input-validation.ts",
+      "default": "./src/input-validation.ts"
     },
     "./is-predicate": {
       "types": "./src/is-predicate.ts",

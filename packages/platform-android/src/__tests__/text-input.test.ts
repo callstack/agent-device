@@ -1,10 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import {
-  ANDROID_SHELL_TEXT_UNSUPPORTED_REASON,
-  ANDROID_TEST_IME_OPEN_HINT,
-} from '@agent-device/contracts/android-text-input';
-import { fillAndroid, typeAndroid } from '../text-input.ts';
+import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/input-validation';
+import { ANDROID_TEST_IME_OPEN_HINT, fillAndroid, typeAndroid } from '../text-input.ts';
 import { assertRejectsAppError } from './test-utils/app-error.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,

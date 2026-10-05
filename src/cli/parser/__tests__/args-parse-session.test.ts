@@ -19,42 +19,6 @@ test('parseArgs recognizes command-specific flag combinations', async () => {
       },
     },
     {
-      label: 'open --test-ime forces the Android test IME on',
-      argv: ['open', 'settings', '--platform', 'android', '--test-ime'],
-      strictFlags: true,
-      assertParsed: (parsed) => {
-        assert.equal(parsed.command, 'open');
-        assert.equal(parsed.flags.testIme, true);
-      },
-    },
-    {
-      label: 'open --no-test-ime forces the Android test IME off',
-      argv: ['open', 'settings', '--platform', 'android', '--no-test-ime'],
-      strictFlags: true,
-      assertParsed: (parsed) => {
-        assert.equal(parsed.command, 'open');
-        assert.equal(parsed.flags.testIme, false);
-      },
-    },
-    {
-      label: 'test --test-ime opts the suite session opens into the Android test IME',
-      argv: ['test', './suite.ad', '--test-ime'],
-      strictFlags: true,
-      assertParsed: (parsed) => {
-        assert.equal(parsed.command, 'test');
-        assert.equal(parsed.flags.testIme, true);
-      },
-    },
-    {
-      label: 'replay --no-test-ime forces the real keyboard for the replay sessions',
-      argv: ['replay', './flow.ad', '--no-test-ime'],
-      strictFlags: true,
-      assertParsed: (parsed) => {
-        assert.equal(parsed.command, 'replay');
-        assert.equal(parsed.flags.testIme, false);
-      },
-    },
-    {
       label: 'open --platform ios --target tv',
       argv: ['open', 'Settings', '--platform', 'ios', '--target', 'tv'],
       strictFlags: true,

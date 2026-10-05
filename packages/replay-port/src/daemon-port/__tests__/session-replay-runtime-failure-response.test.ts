@@ -1,10 +1,7 @@
 import { test, expect } from 'vitest';
+import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/input-validation';
 import {
-  ANDROID_SHELL_TEXT_UNSUPPORTED_REASON,
   ANDROID_TEST_IME_FLOW_HINT,
-  ANDROID_TEST_IME_OPEN_HINT,
-} from '@agent-device/contracts/android-text-input';
-import {
   buildReplayDivergenceFailureResponseFromDescriptor,
   hoistReplayFailureCauseDiagnosticMeta,
 } from '../session-replay-runtime-failure-response.ts';
@@ -85,12 +82,16 @@ test('a replay divergence carries the readiness evidence of an exhausted target 
 // The fixture carries the production shape: the cause arrives WITH the open-route hint
 // already hoisted, so a rewrite that only fills a missing hint would still fail here.
 test('an Android shell-text cause gets the flow-owned --test-ime recovery', () => {
+  // The platform's own hint travels over the wire, so the fixture states it literally the way
+  // a consumer sees it: replay-port never imports the Android package.
+  const openRouteHint =
+    'On emulators the test IME activates automatically; on real devices pass `open --test-ime` to enable it (see `agent-device doctor` for the current IME state).';
   const cause = hoistReplayFailureCauseDiagnosticMeta({
     code: 'COMMAND_FAILED',
     message:
       'Android text input requires provider-native text injection or the bundled test IME helper for non-ASCII/control characters; the adb-shell fallback supports ASCII text only.',
-    hint: ANDROID_TEST_IME_OPEN_HINT,
-    details: { reason: ANDROID_SHELL_TEXT_UNSUPPORTED_REASON, hint: ANDROID_TEST_IME_OPEN_HINT },
+    hint: openRouteHint,
+    details: { reason: ANDROID_SHELL_TEXT_UNSUPPORTED_REASON, hint: openRouteHint },
   });
 
   expect(cause.hint).toBe(ANDROID_TEST_IME_FLOW_HINT);
