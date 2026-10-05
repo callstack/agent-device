@@ -112,6 +112,43 @@ test('cancels a retry delay when the request binding aborts', async () => {
   assert.equal(calls, 1);
 });
 
+// AWS Device Farm's remote access endpoint sits in front of Appium and validates the request
+// against the W3C protocol, where every POST body is a JSON object: a `POST /back` with no body
+// came back as `Value null at 'payload' failed to satisfy constraint: Member must not be null`.
+test('a POST without parameters carries an empty JSON object body', async () => {
+  const seen: { method: string | undefined; contentType: string | undefined; body: string }[] = [];
+  const driver = await localDriver((request, response) => {
+    let body = '';
+    request.on('data', (chunk: Buffer) => {
+      body += chunk.toString();
+    });
+    request.on('end', () => {
+      seen.push({ method: request.method, contentType: request.headers['content-type'], body });
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ value: null }));
+    });
+  });
+  try {
+    const transport = new WebDriverTransport({
+      clientVersion: '0.0.0-test',
+      endpoint: driver.endpoint,
+      requestPolicy: { timeoutMs: 5_000, retryAttempts: 0 },
+    });
+
+    await transport.requestValue('POST', '/session/wd-1/back');
+    await transport.requestValue('DELETE', '/session/wd-1/actions');
+    await transport.requestValue('GET', '/session/wd-1/source');
+
+    assert.deepEqual(seen, [
+      { method: 'POST', contentType: 'application/json', body: '{}' },
+      { method: 'DELETE', contentType: undefined, body: '' },
+      { method: 'GET', contentType: undefined, body: '' },
+    ]);
+  } finally {
+    await driver.close();
+  }
+});
+
 /** A 127.0.0.1 port nothing listens on: bound, then released. */
 async function refusedPort(): Promise<number> {
   const server = net.createServer();

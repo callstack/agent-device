@@ -117,6 +117,14 @@ type ResolvedWebDriverRequestPolicy = Required<
  */
 const IDEMPOTENT_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD']);
 
+/**
+ * What a POST without parameters carries. The W3C WebDriver protocol makes every POST body a JSON
+ * object, and a gateway in front of the driver may enforce it: AWS Device Farm's remote access
+ * endpoint refuses a bodyless `POST /back` with `Value null at 'payload'`, while Appium itself
+ * accepts either.
+ */
+const EMPTY_POST_BODY: Readonly<Record<string, never>> = Object.freeze({});
+
 /** A successful WebDriver answer: its HTTP status and the unwrapped W3C `value`. */
 export type WebDriverAnswer = { status: number; value: unknown };
 
@@ -224,6 +232,7 @@ export class WebDriverTransport {
     requestSignal?: AbortSignal,
   ): Promise<Pick<Response, 'ok' | 'status'> & { text: string }> {
     const url = new URL(trimLeadingSlash(path), this.endpoint);
+    const payload = body === undefined && method === 'POST' ? EMPTY_POST_BODY : body;
     const timeoutSignal = AbortSignal.timeout(timeoutMs);
     const signal = requestSignal ? AbortSignal.any([requestSignal, timeoutSignal]) : timeoutSignal;
     const failure = { method, path, timeoutMs, timeoutSignal, requestSignal };
@@ -233,10 +242,10 @@ export class WebDriverTransport {
         method,
         headers: {
           Accept: 'application/json',
-          ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+          ...(payload === undefined ? {} : { 'Content-Type': 'application/json' }),
           ...this.headers,
         },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: payload === undefined ? undefined : JSON.stringify(payload),
         signal,
       });
     } catch (error) {
