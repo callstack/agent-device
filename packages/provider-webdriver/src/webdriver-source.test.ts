@@ -60,11 +60,12 @@ test("Android WebDriver facts name a node by its text, carry a content descripti
 });
 
 test('Android WebDriver facts read a hinted field as empty, a masked field as a password, and a disabled field as not editable', () => {
-  const [hinted, secure, disabled] = parseWebDriverSourceFacts(
+  const [hinted, secure, disabled, lookalike] = parseWebDriverSourceFacts(
     '<hierarchy>' +
       '<android.widget.EditText text="Your name" hint="Your name" bounds="[0,40][100,80]" />' +
       '<android.widget.EditText text="••••••" password="true" bounds="[0,80][100,120]" />' +
       '<android.widget.EditText text="locked" enabled="false" bounds="[0,120][100,160]" />' +
+      '<com.edittext.sample.CustomButton text="Go" bounds="[0,160][100,200]" />' +
       '</hierarchy>',
     'android',
   ).nodes;
@@ -76,6 +77,11 @@ test('Android WebDriver facts read a hinted field as empty, a masked field as a 
   );
   assert.deepEqual([secure!.password, secure!.editable], [true, true]);
   assert.deepEqual([disabled!.value, disabled!.editable], ['locked', false]);
+  // Only the class name's last segment decides, as `isFillableType` reads it.
+  assert.deepEqual(
+    [lookalike!.label, lookalike!.value, 'editable' in lookalike!],
+    ['Go', undefined, false],
+  );
 });
 
 // UiAutomator2 writes `checkable="false" checked="false"` on every node, so `checked` is a fact

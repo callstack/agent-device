@@ -180,11 +180,18 @@ function sourceNodeFromAttributes(
 }
 
 /**
- * The Android text entry classes, the same set `isFillableType` in
- * `@agent-device/contracts/snapshot-text` admits; that module is not a package subpath, so the
- * rule is restated here.
+ * The Android text entry classes, the same rule `isFillableType` in
+ * `@agent-device/contracts/snapshot-text` applies to the class name's last segment; that module is
+ * not a package subpath, so the rule is restated here.
  */
-const ANDROID_TEXT_FIELD_CLASS = /(edittext|autocompletetextview)/i;
+const ANDROID_TEXT_FIELD_CLASS = /edittext|autocompletetextview/;
+
+/** The class name's last segment, lowercased, as `normalizeType` reads a type. */
+function classNameSegment(className: string): string {
+  return className
+    .slice(Math.max(className.lastIndexOf('.'), className.lastIndexOf('/')) + 1)
+    .toLowerCase();
+}
 
 /**
  * How a node is named. An Android node is labelled by its text and falls back to the content
@@ -239,7 +246,9 @@ function androidTextFieldFacts(
   attrs: Record<string, string>,
 ): TextFieldFacts | undefined {
   const password = parseWebDriverBoolean(attrs.password);
-  if (!ANDROID_TEXT_FIELD_CLASS.test(attrs.class ?? type) && password !== true) return undefined;
+  if (!ANDROID_TEXT_FIELD_CLASS.test(classNameSegment(attrs.class ?? type)) && password !== true) {
+    return undefined;
+  }
   const placeholder = nonEmptyWebDriverAttribute(attrs.hint);
   const text = nonEmptyWebDriverAttribute(attrs.text);
   const hintShowing = placeholder !== undefined && text === placeholder;
