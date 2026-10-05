@@ -44,6 +44,22 @@ test('an input method window with empty bounds draws nothing and reads as absent
   });
 });
 
+test('an input method window whose bounds did not measure cannot prove absence', () => {
+  const huge = '9'.repeat(400);
+  for (const windowBounds of [
+    '',
+    ' window-bounds="unknown"',
+    ` window-bounds="[0,1500][${huge},2400]"`,
+  ]) {
+    const unmeasured = `<node window-index="0" window-type="2"${windowBounds} class="android.widget.FrameLayout" />`;
+    assert.deepEqual(
+      androidSnapshotKeyboardFromTree(tree(unmeasured, APP_WINDOW), WINDOW_LIST),
+      { kind: 'unmeasurable', reason: 'window-bounds-unavailable' },
+      windowBounds,
+    );
+  }
+});
+
 test('a capture that never listed the windows cannot prove absence', () => {
   assert.deepEqual(
     androidSnapshotKeyboardFromTree(tree(APP_WINDOW), { captureMode: 'active-window' }),

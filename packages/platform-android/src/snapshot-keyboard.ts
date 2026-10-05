@@ -12,20 +12,27 @@ const ANDROID_WINDOW_TYPE_INPUT_METHOD = 2;
  * adb call. Bounds are screen pixels, the same space as every node rect.
  *
  * An input method that draws nothing (agent-device's test IME) puts no window on screen and reads as
- * `absent`. Only a capture that listed every window can prove absence: the active-window fallback
- * never saw the window list, a root without window metadata cannot be ruled out as the input method,
- * and a truncated capture may have stopped before it.
+ * `absent`, and so does an input method window whose bounds parsed to an empty box. One whose bounds
+ * did not parse, or parsed to non-finite numbers, was seen but not measured. Only a capture that
+ * listed every window can prove absence: the active-window fallback never saw the window list, a
+ * root without window metadata cannot be ruled out as the input method, and a truncated capture may
+ * have stopped before it.
  */
 export function androidSnapshotKeyboardFromTree(
   tree: AndroidUiHierarchy,
   metadata: Pick<AndroidSnapshotBackendMetadata, 'captureMode' | 'helperTruncated'>,
 ): SnapshotKeyboardBandFact {
   const windows = tree.children;
-  const inputMethodRects = windows
-    .filter((window) => window.windowType === ANDROID_WINDOW_TYPE_INPUT_METHOD)
+  const inputMethodWindows = windows.filter(
+    (window) => window.windowType === ANDROID_WINDOW_TYPE_INPUT_METHOD,
+  );
+  const inputMethodRects = inputMethodWindows
     .map((window) => window.windowRect)
     .filter(isPositiveFiniteRect);
   if (inputMethodRects.length > 0) return { kind: 'visible', frame: unionRects(inputMethodRects) };
+  if (!inputMethodWindows.every((window) => isEmptyFiniteRect(window.windowRect))) {
+    return { kind: 'unmeasurable', reason: 'window-bounds-unavailable' };
+  }
   if (
     metadata.captureMode !== 'interactive-windows' ||
     windows.some((window) => window.windowType === undefined)
@@ -36,6 +43,12 @@ export function androidSnapshotKeyboardFromTree(
     return { kind: 'unmeasurable', reason: 'capture-truncated' };
   }
   return { kind: 'absent' };
+}
+
+function isEmptyFiniteRect(rect: Rect | undefined): boolean {
+  if (!rect) return false;
+  if (![rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)) return false;
+  return rect.width === 0 || rect.height === 0;
 }
 
 function unionRects(rects: readonly Rect[]): Rect {
