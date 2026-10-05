@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { SCRIPT_FLAG_COMMANDS, scriptFlagEntries, scriptFlagKeys } from '@agent-device/ad-script';
+import { SCRIPT_FLAG_COMMANDS, scriptFlagEntries } from '@agent-device/ad-script';
 import {
   COMMON_COMMAND_SUPPORTED_FLAG_KEYS,
   DEVICE_SELECTION_FLAG_KEYS,
@@ -19,35 +19,32 @@ import {
  * `packages/ad-script/src/internal/script-utils.ts`; this pins admission in BOTH
  * directions so neither half can drift again:
  *
- * - a script token the grammar reads must be a flag the command accepts, with the
- *   same spelling and value kind the declaration gives it, and one the recorder may
- *   carry (a grammar that accepted a `recorded: false` flag would parse a line the
- *   recording path can never write);
+ * - a script token the grammar reads must be a long-spelled flag the command accepts,
+ *   with the same spelling and value kind the declaration gives it, and one the
+ *   recorder may carry (a grammar that accepted a `recorded: false` flag would parse
+ *   a line the recording path can never write);
  * - the reverse: a flag the command accepts AND the recorder carries must be in the
  *   grammar, because that flag is exactly what a recording will one day write, and
  *   a script line carrying it must parse (the failure `--until` and `wait --raw` hit).
  */
 describe.each(SCRIPT_FLAG_COMMANDS)('%s script flags', (command) => {
   const entries = scriptFlagEntries(command);
-  const keys = scriptFlagKeys(command);
+  const keys: string[] = [...new Set(entries.map((entry) => entry.key))];
+  const acceptedFlagKeys = new Set<string>([
+    ...(getCliCommandSchema(command).allowedFlags ?? []),
+    ...(getCliCommandSchema(command).supportedFlags ?? []),
+  ]);
 
   test('the command declares at least one script flag', () => {
-    expect(keys.length).toBeGreaterThan(0);
+    expect(entries.length).toBeGreaterThan(0);
   });
 
   test('every flag the script line carries is one the command itself accepts', () => {
-    const schema = getCliCommandSchema(command);
-    const accepted = new Set<string>([
-      ...(schema.allowedFlags ?? []),
-      ...(schema.supportedFlags ?? []),
-    ]);
-    const refused = keys.filter((key) => !accepted.has(key));
-    expect(refused).toEqual([]);
+    expect(keys.filter((key) => !acceptedFlagKeys.has(key))).toEqual([]);
   });
 
   test('every flag the script line carries is one the recorder may carry', () => {
-    const unrecorded = keys.filter((key) => !recordedFlagKeys().has(key as never));
-    expect(unrecorded).toEqual([]);
+    expect(keys.filter((key) => !recordedFlagKeys().has(key as never))).toEqual([]);
   });
 
   test('every script token matches the declaration spelling and kind exactly', () => {
@@ -58,8 +55,6 @@ describe.each(SCRIPT_FLAG_COMMANDS)('%s script flags', (command) => {
     for (const entry of entries) {
       expect(entry.token.startsWith('--')).toBe(true);
       const definitions = getFlagDefinitionsForKey(entry.key as never);
-      const declaredNames = new Set(definitions.flatMap((definition) => [...definition.names]));
-      expect(declaredNames.has(entry.token)).toBe(true);
       const definition = definitions.find((candidate) => candidate.names.includes(entry.token));
       expect(definition?.type).toBe(entry.kind);
     }
@@ -71,13 +66,8 @@ describe.each(SCRIPT_FLAG_COMMANDS)('%s script flags', (command) => {
     // Scoped to the flags the command owns — the common parser flags (device
     // selection, daemon wiring, `--no-record`) are recorded but deliberately not
     // part of a step, so they stay out of the grammar by declaration.
-    const schema = getCliCommandSchema(command);
-    const accepted = new Set<string>([
-      ...(schema.allowedFlags ?? []),
-      ...(schema.supportedFlags ?? []),
-    ]);
     const recorded = recordedFlagKeys();
-    const missing = [...accepted].filter(
+    const missing = [...acceptedFlagKeys].filter(
       (key) =>
         recorded.has(key as never) && !isCommonOrDeviceSelectionFlagKey(key) && !keys.includes(key),
     );
@@ -96,6 +86,6 @@ test('a command outside the declared set carries no script flags, so its line st
   // The generic script branch treats every token as a positional, so a command
   // cannot gain a script flag without its own parse branch. `press` is the proof:
   // its `--button` handling lives in the click-like branch, not in this grammar.
-  expect(scriptFlagKeys('press')).toEqual([]);
-  expect(scriptFlagKeys('snapshot')).toEqual([]);
+  expect(scriptFlagEntries('press')).toEqual([]);
+  expect(scriptFlagEntries('snapshot')).toEqual([]);
 });

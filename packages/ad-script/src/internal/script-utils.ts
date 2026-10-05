@@ -106,18 +106,13 @@ const SCRIPT_FLAG_MAPS: Record<ScriptFlagCommand, Map<string, ScriptFlagEntry>> 
 export const SCRIPT_FLAG_COMMANDS = Object.keys(SCRIPT_FLAG_MAPS) as readonly ScriptFlagCommand[];
 
 /**
- * The flag keys one command's script line can carry (#3197), read back from the parse
- * tables. Exported for the root admission test (`src/commands/replay/script-flag-admission.test.ts`),
- * which proves the tables and the flag declarations admit the same keys in both
- * directions — the invariant that keeps the script grammar and the flag declarations
- * from diverging the way `--until` and `wait --raw` did.
+ * The script flag tokens one command's line reads, with their value kinds and flag keys
+ * (#3197). Exported for the root admission test
+ * (`src/commands/replay/script-flag-admission.test.ts`), which proves the tables and the
+ * flag declarations admit the same keys in both directions — the invariant that keeps the
+ * script grammar and the flag declarations from diverging the way `--until` and
+ * `wait --raw` did.
  */
-export function scriptFlagKeys(command: string): readonly string[] {
-  const flagMap = scriptFlagMapFor(command);
-  return flagMap ? [...new Set([...flagMap.values()].map((entry) => entry.key))] : [];
-}
-
-/** The script flag tokens one command reads, with their value kinds, for the admission test. */
 export function scriptFlagEntries(
   command: string,
 ): ReadonlyArray<{ token: string } & ScriptFlagEntry> {
@@ -130,8 +125,10 @@ function scriptFlagMapFor(command: string): Map<string, ScriptFlagEntry> | undef
   return isScriptFlagCommand(command) ? SCRIPT_FLAG_MAPS[command] : undefined;
 }
 
+// Membership comes from the tables' own keys, so a third command cannot compile into the
+// type while the guard silently refuses to read its flags.
 function isScriptFlagCommand(command: string): command is ScriptFlagCommand {
-  return command === 'scroll' || command === 'wait';
+  return (SCRIPT_FLAG_COMMANDS as readonly string[]).includes(command);
 }
 
 /**

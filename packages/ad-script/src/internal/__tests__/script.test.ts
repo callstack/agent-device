@@ -363,6 +363,17 @@ test("single quotes carry an apostrophe through ', and a backslash stays itself"
   assert.equal(parsed[1]?.flags.snapshotScope, String.raw`root\.section`);
 });
 
+test('a quoted value ending in an even backslash run still closes', () => {
+  // `wait 'C:\\temp\\'` is one path with literal backslashes, not an unclosed
+  // quote: only an ODD run pairs with the quote as the apostrophe escape. The
+  // consequence is that a value ending in ONE literal backslash does not close in
+  // single quotes under this grammar (the `\'` escape owns that position); a
+  // double-quoted JSON string is the spelling for that one value.
+  const parsed = parseReplayScriptDetailed(String.raw`wait 'C:\\temp\\'` + '\n').actions;
+
+  assert.deepEqual(parsed[0]?.positionals, [String.raw`C:\\temp\\`]);
+});
+
 test('apostrophes that survive decoding keep the old bare reading', () => {
   // The shell reads `'don't do this'` as three arguments. A script line has no
   // second reader to hand it to, so re-tokenizing would change what a

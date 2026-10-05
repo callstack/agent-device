@@ -96,14 +96,22 @@ type NoReplayTestsMatchedReasons = {
   declaredOther: number;
 };
 
+/** The selectors a script cannot declare in its `context platform=` header. */
+type NonDeclarablePlatform = Exclude<PlatformSelector, ReplayTestPlatform>;
+
+// An exhaustive table, not a list: a platform that joins the gap between the filter
+// vocabulary and `ReplayTestPlatform` fails here as a missing key, and one that leaves it
+// fails as an excess key — so the predicate can never silently send the remedy toward a
+// header the parser drops (`web` is excluded for #1900).
+const NON_DECLARABLE_PLATFORMS: Record<NonDeclarablePlatform, true> = { web: true };
+
 /**
  * Whether a filter value is one a script can name in its `context platform=` header: the
- * declarable vocabulary is `ReplayTestPlatform`, and `web` is the only `PlatformSelector` it
- * excludes. The type predicate fails to compile if a future declarable platform joins the
- * exclusion, so this stays pinned to the type rather than restating a list.
+ * declarable vocabulary is `ReplayTestPlatform`, and the table above is enforced to be
+ * exactly its gap from `PlatformSelector`, so the predicate cannot silently fall behind.
  */
 function isDeclarableReplayPlatform(filter: PlatformSelector): filter is ReplayTestPlatform {
-  return filter !== 'web';
+  return !Object.hasOwn(NON_DECLARABLE_PLATFORMS, filter);
 }
 
 /**

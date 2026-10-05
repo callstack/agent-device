@@ -347,11 +347,13 @@ function convertScrollAction(action: SessionAction): ConvertedAction {
   // #3197: `--until` is now part of a scroll action, so the export says when it
   // cannot carry the stop condition rather than exporting a bare page scroll and
   // letting the flow lose the step that made it land on the target.
-  const warnings =
-    typeof action.flags?.until === 'string'
-      ? [`scroll --until ${action.flags.until} is not represented by Maestro scroll`]
-      : [];
-  return { kind: 'commands', commands: ['scroll'], ...(warnings.length ? { warnings } : {}) };
+  const until = typeof action.flags?.until === 'string' ? action.flags.until : undefined;
+  return {
+    kind: 'commands',
+    commands: ['scroll'],
+    warnings:
+      until === undefined ? [] : [`scroll --until ${until} is not represented by Maestro scroll`],
+  };
 }
 
 function convertSwipeAction(action: SessionAction): ConvertedAction {

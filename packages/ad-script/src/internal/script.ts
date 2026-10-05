@@ -565,28 +565,44 @@ function readQuotedReplayToken(
  * change is re-tokenized. Inside the quotes only `\'` escapes, as in the shell, where
  * a `\` keeps its own character; `\'` itself is the one deliberate extension, because
  * a shell's single quotes carry no apostrophe at all and a selector like
- * `label="don't"` has to be writable in a script without JSON double quotes.
+ * `label="don't"` has to be writable in a script without JSON double quotes. The
+ * escape only consumes a quote an ODD run of backslashes precedes, so a value ending
+ * in literal backslashes still closes; that also makes a value ending in one literal
+ * backslash unwritable in single quotes, and double quotes are the spelling for it.
  */
 function readSingleQuotedReplayToken(
   line: string,
   cursor: number,
 ): { value: string; nextCursor: number } | null {
   if (line[cursor] !== "'") return null;
-  let end = cursor + 1;
-  while (end < line.length) {
-    const char = line.charAt(end);
-    if (char === '\\' && line.charAt(end + 1) === "'") {
-      end += 2;
-      continue;
-    }
-    if (char === "'") break;
-    end += 1;
-  }
-  if (end >= line.length || !isReplayTokenBoundary(line, end + 1)) return null;
+  const end = findSingleQuotedTokenEnd(line, cursor + 1);
+  if (end === -1 || !isReplayTokenBoundary(line, end + 1)) return null;
   return {
     value: decodeSingleQuotedReplayLiteral(line.slice(cursor + 1, end)),
     nextCursor: end + 1,
   };
+}
+
+/** The closing `'` index, or -1 when the quote never closes at this run. */
+function findSingleQuotedTokenEnd(line: string, from: number): number {
+  let index = from;
+  while (index < line.length) {
+    const quote = line.indexOf("'", index);
+    if (quote === -1) return -1;
+    if (!isBackslashEscaped(line, quote)) return quote;
+    index = quote + 1;
+  }
+  return -1;
+}
+
+/** Whether the character at `index` follows an odd run of backslashes: the `\'` escape. */
+function isBackslashEscaped(line: string, index: number): boolean {
+  let backslashes = 0;
+  while (index > 0 && line.charAt(index - 1) === '\\') {
+    backslashes += 1;
+    index -= 1;
+  }
+  return backslashes % 2 === 1;
 }
 
 function isReplayTokenBoundary(line: string, index: number): boolean {

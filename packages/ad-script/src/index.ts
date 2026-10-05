@@ -12,7 +12,6 @@ export {
   isTouchTargetCommand,
   SCRIPT_FLAG_COMMANDS,
   scriptFlagEntries,
-  scriptFlagKeys,
   stripRecordedRefGeneration,
 } from './internal/script-utils.ts';
 
