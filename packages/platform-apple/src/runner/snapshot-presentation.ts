@@ -120,13 +120,6 @@ export function presentAppleRunnerSnapshot(
     scope: options?.scope,
     customActions: options?.customActions,
   });
-  // The engine only validates a box for the regular projection (`presentIosRunnerSnapshot` reads the
-  // viewport evidence for `regular` and skips it for `raw`), so raw is the one projection where this
-  // host still holds a root it never checked. Publishing it would reinstate the largest-rect guess
-  // #3182 exists to retire, under the name of a measured fact.
-  const validatedViewport =
-    request.projection === 'regular' ? viewportSize(viewportEvidence) : undefined;
-
   const input: IosSnapshotInput = {
     stage: 'presented',
     presentation: {
@@ -151,17 +144,17 @@ export function presentAppleRunnerSnapshot(
   };
 
   try {
+    // The engine returns the box its regular projection validated this payload against and no box
+    // for raw — deriving it here would only repeat that rule (#3182).
+    const presentation = presentIosRunnerSnapshot(input, request);
+    const validatedViewport = snapshotViewportSizeFrom(presentation.validatedViewport);
     return {
-      nodes: presentIosRunnerSnapshot(input, request).nodes,
+      nodes: presentation.nodes,
       ...(validatedViewport ? { viewport: validatedViewport } : {}),
     };
   } catch (error) {
     throwSnapshotPresentationError(error, result);
   }
-}
-
-function viewportSize(evidence: IosViewportEvidence): SnapshotViewportSize | undefined {
-  return snapshotViewportSizeFrom(evidence.kind === 'missing' ? undefined : evidence.rect);
 }
 
 /**

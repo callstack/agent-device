@@ -46,6 +46,9 @@ export function publishIosSnapshot(
     comparisonIdentity: buildIosSnapshotComparisonIdentity(input, request),
     residue:
       input.stage === 'acquired' ? [...input.acquisition.residue] : [...input.validation.residue],
+    ...(presentation.validatedViewport
+      ? { validatedViewport: presentation.validatedViewport }
+      : {}),
   };
 }
 
@@ -143,6 +146,7 @@ function presentAcquiredSnapshot(
         }).nodes;
   return {
     nodes: compacted.nodes,
+    validatedViewport: viewport,
     ...(qualityNodes ? { qualityNodes } : {}),
     presentedIndexesBySourceIndex: remapPresentedIndexes(
       acquisition.nodes,

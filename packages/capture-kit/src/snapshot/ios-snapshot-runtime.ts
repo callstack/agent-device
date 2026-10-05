@@ -42,17 +42,9 @@ export function presentIosSnapshotAcquisition(
 
   try {
     const presentation = publishIosSnapshot(input, request);
-    // A raw projection never validates a box (`presentAcquiredSnapshot` validates the graph alone),
-    // so this seam publishes only the viewport the regular fold measured its rects against — the same
-    // rule the runner presentation follows (#3182).
-    const validatedViewport =
-      request.projection === 'regular'
-        ? snapshotViewportSizeFrom(
-            acquired.acquisition.viewport.kind === 'missing'
-              ? undefined
-              : acquired.acquisition.viewport.rect,
-          )
-        : undefined;
+    // The engine returns the box its regular fold validated against and no box for raw; this seam
+    // only passes it through the shared construction guard (#3182).
+    const validatedViewport = snapshotViewportSizeFrom(presentation.validatedViewport);
     return {
       backend: 'xctest',
       producer: acquired.acquisition.producer,
