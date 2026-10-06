@@ -45,6 +45,7 @@ import {
 } from './snapshot-backend-conformance.ts';
 
 const C = PUBLIC_COMMANDS;
+const DEFAULT_RUNNER_PREPARE_TIMEOUT_MS = 420_000;
 
 type AgentDeviceSdk = typeof import('../../../src/sdk/index.ts');
 
@@ -85,12 +86,42 @@ export async function runIosSimulatorE2E(): Promise<void> {
   const context = createContext();
   let primaryError: unknown;
   try {
+    await prepareRunner(context);
     await executeLiveScenarios(context);
   } catch (error) {
     primaryError = error;
   }
   const cleanupError = await finalizeLiveRun(context);
   throwLiveRunErrors(primaryError, cleanupError);
+}
+
+/**
+ * Starts the runner in this run's daemon under the prepare budget, so a cold start or rebuild is
+ * not paid inside the first runner-backed command's 90 s request timeout. It runs inside the
+ * node-test-tmpdir wrapper, so the daemon it starts gets the run's TMPDIR and claims directory.
+ */
+async function prepareRunner(context: LiveContext): Promise<void> {
+  const timeoutMs = Number(
+    process.env.AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS ?? DEFAULT_RUNNER_PREPARE_TIMEOUT_MS,
+  );
+  await runStep(
+    context,
+    'prepare iOS runner',
+    [
+      'prepare',
+      'ios-runner',
+      '--platform',
+      'ios',
+      '--udid',
+      context.udid,
+      '--state-dir',
+      context.stateDir,
+      '--timeout',
+      String(timeoutMs),
+      '--json',
+    ],
+    { commonFlags: false, timeoutMs: timeoutMs + 30_000 },
+  );
 }
 
 async function executeLiveScenarios(context: LiveContext): Promise<void> {
