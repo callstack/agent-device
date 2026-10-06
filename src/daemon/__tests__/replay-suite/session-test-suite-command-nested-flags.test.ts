@@ -47,6 +47,27 @@ test('buildNestedReplayFlags threads artifactsDir through even when parent lacks
   assert.deepEqual(result, { artifactsDir: '/tmp/attempt-1' });
 });
 
+// #2997: the suite command's own --test-ime opt-in must fan out to every attempt's
+// nested replay, or a real-device suite cannot opt in to the test IME its eraseText
+// steps need. Parent flags ride through untouched, so pin that here.
+test('buildNestedReplayFlags fans the parent testIme opt-in onto every attempt', () => {
+  const result = buildNestedReplayFlags({
+    parentFlags: { platform: 'android', testIme: true },
+    platform: undefined,
+    target: undefined,
+    artifactsDir: '/suite-root/flow/attempt-1',
+  });
+  assert.equal(result?.testIme, true);
+
+  const optedOut = buildNestedReplayFlags({
+    parentFlags: { platform: 'android', testIme: false },
+    platform: undefined,
+    target: undefined,
+    artifactsDir: '/suite-root/flow/attempt-1',
+  });
+  assert.equal(optedOut?.testIme, false);
+});
+
 test('buildNestedReplayFlags overrides a parent artifactsDir with the attempt-level one', () => {
   const result = buildNestedReplayFlags({
     parentFlags: { artifactsDir: '/suite-root' },

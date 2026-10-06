@@ -236,6 +236,10 @@
       "types": "./src/interaction.ts",
       "default": "./src/interaction.ts"
     },
+    "./input-validation": {
+      "types": "./src/input-validation.ts",
+      "default": "./src/input-validation.ts"
+    },
     "./is-predicate": {
       "types": "./src/is-predicate.ts",
       "default": "./src/is-predicate.ts"

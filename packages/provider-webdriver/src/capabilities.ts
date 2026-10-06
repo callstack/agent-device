@@ -14,6 +14,7 @@ export type CloudWebDriverOperation =
   | 'scroll'
   | 'fill'
   | 'type'
+  | 'keyboard'
   | 'back'
   | 'home'
   | 'orientation'
@@ -84,6 +85,10 @@ const BASE_WEBDRIVER_CAPABILITIES: CloudWebDriverCapabilityMap = {
   },
   fill: supported,
   type: supported,
+  keyboard: {
+    support: 'partial',
+    note: 'Enter presses Android keycode 66 through `mobile: pressKey` and types a newline into the focused iOS field; dismiss uses the Appium hide-keyboard route, and Android status uses the Appium keyboard probe.',
+  },
   back: supported,
   home: {
     support: 'partial',

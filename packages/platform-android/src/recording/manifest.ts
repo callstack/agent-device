@@ -21,6 +21,7 @@ export type AndroidRecordingDescriptor = Readonly<{
   recordOnlySession: boolean;
   activeSessionApp?: ScreenRecordingStartInput['activeSessionApp'];
   exportQuality?: ScreenRecordingStartInput['exportQuality'];
+  fps?: number;
   transportMode: 'local' | 'transport-composed';
 }>;
 
@@ -46,6 +47,7 @@ export type NativeManifest = Readonly<{
   recordOnlySession: boolean;
   activeSessionApp?: ScreenRecordingStartInput['activeSessionApp'];
   exportQuality?: ScreenRecordingStartInput['exportQuality'];
+  fps?: number;
   transportMode: 'local' | 'transport-composed';
   chunks: readonly NativeChunk[];
   pendingRemotePath?: string;
@@ -82,6 +84,7 @@ export const androidScreenRecordingDescriptorCodec = Object.freeze({
               : {
                   exportQuality: body.exportQuality as AndroidRecordingDescriptor['exportQuality'],
                 }),
+            ...(body.fps === undefined ? {} : { fps: body.fps }),
           }),
         } as const)
       : ({ status: 'invalid', message: 'Invalid Android screen-recording descriptor' } as const),
@@ -110,6 +113,7 @@ export function createNativeManifest(
     recordOnlySession: input.recordOnlySession,
     ...(input.activeSessionApp === undefined ? {} : { activeSessionApp: input.activeSessionApp }),
     ...(input.exportQuality === undefined ? {} : { exportQuality: input.exportQuality }),
+    ...(input.fps === undefined ? {} : { fps: input.fps }),
     chunks,
     ...(pendingRemotePath === undefined ? {} : { pendingRemotePath }),
     transportMode,
@@ -163,6 +167,7 @@ export function nativeManifestMatchesDescriptor(
     manifest.recordOnlySession === descriptor.recordOnlySession &&
     JSON.stringify(manifest.activeSessionApp) === JSON.stringify(descriptor.activeSessionApp) &&
     manifest.exportQuality === descriptor.exportQuality &&
+    manifest.fps === descriptor.fps &&
     manifest.transportMode === descriptor.transportMode &&
     (manifest.completion === undefined ||
       completionMatchesDescriptor(manifest.completion, descriptor))

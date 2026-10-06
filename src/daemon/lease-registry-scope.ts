@@ -4,7 +4,7 @@ import {
   MIN_LEASE_WINDOW_MS,
   leaseScopeToReleaseRequest,
 } from '@agent-device/contracts/lease-scope';
-import type { LeaseBackend } from '@agent-device/kernel/contracts';
+import { LEASE_BACKENDS, type LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { normalizeTenantId } from './config.ts';
 
@@ -137,9 +137,9 @@ export function normalizeRequiredLeaseId(raw: string | undefined): string {
 
 export function normalizeLeaseBackend(raw: string | undefined): LeaseBackend {
   const value = (raw ?? '').trim().toLowerCase();
-  if (!value || value === 'ios-simulator') return 'ios-simulator';
-  if (value === 'ios-instance' || value === 'android-instance' || value === 'harmonyos-instance')
-    return value;
+  if (!value) return 'ios-simulator';
+  const backend = LEASE_BACKENDS.find((entry) => entry === value);
+  if (backend) return backend;
   throw new AppError('INVALID_ARGS', `Unsupported lease backend: ${raw ?? ''}`);
 }
 
@@ -290,6 +290,21 @@ export function assertLeaseOwnerScope(lease: DeviceLease, request: HeartbeatLeas
       reason: 'LEASE_SCOPE_REQUIRED',
     });
   }
+}
+
+/** Whether `lease` was allocated with exactly this owner and device scope. */
+export function hasAllocatedScope(
+  lease: DeviceLease,
+  request: NormalizedAllocateLeaseRequest,
+): boolean {
+  return (
+    lease.tenantId === request.tenantId &&
+    lease.runId === request.runId &&
+    lease.backend === request.backend &&
+    lease.leaseProvider === request.leaseProvider &&
+    lease.deviceKey === request.deviceKey &&
+    lease.clientId === request.clientId
+  );
 }
 
 export function leaseDeviceBindingKey(

@@ -112,6 +112,81 @@ Holds do not survive daemon restart, matching lease state. Reconnect and re-esta
 before continuing human interaction. Local takeover without a device-scoped remote lease is
 deferred; this does not provide a host-global fence across local daemons.
 
+### Leasing one macOS app
+
+A host can hand a client one macOS app instead of a device. A `macos-app` lease names that app by
+bundle id, optionally pinned to one process (`<bundleId>@<pid>`). Only the host allocates it, on the
+same loopback listener and daemon token as host holds; a tenant `lease_allocate` for `macos-app` is
+refused:
+
+```text
+PUT    /admin/leases/<lease-id>
+GET    /admin/leases
+DELETE /admin/leases/<lease-id>
+```
+
+```json
+{
+  "tenantId": "host-tenant",
+  "runId": "run-1",
+  "clientId": "client-1",
+  "leaseBackend": "macos-app",
+  "leaseProvider": "proxy",
+  "deviceKey": "com.example.app@12345",
+  "ttlMs": 300000
+}
+```
+
+The lease id is 16 to 128 hex characters the host chooses. Repeating the PUT renews the lease; a PUT
+that names another scope for an existing id is refused. The lease stays allocated across the
+client's `close` unless the body sets `retainOnClose: false`, and DELETE revokes it at once. It
+expires after `ttlMs` without a renewal or a client request, like any lease. A client heartbeat can
+shorten that window but never extend it past the `ttlMs` of the last PUT. A client cannot release
+it: `disconnect` drops only its local connection state, and a tenant `lease_release` is refused
+with `MACOS_APP_LEASE_HOST_OWNED`.
+
+The client connects with a remote config that names the lease, and runs `open <bundleId>`:
+
+```json
+{
+  "daemonBaseUrl": "https://<tunnel-url>",
+  "daemonAuthToken": "<client-token>",
+  "tenant": "host-tenant",
+  "runId": "run-1",
+  "clientId": "client-1",
+  "leaseId": "<lease-id>",
+  "leaseBackend": "macos-app",
+  "leaseProvider": "proxy",
+  "deviceKey": "com.example.app@12345",
+  "platform": "macos"
+}
+```
+
+Requests under a `macos-app` lease are limited to `open`, `close`, `snapshot`, `wait`,
+`find`, `get`, `is`, `click`, `fill`, `press`, `type`, `focus`, `scroll`, `screenshot`, and `batch`,
+plus the lease's own heartbeat and release; `doctor`, `devices`, `session list` and the other
+inventory commands are refused too.
+`open` and `close` accept only the leased bundle id, only the `app` surface is allowed, screenshots
+capture only the app window, inputs that name a host path or a launch (`--save-script`,
+`--launch-url`, `--launch-console`, a screenshot path other than the client's own temp file) are
+refused, device selectors (`--udid`, `--serial`, `--device`, `--target`) are refused, `open` and
+`batch` must carry `--platform macos`, every other command must run in the session `open` created for
+the leased app, and a pid-pinned lease stops working when that process exits. `open`
+requires the daemon to run the native macOS app backend (`AGENT_DEVICE_MACOS_APP_BACKEND=native`).
+A refusal fails with `UNAUTHORIZED` and `details.reason: "MACOS_APP_LEASE_DENIED"`.
+
+Responses under the lease name nothing else about the host. `open` omits the session state and log
+paths and the device (`device`, `id`, `kind`), a failure omits `logPath` and `diagnosticsRecord` and
+replaces host paths and the host name in its text with `<host-path>` and `<host>`, and a snapshot's
+fallback screenshot path stays on the host; the screenshot arrives through the artifact route. The
+request diagnostics route is not served to a tenant that held the lease, and a daemon started with
+`leases.require` does not serve it at all.
+
+These rules apply to requests made under the lease. To refuse requests that name no lease at all,
+start the daemon with a policy that requires one (`leases.require`, below). The proxy token is shared
+by every client of the proxy, so a host serving several clients through one proxy authenticates each
+client itself and sets each request's tenant, session isolation, and lease before forwarding it.
+
 ## Restricting What Clients Can Do
 
 Start the proxy with a daemon policy to confine every client to named devices and commands. The
@@ -137,6 +212,9 @@ AGENT_DEVICE_DAEMON_POLICY=./policy.json agent-device proxy
   `react-devtools` and Maestro flows, and `install-from-source` for remote installs.
 - `capabilities.deny: ["device-shutdown"]` blocks `shutdown`, `close --shutdown`, and any other path
   that would shut the device down.
+- `leases.require: "macos-app"` (the only accepted value) refuses every request that is not made
+  under a `macos-app` lease or that its allow list does not cover, including requests that name no
+  lease and inventory commands such as `doctor` and `session list`.
 
 The daemon reads the file once at start and refuses to start if it is invalid. If a daemon is
 already running for the state directory with a different policy, the proxy refuses to reuse it;
@@ -156,7 +234,9 @@ the device-host VM must use the daemon's loopback port and local daemon token.
 
 Remote clients read `/health` before issuing commands and compare the daemon RPC protocol version. Keep the client and proxy versions reasonably close; patch-level differences should normally work, but incompatible RPC protocol versions fail before commands run.
 
-`/health` also reports `hostArch`, the native CPU architecture of the machine serving it: the one its simulators run by default, even when Node itself runs under Rosetta. Macs report `arm64` or `x86_64`; other hosts report `x86_64` for x64 and Node's `process.arch` name otherwise (for example `arm64`). The top-level value describes the proxy's own machine, so a client behind a proxy reads `upstream.hostArch` for the host that runs the simulators, for example to build only that slice of a simulator app. Older daemons omit the field.
+`/health` also reports `hostArch`, the native CPU architecture of the machine serving it: the one its simulators run by default, even when Node itself runs under Rosetta. Macs report `arm64` or `x86_64`; other hosts report `x86_64` for x64 and Node's `process.arch` name otherwise (for example `arm64`). The top-level value describes the proxy's own machine, so a client behind a proxy reads `upstream.hostArch` for the host that runs the simulators, for example to build only that slice of a simulator app. Older daemons omit the field. `leaseBackends` lists the lease backends the daemon admits (`macos-app` only on a macOS host); a host
+checks `upstream.leaseBackends` for `macos-app` before handing out a macOS app lease, and older
+daemons omit it.
 
 ```json
 {"ok":true,"service":"agent-device-proxy","version":"0.21.17","rpcProtocolVersion":2,"instanceId":"5f0c2d7e-8a41-4b7e-9c3a-2e6d1f4b8a90","hostArch":"arm64","upstream":{"ok":true,"service":"agent-device-daemon","version":"0.21.17","rpcProtocolVersion":2,"instanceId":"b3e9a6c1-4d2f-4f8e-a0b7-7c5d9e1f2a34","hostArch":"arm64"}}

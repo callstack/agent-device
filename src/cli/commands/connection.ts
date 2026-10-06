@@ -89,7 +89,7 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
     stateDir,
     connectFlags,
     context.previous,
-    state.daemon?.baseUrl,
+    state,
   );
   const runtimePreparation = buildRuntimePreparationNotice(connectFlags, state);
   const readiness = presentConnectReadiness(state, verification);
@@ -185,20 +185,38 @@ function buildConnectedState(options: {
   };
 }
 
+type ConnectionLeaseBinding = Pick<
+  RemoteConnectionState,
+  'clientId' | 'deviceKey' | 'leaseBackend' | 'leaseId' | 'leaseProvider'
+>;
+
 function buildConnectionLeaseBinding(
   flags: CliFlags,
   previous: RemoteConnectionState | null,
   connectionMetadata: RemoteConnectionRequestMetadata | undefined,
-): Pick<
-  RemoteConnectionState,
-  'clientId' | 'deviceKey' | 'leaseBackend' | 'leaseId' | 'leaseProvider'
-> {
+): ConnectionLeaseBinding {
   const connection = mergeRemoteConnectionRequestMetadata(connectionMetadata ?? {}, previous ?? {});
+  const leaseBackend = previous?.leaseBackend ?? resolveRequestedLeaseBackend(flags);
+  if (leaseBackend === 'macos-app') {
+    return buildHostAllocatedLeaseBinding(flags, previous, connection);
+  }
   return {
     leaseId: previous?.leaseId,
-    leaseBackend: previous?.leaseBackend ?? resolveRequestedLeaseBackend(flags),
+    leaseBackend,
     ...connection,
     deviceKey: previous?.deviceKey ?? connection.deviceKey,
+  };
+}
+
+function buildHostAllocatedLeaseBinding(
+  flags: CliFlags,
+  previous: RemoteConnectionState | null,
+  connection: RemoteConnectionRequestMetadata,
+): ConnectionLeaseBinding {
+  return {
+    leaseId: flags.leaseId ?? previous?.leaseId,
+    leaseBackend: 'macos-app',
+    ...connection,
   };
 }
 
@@ -252,13 +270,14 @@ async function cleanupForcedPreviousConnection(
   stateDir: string,
   flags: CliFlags,
   previous: RemoteConnectionState | null,
-  nextDaemonBaseUrl: string | undefined,
+  next: RemoteConnectionState,
 ): Promise<PreviousLeaseReleaseNotice | undefined> {
   if (!previous || !flags.force) return undefined;
   await stopMetroCleanup(previous.metro);
   await stopReactDevtoolsCleanup({ stateDir, state: previous });
+  if (previous.leaseId && previous.leaseId === next.leaseId) return undefined;
   return await releasePreviousLease(client, previous, {
-    nextDaemonBaseUrl,
+    nextDaemonBaseUrl: next.daemon?.baseUrl,
     ambientDaemonAuthToken: flags.daemonAuthToken,
     cwd: process.cwd(),
     env: process.env,
@@ -462,7 +481,18 @@ function optionalConnectionFieldsMatch(
     [state.leaseBackend, options.desiredLeaseBackend],
     [state.target, options.flags.target],
   ].every(([left, right]) => right === undefined || left === right);
-  return fieldsMatch && remoteConnectionLeaseIdentityMatches(state, options.connection);
+  return (
+    fieldsMatch &&
+    macosAppLeaseIdMatches(state, options.flags.leaseId) &&
+    remoteConnectionLeaseIdentityMatches(state, options.connection)
+  );
+}
+
+function macosAppLeaseIdMatches(
+  state: RemoteConnectionState,
+  leaseId: string | undefined,
+): boolean {
+  return state.leaseBackend !== 'macos-app' || leaseId === undefined || leaseId === state.leaseId;
 }
 
 function isSameDaemonState(

@@ -122,6 +122,48 @@ test('replay parses inline open runtime flags and replays open with runtime payl
   });
 });
 
+// #3197 end to end through the handler: a script line that hunts for an off-screen
+// target and scopes a capture must arrive at the dispatched step as flags, not as
+// poisoned positionals. Parse alone passing here would hide a drop in the replay
+// dispatch, which is exactly how the CLI form and the script form diverged.
+test('replay delivers scroll --until and wait --raw flags to the dispatched steps', async () => {
+  const sessionStore = makeSessionStore();
+  const replayRoot = mkdtempForTestSync('agent-device-replay-scroll-until-');
+  const replayPath = path.join(replayRoot, 'hunt.ad');
+  fs.writeFileSync(
+    replayPath,
+    'scroll down --until \'label="General"\'\nwait \'label="Order summary"\' 5000 --raw\n',
+  );
+
+  const invoked: DaemonRequest[] = [];
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'replay',
+      positionals: [replayPath],
+      flags: { replayScriptSource: replayScriptSourceBundleFor(replayPath) },
+      meta: { cwd: replayRoot },
+    },
+    sessionName: 'default',
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req);
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(invoked.length).toBe(2);
+  expect(invoked[0]?.command).toBe('scroll');
+  expect(invoked[0]?.positionals).toEqual(['down']);
+  expect(invoked[0]?.flags?.until).toBe('label="General"');
+  expect(invoked[1]?.command).toBe('wait');
+  expect(invoked[1]?.positionals).toEqual(['label="Order summary"', '5000']);
+  expect(invoked[1]?.flags?.snapshotRaw).toBe(true);
+});
+
 test('replay inherits parent device selectors for each invoked step', async () => {
   const sessionStore = makeSessionStore();
   const replayRoot = mkdtempForTestSync('agent-device-replay-parent-selectors-');
@@ -231,6 +273,10 @@ test('test --platform web reports no matching scripts, typed or untyped, because
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     expect(response.error.code).toBe('INVALID_ARGS');
-    expect(response.error.message).toBe('No replay tests matched for --platform web.');
+    expect(response.error.message).toBe(
+      'No replay tests matched for --platform web: 1 without a platform declaration, ' +
+        '1 declaring another platform. No script can declare web as its platform; ' +
+        'run this suite without --platform.',
+    );
   }
 });

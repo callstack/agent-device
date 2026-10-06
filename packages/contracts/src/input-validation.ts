@@ -38,3 +38,11 @@ export function readOptionalNumber(
   }
   return value;
 }
+
+/**
+ * The typed reason the Android adb-shell text channel reports when it cannot carry the
+ * requested text. Recovery routing keys on this constant, never on the message: the message
+ * states the channel limit; the reason names which recovery surfaces apply. It lives here
+ * because every producer and consumer of the reason already evaluates this module.
+ */
+export const ANDROID_SHELL_TEXT_UNSUPPORTED_REASON = 'android_shell_text_unsupported' as const;

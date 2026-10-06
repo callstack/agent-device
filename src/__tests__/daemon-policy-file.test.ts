@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
@@ -35,6 +36,8 @@ test.each([
   [{ version: 1, devices: { allow: [] } }, /must not be empty/],
   [{ version: 1, devices: { allow: [{ udid: 'a', serial: 'b' }] } }, /exactly one "udid"/],
   [{ version: 1, capabilities: { deny: ['device-erase'] } }, /unknown capability "device-erase"/],
+  [{ version: 1, leases: { require: 'ios-instance' } }, /"leases.require" must be macos-app/],
+  [{ version: 1, leases: { allow: ['macos-app'] } }, /unknown key "leases.allow"/],
 ])('rejects an invalid policy %j', (raw, message) => {
   expect(() => parseDaemonPolicy(raw, SOURCE)).toThrow(message);
 });
@@ -62,12 +65,24 @@ test('the digest names the rules, not their order or source path', () => {
     { ...base, commands: { deny: ['boot', 'shutdown'] } },
     { ...base, devices: { allow: [{ udid: 'b' }] } },
     { ...base, capabilities: { deny: ['device-shutdown'] } },
+    { ...base, leases: { require: 'macos-app' } },
   ];
 
   expect(reordered.digest).toBe(first.digest);
   for (const variant of variants) {
     expect(parseDaemonPolicy(variant, SOURCE).digest).not.toBe(baseDigest);
   }
+});
+
+test('a policy without lease rules keeps the digest it had before lease rules existed', () => {
+  const canonical = JSON.stringify({ devices: null, commands: null, capabilities: [] });
+  const expected = crypto.createHash('sha256').update(canonical).digest('hex');
+  expect(parseDaemonPolicy({ version: 1 }, SOURCE).digest).toBe(expected);
+  expect(parseDaemonPolicy({ version: 1, leases: { require: 'macos-app' } }, SOURCE)).toMatchObject(
+    {
+      requiredLeaseBackend: 'macos-app',
+    },
+  );
 });
 
 test('internal device commands are nameable by the public command they serve or by their own name', () => {

@@ -80,6 +80,30 @@ describe('replay command interface', () => {
     });
   });
 
+  test('reads the --test-ime opt-in on both flow surfaces', () => {
+    expect(replayCliReader(['./checkout.ad'], flags({ testIme: true }))).toMatchObject({
+      testIme: true,
+    });
+    expect(replayCliReader(['./checkout.ad'], flags({ testIme: false }))).toMatchObject({
+      testIme: false,
+    });
+    expect(testCliReader(['./suite.ad'], flags({ testIme: true }))).toMatchObject({
+      testIme: true,
+    });
+    // Absent stays absent: the session-open defaults (emulator on, device off) must survive.
+    expect(replayCliReader(['./checkout.ad'], flags()).testIme).toBeUndefined();
+    expect(testCliReader(['./suite.ad'], flags()).testIme).toBeUndefined();
+  });
+
+  test('admits testIme on the replay and test CLI schemas', () => {
+    // The schema's allowedFlags is the CLI projection allowlist; the metadata input
+    // schema is the Node/MCP structured surface.
+    expect(replayCommandFacet.cliSchema?.allowedFlags).toContain('testIme');
+    expect(testCommandFacet.cliSchema?.allowedFlags).toContain('testIme');
+    expect(replayCommandMetadata.inputSchema.properties).toHaveProperty('testIme');
+    expect(testCommandMetadata.inputSchema.properties).toHaveProperty('testIme');
+  });
+
   test('rejects missing replay path', () => {
     expectInvalidArgs(() => replayCliReader([], flags()), 'replay requires path');
   });

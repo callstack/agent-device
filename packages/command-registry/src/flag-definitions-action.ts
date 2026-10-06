@@ -42,7 +42,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 1,
     max: 120,
     usageLabel: '--fps <n>',
-    usageDescription: 'Record: target frames per second (iOS physical device runner)',
+    usageDescription:
+      'Record: target frames per second (iOS physical device runner); also lowers the touch-overlay rate, which never exceeds 30',
     projectConfig: true,
     recorded: true,
   },
@@ -158,7 +159,11 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--until <selector>',
     usageDescription: 'Scroll: repeat passes until the selector is visible on screen',
     projectConfig: true,
-    recorded: false,
+    // #3197: the stop condition IS the step. A recorded scroll that hunted for
+    // an off-screen target has to replay as the same hunt; recorded as a bare
+    // `scroll down` it degrades to a fixed gesture that passes on one viewport
+    // and fails on another.
+    recorded: true,
   },
   {
     key: 'doubleTap',

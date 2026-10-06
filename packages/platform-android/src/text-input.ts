@@ -5,6 +5,7 @@
  * `fill-verification.ts`.
  */
 import type { FillUnconfirmedVerification } from '@agent-device/contracts/fill-evidence';
+import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -463,14 +464,27 @@ function isAndroidInputTextUnsupported(error: unknown): boolean {
   return false;
 }
 
+/**
+ * The direct-interaction route's recovery (`open`, then a failing `fill`/`press`). The replay
+ * failure boundary replaces it for flow runs off the typed reason below, so a flow caller is
+ * never sent to a flag only `open` accepts.
+ */
+export const ANDROID_TEST_IME_OPEN_HINT =
+  'On emulators the test IME activates automatically; on real devices pass `open --test-ime` to enable it (see `agent-device doctor` for the current IME state).';
+
 function unsupportedAndroidShellTextError(text: string, cause?: unknown): AppError {
   return new AppError(
     'COMMAND_FAILED',
-    'Android text input requires provider-native text injection or the bundled test IME helper for non-ASCII/control characters; the adb-shell fallback supports ASCII text only. On emulators the test IME activates automatically; on real devices pass `open --test-ime` to enable it (see `agent-device doctor` for the current IME state).',
+    'Android text input requires provider-native text injection or the bundled test IME helper for non-ASCII/control characters; the adb-shell fallback supports ASCII text only.',
     {
       backend: 'adb-shell',
+      reason: ANDROID_SHELL_TEXT_UNSUPPORTED_REASON,
       textLength: Array.from(text).length,
       textPreview: text.slice(0, 32),
+      // The direct-interaction route's recovery. The replay failure boundary rewrites it
+      // off the typed reason (`ANDROID_TEST_IME_FLOW_HINT`), so a flow caller is never
+      // sent to a flag only `open` accepts.
+      hint: ANDROID_TEST_IME_OPEN_HINT,
     },
     cause instanceof Error ? cause : undefined,
   );

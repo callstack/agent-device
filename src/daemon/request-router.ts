@@ -58,7 +58,8 @@ import { isWebSession } from './web-session-names.ts';
 import { inferFillText } from '@agent-device/ad-script';
 import { createPlatformRequestScope } from './platform-request-scope.ts';
 import { createOwnerScopedDeviceClaimReconciler } from './device/device-claim-owner-recovery.ts';
-import { scopeRequestSession } from './request-admission.ts';
+import { isConfinedToAppLease, scopeRequestSession } from './request-admission.ts';
+import { redactMacOsAppLeaseResponse } from './macos-app-lease.ts';
 import { resolveEffectiveSessionName } from './session-routing.ts';
 import { sessionIdleExpiredError } from './session-idle-expiry.ts';
 import type { IdleSessionTombstone } from './session-idle-tombstone.ts';
@@ -256,7 +257,20 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     } catch (error) {
       response = finalizeThrownRequestError(error);
     }
-    return await finalizeRequestBindingCleanup(scope, response);
+    return redactForMacOsAppLease(req, scope, await finalizeRequestBindingCleanup(scope, response));
+  }
+
+  // Not covered, by choice: a request refused before its scope exists that names no lease in its
+  // own metadata and relies on its session's lease. Leased remote clients always send the lease.
+  function redactForMacOsAppLease(
+    req: DaemonRequest,
+    scope: RequestExecutionScope | undefined,
+    response: DaemonResponse,
+  ): DaemonResponse {
+    const session = scope ? sessionStore.lookup(scope.sessionName)?.session : undefined;
+    return isConfinedToAppLease(scope?.req ?? req, leaseRegistry, session, daemonPolicy)
+      ? redactMacOsAppLeaseResponse(req.command, response)
+      : response;
   }
 
   async function executeRequestScope(

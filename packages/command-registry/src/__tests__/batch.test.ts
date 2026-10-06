@@ -58,6 +58,31 @@ function batchRequest(commands: string[], responseLevel?: ResponseLevel): BatchR
   };
 }
 
+// #2997: `testIme` joined INHERITED_PARENT_FLAG_KEYS for the flow command's session
+// opens; batch shares that list, so its steps inherit the parent's opt-in the same way.
+// Pinning it here keeps the shared-list addition deliberate for both consumers.
+test('batch steps inherit the parent testIme session-open opt-in', async () => {
+  const seen: Array<Record<string, unknown> | undefined> = [];
+  const request: BatchRequest = {
+    token: 't',
+    command: 'batch',
+    positionals: [],
+    flags: {
+      batchSteps: [{ command: 'open' }, { command: 'open', flags: { testIme: false } }],
+      testIme: true,
+    },
+  };
+  const response = await runBatch(request, 'session', async (req) => {
+    seen.push(req.flags as Record<string, unknown> | undefined);
+    return { ok: true, data: {} };
+  });
+
+  assert.equal(response.ok, true);
+  assert.equal(seen[0]?.testIme, true);
+  // A step's own flag wins; the merge only fills gaps.
+  assert.equal(seen[1]?.testIme, false);
+});
+
 test('batch preserves typed error recovery signals from a failing step', async () => {
   const response = await runBatch(batchRequest(['open']), 'session', async () => ({
     ok: false,

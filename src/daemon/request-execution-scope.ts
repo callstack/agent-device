@@ -30,6 +30,7 @@ import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-ki
 import { finalizeDaemonResponse } from './request-finalization.ts';
 import { refreshRecordingHealth } from './request-recording-health.ts';
 import { runAdmittedLeaseWork } from './request-lease-work.ts';
+import { assertMacOsAppLeaseProcess } from './macos-app-lease.ts';
 import {
   getSessionCommandKind,
   shouldBlockForInvalidRecording,
@@ -288,8 +289,11 @@ export async function createRequestExecutionScope(params: {
             sessionStore,
             leaseRegistry,
             providerAppCatalog: params.providerAppCatalog,
+            daemonPolicy: params.daemonPolicy,
           });
           scope.req = scopedReq;
+          const admittedLease = scopedReq.internal?.admittedLease;
+          if (admittedLease) await assertMacOsAppLeaseProcess(admittedLease);
           return await runAdmittedLeaseWork({ leaseRegistry, req: scopedReq, task });
         } finally {
           // The #2833 inactivity deadline is measured from the END of the last command that ATTACHED

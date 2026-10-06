@@ -51,11 +51,12 @@ export type LocalInstallSource = Extract<DaemonInstallSource, { kind: 'url' | 'p
 
 const DAEMON_LOCK_POLICIES = ['reject', 'strip'] as const;
 export type DaemonLockPolicy = (typeof DAEMON_LOCK_POLICIES)[number];
-const LEASE_BACKENDS = [
+export const LEASE_BACKENDS = [
   'ios-simulator',
   'ios-instance',
   'android-instance',
   'harmonyos-instance',
+  'macos-app',
 ] as const;
 export type LeaseBackend = (typeof LEASE_BACKENDS)[number];
 
@@ -96,11 +97,14 @@ export function leaseBackendForPlatform(
  * plain object would answer `constructor` and friends with an inherited function, which is a platform
  * nobody rents.
  */
-const PLATFORM_BY_LEASE_BACKEND = new Map<string, PublicPlatform>(
-  Object.entries(LEASE_BACKEND_BY_PLATFORM).flatMap(([platform, backend]) =>
+const PLATFORM_BY_LEASE_BACKEND = new Map<string, PublicPlatform>([
+  ...Object.entries(LEASE_BACKEND_BY_PLATFORM).flatMap(([platform, backend]) =>
     backend === undefined ? [] : [[backend, platform as PublicPlatform] as const],
   ),
-);
+  // A `macos-app` lease rents one app on the macOS host, never the host itself, so no platform
+  // selector resolves to it: only a host administrator allocates one, and its client names it.
+  ['macos-app', 'macos'],
+]);
 
 export function platformForLeaseBackend(backend: string): PublicPlatform | undefined {
   return PLATFORM_BY_LEASE_BACKEND.get(backend);

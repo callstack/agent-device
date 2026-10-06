@@ -59,6 +59,7 @@ import {
 } from '../../session-lifecycle/index.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeAuthoringSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { MACOS_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   bindManagedLocalLifecycleRuntime,
@@ -545,4 +546,55 @@ test('#1391: a close-time script save failure still clears the device claim and 
     .readEvents('close-save-script-failure')
     .events.filter((event) => event.kind === 'action.recorded' && event.command === 'close');
   assert.equal(durableCloseEvents.length, session.actions.length);
+});
+
+test('an open under a macos-app lease holds only its app, beside other claims on the Mac', async () => {
+  const { store, stateDir } = setup();
+  mockResolveTargetDevice.mockResolvedValue(MACOS_DEVICE);
+  mockDispatch.mockResolvedValue(undefined);
+  const ownerStateDir = path.join(stateDir, 'host-user');
+  fs.mkdirSync(ownerStateDir);
+  const foreign = await acquireDeviceClaim({
+    device: MACOS_DEVICE,
+    session: 'host-user-session',
+    workspace: '/worktrees/host-user',
+    stateDir: ownerStateDir,
+  });
+  assert.equal(foreign.status, 'acquired');
+  store.publish('other-app', {
+    name: 'other-app',
+    device: MACOS_DEVICE,
+    appBundleId: 'com.example.other',
+    lease: { leaseId: 'b'.repeat(32), tenantId: 't2', runId: 'r2', leaseBackend: 'macos-app' },
+    createdAt: Date.now(),
+    actions: [],
+  });
+  const admittedLease = new LeaseRegistry().putHostLease('a'.repeat(32), {
+    tenantId: 't1',
+    runId: 'r1',
+    leaseBackend: 'macos-app',
+    deviceKey: 'com.example.app',
+  });
+
+  const response = await handleOpenCommand({
+    req: {
+      command: 'open',
+      token: 'test',
+      session: 'leased-app',
+      positionals: ['com.example.app'],
+      flags: { platform: 'macos' },
+      meta: { cwd: '/worktrees/client' },
+      internal: { admittedLease },
+    },
+    sessionName: 'leased-app',
+    logPath: path.join(stateDir, 'daemon.log'),
+    sessionStore: store,
+  });
+
+  assert.equal(response.ok, true, JSON.stringify(response));
+  assert.equal(store.get('leased-app')?.deviceClaim, undefined);
+  assert.deepEqual(
+    inspectDeviceClaims({ udid: MACOS_DEVICE.id }).map((entry) => entry.claim?.session),
+    ['host-user-session'],
+  );
 });

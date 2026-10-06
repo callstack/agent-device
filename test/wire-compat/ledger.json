@@ -3,8 +3,8 @@
   "declarations": {
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_BASE_PATH": "sha256:a1ada25c6f90d9c69c8c836538e8882547bf239559f7c1accacd0654355802dd",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_TENANT_HEADER": "sha256:ed49119d232500885f014ac73f6123d298d404c6c176abdae59cf324825927e5",
-    "packages/contracts/src/daemon-http.ts#DaemonHealthPayload": "sha256:b613a7dab37945c13087259b3f3a7bbbb7100cfa46ef40fb935cb76ef2615c85",
-    "packages/contracts/src/daemon-http.ts#buildDaemonHealthPayload": "sha256:952f189d1565c035c92873980b0ba4a2eb629f885aa4f128dfc29e6e84027a6a",
+    "packages/contracts/src/daemon-http.ts#DaemonHealthPayload": "sha256:ece08b91cc46c1397309a05a68f1e1be3999cd4b069c4c3b6bc5b75a5700f108",
+    "packages/contracts/src/daemon-http.ts#buildDaemonHealthPayload": "sha256:49a46bd62207a69a359e7c8be6f97c07748af21344452be1d32507b95ce4650b",
     "packages/contracts/src/daemon-http.ts#buildDaemonHttpAuthHeaders": "sha256:5548a44d6248ed858d19a0b2985ec4ae8a7181bae8294b85edf3c1b3b58e80d4",
     "packages/contracts/src/daemon-http.ts#buildDaemonHttpBaseUrl": "sha256:f92697208d9f42ec0dcfb006b6f2dce761bd5307db27ce2e52927fd7742e3a9a",
     "packages/contracts/src/daemon-http.ts#buildDaemonHttpTenantHeaders": "sha256:e38a5f0b5ab07ee3a5fe3db229d0de750888660c55bf31692e100002be96de1d",
@@ -26,7 +26,7 @@
     "packages/kernel/src/contracts.ts#DaemonResponseData": "sha256:f16e61b7f0ea8cdae82349508383af2f97a4c16c8aa21952d833094673f86afc",
     "packages/kernel/src/contracts.ts#JsonRpcId": "sha256:5a5fdff1cd85971214117d69a8278d0ecaf21a6fa3f4582155d9b3d9cad1fbd0",
     "packages/kernel/src/contracts.ts#JsonRpcRequestEnvelope": "sha256:d6328309fc4f8b310b88680181e46c802329de9b0e45682dd2e0f0c3e8d090e4",
-    "packages/kernel/src/contracts.ts#LEASE_BACKENDS": "sha256:1b29207af3c9ec65b999e4d3f9ab839004472897f748f8d4f4ab964de54efc9f",
+    "packages/kernel/src/contracts.ts#LEASE_BACKENDS": "sha256:0d42bb4f810582f75ff3f31e7ef8001c48f6110ed94bd9c38f161eb23fb89676",
     "packages/kernel/src/contracts.ts#LeaseBackend": "sha256:dce397343cda82ce4e3e43b534b1f642cd37568ed304f4783caddc3524c1cae5",
     "packages/kernel/src/contracts.ts#RESPONSE_LEVELS": "sha256:cef29c3b56c299e35a7fee8058b90dc4a6f65a46a420e4f11f77c8ca7d0359c8",
     "packages/kernel/src/contracts.ts#ResponseCost": "sha256:2a44de54e8b5c886b36da1500e22d634ec7e12961d2c93b689d2b1aa8c15f186",
@@ -296,8 +296,8 @@
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#LEASE_BACKENDS",
-      "digest": "sha256:1b29207af3c9ec65b999e4d3f9ab839004472897f748f8d4f4ab964de54efc9f",
-      "rationale": "#2266 adds the additive harmonyos-instance lease backend literal. Protocol-2 peers ignore the new backend unless explicitly requested; existing iOS/Android values and payloads remain unchanged."
+      "digest": "sha256:0d42bb4f810582f75ff3f31e7ef8001c48f6110ed94bd9c38f161eb23fb89676",
+      "rationale": "#2266 adds the additive harmonyos-instance lease backend literal and #3229 the macos-app literal. Protocol-2 peers ignore a new backend unless it is explicitly requested, and an older daemon refuses macos-app with its existing unsupported-backend error; existing iOS/Android/HarmonyOS values and payloads remain unchanged."
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#SessionRuntimeHints",
@@ -351,28 +351,28 @@
     },
     {
       "declaration": "packages/contracts/src/daemon-http.ts#DaemonHealthPayload",
-      "digest": "sha256:b613a7dab37945c13087259b3f3a7bbbb7100cfa46ef40fb935cb76ef2615c85",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, and #3047 adds an optional hostArch the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
+      "digest": "sha256:ece08b91cc46c1397309a05a68f1e1be3999cd4b069c4c3b6bc5b75a5700f108",
+      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
     },
     {
       "declaration": "packages/contracts/src/daemon-http.ts#buildDaemonHealthPayload",
-      "digest": "sha256:952f189d1565c035c92873980b0ba4a2eb629f885aa4f128dfc29e6e84027a6a",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, and #3047 adds an optional hostArch the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
+      "digest": "sha256:49a46bd62207a69a359e7c8be6f97c07748af21344452be1d32507b95ce4650b",
+      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
     },
     {
       "declaration": "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealth",
       "digest": "sha256:3bac36fa97090b273afe1128103e1bf476d05441fd9de41317f1b78775b88304",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, and #3047 adds an optional hostArch the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged. A restart retry must tell a probe that ran out of time from one that failed, so the client can report the RPC deadline instead of 'Remote daemon is unavailable'. `timedOut` is client-local: the prober sets it on its own timeout and abort paths and never reads it from a /health payload. The health request and the accepted payload fields are unchanged, so a released daemon or proxy is probed and parsed exactly as before."
+      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged. A restart retry must tell a probe that ran out of time from one that failed, so the client can report the RPC deadline instead of 'Remote daemon is unavailable'. `timedOut` is client-local: the prober sets it on its own timeout and abort paths and never reads it from a /health payload. The health request and the accepted payload fields are unchanged, so a released daemon or proxy is probed and parsed exactly as before."
     },
     {
       "declaration": "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealthLink",
       "digest": "sha256:7702598468b4c82b4ffa93064cd6bdfec938c1c527f7e6007c0584f3884a6eea",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, and #3047 adds an optional hostArch the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
+      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
     },
     {
       "declaration": "src/daemon-client/daemon-client-transport.ts#readHealthLink",
       "digest": "sha256:f56404b94d73da57de7248719c9136b760d2be8b4a53cde5315a2311b088425b",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, and #3047 adds an optional hostArch the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
+      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
     },
     {
       "declaration": "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_HEADER",

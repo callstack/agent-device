@@ -57,13 +57,20 @@ export type DaemonHealthPayload = {
   rpcProtocolVersion: number;
   instanceId?: string;
   hostArch?: string;
+  /** The lease backends this daemon admits; a host checks it before relying on one. */
+  leaseBackends?: readonly string[];
   upstream?: unknown;
 };
 
 export function buildDaemonHealthPayload(
   service: DaemonHealthPayload['service'],
   version: string,
-  options: { upstream?: unknown; instanceId?: string; hostArch?: string } = {},
+  options: {
+    upstream?: unknown;
+    instanceId?: string;
+    hostArch?: string;
+    leaseBackends?: readonly string[];
+  } = {},
 ): DaemonHealthPayload {
   return {
     ok: true,
@@ -72,6 +79,7 @@ export function buildDaemonHealthPayload(
     rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
     ...(options.instanceId !== undefined ? { instanceId: options.instanceId } : {}),
     ...(options.hostArch !== undefined ? { hostArch: options.hostArch } : {}),
+    ...(options.leaseBackends !== undefined ? { leaseBackends: options.leaseBackends } : {}),
     ...(options.upstream !== undefined ? { upstream: options.upstream } : {}),
   };
 }

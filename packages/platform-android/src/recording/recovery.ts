@@ -256,6 +256,7 @@ function inputFromDescriptor(
       ? {}
       : { activeSessionApp: descriptor.activeSessionApp }),
     ...(descriptor.exportQuality === undefined ? {} : { exportQuality: descriptor.exportQuality }),
+    ...(descriptor.fps === undefined ? {} : { fps: descriptor.fps }),
     fence,
   };
 }

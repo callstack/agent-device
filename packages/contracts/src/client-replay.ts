@@ -41,6 +41,12 @@ export type ReplayRunOptions = AgentDeviceRequestOverrides &
     saveScript?: boolean | string;
     /** #1258: overwrite an existing --save-script target instead of refusing. Alias: --overwrite. */
     force?: boolean;
+    /**
+     * Activate the headless Android test IME for the sessions this replay opens
+     * (default on for emulators; opt-in on real devices). `false` keeps the real
+     * keyboard even on emulators.
+     */
+    testIme?: boolean;
   };
 
 export type ReplayTestOptions = AgentDeviceRequestOverrides &
@@ -61,6 +67,12 @@ export type ReplayTestOptions = AgentDeviceRequestOverrides &
     reportJunit?: string;
     shardAll?: number;
     shardSplit?: number;
+    /**
+     * Activate the headless Android test IME for the sessions each suite attempt
+     * opens (default on for emulators; opt-in on real devices). `false` keeps the
+     * real keyboard even on emulators.
+     */
+    testIme?: boolean;
   };
 
 export type BatchStep = {

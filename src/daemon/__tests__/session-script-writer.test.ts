@@ -81,6 +81,44 @@ test('write() round-trips wait absent positionals without adding an annotation',
   expect(parsed.actions[0]?.positionals).toEqual(['absent', 'label="Removed"', '2500']);
 });
 
+// #3197: the recording half of `scroll --until`. A recorded hunt for an
+// off-screen element has to replay as the same hunt, so the flag must survive the
+// recorder's declared-key filter AND the writer's line, then parse back as a flag.
+test('write() carries a recorded scroll --until through to the script and back', () => {
+  const root = mkdtempForTestSync('agent-device-script-writer-scroll-until-');
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const session = makeAuthoringSession('default');
+  recordActionEntry(session, {
+    command: 'scroll',
+    positionals: ['down'],
+    flags: { until: 'label="Sign in"', settle: true },
+    result: { direction: 'down' },
+  });
+
+  const { parsed } = writeAndParse(writer, session);
+  expect(parsed.actions[0]?.command).toBe('scroll');
+  expect(parsed.actions[0]?.positionals).toEqual(['down']);
+  expect(parsed.actions[0]?.flags.until).toBe('label="Sign in"');
+  // `--settle` is a per-request observation, not part of the step.
+  expect(parsed.actions[0]?.flags.settle).toBeUndefined();
+});
+
+test('write() carries a recorded wait --raw through to the script and back', () => {
+  const root = mkdtempForTestSync('agent-device-script-writer-wait-raw-');
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const session = makeAuthoringSession('default');
+  recordActionEntry(session, {
+    command: 'wait',
+    positionals: ['label="Sign in"', '2000'],
+    flags: { snapshotRaw: true },
+    result: {},
+  });
+
+  const { parsed } = writeAndParse(writer, session);
+  expect(parsed.actions[0]?.positionals).toEqual(['label="Sign in"', '2000']);
+  expect(parsed.actions[0]?.flags.snapshotRaw).toBe(true);
+});
+
 test('a boundary-sliced script still strips diagnostic snapshot actions', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-snapshot-strip-');
   const writer = new SessionScriptWriter(path.join(root, 'sessions'));

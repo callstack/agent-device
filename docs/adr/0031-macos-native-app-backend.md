@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted (2026-10-03). Opt-in; XCTest stays the default app-session backend.
+Accepted (2026-10-03). Opt-in; XCTest stays the default app-session backend. Evidence gap: pointer
+event delivery was re-measured on 2026-10-05 (#3213); Electron, Catalyst, and wheel delivery with
+window fields are unmeasured.
 
 ## Rules at a glance
 
@@ -47,13 +49,22 @@ windows.
 
 **Pointer delivery.** Events posted to a process with `CGEventPostToPid` were measured against
 Calculator (SwiftUI): mouse events were dropped whether the app was frontmost or in the background,
-and wheel events were dropped in the background, while every post reported success. Keyboard events
-were accepted by Calculator and by Electron apps in the background. A fallback that cannot be
-observed to work would turn "nothing happened" into success, so pointer actions have no event
-fallback.
+and wheel events were dropped in the background, while every post reported success. Those events
+named no window. A re-measurement against a background AppKit, SwiftUI, and WKWebView fixture
+(#3213) found the window fields decide delivery, not the API: with the target window number in
+event field 51 and either field 58 or a window-local location (`CGEventSetWindowLocation`), the
+public `CGEventPostToPid` delivered click, double-click (click state in field 1), and secondary
+click to all three, 54 of 54, without activating the app or changing the frontmost app. Fields 51
+and 58 are undocumented. Drags and WKWebView button clicks were delivered only after a private
+focus-without-raise activation. Keyboard events were accepted by Calculator and by Electron apps in
+the background. A dropped post still reports success, and a fallback that cannot be observed to
+work would turn "nothing happened" into success, so pointer actions have no event fallback until
+an event path verifies its outcome.
 
-**Target resolution.** The helper hit-tests inside the session app (other apps' windows above it do
-not answer) and walks at most four ancestors for a text input or a pressable control role.
+**Target resolution.** The helper acts only on a point inside one of the session app's own on-screen
+windows (its menus and sheets included) and never on its menu bar, whose Apple menu acts for the whole Mac
+(Sleep, Lock Screen, Recent Items); other points are refused with `no-accessible-target`. It
+hit-tests inside the session app (other apps' windows above it do not answer) and walks at most four ancestors for a text input or a pressable control role.
 Chromium answers a hit test with wrapper groups that all claim `AXPress`, so when the chain names
 no control the helper picks the smallest such element whose frame contains the point, searching
 only the window the hit landed in (the app's front on-screen window when the hit names none). A
@@ -76,9 +87,11 @@ pointer would need a long-lived helper. `AGENT_DEVICE_MACOS_GHOST_CURSOR=0` disa
 
 - **Suppressing Automation Mode.** `automationmodetool` removes the authentication prompt, not the
   overlay, and the runner still owns the pointer.
-- **Private SkyLight event delivery** (`SLEventPostToPid`, focus-without-raise). It would cover
-  pointer-only controls, but it is private API that can break with any macOS release. Revisit only
-  with evidence of apps the accessibility path cannot drive.
+- **Private SkyLight event delivery** (`SLEventPostToPid`, focus-without-raise). Posting through
+  `SLEventPostToPid` delivered nothing the same fields did not deliver through the public
+  `CGEventPostToPid` (#3213). Focus-without-raise (`SLPSPostEventRecordTo`) made the target
+  AppKit-active while the frontmost app kept the user's keystrokes, and it was the only way drags
+  reached the fixture, but it is private API that can break with any macOS release.
 - **Native by default.** The accessibility path cannot express drags, holds, or double-clicks, and
   apps with sparse accessibility trees still need the runner. Defaults change only with coverage
   evidence across app frameworks.
