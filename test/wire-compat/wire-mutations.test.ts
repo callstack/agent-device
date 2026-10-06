@@ -58,7 +58,7 @@ const MUTATIONS: readonly WireMutation[] = [
   },
   {
     breakClass: 'instance refusal: the proxy drops the mismatch response header',
-    file: 'src/remote/daemon-proxy.ts',
+    file: 'packages/proxy/src/daemon-proxy.ts',
     name: 'sendInstanceMismatch',
     from: "res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');",
     to: '',
