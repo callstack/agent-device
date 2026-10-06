@@ -95,6 +95,30 @@ export function rectArea(rect: Rect): number {
   return rect.width * rect.height;
 }
 
+/** The smallest rect that contains every rect in a non-empty list. */
+export function unionRects(rects: readonly Rect[]): Rect {
+  const firstRect = rects[0];
+  if (firstRect === undefined) {
+    throw new Error('unionRects requires at least one rect');
+  }
+  let minX = firstRect.x;
+  let minY = firstRect.y;
+  let maxRight = firstRect.x + firstRect.width;
+  let maxBottom = firstRect.y + firstRect.height;
+  for (const rect of rects.slice(1)) {
+    minX = Math.min(minX, rect.x);
+    minY = Math.min(minY, rect.y);
+    maxRight = Math.max(maxRight, rect.x + rect.width);
+    maxBottom = Math.max(maxBottom, rect.y + rect.height);
+  }
+  return {
+    x: minX,
+    y: minY,
+    width: maxRight - minX,
+    height: maxBottom - minY,
+  };
+}
+
 /** Point-in-rect with inclusive edges on all four bounds. */
 export function containsPoint(rect: Rect, x: number, y: number): boolean {
   return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;

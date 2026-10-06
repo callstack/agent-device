@@ -5,7 +5,7 @@ import {
   type NormalizedError,
 } from '@agent-device/kernel/errors';
 import path from 'node:path';
-import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
+import { isPositiveFiniteRect, unionRects } from '@agent-device/kernel/rect';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import type { SnapshotOptions as InteractorSnapshotOptions } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -924,12 +924,4 @@ function isEmptyFiniteRect(rect: Rect | undefined): boolean {
   if (!rect) return false;
   if (![rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)) return false;
   return rect.width === 0 || rect.height === 0;
-}
-
-function unionRects(rects: readonly Rect[]): Rect {
-  const left = Math.min(...rects.map((rect) => rect.x));
-  const top = Math.min(...rects.map((rect) => rect.y));
-  const right = Math.max(...rects.map((rect) => rect.x + rect.width));
-  const bottom = Math.max(...rects.map((rect) => rect.y + rect.height));
-  return { x: left, y: top, width: right - left, height: bottom - top };
 }

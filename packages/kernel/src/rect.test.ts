@@ -9,6 +9,7 @@ import {
   pickLargestRect,
   readSnapshotViewportSize,
   snapshotViewportSizeFrom,
+  unionRects,
 } from './rect.ts';
 
 const VIEWPORT: Rect = { x: 0, y: 0, width: 300, height: 500 };
@@ -156,6 +157,17 @@ test('isRectVisibleInViewport counts inclusive edge contact on both axes as visi
 test('pickLargestRect selects by area and returns null for an empty list', () => {
   assert.deepEqual(pickLargestRect([{ x: 0, y: 0, width: 2, height: 2 }, VIEWPORT]), VIEWPORT);
   assert.equal(pickLargestRect([]), null);
+});
+
+test('unionRects spans every rect and refuses an empty list', () => {
+  assert.deepEqual(
+    unionRects([
+      { x: 10, y: 40, width: 20, height: 10 },
+      { x: 0, y: 60, width: 5, height: 30 },
+    ]),
+    { x: 0, y: 40, width: 30, height: 50 },
+  );
+  assert.throws(() => unionRects([]), /at least one rect/);
 });
 
 // These rows are the TypeScript twin of the runner's Swift `SnapshotGeometry.isGeometricallyActionable`
