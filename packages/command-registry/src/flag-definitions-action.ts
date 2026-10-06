@@ -42,7 +42,8 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 1,
     max: 120,
     usageLabel: '--fps <n>',
-    usageDescription: 'Record: target frames per second (iOS physical device runner)',
+    usageDescription:
+      'Record: target frames per second (iOS physical device runner) and touch-overlay frame cap',
     projectConfig: true,
     recorded: true,
   },

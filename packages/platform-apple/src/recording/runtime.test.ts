@@ -262,6 +262,41 @@ test('a simulator stop exports from a copy and retires the file the recorder own
   expect(files.exists(collectedPath)).toBe(false);
 });
 
+test('a simulator recording carries the caller fps from start to the finalizer', async () => {
+  for (const fps of [15, undefined]) {
+    const requests: Readonly<{ fps?: number }>[] = [];
+    const operations = createAppleScreenRecordingOperations({
+      host: appleHost({
+        apple: {
+          startSimulator: async () => ({
+            markers: [processIdentity],
+            wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
+            terminate: async () => {},
+          }),
+        },
+        complete: async (request) => {
+          requests.push(request);
+          return {};
+        },
+      }),
+      device: simulator,
+      owner: localRuntimeOwner('apple'),
+      signal: new AbortController().signal,
+    });
+
+    const started = await operations.screenRecordingStart(
+      input({ showTouches: true, ...(fps === undefined ? {} : { fps }) }),
+    );
+    const handle = started.pendingHandle.transfer();
+    expect(handle.inspect().fps).toBe(fps);
+    expect((await handle.finish()).status).toBe('completed');
+
+    expect(requests).toHaveLength(1);
+    if (fps === undefined) expect(requests[0]).not.toHaveProperty('fps');
+    else expect(requests[0]).toMatchObject({ fps });
+  }
+});
+
 test('a simulator export the finalizer refuses leaves the caller path empty and the copy for the retry', async () => {
   const exportPath = recordingOutputPath('refused.mp4');
   const nativePath = exportPath.replace(/\.mp4$/, '.native.mp4');

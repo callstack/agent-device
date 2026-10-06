@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
-import { completeAppleRecording } from './completion.ts';
+import { completeAppleRecording, finalizeAppleRecordingFromCollected } from './completion.ts';
+import { recordingFileStore } from '@agent-device/capture-kit/recording-artifact-fixtures';
 import { appleRecordingHost } from './runtime.fixtures.ts';
 
 test('projects invalidated touch-overlay state without publishing a false overlay', async () => {
@@ -79,4 +80,39 @@ test('hands the finalizer no fps when the caller asked for none', async () => {
 
   expect(requests).toHaveLength(1);
   expect(requests[0]).not.toHaveProperty('fps');
+});
+
+test('a collected simulator copy hands the caller fps to the finalizer, and none when unset', async () => {
+  for (const fps of [10, undefined]) {
+    const requests: Readonly<{ fps?: number }>[] = [];
+    const files = recordingFileStore();
+    files.files.set('/tmp/capture.collected.mp4', 'fake-video');
+    await finalizeAppleRecordingFromCollected({
+      host: appleRecordingHost({
+        files,
+        complete: async (input) => {
+          requests.push(input);
+          return {};
+        },
+      }),
+      snapshot: {
+        backend: 'simctl',
+        outPath: '/tmp/capture.mp4',
+        startedAt: 1,
+        scope: 'app',
+        showTouches: true,
+        recordOnlySession: false,
+        ...(fps === undefined ? {} : { fps }),
+        gestureEvents: [],
+      },
+      targetLabel: 'iOS recording',
+      collectedPath: '/tmp/capture.collected.mp4',
+      exportPath: '/tmp/capture.mp4',
+      nativePath: '/tmp/capture.native.mp4',
+    });
+
+    expect(requests).toHaveLength(1);
+    if (fps === undefined) expect(requests[0]).not.toHaveProperty('fps');
+    else expect(requests[0]).toMatchObject({ showTouches: true, fps });
+  }
 });
