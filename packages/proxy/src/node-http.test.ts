@@ -11,12 +11,16 @@ import { serveProxyRequest } from './node-http.ts';
 async function serveThroughListener(
   socket: Socket,
   host: string,
-): Promise<{ seenUrl: string | null; status: number }> {
+  { responseClosed = false } = {},
+): Promise<{ seenUrl: string | null; clientGone: boolean; status: number; ended: boolean }> {
   let seenUrl: string | null = null;
+  let clientGone = false;
+  let ended = false;
   const proxy: DaemonProxy = {
     instanceId: 'test',
     handle: async (request) => {
       seenUrl = request.url;
+      clientGone = request.signal.aborted;
       return new Response(null, { status: 204 });
     },
   };
@@ -30,11 +34,14 @@ async function serveThroughListener(
     statusCode: 200,
     writableFinished: false,
     destroyed: false,
+    closed: responseClosed,
     setHeader: () => {},
-    end: () => {},
+    end: () => {
+      ended = true;
+    },
   });
   await serveProxyRequest(proxy, req, res as unknown as ServerResponse);
-  return { seenUrl, status: res.statusCode };
+  return { seenUrl, clientGone, status: res.statusCode, ended };
 }
 
 test('requests arriving over TLS reach the proxy with an https URL', async () => {
@@ -49,12 +56,19 @@ test('plain requests reach the proxy with an http URL', async () => {
 
 test('a Host header that cannot form a URL is answered with 400 instead of a dropped socket', async () => {
   const served = await serveThroughListener(new Socket(), 'gateway example');
-  expect(served).toEqual({ seenUrl: null, status: 400 });
+  expect(served).toMatchObject({ seenUrl: null, status: 400, ended: true });
 });
 
 test('a URL carrying credentials is answered with 400 instead of a dropped socket', async () => {
   const served = await serveThroughListener(new Socket(), 'user:secret@gateway.example.test');
-  expect(served).toEqual({ seenUrl: null, status: 400 });
+  expect(served).toMatchObject({ seenUrl: null, status: 400, ended: true });
+});
+
+test('a client gone before the adapter loads reaches the proxy as an aborted request', async () => {
+  const served = await serveThroughListener(new Socket(), 'gateway.example.test', {
+    responseClosed: true,
+  });
+  expect(served.clientGone).toBe(true);
 });
 
 test('a method Fetch refuses is answered with 404 instead of a dropped socket', async () => {

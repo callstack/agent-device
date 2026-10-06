@@ -72,5 +72,6 @@ function clientGoneSignal(req: IncomingMessage, res: ServerResponse): AbortSigna
   };
   req.on('aborted', abortIfResponseIncomplete);
   res.on('close', abortIfResponseIncomplete);
+  if (res.closed) abortIfResponseIncomplete();
   return clientGone.signal;
 }
