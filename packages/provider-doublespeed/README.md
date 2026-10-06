@@ -12,3 +12,5 @@ agent-device connect doublespeed --platform ios
 
 See the [Doublespeed guide](https://agent-device.dev/docs/doublespeed) for setup and supported operations.
 To update the plugin, run `agent-device plugins update @agent-device/doublespeed`.
+
+After adding or updating a plugin, close your sessions and run `agent-device daemon stop` before reconnecting.
