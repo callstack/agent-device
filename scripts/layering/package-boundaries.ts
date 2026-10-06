@@ -49,6 +49,8 @@ export type WorkspacePackage = {
   exportTargets: ReadonlyMap<string, string>;
   /** Declared `workspace:*` dependencies on sibling internal packages. */
   workspaceDependencies: ReadonlySet<string>;
+  /** Where siblings are declared: a published package bundles them, so it lists them as dev-only. */
+  workspaceDependencyField: 'dependencies' | 'devDependencies';
   /** Non-workspace dependencies that the root build must externalize. */
   externalDependencies: ReadonlyMap<string, string>;
 };
@@ -101,8 +103,8 @@ export function workspacePackagesFromManifests(
       name?: string;
       private?: boolean;
       exports?: Record<string, { default?: string; import?: string } | string>;
-      devDependencies?: Record<string, string>;
       dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
     };
     if (!manifest.name) continue;
     const exportTargets = new Map<string, string>();
@@ -114,8 +116,10 @@ export function workspacePackagesFromManifests(
         path.posix.join('packages', entry, path.posix.normalize(targetFile)),
       );
     }
+    const workspaceDependencyField = manifest.private === true ? 'dependencies' : 'devDependencies';
     const workspaceDependencies = new Set(
-      Object.entries({ ...manifest.dependencies, ...manifest.devDependencies })
+      Object.entries(manifest[workspaceDependencyField] ?? {})
+
         .filter(([, range]) => range.startsWith('workspace:'))
         .map(([name]) => name),
     );
@@ -129,6 +133,7 @@ export function workspacePackagesFromManifests(
       name: manifest.name,
       exportTargets,
       workspaceDependencies,
+      workspaceDependencyField,
       externalDependencies,
     });
   }
@@ -191,7 +196,7 @@ export function checkPackageInternalSites(
         line: site.line,
         message:
           `${pkg.name} imports '${site.specifier}' without declaring "${name}": "workspace:*" ` +
-          `in ${pkg.dir}/package.json dependencies.`,
+          `in ${pkg.dir}/package.json ${pkg.workspaceDependencyField}.`,
       });
     }
     if (!target.exportTargets.has(site.specifier)) {

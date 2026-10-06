@@ -4,8 +4,8 @@ import { hasAndroidSystemChromeProvenance } from '@agent-device/contracts/androi
 import { classifyAndroidAlertIdentifier } from './alert-detection.ts';
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
+import { ANDROID_WINDOW_TYPE_APPLICATION } from './ui-hierarchy-node.ts';
 
-const ANDROID_WINDOW_TYPE_APPLICATION = 1;
 const MAX_REPORTED_WINDOW_TYPES = 8;
 const MIN_FOREGROUND_APP_MEANINGFUL_NODES = 2;
 const MIN_INPUT_METHOD_MEANINGFUL_NODES = 2;

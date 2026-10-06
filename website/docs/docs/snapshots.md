@@ -152,6 +152,18 @@ report it (a 420 dpi phone reports `2.625`, a `wm density` override included); a
 in dp divides rects by it and multiplies its points. An older helper omits it. iOS reports points
 already, so it carries no such factor.
 
+`androidSnapshot.missingRootWindowTypes` lists the `AccessibilityWindowInfo` types of windows the
+helper listed but could not serialize, for example because the window's root was null or reading its
+tree failed (`2` is an input method window); `windowCount` counts only the windows it did serialize. It is empty
+when every listed window was read. When it names an input method window, the capture reports the
+keyboard band as unmeasurable rather than absent. An older helper omits it.
+
+The Android keyboard band is the input method window's bounds, the box around the area it takes
+touches in. On Android 13 (API 33) and later the helper also checks that this area is one rectangle.
+A floating keyboard's is not (the panel plus the gesture strip, with app content between them), so the
+band is reported as unmeasurable and taps fall back to the tree's own keyboard check. Earlier releases
+cannot report the area, so their bounds are used as they are.
+
 Android snapshot nodes and `get attrs` (including the digest response) carry the native
 `selected`, `checked`, `heading`, `roleDescription`, `editable`, `password`, `hintShowing`,
 `placeholder`, `selectionStart`, and `selectionEnd` facts whenever the accessibility tree reports

@@ -109,6 +109,8 @@ export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   'provider-webdriver',
   'provider-limrun',
   'provider-doublespeed',
+  'proxy',
+
   'xml',
 ]);
 

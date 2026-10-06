@@ -1,7 +1,9 @@
 import type { AndroidSnapshotPresentationBudget } from './snapshot-presentation.ts';
-import type { AndroidNode, AndroidUiHierarchy } from './ui-hierarchy-node.ts';
-
-const ANDROID_WINDOW_TYPE_APPLICATION = 1;
+import {
+  ANDROID_WINDOW_TYPE_APPLICATION,
+  type AndroidNode,
+  type AndroidUiHierarchy,
+} from './ui-hierarchy-node.ts';
 
 /**
  * What the regular Android projection hides before daemon publication: nodes the acquisition marks

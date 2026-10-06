@@ -5,6 +5,7 @@ import android.app.UiAutomation;
 import android.os.Build;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
+import java.util.ArrayList;
 import java.util.List;
 
 /** Captures and serializes the Android accessibility window tree. */
@@ -25,7 +26,10 @@ final class AccessibilityTreeCapture {
     StringBuilder xml = new StringBuilder();
     xml.append("<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>");
     xml.append("<hierarchy rotation=\"0\">");
-    int windowCount = appendInteractiveWindowRoots(xml, automation, maxDepth, maxNodes, stats);
+    List<Integer> missingRootWindowTypes = new ArrayList<>();
+    int windowCount =
+        appendInteractiveWindowRoots(
+            xml, automation, maxDepth, maxNodes, stats, missingRootWindowTypes);
     String captureMode = "interactive-windows";
     if (AccessibilityCaptureStabilizer.requiresActiveWindowFallback(
         windowCount, stats.activeWindowRootMissing)) {
@@ -61,7 +65,8 @@ final class AccessibilityTreeCapture {
         captureMode,
         windowCount,
         stats.nodeCount,
-        stats.truncated);
+        stats.truncated,
+        missingRootWindowTypes);
   }
 
   private static void clearAccessibilityCache(UiAutomation automation) {
@@ -118,7 +123,8 @@ final class AccessibilityTreeCapture {
       UiAutomation automation,
       int maxDepth,
       int maxNodes,
-      AccessibilityTreeXml.Stats stats) {
+      AccessibilityTreeXml.Stats stats,
+      List<Integer> missingRootWindowTypes) {
     List<AccessibilityWindowInfo> windows;
     try {
       windows = automation.getWindows();
@@ -140,6 +146,7 @@ final class AccessibilityTreeCapture {
         windowMetadata = AccessibilityTreeXml.readWindowMetadata(window, windowCount);
         root = window.getRoot();
         if (root == null) {
+          missingRootWindowTypes.add(windowMetadata.type);
           stats.activeWindowRootMissing |= activeWindow;
           stats.focusedNonActiveWindowRootMissing |= focusedNonActiveWindow;
           if (activeWindow) {
@@ -165,6 +172,9 @@ final class AccessibilityTreeCapture {
         // Accessibility windows can disappear while traversing; keep the rest of the snapshot.
         stats.activeWindowRootMissing |= activeWindow;
         stats.focusedNonActiveWindowRootMissing |= focusedNonActiveWindow;
+        if (windowMetadata != null) {
+          missingRootWindowTypes.add(windowMetadata.type);
+        }
         if (activeWindow && windowMetadata != null) {
           stats.activeWindowMetadata = windowMetadata;
         }
@@ -202,6 +212,9 @@ final class AccessibilityTreeCapture {
     final int windowCount;
     final int nodeCount;
     final boolean truncated;
+    // AccessibilityWindowInfo types of listed windows whose root read null or threw, so the host
+    // can tell a window it could not read (an input method, say) from one that was not on screen.
+    final List<Integer> missingRootWindowTypes;
 
     Result(
         String xml,
@@ -210,7 +223,8 @@ final class AccessibilityTreeCapture {
         String captureMode,
         int windowCount,
         int nodeCount,
-        boolean truncated) {
+        boolean truncated,
+        List<Integer> missingRootWindowTypes) {
       this.xml = xml;
       this.rootPresent = rootPresent;
       this.foregroundWindowRootsPresent = foregroundWindowRootsPresent;
@@ -218,6 +232,7 @@ final class AccessibilityTreeCapture {
       this.windowCount = windowCount;
       this.nodeCount = nodeCount;
       this.truncated = truncated;
+      this.missingRootWindowTypes = missingRootWindowTypes;
     }
 
     @Override

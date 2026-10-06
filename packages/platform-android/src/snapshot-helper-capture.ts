@@ -9,6 +9,7 @@ import { execFailureDetails } from '@agent-device/host-kit/command';
 import {
   parseInstrumentationRecords,
   readInstrumentationResultBoolean,
+  readInstrumentationResultIntegerList,
   readInstrumentationResultNumber,
 } from './instrumentation-helper.ts';
 import {
@@ -487,6 +488,9 @@ function readHelperMetadata(finalResult: Record<string, string>): AndroidSnapsho
     rootPresent: readOptionalBoolean(finalResult.rootPresent),
     captureMode: readOptionalCaptureMode(finalResult.captureMode),
     windowCount: readOptionalNumber(finalResult.windowCount),
+    missingRootWindowTypes: readInstrumentationResultIntegerList(
+      finalResult.missingRootWindowTypes,
+    ),
     nodeCount: readOptionalNumber(finalResult.nodeCount),
     truncated: readOptionalBoolean(finalResult.truncated),
     elapsedMs: readOptionalNumber(finalResult.elapsedMs),

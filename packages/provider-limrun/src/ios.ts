@@ -356,6 +356,37 @@ class LimrunIosInteractor implements Interactor {
     await this.session.client.pressKey('escape');
   }
 
+  /** One press and release of the hardware home button, sent as a single action batch. */
+  async home(): Promise<void> {
+    await this.session.client.performActions([
+      { type: 'buttonDown', button: 'home' },
+      { type: 'buttonUp', button: 'home' },
+    ]);
+  }
+
+  async readClipboard(): Promise<string> {
+    const result = await this.pasteboard(['pbpaste', 'booted']);
+    return result.stdout.replaceAll('\r\n', '\n').replace(/\n$/, '');
+  }
+
+  async writeClipboard(text: string): Promise<void> {
+    await this.pasteboard(['pbcopy', 'booted'], text);
+  }
+
+  private async pasteboard(argv: string[], stdin?: string) {
+    const result = await this.session.client
+      .simctl(argv, stdin === undefined ? undefined : { stdin })
+      .wait();
+    if (result.code !== 0) {
+      throw new AppError('COMMAND_FAILED', 'Limrun iOS could not access the clipboard.', {
+        command: argv[0],
+        exitCode: result.code,
+        stderr: result.stderr.trim(),
+      });
+    }
+    return result;
+  }
+
   async setOrientation(orientation: DeviceRotation): Promise<void> {
     if (orientation === 'portrait-upside-down') {
       throw unsupported(

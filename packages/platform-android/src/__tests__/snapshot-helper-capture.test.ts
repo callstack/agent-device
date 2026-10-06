@@ -196,6 +196,17 @@ test('parseAndroidSnapshotHelperOutput carries the helper display extent beside 
   assert.equal(parsed.metadata.displayHeight, 2400);
 });
 
+test('parseAndroidSnapshotHelperOutput reads the window types the helper could not serialize', () => {
+  const read = (resultLines: string[]) =>
+    parseAndroidSnapshotHelperOutput(
+      helperOutput('<hierarchy><node text="row" /></hierarchy>', resultLines),
+    ).metadata.missingRootWindowTypes;
+
+  assert.deepEqual(read(['INSTRUMENTATION_RESULT: missingRootWindowTypes=2,1']), [2, 1]);
+  assert.deepEqual(read(['INSTRUMENTATION_RESULT: missingRootWindowTypes=']), []);
+  assert.equal(read([]), undefined, 'an older helper omits the field');
+});
+
 test('parseAndroidSnapshotHelperOutput leaves the display extent absent when the helper omits it (#3182)', () => {
   const parsed = parseAndroidSnapshotHelperOutput(
     helperOutput('<hierarchy><node text="row" /></hierarchy>', [

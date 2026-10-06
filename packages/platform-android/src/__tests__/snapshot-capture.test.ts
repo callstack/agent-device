@@ -28,6 +28,8 @@ afterEach(async () => {
 function helperAdbServing(
   display: { width?: number; height?: number } = {},
   xml: string = SCREEN_XML,
+  counts: { windowCount: number; nodeCount: number } = { windowCount: 1, nodeCount: 1 },
+  resultLines: readonly string[] = [],
 ): AndroidAdbExecutor {
   const displayKeys =
     display.width !== undefined && display.height !== undefined
@@ -54,12 +56,13 @@ function helperAdbServing(
     'INSTRUMENTATION_RESULT: maxNodes=5000',
     'INSTRUMENTATION_RESULT: rootPresent=true',
     'INSTRUMENTATION_RESULT: captureMode=interactive-windows',
-    'INSTRUMENTATION_RESULT: windowCount=1',
-    'INSTRUMENTATION_RESULT: nodeCount=1',
+    `INSTRUMENTATION_RESULT: windowCount=${counts.windowCount}`,
+    `INSTRUMENTATION_RESULT: nodeCount=${counts.nodeCount}`,
     'INSTRUMENTATION_RESULT: truncated=false',
     'INSTRUMENTATION_RESULT: elapsedMs=12',
     'INSTRUMENTATION_RESULT: pixelDensity=2.625',
     ...displayKeys,
+    ...resultLines,
     'INSTRUMENTATION_CODE: 0',
   ].join('\n');
   return async (args) => {
@@ -173,4 +176,48 @@ test('an Android capture with geometry-free nodes still publishes the display it
     true,
     'the tree really carries no geometry',
   );
+});
+
+test('the Android keyboard band survives the publication adapter into the daemon capture', async () => {
+  const capture = await snapshotAndroid(device, {
+    helperAdb: helperAdbServing(
+      { width: 1080, height: 2400 },
+      [
+        '<hierarchy>',
+        '<node window-index="0" window-type="2" window-bounds="[0,1500][1080,2400]" class="android.widget.FrameLayout" package="com.google.android.inputmethod.latin" bounds="[0,1500][1080,2400]" />',
+        '<node window-index="1" window-type="1" window-active="true" window-bounds="[0,0][1080,2400]" class="android.widget.FrameLayout" package="com.example" bounds="[0,0][1080,2400]"><node text="Name" package="com.example" bounds="[0,0][1080,200]" /><node text="Email" package="com.example" bounds="[0,200][1080,400]" /></node>',
+        '</hierarchy>',
+      ].join(''),
+      { windowCount: 2, nodeCount: 4 },
+    ),
+    helperArtifact,
+  });
+
+  assert.deepEqual(androidSnapshotPublicationInput(capture).keyboard, {
+    kind: 'visible',
+    frame: { x: 0, y: 1500, width: 1080, height: 900 },
+  });
+});
+
+test('an input method window the helper could not read makes the published keyboard unmeasurable', async () => {
+  const capture = await snapshotAndroid(device, {
+    helperAdb: helperAdbServing(
+      { width: 1080, height: 2400 },
+      [
+        '<hierarchy>',
+        '<node window-index="0" window-type="1" window-active="true" window-bounds="[0,0][1080,2400]" class="android.widget.FrameLayout" package="com.example" bounds="[0,0][1080,2400]"><node text="Name" package="com.example" bounds="[0,0][1080,200]" /><node text="Email" package="com.example" bounds="[0,200][1080,400]" /></node>',
+        '</hierarchy>',
+      ].join(''),
+      { windowCount: 1, nodeCount: 3 },
+      ['INSTRUMENTATION_RESULT: missingRootWindowTypes=2'],
+    ),
+    helperArtifact,
+  });
+
+  const published = androidSnapshotPublicationInput(capture);
+  assert.deepEqual(published.androidSnapshot?.missingRootWindowTypes, [2]);
+  assert.deepEqual(published.keyboard, {
+    kind: 'unmeasurable',
+    reason: 'window-root-unavailable',
+  });
 });

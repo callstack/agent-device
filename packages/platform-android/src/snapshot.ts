@@ -5,6 +5,7 @@ import {
   type NormalizedError,
 } from '@agent-device/kernel/errors';
 import path from 'node:path';
+import { isPositiveFiniteRect, unionRects } from '@agent-device/kernel/rect';
 import { emitDiagnostic, withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import type { SnapshotOptions as InteractorSnapshotOptions } from '@agent-device/contracts/interactor-types';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -12,6 +13,8 @@ import {
   attachRefs,
   type HiddenContentHint,
   type RawSnapshotNode,
+  type Rect,
+  type SnapshotKeyboardBandFact,
   type SnapshotOptions,
   type SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
@@ -76,7 +79,7 @@ import {
   type AndroidSnapshotPresentationFailure,
   type AndroidSnapshotPresentationOptions,
 } from './snapshot-presentation.ts';
-import { readAndroidSiblingOrder } from './ui-hierarchy-node.ts';
+import { ANDROID_WINDOW_TYPE_INPUT_METHOD, readAndroidSiblingOrder } from './ui-hierarchy-node.ts';
 import {
   androidSnapshotViewportFromHelperMetadata,
   createAndroidSnapshotCapture,
@@ -133,6 +136,7 @@ export async function snapshotAndroid(
   const xml = capture.xml;
   const tree = parseUiHierarchyTree(xml);
   const androidSnapshot = withOcclusionScanDisclosure(capture.metadata, tree);
+  const keyboard = androidSnapshotKeyboardFromTree(tree, capture.metadata);
   const presentationOptions: AndroidUiHierarchySnapshotOptions = {
     ...options,
     androidPresentation: {
@@ -160,6 +164,7 @@ export async function snapshotAndroid(
       ...androidSnapshotTruncationFields(truncated),
       androidSnapshot,
       quality: { state: 'healthy', backend: 'android-helper' } as const,
+      keyboard,
       ...(viewport ? { viewport } : {}),
     };
     return createAndroidSnapshotCapture(result, {
@@ -171,6 +176,7 @@ export async function snapshotAndroid(
     return attachAndroidPresentationFailureEvidence({
       failure: error,
       androidSnapshot,
+      keyboard,
       ...(viewport ? { viewport } : {}),
     });
   }
@@ -179,6 +185,7 @@ export async function snapshotAndroid(
 function attachAndroidPresentationFailureEvidence(params: {
   failure: AndroidSnapshotPresentationFailure;
   androidSnapshot: AndroidSnapshotBackendMetadata;
+  keyboard: SnapshotKeyboardBandFact;
   viewport?: SnapshotViewportSize;
 }): AndroidSnapshotCapture {
   return createAndroidSnapshotCapture(
@@ -202,6 +209,7 @@ function attachAndroidPresentationFailureEvidence(params: {
         reason: params.failure.message,
         reasonCode: params.failure.qualityReasonCode,
       },
+      keyboard: params.keyboard,
       ...(params.viewport ? { viewport: params.viewport } : {}),
     },
     {
@@ -507,6 +515,7 @@ function formatAndroidHelperCaptureResult(
       rootPresent: capture.metadata.rootPresent,
       captureMode: capture.metadata.captureMode,
       windowCount: capture.metadata.windowCount,
+      missingRootWindowTypes: capture.metadata.missingRootWindowTypes,
       nodeCount: capture.metadata.nodeCount,
       helperTruncated: capture.metadata.truncated,
       elapsedMs: capture.metadata.elapsedMs,
@@ -857,4 +866,67 @@ function applyHiddenContentHintsToInteractiveNodes(
       interactiveNode.hiddenContentBelow = true;
     }
   }
+}
+
+/**
+ * The keyboard band an Android capture measured, read from the window roots the helper already
+ * captured: each root carries its `AccessibilityWindowInfo` type and screen bounds, so this costs no
+ * adb call. Bounds are screen pixels, the same space as every node rect.
+ *
+ * An input method that draws nothing (agent-device's test IME) puts no window on screen and reads as
+ * `absent`, and so does an input method window whose bounds parsed to an empty box. One whose bounds
+ * did not parse, or parsed to non-finite numbers, was seen but not measured, so the band is
+ * unmeasurable even when another input method window did measure. The same holds for an input method
+ * window the helper listed but could not serialize because its root read null or threw: the helper
+ * names those windows' types in `missingRootWindowTypes`. Absence is only read from a window-list
+ * capture: the active-window fallback never saw the window list, a root without window metadata
+ * cannot be ruled out as the input method, and a truncated capture may have stopped before it. A
+ * helper too old to report `missingRootWindowTypes` is trusted on the roots it serialized.
+ *
+ * The bounds are the box around the window's touchable region, and a floating keyboard's region is
+ * several rects with app content between them, so an input method window whose region the helper
+ * read as not rectangular is unmeasurable too: the tap guard then falls back to the tree. Below API
+ * 33 the helper cannot read the region, and the bounds are trusted as the band.
+ */
+export function androidSnapshotKeyboardFromTree(
+  tree: AndroidUiHierarchy,
+  metadata: Pick<
+    AndroidSnapshotBackendMetadata,
+    'captureMode' | 'helperTruncated' | 'missingRootWindowTypes'
+  >,
+): SnapshotKeyboardBandFact {
+  const windows = tree.children;
+  const inputMethodWindows = windows.filter(
+    (window) => window.windowType === ANDROID_WINDOW_TYPE_INPUT_METHOD,
+  );
+  const inputMethodRects: Rect[] = [];
+  for (const { windowRect, windowRegionRect } of inputMethodWindows) {
+    if (windowRegionRect === false) {
+      return { kind: 'unmeasurable', reason: 'window-region-not-rectangular' };
+    }
+    if (isPositiveFiniteRect(windowRect)) inputMethodRects.push(windowRect);
+    else if (!isEmptyFiniteRect(windowRect)) {
+      return { kind: 'unmeasurable', reason: 'window-bounds-unavailable' };
+    }
+  }
+  if (metadata.missingRootWindowTypes?.includes(ANDROID_WINDOW_TYPE_INPUT_METHOD)) {
+    return { kind: 'unmeasurable', reason: 'window-root-unavailable' };
+  }
+  if (inputMethodRects.length > 0) return { kind: 'visible', frame: unionRects(inputMethodRects) };
+  if (
+    metadata.captureMode !== 'interactive-windows' ||
+    windows.some((window) => window.windowType === undefined)
+  ) {
+    return { kind: 'unmeasurable', reason: 'window-list-unavailable' };
+  }
+  if (metadata.helperTruncated === true) {
+    return { kind: 'unmeasurable', reason: 'capture-truncated' };
+  }
+  return { kind: 'absent' };
+}
+
+function isEmptyFiniteRect(rect: Rect | undefined): boolean {
+  if (!rect) return false;
+  if (![rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)) return false;
+  return rect.width === 0 || rect.height === 0;
 }
