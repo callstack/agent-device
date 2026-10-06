@@ -199,11 +199,12 @@ jobs:
         run: |
           xcrun simctl install "${{ steps.ios-simulator.outputs.simulator-udid }}" "${{ steps.fixture-app.outputs.app-path }}"
           node --experimental-strip-types src/bin.ts test examples/test-app/replays/gesture-pan-duration.ad --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --timeout 180000 --retries 2 --artifacts-dir test/artifacts/replays-ios-gesture-pan-duration --report-junit test/artifacts/replays-ios-gesture-pan-duration.junit.xml
-          pnpm clean:daemon
 
-      # The E2E steps drive the built CLI, so the daemon the previous steps left was stopped above.
-      # Prepare the runner in the new daemon first, under the prepare budget: otherwise the first
-      # runner-backed command pays the runner start inside its own 90 s request timeout.
+      # The E2E drives the built CLI, whose code signature differs from the source daemon above, so
+      # its first command replaces that daemon. A graceful replacement detaches the warm runner and
+      # the new daemon adopts it; `clean:daemon` here would kill it instead. Prepare runs first,
+      # under the prepare budget, so a runner that must start again does not start inside the first
+      # runner-backed command's 90 s request timeout.
       - name: Run fixture-backed iOS simulator E2E smoke
         env:
           AGENT_DEVICE_FIXTURE_APP_ID: ${{ steps.fixture-app.outputs.app-id }}

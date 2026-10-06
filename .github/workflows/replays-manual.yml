@@ -156,9 +156,7 @@ jobs:
       - name: Prove selector drag reaches its destination on iOS
         run: |
           xcrun simctl install "${{ steps.ios-simulator.outputs.simulator-udid }}" "${{ steps.fixture-app.outputs.app-path }}"
-          pnpm clean:daemon
           node --experimental-strip-types src/bin.ts replay examples/test-app/replays/drag.ad --platform ios --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --session nightly-ios-target-drag --json
-          pnpm clean:daemon
 
       - name: Run full fixture-backed iOS simulator E2E
         env:
