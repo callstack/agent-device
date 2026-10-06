@@ -124,7 +124,7 @@ test('a close-time restore waits for an in-flight rebind instead of racing it', 
       const rebind = rebindAndroidTestIme(DEVICE);
       await reachedHelperSet;
       const restore = restoreAndroidTestIme(DEVICE, { stateDir: STATE_DIR });
-      await Promise.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
       expect(state.settings.get('default_input_method')).toBe(HELPER_SERVICE);
       releaseHelperSet();
       await rebind;
