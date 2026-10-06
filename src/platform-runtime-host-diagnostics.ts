@@ -19,7 +19,7 @@ export function createHostDiagnostics(): HostDiagnostics {
     ): Promise<DoctorCheck | undefined> => {
       if (platform === 'android') {
         const { androidToolchainCheck } = await loadAndroidMechanics();
-        return await androidToolchainCheck(process.env);
+        return await androidToolchainCheck(process.env, process.platform);
       }
       if (platform === 'vega') {
         const { vegaToolchainCheck } = await import('@agent-device/platform-vega');

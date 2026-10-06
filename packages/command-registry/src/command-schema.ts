@@ -23,6 +23,15 @@ export type CommandSchema = {
   flagsByAction?: Readonly<Record<string, readonly FlagKey[]>>;
   supportedFlags?: readonly FlagKey[];
   /**
+   * Options this command consumes only when the caller typed them. Config, env, and remote-config
+   * defaults still fill the flag bag — every other reader of the key keeps its default — but the
+   * parser strips a value the command line never named before the input reader sees it, so an
+   * operator-wide default can never stand in for a per-invocation argument. Use it where the key
+   * selects the subject a mutation acts on (`settings --app`), because silently mutating a default
+   * target is worse than ignoring an option the caller never asked for.
+   */
+  explicitOnlyFlags?: readonly FlagKey[];
+  /**
    * Replaces the generated synopsis grammar in `--help`, for shapes the generator cannot express.
    * The flag tail after it stays generated from `usageFlags`, so this string never restates the
    * command's option list; a bracket it writes itself must be declared out of that tail.

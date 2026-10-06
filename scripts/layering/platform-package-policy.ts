@@ -90,6 +90,7 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
     '@agent-device/platform-apple/session-observation',
     '@agent-device/platform-apple/snapshot-source',
     '@agent-device/platform-apple/simctl',
+    '@agent-device/platform-apple/simctl-settings',
     '@agent-device/platform-apple/simulator',
     '@agent-device/platform-apple/simulator-boot',
     '@agent-device/platform-apple/tool-provider',

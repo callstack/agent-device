@@ -83,6 +83,7 @@ function normalizeLease(data: Record<string, unknown>): Lease {
     leaseProvider: readOptionalString(rawLease, 'leaseProvider'),
     clientId: readOptionalString(rawLease, 'clientId'),
     deviceKey: readOptionalString(rawLease, 'deviceKey'),
+    ...(rawLease.retainOnClose === true ? { retainOnClose: true } : {}),
     createdAt: typeof rawLease.createdAt === 'number' ? rawLease.createdAt : undefined,
     heartbeatAt: typeof rawLease.heartbeatAt === 'number' ? rawLease.heartbeatAt : undefined,
     expiresAt: typeof rawLease.expiresAt === 'number' ? rawLease.expiresAt : undefined,

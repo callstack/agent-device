@@ -131,10 +131,10 @@ const clipboardUnavailableIos = Object.freeze({
   reason: 'unsupported-provider-mode',
   hint: 'Limrun iOS direct sessions do not expose clipboard access yet.',
 } as const);
-const settingsUnavailableIos = Object.freeze({
+const settingsReadUnavailableIos = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
-  hint: 'Limrun iOS direct sessions do not expose settings changes yet.',
+  hint: 'Limrun iOS direct sessions cannot read settings back.',
 } as const);
 const appSwitcherUnavailableIos = Object.freeze({
   available: false,
@@ -373,16 +373,18 @@ export function limrunAppEventOperationFacts(
 
 /**
  * `settings` splits the same way `app-switcher` does: the Android leg rides the local family's
- * own interactor factory, while the iOS leg's `setSetting` throws.
+ * own interactor factory, while the iOS leg writes through simctl and reads nothing back.
  */
 export function limrunSettingsOperationFacts(
   device: DeviceInfo,
   liveSessionUnavailable?: RuntimeOperationUnavailability,
 ) {
-  const cell =
-    liveSessionUnavailable ?? (device.platform === 'android' ? available : settingsUnavailableIos);
+  const write = liveSessionUnavailable ?? available;
+  const read =
+    liveSessionUnavailable ??
+    (device.platform === 'android' ? available : settingsReadUnavailableIos);
   return Object.freeze({
-    ...settingsRuntimeOperationFacts({ setSetting: cell, readSetting: cell }),
+    ...settingsRuntimeOperationFacts({ setSetting: write, readSetting: read }),
   });
 }
 

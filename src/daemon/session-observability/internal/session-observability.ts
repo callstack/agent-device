@@ -11,14 +11,15 @@ import {
 import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 import { uniqueStrings } from '@agent-device/kernel/collections';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { appendAppLogMarker, clearAppLogFiles, getAppLogPathMetadata } from '../../app-log.ts';
+import { appendAppLogMarker, getAppLogPathMetadata } from '../../app-log.ts';
 import type { AppLogAdmissionLedger } from '../../app-log-admission-ledger.ts';
 import { type AudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { type PerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { appLogResourceStore } from '../../app-log-resource-store.ts';
 import {
   adoptStartedSessionAppLog,
-  clearSessionAppLogFailure,
+  bindSessionAppLog,
+  clearStoppedSessionAppLog,
   finishSessionAppLog,
   inspectSessionAppLog,
   recordSessionAppLogFailure,
@@ -31,7 +32,7 @@ import type {
 } from '../../request-runtime-binding.ts';
 import type { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
-import type { SessionState } from '../../session-state.ts';
+import type { SessionRef, SessionState } from '../../session-state.ts';
 import { handleAudioCommand } from './session-audio.ts';
 import { handlePerfRuntimeCommand } from './session-perf-runtime.ts';
 import { handleNetworkCommand } from './session-network.ts';
@@ -51,6 +52,7 @@ export type SessionObservabilityCommandInput = {
 type ObservabilityInput = SessionObservabilityCommandInput;
 type LogsHandlerParams = Omit<ObservabilityInput, 'bindDevice' | 'appLogAdmissionLedger'> & {
   session: SessionState;
+  ref: SessionRef;
   bindDevice: BindDeviceRuntime;
   appLogAdmissionLedger: AppLogAdmissionLedger;
 };
@@ -143,12 +145,13 @@ async function handleEventsCommand(params: ObservabilityInput): Promise<DaemonRe
 
 async function handleLogsCommand(params: ObservabilityInput): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
-  const session = sessionStore.get(sessionName);
-  if (!session) {
+  const ref = sessionStore.lookup(sessionName);
+  if (!ref) {
     return errorResponse('SESSION_NOT_FOUND', 'logs requires an active session');
   }
   try {
-    const logsParams = requireLogsHandlerParams({ ...params, session });
+    const session = sessionStore.requireCurrent(ref);
+    const logsParams = requireLogsHandlerParams({ ...params, session, ref });
     const admission = await logsParams.bindDevice(session.device, appLogAdmissionUse);
     const inspectFact = admission.facts.appLogInspect;
     if (!inspectFact.available) {
@@ -296,17 +299,7 @@ function handleLogsMark(
 }
 
 function handleLogsClear(params: LogsHandlerParams): DaemonResponse {
-  const { session, sessionName, sessionStore } = params;
-  if (session.appLog) {
-    return errorResponse(
-      'INVALID_ARGS',
-      'logs clear requires logs to be stopped first; run logs stop',
-    );
-  }
-  const logPath = sessionStore.resolveAppLogPath(sessionName);
-  const cleared = clearAppLogFiles(logPath);
-  clearSessionAppLogFailure({ session, sessionName, sessionStore });
-  return { ok: true, data: cleared };
+  return { ok: true, data: clearStoppedSessionAppLog(params) };
 }
 
 async function handleLogsClearRestart(
@@ -315,20 +308,17 @@ async function handleLogsClearRestart(
   owner: RuntimeOwnerRef,
   start: AppLogRuntimeOperations['appLogStart'],
 ): Promise<DaemonResponse> {
-  const { session, sessionName, sessionStore } = params;
+  const { session, sessionStore } = params;
   if (session.appLog) {
     // The stream is replaced and its files cleared behind it: nobody captures that completion, and
     // an open record left here would refuse the start this path exists to serve.
     await finishSessionAppLog({
       intent: 'disposal',
-      session,
-      sessionName,
+      ref: params.ref,
       sessionStore,
-      resourcePath: appLogResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName)),
     });
   }
-  const logPath = sessionStore.resolveAppLogPath(sessionName);
-  const cleared = clearAppLogFiles(logPath);
+  const cleared = clearStoppedSessionAppLog(params);
   const started = await startSessionAppLog(params, appBundleId, start, owner);
   return started.ok ? { ok: true, data: { ...cleared, restarted: true } } : started;
 }
@@ -354,10 +344,8 @@ async function handleLogsStop(params: LogsHandlerParams): Promise<DaemonResponse
   const outPath = sessionStore.resolveAppLogPath(sessionName);
   await finishSessionAppLog({
     intent: 'capture',
-    session,
-    sessionName,
+    ref: params.ref,
     sessionStore,
-    resourcePath: appLogResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName)),
   });
   return { ok: true, data: { path: outPath, stopped: true } };
 }
@@ -377,6 +365,7 @@ async function startSessionAppLog(
       resourcePath,
       device: session.device,
     });
+    bindSessionAppLog(sessionStore, params.ref).assertAdoptable();
     const result = await start({
       sessionId: sessionName,
       appBundleId,
@@ -386,10 +375,8 @@ async function startSessionAppLog(
     });
     await adoptStartedSessionAppLog({
       admissionLedger: params.appLogAdmissionLedger,
-      session,
-      sessionName,
+      ref: params.ref,
       sessionStore,
-      resourcePath,
       device: session.device,
       owner,
       fence,
@@ -400,8 +387,7 @@ async function startSessionAppLog(
     return { ok: true, data: { path: outputPath, started: true } };
   } catch (error) {
     const normalized = recordSessionAppLogFailure({
-      session,
-      sessionName,
+      ref: params.ref,
       sessionStore,
       error,
     });
@@ -431,7 +417,7 @@ function requireAudioSeams(params: ObservabilityInput): Parameters<typeof handle
 }
 
 function requireLogsHandlerParams(
-  params: ObservabilityInput & { session: SessionState },
+  params: ObservabilityInput & { session: SessionState; ref: SessionRef },
 ): LogsHandlerParams {
   if (!params.bindDevice) {
     throw new AppError('COMMAND_FAILED', 'Device runtime gateway is not configured', {

@@ -54,11 +54,13 @@ export type ReplaySessionStore = Readonly<{
  */
 export type ReplaySessionObservation = Readonly<{
   get: () => ReplaySessionState | undefined;
-  bindAuthority: ReplayObservationAuthorityBinder;
-  capture: (params: {
-    flags: DaemonWireRequest['flags'];
-    logPath: string;
-  }) => Promise<{ snapshot: SnapshotState }>;
+  bindAuthority: (signal?: AbortSignal) => ReturnType<ReplayObservationAuthorityBinder> &
+    Readonly<{
+      capture: (params: {
+        flags: DaemonWireRequest['flags'];
+        logPath: string;
+      }) => Promise<{ snapshot: SnapshotState }>;
+    }>;
 }>;
 
 /** Immutable read projection of the repair-transaction fields the coordinator's writers touch. */

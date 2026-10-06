@@ -151,6 +151,136 @@ export type SettingOptions = {
   longitude?: number;
 };
 
+/** The settings a simulator changes through `simctl` alone, whichever host runs that `simctl`. */
+type SimctlSetting = 'appearance' | 'permission' | 'location';
+
+/**
+ * Runs one `simctl` argv on the simulator. It resolves with the output when `simctl` exits 0 and
+ * rejects with a `COMMAND_FAILED` AppError whose `details.stderr` is the `simctl` stderr otherwise.
+ */
+type SimctlSettingRunner = (
+  args: string[],
+) => Promise<{ readonly stdout: string; readonly stderr: string }>;
+
+/** One simulator setting the Apple `simctl` plan changes, whichever host runs that `simctl`. */
+export type SimctlSettingRequest = {
+  runSimctl: SimctlSettingRunner;
+  /** The simulator UDID `simctl` addresses, or `booted` where the runner reaches one simulator. */
+  udid: string;
+  /** The device id a refusal reports to the caller, which `udid` is not on every runner. */
+  deviceId: string;
+  setting: SimctlSetting;
+  state: string;
+  appBundleId?: string;
+  options?: SettingOptions;
+};
+
+/**
+ * Whether naming an app for one mutation can mean anything on one target.
+ *
+ * `app-scoped` is the shape the public `app` field exists for: the change lands on that bundle id
+ * or package (`simctl privacy`, Android's `pm`). `device-level` is a mutation the same command
+ * serves for the whole device: Android's on/off `location` writes the global `location_mode`, and
+ * the macOS host's permissions are TCC grants to the host process, so neither can consume an app.
+ * `unknown` covers every combination this table does not settle — a setting with no app shape and no
+ * device-wide write of its own (`wifi` on the macOS host) among them — and is deliberately not a
+ * verdict: support belongs to the owner's runtime fact, which answers a setting it does not serve
+ * (`permission` on HarmonyOS) with its own refusal rather than with a complaint about an argument it
+ * never read.
+ */
+export type SettingsAppScope = 'app-scoped' | 'device-level' | 'unknown';
+
+/**
+ * What kind of target a `settings` mutation runs on, as far as consuming an app is concerned:
+ * the Apple family, the macOS host, or the non-Apple targets that share the mobile app shape
+ * (Android, HarmonyOS, Vega, Linux, web). The daemon derives it from a device with the kernel's
+ * own predicates; being app-scoped here is a claim about the shape of the change, never about
+ * support — an owner that serves no such setting answers with its own refusal.
+ */
+export type SettingsTargetFamily = 'apple' | 'mobile' | 'macos-host';
+
+/**
+ * The one table deciding whether an app named on a `settings` request is consumed. It is keyed on
+ * the target family, a fact the daemon derives from the device before binding a runtime, and it
+ * stays honest by settling only the combinations whose owner behavior is already fixed elsewhere:
+ * `clear-app-state` is app-scoped wherever it is served (`isMacOsSettingSupported` keeps macOS out
+ * of that claim), `permission` is app-scoped on every non-Apple mobile target and on Apple and
+ * host-level on macOS, and on/off `location` is app-scoped only on Apple, where it maps to a
+ * privacy grant — while `location set` moves the device's own location for everyone.
+ */
+export function settingsAppScope(
+  family: SettingsTargetFamily,
+  setting: string,
+  state: string | undefined,
+): SettingsAppScope {
+  const normalizedSetting = setting.trim().toLowerCase();
+  if (normalizedSetting === 'clear-app-state') {
+    return family === 'macos-host' ? 'unknown' : 'app-scoped';
+  }
+  if (normalizedSetting === 'permission') {
+    return family === 'macos-host' ? 'device-level' : 'app-scoped';
+  }
+  if (normalizedSetting === 'location') return locationAppScope(family, state);
+  return 'unknown';
+}
+
+/**
+ * One on/off `location` is a privacy grant only on Apple, where it maps to `simctl privacy`; on
+ * the other mobile targets it writes the global `location_mode`, and `set` moves the device's own
+ * location for everyone. A state this ladder does not name settles nothing, and the macOS host,
+ * whose location surface `isMacOsSettingSupported` keeps out of the settings vocabulary, is no
+ * verdict either.
+ */
+function locationAppScope(
+  family: SettingsTargetFamily,
+  state: string | undefined,
+): SettingsAppScope {
+  const normalizedState = state?.trim().toLowerCase();
+  if (normalizedState === 'set') return 'device-level';
+  if (readSettingState(normalizedState) === undefined) return 'unknown';
+  if (family === 'apple') return 'app-scoped';
+  if (family === 'mobile') return 'device-level';
+  return 'unknown';
+}
+
+/**
+ * The reason a request is told its app names nothing: what a caller does about it — drop the app or
+ * move to a target whose mutation is app-scoped — is the reason's meaning, so a driver can branch
+ * on `error.details.reason` instead of the prose. Paired with `dispatched: no`, because the
+ * refusal runs before a device is touched.
+ */
+export const SETTINGS_APP_NOT_CONSUMED_REASON = 'setting_app_not_consumed';
+
+/**
+ * The refusal a mutation answers with when its target consumes no app: the code, sentence, typed
+ * details, and hint as data, so the daemon can answer with it through its own response builder
+ * rather than by unwrapping an error the CLI would then re-normalize. The `app` that named nothing
+ * stays in `details` — the caller asked about that bundle id and the answer should quote it back.
+ */
+export function settingsAppNotConsumedRefusal(
+  setting: string,
+  state: string | undefined,
+  app: string,
+): {
+  code: 'INVALID_ARGS';
+  message: string;
+  details: Record<string, unknown>;
+  hint: string;
+} {
+  const described = state === undefined ? setting : `${setting} ${state}`;
+  return {
+    code: 'INVALID_ARGS',
+    message: `settings ${described} applies to the target itself, not to an app: ${app} names nothing it can grant or revoke.`,
+    details: {
+      reason: SETTINGS_APP_NOT_CONSUMED_REASON,
+      dispatched: 'no',
+      setting: described,
+      app,
+    },
+    hint: `Drop the --app option and run \`settings ${described}\`, or aim the app at an app-scoped setting such as \`settings permission grant location --app ${app}\`.`,
+  };
+}
+
 const SETTINGS_WIFI_USAGE = '<wifi|airplane|location> <on|off>';
 const SETTINGS_LOCATION_SET_USAGE = 'location set <lat> <lon>';
 const SETTINGS_ANIMATIONS_USAGE = 'animations <on|off>';
@@ -299,10 +429,22 @@ export function parseAppearanceAction(state: string): AppearanceAction {
   );
 }
 
-/** The boolean a `settings <setting> <state>` positional spells, in any casing. */
-export function parseSettingState(state: string): boolean {
+/**
+ * The boolean a `settings <setting> <state>` positional spells, or `undefined` when it spells none.
+ * This is the grammar `parseSettingState` refuses on and the app-scope table classifies with, so a
+ * state the owners accept can never settle differently about an app than it settles about the toggle.
+ */
+function readSettingState(state: string | undefined): boolean | undefined {
+  if (state === undefined) return undefined;
   const normalized = state.toLowerCase();
   if (SETTING_STATE_ON.includes(normalized)) return true;
   if (SETTING_STATE_OFF.includes(normalized)) return false;
+  return undefined;
+}
+
+/** The boolean a `settings <setting> <state>` positional spells, in any casing. */
+export function parseSettingState(state: string): boolean {
+  const parsed = readSettingState(state);
+  if (parsed !== undefined) return parsed;
   throw new AppError('INVALID_ARGS', `Invalid setting state: ${state}`);
 }

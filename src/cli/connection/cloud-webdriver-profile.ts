@@ -1,9 +1,12 @@
 import {
+  CLOUD_WEBDRIVER_PROFILE_FIELDS,
   CLOUD_WEBDRIVER_PROVIDERS,
+  parseBrowserStackAppReference,
   readAwsDeviceFarmRegionFromArn,
-  rejectBrowserStackOnlyDeviceFeatures,
+  requireBrowserStackCredentials,
   type CloudWebDriverKnownProviderName,
 } from '@agent-device/provider-webdriver';
+import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/provider-profile-fields';
 import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { PlatformSelector } from '@agent-device/kernel/device';
@@ -23,7 +26,12 @@ export function resolveCloudWebDriverConnectProfile(options: {
   cwd: string;
   env?: EnvMap;
 }): { flags: CliFlags; remoteConfigPath: string } {
-  const providerConfig = requireConnectProfileBuilder(options.provider)(options);
+  const buildProfileFields = requireConnectProfileBuilder(options.provider);
+  rejectRefusedProviderProfileFields(
+    options.flags,
+    CLOUD_WEBDRIVER_PROFILE_FIELDS[options.provider],
+  );
+  const providerConfig = buildProfileFields(options);
   const clientId = buildConnectClientId(
     options.provider,
     options.stateDir,
@@ -49,6 +57,11 @@ export function resolveCloudWebDriverConnectProfile(options: {
     cwd: options.cwd,
     env: options.env,
     flags: options.flags,
+    // Verification reads these flags; it must see the canonical reference the profile saved,
+    // not the spelling typed on the command line.
+    ...(providerConfig.providerApp
+      ? { extraFlags: { providerApp: providerConfig.providerApp } }
+      : {}),
   });
 }
 
@@ -87,8 +100,7 @@ function browserStackProfileFields(options: {
   env?: EnvMap;
   cwd: string;
 }): RemoteConfigProfile {
-  requireEnv(options.env, 'BROWSERSTACK_USERNAME', 'connect browserstack');
-  requireEnv(options.env, 'BROWSERSTACK_ACCESS_KEY', 'connect browserstack');
+  requireBrowserStackCredentials(options.env ?? {}, 'connect browserstack');
   const platform = requireCloudWebDriverPlatform(
     options.flags.platform,
     'connect browserstack requires --platform ios|android.',
@@ -121,7 +133,9 @@ function browserStackProfileFields(options: {
 }
 
 function normalizeBrowserStackAppReference(app: string, cwd: string): string {
-  if (app.startsWith('bs://') || /^https?:\/\//i.test(app)) return app;
+  if (/^https?:\/\//i.test(app)) return app;
+  const reference = parseBrowserStackAppReference(app);
+  if (reference !== undefined) return reference;
   const resolvedPath = path.resolve(cwd, app);
   try {
     if (fs.statSync(resolvedPath).isFile()) return resolvedPath;
@@ -136,7 +150,6 @@ function awsDeviceFarmProfileFields(options: {
   env?: EnvMap;
 }): RemoteConfigProfile {
   const { env, flags } = options;
-  rejectBrowserStackOnlyDeviceFeatures(flags, CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm);
   const platform = requireCloudWebDriverPlatform(
     flags.platform,
     'connect aws-device-farm requires --platform ios|android.',
@@ -180,12 +193,6 @@ function requireCloudWebDriverPlatform(
 function requireFlag(value: string | undefined, message: string): string {
   if (value) return value;
   throw new AppError('INVALID_ARGS', message);
-}
-
-function requireEnv(env: EnvMap | undefined, name: string, command: string): string {
-  const value = env?.[name];
-  if (value) return value;
-  throw new AppError('INVALID_ARGS', `${command} requires ${name} in the environment.`);
 }
 
 function requireAwsProfileValue(

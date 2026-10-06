@@ -20,7 +20,7 @@ test('a typed Maestro replay error keeps its recovery hint', async () => {
   const flowPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(flowPath, `${stringify({ appId: 'com.example.app' })}---\n${stringify([])}`);
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  sessionStore.set('default', makeIosSession('default'));
+  sessionStore.publish('default', makeIosSession('default'));
 
   const req = {
     token: 'test-token',

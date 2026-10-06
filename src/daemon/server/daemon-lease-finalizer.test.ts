@@ -1,14 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
-import { finalizeDaemonSessionLease } from './daemon-session-lease-finalizer.ts';
+import { finalizeDaemonLeases } from './daemon-lease-finalizer.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
-test('journals and bounds a hung recoverable session lease release before the final drain', async () => {
+test('journals and bounds a hung recoverable lease release before the final drain', async () => {
   vi.useFakeTimers();
   const stateDir = mkdtempForTestSync('agent-device-daemon-lease-finalizer-');
   const leaseRegistry = new LeaseRegistry();
@@ -16,6 +15,7 @@ test('journals and bounds a hung recoverable session lease release before the fi
     tenantId: 'tenant-a',
     runId: 'run-1',
     leaseProvider: 'limrun',
+    retainOnClose: true,
   });
   const recoverExpiredLease = vi.fn(() => new Promise<void>(() => {}));
   const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
@@ -23,21 +23,10 @@ test('journals and bounds a hung recoverable session lease release before the fi
     recoverableProviderIds: ['limrun'],
     stateDir,
   });
-  const session = makeIosSession('default', {
-    lease: {
-      leaseId: lease.leaseId,
-      tenantId: lease.tenantId,
-      runId: lease.runId,
-      leaseBackend: lease.backend,
-      leaseProvider: lease.leaseProvider,
-      expiresAt: lease.expiresAt,
-    },
-  });
 
   try {
     expiredProviderLeaseReleaser.beginShutdown();
-    const finalization = finalizeDaemonSessionLease({
-      session,
+    const finalization = finalizeDaemonLeases({
       leaseRegistry,
       expiredProviderLeaseReleaser,
       timeoutMs: 10,
@@ -62,7 +51,7 @@ test('journals and bounds a hung recoverable session lease release before the fi
   }
 });
 
-test('final drain joins a release that completes after the session timeout', async () => {
+test('final drain joins a release that completes after the lease timeout', async () => {
   vi.useFakeTimers();
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({
@@ -80,21 +69,10 @@ test('final drain joins a release that completes after the session timeout', asy
     leaseLifecycleProvider: { release },
     providerRuntimeIds: ['browserstack'],
   });
-  const session = makeIosSession('default', {
-    lease: {
-      leaseId: lease.leaseId,
-      tenantId: lease.tenantId,
-      runId: lease.runId,
-      leaseBackend: lease.backend,
-      leaseProvider: lease.leaseProvider,
-      expiresAt: lease.expiresAt,
-    },
-  });
 
   try {
     expiredProviderLeaseReleaser.beginShutdown();
-    const finalization = finalizeDaemonSessionLease({
-      session,
+    const finalization = finalizeDaemonLeases({
       leaseRegistry,
       expiredProviderLeaseReleaser,
       timeoutMs: 1_000,
@@ -112,7 +90,7 @@ test('final drain joins a release that completes after the session timeout', asy
   }
 });
 
-test('a hung provider release does not starve a later session during shutdown', async () => {
+test('a hung provider release does not starve another lease during shutdown', async () => {
   vi.useFakeTimers();
   const leaseRegistry = new LeaseRegistry();
   const hungLease = leaseRegistry.allocateLease({
@@ -134,24 +112,14 @@ test('a hung provider release does not starve a later session during shutdown', 
     leaseLifecycleProvider: { release },
     providerRuntimeIds: ['browserstack'],
   });
-  const sessions = [
-    makeIosSession('hung', { lease: sessionLease(hungLease) }),
-    makeIosSession('released', { lease: sessionLease(releasedLease) }),
-  ];
 
   try {
     expiredProviderLeaseReleaser.beginShutdown();
-    const finalization = Promise.all(
-      sessions.map(
-        async (session) =>
-          await finalizeDaemonSessionLease({
-            session,
-            leaseRegistry,
-            expiredProviderLeaseReleaser,
-            timeoutMs: 1_000,
-          }),
-      ),
-    );
+    const finalization = finalizeDaemonLeases({
+      leaseRegistry,
+      expiredProviderLeaseReleaser,
+      timeoutMs: 1_000,
+    });
 
     await vi.advanceTimersByTimeAsync(1_000);
     await finalization;
@@ -167,14 +135,3 @@ test('a hung provider release does not starve a later session during shutdown', 
     vi.useRealTimers();
   }
 });
-
-function sessionLease(lease: DeviceLease) {
-  return {
-    leaseId: lease.leaseId,
-    tenantId: lease.tenantId,
-    runId: lease.runId,
-    leaseBackend: lease.backend,
-    leaseProvider: lease.leaseProvider,
-    expiresAt: lease.expiresAt,
-  };
-}

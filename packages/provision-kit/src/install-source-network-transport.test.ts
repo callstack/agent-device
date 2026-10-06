@@ -66,6 +66,5 @@ test('direct requests connect to the approved address through the real lookup', 
     }
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
-    vi.unstubAllEnvs();
   }
 });

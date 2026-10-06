@@ -1,12 +1,16 @@
 import type { CloudArtifact, CloudArtifactsResult } from '@agent-device/contracts/observability';
+import { AppError } from '@agent-device/kernel/errors';
 import type { CloudWebDriverCapabilityOverrides } from './capabilities.ts';
 import type { CloudWebDriverUploadApp } from './runtime.ts';
 import { cloudArtifactsReadyOrPending, urlArtifactFromDetails } from './artifact-results.ts';
-import { isBrowserStackAppReference } from './providers.ts';
+import {
+  canonicalBrowserStackAppReference,
+  CLOUD_WEBDRIVER_PROVIDERS,
+  isBrowserStackAppReference,
+} from './providers.ts';
 import {
   appendUrlPath,
   appFileUploadForm,
-  asRecord,
   createHubUploadApp,
   fetchProviderSessionDetails,
   postHubAppUpload,
@@ -82,7 +86,10 @@ export async function uploadBrowserStackApp(
 ): Promise<string> {
   signal?.throwIfAborted();
   return await postHubAppUpload(
-    await appFileUploadForm(appPath, 'file'),
+    await appFileUploadForm(appPath, 'file', {
+      provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+      service: 'BrowserStack',
+    }),
     {
       service: 'BrowserStack',
       endpoint: options.endpoint ?? BROWSERSTACK_APP_UPLOAD_ENDPOINT,
@@ -102,6 +109,19 @@ export function createBrowserStackUploadApp(
   );
 }
 
+/**
+ * The canonical `bs://` reference for `app`, or undefined when `app` does not use the scheme. A
+ * `bs://` value outside the id grammar is `INVALID_ARGS`, worded the same on every path.
+ */
+export function parseBrowserStackAppReference(app: string): string | undefined {
+  const reference = canonicalBrowserStackAppReference(app);
+  if (reference === undefined || isBrowserStackAppReference(reference)) return reference;
+  throw new AppError('INVALID_ARGS', `BrowserStack --provider-app ${app} is not a bs:// app id.`, {
+    providerApp: app,
+    hint: 'Pass <bs://app-id-or-local-path>.',
+  });
+}
+
 /** The hub fetches a public URL itself, so only a local path is uploaded. */
 export async function resolveBrowserStackAppReference(
   app: string,
@@ -111,9 +131,8 @@ export async function resolveBrowserStackAppReference(
     service: 'BrowserStack',
     app,
     cwd: options.cwd,
-    referenceScheme: 'bs://',
     referenceLabel: 'a bs:// app id',
-    isReference: isBrowserStackAppReference,
+    parseReference: parseBrowserStackAppReference,
     uploadFile: async (appPath, signal) => await uploadBrowserStackApp(appPath, options, signal),
     signal: options.signal,
   });
@@ -144,9 +163,15 @@ export function buildBrowserStackCapabilities(
       buildName: options.buildName,
       sessionName: options.sessionName,
       ...(options.deviceFeatures ?? {}),
-      ...(asRecord(configuredBstackOptions) ?? {}),
+      ...asRecord(configuredBstackOptions),
     },
   };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 async function fetchBrowserStackSessionDetails(
@@ -162,7 +187,7 @@ async function fetchBrowserStackSessionDetails(
     auth: options,
     service: 'BrowserStack',
   });
-  return asRecord(json.automation_session) ?? json;
+  return asRecord(json.automation_session ?? json);
 }
 
 function mapBrowserStackArtifacts(

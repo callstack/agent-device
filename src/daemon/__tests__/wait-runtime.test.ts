@@ -148,6 +148,53 @@ function waitRequest(positionals: string[], flags: Record<string, unknown> = {})
   } as unknown as DaemonRequest;
 }
 
+test.each(['rebuild', 'retire'] as const)(
+  'sleep-only wait records in its admitted lifetime across %s',
+  async (transition) => {
+    vi.useFakeTimers();
+    try {
+      const harness = waitRuntimeHarness();
+      const sessionStore = makeSessionStore();
+      const address = 'cwd:sleep-wait:default';
+      const ref = sessionStore.publish(address, makeSession('default', { device: harness.device }));
+      const running = handleSnapshotCommands({
+        req: waitRequest(['100']),
+        sessionName: address,
+        logPath: '/tmp/daemon.log',
+        sessionStore,
+        inspectFacts: harness.inspectFacts,
+        bindDevice: harness.bindDevice,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      let current = ref.session;
+      if (transition === 'rebuild') {
+        current = sessionStore.update(ref, { actions: [], appName: 'Updated during sleep' });
+      } else {
+        sessionStore.retire(ref);
+        current = sessionStore.publish(
+          address,
+          makeSession('default', { device: harness.device }),
+        ).session;
+      }
+      await vi.advanceTimersByTimeAsync(100);
+      const response = await running;
+      expect(harness.captureSnapshot).not.toHaveBeenCalled();
+      if (transition === 'rebuild') {
+        expect(response?.ok).toBe(true);
+        expect(current.actions.map((action) => action.command)).toEqual(['wait']);
+        expect(ref.session.actions).toEqual([]);
+        expect(current.appName).toBe('Updated during sleep');
+      } else {
+        expect(response).toMatchObject({ ok: true, data: { waitedMs: 100 } });
+        expect(ref.session.actions).toEqual([]);
+        expect(current.actions).toEqual([]);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
+
 async function runWait(
   positionals: string[],
   harness: ReturnType<typeof waitRuntimeHarness>,
@@ -163,7 +210,7 @@ async function runWait(
       backend: 'web',
     } as unknown as NonNullable<typeof session.snapshot>;
   }
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const response = await handleSnapshotCommands({
     req: waitRequest(positionals, flags),
     sessionName: session.name,

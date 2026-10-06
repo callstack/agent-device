@@ -36,6 +36,52 @@ test('canceled adoption cleans the pending handle before terminalizing its manif
   expect(context.reportUndurableCleanup).toHaveBeenCalledWith(context.device, { confirmed: true });
 });
 
+test('canceled adoption terminalizes its manifest when the session retires during cleanup', async () => {
+  const context = makeDurableCaptureContext();
+  const start = makeDurableCaptureStartResult(context);
+  let releaseCleanup!: () => void;
+  let enterCleanup!: () => void;
+  const heldCleanup = new Promise<void>((resolve) => {
+    releaseCleanup = resolve;
+  });
+  const cleanupEntered = new Promise<void>((resolve) => {
+    enterCleanup = resolve;
+  });
+  start.forceCleanup.mockImplementationOnce(async () => {
+    enterCleanup();
+    await heldCleanup;
+    return { status: 'cleaned' } as const;
+  });
+  const cancellation = new AppError('CANCELED', 'request canceled');
+  const adoption = adoptStartedDurableCapture(
+    testCaptureDefinition,
+    {
+      ...context,
+      ...start,
+      throwIfCanceled: () => {
+        throw cancellation;
+      },
+    },
+    context.resourcePath,
+  );
+  const rejected = expect(adoption).rejects.toBe(cancellation);
+
+  await cleanupEntered;
+  const original = context.sessionStore.lookup(context.sessionName);
+  expect(context.sessionStore.retire(original)).toBe(true);
+  const successor = { name: 'successor' };
+  context.sessionStore.set(context.sessionName, successor);
+  releaseCleanup();
+  await rejected;
+
+  expect(context.sessionStore.get(context.sessionName)).toBe(successor);
+  expect(testCaptureStore.read(context.resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'completed', metadata: { phase: 'completed' } },
+  });
+  expect(context.reportUndurableCleanup).toHaveBeenCalledWith(context.device, { confirmed: true });
+});
+
 test('a failed terminal transition preserves the primary error and reports it unconfirmed', async () => {
   const context = makeDurableCaptureContext();
   const start = makeDurableCaptureStartResult(context, {
@@ -67,4 +113,27 @@ test('a failed terminal transition preserves the primary error and reports it un
     confirmed: false,
     reason: expect.stringMatching(/./),
   });
+});
+
+test('adoption refuses a retired lifetime even when its address has a vacant successor', async () => {
+  const context = makeDurableCaptureContext();
+  const start = makeDurableCaptureStartResult(context);
+  context.sessionStore.retire(context.sessionStore.lookup(context.sessionName));
+  const successor = { name: 'successor' };
+  context.sessionStore.set(context.sessionName, successor);
+  await expect(
+    adoptStartedDurableCapture(
+      testCaptureDefinition,
+      {
+        ...context,
+        ...start,
+        throwIfCanceled: () => {},
+      },
+      context.resourcePath,
+    ),
+  ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
+  expect(start.forceCleanup).toHaveBeenCalledOnce();
+  expect(context.sessionStore.get(context.sessionName)).toBe(successor);
+  expect(testCaptureStore.read(context.resourcePath).status).toBe('missing');
+  expect(context.reportUndurableCleanup).toHaveBeenCalledWith(context.device, { confirmed: true });
 });

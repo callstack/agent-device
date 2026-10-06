@@ -15,7 +15,6 @@ import {
 import type {
   AdoptStartedDurableCaptureParams,
   DurableCaptureRecordDefinition,
-  DurableCaptureResourceDefinition,
 } from './definition.ts';
 import { capitalizeDurableCaptureLabel, durableCaptureDiagnosticPrefix } from './labels.ts';
 
@@ -28,39 +27,39 @@ export async function adoptStartedDurableCapture<
   K extends string,
   H extends LiveResourceHandle<C>,
   C,
-  S,
 >(
-  definition: DurableCaptureResourceDefinition<K, H, C, S>,
-  params: AdoptStartedDurableCaptureParams<K, H, S>,
+  definition: DurableCaptureRecordDefinition<K, C>,
+  params: AdoptStartedDurableCaptureParams<K, H>,
   resourcePath: string,
 ): Promise<void> {
   let state: AdoptionState<H> = { kind: 'pending' };
   try {
+    params.binding.assertAdoptable();
     const envelope = withPhase(validateStartedEnvelope(definition, params), 'active');
     definition.store.write(resourcePath, envelope);
     state = { kind: 'persisted' };
     params.throwIfCanceled();
     const handle = params.pendingHandle.transfer();
     state = { kind: 'transferred', handle };
-    params.sessionStore.set(
-      params.sessionName,
-      definition.sessionSlot.replace(params.session, { handle, envelope }),
-    );
+    params.binding.adopt({ handle, envelope });
   } catch (error) {
     await recoverFailedAdoption(definition, params, resourcePath, state, error);
     throw error;
   }
 }
 
-async function recoverFailedAdoption<K extends string, H extends LiveResourceHandle<C>, C, S>(
-  definition: DurableCaptureResourceDefinition<K, H, C, S>,
-  params: AdoptStartedDurableCaptureParams<K, H, S>,
+async function recoverFailedAdoption<K extends string, H extends LiveResourceHandle<C>, C>(
+  definition: DurableCaptureRecordDefinition<K, C>,
+  params: AdoptStartedDurableCaptureParams<K, H>,
   resourcePath: string,
   state: AdoptionState<H>,
   primaryError: unknown,
 ): Promise<void> {
+  const mayPersist = params.binding.canPersist();
   const persisted =
-    state.kind === 'pending' ? persistRecoveryTombstone(definition, params, resourcePath) : true;
+    state.kind === 'pending'
+      ? mayPersist && persistRecoveryTombstone(definition, params, resourcePath)
+      : true;
   const initialCleanupError = await disposeFailedAdoption(params, state);
   const transition = confirmFailedAdoptionTransition(
     definition,
@@ -84,9 +83,9 @@ async function recoverFailedAdoption<K extends string, H extends LiveResourceHan
     emitCleanupDiagnostic(definition, params, primaryError, transition.cleanupError);
 }
 
-function confirmFailedAdoptionTransition<K extends string, H extends LiveResourceHandle<C>, C, S>(
+function confirmFailedAdoptionTransition<K extends string, H extends LiveResourceHandle<C>, C>(
   definition: DurableCaptureRecordDefinition<K, C>,
-  params: Pick<AdoptStartedDurableCaptureParams<K, H, S>, 'sessionName' | 'fence'>,
+  params: Pick<AdoptStartedDurableCaptureParams<K, H>, 'binding' | 'fence'>,
   resourcePath: string,
   cleanupError: unknown | undefined,
 ): { confirmed: boolean; cleanupError: unknown | undefined } {
@@ -100,7 +99,7 @@ function confirmFailedAdoptionTransition<K extends string, H extends LiveResourc
       level: 'error',
       phase: `${durableCaptureDiagnosticPrefix(definition.resourceKind)}_pending_adoption_transition_failed`,
       data: {
-        session: params.sessionName,
+        session: params.binding.address,
         transitionError:
           transitionError instanceof Error ? transitionError.message : String(transitionError),
       },
@@ -109,8 +108,8 @@ function confirmFailedAdoptionTransition<K extends string, H extends LiveResourc
   }
 }
 
-async function disposeFailedAdoption<K extends string, H extends AsyncDisposable, S>(
-  params: AdoptStartedDurableCaptureParams<K, H, S>,
+async function disposeFailedAdoption<K extends string, H extends AsyncDisposable>(
+  params: AdoptStartedDurableCaptureParams<K, H>,
   state: AdoptionState<H>,
 ): Promise<unknown | undefined> {
   try {
@@ -122,16 +121,13 @@ async function disposeFailedAdoption<K extends string, H extends AsyncDisposable
   }
 }
 
-function persistRecoveryTombstone<K extends string, H extends LiveResourceHandle<C>, C, S>(
+function persistRecoveryTombstone<K extends string, H extends LiveResourceHandle<C>, C>(
   definition: DurableCaptureRecordDefinition<K, C>,
-  params: AdoptStartedDurableCaptureParams<K, H, S>,
+  params: AdoptStartedDurableCaptureParams<K, H>,
   resourcePath: string,
 ): boolean {
   try {
-    definition.store.write(
-      resourcePath,
-      createExpectedEnvelope(definition, params, params.envelope.descriptor),
-    );
+    definition.store.write(resourcePath, createRecoveryEnvelope(definition, params));
     return true;
   } catch (descriptorError) {
     try {
@@ -148,7 +144,7 @@ function persistRecoveryTombstone<K extends string, H extends LiveResourceHandle
         level: 'error',
         phase: `${durableCaptureDiagnosticPrefix(definition.resourceKind)}_runtime_contract_tombstone_failed`,
         data: {
-          session: params.sessionName,
+          session: params.binding.address,
           descriptorError:
             descriptorError instanceof Error ? descriptorError.message : String(descriptorError),
           persistenceError:
@@ -160,17 +156,25 @@ function persistRecoveryTombstone<K extends string, H extends LiveResourceHandle
   }
 }
 
-function createExpectedEnvelope<K extends string, H extends LiveResourceHandle<C>, C, S>(
+function createRecoveryEnvelope<K extends string, H extends LiveResourceHandle<C>, C>(
   definition: DurableCaptureRecordDefinition<K, C>,
-  params: Pick<
-    AdoptStartedDurableCaptureParams<K, H, S>,
-    'sessionName' | 'device' | 'owner' | 'fence'
-  >,
+  params: AdoptStartedDurableCaptureParams<K, H>,
+): DurableResourceEnvelope<K> {
+  try {
+    return withPhase(validateStartedEnvelope(definition, params), 'active');
+  } catch {
+    return createExpectedEnvelope(definition, params, params.envelope.descriptor);
+  }
+}
+
+function createExpectedEnvelope<K extends string, H extends LiveResourceHandle<C>, C>(
+  definition: DurableCaptureRecordDefinition<K, C>,
+  params: Pick<AdoptStartedDurableCaptureParams<K, H>, 'binding' | 'device' | 'owner' | 'fence'>,
   descriptor: DurableResourceEnvelope<K>['descriptor'],
 ): DurableResourceEnvelope<K> {
   return createDurableResourceEnvelope({
     resourceKind: definition.resourceKind,
-    sessionId: params.sessionName,
+    sessionId: params.binding.address,
     device: deviceIdentity(params.device),
     owner: params.owner,
     fence: params.fence,
@@ -180,11 +184,11 @@ function createExpectedEnvelope<K extends string, H extends LiveResourceHandle<C
   });
 }
 
-function validateStartedEnvelope<K extends string, H extends LiveResourceHandle<C>, C, S>(
+function validateStartedEnvelope<K extends string, H extends LiveResourceHandle<C>, C>(
   definition: DurableCaptureRecordDefinition<K, C>,
   params: Pick<
-    AdoptStartedDurableCaptureParams<K, H, S>,
-    'sessionName' | 'device' | 'owner' | 'fence' | 'envelope'
+    AdoptStartedDurableCaptureParams<K, H>,
+    'binding' | 'device' | 'owner' | 'fence' | 'envelope'
   >,
 ): DurableResourceEnvelope<K> {
   const decoded = decodeDurableResourceEnvelope(params.envelope);
@@ -207,7 +211,7 @@ function validateStartedEnvelope<K extends string, H extends LiveResourceHandle<
 function matchesAuthority(
   envelope: DurableResourceEnvelope,
   expected: {
-    sessionName: string;
+    binding: { address: string };
     device: DeviceInfo;
     owner: RuntimeOwnerRef;
     fence: ResourceOwnershipFence;
@@ -216,7 +220,7 @@ function matchesAuthority(
 ): boolean {
   return (
     envelope.resourceKind === resourceKind &&
-    envelope.sessionId === expected.sessionName &&
+    envelope.sessionId === expected.binding.address &&
     sameDeviceIdentity(envelope.device, deviceIdentity(expected.device)) &&
     runtimeOwnerKey(envelope.owner) === runtimeOwnerKey(expected.owner) &&
     envelope.fence.token === expected.fence.token &&
@@ -250,9 +254,9 @@ function confirmFailedAdoption<K extends string, C>(
   return true;
 }
 
-function emitCleanupDiagnostic<K extends string, H extends AsyncDisposable, C, S>(
+function emitCleanupDiagnostic<K extends string, H extends AsyncDisposable, C>(
   definition: DurableCaptureRecordDefinition<K, C>,
-  params: Pick<AdoptStartedDurableCaptureParams<K, H, S>, 'sessionName'>,
+  params: Pick<AdoptStartedDurableCaptureParams<K, H>, 'binding'>,
   primaryError: unknown,
   cleanupError: unknown,
 ): void {
@@ -260,7 +264,7 @@ function emitCleanupDiagnostic<K extends string, H extends AsyncDisposable, C, S
     level: 'error',
     phase: `${durableCaptureDiagnosticPrefix(definition.resourceKind)}_pending_adoption_cleanup_failed`,
     data: {
-      session: params.sessionName,
+      session: params.binding.address,
       primaryError: primaryError instanceof Error ? primaryError.message : String(primaryError),
       cleanupError: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
     },

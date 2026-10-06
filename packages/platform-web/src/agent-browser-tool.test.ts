@@ -209,7 +209,6 @@ for (const scenario of [
         'agent-browser@0.27.1',
       ]);
     } finally {
-      vi.unstubAllEnvs();
       fs.rmSync(stateDir, { recursive: true, force: true });
     }
   });
@@ -235,7 +234,6 @@ test('managed agent-browser setup reports an install that produced no entry', as
       );
     });
   } finally {
-    vi.unstubAllEnvs();
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
@@ -261,7 +259,6 @@ test('managed agent-browser setup gives the install lock back on every path out'
       );
     });
   } finally {
-    vi.unstubAllEnvs();
     assert.deepEqual(lockPathsUnder(stateDir), []);
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

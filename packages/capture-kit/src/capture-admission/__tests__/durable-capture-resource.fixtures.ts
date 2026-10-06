@@ -1,3 +1,4 @@
+import { makeCaptureSessionBinding } from '../../durable-capture/session-binding.fixtures.ts';
 import { vi } from 'vitest';
 import type { AppLogCompletion, AppLogLiveHandle } from '@agent-device/contracts/app-log-runtime';
 import type { CleanupOutcome, FinishOutcome } from '@agent-device/contracts/durable-resource';
@@ -30,19 +31,10 @@ export const testCaptureStore = createDurableCaptureResourceStore({
 export function createTestCaptureResource(
   store: DurableCaptureResourceStore<'app-log'> = testCaptureStore,
 ) {
-  return createDurableCaptureResource<
-    'app-log',
-    AppLogLiveHandle,
-    AppLogCompletion,
-    TestCaptureSession
-  >({
+  return createDurableCaptureResource<'app-log', AppLogLiveHandle, AppLogCompletion>({
     resourceKind: 'app-log',
     displayName: 'test capture',
     store,
-    sessionSlot: {
-      read: (session) => session.appLog,
-      replace: (session, appLog) => ({ ...session, appLog, appLogFailure: undefined }),
-    },
     completionMetadata: (completion) => ({
       outputPath: completion.outputPath,
       completedAt: completion.completedAt,
@@ -72,8 +64,11 @@ export function makeDurableCaptureContext(
   const session: TestCaptureSession = {};
   sessionStore.set(sessionName, session);
   return {
+    binding: makeCaptureSessionBinding(sessionStore, sessionName, {
+      read: (session) => session.appLog,
+      replace: (session, appLog) => ({ ...session, appLog, appLogFailure: undefined }),
+    }),
     admissionLedger: createDurableCaptureAdmissionLedger({ displayName: 'test capture' }),
-    session,
     sessionName,
     sessionStore,
     device,

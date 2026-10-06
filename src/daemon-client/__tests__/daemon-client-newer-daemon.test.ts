@@ -28,7 +28,6 @@ const mockRunCmdDetached = vi.mocked(runCmdDetachedMonitored);
 
 afterEach(() => {
   mockRunCmdDetached.mockReset();
-  vi.unstubAllEnvs();
 });
 
 test('sendToDaemon refuses to replace a reachable daemon newer than the client', async (t) => {

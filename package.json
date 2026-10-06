@@ -1,6 +1,6 @@
 {
   "name": "agent-device",
-  "version": "0.21.18",
+  "version": "0.21.22",
   "description": "Mobile app automation and verification for AI coding agents. CLI, MCP server, and typed Node.js API for iOS, Android, HarmonyOS, TV, web, macOS, and Linux.",
   "mcpName": "io.github.callstack/agent-device",
   "license": "MIT",
@@ -120,8 +120,8 @@
     "prepare:publish-assets": "node scripts/prepare-publish-assets.mjs",
     "build:package": "pnpm build && pnpm build:xcuitest:ios && pnpm build:xcuitest:macos && pnpm build:xcuitest:tvos && pnpm build:xcuitest:visionos && pnpm build:macos-helper:clean && pnpm prepare:publish-assets",
     "package:npm": "pnpm build:package && pnpm check:package",
-    "release:prepare": "node scripts/release-mark-dev.mjs --check-release-version && rm -rf .tmp/release && pnpm check:mcp-metadata && pnpm build:package && pnpm check:package -- --pack-destination .tmp/release",
-    "release:publish": "pnpm release:prepare && npm publish --ignore-scripts .tmp/release/*.tgz && pnpm release:mark-dev",
+    "release:prepare": "rm -rf .tmp/release && pnpm check:mcp-metadata && pnpm build:package && pnpm check:package -- --pack-destination .tmp/release && node scripts/release-workspace.mjs pack",
+    "release:publish": "node scripts/release-mark-dev.mjs --check-release-version && pnpm release:prepare && node scripts/release-workspace.mjs publish",
     "release:mark-dev": "node scripts/release-mark-dev.mjs",
     "ad": "node bin/agent-device.mjs",
     "bench:help-conformance": "node scripts/help-conformance-bench.mjs",
@@ -174,11 +174,11 @@
     "check:quick": "pnpm lint && pnpm typecheck",
     "sync:mcp-metadata": "node scripts/sync-mcp-metadata.mjs",
     "check:mcp-metadata": "node scripts/sync-mcp-metadata.mjs --check",
-    "version": "pnpm sync:mcp-metadata && git add server.json",
+    "version": "node scripts/release-workspace.mjs sync --stage && pnpm sync:mcp-metadata && git add server.json",
     "check:tooling": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm check:layering && pnpm depgraph:test && pnpm check:gate-manifest:test && pnpm check:gate-manifest && pnpm check:production-exports && pnpm check:tmpdir-leaks:test && pnpm check:xctest-selection && pnpm check:packaged-runner-swift && pnpm check:mcp-metadata && pnpm build && pnpm check:bundle-owner-files && pnpm check:package",
     "check:unit": "pnpm test:unit && pnpm check:tmpdir-leaks && pnpm test:smoke",
     "check": "pnpm check:tooling && pnpm check:fallow && pnpm check:unit",
-    "prepack": "pnpm check:mcp-metadata && pnpm package:npm",
+    "prepack": "npm_config_dry_run=false pnpm release:prepare",
     "typecheck": "tsc -b packages/xml packages/kernel packages/contracts packages/device-selection packages/host-kit packages/capture-kit packages/managed-allocation packages/provision-kit packages/platform-apple packages/platform-android packages/platform-harmonyos packages/platform-vega packages/platform-linux packages/platform-web packages/ad-script packages/selectors packages/command-registry packages/session-journal packages/ad-replay packages/maestro packages/replay-port packages/replay-test packages/provider-webdriver packages/provider-limrun packages/provider-doublespeed && tsc -p tsconfig.json && tsc -p examples/sdk/tsconfig.json",
     "test-app:install": "pnpm install --dir examples/test-app",
     "test-app:start": "pnpm --dir examples/test-app start",
@@ -214,7 +214,9 @@
     "test:replay:android": "node --experimental-strip-types src/bin.ts test test/integration/replays/android/emulator",
     "test:replay:macos": "node --experimental-strip-types src/bin.ts test test/integration/replays/macos",
     "test:replay:linux": "node --experimental-strip-types src/bin.ts test test/integration/replays/linux",
-    "test:linux:command-evidence": "node --experimental-strip-types test/integration/linux-e2e/live-runner.ts"
+    "test:linux:command-evidence": "node --experimental-strip-types test/integration/linux-e2e/live-runner.ts",
+    "postpublish": "node scripts/release-workspace.mjs publish",
+    "prepublishOnly": "node scripts/release-mark-dev.mjs --check-release-version"
   },
   "files": [
     "bin",

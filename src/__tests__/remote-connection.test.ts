@@ -48,7 +48,6 @@ import type { AgentDeviceClient } from '../agent-device-client.ts';
 afterEach(() => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
-  vi.unstubAllEnvs();
 });
 
 test('deferred Metro config ignores perf-style kind values', () => {

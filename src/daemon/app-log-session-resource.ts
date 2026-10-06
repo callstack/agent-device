@@ -7,7 +7,7 @@ import type {
   RuntimeOwnerRef,
 } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { normalizeError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { AppLogAdmissionLedger } from './app-log-admission-ledger.ts';
 import {
   createDurableCaptureResource,
@@ -15,7 +15,9 @@ import {
 } from '@agent-device/capture-kit/durable-capture-resource';
 import { appLogResourceStore } from './app-log-resource-store.ts';
 import type { SessionStore } from './session-store.ts';
-import type { SessionState } from './session-state.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
+import { clearAppLogFiles } from './app-log.ts';
+import { bindSessionCapture } from './session-capture-binding.ts';
 
 export type AppLogSessionSnapshot = Readonly<{
   active: boolean;
@@ -30,16 +32,11 @@ export type AppLogSessionSnapshot = Readonly<{
 export const appLogDurableResource = createDurableCaptureResource<
   'app-log',
   AppLogLiveHandle,
-  AppLogCompletion,
-  SessionState
+  AppLogCompletion
 >({
   resourceKind: 'app-log',
   displayName: 'app-log',
   store: appLogResourceStore,
-  sessionSlot: {
-    read: (session) => session.appLog,
-    replace: (session, appLog) => ({ ...session, appLog, appLogFailure: undefined }),
-  },
   completionMetadata: (completion) => ({
     backend: completion.backend,
     outputPath: completion.outputPath,
@@ -76,10 +73,8 @@ export function inspectSessionAppLog(session: SessionState): AppLogSessionSnapsh
 
 export function adoptStartedSessionAppLog(params: {
   admissionLedger: AppLogAdmissionLedger;
-  session: SessionState;
-  sessionName: string;
+  ref: SessionRef;
   sessionStore: SessionStore;
-  resourcePath: string;
   device: DeviceInfo;
   owner: RuntimeOwnerRef;
   fence: ResourceOwnershipFence;
@@ -87,38 +82,42 @@ export function adoptStartedSessionAppLog(params: {
   envelope: DurableResourceEnvelope<'app-log'>;
   throwIfCanceled(): void;
 }): Promise<void> {
-  return appLogDurableResource.adoptStarted(params);
+  return appLogDurableResource.adoptStarted({
+    ...params,
+    binding: bindSessionAppLog(params.sessionStore, params.ref),
+  });
 }
 
 export function finishSessionAppLog(params: {
-  session: SessionState;
-  sessionName: string;
+  ref: SessionRef;
   sessionStore: SessionStore;
-  resourcePath: string;
   intent: DurableCaptureFinishIntent;
 }): Promise<AppLogCompletion> {
-  return appLogDurableResource.finishLive(params);
+  return appLogDurableResource.finishLive({
+    binding: bindSessionAppLog(params.sessionStore, params.ref),
+    intent: params.intent,
+  });
 }
 
 export function forceCleanupSessionAppLog(params: {
-  session: SessionState;
-  sessionName?: string;
-  sessionStore?: SessionStore;
-  resourcePath: string;
+  ref: SessionRef;
+  sessionStore: SessionStore;
 }): Promise<void> {
-  return appLogDurableResource.forceCleanupLive(params);
+  return appLogDurableResource.forceCleanupLive({
+    binding: bindSessionAppLog(params.sessionStore, params.ref),
+  });
 }
 
 export function recordSessionAppLogFailure(params: {
-  session: SessionState;
-  sessionName: string;
+  ref: SessionRef;
   sessionStore: SessionStore;
   error: unknown;
   backend?: LogBackend;
 }): ReturnType<typeof normalizeError> {
   const normalized = normalizeError(params.error);
-  params.sessionStore.set(params.sessionName, {
-    ...params.session,
+  const current = params.sessionStore.resolveCurrent(params.ref);
+  if (!current || current.appLog) return normalized;
+  params.sessionStore.update(params.ref, {
     appLog: undefined,
     appLogFailure: {
       backend: params.backend,
@@ -130,13 +129,24 @@ export function recordSessionAppLogFailure(params: {
   return normalized;
 }
 
-export function clearSessionAppLogFailure(params: {
-  session: SessionState;
-  sessionName: string;
-  sessionStore: SessionStore;
-}): void {
-  params.sessionStore.set(params.sessionName, {
-    ...params.session,
-    appLogFailure: undefined,
+export function bindSessionAppLog(sessionStore: SessionStore, ref: SessionRef) {
+  return bindSessionCapture(sessionStore, ref, {
+    read: (session) => session.appLog,
+    write: (appLog) => {
+      sessionStore.update(ref, { appLog, appLogFailure: undefined });
+    },
   });
+}
+
+export function clearStoppedSessionAppLog(params: { ref: SessionRef; sessionStore: SessionStore }) {
+  const session = params.sessionStore.requireCurrent(params.ref);
+  if (session.appLog) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'logs clear requires logs to be stopped first; run logs stop',
+    );
+  }
+  const cleared = clearAppLogFiles(params.sessionStore.resolveAppLogPath(params.ref.address));
+  params.sessionStore.update(params.ref, { appLogFailure: undefined });
+  return cleared;
 }

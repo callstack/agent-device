@@ -23,7 +23,8 @@ export type MaestroControlCommandDescriptor =
   | {
       readonly kind: 'repeat';
       readonly source: MaestroSourceLocation;
-      readonly times: number | string;
+      readonly times?: number | string;
+      readonly while?: Extract<MaestroControlCommand, { kind: 'repeat' }>['while'];
     }
   | {
       readonly kind: 'retry';

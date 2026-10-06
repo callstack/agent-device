@@ -4,8 +4,9 @@ import path from 'node:path';
 import { test } from 'vitest';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { writeInfo } from '../../daemon/server/server-lifecycle.ts';
-import { readDaemonInfo } from '../daemon-client-metadata.ts';
+import { tryAcquireDaemonRegistration } from '../../daemon-registration-owner.ts';
+import { readDaemonInfo, type DaemonInfo } from '../daemon-client-metadata.ts';
+import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 
 // The reuse decision is only as good as the identity that survives the round trip
 // through `daemon.json`: a client cannot compare what the file lost (#2458).
@@ -15,22 +16,26 @@ function scratchStateDir(): [stateDir: string, infoPath: string] {
   return [stateDir, path.join(stateDir, 'daemon.json')];
 }
 
-function publishInfo(codeOrigin: DaemonCodeOrigin): string {
+async function publishInfo(codeOrigin: DaemonCodeOrigin): Promise<DaemonInfo | null> {
   const [stateDir, infoPath] = scratchStateDir();
-  writeInfo(stateDir, infoPath, path.join(stateDir, 'daemon.log'), {
+  const registration = await tryAcquireDaemonRegistration(resolveDaemonPaths(stateDir));
+  assert.equal(registration.status, 'acquired');
+  if (registration.status !== 'acquired') throw new Error('registration refused');
+  registration.owner.publish({
     httpPort: 41_234,
     token: 'local-secret',
     version: '0.0.0-test',
     codeOrigin,
     codeSignature: 'graph:1:abc',
-    processStartTime: 'start',
   });
-  return infoPath;
+  const published = readDaemonInfo(infoPath);
+  await registration.owner.finish();
+  return published;
 }
 
-test('a daemon publishes the code origin its client reads back', () => {
+test('a daemon publishes the code origin its client reads back', async () => {
   for (const codeOrigin of ['installed', 'checkout'] as const) {
-    assert.equal(readDaemonInfo(publishInfo(codeOrigin))?.codeOrigin, codeOrigin);
+    assert.equal((await publishInfo(codeOrigin))?.codeOrigin, codeOrigin);
   }
 });
 

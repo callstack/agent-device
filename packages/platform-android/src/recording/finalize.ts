@@ -123,6 +123,7 @@ async function exportCollectedChunks(
       showTouches: chunked ? false : recording.showTouches,
       gestureEvents: recording.gestureEvents,
       exportQuality: recording.exportQuality ?? 'medium',
+      ...(recording.fps === undefined ? {} : { fps: recording.fps }),
       targetLabel: TARGET_LABEL,
     });
   } catch (error) {

@@ -1,31 +1,30 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
-import {
-  acquireDaemonLock,
-  parseIntegerEnv,
-  releaseDaemonLock,
-  removeInfoOwnedBy,
-  writeInfo,
-} from '../../../src/daemon/server/server-lifecycle.ts';
+import { parseIntegerEnv } from '../../../src/daemon/server/server-lifecycle.ts';
+import { tryAcquireDaemonRegistration } from '../../../src/daemon-registration-owner.ts';
+import { resolveDaemonPaths } from '../../../src/daemon-resolution.ts';
+import { mkdtempForTestSync } from '../../../src/__tests__/test-utils/tmp-dir.ts';
 
-test('Provider-backed integration daemon lifecycle writes metadata and protects process-owned locks', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-lifecycle-'));
+test('Provider-backed integration daemon lifecycle writes metadata and protects acquisitions', async () => {
+  const root = mkdtempForTestSync('agent-device-daemon-lifecycle-');
   const infoPath = path.join(root, 'daemon.json');
-  const lockPath = path.join(root, 'daemon.lock');
   const logPath = path.join(root, 'daemon.log');
+  const paths = resolveDaemonPaths(root);
+  const attempt = await tryAcquireDaemonRegistration(paths);
+  assert.equal(attempt.status, 'acquired');
+  if (attempt.status !== 'acquired') throw new Error('registration refused');
+  const { owner } = attempt;
 
   try {
-    writeInfo(root, infoPath, logPath, {
+    owner.publish({
       socketPort: 4210,
       httpPort: 4310,
       token: 'provider-scenario-token',
       version: '0.0.0-provider-scenario',
       codeOrigin: 'checkout',
       codeSignature: 'graph:1:abc',
-      processStartTime: 'start-time',
     });
 
     assert.equal(fs.existsSync(logPath), true);
@@ -36,78 +35,38 @@ test('Provider-backed integration daemon lifecycle writes metadata and protects 
     assert.equal(info.token, 'provider-scenario-token');
     assert.equal(info.stateDir, root);
 
-    const httpOnlyInfoPath = path.join(root, 'daemon-http.json');
-    writeInfo(root, httpOnlyInfoPath, path.join(root, 'daemon-http.log'), {
+    owner.publish({
       httpPort: 4311,
       token: 'http-only-token',
       version: '0.0.0-provider-scenario',
       codeOrigin: 'checkout',
       codeSignature: 'graph:1:http',
-      processStartTime: undefined,
     });
-    const httpOnlyInfo = JSON.parse(fs.readFileSync(httpOnlyInfoPath, 'utf8'));
+    const httpOnlyInfo = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
     assert.equal(httpOnlyInfo.transport, 'http');
     assert.equal(httpOnlyInfo.port, undefined);
     assert.equal(httpOnlyInfo.httpPort, 4311);
 
-    const socketOnlyInfoPath = path.join(root, 'daemon-socket.json');
-    writeInfo(root, socketOnlyInfoPath, path.join(root, 'daemon-socket.log'), {
+    owner.publish({
       socketPort: 4211,
       token: 'socket-only-token',
       version: '0.0.0-provider-scenario',
       codeOrigin: 'checkout',
       codeSignature: 'graph:1:socket',
-      processStartTime: undefined,
     });
-    const socketOnlyInfo = JSON.parse(fs.readFileSync(socketOnlyInfoPath, 'utf8'));
+    const socketOnlyInfo = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
     assert.equal(socketOnlyInfo.transport, 'socket');
     assert.equal(socketOnlyInfo.port, 4211);
     assert.equal(socketOnlyInfo.httpPort, undefined);
-
-    assert.equal(
-      acquireDaemonLock(root, lockPath, {
-        pid: process.pid,
-        version: '0.0.0-provider-scenario',
-        startedAt: 1,
-      }),
-      true,
-    );
-    assert.equal(
-      acquireDaemonLock(root, lockPath, {
-        pid: process.pid,
-        version: '0.0.0-provider-scenario',
-        startedAt: 2,
-      }),
-      true,
-    );
-    releaseDaemonLock(lockPath);
-    assert.equal(fs.existsSync(lockPath), false);
+    assert.equal((await tryAcquireDaemonRegistration(paths)).status, 'busy');
 
     assert.equal(parseIntegerEnv('10'), 10);
     assert.equal(parseIntegerEnv('1.5'), undefined);
     assert.equal(parseIntegerEnv(undefined), undefined);
-
-    const owner = { pid: process.pid, startTime: 'start-time' };
-    fs.writeFileSync(
-      infoPath,
-      JSON.stringify({ pid: process.pid, processStartTime: 'start-time', token: 't', port: 1 }),
-    );
-    assert.deepEqual(removeInfoOwnedBy(infoPath, owner), { removed: true });
-    assert.equal(fs.existsSync(infoPath), false);
-
-    // A successor's record survives this process's shutdown, which is what #3087 is about.
-    const foreignPath = path.join(root, 'daemon-foreign.json');
-    fs.writeFileSync(
-      foreignPath,
-      JSON.stringify({ pid: 999_999_999, processStartTime: 'other', token: 't', port: 1 }),
-    );
-    assert.deepEqual(removeInfoOwnedBy(foreignPath, owner), {
-      removed: false,
-      reason: 'replaced',
-      registeredPid: 999_999_999,
-    });
-    assert.equal(fs.existsSync(foreignPath), true);
   } finally {
+    assert.deepEqual(await owner.finish(), { state: 'removed' });
+    assert.equal(fs.existsSync(infoPath), false);
+    assert.equal(fs.existsSync(paths.lockPath), false);
     fs.rmSync(root, { recursive: true, force: true });
   }
 });

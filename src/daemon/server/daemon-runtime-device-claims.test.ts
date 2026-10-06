@@ -36,47 +36,41 @@ function setup(): { session: SessionState; sessionStore: SessionStore; stateDir:
     actions: [],
   };
   const sessionStore = new SessionStore(path.join(stateDir, 'sessions'));
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   return { session, sessionStore, stateDir };
 }
 
-test('finalizes provider state but does not clear a claim after shutdown teardown rejects', async () => {
+test('does not clear a claim after shutdown teardown rejects', async () => {
   const { session, sessionStore } = setup();
   mockTeardownSessionResources.mockRejectedValueOnce(new Error('teardown failed'));
-  const beforeDelete = vi.fn(async () => {});
   const afterSuccessfulTeardown = vi.fn(async () => {});
 
   await teardownDaemonSessionForShutdown({
-    session,
+    ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stderr: { write: () => {} },
-    beforeDelete,
     afterSuccessfulTeardown,
   });
 
-  expect(beforeDelete).toHaveBeenCalledWith(session);
   expect(afterSuccessfulTeardown).not.toHaveBeenCalled();
   expect(sessionStore.get(session.name)).toBeUndefined();
 });
 
-test('finalizes provider state but does not clear a claim after shutdown teardown times out', async () => {
+test('does not clear a claim after shutdown teardown times out', async () => {
   vi.useFakeTimers();
   const { session, sessionStore } = setup();
   mockTeardownSessionResources.mockReturnValueOnce(new Promise(() => {}));
-  const beforeDelete = vi.fn(async () => {});
   const afterSuccessfulTeardown = vi.fn(async () => {});
 
   const teardown = teardownDaemonSessionForShutdown({
-    session,
+    ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stderr: { write: () => {} },
-    beforeDelete,
     afterSuccessfulTeardown,
   });
   await vi.advanceTimersByTimeAsync(5_000);
   await teardown;
 
-  expect(beforeDelete).toHaveBeenCalledWith(session);
   expect(afterSuccessfulTeardown).not.toHaveBeenCalled();
   expect(sessionStore.get(session.name)).toBeUndefined();
 });

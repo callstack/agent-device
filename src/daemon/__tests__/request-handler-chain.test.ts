@@ -40,7 +40,7 @@ function makeRequest(command: string, positionals: string[] = []): DaemonRequest
 
 function makeChainParams(req: DaemonRequest) {
   const sessionStore = makeSessionStore('agent-device-request-chain-');
-  sessionStore.set('chain-test', makeIosSession('chain-test'));
+  sessionStore.publish('chain-test', makeIosSession('chain-test'));
   return {
     req,
     sessionName: 'chain-test',
@@ -244,7 +244,7 @@ test('swipe rejects repetition inputs that can monopolize the request', async ()
 
 test('duration-less public coordinate swipe retains Linux drag behavior', async () => {
   const sessionStore = makeSessionStore('agent-device-linux-swipe-');
-  sessionStore.set('linux-swipe', makeSession('linux-swipe', { device: LINUX_DEVICE }));
+  sessionStore.publish('linux-swipe', makeSession('linux-swipe', { device: LINUX_DEVICE }));
   const drags: number[][] = [];
   let captureCount = 0;
   const provider = await createLocalLinuxToolProvider({

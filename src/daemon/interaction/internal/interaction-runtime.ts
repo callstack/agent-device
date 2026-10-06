@@ -1,3 +1,4 @@
+import { bindInteractionSession } from './interaction-session.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { AppError as KernelAppError } from '@agent-device/kernel/errors';
 import type {
@@ -28,7 +29,7 @@ import { isSessionRecording } from '../../session-script-publication-capability.
 import { recordTouchVisualizationEvent } from '../../recording-gestures.ts';
 import type { SessionStore } from '../../session-store.ts';
 import type { DaemonResponse } from '../../daemon-request.ts';
-import type { SessionState } from '../../session-state.ts';
+import type { SessionRef } from '../../session-state.ts';
 import type { BoundTouchExecutor } from '../../touch-runtime.ts';
 import type { BoundGestureExecutor } from '../../gesture-runtime.ts';
 import { NO_ACTIVE_SESSION_MESSAGE } from '@agent-device/kernel/contracts';
@@ -41,8 +42,9 @@ export function createInteractionRuntimeForRoute(
     gestures?: BoundGestureExecutor;
   },
 ) {
-  const session = params.sessionStore.get(params.sessionName);
-  if (!session) throw new KernelAppError('SESSION_NOT_FOUND', NO_ACTIVE_SESSION_MESSAGE);
+  const ref = bindInteractionSession(params).sessionRef;
+  if (!ref) throw new KernelAppError('SESSION_NOT_FOUND', NO_ACTIVE_SESSION_MESSAGE);
+  const session = params.sessionStore.requireCurrent(ref);
   return createInteractionAgentDevice({
     requestId: params.req.meta?.requestId,
     flags: params.req.flags,
@@ -50,7 +52,7 @@ export function createInteractionRuntimeForRoute(
     contextFromFlags: params.contextFromFlags,
     captureSnapshot: async (flags, options) => {
       const snapshot = await params.captureSnapshotForSession(
-        session,
+        ref,
         flags,
         params.sessionStore,
         params.contextFromFlags,
@@ -60,18 +62,18 @@ export function createInteractionRuntimeForRoute(
     },
     runtimeSessions: createDaemonRuntimeSessionStore({
       sessionName: params.sessionName,
-      getSession: () => session,
+      sessionStore: params.sessionStore,
+      ref,
       recordOptions: {
         includeSnapshot: true,
         omitRefFrameSnapshot: params.req.internal?.findResolvedTarget !== undefined,
       },
-      setRecord: (record) => {
+      setRecord: (record, current) => {
         if (!record.snapshot) return;
-        setSessionSnapshot(session, record.snapshot);
-        params.sessionStore.set(params.sessionName, session);
+        setSessionSnapshot(current!, record.snapshot);
       },
     }),
-    expireRefFrame: () => expireRefFrame(session),
+    expireRefFrame: () => expireRefFrame(params.sessionStore.requireCurrent(ref)),
     confirmOffscreenTargetVisible: isLocalIosRunnerSession(session, {
       skipPendingPostGestureStabilization: false,
     })
@@ -97,16 +99,17 @@ type FinalizeTouchInteractionInput = Omit<
   Parameters<typeof finalizeInteraction>[0],
   'operations'
 > & {
-  session: SessionState;
+  ref: SessionRef;
   sessionStore: SessionStore;
 };
 
 export function finalizeTouchInteraction(params: FinalizeTouchInteractionInput): DaemonResponse {
-  const { session, sessionStore, ...finalization } = params;
+  const { ref, sessionStore, ...finalization } = params;
+  const session = sessionStore.requireCurrent(ref);
   return finalizeInteraction({
     ...finalization,
     operations: {
-      recordAction: sessionStore.recordAction.bind(sessionStore, session),
+      recordAction: sessionStore.recordAction.bind(sessionStore, ref),
       markDeferredOutcome: (mark) => markDeferredInteractionOutcome({ session, ...mark }),
       isSessionRecording: isSessionRecording.bind(null, session),
       recordGestureVisualization: recordTouchVisualizationEvent.bind(null, session),

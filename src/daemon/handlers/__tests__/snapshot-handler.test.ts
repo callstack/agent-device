@@ -69,7 +69,7 @@ beforeEach(() => {
 test('snapshot rejects @ref scope without existing session snapshot', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       platform: 'apple',
@@ -98,7 +98,7 @@ test('snapshot rejects @ref scope without existing session snapshot', async () =
 test('snapshot on iOS rejects sessions without a tracked app', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-no-app';
-  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
+  sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
   const runtime = countingSnapshotRuntime();
 
   const response = await handleSnapshotCommands({
@@ -128,7 +128,7 @@ test('snapshot on iOS without a tracked app carries the detected open command as
   );
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-no-app-hinted';
-  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
+  sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
     req: snapshotRequest(sessionName, 'snapshot'),
@@ -155,7 +155,7 @@ test('snapshot on iOS without a tracked app carries the detected open command as
 test('snapshot on provider-backed iOS runs without a tracked app', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-cloud-no-app';
-  sessionStore.set(sessionName, makeSession(sessionName, providerIosDevice));
+  sessionStore.publish(sessionName, makeSession(sessionName, providerIosDevice));
   setActiveProviderDeviceRuntimes([makeProviderRuntimeOwning(providerIosDevice)]);
   legacyDispatchCapture.mockResolvedValue({
     nodes: [{ index: 0, depth: 0, type: 'XCUIElementTypeButton', label: 'Sign in' }],
@@ -185,7 +185,7 @@ test('snapshot on provider-backed iOS runs without a tracked app', async () => {
 test('diff on local iOS still requires a tracked app', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-no-app-diff';
-  sessionStore.set(sessionName, makeSession(sessionName, iosSimulatorDevice));
+  sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
     req: snapshotRequest(sessionName, 'diff', { positionals: ['snapshot'] }),
@@ -205,7 +205,7 @@ test('diff on local iOS still requires a tracked app', async () => {
 test('snapshot on iOS runs when the session tracks an app', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-app';
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, iosSimulatorDevice),
     appBundleId: 'org.reactnavigation.playground',
   });
@@ -243,7 +243,7 @@ test('snapshot re-activates a complete frame; diff preserves it (ADR 0014)', asy
   };
   // A prior device action expired the frame.
   expireRefFrame(session);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   legacyDispatchCapture.mockResolvedValue({
     nodes: [{ index: 0, depth: 0, type: 'android.widget.Button', label: 'Fresh' }],
     truncated: false,
@@ -295,7 +295,7 @@ async function runVersionedRefsCommand(params: {
 
 function makeVersionedRefsScenario(sessionName: string) {
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName, androidDevice));
+  sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
   legacyDispatchCapture.mockResolvedValue({
     nodes: [{ index: 0, depth: 0, type: 'android.widget.Button', label: 'Fresh' }],
     truncated: false,
@@ -384,7 +384,7 @@ test('daemon-private snapshot observation advances capture state without publish
 test('snapshot surfaces filtered-to-zero Android guidance for interactive snapshots', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-empty-interactive';
-  sessionStore.set(sessionName, makeSession(sessionName, androidDevice));
+  sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
 
   legacyDispatchCapture.mockResolvedValue(androidCapture([], { rawNodeCount: 42, maxDepth: 8 }));
 

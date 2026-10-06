@@ -64,7 +64,10 @@ beforeEach(() => {
 function setupSession(root: string): { sessionStore: SessionStore; sessionName: string } {
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   return { sessionStore, sessionName };
 }
 

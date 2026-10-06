@@ -163,6 +163,10 @@ Script paths are the caller's:
   replay <path> and test <path-or-glob> resolve and read on the machine running the command, then send the script content (Maestro runFlow includes too) with the request. The same flows therefore run against a local daemon and against a remote one (AGENT_DEVICE_DAEMON_BASE_URL) with no copy step, and a missing script fails immediately, naming the path you typed. --save-script writes on the DAEMON host and is rejected against a remote daemon.
   test --json marks a failed test with infrastructure: true only when the owning runtime classified a device, runner, boot, or transport failure. It remains a failed test; consumers may use the tag to distinguish "the oracle did not run" from a behavioral replay divergence without weakening either gate.
 
+Script line grammar:
+  A .ad line is <command> [positional...] [flag...]. Whitespace splits tokens; a token quoted with " or ' is one argument, and single quotes keep a double quote literal, exactly as at the shell (press 'id="far"' is one selector). Values in double quotes are JSON strings (escape \\\\, \\", \\t, \\n). Values in single quotes are literal, as at the shell: a backslash keeps its own character and the only escape is \\' for an apostrophe. A script carries only the flags declared for that command and marked recorded, so the script form of a step matches the CLI form: scroll down --until 'id="x"', wait 'label="Sign in"' --raw. CLI-only spellings and per-request options are not part of a step: --settle, --verify, scroll --pixels/--duration-ms, and the device-selection flags (--platform, --serial, --device) are the common ones a script does not carry.
+  Reaching an off-screen target is viewport-independent in a script the same way it is at the CLI: write scroll down --until <selector>, not a fixed scroll amount that passes on one screen size and fails on another.
+
 Reusable open-to-destination scripts:
   Arm recording on the first open, perform the full journey, verify the destination with a selector-targeted wait, then publish without closing:
     agent-device open com.example.app --relaunch --save-script=screen-x.ad
@@ -611,7 +615,7 @@ Human takeover of a leased remote device:
     agent-device takeover --session remote-session
     agent-device takeover status
     agent-device takeover release <hold-id>
-  An HTTP-mode daemon also accepts authenticated GET/PUT/DELETE requests at /admin/human-control/holds on its loopback listener. Host administrators supply the exact lease backend/provider/device key and use the local daemon token, not a tenant credential. This host-admin route is intentionally not forwarded by agent-device proxy. Holds do not survive daemon restart; re-establish them after reconnecting.
+  An HTTP-mode daemon also accepts authenticated GET/PUT/DELETE requests at /admin/human-control/holds on its loopback listener. Host administrators supply the exact lease backend/provider/device key and use the local daemon token, not a tenant credential. This host-admin route is intentionally not forwarded by agent-device proxy. Holds do not survive daemon restart; re-establish them after reconnecting. The same listener and token serve GET/PUT/DELETE /admin/leases, where a host allocates a macos-app lease confining a client to one app (<bundleId> or <bundleId>@<pid>); tenants cannot allocate one.
 
 Cloud profile flow:
   agent-device connect
@@ -643,6 +647,8 @@ Limrun direct-device flow:
   agent-device connect limrun --platform android
 
   Limrun creates remote iOS simulators and Android emulators only. Do not pass local device selectors such as --udid, --serial, or --device.
+  To drive an existing instance without the API key, set LIM_IOS_INSTANCE_URL and LIM_IOS_INSTANCE_TOKEN, or LIM_ANDROID_INSTANCE_URL, LIM_ANDROID_INSTANCE_TOKEN, and LIM_ANDROID_INSTANCE_ADB_URL, from the instance status before connect. agent-device then never creates or deletes that instance; install, and apps before the first open, still need LIMRUN_API_KEY.
+  Set LIMRUN_KEEP_ALIVE=1 to ping the instance every 30 seconds while a session is open, so an idle session does not hit the Limrun inactivity timeout. It is off by default.
   agent-device apps
   agent-device open Example.apk
   agent-device snapshot -i
@@ -678,12 +684,14 @@ Rules:
   Prefer connect --remote-config over --daemon-base-url, --tenant, --run-id, and --lease-id when using a local profile.
   Use agent-device proxy for direct tunnel access to a Mac you control. Expose the printed proxy URL through cloudflared/ngrok, then run agent-device connect proxy with the tunnel URL and printed token before normal commands.
   Use Limrun, BrowserStack, and AWS Device Farm through local provider profiles; they do not accept a remote agent-device daemon URL. Doublespeed uses a local provider profile the same way.
-  Device cloud credentials must be available before the command starts. Limrun uses LIMRUN_API_KEY. Doublespeed uses DOUBLESPEED_API_KEY. BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY. AWS Device Farm uses the AWS CLI credential chain, including CI-provided AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN, AWS profiles, or web identity role variables.
+  Device cloud credentials must be available before the command starts. Limrun uses LIMRUN_API_KEY, or the LIM_*_INSTANCE_* variables for an existing instance. Doublespeed uses DOUBLESPEED_API_KEY. BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY. AWS Device Farm uses the AWS CLI credential chain, including CI-provided AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN, AWS profiles, or web identity role variables.
+  A local daemon keeps the Limrun and BrowserStack credentials it started with. When the shell holds different ones, the first command that allocates a lease refuses with reason provider-credentials-changed; run agent-device daemon stop with the same --state-dir, then rerun the command. A shell that sets none of them uses the daemon's. A daemon with an HTTP auth hook serves remote callers and does not compare.
   Direct-provider connect performs read-only provider calls and saves active connection state only after verification succeeds. It never creates a device, instance, App Automate session, or AWS remote access session.
   connect without --session always creates a fresh remote session and prints that session in its next-step commands. Concurrent callers must pass the returned --session on every command; the ambient active connection is only a single-workflow convenience.
   To replace an existing connection, pass its returned session explicitly with --session <name> --force. --force without --session creates another fresh session and does not release or overwrite an unrelated active connection.
-  Prefer short-lived AWS role credentials in CI. Generated connection profiles store app/device selectors and ARNs, not Limrun API keys, BrowserStack access keys, or AWS credentials.
+  Prefer short-lived AWS role credentials in CI. Generated connection profiles store app/device selectors and ARNs, not Limrun API keys or instance tokens, BrowserStack access keys, or AWS credentials.
   Limrun Android supports direct ADB port reverse for local Metro. Limrun iOS and Doublespeed require a public Metro/React DevTools URL because they cannot reach local host ports directly.
+
   After closing a device cloud session, run agent-device artifacts --json to retrieve provider video/log/dashboard URLs when the provider has made them available.
   connect proxy stores the connection profile and client identity. Proxy device leases are acquired on open and expire after five minutes without commands; devices may inspect proxy inventory without allocating.
   Multiple agents can share one proxy when each uses connect proxy, open, commands, close, and disconnect.

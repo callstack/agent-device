@@ -13,6 +13,11 @@ export type AppDeploymentSource =
 export type MaterializedAppSource = Readonly<{
   archivePath?: string;
   installablePath: string;
+  /**
+   * The single file a hosted provider uploads for this build, named by the materializer that knows
+   * its format. Absent when the installable is already that file or no such file exists.
+   */
+  uploadPath?: string;
   bundleId?: string;
   packageName?: string;
   appName?: string;

@@ -163,9 +163,10 @@ export type CloudTextEntryReadiness = (typeof CLOUD_TEXT_ENTRY_READINESS)[number
 /**
  * What `Interactor.fill` reports back about the entry it performed. The cloud
  * interactors (WebDriver and the Limrun iOS session) populate
- * `textEntryReadiness`; Android may return target-bound
- * `verification: 'unconfirmed'` evidence when an app-owned field changed but
- * formatting prevented raw equality. The Apple runner carries its own readiness
+ * `textEntryReadiness`; Android and the Apple runner may return target-bound
+ * `verification: 'unconfirmed'` evidence when the field changed but its value
+ * cannot confirm the text (app-owned formatting, or an accessibility value that
+ * does not echo the entry). The Apple runner carries its own readiness
  * equivalent in Swift.
  */
 export type FillBackendResult =

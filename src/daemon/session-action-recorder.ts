@@ -3,7 +3,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import { recordedFlagKeys } from '@agent-device/command-registry/flag-registry';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { DaemonRequest } from './daemon-request.ts';
-import type { SessionRuntimeHints, SessionState } from './session-state.ts';
+import type { SessionRef, SessionRuntimeHints, SessionState } from './session-state.ts';
 import { applyRecordedSaveScriptFlags } from './session-script-publication-capability.ts';
 import { repairSessionBoundary } from './session-replay-transaction.ts';
 import type { MultiTargetAnnotationV1, TargetAnnotationV1 } from '@agent-device/contracts/replay';
@@ -98,24 +98,27 @@ export function recordActionEntry(
   return action;
 }
 
-type SessionActionStore = { recordAction(session: SessionState, entry: RecordActionEntry): void };
+type SessionActionStore = {
+  resolveCurrent(ref: SessionRef): SessionState | undefined;
+  recordAction(ref: SessionRef, entry: RecordActionEntry): void;
+};
 
 /**
- * Record a session action if a session is active. No-op when session is undefined.
+ * Record an action in its admitted lifetime. No-op when no session was admitted.
  *
  * By default the recorded positionals/flags mirror the request; pass `overrides` to
  * record a different set (e.g. resolved positionals or stripped public flags).
  */
 export function recordSessionAction(
   sessionStore: SessionActionStore,
-  session: SessionState | undefined,
+  ref: SessionRef | undefined,
   req: DaemonRequest,
   command: string,
   result: Record<string, unknown> | undefined,
   overrides?: { positionals?: string[]; flags?: CommandFlags },
 ): void {
-  if (!session) return;
-  sessionStore.recordAction(session, {
+  if (!ref || !sessionStore.resolveCurrent(ref)) return;
+  sessionStore.recordAction(ref, {
     command,
     positionals: overrides?.positionals ?? req.positionals ?? [],
     flags: overrides?.flags ?? ((req.flags ?? {}) as CommandFlags),

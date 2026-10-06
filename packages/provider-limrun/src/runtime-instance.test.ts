@@ -18,3 +18,14 @@ test('uses and validates an explicit composition identity', () => {
     'non-empty',
   );
 });
+
+test('derives an identity from attached instances without an API key', () => {
+  const ios = { apiUrl: 'https://attached.example/api', token: 'instance-token' };
+  const attached = resolveLimrunRuntimeInstance({ instances: { ios } });
+  expect(attached).not.toBe(
+    resolveLimrunRuntimeInstance({ instances: { ios: { ...ios, apiUrl: 'x' } } }),
+  );
+  expect(resolveLimrunRuntimeInstance({ apiKey: 'k', instances: {} })).toBe(
+    resolveLimrunRuntimeInstance({ apiKey: 'k' }),
+  );
+});

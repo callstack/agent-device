@@ -117,6 +117,7 @@ extension RunnerTests {
       )
     }
 
+    var entryBaseline: TextEntryObservation?
     if repairMode == .replacement {
       guard let replacementTarget = initialTarget else {
         logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
@@ -134,6 +135,7 @@ extension RunnerTests {
           mode: repairMode
         )
       }
+      entryBaseline = textEntryObservation(for: replacementTarget)
     }
 
     // The shape this command posts, decided once: a spaced per-character plan, a peeled warmup plus
@@ -194,7 +196,7 @@ extension RunnerTests {
         textEntryRoute = "xctest-element"
         currentTarget.typeText(value)
         return (currentTarget, nil)
-      } else if activeTarget.prefersFocusedElement && isKeyboardVisible(app: app) {
+      } else if activeTarget.boundIdentity == nil && activeTarget.prefersFocusedElement && isKeyboardVisible(app: app) {
 #if os(iOS)
         // Two ways this post leaves the synthesized channel, and both hand the text to
         // application-wide typing: the command's own budget refused it, or XCTest's private synthesis
@@ -344,7 +346,8 @@ extension RunnerTests {
       app: app,
       target: activeTarget,
       expectedText: expectedText,
-      repairMode: repairMode
+      repairMode: repairMode,
+      baseline: entryBaseline
     )
     logTextEntryPhase(
       commandId: commandId,
@@ -390,14 +393,40 @@ extension RunnerTests {
     app: XCUIApplication,
     target: TextEntryTarget,
     expectedText: String?,
-    repairMode: TextTypingRepairMode
+    repairMode: TextTypingRepairMode,
+    baseline: TextEntryObservation?
   ) -> TextEntryResult {
+    if target.boundIdentity != nil, resolveTextEntryElement(app: app, target: target) == nil {
+      guard boundTextEntryInputIsGone(app: app, target: target) else {
+        return TextEntryResult(
+          verified: nil,
+          repaired: false,
+          expectedText: expectedText,
+          observedText: nil,
+          failure: .commitNotObserved
+        )
+      }
+      // Every character was delivered and the app then removed the input, as an auto-submitting
+      // code field does. Its value can no longer be read back.
+      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_INPUT_REMOVED_AFTER_DELIVERY")
+      return TextEntryResult(verified: nil, repaired: false, expectedText: expectedText, observedText: nil)
+    }
     let initialResult = verifyTextEntry(
       app: app,
       target: target,
       expectedText: expectedText,
       repaired: false
     )
+    // Retyping cannot make a value that does not echo the entry match, and it would deliver the
+    // text twice to an app that already acted on it.
+    if let unconfirmed = settledUnconfirmedTextEntry(
+      app: app,
+      target: target,
+      result: initialResult,
+      baseline: baseline
+    ) {
+      return unconfirmed
+    }
 #if os(iOS)
     guard initialResult.verified == false,
           let expectedText = initialResult.expectedText
@@ -417,6 +446,15 @@ extension RunnerTests {
         repaired: false
       )
     }
+    guard Self.textEntryRepairCanTarget(boundIdentity: target.boundIdentity) else {
+      NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_REPAIR_REFUSED reason=unidentified-input")
+      return verifyTextEntry(
+        app: app,
+        target: target,
+        expectedText: expectedText,
+        repaired: false
+      )
+    }
 
     guard let repairTarget = resolveTextEntryElement(app: app, target: target) else {
       return initialResult
@@ -429,15 +467,81 @@ extension RunnerTests {
     )
     clearTextInput(repairTarget)
     repairTarget.typeText(expectedText)
-    return verifyTextEntry(
+    let repairedTarget = target.withElement(repairTarget)
+    let repairedResult = verifyTextEntry(
       app: app,
-      target: target.withElement(repairTarget),
+      target: repairedTarget,
       expectedText: expectedText,
       repaired: true
     )
+    return settledUnconfirmedTextEntry(
+      app: app,
+      target: repairedTarget,
+      result: repairedResult,
+      baseline: baseline
+    ) ?? repairedResult
 #else
     return initialResult
 #endif
+  }
+
+  /// Turns a failed replacement read-back into unconfirmed evidence once the same field's value has
+  /// settled on one that does not echo the request; nil leaves the failure standing.
+  private func settledUnconfirmedTextEntry(
+    app: XCUIApplication,
+    target: TextEntryTarget,
+    result: TextEntryResult,
+    baseline: TextEntryObservation?
+  ) -> TextEntryResult? {
+    guard result.verified == false, let requested = result.expectedText, let baseline else {
+      return nil
+    }
+    func observe() -> TextEntryObservation? {
+      textEntryObservation(for: resolveTextEntryElement(app: app, target: target))
+    }
+    func evidence(_ observed: TextEntryObservation?) -> TextEntryUnconfirmedEvidence? {
+      Self.unconfirmedTextEntryEvidence(requested: requested, baseline: baseline, observed: observed)
+    }
+    let moveDeadline = Date().addingTimeInterval(TextEntryTiming.unconfirmedSettleCeiling)
+    var latest = observe()
+    while let unmoved = latest, unmoved.isSettled(with: baseline), Date() < moveDeadline {
+      sleepFor(TextEntryTiming.pollInterval)
+      latest = observe()
+    }
+    guard evidence(latest) != nil else {
+      return nil
+    }
+    let ceiling = Date().addingTimeInterval(TextEntryTiming.unconfirmedSettleCeiling)
+    var stableSince = Date()
+    while Date().timeIntervalSince(stableSince) < TextEntryTiming.verificationStabilityWindow {
+      guard Date() < ceiling else {
+        return nil
+      }
+      sleepFor(TextEntryTiming.pollInterval)
+      let next = observe()
+      if let next, let settled = latest, next.isSettled(with: settled) {
+        latest = next
+        continue
+      }
+      latest = next
+      stableSince = Date()
+    }
+    guard let unconfirmed = evidence(latest) else {
+      return nil
+    }
+    NSLog(
+      "AGENT_DEVICE_RUNNER_TEXT_ENTRY_UNCONFIRMED expectedLength=%d observedLength=%d repaired=%d",
+      requested.count,
+      unconfirmed.after.count,
+      result.repaired ? 1 : 0
+    )
+    return TextEntryResult(
+      verified: nil,
+      repaired: result.repaired,
+      expectedText: requested,
+      observedText: unconfirmed.after,
+      unconfirmed: unconfirmed
+    )
   }
 
   private func verifyTextEntry(
@@ -503,18 +607,10 @@ extension RunnerTests {
     if observedText == expectedText {
       return true
     }
-    guard hasTextEntrySubmitSuffix(expectedText), element?.elementType != .textView else {
+    guard element?.elementType != .textView else {
       return false
     }
-    var submittedText = expectedText
-    while hasTextEntrySubmitSuffix(submittedText) {
-      submittedText.removeLast()
-    }
-    return observedText == submittedText
-  }
-
-  private func hasTextEntrySubmitSuffix(_ text: String) -> Bool {
-    text.hasSuffix("\n") || text.hasSuffix("\r")
+    return observedText == Self.textEntryRequestWithoutSubmitKeys(expectedText)
   }
 
   private func expectedTextEntryValue(
@@ -611,13 +707,6 @@ extension RunnerTests {
     guard missingCharacterCount <= max(2, expectedText.count / 4) else {
       return false
     }
-    var expectedIndex = expectedText.startIndex
-    for character in observedText {
-      guard let matchIndex = expectedText[expectedIndex...].firstIndex(of: character) else {
-        return false
-      }
-      expectedIndex = expectedText.index(after: matchIndex)
-    }
-    return true
+    return Self.isOrderedSubsequence(observedText, of: expectedText)
   }
 }

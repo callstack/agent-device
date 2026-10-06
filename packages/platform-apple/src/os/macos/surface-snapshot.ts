@@ -13,7 +13,7 @@ export async function captureMacOsSurfaceSnapshot(
   const surface = options.surface;
   const { runMacOsSnapshotAction } = await import('./helper.ts');
   const result = await runMacOsSnapshotAction(surface, {
-    bundleId: surface === 'menubar' ? options.appBundleId : undefined,
+    bundleId: surface === 'menubar' || surface === 'app' ? options.appBundleId : undefined,
     signal,
   });
   return shapeDesktopSurfaceSnapshot({ ...result, producer: 'macos-helper' }, options);

@@ -120,7 +120,7 @@ test.each([
   async ({ customActions, activeApp, required, selected }) => {
     const harness = await runtimeHarness({});
     const sessionStore = makeSessionStore('agent-device-diff-runtime-plan-');
-    sessionStore.set('diff-runtime', {
+    sessionStore.publish('diff-runtime', {
       ...harness.session,
       ...(activeApp ? { appBundleId: 'com.example.app' } : {}),
     });
@@ -181,7 +181,7 @@ test('preserves initialized, unchanged, and changed diff results through one bou
     captures: [baseCapture, baseCapture, changedCapture],
   });
   const sessionStore = makeSessionStore('agent-device-diff-runtime-results-');
-  sessionStore.set('diff-runtime', { ...harness.session, appBundleId: 'com.example.app' });
+  sessionStore.publish('diff-runtime', { ...harness.session, appBundleId: 'com.example.app' });
 
   const run = async () =>
     await dispatchSnapshotDiffViaRuntime({
@@ -230,7 +230,7 @@ test('a sparse internal diff capture returns no screenshot fallback artifact', a
     ],
   });
   const sessionStore = makeSessionStore('agent-device-diff-runtime-sparse-');
-  sessionStore.set('diff-runtime', { ...harness.session, appBundleId: 'com.example.app' });
+  sessionStore.publish('diff-runtime', { ...harness.session, appBundleId: 'com.example.app' });
 
   const response = await dispatchSnapshotDiffViaRuntime({
     req: { command: 'diff', positionals: ['snapshot'], token: 't', session: 'diff-runtime' },

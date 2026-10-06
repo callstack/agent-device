@@ -65,6 +65,7 @@ Supported public entry points for Node consumers:
   - `tryParseSelectorChain(expression)`
   - `resolveSelectorChain(nodes, chain, options)`
   - `findSelectorChainMatch(nodes, chain, options)`
+  - `listSelectorChainMatches(nodes, chain, options)`
   - `formatSelectorFailure(chain, diagnostics, options)`
   - `isNodeVisible(node)`
   - `isSelectorToken(token)`
@@ -82,7 +83,7 @@ Supported public entry points for Node consumers:
 - `agent-device/artifacts`
   - `resolveAndroidArchivePackageName(archivePath)`
 - `agent-device/android-adb`
-  - `createAndroidPortReverseManager(provider)`
+  - `createAndroidPortReverseManager(provider)` / `createAndroidPortReverseManager(executor, { noRebind })`
   - `captureAndroidLogcatWithAdb(executor, options?)`
   - `readAndroidClipboardWithAdb(executor)` / `writeAndroidClipboardWithAdb(executor, text)`
   - `getAndroidKeyboardStatusWithAdb(executor)` / `dismissAndroidKeyboardWithAdb(executor)`
@@ -206,7 +207,11 @@ bounded logcat capture.
 Providers can also expose `reverse` for first-class port reverse ownership. Plain executors do not
 advertise reverse support automatically; call `createAndroidPortReverseManager(providerOrExecutor)`
 only when the provider supports `adb reverse` argument semantics. The manager makes duplicate setup
-idempotent for the same owner and rejects conflicting owners for the same local endpoint.
+idempotent for the same owner and rejects conflicting owners for the same local endpoint. For a
+device that other adb clients also drive, pass an executor with `{ noRebind: true }`: the manager
+runs `adb reverse --no-rebind` and never replaces an existing device mapping, including one it
+created. When `adb reverse --list` shows the mapping, the refusal fails with `COMMAND_FAILED` and
+`details.reason: 'android_port_reverse_rebind_refused'`. Otherwise it fails as an ordinary adb error.
 
 The device shell re-parses whatever follows `shell` or `exec-out`, so those commands are built for you:
 every dynamic word is rendered for the quoting its transport applies before it reaches the device. `adb`
@@ -239,6 +244,15 @@ Use `client.command.<method>()` for command-level device actions. It uses the sa
 Results are daemon-shaped objects with typed known fields, so command semantics stay aligned with the CLI.
 
 A failed interaction rejects with the same error the CLI prints. Read `error.details.dispatched` before you retry; [Commands](./commands.md) explains the two values.
+
+Every client call that dispatches to the daemon accepts `signal?: AbortSignal` to cancel that one call:
+
+```ts
+const controller = new AbortController();
+await client.interactions.press({ ref: '@e12', signal: controller.signal });
+```
+
+With the built-in transport, a signal that is already aborted rejects the call without sending anything (`error.details.dispatched: 'no'`). Aborting while the request is in flight closes that request's connection, the daemon marks the request canceled, and the promise rejects with the typed canceled-request error (`error.details.reason: 'request_canceled'`, `error.details.dispatched: 'unknown'`). A custom transport receives the signal on its context and may cancel differently. The daemon and the session stay alive for other requests, and an abort is never a timeout: it never triggers the timeout path's runner cleanup or daemon reset. Cancellation covers the daemon request itself, so a response-artifact download already underway is not stopped, and a canceled one-shot replay still runs the existing cleanup that can tear down a daemon this client started.
 
 ```ts
 await client.command.wait({
@@ -334,7 +348,7 @@ The complete domain-client method map is:
 - `client.sessions.list()`, `stateDir()`, `close()`, `saveScript()`, `artifacts()`
 - `client.apps.install()`, `reinstall()`, `installFromSource()`, `list()`, `open()`, `close()`, `push()`, `triggerEvent()`
 - `client.materializations.release()`
-- `client.leases.allocate()`, `heartbeat()`, `release()`
+- `client.leases.allocate()`, `heartbeat()`, `release()`. Pass `retainOnClose: true` to `allocate()` when you release the lease yourself; session `close` then leaves it active until `release()`, expiry, or daemon shutdown. The returned lease has `retainOnClose: true` only when the daemon honored it. Keep heartbeating a retained lease between sessions: it expires after its `ttlMs` like any other lease.
 - `client.metro.prepare()`, `reload()`
 - `client.capture.snapshot()`, `screenshot()`, `diff()`
 - `client.interactions.click()`, `press()`, `longPress()`, `swipe()`, `pan()`, `drag()`, `fling()`, `swipeGesture()`, `focus()`, `type()`, `fill()`, `scroll()`, `pinch()`, `rotateGesture()`, `transformGesture()`, `get()`, `is()`, `find()`
@@ -346,6 +360,8 @@ The complete domain-client method map is:
 - `client.settings.update()`
 
 `client.devices.list()` returns `AgentDeviceDevice` entries. Their optional `model` and `osVersion` fields describe the hardware and OS when discovery reports them; see [Device discovery](/docs/commands#device-discovery) for the sources.
+
+`client.capture.snapshot()` carries an optional `viewport: { width, height }` beside `nodes`: the box those rects are measured in, in the same coordinate space and orientation, so a consumer scales and clips against the screen it was shown instead of inferring one from the largest rect on screen. It is absent when the producer measured no box and never reported as a zero; see [`snapshot`](/docs/commands) for what each producer answers with.
 
 `client.observability.events({ cursor, limit })` reads the session event timeline as paged JSON entries. Use `nextCursor` from the previous page to continue from the daemon-owned `events.ndjson` file without replaying already uploaded/displayed events. Cursors are absolute and survive the file's size rotation; a cursor older than the retained window rejects with `COMMAND_FAILED`, `details.reason: "EVENT_LOG_CURSOR_EXPIRED"`, and `details.earliestCursor` to resume from.
 The event timeline keeps operational context such as command/status/timing, paths, session/device/app identifiers, refs/selectors, and coordinates. Typed text, clipboard writes, push/event payloads, raw unknown command arguments, and matching raw message fragments are replaced with length-only placeholders.
@@ -496,7 +512,9 @@ Use `agent-device/remote-config` for profile loading and path resolution, `agent
 
 ## Selector helpers
 
-Use `agent-device/selectors` when a remote daemon or bridge needs to parse and match selector expressions without deep-importing daemon internals. Matching is platform-aware because role normalization and editability checks differ by backend.
+Use `agent-device/selectors` when a remote daemon or bridge needs to parse and match selector expressions without deep-importing daemon internals. The `role=` term matches the platform-neutral `kind` vocabulary that `snapshot --json` publishes (see [Snapshots](./snapshots.md#structured-node-fields---json)): pass the nodes as captured, and a node whose `kind` is `text` always matches `role=text`. Separately, pre-reconciliation leaf spellings (`statictext`, `edittext`, `textview`, …) still match during a deprecation window, each on the nodes that actually carried that class. A legacy spelling matches beside such a node's `kind`, not in place of it — `role=webarea` resolves a macOS-helper `AXWebArea` node whose `kind` is `axwebarea`, for example. Matching stays platform-aware because editability checks differ by backend.
+
+`listSelectorChainMatches(nodes, chain, options)` returns every node the winning selector alternative matches, in snapshot order, plus that alternative and its index — the same first-match domain `findSelectorChainMatch` uses, without uniqueness refusal, so a runner applies its own strictness to the same nodes the CLI matched. `resolveSelectorChain` can name a LATER alternative: by default it refuses an ambiguous one and keeps walking, so the indices agree when it passes `requireUnique: false`, when the first matching alternative is unique, or when `disambiguateAmbiguous: true` resolves that alternative in place. It returns `null` when no alternative matches. `options` is `{ platform, requireRect? }`; the matched `SnapshotNode` objects are the ones passed in.
 
 ```ts
 import { findSelectorChainMatch, parseSelectorChain } from 'agent-device/selectors';

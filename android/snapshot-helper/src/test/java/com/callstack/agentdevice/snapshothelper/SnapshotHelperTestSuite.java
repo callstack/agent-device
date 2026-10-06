@@ -8,5 +8,6 @@ public final class SnapshotHelperTestSuite {
     AccessibilityCaptureStabilizerTest.run();
     BoundedUiAutomationConnectionTest.run();
     GestureViewportReaderTest.run();
+    DisplayExtentTest.run();
   }
 }

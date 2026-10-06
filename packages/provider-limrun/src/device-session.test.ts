@@ -64,6 +64,7 @@ const TEST_DEPENDENCIES = {
     downloadFile,
   },
   ios: {
+    applySimctlSetting: vi.fn(async () => undefined),
     resolveAppAlias: async (app: string) => app,
     readBundleAppName: async () => undefined,
   },

@@ -43,7 +43,11 @@ import type {
   AppleRunnerPrepareOptions,
   AppleRunnerPrepareResult,
 } from './runner-provider.ts';
-import { markRunnerXctestrunArtifactBadForRun } from './runner-xctestrun.ts';
+import {
+  finishRunnerStartAdmission,
+  markRunnerXctestrunArtifactBadForRun,
+  openRunnerStartLoopAdmission,
+} from './runner-xctestrun.ts';
 import { handleRunnerTransportErrorAfterCommandSend } from './runner-command-recovery.ts';
 import {
   buildRunnerRecycleBudgetExhaustedError,
@@ -70,18 +74,26 @@ export async function prepareLocalIosRunner(
   assertRunnerRequestActive(options.requestId);
   const signal = resolveRunnerRequestSignal(options);
   const command = withRunnerCommandId({ command: 'uptime' });
+  // One admission for the whole attempt loop, supplied to every start it makes: a teardown that
+  // lands mid-loop closes it, and the health retry that would re-enter the start and rebuild the
+  // runner the loop's killed child was building meets a closed gate instead (#3220).
+  const startAdmission = openRunnerStartLoopAdmission(device.id);
   let recoveryReason: string | undefined;
-  for (let attempt = 1; attempt <= PREPARE_RUNNER_HEALTH_MAX_SESSION_ATTEMPTS; attempt += 1) {
-    const result = await runPrepareAttempt({
-      device,
-      command,
-      options,
-      signal,
-      attempt,
-      recoveryReason,
-    });
-    if (result.kind === 'prepared') return result.result;
-    recoveryReason = result.recoveryReason;
+  try {
+    for (let attempt = 1; attempt <= PREPARE_RUNNER_HEALTH_MAX_SESSION_ATTEMPTS; attempt += 1) {
+      const result = await runPrepareAttempt({
+        device,
+        command,
+        options: { ...options, startAdmission },
+        signal,
+        attempt,
+        recoveryReason,
+      });
+      if (result.kind === 'prepared') return result.result;
+      recoveryReason = result.recoveryReason;
+    }
+  } finally {
+    finishRunnerStartAdmission(startAdmission);
   }
 
   // Unreachable while PREPARE_RUNNER_HEALTH_MAX_SESSION_ATTEMPTS is positive.

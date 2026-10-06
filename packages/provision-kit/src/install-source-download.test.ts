@@ -5,6 +5,7 @@ import { Readable } from 'node:stream';
 import { test, vi } from 'vitest';
 import { mkdtempForTest } from './tmp-dir.fixtures.ts';
 import { downloadInstallSource } from './install-source-download.ts';
+import { isTrustedInstallSourceUrl } from './install-source.ts';
 import * as networkTransport from './install-source-network-transport.ts';
 
 test('download redirects revalidate destinations and strip sensitive cross-origin headers', async () => {
@@ -242,3 +243,17 @@ function response(
     close: async () => {},
   };
 }
+
+test('download and the trusted-source check refuse an unparsable source alike', async () => {
+  const source = '/abs/path/app.zip';
+  const expected = { code: 'INVALID_ARGS', message: 'Invalid source URL' };
+  await assert.rejects(
+    downloadInstallSource({
+      tempDir: '/unused',
+      url: source,
+      signal: new AbortController().signal,
+    }),
+    expected,
+  );
+  assert.throws(() => isTrustedInstallSourceUrl(source), expected);
+});

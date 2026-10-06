@@ -1,11 +1,15 @@
 import fs from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   DeviceLease,
   ProviderDeviceInstallOptions,
   ProviderDeviceInstallResult,
 } from '@agent-device/contracts/device';
+import {
+  PROVIDER_DEVICE_ORIENTATIONS,
+  type ProviderDeviceOrientation,
+} from '@agent-device/contracts/remote';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { agentDeviceRequestHeaders } from './request-headers.ts';
 
@@ -66,16 +70,30 @@ export function withTrailingSlash(url: URL): URL {
   return copy;
 }
 
-export function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
 type HubCredentials = { username: string; accessKey: string };
 
-/** A multipart form carrying the local app file under the hub's field name. */
-export async function appFileUploadForm(appPath: string, fileField: string): Promise<FormData> {
+/**
+ * A multipart form carrying the local app file under the hub's field name. Upload APIs take one
+ * regular file, so anything else (an extracted `.app` directory, a missing path) is refused here,
+ * before any request.
+ */
+export async function appFileUploadForm(
+  appPath: string,
+  fileField: string,
+  hub: { provider: string; service: string },
+): Promise<FormData> {
+  const entry = await stat(appPath).catch(() => undefined);
+  if (!entry?.isFile()) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `${hub.service} can only upload a regular app file: ${appPath}`,
+      {
+        provider: hub.provider,
+        appPath,
+        hint: 'Use an existing .ipa, .apk, or .aab file, or a .zip of the iOS simulator .app bundle.',
+      },
+    );
+  }
   const form = new FormData();
   form.set(fileField, new Blob([await readFile(appPath)]), path.basename(appPath));
   return form;
@@ -106,7 +124,7 @@ export async function postHubAppUpload(
     signal,
   });
   const json = await readProviderJsonBody(response);
-  const appReference = options.readAppReference(json);
+  const appReference = options.readAppReference(json)?.trim();
   if (!response.ok || !appReference) {
     throw new AppError('COMMAND_FAILED', `${options.service} app upload failed.`, {
       status: response.status,
@@ -133,74 +151,45 @@ export function createHubUploadApp(
 }
 
 /**
- * Turns `--provider-app` into a reference the hub accepts: its own reference scheme passes
- * through, a public URL passes through unless the hub only takes its own references (then
- * `uploadUrl` has the hub fetch it), and anything else must be a local file to upload.
+ * Turns `--provider-app` into a reference the hub accepts: its own reference passes through in
+ * canonical form when it fits the hub's grammar, public URLs pass through, and anything else must
+ * be a local file to upload.
  */
 export async function resolveHubAppReference(options: {
   service: string;
   app: string;
   cwd?: string;
-  referenceScheme: string;
   /** How the scheme reads in the error message, e.g. `a bs:// app id`. */
   referenceLabel: string;
-  /** Validates a canonical reference; by default any non-empty id after the scheme is accepted. */
-  isReference?: (reference: string) => boolean;
+  /**
+   * The canonical spelling of the hub's own reference, or undefined when `app` is not one. Throws
+   * when `app` uses the hub's scheme outside its grammar.
+   */
+  parseReference: (app: string) => string | undefined;
   uploadFile: (appPath: string, signal?: AbortSignal) => Promise<string>;
-  uploadUrl?: (url: string, signal?: AbortSignal) => Promise<string>;
   signal?: AbortSignal;
 }): Promise<string> {
   const { app } = options;
-  const reference = canonicalHubAppReference(app, options.referenceScheme);
-  if (reference !== undefined) {
-    const isReference =
-      options.isReference ?? ((value: string) => value.length > options.referenceScheme.length);
-    if (isReference(reference)) return reference;
-    throw new AppError(
-      'INVALID_ARGS',
-      `${options.service} --provider-app ${app} is not ${options.referenceLabel}.`,
-      { providerApp: app },
-    );
-  }
-  if (/^https?:\/\//i.test(app)) {
-    return options.uploadUrl ? await options.uploadUrl(app, options.signal) : app;
-  }
+  const reference = options.parseReference(app);
+  if (reference !== undefined) return reference;
+  if (/^https?:\/\//i.test(app)) return app;
   const appPath = path.resolve(options.cwd ?? process.cwd(), app);
-  const stat = fs.statSync(appPath, { throwIfNoEntry: false });
-  if (!stat) {
+  if (!fs.existsSync(appPath)) {
     throw new AppError(
       'INVALID_ARGS',
       `${options.service} --provider-app must be ${options.referenceLabel}, URL, or existing local app path.`,
       { providerApp: app },
     );
   }
-  if (!stat.isFile()) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `${options.service} --provider-app must be an app file, not a directory: ${appPath}`,
-      {
-        providerApp: app,
-        hint: 'Zip an iOS simulator .app bundle and pass the .zip, or pass the .ipa, .apk, or .aab.',
-      },
-    );
-  }
   return await options.uploadFile(appPath, options.signal);
-}
-
-/** URI schemes are case-insensitive, so `LT://id` is the hub reference `lt://id`. */
-function canonicalHubAppReference(app: string, scheme: string): string | undefined {
-  if (app.slice(0, scheme.length).toLowerCase() !== scheme) return undefined;
-  return `${scheme}${app.slice(scheme.length)}`;
 }
 
 const PROVIDER_API_TIMEOUT_MS = 15_000;
 
-/** The provider rejected or could not answer a verification call; typed so callers never sniff text. */
-export type ProviderJsonFailureHints = {
+/** Service name and remediation hints a verification failure carries. */
+type ProviderJsonFailureHints = {
   service: string;
   unauthorizedHint: string;
-  /** For any other non-2xx answer, or a 2xx answer that is not JSON. */
-  serviceHint: string;
   networkHint: string;
 };
 
@@ -214,16 +203,17 @@ export async function fetchProviderVerificationJson(
   endpoint: string | URL,
   options: {
     clientVersion: string;
-    auth?: { username: string; accessKey: string };
+    auth: { username: string; accessKey: string };
     hints: ProviderJsonFailureHints;
   },
 ): Promise<unknown> {
-  const { service, unauthorizedHint, serviceHint, networkHint } = options.hints;
+  const { service, unauthorizedHint, networkHint } = options.hints;
+  const serviceHint = `Retry connect or check the ${service} service status.`;
   try {
     const response = await fetch(endpoint, {
       headers: {
         ...agentDeviceRequestHeaders(options.clientVersion),
-        ...(options.auth ? { Authorization: basicAuthHeader(options.auth) } : {}),
+        Authorization: basicAuthHeader(options.auth),
       },
       signal: AbortSignal.timeout(PROVIDER_API_TIMEOUT_MS),
     });
@@ -289,7 +279,10 @@ export async function fetchProviderSessionDetails(
       error,
     );
   }
-  const details = asRecord(json);
+  const details =
+    json && typeof json === 'object' && !Array.isArray(json)
+      ? (json as Record<string, unknown>)
+      : undefined;
   if (!response.ok || !details) {
     throw new AppError('COMMAND_FAILED', `${options.service} session details lookup failed.`, {
       status: response.status,
@@ -310,8 +303,22 @@ async function readProviderJsonBody(response: Response): Promise<unknown> {
   }
 }
 
-/** `1.0` and `1` name the same OS release on BrowserStack's catalog; TestMu's hub matches spellings exactly. */
+/** `1.0` and `1` name the same OS release on BrowserStack's catalog. */
 export function sameOsVersion(left: string, right: string): boolean {
   const normalize = (value: string) => value.replace(/(?:\.0)+$/, '');
   return normalize(left) === normalize(right);
+}
+
+/** Validates a device-orientation flag against the shared enum before it reaches a hub that would ignore it. */
+export function requireProviderDeviceOrientation(
+  spec: { flag: string; capability: string },
+  value: string,
+): ProviderDeviceOrientation {
+  const match = PROVIDER_DEVICE_ORIENTATIONS.find((orientation) => orientation === value);
+  if (match) return match;
+  throw new AppError('INVALID_ARGS', `Invalid ${spec.flag} value: ${value}.`, {
+    hint: `Use ${PROVIDER_DEVICE_ORIENTATIONS.join('|')}.`,
+    flag: spec.flag,
+    capability: spec.capability,
+  });
 }

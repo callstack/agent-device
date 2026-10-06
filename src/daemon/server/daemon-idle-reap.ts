@@ -83,6 +83,12 @@ export type DaemonIdleReapController = {
 export function createDaemonIdleReap(params: {
   sessionStore: SessionStore;
   getInFlightRequestCount: () => number;
+  /**
+   * An unexpired `retainOnClose` lease is a caller's claim on this daemon beyond its sessions, so a
+   * reap that finds one waits another idle window. The check must also expire leases past their
+   * window, or none would ever end.
+   */
+  hasRetainedLeases: () => boolean;
   onIdleReap: () => void;
   env?: NodeJS.ProcessEnv;
 }): DaemonIdleReapController {
@@ -110,6 +116,10 @@ export function createDaemonIdleReap(params: {
       // session open or new request must never lose a race against a
       // previously scheduled reap.
       if (!isIdleNow()) return;
+      if (params.hasRetainedLeases()) {
+        schedule();
+        return;
+      }
       emitDiagnostic({ level: 'info', phase: 'daemon_idle_reap', data: { idleMs } });
       params.onIdleReap();
     }, idleMs);

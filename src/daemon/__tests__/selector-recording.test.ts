@@ -46,12 +46,12 @@ test('a repair-armed session excludes get/is/find by default but keeps recording
       boundary: 0,
     },
   });
-  store.set('default', session);
+  store.publish('default', session);
 
-  recordIfSession(store, 'default', req('get'), {});
-  recordIfSession(store, 'default', req('is'), {});
-  recordIfSession(store, 'default', req('find'), {});
-  recordIfSession(store, 'default', req('wait'), {});
+  recordIfSession(store, store.lookup('default'), req('get'), {});
+  recordIfSession(store, store.lookup('default'), req('is'), {});
+  recordIfSession(store, store.lookup('default'), req('find'), {});
+  recordIfSession(store, store.lookup('default'), req('wait'), {});
 
   expect(store.get('default')!.actions.map((a) => a.command)).toEqual(['wait']);
 });
@@ -71,11 +71,11 @@ test('a repair-armed session still records get/is/find dispatched as replay plan
       boundary: 0,
     },
   });
-  store.set('default', session);
+  store.publish('default', session);
 
-  recordIfSession(store, 'default', planStepReq('get'), {});
-  recordIfSession(store, 'default', planStepReq('is'), {});
-  recordIfSession(store, 'default', planStepReq('find'), {});
+  recordIfSession(store, store.lookup('default'), planStepReq('get'), {});
+  recordIfSession(store, store.lookup('default'), planStepReq('is'), {});
+  recordIfSession(store, store.lookup('default'), planStepReq('find'), {});
 
   expect(store.get('default')!.actions.map((a) => a.command)).toEqual(['get', 'is', 'find']);
 });
@@ -90,11 +90,11 @@ test('--record forces get/is/find through even while repair-armed', () => {
       boundary: 0,
     },
   });
-  store.set('default', session);
+  store.publish('default', session);
 
-  recordIfSession(store, 'default', req('get', { record: true }), {});
-  recordIfSession(store, 'default', req('is', { record: true }), {});
-  recordIfSession(store, 'default', req('find', { record: true }), {});
+  recordIfSession(store, store.lookup('default'), req('get', { record: true }), {});
+  recordIfSession(store, store.lookup('default'), req('is', { record: true }), {});
+  recordIfSession(store, store.lookup('default'), req('find', { record: true }), {});
 
   expect(store.get('default')!.actions.map((a) => a.command)).toEqual(['get', 'is', 'find']);
 });
@@ -103,12 +103,12 @@ test('outside a repair-armed session, get/is/find/wait all record normally', () 
   const store = makeStore();
   const session = makeIosSession('default');
   expect(session.scriptPublication).toBeUndefined();
-  store.set('default', session);
+  store.publish('default', session);
 
-  recordIfSession(store, 'default', req('get'), {});
-  recordIfSession(store, 'default', req('is'), {});
-  recordIfSession(store, 'default', req('find'), {});
-  recordIfSession(store, 'default', req('wait'), {});
+  recordIfSession(store, store.lookup('default'), req('get'), {});
+  recordIfSession(store, store.lookup('default'), req('is'), {});
+  recordIfSession(store, store.lookup('default'), req('find'), {});
+  recordIfSession(store, store.lookup('default'), req('wait'), {});
 
   expect(store.get('default')!.actions.map((a) => a.command)).toEqual([
     'get',
@@ -120,9 +120,9 @@ test('outside a repair-armed session, get/is/find/wait all record normally', () 
 
 test('wait absent records positionals without target-v1 annotation', () => {
   const store = makeStore();
-  store.set('default', makeIosSession('default'));
+  store.publish('default', makeIosSession('default'));
 
-  recordIfSession(store, 'default', waitAbsentReq(), { waitedMs: 0 });
+  recordIfSession(store, store.lookup('default'), waitAbsentReq(), { waitedMs: 0 });
 
   expect(store.get('default')!.actions[0]).toMatchObject({
     command: 'wait',
@@ -130,4 +130,22 @@ test('wait absent records positionals without target-v1 annotation', () => {
     result: { waitedMs: 0 },
   });
   expect(store.get('default')!.actions[0]?.targetEvidence).toBeUndefined();
+});
+
+test('sessionless recording cannot acquire a newly published address', () => {
+  const store = makeStore();
+  const admitted = store.lookup('default');
+  const session = makeIosSession('default');
+  store.publish('default', session);
+  recordIfSession(store, admitted, req('wait'), { waitedMs: 100 });
+  expect(session.actions).toEqual([]);
+});
+
+test('optional recording cannot adopt a successor lifetime', () => {
+  const store = makeStore();
+  const retired = store.publish('default', makeIosSession('default'));
+  store.retire(retired);
+  const successor = store.publish('default', makeIosSession('default'));
+  expect(() => recordIfSession(store, retired, req('wait'), { completed: true })).not.toThrow();
+  expect(store.requireCurrent(successor).actions).toEqual([]);
 });

@@ -31,7 +31,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.unstubAllEnvs();
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -98,10 +97,16 @@ test('extra source paths participate in the cache key and reach the compiler', a
   expect(compiledPaths).toContainEqual(['swiftc', sourcePath, changedSupportPath]);
 });
 
-test('stale cache locks are removed before compiling', async () => {
+test('cache locks with a proven dead owner are recovered before compiling', async () => {
   const { sourcePath, executablePath, lockDir } = await createBlockedCacheEntry();
-  const staleTime = new Date(Date.now() - 1_000);
-  fs.utimesSync(lockDir, staleTime, staleTime);
+  fs.writeFileSync(
+    path.join(lockDir, 'owner.json'),
+    JSON.stringify({
+      pid: 999_999_999,
+      startTime: null,
+      acquiredAtMs: Date.now(),
+    }),
+  );
 
   await expect(
     compileSwiftSourceFile({
@@ -115,10 +120,10 @@ test('stale cache locks are removed before compiling', async () => {
   expect(mockRunCmd).toHaveBeenCalledTimes(1);
 });
 
-test('cache lock timeout reports the lock path', async () => {
+test('an ownerless cache lock is retained with verified-recovery guidance regardless of age', async () => {
   const { sourcePath, lockDir } = await createBlockedCacheEntry();
-  const futureTime = new Date(Date.now() + 60_000);
-  fs.utimesSync(lockDir, futureTime, futureTime);
+  const old = new Date(Date.now() - 60_000);
+  fs.utimesSync(lockDir, old, old);
 
   await expect(
     compileSwiftSourceFile({
@@ -132,11 +137,12 @@ test('cache lock timeout reports the lock path', async () => {
     details: {
       lockDir,
       timeoutMs: 1,
-      hint: expect.stringContaining(`remove "${lockDir}"`),
+      hint: expect.stringContaining('confirming all users of this state directory have stopped'),
     },
   });
 
   expect(mockRunCmd).not.toHaveBeenCalled();
+  expect(fs.existsSync(lockDir)).toBe(true);
 });
 
 test('compileSwiftSourceText resolves a cache name with a long interior dash run in sub-second time', async () => {
@@ -228,15 +234,18 @@ async function expectConcurrentCacheReuse(compile: () => Promise<string>): Promi
 
   const firstCompile = compile();
   await compileStarted;
-  const originalMkdirSync = fs.mkdirSync;
+  const originalReadFileSync = fs.readFileSync;
   const lockAttempted = new Promise<void>((resolve) => {
-    const mkdirSpy = vi.spyOn(fs, 'mkdirSync').mockImplementation((dirPath, options) => {
-      if (typeof dirPath === 'string' && dirPath.endsWith('.lock')) {
+    const readSpy = vi.spyOn(fs, 'readFileSync').mockImplementation(((
+      filePath: fs.PathOrFileDescriptor,
+      options?: Parameters<typeof fs.readFileSync>[1],
+    ) => {
+      if (typeof filePath === 'string' && filePath.endsWith(`.lock${path.sep}owner.json`)) {
         resolve();
-        mkdirSpy.mockRestore();
+        readSpy.mockRestore();
       }
-      return originalMkdirSync(dirPath, options);
-    });
+      return originalReadFileSync(filePath, options);
+    }) as typeof fs.readFileSync);
   });
   const secondCompile = compile();
 

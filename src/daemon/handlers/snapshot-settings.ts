@@ -12,8 +12,11 @@ import {
   isMacOsSettingSupported,
   invalidTextSizeMessage,
   readTextSizeCategory,
+  settingsAppNotConsumedRefusal,
+  settingsAppScope,
   SETTINGS_INVALID_ARGS_MESSAGE,
   type ReadableSetting,
+  type SettingsTargetFamily,
   type SettingOptions,
 } from '@agent-device/contracts/settings';
 import type { SetSettingInput } from '@agent-device/contracts/settings-runtime';
@@ -26,11 +29,12 @@ import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtim
 import { contextFromFlags } from '../context.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
-import type { SessionState } from '../session-state.ts';
-import { recordIfSession } from '../snapshot-session.ts';
+import type { SessionRef, SessionState } from '../session-state.ts';
+import { recordSessionAction } from '../session-action-recorder.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { readLocationCoordinate } from '@agent-device/kernel/location-coordinates';
+import { sessionAppRequiredDetails } from '@agent-device/kernel/errors';
 import { successText, withSuccessText } from '@agent-device/kernel/success-text';
 
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
@@ -62,7 +66,7 @@ type HandleSettingsCommandParams = {
   req: DaemonRequest;
   logPath: string;
   sessionStore: SessionStore;
-  session: SessionState | undefined;
+  ref: SessionRef | undefined;
   device: SessionState['device'];
   parsed: ParsedSettingsRequest;
   inspectFacts?: InspectDeviceRuntimeFacts;
@@ -217,7 +221,8 @@ async function executeSettingsRead(
   params: HandleSettingsCommandParams,
   setting: ReadableSetting,
 ): Promise<DaemonResponse> {
-  const { req, logPath, sessionStore, session, device, inspectFacts, bindDevice } = params;
+  const { req, logPath, sessionStore, ref, device, inspectFacts, bindDevice } = params;
+  let session = ref ? sessionStore.requireCurrent(ref) : undefined;
   const refusal = settingsRequestRefusal(device, setting);
   if (refusal !== undefined) return refusal;
   const admission = await admitRuntimeUse({
@@ -229,6 +234,8 @@ async function executeSettingsRead(
     readiness: !session,
   });
   if (admission.type === 'response') return admission.response;
+
+  session = ref ? sessionStore.requireCurrent(ref) : undefined;
 
   emitDiagnostic({
     level: 'debug',
@@ -249,7 +256,7 @@ async function executeSettingsRead(
     ...payload,
     ...successText(describeSettingRead(payload)),
   };
-  recordIfSession(sessionStore, session, req, data);
+  recordSessionAction(sessionStore, ref, req, req.command, data);
   return { ok: true, data };
 }
 
@@ -257,10 +264,13 @@ async function executeSettingsWrite(
   params: HandleSettingsCommandParams,
   parsed: ParsedSettingsArgs,
 ): Promise<DaemonResponse> {
-  const { req, logPath, sessionStore, session, device, inspectFacts, bindDevice } = params;
+  const { req, logPath, sessionStore, ref, device, inspectFacts, bindDevice } = params;
+  let session = ref ? sessionStore.requireCurrent(ref) : undefined;
   const { setting, state } = parsed;
   const refusal = settingsRequestRefusal(device, setting);
   if (refusal !== undefined) return refusal;
+  const appRefusal = settingsAppRefusal(device, req, setting, state);
+  if (appRefusal !== undefined) return appRefusal;
   const admission = await admitRuntimeUse({
     command: 'settings',
     device,
@@ -269,8 +279,9 @@ async function executeSettingsWrite(
     bindDevice,
     readiness: !session,
   });
-  const appBundleId = settingsWriteAppId(req, parsed, session);
   if (admission.type === 'response') return admission.response;
+  session = ref ? sessionStore.requireCurrent(ref) : undefined;
+  const appBundleId = settingsWriteAppId(req, parsed, session, device);
   const writeRefusal = settingsWriteRefusal(parsed, appBundleId);
   if (writeRefusal !== undefined) return writeRefusal;
   // ADR 0014 side-effect seam: a settings mutation changes device state; expire the frame before
@@ -292,7 +303,7 @@ async function executeSettingsWrite(
     ),
     describeSettingWrite(setting, state, appBundleId),
   );
-  recordIfSession(sessionStore, session, req, data);
+  recordSessionAction(sessionStore, ref, req, req.command, data);
   return { ok: true, data };
 }
 
@@ -335,16 +346,67 @@ function settingsRequestRefusal(
 }
 
 /**
- * The app a mutation targets: the explicit positional wins, then the Maestro adapter's daemon-internal
- * `settingsAppBundleId`, which aims one request at another app than the session carries, and last the
- * app the session is bound to.
+ * The app a request names outside its positionals: the `app` of the request input, which the CLI
+ * writes from `--app` and the client and MCP surfaces write from their `app` option. Read as a
+ * non-empty string or nothing, because an empty `--app` was never a request to grant anything.
+ */
+function settingsRequestApp(req: DaemonRequest): string | undefined {
+  const app = req.input?.app;
+  if (typeof app !== 'string') return undefined;
+  const trimmed = app.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/**
+ * The device fact the app-scope table is keyed on, answered with the kernel's own predicates so the
+ * legacy Apple leaf platforms settle exactly where the predicates do.
+ */
+function settingsTargetFamily(device: SessionState['device']): SettingsTargetFamily {
+  if (isMacOs(device)) return 'macos-host';
+  return isApplePlatform(device.platform) ? 'apple' : 'mobile';
+}
+
+/**
+ * The refusal for naming an app on a mutation whose target consumes none: Android's on/off `location`
+ * writes the global `location_mode`, and a macOS permission is a TCC grant to the host process. It
+ * runs before admission because a request this surface refuses must not bind a runtime, and it stays
+ * silent for `unknown`, where the owner's own fact answers the setting rather than the app.
+ */
+function settingsAppRefusal(
+  device: SessionState['device'],
+  req: DaemonRequest,
+  setting: string,
+  state: string,
+): DaemonResponse | undefined {
+  const app = settingsRequestApp(req);
+  if (app === undefined) return undefined;
+  if (settingsAppScope(settingsTargetFamily(device), setting, state) !== 'device-level') {
+    return undefined;
+  }
+  const refusal = settingsAppNotConsumedRefusal(setting, state, app);
+  return errorResponse(refusal.code, refusal.message, refusal.details, { hint: refusal.hint });
+}
+
+/**
+ * The app a mutation targets: the explicit positional wins, then the request's explicit `app`, then
+ * the Maestro adapter's daemon-internal `settingsAppBundleId`, which aims one request at another app
+ * than the session carries, and last the app the session is bound to. The request's `app` is only
+ * consumed where the scope table says the mutation can carry one; elsewhere it was already refused or
+ * belongs to an owner that never reads it.
  */
 function settingsWriteAppId(
   req: DaemonRequest,
   parsed: ParsedSettingsArgs,
   session: SessionState | undefined,
+  device: SessionState['device'],
 ): string | undefined {
-  return parsed.appBundleId ?? req.internal?.settingsAppBundleId ?? session?.appBundleId;
+  const explicitApp =
+    settingsAppScope(settingsTargetFamily(device), parsed.setting, parsed.state) === 'app-scoped'
+      ? settingsRequestApp(req)
+      : undefined;
+  return (
+    parsed.appBundleId ?? explicitApp ?? req.internal?.settingsAppBundleId ?? session?.appBundleId
+  );
 }
 
 /** The refusal a mutation adds on top of the shared one: an app the session may not carry. */
@@ -356,6 +418,7 @@ function settingsWriteRefusal(
     return errorResponse(
       'INVALID_ARGS',
       'settings clear-app-state requires an app id when no app is bound to the session',
+      sessionAppRequiredDetails(),
     );
   }
   return undefined;

@@ -1,21 +1,13 @@
-import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  isAgentDeviceDaemonProcess,
-  trySignalProcess,
-  waitForDaemonExit,
-  type DaemonProcessIdentity,
-} from '../daemon-process.ts';
-import { isProcessAlive } from '@agent-device/host-kit/process';
-import { sleep } from '@agent-device/host-kit/retry';
+import type { DaemonRetirementResult } from '../daemon-registration-owner.ts';
+import type { OwnerIdentity } from '@agent-device/host-kit/process';
 
 import type { DaemonPaths } from '../daemon-resolution.ts';
-import { readRegisteredDaemonIdentity } from './daemon-registration.ts';
-import type { DeviceClaimRecord, ProviderReleaseRecord } from './daemon-shutdown-report.ts';
+import { readRegisteredDaemonIdentity } from '../daemon-registration.ts';
+import type { DeviceClaimRecord, ProviderReleaseRecord } from '../daemon-shutdown-report.ts';
 
 const DAEMON_STOP_GRACE_TIMEOUT_MS = 10_000;
 const DAEMON_STOP_KILL_TIMEOUT_MS = 2_000;
-const DAEMON_STOP_METADATA_WAIT_MS = 1_000;
 
 export type DaemonStopResult = {
   stopped: boolean;
@@ -51,30 +43,19 @@ export async function stopDaemon(params: {
 }): Promise<DaemonStopResult> {
   const info = readRegisteredDaemonIdentity(params.paths.infoPath);
   if (!info) return notRunningResult();
-  if (!info.startTime) {
-    if (!isProcessAlive(info.pid)) return notRunningResult();
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Refusing to stop a daemon without a verified process start-time identity.',
-      { pid: info.pid },
-    );
-  }
-  if (!isAgentDeviceDaemonProcess(info.pid, info.startTime)) {
-    if (!isProcessAlive(info.pid)) return notRunningResult();
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Refusing to stop a daemon whose PID or start-time identity could not be verified.',
-      { pid: info.pid, processStartTime: info.startTime },
-    );
-  }
-
-  const identity: DaemonProcessIdentity = { pid: info.pid, startTime: info.startTime };
-  if (!signalDaemonProcess(info.pid, 'SIGTERM')) return notRunningResult();
-  const { exited: graceful } = await waitForDaemonExit(identity, {
-    timeoutMs: params.graceTimeoutMs ?? DAEMON_STOP_GRACE_TIMEOUT_MS,
+  const { stopAndRetireDaemon } = await import('../daemon-registration-owner.ts');
+  const retirement = await stopAndRetireDaemon({
+    paths: params.paths,
+    observed: info,
+    mode: 'graceful',
+    termTimeoutMs: params.graceTimeoutMs ?? DAEMON_STOP_GRACE_TIMEOUT_MS,
+    killTimeoutMs: params.killTimeoutMs ?? DAEMON_STOP_KILL_TIMEOUT_MS,
   });
-  if (graceful) {
-    await waitForDaemonMetadataRemoval(params.paths, DAEMON_STOP_METADATA_WAIT_MS);
+  if (retirement.status === 'retained' && retirement.termination?.status === 'not-running')
+    return notRunningResult();
+  if (retirement.status !== 'retired') throw daemonRetirementError(info, retirement);
+  if (retirement.termination.mode === 'already-exited') return notRunningResult();
+  if (retirement.termination.mode === 'graceful') {
     return {
       stopped: true,
       mode: 'graceful',
@@ -88,17 +69,6 @@ export async function stopDaemon(params: {
     };
   }
 
-  // Re-verify immediately before escalation so a PID cannot be reused between
-  // the graceful wait and SIGKILL.
-  if (isAgentDeviceDaemonProcess(info.pid, info.startTime)) {
-    signalDaemonProcess(info.pid, 'SIGKILL');
-  }
-  const { exited: stopped } = await waitForDaemonExit(identity, {
-    timeoutMs: params.killTimeoutMs ?? DAEMON_STOP_KILL_TIMEOUT_MS,
-  });
-  if (!stopped) {
-    throw new AppError('COMMAND_FAILED', 'Daemon did not exit after SIGKILL.', { pid: info.pid });
-  }
   return {
     stopped: true,
     mode: 'forced',
@@ -114,12 +84,24 @@ export async function stopDaemon(params: {
   };
 }
 
-function signalDaemonProcess(pid: number, signal: NodeJS.Signals): boolean {
-  if (trySignalProcess(pid, signal)) return true;
-  if (!isProcessAlive(pid)) return false;
-  throw new AppError('COMMAND_FAILED', `Daemon could not be signaled with ${signal}.`, {
-    pid,
-    signal,
+function daemonRetirementError(
+  info: OwnerIdentity,
+  retirement: Exclude<DaemonRetirementResult, { status: 'retired' }>,
+): AppError {
+  const termination = retirement.status === 'retained' ? retirement.termination : undefined;
+  const failure = termination?.status === 'retained' ? termination : undefined;
+  const error = retirement.status === 'retained' ? retirement.error : undefined;
+  const { hint, diagnosticId, logPath } = error ?? {};
+  return new AppError('COMMAND_FAILED', 'Daemon retirement could not be confirmed.', {
+    pid: info.pid,
+    processStartTime: info.startTime,
+    reason: failure ? 'daemon_exit_unconfirmed' : 'daemon_retirement_unconfirmed',
+    terminationReason: failure?.reason,
+    signal: failure?.signal,
+    retirement,
+    hint,
+    diagnosticId,
+    logPath,
   });
 }
 
@@ -129,14 +111,6 @@ export function readDaemonStopIdentity(
   const info = readRegisteredDaemonIdentity(infoPath);
   if (!info?.startTime) return null;
   return { pid: info.pid, processStartTime: info.startTime };
-}
-
-async function waitForDaemonMetadataRemoval(paths: DaemonPaths, timeoutMs: number): Promise<void> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    if (!fs.existsSync(paths.infoPath) && !fs.existsSync(paths.lockPath)) return;
-    await sleep(25);
-  }
 }
 
 function notRunningResult(): DaemonStopResult {

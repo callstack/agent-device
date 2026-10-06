@@ -137,7 +137,7 @@ function sessionRequest(
 test('open web URL on existing iOS simulator session binds Safari and drops stale app bundle id', async () => {
   const sessionStore = makeSessionStore('agent-device-session-open-url-prewarm-');
   const sessionName = 'ios-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {
@@ -179,7 +179,7 @@ test('open web URL on existing iOS simulator session binds Safari and drops stal
 test('open URL on existing macOS session clears stale app bundle id', async () => {
   const sessionStore = makeSessionStore('agent-device-session-open-url-prewarm-');
   const sessionName = 'macos-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {
@@ -216,7 +216,7 @@ test('open URL on existing macOS session clears stale app bundle id', async () =
 test('open URL on existing iOS device session preserves app bundle id context', async () => {
   const sessionStore = makeSessionStore('agent-device-session-open-url-prewarm-');
   const sessionName = 'ios-device-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {
@@ -251,7 +251,7 @@ test('open URL on existing iOS device session preserves app bundle id context', 
 test('open custom URL on existing iOS simulator session preserves app bundle id context', async () => {
   const sessionStore = makeSessionStore('agent-device-session-open-url-prewarm-');
   const sessionName = 'ios-simulator-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {
@@ -364,7 +364,7 @@ test('open iOS simulator app prewarms runner cache during cold boot', async () =
 test('open iOS app session prewarms runner session when app bundle id is known', async () => {
   const sessionStore = makeSessionStore('agent-device-session-open-url-prewarm-');
   const sessionName = 'ios-device-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {
@@ -398,7 +398,7 @@ test('open iOS Maestro app link waits for runner prewarm before launching app', 
   const sessionName = 'ios-maestro-open-link';
   const events: string[] = [];
   let finishPrewarm: (() => void) | undefined;
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {
@@ -460,7 +460,7 @@ test('open iOS Maestro app link resets a simulator runner prewarmed before URL d
     kind: 'simulator' as const,
     booted: true,
   };
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device,
@@ -499,7 +499,7 @@ test('open iOS Maestro app link resets a simulator runner prewarmed before URL d
 test('open iOS Maestro app link reports blocking runner prewarm failures before launching app', async () => {
   const sessionStore = makeSessionStore('agent-device-session-open-url-prewarm-');
   const sessionName = 'ios-maestro-open-link-prewarm-failed';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {
@@ -542,7 +542,7 @@ test('open iOS Maestro app link reports blocking runner prewarm failures before 
 test('open iOS URL without app bundle id skips runner prewarm', async () => {
   const sessionStore = makeSessionStore('agent-device-session-open-url-prewarm-');
   const sessionName = 'ios-device-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       device: {

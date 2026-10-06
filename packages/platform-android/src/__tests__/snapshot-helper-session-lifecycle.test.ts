@@ -137,27 +137,28 @@ test('a generous caller budget buys a slow start, and never more than the caller
 test('a session that reaches ready settles a release the device could not confirm', async () => {
   const calls: (readonly string[])[] = [];
   const spawnArgs: (readonly string[])[] = [];
+  const deviceKey = 'android:emulator-5554';
   // The device answers every process read with an adb error no classifier lists, and the first
-  // command's session stalls, so that command's teardown records a release nothing could prove.
+  // session ignores its quit, so that teardown records a release nothing could prove.
   const provider = createSessionProvider({
     calls,
     spawnArgs,
-    stalledSnapshots: 1,
+    quitResponseMode: 'malformed',
     runtimeRelease: 'closed',
   });
 
-  const stalled = await captureAndroidSnapshotWithHelperSession({
+  await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    deviceKey: 'android:emulator-5554',
+    deviceKey,
     commandTimeoutMs: 400,
   });
-  assert.equal(stalled, undefined);
+  await stopAndroidSnapshotHelperSession(deviceKey);
 
   const started = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    deviceKey: 'android:emulator-5554',
+    deviceKey,
     commandTimeoutMs: 400,
   });
   assert.equal(started?.metadata.sessionReused, false);
@@ -169,7 +170,7 @@ test('a session that reaches ready settles a release the device could not confir
   const reused = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
-    deviceKey: 'android:emulator-5554',
+    deviceKey,
     commandTimeoutMs: 400,
   });
 
@@ -178,6 +179,28 @@ test('a session that reaches ready settles a release the device could not confir
     calls.filter(isAndroidHelperRuntimeForceStop).length,
     forceStopsWhilePending,
     'a live session is not force-stopped for a release its own readiness settled',
+  );
+});
+
+test('a session whose capture timed out is not restarted by the next command', async () => {
+  const calls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
+  const provider = createSessionProvider({ calls, spawnArgs, stalledSnapshots: 1 });
+  const capture = () =>
+    captureAndroidSnapshotWithHelperSession({
+      adb: provider.exec,
+      adbProvider: provider,
+      deviceKey: 'android:emulator-5554',
+      commandTimeoutMs: 400,
+    });
+
+  assert.equal(await capture(), undefined, 'the timed-out session falls back to one-shot');
+  assert.equal(await capture(), undefined, 'the next command answers one-shot as well');
+  assert.equal(spawnArgs.length, 1, 'a timed-out session earns a backoff, not another spawn');
+  assert.equal(
+    calls.some(isAndroidHelperRuntimeForceStop),
+    true,
+    'the timed-out helper is stopped',
   );
 });
 

@@ -72,6 +72,7 @@ import {
   lifecycleDeviceRuntimeGateway,
 } from './test-device-runtime-gateway.ts';
 import { createRequestHandler as createProductionRequestHandler } from '../request-router.ts';
+import { readDaemonProviderCredentials } from '../../provider-credential-fingerprint.ts';
 import { resolveRequestExecutionLockPlan } from '../request-binding.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { ensureDeviceReady } from '../device/device-ready.ts';
@@ -402,7 +403,7 @@ test('close releases the session lease', async () => {
     runId: 'run-1',
     clientId: 'client-a',
   });
-  sessionStore.set('default', {
+  sessionStore.publish('default', {
     name: 'default',
     device: makeIosDevice('SIM-CLOSE'),
     createdAt: Date.now(),
@@ -430,9 +431,57 @@ test('close releases the session lease', async () => {
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
 });
 
+test.each([
+  ['close', []],
+  ['close <app>', ['com.example.app']],
+])('%s keeps a lease allocated with retainOnClose', async (_name, positionals) => {
+  const sessionStore = makeSessionStore('agent-device-router-open-');
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    clientId: 'client-a',
+    retainOnClose: true,
+  });
+  sessionStore.publish('default', {
+    name: 'default',
+    device: makeIosDevice('SIM-CLOSE-RETAIN'),
+    createdAt: Date.now(),
+    actions: [],
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      clientId: 'client-a',
+    },
+  });
+  const handler = createOpenHandler(sessionStore, leaseRegistry);
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'close',
+    positionals,
+    meta: { requestId: 'req-close-retain-lease' },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(sessionStore.get('default')).toBeUndefined();
+  expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
+  expect(
+    leaseRegistry.heartbeatLease({
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      clientId: 'client-a',
+    }).leaseId,
+  ).toBe(lease.leaseId);
+});
+
 test('close fails synchronously when root composition omits platform resource cleanup', async () => {
   const sessionStore = makeSessionStore('agent-device-router-open-');
-  sessionStore.set('default', {
+  sessionStore.publish('default', {
     name: 'default',
     device: makeIosDevice('SIM-CLOSE-MISSING-CLEANUP'),
     createdAt: Date.now(),
@@ -443,6 +492,7 @@ test('close fails synchronously when root composition omits platform resource cl
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    providerCredentials: readDaemonProviderCredentials({}, '/tmp'),
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
@@ -475,7 +525,7 @@ test('close rejects a different client before cleanup', async () => {
     runId: 'run-1',
     clientId: 'client-a',
   });
-  sessionStore.set('default', {
+  sessionStore.publish('default', {
     name: 'default',
     device: makeIosDevice('SIM-CLOSE-CLIENT'),
     createdAt: Date.now(),
@@ -831,4 +881,80 @@ test('an open that booted the device keeps the device against a foreign open', a
     else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
     fs.rmSync(claimsDir, { recursive: true, force: true });
   }
+});
+
+const LEASED_MACOS_BUNDLE = 'com.example.leased';
+const LEASED_MACOS_HOST: DeviceInfo = {
+  platform: 'apple',
+  appleOs: 'macos',
+  id: 'host-macos-local',
+  name: 'leased-host-mac',
+  kind: 'device',
+  target: 'desktop',
+  booted: true,
+};
+
+function leasedMacOsMeta(leaseId: string, requestId: string) {
+  return {
+    requestId,
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseId,
+    sessionIsolation: 'tenant',
+    leaseProvider: 'proxy',
+    clientId: 'client-a',
+    deviceKey: LEASED_MACOS_BUNDLE,
+    leaseBackend: 'macos-app',
+  };
+}
+
+test('open under a macos-app lease names no host path or device, and an unleased open still does', async () => {
+  mockResolveTargetDevice.mockResolvedValue(LEASED_MACOS_HOST);
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.putHostLease('a1b2c3d4e5f60718293a4b5c6d7e8f90', {
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'proxy',
+    clientId: 'client-a',
+    leaseBackend: 'macos-app',
+    deviceKey: LEASED_MACOS_BUNDLE,
+  });
+  const sessionStore = makeSessionStore('agent-device-router-open-macos-lease-');
+
+  vi.stubEnv('AGENT_DEVICE_MACOS_APP_BACKEND', 'native');
+  const opened = await createOpenHandler(
+    sessionStore,
+    leaseRegistry,
+  )(
+    openRequest(
+      'default',
+      { platform: 'macos' },
+      'req-open-macos-lease',
+      leasedMacOsMeta(lease.leaseId, 'req-open-macos-lease'),
+      [LEASED_MACOS_BUNDLE],
+    ),
+  );
+  vi.unstubAllEnvs();
+
+  expect(opened).toMatchObject({
+    ok: true,
+    data: { appBundleId: LEASED_MACOS_BUNDLE, platform: 'macos', target: 'desktop' },
+  });
+  const wire = JSON.stringify(opened);
+  for (const hostFact of [
+    sessionStore.resolveDaemonStateDir(),
+    LEASED_MACOS_HOST.name,
+    LEASED_MACOS_HOST.id,
+  ]) {
+    expect(wire).not.toContain(hostFact);
+  }
+
+  const unleased = await createOpenHandler(makeSessionStore('agent-device-router-open-macos-'))(
+    openRequest('plain', { platform: 'macos' }, 'req-open-macos-plain', {}, [LEASED_MACOS_BUNDLE]),
+  );
+  expect(unleased).toMatchObject({
+    ok: true,
+    data: { device: LEASED_MACOS_HOST.name, id: LEASED_MACOS_HOST.id },
+  });
+  expect(unleased.ok && unleased.data?.sessionStateDir).toEqual(expect.any(String));
 });

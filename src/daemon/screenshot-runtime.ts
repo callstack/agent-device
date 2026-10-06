@@ -1,3 +1,4 @@
+import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   retiredScreenshotMaxSizeFlagError,
@@ -28,7 +29,7 @@ import type {
   RecordedGenericRequest,
   ResolvedGenericExecution,
 } from './request-generic-dispatch.ts';
-import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
+import { createReadonlyRuntimeSessionStore } from './runtime-session.ts';
 import { assertScreenshotCropPolicy } from './screenshot-crop-target.ts';
 import { buildScreenshotCropWarnings, cropScreenshotToSelector } from './screenshot-crop.ts';
 import { annotateScreenshotWithRefs } from '@agent-device/capture-kit/screenshot-overlay';
@@ -38,7 +39,6 @@ import {
   type ScreenshotRuntimeBindings,
 } from './screenshot-runtime-binding.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
-import { SessionStore } from './session-store.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
 
@@ -121,12 +121,7 @@ export async function captureScreenshotArtifact(
   const runtime = createCommandSurfaceAgentDevice({
     backend: createBoundScreenshotBackend(params),
     artifacts: createDaemonScreenshotArtifactAdapter(),
-    sessions: createDaemonRuntimeSessionStore({
-      sessionName,
-      getSession: () => session,
-      recordOptions: { includeSnapshot: false },
-      setRecord: () => {},
-    }),
+    sessions: createReadonlyRuntimeSessionStore(sessionName, session),
     policy: localCommandPolicy(),
   });
 
@@ -321,7 +316,7 @@ function readScreenshotRequest(
   const positionals = req.positionals ?? [];
   const flags = req.flags ?? {};
   const expand = (value: string | undefined) =>
-    value === undefined ? undefined : SessionStore.expandHome(value, req.meta?.cwd);
+    value === undefined ? undefined : expandSessionPath(value, req.meta?.cwd);
   const positionalPath = expand(positionals[0]);
   const outFlag = expand(flags.out);
   return {

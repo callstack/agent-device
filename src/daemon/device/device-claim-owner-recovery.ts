@@ -4,7 +4,11 @@ import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
 import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
 import type { DeviceClaimReconciler } from './device-claims.ts';
-import { SessionStore } from '../session-store.ts';
+import {
+  resolveSessionDir,
+  resolveSessionAppLogPath,
+  resolveSessionAppLogPidPath,
+} from '../session-artifact-paths.ts';
 
 export type OwnerScopedClaimRecovery = {
   reconcile: DeviceClaimReconciler;
@@ -49,17 +53,16 @@ function composeOwnerScopedClaimRecovery(
   scope: PlatformRequestScope,
 ): OwnerScopedClaimRecovery {
   const daemonPaths = resolveDaemonPaths(stateDir);
-  const sessionStore = new SessionStore(daemonPaths.sessionsDir);
   const gateway = createPlatformRuntimeGateway({
     sessionsDir: daemonPaths.sessionsDir,
     ownedProcesses: createOwnedProcessRecordStore({
       stateDir: daemonPaths.baseDir,
       sessionsDir: daemonPaths.sessionsDir,
-      resolveSessionDir: (sessionId) => sessionStore.resolveSessionDir(sessionId),
+      resolveSessionDir: (sessionId) => resolveSessionDir(daemonPaths.sessionsDir, sessionId),
     }),
     resolveSessionArtifacts: (sessionId) => ({
-      outputPath: sessionStore.resolveAppLogPath(sessionId),
-      pidPath: sessionStore.resolveAppLogPidPath(sessionId),
+      outputPath: resolveSessionAppLogPath(daemonPaths.sessionsDir, sessionId),
+      pidPath: resolveSessionAppLogPidPath(daemonPaths.sessionsDir, sessionId),
     }),
   });
   return {

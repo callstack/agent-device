@@ -1,3 +1,4 @@
+import { storeSessionForTest } from '../../__tests__/test-utils/store-factory.ts';
 import { isSessionRecording } from '../session-script-publication-capability.ts';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 /**
@@ -67,7 +68,7 @@ function setup(): Harness {
   roots.push(root);
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const session = makeIosSession(SESSION);
-  sessionStore.set(SESSION, session);
+  sessionStore.publish(SESSION, session);
   const handleRequest = createRequestHandler({
     logPath: path.join(root, 'daemon.log'),
     token: TOKEN,
@@ -204,7 +205,9 @@ for (const [transport, send] of TRANSPORTS) {
     expect(isSessionRecording(session)).toBe(false);
     expect(session.scriptPublication).toBe(undefined);
     // No artifact: the write a later close/teardown would attempt publishes nothing.
-    expect(sessionStore.writeSessionLog(session)).toEqual({ written: false });
+    expect(sessionStore.writeSessionLog(storeSessionForTest(sessionStore, session))).toEqual({
+      written: false,
+    });
     expect(listAdArtifacts(root)).toEqual([]);
     expect(fs.existsSync(path.join(root, 'forged.ad'))).toBe(false);
 
@@ -286,7 +289,7 @@ test('an owner-armed session still records its target and publishes its script',
 
   // What `open`/`close --save-script` do once past the seam: arm the session,
   // then publish at teardown. Unchanged by the ingress rejection.
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'open',
     positionals: ['Example'],
     flags: { saveScript: target },
@@ -295,7 +298,7 @@ test('an owner-armed session still records its target and publishes its script',
   expect(isSessionRecording(session)).toBe(true);
   expect(scriptTargetPath(session.scriptPublication ?? NO_SCRIPT_PUBLICATION)).toBe(target);
 
-  const result = sessionStore.writeSessionLog(session);
+  const result = sessionStore.writeSessionLog(storeSessionForTest(sessionStore, session));
   expect(result).toEqual({ written: true, path: target, actionCount: 1 });
   expect(fs.readFileSync(target, 'utf8')).toMatch(/^open /m);
 });

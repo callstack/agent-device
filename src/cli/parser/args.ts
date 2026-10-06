@@ -215,6 +215,7 @@ export function finalizeParsedArgs(
       delete (flags as Record<string, unknown>)[key];
     }
   }
+  stripFlagsTheCommandTreatsAsExplicitOnly(parsed, flags);
   assertNoConflictingBackModeFlags(parsed);
   applyCommandDefaults(parsed.command, flags);
   const normalized = normalizeParsedCommandAliases({
@@ -383,6 +384,22 @@ function normalizeParsedCommandAliases(parsed: ParsedArgs): ParsedArgs {
     };
   }
   return parsed;
+}
+
+/**
+ * Drops a declared explicit-only option whose value arrived only from config, env, or remote-config
+ * defaults. `providedFlags` records what the command line typed, so a key absent from it is a default
+ * the command must not consume: `settings permission grant camera` mutates the session app even when
+ * AGENT_DEVICE_TARGET_APP names a different one. A typed value stays untouched.
+ */
+function stripFlagsTheCommandTreatsAsExplicitOnly(parsed: RawParsedArgs, flags: CliFlags): void {
+  const explicitOnly = getCommandSchema(parsed.command)?.explicitOnlyFlags;
+  if (explicitOnly === undefined) return;
+  const typedKeys = new Set(parsed.providedFlags.map((entry) => entry.key));
+  for (const key of explicitOnly) {
+    if (typedKeys.has(key)) continue;
+    delete (flags as Record<string, unknown>)[key];
+  }
 }
 
 /**

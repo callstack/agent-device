@@ -1,4 +1,4 @@
-import { retryWithPolicy, emitDiagnostic } from './host.ts';
+import { retryWithPolicy, emitDiagnostic, hasScopedAppleToolProvider } from './host.ts';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   ensureRunnerSession,
@@ -119,11 +119,20 @@ type PrewarmIosRunnerOptions = AppleRunnerPrewarmOptions & {
   propagateError?: boolean;
 };
 
+/** Speculative host build: a request whose Apple tooling a provider serves has none to warm. */
 export function prewarmAppleRunnerCache(
   device: DeviceInfo,
   options: PrewarmIosRunnerOptions = {},
 ): Promise<void> | undefined {
   if (!isIosFamily(device)) {
+    return undefined;
+  }
+  if (hasScopedAppleToolProvider()) {
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'ios_runner_cache_prewarm_unavailable',
+      data: { deviceId: device.id },
+    });
     return undefined;
   }
   return runBestEffortIosRunnerPrewarm({

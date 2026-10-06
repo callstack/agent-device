@@ -2,11 +2,16 @@ import { beforeEach, expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidImeHelperArtifact } from './helper-artifacts.ts';
+import type { AndroidAdbExecutor } from './adb-transport.ts';
 import { bindAndroidAdbHostStub, type AndroidAdbHostStub } from './adb-host.fixtures.ts';
 import { withAndroidAdbProvider } from './adb-provider-scope.ts';
 import { activateAndroidTestIme } from './ime-activation.ts';
 import { fakeImeDeviceAdb, type FakeImeDeviceState } from './ime-device.fixtures.ts';
-import { resetAndroidTestImeActivationCacheForTests, isAndroidTestImeActive } from './ime-state.ts';
+import {
+  getAndroidTestImeOwnership,
+  isAndroidTestImeActive,
+  resetAndroidTestImeActivationCacheForTests,
+} from './ime-state.ts';
 import { resetAndroidImeHelperInstallCache } from './ime-helper.ts';
 
 const DEVICE: DeviceInfo = {
@@ -136,4 +141,96 @@ test('an unobtainable helper is an outcome that mutates nothing', async () => {
   expect(result).not.toHaveProperty('hint');
   expect(state.settings.has('agent_device_ime_helper_previous_ime')).toBe(false);
   expect(host.markerStore.get(STATE_DIR)).toBeUndefined();
+});
+
+async function withDeviceAdb<T>(exec: AndroidAdbExecutor, task: () => Promise<T>): Promise<T> {
+  return await withAndroidAdbProvider(
+    { exec, imeHelperArtifact: ARTIFACT },
+    { serial: DEVICE.id },
+    task,
+  );
+}
+
+const REBIND_DISPLACED = 'agent_device_ime_helper_rebind_displaced';
+
+test('activation does not switch while the rebind record cannot be read', async () => {
+  activationHost();
+  const state: FakeImeDeviceState = {
+    settings: new Map([
+      ['default_input_method', 'com.android.inputmethod.latin/.LatinIME'],
+      ['agent_device_ime_helper_previous_ime', 'com.samsung/.Keyboard'],
+      [REBIND_DISPLACED, '1'],
+    ]),
+  };
+  const deviceAdb = fakeImeDeviceAdb(state);
+
+  const result = await withDeviceAdb(
+    async (args) =>
+      args[1] === 'settings' && args[2] === 'get' && args[4] === REBIND_DISPLACED
+        ? { exitCode: 1, stdout: '', stderr: 'timed out' }
+        : await deviceAdb(args),
+    async () => await activateAndroidTestIme(DEVICE, { stateDir: STATE_DIR }),
+  );
+
+  expect(result).toMatchObject({ activated: false, persistFailed: true });
+  expect(state.settings.get('agent_device_ime_helper_previous_ime')).toBe('com.samsung/.Keyboard');
+  expect(state.settings.get('default_input_method')).toBe(
+    'com.android.inputmethod.latin/.LatinIME',
+  );
+  expect(isAndroidTestImeActive(DEVICE)).toBe(false);
+});
+
+test('an idempotent activation keeps a rebind the device record marks as unconfirmed', async () => {
+  activationHost();
+  const state: FakeImeDeviceState = {
+    settings: new Map([['default_input_method', 'com.samsung/.Keyboard']]),
+  };
+  await activateWith(state);
+  state.settings.set(REBIND_DISPLACED, '1');
+  resetAndroidTestImeActivationCacheForTests();
+
+  const result = await activateWith(state);
+
+  expect(result).toMatchObject({ alreadyActive: true });
+  expect(getAndroidTestImeOwnership(DEVICE)?.rebindUnconfirmed).toBe(true);
+});
+
+test('a confirmed activation clears a rebind record left without a restore record', async () => {
+  activationHost();
+  const state: FakeImeDeviceState = {
+    settings: new Map([
+      ['default_input_method', 'com.samsung/.Keyboard'],
+      [REBIND_DISPLACED, '1'],
+    ]),
+  };
+
+  const result = await activateWith(state);
+
+  expect(result).toMatchObject({ activated: true, previousIme: 'com.samsung/.Keyboard' });
+  expect(state.settings.has(REBIND_DISPLACED)).toBe(false);
+  expect(getAndroidTestImeOwnership(DEVICE)?.rebindUnconfirmed).toBe(false);
+});
+
+test('activation claims ownership before settling an earlier rebind record', async () => {
+  activationHost();
+  const state: FakeImeDeviceState = {
+    settings: new Map([
+      ['default_input_method', 'com.android.inputmethod.latin/.LatinIME'],
+      ['agent_device_ime_helper_previous_ime', 'com.samsung/.Keyboard'],
+      [REBIND_DISPLACED, '1'],
+    ]),
+  };
+  const deviceAdb = fakeImeDeviceAdb(state);
+
+  const activation = withDeviceAdb(
+    async (args) => {
+      if (args[2] === 'delete' && args[4] === REBIND_DISPLACED) throw new Error('adb timed out');
+      return await deviceAdb(args);
+    },
+    async () => await activateAndroidTestIme(DEVICE, { stateDir: STATE_DIR }),
+  );
+
+  await expect(activation).rejects.toThrow('adb timed out');
+  expect(state.settings.get('default_input_method')).toBe(HELPER_SERVICE);
+  expect(getAndroidTestImeOwnership(DEVICE)?.rebindUnconfirmed).toBe(true);
 });

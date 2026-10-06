@@ -15,7 +15,7 @@ import type { BoundContextFromFlags } from './context.ts';
 import { issueSettleRefs } from './session-snapshot.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
-import type { SessionState } from './session-state.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
 
 /**
  * `--settle` on the generic daemon route (#1638): `scroll` and `back` change
@@ -55,6 +55,7 @@ export type GenericSettleObserver = () => Promise<SettleObservation | undefined>
 export type GenericSettlePlan = { response: DaemonResponse } | { observe?: GenericSettleObserver };
 
 type GenericSettleContext = {
+  sessionRef: SessionRef | undefined;
   req: DaemonRequest;
   session: SessionState;
   sessionName: string;
@@ -109,7 +110,9 @@ async function observeSettled(
     session: context.sessionName,
     requestId: context.req.meta?.requestId,
   });
-  const refsGeneration = issueSettleRefs(context.session, observation);
+  if (context.sessionRef && !context.sessionStore.resolveCurrent(context.sessionRef))
+    return undefined;
+  const refsGeneration = issueSettleRefs(context.sessionRef, context.sessionStore, observation);
   return refsGeneration === undefined ? observation : { ...observation, refsGeneration };
 }
 
@@ -120,6 +123,7 @@ function createGenericSettleRuntime(
     return createInteractionRuntime({
       req: context.req,
       sessionName: context.sessionName,
+      sessionRef: context.sessionRef,
       logPath: context.logPath,
       sessionStore: context.sessionStore,
       contextFromFlags: context.contextFromFlags,

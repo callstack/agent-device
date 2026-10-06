@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession, makeMacOsSession } from '../../__tests__/test-utils/session-factories.ts';
+import { parseDaemonPolicy } from '../../daemon-policy-file.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { assertRequestLeaseAdmission } from '../request-admission.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
@@ -269,4 +270,123 @@ test('close still admits and heartbeats a real active lease', () => {
 
   assert.equal(result?.leaseId, lease.leaseId);
   assert.equal(result?.heartbeatAt, 2_000);
+});
+
+function hostMacOsAppLease(registry: LeaseRegistry) {
+  return registry.putHostLease('a1b2c3d4e5f60718293a4b5c6d7e8f90', {
+    tenantId: 'stim',
+    runId: 'session-1',
+    clientId: 'client-1',
+    leaseBackend: 'macos-app',
+    leaseProvider: 'proxy',
+    deviceKey: 'com.example.app',
+    retainOnClose: true,
+  });
+}
+
+function leaseMeta(lease: { leaseId: string }) {
+  return {
+    tenantId: 'stim',
+    runId: 'session-1',
+    leaseId: lease.leaseId,
+    leaseBackend: 'macos-app' as const,
+    clientId: 'client-1',
+    leaseProvider: 'proxy',
+    deviceKey: 'com.example.app',
+  };
+}
+
+test('a request under a macos-app lease is confined to the leased app', () => {
+  const registry = new LeaseRegistry();
+  const lease = hostMacOsAppLease(registry);
+  const session = makeMacOsSession('default', { appBundleId: 'com.example.app' });
+  assert.equal(
+    assertRequestLeaseAdmission(
+      makeRequest({ command: 'snapshot', meta: leaseMeta(lease) }),
+      registry,
+      session,
+    )?.leaseId,
+    lease.leaseId,
+  );
+  assert.throws(
+    () =>
+      assertRequestLeaseAdmission(
+        makeRequest({ command: 'snapshot', flags: { surface: 'desktop' }, meta: leaseMeta(lease) }),
+        registry,
+        session,
+      ),
+    { code: 'UNAUTHORIZED' },
+  );
+});
+
+test('a request under a macos-app lease that names no existing session is refused', () => {
+  const registry = new LeaseRegistry();
+  const lease = hostMacOsAppLease(registry);
+  for (const command of ['snapshot', 'screenshot', 'wait', 'find', 'get', 'is']) {
+    assert.throws(
+      () =>
+        assertRequestLeaseAdmission(
+          makeRequest({ command, flags: { platform: 'macos' }, meta: leaseMeta(lease) }),
+          registry,
+          undefined,
+        ),
+      (error: { code?: string; details?: Record<string, unknown> }) =>
+        error.code === 'UNAUTHORIZED' &&
+        error.details?.reason === 'MACOS_APP_LEASE_DENIED' &&
+        error.details.rule === 'session',
+    );
+  }
+});
+
+test('a daemon policy that requires a macos-app lease refuses unleased and other-backend requests', () => {
+  const policy = parseDaemonPolicy(
+    { version: 1, leases: { require: 'macos-app' } },
+    '/policy.json',
+  );
+  const registry = new LeaseRegistry();
+  const denied = (error: { details?: Record<string, unknown> }) =>
+    error.details?.reason === 'DAEMON_POLICY_DENIED' && error.details.rule === 'lease';
+  assert.throws(
+    () =>
+      assertRequestLeaseAdmission(
+        makeRequest({ command: 'open', positionals: ['com.apple.finder'] }),
+        registry,
+        undefined,
+        { daemonPolicy: policy },
+      ),
+    denied,
+  );
+  const other = registry.allocateLease({
+    tenantId: 'stim',
+    runId: 'run-2',
+    leaseBackend: 'ios-instance',
+  });
+  assert.throws(
+    () =>
+      assertRequestLeaseAdmission(
+        makeRequest({
+          command: 'snapshot',
+          meta: {
+            tenantId: 'stim',
+            runId: 'run-2',
+            leaseId: other.leaseId,
+            leaseBackend: 'ios-instance',
+          },
+        }),
+        registry,
+        undefined,
+        { daemonPolicy: policy },
+      ),
+    denied,
+  );
+  const lease = hostMacOsAppLease(registry);
+  assert.equal(
+    assertRequestLeaseAdmission(
+      makeRequest({ command: 'snapshot', meta: leaseMeta(lease) }),
+      registry,
+      makeMacOsSession('default', { appBundleId: 'com.example.app' }),
+      { daemonPolicy: policy },
+    )?.leaseId,
+    lease.leaseId,
+  );
 });

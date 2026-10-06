@@ -3,8 +3,8 @@
   "declarations": {
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_BASE_PATH": "sha256:a1ada25c6f90d9c69c8c836538e8882547bf239559f7c1accacd0654355802dd",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_TENANT_HEADER": "sha256:ed49119d232500885f014ac73f6123d298d404c6c176abdae59cf324825927e5",
-    "packages/contracts/src/daemon-http.ts#DaemonHealthPayload": "sha256:b613a7dab37945c13087259b3f3a7bbbb7100cfa46ef40fb935cb76ef2615c85",
-    "packages/contracts/src/daemon-http.ts#buildDaemonHealthPayload": "sha256:952f189d1565c035c92873980b0ba4a2eb629f885aa4f128dfc29e6e84027a6a",
+    "packages/contracts/src/daemon-http.ts#DaemonHealthPayload": "sha256:ece08b91cc46c1397309a05a68f1e1be3999cd4b069c4c3b6bc5b75a5700f108",
+    "packages/contracts/src/daemon-http.ts#buildDaemonHealthPayload": "sha256:49a46bd62207a69a359e7c8be6f97c07748af21344452be1d32507b95ce4650b",
     "packages/contracts/src/daemon-http.ts#buildDaemonHttpAuthHeaders": "sha256:5548a44d6248ed858d19a0b2985ec4ae8a7181bae8294b85edf3c1b3b58e80d4",
     "packages/contracts/src/daemon-http.ts#buildDaemonHttpBaseUrl": "sha256:f92697208d9f42ec0dcfb006b6f2dce761bd5307db27ce2e52927fd7742e3a9a",
     "packages/contracts/src/daemon-http.ts#buildDaemonHttpTenantHeaders": "sha256:e38a5f0b5ab07ee3a5fe3db229d0de750888660c55bf31692e100002be96de1d",
@@ -21,12 +21,12 @@
     "packages/kernel/src/contracts.ts#DaemonInstallSource": "sha256:fe26e202e62d997cdd3855fd96002511783a6c26a9ce27210d7c6cc084c66e4e",
     "packages/kernel/src/contracts.ts#DaemonLockPolicy": "sha256:f33d0ce7200a7d97c11e91bd2889b5d9bc7f35935a5370a29930118d091468f4",
     "packages/kernel/src/contracts.ts#DaemonRequest": "sha256:911d93245b8dc557db897c4cac051030db673711bf3af51baa8b82248d509c57",
-    "packages/kernel/src/contracts.ts#DaemonRequestMeta": "sha256:58f71959e597ceb3d6284d4b68533c6c6bbc214c069ffefa4a1a47be068e2314",
+    "packages/kernel/src/contracts.ts#DaemonRequestMeta": "sha256:95c8aabe103b00af574ab5e97762fb295e44f1f5b17b69b11b5493cc56e4c1a1",
     "packages/kernel/src/contracts.ts#DaemonResponse": "sha256:5f6cc08ed43f40c1cf17e33dd2b6b879dda1ac383de9c6c9a2c653929c21346b",
     "packages/kernel/src/contracts.ts#DaemonResponseData": "sha256:f16e61b7f0ea8cdae82349508383af2f97a4c16c8aa21952d833094673f86afc",
     "packages/kernel/src/contracts.ts#JsonRpcId": "sha256:5a5fdff1cd85971214117d69a8278d0ecaf21a6fa3f4582155d9b3d9cad1fbd0",
     "packages/kernel/src/contracts.ts#JsonRpcRequestEnvelope": "sha256:d6328309fc4f8b310b88680181e46c802329de9b0e45682dd2e0f0c3e8d090e4",
-    "packages/kernel/src/contracts.ts#LEASE_BACKENDS": "sha256:1b29207af3c9ec65b999e4d3f9ab839004472897f748f8d4f4ab964de54efc9f",
+    "packages/kernel/src/contracts.ts#LEASE_BACKENDS": "sha256:0d42bb4f810582f75ff3f31e7ef8001c48f6110ed94bd9c38f161eb23fb89676",
     "packages/kernel/src/contracts.ts#LeaseBackend": "sha256:dce397343cda82ce4e3e43b534b1f642cd37568ed304f4783caddc3524c1cae5",
     "packages/kernel/src/contracts.ts#RESPONSE_LEVELS": "sha256:cef29c3b56c299e35a7fee8058b90dc4a6f65a46a420e4f11f77c8ca7d0359c8",
     "packages/kernel/src/contracts.ts#ResponseCost": "sha256:2a44de54e8b5c886b36da1500e22d634ec7e12961d2c93b689d2b1aa8c15f186",
@@ -56,7 +56,7 @@
     "src/daemon-client/daemon-client-progress.ts#createInvalidDaemonResponseError": "sha256:0af812346b667a23fdfef641b242cd86d07edaa05eb928c4c531628c09a4031b",
     "src/daemon-client/daemon-client-progress.ts#shouldReadDaemonProgressStream": "sha256:6811404f41d8db3fa6fc751332c7186a2399ec7ecbc4e9c547d9cb9f14dbb350",
     "src/daemon-client/daemon-client-rpc.ts#appErrorFromDaemonError": "sha256:ac4761006c71d93ccba9f8e37cbd4cf48283dbb22737c163dc9c1a878e154eea",
-    "src/daemon-client/daemon-client-rpc.ts#buildHttpRpcPayload": "sha256:caddf184cd57a41d9910c414bba72ce5a0503e22a2a4ef3a47f95fed67037127",
+    "src/daemon-client/daemon-client-rpc.ts#buildHttpRpcPayload": "sha256:a8311d02126c51c0205be29d5deae68298b5dca223851a68f03aac95a4add5c6",
     "src/daemon-client/daemon-client-rpc.ts#buildLeaseRpcParams": "sha256:1755f46be8c62e7a8eb409e9a94d61781c96ccbef3306702121aa94264d63267",
     "src/daemon-client/daemon-client-rpc.ts#handleDaemonHttpResponseBody": "sha256:8f1c4bba1918545db6296ad29b95f0baa9f949e7c23bc04d59e261130f14611e",
     "src/daemon-client/daemon-client-rpc.ts#isLeaseRpcCommand": "sha256:955dc1b73462d40593e5728dbcbaeec1307944b08262a22627e84cc5dc507e8f",
@@ -67,10 +67,10 @@
     "src/daemon-client/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
     "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:3bac36fa97090b273afe1128103e1bf476d05441fd9de41317f1b78775b88304",
     "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealthLink": "sha256:7702598468b4c82b4ffa93064cd6bdfec938c1c527f7e6007c0584f3884a6eea",
-    "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:eef0e153eb6f0bc02175e464dd6d98559b500b65ea8c74ba2203cfef09ec09a0",
+    "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth": "sha256:6ce1f9be1e6a977130d0875003ac22da2de5e90b514a3b22b30b9347e63d81c7",
     "src/daemon-client/daemon-client-transport.ts#readHealthLink": "sha256:f56404b94d73da57de7248719c9136b760d2be8b4a53cde5315a2311b088425b",
     "src/daemon-client/daemon-client-transport.ts#readHealthPayload": "sha256:4e85ffc3e35e02379c393e9312344757e003cf1f0ad9eb8d1f77d90c81c861f1",
-    "src/daemon-client/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:bcefa89fbb7fcbd6fee1b5ecb217955b9eee8d6fd2ad175fb653011edbd199d9",
+    "src/daemon-client/daemon-client-transport.ts#readRemoteDaemonHealth": "sha256:df174d1ccf73851ca58bd75533fb4660424003b98bd9e41fe942cf3ab3698e5f",
     "src/daemon/downloadable-artifact-http.ts#DownloadableArtifactHttpAuthorizer": "sha256:1b2702a929ca9170db2ca97c08e3ab67e17edb3ee75325a576c4c1b9cdbebb44",
     "src/daemon/downloadable-artifact-http.ts#DownloadableArtifactHttpRoute": "sha256:e63c4581ccde668913914149c9092d16ecf8a5cbd7ab33c6eb8617e77fc1015e",
     "src/daemon/downloadable-artifact-http.ts#handleArtifactDownload": "sha256:7f96d17b7c605230fb3cc21ceaa5b2e515d7445653ff95b2b0f6f15fa6214d4e",
@@ -121,7 +121,7 @@
     "src/daemon/server/http-server.ts#sendJson": "sha256:a1de00da3f1db8c98e69a85dfe2e11b626a4d2ce472840e3b8f519aa8a207a8f",
     "src/daemon/server/http-server.ts#toDaemonRequest": "sha256:f3861d2d4f67f66e83800616926f6bbb0595de4ecbb0072b5b78971ebeb0705b",
     "src/daemon/server/http-server.ts#toInstallFromSourceDaemonRequest": "sha256:dff093758b433043816dfc1e2e9658078875e46b887fdc530fb9380158d629f5",
-    "src/daemon/server/http-server.ts#toLeaseDaemonRequest": "sha256:bee83566f9c5da4ede12b4844fae0930d09439ba7586123609637107b61f8644",
+    "src/daemon/server/http-server.ts#toLeaseDaemonRequest": "sha256:3018984aeace4054767875f5eb6e6ad5d38bfcb71c15d1a56ccf9b53e0a419ec",
     "src/daemon/server/http-server.ts#toReleaseMaterializedPathsDaemonRequest": "sha256:708736ca03d6a3fc449bb408382dbd509e490de1f84ecc8771fd77d4adda0154",
     "src/daemon/server/http-server.ts#writeProgressEnvelope": "sha256:7be778b3902c72d7aa6282c16dc7106fdd64e99c0b5daf9f413ff5dd3fb044f1",
     "src/daemon/server/http-server.ts#writeRpcResponseEnvelope": "sha256:7a8155e9fcbb53485489728250a85109b5dab0d96cdd4aa8b7e7eb87a4898ddb",
@@ -196,8 +196,8 @@
   "compatibleChanges": [
     {
       "declaration": "packages/kernel/src/contracts.ts#DaemonRequestMeta",
-      "digest": "sha256:58f71959e597ceb3d6284d4b68533c6c6bbc214c069ffefa4a1a47be068e2314",
-      "rationale": "Adds the optional developerDir field: a local client's DEVELOPER_DIR, overlaid on the env of commands the daemon spawns for that request. A released daemon ignores the unknown meta key and keeps its own environment, exactly as before; a released client never sends it, so the new daemon inherits its own environment for that request. The remote HTTP surface strips it."
+      "digest": "sha256:95c8aabe103b00af574ab5e97762fb295e44f1f5b17b69b11b5493cc56e4c1a1",
+      "rationale": "Adds the optional developerDir field: a local client's DEVELOPER_DIR, overlaid on the env of commands the daemon spawns for that request. A released daemon ignores the unknown meta key and keeps its own environment, exactly as before; a released client never sends it, so the new daemon inherits its own environment for that request. The remote HTTP surface strips it. Also adds the optional leaseRetainOnClose field, sent only on lease_allocate when the caller opts in: a released daemon ignores the unknown meta key and releases the lease on session close as before, and a released client never sends it. Adds the optional providerCredentialFingerprint field: a digest of the local caller's provider credential variables, which the daemon compares with its own on lease_allocate. A released daemon ignores the unknown meta key and allocates as before; a released client never sends it, so the new daemon skips the comparison. The client sends it only to a local daemon, and the remote HTTP surface strips it."
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#DaemonArtifactKnownType",
@@ -221,13 +221,13 @@
     },
     {
       "declaration": "src/daemon-client/daemon-client-rpc.ts#buildHttpRpcPayload",
-      "digest": "sha256:caddf184cd57a41d9910c414bba72ce5a0503e22a2a4ef3a47f95fed67037127",
-      "rationale": "#2110 added the optional providerApp parameter to lease allocation; #2494 extends the same additive projection to the full provider-allocation flag set the lease-lifecycle provider reads in prepareSession — device selection (platform, device), the app/os, the session-naming fields, and the configured device-feature and AWS knobs — so a fresh remote allocation reaches BrowserStack/AWS with a named, configured session instead of failing on a missing --device/--platform or landing in Untitled Project/Build. Producer and consumer both read one shared projection (readLeaseAllocateProviderFlags). Every field is optional and forwarded only when the caller supplied it: a released protocol-2 daemon ignores unknown JSON-RPC parameters, and a request carrying none of these retains the previous payload byte-for-byte."
+      "digest": "sha256:a8311d02126c51c0205be29d5deae68298b5dca223851a68f03aac95a4add5c6",
+      "rationale": "Adds the optional providerCredentialFingerprint parameter to agent_device.lease.allocate, forwarded only when the request meta carries one, which the client sets only for a local daemon. A released protocol-2 daemon ignores unknown JSON-RPC parameters, and a request without a fingerprint keeps the previous payload byte-for-byte."
     },
     {
       "declaration": "src/daemon/server/http-server.ts#toLeaseDaemonRequest",
-      "digest": "sha256:bee83566f9c5da4ede12b4844fae0930d09439ba7586123609637107b61f8644",
-      "rationale": "#2110 read the optional providerApp lease-allocation parameter into the existing flags bag; #2494 reads the full provider-allocation flag set into that same bag through the shared readLeaseAllocateProviderFlags projection, so the reconstructed req.flags handed to prepareSession match what the line transport forwards for free. Released protocol-2 clients omit these and follow the unchanged allocation path; no existing field is required or reinterpreted."
+      "digest": "sha256:3018984aeace4054767875f5eb6e6ad5d38bfcb71c15d1a56ccf9b53e0a419ec",
+      "rationale": "#2110 read the optional providerApp lease-allocation parameter into the existing flags bag; #2494 reads the full provider-allocation flag set into that same bag through the shared readLeaseAllocateProviderFlags projection, so the reconstructed req.flags handed to prepareSession match what the line transport forwards for free. Released protocol-2 clients omit these and follow the unchanged allocation path; no existing field is required or reinterpreted. The optional retainOnClose boolean parameter is read into meta.leaseRetainOnClose; a released daemon ignores it and keeps releasing on session close. Reads the optional providerCredentialFingerprint lease-allocation parameter into request meta, so a local caller over HTTP gets the same credential check as over the socket. A daemon with an auth hook treats every HTTP caller as remote and strips it, as it does developerDir. Released protocol-2 clients omit it and follow the unchanged allocation path; no existing field is required or reinterpreted."
     },
     {
       "declaration": "packages/kernel/src/errors.ts#DaemonError",
@@ -276,8 +276,8 @@
     },
     {
       "declaration": "src/daemon-client/daemon-client-transport.ts#readRemoteDaemonHealth",
-      "digest": "sha256:bcefa89fbb7fcbd6fee1b5ecb217955b9eee8d6fd2ad175fb653011edbd199d9",
-      "rationale": "#2198 checks every link a command RPC crosses for protocol skew. #2650 caps a retry health probe at the request's remaining deadline. Health payload parsing and protocol mismatch refusal are unchanged; released peers still receive the same RPCs."
+      "digest": "sha256:df174d1ccf73851ca58bd75533fb4660424003b98bd9e41fe942cf3ab3698e5f",
+      "rationale": "#2198 checks every link a command RPC crosses for protocol skew. #2650 caps a retry health probe at the request's remaining deadline. Health payload parsing and protocol mismatch refusal are unchanged; released peers still receive the same RPCs. #3178 threads the caller's optional AbortSignal through so a canceled call cuts a probe already in flight instead of waiting it out: the signal is client-local, never serialized, and the GET /health request and payload are unchanged."
     },
     {
       "declaration": "src/daemon/server/http-server.ts#authorizeAuxiliaryHttpRequest",
@@ -296,8 +296,8 @@
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#LEASE_BACKENDS",
-      "digest": "sha256:1b29207af3c9ec65b999e4d3f9ab839004472897f748f8d4f4ab964de54efc9f",
-      "rationale": "#2266 adds the additive harmonyos-instance lease backend literal. Protocol-2 peers ignore the new backend unless explicitly requested; existing iOS/Android values and payloads remain unchanged."
+      "digest": "sha256:0d42bb4f810582f75ff3f31e7ef8001c48f6110ed94bd9c38f161eb23fb89676",
+      "rationale": "#2266 adds the additive harmonyos-instance lease backend literal and #3229 the macos-app literal. Protocol-2 peers ignore a new backend unless it is explicitly requested, and an older daemon refuses macos-app with its existing unsupported-backend error; existing iOS/Android/HarmonyOS values and payloads remain unchanged."
     },
     {
       "declaration": "packages/kernel/src/contracts.ts#SessionRuntimeHints",
@@ -351,28 +351,28 @@
     },
     {
       "declaration": "packages/contracts/src/daemon-http.ts#DaemonHealthPayload",
-      "digest": "sha256:b613a7dab37945c13087259b3f3a7bbbb7100cfa46ef40fb935cb76ef2615c85",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, and #3047 adds an optional hostArch the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
+      "digest": "sha256:ece08b91cc46c1397309a05a68f1e1be3999cd4b069c4c3b6bc5b75a5700f108",
+      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
     },
     {
       "declaration": "packages/contracts/src/daemon-http.ts#buildDaemonHealthPayload",
-      "digest": "sha256:952f189d1565c035c92873980b0ba4a2eb629f885aa4f128dfc29e6e84027a6a",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, and #3047 adds an optional hostArch the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
+      "digest": "sha256:49a46bd62207a69a359e7c8be6f97c07748af21344452be1d32507b95ce4650b",
+      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
     },
     {
       "declaration": "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealth",
       "digest": "sha256:3bac36fa97090b273afe1128103e1bf476d05441fd9de41317f1b78775b88304",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, and #3047 adds an optional hostArch the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged. A restart retry must tell a probe that ran out of time from one that failed, so the client can report the RPC deadline instead of 'Remote daemon is unavailable'. `timedOut` is client-local: the prober sets it on its own timeout and abort paths and never reads it from a /health payload. The health request and the accepted payload fields are unchanged, so a released daemon or proxy is probed and parsed exactly as before."
+      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged. A restart retry must tell a probe that ran out of time from one that failed, so the client can report the RPC deadline instead of 'Remote daemon is unavailable'. `timedOut` is client-local: the prober sets it on its own timeout and abort paths and never reads it from a /health payload. The health request and the accepted payload fields are unchanged, so a released daemon or proxy is probed and parsed exactly as before."
     },
     {
       "declaration": "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealthLink",
       "digest": "sha256:7702598468b4c82b4ffa93064cd6bdfec938c1c527f7e6007c0584f3884a6eea",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, and #3047 adds an optional hostArch the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
+      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
     },
     {
       "declaration": "src/daemon-client/daemon-client-transport.ts#readHealthLink",
       "digest": "sha256:f56404b94d73da57de7248719c9136b760d2be8b4a53cde5315a2311b088425b",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, and #3047 adds an optional hostArch the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
+      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
     },
     {
       "declaration": "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_HEADER",
@@ -431,8 +431,8 @@
     },
     {
       "declaration": "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth",
-      "digest": "sha256:eef0e153eb6f0bc02175e464dd6d98559b500b65ea8c74ba2203cfef09ec09a0",
-      "rationale": "A restart retry must tell a probe that ran out of time from one that failed, so the client can report the RPC deadline instead of 'Remote daemon is unavailable'. `timedOut` is client-local: the prober sets it on its own timeout and abort paths and never reads it from a /health payload. The health request and the accepted payload fields are unchanged, so a released daemon or proxy is probed and parsed exactly as before."
+      "digest": "sha256:6ce1f9be1e6a977130d0875003ac22da2de5e90b514a3b22b30b9347e63d81c7",
+      "rationale": "The health-probe budget includes requester loading and response completion. The caller AbortSignal joins the probe timer only in-process; caller cancellation remains distinct from probe expiry. No signal, timedOut flag, request route, auth header or accepted health payload field changes on the wire, so released daemons and proxies parse and respond as before (ADR 0006)."
     }
   ]
 }

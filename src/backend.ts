@@ -28,6 +28,7 @@ import type {
   SnapshotNode,
   SnapshotOptions,
   SnapshotState,
+  SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
 
 // The backend's public leaf platform (approach b): backends distinguish iOS from
@@ -58,6 +59,12 @@ export type BackendSnapshotResult = {
    * the band from `nodes`.
    */
   keyboard?: SnapshotKeyboardBandFact;
+  /**
+   * The box these rects are measured in, as the producer measured it (#3182). Absent means the
+   * producer measured no box — never a zero — since that absence is the only answer a producer with
+   * no screen to measure is allowed to give.
+   */
+  viewport?: SnapshotViewportSize;
 } & SnapshotCaptureAnnotations;
 
 export type BackendSnapshotOptions = SnapshotOptions & {

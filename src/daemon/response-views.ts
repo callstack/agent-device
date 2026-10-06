@@ -34,6 +34,7 @@ function snapshotView(data: DaemonResponseData, level: ResponseLevel): DaemonRes
   // activation, and the occlusion/quality/visibility warnings a digest still has to surface).
   const carriedFields = [
     'visibility',
+    'viewport',
     'snapshotQuality',
     'targetActivation',
     'warnings',

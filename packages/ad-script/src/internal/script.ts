@@ -11,6 +11,7 @@ import { parseReplayOpenFlags } from './open-script.ts';
 import type { SessionAction } from '@agent-device/contracts/session';
 import {
   isClickLikeCommand,
+  parseReplayCommandFlags,
   parseReplaySeriesFlags,
   parseReplayRuntimeFlags,
   stripRecordedRefGeneration,
@@ -462,11 +463,21 @@ function parseReplayScriptLine(line: string): SessionAction | null {
     return action;
   }
 
-  // wait @ref [timeout], longpress @ref [durationMs], and hover @ref flow
-  // through this generic branch: strip recorded generation pins like the
-  // branches above.
+  if (command === 'scroll' || command === 'wait') {
+    // #3197: these two commands carry their own flags in the script grammar, so
+    // a script can hunt for an off-screen target (`scroll down --until <selector>`)
+    // and scope a capture (`wait <selector> --raw`) the same way the CLI does.
+    const parsed = parseReplayCommandFlags(command, args);
+
+    Object.assign(action.flags, parsed.flags);
+    action.positionals = parsed.positionals.map((token) => stripRecordedRefGeneration(token));
+    return action;
+  }
+
+  // wait @ref, longpress @ref, and hover @ref flow through the generic branch:
+  // strip recorded generation pins like the branches above.
   action.positionals =
-    command === 'wait' || command === 'longpress' || command === 'hover'
+    command === 'longpress' || command === 'hover'
       ? args.map((token) => stripRecordedRefGeneration(token))
       : args;
   return action;
@@ -490,7 +501,7 @@ function tokenizeReplayLine(line: string): string[] {
     const parsed =
       line[cursor] === '"'
         ? readQuotedReplayToken(line, cursor)
-        : readBareReplayToken(line, cursor);
+        : (readSingleQuotedReplayToken(line, cursor) ?? readBareReplayToken(line, cursor));
     tokens.push(parsed.value);
     cursor = parsed.nextCursor;
   }
@@ -540,6 +551,66 @@ function readQuotedReplayToken(
     );
   }
   return { value: value as string, nextCursor: end + 1 };
+}
+
+/**
+ * A single-quoted token: `'id="far-button"'` or `'label="Sign in"'` (#3197). The
+ * shell's single quotes strip to one argument and keep `"` literal; a hand-written
+ * `.ad` line is the same text, so the tokenizer must agree or the identical command
+ * parses at the CLI and fails in a script. The guarantee is scoped: a run the shell
+ * reads as one quoted argument NOW reads as one argument (`'Sign in'` was two bare
+ * tokens before, and taking the shell reading is the point), while a run it would
+ * not — an unclosed quote or a quote that stops mid-word (`wait text it's fine`,
+ * `'don't do this'`) — keeps its old bare meaning, so no line relied on before this
+ * change is re-tokenized. Inside the quotes only `\'` escapes, as in the shell, where
+ * a `\` keeps its own character; `\'` itself is the one deliberate extension, because
+ * a shell's single quotes carry no apostrophe at all and a selector like
+ * `label="don't"` has to be writable in a script without JSON double quotes. The
+ * escape only consumes a quote an ODD run of backslashes precedes, so a value ending
+ * in literal backslashes still closes; that also makes a value ending in one literal
+ * backslash unwritable in single quotes, and double quotes are the spelling for it.
+ */
+function readSingleQuotedReplayToken(
+  line: string,
+  cursor: number,
+): { value: string; nextCursor: number } | null {
+  if (line[cursor] !== "'") return null;
+  const end = findSingleQuotedTokenEnd(line, cursor + 1);
+  if (end === -1 || !isReplayTokenBoundary(line, end + 1)) return null;
+  return {
+    value: decodeSingleQuotedReplayLiteral(line.slice(cursor + 1, end)),
+    nextCursor: end + 1,
+  };
+}
+
+/** The closing `'` index, or -1 when the quote never closes at this run. */
+function findSingleQuotedTokenEnd(line: string, from: number): number {
+  let index = from;
+  while (index < line.length) {
+    const quote = line.indexOf("'", index);
+    if (quote === -1) return -1;
+    if (!isBackslashEscaped(line, quote)) return quote;
+    index = quote + 1;
+  }
+  return -1;
+}
+
+/** Whether the character at `index` follows an odd run of backslashes: the `\'` escape. */
+function isBackslashEscaped(line: string, index: number): boolean {
+  let backslashes = 0;
+  while (index > 0 && line.charAt(index - 1) === '\\') {
+    backslashes += 1;
+    index -= 1;
+  }
+  return backslashes % 2 === 1;
+}
+
+function isReplayTokenBoundary(line: string, index: number): boolean {
+  return index >= line.length || /\s/.test(line.charAt(index));
+}
+
+function decodeSingleQuotedReplayLiteral(value: string): string {
+  return value.replaceAll(String.raw`\'`, "'");
 }
 
 function readBareReplayToken(line: string, cursor: number): { value: string; nextCursor: number } {

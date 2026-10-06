@@ -14,7 +14,7 @@ import {
 } from '@agent-device/kernel/snapshot';
 import { expireRefFrame } from '../../ref-frame.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
-import type { SessionState } from '../../session-state.ts';
+import type { SessionRef, SessionState } from '../../session-state.ts';
 import { SessionStore } from '../../session-store.ts';
 import { contextFromFlags } from '../../context.ts';
 import { readCommandMessage, successText } from '@agent-device/kernel/success-text';
@@ -44,7 +44,7 @@ type FindContext = {
   logPath: string;
   sessionStore: SessionStore;
   invoke: DaemonInvokeFn;
-  session: SessionState;
+  sessionRef: SessionRef;
   device: SessionState['device'];
   command: string;
   locator: FindLocator;
@@ -75,6 +75,7 @@ type ResolvedMatch = {
 
 export async function handleFindCommands(params: FindRouteInput): Promise<DaemonResponse | null> {
   const { req, sessionName, logPath, sessionStore, invoke } = params;
+  const sessionRef = sessionStore.lookup(sessionName);
   const command = req.command;
   if (command !== 'find') return null;
 
@@ -106,8 +107,8 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
   // Read-only find actions (exists/wait/list/get_text/get_attrs) always return from
   // the selector runtime above, so only mutating actions (click/fill/focus/type)
   // reach this point — and every mutating find needs an active session.
-  const session = sessionStore.get(sessionName);
-  if (!session) return noActiveSessionError();
+  const session = sessionRef ? sessionStore.requireCurrent(sessionRef) : undefined;
+  if (!session || !sessionRef) return noActiveSessionError();
   const device = session.device;
   // R35 + ADR 0019 §9: ONE action-selected plan, ONE facts inspection, ONE bind. The plan
   // carries everything this action executes directly — the target capture always, plus
@@ -131,8 +132,8 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
   // that survives and gets answered from (#2682).
   const captureProof: RequestCaptureProof = {};
   const readTargetTree = createFindTargetCapture({
+    ref: sessionRef,
     device,
-    session,
     req,
     logPath,
     locator,
@@ -144,12 +145,12 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
   });
 
   const ctx: FindContext = {
+    sessionRef,
     req,
     sessionName,
     logPath,
     sessionStore,
     invoke,
-    session,
     device,
     command,
     locator,
@@ -270,8 +271,17 @@ function preresolvedTarget(match: ResolvedMatch): PreresolvedInteractionTarget {
 }
 
 async function handleFindClick(ctx: FindContext, match: ResolvedMatch): Promise<DaemonResponse> {
-  const { req, sessionName, sessionStore, session, invoke, command, locator, query, publicFlags } =
-    ctx;
+  const {
+    req,
+    sessionName,
+    sessionStore,
+    sessionRef,
+    invoke,
+    command,
+    locator,
+    query,
+    publicFlags,
+  } = ctx;
   const response = await invoke({
     token: req.token,
     session: sessionName,
@@ -297,7 +307,7 @@ async function handleFindClick(ctx: FindContext, match: ResolvedMatch): Promise<
   Object.assign(matchData, successText(clickMessage));
   recordSessionAction(
     sessionStore,
-    session,
+    sessionRef,
     req,
     command,
     { ref: match.ref, action: 'click', locator, query },
@@ -311,7 +321,7 @@ async function handleFindFill(
   match: ResolvedMatch,
   value: string | undefined,
 ): Promise<DaemonResponse> {
-  const { req, sessionName, sessionStore, session, invoke, command, publicFlags } = ctx;
+  const { req, sessionName, sessionStore, sessionRef, invoke, command, publicFlags } = ctx;
   // `''` is the clear request (#2063); only a MISSING value is an error.
   if (value === undefined) {
     return errorResponse('INVALID_ARGS', 'find fill requires text (use "" to clear the field)');
@@ -327,7 +337,7 @@ async function handleFindFill(
   if (!response.ok) return response;
   recordSessionAction(
     sessionStore,
-    session,
+    sessionRef,
     req,
     command,
     { ref: match.ref, action: 'fill' },
@@ -348,12 +358,13 @@ async function handleFindType(
   match: ResolvedMatch,
   value: string | undefined,
 ): Promise<DaemonResponse> {
-  const { req, logPath, session } = ctx;
+  const { req, logPath } = ctx;
   if (!value) {
     return errorResponse('INVALID_ARGS', 'find type requires text');
   }
   const focusResponse = await dispatchFocusForFindMatch(ctx, match);
   if (!focusResponse.ok) return focusResponse;
+  const session = ctx.sessionStore.requireCurrent(ctx.sessionRef);
   // The focus above already crossed the seam; expiry is idempotent, but keep it
   // explicit at the type dispatch so it does not rely on the focus-first order.
   expireRefFrame(session);
@@ -376,7 +387,7 @@ async function dispatchFocusForFindMatch(
   ctx: FindContext,
   match: ResolvedMatch,
 ): Promise<DaemonResponse> {
-  const { req, logPath, session } = ctx;
+  const { req, logPath } = ctx;
   const coveredResponse = rejectCoveredFindMatch(match, 'be focused');
   if (coveredResponse) return coveredResponse;
   const coords = match.resolvedNode.rect ? centerOfRect(match.resolvedNode.rect) : null;
@@ -386,6 +397,7 @@ async function dispatchFocusForFindMatch(
   // ADR 0014 side-effect seam: mutating find focus/type dispatch the device
   // command directly (they do not re-enter the interaction leaf), so expire the
   // frame here before the device op. Pre-seam guards above preserve the frame.
+  const session = ctx.sessionStore.requireCurrent(ctx.sessionRef);
   expireRefFrame(session);
   // R40/R35: the operation came from the handler's ONE action-selected bind; the shared
   // executor is the single lexical owner of the `focusPoint` call.
@@ -416,10 +428,10 @@ function rejectCoveredFindMatch(match: ResolvedMatch, interaction: string): Daem
 }
 
 function recordFindAction(ctx: FindContext, match: ResolvedMatch, action: string): void {
-  const { req, sessionStore, session, command, publicFlags } = ctx;
+  const { req, sessionStore, sessionRef, command, publicFlags } = ctx;
   recordSessionAction(
     sessionStore,
-    session,
+    sessionRef,
     req,
     command,
     { ref: match.ref, action },

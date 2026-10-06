@@ -1,0 +1,15 @@
+appId: com.example.app
+---
+- repeat:
+    while:
+      platform: Android
+      notVisible: "Continue"
+    commands:
+      - tapOn: "Continue"
+- evalScript: ${output.counter = 0}
+- repeat:
+    times: 4
+    while:
+      true: ${output.counter < 3}
+    commands:
+      - evalScript: ${output.counter++}

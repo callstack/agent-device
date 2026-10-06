@@ -9,8 +9,8 @@ import {
   type AdoptStartedDurableCaptureParams,
   type DurableCaptureFinishIntent,
   type DurableCaptureRecoveryParams,
-  type DurableCaptureResourceDefinition,
-  type DurableCaptureSessionStore,
+  type DurableCaptureRecordDefinition,
+  type DurableCaptureSessionBinding,
   type FinishRecoveredDurableCaptureParams,
 } from '../durable-capture/index.ts';
 import type { LiveResourceHandle } from '@agent-device/contracts/durable-resource';
@@ -23,8 +23,8 @@ import type { DurableSessionResourceKind } from './durable-session-resource-kind
 
 export type { DurableCaptureFinishIntent, DurableSessionResourceKind };
 
-type AdoptStartedSessionCaptureParams<K extends string, H extends AsyncDisposable, S> = Omit<
-  AdoptStartedDurableCaptureParams<K, H, S>,
+type AdoptStartedSessionCaptureParams<K extends string, H extends AsyncDisposable> = Omit<
+  AdoptStartedDurableCaptureParams<K, H>,
   'reportUndurableCleanup'
 > &
   Readonly<{ admissionLedger: DurableCaptureAdmissionLedger }>;
@@ -34,21 +34,14 @@ type SessionCaptureRecoveryParams<K extends string, H extends LiveResourceHandle
   'definition' | 'resolveSessionDir'
 >;
 
-/**
- * Where the shared durable-capture mechanics meet the two authorities that stay with the session
- * owner: the admission ledger, which decides whether a failed adoption blocks a replacement start,
- * and the session store, whose naming rule turns a session id into the one directory its records
- * may occupy. The session record itself stays opaque behind `S`; only the definition's own
- * `sessionSlot` looks inside it.
- */
+/** The session binding owns its slot and path; the ledger owns failed-adoption admission. */
 export function createDurableCaptureResource<
   K extends DurableSessionResourceKind,
   H extends LiveResourceHandle<C>,
   C,
-  S,
->(definition: DurableCaptureResourceDefinition<K, H, C, S>) {
+>(definition: DurableCaptureRecordDefinition<K, C>) {
   const sessionResourcePath = (
-    sessionStore: DurableCaptureSessionStore<S>,
+    sessionStore: Readonly<{ resolveSessionDir(name: string): string }>,
     sessionName: string,
   ): string => definition.store.resolvePath(sessionStore.resolveSessionDir(sessionName));
   const recoveryParams = (
@@ -70,7 +63,7 @@ export function createDurableCaptureResource<
     }): ResourceOwnershipFence {
       return createNextDurableCaptureFence(definition, params);
     },
-    adoptStarted(params: AdoptStartedSessionCaptureParams<K, H, S>): Promise<void> {
+    adoptStarted(params: AdoptStartedSessionCaptureParams<K, H>): Promise<void> {
       return adoptStartedDurableCapture(
         definition,
         {
@@ -80,31 +73,27 @@ export function createDurableCaptureResource<
             else params.admissionLedger.blockUndurableCleanup(device, outcome.reason);
           },
         },
-        sessionResourcePath(params.sessionStore, params.sessionName),
+        definition.store.resolvePath(params.binding.sessionDir),
       );
     },
     finishLive(params: {
-      session: S;
-      sessionName: string;
-      sessionStore: DurableCaptureSessionStore<S>;
+      binding: DurableCaptureSessionBinding<K, H>;
       intent: DurableCaptureFinishIntent;
     }): Promise<C> {
       return finishLiveDurableCapture(
         definition,
         params,
-        sessionResourcePath(params.sessionStore, params.sessionName),
+        definition.store.resolvePath(params.binding.sessionDir),
       );
     },
     finishRecovered(params: FinishRecoveredDurableCaptureParams<K, H, C>): Promise<C> {
       return finishRecoveredDurableCapture(definition, params);
     },
-    forceCleanupLive(params: {
-      session: S;
-      sessionName?: string;
-      sessionStore?: DurableCaptureSessionStore<S>;
-      resourcePath: string;
-    }): Promise<void> {
-      return forceCleanupLiveDurableCapture(definition, params);
+    forceCleanupLive(params: { binding: DurableCaptureSessionBinding<K, H> }): Promise<void> {
+      return forceCleanupLiveDurableCapture(definition, {
+        ...params,
+        resourcePath: definition.store.resolvePath(params.binding.sessionDir),
+      });
     },
     recoverAll(params: SessionCaptureRecoveryParams<K, H, C>) {
       return recoverDurableCaptureResourcesAfterDaemonLock(recoveryParams(params));

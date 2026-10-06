@@ -17,6 +17,7 @@ export type DeviceLease = {
   leaseProvider?: string;
   deviceKey?: string;
   clientId?: string;
+  retainOnClose?: true;
   createdAt: number;
   heartbeatAt: number;
   expiresAt: number;

@@ -73,3 +73,27 @@ test('lease client rejects invalid control responses and preserves normalized er
       error.details?.reason === 'LEASE_SCOPE_MISMATCH',
   );
 });
+
+test('allocate reports whether the daemon kept retainOnClose on the lease', async () => {
+  const requests: Array<Omit<DaemonRequest, 'token'>> = [];
+  const lease = {
+    leaseId: 'lease-1',
+    tenantId: 'tenant-a',
+    runId: 'run-a',
+    backend: 'ios-instance',
+  };
+  const allocate = async (honored: boolean) =>
+    await createAgentDeviceClient(
+      {},
+      {
+        transport: async (request) => {
+          requests.push(request);
+          return { ok: true, data: { lease: honored ? { ...lease, retainOnClose: true } : lease } };
+        },
+      },
+    ).leases.allocate({ tenant: 'tenant-a', runId: 'run-a', retainOnClose: true });
+
+  assert.equal((await allocate(true)).retainOnClose, true);
+  assert.equal((await allocate(false)).retainOnClose, undefined);
+  assert.equal(requests[0]?.meta?.leaseRetainOnClose, true);
+});

@@ -1,3 +1,4 @@
+import { LEASE_BACKENDS } from '@agent-device/kernel/contracts';
 import { PROVIDER_DEVICE_ORIENTATIONS } from '@agent-device/contracts/remote';
 import type { FlagDefinition } from './flag-types.ts';
 
@@ -131,8 +132,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     key: 'leaseBackend',
     names: ['--lease-backend'],
     type: 'enum',
-    enumValues: ['ios-simulator', 'ios-instance', 'android-instance', 'harmonyos-instance'],
-    usageLabel: '--lease-backend ios-simulator|ios-instance|android-instance|harmonyos-instance',
+    enumValues: LEASE_BACKENDS,
+    usageLabel: `--lease-backend ${LEASE_BACKENDS.join('|')}`,
     usageDescription: 'Lease backend for remote tenant connection admission',
     projectConfig: false,
     recorded: false,

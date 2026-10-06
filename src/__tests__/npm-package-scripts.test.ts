@@ -27,8 +27,7 @@ function script(name: string): string {
   return value;
 }
 
-test('prepack builds the complete package without stopping the development daemon', () => {
-  assert.equal(script('prepack'), 'pnpm check:mcp-metadata && pnpm package:npm');
+test('the package build does not stop the development daemon', () => {
   assert.doesNotMatch(script('package:npm'), /clean:daemon|rebuild:cli/);
   assert.equal(packageJson.scripts['build:dev'], undefined);
 });
@@ -48,9 +47,6 @@ test('Fallow exposes one changed-code gate and an explicit full-tree audit', () 
   assert.equal(script('fallow:all'), 'fallow --summary');
 });
 
-// `check:package` verifies the tarball, so it has to observe every build output the package ships.
-// Keep construction separate from verification so release preparation can publish the exact tarball
-// that was installed and smoke-tested instead of rebuilding it during `npm publish`.
 test('the npm package build covers every package-owned output before verification', () => {
   assert.deepEqual(script('build:package').split(' && '), [
     'pnpm build',
@@ -68,31 +64,6 @@ test('the npm package build covers every package-owned output before verificatio
     'pnpm package:android-snapshot-helper:npm',
     'pnpm package:android-ime-helper:npm',
   ]);
-});
-
-test('release publishing uploads the tarball that passed the package gate', () => {
-  assert.equal(
-    script('release:prepare'),
-    'node scripts/release-mark-dev.mjs --check-release-version && rm -rf .tmp/release && pnpm check:mcp-metadata && pnpm build:package && pnpm check:package -- --pack-destination .tmp/release',
-  );
-  assert.equal(
-    script('release:publish'),
-    'pnpm release:prepare && npm publish --ignore-scripts .tmp/release/*.tgz && pnpm release:mark-dev',
-  );
-  assert.doesNotMatch(script('release:publish'), /prepack|package:npm/);
-});
-
-// AS-012: registry scanners diff the repository's tool surface per version string, so the
-// version on main must never equal a published version. Publishing marks main as unreleased
-// (`-dev` prerelease on the next patch) right after the upload, and preparation refuses to
-// publish while that marker is still in place.
-test('release publishing moves main off the released version', () => {
-  assert.match(
-    script('release:prepare'),
-    /^node scripts\/release-mark-dev\.mjs --check-release-version && /,
-  );
-  assert.match(script('release:publish'), / && pnpm release:mark-dev$/);
-  assert.equal(script('release:mark-dev'), 'node scripts/release-mark-dev.mjs');
 });
 
 test('the package checker can retain the tarball it verifies for publishing', () => {

@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import type {
   MaestroRuntimeOperationContext,
   MaestroRuntimeOperations,
@@ -7,6 +8,7 @@ import type {
   MaestroEngineOptions,
   MaestroEngineResult,
   MaestroRuntimePort,
+  MaestroRuntimeResult,
 } from '../engine-types.ts';
 import type { MaestroProgram } from '../program-ir.ts';
 import { compileMaestroReplayPlan } from '../replay-plan.ts';
@@ -32,6 +34,24 @@ export function createMaestroRuntimePort(operations: MaestroRuntimeOperations): 
   return {
     execute: async (request) => await executeMaestroRuntimeCommand(request, operations),
     observe: async (request) => await observeMaestroCondition(request, operations),
+  };
+}
+
+export function makePort(overrides: Partial<MaestroRuntimePort> = {}): MaestroRuntimePort {
+  return {
+    execute: vi.fn(async (request): Promise<MaestroRuntimeResult> => {
+      const { command } = request;
+      if (
+        command.kind !== 'takeScreenshot' &&
+        command.kind !== 'runScript' &&
+        command.kind !== 'waitForAnimationToEnd'
+      ) {
+        request.invalidateObservation();
+      }
+      return command.kind === 'takeScreenshot' ? { artifactPaths: [command.path] } : {};
+    }),
+    observe: vi.fn(async ({ generation }) => ({ generation, matched: true })),
+    ...overrides,
   };
 }
 

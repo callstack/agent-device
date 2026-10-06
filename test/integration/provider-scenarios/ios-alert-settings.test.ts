@@ -200,6 +200,20 @@ function createRecordingPlatformRuntimeGateway(params: {
       }
       const appleOs = device.appleOs;
       const interactor = await applePlugin.createInteractor(device, {});
+      // Each alert leg resolves its interactor per call from the input's execution metadata,
+      // exactly like the production alert binding. The request-scoped runner provider is keyed by
+      // the request id that metadata carries, so a bind-time interactor with an empty runner
+      // context would miss the scripted provider and fall through to the local XCTest runner.
+      const runAlertLeg = async (
+        leg: 'readAlert' | 'awaitAlert' | 'acceptAlert' | 'dismissAlert',
+        input: AlertRuntimeInput,
+      ): Promise<Record<string, unknown>> => {
+        const alertInteractor = await applePlugin.createInteractor(device, {
+          ...input.execution,
+          appBundleId: input.appBundleId,
+        });
+        return await alertInteractor[leg]!(alertOptions(input));
+      };
       return {
         device,
         owner,
@@ -284,10 +298,10 @@ function createRecordingPlatformRuntimeGateway(params: {
           // R59 does the same for `alert`: the scenario's gateway states and serves the four
           // legs, reusing the Apple family's own module so the runner transcript this scenario
           // scripts — including its retry and poll windows — is what actually runs.
-          readAlert: async (input) => await interactor.readAlert!(alertOptions(input)),
-          awaitAlert: async (input) => await interactor.awaitAlert!(alertOptions(input)),
-          acceptAlert: async (input) => await interactor.acceptAlert!(alertOptions(input)),
-          dismissAlert: async (input) => await interactor.dismissAlert!(alertOptions(input)),
+          readAlert: async (input) => await runAlertLeg('readAlert', input),
+          awaitAlert: async (input) => await runAlertLeg('awaitAlert', input),
+          acceptAlert: async (input) => await runAlertLeg('acceptAlert', input),
+          dismissAlert: async (input) => await runAlertLeg('dismissAlert', input),
           appLogReattach: async () => ({ status: 'missing' }),
           appLogCleanup: async () => ({ status: 'already-missing' }),
           resolveOpenTarget: async (input) => ({

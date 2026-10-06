@@ -190,7 +190,7 @@ function scenario() {
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   return { sessionStore, sessionName, logPath: path.join(root, 'daemon.log') };
 }
 

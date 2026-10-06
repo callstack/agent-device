@@ -20,7 +20,7 @@ import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts'
 test('open web URL on iOS device session without active app falls back to Safari', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-device-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       platform: 'apple',
@@ -62,7 +62,7 @@ test('open web URL on iOS device session without active app falls back to Safari
 test('open web URL on iOS simulator session without active app falls back to Safari', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-simulator-session';
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       platform: 'apple',
@@ -112,7 +112,7 @@ test('open web URL on iOS simulator session without active app falls back to Saf
 test('open app and URL on existing iOS device session keeps app context', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-device-session';
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, {
       platform: 'apple',
       id: 'ios-device-1',
@@ -159,7 +159,7 @@ test('open app and URL on existing iOS device session keeps app context', async 
 test('open app on existing macOS session resolves and stores bundle id', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'macos-session';
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, {
       platform: 'apple',
       appleOs: 'macos',
@@ -234,7 +234,7 @@ test('open rejects --surface on non-macOS devices', async () => {
 test('open on existing macOS frontmost-app session preserves surface without --surface flag', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'macos-frontmost-existing';
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, {
       platform: 'apple',
       appleOs: 'macos',
@@ -295,7 +295,7 @@ test('open on existing macOS frontmost-app session preserves surface without --s
 test('open on existing iOS session refreshes unavailable simulator by name', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-session';
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, {
       platform: 'apple',
       id: 'stale-sim',
@@ -361,7 +361,7 @@ test('open on existing iOS session refreshes unavailable simulator by name', asy
 test('open app on existing Android session resolves and stores package id', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-session';
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, {
       platform: 'android',
       id: 'emulator-5554',
@@ -404,7 +404,7 @@ test('open app on existing Android session resolves and stores package id', asyn
 test('open intent target on existing Android session clears stale package context', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-session';
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, {
       platform: 'android',
       id: 'emulator-5554',
@@ -455,7 +455,7 @@ test('open on existing Android session preserves a comparable freshness baseline
     type: 'android.widget.TextView',
     label: `Inbox row ${index + 1}`,
   }));
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, {
       platform: 'android',
       id: 'emulator-5554',

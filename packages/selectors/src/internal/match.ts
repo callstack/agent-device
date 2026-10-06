@@ -1,7 +1,7 @@
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { isNodeEditable, isNodeVisible } from './node.ts';
-import { extractNodeText, normalizeType } from '@agent-device/contracts/snapshot';
+import { isNodeEditable, isNodeVisible, roleSpellingsOfNode } from './node.ts';
+import { extractNodeText } from '@agent-device/contracts/snapshot';
 import { normalizeText } from './find.ts';
 import type { Selector, SelectorTerm } from './parse.ts';
 
@@ -22,7 +22,7 @@ function matchesTerm(
     case 'id':
       return textEquals(node.identifier, String(term.value));
     case 'role':
-      return textEquals(normalizeType(node.type ?? ''), String(term.value));
+      return matchesRoleKind(node, String(term.value));
     case 'label':
       return textEquals(node.label, String(term.value));
     case 'value':
@@ -54,4 +54,17 @@ function matchesTerm(
 
 function textEquals(value: string | undefined, query: string): boolean {
   return normalizeText(value ?? '') === normalizeText(query);
+}
+
+/**
+ * `role=` matches the canonical `kind` vocabulary (#3021): a term value equals
+ * the node's role kind, or one of the legacy spellings still windowed for that
+ * node. Both come from {@link roleSpellingsOfNode} — the same `kind`
+ * `attachRefs` publishes and the same `normalizeType` that RECORDS selector
+ * chains — so the selector, the `find role=` locator, snapshot output, and
+ * recorded scripts cannot disagree about a node's role.
+ */
+function matchesRoleKind(node: SnapshotNode, query: string): boolean {
+  const normalizedQuery = normalizeText(query);
+  return roleSpellingsOfNode(node).some((spelling) => normalizeText(spelling) === normalizedQuery);
 }

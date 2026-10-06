@@ -24,6 +24,7 @@ export async function dispatchSnapshotViaRuntime(
       sessionName: resolvedSessionName,
       req: request,
       snapshotScope,
+      getSession,
     }) => {
       const result = await agentRuntime.capture.snapshot({
         session: resolvedSessionName,
@@ -34,16 +35,13 @@ export async function dispatchSnapshotViaRuntime(
       // This request's own capture, read here rather than off the stored snapshot: a snapshot that
       // failed before capturing must not inherit the previous command's repair (#2682).
       if (result.targetActivation) captureProof.targetActivation ??= result.targetActivation;
-      const refsGeneration = publishedSnapshotGeneration(
-        request,
-        params.sessionStore.get(resolvedSessionName),
-      );
+      const refsGeneration = publishedSnapshotGeneration(request, getSession());
       const publicNodes = stripAndroidSystemChromeProvenance(result.nodes);
       const publicResult = copySnapshotClickabilityEvidence(
         result,
         publicNodes === result.nodes ? result : { ...result, nodes: publicNodes },
       );
-      const session = params.sessionStore.get(resolvedSessionName);
+      const session = getSession();
       const fallbackScreenshot = await captureSparseFallbackScreenshot({
         req: request,
         session,

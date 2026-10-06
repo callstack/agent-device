@@ -9,9 +9,7 @@ import {
 import {
   makeAndroidSession,
   makeIosSession,
-  makeSession,
 } from '../../__tests__/test-utils/session-factories.ts';
-import { LINUX_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
@@ -196,7 +194,7 @@ test('leased session admission uses stored lease metadata and heartbeats', async
     clientId: 'client-a',
     deviceKey: 'ios:sim-1',
   });
-  sessionStore.set(
+  sessionStore.publish(
     'default',
     makeIosSession('default', {
       lease: {
@@ -239,7 +237,7 @@ test('leased session heartbeat is serialized with the request execution lock', a
     clientId: 'client-a',
     deviceKey: 'ios:sim-1',
   });
-  sessionStore.set(
+  sessionStore.publish(
     'default',
     makeIosSession('default', {
       lease: {
@@ -295,7 +293,7 @@ test('leased session heartbeat is serialized with the request execution lock', a
 
 test('a later external command cannot interleave with replay observation finalization', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
-  sessionStore.set('default', makeIosSession('default'));
+  sessionStore.publish('default', makeIosSession('default'));
   const leaseRegistry = new LeaseRegistry();
   const replay = await createRequestExecutionScope({
     req: makeRequest({ command: 'replay' }),
@@ -352,7 +350,7 @@ test('a fresh replay keeps its session lock after a nested open binds the device
   const replayRun = replay.runLocked(
     async () =>
       await new Promise<void>((resolve) => {
-        sessionStore.set('default', makeIosSession('default'));
+        sessionStore.publish('default', makeIosSession('default'));
         finishReplay = resolve;
         sessionOpened();
       }),
@@ -381,7 +379,7 @@ test('leased session rejects mismatched lease id before dispatch', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
-  sessionStore.set(
+  sessionStore.publish(
     'default',
     makeIosSession('default', {
       lease: {
@@ -412,7 +410,7 @@ test.each([
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
-  sessionStore.set(
+  sessionStore.publish(
     'default',
     makeIosSession('default', {
       lease: {
@@ -440,7 +438,7 @@ test.each([
 
 test('local unleased session admission still succeeds', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
-  sessionStore.set('default', makeIosSession('default'));
+  sessionStore.publish('default', makeIosSession('default'));
 
   const scope = await createRequestExecutionScope({
     req: makeRequest({ command: 'snapshot' }),
@@ -453,7 +451,7 @@ test('local unleased session admission still succeeds', async () => {
 
 test('local unleased session ignores stale lease id without tenant scope', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
-  sessionStore.set('default', makeIosSession('default'));
+  sessionStore.publish('default', makeIosSession('default'));
   const scope = await createRequestExecutionScope({
     req: makeRequest({
       command: 'snapshot',
@@ -475,7 +473,7 @@ test('provider lease admission succeeds without a device key', async () => {
     leaseBackend: 'android-instance',
     leaseProvider: 'limrun',
   });
-  sessionStore.set(
+  sessionStore.publish(
     'default',
     makeAndroidSession('default', {
       lease: {
@@ -497,45 +495,6 @@ test('provider lease admission succeeds without a device key', async () => {
   expect(scope.sessionName).toBe('default');
 });
 
-test('expired leases remove owned sessions before the next command and free capacity', async () => {
-  let now = 1_000;
-  const sessionStore = makeSessionStore('agent-device-request-scope-');
-  const leaseRegistry = new LeaseRegistry({
-    maxActiveSimulatorLeases: 1,
-    defaultLeaseTtlMs: 10,
-    minLeaseTtlMs: 1,
-    now: () => now,
-  });
-  const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
-  sessionStore.set(
-    'default',
-    makeSession('default', {
-      device: LINUX_DEVICE,
-      lease: {
-        leaseId: lease.leaseId,
-        tenantId: lease.tenantId,
-        runId: lease.runId,
-        leaseBackend: lease.backend,
-        leaseProvider: 'proxy',
-        deviceKey: 'ios:SIM-001',
-        expiresAt: lease.expiresAt,
-      },
-    }),
-  );
-  now = 1_011;
-
-  const scope = await createRequestExecutionScope({
-    req: makeRequest({ command: 'snapshot' }),
-    sessionStore,
-    leaseRegistry,
-  });
-  await scope.runLocked(async () => 'ran');
-
-  expect(sessionStore.get('default')).toBeUndefined();
-  const nextLease = leaseRegistry.allocateLease({ tenantId: 'tenant-b', runId: 'run-2' });
-  expect(nextLease.tenantId).toBe('tenant-b');
-});
-
 // A lease renewed only at admission lets one command slower than its inactivity TTL
 // expire the lease paying for the device it is using, and expiry then tears the
 // provider session down under the client still waiting for that same command. Found
@@ -550,7 +509,7 @@ test('an admitted request that outlives the lease TTL keeps its lease and sessio
     now: () => now,
   });
   const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
-  sessionStore.set(
+  sessionStore.publish(
     'default',
     makeIosSession('default', {
       lease: {
@@ -591,7 +550,7 @@ test('expired leased session cleanup waits for the request execution lock', asyn
     now: () => now,
   });
   const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
-  sessionStore.set(
+  sessionStore.publish(
     'default',
     makeIosSession('default', {
       lease: {
@@ -682,7 +641,7 @@ test('tenant lease rejection flushes diagnostics into the effective session requ
 
 test('prepareLockedRequestScope preserves existing-session selector validation', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
-  sessionStore.set('default', makeAndroidSession('default'));
+  sessionStore.publish('default', makeAndroidSession('default'));
   const scope = await createRequestExecutionScope({
     req: makeRequest({
       command: 'snapshot',
@@ -713,7 +672,7 @@ test('prepareLockedRequestScope blocks commands for invalidated recordings befor
     showTouches: true,
     invalidatedReason: 'iOS runner session restarted during recording',
   });
-  sessionStore.set('default', session);
+  sessionStore.publish('default', session);
   const scope = await createRequestExecutionScope({
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
@@ -741,7 +700,7 @@ test('prepareLockedRequestScope blocks commands for invalidated recordings befor
 
 test('prepareLockedRequestScope passes the session runner log path into handler context', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
-  sessionStore.set('default', makeIosSession('default'));
+  sessionStore.publish('default', makeIosSession('default'));
   const scope = await createRequestExecutionScope({
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
@@ -764,7 +723,7 @@ test('prepareLockedRequestScope passes the session runner log path into handler 
 test('prepareLockedRequestScope streams ordinary diagnostics into the active trace', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   const tracePath = path.join(TEST_ROOT, 'active-session.trace');
-  sessionStore.set(
+  sessionStore.publish(
     'default',
     makeIosSession('default', {
       trace: { outPath: tracePath, startedAt: Date.now() },
@@ -808,7 +767,7 @@ test('runLocked rejects a canceled request before executing work', async () => {
 test('runLocked rejects a request canceled while waiting for its execution lock', async () => {
   const requestId = 'request-scope-canceled-after-lock';
   const sessionStore = makeSessionStore('agent-device-request-scope-');
-  sessionStore.set('default', makeIosSession('default'));
+  sessionStore.publish('default', makeIosSession('default'));
   const leaseRegistry = new LeaseRegistry();
   const first = await createRequestExecutionScope({
     req: makeRequest({ command: 'click' }),
@@ -908,7 +867,7 @@ test('router: deferred tenant connect still refuses an app-target close before d
 // run-scoped), so a missing lease field alone is not proof of ownership.
 test('router: an existing lease-less session under tenant isolation still refuses close', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
-  sessionStore.set('tenant-a:default', makeIosSession('tenant-a:default'));
+  sessionStore.publish('tenant-a:default', makeIosSession('tenant-a:default'));
   const leaseRegistry = new LeaseRegistry();
 
   const scope = await createRequestExecutionScope({
@@ -947,11 +906,11 @@ async function createScopeAcrossTwoImplicitWorkspaceSessions(command: string) {
   const scope = resolveSessionScope({ ...makeRequest({ command }), meta: { cwd: root } });
   if (scope.kind !== 'cwd') throw new Error('expected a cwd session scope');
   const sessionStore = makeSessionStore('agent-device-request-scope-ambiguity-');
-  sessionStore.set(
+  sessionStore.publish(
     `cwd:${scope.id}:ios`,
     makeIosSession('default', { sessionScope: { kind: 'cwd', id: scope.id } }),
   );
-  sessionStore.set(
+  sessionStore.publish(
     `cwd:${scope.id}:android`,
     makeAndroidSession('default', { sessionScope: { kind: 'cwd', id: scope.id } }),
   );

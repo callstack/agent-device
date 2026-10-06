@@ -25,11 +25,16 @@ import {
 } from '../../../request-dispatch-ledger.ts';
 import type { BindDeviceRuntime } from '../../../request-runtime-binding.ts';
 import { clearAndroidObservationFixture } from '../../../__tests__/android-observation-fixture.ts';
+import { activateCompleteRefFrame, expireRefFrame } from '../../../ref-frame.ts';
 import { handleInteractionCommands } from '../../index.ts';
 import type { InteractionRouteInput } from '../types.ts';
 import { assertAndroidPressStayedInApp } from '../interaction-android-escape.ts';
 import { gestureRuntimeBindingsFixture } from './gesture-runtime-bindings.fixtures.ts';
-import { contextFromFlags, makeSession } from './interaction-touch-fixtures.ts';
+import {
+  contextFromFlags,
+  makeSession,
+  makeStaleRefSession,
+} from './interaction-touch-fixtures.ts';
 
 // contracts/fixtures/dispatch-disclosure.json, daemon and post-action guard rows: the daemon rows
 // drive a real `press` through the daemon interaction handler, inside the router's dispatch seam,
@@ -87,7 +92,7 @@ async function press({
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const response = await routeInteraction({
     req: { token: 't', session: session.name, command, positionals, flags },
     sessionName: session.name,
@@ -184,7 +189,7 @@ async function swipeRefusedOnSecondRepetition(): Promise<unknown> {
   }
   const sessionStore = makeSessionStore();
   const session = makeSession('dispatch-disclosure-swipe');
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const response = await routeInteraction({
     req: {
       token: 't',
@@ -210,13 +215,117 @@ async function swipeRefusedOnSecondRepetition(): Promise<unknown> {
   throw new AppError(response.error.code, response.error.message, response.error.details);
 }
 
+/** A stale drag ref is rejected before binding any gesture operation. */
+async function gestureDragRefusedBeforeDispatch(): Promise<unknown> {
+  const gestures = gestureRuntimeBindingsFixture();
+  const sessionStore = makeSessionStore();
+  const session = makeStaleRefSession('dispatch-disclosure-stale-drag');
+  expireRefFrame(session);
+  sessionStore.publish(session.name, session);
+  const response = await routeInteraction({
+    req: {
+      token: 't',
+      session: session.name,
+      command: 'gesture',
+      positionals: [],
+      flags: {},
+      input: {
+        kind: 'drag',
+        source: '@e1',
+        destination: '@e2',
+        sourceHoldMs: 100,
+        moveMs: 100,
+        destinationHoldMs: 100,
+      },
+    },
+    sessionName: session.name,
+    sessionStore,
+    contextFromFlags,
+    inspectFacts: gestures.inspectFacts,
+    bindDevice: gestures.bindDevice,
+  });
+  assert.ok(response && !response.ok, 'expected stale drag admission to fail');
+  assert.equal(response.error.details?.reason, 'ref_frame_expired');
+  assert.equal(gestures.bindDevice.mock.calls.length, 0, 'admission must precede runtime binding');
+  throw new AppError(response.error.code, response.error.message, response.error.details);
+}
+
+async function refRefusedAfterAndroidRecovery(command: 'press' | 'gesture'): Promise<unknown> {
+  const gestures = gestureRuntimeBindingsFixture();
+  const sessionStore = makeSessionStore();
+  const session = makeAndroidSession('dispatch-disclosure-recovered-drag', {
+    appBundleId: 'com.example.app',
+  });
+  session.snapshot = makeStaleRefSession('recovery-frame').snapshot;
+  activateCompleteRefFrame(session);
+  sessionStore.publish(session.name, session);
+  const tap = vi.fn(clearAndroidObservationFixture.tap);
+  const openApp = vi.fn(clearAndroidObservationFixture.openApp);
+  const androidObservation: AndroidObservationAdapter = {
+    ...clearAndroidObservationFixture,
+    readBlockingDialog: async () => ({
+      status: 'dialog',
+      focus: { package: 'com.example.app', focusedWindow: 'Application Not Responding', raw: '' },
+    }),
+    readSnapshotNodes: async () => [
+      {
+        index: 0,
+        ref: 'e0',
+        type: 'Button',
+        label: 'Close app',
+        rect: { x: 10, y: 20, width: 100, height: 40 },
+      },
+    ],
+    tap,
+    openApp,
+  };
+  const response = await routeInteraction({
+    req: {
+      token: 't',
+      session: session.name,
+      command,
+      positionals: command === 'press' ? ['@e1'] : [],
+      flags: {},
+      input: {
+        kind: 'drag',
+        source: '@e1',
+        destination: '@e2',
+        sourceHoldMs: 100,
+        moveMs: 100,
+        destinationHoldMs: 100,
+      },
+    },
+    sessionName: session.name,
+    sessionStore,
+    contextFromFlags,
+    ...(command === 'gesture'
+      ? { inspectFacts: gestures.inspectFacts, bindDevice: gestures.bindDevice }
+      : getRuntimeBindings()),
+    androidObservation,
+  });
+  assert.ok(response && !response.ok, 'expected stale drag admission to fail after recovery');
+  assert.equal(response.error.details?.reason, 'ref_frame_expired');
+  assert.equal(tap.mock.calls.length, 1);
+  assert.equal(openApp.mock.calls.length, 1);
+  assert.equal(mockTapPoint.mock.calls.length, 0);
+  if (command === 'gesture') {
+    assert.equal(gestures.bindDevice.mock.calls.length, 0);
+    assert.equal(
+      response.error.details?.warning,
+      'Recovered Android app ANR before gesture: closed and relaunched com.example.app.',
+    );
+    assert.match(response.error.hint ?? '', /Capture a fresh interactive snapshot/);
+  }
+  throw new AppError(response.error.code, response.error.message, response.error.details);
+}
+
 /** An Android press whose tap returns and whose post-press foreground read is refused with `no`. */
 async function pressThenForegroundReadRefused(): Promise<unknown> {
   const session = makeAndroidSession('dispatch-disclosure-post-dispatch', {
     appBundleId: 'com.example.app',
   });
   const sessionStore = makeSessionStore();
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const readRefusal = new AppError('COMMAND_FAILED', 'adb device offline', { dispatched: 'no' });
   const androidObservation: AndroidObservationAdapter = {
     ...clearAndroidObservationFixture,
@@ -247,6 +356,10 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
   'daemon.refusal.selector-readiness-exhausted': pressWhoseTargetNeverAppears,
   'daemon.unclassified': () => pressAfterUnclassifiedTouchFailure(),
   'daemon.series.swipe-later-repetition-refused': swipeRefusedOnSecondRepetition,
+  'daemon.refusal.gesture-drag-admission': gestureDragRefusedBeforeDispatch,
+  'daemon.post-dispatch.gesture-drag-after-recovery': () =>
+    refRefusedAfterAndroidRecovery('gesture'),
+  'daemon.post-dispatch.ref-after-android-recovery': () => refRefusedAfterAndroidRecovery('press'),
   'daemon.post-dispatch.press-then-foreground-read-refused': pressThenForegroundReadRefused,
   'daemon.read-only-command': () =>
     press({ command: 'get', positionals: ['text', 'label="Missing"'] }),
@@ -325,7 +438,7 @@ test('a read-only command discloses no over a producer verdict it throws', async
 test('a plain Error a backend throws reaches the wire with dispatched unknown', async () => {
   const sessionStore = makeSessionStore();
   const session = makeSession('dispatch-disclosure-plain-error');
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const bindings = getRuntimeBindings();
   const bindDevice = vi.fn(async () => {
     throw new Error('socket hang up');

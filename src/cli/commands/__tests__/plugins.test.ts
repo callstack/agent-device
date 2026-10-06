@@ -12,7 +12,6 @@ vi.mock('../../../provider-device-runtimes.ts', () => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  vi.unstubAllEnvs();
 });
 
 test('plugins list and remove route through the CLI and emits JSON without daemon access or plugin evaluation', async () => {

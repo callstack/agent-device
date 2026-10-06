@@ -7,6 +7,7 @@ import {
 // Declared in contracts/ so zones below remote/ can be stated in terms of the field vocabulary;
 // re-exported here because this module is where consumers already import it from.
 export type { RemoteConnectionProfileFields } from '@agent-device/contracts/remote';
+import { LEASE_BACKENDS } from '@agent-device/kernel/contracts';
 import { buildPrimaryEnvVarName } from '@agent-device/kernel/source-value';
 import {
   PLATFORM_SELECTORS,
@@ -58,11 +59,7 @@ export const REMOTE_CONFIG_FIELD_SPECS = [
   { key: 'sessionIsolation', type: 'enum', enumValues: ['none', 'tenant'] },
   { key: 'runId', type: 'string' },
   { key: 'leaseId', type: 'string' },
-  {
-    key: 'leaseBackend',
-    type: 'enum',
-    enumValues: ['ios-simulator', 'ios-instance', 'android-instance', 'harmonyos-instance'],
-  },
+  { key: 'leaseBackend', type: 'enum', enumValues: LEASE_BACKENDS },
   { key: 'platform', type: 'enum', enumValues: PLATFORM_SELECTORS },
   { key: 'target', type: 'enum', enumValues: ['mobile', 'tv', 'desktop'] },
   { key: 'device', type: 'string' },

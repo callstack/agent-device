@@ -4,13 +4,15 @@ import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionRef, SessionRuntimeHints, SessionState } from './session-state.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
+import { isSafeSessionSegment, safeSessionName } from '@agent-device/host-kit/session-paths';
 import {
-  expandSessionPath,
-  isSafeSessionSegment,
-  safeSessionName,
-} from '@agent-device/host-kit/session-paths';
+  resolveSessionDir,
+  resolveSessionAppLogPath,
+  resolveSessionAppLogPidPath,
+} from './session-artifact-paths.ts';
 import {
   readRepairTombstoneFile,
+  clearRepairTombstoneFile,
   resolveRepairTombstonePath,
   type RepairSessionTombstone,
 } from '../session-repair-tombstone.ts';
@@ -42,9 +44,12 @@ import {
 } from '@agent-device/session-journal/session-event-log';
 
 const REPAIR_TOMBSTONE_TTL_MS = 60 * 60_000;
+type SessionEntry = { current: SessionState };
+type SessionPatch = Partial<SessionState> | ((current: SessionState) => Partial<SessionState>);
 
 export class SessionStore {
-  private readonly sessions = new Map<string, SessionState>();
+  private readonly sessions = new Map<string, SessionEntry>();
+  private acceptingSessions = true;
   private readonly runtimeHints = new Map<string, SessionRuntimeHints>();
   private readonly sessionsDir: string;
   private readonly scriptWriter: SessionScriptWriter;
@@ -55,43 +60,92 @@ export class SessionStore {
   }
 
   /**
-   * Returns the LIVE record, not a copy: mutating a field on the result is a durable write
-   * to store state whether or not {@link SessionStore.set} is called afterwards. Which
-   * modules may do that is declared in `SESSION_STATE_FIELD_OWNERS`
-   * (`scripts/layering/session-state.ts`) and enforced by the layering gate's R7, because
-   * nothing here can check the invariant a given field carries.
+   * Returns the live record. Field owners may mutate it through their transitions;
+   * record rebuilds use a lifetime-checked update. R7 enforces field ownership.
    */
   get(name: string): SessionState | undefined {
-    return this.sessions.get(name);
+    return this.sessions.get(name)?.current;
   }
 
-  /**
-   * Insert or replace a session. Calling this with a record obtained from
-   * {@link SessionStore.get} is a no-op — the reference is already stored — so the call
-   * documents intent rather than committing anything; a genuinely new record needs it.
-   */
-  set(name: string, session: SessionState): void {
-    // A key with no record is a NEW occupant, and the previous occupant's idle-expiry marker must
-    // stop explaining this key's absences from now on. Clearing it here rather than at `open` covers
-    // every way a record arrives — `open`'s provisional record, a record-only `record` session — and
-    // cannot be forgotten by a future insertion path. A replacing `open` on a live session takes the
-    // other branch and keeps whatever marker that session will earn for itself.
-    const occupying = this.sessions.has(name);
-    this.sessions.set(name, session);
-    if (!occupying) this.clearIdleExpiryTombstone(name);
+  closeAdmission(): void {
+    this.acceptingSessions = false;
   }
 
-  delete(name: string): boolean {
-    this.runtimeHints.delete(name);
-    return this.sessions.delete(name);
+  assertAdmissionOpen(address: string): void {
+    if (!this.acceptingSessions) {
+      throw new AppError('COMMAND_FAILED', 'Daemon is shutting down', {
+        reason: 'daemon_shutting_down',
+        session: address,
+      });
+    }
   }
 
-  values(): IterableIterator<SessionState> {
-    return this.sessions.values();
+  assertPublishable(address: string): void {
+    this.assertAdmissionOpen(address);
+    if (this.sessions.has(address)) {
+      throw new AppError('COMMAND_FAILED', 'Session address is already occupied', {
+        reason: 'session_address_occupied',
+        session: address,
+      });
+    }
+  }
+
+  publish(address: string, session: SessionState): SessionRef {
+    this.assertPublishable(address);
+    const entry = { current: session };
+    this.sessions.set(address, entry);
+    this.clearIdleExpiryTombstone(address);
+    return this.captureRef(address, entry);
+  }
+
+  resolveCurrent(ref: SessionRef): SessionState | undefined {
+    const entry = this.sessions.get(ref.address);
+    return entry === ref.lifetime ? entry.current : undefined;
+  }
+
+  refresh(ref: SessionRef): SessionRef {
+    const entry = this.sessions.get(ref.address);
+    return entry === ref.lifetime ? this.captureRef(ref.address, entry) : ref;
+  }
+
+  requireCurrent(ref: SessionRef): SessionState {
+    const session = this.resolveCurrent(ref);
+    if (!session) {
+      throw new AppError('COMMAND_FAILED', 'Session lifetime has ended', {
+        reason: 'session_lifetime_ended',
+        session: ref.address,
+        hint: 'Open a new session before retrying the command.',
+      });
+    }
+    return session;
+  }
+
+  /** Patch callbacks are synchronous and must not call back into the store. */
+  update(ref: SessionRef, patch: SessionPatch): SessionState {
+    const current = this.requireCurrent(ref);
+    const entry = this.sessions.get(ref.address)!;
+    const changes = typeof patch === 'function' ? patch(current) : patch;
+    const next = { ...current, ...changes };
+    entry.current = next;
+    return next;
+  }
+
+  retire(ref: SessionRef): boolean {
+    if (!this.resolveCurrent(ref)) return false;
+    this.runtimeHints.delete(ref.address);
+    return this.sessions.delete(ref.address);
+  }
+
+  private captureRef(address: string, entry: SessionEntry): SessionRef {
+    return Object.freeze({ address, session: entry.current, lifetime: entry });
+  }
+
+  *values(): IterableIterator<SessionState> {
+    for (const entry of this.sessions.values()) yield entry.current;
   }
 
   toArray(): SessionState[] {
-    return Array.from(this.sessions.values());
+    return Array.from(this.values());
   }
 
   /**
@@ -100,40 +154,41 @@ export class SessionStore {
    * falls back to `SessionState.name` (#2031/#1394).
    */
   lookup(address: string): SessionRef | undefined {
-    const session = this.sessions.get(address);
-    return session ? { address, session } : undefined;
+    const entry = this.sessions.get(address);
+    return entry ? this.captureRef(address, entry) : undefined;
   }
 
   /** The session currently bound to `deviceId`, with its address, or `undefined` if none is. */
   findByDevice(deviceId: string): SessionRef | undefined {
-    for (const [address, session] of this.sessions) {
-      if (session.device.id === deviceId) return { address, session };
+    for (const [address, entry] of this.sessions) {
+      if (entry.current.device.id === deviceId) return this.captureRef(address, entry);
     }
     return undefined;
   }
 
   /** Every live session with its address, for surfaces that must report what `--session` accepts. */
   listRefs(): SessionRef[] {
-    return Array.from(this.sessions, ([address, session]) => ({ address, session }));
+    return Array.from(this.sessions, ([address, entry]) => this.captureRef(address, entry));
   }
 
   getRuntimeHints(name: string): SessionRuntimeHints | undefined {
     return this.runtimeHints.get(name);
   }
 
-  setRuntimeHints(name: string, hints: SessionRuntimeHints): void {
-    this.runtimeHints.set(name, hints);
+  setRuntimeHints(address: string, hints: SessionRuntimeHints | undefined): void {
+    if (hints) this.runtimeHints.set(address, hints);
+    else this.runtimeHints.delete(address);
   }
 
-  clearRuntimeHints(name: string): boolean {
-    return this.runtimeHints.delete(name);
+  clearRuntimeHints(ref: SessionRef): boolean {
+    this.requireCurrent(ref);
+    return this.runtimeHints.delete(ref.address);
   }
 
-  recordAction(session: SessionState, entry: RecordActionEntry): void {
-    const action = recordActionEntry(session, entry);
+  recordAction(ref: SessionRef, entry: RecordActionEntry): void {
+    const action = recordActionEntry(this.requireCurrent(ref), entry);
     if (action) {
-      const sessionName = this.resolveStoredSessionName(session);
-      appendActionEvent(this.resolveEventLogPath(sessionName), sessionName, action);
+      appendActionEvent(this.resolveEventLogPath(ref.address), ref.address, action);
     }
   }
 
@@ -154,10 +209,8 @@ export class SessionStore {
     );
   }
 
-  writeSessionLog(
-    session: SessionState,
-    options?: SessionScriptWriteOptions,
-  ): SessionScriptWriteResult {
+  writeSessionLog(ref: SessionRef, options?: SessionScriptWriteOptions): SessionScriptWriteResult {
+    const session = this.requireCurrent(ref);
     const result = this.scriptWriter.write(session, options);
     if (result.written) {
       emitDiagnostic({
@@ -196,22 +249,24 @@ export class SessionStore {
    * ordinary bounded `REPAIR_SESSION_EXPIRED` tombstone. A no-op for ordinary
    * (non-repair) sessions beyond the existing `writeSessionLog`.
    */
-  finalizeRepairTeardown(session: SessionState): void {
-    this.recordRepairFinalizeCloseIfCommitting(session);
+  finalizeRepairTeardown(ref: SessionRef): void {
+    const session = this.resolveCurrent(ref);
+    if (!session) return;
+    this.recordRepairFinalizeCloseIfCommitting(ref);
     // #1258: no live request here (idle-reap/daemon-shutdown teardown), so
     // the only source of `force` is whatever was persisted on the session at
     // arm time.
-    const result = this.writeSessionLog(session, {
+    const result = this.writeSessionLog(ref, {
       force: effectiveWriteForce(session, undefined),
     });
     if (isUncommittedRepairSession(session)) {
       if (!result.written && result.error) {
-        this.writeRepairTombstone(session, REPAIR_TOMBSTONE_TTL_MS, {
+        this.writeRepairTombstone(ref, REPAIR_TOMBSTONE_TTL_MS, {
           code: String(result.error.code),
           message: result.error.message,
         });
       } else {
-        this.writeRepairTombstone(session);
+        this.writeRepairTombstone(ref);
       }
     }
   }
@@ -224,10 +279,11 @@ export class SessionStore {
    * (incomplete) transaction's write is a no-op regardless, so there is
    * nothing to make self-contained.
    */
-  private recordRepairFinalizeCloseIfCommitting(session: SessionState): void {
+  private recordRepairFinalizeCloseIfCommitting(ref: SessionRef): void {
+    const session = this.requireCurrent(ref);
     const state = session.scriptPublication ?? NO_SCRIPT_PUBLICATION;
     if (!isRepairCommittable(state)) return;
-    this.recordAction(session, {
+    this.recordAction(ref, {
       command: 'close',
       positionals: [],
       flags: {},
@@ -247,15 +303,17 @@ export class SessionStore {
    * teardown.
    */
   writeRepairTombstone(
-    session: SessionState,
+    ref: SessionRef,
     ttlMs = REPAIR_TOMBSTONE_TTL_MS,
     commitFailure?: { code: string; message: string },
   ): void {
+    const session = this.resolveCurrent(ref);
+    if (!session) return;
     try {
-      const dir = this.resolveSessionDir(session.name);
+      const dir = this.resolveSessionDir(ref.address);
       fs.mkdirSync(dir, { recursive: true });
       const tombstone: RepairSessionTombstone = {
-        owner: session.name,
+        owner: ref.address,
         reapedAt: Date.now(),
         expiresAt: Date.now() + ttlMs,
         ...(repairSessionSourcePath(session)
@@ -263,13 +321,13 @@ export class SessionStore {
           : {}),
         ...(commitFailure ? { commitFailure } : {}),
       };
-      fs.writeFileSync(this.repairTombstonePath(session.name), `${JSON.stringify(tombstone)}\n`);
+      fs.writeFileSync(this.repairTombstonePath(ref.address), `${JSON.stringify(tombstone)}\n`);
     } catch (error) {
       emitDiagnostic({
         level: 'warn',
         phase: 'repair_tombstone_write_failed',
         data: {
-          session: session.name,
+          session: ref.address,
           error: error instanceof Error ? error.message : String(error),
         },
       });
@@ -278,14 +336,12 @@ export class SessionStore {
 
   /** Returns a non-expired repair tombstone for `sessionName`, or `undefined`. */
   readRepairTombstone(sessionName: string): RepairSessionTombstone | undefined {
-    return readRepairTombstoneFile(this.repairTombstonePath(sessionName));
+    return readRepairTombstoneFile(this.repairTombstonePath(sessionName), sessionName);
   }
 
   /** ADR 0012 R7 (C5a): a fresh `replay --save-script` on this key clears the tombstone. */
   clearRepairTombstone(sessionName: string): void {
-    try {
-      fs.rmSync(this.repairTombstonePath(sessionName), { force: true });
-    } catch {}
+    clearRepairTombstoneFile(this.repairTombstonePath(sessionName), sessionName);
   }
 
   /**
@@ -298,7 +354,7 @@ export class SessionStore {
    * never built, and its own `createdAt` already starts that session's deadline clock.
    */
   noteSessionActivity(address: string, atMs: number = Date.now()): void {
-    const session = this.sessions.get(address);
+    const session = this.get(address);
     if (!session) return;
     session.lastActivityAtMs = atMs;
   }
@@ -380,20 +436,8 @@ export class SessionStore {
     return path.join(this.sessionsDir, `${safeName}-${timestamp}.trace.log`);
   }
 
-  /**
-   * The one place a session name becomes a directory, so the invariant that every
-   * session dir lies beneath `sessionsDir` is enforced here rather than by each
-   * caller: `.` and `..` survive `safeSessionName` and would resolve to the
-   * sessions dir itself or the daemon state dir above it.
-   */
   resolveSessionDir(sessionName: string): string {
-    if (!isSafeSessionSegment(sessionName)) {
-      throw new AppError(
-        'INVALID_ARGS',
-        `Invalid session name ${JSON.stringify(sessionName)}: a session name cannot be empty, ".", or "..".`,
-      );
-    }
-    return path.join(this.sessionsDir, safeSessionName(sessionName));
+    return resolveSessionDir(this.sessionsDir, sessionName);
   }
 
   // Daemon state dir (parent of the `sessions/` dir), matching daemonPaths.baseDir. Called via
@@ -411,29 +455,14 @@ export class SessionStore {
 
   /** Path to session-scoped app log file. Agent can grep this for token-efficient debugging. */
   resolveAppLogPath(sessionName: string): string {
-    return path.join(this.resolveSessionDir(sessionName), 'app.log');
+    return resolveSessionAppLogPath(this.sessionsDir, sessionName);
   }
 
   resolveAppLogPidPath(sessionName: string): string {
-    return path.join(this.resolveSessionDir(sessionName), 'app-log.pid');
+    return resolveSessionAppLogPidPath(this.sessionsDir, sessionName);
   }
 
   resolveEventLogPath(sessionName: string): string {
     return resolveSessionEventLogPath(this.resolveSessionDir(sessionName));
-  }
-
-  static expandHome(filePath: string, cwd?: string): string {
-    return expandSessionPath(filePath, cwd);
-  }
-
-  /**
-   * Resolve the map key for a live session object. SessionState.name is the
-   * public session name, while the map key may include cwd/tenant isolation.
-   */
-  resolveStoredSessionName(session: SessionState): string {
-    for (const [name, value] of this.sessions) {
-      if (value === session) return name;
-    }
-    return session.name;
   }
 }

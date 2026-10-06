@@ -4,6 +4,7 @@ import { isActiveProviderDevice } from '../../provider-device-admission.ts';
 import { handleDoctorCommand } from '../session-doctor.ts';
 import { createHostDiagnostics } from '../../../platform-runtime-host-diagnostics.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { withTestDeviceInventory } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DaemonResponse } from '../../daemon-request.ts';
 
 const { mockAppleRunnerWarmupCheck } = vi.hoisted(() => ({
@@ -14,14 +15,6 @@ vi.mock('@agent-device/platform-apple/doctor', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/platform-apple/doctor')>()),
   appleRunnerWarmupCheck: mockAppleRunnerWarmupCheck,
 }));
-vi.mock('../session-doctor-device.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../session-doctor-device.ts')>();
-  return {
-    ...actual,
-    appendDeviceInventoryCheck: vi.fn(async () => undefined),
-    resolveDoctorDeviceForAppCheck: vi.fn(() => undefined),
-  };
-});
 vi.mock('../session-doctor-app.ts', () => ({
   appendAppChecks: vi.fn(async () => {}),
 }));
@@ -62,24 +55,52 @@ beforeEach(() => {
 
 async function runDoctorWithSessionDevice(device: DeviceInfo): Promise<DaemonResponse | null> {
   const sessionStore = makeSessionStore('agent-device-doctor-warmup-');
-  sessionStore.set('doctor-session', {
+  sessionStore.publish('doctor-session', {
     name: 'doctor-session',
     createdAt: Date.now(),
     device,
     actions: [],
   });
-  return await handleDoctorCommand({
-    req: {
-      token: 't',
-      session: 'doctor-session',
-      command: 'doctor',
-      positionals: [],
-      flags: { session: 'doctor-session' },
-    },
-    sessionName: 'doctor-session',
-    sessionStore,
-    hostDiagnostics: createHostDiagnostics(),
-  });
+  return await withTestDeviceInventory(
+    {},
+    async () =>
+      await handleDoctorCommand({
+        req: {
+          token: 't',
+          session: 'doctor-session',
+          command: 'doctor',
+          positionals: [],
+          flags: { session: 'doctor-session' },
+        },
+        sessionName: 'doctor-session',
+        sessionStore,
+        hostDiagnostics: createHostDiagnostics(),
+      }),
+  );
+}
+
+async function runSessionlessDoctor(
+  source: 'host' | 'provider',
+  flags: { targetApp?: string } = {},
+): Promise<DaemonResponse | null> {
+  const inventory =
+    source === 'host'
+      ? { local: async () => [IOS_SIMULATOR] }
+      : {
+          provider: {
+            discover: async () => ({ kind: 'inventory' as const, devices: [IOS_SIMULATOR] }),
+          },
+        };
+  return await withTestDeviceInventory(
+    inventory,
+    async () =>
+      await handleDoctorCommand({
+        req: { token: 't', session: 'default', command: 'doctor', positionals: [], flags },
+        sessionName: 'default',
+        sessionStore: makeSessionStore('agent-device-doctor-warmup-'),
+        hostDiagnostics: createHostDiagnostics(),
+      }),
+  );
 }
 
 function readCheck(response: DaemonResponse | null, id: string): Record<string, unknown> | null {
@@ -163,3 +184,32 @@ test('doctor skips the runner warmup for provider-backed devices', async () => {
   expect(mockAppleRunnerWarmupCheck).toHaveBeenCalledWith(IOS_SIMULATOR, expect.any(Object));
   expect(readCheck(response, 'ios-runner-cache')).toBeNull();
 });
+
+const SESSIONLESS_WARMUP_CANDIDATES = [
+  { name: 'an inventory simulator', flags: {} },
+  { name: 'the --app device', flags: { targetApp: 'com.example.demo' } },
+];
+
+test.each(SESSIONLESS_WARMUP_CANDIDATES)(
+  'doctor warms the runner cache for $name this host discovered',
+  async ({ flags }) => {
+    const response = await runSessionlessDoctor('host', flags);
+
+    expect(response?.ok).toBe(true);
+    expect(mockAppleRunnerWarmupCheck).toHaveBeenCalledTimes(1);
+    expect(mockAppleRunnerWarmupCheck).toHaveBeenCalledWith(
+      expect.objectContaining({ id: IOS_SIMULATOR.id }),
+      expect.any(Object),
+    );
+  },
+);
+
+test.each(SESSIONLESS_WARMUP_CANDIDATES)(
+  'doctor starts no runner warmup for $name a provider reported',
+  async ({ flags }) => {
+    const response = await runSessionlessDoctor('provider', flags);
+
+    expect(response?.ok).toBe(true);
+    expect(mockAppleRunnerWarmupCheck).not.toHaveBeenCalled();
+  },
+);

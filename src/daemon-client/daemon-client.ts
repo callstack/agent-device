@@ -17,18 +17,8 @@ import {
   prepareRemoteRequestArtifacts,
   type PreparedRemoteRequest,
 } from '../remote/daemon-artifacts.ts';
-import {
-  attachActiveSessionAddressHint,
-  attachRepairSessionAddressHint,
-  cleanupDaemonAfterRequest,
-  ensureDaemon,
-  isActiveReplaySessionResponse,
-  isHeldRepairDivergence,
-  resolveClientSettings,
-  type DaemonClientSettings,
-  type EnsuredDaemon,
-} from './daemon-client-lifecycle.ts';
-import { sendRequest } from './daemon-client-transport.ts';
+import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
+import { createRequestGuard, sendRequest } from './daemon-client-transport.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
 
@@ -42,6 +32,8 @@ export async function sendToDaemon(
   req: Omit<DaemonRequest, 'token'>,
   options: DaemonTransportOptions = {},
 ): Promise<DaemonResponse> {
+  const { resolveClientSettings, ensureDaemon, attachSessionAddressHints } =
+    await import('./daemon-client-lifecycle.ts');
   const requestId = req.meta?.requestId ?? createRequestId();
   const debug = Boolean(req.meta?.debug || req.flags?.verbose);
   // A few internal callers build DaemonRequest directly instead of using the
@@ -60,16 +52,25 @@ export async function sendToDaemon(
     resolveCommandTimeoutPolicy(requestWithoutAuthFlag.command),
     requestWithoutAuthFlag,
   );
-  const daemon = await withDiagnosticTimer(
-    'daemon_startup',
-    async () => await ensureDaemon(settings),
-    { requestId, session: req.session },
-  );
+  // The caller's signal covers every phase of this one request, and the guard turns any phase's
+  // cancellation into the typed canceled-request error — so an abort never borrows a timeout's shape.
+  const cancellation = createRequestGuard({ signal: options.signal, requestId });
+  cancellation.refuseIfAborted();
+  const daemon = await cancellation.guard(async () => {
+    return await withDiagnosticTimer('daemon_startup', async () => await ensureDaemon(settings), {
+      requestId,
+      session: req.session,
+    });
+  });
   const info = daemon.info;
-  const preparedRemoteRequest = await protectArtifactUploadWithLeaseBeats(
-    info,
-    settings,
-    requestWithoutAuthFlag,
+  const preparedRemoteRequest = await cancellation.guard(
+    async () =>
+      await protectArtifactUploadWithLeaseBeats(
+        info,
+        settings,
+        requestWithoutAuthFlag,
+        options.signal,
+      ),
   );
   writeInstallInProgressNotice(requestWithoutAuthFlag.command);
 
@@ -79,6 +80,7 @@ export async function sendToDaemon(
     info,
     requestId,
     debug,
+    await readLocalProviderCredentialFingerprint(requestWithoutAuthFlag, info),
   );
   emitDiagnostic({
     level: 'info',
@@ -103,15 +105,11 @@ export async function sendToDaemon(
             settings.transportPreference,
             settings.paths,
             requestTimeoutMs,
-            { onProgress: options.onProgress },
+            { onProgress: options.onProgress, signal: options.signal },
           ),
         { requestId, command: req.command },
       );
-      return withActiveSessionAddressHint(
-        withRepairSessionAddressHintIfOwned(response, settings),
-        requestWithoutAuthFlag,
-        settings,
-      );
+      return attachSessionAddressHints(response, requestWithoutAuthFlag, settings);
     },
   );
 }
@@ -122,6 +120,7 @@ function buildTransportRequest(
   info: DaemonInfo,
   requestId: string,
   debug: boolean,
+  providerCredentialFingerprint: string | undefined,
 ): DaemonRequest {
   return {
     ...request,
@@ -131,8 +130,22 @@ function buildTransportRequest(
     meta: {
       ...buildTransportRequestMeta(request, preparedRemoteRequest, requestId, debug),
       ...buildLocalHostEnvMeta(info),
+      providerCredentialFingerprint,
     },
   };
+}
+
+// A remote daemon reads provider credentials from its own host, so only a local daemon is asked
+// to compare them, and only when a lease is allocated.
+async function readLocalProviderCredentialFingerprint(
+  request: Omit<DaemonRequest, 'token'>,
+  info: DaemonInfo,
+): Promise<string | undefined> {
+  if (isRemoteDaemon(info) || request.command !== 'lease_allocate') return undefined;
+  const { leaseProvider: provider, leaseBackend } = leaseScopeFromRequest(request);
+  if (!provider) return undefined;
+  const { providerCredentialFingerprint } = await import('../provider-credential-fingerprint.ts');
+  return providerCredentialFingerprint(provider, process.env, leaseBackend);
 }
 
 // A developer dir is a path on the client's host, so only a local daemon can use it.
@@ -235,6 +248,7 @@ async function performDaemonRequestWithCleanup(
     requestFailed = true;
     requestError = error;
   }
+  const { cleanupDaemonAfterRequest } = await import('./daemon-client-lifecycle.ts');
   const finalResponse = await cleanupDaemonAfterRequest(req, daemon, settings, response);
   if (requestFailed) throw requestError;
   if (!finalResponse) {
@@ -244,48 +258,6 @@ async function performDaemonRequestWithCleanup(
     throw new AppError('COMMAND_FAILED', 'Daemon request produced no response after cleanup');
   }
   return finalResponse;
-}
-
-/**
- * ADR 0012 decision 6 (Fix 1): the owned ephemeral state dir this daemon was
- * started at is otherwise unaddressable by a later invocation — hint it here,
- * only when the daemon is actually being kept alive for it
- * (`settings.ownedStateDir` means `daemon.startedByClient` is also true).
- */
-function withRepairSessionAddressHintIfOwned(
-  response: DaemonResponse,
-  settings: DaemonClientSettings,
-): DaemonResponse {
-  if (response.ok || !settings.ownedStateDir || !isHeldRepairDivergence(response)) {
-    return response;
-  }
-  return attachRepairSessionAddressHint(response, settings.paths.baseDir);
-}
-
-/**
- * ADR 0016 counterpart to `withRepairSessionAddressHintIfOwned` — but unlike
- * that one, NOT gated on `settings.ownedStateDir`. An owned ephemeral state
- * dir is unaddressable by a later invocation either way, so it's included
- * when owned; an explicit `--state-dir`/`AGENT_DEVICE_STATE_DIR` caller
- * already knows their own dir, so it's omitted then. But the session's own
- * name is cwd-qualified and, per #1394, `session list` cannot rediscover it
- * either — so `--session` is still worth hinting even at an explicit state
- * dir, which is why this runs for every active-session response regardless
- * of `ownedStateDir` (`attachActiveSessionAddressHint` itself decides what,
- * if anything, is worth attaching).
- */
-function withActiveSessionAddressHint(
-  response: DaemonResponse,
-  req: Omit<DaemonRequest, 'token'>,
-  settings: DaemonClientSettings,
-): DaemonResponse {
-  if (!response.ok || !isActiveReplaySessionResponse(req, response)) {
-    return response;
-  }
-  return attachActiveSessionAddressHint(
-    response,
-    settings.ownedStateDir ? settings.paths.baseDir : undefined,
-  );
 }
 
 function writeInstallInProgressNotice(command: string | undefined): void {
@@ -316,15 +288,28 @@ async function protectArtifactUploadWithLeaseBeats(
   info: DaemonInfo,
   settings: DaemonClientSettings,
   request: Omit<DaemonRequest, 'token'>,
+  callerSignal: AbortSignal | undefined,
 ): Promise<PreparedRemoteRequest> {
   const leaseScope = leaseScopeFromRequest(request);
   if (!isRemoteDaemon(info) || !leaseScope.leaseId) {
-    return await prepareRemoteRequestArtifacts(request, info, new AbortController().signal);
+    return await prepareRemoteRequestArtifacts(
+      request,
+      info,
+      callerSignal ?? new AbortController().signal,
+    );
   }
   const { buildUploadLeaseHeartbeat, runProtectedLeaseWork } =
     await import('./daemon-client-lease-beat.ts');
   return await runProtectedLeaseWork({
     heartbeat: buildUploadLeaseHeartbeat(info, settings, request),
-    task: (signal) => prepareRemoteRequestArtifacts(request, info, signal),
+    // The upload stops for either owner of its signal: the lease beat finding the lease gone, or
+    // the caller aborting this one call.
+    task: (leaseSignal) =>
+      prepareRemoteRequestArtifacts(
+        request,
+        info,
+        callerSignal ? AbortSignal.any([leaseSignal, callerSignal]) : leaseSignal,
+      ),
+    callerSignal,
   });
 }

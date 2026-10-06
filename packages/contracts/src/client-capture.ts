@@ -8,6 +8,7 @@ import type {
   SnapshotKeyboardBandFact,
   SnapshotNode,
   SnapshotUnchanged,
+  SnapshotViewportSize,
   SnapshotVisibility,
 } from '@agent-device/kernel/snapshot';
 import type { ScreenshotResultData } from './snapshot-types.ts';
@@ -64,6 +65,19 @@ export type CaptureSnapshotResult = {
    * the producer measured no band and the tap guard derived one from the tree.
    */
   keyboard?: SnapshotKeyboardBandFact;
+  /**
+   * The box the node rects are measured in, as the producer measured it (#3182). Same coordinate
+   * space and orientation as the rects beside it, so a consumer scales and clips against the screen
+   * it is being shown instead of inferring it from the largest rect on screen.
+   *
+   * Which surface it names is the producer's answer, not always the physical panel: the app window
+   * for iOS (so iPad Split View and a foldable panel do not inflate it), the screen the bounds were
+   * measured on for Android and Apple TV. Absent means the producer measured no box — a desktop
+   * capture whose rects are absolute in window space, a backend that reads a tree without reading a
+   * screen, or a raw projection nothing validated a box against — and never a zero. This is the full
+   * screen size only; content-safe gesture bounds stay with #1821.
+   */
+  viewport?: SnapshotViewportSize;
   /**
    * Screenshot captured automatically when the semantic snapshot was sparse.
    * Remote clients receive a materialized local path through the daemon artifact channel.

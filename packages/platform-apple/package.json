@@ -84,6 +84,10 @@
       "types": "./src/simctl-facade.ts",
       "default": "./src/simctl-facade.ts"
     },
+    "./simctl-settings": {
+      "types": "./src/simctl-settings-facade.ts",
+      "default": "./src/simctl-settings-facade.ts"
+    },
     "./simulator": {
       "types": "./src/simulator-facade.ts",
       "default": "./src/simulator-facade.ts"

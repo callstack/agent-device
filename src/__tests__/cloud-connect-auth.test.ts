@@ -9,7 +9,6 @@ import type { AgentDeviceClient } from '../agent-device-client.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 afterEach(() => {
-  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });

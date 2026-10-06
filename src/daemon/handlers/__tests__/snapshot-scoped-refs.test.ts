@@ -18,7 +18,7 @@ test('snapshot resolves @ref scope with the stored source after scoped output re
   const sessionStore = makeSessionStore('agent-device-snapshot-scoped-refs-');
   const sessionName = 'android-ref-scope-repeat';
   const session = makeAndroidSession(sessionName, { snapshot: androidRefScopeSourceSnapshot() });
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   legacyDispatchCapture.mockResolvedValue({
     nodes: scopedScriptErrorNodes(),
@@ -46,7 +46,7 @@ test('a mutation clears scoped-snapshot lineage so a repeated snapshot -s @ref c
   const sessionStore = makeSessionStore('agent-device-snapshot-scoped-refs-');
   const sessionName = 'android-ref-scope-broken-by-mutation';
   const session = makeAndroidSession(sessionName, { snapshot: androidRefScopeSourceSnapshot() });
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   legacyDispatchCapture.mockResolvedValue({
     nodes: scopedScriptErrorNodes(),
@@ -75,7 +75,7 @@ test('empty @ref-scoped snapshot output does not replace the stored session snap
   const sessionStore = makeSessionStore('agent-device-snapshot-scoped-refs-');
   const sessionName = 'android-empty-scope-preserve';
   const session = makeAndroidSession(sessionName, { snapshot: currentScreenSnapshot() });
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   legacyDispatchCapture.mockResolvedValue({
     nodes: [],

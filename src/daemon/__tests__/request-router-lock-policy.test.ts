@@ -122,7 +122,7 @@ function installGatedDispatch(): {
 
 test('direct daemon requests cannot bypass reject lock policy for existing sessions', async () => {
   const sessionStore = makeSessionStore('agent-device-router-lock-');
-  sessionStore.set('qa-ios', makeIosSession('qa-ios'));
+  sessionStore.publish('qa-ios', makeIosSession('qa-ios'));
 
   const handler = createRequestHandler({
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
@@ -455,7 +455,7 @@ test('fresh named sessions reject incompatible selector combinations before bind
 
 test('batch steps cannot bypass reject lock policy on nested direct requests', async () => {
   const sessionStore = makeSessionStore('agent-device-router-lock-');
-  sessionStore.set('qa-ios', makeIosSession('qa-ios'));
+  sessionStore.publish('qa-ios', makeIosSession('qa-ios'));
 
   const handler = createRequestHandler({
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
@@ -499,7 +499,7 @@ test('batch steps cannot bypass reject lock policy on nested direct requests', a
 
 test('direct daemon requests apply strip lock policy for existing sessions before dispatch', async () => {
   const sessionStore = makeSessionStore('agent-device-router-lock-');
-  sessionStore.set('qa-ios', makeIosSession('qa-ios'));
+  sessionStore.publish('qa-ios', makeIosSession('qa-ios'));
   systemRuntimeSpies.appSwitcher.mockClear();
 
   const handler = createRequestHandler({
@@ -538,7 +538,7 @@ test('strip lock policy still refuses a request naming a different device, befor
   // The wrong-device footgun: `strip` used to delete --udid and run the command against the bound
   // session's device instead. A request that names another device must fail, not silently retarget.
   const sessionStore = makeSessionStore('agent-device-router-lock-');
-  sessionStore.set('qa-ios', makeIosSession('qa-ios'));
+  sessionStore.publish('qa-ios', makeIosSession('qa-ios'));
   let dispatchCalls = 0;
   legacyDispatchCapture.mockImplementation(async () => {
     dispatchCalls += 1;
@@ -575,7 +575,7 @@ test('strip lock policy still refuses a request naming a different device, befor
 
 test('batch preserves tenant-scoped session names across nested requests', async () => {
   const sessionStore = makeSessionStore('agent-device-router-lock-');
-  sessionStore.set('tenant-a:default', makeIosSession('tenant-a:default'));
+  sessionStore.publish('tenant-a:default', makeIosSession('tenant-a:default'));
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({
     tenantId: 'tenant-a',

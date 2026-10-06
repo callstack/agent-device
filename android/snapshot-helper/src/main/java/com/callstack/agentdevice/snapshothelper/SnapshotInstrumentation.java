@@ -5,6 +5,7 @@ import android.app.UiAutomation;
 import android.content.res.Resources;
 import android.os.Bundle;
 import android.util.Base64;
+import android.util.DisplayMetrics;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -77,14 +78,17 @@ public final class SnapshotInstrumentation extends Instrumentation {
         return;
       }
       long startedAtMs = System.currentTimeMillis();
+      DisplayExtent.Extent beforeDump = DisplayExtent.read(getContext());
       AccessibilityTreeCapture.Result capture =
           captureXml(waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
+      DisplayExtent.Extent display =
+          DisplayExtent.whenBothAgree(beforeDump, DisplayExtent.read(getContext()));
       writeOutputFile(outputPath, capture.xml);
       if (emitChunks) {
         emitChunks(capture.xml);
       }
       result.putString("ok", "true");
-      putCaptureMetadata(result, capture, System.currentTimeMillis() - startedAtMs);
+      putCaptureMetadata(result, capture, display, System.currentTimeMillis() - startedAtMs);
       finishSafely(0, result);
     } catch (Throwable error) {
       result.putString("ok", "false");
@@ -114,7 +118,10 @@ public final class SnapshotInstrumentation extends Instrumentation {
   }
 
   private static void putCaptureMetadata(
-      Bundle result, AccessibilityTreeCapture.Result capture, long elapsedMs) {
+      Bundle result,
+      AccessibilityTreeCapture.Result capture,
+      DisplayExtent.Extent display,
+      long elapsedMs) {
     result.putString("rootPresent", Boolean.toString(capture.rootPresent));
     result.putString("captureMode", capture.captureMode);
     result.putString("windowCount", Integer.toString(capture.windowCount));
@@ -124,8 +131,17 @@ public final class SnapshotInstrumentation extends Instrumentation {
     // Physical pixels per dp of the display the bounds above were measured on, from the same
     // configuration the framework lays out with (a `wm density` override included), so a host that
     // works in dp has the factor beside the pixels instead of a second adb round trip.
-    result.putString(
-        "pixelDensity", Float.toString(Resources.getSystem().getDisplayMetrics().density));
+    DisplayMetrics metrics = Resources.getSystem().getDisplayMetrics();
+    result.putString("pixelDensity", Float.toString(metrics.density));
+    // The real extent of the display those bounds are measured in, read around the tree dump and
+    // published only when both reads agreed, so the host can publish the box the bounds live in
+    // without reading the tree for it. Published by absence: a display this helper could not
+    // address, or one that rotated mid-dump, adds no keys, which the host reads as unknown rather
+    // than as a screen of no size or of another rotation's size (#3182).
+    if (display != null) {
+      result.putString("displayWidth", Integer.toString(display.width));
+      result.putString("displayHeight", Integer.toString(display.height));
+    }
   }
 
   private void runOneShotViewport(Bundle result) {
@@ -232,10 +248,13 @@ public final class SnapshotInstrumentation extends Instrumentation {
     result.putString("requestId", requestId);
     try {
       long startedAtMs = System.currentTimeMillis();
+      DisplayExtent.Extent beforeDump = DisplayExtent.read(getContext());
       AccessibilityTreeCapture.Result capture =
           captureXml(waitForIdleQuietMs, waitForIdleTimeoutMs, timeoutMs, maxDepth, maxNodes);
+      DisplayExtent.Extent display =
+          DisplayExtent.whenBothAgree(beforeDump, DisplayExtent.read(getContext()));
       result.putString("ok", "true");
-      putCaptureMetadata(result, capture, System.currentTimeMillis() - startedAtMs);
+      putCaptureMetadata(result, capture, display, System.currentTimeMillis() - startedAtMs);
       result.putString("byteLength", Integer.toString(capture.xml.getBytes(StandardCharsets.UTF_8).length));
       SessionResponseWriter.writeSessionResponse(output, result, capture.xml);
     } catch (Throwable error) {

@@ -237,6 +237,52 @@ test.each(Object.entries(leaves))(
   },
 );
 
+test('a misspelled macOS app backend fails macOS bindings only', async () => {
+  vi.stubEnv('AGENT_DEVICE_MACOS_APP_BACKEND', 'nativ');
+  try {
+    const runtime = createApplePlatformRuntime(platformRuntimeHostFixture());
+    const bind = (device: DeviceInfo) =>
+      runtime.bind({
+        device,
+        intent: { kind: 'ordinary' },
+        scope: {
+          signal: new AbortController().signal,
+          diagnostics: { emit: () => {} },
+          progress: { report: () => {} },
+        },
+      });
+    await expect(bind(leaves.ios)).resolves.toBeDefined();
+    await expect(bind(leaves.macos)).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+test('the native macOS app backend refuses recording and the runner before dispatch', async () => {
+  vi.stubEnv('AGENT_DEVICE_MACOS_APP_BACKEND', 'native');
+  try {
+    const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
+      device: leaves.macos,
+      intent: { kind: 'ordinary' },
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    });
+    for (const operation of ['screenRecordingStart', 'prepareAppleRunner', 'back'] as const) {
+      expect(binding.facts.operations[operation]).toMatchObject({
+        available: false,
+        reason: 'unsupported-device-backend',
+      });
+      expect(binding.operations[operation]).toBeTypeOf('undefined');
+    }
+    expect(binding.facts.operations.tapPoint).toEqual({ available: true });
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
 test('hover has no Apple interactor route on macOS, iOS, or tvOS; the touch family reports its typed denial', async () => {
   for (const device of [leaves.macos, leaves.ios, leaves.tvos]) {
     const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({

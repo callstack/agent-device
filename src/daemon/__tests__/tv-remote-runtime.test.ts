@@ -214,7 +214,7 @@ test('request router joins tv-remote admission to execution and ref invalidation
   const sessionStore = makeSessionStore('agent-device-tv-remote-generic-');
   const session = makeSession('tv-remote-runtime', { device: vegaVvd });
   activateCompleteRefFrame(session);
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const handler = createRequestHandler({
     logPath: '/tmp/daemon.log',
     token: 't',

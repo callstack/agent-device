@@ -197,8 +197,8 @@ test('a session shutdown finalized mid-settle is not also reported as expired', 
     executionLocks: new Map(),
     // Shutdown takes no execution lock: it tears the whole session set down directly, so it is the
     // one remover that can finish while a settle is still running.
-    settleSession: async (_session, sessionName) => {
-      sessionStore.delete(sessionName);
+    settleSession: async (ref) => {
+      sessionStore.retire(ref);
     },
     withinDiagnosticsScope: sweeps.withinDiagnosticsScope,
     now: () => NOW,
@@ -234,7 +234,7 @@ test('a session closed by its owner stops the retry clock tracking it', async ()
   await sweeps.swept();
   assert.equal(settleCalls, 1);
 
-  sessionStore.delete('default');
+  sessionStore.retire(sessionStore.lookup('default')!);
   await runUntilIdle(controller, 10);
   assert.equal(settleCalls, 1, 'nothing is left to retry once the session is gone');
   controller.cancel();
@@ -243,7 +243,7 @@ test('a session closed by its owner stops the retry clock tracking it', async ()
 test('a settled session of another kind is never touched by the sweep', async () => {
   const { sessionStore } = makeFixture('agent-device-idle-expiry-kind-');
   // Past its deadline in time, but holding a remote lease: that lease owns the device.
-  sessionStore.set(
+  sessionStore.publish(
     'leased',
     makeIosSession('leased', {
       createdAt: NOW - WINDOW_MS - 1,
@@ -258,7 +258,7 @@ test('a settled session of another kind is never touched by the sweep', async ()
   );
   // Past its deadline too, but holding no claim: there is no device for another agent to wait on,
   // so there is nothing here an expiry could reclaim and nothing to release.
-  sessionStore.set('plain', unclaimedExpiredSession('plain'));
+  sessionStore.publish('plain', unclaimedExpiredSession('plain'));
 
   const settledNames: string[] = [];
   const controller = createSessionIdleExpiry({
@@ -267,7 +267,7 @@ test('a settled session of another kind is never touched by the sweep', async ()
     executionLocks: new Map(),
     // Succeeds rather than throwing: a rejected settle leaves every record standing for retry, which
     // would let this pass read as a correct refusal even if the sweep had torn both sessions down.
-    settleSession: async (_session, sessionName) => {
+    settleSession: async ({ address: sessionName }) => {
       settledNames.push(sessionName);
     },
     now: () => NOW,
@@ -292,7 +292,8 @@ test('a held-back settle leaves a repair transaction uncommitted, so a later pas
     createdAt: NOW - WINDOW_MS - 1,
     deviceClaim: { ...deviceClaim },
   });
-  sessionStore.set('default', session);
+  sessionStore.retire(sessionStore.lookup('default')!);
+  sessionStore.publish('default', session);
 
   const claimsDir = path.dirname(resolveDeviceClaimPath(deviceClaim.deviceKey));
   const sweeps = createSweepBarrier();
@@ -353,7 +354,8 @@ test('a committed expiry finalizes the repair transaction it ends', async () => 
     createdAt: NOW - WINDOW_MS - 1,
     deviceClaim: { ...deviceClaim },
   });
-  sessionStore.set('default', session);
+  sessionStore.retire(sessionStore.lookup('default')!);
+  sessionStore.publish('default', session);
 
   const sweeps = createSweepBarrier();
   const controller = createSessionIdleExpiry({
@@ -375,4 +377,50 @@ test('a committed expiry finalizes the repair transaction it ends', async () => 
     session.scriptPublication?.kind === 'repair' ? session.scriptPublication.status : undefined,
     'committed',
   );
+});
+
+test('an idle settle cannot finalize or retire a replacement at its scoped address', async () => {
+  const { sessionStore } = makeFixture('agent-device-idle-expiry-lifetime-');
+  idleClaimedSession(sessionStore);
+  const old = sessionStore.lookup('default')!;
+  sessionStore.retire(old);
+  const address = 'cwd:idle:default';
+  const ref = sessionStore.publish(address, old.session);
+  const sweeps = createSweepBarrier();
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let entered = false;
+  const controller = createSessionIdleExpiry({
+    sessionStore,
+    idleExpiryMs: WINDOW_MS,
+    executionLocks: new Map(),
+    settleSession: async () => {
+      entered = true;
+      await held;
+    },
+    withinDiagnosticsScope: sweeps.withinDiagnosticsScope,
+    now: () => NOW,
+  });
+  try {
+    controller.noteSessionsChanged();
+    await waitFor(() => entered, 'the held idle settle');
+    sessionStore.retire(ref);
+    const successor = sessionStore.publish(address, makeRepairCompleteSession('default'));
+    sessionStore.setRuntimeHints(address, { metroPort: 9090 });
+    release();
+    await sweeps.swept();
+    assert.equal(sessionStore.requireCurrent(successor), successor.session);
+    assert.equal(successor.session.scriptPublication?.kind, 'repair');
+    if (successor.session.scriptPublication?.kind === 'repair') {
+      assert.equal(successor.session.scriptPublication.status, 'complete');
+    }
+    assert.equal(successor.session.actions.length, 0);
+    assert.equal(sessionStore.getRuntimeHints(address)?.metroPort, 9090);
+    assert.equal(sessionStore.readIdleExpiryTombstone(address), undefined);
+  } finally {
+    release();
+    controller.cancel();
+  }
 });

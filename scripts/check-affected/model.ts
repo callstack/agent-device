@@ -509,10 +509,11 @@ const BUILD_OWNERSHIP: ReadonlyArray<{
   {
     check: 'unit',
     rule: 'own:android-package-test-fixture',
-    detail: 'the Android package test fixture is consumed by the unit suite',
+    detail: 'Android package test fixtures are consumed by the unit suite',
     owns: (file) =>
-      file ===
-      'packages/platform-android/src/__tests__/test-utils/fixtures/android-helper-apk.fixture',
+      file.startsWith('packages/platform-android/') &&
+      file.includes('/fixtures/') &&
+      (file.endsWith('.fixture') || file.endsWith('.apk')),
   },
   {
     check: 'macos-helper',

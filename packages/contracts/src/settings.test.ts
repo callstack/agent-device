@@ -17,6 +17,9 @@ import {
   PERMISSION_ACTIONS,
   PERMISSION_MODES,
   readTextSizeCategory,
+  settingsAppNotConsumedRefusal,
+  settingsAppScope,
+  SETTINGS_APP_NOT_CONSUMED_REASON,
   SETTINGS_INVALID_ARGS_MESSAGE,
   SETTINGS_MACOS_PERMISSION_USAGE,
   SETTINGS_USAGE_OVERRIDE,
@@ -329,5 +332,81 @@ describe('appearance vocabulary types', () => {
     expectTypeOf<AppearanceAction>().toEqualTypeOf<
       Extract<SettingsUpdateOptions, { setting: 'appearance' }>['state']
     >();
+  });
+});
+
+describe('settingsAppScope', () => {
+  test('a permission is app-scoped on every mobile target and host-level on macOS', () => {
+    expect(settingsAppScope('apple', 'permission', 'grant')).toBe('app-scoped');
+    expect(settingsAppScope('mobile', 'permission', 'deny')).toBe('app-scoped');
+    expect(settingsAppScope('macos-host', 'permission', 'grant')).toBe('device-level');
+  });
+
+  test('clear-app-state is app-scoped wherever it is served', () => {
+    expect(settingsAppScope('apple', 'clear-app-state', 'clear')).toBe('app-scoped');
+    expect(settingsAppScope('mobile', 'clear-app-state', 'clear')).toBe('app-scoped');
+    expect(settingsAppScope('macos-host', 'clear-app-state', 'clear')).toBe('unknown');
+  });
+
+  test('an on/off location is app-scoped only where it maps to a privacy grant', () => {
+    expect(settingsAppScope('apple', 'location', 'on')).toBe('app-scoped');
+    expect(settingsAppScope('apple', 'location', 'off')).toBe('app-scoped');
+    expect(settingsAppScope('mobile', 'location', 'on')).toBe('device-level');
+    expect(settingsAppScope('mobile', 'location', 'off')).toBe('device-level');
+  });
+
+  test('every state parseSettingState accepts classifies like its on/off spelling', () => {
+    // The owners toggle on `parseSettingState`, which also accepts true/1/false/0. A spelling the
+    // parser takes must settle the app scope the same way, or `location 1 --app X` silently drops X.
+    for (const state of ['on', 'true', 'TRUE', '1']) {
+      expect(parseSettingState(state)).toBe(true);
+      expect(settingsAppScope('apple', 'location', state)).toBe('app-scoped');
+      expect(settingsAppScope('mobile', 'location', state)).toBe('device-level');
+    }
+    for (const state of ['off', 'false', 'FALSE', '0']) {
+      expect(parseSettingState(state)).toBe(false);
+      expect(settingsAppScope('apple', 'location', state)).toBe('app-scoped');
+      expect(settingsAppScope('mobile', 'location', state)).toBe('device-level');
+    }
+    // The table trims before consulting the grammar, so a padded spelling still classifies.
+    expect(settingsAppScope('apple', 'location', ' on ')).toBe('app-scoped');
+  });
+
+  test('a location set moves the device itself for everyone', () => {
+    expect(settingsAppScope('apple', 'location', 'set')).toBe('device-level');
+    expect(settingsAppScope('mobile', 'location', 'set')).toBe('device-level');
+  });
+
+  test('a combination the table does not settle stays unknown, not a verdict', () => {
+    expect(settingsAppScope('macos-host', 'location', 'on')).toBe('unknown');
+    expect(settingsAppScope('mobile', 'wifi', 'on')).toBe('unknown');
+    expect(settingsAppScope('apple', 'animations', 'on')).toBe('unknown');
+    expect(settingsAppScope('mobile', 'location', 'sideways')).toBe('unknown');
+    // A mutation with no state is not a write the surface admits, so the table names no scope for it.
+    expect(settingsAppScope('apple', 'location', undefined)).toBe('unknown');
+  });
+
+  test('the scope keys on the setting and state vocabulary, not its padding or case', () => {
+    expect(settingsAppScope('apple', ' PERMISSION ', 'GRANT')).toBe('app-scoped');
+    expect(settingsAppScope('mobile', 'Location', ' On ')).toBe('device-level');
+  });
+});
+
+describe('settingsAppNotConsumedRefusal', () => {
+  test('refuses by naming the mutation and quoting the app back', () => {
+    const refusal = settingsAppNotConsumedRefusal('location', 'on', 'com.example.app');
+    expect(refusal.code).toBe('INVALID_ARGS');
+    expect(refusal.message).toContain('settings location on');
+    expect(refusal.message).toContain('com.example.app');
+    expect(refusal.details.reason).toBe(SETTINGS_APP_NOT_CONSUMED_REASON);
+    expect(refusal.details.dispatched).toBe('no');
+    expect(refusal.details.app).toBe('com.example.app');
+    expect(refusal.hint).toContain('settings permission grant location --app com.example.app');
+  });
+
+  test('a stateless mutation is named by its setting alone', () => {
+    expect(
+      settingsAppNotConsumedRefusal('permission', undefined, 'com.example.app').message,
+    ).toContain('settings permission applies to the target itself');
   });
 });

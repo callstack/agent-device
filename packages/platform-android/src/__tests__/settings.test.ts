@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { TEXT_SIZE_CATEGORIES } from '@agent-device/contracts/settings';
+import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 import { readAndroidSetting, setAndroidSetting } from '../settings.ts';
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import { assertRejectsAppError } from './test-utils/app-error.ts';
@@ -59,6 +60,19 @@ test('setAndroidSetting clear-app-state force stops and clears package data', as
         ['shell', 'am', 'force-stop', 'com.example.app'],
         ['shell', 'pm', 'clear', 'com.example.app'],
       ]);
+    },
+  );
+});
+
+test('setAndroidSetting clear-app-state refuses an appless session with the published reason', async () => {
+  await withFakeAdb(
+    (args) => ({ stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 }),
+    async ({ device }) => {
+      await assertRejectsAppError(() => setAndroidSetting(device, 'clear-app-state', 'clear'), {
+        code: 'INVALID_ARGS',
+        reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired,
+        dispatched: 'no',
+      });
     },
   );
 });

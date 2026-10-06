@@ -160,6 +160,7 @@ const APPLE_DOMAIN_MECHANICS_ENTRY_FILES: ReadonlySet<string> = new Set([
   'packages/platform-apple/src/runner-operations-facade.ts',
   'packages/platform-apple/src/runner-owner-facade.ts',
   'packages/platform-apple/src/simctl-facade.ts',
+  'packages/platform-apple/src/simctl-settings-facade.ts',
   'packages/platform-apple/src/simulator-facade.ts',
   'packages/platform-apple/src/tool-provider-facade.ts',
 ]);

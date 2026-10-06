@@ -36,6 +36,7 @@ export {
 export {
   classifyOwnerLiveness,
   classifyOwnerLivenessFromObservation,
+  isProcessPid,
   type OwnerIdentity,
   ownerIdentityDiffers,
   ownerIdentityMatches,

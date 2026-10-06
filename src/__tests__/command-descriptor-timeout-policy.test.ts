@@ -9,6 +9,7 @@ import {
 } from '@agent-device/command-registry/registry';
 import { INTERACTION_DISPATCH_PATHS } from '@agent-device/contracts/interaction-guarantees';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
+import { OVERLAY_BUDGET_MS } from '@agent-device/capture-kit/recording-overlay';
 import {
   DEFAULT_TIMEOUT_POLICY,
   READINESS_BUDGET_MAX_MS,
@@ -71,6 +72,9 @@ test('daemon-preserving timeout commands are a bounded, reviewed set', () => {
   // sessions the daemon owns, so a client-side timeout must not SIGKILL the
   // daemon mid-create/mid-release and orphan them (and every other provider
   // session held).
+  // record joined because a `record stop` export can outlast the envelope: a
+  // reset mid-export left an ownerless open manifest that refused every later
+  // `record start` on the device.
   const preserving = commandDescriptors
     .filter((descriptor) => descriptor.timeoutPolicy.onTimeout === 'preserve-daemon')
     .map((descriptor) => descriptor.name);
@@ -87,6 +91,7 @@ test('daemon-preserving timeout commands are a bounded, reviewed set', () => {
     'lease_release',
     'longpress',
     'press',
+    'record',
     'scroll',
     'snapshot',
     'type',
@@ -328,6 +333,18 @@ test('snapshot uses the standard daemon request timeout with an explicit overrid
     resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('test'), { ...base }),
     undefined,
   );
+});
+
+test('the touch overlay budget leaves record stop room inside its request envelope', () => {
+  // The recorder stop, the copies and the playability checks around the overlay are outside its
+  // budget (about 1 s for a 10-minute simulator recording), so the envelope keeps a reserve for
+  // them beyond it.
+  const reserveMs = 20_000;
+  const envelopeMs = resolveCommandRequestTimeoutMs(resolveCommandTimeoutPolicy('record'), {
+    positionals: ['stop'],
+    flags: {},
+  });
+  assert.ok(envelopeMs !== undefined && OVERLAY_BUDGET_MS + reserveMs <= envelopeMs);
 });
 
 test('open and prepare startup budgets keep a client-envelope margin over the daemon deadline', () => {

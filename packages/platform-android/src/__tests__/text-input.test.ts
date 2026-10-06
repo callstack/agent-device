@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { fillAndroid, typeAndroid } from '../text-input.ts';
+import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/input-validation';
+import { ANDROID_TEST_IME_OPEN_HINT, fillAndroid, typeAndroid } from '../text-input.ts';
 import { assertRejectsAppError } from './test-utils/app-error.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
@@ -226,9 +227,13 @@ test('typeAndroid reports clear error when unicode input is unsupported', async 
       return { stderr: `unexpected args: ${args.join(' ')}`, exitCode: 1 };
     },
     async ({ device }) => {
+      // #2997: consumers route recovery on the typed reason; the hint stays the
+      // direct-interaction `open --test-ime` route and the replay boundary rewrites it.
       await assertRejectsAppError(() => typeAndroid(device, '很'), {
         code: 'COMMAND_FAILED',
         message: /provider-native text injection/i,
+        reason: ANDROID_SHELL_TEXT_UNSUPPORTED_REASON,
+        hint: ANDROID_TEST_IME_OPEN_HINT,
       });
     },
   );

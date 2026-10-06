@@ -170,7 +170,7 @@ test('request router joins home admission to execution, recording, and ref inval
   const sessionStore = makeSessionStore('agent-device-home-generic-');
   const session = makeSession('system-button-runtime', { device: iosSimulator });
   activateCompleteRefFrame(session);
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const handler = createRequestHandler({
     logPath: '/tmp/daemon.log',
     token: 't',

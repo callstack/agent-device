@@ -3,7 +3,7 @@ import type { OwnerIdentity } from '@agent-device/host-kit/process';
 import {
   readRegisteredDaemonOwnership,
   type RegisteredDaemonOwnership,
-} from '../daemon-registration.ts';
+} from '../../daemon-registration.ts';
 
 /** A registration this daemon no longer owns, naming the successor when the record does. */
 export type DaemonMetadataLoss = Readonly<{

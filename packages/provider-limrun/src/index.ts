@@ -1,6 +1,7 @@
-export { LIMRUN_PROVIDER } from './device.ts';
+export { LIMRUN_PROFILE_FIELDS, LIMRUN_PROVIDER } from './device.ts';
 export { createLimrunRuntime, type LimrunRuntime, type LimrunRuntimeOptions } from './runtime.ts';
 export { verifyLimrunConnection } from './connection-verification.ts';
+export type { LimrunInstanceAccess } from './instance-access.ts';
 
 export type { LimrunFileDownload, LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 

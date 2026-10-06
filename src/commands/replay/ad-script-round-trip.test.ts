@@ -38,11 +38,17 @@ test('serializing a parsed script is a fixed point for generated scripts', () =>
       const canonical = formatReplayScriptForTest(parsed);
       const reparsed = parseReplayScriptDetailed(canonical).actions;
       assert.equal(formatReplayScriptForTest(reparsed), canonical);
-      // The action identity survives the rewrite: same commands, same targets.
-      assert.deepEqual(
-        reparsed.map((action) => [action.command, action.positionals]),
-        parsed.map((action) => [action.command, action.positionals]),
-      );
+      // The action identity survives the rewrite: same commands, same targets, and
+      // the same flags (#3197 — a dropped flag would silently degrade a hunt or a
+      // scoped capture into a plain step). One declared normalization aside:
+      // `--button primary` is the default, so the writer canonically omits it.
+      const identity = (actions: SessionAction[]) =>
+        actions.map((action) => {
+          const flags = { ...action.flags };
+          if (flags.clickButton === 'primary') delete flags.clickButton;
+          return [action.command, action.positionals, flags];
+        });
+      assert.deepEqual(identity(reparsed), identity(parsed));
     }),
     { numRuns: PROPERTY_RUNS },
   );

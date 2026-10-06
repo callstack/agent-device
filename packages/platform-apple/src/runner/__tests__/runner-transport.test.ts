@@ -96,7 +96,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  vi.unstubAllEnvs();
 });
 
 test('sendRunnerCommandOnce does not retry or simulator fallback after request failure', async () => {

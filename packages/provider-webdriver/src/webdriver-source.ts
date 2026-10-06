@@ -162,18 +162,132 @@ function sourceNodeFromAttributes(
   rect: RawSnapshotNode['rect'],
   platform: WebDriverSourcePlatform,
 ): RawSnapshotNode {
+  const field = textFieldFacts(type, attrs, platform);
   return {
     index,
     type,
     role: roleFromWebDriverType(type, attrs),
-    label: firstWebDriverAttribute(attrs, ['content-desc', 'label', 'text', 'name']),
-    value: nonEmptyWebDriverAttribute(attrs.value),
+    ...labelFacts(attrs, platform),
+    value: field === undefined ? nonEmptyWebDriverAttribute(attrs.value) : field.value,
     identifier: firstWebDriverAttribute(attrs, ['resource-id', 'id', 'accessibility-id', 'name']),
     rect,
     ...sourceStateFacts(attrs, rect, platform),
+    ...(field === undefined ? {} : field.facts),
+    ...checkedFact(type, attrs, platform),
     depth,
     parentIndex,
   };
+}
+
+/**
+ * The Android text entry classes, the same rule `isFillableType` in
+ * `@agent-device/contracts/snapshot-text` applies to the class name's last segment; that module is
+ * not a package subpath, so the rule is restated here.
+ */
+const ANDROID_TEXT_FIELD_CLASS = /edittext|autocompletetextview/;
+
+/** The class name's last segment, lowercased, as `normalizeType` reads a type. */
+function classNameSegment(className: string): string {
+  return className
+    .slice(Math.max(className.lastIndexOf('.'), className.lastIndexOf('/')) + 1)
+    .toLowerCase();
+}
+
+/**
+ * How a node is named. An Android node is labelled by its text and falls back to the content
+ * description only when it has none, as `normalizeAndroidUiHierarchyNode` reads the same
+ * attributes for the native helper; a content description beside visible text travels as
+ * `contentDescription`. A hinted empty field is labelled by its hint, which is its text. XCUITest
+ * names a node by `label`, else `name`.
+ */
+function labelFacts(
+  attrs: Record<string, string>,
+  platform: WebDriverSourcePlatform,
+): Pick<RawSnapshotNode, 'label' | 'contentDescription'> {
+  if (platform === 'ios')
+    return { label: firstWebDriverAttribute(attrs, ['label', 'text', 'name']) };
+  const description = nonEmptyWebDriverAttribute(attrs['content-desc']);
+  const label = nonEmptyWebDriverAttribute(attrs.text) ?? description;
+  return {
+    label,
+    ...(description !== undefined && description !== label
+      ? { contentDescription: description }
+      : {}),
+  };
+}
+
+type TextFieldFacts = Readonly<{
+  value: string | undefined;
+  facts: Pick<RawSnapshotNode, 'editable' | 'password' | 'placeholder' | 'hintShowing'>;
+}>;
+
+/**
+ * The field facts a text entry control carries. UiAutomator2 reports a field's content as `text`
+ * (the same attribute a label carries on every other node), its hint as `hint`, and whether it
+ * masks input as `password`. XCUITest reports content as `value`, which every node already
+ * carries, and the native iOS runner reports no field facts, so none are derived there.
+ */
+function textFieldFacts(
+  type: string,
+  attrs: Record<string, string>,
+  platform: WebDriverSourcePlatform,
+): TextFieldFacts | undefined {
+  return platform === 'android' ? androidTextFieldFacts(type, attrs) : undefined;
+}
+
+/**
+ * A field showing its hint reports the hint as its text, so that text is the placeholder and the
+ * label, not a value. The page source offers no other signal, so a typed value equal to the hint
+ * reads as the hint showing; the native helper's `hint-showing` fact has no counterpart here. A
+ * disabled field is not editable, whatever its class.
+ */
+function androidTextFieldFacts(
+  type: string,
+  attrs: Record<string, string>,
+): TextFieldFacts | undefined {
+  const password = parseWebDriverBoolean(attrs.password);
+  if (!ANDROID_TEXT_FIELD_CLASS.test(classNameSegment(attrs.class ?? type)) && password !== true) {
+    return undefined;
+  }
+  const placeholder = nonEmptyWebDriverAttribute(attrs.hint);
+  const text = nonEmptyWebDriverAttribute(attrs.text);
+  const hintShowing = placeholder !== undefined && text === placeholder;
+  return {
+    value: hintShowing ? undefined : text,
+    facts: {
+      editable: parseWebDriverBoolean(attrs.enabled, true) === true,
+      ...optionalFact('password', password),
+      ...(placeholder === undefined ? {} : { placeholder, hintShowing }),
+    },
+  };
+}
+
+function optionalFact<Key extends keyof RawSnapshotNode>(
+  key: Key,
+  value: RawSnapshotNode[Key] | undefined,
+): Partial<Pick<RawSnapshotNode, Key>> {
+  return value === undefined ? {} : ({ [key]: value } as Pick<RawSnapshotNode, Key>);
+}
+
+/** Android classes that are checkable when the page source names no `checkable` attribute. */
+const ANDROID_CHECKABLE_CLASS = /(CheckBox|RadioButton|Switch|ToggleButton|CheckedTextView)$/;
+
+/**
+ * The checked state of a checkable Android control. UiAutomator2 reports `checkable` and
+ * `checked` on every node, `false` on the many that cannot be checked, so only a checkable node
+ * carries the fact. XCUITest reports a switch's state as its `value`, which stays a value, as the
+ * native iOS runner reports it.
+ */
+function checkedFact(
+  type: string,
+  attrs: Record<string, string>,
+  platform: WebDriverSourcePlatform,
+): Pick<RawSnapshotNode, 'checked'> {
+  if (platform !== 'android') return {};
+  const checkable =
+    parseWebDriverBoolean(attrs.checkable) ?? ANDROID_CHECKABLE_CLASS.test(attrs.class ?? type);
+  const checked = parseWebDriverBoolean(attrs.checked);
+  return checkable && checked !== undefined ? { checked } : {};
 }
 
 function sourceStateFacts(

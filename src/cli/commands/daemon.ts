@@ -4,7 +4,7 @@ import {
   stopDaemon,
   type DaemonStopResult,
 } from '../../daemon/daemon-stop.ts';
-import { readDaemonShutdownReport } from '../../daemon/daemon-shutdown-report.ts';
+import { readDaemonShutdownReport } from '../../daemon-shutdown-report.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';

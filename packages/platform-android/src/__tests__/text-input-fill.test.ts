@@ -305,6 +305,33 @@ test('fillAndroid returns target-bound unconfirmed evidence when an input mask r
   assert.equal(calls.length, 1, 'an ambiguous committed fill must not be repeated');
 });
 
+test('fillAndroid fails, not unconfirmed, when a fill leaves a pre-filled field on its hint', async () => {
+  let hintShowing = false;
+  await withAndroidAdbProvider(
+    {
+      snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+      exec: createAndroidSnapshotHelperExecutor({
+        exec: async (args) => {
+          throw new Error(`unexpected adb call: ${args.join(' ')}`);
+        },
+        captureXml: () =>
+          hintShowing
+            ? `<?xml version="1.0" encoding="UTF-8"?><hierarchy><node package="com.example" class="android.widget.EditText" text="Phone" hint="Phone" hint-showing="true" resource-id="com.example:id/phone" focused="true" bounds="[0,0][200,100]"/></hierarchy>`
+            : phoneInputXml('12 123 4567'),
+      }),
+      text: async () => {
+        hintShowing = true;
+      },
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      await assert.rejects(fillAndroid(ANDROID_EMULATOR, 100, 50, '0501234567'), {
+        code: 'COMMAND_FAILED',
+      });
+    },
+  );
+});
+
 test('fillAndroid waits for settled app text before reporting success', async () => {
   let typed = '';
   let dumpCount = 0;

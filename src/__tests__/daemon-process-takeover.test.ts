@@ -1,25 +1,34 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 // oxlint-disable-next-line no-restricted-imports -- real /tmp socket path within the 104-char limit
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test } from 'vitest';
 import { isProcessAlive, readProcessStartTime } from '@agent-device/host-kit/process';
-import { isAgentDeviceDaemonProcess, stopProcessForTakeover } from '../daemon-process.ts';
+import { isAgentDeviceDaemonProcess, stopDaemonProcess } from '../daemon-process.ts';
 
 const TAKEOVER_TIMEOUTS = { termTimeoutMs: 5_000, killTimeoutMs: 2_000 };
-const spawnedPids: number[] = [];
+const spawnedChildren: { child: ChildProcess; exited: Promise<void> }[] = [];
 const spawnedRoots: string[] = [];
 
-afterEach(() => {
-  for (const pid of spawnedPids.splice(0)) {
-    if (!isProcessAlive(pid)) continue;
-    try {
-      process.kill(pid, 'SIGKILL');
-    } catch {
-      // The test's assertion already observed that the child exited.
-    }
+test.each([0, -1, 1.5, Number.NaN, '123', 2_147_483_648, Number.MAX_SAFE_INTEGER])(
+  'an invalid daemon pid %s cannot prove exit',
+  async (pid) => {
+    assert.deepEqual(
+      await stopDaemonProcess(
+        { pid: pid as number, startTime: 'captured-birth' },
+        { mode: 'force', termTimeoutMs: 0, killTimeoutMs: 0 },
+      ),
+      { status: 'retained', reason: 'identity-unverified' },
+    );
+  },
+);
+
+afterEach(async () => {
+  for (const { child, exited } of spawnedChildren.splice(0)) {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    await exited;
   }
   for (const root of spawnedRoots.splice(0)) {
     fs.rmSync(root, { recursive: true, force: true });
@@ -40,7 +49,10 @@ function spawnFakeDaemonFromBranchNamedCheckout(): { pid: number; entryPath: str
   const child = spawn(process.execPath, [entryPath], { stdio: 'ignore' });
   const pid = child.pid ?? 0;
   assert.ok(pid > 0, 'expected the fake daemon to have a pid');
-  spawnedPids.push(pid);
+  spawnedChildren.push({
+    child,
+    exited: new Promise<void>((resolve) => child.once('exit', () => resolve())),
+  });
   return { pid, entryPath };
 }
 
@@ -55,7 +67,12 @@ test('stops a branch-named daemon before replacement can strand its session', as
   assert.ok(startTime, 'expected the spawned daemon to report a start time');
   assert.equal(isAgentDeviceDaemonProcess(pid, startTime), true);
 
-  await stopProcessForTakeover(pid, { ...TAKEOVER_TIMEOUTS, expectedStartTime: startTime });
+  const result = await stopDaemonProcess(
+    { pid, startTime },
+    { mode: 'graceful', ...TAKEOVER_TIMEOUTS },
+  );
+  assert.equal(result.status, 'exited');
+  await spawnedChildren.at(-1)!.exited;
   assert.equal(isProcessAlive(pid), false);
 });
 
@@ -65,7 +82,11 @@ test('does not stop a branch-named daemon when process identity is missing', asy
 
   assert.equal(isAgentDeviceDaemonProcess(pid, undefined), false);
 
-  await stopProcessForTakeover(pid, { ...TAKEOVER_TIMEOUTS, expectedStartTime: undefined });
+  const result = await stopDaemonProcess(
+    { pid, startTime: null },
+    { mode: 'graceful', ...TAKEOVER_TIMEOUTS },
+  );
+  assert.deepEqual(result, { status: 'retained', reason: 'missing-start-time' });
   assert.equal(isProcessAlive(pid), true);
 });
 
@@ -78,9 +99,14 @@ test('does not stop a branch-named daemon when the pid belongs to a different pr
   const staleStartTime = `${actualStartTime}-previous-lifetime`;
   assert.equal(isAgentDeviceDaemonProcess(pid, staleStartTime), false);
 
-  await stopProcessForTakeover(pid, {
-    ...TAKEOVER_TIMEOUTS,
-    expectedStartTime: staleStartTime,
+  const result = await stopDaemonProcess(
+    { pid, startTime: staleStartTime },
+    { mode: 'graceful', ...TAKEOVER_TIMEOUTS },
+  );
+  assert.deepEqual(result, {
+    status: 'exited',
+    mode: 'already-exited',
+    identity: { pid, startTime: staleStartTime },
   });
   assert.equal(isProcessAlive(pid), true);
 });

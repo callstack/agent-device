@@ -8,12 +8,13 @@ import {
 } from './compatibility-policy.ts';
 import type { MaestroExecutionContext } from './engine-context.ts';
 import {
+  assertMaestroScriptsTrusted,
   checkpointMaestroCancellation,
+  conditionTruthMatches,
   observationConditions,
   readIterationCount,
   resolveCommand,
   resolveNumeric,
-  staticConditionMatches,
 } from './engine-flow.ts';
 import type { MaestroRunFlowCondition } from './program-ir.ts';
 import type {
@@ -113,13 +114,7 @@ async function executeEvalScript(
 ): Promise<undefined> {
   // ponytail: function-scoped import keeps engine-eval-script (and node:vm) out of the maestro eager closure.
   const { evaluateMaestroEvalScript } = await import('./engine-eval-script.ts');
-  if (state.options.trustedScripts === false) {
-    throw new AppError(
-      'UNAUTHORIZED',
-      'Maestro evalScript is not permitted for flows received over the remote daemon surface: ' +
-        'node:vm is not a security sandbox, so an untrusted expression can escape to the host.',
-    );
-  }
+  assertMaestroScriptsTrusted(state.options, 'evalScript');
   const outputEnv = await evaluateMaestroEvalScript(command.script, state.context.values);
   state.context.replaceOutput(outputEnv);
   state.executed += 1;
@@ -197,25 +192,20 @@ async function executeOpaqueStep(
   step: MaestroReplayPlanOpaqueStep,
   state: MaestroReplayPlanExecutionState,
 ): Promise<void> {
-  const command = resolveCommand(step.command, state.context);
+  const command = step.command;
   switch (command.kind) {
     case 'runFlow':
-      if (command.when && !(await flowConditionMatches(command.when, state))) {
+      if (command.when && !(await conditionMatches(command.when, 'runFlow.when', state))) {
         state.skipped += 1;
         return;
       }
       state.executed += 1;
       await executeNestedSteps(step.body, state);
       return;
-    case 'repeat': {
-      const times = readIterationCount(command.times, 0, state.context, 'repeat.times');
+    case 'repeat':
       state.executed += 1;
-      for (let iteration = 0; iteration < times; iteration += 1) {
-        checkpointMaestroCancellation(state.options.signal);
-        await executeNestedSteps(step.body, state);
-      }
+      await executeRepeat(step.body, command.times, command.while, state);
       return;
-    }
     case 'retry': {
       const retries = Math.min(
         readIterationCount(command.maxRetries, 1, state.context, 'retry.maxRetries'),
@@ -234,6 +224,25 @@ async function executeNestedSteps(
 ): Promise<void> {
   for (const step of steps) {
     await executeMaestroReplayPlanStep(step, state);
+  }
+}
+
+async function executeRepeat(
+  steps: readonly MaestroReplayPlanStep[],
+  times: number | string | undefined,
+  condition: MaestroRunFlowCondition | undefined,
+  state: MaestroReplayPlanExecutionState,
+): Promise<void> {
+  const maxIterations =
+    times === undefined && condition
+      ? Number.POSITIVE_INFINITY
+      : readIterationCount(times, 0, state.context, 'repeat.times');
+  for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+    // A synchronous body (e.g. only evalScript) would otherwise starve cancellation timers.
+    await new Promise((resolve) => setImmediate(resolve));
+    checkpointMaestroCancellation(state.options.signal);
+    if (condition && !(await conditionMatches(condition, 'repeat.while', state))) return;
+    await executeNestedSteps(steps, state);
   }
 }
 
@@ -258,12 +267,18 @@ async function executeRetry(
   throw new AppError('COMMAND_FAILED', 'Maestro retry commands failed.');
 }
 
-async function flowConditionMatches(
+async function conditionMatches(
   condition: MaestroRunFlowCondition,
+  field: 'runFlow.when' | 'repeat.while',
   state: MaestroReplayPlanExecutionState,
 ): Promise<boolean> {
-  if (!staticConditionMatches(condition, state.context, state.options)) return false;
-  for (const observation of observationConditions(condition)) {
+  if (condition.platform && condition.platform !== state.options.platform) return false;
+  if (
+    !(await conditionTruthMatches(condition.true, `${field}.true`, state.context, state.options))
+  ) {
+    return false;
+  }
+  for (const observation of observationConditions(condition, state.context)) {
     checkpointMaestroCancellation(state.options.signal);
     if (!(await observe(observation, state.timing.runFlowConditionTimeoutMs, state)).matched) {
       return false;

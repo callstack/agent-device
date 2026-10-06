@@ -242,9 +242,15 @@ const fillResponseProperties = {
 
 const fillVerificationTargetSchema = objectSchema(
   {
-    resourceId: nullableStringSchema('Android resource id of the exact field that changed.'),
-    className: nullableStringSchema('Android class name of the exact field that changed.'),
-    packageName: nullableStringSchema('Android package name that owns the exact field.'),
+    resourceId: nullableStringSchema(
+      'Identifier of the exact field that changed: Android resource id or Apple accessibility identifier.',
+    ),
+    className: nullableStringSchema(
+      'Type of the exact field that changed: Android class name or Apple element type.',
+    ),
+    packageName: nullableStringSchema(
+      'App that owns the exact field: Android package name or Apple bundle id.',
+    ),
     rect: objectSchema(
       {
         x: numberSchema(),
@@ -296,7 +302,7 @@ export const INTERACTION_COMMAND_OUTPUT_SCHEMAS = {
   fill: {
     type: 'object',
     description:
-      'Fill response. Android may return target-bound unconfirmed evidence when the exact app-owned field changed but formatting prevented raw equality.',
+      'Fill response. Returns target-bound unconfirmed evidence when the exact field changed but its value cannot confirm the text: Android app-owned formatting, or an Apple field whose accessibility value does not echo the typed text.',
     oneOf: [confirmedFillResponseSchema, unconfirmedFillResponseSchema],
   },
   longpress: interactionResponseDataSchema({

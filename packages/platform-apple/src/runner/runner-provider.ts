@@ -21,6 +21,12 @@ export type AppleRunnerLifecycleOptions = AppleRunnerCommandOptions & {
   forceRunnerXctestrunRebuild?: boolean;
   /** The session is started ahead of any command that needs it (a prewarm). */
   speculative?: boolean;
+  /**
+   * The admission held by the caller that owns this start across its retries (#3220). The prepare
+   * attempt loop carries one into every start it makes, so a teardown landing mid-loop refuses the
+   * retry that would otherwise rebuild the runner its first child was killed building.
+   */
+  startAdmission?: import('./runner-artifact.ts').RunnerStartAdmission;
 };
 
 export type AppleRunnerPrewarmOptions = AppleRunnerLifecycleOptions & {

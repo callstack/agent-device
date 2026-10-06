@@ -96,7 +96,7 @@ test('fill @ref fails fast when the target is off-screen', async () => {
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const response = await withRunner(() =>
     handleInteractionCommands({
@@ -153,7 +153,7 @@ test('fill @ref fails closed when stored ref bounds are invalid (ADR 0014)', asy
     createdAt: Date.now(),
     backend: 'android',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockFillPoint.mockRejectedValue(
     new Error('dispatch must not run: no positional recapture on unusable frame evidence'),
@@ -204,7 +204,7 @@ test('fill @ref rejects after a device action expired the frame', async () => {
   };
   // ADR 0014: an unobserved device action expired the frame.
   expireRefFrame(session);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   mockFillPoint.mockRejectedValue(
     new Error('dispatch should not be called for an expired-frame ref'),
   );
@@ -244,7 +244,7 @@ test('fill with a pinned stale ref rejects; pinned current is clean', async () =
   session.snapshotGeneration = 3;
   // Re-issue the frame over the overridden snapshot so its source tree matches.
   activateCompleteRefFrame(session);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const stale = await runInteraction(sessionStore, sessionName, 'fill', ['@e1~s2', 'hello']);
   expect(stale?.ok).toBe(false);
@@ -290,7 +290,7 @@ test("ADR 0014 blocker-2: a mutating find's internal fill from an expired frame 
   // device side effect changed the screen.
   activateCompleteRefFrame(session);
   expireRefFrame(session);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   mockFillPoint.mockResolvedValue({ filled: true });
 
   // Contrast: a user-supplied `@ref` against the expired frame rejects before
@@ -355,7 +355,7 @@ test('fill @ref keeps the original editable node when its parent is the hittable
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockFillPoint.mockResolvedValue({ filled: true });
 

@@ -1,7 +1,10 @@
 import crypto from 'node:crypto';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { MIN_LEASE_WINDOW_MS } from '@agent-device/contracts/lease-scope';
-import type { LeaseBackend } from '@agent-device/kernel/contracts';
+import {
+  MIN_LEASE_WINDOW_MS,
+  leaseScopeToReleaseRequest,
+} from '@agent-device/contracts/lease-scope';
+import { LEASE_BACKENDS, type LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
 import { normalizeTenantId } from './config.ts';
 
@@ -23,6 +26,7 @@ export type AllocateLeaseRequest = {
   deviceKey?: string;
   clientId?: string;
   ttlMs?: number;
+  retainOnClose?: boolean;
 };
 
 export type HeartbeatLeaseRequest = {
@@ -82,6 +86,7 @@ export type NormalizedAllocateLeaseRequest = {
   deviceKey?: string;
   clientId?: string;
   ttlMs?: number;
+  retainOnClose?: boolean;
 };
 
 const DEFAULT_LEASE_TTL_MS = 60_000;
@@ -132,9 +137,9 @@ export function normalizeRequiredLeaseId(raw: string | undefined): string {
 
 export function normalizeLeaseBackend(raw: string | undefined): LeaseBackend {
   const value = (raw ?? '').trim().toLowerCase();
-  if (!value || value === 'ios-simulator') return 'ios-simulator';
-  if (value === 'ios-instance' || value === 'android-instance' || value === 'harmonyos-instance')
-    return value;
+  if (!value) return 'ios-simulator';
+  const backend = LEASE_BACKENDS.find((entry) => entry === value);
+  if (backend) return backend;
   throw new AppError('INVALID_ARGS', `Unsupported lease backend: ${raw ?? ''}`);
 }
 
@@ -204,6 +209,7 @@ export function normalizeAllocateLeaseRequest(
     tenantId: normalizeRequiredTenantId(request.tenantId),
     runId: normalizeRequiredRunId(request.runId),
     ttlMs: request.ttlMs,
+    retainOnClose: request.retainOnClose,
   };
 }
 
@@ -286,6 +292,21 @@ export function assertLeaseOwnerScope(lease: DeviceLease, request: HeartbeatLeas
   }
 }
 
+/** Whether `lease` was allocated with exactly this owner and device scope. */
+export function hasAllocatedScope(
+  lease: DeviceLease,
+  request: NormalizedAllocateLeaseRequest,
+): boolean {
+  return (
+    lease.tenantId === request.tenantId &&
+    lease.runId === request.runId &&
+    lease.backend === request.backend &&
+    lease.leaseProvider === request.leaseProvider &&
+    lease.deviceKey === request.deviceKey &&
+    lease.clientId === request.clientId
+  );
+}
+
 export function leaseDeviceBindingKey(
   scope: Pick<DeviceLease, 'backend' | 'leaseProvider' | 'deviceKey'>,
 ): string | undefined {
@@ -322,6 +343,7 @@ export function createDeviceLease(
     ...(request.leaseProvider ? { leaseProvider: request.leaseProvider } : {}),
     ...(request.deviceKey ? { deviceKey: request.deviceKey } : {}),
     ...(request.clientId ? { clientId: request.clientId } : {}),
+    ...(request.retainOnClose ? { retainOnClose: true as const } : {}),
     createdAt: now,
     heartbeatAt: now,
     expiresAt: now + leaseTtlMs,
@@ -348,5 +370,17 @@ export function deviceLeaseBusyError(activeLease: DeviceLease): AppError {
     leaseProvider: activeLease.leaseProvider,
     expiresAt: activeLease.expiresAt,
     hint: 'Retry after the lease expires or close the owning session.',
+  });
+}
+
+export function leaseReleaseRequestFor(lease: DeviceLease): ReleaseLeaseRequest {
+  return leaseScopeToReleaseRequest({
+    leaseId: lease.leaseId,
+    tenantId: lease.tenantId,
+    runId: lease.runId,
+    leaseBackend: lease.backend,
+    leaseProvider: lease.leaseProvider,
+    deviceKey: lease.deviceKey,
+    clientId: lease.clientId,
   });
 }

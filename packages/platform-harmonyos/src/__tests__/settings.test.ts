@@ -6,6 +6,7 @@ vi.mock('../hdc.ts', () => ({ runHarmonyShell: vi.fn() }));
 import { runHarmonyShell } from '../hdc.ts';
 import { setHarmonySetting } from '../settings.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError, PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 
 const device: DeviceInfo = {
   platform: 'harmonyos',
@@ -46,6 +47,10 @@ test('HarmonyOS settings rejects unsupported setting and missing app bundle', as
   await assert.rejects(async () => await setHarmonySetting(device, 'wifi', 'on'), /not supported/);
   await assert.rejects(
     async () => await setHarmonySetting(device, 'clear-app-state', 'clear'),
-    /requires an app id/,
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.message.includes('requires an app id') &&
+      error.details?.reason === PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired &&
+      error.details?.dispatched === 'no',
   );
 });

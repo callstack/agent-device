@@ -12,7 +12,8 @@ import type {
   MaestroRunFlowCondition,
 } from './program-ir.ts';
 import type { MaestroExecutionContext } from './engine-context.ts';
-import { evaluateMaestroBooleanExpression } from './engine-expression.ts';
+import { tryEvaluateMaestroBooleanExpression } from './engine-expression.ts';
+import { isMaestroConditionTruthy, isMaestroScriptResultTruthy } from './engine-truthiness.ts';
 import { type MaestroEngineOptions, type MaestroObservationCondition } from './engine-types.ts';
 
 export function resolveCommand<T extends { readonly source: MaestroCommand['source'] }>(
@@ -139,24 +140,62 @@ export function registerIncludedProgramPaths(
   return includedPaths;
 }
 
-export function staticConditionMatches(
-  condition: MaestroRunFlowCondition,
+export function assertMaestroScriptsTrusted(options: MaestroEngineOptions, field: string): void {
+  if (options.trustedScripts !== false) return;
+  throw new AppError(
+    'UNAUTHORIZED',
+    `Maestro ${field} is not permitted for flows received over the remote daemon surface: ` +
+      'node:vm is not a security sandbox, so an untrusted expression can escape to the host.',
+  );
+}
+
+// Literals, maestro.platform comparisons, and ${VAR} lookups run without JavaScript, so remote flows keep them.
+export async function conditionTruthMatches(
+  truth: boolean | string | undefined,
+  field: string,
   context: MaestroExecutionContext,
   options: MaestroEngineOptions,
-): boolean {
-  if (condition.platform && condition.platform !== options.platform) return false;
-  if (condition.true === undefined) return true;
-  if (typeof condition.true === 'boolean') return condition.true;
-  return evaluateMaestroBooleanExpression(condition.true, context, options.platform);
+): Promise<boolean> {
+  if (truth === undefined) return true;
+  if (typeof truth === 'boolean') return truth;
+  const resolved = resolveWithoutScript(truth, context);
+  if (resolved !== undefined) {
+    const restricted = tryEvaluateMaestroBooleanExpression(resolved, options.platform);
+    if (restricted !== undefined) return restricted;
+    if (!resolved.includes('${')) return isMaestroConditionTruthy(resolved);
+  }
+  assertMaestroScriptsTrusted(options, field);
+  // ponytail: function-scoped import keeps engine-eval-script (and node:vm) out of the maestro eager closure.
+  const { evaluateMaestroConditionScript } = await import('./engine-eval-script.ts');
+  const result = await evaluateMaestroConditionScript(
+    truth,
+    context.values,
+    options.platform,
+    field,
+  );
+  context.replaceOutput(result.outputEnv);
+  return isMaestroScriptResultTruthy(result.value);
+}
+
+function resolveWithoutScript(value: string, context: MaestroExecutionContext): string | undefined {
+  try {
+    return context.resolve(value);
+  } catch (error) {
+    if (error instanceof AppError && error.code === 'INVALID_ARGS') return undefined;
+    throw error;
+  }
 }
 
 export function observationConditions(
   condition: MaestroRunFlowCondition,
+  context: MaestroExecutionContext,
 ): MaestroObservationCondition[] {
   return [
-    ...(condition.visible ? [{ kind: 'visible' as const, selector: condition.visible }] : []),
+    ...(condition.visible
+      ? [{ kind: 'visible' as const, selector: resolveValue(condition.visible, context) }]
+      : []),
     ...(condition.notVisible
-      ? [{ kind: 'notVisible' as const, selector: condition.notVisible }]
+      ? [{ kind: 'notVisible' as const, selector: resolveValue(condition.notVisible, context) }]
       : []),
   ];
 }

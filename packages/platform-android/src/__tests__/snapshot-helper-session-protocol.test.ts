@@ -37,8 +37,36 @@ test('parses the session envelope and snapshot metadata', () => {
       rootPresent: undefined,
       truncated: undefined,
       elapsedMs: undefined,
+      displayWidth: undefined,
+      displayHeight: undefined,
     },
   });
+});
+
+// The session transport reads the display pair exactly like the one-shot transport does (#3182),
+// and a header that never arrived stays an absence rather than becoming a zero.
+test('parses the session display extent beside its density and absent headers stay absent (#3182)', () => {
+  const xml = '<hierarchy><node text="catalog" /></hierarchy>';
+  const withDisplay = sessionResponse({
+    requestId: 'snapshot-1',
+    xml,
+    metadata: { pixelDensity: '2.625', displayWidth: '1080', displayHeight: '2400' },
+  });
+
+  const parsed = parseAndroidSnapshotHelperSessionSnapshotResponse(withDisplay, 'snapshot-1');
+
+  assert.equal(parsed.metadata.pixelDensity, 2.625);
+  assert.equal(parsed.metadata.displayWidth, 1080);
+  assert.equal(parsed.metadata.displayHeight, 2400);
+
+  const withoutDisplay = sessionResponse({
+    requestId: 'snapshot-1',
+    xml,
+    metadata: { pixelDensity: '2.625' },
+  });
+  const sparse = parseAndroidSnapshotHelperSessionSnapshotResponse(withoutDisplay, 'snapshot-1');
+  assert.equal(sparse.metadata.displayWidth, undefined);
+  assert.equal(sparse.metadata.displayHeight, undefined);
 });
 
 test('rejects stale and truncated session snapshot responses', () => {

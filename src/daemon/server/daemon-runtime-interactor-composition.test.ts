@@ -6,6 +6,12 @@ import { setActiveProviderDeviceRuntimes } from '../../provider-device-runtime.t
 import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { createDaemonProviderRuntimeComposition } from '../../provider-device-runtimes.ts';
+import { providerCredentialFingerprint } from '../../provider-credential-fingerprint.ts';
+import {
+  DAEMON_STARTUP_EXIT_CODES,
+  tryAcquireDaemonRegistration,
+} from '../../daemon-registration-owner.ts';
+import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { interactorResolution } from '../interactor-resolution.ts';
 
 vi.mock('../../platform-runtime.ts', () => ({
@@ -84,8 +90,59 @@ test('daemon startup composes the interactor resolution the daemon resolves thro
   }
 });
 
+test('daemon startup compares lease credentials with its own startup environment', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-credential-composition-');
+  const daemonEnv = { BROWSERSTACK_USERNAME: 'user', BROWSERSTACK_ACCESS_KEY: 'key-1' };
+  const runtime = await startDaemonRuntime({
+    env: {
+      ...process.env,
+      ...daemonEnv,
+      AGENT_DEVICE_STATE_DIR: stateDir,
+      AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',
+      AGENT_DEVICE_DAEMON_SERVER_MODE: 'http',
+    },
+    exit: () => {},
+    registerProcessHandlers: false,
+    stderr: { write: () => {} },
+    stdout: { write: () => {} },
+  });
+  try {
+    const { httpPort, token } = JSON.parse(
+      fs.readFileSync(resolveDaemonPaths(stateDir).infoPath, 'utf8'),
+    ) as { httpPort: number; token: string };
+    const allocate = async (env: Record<string, string>) =>
+      await (
+        await fetch(`http://127.0.0.1:${httpPort}/rpc`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'agent_device.lease.allocate',
+            params: {
+              token,
+              tenantId: 'tenant',
+              runId: 'run',
+              leaseProvider: 'browserstack',
+              providerCredentialFingerprint: providerCredentialFingerprint('browserstack', env),
+            },
+          }),
+        })
+      ).text();
+
+    expect(await allocate({ ...daemonEnv, BROWSERSTACK_ACCESS_KEY: 'key-2' })).toContain(
+      'provider-credentials-changed',
+    );
+    expect(await allocate(daemonEnv)).not.toContain('provider-credentials-changed');
+  } finally {
+    await runtime?.shutdown();
+  }
+});
+
 test('a daemon attempt losing the lock shuts down every constructed provider', async () => {
-  vi.spyOn(await import('./server-lifecycle.ts'), 'acquireDaemonLock').mockReturnValueOnce(false);
+  const stateDir = mkdtempForTestSync('daemon-held-lock-');
+  const held = await tryAcquireDaemonRegistration(resolveDaemonPaths(stateDir));
+  if (held.status !== 'acquired') throw new Error('registration fixture refused');
   const shutdown = vi.fn(() => {
     throw new Error('cleanup failed');
   });
@@ -103,7 +160,7 @@ test('a daemon attempt losing the lock shuts down every constructed provider', a
   });
   const exit = vi.fn();
   const runtime = await startDaemonRuntime({
-    env: { AGENT_DEVICE_STATE_DIR: mkdtempForTestSync('daemon-held-lock-') },
+    env: { AGENT_DEVICE_STATE_DIR: stateDir },
     exit,
     registerProcessHandlers: false,
     stderr: { write: () => {} },
@@ -112,5 +169,6 @@ test('a daemon attempt losing the lock shuts down every constructed provider', a
   expect(runtime).toBeNull();
   expect(shutdown).toHaveBeenCalledOnce();
   expect(otherShutdown).toHaveBeenCalledOnce();
-  expect(exit).toHaveBeenCalledWith(0);
+  expect(exit).toHaveBeenCalledWith(DAEMON_STARTUP_EXIT_CODES.busy);
+  await held.owner.finish();
 });

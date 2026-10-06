@@ -96,7 +96,7 @@ test('runtime clear removes applied transport hints for the active app', async (
     metroHost: '10.0.0.10',
     metroPort: 8081,
   });
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, {
       platform: 'android',
       id: 'emulator-5554',
@@ -146,7 +146,7 @@ test('runtime clear expires the ref frame at the admitted hint mutation boundary
     }),
     appBundleId: 'com.example.demo',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   sessionStore.setRuntimeHints(sessionName, {
     platform: 'android',
     metroHost: '10.0.2.2',
@@ -190,7 +190,7 @@ test('runtime clear rejects a false runtime-hints fact before its one implementa
     metroHost: '10.0.0.10',
     metroPort: 8081,
   });
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, device),
     appBundleId: 'com.example.demo',
   });
@@ -247,7 +247,7 @@ test('runtime gesture-viewport admits and binds the exact viewport operation onc
     mkdtempForTestSync('runtime-gesture-viewport'),
     'runtime-gesture-viewport.log',
   );
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeSession(sessionName, {
       platform: 'android',
@@ -289,4 +289,102 @@ test('runtime gesture-viewport admits and binds the exact viewport operation onc
       }),
     }),
   );
+});
+
+for (const phase of ['admission', 'effect'] as const) {
+  test(`runtime clear does not clear a successor's hints after retirement during ${phase}`, async () => {
+    const sessionStore = makeSessionStore();
+    const address = `cwd:runtime-clear-${phase}:default`;
+    const device = {
+      platform: 'android' as const,
+      id: `runtime-clear-${phase}`,
+      name: 'Pixel',
+      kind: 'emulator' as const,
+      booted: true,
+    };
+    const ref = sessionStore.publish(address, {
+      ...makeSession('default', device),
+      appBundleId: 'com.example.old',
+    });
+    sessionStore.setRuntimeHints(address, { platform: 'android', metroHost: 'old' });
+    const successorHints = { platform: 'android' as const, metroHost: 'successor' };
+    const replace = () => {
+      sessionStore.retire(ref);
+      sessionStore.publish(address, {
+        ...makeSession('default', device),
+        appBundleId: 'com.example.new',
+      });
+      sessionStore.setRuntimeHints(address, successorHints);
+    };
+    if (phase === 'admission') {
+      mockInspectDeviceRuntimeFacts.mockImplementationOnce(async (target) => {
+        replace();
+        return lifecycleRuntimeFacts(target);
+      });
+    } else {
+      mockClearRuntimeHints.mockImplementationOnce(async () => {
+        replace();
+      });
+    }
+    await expect(
+      handleSessionCommands({
+        req: {
+          token: 't',
+          session: 'default',
+          command: 'runtime',
+          positionals: ['clear'],
+          flags: {},
+        },
+        sessionName: address,
+        logPath: '/dev/null',
+        sessionStore,
+        invoke: noopInvoke,
+      }),
+    ).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'session_lifetime_ended' },
+    });
+    expect(sessionStore.getRuntimeHints(address)).toBe(successorHints);
+    expect(refFrameState(sessionStore.get(address)!)).toBe('active');
+    expect(mockClearRuntimeHints).toHaveBeenCalledTimes(phase === 'admission' ? 0 : 1);
+  });
+}
+
+test('runtime clear expires and uses the latest matching record after admission', async () => {
+  const sessionStore = makeSessionStore();
+  const device = {
+    platform: 'android' as const,
+    id: 'runtime-clear-rebuild',
+    name: 'Pixel',
+    kind: 'emulator' as const,
+    booted: true,
+  };
+  const ref = sessionStore.publish('clear-rebuild', {
+    ...makeSession('clear-rebuild', device),
+    appBundleId: 'old.app',
+  });
+  sessionStore.setRuntimeHints(ref.address, { platform: 'android', metroHost: 'old' });
+  mockInspectDeviceRuntimeFacts.mockImplementationOnce(async (target) => {
+    sessionStore.update(ref, { appBundleId: 'rebuilt.app' });
+    return lifecycleRuntimeFacts(target);
+  });
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: ref.address,
+      command: 'runtime',
+      positionals: ['clear'],
+      flags: {},
+    },
+    sessionName: ref.address,
+    logPath: '/dev/null',
+    sessionStore,
+    invoke: noopInvoke,
+  });
+  expect(response).toMatchObject({ ok: true, data: { cleared: true } });
+  expect(mockClearRuntimeHints).toHaveBeenCalledWith(
+    expect.objectContaining({ appId: 'rebuilt.app' }),
+  );
+  expect(refFrameState(sessionStore.requireCurrent(ref))).toBe('expired');
+  expect(refFrameState(ref.session)).toBe('active');
 });

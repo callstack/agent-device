@@ -39,9 +39,7 @@ test('finish failure remains primary when cleanup and cleanup-pending persistenc
       finishLiveDurableCapture(
         definition,
         {
-          session: active,
-          sessionName: context.sessionName,
-          sessionStore: context.sessionStore,
+          binding: context.binding,
           intent: 'capture',
         },
         context.resourcePath,
@@ -70,9 +68,7 @@ test('an uncertain finish preserves its error after confirmed compensating clean
     finishLiveDurableCapture(
       testCaptureDefinition,
       {
-        session: active,
-        sessionName: context.sessionName,
-        sessionStore: context.sessionStore,
+        binding: context.binding,
         intent: 'capture',
       },
       context.resourcePath,
@@ -106,9 +102,7 @@ test('an uncertain finish retains live evidence when compensating cleanup is unc
       finishLiveDurableCapture(
         testCaptureDefinition,
         {
-          session: active,
-          sessionName: context.sessionName,
-          sessionStore: context.sessionStore,
+          binding: context.binding,
           intent: 'capture',
         },
         context.resourcePath,
@@ -145,9 +139,7 @@ test('a preserved finish leaves the record open without disposing what its retry
       finishLiveDurableCapture(
         definition,
         {
-          session: active,
-          sessionName: context.sessionName,
-          sessionStore: context.sessionStore,
+          binding: context.binding,
           intent: 'capture',
         },
         context.resourcePath,
@@ -181,9 +173,7 @@ test('a preserved finish that reports uncertainty still leaves the record retrya
     finishLiveDurableCapture(
       definition,
       {
-        session: active,
-        sessionName: context.sessionName,
-        sessionStore: context.sessionStore,
+        binding: context.binding,
         intent: 'capture',
       },
       context.resourcePath,
@@ -216,9 +206,7 @@ test('a disposal finish disposes a preserving kind’s material too', async () =
     finishLiveDurableCapture(
       definition,
       {
-        session: active,
-        sessionName: context.sessionName,
-        sessionStore: context.sessionStore,
+        binding: context.binding,
         intent: 'disposal',
       },
       context.resourcePath,
@@ -231,3 +219,72 @@ test('a disposal finish disposes a preserving kind’s material too', async () =
     envelope: { lifecycle: 'completed', metadata: { phase: 'completed' } },
   });
 });
+
+test.each(['rebuild', 'retire', 'handle', 'token', 'generation'] as const)(
+  'a held finish after %s clears only its matching lifetime, handle and fence',
+  async (change) => {
+    const context = makeDurableCaptureContext();
+    const start = makeDurableCaptureStartResult(context);
+    let enter!: () => void;
+    let release!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    const resumed = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    start.finish.mockImplementationOnce(async () => {
+      enter();
+      await resumed;
+      return { status: 'completed', result: { outputPath: '/tmp/capture', completedAt: 2 } };
+    });
+    await adoptStartedDurableCapture(
+      testCaptureDefinition,
+      {
+        ...context,
+        ...start,
+        throwIfCanceled: () => {},
+      },
+      context.resourcePath,
+    );
+    const finishing = finishLiveDurableCapture(
+      testCaptureDefinition,
+      {
+        binding: context.binding,
+        intent: 'capture',
+      },
+      context.resourcePath,
+    );
+    await entered;
+    const ref = context.sessionStore.lookup(context.sessionName);
+    const active = context.sessionStore.get(context.sessionName)!.capture!;
+    if (change === 'retire') {
+      context.sessionStore.retire(ref);
+      context.sessionStore.set(context.sessionName, { name: 'successor', capture: active });
+    } else {
+      const fence = {
+        ...active.envelope.fence,
+        ...(change === 'token' ? { token: 'replacement' } : {}),
+        ...(change === 'generation' ? { generation: active.envelope.fence.generation + 1 } : {}),
+      };
+      context.sessionStore.update(ref, (current) => ({
+        ...current,
+        name: 'updated',
+        capture: {
+          ...active,
+          handle:
+            change === 'handle' ? makeDurableCaptureStartResult(context).handle : active.handle,
+          envelope: { ...active.envelope, fence },
+        },
+      }));
+    }
+    const before = context.sessionStore.get(context.sessionName)!;
+    release();
+    await finishing;
+    const current = context.sessionStore.get(context.sessionName)!;
+    expect(start.finish).toHaveBeenCalledOnce();
+    expect(current.name).toBe(change === 'retire' ? 'successor' : 'updated');
+    if (change === 'rebuild') expect(current.capture).toBeUndefined();
+    else expect(current).toBe(before);
+  },
+);

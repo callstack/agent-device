@@ -13,9 +13,9 @@ import {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { contextFromFlags } from '../context.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
-import type { SessionState } from '../session-state.ts';
+import type { SessionRef, SessionState } from '../session-state.ts';
 import { SessionStore } from '../session-store.ts';
-import { recordIfSession } from '../snapshot-session.ts';
+import { recordSessionAction } from '../session-action-recorder.ts';
 import { parseTimeout } from '@agent-device/command-registry/parse-timeout';
 import { resolveRefFrameEffect } from '../daemon-command-registry.ts';
 import { expireRefFrame } from '../ref-frame.ts';
@@ -28,7 +28,7 @@ type HandleAlertCommandParams = {
   req: DaemonRequest;
   logPath: string;
   sessionStore: SessionStore;
-  session: SessionState | undefined;
+  ref: SessionRef | undefined;
   device: SessionState['device'];
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
@@ -118,7 +118,8 @@ async function executeDismissAlert(
 export async function handleAlertCommand(
   params: HandleAlertCommandParams,
 ): Promise<DaemonResponse> {
-  const { req, logPath, sessionStore, session, device, inspectFacts, bindDevice } = params;
+  const { req, logPath, sessionStore, ref, device, inspectFacts, bindDevice } = params;
+  let session = ref ? sessionStore.requireCurrent(ref) : undefined;
   const action = normalizeAlertAction(req.positionals?.[0]);
   const bound = await resolveBoundAlertRuntime({
     device,
@@ -128,6 +129,7 @@ export async function handleAlertCommand(
     bindDevice,
   });
   if (!bound.ok) return bound.response;
+  session = ref ? sessionStore.requireCurrent(ref) : undefined;
   // ADR 0014 side-effect seam: alert accept/dismiss act on the device; get/wait are read-only.
   // The alert resolver returns `may-invalidate` only for the acting subactions, so this covers
   // the accept/dismiss mutations on every owner without touching the read paths.
@@ -145,7 +147,7 @@ export async function handleAlertCommand(
     ...alertTarget(session),
     execution: runtimeExecutionFromContext(context),
   });
-  recordIfSession(sessionStore, session, req, data);
+  recordSessionAction(sessionStore, ref, req, req.command, data);
   return { ok: true, data };
 }
 

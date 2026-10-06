@@ -24,6 +24,7 @@ import {
   withAppleToolProvider,
 } from '@agent-device/platform-apple/tool-provider';
 import { prepareIosInstallArtifact } from '@agent-device/platform-apple/install-artifact';
+import { AppError } from '@agent-device/kernel/errors';
 import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from './install-source.coverage.ts';
 import { mkdtempForTest } from './test-utils/tmp-dir.ts';
 import * as networkTransport from '@agent-device/provision-kit/install-source-network-transport';
@@ -104,6 +105,13 @@ test('isTrustedInstallSourceUrl recognizes supported artifact services', () => {
     false,
   );
   assert.equal(isTrustedInstallSourceUrl('https://expo.dev/pricing'), false);
+  assert.throws(
+    () => isTrustedInstallSourceUrl('/abs/path/app.zip'),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.message === 'Invalid source URL',
+  );
 });
 
 test.sequential('materializeInstallablePath extracts zip archives without ditto', async () => {
@@ -380,6 +388,8 @@ test('prepareIosInstallArtifact extracts GitHub artifact ZIP containing nested a
 
           try {
             assert.equal(path.basename(result.installablePath), 'Demo.app');
+            // A tar has no hosted upload API, so nothing is named uploadable.
+            assert.equal(result.uploadPath, undefined);
             assert.equal(result.bundleId, 'com.example.githubtar');
             assert.equal(result.appName, 'GitHub Tar');
           } finally {
@@ -419,8 +429,44 @@ test('prepareIosInstallArtifact extracts GitHub artifact ZIP containing one IPA'
 
           try {
             assert.equal(path.basename(result.installablePath), 'Demo.app');
+            // The .ipa, not the artifact zip that wrapped it, is what a hosted provider uploads.
+            assert.equal(path.basename(result.uploadPath ?? ''), 'Demo.ipa');
+            assert.equal((await fs.stat(result.uploadPath ?? '')).isFile(), true);
             assert.equal(result.bundleId, 'com.example.githubipa');
             assert.equal(result.appName, 'GitHub IPA');
+          } finally {
+            await result.cleanup();
+          }
+        });
+      });
+    },
+  );
+});
+
+test('prepareIosInstallArtifact names the zip a simulator app arrived in as its upload', async () => {
+  await withArchiveFixture(
+    {
+      extractions: [
+        {
+          command: 'unzip',
+          populate: async (outputPath) => {
+            await fs.mkdir(path.join(outputPath, 'Demo.app'));
+          },
+        },
+      ],
+    },
+    async () => {
+      await withIosBundleInfo('com.example.githubapp', 'GitHub App', async () => {
+        await withMockedInstallSourceFetch(Buffer.from('artifact fixture'), async () => {
+          const result = await prepareIosInstallArtifact({
+            kind: 'url',
+            url: 'https://api.github.com/repos/acme/app/actions/artifacts/989/zip',
+          });
+
+          try {
+            assert.equal(path.basename(result.installablePath), 'Demo.app');
+            assert.equal(result.uploadPath, result.archivePath);
+            assert.equal((await fs.stat(result.uploadPath ?? '')).isFile(), true);
           } finally {
             await result.cleanup();
           }

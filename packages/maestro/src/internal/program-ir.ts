@@ -254,7 +254,8 @@ export type MaestroRunFlowCommand = {
 export type MaestroRepeatCommand = {
   kind: 'repeat';
   source: MaestroSourceLocation;
-  times: number | string;
+  times?: number | string;
+  while?: MaestroRunFlowCondition;
   commands: MaestroCommand[];
 };
 

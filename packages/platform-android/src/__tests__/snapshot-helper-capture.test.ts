@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'vitest';
-import { captureAndroidSnapshotWithHelper } from '../snapshot-helper-capture.ts';
+import { readAndroidCaptureFailureReason } from '@agent-device/contracts/android-snapshot-quality';
+import { AppError } from '@agent-device/kernel/errors';
+import {
+  captureAndroidSnapshotWithHelper,
+  parseAndroidSnapshotHelperOutput,
+} from '../snapshot-helper-capture.ts';
 import { resetAndroidSnapshotHelperRetirements } from '../snapshot-helper-retirement.ts';
 import type { AndroidAdbExecutor } from '../snapshot-helper-types.ts';
 import {
@@ -130,7 +135,34 @@ test('canceled one-shot capture reports the cancellation and the next capture re
   ]);
 });
 
-function helperOutput(xml: string): string {
+test('a helper failure reported under a zero am exit status keeps its own reason', async () => {
+  // `am instrument` exits 0 after the helper finished with ok=false, as an emulator answered a
+  // capture of an app whose main thread never served its window.
+  const adb: AndroidAdbExecutor = async (args) => {
+    if (isAndroidHelperRuntimeProbe(args)) return androidHelperRuntimeProbeResult();
+    return {
+      exitCode: 0,
+      stdout: [
+        'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-snapshot-helper-v1',
+        'INSTRUMENTATION_RESULT: errorType=java.util.concurrent.TimeoutException',
+        'INSTRUMENTATION_RESULT: message=Timed out waiting for the accessibility hierarchy',
+        'INSTRUMENTATION_RESULT: ok=false',
+        'INSTRUMENTATION_CODE: 1',
+      ].join('\n'),
+      stderr: '',
+    };
+  };
+
+  await assert.rejects(
+    captureAndroidSnapshotWithHelper({ adb, deviceKey: 'android:emulator-5554' }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      readAndroidCaptureFailureReason(error) === 'accessibility-timeout' &&
+      error.details?.errorType === 'java.util.concurrent.TimeoutException',
+  );
+});
+
+function helperOutput(xml: string, resultLines: readonly string[] = []): string {
   return [
     'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
     'INSTRUMENTATION_STATUS: helperApiVersion=1',
@@ -143,6 +175,34 @@ function helperOutput(xml: string): string {
     'INSTRUMENTATION_RESULT: helperApiVersion=1',
     'INSTRUMENTATION_RESULT: ok=true',
     'INSTRUMENTATION_RESULT: outputFormat=uiautomator-xml',
+    ...resultLines,
     'INSTRUMENTATION_CODE: 0',
   ].join('\n');
 }
+
+// The helper publishes the display's extent beside its density (#3182), and the transport reader
+// keeps an omitted pair absent rather than carrying a zero the host would have to second-guess.
+test('parseAndroidSnapshotHelperOutput carries the helper display extent beside its density (#3182)', () => {
+  const parsed = parseAndroidSnapshotHelperOutput(
+    helperOutput('<hierarchy><node text="row" /></hierarchy>', [
+      'INSTRUMENTATION_RESULT: pixelDensity=2.625',
+      'INSTRUMENTATION_RESULT: displayWidth=1080',
+      'INSTRUMENTATION_RESULT: displayHeight=2400',
+    ]),
+  );
+
+  assert.equal(parsed.metadata.pixelDensity, 2.625);
+  assert.equal(parsed.metadata.displayWidth, 1080);
+  assert.equal(parsed.metadata.displayHeight, 2400);
+});
+
+test('parseAndroidSnapshotHelperOutput leaves the display extent absent when the helper omits it (#3182)', () => {
+  const parsed = parseAndroidSnapshotHelperOutput(
+    helperOutput('<hierarchy><node text="row" /></hierarchy>', [
+      'INSTRUMENTATION_RESULT: pixelDensity=2.625',
+    ]),
+  );
+
+  assert.equal(parsed.metadata.displayWidth, undefined);
+  assert.equal(parsed.metadata.displayHeight, undefined);
+});

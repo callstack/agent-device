@@ -142,7 +142,7 @@ test('capabilities fixture preserves transport mode and owner-specific refusal r
 function createAndroidCapabilitiesSession(suffix: string) {
   const sessionName = `android-capabilities-${suffix}`;
   const sessionStore = makeSessionStore(`agent-device-capabilities-${suffix}-`);
-  sessionStore.set(sessionName, makeAndroidSession(sessionName));
+  sessionStore.publish(sessionName, makeAndroidSession(sessionName));
   return { sessionName, sessionStore };
 }
 

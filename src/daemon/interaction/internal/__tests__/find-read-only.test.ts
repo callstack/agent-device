@@ -175,7 +175,7 @@ test('read-only find while recording is intentionally deferred from target-v1 ev
   const sessionStore = makeSessionStore();
   const sessionName = 'default';
   const session = makeAuthoringSession(sessionName);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   mockDispatch.mockImplementation(async (_device, command) => {
     if (command === 'snapshot') {
       return {

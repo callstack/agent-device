@@ -36,7 +36,7 @@ function makeStore(t: TestContext): SessionStore {
 
 test('does not reuse lone active session for implicit default session from another scope', (t) => {
   const store = makeStore(t);
-  store.set('android', makeSession('android'));
+  store.publish('android', makeSession('android'));
   const cwd = mkdtempForTestSync('agent-device-cwd-scope-');
   t.onTestFinished(() => {
     fs.rmSync(cwd, { recursive: true, force: true });
@@ -223,7 +223,7 @@ test('names an implicit session by the platform it selects', (t) => {
 test('gives each platform its own implicit session in one workspace', (t) => {
   const { cwd, scopeId } = makeWorkspaceCwd(t);
   const store = makeStore(t);
-  store.set(`cwd:${scopeId}:ios`, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
+  store.publish(`cwd:${scopeId}:ios`, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
 
   // #2580: binding Android from the same checkout used to be refused because the workspace
   // session was already bound to Apple.
@@ -239,7 +239,7 @@ test('joins the workspace session that a named platform agrees with', (t) => {
   const { cwd, scopeId } = makeWorkspaceCwd(t);
   const store = makeStore(t);
   const openedWithoutPlatform = `cwd:${scopeId}:default`;
-  store.set(openedWithoutPlatform, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
+  store.publish(openedWithoutPlatform, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
 
   // Routing must keep the store key, so a platform-tagged command writes into the artifacts
   // of the session it joined instead of a second directory.
@@ -251,7 +251,7 @@ test('joins the workspace session that a named platform agrees with', (t) => {
 test('does not join a workspace session bound to another platform', (t) => {
   const { cwd, scopeId } = makeWorkspaceCwd(t);
   const store = makeStore(t);
-  store.set(`cwd:${scopeId}:ios`, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
+  store.publish(`cwd:${scopeId}:ios`, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
 
   const resolved = resolveEffectiveSessionName(
     implicitRequest(cwd, { platform: 'android', device: 'Pixel 9' }, 'boot'),
@@ -265,7 +265,7 @@ test('routes a platform-less request to the workspace sole implicit session', (t
   const { cwd, scopeId } = makeWorkspaceCwd(t);
   const store = makeStore(t);
   const iosSession = `cwd:${scopeId}:ios`;
-  store.set(iosSession, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
+  store.publish(iosSession, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
 
   const resolved = resolveEffectiveSessionName(implicitRequest(cwd, {}, 'press'), store, {
     attachesToSession: true,
@@ -277,8 +277,8 @@ test('routes a platform-less request to the workspace sole implicit session', (t
 test('refuses a platform-less request when the workspace holds several implicit sessions', (t) => {
   const { cwd, scopeId } = makeWorkspaceCwd(t);
   const store = makeStore(t);
-  store.set(`cwd:${scopeId}:ios`, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
-  store.set(`cwd:${scopeId}:android`, makeWorkspaceSession(scopeId, ANDROID_EMULATOR));
+  store.publish(`cwd:${scopeId}:ios`, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
+  store.publish(`cwd:${scopeId}:android`, makeWorkspaceSession(scopeId, ANDROID_EMULATOR));
 
   assert.throws(
     () =>
@@ -303,7 +303,7 @@ test('routes a platform-less request to a sole default-leaf session', (t) => {
   const { cwd, scopeId } = makeWorkspaceCwd(t);
   const store = makeStore(t);
   const openedWithoutPlatform = `cwd:${scopeId}:default`;
-  store.set(openedWithoutPlatform, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
+  store.publish(openedWithoutPlatform, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
 
   const resolved = resolveEffectiveSessionName(implicitRequest(cwd, {}, 'press'), store, {
     attachesToSession: true,
@@ -318,8 +318,8 @@ test('refuses a platform-less request when a default-leaf session shares the wor
   // The #2580 shape: iOS was opened without `--platform`, so it owns the `default` leaf, and
   // Android then took its own platform leaf. Preferring `default` here would run a bare `press`
   // on the iOS device the caller is no longer addressing.
-  store.set(`cwd:${scopeId}:default`, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
-  store.set(`cwd:${scopeId}:android`, makeWorkspaceSession(scopeId, ANDROID_EMULATOR));
+  store.publish(`cwd:${scopeId}:default`, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
+  store.publish(`cwd:${scopeId}:android`, makeWorkspaceSession(scopeId, ANDROID_EMULATOR));
 
   assert.throws(
     () =>
@@ -343,8 +343,8 @@ test('refuses a platform-less request when a default-leaf session shares the wor
 test('keeps inventory commands routable across implicit session ambiguity', (t) => {
   const { cwd, scopeId } = makeWorkspaceCwd(t);
   const store = makeStore(t);
-  store.set(`cwd:${scopeId}:ios`, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
-  store.set(`cwd:${scopeId}:android`, makeWorkspaceSession(scopeId, ANDROID_EMULATOR));
+  store.publish(`cwd:${scopeId}:ios`, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
+  store.publish(`cwd:${scopeId}:android`, makeWorkspaceSession(scopeId, ANDROID_EMULATOR));
 
   // `session list` is how a caller discovers the two addresses, so it must not be refused.
   const resolved = resolveEffectiveSessionName(implicitRequest(cwd, {}, 'session_list'), store, {
@@ -357,7 +357,10 @@ test('keeps inventory commands routable across implicit session ambiguity', (t) 
 test('keeps a named session out of implicit workspace routing', (t) => {
   const { cwd, scopeId } = makeWorkspaceCwd(t);
   const store = makeStore(t);
-  store.set('qa', { ...makeWorkspaceSession(scopeId, ANDROID_EMULATOR), sessionScope: undefined });
+  store.publish('qa', {
+    ...makeWorkspaceSession(scopeId, ANDROID_EMULATOR),
+    sessionScope: undefined,
+  });
 
   const resolved = resolveEffectiveSessionName(implicitRequest(cwd, {}, 'press'), store, {
     attachesToSession: true,
@@ -369,7 +372,10 @@ test('keeps a named session out of implicit workspace routing', (t) => {
 test('ignores an implicit session owned by another workspace', (t) => {
   const { cwd } = makeWorkspaceCwd(t);
   const store = makeStore(t);
-  store.set('cwd:0000000000000000:ios', makeWorkspaceSession('0000000000000000', IOS_SIMULATOR));
+  store.publish(
+    'cwd:0000000000000000:ios',
+    makeWorkspaceSession('0000000000000000', IOS_SIMULATOR),
+  );
 
   const resolved = resolveEffectiveSessionName(implicitRequest(cwd, {}, 'press'), store, {
     attachesToSession: true,
@@ -410,8 +416,8 @@ test('treats an unusable platform value as no platform at all', (t) => {
 test('refuses a platform selector that several implicit sessions equally answer', (t) => {
   const { cwd, scopeId } = makeWorkspaceCwd(t);
   const store = makeStore(t);
-  store.set(`cwd:${scopeId}:ios`, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
-  store.set(`cwd:${scopeId}:macos`, {
+  store.publish(`cwd:${scopeId}:ios`, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
+  store.publish(`cwd:${scopeId}:macos`, {
     ...makeWorkspaceSession(scopeId, {
       platform: 'apple',
       appleOs: 'macos',
@@ -441,8 +447,8 @@ test('prefers the session already keyed to the requested platform', (t) => {
   const { cwd, scopeId } = makeWorkspaceCwd(t);
   const store = makeStore(t);
   // Both sessions answer `--platform ios`: the one keyed to it, and one opened without a platform.
-  store.set(`cwd:${scopeId}:ios`, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
-  store.set(
+  store.publish(`cwd:${scopeId}:ios`, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
+  store.publish(
     `cwd:${scopeId}:default`,
     makeWorkspaceSession(scopeId, { ...IOS_SIMULATOR, id: 'SIM-002', name: 'iPhone 16 Plus' }),
   );
@@ -456,7 +462,7 @@ test('joins the session already keyed to the platform-less default leaf', (t) =>
   const { cwd, scopeId } = makeWorkspaceCwd(t);
   const store = makeStore(t);
   const defaultAddress = `cwd:${scopeId}:default`;
-  store.set(defaultAddress, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
+  store.publish(defaultAddress, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
 
   const resolved = resolveEffectiveSessionName(implicitRequest(cwd, {}, 'press'), store, {
     attachesToSession: true,
@@ -469,7 +475,7 @@ test('keeps a same-platform device mismatch on the bound session instead of fork
   const { cwd, scopeId } = makeWorkspaceCwd(t);
   const store = makeStore(t);
   const boundSession = `cwd:${scopeId}:default`;
-  store.set(boundSession, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
+  store.publish(boundSession, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
 
   // `--platform ios` agrees with the bound session; only the device disagrees. Routing hands the
   // request to that session so the shared selector rules refuse the mismatch, rather than opening
@@ -486,7 +492,7 @@ test('keeps a same-platform target mismatch on the bound session', (t) => {
   const { cwd, scopeId } = makeWorkspaceCwd(t);
   const store = makeStore(t);
   const boundSession = `cwd:${scopeId}:default`;
-  store.set(boundSession, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
+  store.publish(boundSession, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
 
   const resolved = resolveEffectiveSessionName(
     implicitRequest(cwd, { platform: 'ios', target: 'tv' }),
@@ -515,7 +521,7 @@ test('routes a session-lock platform into the implicit session key', (t) => {
 test('routes a session-lock platform past a workspace session bound to another platform', (t) => {
   const { cwd, scopeId } = makeWorkspaceCwd(t);
   const store = makeStore(t);
-  store.set(`cwd:${scopeId}:ios`, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
+  store.publish(`cwd:${scopeId}:ios`, makeWorkspaceSession(scopeId, IOS_SIMULATOR));
 
   // Candidate matching that reads only `flags` sees no platform here, so the iOS session appears
   // to agree and the request runs on it; the lock policy then leaves the platform unset because a
@@ -536,10 +542,10 @@ test('counts one session reachable under two addresses once', (t) => {
   const store = makeStore(t);
   const address = `cwd:${scopeId}:ios`;
   const session = makeWorkspaceSession(scopeId, IOS_SIMULATOR);
-  store.set(address, session);
+  store.publish(address, session);
   // A writer that stores by `SessionState.name` publishes the same session a second time. It must
   // not read as a second session the caller has to disambiguate.
-  store.set(session.name, session);
+  store.publish(session.name, session);
 
   const resolved = resolveEffectiveSessionName(implicitRequest(cwd, {}, 'press'), store, {
     attachesToSession: true,

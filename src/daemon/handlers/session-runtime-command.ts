@@ -2,6 +2,7 @@ import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { clearRuntimeHintsRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import { SessionStore } from '../session-store.ts';
+import type { SessionRef } from '../session-state.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import { admitRuntimeUse } from '../runtime-admission.ts';
 import {
@@ -64,13 +65,14 @@ export async function handleRuntimeCommand(params: {
       'runtime requires set, show, clear, port-reverse, or gesture-viewport',
     );
   }
-  const session = sessionStore.get(sessionName);
+  const ref = sessionStore.lookup(sessionName);
+  const session = ref?.session;
   const current = sessionStore.getRuntimeHints(sessionName);
   if (action === 'clear') {
     return await clearRuntimeCommand({
       sessionName,
       sessionStore,
-      session,
+      ref,
       current,
       inspectFacts: params.inspectFacts,
       bindDevice: params.bindDevice,
@@ -118,12 +120,13 @@ function isRuntimeAction(action: string): action is RuntimeAction {
 async function clearRuntimeCommand(params: {
   sessionName: string;
   sessionStore: SessionStore;
-  session: ReturnType<SessionStore['get']>;
+  ref: SessionRef | undefined;
   current: ReturnType<SessionStore['getRuntimeHints']>;
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
-  const { sessionName, sessionStore, session, current, inspectFacts, bindDevice } = params;
+  const { sessionName, sessionStore, ref, current, inspectFacts, bindDevice } = params;
+  const session = ref ? sessionStore.requireCurrent(ref) : undefined;
   if (hasRuntimeTransportHints(current) && session?.appBundleId) {
     const admission = await admitClearRuntime({
       device: session.device,
@@ -133,13 +136,15 @@ async function clearRuntimeCommand(params: {
     if (admission.type === 'response') return admission.response;
     // Native hint removal can change the app's reachable surface. Expire the existing frame at
     // the mutation boundary, after admission and immediately before the bound package effect.
-    expireRefFrame(session);
+    const currentSession = sessionStore.requireCurrent(ref!);
+    expireRefFrame(currentSession);
     await admission.runtime.operations.clearRuntimeHints({
-      appId: session.appBundleId,
+      appId: currentSession.appBundleId,
       values: runtimeHintValues(current),
     });
   }
-  const cleared = sessionStore.clearRuntimeHints(sessionName);
+  const cleared = ref ? sessionStore.clearRuntimeHints(ref) : Boolean(current);
+  if (!ref) sessionStore.setRuntimeHints(sessionName, undefined);
   return { ok: true, data: { session: sessionName, cleared } };
 }
 

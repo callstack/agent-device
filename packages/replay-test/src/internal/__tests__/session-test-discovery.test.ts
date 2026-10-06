@@ -74,7 +74,62 @@ test('a suite that matched nothing after filtering is rejected', () => {
         platformFilter: 'android',
         discoverSources: sourcesOf({ path: '01-ios.ad', manifest: declared('ios') }),
       }),
-    (error: unknown) => error instanceof AppError && /No replay tests matched/.test(error.message),
+    (error: unknown) =>
+      error instanceof AppError &&
+      // #3197: the skip reason used to live only in the internal entry, so the
+      // caller saw a bare "no tests matched" for a declaration mismatch.
+      /1 declaring another platform/.test(error.message) &&
+      /Run a source that declares android/.test(error.message),
+  );
+});
+
+test('a suite whose only source declares no platform is told how to declare one', () => {
+  // The reported case: header-less files plus `--platform android` on a serial that
+  // already pins the device.
+  assert.throws(
+    () =>
+      discoverReplayTestEntries({
+        platformFilter: 'android',
+        discoverSources: sourcesOf({ path: '01-untyped.ad', manifest: unspecified }),
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.message ===
+        'No replay tests matched for --platform android: 1 without a platform declaration. ' +
+          'Add "context platform=android" to the first line of a script that has none, ' +
+          'or drop --platform when the device is already selected.',
+  );
+});
+
+test('a filter value no script can declare is not answered with declaration advice', () => {
+  // `web` is excluded from ReplayTestPlatform (#1900): telling the caller to add
+  // `context platform=web` would send them editing a header the parser drops.
+  assert.throws(
+    () =>
+      discoverReplayTestEntries({
+        platformFilter: 'web',
+        discoverSources: sourcesOf({ path: '01-untyped.ad', manifest: unspecified }),
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      /No script can declare web as its platform; run this suite without --platform\./.test(
+        error.message,
+      ),
+  );
+});
+
+test('a filtered suite with no sources at all keeps the plain sentence: nothing was skipped', () => {
+  // The reasons the message now names come from the filter visiting a source. With
+  // no source visited, the old sentence is the true one and stays byte-identical.
+  assert.throws(
+    () =>
+      discoverReplayTestEntries({
+        platformFilter: 'android',
+        discoverSources: sourcesOf(),
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.message === 'No replay tests matched for --platform android.',
   );
 });
 

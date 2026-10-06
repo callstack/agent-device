@@ -29,7 +29,12 @@ import {
   makeSession,
 } from '../../__tests__/test-utils/session-factories.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { AppError, retriableForErrorCode } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  defaultHintForCode,
+  PRE_DISPATCH_REFUSAL_REASONS,
+  retriableForErrorCode,
+} from '@agent-device/kernel/errors';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 const mockLifecycleEffect = vi.mocked(dispatchApplicationLifecycleEffect);
@@ -100,7 +105,7 @@ test('fact-owned UNSUPPORTED_OPERATION errors do not fabricate legacy supportedO
   const { sessionStore, handler } = makeHandler();
   // Linux refuses native perf from exact runtime facts. The retired capability matrix has no
   // trustworthy platform summary to graft onto that operation-level refusal.
-  sessionStore.set(
+  sessionStore.publish(
     'typed-error',
     makeSession('typed-error', {
       ...TENANT_SESSION_DEFAULTS,
@@ -125,7 +130,7 @@ test('fact-owned UNSUPPORTED_OPERATION errors do not fabricate legacy supportedO
 
 test('DEVICE_IN_USE errors are flagged retriable; supportedOn stays absent', async () => {
   const { sessionStore, handler } = makeHandler();
-  sessionStore.set('typed-error', makeIosSession('typed-error'));
+  sessionStore.publish('typed-error', makeIosSession('typed-error'));
   // R56 put `app-switcher` on a bound operation, so the failure is raised where the device work
   // happens rather than by the retired dispatcher.
   systemRuntimeSpies.appSwitcher.mockRejectedValue(new AppError('DEVICE_IN_USE', 'device busy'));
@@ -140,7 +145,7 @@ test('DEVICE_IN_USE errors are flagged retriable; supportedOn stays absent', asy
 
 test('deterministic errors (INVALID_ARGS) are returned with the default shape — no typed-error fields', async () => {
   const { sessionStore, handler } = makeHandler();
-  sessionStore.set('typed-error', makeIosSession('typed-error'));
+  sessionStore.publish('typed-error', makeIosSession('typed-error'));
 
   // Conflicting explicit selector under a reject lock policy fails with INVALID_ARGS
   // before dispatch — a deterministic error.
@@ -171,7 +176,7 @@ test('BLOCKER 2 (second follow-up): a repair-close platform-close failure surfac
     ...TENANT_SESSION_DEFAULTS,
     actions: [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }],
   });
-  sessionStore.set('typed-error', session);
+  sessionStore.publish('typed-error', session);
 
   // DEVICE_NOT_FOUND is not in `retriableForErrorCode`'s conservative allow
   // list — if the handler ever regressed to relying on that code-level
@@ -216,7 +221,7 @@ test('#1391: an ordinary close-time script-save failure surfaces details.reason/
     status: 'armed',
     target: { kind: 'explicit', path: targetPath, force: false },
   };
-  sessionStore.set('typed-error', session);
+  sessionStore.publish('typed-error', session);
 
   try {
     // Untargeted close: no positionals, so no platform close is dispatched
@@ -238,4 +243,25 @@ test('#1391: an ordinary close-time script-save failure surfaces details.reason/
   } finally {
     fs.rmSync(targetPath, { force: true });
   }
+});
+
+test('#3181: the session-or-selector refusal reaches the caller with its reason and dispatched no through the router', async () => {
+  const { handler } = makeHandler();
+
+  // No session exists for `typed-error` and no device selector is given, so the
+  // handler returns this refusal — the returned-error path finalizeDaemonResponse rebuilds.
+  const response = await handler(request('capabilities'));
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('INVALID_ARGS');
+  expect(response.error.message).toBe(
+    'capabilities requires an active session or an explicit device selector (e.g. --platform ios).',
+  );
+  expect(response.error.details?.reason).toBe(
+    PRE_DISPATCH_REFUSAL_REASONS.sessionOrDeviceSelectorRequired,
+  );
+  expect(response.error.details?.dispatched).toBe('no');
+  // The hint stays the INVALID_ARGS default: the reason, not the prose, is the new information.
+  expect(response.error.hint).toBe(defaultHintForCode('INVALID_ARGS'));
 });

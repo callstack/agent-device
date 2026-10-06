@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { sessionAppRequiredDetails } from '@agent-device/kernel/errors';
 import type { CliJsonResult } from './cli-json.ts';
 import type { LiveContext } from './ios-simulator-e2e/live-harness.ts';
 import { retryCleanupStep } from './ios-simulator-e2e/live-harness.ts';
@@ -16,8 +17,19 @@ const MIC_STEP = 'reset microphone permission';
 const OTHER_STEP = 'restore portrait orientation';
 const MIC_APPLESS_MESSAGE = 'permission setting requires an active app in session';
 
-function invalidArgsResult(message: string): CliJsonResult {
-  return { json: { error: { code: 'INVALID_ARGS', message } }, status: 1, stderr: '', stdout: '' };
+function invalidArgsResult(message: string, details?: Record<string, unknown>): CliJsonResult {
+  return {
+    json: {
+      error: {
+        code: 'INVALID_ARGS',
+        message,
+        ...(details === undefined ? {} : { details }),
+      },
+    },
+    status: 1,
+    stderr: '',
+    stdout: '',
+  };
 }
 
 function sessionNotFoundResult(): CliJsonResult {
@@ -57,26 +69,28 @@ test('a dead session (SESSION_NOT_FOUND) skips cleanup without error, on any ste
   assert.equal(attempts, 1, 'should not retry once the session is confirmed gone');
 });
 
-test('the known mic-permission appless response stops retrying immediately', async () => {
+test('the known mic-permission appless refusal stops retrying immediately', async () => {
   let attempts = 0;
   const failure = await retryCleanupStep(MIC_STEP, async () => {
     attempts += 1;
-    return invalidArgsResult(MIC_APPLESS_MESSAGE);
+    // Message wording deliberately differs from the shipped refusal: only the typed reason may
+    // trigger the skip, so a guard that also matched the message would fail here.
+    return invalidArgsResult('updated wording', sessionAppRequiredDetails());
   });
   assert.equal(failure, undefined);
-  assert.equal(attempts, 1, 'should not retry the known appless response');
+  assert.equal(attempts, 1, 'should not retry the known appless refusal');
 });
 
 test('a different INVALID_ARGS still fails after exhausting retries', async (t) => {
-  // Same message, wrong step: proves the guard is scoped to the mic-permission reset
-  // and does not tolerate the identical string on another step.
+  // Same refusal, wrong step: proves the guard is scoped to the mic-permission reset
+  // and does not tolerate that reason on another step.
   t.mock.timers.enable({ apis: ['setTimeout'] });
   let attempts = 0;
   const failure = await drainRetry(
     t,
     retryCleanupStep(OTHER_STEP, async (attempt) => {
       attempts += 1;
-      if (attempt < 3) return invalidArgsResult(MIC_APPLESS_MESSAGE);
+      if (attempt < 3) return invalidArgsResult(MIC_APPLESS_MESSAGE, sessionAppRequiredDetails());
       // Mirrors runStep(..., { allowFailure: false }) on the final attempt: it throws
       // instead of returning a failed result.
       throw new Error(`cleanup: ${OTHER_STEP} (attempt 3) failed`);
@@ -86,18 +100,16 @@ test('a different INVALID_ARGS still fails after exhausting retries', async (t) 
   assert.equal(attempts, 3, 'should exhaust all three attempts');
 });
 
-test('a different INVALID_ARGS message on the mic-permission step still fails after retries', async (t) => {
-  // Same step, a message sharing the "requires an active app in session" suffix with
-  // the location-setting call site (app-settings.ts): proves the match is the exact
-  // known string, not any INVALID_ARGS message that happens to overlap it.
+test('the appless message without its typed reason still fails after retries', async (t) => {
+  // Same step, byte-identical message, no reason: the message alone must never activate the
+  // skip, so a reworded refusal cannot be what this guard keys on.
   t.mock.timers.enable({ apis: ['setTimeout'] });
   let attempts = 0;
   const failure = await drainRetry(
     t,
     retryCleanupStep(MIC_STEP, async (attempt) => {
       attempts += 1;
-      if (attempt < 3)
-        return invalidArgsResult('location setting requires an active app in session');
+      if (attempt < 3) return invalidArgsResult(MIC_APPLESS_MESSAGE);
       throw new Error(`cleanup: ${MIC_STEP} (attempt 3) failed`);
     }),
   );

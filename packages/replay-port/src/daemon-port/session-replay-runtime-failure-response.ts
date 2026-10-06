@@ -1,4 +1,5 @@
 import type { SessionAction } from '@agent-device/contracts/session';
+import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/input-validation';
 import { scrubReplayVarValues, type ReplayVarScrubEntry } from '@agent-device/ad-replay/divergence';
 import { formatDivergenceActionLabel } from '@agent-device/ad-script';
 import type { SnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
@@ -7,15 +8,33 @@ import { type DaemonResponse } from '@agent-device/kernel/contracts';
 
 export type ReplayFailureCause = Extract<DaemonResponse, { ok: false }>['error'];
 
+/**
+ * Recovery hint for flow-owned session opens: `replay`/`test` accept `--test-ime` themselves
+ * and pass the opt-in to the sessions their flow opens.
+ */
+export const ANDROID_TEST_IME_FLOW_HINT =
+  'On emulators the test IME activates automatically; on real devices pass `--test-ime` to this test/replay run to enable it for the sessions the flow opens (see `agent-device doctor` for the current IME state).';
+
 export function hoistReplayFailureCauseDiagnosticMeta(
   error: ReplayFailureCause,
 ): ReplayFailureCause {
-  return {
+  const cause: ReplayFailureCause = {
     ...error,
     hint: error.hint ?? readStringDetail(error.details, 'hint'),
     diagnosticId: error.diagnosticId ?? readStringDetail(error.details, 'diagnosticId'),
     logPath: error.logPath ?? readStringDetail(error.details, 'logPath'),
   };
+  return rewriteAndroidTestImeFlowHint(cause);
+}
+
+/**
+ * The Android platform states the `open --test-ime` recovery because it sees one
+ * dispatched session-open; a flow caller cannot run `open`, so on this surface the
+ * recovery is the `test`/`replay` flag itself. Keyed on the typed reason only.
+ */
+function rewriteAndroidTestImeFlowHint(error: ReplayFailureCause): ReplayFailureCause {
+  if (error.details?.reason !== ANDROID_SHELL_TEXT_UNSUPPORTED_REASON) return error;
+  return { ...error, hint: ANDROID_TEST_IME_FLOW_HINT };
 }
 
 export function buildReplayDivergenceFailureResponse(params: {

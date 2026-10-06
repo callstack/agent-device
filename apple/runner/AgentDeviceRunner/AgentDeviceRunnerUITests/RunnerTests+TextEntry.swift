@@ -8,6 +8,7 @@ extension RunnerTests {
     case notFocused = "TEXT_INPUT_NOT_FOCUSED"
     case synthesisUnavailable = "TEXT_INPUT_SYNTHESIS_UNAVAILABLE"
     case commitNotObserved = "TEXT_INPUT_COMMIT_NOT_OBSERVED"
+    case clearNotObserved = "TEXT_INPUT_CLEAR_NOT_OBSERVED"
     case synthesisBudgetExceeded = "TEXT_INPUT_SYNTHESIS_BUDGET_EXCEEDED"
 
     var message: String {
@@ -18,6 +19,8 @@ extension RunnerTests {
         return "Reliable text synthesis is unavailable while the software keyboard is hidden."
       case .commitNotObserved:
         return "The runner could not confirm the typed text reached the field."
+      case .clearNotObserved:
+        return "The runner could not clear the field before typing, so it typed nothing."
       case .synthesisBudgetExceeded:
         return "The text is longer than one runner command can type at this pace."
       }
@@ -31,6 +34,8 @@ extension RunnerTests {
         return "Show the software keyboard, then retry type."
       case .commitNotObserved:
         return "The field may hold none, part, or all of the text. Run snapshot -i and inspect the field: if it already matches, continue; otherwise retry fill with the full text quoted and --delay-ms \(TextEntryTiming.recoveryDelayMilliseconds). Do not use type, which appends to whatever committed."
+      case .clearNotObserved:
+        return "The field may still hold some or all of its old text. Run snapshot -i and inspect the field, then retry fill. Do not use type, which appends to whatever the field holds."
       case .synthesisBudgetExceeded:
         let recoveryDelay = TextEntryTiming.recoveryDelayMilliseconds
         let recoveryBudget = SynthesizedDeliveryBudget.maxTextLength(
@@ -58,6 +63,10 @@ extension RunnerTests {
     static let pollInterval: TimeInterval = 0.02
     static let warmupValueTimeout: TimeInterval = 0.4
     static let verificationStabilityWindow: TimeInterval = 0.2
+    /// How long a replacement value may take to move off its baseline, and then how long an unechoed
+    /// value may keep changing before it must hold for `verificationStabilityWindow`; the app renders
+    /// the last characters' summary late.
+    static let unconfirmedSettleCeiling: TimeInterval = 1.0
     /// How long the commit wait tolerates seeing NO further progress toward the expected value.
     /// Numerically the flat deadline this replaced, so a pipeline that delivers nothing is
     /// condemned at exactly the same instant it always was (see `SynthesizedCommitDeadline`).
@@ -66,8 +75,15 @@ extension RunnerTests {
     /// delivery happens before this wait starts and is bounded by `synthesizedDeliveryCeiling`.
     static let synthesizedCommitCeiling: TimeInterval = 10.0
     /// What a synthesized replacement spends before its first character: focusing the field took
-    /// 374–500 ms through the daemon on an iPhone 17 Pro simulator.
-    static let synthesizedReplacementFocusAllowance: TimeInterval = 2.0
+    /// 374–500 ms through the daemon on an iPhone 17 Pro simulator, and finding the input under the
+    /// point before that tap took up to 2.0 s more on a React Native bottom sheet (iPhone 17 Pro
+    /// Max, iOS 26.5).
+    static let synthesizedReplacementFocusAllowance: TimeInterval = 4.0
+    /// What one read of the field between a replacement's clear passes is charged. On a penalized
+    /// channel, a clear pass on a React Native bottom-sheet field took 1.18–1.26 s over 22 passes
+    /// (iPhone 17 Pro Max, iOS 26.5); less the pass's charged synthesize calls and delete key, the
+    /// read took 0.80–0.88 s. A login field read in 0.26–0.40 s.
+    static let synthesizedClearReadAllowance: TimeInterval = 0.9
     /// How long a synthesized burst may spend posting its characters: what the command's
     /// main-thread watchdog leaves after focus and the longest commit wait. The private synthesize
     /// call delivers as it returns, so text that does not fit is refused before the first character
@@ -108,6 +124,27 @@ extension RunnerTests {
     let observedText: String?
     var textEntryRoute: String? = nil
     var failure: TextEntryFailure? = nil
+    var unconfirmed: TextEntryUnconfirmedEvidence? = nil
+  }
+
+  /// The input a text entry command bound to. XCUIElement exposes no per-instance id, and a query
+  /// bound by index or point re-resolves to whatever input occupies that slot now, so element type
+  /// plus identifier is the identity. It is unique only when the identifier is non-empty. Unlike
+  /// `TextEntryElementIdentity` it leaves out the frame: it must hold across every post of a fill,
+  /// while the field can still be moving with the keyboard.
+  struct TextEntryInputIdentity: Equatable {
+    let elementType: XCUIElement.ElementType
+    let identifier: String
+
+    var isDistinguishable: Bool { !identifier.isEmpty }
+  }
+
+  /// A text input found under a point, and the identity it carried when found. The element is an
+  /// index-bound query handle: an input inserted or reordered ahead of it later re-binds the handle
+  /// to that input, and the identity is what notices.
+  struct TextInputAtPoint {
+    let element: XCUIElement
+    let identity: TextEntryInputIdentity
   }
 
   struct TextEntryTarget {
@@ -115,32 +152,80 @@ extension RunnerTests {
     let refreshPoint: CGPoint?
     let prefersFocusedElement: Bool
     let fromTapWitness: Bool
+    /// The input the first resolved element was. Once bound, resolution refuses any other input.
+    let boundIdentity: TextEntryInputIdentity?
+    /// The text input that sat under `refreshPoint` before the focus tap, which binds the target to
+    /// its identity. Focusing a field can move the layout (keyboard avoidance, a bottom sheet
+    /// extending above the keyboard), after which the point hits a different field or none, so once
+    /// this is set the point no longer names the field. It identifies the field for reads and
+    /// clears, never for routing.
+    let inputAtRefreshPoint: TextInputAtPoint?
 
     init(
       element: XCUIElement?,
       refreshPoint: CGPoint?,
       prefersFocusedElement: Bool,
-      fromTapWitness: Bool = false
+      fromTapWitness: Bool = false,
+      boundIdentity: TextEntryInputIdentity? = nil,
+      inputAtRefreshPoint: TextInputAtPoint? = nil
     ) {
       self.element = element
       self.refreshPoint = refreshPoint
       self.prefersFocusedElement = prefersFocusedElement
       self.fromTapWitness = fromTapWitness
+      self.boundIdentity = boundIdentity ?? inputAtRefreshPoint?.identity
+      self.inputAtRefreshPoint = inputAtRefreshPoint
     }
 
     func withElement(_ nextElement: XCUIElement?) -> TextEntryTarget {
       guard let nextElement else {
         return self
       }
-      let frame = nextElement.frame
+      // Reading `frame` from an input the app has removed records an XCTest failure; a snapshot
+      // only throws, after XCTest waits about two seconds for a match, so it is skipped when the
+      // input is already gone.
+      let snapshot = nextElement.exists ? try? nextElement.snapshot() : nil
+      let frame = snapshot?.frame ?? .zero
       let point = frame.isEmpty ? refreshPoint : CGPoint(x: frame.midX, y: frame.midY)
       return TextEntryTarget(
         element: nextElement,
         refreshPoint: point,
         prefersFocusedElement: prefersFocusedElement,
-        fromTapWitness: fromTapWitness
+        fromTapWitness: fromTapWitness,
+        boundIdentity: boundIdentity ?? snapshot.map {
+          TextEntryInputIdentity(elementType: $0.elementType, identifier: $0.identifier)
+        },
+        inputAtRefreshPoint: inputAtRefreshPoint
       )
     }
+  }
+
+  /// What one snapshot of a candidate element proved.
+  enum TextEntryInputProbe: Equatable {
+    case input(TextEntryInputIdentity)
+    /// XCTest found no element for the query: the only error that proves absence.
+    case noMatch
+    /// Any other snapshot failure, such as a transient accessibility error or multiple matches.
+    case unavailable
+  }
+
+  static let xCTestUITestingErrorDomain = "com.apple.dt.xctest.ui-testing.error"
+  /// `snapshot()` of a query that matches nothing, as for an input the app removed. A query with
+  /// several matches throws 10006 and one into an app that is not running throws 10001.
+  static let xCTestNoMatchesErrorCode = 10008
+
+  /// Classifies a candidate's `snapshot()` error: only XCTest's no-match proves the input is gone.
+  static func textEntryInputProbe(snapshotError error: Error) -> TextEntryInputProbe {
+    let error = error as NSError
+    return error.domain == xCTestUITestingErrorDomain && error.code == xCTestNoMatchesErrorCode
+      ? .noMatch
+      : .unavailable
+  }
+
+  /// Repair clears and retypes whatever input resolves, so it needs an identity that a
+  /// successor input cannot share. An unbound target keeps its unguarded repair.
+  static func textEntryRepairCanTarget(boundIdentity: TextEntryInputIdentity?) -> Bool {
+    boundIdentity?.isDistinguishable ?? true
   }
 
   struct TextEntryStabilization {
@@ -199,7 +284,95 @@ extension RunnerTests {
     }
   }
 
+  /// Resolves the target's input. A bound target accepts only an element whose snapshot carries
+  /// its bound identity, so every post, read-back, verification poll, and repair refuses an input
+  /// that took the bound one's place.
   func resolveTextEntryElement(app: XCUIApplication, target: TextEntryTarget) -> XCUIElement? {
+    guard let boundIdentity = target.boundIdentity else {
+      return resolveUnboundTextEntryElement(app: app, target: target)
+    }
+    func isBoundInput(_ candidate: XCUIElement) -> Bool {
+      candidate.exists && probeTextEntryInput(candidate) == .input(boundIdentity)
+    }
+    if target.prefersFocusedElement, let focused = focusedTextInput(app: app), isBoundInput(focused) {
+      return focused
+    }
+    if let element = target.element, isBoundInput(element) {
+      return element
+    }
+    if let input = target.inputAtRefreshPoint, textInputStillResolves(input) {
+      return input.element
+    }
+    if target.inputAtRefreshPoint == nil,
+       let refreshPoint = target.refreshPoint,
+       case .matches(let candidates) = probeTextInputs(app: app, point: refreshPoint),
+       let match = candidates.first(where: isBoundInput) {
+      return match
+    }
+    if let focused = focusedTextInput(app: app), isBoundInput(focused) {
+      return focused
+    }
+    if let byIdentifier = boundTextEntryInputQuery(app: app, identity: boundIdentity), isBoundInput(byIdentifier) {
+      return byIdentifier
+    }
+    return nil
+  }
+
+  /// Whether a bound target's input is proven gone: XCTest found no match for it, or a different
+  /// input answers in its place, and nothing at its point carries its identity. A failed probe
+  /// proves nothing. Unbound targets and unidentified inputs without an element cannot be proven
+  /// gone.
+  func boundTextEntryInputIsGone(app: XCUIApplication, target: TextEntryTarget) -> Bool {
+    guard let boundIdentity = target.boundIdentity,
+          let query = boundTextEntryInputQuery(app: app, identity: boundIdentity) ?? target.element
+    else {
+      return false
+    }
+    switch probeTextEntryInput(query) {
+    case .input(let identity) where identity != boundIdentity:
+      break
+    case .noMatch:
+      break
+    case .input, .unavailable:
+      return false
+    }
+    guard let refreshPoint = target.refreshPoint else {
+      return true
+    }
+    switch probeTextInputs(app: app, point: refreshPoint) {
+    case .absent:
+      return true
+    case .matches(let candidates):
+      return candidates.allSatisfy { probeTextEntryInput($0) != .input(boundIdentity) }
+    case .unavailable:
+      return false
+    }
+  }
+
+  /// The app-wide query for an input whose identifier is unique enough to search by.
+  private func boundTextEntryInputQuery(app: XCUIApplication, identity: TextEntryInputIdentity) -> XCUIElement? {
+    guard identity.isDistinguishable else {
+      return nil
+    }
+    return app.descendants(matching: identity.elementType).matching(identifier: identity.identifier).element
+  }
+
+  /// Snapshots one candidate: its identity, a proven no-match, or a failure that proves nothing.
+  func probeTextEntryInput(_ element: XCUIElement) -> TextEntryInputProbe {
+    var probe = TextEntryInputProbe.unavailable
+    let (_, exception) = catchingObjCException(fallback: ()) {
+      do {
+        let snapshot = try element.snapshot()
+        probe = .input(TextEntryInputIdentity(elementType: snapshot.elementType, identifier: snapshot.identifier))
+      } catch {
+        probe = Self.textEntryInputProbe(snapshotError: error)
+      }
+    }
+    return exception == nil ? probe : .unavailable
+  }
+
+  /// Resolution for a target not bound to an input yet: the first element that exists.
+  private func resolveUnboundTextEntryElement(app: XCUIApplication, target: TextEntryTarget) -> XCUIElement? {
     if target.prefersFocusedElement {
       if let focused = focusedTextInput(app: app) {
         return focused
@@ -251,7 +424,7 @@ extension RunnerTests {
   }
 
   func editableTextValue(
-    for element: XCUIElement?,
+    for element: (any XCUIElementAttributes)?,
     treatingPlaceholderAsEmpty: Bool = false
   ) -> String? {
     guard let element else {
@@ -271,7 +444,7 @@ extension RunnerTests {
     }
   }
 
-  private func isPlaceholderValue(_ value: String, for element: XCUIElement) -> Bool {
+  private func isPlaceholderValue(_ value: String, for element: any XCUIElementAttributes) -> Bool {
     if Self.textMatchesPlaceholder(value, placeholder: element.placeholderValue) {
       return true
     }

@@ -5,6 +5,7 @@ import {
   isInactiveLeaseError,
   leaseScopeFromOptions,
   leaseScopeFromRequest,
+  leaseScopeToAllocateRequest,
   leaseScopeToCommandFlags,
   leaseScopeToConnectionMetadata,
   leaseScopeToLeaseRpcParams,
@@ -53,6 +54,27 @@ test('leaseScopeFromOptions normalizes public aliases and projects request meta'
     deviceKey: 'ios:SIM-001',
     clientId: 'client-a',
   });
+});
+
+test('retainOnClose travels from options to request meta, allocate request and rpc params', () => {
+  const scope = leaseScopeFromOptions({ tenant: 'tenant-a', runId: 'run-1', retainOnClose: true });
+
+  assert.equal(scope.leaseRetainOnClose, true);
+  assert.equal(leaseScopeToRequestMeta(scope)?.leaseRetainOnClose, true);
+  assert.equal(leaseScopeToAllocateRequest(scope).retainOnClose, true);
+  assert.equal(
+    leaseScopeToLeaseRpcParams(scope, 'lease_allocate', { includeTokenParam: false }).retainOnClose,
+    true,
+  );
+  assert.equal(
+    'retainOnClose' in
+      leaseScopeToLeaseRpcParams(scope, 'lease_release', { includeTokenParam: false }),
+    false,
+  );
+  assert.equal(
+    'leaseRetainOnClose' in leaseScopeFromOptions({ tenant: 'tenant-a', runId: 'run-1' }),
+    false,
+  );
 });
 
 test('leaseScopeFromRequest prefers metadata and falls back to legacy flags', () => {

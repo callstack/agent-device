@@ -66,7 +66,10 @@ beforeEach(() => {
 test('ordinary click uses canonical capture even when the owner binds selector tap', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-selector-without-direct-operation';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   mockCaptureSnapshotForSession.mockResolvedValueOnce({
     nodes: attachRefs([
       {
@@ -111,7 +114,10 @@ test('ordinary click uses canonical capture even when the owner binds selector t
 test('fill simple iOS id selector resolves runtime text input evidence before coordinate fill', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-runtime-selector-fill';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
 
   mockCaptureSnapshotForSession.mockResolvedValueOnce({
     nodes: attachRefs([
@@ -175,7 +181,10 @@ test('fill simple iOS id selector resolves runtime text input evidence before co
 test('click simple iOS selector forwards Maestro non-hittable coordinate fallback', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-maestro-selector-fallback';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
 
   mockTapElementSelector.mockResolvedValue({
     message: 'tapped via non-hittable coordinate fallback',
@@ -223,7 +232,7 @@ test('click simple iOS id selector waits for snapshot path after pending gesture
   const sessionName = 'ios-direct-selector-after-swipe';
   const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });
   session.postGestureStabilization = { action: 'swipe', positionals: [], markedAt: Date.now() };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   mockCaptureSnapshotForSession.mockResolvedValue({
     nodes: attachRefs([

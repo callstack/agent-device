@@ -42,7 +42,9 @@ export async function loadMacOsSurfaceSnapshot(
   options: CaptureSnapshotInput['options'],
   signal?: AbortSignal,
 ): Promise<SnapshotResult> {
-  const surface = macOsHelperSurface(options?.surface);
+  // The Apple owner routes and names the surface; one it did not name was never routed here.
+  const surface =
+    options?.surface === undefined ? undefined : macOsHelperSurface(options.surface, 'native');
   if (!surface) {
     throw new TypeError('Apple surface capture requires a helper-routed macOS surface');
   }

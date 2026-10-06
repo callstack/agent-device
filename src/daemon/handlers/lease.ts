@@ -10,7 +10,11 @@ import type {
 } from '@agent-device/contracts/observability';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
-import type { ReleaseLeaseRequest } from '../lease-registry-scope.ts';
+import {
+  leaseReleaseRequestFor,
+  normalizeLeaseBackend,
+  type ReleaseLeaseRequest,
+} from '../lease-registry-scope.ts';
 import type { SessionStore } from '../session-store.ts';
 import {
   isProxyLeaseScope,
@@ -27,6 +31,8 @@ import { LEASE_ALLOCATION_BUDGET_MS } from '@agent-device/command-registry/timeo
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
 import { listDownloadableArtifacts } from '../artifact-tracking.ts';
 import { providerSessionIdFromData } from '../provider-session-ownership.ts';
+import type { DaemonProviderCredentials } from '../../provider-credential-fingerprint.ts';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 
 type LeaseHandlerArgs = {
   req: DaemonRequest;
@@ -35,6 +41,7 @@ type LeaseHandlerArgs = {
   leaseRegistry: LeaseRegistry;
   providerRuntimeIds?: readonly string[];
   providerRuntimeRequiredIds?: readonly string[];
+  providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
 };
@@ -47,6 +54,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     leaseRegistry,
     providerRuntimeIds,
     providerRuntimeRequiredIds,
+    providerCredentials,
     leaseLifecycleProvider,
     cloudArtifactProvider,
   } = args;
@@ -65,26 +73,50 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       };
     }
     case 'lease_allocate': {
+      assertTenantMayAllocate(leaseScope.leaseBackend);
       assertProviderRuntimeAvailable(
         leaseScope.leaseProvider,
         providerRuntimeIds,
         providerRuntimeRequiredIds,
       );
+      assertProviderCredentialsUnchanged(
+        leaseScope,
+        req.meta?.providerCredentialFingerprint,
+        providerCredentials,
+      );
+      const activeLeaseIds = new Set(
+        leaseRegistry.listActiveLeases().map((entry) => entry.leaseId),
+      );
       const lease = leaseRegistry.allocateLease(leaseScopeToAllocateRequest(leaseScope));
+      const reused = activeLeaseIds.has(lease.leaseId);
+      const requestId = req.meta?.requestId;
       return await leaseRegistry.runDeviceMutation(lease, async () => {
         let providerData: Record<string, unknown> | undefined;
+        // A hosted provider can take longer than the lease TTL to create its session; the work
+        // pass keeps the lease alive until it does, and ending the pass restarts the TTL then.
+        const work = leaseLifecycleProvider?.allocate
+          ? leaseRegistry.retainLeaseWork(lease, () => !isRequestCanceled(requestId))
+          : undefined;
         try {
           providerData = await leaseLifecycleProvider?.allocate?.(lease, {
             ...leaseLifecycleContext(req),
-            signal: getRequestSignal(req.meta?.requestId),
+            signal: getRequestSignal(requestId),
             deadline: Date.now() + LEASE_ALLOCATION_BUDGET_MS,
           });
           recordProviderSession(leaseRegistry, lease, providerData);
         } catch (error) {
-          leaseRegistry.releaseLease(leaseReleaseRequestFor(lease));
+          await settleFailedAllocation(
+            lease,
+            reused,
+            requestId,
+            leaseLifecycleProvider,
+            leaseRegistry,
+          );
           throw error;
+        } finally {
+          work?.release();
         }
-        if (isRequestCanceled(req.meta?.requestId)) {
+        if (isRequestCanceled(requestId)) {
           // The requester left while the provider was allocating; the lease it
           // produced is real (and billed) and nobody will ever release it.
           throw await releaseAllocationForGoneRequester(
@@ -93,9 +125,10 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
             leaseRegistry,
           );
         }
+        const allocated = leaseRegistry.getLease(leaseReleaseRequestFor(lease)) ?? lease;
         return {
           ok: true,
-          data: { lease, ...(providerData ? { provider: providerData } : {}) },
+          data: { lease: allocated, ...(providerData ? { provider: providerData } : {}) },
         };
       });
     }
@@ -113,6 +146,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     case 'lease_release': {
       const releaseRequest = leaseScopeToReleaseRequest(leaseScope);
       const lease = leaseRegistry.getLease(releaseRequest);
+      assertTenantMayRelease(lease);
       const outcome = await leaseRegistry.runDeviceMutation(
         lease,
         async () =>
@@ -138,18 +172,6 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
   }
 }
 
-function leaseReleaseRequestFor(lease: DeviceLease): ReleaseLeaseRequest {
-  return leaseScopeToReleaseRequest({
-    leaseId: lease.leaseId,
-    tenantId: lease.tenantId,
-    runId: lease.runId,
-    leaseBackend: lease.backend,
-    leaseProvider: lease.leaseProvider,
-    deviceKey: lease.deviceKey,
-    clientId: lease.clientId,
-  });
-}
-
 type LeaseReleaseOutcome = {
   /** The daemon's own lease record was released (bookkeeping, not the billed resource). */
   registryReleased: boolean;
@@ -168,6 +190,25 @@ async function releaseLease(
   const provider = lease ? await leaseLifecycleProvider?.release?.(lease, context) : undefined;
   if (lease) recordProviderSession(leaseRegistry, lease, provider);
   return { registryReleased: leaseRegistry.releaseLease(request).released, provider };
+}
+
+// A run's repeat allocation reuses its live lease; refusing that request must not end the
+// lease, or the provider session the first allocation created is left without an owner.
+// A requester that hung up owns nothing, so its canceled repeat allocation still releases.
+async function settleFailedAllocation(
+  lease: DeviceLease,
+  reused: boolean,
+  requestId: string | undefined,
+  leaseLifecycleProvider: LeaseLifecycleProvider | undefined,
+  leaseRegistry: LeaseRegistry,
+): Promise<void> {
+  if (!reused) {
+    leaseRegistry.releaseLease(leaseReleaseRequestFor(lease));
+    return;
+  }
+  if (isRequestCanceled(requestId)) {
+    throw await releaseAllocationForGoneRequester(lease, leaseLifecycleProvider, leaseRegistry);
+  }
 }
 
 /**
@@ -256,6 +297,30 @@ function assertProviderRuntimeAvailable(
     {
       provider,
       hint: `Restart the daemon with ${provider} configured, then retry lease allocation.`,
+    },
+  );
+}
+
+function assertProviderCredentialsUnchanged(
+  {
+    leaseProvider: provider,
+    leaseBackend,
+  }: Pick<ReturnType<typeof resolveLeaseScope>, 'leaseProvider' | 'leaseBackend'>,
+  requested: string | undefined,
+  daemon: DaemonProviderCredentials | undefined,
+): void {
+  if (!daemon || !provider || !requested) return;
+  const current = daemon.fingerprint(provider, leaseBackend);
+  if (requested === current) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    current
+      ? `The running daemon holds different ${provider} credentials than this shell.`
+      : `The running daemon was started without the ${provider} credentials this shell holds.`,
+    {
+      reason: 'provider-credentials-changed',
+      provider,
+      hint: `Stop it with agent-device daemon stop --state-dir ${shellQuoteIfNeeded(daemon.stateDir)}, then rerun the command so a new daemon starts with this shell's environment.`,
     },
   );
 }
@@ -362,4 +427,24 @@ function recordProviderSession(
   const providerSessionId = providerSessionIdFromData(providerData);
   if (!providerSessionId) return;
   leaseRegistry.recordProviderSession(lease, providerSessionId);
+}
+
+/** The host that allocated a `macos-app` lease keeps it for the hosted app's lifetime and ends it with DELETE /admin/leases. */
+function assertTenantMayRelease(lease: DeviceLease | undefined): void {
+  if (lease?.backend !== 'macos-app') return;
+  throw new AppError('UNAUTHORIZED', 'A macos-app lease is released by the host administrator.', {
+    reason: 'MACOS_APP_LEASE_HOST_OWNED',
+    retriable: false,
+    hint: 'Disconnect only drops the client connection; the host ends the lease.',
+  });
+}
+
+/** A `macos-app` lease names the app it confines a client to, so only the host allocates one. */
+function assertTenantMayAllocate(leaseBackend: string | undefined): void {
+  if (normalizeLeaseBackend(leaseBackend) !== 'macos-app') return;
+  throw new AppError('UNAUTHORIZED', 'A macos-app lease is allocated by the host administrator.', {
+    reason: 'MACOS_APP_LEASE_HOST_ALLOCATED',
+    retriable: false,
+    hint: 'Ask the host administrator for a macos-app lease and connect with its leaseId.',
+  });
 }

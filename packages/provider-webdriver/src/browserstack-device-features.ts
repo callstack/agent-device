@@ -1,8 +1,10 @@
 import {
   PROVIDER_DEVICE_ORIENTATIONS,
+  PROVIDER_PROFILE_FIELD_FLAGS,
   type CloudProviderProfileFields,
 } from '@agent-device/contracts/remote';
 import { AppError } from '@agent-device/kernel/errors';
+import { requireProviderDeviceOrientation } from './webdriver-utils.ts';
 import type { CloudWebDriverPlatform } from './runtime.ts';
 
 /**
@@ -33,7 +35,7 @@ type BrowserStackDeviceFeatureSpec = {
   field: keyof BrowserStackDeviceFeatureFields;
   /** Key emitted inside `bstack:options`. */
   capability: string;
-  /** Canonical CLI flag, so an error can name a recovery action. */
+  /** Canonical CLI flag, read from `PROVIDER_PROFILE_FIELD_FLAGS`. */
   flag: string;
   /**
    * `negated-boolean` is a flag whose presence means "turn the capability off" — BrowserStack
@@ -45,24 +47,21 @@ type BrowserStackDeviceFeatureSpec = {
   platform?: CloudWebDriverPlatform;
 };
 
-export const BROWSERSTACK_DEVICE_FEATURE_SPECS: readonly BrowserStackDeviceFeatureSpec[] = [
+const BROWSERSTACK_DEVICE_FEATURE_ROWS: readonly Omit<BrowserStackDeviceFeatureSpec, 'flag'>[] = [
   {
     field: 'providerDeviceOrientation',
     capability: 'deviceOrientation',
-    flag: '--provider-device-orientation',
     type: 'enum',
     enumValues: PROVIDER_DEVICE_ORIENTATIONS,
   },
   {
     field: 'providerGeoLocation',
     capability: 'geoLocation',
-    flag: '--provider-geo-location',
     type: 'string',
   },
   {
     field: 'providerTimezone',
     capability: 'timezone',
-    flag: '--provider-timezone',
     type: 'string',
   },
   {
@@ -70,31 +69,26 @@ export const BROWSERSTACK_DEVICE_FEATURE_SPECS: readonly BrowserStackDeviceFeatu
     // (deepLink, pressButton, activateApp) need a 2.x+ server.
     field: 'providerAppiumVersion',
     capability: 'appiumVersion',
-    flag: '--provider-appium-version',
     type: 'string',
   },
   {
     field: 'providerLanguage',
     capability: 'language',
-    flag: '--provider-language',
     type: 'string',
   },
   {
     field: 'providerLocale',
     capability: 'locale',
-    flag: '--provider-locale',
     type: 'string',
   },
   {
     field: 'providerNetworkProfile',
     capability: 'networkProfile',
-    flag: '--provider-network-profile',
     type: 'string',
   },
   {
     field: 'providerCustomNetwork',
     capability: 'customNetwork',
-    flag: '--provider-custom-network',
     type: 'string',
   },
   {
@@ -102,11 +96,16 @@ export const BROWSERSTACK_DEVICE_FEATURE_SPECS: readonly BrowserStackDeviceFeatu
     // entitlements. Opting out keeps entitlement-dependent features (push notifications) testable.
     field: 'providerNoResignApp',
     capability: 'resignApp',
-    flag: '--provider-no-resign-app',
     type: 'negated-boolean',
     platform: 'ios',
   },
 ];
+
+export const BROWSERSTACK_DEVICE_FEATURE_SPECS: readonly BrowserStackDeviceFeatureSpec[] =
+  BROWSERSTACK_DEVICE_FEATURE_ROWS.map((row) => ({
+    ...row,
+    flag: PROVIDER_PROFILE_FIELD_FLAGS[row.field],
+  }));
 
 /**
  * Builds the `bstack:options` fragment for the configured device features.
@@ -127,47 +126,6 @@ export function buildBrowserStackDeviceFeatureCapabilities(
     capabilities[spec.capability] = spec.type === 'negated-boolean' ? false : value;
   }
   return capabilities;
-}
-
-/**
- * Canonical CLI flags for every device-feature capability set on `flags`.
- *
- * These capabilities are BrowserStack-owned. Other providers have no equivalent, so a caller who
- * passes them to AWS Device Farm would otherwise have them accepted, persisted into the profile,
- * and then silently dropped — the session runs with provider defaults and nothing says why.
- * Callers use this to reject them at the point the provider is known.
- */
-function browserStackOnlyDeviceFeatureFlags(flags: Record<string, unknown> | undefined): string[] {
-  return BROWSERSTACK_DEVICE_FEATURE_SPECS.filter((spec) => {
-    const value = flags?.[spec.field];
-    return value !== undefined && value !== false && value !== '';
-  }).map((spec) => spec.flag);
-}
-
-/**
- * Fails when a non-BrowserStack provider was given BrowserStack-owned device features.
- *
- * Called from both the CLI profile builder and the provider's own session preparation. The second
- * is the one that actually closes the hole: the typed client and hand-authored remote-config
- * profiles reach session preparation without passing through `connect`, so a CLI-only check leaves
- * those routes accepting the capabilities and dropping them.
- */
-export function rejectBrowserStackOnlyDeviceFeatures(
-  flags: Record<string, unknown> | undefined,
-  provider: string,
-): void {
-  const configured = browserStackOnlyDeviceFeatureFlags(flags);
-  if (configured.length === 0) return;
-  const plural = configured.length !== 1;
-  throw new AppError(
-    'INVALID_ARGS',
-    `${configured.join(', ')} ${plural ? 'are' : 'is'} only supported by BrowserStack, not ${provider}.`,
-    {
-      hint: `Drop ${plural ? 'those flags' : 'the flag'} or use the browserstack provider.`,
-      provider,
-      flags: configured,
-    },
-  );
 }
 
 /**
@@ -199,24 +157,11 @@ function assignStringField(
   value: string,
 ): void {
   if (spec.field === 'providerDeviceOrientation') {
-    fields.providerDeviceOrientation = requireDeviceOrientation(spec, value);
+    fields.providerDeviceOrientation = requireProviderDeviceOrientation(spec, value);
     return;
   }
   if (spec.field === 'providerNoResignApp') return;
   fields[spec.field] = value;
-}
-
-function requireDeviceOrientation(
-  spec: BrowserStackDeviceFeatureSpec,
-  value: string,
-): (typeof PROVIDER_DEVICE_ORIENTATIONS)[number] {
-  const match = PROVIDER_DEVICE_ORIENTATIONS.find((orientation) => orientation === value);
-  if (match) return match;
-  throw new AppError('INVALID_ARGS', `Invalid ${spec.flag} value: ${value}.`, {
-    hint: `Use ${PROVIDER_DEVICE_ORIENTATIONS.join('|')}.`,
-    flag: spec.flag,
-    capability: spec.capability,
-  });
 }
 
 function requireSupportedPlatform(

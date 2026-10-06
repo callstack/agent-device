@@ -32,7 +32,10 @@ export function stripRecordedRefGeneration(token: string): string {
 }
 
 const NUMERIC_ARG_RE = /^-?\d+(\.\d+)?$/;
-const BARE_SCRIPT_TOKEN_RE = /^[^\s"\\]+$/;
+// A token may not start with `'`: the tokenizer reads a leading `'` as a
+// single-quoted literal (#3197), so the writer must quote such values or the
+// re-parse would strip the apostrophe.
+const BARE_SCRIPT_TOKEN_RE = /^[^\s"'\\][^\s"\\]*$/;
 
 const CLICK_LIKE_NUMERIC_FLAG_MAP = new Map<string, 'count' | 'intervalMs' | 'holdMs' | 'jitterPx'>(
   [
@@ -52,6 +55,123 @@ const GESTURE_NUMERIC_FLAG_MAP = new Map<string, 'pointerCount'>([
 ]);
 
 const TYPING_NUMERIC_FLAG_MAP = new Map<string, 'delayMs'>([['--delay-ms', 'delayMs']]);
+
+/**
+ * `scroll`'s stop condition, in the script grammar beside its `recorded: true`
+ * declaration (#3197): the hunt for an off-screen element IS the step, so a
+ * recorded `scroll down --until <selector>` carries it and a hand-written script
+ * can say the same. Without this the tokens fall through as positionals and the
+ * daemon reads `--until` as the scroll amount. Distance stays a positional
+ * (`scroll down 0.8`): `--pixels` and `--duration-ms` are `recorded: false`, and a
+ * script grammar that accepted a flag the recorder cannot carry would write a line
+ * the recording path could never reproduce.
+ */
+const SCROLL_SCRIPT_FLAG_MAP = new Map<string, ScriptFlagEntry>([
+  ['--until', { key: 'until', kind: 'string' }],
+]);
+
+/**
+ * `wait`'s capture-scope flags (#3197): the command declares them
+ * (`SELECTOR_SNAPSHOT_FLAGS`) and they are recorded, so the script grammar
+ * recognizes them too. Otherwise they land inside the positional list and the
+ * wait parser refuses the line as selector-shaped text. Long spellings only:
+ * this is the spelling the writer emits for `wait`, so nothing the recorder can
+ * write needs an alias, and matching `-d`/`-s` would reclassify realistic
+ * waited text (`wait text -s so funny`) to buy almost nothing — the only line
+ * losing its old reading is one whose whole token is a literal long flag word,
+ * which a hand-written script can spell with the selector wrapped instead.
+ */
+const WAIT_SCRIPT_FLAG_MAP = new Map<string, ScriptFlagEntry>([
+  ['--raw', { key: 'snapshotRaw', kind: 'boolean' }],
+  ['--depth', { key: 'snapshotDepth', kind: 'int' }],
+  ['--scope', { key: 'snapshotScope', kind: 'string' }],
+]);
+
+/** How one script flag token carries its value. */
+type ScriptFlagEntry = {
+  key: 'until' | 'snapshotRaw' | 'snapshotDepth' | 'snapshotScope';
+  kind: 'boolean' | 'int' | 'string';
+};
+
+/** The commands whose script line carries flags (`scroll`, `wait`). */
+export type ScriptFlagCommand = 'scroll' | 'wait';
+
+/** Which script flag tokens each flag-carrying command reads. */
+const SCRIPT_FLAG_MAPS: Record<ScriptFlagCommand, Map<string, ScriptFlagEntry>> = {
+  scroll: SCROLL_SCRIPT_FLAG_MAP,
+  wait: WAIT_SCRIPT_FLAG_MAP,
+};
+
+/** The commands whose script line carries flags, derived from the parse tables. */
+export const SCRIPT_FLAG_COMMANDS = Object.keys(SCRIPT_FLAG_MAPS) as readonly ScriptFlagCommand[];
+
+/**
+ * The script flag tokens one command's line reads, with their value kinds and flag keys
+ * (#3197). Exported for the root admission test
+ * (`src/commands/replay/script-flag-admission.test.ts`), which proves the tables and the
+ * flag declarations admit the same keys in both directions — the invariant that keeps the
+ * script grammar and the flag declarations from diverging the way `--until` and
+ * `wait --raw` did.
+ */
+export function scriptFlagEntries(
+  command: string,
+): ReadonlyArray<{ token: string } & ScriptFlagEntry> {
+  const flagMap = scriptFlagMapFor(command);
+  if (!flagMap) return [];
+  return [...flagMap].map(([token, entry]) => ({ token, ...entry }));
+}
+
+function scriptFlagMapFor(command: string): Map<string, ScriptFlagEntry> | undefined {
+  return isScriptFlagCommand(command) ? SCRIPT_FLAG_MAPS[command] : undefined;
+}
+
+// Membership comes from the tables' own keys, so a third command cannot compile into the
+// type while the guard silently refuses to read its flags.
+function isScriptFlagCommand(command: string): command is ScriptFlagCommand {
+  return (SCRIPT_FLAG_COMMANDS as readonly string[]).includes(command);
+}
+
+/**
+ * Splits a `scroll` or `wait` script line into positionals and the command's own
+ * flags (#3197). A token is a flag only when it names one of the command's
+ * declared script flags and, for a value kind, a value token follows; anything
+ * else stays positional, so a hand-written target or text value is untouched.
+ */
+export function parseReplayCommandFlags(
+  command: ScriptFlagCommand,
+  args: string[],
+): { positionals: string[]; flags: SessionAction['flags'] } {
+  const positionals: string[] = [];
+  const flags: SessionAction['flags'] = {};
+  const flagMap = SCRIPT_FLAG_MAPS[command];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index]!;
+    const entry = flagMap.get(token);
+    const nextArg = args[index + 1];
+    if (entry === undefined || (entry.kind !== 'boolean' && nextArg === undefined)) {
+      positionals.push(token);
+      continue;
+    }
+    if (entry.kind === 'boolean') {
+      Object.assign(flags, { [entry.key]: true });
+      continue;
+    }
+    if (entry.kind === 'int') {
+      const parsed = parseNonNegativeIntToken(nextArg);
+      if (parsed === null) {
+        positionals.push(token);
+        continue;
+      }
+      Object.assign(flags, { [entry.key]: parsed });
+    } else {
+      Object.assign(flags, { [entry.key]: nextArg });
+    }
+    index += 1;
+  }
+
+  return { positionals, flags };
+}
 
 export function isClickLikeCommand(command: string): command is 'click' | 'press' {
   return command === 'click' || command === 'press';
@@ -264,7 +384,32 @@ export function appendGenericActionScriptArgs(parts: string[], action: SessionAc
   if (action.command === 'fold' && action.flags?.keyframes !== undefined) {
     parts.push('--keyframes', formatScriptArg(action.flags.keyframes));
   }
+  // #3197: `scroll`'s stop condition is part of the step's meaning, so the writer
+  // emits it beside the parser that reads it back. Only `--until` is declared
+  // recorded, so only `--until` can arrive here on a recorded action.
+  if (action.command === 'scroll' && typeof action.flags?.until === 'string') {
+    parts.push('--until', formatScriptArg(action.flags.until));
+  }
+  if (action.command === 'wait') {
+    appendWaitSnapshotScriptFlags(parts, action.flags);
+  }
   appendScriptSeriesFlags(parts, action);
+}
+
+/**
+ * `wait`'s capture-scope flags, written back in the long spelling its script
+ * parser reads (`SELECTOR_SNAPSHOT_FLAGS`, all declared recorded).
+ */
+function appendWaitSnapshotScriptFlags(
+  parts: string[],
+  flags: SessionAction['flags'] | undefined,
+): void {
+  if (!flags) return;
+  if (flags.snapshotRaw === true) parts.push('--raw');
+  if (typeof flags.snapshotDepth === 'number') parts.push('--depth', String(flags.snapshotDepth));
+  if (typeof flags.snapshotScope === 'string') {
+    parts.push('--scope', formatScriptArg(flags.snapshotScope));
+  }
 }
 
 // fallow-ignore-next-line complexity

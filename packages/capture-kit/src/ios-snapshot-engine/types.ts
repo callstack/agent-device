@@ -26,6 +26,13 @@ export type IosSnapshotPresentationStats = Readonly<{
 
 export type IosSnapshotEnginePresentation = Readonly<{
   nodes: RawSnapshotNode[];
+  /**
+   * The box the regular projection validated this tree against (#3182). The fold already resolves it
+   * (`resolveIosViewport` / `resolveViewportEvidence`), so the engine hands it over instead of making
+   * every caller re-derive "regular validates a box, raw does not". A raw projection validates no box
+   * and carries none.
+   */
+  validatedViewport?: Rect;
   qualityNodes?: RawSnapshotNode[];
   presentedIndexesBySourceIndex: ReadonlyMap<number, readonly number[]>;
   stats: IosSnapshotPresentationStats;

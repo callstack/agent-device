@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type { DiagnosticsRecordRef } from '@agent-device/kernel/errors';
-import { safeSessionName } from '@agent-device/host-kit/session-paths';
+import { AppError } from '@agent-device/kernel/errors';
+import { isSafeSessionSegment, safeSessionName } from '@agent-device/host-kit/session-paths';
 
 /** Path to session-scoped platform subprocess output, such as Apple runner xcodebuild logs. */
 export function resolveSessionRunnerLogPath(sessionDir: string): string {
@@ -48,4 +49,28 @@ export function resolveRemoteRequestDiagnosticsPath(
     path.join(stateDir, 'remote-diagnostics', safeSessionName(ref.session)),
     ref.requestId,
   );
+}
+
+/**
+ * The one place a session name becomes a directory, so the invariant that every
+ * session dir lies beneath `sessionsDir` is enforced here rather than by each
+ * caller: `.` and `..` survive `safeSessionName` and would resolve to the
+ * sessions dir itself or the daemon state dir above it.
+ */
+export function resolveSessionDir(sessionsDir: string, sessionName: string): string {
+  if (!isSafeSessionSegment(sessionName)) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `Invalid session name ${JSON.stringify(sessionName)}: a session name cannot be empty, ".", or "..".`,
+    );
+  }
+  return path.join(sessionsDir, safeSessionName(sessionName));
+}
+
+export function resolveSessionAppLogPath(sessionsDir: string, address: string): string {
+  return path.join(resolveSessionDir(sessionsDir, address), 'app.log');
+}
+
+export function resolveSessionAppLogPidPath(sessionsDir: string, address: string): string {
+  return path.join(resolveSessionDir(sessionsDir, address), 'app-log.pid');
 }

@@ -52,7 +52,10 @@ test.each([
   async (code, message) => {
     const sessionStore = makeSessionStore();
     const sessionName = `ios-maestro-direct-selector-${code}`;
-    sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+    sessionStore.publish(
+      sessionName,
+      makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+    );
     mockTapElementSelector.mockRejectedValue(new AppError(code, message));
 
     const response = await handleInteractionCommands({
@@ -77,7 +80,7 @@ test.each([
 test('Maestro selector click crosses the ADR 0014 fused seam and expires the ref frame', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'maestro-direct-ios-seam';
-  sessionStore.set(sessionName, makeStaleRefSession(sessionName));
+  sessionStore.publish(sessionName, makeStaleRefSession(sessionName));
 
   const click = await runInteraction(sessionStore, sessionName, 'click', ['label=Continue'], {
     maestro: { allowNonHittableCoordinateFallback: true },
@@ -121,7 +124,7 @@ for (const row of ROWS) {
     assert.equal(typeof row.fallsBack, 'boolean', `${row.id} must state fallsBack`);
     const sessionStore = makeSessionStore();
     const sessionName = `maestro-direct-${row.id}`;
-    sessionStore.set(sessionName, makeStaleRefSession(sessionName));
+    sessionStore.publish(sessionName, makeStaleRefSession(sessionName));
     mockTapElementSelector.mockRejectedValueOnce(failure());
     vi.mocked(captureSnapshotWithInteractor).mockResolvedValue({
       nodes: makeTwoButtonNodes(),

@@ -56,9 +56,11 @@ Read the declaration rather than maintaining a prose copy:
 - common command input fields, and which surface may write an input key (model, operator, retired):
   `src/commands/common-input-fields.ts` and `src/commands/input-audience.ts`
 
-Shared selector parsing and matching belongs in `@agent-device/selectors`; request cancellation
-and progress in `@agent-device/host-kit/request`; cross-layer contracts in `packages/contracts/src`;
-CLI flags in `src/commands/cli-grammar`; cross-surface schema composition in `src/commands/schema`.
+Shared selector parsing and matching belongs in `@agent-device/selectors`; daemon-side request
+cancellation and progress in `@agent-device/host-kit/request`, and the caller's per-call abort guard
+beside the transports it serves in `src/daemon-client/daemon-client-transport.ts`; cross-layer
+contracts in `packages/contracts/src`; CLI flags in `src/commands/cli-grammar`; cross-surface schema
+composition in `src/commands/schema`.
 
 Resolve registry completeness failures at the missing declaration. Diagnose other gate failures
 at their reported invariant; do not suppress them or add an allowlist to get a pass. Build interaction

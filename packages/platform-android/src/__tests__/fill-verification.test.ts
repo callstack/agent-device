@@ -4,15 +4,18 @@
 // command-scoped capture stops the automation-helper session after every one of those reads and the
 // next read pays a fresh `am instrument` start. These tests pin who owns the helper session across
 // the samples and how long the samples keep coming — not what one sample concludes, which
-// fill-diagnostics/input-actions-fill own.
+// fill-diagnostics/input-actions-fill own. The one conclusion pinned here is whether any of a
+// commit reached the field, which both the soft-success guard and the IME rebind share.
 
 import { afterEach, beforeEach, test } from 'vitest';
 import './test-utils/android-host-test-setup.ts';
 import assert from 'node:assert/strict';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { withAndroidAdbProvider, type AndroidAdbProvider } from '../adb-executor.ts';
+import type { AndroidFillVerificationNode } from '../fill-diagnostics.ts';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from './test-utils/android-snapshot-helper.ts';
 import {
+  isAndroidFillCommitDropped,
   readAndroidFillTargetBeforeMutation,
   verifyAndroidFilledText,
   type FillVerificationClock,
@@ -228,3 +231,42 @@ function withKeyboardStateProbe(exec: AndroidAdbProvider['exec']): AndroidAdbPro
 function filledFieldXml(text: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?><hierarchy><node package="com.example" class="android.widget.EditText" text="${text}" resource-id="com.example:id/field" focused="true" bounds="[0,0][200,100]"/></hierarchy>`;
 }
+
+function fillNode(text: string | null, hintShowing = false): AndroidFillVerificationNode {
+  return {
+    text,
+    className: 'android.widget.EditText',
+    resourceId: null,
+    packageName: 'com.example',
+    rect: { x: 0, y: 0, width: 200, height: 100 },
+    focused: true,
+    password: false,
+    inputMethodOwned: false,
+    area: 20_000,
+    hintShowing,
+    placeholder: null,
+  };
+}
+
+test('a commit counts as dropped when the field shows its hint or keeps its old value', () => {
+  const before = fillNode('Old');
+  const observed = (text: string | null, hintShowing = false) => ({
+    ok: false,
+    actual: text,
+    targetInput: fillNode(text, hintShowing),
+    actualInput: fillNode(text, hintShowing),
+  });
+
+  assert.equal(isAndroidFillCommitDropped(observed('e.g. Jane', true), before), true);
+  assert.equal(isAndroidFillCommitDropped(observed('Old'), before), true);
+  assert.equal(isAndroidFillCommitDropped(observed(null), before), true);
+  assert.equal(
+    isAndroidFillCommitDropped(
+      { ok: false, actual: null, actualInput: null, targetInput: null },
+      before,
+    ),
+    false,
+  );
+  assert.equal(isAndroidFillCommitDropped(observed('Jan'), before), false);
+  assert.equal(isAndroidFillCommitDropped(observed('Jan'), null), false);
+});

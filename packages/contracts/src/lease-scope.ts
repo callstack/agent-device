@@ -18,13 +18,14 @@ export type LeaseScope = {
   runId?: string;
   leaseId?: string;
   leaseTtlMs?: number;
+  leaseRetainOnClose?: boolean;
   leaseBackend?: LeaseBackend;
   leaseProvider?: string;
   deviceKey?: string;
   clientId?: string;
 };
 
-export type LeaseDiagnosticsContext = Omit<LeaseScope, 'leaseTtlMs'>;
+export type LeaseDiagnosticsContext = Omit<LeaseScope, 'leaseTtlMs' | 'leaseRetainOnClose'>;
 
 export type LeaseRpcCommand = 'lease_allocate' | 'lease_heartbeat' | 'lease_release';
 
@@ -36,6 +37,7 @@ export type LeaseAllocateRequestScope = {
   deviceKey?: string;
   clientId?: string;
   ttlMs?: number;
+  retainOnClose?: boolean;
 };
 
 export type LeaseScopedRequestScope = {
@@ -56,6 +58,7 @@ type LeaseRequestLike = {
     runId?: string;
     leaseId?: string;
     leaseTtlMs?: number;
+    leaseRetainOnClose?: boolean;
     leaseBackend?: LeaseBackend;
     leaseProvider?: string;
     deviceKey?: string;
@@ -69,6 +72,7 @@ type LeaseOptionsLike = {
   leaseId?: string;
   leaseTtlMs?: number;
   ttlMs?: number;
+  retainOnClose?: boolean;
   leaseBackend?: LeaseBackend;
   leaseProvider?: string;
   provider?: string;
@@ -82,6 +86,7 @@ export function leaseScopeFromRequest(req: LeaseRequestLike): LeaseScope {
     runId: req.meta?.runId ?? readFlagString(req.flags, 'runId'),
     leaseId: req.meta?.leaseId ?? readFlagString(req.flags, 'leaseId'),
     leaseTtlMs: req.meta?.leaseTtlMs,
+    leaseRetainOnClose: req.meta?.leaseRetainOnClose,
     leaseBackend: req.meta?.leaseBackend,
     leaseProvider:
       req.meta?.leaseProvider ??
@@ -98,6 +103,7 @@ export function leaseScopeFromOptions(options: LeaseOptionsLike): LeaseScope {
     runId: options.runId,
     leaseId: options.leaseId,
     leaseTtlMs: options.leaseTtlMs ?? options.ttlMs,
+    leaseRetainOnClose: options.retainOnClose,
     leaseBackend: options.leaseBackend,
     leaseProvider: options.leaseProvider ?? options.provider,
     deviceKey: options.deviceKey,
@@ -111,6 +117,7 @@ export function leaseScopeToRequestMeta(scope: LeaseScope): LeaseRequestLike['me
     runId: scope.runId,
     leaseId: scope.leaseId,
     leaseTtlMs: scope.leaseTtlMs,
+    leaseRetainOnClose: scope.leaseRetainOnClose,
     leaseBackend: scope.leaseBackend,
     leaseProvider: scope.leaseProvider,
     deviceKey: scope.deviceKey,
@@ -139,6 +146,7 @@ export function leaseScopeToAllocateRequest(scope: LeaseScope): LeaseAllocateReq
     deviceKey: scope.deviceKey,
     clientId: scope.clientId,
     ttlMs: scope.leaseTtlMs,
+    retainOnClose: scope.leaseRetainOnClose,
   }) as LeaseAllocateRequestScope;
 }
 
@@ -177,6 +185,7 @@ export function leaseScopeToLeaseRpcParams(
         ...common,
         ...stripUndefined({
           ttlMs: scope.leaseTtlMs,
+          retainOnClose: scope.leaseRetainOnClose,
           backend: scope.leaseBackend,
         }),
       };

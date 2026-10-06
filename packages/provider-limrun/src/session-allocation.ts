@@ -1,8 +1,9 @@
 import type Limrun from '@limrun/api';
 import type { DeviceLease, LeaseLifecycleContext } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { rejectRefusedProviderProfileFields } from '@agent-device/contracts/provider-profile-fields';
 import { createLimrunAndroidSession, type LimrunAndroidSession } from './android.ts';
-import { buildLimrunDevice } from './device.ts';
+import { buildLimrunDevice, LIMRUN_PROFILE_FIELDS } from './device.ts';
 import { createLimrunIosSession, type LimrunIosSession } from './ios.ts';
 import {
   assertLimrunUploadedAppAccess,
@@ -33,6 +34,10 @@ type SessionAllocationParams = Readonly<{
   app?: LimrunAppAsset;
   dependencies: LimrunRuntimeDependencies;
 }>;
+
+export function rejectRefusedLimrunProfileFields(context?: LeaseLifecycleContext): void {
+  rejectRefusedProviderProfileFields(context?.flags, LIMRUN_PROFILE_FIELDS);
+}
 
 export async function resolveRequestedLimrunAppAsset(
   limrun: Limrun,
@@ -90,6 +95,7 @@ export async function allocateLimrunIosSession(
       {
         lease: params.lease,
         instanceId: instance.metadata.id,
+        ownership: 'created',
         device: buildLimrunDevice('ios', params.lease, instance.metadata.id),
         apiUrl: instance.status.apiUrl,
         token: instance.status.token,
@@ -134,6 +140,7 @@ export async function allocateLimrunAndroidSession(
       {
         lease: params.lease,
         instanceId: instance.metadata.id,
+        ownership: 'created',
         device: buildLimrunDevice('android', params.lease, instance.metadata.id),
         apiUrl: instance.status.apiUrl,
         token: instance.status.token,

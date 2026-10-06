@@ -10,6 +10,8 @@ export {
   formatScriptStringLiteral,
   isClickLikeCommand,
   isTouchTargetCommand,
+  SCRIPT_FLAG_COMMANDS,
+  scriptFlagEntries,
   stripRecordedRefGeneration,
 } from './internal/script-utils.ts';
 

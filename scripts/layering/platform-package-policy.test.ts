@@ -42,6 +42,7 @@ function declarations(): PlatformPackageDeclaration[] {
             '@agent-device/platform-apple/runner-owner',
             '@agent-device/platform-apple/session-observation',
             '@agent-device/platform-apple/simctl',
+            '@agent-device/platform-apple/simctl-settings',
             '@agent-device/platform-apple/snapshot-source',
             '@agent-device/platform-apple/simulator',
             '@agent-device/platform-apple/simulator-boot',

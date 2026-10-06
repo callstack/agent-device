@@ -24,6 +24,7 @@ import type { PlatformRequestScope } from '@agent-device/contracts/platform-runt
 import type { RequestPlatformProviderScope } from '@agent-device/contracts/platform-providers';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
+import type { DaemonProviderCredentials } from '../provider-credential-fingerprint.ts';
 
 type RequestHandlerChainParams = {
   req: DaemonRequest;
@@ -33,6 +34,7 @@ type RequestHandlerChainParams = {
   leaseRegistry: LeaseRegistry;
   providerRuntimeIds?: readonly string[];
   providerRuntimeRequiredIds?: readonly string[];
+  providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
   providerAppCatalog?: ProviderAppCatalog;
@@ -150,6 +152,7 @@ async function runLeaseHandler(
       leaseRegistry: params.leaseRegistry,
       providerRuntimeIds: params.providerRuntimeIds,
       providerRuntimeRequiredIds: params.providerRuntimeRequiredIds,
+      providerCredentials: params.providerCredentials,
       leaseLifecycleProvider: params.leaseLifecycleProvider,
       cloudArtifactProvider: params.cloudArtifactProvider,
     }),

@@ -5,6 +5,7 @@ import { androidRevokedPermissionWarning } from '../settings-permission.ts';
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import { assertRejectsAppError } from './test-utils/app-error.ts';
 import { withFakeAdb } from './test-utils/fake-adb.ts';
+import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 
 // #1796. Two invariants decide every case here:
 //   * `pm` defaults grant/revoke and the permission-flag operations to UserHandle.USER_SYSTEM,
@@ -314,13 +315,18 @@ test.each([
   );
 });
 
-test('setAndroidSetting permission requires an app in session', async () => {
+test('setAndroidSetting permission requires an app in session with the published reason', async () => {
   await assertRejectsAppError(
     () =>
       setAndroidSetting(ANDROID_EMULATOR, 'permission', 'deny', undefined, {
         permissionTarget: 'camera',
       }),
-    { code: 'INVALID_ARGS', message: /requires an active app in session/ },
+    {
+      code: 'INVALID_ARGS',
+      message: /requires an active app in session/,
+      reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired,
+      dispatched: 'no',
+    },
   );
 });
 

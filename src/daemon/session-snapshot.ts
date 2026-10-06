@@ -2,7 +2,8 @@ import { randomInt } from 'node:crypto';
 import type { SettleObservation } from '@agent-device/contracts/interaction';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { activatePartialRefFrame, refFrameEpoch, refFrameState } from './ref-frame.ts';
-import type { SessionState } from './session-state.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
+import type { SessionStore } from './session-store.ts';
 
 /**
  * Warning attached to a read of an `@ref` argument once the ref frame has
@@ -16,8 +17,7 @@ export const STALE_SNAPSHOT_REFS_WARNING =
 
 /**
  * The single daemon-side write choke point for replacing a session's stored
- * snapshot outside the snapshot/diff command (`buildNextSnapshotSession`,
- * src/daemon/snapshot-runtime.ts). It advances the observation generation but
+ * snapshot outside the snapshot/diff command. It advances the observation generation but
  * does NOT touch the ref frame: replacing the latest observation is an
  * operational read, so it never expires, reactivates, or reindexes the
  * authorized frame (ADR 0014). Frame lifetime is owned solely by
@@ -38,35 +38,24 @@ export function setSessionSnapshot(session: SessionState, snapshot: SnapshotStat
   }
 }
 
-/**
- * The same lineage rule, applied to a freshly BUILT record instead of the stored one.
- * `snapshot-runtime.ts` constructs a new `SessionState` rather than mutating the one in the
- * store, so it cannot go through `setSessionSnapshot` — but the invariant it has to honour is
- * identical, and it is the invariant that matters: #1076 versioned refs require the observation
- * counter to advance exactly when the stored tree is replaced, for `snapshot` and `diff` alike,
- * and the scope source must describe the tree that actually ended up there.
- *
- * Advancing the counter is NOT the same as invalidating client refs, and the comment this
- * replaced said otherwise — it claimed a diff leaves refs pinned to the previous generation
- * "which is exactly what the pinned warning diagnoses". It does not: `diff` passes
- * `issuesRefsToClient: false`, so it never reactivates the frame, and
- * `resolveRefStalenessWarning` compares a pin against the frame EPOCH rather than this counter,
- * precisely so a capture that bumped the counter cannot make a valid pin look stale. A ref
- * pinned before a diff therefore keeps resolving, with no warning, by design (ADR 0014).
- * `session-snapshot.test.ts` pins that outcome so the claim cannot drift back.
- *
- * Both fields move together, here, next to the writer they have to agree with. They used to be
- * assigned at the call site, which is how the rule came to have two statements of itself in two
- * modules.
- */
-export function setSnapshotLineage(
+export function clearSessionSnapshot(session: SessionState): void {
+  session.snapshot = undefined;
+}
+
+/** Replaces a snapshot/diff observation and its scoped lineage without issuing client refs. */
+export function setCommandSnapshot(
   session: SessionState,
   params: {
+    snapshot: SnapshotState;
     scopeSource: SnapshotState | undefined;
     keptCurrentSnapshot: boolean;
     previousGeneration: number | undefined;
   },
 ): void {
+  session.snapshot = params.snapshot;
+  if (params.snapshot.comparisonSafe === true) {
+    session.lastComparisonSafeSnapshot = params.snapshot;
+  }
   session.snapshotScopeSource = params.scopeSource;
   session.snapshotGeneration = params.keptCurrentSnapshot
     ? params.previousGeneration
@@ -136,10 +125,13 @@ export function markSessionPartialRefsIssued(session: SessionState, refs: Iterab
  * rule has one implementation beside the partial-frame primitive it wraps.
  */
 export function issueSettleRefs(
-  session: SessionState,
+  ref: SessionRef | undefined,
+  sessionStore: SessionStore,
   settle: SettleObservation | undefined,
 ): number | undefined {
-  if (!settle?.diff) return undefined;
+  if (!ref || !settle?.diff) return undefined;
+  const session = sessionStore.resolveCurrent(ref);
+  if (!session) return undefined;
   markSessionPartialRefsIssued(session, collectSettleIssuedRefBodies(settle));
   return session.snapshotGeneration;
 }

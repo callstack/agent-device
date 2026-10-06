@@ -17,6 +17,7 @@ import {
   normalizeAllocateLeaseRequest,
   createDeviceLease,
   deviceLeaseBusyError,
+  hasAllocatedScope,
   normalizeLeaseId,
   normalizeRequiredLeaseId,
   normalizeLeaseAdmissionRequest,
@@ -52,6 +53,9 @@ export class LeaseRegistry {
   private readonly leases = new Map<string, DeviceLease>();
   private readonly runBindings = new Map<string, string>();
   private readonly deviceBindings = new Map<string, string>();
+  /** The inactivity window the host chose for each lease it allocated; a tenant cannot exceed it. */
+  private readonly hostTtlMsByLeaseId = new Map<string, number>();
+  private readonly macOsAppTenantIds = new Set<string>();
   private readonly maxActiveSimulatorLeases: number;
   private readonly resolveLeaseTtlMs: ReturnType<typeof createLeaseTtlResolver>;
   private readonly now: () => number;
@@ -86,6 +90,42 @@ export class LeaseRegistry {
     return { ...lease };
   }
 
+  /**
+   * Host administration: allocates the lease `leaseId` with exactly this scope, or renews it when
+   * it already holds this scope. A tenant never reaches this; it is how a host pins the device a
+   * client may use, so an existing lease with another scope is refused rather than rewritten.
+   */
+  putHostLease(leaseId: string, request: AllocateLeaseRequest): DeviceLease {
+    const id = normalizeRequiredLeaseId(leaseId);
+    const normalized = normalizeAllocateLeaseRequest(request);
+    this.cleanupExpiredLeases();
+    const leaseTtlMs = this.resolveLeaseTtlMs(normalized.ttlMs);
+    const existing = this.leases.get(id);
+    if (existing) {
+      if (!hasAllocatedScope(existing, normalized)) {
+        throw new AppError('INVALID_ARGS', 'Lease id already names a lease with another scope.', {
+          reason: 'LEASE_SCOPE_MISMATCH',
+        });
+      }
+      this.hostTtlMsByLeaseId.set(id, leaseTtlMs);
+      return this.refreshLease(existing, leaseTtlMs);
+    }
+    this.assertHumanControlAdmission(normalized);
+    this.assertDeviceAvailable(normalized);
+    if (normalized.backend === 'macos-app') this.macOsAppTenantIds.add(normalized.tenantId);
+    if (this.runBindings.has(leaseRunBindingKey(normalized))) {
+      throw new AppError('DEVICE_IN_USE', 'This tenant run already holds a lease for the device.', {
+        reason: 'DEVICE_LEASE_BUSY',
+      });
+    }
+    this.enforceCapacity(normalized.backend);
+    const lease = { ...createDeviceLease(normalized, leaseTtlMs, this.now()), leaseId: id };
+    this.leases.set(lease.leaseId, lease);
+    this.hostTtlMsByLeaseId.set(id, leaseTtlMs);
+    this.bindLease(lease);
+    return { ...lease };
+  }
+
   private refreshExistingRunBinding(
     request: NormalizedAllocateLeaseRequest,
     leaseTtlMs: number,
@@ -99,7 +139,10 @@ export class LeaseRegistry {
       return undefined;
     }
     if (existingLease.clientId === request.clientId) {
-      return this.refreshLease(existingLease, leaseTtlMs);
+      return this.refreshLease(
+        request.retainOnClose ? { ...existingLease, retainOnClose: true } : existingLease,
+        leaseTtlMs,
+      );
     }
     if (existingLease.deviceKey) {
       throw deviceLeaseBusyError(existingLease);
@@ -121,9 +164,13 @@ export class LeaseRegistry {
     const lease = this.getActiveLease(leaseId);
     assertLeaseOwnerScope(lease, request);
     assertLeaseScopeMatch(lease, request);
-    const leaseTtlMs =
+    const requestedTtlMs =
       request.ttlMs === undefined ? leaseOwnTtlMs(lease) : this.resolveLeaseTtlMs(request.ttlMs);
-    return this.refreshLease(lease, leaseTtlMs);
+    const hostTtlMs = this.hostTtlMsByLeaseId.get(leaseId);
+    return this.refreshLease(
+      lease,
+      hostTtlMs === undefined ? requestedTtlMs : Math.min(requestedTtlMs, hostTtlMs),
+    );
   }
 
   /**
@@ -177,6 +224,31 @@ export class LeaseRegistry {
     const scope = normalizeLeaseAdmissionRequest(request);
     this.cleanupExpiredLeases();
     assertLeaseScopeMatch(this.getActiveLease(scope.leaseId), scope);
+  }
+
+  /** Whether this daemon ever allocated `tenantId` a `macos-app` lease, released or not. */
+  hasHeldMacOsAppLease(tenantId: string): boolean {
+    return this.macOsAppTenantIds.has(tenantId);
+  }
+
+  /** The backend of the active lease `leaseId` names, read without an owner check. */
+  findActiveLeaseBackend(leaseId: string): LeaseBackend | undefined {
+    const id = normalizeLeaseId(leaseId);
+    if (!id) return undefined;
+    this.cleanupExpiredLeases();
+    return this.leases.get(id)?.backend;
+  }
+
+  /**
+   * Whether a `retainOnClose` lease is still inside its own window. A human-control hold or admitted
+   * work can keep a past-due lease registered, but only the lease's `expiresAt` bounds how long it
+   * keeps an idle daemon alive.
+   */
+  hasRetainedLeases(): boolean {
+    const now = this.now();
+    return this.listActiveLeases().some(
+      (lease) => lease.retainOnClose === true && lease.expiresAt > now,
+    );
   }
 
   listActiveLeases(): DeviceLease[] {
@@ -518,6 +590,7 @@ export class LeaseRegistry {
   }
 
   private unbindLease(lease: DeviceLease, releasedAt = this.now()): void {
+    this.hostTtlMsByLeaseId.delete(lease.leaseId);
     this.runBindings.delete(leaseRunBindingKey(lease));
     const deviceBindingKey = leaseDeviceBindingKey(lease);
     if (deviceBindingKey) {

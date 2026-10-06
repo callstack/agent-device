@@ -151,6 +151,17 @@ export function completeAndroidFillVerification(
   );
 }
 
+/** Whether a failed fill left an observed field empty, showing its hint, or holding its old value. */
+export function isAndroidFillCommitDropped(
+  verification: AndroidFillVerification,
+  beforeTarget: AndroidFillVerification['targetInput'],
+): boolean {
+  if (verification.ok) return false;
+  const input = verification.actualInput;
+  if (input && (input.hintShowing === true || input.text === null)) return true;
+  return beforeTarget?.text != null && verification.actual === beforeTarget.text;
+}
+
 export function buildAndroidFillUnconfirmedVerification(
   requested: string,
   beforeTarget: AndroidFillVerification['targetInput'],
@@ -164,6 +175,7 @@ export function buildAndroidFillUnconfirmedVerification(
     // and the soft-success would also skip the second, bigger delete burst.
     requested.length === 0 ||
     verification.reason === 'ime_capture' ||
+    isAndroidFillCommitDropped(verification, beforeTarget) ||
     !beforeTarget ||
     !afterTarget ||
     !actualInput ||
@@ -171,8 +183,7 @@ export function buildAndroidFillUnconfirmedVerification(
     isSensitiveFillDiagnosticNode(afterTarget) ||
     isSensitiveFillDiagnosticNode(actualInput) ||
     !sameAndroidFillTarget(beforeTarget, afterTarget) ||
-    !sameAndroidFillTarget(beforeTarget, actualInput) ||
-    beforeTarget.text === verification.actual
+    !sameAndroidFillTarget(beforeTarget, actualInput)
   ) {
     return null;
   }

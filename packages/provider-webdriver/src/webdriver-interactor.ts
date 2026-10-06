@@ -6,6 +6,9 @@ import type {
   ScreenshotOptions,
   SnapshotOptions,
   SnapshotResult,
+  KeyboardDismissResult,
+  KeyboardEnterResult,
+  KeyboardStatusResult,
 } from '@agent-device/contracts/interactor-types';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import {
@@ -43,6 +46,11 @@ const TEXT_ENTRY_READINESS_POLL_MS = 100;
  * WebDriver client's much longer default request timeout.
  */
 const TEXT_ENTRY_PROBE_TIMEOUT_MS = 1_500;
+
+/** The Android `KEYCODE_ENTER` the IME's return key sends. */
+const ANDROID_KEYCODE_ENTER = 66;
+/** How a WebDriver dismiss lowers the iOS keyboard: Appium's hide-keyboard route. */
+const WEBDRIVER_DISMISS_MECHANISM = 'appium-hide-keyboard';
 
 /** Global-timer based, so text-entry readiness can be exercised on a fake clock. */
 function sleep(ms: number): Promise<void> {
@@ -359,6 +367,97 @@ class WebDriverInteractor implements Interactor {
 
   async tvRemote(_button: TvRemoteButton, _durationMs?: number): Promise<void> {
     this.unsupported('tvRemote');
+  }
+
+  /** Android only: the Appium keyboard probe is the IME probe this result shape names. */
+  async keyboardStatus(): Promise<KeyboardStatusResult> {
+    this.requireSupport('keyboard');
+    return { kind: 'ime-probe', visible: await this.keyboardVisible() };
+  }
+
+  /**
+   * A keyboard that is not up is left alone: Appium refuses the hide-keyboard route when no soft
+   * keyboard shows, and native dismiss answers an already-hidden keyboard with success. Only a
+   * keyboard seen up, or one the driver cannot report, is asked down.
+   */
+  async keyboardDismiss(): Promise<KeyboardDismissResult> {
+    this.requireSupport('keyboard');
+    const wasVisible = await this.keyboardVisibility();
+    if (wasVisible === false)
+      return this.dismissResult({ wasVisible, visible: false, dismissed: false });
+    await this.client.hideKeyboard();
+    const visible = await this.keyboardVisibilityAfterMutation();
+    return this.dismissResult({
+      ...(wasVisible === undefined ? {} : { wasVisible }),
+      ...(visible === undefined ? {} : { visible, dismissed: wasVisible === true && !visible }),
+    });
+  }
+
+  private dismissResult(echo: {
+    wasVisible?: boolean;
+    visible?: boolean;
+    dismissed?: boolean;
+  }): KeyboardDismissResult {
+    return this.backend === 'android'
+      ? { kind: 'ime-probe', ...echo }
+      : { kind: 'mechanism', mechanism: WEBDRIVER_DISMISS_MECHANISM, ...echo };
+  }
+
+  /**
+   * Android presses the Enter keycode through the driver, the same key the IME's return key
+   * sends. XCUITest exposes no key press, so iOS types a newline into the focused field, which
+   * the return key also does; the keyboard visibility around it is the echo the Apple runner
+   * reports too.
+   */
+  async keyboardEnter(): Promise<KeyboardEnterResult> {
+    this.requireSupport('keyboard');
+    if (this.backend === 'android') {
+      await this.client.executeScript('mobile: pressKey', [{ keycode: ANDROID_KEYCODE_ENTER }]);
+      return { kind: 'android-acknowledged' };
+    }
+    const wasVisible = await this.keyboardVisibility();
+    await this.client.sendKeys('\n');
+    const visible = await this.keyboardVisibilityAfterMutation();
+    return {
+      kind: 'visibility-echo',
+      ...(wasVisible === undefined ? {} : { wasVisible }),
+      ...(visible === undefined ? {} : { visible }),
+    };
+  }
+
+  /**
+   * The echo read after a key press or dismiss landed. A probe that fails there must not turn
+   * the landed mutation into a failure a caller would retry, so it reads as no echo.
+   */
+  private async keyboardVisibilityAfterMutation(): Promise<boolean | undefined> {
+    try {
+      return await this.keyboardVisibility();
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** The keyboard probe's answer, or `undefined` when this driver has no such route. */
+  private async keyboardVisibility(): Promise<boolean | undefined> {
+    const shown = await this.client.isKeyboardShown(TEXT_ENTRY_PROBE_TIMEOUT_MS);
+    return shown === 'unsupported' ? undefined : shown;
+  }
+
+  /** The keyboard probe's answer where the result shape requires one. */
+  private async keyboardVisible(): Promise<boolean> {
+    const shown = await this.keyboardVisibility();
+    if (shown === undefined) {
+      throw new AppError(
+        'UNSUPPORTED_OPERATION',
+        'This driver does not implement the keyboard visibility route.',
+        {
+          provider: this.capabilities.provider,
+          platform: this.capabilities.platform,
+          operation: 'keyboard',
+        },
+      );
+    }
+    return shown;
   }
 
   async readClipboard(): Promise<string> {

@@ -54,7 +54,7 @@ test('Provider-backed Vega TV flow routes lifecycle and every remote control as 
         deviceInventoryProvider: async () => [VEGA_TV],
       }),
     async (daemon) => {
-      daemon.setSession('default', {
+      daemon.publishSession('default', {
         name: 'default',
         device: VEGA_TV,
         createdAt: Date.now(),

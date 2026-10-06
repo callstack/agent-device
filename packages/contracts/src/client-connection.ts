@@ -17,6 +17,13 @@ import type {
 
 export type AgentDeviceDaemonTransportContext = {
   authToken?: string;
+  /**
+   * Cancels this one in-flight request. A built-in transport that sees an abort destroys the
+   * request's connection, which makes the daemon mark the request canceled; the promise rejects
+   * with the typed canceled-request error. A custom transport that ignores the signal keeps its
+   * own cancellation contract, and the client still rejects the caller's promise on abort.
+   */
+  signal?: AbortSignal;
 };
 
 export type AgentDeviceDaemonTransport = (
@@ -88,7 +95,22 @@ export type AgentDeviceRequestOverrides = Pick<
   | 'iosXctestrunFile'
   | 'iosXctestDerivedDataPath'
   | 'iosXctestEnvDir'
->;
+> & {
+  /**
+   * Cancels this one call. Already aborted: the call rejects without sending anything
+   * (`details.dispatched: 'no'`). Aborted in flight: the request's connection closes, the daemon
+   * marks the request canceled, and the promise rejects with the typed canceled-request error
+   * (`details.reason: 'request_canceled'`). An abort is never a timeout: no runner sweep, no
+   * daemon reset.
+   *
+   * The guarantee covers the daemon request, and the built-in transports enforce it; a custom
+   * transport receives the signal on its context and may implement cancellation differently. Two
+   * phases run outside it: a response-artifact download started after the response begins is not
+   * canceled, and a canceled one-shot replay still runs the existing cleanup that may tear down a
+   * daemon this client started.
+   */
+  signal?: AbortSignal;
+};
 
 export type AgentDeviceIdentifiers = {
   session?: string;

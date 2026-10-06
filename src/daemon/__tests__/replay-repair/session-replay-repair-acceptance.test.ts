@@ -1,3 +1,4 @@
+import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
 /**
  * ADR 0012 decision 6 acceptance test: a healed sibling `.ad` produced by the
  * repair loop must replay end-to-end in a FRESH session, with every selector
@@ -76,7 +77,10 @@ test('a healed script survives repair + fresh-session replay: self-contained ope
   const root = mkdtempForTestSync('agent-device-replay-repair-accept-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.publish(
+    sessionName,
+    makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
+  );
   const filePath = writeReplayFile(root, [
     'open "Demo" --relaunch --platform ios --metro-port 8081',
     SAVE_ANNOTATION,
@@ -113,7 +117,7 @@ test('a healed script survives repair + fresh-session replay: self-contained ope
   expect(session.actions.map((a) => a.command)).toEqual(['open']);
 
   // --- Agent presses the blessed @ref (record-and-heal): recorded live. ---
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e7'],
     flags: {},
@@ -140,7 +144,7 @@ test('a healed script survives repair + fresh-session replay: self-contained ope
   // repair-armed write on the same explicit finalize signal `close
   // --save-script` sets). ---
   markRepairTransactionComplete(session);
-  sessionStore.writeSessionLog(session);
+  sessionStore.writeSessionLog(storeSessionForTest(sessionStore, session));
   const healedPath = path.join(root, 'flow.healed.ad');
   expect(fs.existsSync(healedPath)).toBe(true);
   const healedScript = fs.readFileSync(healedPath, 'utf8');
@@ -162,7 +166,7 @@ test('a healed script survives repair + fresh-session replay: self-contained ope
     invoke: makeRecordingReplayInvoke({
       sessionStore: freshSessionStore,
       sessionName: freshSessionName,
-      openReplacesSession: true,
+      openRebuildsActions: true,
       spy: invokedFresh,
     }),
   });

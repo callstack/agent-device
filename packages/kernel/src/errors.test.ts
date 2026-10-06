@@ -2,14 +2,75 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   AppError,
+  defaultHintForCode,
   discloseDispatch,
   discloseDispatchAfterSteps,
   normalizeError,
+  PRE_DISPATCH_REFUSAL_REASONS,
+  sessionAppRequiredDetails,
+  sessionOrDeviceSelectorRequiredDetails,
   throwDaemonError,
   readElementMatchCandidateRefs,
   readErrorCandidateViews,
   summarizeCommandAttemptFailures,
 } from './errors.ts';
+
+test('the pre-dispatch refusal reasons are the values consumers branch on', () => {
+  assert.deepEqual(PRE_DISPATCH_REFUSAL_REASONS, {
+    sessionAppRequired: 'session_app_required',
+    sessionOrDeviceSelectorRequired: 'session_or_device_selector_required',
+  });
+});
+
+for (const [label, details, code, message] of [
+  [
+    'sessionAppRequired',
+    sessionAppRequiredDetails(),
+    'INVALID_ARGS',
+    'permission setting requires an active app in session',
+  ],
+  [
+    'sessionOrDeviceSelectorRequired',
+    sessionOrDeviceSelectorRequiredDetails(),
+    'INVALID_ARGS',
+    'clipboard requires an active session or an explicit device selector (e.g. --platform ios).',
+  ],
+] as const) {
+  test(`${label} refusal carries its reason and dispatched:no through normalize and the wire`, () => {
+    const normalized = normalizeError(new AppError(code, message, details));
+    assert.equal(normalized.message, message);
+    assert.equal(normalized.details?.reason, details.reason);
+    assert.equal(normalized.details?.dispatched, 'no');
+    assert.throws(
+      () => throwDaemonError(normalized),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.details?.reason === details.reason &&
+        error.details?.dispatched === 'no',
+    );
+  });
+
+  test(`${label} reason survives a second normalization of the wire shape`, () => {
+    const once = normalizeError(new AppError(code, message, details));
+    const twice = normalizeError(new AppError(once.code, once.message, once.details));
+    assert.deepEqual(twice.details, once.details);
+  });
+}
+
+test('a published refusal keeps the INVALID_ARGS default hint — the reason carries the extra fact', () => {
+  for (const details of [sessionAppRequiredDetails(), sessionOrDeviceSelectorRequiredDetails()]) {
+    const normalized = normalizeError(new AppError('INVALID_ARGS', 'refused', details));
+    assert.equal(normalized.hint, defaultHintForCode('INVALID_ARGS'));
+  }
+});
+
+test('a sibling INVALID_ARGS refusal without a reason cannot activate a reason-driven consumer', () => {
+  const unrelated = normalizeError(
+    new AppError('INVALID_ARGS', 'clipboard requires a subcommand: read or write'),
+  );
+  assert.equal(unrelated.details?.reason, undefined);
+  assert.equal('dispatched' in (unrelated.details ?? {}), false);
+});
 
 test('normalizeError retains redacted nested command errors through repeated normalization', () => {
   const stderr = `Launch request denied\n${'Context line\n'.repeat(50)}Underlying reason: token=private-value device locked`;

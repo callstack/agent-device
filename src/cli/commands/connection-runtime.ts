@@ -434,6 +434,7 @@ type ConnectionLeasePolicy = {
 };
 
 function connectionLeasePolicyForState(state: RemoteConnectionState): ConnectionLeasePolicy {
+  if (state.leaseBackend === 'macos-app') return MACOS_APP_CONNECTION_LEASE_POLICY;
   const capabilities = connectionProviderCapabilities(state.leaseProvider);
   if (capabilities.leaseKind === 'proxy') {
     return PROXY_CONNECTION_LEASE_POLICY;
@@ -464,6 +465,24 @@ const PROXY_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
   shouldAllocate: (command) => command !== 'devices' && !leaseDeferredCommands.has(command),
   ttlMs: () => PROXY_REMOTE_LEASE_TTL_MS,
   resolveLeaseState: resolveProxyLeaseState,
+};
+
+/**
+ * A `macos-app` lease names one app, and the host allocated it: the client uses the lease its
+ * remote config names as it is, and never resolves a device into a new key or allocates a lease.
+ */
+const MACOS_APP_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
+  shouldAllocate: (command) => command !== 'devices' && !leaseDeferredCommands.has(command),
+  ttlMs: () => undefined,
+  resolveLeaseState: async ({ state }) => {
+    if (!state.leaseId || !state.deviceKey) {
+      throw new AppError(
+        'INVALID_ARGS',
+        'A macos-app connection needs the leaseId and deviceKey the host allocated in its remote config.',
+      );
+    }
+    return { state: { ...state, platform: 'macos' } };
+  },
 };
 
 const CLOUD_WEBDRIVER_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
@@ -555,6 +574,11 @@ export async function stopReactDevtoolsCleanup(options: {
   }
 }
 
+/** The host allocated a `macos-app` lease and ends it itself; a tenant never releases it. */
+function isHostAllocatedLease(state: RemoteConnectionState): boolean {
+  return state.leaseBackend === 'macos-app';
+}
+
 export async function releaseRemoteConnectionLease(
   client: AgentDeviceClient,
   state: RemoteConnectionState,
@@ -562,7 +586,7 @@ export async function releaseRemoteConnectionLease(
   // pass the token already resolved via the flag/env/CLI-session chain.
   daemonAuthToken?: string,
 ): Promise<{ released: boolean; provider?: CloudProviderSessionResult }> {
-  if (!state.leaseId) return { released: false };
+  if (!state.leaseId || isHostAllocatedLease(state)) return { released: false };
   const result = await client.leases.release({
     tenant: state.tenant,
     runId: state.runId,
@@ -677,7 +701,7 @@ export async function releasePreviousLease(
     env: Record<string, string | undefined>;
   },
 ): Promise<PreviousLeaseReleaseNotice | undefined> {
-  if (!previous.leaseId) return undefined;
+  if (!previous.leaseId || isHostAllocatedLease(previous)) return undefined;
   const auth = resolvePreviousLeaseAuth({
     previous,
     nextDaemonBaseUrl: options.nextDaemonBaseUrl,
@@ -869,6 +893,13 @@ async function allocateOrReuseLease(
       ttlMs: policy.ttlMs(state),
     });
     if (existing) return { lease: existing, acquired: false };
+  }
+  if (leaseBackend === 'macos-app') {
+    throw new AppError('UNAUTHORIZED', 'The host-allocated macos-app lease is no longer active.', {
+      reason: 'LEASE_NOT_FOUND',
+      leaseId: state.leaseId,
+      hint: 'Ask the host for a new macos-app lease and update the remote config.',
+    });
   }
   const lease = await client.leases.allocate({
     tenant: state.tenant,

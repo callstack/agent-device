@@ -17,7 +17,6 @@ import {
 } from '../../../core/interaction-response-data-transform.ts';
 import { issueSettleRefs } from '../../session-snapshot.ts';
 import type { RecordedTargetCapture } from '@agent-device/selectors/target-evidence';
-import type { SessionState } from '../../session-state.ts';
 import type { CaptureSnapshotForSession, InteractionRouteInput } from './types.ts';
 import { resolveDirectTouchReferenceFrameSafely } from './interaction-touch-reference-frame.ts';
 import { readSnapshotNodesReferenceFrame } from '@agent-device/capture-kit/touch-reference-frame';
@@ -288,30 +287,40 @@ export async function buildTargetedTouchResponsePayloads(params: {
   params: InteractionRouteInput & {
     captureSnapshotForSession: CaptureSnapshotForSession;
   };
-  session: SessionState;
   result: TargetedTouchResult;
   staleRefsWarning: string | undefined;
   publicData?: Record<string, unknown>;
   extra: Record<string, unknown>;
 }): Promise<InteractionResponsePayloads> {
-  const { params: handlerParams, session, result, publicData, extra } = params;
-  const referenceFrame =
+  const { params: handlerParams, result, publicData, extra } = params;
+  const probedFrame =
     result.kind === 'point'
       ? await resolveDirectTouchReferenceFrameSafely({
-          session,
+          ref: handlerParams.sessionRef!,
           flags: handlerParams.req.flags,
           sessionStore: handlerParams.sessionStore,
           contextFromFlags: handlerParams.contextFromFlags,
           captureSnapshotForSession: handlerParams.captureSnapshotForSession,
           observation: handlerParams.androidObservation,
         })
-      : readSnapshotNodesReferenceFrame(session.snapshot?.nodes ?? []);
+      : undefined;
+  const current = handlerParams.sessionStore.resolveCurrent(handlerParams.sessionRef!);
+  const referenceFrame = current
+    ? result.kind === 'point'
+      ? probedFrame
+      : readSnapshotNodesReferenceFrame(current.snapshot?.nodes ?? [])
+    : undefined;
+  const currentResult = current ? result : { ...result, settle: undefined };
   return buildInteractionResponseData({
-    source: { kind: 'runtime', result, publicData },
+    source: { kind: 'runtime', result: currentResult, publicData },
     referenceFrame,
     extra,
     staleRefsWarning: params.staleRefsWarning,
-    settleRefsGeneration: issueSettleRefs(session, result.settle),
+    settleRefsGeneration: issueSettleRefs(
+      handlerParams.sessionRef,
+      handlerParams.sessionStore,
+      currentResult.settle,
+    ),
   });
 }
 

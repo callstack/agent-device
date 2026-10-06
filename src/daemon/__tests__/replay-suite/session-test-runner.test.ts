@@ -31,7 +31,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
 
 test('session_list includes device_udid and ios_simulator_device_set for iOS sessions', async () => {
   const sessionStore = makeSessionStore();
-  sessionStore.set(
+  sessionStore.publish(
     'ios-scoped',
     makeSession('ios-scoped', {
       platform: 'apple',
@@ -42,7 +42,7 @@ test('session_list includes device_udid and ios_simulator_device_set for iOS ses
       simulatorSetPath: '/tmp/tenant-a/simulators',
     }),
   );
-  sessionStore.set(
+  sessionStore.publish(
     'android-1',
     makeSession('android-1', {
       platform: 'android',
@@ -52,7 +52,7 @@ test('session_list includes device_udid and ios_simulator_device_set for iOS ses
       booted: true,
     }),
   );
-  sessionStore.set(
+  sessionStore.publish(
     'macos-1',
     makeSession('macos-1', {
       platform: 'apple',
@@ -220,7 +220,7 @@ test('test cleans up suite-owned sessions after each executed script', async () 
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore,
     invoke: async (req) => {
-      sessionStore.set(
+      sessionStore.publish(
         req.session,
         makeSession(req.session, {
           platform: 'android',
@@ -413,7 +413,10 @@ test('test returns invalid args when no replay scripts match the platform filter
     invoke: noopInvoke,
   });
 
-  assertInvalidArgsMessage(response, 'No replay tests matched for --platform android.');
+  assertInvalidArgsMessage(
+    response,
+    'No replay tests matched for --platform android: 1 declaring another platform. Run a source that declares android, or drop --platform.',
+  );
 });
 
 test('test rejects duplicate replay test metadata in the context header', async () => {

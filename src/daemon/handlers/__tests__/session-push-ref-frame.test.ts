@@ -18,7 +18,7 @@ const invoke = async (): Promise<never> => {
 test('push admission failure preserves an active ref frame', async () => {
   const sessionStore = makeSessionStore('agent-device-session-push-ref-admission-');
   const session = activeSession();
-  sessionStore.set('default', session);
+  sessionStore.publish('default', session);
   const inspectFacts = vi.fn(async (device) => {
     const facts = await mockInspectDeviceRuntimeFacts(device);
     return {
@@ -45,7 +45,7 @@ test('push admission failure preserves an active ref frame', async () => {
 test('push dispatch attempt expires an active ref frame when the bound operation fails', async () => {
   const sessionStore = makeSessionStore('agent-device-session-push-ref-dispatch-');
   const session = activeSession();
-  sessionStore.set('default', session);
+  sessionStore.publish('default', session);
   mockPushNotificationRuntime.mockRejectedValueOnce(new Error('provider dispatch failed'));
 
   await expect(dispatchPush({ sessionStore })).rejects.toThrow('provider dispatch failed');

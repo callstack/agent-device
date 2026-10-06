@@ -78,6 +78,7 @@ export function serializeSnapshotResult(result: CaptureSnapshotResult): Record<s
     ...(result.appBundleId ? { appBundleId: result.appBundleId } : {}),
     ...(result.visibility ? { visibility: result.visibility } : {}),
     ...(result.keyboard ? { keyboard: result.keyboard } : {}),
+    ...(result.viewport ? { viewport: result.viewport } : {}),
     ...publicSnapshotCaptureAnnotations({
       ...result,
       ...(result.snapshotQuality ? { quality: result.snapshotQuality } : {}),
