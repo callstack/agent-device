@@ -110,15 +110,22 @@ After every package succeeds, the hook commits all public manifests and MCP meta
 `-dev` version. Your `git push` includes that commit; the version bump created the single release
 tag. Write one GitHub release covering the core and plugins.
 
-After setting the version, preview the full release with `npm publish --dry-run`. It builds and checks the packages without
-uploading them, changing versions, or creating commits. Publishing requires npm registry access for
+After setting the version, preview the full release with `npm publish --dry-run`. It builds and
+checks the packages without uploading them, changing versions, or creating commits. The dry-run
+publish hook makes no additional registry requests. Dependency installation during preparation
+still requires registry access unless the dependencies are cached. Publishing requires npm registry access for
 `agent-device` and the `@agent-device` scope.
 
 If core publication succeeds but a later package fails, run `pnpm release:publish` to finish the
 release. It skips versions already published and commits the development marker once every package
 succeeds. Plain `npm publish` cannot retry an already-published core version.
 If every upload succeeds but Git refuses the development-marker commit, fix the Git error and
-commit the changed public manifests and `server.json` before pushing. No package needs republishing.
+run `pnpm release:mark-dev` to finish any interrupted version synchronization, then commit the
+changed public manifests and `server.json` before pushing. No package needs republishing.
+
+Use `npm pack` to build and validate a development-version package locally. The normal npm and
+pnpm publishers repack the prepared files when uploading; the checks validate package contents,
+not the byte identity of the uploaded archive.
 
 A public package owns its `files`, published `exports`, license, repository metadata, README,
 and `prepack` build (including any prerequisites). Use `publishConfig.exports` for source-only
@@ -138,7 +145,7 @@ and synchronized `server.json` to the next patch with a `-dev` prerelease marker
 `0.20.11-dev`) and committing that bump as part of the release. The invariant it protects: MCP registry
 scanners diff the repository's tool surface per version string, so a released number left on `main`
 while `main` keeps changing is indistinguishable from a republished ("rug-pull") version.
-`release:prepare` enforces the inverse direction and refuses to publish while the `-dev` marker is
+`prepublishOnly` and the retry command refuse to publish while the `-dev` marker is
 still in place — set the real release version first (for example `npm version patch`, which strips
 the prerelease marker), commit, then publish.
 

@@ -8,7 +8,7 @@ import process from 'node:process';
 // left in place while main keeps moving reads as a rug-pull republish
 // (AS-012). `postpublish` runs this after all packages publish to move
 // main to the next patch with a `-dev` prerelease marker; `--check-release-version`
-// is the inverse guard in `release:prepare`, refusing to publish a `-dev`
+// is the inverse guard in `prepublishOnly`, refusing to publish a `-dev`
 // version because the maintainer has not set the release version yet.
 const root = process.cwd();
 const checkReleaseVersion = process.argv.includes('--check-release-version');
@@ -33,22 +33,7 @@ if (checkReleaseVersion) {
   process.exit(0);
 }
 
-if (version.includes('-')) {
-  process.stdout.write(`Version ${version} already carries a prerelease marker; nothing to do.\n`);
-  process.exit(0);
-}
-
-const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
-if (!match) {
-  fail(`Unsupported version format: ${version}`);
-}
-const nextVersion = `${match[1]}.${match[2]}.${Number(match[3]) + 1}-dev`;
-
-const versionField = `"version": "${version}"`;
-if (raw.split(versionField).length !== 2) {
-  fail(`Expected exactly one ${versionField} in package.json.`);
-}
-fs.writeFileSync(packagePath, raw.replace(versionField, `"version": "${nextVersion}"`));
+const nextVersion = version.includes('-') ? version : markRootAsDevelopment();
 runWorkspaceRelease('sync');
 
 const sync = spawnSync(process.execPath, [path.join(root, 'scripts', 'sync-mcp-metadata.mjs')], {
@@ -59,8 +44,8 @@ if (sync.status !== 0) {
 }
 
 process.stdout.write(
-  `Marked main as unreleased: ${version} -> ${nextVersion} (public packages + server.json).\n` +
-    `Commit and push this so the version on main never equals the published ${version}.\n`,
+  `Synchronized development version: ${nextVersion} (public packages + server.json).\n` +
+    `Commit and push this so main stays marked as unreleased.\n`,
 );
 
 function fail(message) {
@@ -75,4 +60,16 @@ function runWorkspaceRelease(command) {
     { stdio: 'inherit' },
   );
   if (result.status !== 0) fail(`Workspace release ${command} failed.`);
+}
+
+function markRootAsDevelopment() {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+  if (!match) fail(`Unsupported version format: ${version}`);
+  const nextVersion = `${match[1]}.${match[2]}.${Number(match[3]) + 1}-dev`;
+  const versionField = `"version": "${version}"`;
+  if (raw.split(versionField).length !== 2) {
+    fail(`Expected exactly one ${versionField} in package.json.`);
+  }
+  fs.writeFileSync(packagePath, raw.replace(versionField, `"version": "${nextVersion}"`));
+  return nextVersion;
 }

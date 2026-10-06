@@ -89,7 +89,7 @@ function checkDependencyField(field, dependencies, unpublishableNames) {
   for (const [name, specifier] of Object.entries(dependencies)) {
     if (
       unpublishableNames.has(name) ||
-      /^(workspace:|file:|link:|catalog:|git\+file:|[./])/.test(specifier)
+      /^(workspace:|file:|link:|portal:|catalog:|git\+file:|[./])/.test(specifier)
     ) {
       throw new Error(`${field}.${name} is not a publishable runtime dependency.`);
     }
@@ -103,7 +103,14 @@ function checkPackedIdentity(packed, name) {
 }
 
 function publishWorkspacePackages() {
-  const dryRun = process.env.npm_config_dry_run === 'true';
+  if (process.env.npm_config_dry_run === 'true') {
+    if (process.env.npm_lifecycle_event !== 'postpublish') {
+      throw new Error(
+        'Use npm publish --dry-run to preview a release; the retry command publishes.',
+      );
+    }
+    return;
+  }
   const args = [
     '--recursive',
     '--include-workspace-root',
@@ -116,9 +123,7 @@ function publishWorkspacePackages() {
   if (process.env.npm_lifecycle_event === 'postpublish') {
     args.push('--filter', `!${rootPackage.manifest.name}`);
   }
-  if (dryRun) args.push('--dry-run');
   execFileSync('pnpm', args, { cwd: root, stdio: 'inherit' });
-  if (dryRun) return;
   execFileSync(process.execPath, ['scripts/release-mark-dev.mjs'], { cwd: root, stdio: 'inherit' });
   execFileSync(
     'git',
