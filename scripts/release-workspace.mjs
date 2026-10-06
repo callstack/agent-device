@@ -64,7 +64,7 @@ function packWorkspacePackages() {
       `${pkg.manifest.name.replace('@', '').replace('/', '-')}-${version}.tgz`,
     );
     const args = ['pack', '--out', tarball];
-    if (pkg.directory === root) args.push('--ignore-scripts');
+    if (pkg.directory === root) args.push('--config.ignore-scripts=true');
     execFileSync('pnpm', args, { cwd: pkg.directory, stdio: 'inherit' });
     const packed = JSON.parse(
       execFileSync('tar', ['-xOf', tarball, 'package/package.json'], { encoding: 'utf8' }),
