@@ -422,34 +422,6 @@ test('typeAndroid never broadcasts into a helper whose rebind went unconfirmed',
   assert.equal(device.settings.get('agent_device_ime_helper_rebind_displaced'), '1');
 });
 
-test('typeAndroid rebinds an unconfirmed helper before it broadcasts', async () => {
-  setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
-  const ownership = getAndroidTestImeOwnership(ANDROID_EMULATOR);
-  assert.ok(ownership);
-  ownership.rebindUnconfirmed = true;
-  const device: FakeImeDeviceState = {
-    settings: new Map([['default_input_method', 'com.android.inputmethod.latin/.LatinIME']]),
-  };
-  const deviceAdb = fakeImeDeviceAdb(device);
-  const calls: string[] = [];
-
-  await withAndroidAdbProvider(
-    async (args) => {
-      calls.push(`${args[1]} ${args[2]}`);
-      if (args[1] === 'am') return { exitCode: 0, stdout: '', stderr: '' };
-      return await deviceAdb(args);
-    },
-    { serial: ANDROID_EMULATOR.id },
-    async () => {
-      await typeAndroid(ANDROID_EMULATOR, 'Jane');
-    },
-  );
-
-  assert.ok(calls.lastIndexOf('ime set') < calls.indexOf('am broadcast'));
-  assert.equal(ownership.rebindUnconfirmed, false);
-  assert.equal(device.settings.has('agent_device_ime_helper_rebind_displaced'), false);
-});
-
 // Unicode is only beyond the *shell* path. Refusing it before reading which IME is active denied
 // the broadcast channel to exactly the devices that could serve it: helper active, cache empty.
 

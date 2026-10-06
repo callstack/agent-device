@@ -175,7 +175,6 @@ export function buildAndroidFillUnconfirmedVerification(
     // and the soft-success would also skip the second, bigger delete burst.
     requested.length === 0 ||
     verification.reason === 'ime_capture' ||
-    // A field holding none of the requested text was not formatted; nothing formats a field empty.
     isAndroidFillCommitDropped(verification, beforeTarget) ||
     !beforeTarget ||
     !afterTarget ||

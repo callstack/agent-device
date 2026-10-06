@@ -36,6 +36,8 @@ through `simctl pbcopy`.
 - **Emulators**: the test IME activates automatically on `open`; non-ASCII `fill`/`type` just work, no setup needed.
 - **Real devices**: pass `--test-ime` to `open` to opt in (off by default on real hardware, since a stuck helper IME leaves the real keyboard unavailable until restored — `agent-device` restores the previous IME on session close and on daemon startup if a prior session crashed, and `agent-device doctor` flags a stuck test IME with the exact `adb shell ime set <id>` command to fix it manually if needed). `test` and `replay` accept the same setting on the flow command itself (`--test-ime` / `--no-test-ime`, or `testIme` in config), which applies it to the sessions each flow run opens — this is the route a Maestro `eraseText` or non-ASCII `fill` step needs when the flow owns the session.
 
+If a stale input session drops a `fill` commit, agent-device rebinds the helper and retries once. An unconfirmed rebind stops text entry until it can be confirmed. If keyboard restoration cannot read its recovery record, `close` reports a failure and retains the record for startup recovery.
+
 If the helper cannot be installed (locked-down managed devices, some cloud providers), text entry falls back to the existing ASCII-only `adb shell input text` path and non-ASCII `fill`/`type` reports the gap.
 
 ## Android: first helper install can wait on an OEM install dialog

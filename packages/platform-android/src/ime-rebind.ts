@@ -22,10 +22,6 @@ export type AndroidTestImeRebindOutcome =
       cause: 'record-write' | 'command-failed' | 'helper-not-selected' | 'read-failed';
     }>;
 
-/**
- * Recreates the owned IME's input session under the activation/restore lock. The displacement
- * record survives failure or cancellation so close and startup recovery can restore the user's IME.
- */
 export async function rebindAndroidTestIme(
   device: DeviceInfo,
 ): Promise<AndroidTestImeRebindOutcome> {

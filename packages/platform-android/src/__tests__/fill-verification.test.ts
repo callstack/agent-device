@@ -260,7 +260,13 @@ test('a commit counts as dropped when the field shows its hint or keeps its old 
   assert.equal(isAndroidFillCommitDropped(observed('e.g. Jane', true), before), true);
   assert.equal(isAndroidFillCommitDropped(observed('Old'), before), true);
   assert.equal(isAndroidFillCommitDropped(observed(null), before), true);
-  assert.equal(isAndroidFillCommitDropped({ ok: false, actual: null }, before), false);
+  assert.equal(
+    isAndroidFillCommitDropped(
+      { ok: false, actual: null, actualInput: null, targetInput: null },
+      before,
+    ),
+    false,
+  );
   assert.equal(isAndroidFillCommitDropped(observed('Jan'), before), false);
   assert.equal(isAndroidFillCommitDropped(observed('Jan'), null), false);
 });

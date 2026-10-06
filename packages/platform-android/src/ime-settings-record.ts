@@ -7,8 +7,7 @@ import type { AndroidAdbExecutor } from './adb-transport.ts';
 // not in a host-side file — so any daemon/state-dir can recover it.
 
 const SETTINGS_KEY_PREVIOUS_IME = 'agent_device_ime_helper_previous_ime';
-// Set before a rebind disables the helper and cleared once the helper reads back selected: while it
-// is set, the current IME may be Android's fallback rather than the user's choice.
+// While displaced, Android's fallback must not replace the user's restore target.
 const SETTINGS_KEY_REBIND_DISPLACED = 'agent_device_ime_helper_rebind_displaced';
 const SETTINGS_NAMESPACE = 'secure';
 const DEFAULT_INPUT_METHOD_KEY = 'default_input_method';
@@ -56,10 +55,6 @@ export async function clearPersistedPreviousIme(adb: AndroidAdbExecutor): Promis
   });
 }
 
-/**
- * The restore record on the device. Every reader switches on this one shape, so a record that cannot
- * be read is `unreadable` everywhere and never passes for a clean device.
- */
 export type AndroidTestImeDeviceRecord =
   | Readonly<{ kind: 'unreadable' }>
   | Readonly<{ kind: 'absent'; rebindDisplaced: boolean }>
@@ -77,7 +72,6 @@ export async function readAndroidTestImeDeviceRecord(
     : { kind: 'absent', rebindDisplaced };
 }
 
-/** Answers true only when the write succeeded and reads back. */
 export async function writePersistedRebindDisplacement(adb: AndroidAdbExecutor): Promise<boolean> {
   const result = await runAdbShell(
     adb,
@@ -88,7 +82,6 @@ export async function writePersistedRebindDisplacement(adb: AndroidAdbExecutor):
   return (await readSecureSetting(adb, SETTINGS_KEY_REBIND_DISPLACED)) === '1';
 }
 
-/** Answers true only when the record reads back as cleared. */
 export async function clearPersistedRebindDisplacement(adb: AndroidAdbExecutor): Promise<boolean> {
   await runAdbShell(
     adb,
