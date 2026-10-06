@@ -77,9 +77,7 @@ test('clipboard follows the same Android-reuse / iOS-refusal split its siblings 
   expect(stale.writeClipboard).toEqual(liveSessionUnavailable);
 });
 
-// R56: the springboard buttons follow the same Android-reuse / iOS-refusal split; a hardware
-// button is refused on both legs, and a dead session closes the whole family.
-test('home and app-switcher ride the Android interactor and are refused on the iOS leg', () => {
+test('home is admitted on both legs, app-switcher only on Android, the action button on neither', () => {
   const android = limrunSystemButtonOperationFacts(androidMobileDevice);
   expect(android.home).toEqual({ available: true });
   expect(android.appSwitcher).toEqual({ available: true });
@@ -89,11 +87,7 @@ test('home and app-switcher ride the Android interactor and are refused on the i
   });
 
   const ios = limrunSystemButtonOperationFacts(iosDevice);
-  expect(ios.home).toEqual({
-    available: false,
-    reason: 'unsupported-provider-mode',
-    hint: 'Limrun iOS direct sessions do not expose home yet.',
-  });
+  expect(ios.home).toEqual({ available: true });
   expect(ios.appSwitcher).toEqual({
     available: false,
     reason: 'unsupported-provider-mode',
@@ -231,7 +225,8 @@ test('binding omits every operation an unavailable fact refused', () => {
 
   expect(operations.back).toBeTypeOf('function');
   expect(operations.setOrientation).toBeTypeOf('function');
-  expect(operations.home).toBeUndefined();
+  expect(operations.home).toBeTypeOf('function');
+  expect(operations.appSwitcher).toBeUndefined();
   expect(operations.tvRemote).toBeUndefined();
 });
 

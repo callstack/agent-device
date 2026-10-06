@@ -356,6 +356,14 @@ class LimrunIosInteractor implements Interactor {
     await this.session.client.pressKey('escape');
   }
 
+  /** One press and release of the hardware home button, sent as a single action batch. */
+  async home(): Promise<void> {
+    await this.session.client.performActions([
+      { type: 'buttonDown', button: 'home' },
+      { type: 'buttonUp', button: 'home' },
+    ]);
+  }
+
   async setOrientation(orientation: DeviceRotation): Promise<void> {
     if (orientation === 'portrait-upside-down') {
       throw unsupported(

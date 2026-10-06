@@ -99,11 +99,6 @@ function limrunGestureFacts(
     viewport: available,
   });
 }
-const homeUnavailableIos = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun iOS direct sessions do not expose home yet.',
-} as const);
 const tvRemoteUnavailableIos = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
@@ -316,9 +311,9 @@ export function limrunAlertOperationFacts(
 }
 
 /**
- * The system buttons split the way the navigation leaves do: the Android leg rides the local
- * family's own interactor factory for `home` and `appSwitcher`, the iOS direct session refuses
- * both, and no Limrun session exposes a hardware button on either leg.
+ * The Android leg rides the local family's own interactor factory for `home` and `appSwitcher`.
+ * The iOS direct session presses `home` through Limrun's button actions and refuses
+ * `appSwitcher`. No Limrun session exposes the action button.
  */
 export function limrunSystemButtonOperationFacts(
   device: DeviceInfo,
@@ -336,7 +331,7 @@ export function limrunSystemButtonOperationFacts(
   }
   return systemButtonRuntimeOperationFacts({
     unsupported: systemButtonUnavailable,
-    home: homeUnavailableIos,
+    home: available,
     appSwitcher: appSwitcherUnavailableIos,
   });
 }
