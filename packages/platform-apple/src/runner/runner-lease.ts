@@ -444,6 +444,14 @@ function listRunnerLeasesForOwner(owner: {
   pid: number;
   startTime?: string | null;
 }): RunnerLease[] {
+  return listRunnerLeases().filter(
+    (lease) =>
+      lease.ownerPid === owner.pid &&
+      (owner.startTime === undefined || lease.ownerStartTime === owner.startTime),
+  );
+}
+
+function listRunnerLeases(): RunnerLease[] {
   let entries: fs.Dirent[];
   const root = resolveRunnerLeaseRoot();
   try {
@@ -455,12 +463,27 @@ function listRunnerLeasesForOwner(owner: {
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
     const lease = readRunnerLeaseFile(path.join(root, entry.name));
-    if (!lease) continue;
-    if (lease.ownerPid !== owner.pid) continue;
-    if (owner.startTime !== undefined && lease.ownerStartTime !== owner.startTime) continue;
-    leases.push(lease);
+    if (lease) leases.push(lease);
   }
   return leases;
+}
+
+/**
+ * The `.xctestrun` paths of every lease whose runner can still be running: its owner is live or
+ * cannot be told apart from live, or its leased runner process is provably still the one the lease
+ * recorded (a handed-off runner outlives its owner). A lease that fails both is a leftover file.
+ */
+export function listActiveRunnerLeaseXctestrunPaths(): string[] {
+  return listRunnerLeases()
+    .filter((lease) => {
+      const liveness = classifyOwnerLiveness({
+        owner: { pid: lease.ownerPid, startTime: lease.ownerStartTime },
+        ...(lease.ownerStateDir ? { stateDir: lease.ownerStateDir } : {}),
+      });
+      if (liveness === 'live' || liveness === 'unknown') return true;
+      return lease.runnerPid !== null && isLeaseRunnerProcessIntact(lease, lease.runnerPid);
+    })
+    .map((lease) => lease.xctestrunPath);
 }
 
 function readRunnerLeaseFile(filePath: string): RunnerLease | null {

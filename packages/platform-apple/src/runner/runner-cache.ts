@@ -120,6 +120,7 @@ export async function markRunnerXctestrunArtifactBadForRun(
 
 export async function acquireRunnerXctestrunCacheLock(
   derived: string,
+  timeoutMs: number = RUNNER_XCTESTRUN_CACHE_LOCK_TIMEOUT_MS,
 ): Promise<() => Promise<void>> {
   return await acquireProcessLock({
     lockDirPath: resolveRunnerXctestrunCacheLockPath(derived),
@@ -128,7 +129,7 @@ export async function acquireRunnerXctestrunCacheLock(
       startTime: readProcessStartTime(process.pid),
       acquiredAtMs: Date.now(),
     },
-    timeoutMs: RUNNER_XCTESTRUN_CACHE_LOCK_TIMEOUT_MS,
+    timeoutMs,
     pollMs: RUNNER_XCTESTRUN_CACHE_LOCK_POLL_MS,
     description: 'iOS runner cache lock',
   });
@@ -380,7 +381,8 @@ export function emitRunnerXctestrunDecision(
     | 'built_new'
     | 'external_xctestrun'
     | 'external_bad_artifact'
-    | 'uncertifiable_products',
+    | 'uncertifiable_products'
+    | 'stale_cache_evicted',
   data: Record<string, unknown>,
 ): void {
   emitDiagnostic({

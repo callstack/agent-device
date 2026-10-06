@@ -185,7 +185,7 @@ export async function ensureXctestrunArtifact(
     options.budget,
   );
   const derived = resolveRunnerDerivedPath(device, expectedCacheMetadata);
-  return await withKeyedLock(runnerXctestrunBuildLocks, derived, async () => {
+  const artifact = await withKeyedLock(runnerXctestrunBuildLocks, derived, async () => {
     return await withProcessLock({
       acquire: () => acquireRunnerXctestrunCacheLock(derived),
       task: () =>
@@ -199,6 +199,18 @@ export async function ensureXctestrunArtifact(
         }),
     });
   });
+  if (artifact.artifact === 'rebuilt') {
+    void evictStaleRunnerCachesBestEffort(derived);
+  }
+  return artifact;
+}
+
+/** A new key is the only way the cache grows, so a build is when the old keys are swept, off the start path. */
+async function evictStaleRunnerCachesBestEffort(derived: string): Promise<void> {
+  try {
+    const { evictStaleRunnerCaches } = await import('./runner-cache-retention.ts');
+    await evictStaleRunnerCaches(derived);
+  } catch {}
 }
 
 function resolveExternalXctestrunArtifact(
