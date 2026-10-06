@@ -365,6 +365,7 @@ async function buildXctestrunArtifact(params: {
     ),
     derived,
   );
+  await trimRunnerBuildScratchBestEffort(derived, [built, ...builtProductPaths]);
   emitRunnerXctestrunDecision('build', 'built_new', {
     derived,
     xctestrunPath: built,
@@ -379,6 +380,19 @@ async function buildXctestrunArtifact(params: {
     xctestrunPathSource: 'build',
     reason,
   };
+}
+
+/** Runs under the cache lock, so no rebuild or reuse of this key sees the tree mid-trim. */
+async function trimRunnerBuildScratchBestEffort(
+  derived: string,
+  protectedPaths: readonly string[],
+): Promise<void> {
+  try {
+    const { trimRunnerBuildScratch } = await import('./runner-cache-trim.ts');
+    const removed = await trimRunnerBuildScratch(derived, protectedPaths);
+    if (removed.length > 0)
+      emitRunnerXctestrunDecision('clean', 'build_scratch_trimmed', { derived });
+  } catch {}
 }
 
 async function tryReuseExistingXctestrun(
