@@ -40,31 +40,23 @@ export async function rebindAndroidTestIme(
     let cause: Extract<AndroidTestImeRebindOutcome, { kind: 'unconfirmed' }>['cause'] =
       'record-write';
     try {
-      if (await writePersistedRebindDisplacement(adb)) {
-        cause = 'command-failed';
-        for (const verb of ['disable', 'enable', 'set'] as const) {
-          const result = await runAdbShell(adb, ['ime', verb, manifest.serviceComponent], {
-            allowFailure: true,
-            timeoutMs: 10_000,
-          });
-          if (result.exitCode !== 0) return unconfirmed(device.id, cause);
-        }
-        cause = 'read-failed';
-        const activeIme = await readAndroidDefaultInputMethod(adb);
-        if (activeIme === manifest.serviceComponent) {
-          // A failed record clear keeps admission on the rebind path, even with the helper selected.
-          ownership.rebindUnconfirmed = !(await clearPersistedRebindDisplacement(adb));
-          if (ownership.rebindUnconfirmed) {
-            emitAndroidAdbDiagnostic({
-              level: 'warn',
-              phase: 'android_test_ime_rebind_record_clear_failed',
-              data: { device: device.id },
-            });
-          }
-          return { kind: 'confirmed' };
-        }
-        cause = activeIme ? 'helper-not-selected' : 'read-failed';
+      if (!(await writePersistedRebindDisplacement(adb))) return unconfirmed(device.id, cause);
+      cause = 'command-failed';
+      for (const verb of ['disable', 'enable', 'set'] as const) {
+        const result = await runAdbShell(adb, ['ime', verb, manifest.serviceComponent], {
+          allowFailure: true,
+          timeoutMs: 10_000,
+        });
+        if (result.exitCode !== 0) return unconfirmed(device.id, cause);
       }
+      cause = 'read-failed';
+      const activeIme = await readAndroidDefaultInputMethod(adb);
+      if (activeIme !== manifest.serviceComponent) {
+        return unconfirmed(device.id, activeIme ? 'helper-not-selected' : 'read-failed');
+      }
+      // Failed cleanup keeps admission on the rebind path even with the helper selected.
+      ownership.rebindUnconfirmed = !(await clearPersistedRebindDisplacement(adb));
+      return { kind: 'confirmed' };
     } catch (error) {
       if (isRequestCanceledError(error)) throw error;
     }

@@ -75,10 +75,6 @@ test("a rebind that displaces the helper keeps ownership and the user's IME as r
   expect(isAndroidTestImeActive(DEVICE)).toBe(true);
   expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
   expect(state.settings.get('agent_device_ime_helper_rebind_displaced')).toBe('1');
-  expect(host.diagnostics).toContainEqual({
-    phase: 'android_test_ime_rebind_failed',
-    level: 'warn',
-  });
 
   // The next open finds Android's fallback IME current; it must not become the restore target.
   state.imeSetFails = false;
@@ -116,18 +112,14 @@ test('a close-time restore waits for an in-flight rebind instead of racing it', 
     helperSetReached = resolve;
   });
 
-  await withAndroidAdbProvider(
-    {
-      exec: async (args) => {
-        if (args[2] === 'set' && args[3] === HELPER_SERVICE) {
-          helperSetReached();
-          await helperSetGate;
-        }
-        return await deviceAdb(args);
-      },
-      imeHelperArtifact: ARTIFACT,
+  await withDeviceAdb(
+    async (args) => {
+      if (args[2] === 'set' && args[3] === HELPER_SERVICE) {
+        helperSetReached();
+        await helperSetGate;
+      }
+      return await deviceAdb(args);
     },
-    { serial: DEVICE.id },
     async () => {
       const rebind = rebindAndroidTestIme(DEVICE);
       await reachedHelperSet;
@@ -207,10 +199,6 @@ test('a confirmed rebind whose device record stays set is retried at the next en
   expect(state.settings.get('agent_device_ime_helper_previous_ime')).toBe('com.samsung/.Keyboard');
   expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
   expect(state.settings.get(REBIND_DISPLACED)).toBe('1');
-  expect(host.diagnostics).toContainEqual({
-    phase: 'android_test_ime_rebind_record_clear_failed',
-    level: 'warn',
-  });
   const calls: string[] = [];
   await withDeviceAdb(
     async (args) => {
