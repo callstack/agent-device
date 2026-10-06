@@ -82,52 +82,55 @@ so name the version the CI lanes install and the published helper matches the CI
 `pnpm package:npm` is a release guard, not a routine development command. Use the specific commands
 above while iterating.
 
-### Publish a workspace package
+### Release the core and public workspace packages together
 
-Packages under `packages/*` release independently from `agent-device`. Only packages that
-explicitly set `"private": false` can use this path; internal packages remain private.
-Keep plugin SDK and bundled workspace helpers in `devDependencies`. An optional plugin must
-have no production import from the core build or production dependency in the root manifest.
+The root `package.json` owns the release version. Every public workspace package uses that version;
+private internal packages stay unpublished. There is one Git tag and GitHub release, `v<version>`,
+for the whole release. No changeset files or per-package tags are needed.
 
-A public package owns its version, `files`, published `exports`, license, repository metadata,
-and `prepack` build (including any prerequisites it needs). Use `publishConfig.exports` when workspace tests need source-only exports;
-`pnpm pack` applies those overrides to the published manifest. The repository URL must be
-`git+https://github.com/callstack/agent-device.git`, with `repository.directory` naming its package
-folder. Include a package README. Versions need not match the core version.
-
-After setting and committing the package version, prepare it locally:
+From a clean release checkout, bump the version once:
 
 ```bash
-pnpm release:workspace @agent-device/doublespeed 0.1.0
-pnpm release:workspace @agent-device/testmu 0.2.0-beta.1 next
+npm version patch
+# or npm version minor / npm version 0.22.0
 ```
 
-The command runs the package's pack lifecycle, checks the actual tarball for private workspace
-or local runtime dependencies, and prints its path. It does not build the core's native assets.
-Run the package's tests and packed-install smoke before releasing. For the first publication,
-an npm maintainer with access to the `@agent-device` scope can publish the prepared tarball:
+The version hook synchronizes all public workspace manifests and MCP metadata, stages them, and
+includes them in npm's version commit and `v<version>` tag. Do not bump plugin versions separately.
+
+Publish the full release with one command:
 
 ```bash
-npm publish <printed-tarball-path> --ignore-scripts --access public
+pnpm release:publish
 ```
 
-Before CI publishing, create the GitHub **npm-publish** environment and restrict its deployment
-branches to **main**. Then configure each package's [npm trusted publisher](https://docs.npmjs.com/trusted-publishers/)
-with organization **callstack**, repository **agent-device**, and workflow filename
-**publish-workspace-package.yml**, with environment **npm-publish**. The workflow uses GitHub OIDC
-rather than an npm token; install and pack run in a separate job without publish credentials.
+It rejects version drift before building, prepares and validates the core package, builds and
+packs the public workspace packages, then uses `pnpm --recursive publish` to publish every
+unpublished package version. pnpm excludes private packages and skips versions already published,
+so the same command can finish a partially completed release. Publish lifecycle scripts are skipped
+only after preparation succeeds. The command then marks all public manifests and MCP metadata with
+the next `-dev` version; commit and push that development marker. Push the single release tag and
+write one GitHub release covering the core and plugins.
 
-For subsequent releases, use **Publish workspace package** in GitHub Actions on `main`.
-Enter the exact package name and committed version. It defaults to a dry run; clear **dry_run**
-to publish the same validated tarball. Use `latest` for stable releases and `next` for previews; prereleases require `next`.
-A dry run proves preparation and npm package validation, but does not verify registry permissions
-or the trusted publisher configuration. Record the package version and release commit in the
-release notes. The core's `release:publish` command and `v*` tags remain dedicated to `agent-device`.
+For a local packaging preview, run `pnpm release:prepare`, then
+`pnpm --recursive --include-workspace-root publish --dry-run --ignore-scripts --access public --no-git-checks`.
+Publishing requires npm registry access for `agent-device` and the `@agent-device` scope.
+
+A public package owns its `files`, published `exports`, license, repository metadata, README,
+and `prepack` build (including any prerequisites). Use `publishConfig.exports` for source-only
+workspace test exports; pnpm applies the overrides when packing. Keep plugin SDK imports and
+bundled workspace helpers in `devDependencies`. Plugins must not depend on the core at runtime
+or through a peer dependency. Their factories receive the host from `agent-device`.
+
+When adding a public package, initialize its version from the root `package.json`; subsequent
+`npm version` and `release:mark-dev` runs keep it synchronized automatically. An optional plugin
+must have no production import from the core build or production dependency in the root manifest.
+Run its packed-install smoke before releasing.
 
 ### The version on main never equals a published version
 
-`release:publish` runs `release:mark-dev` right after `npm publish`, moving `package.json` (and the
-synchronized `server.json`) to the next patch with a `-dev` prerelease marker (for example
+`release:publish` runs `release:mark-dev` after publishing, moving all public package manifests
+and synchronized `server.json` to the next patch with a `-dev` prerelease marker (for example
 `0.20.11-dev`). Commit that bump as part of the release. The invariant it protects: MCP registry
 scanners diff the repository's tool surface per version string, so a released number left on `main`
 while `main` keeps changing is indistinguishable from a republished ("rug-pull") version.

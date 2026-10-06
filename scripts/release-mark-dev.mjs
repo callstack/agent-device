@@ -6,7 +6,7 @@ import process from 'node:process';
 // The version on main must never equal a published version: registry scanners
 // diff the repository's tool surface per version string, so a released number
 // left in place while main keeps moving reads as a rug-pull republish
-// (AS-012). `release:publish` runs this right after `npm publish` to move
+// (AS-012). `release:publish` runs this after publishing to move
 // main to the next patch with a `-dev` prerelease marker; `--check-release-version`
 // is the inverse guard in `release:prepare`, refusing to publish a `-dev`
 // version because the maintainer has not set the release version yet.
@@ -29,6 +29,7 @@ if (checkReleaseVersion) {
         '(e.g. `npm version patch`), commit, then publish.',
     );
   }
+  runWorkspaceRelease('check');
   process.exit(0);
 }
 
@@ -48,6 +49,7 @@ if (raw.split(versionField).length !== 2) {
   fail(`Expected exactly one ${versionField} in package.json.`);
 }
 fs.writeFileSync(packagePath, raw.replace(versionField, `"version": "${nextVersion}"`));
+runWorkspaceRelease('sync');
 
 const sync = spawnSync(process.execPath, [path.join(root, 'scripts', 'sync-mcp-metadata.mjs')], {
   stdio: 'inherit',
@@ -57,11 +59,20 @@ if (sync.status !== 0) {
 }
 
 process.stdout.write(
-  `Marked main as unreleased: ${version} -> ${nextVersion} (package.json + server.json).\n` +
+  `Marked main as unreleased: ${version} -> ${nextVersion} (public packages + server.json).\n` +
     `Commit and push this so the version on main never equals the published ${version}.\n`,
 );
 
 function fail(message) {
   process.stderr.write(`${message}\n`);
   process.exit(1);
+}
+
+function runWorkspaceRelease(command) {
+  const result = spawnSync(
+    process.execPath,
+    [path.join(root, 'scripts', 'release-workspace.mjs'), command],
+    { stdio: 'inherit' },
+  );
+  if (result.status !== 0) fail(`Workspace release ${command} failed.`);
 }
