@@ -39,13 +39,20 @@ To support `agent-device connect example`, declare `agentDevicePlugin.connection
 
 ```json
 {
-  "leaseKind": "direct-device-provider",
-  "requiresAppAttachment": false,
-  "requiresRemoteDaemon": false,
-  "supportsArtifacts": false,
-  "supportsDeferredAppSelection": true,
-  "supportsDirectPortReverse": false,
-  "usesCloudWebDriverLease": false
+  "agentDevicePlugin": {
+    "apiVersion": 1,
+    "provider": "example",
+    "entry": "./dist/plugin.mjs",
+    "connection": {
+      "leaseKind": "direct-device-provider",
+      "requiresAppAttachment": false,
+      "requiresRemoteDaemon": false,
+      "supportsArtifacts": false,
+      "supportsDeferredAppSelection": true,
+      "supportsDirectPortReverse": false,
+      "usesCloudWebDriverLease": false
+    }
+  }
 }
 ```
 

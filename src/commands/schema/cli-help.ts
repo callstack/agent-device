@@ -660,6 +660,7 @@ Doublespeed direct-simulator flow:
   DOUBLESPEED_API_KEY=...
   agent-device connect doublespeed --platform ios
 
+  After adding or updating the plugin, close active sessions and run agent-device daemon stop with the same --state-dir before continuing.
   Doublespeed creates remote iOS simulators only. Do not pass local device selectors such as --udid, --serial, or --device; set DOUBLESPEED_DEVICE to choose the simulator model.
   agent-device install com.example.app ./Example.app
   agent-device open com.example.app
