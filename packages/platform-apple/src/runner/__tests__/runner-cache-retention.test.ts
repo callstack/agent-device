@@ -148,12 +148,13 @@ test('keeps a key whose build lock is held', async () => {
   }
 });
 
-test('keeps a key a live lease points at and evicts one only a dead lease points at', async () => {
+test('keeps a key a live lease points at, by path or cache key, and evicts one only a dead lease points at', async () => {
   process.env.AGENT_DEVICE_IOS_RUNNER_CACHE_KEEP = '1';
   const current = seedKey(key(1), 0);
   const live = seedKey(key(2), 30);
   const dead = seedKey(key(3), 30);
   const handedOff = seedKey(key(4), 30);
+  const envDirLease = seedKey(key(5), 30);
   appleRunnerTestHost.update({
     classifyOwnerLiveness: ({ owner }) => (owner.pid === 4242 ? 'live' : 'owner-process-dead'),
     isProcessAlive: (pid) => pid === 9001,
@@ -170,9 +171,18 @@ test('keeps a key a live lease points at and evicts one only a dead lease points
     }),
   );
 
+  writeRunnerLease(
+    leaseFor(envDirLease, {
+      deviceId: 'SIM-ENV-DIR',
+      ownerPid: 4242,
+      cacheKey: key(5),
+      xctestrunPath: path.join(base, 'env-dir', 'Runner.env.xctestrun'),
+    }),
+  );
+
   await evictStaleRunnerCaches(current, process.env, NOW_MS);
 
-  assert.deepEqual(remaining(), [key(1), key(2), key(4)]);
+  assert.deepEqual(remaining(), [key(1), key(2), key(4), key(5)]);
 });
 
 test('a keep count of 0 turns eviction off', async () => {

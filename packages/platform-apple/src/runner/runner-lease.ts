@@ -469,11 +469,11 @@ function listRunnerLeases(): RunnerLease[] {
 }
 
 /**
- * The `.xctestrun` paths of every lease whose runner can still be running: its owner is live or
+ * The `.xctestrun` path and cache key of every lease whose runner can still be running: its owner is live or
  * cannot be told apart from live, or its leased runner process is provably still the one the lease
  * recorded (a handed-off runner outlives its owner). A lease that fails both is a leftover file.
  */
-export function listActiveRunnerLeaseXctestrunPaths(): string[] {
+export function listActiveRunnerLeaseArtifacts(): { xctestrunPath: string; cacheKey?: string }[] {
   return listRunnerLeases()
     .filter((lease) => {
       const liveness = classifyOwnerLiveness({
@@ -483,7 +483,7 @@ export function listActiveRunnerLeaseXctestrunPaths(): string[] {
       if (liveness === 'live' || liveness === 'unknown') return true;
       return lease.runnerPid !== null && isLeaseRunnerProcessIntact(lease, lease.runnerPid);
     })
-    .map((lease) => lease.xctestrunPath);
+    .map(({ xctestrunPath, cacheKey }) => ({ xctestrunPath, cacheKey }));
 }
 
 function readRunnerLeaseFile(filePath: string): RunnerLease | null {

@@ -5,7 +5,7 @@ import {
   emitRunnerXctestrunDecision,
   resolveRunnerCacheMetadataPath,
 } from './runner-cache.ts';
-import { listActiveRunnerLeaseXctestrunPaths } from './runner-lease.ts';
+import { listActiveRunnerLeaseArtifacts } from './runner-lease.ts';
 
 const DEFAULT_RUNNER_CACHE_KEEP = 3;
 // CONSERVATIVE: A key used within a day is never evicted, so a runner that has passed the cache
@@ -46,7 +46,7 @@ export async function evictStaleRunnerCaches(
   const evicted: string[] = [];
   for (const { derived } of candidates) {
     try {
-      if (await evictIfUnused(derived)) evicted.push(derived);
+      if (await evictIfUnused(derived, nowMs)) evicted.push(derived);
     } catch {}
   }
   return evicted;
@@ -67,15 +67,19 @@ function listCacheKeyDirectories(base: string): CacheKeyDirectory[] {
   }
   return names.map((name) => {
     const derived = path.join(base, name);
-    try {
-      return { derived, lastUsedMs: fs.statSync(resolveRunnerCacheMetadataPath(derived)).mtimeMs };
-    } catch {
-      return { derived, lastUsedMs: 0 };
-    }
+    return { derived, lastUsedMs: lastUsedMs(derived) };
   });
 }
 
-async function evictIfUnused(derived: string): Promise<boolean> {
+function lastUsedMs(derived: string): number {
+  try {
+    return fs.statSync(resolveRunnerCacheMetadataPath(derived)).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+async function evictIfUnused(derived: string, nowMs: number): Promise<boolean> {
   let release: () => Promise<void>;
   try {
     release = await acquireRunnerXctestrunCacheLock(derived, 0);
@@ -83,11 +87,18 @@ async function evictIfUnused(derived: string): Promise<boolean> {
     return false;
   }
   try {
+    // Re-read under the lock: a reuse that finished after the listing refreshed the key, and its
+    // runner may not have written a lease yet.
+    if (nowMs - lastUsedMs(derived) < MIN_IDLE_MS) return false;
     // Leases are read under the lock: a runner needs this lock to resolve the key before it writes one.
-    const leased = listActiveRunnerLeaseXctestrunPaths().some((xctestrunPath) =>
-      xctestrunPath.startsWith(`${derived}${path.sep}`),
+    const key = path.basename(derived);
+    const leased = listActiveRunnerLeaseArtifacts().some(
+      ({ xctestrunPath, cacheKey }) =>
+        cacheKey === key || xctestrunPath.startsWith(`${derived}${path.sep}`),
     );
     if (leased) return false;
+    // Without its metadata a half-deleted key is a stub the next build cleans, never a hit.
+    await fs.promises.rm(resolveRunnerCacheMetadataPath(derived), { force: true });
     await fs.promises.rm(derived, { recursive: true, force: true });
     emitRunnerXctestrunDecision('clean', 'stale_cache_evicted', { derived });
     return true;
