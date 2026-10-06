@@ -19,10 +19,6 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
-    "./node": {
-      "types": "./src/node.ts",
-      "default": "./src/node.ts"
-    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -42,10 +38,6 @@
       ".": {
         "types": "./dist/index.d.mts",
         "import": "./dist/index.mjs"
-      },
-      "./node": {
-        "types": "./dist/node.d.mts",
-        "import": "./dist/node.mjs"
       },
       "./package.json": "./package.json"
     }

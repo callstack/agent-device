@@ -16,7 +16,6 @@
     "src/sdk/finders.ts",
     "src/ai-sdk/index.ts",
     "packages/proxy/src/index.ts",
-    "packages/proxy/src/node.ts",
     "packages/proxy/tsdown.config.ts",
     "src/bin.ts",
     "src/client/companion-tunnel.ts",
@@ -280,7 +279,7 @@
     },
     {
       "comment": "Published package surfaces (see each package.json#exports); consumers may be external or reach them through workspace package exports Fallow does not follow.",
-      "file": "{src/sdk/*.ts,src/ai-sdk/index.ts,packages/proxy/src/index.ts,packages/proxy/src/node.ts}",
+      "file": "{src/sdk/*.ts,src/ai-sdk/index.ts,packages/proxy/src/index.ts}",
       "exports": ["*"]
     },
     {
