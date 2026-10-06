@@ -79,7 +79,7 @@ import {
   type AndroidSnapshotPresentationFailure,
   type AndroidSnapshotPresentationOptions,
 } from './snapshot-presentation.ts';
-import { readAndroidSiblingOrder } from './ui-hierarchy-node.ts';
+import { ANDROID_WINDOW_TYPE_INPUT_METHOD, readAndroidSiblingOrder } from './ui-hierarchy-node.ts';
 import {
   androidSnapshotViewportFromHelperMetadata,
   createAndroidSnapshotCapture,
@@ -867,9 +867,6 @@ function applyHiddenContentHintsToInteractiveNodes(
     }
   }
 }
-
-/** `AccessibilityWindowInfo.TYPE_INPUT_METHOD`. */
-const ANDROID_WINDOW_TYPE_INPUT_METHOD = 2;
 
 /**
  * The keyboard band an Android capture measured, read from the window roots the helper already

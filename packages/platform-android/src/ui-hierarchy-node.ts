@@ -52,6 +52,11 @@ export type AndroidUiHierarchy = {
 
 export type AndroidNode = AndroidUiHierarchy;
 
+/** `AccessibilityWindowInfo.TYPE_APPLICATION`, as carried in `windowType`. */
+export const ANDROID_WINDOW_TYPE_APPLICATION = 1;
+/** `AccessibilityWindowInfo.TYPE_INPUT_METHOD`, as carried in `windowType`. */
+export const ANDROID_WINDOW_TYPE_INPUT_METHOD = 2;
+
 export type AndroidSiblingOrder = { parent: AndroidNode; order: number };
 
 const siblingOrderByNode = new WeakMap<AndroidNode, AndroidSiblingOrder>();
