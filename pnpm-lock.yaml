@@ -96,8 +96,8 @@ importers:
         specifier: ^0.0.4
         version: 0.0.4
       '@limrun/api':
-        specifier: ^0.49.3
-        version: 0.49.3(supports-color@7.2.0)
+        specifier: ^0.59.0
+        version: 0.59.0(supports-color@7.2.0)
       '@nkzw/eslint-plugin':
         specifier: ^2.0.0
         version: 2.0.0(eslint@10.9.1(supports-color@7.2.0))
@@ -467,8 +467,8 @@ importers:
         version: link:../platform-android
     devDependencies:
       '@limrun/api':
-        specifier: ^0.49.3
-        version: 0.49.3(supports-color@7.2.0)
+        specifier: ^0.59.0
+        version: 0.59.0(supports-color@7.2.0)
 
   packages/provider-webdriver:
     dependencies:
@@ -1105,8 +1105,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@limrun/api@0.49.3':
-    resolution: {integrity: sha512-gkVhAutGRFnX5TAebXMvWlTHalODe5/KO3AI0pOb5c/xjO41c2GPjpt/pbMTknBxswo7KSI3KzOeK9ZDEuejGQ==}
+  '@limrun/api@0.59.0':
+    resolution: {integrity: sha512-CipjJnvfLq8cTYP58vUneFyJlGvPmr+PspBuuGST1/krYi0QoVOpdNXGqOexio1N6ltnAG5GoQcU40ViDEUTbQ==}
 
   '@limrun/xdelta3-wasm@0.2.0':
     resolution: {integrity: sha512-mEohO7CYj4Gdc0v1Gr/AjlBhfbXQnIz6+2wmMhRfwz8hXZrsIC/yqYQhfoDhu1ysqQwBnU5lDDLPUGdUu+8hPQ==}
@@ -4697,7 +4697,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@limrun/api@0.49.3(supports-color@7.2.0)':
+  '@limrun/api@0.59.0(supports-color@7.2.0)':
     dependencies:
       '@limrun/xdelta3-wasm': 0.2.0
       '@types/har-format': 1.2.16

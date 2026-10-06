@@ -95,6 +95,32 @@ test('fails closed when the instance labels do not match the descriptor lease', 
   expect(outcome).toEqual({ status: 'ownership-lost' });
 });
 
+test('reports an owned instance whose status carries no control token as missing', async () => {
+  vi.mocked(createIosInstanceClient).mockClear();
+  const outcome = await reconnectLimrunAppLogReader({
+    limrun: {
+      iosInstances: {
+        get: vi.fn(async () => ({
+          metadata: { labels: { provider: 'limrun', leaseId: 'lease-a' } },
+          status: { state: 'ready', apiUrl: 'https://instance' },
+        })),
+      },
+    } as never,
+    descriptor: {
+      transport: 'limrun-log-poller',
+      platform: 'ios',
+      leaseId: 'lease-a',
+      instanceId: 'instance-a',
+      ownership: 'created',
+      appBundleId: 'com.example.app',
+      outputPath: '/sessions/one/app.log',
+    },
+    dependencies: {} as LimrunRuntimeDependencies,
+  });
+  expect(outcome).toEqual({ status: 'missing' });
+  expect(createIosInstanceClient).not.toHaveBeenCalled();
+});
+
 test('disconnects the Android instance client when tunnel acquisition fails', async () => {
   androidClient.disconnect.mockClear();
   await expect(

@@ -79,7 +79,7 @@ async function reconnectIos(options: {
   );
   if (selected.status !== 'active') return selected;
   return await openIosReader(
-    { apiUrl: selected.apiUrl, token: selected.instance.status.token },
+    { apiUrl: selected.apiUrl, token: selected.token },
     options.descriptor,
   );
 }
@@ -126,7 +126,7 @@ async function reconnectAndroid(options: {
     {
       apiUrl: selected.apiUrl,
       adbUrl: instance.status.adbWebSocketUrl,
-      token: instance.status.token,
+      token: selected.token,
     },
     options.descriptor,
     options.dependencies,
@@ -199,24 +199,25 @@ async function openAndroidReader(
 
 type ReconnectableLimrunInstance = Readonly<{
   metadata: Readonly<{ labels?: Record<string, string> }>;
-  status: Readonly<{ state: string; apiUrl?: string | null }>;
+  status: Readonly<{ state: string; apiUrl?: string | null; token?: string }>;
 }>;
 
 async function selectOwnedActiveInstance<Instance extends ReconnectableLimrunInstance>(
   load: () => Promise<Instance>,
   descriptor: LimrunAppLogDescriptor,
 ): Promise<
-  | Readonly<{ status: 'active'; instance: Instance; apiUrl: string }>
+  | Readonly<{ status: 'active'; instance: Instance; apiUrl: string; token: string }>
   | Extract<LimrunAppLogReconnectOutcome, { status: 'missing' | 'ownership-lost' }>
 > {
   const instance = await load();
   if (!hasDescriptorOwnership(instance.metadata.labels, descriptor)) {
     return { status: 'ownership-lost' };
   }
-  if (instance.status.state === 'terminated' || !instance.status.apiUrl) {
+  const { apiUrl, token } = instance.status;
+  if (instance.status.state === 'terminated' || !apiUrl || !token) {
     return { status: 'missing' };
   }
-  return { status: 'active', instance, apiUrl: instance.status.apiUrl };
+  return { status: 'active', instance, apiUrl, token };
 }
 
 function hasDescriptorOwnership(

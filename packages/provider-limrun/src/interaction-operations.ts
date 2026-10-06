@@ -121,11 +121,6 @@ const keyboardUnavailableIos = Object.freeze({
   reason: 'unsupported-provider-mode',
   hint: 'Limrun iOS direct sessions do not expose keyboard actions.',
 } as const);
-const clipboardUnavailableIos = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun iOS direct sessions do not expose clipboard access yet.',
-} as const);
 const settingsReadUnavailableIos = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
@@ -260,23 +255,17 @@ export function limrunNavigationOperationFacts(
  * provider keyboard behavior, so it stays unavailable.
  */
 /**
- * `clipboard` shares the split its siblings have: the Android leg rides
- * `session.dependencies.android.createInteractor` — the SAME factory the local Android family
- * binds, so `cmd clipboard get/set text` reaches the device exactly as it does locally — while
- * the iOS direct session has no pasteboard transport, so both cells stay unavailable there.
+ * The Android leg rides `session.dependencies.android.createInteractor`, the factory the local
+ * Android family binds, so `cmd clipboard get/set text` reaches the device as it does locally.
+ * The iOS direct session reads and writes the pasteboard through Limrun's `simctl pbpaste` and
+ * `pbcopy`.
  */
 export function limrunClipboardOperationFacts(
-  device: DeviceInfo,
   liveSessionUnavailable?: RuntimeOperationUnavailability,
 ) {
   if (liveSessionUnavailable) {
     return Object.freeze({
       ...clipboardRuntimeOperationFacts({ unsupported: liveSessionUnavailable }),
-    });
-  }
-  if (device.platform !== 'android') {
-    return Object.freeze({
-      ...clipboardRuntimeOperationFacts({ unsupported: clipboardUnavailableIos }),
     });
   }
   return Object.freeze({

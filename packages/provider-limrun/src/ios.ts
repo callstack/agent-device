@@ -364,6 +364,29 @@ class LimrunIosInteractor implements Interactor {
     ]);
   }
 
+  async readClipboard(): Promise<string> {
+    const result = await this.pasteboard(['pbpaste', 'booted']);
+    return result.stdout.replaceAll('\r\n', '\n').replace(/\n$/, '');
+  }
+
+  async writeClipboard(text: string): Promise<void> {
+    await this.pasteboard(['pbcopy', 'booted'], text);
+  }
+
+  private async pasteboard(argv: string[], stdin?: string) {
+    const result = await this.session.client
+      .simctl(argv, stdin === undefined ? undefined : { stdin })
+      .wait();
+    if (result.code !== 0) {
+      throw new AppError('COMMAND_FAILED', 'Limrun iOS could not access the clipboard.', {
+        command: argv[0],
+        exitCode: result.code,
+        stderr: result.stderr.trim(),
+      });
+    }
+    return result;
+  }
+
   async setOrientation(orientation: DeviceRotation): Promise<void> {
     if (orientation === 'portrait-upside-down') {
       throw unsupported(

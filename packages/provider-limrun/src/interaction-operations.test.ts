@@ -55,24 +55,12 @@ test('the Android leg admits back/orientation and gates tv-remote on a real TV t
   expect(tv.tvRemote).toEqual({ available: true });
 });
 
-// R55: the Android leg reuses the local family's `createAndroidInteractor`, so `cmd clipboard
-// get/set text` reaches the device exactly as it does locally; the iOS leg's own clipboard
-// methods throw, so both halves stay unavailable there.
-test('clipboard follows the same Android-reuse / iOS-refusal split its siblings do', () => {
-  const android = limrunClipboardOperationFacts(androidMobileDevice);
-  expect(android.readClipboard).toEqual({ available: true });
-  expect(android.writeClipboard).toEqual({ available: true });
+test('a live session reads and writes the clipboard on both legs', () => {
+  const live = limrunClipboardOperationFacts();
+  expect(live.readClipboard).toEqual({ available: true });
+  expect(live.writeClipboard).toEqual({ available: true });
 
-  const ios = limrunClipboardOperationFacts(iosDevice);
-  const refusal = {
-    available: false,
-    reason: 'unsupported-provider-mode',
-    hint: 'Limrun iOS direct sessions do not expose clipboard access yet.',
-  };
-  expect(ios.readClipboard).toEqual(refusal);
-  expect(ios.writeClipboard).toEqual(refusal);
-
-  const stale = limrunClipboardOperationFacts(androidMobileDevice, liveSessionUnavailable);
+  const stale = limrunClipboardOperationFacts(liveSessionUnavailable);
   expect(stale.readClipboard).toEqual(liveSessionUnavailable);
   expect(stale.writeClipboard).toEqual(liveSessionUnavailable);
 });
