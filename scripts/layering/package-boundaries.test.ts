@@ -16,7 +16,6 @@ import {
   checkPackageInternalSites,
   checkRootSites,
   readWorkspacePackages,
-  workspacePackagesFromManifests,
   rootExternalDependencyRanges,
   rootWorkspaceDependencyNames,
   specifierSites,
