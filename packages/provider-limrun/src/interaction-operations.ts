@@ -250,11 +250,6 @@ export function limrunNavigationOperationFacts(
 }
 
 /**
- * `keyboard` (status/dismiss/enter) shares one cell per session: the Android leg rides the same
- * interactor factory `limrunNavigationOperationFacts` above describes; the iOS leg has no tested
- * provider keyboard behavior, so it stays unavailable.
- */
-/**
  * The Android leg rides `session.dependencies.android.createInteractor`, the factory the local
  * Android family binds, so `cmd clipboard get/set text` reaches the device as it does locally.
  * The iOS direct session reads and writes the pasteboard through Limrun's `simctl pbpaste` and
@@ -372,6 +367,11 @@ export function limrunSettingsOperationFacts(
   });
 }
 
+/**
+ * `keyboard` (status/dismiss/enter) shares one cell per session: the Android leg rides the same
+ * interactor factory `limrunNavigationOperationFacts` above describes; the iOS leg has no tested
+ * provider keyboard behavior, so it stays unavailable.
+ */
 export function limrunKeyboardOperationFacts(
   device: DeviceInfo,
   liveSessionUnavailable?: RuntimeOperationUnavailability,
