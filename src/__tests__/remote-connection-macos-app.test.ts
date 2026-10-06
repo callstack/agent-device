@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import { connectionWorkspace, createTestClient } from './remote-connection.fixtures.ts';
 import type { AgentDeviceClient } from '../agent-device-client.ts';
-import { connectCommand } from '../cli/commands/connection.ts';
+import { connectCommand, disconnectCommand } from '../cli/commands/connection.ts';
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
 import { readRemoteConnectionState } from '../remote/remote-connection-state.ts';
 import { LeaseRegistry } from '../daemon/lease-registry.ts';
@@ -189,4 +189,64 @@ test('a forced reconnect keeps the host lease it binds again', async () => {
   ).toMatchObject({
     leaseId: LEASE_ID,
   });
+});
+
+test('a forced reconnect to a different host lease never releases the previous one', async () => {
+  const workspace = connectionWorkspace('macos-app-connect-force-other-');
+  writeHostIssuedConfig(workspace.remoteConfigPath);
+  await connectHostedMacosApp(workspace);
+  const released: string[] = [];
+  await connectHostedMacosApp(
+    workspace,
+    { force: true, leaseId: 'ffffffffffffffffffffffffffffffff' },
+    async (request) => {
+      released.push(request.leaseId);
+      return { released: true };
+    },
+  );
+  expect(released).toEqual([]);
+});
+
+test('a reconnect without --force that names a different host lease is incompatible', async () => {
+  const workspace = connectionWorkspace('macos-app-connect-other-lease-');
+  writeHostIssuedConfig(workspace.remoteConfigPath);
+  await connectHostedMacosApp(workspace);
+  await expect(
+    connectHostedMacosApp(workspace, { leaseId: 'ffffffffffffffffffffffffffffffff' }),
+  ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+  expect(
+    readRemoteConnectionState({ stateDir: workspace.stateDir, session: 'hosted' }),
+  ).toMatchObject({ leaseId: LEASE_ID });
+  await connectHostedMacosApp(workspace, { leaseId: LEASE_ID });
+});
+
+test('disconnect drops the local connection and never releases the host lease', async () => {
+  const workspace = connectionWorkspace('macos-app-disconnect-');
+  writeHostIssuedConfig(workspace.remoteConfigPath);
+  await connectHostedMacosApp(workspace);
+  const released: string[] = [];
+  const closed: string[] = [];
+  const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  try {
+    await disconnectCommand({
+      positionals: [],
+      flags: flagsFor(workspace.stateDir, workspace.remoteConfigPath),
+      client: createTestClient({
+        closeSession: async (request) => {
+          const session = request?.session ?? '';
+          closed.push(session);
+          return { session, identifiers: { session } };
+        },
+        release: async (request) => {
+          released.push(request.leaseId);
+          return { released: true };
+        },
+      }),
+    });
+  } finally {
+    stdout.mockRestore();
+  }
+  expect(released).toEqual([]);
+  expect(closed).toEqual(['hosted']);
+  expect(readRemoteConnectionState({ stateDir: workspace.stateDir, session: 'hosted' })).toBeNull();
 });

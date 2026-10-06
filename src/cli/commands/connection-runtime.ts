@@ -574,6 +574,11 @@ export async function stopReactDevtoolsCleanup(options: {
   }
 }
 
+/** The host allocated a `macos-app` lease and ends it itself; a tenant never releases it. */
+function isHostAllocatedLease(state: RemoteConnectionState): boolean {
+  return state.leaseBackend === 'macos-app';
+}
+
 export async function releaseRemoteConnectionLease(
   client: AgentDeviceClient,
   state: RemoteConnectionState,
@@ -581,7 +586,7 @@ export async function releaseRemoteConnectionLease(
   // pass the token already resolved via the flag/env/CLI-session chain.
   daemonAuthToken?: string,
 ): Promise<{ released: boolean; provider?: CloudProviderSessionResult }> {
-  if (!state.leaseId) return { released: false };
+  if (!state.leaseId || isHostAllocatedLease(state)) return { released: false };
   const result = await client.leases.release({
     tenant: state.tenant,
     runId: state.runId,
@@ -696,7 +701,7 @@ export async function releasePreviousLease(
     env: Record<string, string | undefined>;
   },
 ): Promise<PreviousLeaseReleaseNotice | undefined> {
-  if (!previous.leaseId) return undefined;
+  if (!previous.leaseId || isHostAllocatedLease(previous)) return undefined;
   const auth = resolvePreviousLeaseAuth({
     previous,
     nextDaemonBaseUrl: options.nextDaemonBaseUrl,

@@ -96,6 +96,48 @@ test('lease_release still releases a retainOnClose lease through the provider', 
   assert.equal(registry.listActiveLeases().length, 0);
 });
 
+test('lease_release refuses a host-allocated macos-app lease and keeps it', async () => {
+  const registry = new LeaseRegistry();
+  const lease = registry.putHostLease('a1b2c3d4e5f60718293a4b5c6d7e8f90', {
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    clientId: 'client-a',
+    leaseBackend: 'macos-app' as const,
+    deviceKey: 'com.example.app@4242',
+  });
+  const released: DeviceLease[] = [];
+  const meta = {
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseId: lease.leaseId,
+    clientId: 'client-a',
+    leaseBackend: 'macos-app' as const,
+    deviceKey: 'com.example.app@4242',
+  };
+  const run = (command: 'lease_release' | 'lease_heartbeat') =>
+    handleLeaseCommands({
+      req: { token: 'test-token', session: 'default', command, positionals: [], meta },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-macos-app-release-'),
+      leaseRegistry: registry,
+      leaseLifecycleProvider: {
+        release: async (active) => {
+          released.push(active);
+          return {};
+        },
+      },
+    });
+
+  await assert.rejects(run('lease_release'), (error: AppError) => {
+    assert.equal(error.code, 'UNAUTHORIZED');
+    assert.equal(error.details?.reason, 'MACOS_APP_LEASE_HOST_OWNED');
+    return true;
+  });
+  assert.deepEqual(released, []);
+  assert.equal(registry.listActiveLeases().length, 1);
+  assert.equal((await run('lease_heartbeat'))?.ok, true);
+});
+
 test('lease_allocate stores retainOnClose from the request meta', async () => {
   const registry = new LeaseRegistry();
   const request: DaemonRequest = {

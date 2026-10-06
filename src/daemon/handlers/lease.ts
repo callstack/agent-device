@@ -146,6 +146,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     case 'lease_release': {
       const releaseRequest = leaseScopeToReleaseRequest(leaseScope);
       const lease = leaseRegistry.getLease(releaseRequest);
+      assertTenantMayRelease(lease);
       const outcome = await leaseRegistry.runDeviceMutation(
         lease,
         async () =>
@@ -426,6 +427,16 @@ function recordProviderSession(
   const providerSessionId = providerSessionIdFromData(providerData);
   if (!providerSessionId) return;
   leaseRegistry.recordProviderSession(lease, providerSessionId);
+}
+
+/** The host that allocated a `macos-app` lease keeps it for the hosted app's lifetime and ends it with DELETE /admin/leases. */
+function assertTenantMayRelease(lease: DeviceLease | undefined): void {
+  if (lease?.backend !== 'macos-app') return;
+  throw new AppError('UNAUTHORIZED', 'A macos-app lease is released by the host administrator.', {
+    reason: 'MACOS_APP_LEASE_HOST_OWNED',
+    retriable: false,
+    hint: 'Disconnect only drops the client connection; the host ends the lease.',
+  });
 }
 
 /** A `macos-app` lease names the app it confines a client to, so only the host allocates one. */

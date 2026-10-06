@@ -481,7 +481,18 @@ function optionalConnectionFieldsMatch(
     [state.leaseBackend, options.desiredLeaseBackend],
     [state.target, options.flags.target],
   ].every(([left, right]) => right === undefined || left === right);
-  return fieldsMatch && remoteConnectionLeaseIdentityMatches(state, options.connection);
+  return (
+    fieldsMatch &&
+    macosAppLeaseIdMatches(state, options.flags.leaseId) &&
+    remoteConnectionLeaseIdentityMatches(state, options.connection)
+  );
+}
+
+function macosAppLeaseIdMatches(
+  state: RemoteConnectionState,
+  leaseId: string | undefined,
+): boolean {
+  return state.leaseBackend !== 'macos-app' || leaseId === undefined || leaseId === state.leaseId;
 }
 
 function isSameDaemonState(
