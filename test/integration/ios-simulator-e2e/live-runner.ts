@@ -95,11 +95,7 @@ export async function runIosSimulatorE2E(): Promise<void> {
   throwLiveRunErrors(primaryError, cleanupError);
 }
 
-/**
- * Starts the runner in this run's daemon under the prepare budget, so a cold start or rebuild is
- * not paid inside the first runner-backed command's 90 s request timeout. It runs inside the
- * node-test-tmpdir wrapper, so the daemon it starts gets the run's TMPDIR and claims directory.
- */
+/** A runner start must not spend the first runner-backed command's 90 s request timeout. */
 async function prepareRunner(context: LiveContext): Promise<void> {
   const timeoutMs = Number(
     process.env.AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS ?? DEFAULT_RUNNER_PREPARE_TIMEOUT_MS,
@@ -173,11 +169,28 @@ async function assertLiveAssertionCapture(context: LiveContext): Promise<void> {
 async function finalizeLiveRun(context: LiveContext): Promise<unknown> {
   let cleanupError = await finalizeSessionCleanup(context, sessionExists, cleanupSession);
   try {
+    await stopDaemon(context);
+  } catch (error) {
+    cleanupError = combineErrors(cleanupError, error, 'cleanup and daemon stop failed');
+  }
+  try {
     writeCoverageReport(context);
   } catch (error) {
     cleanupError = combineErrors(cleanupError, error, 'cleanup and coverage reporting failed');
   }
   return cleanupError;
+}
+
+/** The daemon holds this run's TMPDIR and claims directory, which the test wrapper deletes. */
+async function stopDaemon(context: LiveContext): Promise<void> {
+  await runStep(
+    context,
+    'stop daemon',
+    ['daemon', 'stop', '--state-dir', context.stateDir, '--json'],
+    {
+      commonFlags: false,
+    },
+  );
 }
 
 /**
