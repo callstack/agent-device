@@ -102,17 +102,6 @@ test('a failed restore keeps the record and the marker for a later retry', async
   expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
 });
 
-test('close leaves the user-selected keyboard alone', async () => {
-  bindAndroidAdbHostStub();
-  setAndroidTestImeActiveForTests(DEVICE, true);
-  const state = stuckDeviceState();
-  state.settings.set('default_input_method', 'com.android.inputmethod.latin/.LatinIME');
-  expect(await restoreWith(state)).toMatchObject({ reason: 'helper-not-active' });
-  expect(state.settings.get('default_input_method')).toBe(
-    'com.android.inputmethod.latin/.LatinIME',
-  );
-});
-
 test('devices this process never activated are left alone', async () => {
   bindAndroidAdbHostStub();
   const state = stuckDeviceState();

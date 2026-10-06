@@ -6,6 +6,7 @@ import {
   resolveAndroidAdbProvider,
   runAdbShell,
 } from './adb-provider-scope.ts';
+import type { AndroidAdbExecutor } from './adb-transport.ts';
 import { selectAndroidImeHelperArtifact } from './ime-helper.ts';
 import {
   clearPersistedRebindDisplacement,
@@ -55,7 +56,7 @@ export async function rebindAndroidTestIme(
         return unconfirmed(device.id, activeIme ? 'helper-not-selected' : 'read-failed');
       }
       // Failed cleanup keeps admission on the rebind path even with the helper selected.
-      ownership.rebindUnconfirmed = !(await clearPersistedRebindDisplacement(adb));
+      ownership.rebindUnconfirmed = !(await clearRebindRecord(adb, device.id));
       return { kind: 'confirmed' };
     } catch (error) {
       if (isRequestCanceledError(error)) throw error;
@@ -74,4 +75,15 @@ function unconfirmed(
     data: { device: deviceId, cause },
   });
   return { kind: 'unconfirmed', cause };
+}
+
+async function clearRebindRecord(adb: AndroidAdbExecutor, deviceId: string): Promise<boolean> {
+  const cleared = await clearPersistedRebindDisplacement(adb);
+  if (!cleared)
+    emitAndroidAdbDiagnostic({
+      level: 'warn',
+      phase: 'android_test_ime_rebind_record_clear_failed',
+      data: { device: deviceId },
+    });
+  return cleared;
 }
