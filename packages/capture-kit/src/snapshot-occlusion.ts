@@ -325,53 +325,43 @@ function isSiblingSizedChromeContainer(
   if (typeof node.parentIndex !== 'number') return false;
   const rect = positiveRect(node.rect);
   if (!rect) return false;
-  const listed = listedSiblings(node, neighbourhood);
-  if (!listed) return false;
-  const { siblings, position } = listed;
+  const siblings = neighbourhood.childrenByParent.get(node.parentIndex) ?? [];
   return siblings.some(
-    (sibling, siblingPosition) =>
-      siblingPosition !== position && areRectsApproximatelyEqual(rect, sibling.rect),
+    (sibling) => sibling.index !== node.index && areRectsApproximatelyEqual(rect, sibling.rect),
   );
 }
 
 /**
- * Exempt a toolbar host that encloses only its own presentation's bars and scroll regions. SwiftUI's
- * toolbar host spans the presentation it belongs to while drawing only its descendants; once
- * projection pruning reshapes its siblings, the sibling-sized rule no longer sees it.
- *
- * Presentations are listed in z-order, each ending with its toolbar host, so the host's own
- * presentation is the run of siblings after the previous toolbar sibling. An enclosed bar or scroll
- * region outside that run belongs to a presentation stacked under or over the host, and the host
- * keeps covering.
+ * SwiftUI toolbar hosts draw their descendants, not their enclosing frame. Exempt a host only
+ * when it encloses bars or scroll containers from its own presentation: the siblings after the
+ * previous toolbar and before this host. Enclosing another presentation's regions keeps it covering.
  */
 function isOwnPresentationToolbarHost(
   node: RawSnapshotNode,
   neighbourhood: NeighbourhoodIndex,
 ): boolean {
   if (!nodeKindIncludesAny(node, TOOLBAR_HOST_KIND_FRAGMENTS)) return false;
+  if (typeof node.parentIndex !== 'number') return false;
   const rect = positiveRect(node.rect);
   if (!rect) return false;
-  const listed = listedSiblings(node, neighbourhood);
-  if (!listed) return false;
-  const { siblings, position } = listed;
+  const siblings = neighbourhood.childrenByParent.get(node.parentIndex)!;
+  const position = siblings.findIndex((sibling) => sibling.index === node.index);
   const ownStart = ownPresentationStart(siblings, position);
-  const enclosed = siblings.flatMap((sibling, siblingPosition) =>
-    siblingPosition !== position && isEnclosedHostedRegion(rect, sibling) ? [siblingPosition] : [],
-  );
-  return (
-    enclosed.length > 0 &&
-    enclosed.every((siblingPosition) => siblingPosition >= ownStart && siblingPosition < position)
-  );
+
+  let hasHostedRegion = false;
+  for (const [siblingPosition, sibling] of siblings.entries()) {
+    if (siblingPosition === position || !isEnclosedHostedRegion(rect, sibling)) continue;
+    if (siblingPosition < ownStart || siblingPosition > position) return false;
+    hasHostedRegion = true;
+  }
+  return hasHostedRegion;
 }
 
-/** Where the presentation ending at `position` begins: just after the previous toolbar sibling. */
 function ownPresentationStart(siblings: readonly RawSnapshotNode[], position: number): number {
-  let start = 0;
-  for (const [siblingPosition, sibling] of siblings.entries()) {
-    if (siblingPosition >= position) break;
-    if (nodeKindIncludesAny(sibling, TOOLBAR_HOST_KIND_FRAGMENTS)) start = siblingPosition + 1;
+  for (let previous = position - 1; previous >= 0; previous--) {
+    if (nodeKindIncludesAny(siblings[previous]!, TOOLBAR_HOST_KIND_FRAGMENTS)) return previous + 1;
   }
-  return start;
+  return 0;
 }
 
 /** A bar or a scroll container inside `rect`; a scroll indicator is not a container. */
@@ -381,17 +371,6 @@ function isEnclosedHostedRegion(rect: Rect, node: RawSnapshotNode): boolean {
     (isScrollableNodeLike(node) && !nodeKindIncludesAny(node, SCROLL_INDICATOR_KIND_FRAGMENTS));
   const nodeRect = positiveRect(node.rect);
   return Boolean(isHostedRegion && nodeRect && rectContains(rect, nodeRect));
-}
-
-/** The siblings listed under the node's parent in document order and the node's position, if listed. */
-function listedSiblings(
-  node: RawSnapshotNode,
-  neighbourhood: NeighbourhoodIndex,
-): { siblings: readonly RawSnapshotNode[]; position: number } | undefined {
-  if (typeof node.parentIndex !== 'number') return undefined;
-  const siblings = neighbourhood.childrenByParent.get(node.parentIndex) ?? [];
-  const position = siblings.findIndex((sibling) => sibling.index === node.index);
-  return position < 0 ? undefined : { siblings, position };
 }
 
 function isFullViewportChromeContainer(
