@@ -1,7 +1,9 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import { connectionWorkspace, createTestClient } from './remote-connection.fixtures.ts';
+import type { AgentDeviceClient } from '../agent-device-client.ts';
+import { connectCommand } from '../cli/commands/connection.ts';
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
 import { readRemoteConnectionState } from '../remote/remote-connection-state.ts';
 import { LeaseRegistry } from '../daemon/lease-registry.ts';
@@ -98,4 +100,93 @@ test('an inactive host lease is reported, never replaced by a tenant allocation'
     }),
   ).rejects.toMatchObject({ code: 'UNAUTHORIZED', details: { reason: 'LEASE_NOT_FOUND' } });
   expect(allocations).toBe(0);
+});
+
+async function connectHostedMacosApp(
+  workspace: { stateDir: string; remoteConfigPath: string },
+  overrides: { leaseId?: string; force?: boolean } = {},
+  release: AgentDeviceClient['leases']['release'] = async () => ({ released: true }),
+): Promise<void> {
+  const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  try {
+    await connectCommand({
+      positionals: [],
+      flags: {
+        ...flagsFor(workspace.stateDir, workspace.remoteConfigPath),
+        daemonBaseUrl: 'https://host.example/agent/',
+        tenant: 'stim',
+        runId: 'session-1',
+        leaseId: LEASE_ID,
+        leaseBackend: 'macos-app',
+        platform: 'macos',
+        ...overrides,
+      },
+      client: createTestClient({
+        release,
+        listDevices: async () => {
+          throw new Error('a macos-app connection resolves no device into a new key');
+        },
+        allocate: async () => {
+          throw new Error('a macos-app connection never allocates');
+        },
+      }),
+    });
+  } finally {
+    stdout.mockRestore();
+  }
+}
+
+test('connect binds the lease and device a macos-app remote config names, and open uses them', async () => {
+  const workspace = connectionWorkspace('macos-app-connect-');
+  writeHostIssuedConfig(workspace.remoteConfigPath);
+  await connectHostedMacosApp(workspace);
+  expect(
+    readRemoteConnectionState({ stateDir: workspace.stateDir, session: 'hosted' }),
+  ).toMatchObject({
+    leaseId: LEASE_ID,
+    leaseBackend: 'macos-app',
+    deviceKey: 'com.example.app@4242',
+  });
+
+  const materialized = await materializeRemoteConnectionForCommand({
+    command: 'open',
+    positionals: ['com.example.app'],
+    flags: { ...flagsFor(workspace.stateDir, workspace.remoteConfigPath), platform: 'macos' },
+    client: createTestClient({
+      allocate: async () => {
+        throw new Error('a macos-app connection never allocates');
+      },
+    }),
+  });
+  expect(materialized.flags).toMatchObject({ leaseId: LEASE_ID, leaseBackend: 'macos-app' });
+});
+
+test('connect with an explicit --lease-id binds that lease over the one in the config', async () => {
+  const workspace = connectionWorkspace('macos-app-connect-flag-');
+  writeHostIssuedConfig(workspace.remoteConfigPath);
+  const flagLeaseId = 'ffffffffffffffffffffffffffffffff';
+  await connectHostedMacosApp(workspace, { leaseId: flagLeaseId });
+  expect(
+    readRemoteConnectionState({ stateDir: workspace.stateDir, session: 'hosted' }),
+  ).toMatchObject({
+    leaseId: flagLeaseId,
+    deviceKey: 'com.example.app@4242',
+  });
+});
+
+test('a forced reconnect keeps the host lease it binds again', async () => {
+  const workspace = connectionWorkspace('macos-app-connect-force-');
+  writeHostIssuedConfig(workspace.remoteConfigPath);
+  await connectHostedMacosApp(workspace);
+  const released: string[] = [];
+  await connectHostedMacosApp(workspace, { force: true }, async (request) => {
+    released.push(request.leaseId);
+    return { released: true };
+  });
+  expect(released).toEqual([]);
+  expect(
+    readRemoteConnectionState({ stateDir: workspace.stateDir, session: 'hosted' }),
+  ).toMatchObject({
+    leaseId: LEASE_ID,
+  });
 });
