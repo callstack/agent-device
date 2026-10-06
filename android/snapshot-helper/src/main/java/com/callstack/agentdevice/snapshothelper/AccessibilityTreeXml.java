@@ -1,6 +1,7 @@
 package com.callstack.agentdevice.snapshothelper;
 
 import android.graphics.Rect;
+import android.graphics.Region;
 import android.os.Build;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
@@ -133,8 +134,29 @@ final class AccessibilityTreeXml {
   static WindowMetadata readWindowMetadata(AccessibilityWindowInfo window, int index) {
     Rect bounds = new Rect();
     window.getBoundsInScreen(bounds);
+    int type = window.getType();
     return new WindowMetadata(
-        index, window.getType(), window.getLayer(), window.isActive(), window.isFocused(), bounds);
+        index,
+        type,
+        window.getLayer(),
+        window.isActive(),
+        window.isFocused(),
+        bounds,
+        readInputMethodRegionRect(window, type));
+  }
+
+  // The window bounds are the box around the window's touchable region. A floating keyboard's region
+  // is several rects (the panel and the gesture strip), so the box claims app content between them;
+  // the host must not read such a box as the keyboard band. getRegionInScreen arrived in API 33, so
+  // older releases, and a region that reads empty, report nothing and keep the bounds-only answer.
+  private static Boolean readInputMethodRegionRect(AccessibilityWindowInfo window, int type) {
+    if (type != AccessibilityWindowInfo.TYPE_INPUT_METHOD
+        || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+      return null;
+    }
+    Region region = new Region();
+    window.getRegionInScreen(region);
+    return region.isEmpty() ? null : region.isRect();
   }
 
   private static void appendNonEmptyAttribute(
@@ -194,6 +216,9 @@ final class AccessibilityTreeXml {
             metadata.bounds.top,
             metadata.bounds.right,
             metadata.bounds.bottom));
+    if (metadata.regionRect != null) {
+      appendAttribute(xml, "window-region-rect", Boolean.toString(metadata.regionRect));
+    }
   }
 
   private static void appendAttribute(StringBuilder xml, String name, CharSequence value) {
@@ -279,18 +304,28 @@ final class AccessibilityTreeXml {
     final boolean active;
     final boolean focused;
     final Rect bounds;
+    // Null unless an input method window's touchable region was read (API 33+).
+    final Boolean regionRect;
 
-    WindowMetadata(int index, int type, int layer, boolean active, boolean focused, Rect bounds) {
+    WindowMetadata(
+        int index,
+        int type,
+        int layer,
+        boolean active,
+        boolean focused,
+        Rect bounds,
+        Boolean regionRect) {
       this.index = index;
       this.type = type;
       this.layer = layer;
       this.active = active;
       this.focused = focused;
       this.bounds = bounds;
+      this.regionRect = regionRect;
     }
 
     WindowMetadata withIndex(int nextIndex) {
-      return new WindowMetadata(nextIndex, type, layer, active, focused, bounds);
+      return new WindowMetadata(nextIndex, type, layer, active, focused, bounds, regionRect);
     }
   }
 }

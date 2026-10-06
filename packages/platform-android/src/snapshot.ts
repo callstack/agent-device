@@ -882,6 +882,11 @@ function applyHiddenContentHintsToInteractiveNodes(
  * capture: the active-window fallback never saw the window list, a root without window metadata
  * cannot be ruled out as the input method, and a truncated capture may have stopped before it. A
  * helper too old to report `missingRootWindowTypes` is trusted on the roots it serialized.
+ *
+ * The bounds are the box around the window's touchable region, and a floating keyboard's region is
+ * several rects with app content between them, so an input method window whose region the helper
+ * read as not rectangular is unmeasurable too: the tap guard then falls back to the tree. Below API
+ * 33 the helper cannot read the region, and the bounds are trusted as the band.
  */
 export function androidSnapshotKeyboardFromTree(
   tree: AndroidUiHierarchy,
@@ -895,7 +900,10 @@ export function androidSnapshotKeyboardFromTree(
     (window) => window.windowType === ANDROID_WINDOW_TYPE_INPUT_METHOD,
   );
   const inputMethodRects: Rect[] = [];
-  for (const { windowRect } of inputMethodWindows) {
+  for (const { windowRect, windowRegionRect } of inputMethodWindows) {
+    if (windowRegionRect === false) {
+      return { kind: 'unmeasurable', reason: 'window-region-not-rectangular' };
+    }
     if (isPositiveFiniteRect(windowRect)) inputMethodRects.push(windowRect);
     else if (!isEmptyFiniteRect(windowRect)) {
       return { kind: 'unmeasurable', reason: 'window-bounds-unavailable' };

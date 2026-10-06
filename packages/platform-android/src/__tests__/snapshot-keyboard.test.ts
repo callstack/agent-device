@@ -137,3 +137,36 @@ test('a skipped window that is not an input method leaves the keyboard answer al
     { kind: 'absent' },
   );
 });
+
+const FLOATING_GBOARD_WINDOW =
+  '<node window-index="0" window-type="2" window-bounds="[0,1392][1080,2400]" window-region-rect="false" class="android.widget.FrameLayout" package="com.google.android.inputmethod.latin" bounds="[167,1392][1061,2169]" />';
+
+test('the helper region mark parses as marked, unmarked, or absent', () => {
+  const windowRegionRect = (attribute: string) =>
+    parseUiHierarchyTree(
+      `<hierarchy rotation="0"><node window-index="0" window-type="2" window-bounds="[0,1500][1080,2400]"${attribute} /></hierarchy>`,
+    ).children[0]?.windowRegionRect;
+  assert.equal(windowRegionRect(' window-region-rect="false"'), false);
+  assert.equal(windowRegionRect(' window-region-rect="true"'), true);
+  assert.equal(windowRegionRect(''), undefined);
+});
+
+test('a floating keyboard whose touchable region is not one rect cannot be measured', () => {
+  assert.deepEqual(
+    androidSnapshotKeyboardFromTree(tree(FLOATING_GBOARD_WINDOW, APP_WINDOW), WINDOW_LIST),
+    { kind: 'unmeasurable', reason: 'window-region-not-rectangular' },
+  );
+});
+
+test('a docked keyboard whose region is one rect, or was not read, keeps its band', () => {
+  const docked = GBOARD_WINDOW.replace(
+    ' window-bounds=',
+    ' window-region-rect="true" window-bounds=',
+  );
+  for (const window of [docked, GBOARD_WINDOW]) {
+    assert.deepEqual(androidSnapshotKeyboardFromTree(tree(window, APP_WINDOW), WINDOW_LIST), {
+      kind: 'visible',
+      frame: { x: 0, y: 1500, width: 1080, height: 900 },
+    });
+  }
+});

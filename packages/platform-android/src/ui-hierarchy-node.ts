@@ -47,6 +47,11 @@ export type AndroidUiHierarchy = {
   windowActive?: boolean;
   windowFocused?: boolean;
   windowRect?: Rect;
+  /**
+   * Whether this input method window's touchable region is one rect, so `windowRect` is exactly the
+   * area it takes touches in. Absent below API 33, on other window types, and on older helpers.
+   */
+  windowRegionRect?: boolean;
   children: AndroidUiHierarchy[];
 };
 
