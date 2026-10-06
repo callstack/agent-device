@@ -15,6 +15,9 @@
     "src/sdk/selectors.ts",
     "src/sdk/finders.ts",
     "src/ai-sdk/index.ts",
+    "packages/proxy/src/index.ts",
+    "packages/proxy/src/node.ts",
+    "packages/proxy/tsdown.config.ts",
     "src/bin.ts",
     "src/client/companion-tunnel.ts",
     "src/daemon.ts",
@@ -276,8 +279,8 @@
       "exports": ["*"]
     },
     {
-      "comment": "Published package surface (see package.json#exports); consumed by SDK users, not internally.",
-      "file": "{src/sdk/*.ts,src/ai-sdk/index.ts}",
+      "comment": "Published package surfaces (see each package.json#exports); consumers may be external or reach them through workspace package exports Fallow does not follow.",
+      "file": "{src/sdk/*.ts,src/ai-sdk/index.ts,packages/proxy/src/index.ts,packages/proxy/src/node.ts}",
       "exports": ["*"]
     },
     {
@@ -287,7 +290,7 @@
     },
     {
       "comment": "Tool config default exports, loaded by the tool rather than imported.",
-      "file": "{oxlint.config.ts,tsdown.config.ts,vitest.mutation.config.ts,website/rspress.config.ts}",
+      "file": "{oxlint.config.ts,tsdown.config.ts,packages/proxy/tsdown.config.ts,vitest.mutation.config.ts,website/rspress.config.ts}",
       "exports": ["default"]
     },
     {

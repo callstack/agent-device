@@ -60,8 +60,8 @@ const MUTATIONS: readonly WireMutation[] = [
     breakClass: 'instance refusal: the proxy drops the mismatch response header',
     file: 'packages/proxy/src/daemon-proxy.ts',
     name: 'sendInstanceMismatch',
-    from: "res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');",
-    to: '',
+    from: "{ status: 409, headers: { [DAEMON_HTTP_INSTANCE_MISMATCH_HEADER]: 'true' } }",
+    to: '{ status: 409 }',
   },
   {
     breakClass: 'instance refusal: the shared RPC error code changes',

@@ -19,6 +19,7 @@ import {
   rootExternalDependencyRanges,
   rootWorkspaceDependencyNames,
   specifierSites,
+  workspacePackagesFromManifests,
   type WorkspacePackage,
 } from './package-boundaries.ts';
 import { listTrackedTypeScriptFiles } from './tracked-sources.ts';
@@ -33,6 +34,7 @@ const kernel: WorkspacePackage = {
     ['@agent-device/kernel/device', 'packages/kernel/src/device.ts'],
   ]),
   workspaceDependencies: new Set(),
+  workspaceDependencyField: 'dependencies',
   externalDependencies: new Map(),
 };
 
@@ -43,6 +45,7 @@ const contracts: WorkspacePackage = {
     ['@agent-device/contracts/interaction', 'packages/contracts/src/interaction.ts'],
   ]),
   workspaceDependencies: new Set(['@agent-device/kernel']),
+  workspaceDependencyField: 'dependencies',
   externalDependencies: new Map(),
 };
 
@@ -366,6 +369,34 @@ test('root workspace specifiers need a root workspace:* entry and an exported su
 
   const unknown = specifierSites('src/cli.ts', "import { x } from '@agent-device/nope/thing';");
   assert.equal(checkRootSites(unknown, ALL, new Set([kernel.name])).length, 1);
+});
+
+test('a published package declares its bundled workspace siblings as devDependencies', () => {
+  const manifest = (name: string, isPrivate: boolean) =>
+    JSON.stringify({
+      name,
+      private: isPrivate,
+      exports: { '.': './src/index.ts' },
+      devDependencies: { '@agent-device/kernel': 'workspace:*' },
+    });
+  const packages = workspacePackagesFromManifests(
+    new Map([
+      ['packages/published/package.json', manifest('@agent-device/published', false)],
+      ['packages/internal/package.json', manifest('@agent-device/internal', true)],
+    ]),
+  );
+  const published = packages.find((pkg) => pkg.name === '@agent-device/published');
+  const internal = packages.find((pkg) => pkg.name === '@agent-device/internal');
+  assert.ok(published && internal);
+  assert.deepEqual([...published.workspaceDependencies], ['@agent-device/kernel']);
+  assert.deepEqual([...internal.workspaceDependencies], []);
+
+  const undeclared = specifierSites(
+    'packages/published/src/index.ts',
+    "import { g } from '@agent-device/contracts/interaction';",
+  );
+  const [violation] = checkPackageInternalSites(published, undeclared, [...ALL, published]);
+  assert.match(violation?.message ?? '', /packages\/published\/package\.json devDependencies\.$/);
 });
 
 test('the real tree parses, declares, and passes R11', () => {

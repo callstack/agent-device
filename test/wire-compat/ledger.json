@@ -185,10 +185,10 @@
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER": "sha256:4564c2ce437d30d7a823e3326f4375c0750ba8d42bec22b4d02e8eb7f7db2973",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_INSTANCE_MISMATCH_HEADER": "sha256:a197edaf7f9fa94a6aab269856aa852da3204cc586f5fd23198689eb11908b61",
     "src/daemon/server/http-instance-precondition.ts#refuseStaleDaemonInstance": "sha256:cf9b6f9dd95bb2593e4810c5b5939936b6d6358bf2614c7c234266cab1922d29",
-    "packages/proxy/src/daemon-proxy.ts#refuseStaleProxyInstance": "sha256:82d39a1c241f1fb91c6bda2a55e9fde7b6d70db1a1a1496bef0eabf546ea706e",
-    "packages/proxy/src/daemon-proxy.ts#sendInstanceMismatch": "sha256:d61ce46ef35d7aee9be4a41a79c84f372b05370097e3d8c8c109f06d494bfc55",
+    "packages/proxy/src/daemon-proxy.ts#refuseStaleProxyInstance": "sha256:a5d802a666fd04a5c41a40bf3c96cbb4d05d6b449e950cf52098836df01df6ea",
+    "packages/proxy/src/daemon-proxy.ts#sendInstanceMismatch": "sha256:7d0a889f8c7a8151a5ac7a37f52620a269b707144303cae7304825fca49e2a0d",
     "packages/contracts/src/daemon-http.ts#buildDaemonInstanceMismatchRpcResponse": "sha256:24e50130bbd0c4a21dfc51005cabf118525b9121f918719a2c16f73fcfcfbcf9",
-    "packages/proxy/src/daemon-proxy.ts#buildUpstreamInstancePreconditionHeaders": "sha256:9f7a2f1a3f86fce2c939f03fce3c6db061c31d1a4bb8074a563e3c81196ecfbe",
+    "packages/proxy/src/daemon-proxy.ts#buildUpstreamInstancePreconditionHeaders": "sha256:9f5d76a1f761d65fabd7244fc67295fed5934a544e86a6455451ef8520cf1615",
     "src/daemon-client/daemon-client-transport.ts#buildRemoteInstancePreconditionHeaders": "sha256:70241561c4070a8ebbdbbdb4ebcdbdfcb9543501cbb649a6d71cf041aee55a08",
     "src/daemon-client/daemon-client-transport.ts#isRemoteInstanceMismatchResponse": "sha256:7670f48fe0fc7344f8a000cd303e49788ec7ea9d1c729bcdc2af73ff02dae04d",
     "src/daemon-client/daemon-client-transport.ts#isRemoteInstanceMismatch": "sha256:6d4cfdd36bd44686d2a48990491faf63ba9117fb760f982fd72922c99be8daee"
@@ -401,18 +401,18 @@
     },
     {
       "declaration": "packages/proxy/src/daemon-proxy.ts#refuseStaleProxyInstance",
-      "digest": "sha256:82d39a1c241f1fb91c6bda2a55e9fde7b6d70db1a1a1496bef0eabf546ea706e",
-      "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before."
+      "digest": "sha256:a5d802a666fd04a5c41a40bf3c96cbb4d05d6b449e950cf52098836df01df6ea",
+      "rationale": "Moved into @agent-device/proxy and rewritten over fetch Request/Response so the proxy can run on any transport. The 409 status, instance-mismatch header, JSON-RPC error body, and forwarded upstream precondition header are unchanged on the wire, so peers on both sides parse them as before."
     },
     {
       "declaration": "packages/proxy/src/daemon-proxy.ts#sendInstanceMismatch",
-      "digest": "sha256:d61ce46ef35d7aee9be4a41a79c84f372b05370097e3d8c8c109f06d494bfc55",
-      "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before."
+      "digest": "sha256:7d0a889f8c7a8151a5ac7a37f52620a269b707144303cae7304825fca49e2a0d",
+      "rationale": "Moved into @agent-device/proxy and rewritten over fetch Request/Response so the proxy can run on any transport. The 409 status, instance-mismatch header, JSON-RPC error body, and forwarded upstream precondition header are unchanged on the wire, so peers on both sides parse them as before."
     },
     {
       "declaration": "packages/proxy/src/daemon-proxy.ts#buildUpstreamInstancePreconditionHeaders",
-      "digest": "sha256:9f7a2f1a3f86fce2c939f03fce3c6db061c31d1a4bb8074a563e3c81196ecfbe",
-      "rationale": "#2650 adds conditional RPC refusal and retry only for peers that advertise complete instance IDs. Released peers advertise none, so new clients keep per-command health probes and send their unchanged RPC; older clients omit the new request precondition and parse existing responses as before."
+      "digest": "sha256:9f5d76a1f761d65fabd7244fc67295fed5934a544e86a6455451ef8520cf1615",
+      "rationale": "Moved into @agent-device/proxy and rewritten over fetch Request/Response so the proxy can run on any transport. The 409 status, instance-mismatch header, JSON-RPC error body, and forwarded upstream precondition header are unchanged on the wire, so peers on both sides parse them as before."
     },
     {
       "declaration": "src/daemon-client/daemon-client-transport.ts#buildRemoteInstancePreconditionHeaders",
