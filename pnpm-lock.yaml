@@ -74,6 +74,9 @@ importers:
       '@agent-device/provision-kit':
         specifier: workspace:*
         version: link:packages/provision-kit
+      '@agent-device/proxy':
+        specifier: workspace:*
+        version: link:packages/proxy
       '@agent-device/replay-port':
         specifier: workspace:*
         version: link:packages/replay-port
@@ -506,6 +509,18 @@ importers:
       undici:
         specifier: 7.29.0
         version: 7.29.0
+
+  packages/proxy:
+    dependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
 
   packages/replay-port:
     dependencies:

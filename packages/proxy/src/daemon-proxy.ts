@@ -17,12 +17,10 @@ import {
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpUrl,
 } from '@agent-device/contracts/daemon-http';
-import { readVersion } from '@agent-device/host-kit/version';
-import { readHostCpuArch } from '@agent-device/host-kit/process';
 import {
   carriesUnbackedHostPathInstallSource,
   sendHostPathInstallSourceRefused,
-} from './proxy-install-source-admission.ts';
+} from './install-source-admission.ts';
 
 export type DaemonProxyOptions = {
   upstreamBaseUrl: string;
@@ -115,7 +113,11 @@ async function sendProxyHealth(
   options: Required<DaemonProxyOptions>,
   instanceId: string,
 ) {
-  const upstream = await readUpstreamHealth(options);
+  const [upstream, { readVersion }, { readHostCpuArch }] = await Promise.all([
+    readUpstreamHealth(options),
+    import('@agent-device/host-kit/version'),
+    import('@agent-device/host-kit/process'),
+  ]);
   res.statusCode = 200;
   res.setHeader('content-type', 'application/json');
   res.end(

@@ -1,0 +1,18 @@
+{
+  "name": "@agent-device/proxy",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Authenticating proxy in front of an agent-device daemon. Internal workspace package bundled into the published artifact.",
+  "dependencies": {
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  }
+}
