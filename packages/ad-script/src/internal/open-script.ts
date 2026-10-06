@@ -1,5 +1,5 @@
-import type { SessionAction } from '@agent-device/contracts/session';
-import { parseSessionSurface } from '@agent-device/contracts/session';
+import { AppError } from '@agent-device/kernel/errors';
+import type { SessionAction, SessionSurface } from '@agent-device/contracts/session';
 import {
   appendRuntimeHintFlags,
   formatScriptArg,
@@ -68,7 +68,7 @@ export function parseReplayOpenFlags(args: string[]): {
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index]!;
     if (token === '--surface') {
-      flags.surface = parseSessionSurface(args[index + 1]);
+      flags.surface = parseReplaySurface(args[index + 1]);
       index += 1;
       continue;
     }
@@ -92,6 +92,26 @@ export function parseReplayOpenFlags(args: string[]): {
     flags,
     runtime: hasReplayOpenRuntimeHints(parsedRuntime.flags) ? parsedRuntime.flags : undefined,
   };
+}
+
+const REPLAY_SURFACES: Record<SessionSurface, true> = {
+  app: true,
+  'frontmost-app': true,
+  desktop: true,
+  menubar: true,
+};
+
+function isReplaySurface(value: string): value is SessionSurface {
+  return Object.hasOwn(REPLAY_SURFACES, value);
+}
+
+function parseReplaySurface(value: string | undefined): SessionSurface {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized !== undefined && isReplaySurface(normalized)) return normalized;
+  throw new AppError(
+    'INVALID_ARGS',
+    `Invalid surface: ${value}. Use ${Object.keys(REPLAY_SURFACES).join('|')}.`,
+  );
 }
 
 function hasReplayOpenRuntimeHints(
