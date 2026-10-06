@@ -89,6 +89,7 @@ agent-device fold open
 - `open <app> --launch-console <path>` captures launch-time stdout/stderr for direct iOS simulator app launches. It is not valid for URL opens or
   non-simulator targets.
 - `open --platform macos --surface app|frontmost-app|desktop|menubar` selects the macOS session surface explicitly. `app` is the default when an app argument is provided.
+- A surface given to `open`, as a flag or from a config file, is saved in `--save-script` scripts, so `replay` reopens the same surface. When no surface is given, the script has no `--surface`, and replay opens an app session.
 - `back` now defaults to app-owned back navigation. On Apple targets that means visible in-app back UI only. On Android this currently maps to the same back keyevent because Android routes in-app back through that platform event.
 - `back --in-app` is an explicit alias for the default app-owned behavior.
 - `back --system` asks for system back input explicitly. On Android this is the normal back keyevent. On iOS and tvOS it uses the platform back gesture or Siri Remote menu action. On macOS, where there is no generic system back input, `back --system` reports unavailable instead of falling back to app-owned navigation.
