@@ -136,7 +136,7 @@ const appSwitcherUnavailableIos = Object.freeze({
   reason: 'unsupported-provider-mode',
   hint: 'Limrun iOS direct sessions do not expose app switcher yet.',
 } as const);
-/** No Limrun session exposes a hardware button; only the springboard buttons split by leg. */
+/** No Limrun session exposes the action button; only `appSwitcher` still splits by leg. */
 const systemButtonUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
