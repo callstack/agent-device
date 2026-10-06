@@ -153,10 +153,6 @@ export default defineConfig({
             // Publish preparation spawns only fixture-owned scripts and proves both Android
             // helper families are rebuilt through the shared release/size-report owner.
             'scripts/__tests__/prepare-publish-assets.test.ts',
-            // Real pnpm packs prove public exports and dependency isolation; YAML guards keep
-            // publishing credentials out of the install/build job. No registry or devices needed.
-            'scripts/__tests__/release-workspace-package.test.ts',
-            'test/ci/workspace-publishing.test.ts',
             // The packager's Swift comment scanner: pure string transform, and the only place a
             // literal that looks like a comment (a URL, a raw or multi-line literal) is proven
             // to survive packaging before the npm package ships unbuildable Swift.
