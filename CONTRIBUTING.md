@@ -82,6 +82,48 @@ so name the version the CI lanes install and the published helper matches the CI
 `pnpm package:npm` is a release guard, not a routine development command. Use the specific commands
 above while iterating.
 
+### Publish a workspace package
+
+Packages under `packages/*` release independently from `agent-device`. Only packages that
+explicitly set `"private": false` can use this path; internal packages remain private.
+Keep plugin SDK and bundled workspace helpers in `devDependencies`. An optional plugin must
+have no production import from the core build or production dependency in the root manifest.
+
+A public package owns its version, `files`, published `exports`, license, repository metadata,
+and `prepack` build (including any prerequisites it needs). Use `publishConfig.exports` when workspace tests need source-only exports;
+`pnpm pack` applies those overrides to the published manifest. The repository URL must be
+`git+https://github.com/callstack/agent-device.git`, with `repository.directory` naming its package
+folder. Include a package README. Versions need not match the core version.
+
+After setting and committing the package version, prepare it locally:
+
+```bash
+pnpm release:workspace @agent-device/doublespeed 0.1.0
+pnpm release:workspace @agent-device/testmu 0.2.0-beta.1 next
+```
+
+The command runs the package's pack lifecycle, checks the actual tarball for private workspace
+or local runtime dependencies, and prints its path. It does not build the core's native assets.
+Run the package's tests and packed-install smoke before releasing. For the first publication,
+an npm maintainer with access to the `@agent-device` scope can publish the prepared tarball:
+
+```bash
+npm publish <printed-tarball-path> --ignore-scripts --access public
+```
+
+Before CI publishing, create the GitHub **npm-publish** environment and restrict its deployment
+branches to **main**. Then configure each package's [npm trusted publisher](https://docs.npmjs.com/trusted-publishers/)
+with organization **callstack**, repository **agent-device**, and workflow filename
+**publish-workspace-package.yml**, with environment **npm-publish**. The workflow uses GitHub OIDC
+rather than an npm token; install and pack run in a separate job without publish credentials.
+
+For subsequent releases, use **Publish workspace package** in GitHub Actions on `main`.
+Enter the exact package name and committed version. It defaults to a dry run; clear **dry_run**
+to publish the same validated tarball. Use `latest` for stable releases and `next` for previews; prereleases require `next`.
+A dry run proves preparation and npm package validation, but does not verify registry permissions
+or the trusted publisher configuration. Record the package version and release commit in the
+release notes. The core's `release:publish` command and `v*` tags remain dedicated to `agent-device`.
+
 ### The version on main never equals a published version
 
 `release:publish` runs `release:mark-dev` right after `npm publish`, moving `package.json` (and the
