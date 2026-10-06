@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { emitDiagnostic } from './host.ts';
 import {
   acquireRunnerXctestrunCacheLock,
   emitRunnerXctestrunDecision,
@@ -47,9 +48,19 @@ export async function evictStaleRunnerCaches(
   for (const { derived } of candidates) {
     try {
       if (await evictIfUnused(derived, nowMs)) evicted.push(derived);
-    } catch {}
+    } catch (error) {
+      emitEvictionFailure(derived, error);
+    }
   }
   return evicted;
+}
+
+export function emitEvictionFailure(derived: string, error: unknown): void {
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'runner_xctestrun_cache_eviction_failed',
+    data: { derived, error: error instanceof Error ? error.message : String(error) },
+  });
 }
 
 type CacheKeyDirectory = { derived: string; lastUsedMs: number };
@@ -97,7 +108,7 @@ async function evictIfUnused(derived: string, nowMs: number): Promise<boolean> {
         cacheKey === key || xctestrunPath.startsWith(`${derived}${path.sep}`),
     );
     if (leased) return false;
-    // Without its metadata a half-deleted key is a stub the next build cleans, never a hit.
+    // Without its metadata a half-deleted key is never a hit; the next build for this key overwrites it.
     await fs.promises.rm(resolveRunnerCacheMetadataPath(derived), { force: true });
     await fs.promises.rm(derived, { recursive: true, force: true });
     emitRunnerXctestrunDecision('clean', 'stale_cache_evicted', { derived });

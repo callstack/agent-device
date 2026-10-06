@@ -7,6 +7,7 @@ import {
   runCmdStreaming,
   withKeyedLock,
   withProcessLock,
+  emitDiagnostic,
   emitRequestProgress,
   findProjectRoot,
   getRequestSignal,
@@ -210,7 +211,13 @@ async function evictStaleRunnerCachesBestEffort(derived: string): Promise<void> 
   try {
     const { evictStaleRunnerCaches } = await import('./runner-cache-retention.ts');
     await evictStaleRunnerCaches(derived);
-  } catch {}
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'runner_xctestrun_cache_eviction_failed',
+      data: { derived, error: error instanceof Error ? error.message : String(error) },
+    });
+  }
 }
 
 function resolveExternalXctestrunArtifact(

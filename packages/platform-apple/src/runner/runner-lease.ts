@@ -475,14 +475,11 @@ function listRunnerLeases(): RunnerLease[] {
  */
 export function listActiveRunnerLeaseArtifacts(): { xctestrunPath: string; cacheKey?: string }[] {
   return listRunnerLeases()
-    .filter((lease) => {
-      const liveness = classifyOwnerLiveness({
-        owner: { pid: lease.ownerPid, startTime: lease.ownerStartTime },
-        ...(lease.ownerStateDir ? { stateDir: lease.ownerStateDir } : {}),
-      });
-      if (liveness === 'live' || liveness === 'unknown') return true;
-      return lease.runnerPid !== null && isLeaseRunnerProcessIntact(lease, lease.runnerPid);
-    })
+    .filter(
+      (lease) =>
+        classifyRunnerLease(lease).type !== 'stale' ||
+        (lease.runnerPid !== null && isLeaseRunnerProcessIntact(lease, lease.runnerPid)),
+    )
     .map(({ xctestrunPath, cacheKey }) => ({ xctestrunPath, cacheKey }));
 }
 

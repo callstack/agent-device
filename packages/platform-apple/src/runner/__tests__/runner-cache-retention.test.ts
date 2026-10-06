@@ -265,3 +265,31 @@ test('building a new runner cache key sweeps the keys beside it', async () => {
   assert.equal(fs.existsSync(built.derived), true);
   assert.equal(fs.existsSync(unrelatedPlatform), true);
 });
+
+test('keeps a key that a runner reused after the listing, found fresh under the lock', async () => {
+  process.env.AGENT_DEVICE_IOS_RUNNER_CACHE_KEEP = '1';
+  const current = seedKey(key(1), 0);
+  seedKey(key(2), 5);
+  const reused = seedKey(key(3), 9);
+  const realRm = fs.promises.rm.bind(fs.promises);
+  let touched = false;
+  const rm = vi.spyOn(fs.promises, 'rm').mockImplementation(async (target, options) => {
+    if (!touched) {
+      touched = true;
+      const usedAt = new Date(NOW_MS);
+      fs.utimesSync(resolveRunnerCacheMetadataPath(reused), usedAt, usedAt);
+    }
+    return realRm(target, options);
+  });
+  try {
+    const evicted = await evictStaleRunnerCaches(current, process.env, NOW_MS);
+    assert.deepEqual(
+      evicted.map((entry) => path.basename(entry)),
+      [key(2)],
+    );
+  } finally {
+    rm.mockRestore();
+  }
+
+  assert.deepEqual(remaining(), [key(1), key(3)]);
+});
