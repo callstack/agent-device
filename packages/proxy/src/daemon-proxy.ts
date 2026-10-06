@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import http from 'node:http';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import {
@@ -83,6 +84,21 @@ export function createDaemonProxy(options: DaemonProxyOptions): DaemonProxy {
         return proxyErrorResponse(error);
       }
     },
+  };
+}
+
+export function createDaemonProxyServer(options: DaemonProxyOptions): http.Server {
+  return http.createServer(createDaemonProxyRequestListener(createDaemonProxy(options)));
+}
+
+/** Serves a proxy from any `node:http` or `node:https` server; upload tickets follow its scheme. */
+export function createDaemonProxyRequestListener(proxy: DaemonProxy): http.RequestListener {
+  return (req, res) => {
+    void import('./node-http.ts')
+      .then(({ serveProxyRequest }) => serveProxyRequest(proxy, req, res))
+      .catch((error: unknown) => {
+        if (!res.destroyed) res.destroy(error instanceof Error ? error : undefined);
+      });
   };
 }
 

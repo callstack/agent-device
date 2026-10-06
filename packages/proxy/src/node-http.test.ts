@@ -6,7 +6,7 @@ import { Readable } from 'node:stream';
 import { TLSSocket } from 'node:tls';
 import { expect, test } from 'vitest';
 import type { DaemonProxy } from './daemon-proxy.ts';
-import { createDaemonProxyRequestListener } from './node-http.ts';
+import { serveProxyRequest } from './node-http.ts';
 
 async function serveThroughListener(
   socket: Socket,
@@ -33,11 +33,7 @@ async function serveThroughListener(
     setHeader: () => {},
     end: () => {},
   });
-  const ended = new Promise<void>((resolve) => {
-    res.end = () => resolve();
-  });
-  createDaemonProxyRequestListener(proxy)(req, res as unknown as ServerResponse);
-  await ended;
+  await serveProxyRequest(proxy, req, res as unknown as ServerResponse);
   return { seenUrl, status: res.statusCode };
 }
 
@@ -66,7 +62,7 @@ test('a method Fetch refuses is answered with 404 instead of a dropped socket', 
     instanceId: 'test',
     handle: async () => new Response(null, { status: 204 }),
   };
-  const server = http.createServer(createDaemonProxyRequestListener(proxy));
+  const server = http.createServer((req, res) => void serveProxyRequest(proxy, req, res));
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   try {
     const { port } = server.address() as AddressInfo;

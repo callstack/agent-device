@@ -1,23 +1,10 @@
-import http, { type IncomingMessage, type ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { TLSSocket } from 'node:tls';
-import { createDaemonProxy, type DaemonProxy, type DaemonProxyOptions } from './daemon-proxy.ts';
+import type { DaemonProxy } from './daemon-proxy.ts';
 
-export function createDaemonProxyServer(options: DaemonProxyOptions): http.Server {
-  return http.createServer(createDaemonProxyRequestListener(createDaemonProxy(options)));
-}
-
-/** Serves a proxy from any `node:http` or `node:https` server; upload tickets follow its scheme. */
-export function createDaemonProxyRequestListener(proxy: DaemonProxy): http.RequestListener {
-  return (req, res) => {
-    void serveProxyRequest(proxy, req, res).catch((error: unknown) => {
-      if (!res.destroyed) res.destroy(error instanceof Error ? error : undefined);
-    });
-  };
-}
-
-async function serveProxyRequest(
+export async function serveProxyRequest(
   proxy: DaemonProxy,
   req: IncomingMessage,
   res: ServerResponse,
