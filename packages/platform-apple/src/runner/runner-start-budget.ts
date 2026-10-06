@@ -5,8 +5,16 @@ import {
 } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from './host.ts';
 import { isCallerDeadlineAbortReason, resolveRunnerStartupSignal } from './runner-contract.ts';
-import { stopRunnerPrepProcessesWithoutActiveOwner } from './runner-disposal.ts';
-import { createRunnerPhaseBudget, type RunnerPhaseBudget } from './runner-xctestrun.ts';
+import {
+  addRunnerStartWaiter,
+  cancelRunnerStartWaiter,
+  createRunnerPhaseBudget,
+  markRunnerStartRetryPending,
+  releaseRunnerStartWaiter,
+  type RunnerPhaseBudget,
+  type RunnerStartAdmission,
+} from './runner-xctestrun.ts';
+import { stopRunnerPrepProcessesWithoutLiveOwner } from './runner-disposal.ts';
 import { normalizeRunnerStartupTimeoutMs, type RunnerSession } from './runner-session-types.ts';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
 
@@ -91,38 +99,83 @@ function runnerStartBudgetExhaustedError(timeoutMs: number, explicit: boolean): 
  *
  * The two abort reasons get opposite treatment of the detached start, and the difference is the
  * whole point (#2894 vs #3177). A caller's own deadline (a bounded poll) must leave the start
- * running: it is the start the retry joins. A cancelled request means the client is gone, and the
- * start it was waiting for belongs to nobody — its spawn carried the *waiting request's*
- * cancellation signal only when that request opened the start, so a request that merely joined a
- * start another request spawned has no path to it otherwise. On cancel the waiter stops the
- * device's prep subprocesses through the same tree-kill path a session stop uses, so a timed-out
- * `open` cannot orphan a `build-for-testing` on the shared runner derived-data root where a
- * retried `open` would race it. Only builds whose owning start is detached are stopped: a build
- * still owned by an in-flight request belongs to its owner and dies through the owner's own
- * signal, never under a canceled waiter. The start itself keeps running under the lock (bounded
- * by its own budget); its build is left running only while its owner is still there to cancel it.
+ * running: it is the start the retry joins. A cancelled request means the caller wants nothing
+ * more from this start, and the waiters are what hold a detached start's work alive: its spawn
+ * carried the *starting* request's cancellation signal only when that request opened the start, so
+ * a request that merely joined a start another request spawned has no path to it otherwise.
+ *
+ * The verdict belongs to the admission, not to this race: a waiter's cancellation closes the
+ * start's admission and stops the device's prep children no live caller owns any more — and only
+ * when it is the LAST interested one, because a build somebody is still waiting on belongs to that
+ * waiter's work and one request must not SIGTERM another's out from under it. The closed admission
+ * is what keeps the build it killed from being replaced by the start's next retry (#3220).
  */
 export async function raceRunnerStartAgainstCaller(
   start: Promise<RunnerSession>,
+  admission: RunnerStartAdmission,
   signal: AbortSignal | undefined,
-  deviceId: string,
 ): Promise<RunnerSession> {
   if (!signal) return await start;
   return await new Promise<RunnerSession>((resolve, reject) => {
+    const interested = signal.aborted
+      ? ('already-spent' as const)
+      : addRunnerStartWaiter(admission, signal);
     const abort = () => {
       reject(createRequestCanceledError(undefined, signal.reason));
-      if (!isCallerDeadlineAbortReason(signal.reason)) {
-        void stopRunnerPrepProcessesWithoutActiveOwner(deviceId);
-      }
       start.catch(emitDetachedRunnerStartFailed);
+      if (isCallerDeadlineAbortReason(signal.reason)) {
+        if (interested === 'interested') releaseRunnerStartWaiter(admission, signal);
+        // The start keeps running for this caller's retry (#2894), so its build stays owned:
+        // another caller's cancellation must not reach work a retry is still owed.
+        markRunnerStartRetryPending(admission);
+        return;
+      }
+      // Even a caller canceled before its interest registered closes the start's admission: the
+      // issue's pre-spawn window is exactly a cancel that arrives while the ledger is still
+      // empty, and the closed admission is what refuses the spawn that would otherwise follow.
+      if (cancelRunnerStartWaiter(admission, signal)) {
+        void stopRunnerPrepProcessesWithoutLiveOwner(admission.deviceId);
+      }
     };
     if (signal.aborted) {
       abort();
     } else {
       signal.addEventListener('abort', abort, { once: true });
     }
-    start.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+    start.then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', abort);
+      if (interested === 'interested') releaseRunnerStartWaiter(admission, signal);
+    });
   });
+}
+
+/**
+ * The starting request's own interest in the start it opened, for the surface where the caller
+ * hands over no `signal` at all: `raceRunnerStartAgainstCaller` registers nothing when there is
+ * no signal to listen on, and without an owner entry here the start is invisible to the
+ * last-waiter rule — a joiner canceling could then SIGTERM the live owner's build, which is the
+ * exact protection the removed #3193 owner sniff used to provide. Keyed on the startup signal
+ * (a cancelled request, never a deadline), so the owner's disconnect closes admission and stops
+ * the build the same way a last waiter's does. Returns the release, called once the start
+ * settles. A caller that did pass a signal already counts through the race; double-keying the
+ * same caller would keep its cancellation from ever being the last one.
+ */
+export function reserveRunnerStartOwnerInterest(
+  admission: RunnerStartAdmission,
+  options: RunnerSessionOptions,
+): () => void {
+  const signal = options.signal ? undefined : resolveRunnerStartupSignal(options);
+  if (!signal || addRunnerStartWaiter(admission, signal) !== 'interested') return () => {};
+  const onAbort = () => {
+    if (cancelRunnerStartWaiter(admission, signal)) {
+      void stopRunnerPrepProcessesWithoutLiveOwner(admission.deviceId);
+    }
+  };
+  signal.addEventListener('abort', onAbort, { once: true });
+  return () => {
+    signal.removeEventListener('abort', onAbort);
+    releaseRunnerStartWaiter(admission, signal);
+  };
 }
 
 /** A cancelled request killed its start on purpose; any other failure of a start nobody awaits is news. */

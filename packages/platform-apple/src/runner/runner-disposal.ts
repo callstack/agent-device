@@ -29,7 +29,7 @@ import {
   forgetRunnerPrepProcess,
   IOS_RUNNER_CONTAINER_BUNDLE_IDS,
   runnerPrepProcessChildren,
-  runnerPrepProcessChildrenWithoutActiveOwner,
+  runnerPrepProcessChildrenWithoutLiveOwner,
 } from './runner-xctestrun.ts';
 import { advanceRunnerSessionState, type RunnerSession } from './runner-session-types.ts';
 
@@ -116,20 +116,23 @@ export async function abortRunnerSessionsAndPrepProcesses(
 /**
  * Stops the prep subprocesses (the `xcodebuild build-for-testing` behind a cold runner start)
  * with the tree-kill escalation the sessions get. A device stops only its own builds: the caller
- * that stops device A's session must not sweep device B's in-flight build (#3177).
+ * that stops device A's session must not sweep device B's in-flight build (#3177). This device-wide
+ * form belongs to an explicit teardown, which has fenced the device and owns every build on it.
  */
 export async function stopRunnerPrepProcesses(deviceId?: string): Promise<void> {
   await stopPrepProcessList(runnerPrepProcessChildren(deviceId));
 }
 
 /**
- * Stops the device builds no active request owns anymore (#3177). A canceled waiter may stop the
- * build it waited on only once that build's owning start is detached; a build still owned by an
- * in-flight request belongs to its owner, which cancels it through its own signal, and a waiter
- * must not SIGTERM another request's work out from under it.
+ * Stops the device builds no live caller owns any more (#3177), the way #3193 did it and for the
+ * same reason: a canceled waiter may stop the build it waited on, but a build still owned by a
+ * caller who can cancel it belongs to that caller and dies through that caller's own signal. The
+ * difference is the mechanism — the waiter set on the start's own admission answers who owns a
+ * build, instead of a lookup of whether the owning request id still resolves to a live signal
+ * (#3220). A last-waiter cancellation calls this; an explicit teardown calls the device-wide form.
  */
-export async function stopRunnerPrepProcessesWithoutActiveOwner(deviceId?: string): Promise<void> {
-  await stopPrepProcessList(runnerPrepProcessChildrenWithoutActiveOwner(deviceId));
+export async function stopRunnerPrepProcessesWithoutLiveOwner(deviceId?: string): Promise<void> {
+  await stopPrepProcessList(runnerPrepProcessChildrenWithoutLiveOwner(deviceId));
 }
 
 async function stopPrepProcessList(

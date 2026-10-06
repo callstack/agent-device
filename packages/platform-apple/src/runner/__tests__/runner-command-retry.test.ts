@@ -1061,12 +1061,22 @@ function assertBadCacheRecoverySideEffects(
     fixtures.restoredArtifact,
     'Runner did not accept connection',
   ]);
-  assert.deepEqual(mockEnsureRunnerSession.mock.calls[1]?.[1], {
+  const firstCallOptions = mockEnsureRunnerSession.mock.calls[0]?.[1] as
+    | { startAdmission?: unknown }
+    | undefined;
+  const retryOptions = mockEnsureRunnerSession.mock.calls[1]?.[1] as
+    | Record<string, unknown>
+    | undefined;
+  assert.deepEqual(retryOptions, {
     healthTimeoutMs: 90_000,
     buildTimeoutMs: 300_000,
     cleanStaleBundles: true,
     forceRunnerXctestrunRebuild: true,
+    startAdmission: firstCallOptions?.startAdmission,
   });
+  // Both attempts of the prepare loop share one admission token: the retry
+  // is the replacement build for the first attempt, not a newcomer.
+  assert.ok(firstCallOptions?.startAdmission);
   assert.equal(mockExecuteRunnerCommandWithSession.mock.calls.length, 2);
   assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[0]?.[2].command, 'uptime');
   assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[0]?.[4], 90_000);
