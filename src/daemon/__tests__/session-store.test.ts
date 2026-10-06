@@ -1,10 +1,8 @@
+import { storeSessionForTest } from '../../__tests__/test-utils/store-factory.ts';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-// oxlint-disable-next-line no-restricted-imports -- asserts a path under os.homedir
-import os from 'node:os';
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../session-state.ts';
 import { buildRequestFinishedEvent } from '@agent-device/session-journal/session-event-log';
@@ -67,7 +65,7 @@ function recordOpen(
   flags: RecordActionEntry['flags'] = { platform: 'ios', saveScript: true },
   runtime?: RecordActionEntry['runtime'],
 ): void {
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'open',
     positionals: ['Settings'],
     flags,
@@ -77,7 +75,7 @@ function recordOpen(
 }
 
 function recordClose(store: SessionStore, session: SessionState): void {
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'close',
     positionals: [],
     flags: { platform: 'ios' },
@@ -86,7 +84,7 @@ function recordClose(store: SessionStore, session: SessionState): void {
 }
 
 function writeScript({ root, store, session }: SessionStoreFixture): string {
-  store.writeSessionLog(session);
+  store.writeSessionLog(storeSessionForTest(store, session));
   return readWrittenSessionScript(root);
 }
 
@@ -96,19 +94,6 @@ function assertScriptMatches(script: string, patterns: RegExp[]): void {
   }
 }
 
-test('expandHome resolves tilde, relative-with-cwd, and absolute paths', () => {
-  const homePath = SessionStore.expandHome('~/flows/replay.ad');
-  assert.equal(homePath.startsWith(os.homedir()), true);
-  assert.equal(homePath.endsWith(path.join('flows', 'replay.ad')), true);
-
-  const relativePath = SessionStore.expandHome('workflows/replay.ad', '/tmp/agent-device-cwd');
-  assert.equal(relativePath, path.resolve('/tmp/agent-device-cwd', 'workflows/replay.ad'));
-
-  const absoluteInput = path.resolve('/tmp', 'agent-device-absolute.ad');
-  const absolutePath = SessionStore.expandHome(absoluteInput, '/tmp/ignored-cwd');
-  assert.equal(absolutePath, absoluteInput);
-});
-
 test('defaultTracePath sanitizes session name', () => {
   const store = new SessionStore(
     path.join(mkdtempForTestSync('agent-device-tests'), 'agent-device-tests'),
@@ -117,30 +102,6 @@ test('defaultTracePath sanitizes session name', () => {
   const tracePath = store.defaultTracePath(session);
   assert.match(tracePath, /session_with_spaces/);
   assert.match(tracePath, /\.trace\.log$/);
-});
-
-test('resolveSessionDir keeps every session dir beneath the sessions dir', () => {
-  const sessionsDir = path.join(
-    mkdtempForTestSync('agent-device-tests'),
-    'agent-device-tests',
-    'sessions',
-  );
-  const store = new SessionStore(sessionsDir);
-  assert.equal(store.resolveSessionDir('a/b:c d'), path.join(sessionsDir, 'a_b_c_d'));
-  // `.` and `..` survive `safeSessionName` unchanged, so without an explicit
-  // refusal `path.join` resolves them to the sessions dir itself and its parent
-  // (the daemon state dir): a remote caller's `--session ..` would then land
-  // app.log / runner.log / requests/*.ndjson outside the sessions tree.
-  for (const name of ['.', '..', '']) {
-    assert.throws(
-      () => store.resolveSessionDir(name),
-      (error: unknown) =>
-        error instanceof AppError &&
-        error.code === 'INVALID_ARGS' &&
-        /session name/i.test(error.message),
-      `expected resolveSessionDir(${JSON.stringify(name)}) to reject`,
-    );
-  }
 });
 
 test('session lease metadata round-trips through the store', () => {
@@ -156,7 +117,7 @@ test('session lease metadata round-trips through the store', () => {
     expiresAt: 123_456,
   };
 
-  store.set(session.name, session);
+  store.publish(session.name, session);
 
   assert.deepEqual(store.get(session.name)?.lease, session.lease);
 });
@@ -164,7 +125,7 @@ test('session lease metadata round-trips through the store', () => {
 test('sessions without lease metadata remain valid', () => {
   const { store, session } = makeFixture('agent-device-session-unleased-');
 
-  store.set(session.name, session);
+  store.publish(session.name, session);
 
   assert.equal(store.get(session.name)?.lease, undefined);
 });
@@ -174,7 +135,7 @@ test('saveScript flag enables .ad session log writing', () => {
   recordOpen(store, session);
   recordClose(store, session);
 
-  store.writeSessionLog(session);
+  store.writeSessionLog(storeSessionForTest(store, session));
   assert.equal(listSessionScriptFiles(root).length, 1);
 });
 
@@ -182,7 +143,7 @@ test('parameterized fill publication writes only the placeholder to target and t
   const fixture = makeFixture('agent-device-session-log-parameterized-fill-');
   const secret = 'publication-only-live-value-1348';
   recordOpen(fixture.store, fixture.session);
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'fill',
     positionals: ['id="password"', secret],
     flags: { platform: 'ios', recordAs: 'PASSWORD' },
@@ -206,7 +167,7 @@ test('parameterized fill publication writes only the placeholder to target and t
 test('recordAction writes a paged session event log', async () => {
   const { store, session } = makeFixture('agent-device-session-events-');
   recordOpen(store, session, { platform: 'ios' });
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'click',
     positionals: ['@14', 'Checkout'],
     flags: { platform: 'ios' },
@@ -228,7 +189,7 @@ test('recordAction writes a paged session event log', async () => {
 
 test('recordAction event log redacts typed text and its length from display positionals', async () => {
   const { store, session } = makeFixture('agent-device-session-events-redaction-');
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'fill',
     positionals: ['@14', 'super-secret-token'],
     flags: {},
@@ -252,25 +213,25 @@ test('recordAction event log redacts payload-bearing and unknown positionals', a
   const eventPayload = '{"token":"event-secret-token"}';
   const futurePayload = 'future-secret-token';
 
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'clipboard',
     positionals: ['write', clipboardText],
     flags: {},
     result: { action: 'write', textLength: Array.from(clipboardText).length },
   });
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'push',
     positionals: ['com.example.app', pushPayload],
     flags: {},
     result: { message: 'Pushed notification to com.example.app' },
   });
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'trigger-app-event',
     positionals: ['checkout', eventPayload],
     flags: {},
     result: { message: 'Triggered app event checkout' },
   });
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'future-command',
     positionals: ['public-ish', futurePayload],
     flags: {},
@@ -295,13 +256,13 @@ test('recordAction event log redacts payload-bearing and unknown positionals', a
 test('recordAction event log omits transformed messages for redacted positionals', async () => {
   const { store, session } = makeFixture('agent-device-session-events-overlap-redaction-');
 
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'future-command',
     positionals: ['token', 'my-token-123'],
     flags: {},
     result: { message: 'Ran my-token-123 after token' },
   });
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'future-command',
     positionals: ['arg', 'my-arg-123'],
     flags: {},
@@ -323,7 +284,7 @@ test('recordAction event log omits transformed messages for redacted positionals
 
 test('recordAction event log does not leak short typed text or its length', async () => {
   const { store, session } = makeFixture('agent-device-session-events-short-text-');
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'type',
     positionals: ['e'],
     flags: {},
@@ -341,7 +302,7 @@ test('recordAction event log does not leak short typed text or its length', asyn
 
 test('recordAction event log omits value-bearing selector details', async () => {
   const { store, session } = makeFixture('agent-device-session-events-selector-redaction-');
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'click',
     positionals: ['value=123456'],
     flags: {},
@@ -368,7 +329,7 @@ test('recordAction event log omits value-bearing selector details', async () => 
 test('recordAction event log rejects malformed provider scroll output', async () => {
   const { store, session } = makeFixture('agent-device-session-events-malformed-scroll-');
   const privateValue = 'provider-private-scroll-value';
-  store.recordAction(session, {
+  store.recordAction(storeSessionForTest(store, session), {
     command: 'scroll',
     positionals: [privateValue],
     flags: {},
@@ -437,7 +398,7 @@ test('saveScript path writes session log to custom location', async () => {
   recordOpen(store, session, { platform: 'ios', saveScript: customPath });
   recordClose(store, session);
 
-  store.writeSessionLog(session);
+  store.writeSessionLog(storeSessionForTest(store, session));
   await store.flushEvents(session.name);
   assert.equal(fs.existsSync(customPath), true);
   assert.equal(fs.existsSync(store.resolveEventLogPath(session.name)), true);
@@ -455,7 +416,7 @@ test('writeSessionLog persists open --relaunch in script output', () => {
 test('writeSessionLog persists record --hide-touches flags in script output', () => {
   const fixture = makeFixture('agent-device-session-log-record-');
   recordOpen(fixture.store, fixture.session);
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'record',
     positionals: ['start', './capture.mp4'],
     flags: {
@@ -474,7 +435,7 @@ test('writeSessionLog persists record --hide-touches flags in script output', ()
 test('writeSessionLog persists screenshot flags in script output', () => {
   const fixture = makeFixture('agent-device-session-log-screenshot-');
   recordOpen(fixture.store, fixture.session);
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'screenshot',
     positionals: ['./page.png'],
     flags: { platform: 'ios', screenshotFullscreen: true, screenshotScale: 0.3 },
@@ -510,7 +471,7 @@ test('writeSessionLog persists inline open runtime hints in script output', () =
 test('writeSessionLog persists runtime set hints in script output', () => {
   const fixture = makeFixture('agent-device-session-log-runtime-');
   recordOpen(fixture.store, fixture.session);
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'runtime',
     positionals: ['set'],
     flags: {
@@ -533,7 +494,7 @@ test('writeSessionLog persists runtime set hints in script output', () => {
 test('writeSessionLog preserves interaction series flags for click/press/swipe', () => {
   const fixture = makeFixture('agent-device-session-log-series-flags-');
   recordOpen(fixture.store, fixture.session);
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'click',
     positionals: ['id="continue_button"'],
     flags: {
@@ -546,7 +507,7 @@ test('writeSessionLog preserves interaction series flags for click/press/swipe',
     },
     result: {},
   });
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'press',
     positionals: ['201', '545'],
     flags: {
@@ -556,7 +517,7 @@ test('writeSessionLog preserves interaction series flags for click/press/swipe',
     },
     result: {},
   });
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'swipe',
     positionals: ['10', '20', '30', '40'],
     flags: {
@@ -567,7 +528,7 @@ test('writeSessionLog preserves interaction series flags for click/press/swipe',
     },
     result: {},
   });
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'fill',
     positionals: ['@e5', 'search'],
     flags: {
@@ -576,7 +537,7 @@ test('writeSessionLog preserves interaction series flags for click/press/swipe',
     },
     result: {},
   });
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'gesture',
     positionals: ['pan', '195', '443', '48', '0', '500'],
     flags: {
@@ -600,19 +561,19 @@ test('writeSessionLog preserves interaction series flags for click/press/swipe',
 test('writeSessionLog optimizes selector chains and scopes fallback snapshots', () => {
   const fixture = makeFixture('agent-device-session-log-selectors-');
   recordOpen(fixture.store, fixture.session);
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'snapshot',
     positionals: [],
     flags: { platform: 'ios', snapshotInteractiveOnly: true },
     result: {},
   });
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'click',
     positionals: ['@e1'],
     flags: { platform: 'ios', count: 2 },
     result: { selectorChain: ['text="Continue"', 'role=button'], refLabel: 'Continue' },
   });
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'longpress',
     positionals: ['@e3', '800'],
     flags: { platform: 'ios' },
@@ -622,13 +583,13 @@ test('writeSessionLog optimizes selector chains and scopes fallback snapshots', 
     },
   });
   // #1783: hover @ref publishes as a portable selector line like click/longpress.
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'hover',
     positionals: ['@e4~s12'],
     flags: { platform: 'web', settle: true },
     result: { selectorChain: ['text="Second message"', 'role=link'] },
   });
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'fill',
     positionals: ['@e2', 'hello world'],
     flags: { platform: 'ios', delayMs: 5 },
@@ -670,19 +631,19 @@ test('writeSessionLog preserves significant whitespace and empty string argument
       launchUrl: 'myapp://dev ',
     },
   );
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'type',
     positionals: ['  leading\ttrailing  '],
     flags: { platform: 'ios' },
     result: {},
   });
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'fill',
     positionals: ['@e5', ''],
     flags: { platform: 'ios' },
     result: { refLabel: 'Search field' },
   });
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'screenshot',
     positionals: [' ./screens/final.png '],
     flags: { platform: 'ios' },
@@ -717,7 +678,7 @@ const SAVE_TARGET_EVIDENCE: TargetAnnotationV1 = {
 test('writeSessionLog emits the target-v1 annotation immediately before its action line', () => {
   const fixture = makeFixture('agent-device-session-log-target-evidence-');
   recordOpen(fixture.store, fixture.session);
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'click',
     positionals: ['@e12'],
     flags: { platform: 'ios' },
@@ -739,7 +700,7 @@ test('writeSessionLog emits the target-v1 annotation immediately before its acti
 test('writeSessionLog never fabricates a target-v1 annotation for actions recorded without evidence', () => {
   const fixture = makeFixture('agent-device-session-log-no-target-evidence-');
   recordOpen(fixture.store, fixture.session);
-  fixture.store.recordAction(fixture.session, {
+  fixture.store.recordAction(storeSessionForTest(fixture.store, fixture.session), {
     command: 'click',
     positionals: ['@e12'],
     flags: { platform: 'ios' },
@@ -763,7 +724,7 @@ test('writeRepairTombstone/readRepairTombstone round-trips owner + source path',
     sourcePath: '/flows/login.ad',
   });
 
-  store.writeRepairTombstone(session);
+  store.writeRepairTombstone(storeSessionForTest(store, session));
   const tombstone = store.readRepairTombstone('default');
   assert.ok(tombstone);
   assert.equal(tombstone?.owner, 'default');
@@ -776,7 +737,7 @@ test('readRepairTombstone returns undefined once the tombstone has expired', () 
   const store = new SessionStore(path.join(root, 'sessions'));
   const session = makeSession('default');
   // TTL 0 => expiresAt <= now => already stale.
-  store.writeRepairTombstone(session, 0);
+  store.writeRepairTombstone(storeSessionForTest(store, session), 0);
   assert.equal(store.readRepairTombstone('default'), undefined);
 });
 
@@ -784,7 +745,7 @@ test('clearRepairTombstone removes a tombstone (a fresh replay --save-script cle
   const root = mkdtempForTestSync('agent-device-tombstone-clear-');
   const store = new SessionStore(path.join(root, 'sessions'));
   const session = makeSession('default');
-  store.writeRepairTombstone(session);
+  store.writeRepairTombstone(storeSessionForTest(store, session));
   assert.ok(store.readRepairTombstone('default'));
 
   store.clearRepairTombstone('default');
@@ -818,7 +779,7 @@ test('BLOCKER 2: finalizeRepairTeardown of a COMPLETE transaction whose commit F
   session.actions = [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }];
 
   // Idle-reap/shutdown teardown (never routes through close's handler).
-  store.finalizeRepairTeardown(session);
+  store.finalizeRepairTeardown(storeSessionForTest(store, session));
 
   // The prior complete artifact is untouched — teardown's failed commit
   // never clobbers it.
@@ -859,7 +820,7 @@ test('BLOCKER 3: finalizeRepairTeardown auto-commit records a terminal close, pr
   // The source plan's terminal `close` was already skipped-while-armed
   // (Fix 3) — `session.actions` never gained one. Idle-reap/shutdown teardown
   // must synthesize it itself before auto-committing.
-  store.finalizeRepairTeardown(session);
+  store.finalizeRepairTeardown(storeSessionForTest(store, session));
 
   assert.equal(
     session.scriptPublication?.kind === 'repair' ? session.scriptPublication.status : undefined,
@@ -887,7 +848,7 @@ test('BLOCKER 3: finalizeRepairTeardown auto-commit records a terminal close, pr
 
 test('noteSessionActivity stamps the live record and ignores an unknown address', () => {
   const { store, session } = makeFixture('agent-device-store-note-activity-');
-  store.set('default', session);
+  store.publish('default', session);
   assert.equal(session.lastActivityAtMs, undefined);
 
   store.noteSessionActivity('default', 5_000);

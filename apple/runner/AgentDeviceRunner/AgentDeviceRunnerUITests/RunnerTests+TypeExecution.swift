@@ -27,6 +27,8 @@ extension RunnerTests {
       hasY: command.y != nil,
       xCTestChannelPenalized: xCTestChannelPenalized
     ), let x = command.x, let y = command.y {
+      // Resolved before the tap: the focus it causes can move the field away from this point.
+      let inputAtPoint = coordinateTapTextInputIdentityAt(app: activeApp, x: x, y: y)
       let policyKind = SynthesizedGesturePolicyKind.coordinateTap
       let context = synthesizedCoordinateContext(
         app: activeApp,
@@ -40,7 +42,8 @@ extension RunnerTests {
         resolvedCoordinateTarget = TextEntryTarget(
           element: nil,
           refreshPoint: CGPoint(x: x, y: y),
-          prefersFocusedElement: false
+          prefersFocusedElement: false,
+          inputAtRefreshPoint: inputAtPoint
         )
       case .xctestFallback:
         break
@@ -120,17 +123,27 @@ extension RunnerTests {
       // application AX tree only to emit unused reference dimensions.
       frame = .zero
     }
-    return Response(
-      ok: true,
-      data: DataPayload(
-        message: textResult.repaired ? "typed after repair" : "typed",
-        x: point.map { Double($0.x) },
-        y: point.map { Double($0.y) },
-        referenceWidth: frame.isEmpty ? nil : Double(frame.width),
-        referenceHeight: frame.isEmpty ? nil : Double(frame.height),
-        maestroNonHittableCoordinateFallbackUsed: maestroNonHittableCoordinateFallbackUsed,
-        textEntryRoute: textResult.textEntryRoute
-      )
+    var data = DataPayload(
+      message: textResult.repaired ? "typed after repair" : "typed",
+      x: point.map { Double($0.x) },
+      y: point.map { Double($0.y) },
+      referenceWidth: frame.isEmpty ? nil : Double(frame.width),
+      referenceHeight: frame.isEmpty ? nil : Double(frame.height),
+      maestroNonHittableCoordinateFallbackUsed: maestroNonHittableCoordinateFallbackUsed,
+      textEntryRoute: textResult.textEntryRoute
     )
+    if let unconfirmed = textResult.unconfirmed {
+      data.verification = "unconfirmed"
+      data.requested = unconfirmed.requested
+      data.before = unconfirmed.before
+      data.after = unconfirmed.after
+      data.target = TextEntryVerificationTargetPayload(
+        resourceId: unconfirmed.target.identifier,
+        className: unconfirmed.target.elementType,
+        packageName: command.appBundleId,
+        rect: SnapshotRect(unconfirmed.target.frame)
+      )
+    }
+    return Response(ok: true, data: data)
   }
 }

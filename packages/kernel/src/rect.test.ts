@@ -7,6 +7,8 @@ import {
   isPositiveFiniteRect,
   isRectVisibleInViewport,
   pickLargestRect,
+  readSnapshotViewportSize,
+  snapshotViewportSizeFrom,
 } from './rect.ts';
 
 const VIEWPORT: Rect = { x: 0, y: 0, width: 300, height: 500 };
@@ -58,6 +60,83 @@ test('the sentinel would survive any check that only looks at components and ext
     true,
     'one byte off is a real box',
   );
+});
+
+// #3182: the viewport a response publishes has exactly one construction path and exactly one wire
+// re-read, and both answer a box they cannot accept with absence. A zero the producer answered with
+// has to become "unknown", never a claim that the screen has no width.
+test('snapshotViewportSizeFrom publishes only a box the rect guard accepts (#3182)', () => {
+  assert.deepEqual(snapshotViewportSizeFrom({ x: 12, y: -40, width: 390, height: 844 }), {
+    width: 390,
+    height: 844,
+  });
+  assert.equal(snapshotViewportSizeFrom(undefined), undefined, 'a producer that read nothing');
+  assert.equal(
+    snapshotViewportSizeFrom({ x: 0, y: 0, width: 0, height: 844 }),
+    undefined,
+    'a zero width is unknown, never a screen of no size',
+  );
+  assert.equal(
+    snapshotViewportSizeFrom({ x: 0, y: 0, width: Number.NaN, height: 844 }),
+    undefined,
+    'a non-finite extent',
+  );
+  assert.equal(snapshotViewportSizeFrom(CG_RECT_INFINITE), undefined, 'the failed-read sentinel');
+  // A viewport carries no origin, so the producer that hands over the box it still holds after a
+  // refused read arrives with plausible coordinates beside the sentinel's extents. The extents alone
+  // have to refuse it, or the largest number on the wire becomes the screen (#2891).
+  assert.equal(
+    snapshotViewportSizeFrom({ x: 0, y: 0, width: Number.MAX_VALUE, height: Number.MAX_VALUE }),
+    undefined,
+    'failed-read extents beside a plausible origin',
+  );
+  assert.equal(
+    snapshotViewportSizeFrom({ x: 0, y: 0, width: 390, height: Number.MAX_VALUE }),
+    undefined,
+    'one failed-read extent',
+  );
+});
+
+test('readSnapshotViewportSize accepts only a guard-approved pair from a wire payload (#3182)', () => {
+  assert.deepEqual(readSnapshotViewportSize({ width: 1080, height: 2400 }), {
+    width: 1080,
+    height: 2400,
+  });
+  for (const unusable of [
+    undefined,
+    null,
+    'screen',
+    [],
+    {},
+    { width: 1080 },
+    { width: '1080', height: 2400 },
+    { width: 0, height: 2400 },
+    { width: 1080, height: -1 },
+    { width: Number.NaN, height: 2400 },
+  ]) {
+    assert.equal(readSnapshotViewportSize(unusable), undefined, String(unusable));
+  }
+  // A producer shipping the failed-read box whole ships the sentinel origin beside maximal extents;
+  // an origin on the wire is inspected, not flattened to (0, 0).
+  assert.equal(
+    readSnapshotViewportSize({ ...CG_RECT_INFINITE }),
+    undefined,
+    'the infinite sentinel with its origin',
+  );
+  // The published shape has no origin at all, so the ordinary broken payload is the originless one:
+  // the extents have to be enough to recognise a failed read, or `x ?? 0` would mint the largest
+  // finite box on the wire as the screen every rect is measured in.
+  assert.equal(
+    readSnapshotViewportSize({ width: Number.MAX_VALUE, height: Number.MAX_VALUE }),
+    undefined,
+    'failed-read extents with no origin',
+  );
+  assert.equal(
+    readSnapshotViewportSize({ width: 390, height: Number.MAX_VALUE }),
+    undefined,
+    'one failed-read extent',
+  );
+  assert.equal(readSnapshotViewportSize({ width: 1, height: 1, x: '0' }), undefined);
 });
 
 test('containsPoint is inclusive on every edge and requires all four bounds', () => {

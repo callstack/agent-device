@@ -28,6 +28,8 @@ const ANDROID_LAUNCHER_CATEGORY = 'android.intent.category.LAUNCHER';
 const ANDROID_LEANBACK_CATEGORY = 'android.intent.category.LEANBACK_LAUNCHER';
 const ANDROID_DEFAULT_CATEGORY = 'android.intent.category.DEFAULT';
 const ANDROID_LOCALHOST_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+/** Owns localhost URL reverses, so a teardown that removes only owned mappings removes them too. */
+const ANDROID_LOCALHOST_URL_REVERSE_OWNER = 'localhost-url';
 const ANDROID_CLOSE_FOCUS_TIMEOUT_MS = 2_000;
 const ANDROID_CLOSE_FOCUS_POLL_MS = 50;
 const ANDROID_CLOSE_PROCESS_TIMEOUT_MS = 2_000;
@@ -124,7 +126,11 @@ async function ensureAndroidLocalhostReverse(device: DeviceInfo, target: string)
 
   const reverse = createAndroidPortReverseManager(resolveAndroidAdbProvider(device));
   try {
-    await reverse.ensure({ local: endpoint, remote: endpoint });
+    await reverse.ensure({
+      local: endpoint,
+      remote: endpoint,
+      ownerId: ANDROID_LOCALHOST_URL_REVERSE_OWNER,
+    });
   } catch (error) {
     const details = {
       localPort: endpoint.replace('tcp:', ''),
@@ -132,6 +138,7 @@ async function ensureAndroidLocalhostReverse(device: DeviceInfo, target: string)
     };
     if (error instanceof AppError) {
       Object.assign(details, {
+        reason: error.details?.reason,
         hint: error.details?.hint,
         diagnosticId: error.details?.diagnosticId,
         logPath: error.details?.logPath,

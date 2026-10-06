@@ -15,11 +15,12 @@ import type { CommandSchemaOverride } from '@agent-device/command-registry/comma
 import type { CliFlags } from '@agent-device/contracts/command';
 import { AppError } from '@agent-device/kernel/errors';
 import { readLocationCoordinate } from '@agent-device/kernel/location-coordinates';
+import { compactRecord } from '../input-readers.ts';
 import { enumField, numberField, requiredField, stringField } from '../command-input.ts';
 import {
-  direct,
   isOneOf,
   optionalString,
+  request,
   selectionOptionsFromFlags,
   setOf,
 } from '../cli-grammar/common.ts';
@@ -41,7 +42,9 @@ const settingsCommandMetadata = defineFieldCommandMetadata(
     // value the target holds. Every other setting still requires one, which the command's own parse
     // and the daemon enforce per setting rather than the shared field map.
     state: stringField(),
-    app: stringField(),
+    app: stringField(
+      'App the change targets, by bundle id or package name: the app `clear-app-state` clears, or the app a `permission` change (or an iOS-simulator `location on|off` privacy change) lands on. An app named here needs no session and need not be running (Android `deny|reset` of a held permission does kill a running one); without it those changes use the session app, and a change that is device-wide refuses one with `setting_app_not_consumed` (`location set` on any target, the Android `location on|off` toggle, macOS permissions). The CLI consumes it only when this invocation passes it: an `AGENT_DEVICE_TARGET_APP` or config `targetApp` never retargets a settings mutation.',
+    ),
     latitude: numberField(),
     longitude: numberField(),
     permission: stringField(),
@@ -53,20 +56,56 @@ const settingsCliSchema = {
   usageOverride: SETTINGS_USAGE_OVERRIDE,
   listUsageOverride: 'settings [area] [options]',
   positionalArgs: ['setting', 'state?', 'target?', 'mode?'],
+  // `--app` names the app an app-scoped change lands on (`settings permission grant camera --app
+  // com.example.app`), shared with `doctor`. It rides the request's input payload, not a positional,
+  // because the setting's own positionals already carry the permission target and mode.
+  allowedFlags: ['targetApp'],
+  // A settings mutation changes state on the app it resolves, so the app must come only from this
+  // invocation: `doctor` reads `--app` to check someone's default app, and the same env or config
+  // key must never redirect a `grant` or a destructive `clear-app-state` away from the session app.
+  explicitOnlyFlags: ['targetApp'],
 } as const satisfies CommandSchemaOverride;
 
-export const settingsCliReader: CliReader = (positionals, flags) =>
-  readSettingsOptionsFromPositionals(positionals, flags);
+export const settingsCliReader: CliReader = (positionals, flags) => {
+  const options = readSettingsOptionsFromPositionals(positionals, flags);
+  // `clear-app-state` resolves `--app` against its own positional slot while it parses, so the
+  // option is added here only for the settings whose app has no positional. Whether a mutation can
+  // consume an app at all is the daemon's scope table to decide once it knows the resolved target.
+  return options.setting === 'clear-app-state' || flags.targetApp === undefined
+    ? options
+    : { ...options, app: flags.targetApp };
+};
 
-export const settingsDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.settings, (input) =>
-  settingsPositionals(input as SettingsUpdateOptions),
-);
+export const settingsDaemonWriter: DaemonWriter = (input) => {
+  const options = input as SettingsUpdateOptions;
+  // The app-scoped `app` has no positional of its own and `app` is no CLI flag key, so it crosses
+  // the daemon boundary as request input the way a gesture payload does: read back by the handler,
+  // never reconstructed from the command line. `clear-app-state` keeps carrying its app
+  // positionally, as it always has.
+  const settingsInput = compactRecord({ app: settingsInputApp(options) });
+  return request(
+    PUBLIC_COMMANDS.settings,
+    settingsPositionals(options),
+    input,
+    Object.keys(settingsInput).length === 0 ? undefined : settingsInput,
+  );
+};
+
+/** The settings whose `app` reaches the daemon through request input rather than a positional. */
+function settingsInputApp(input: SettingsUpdateOptions): string | undefined {
+  if (input.setting === 'permission') return input.app;
+  // Every location state forwards the app: `on|off` consumes it on Apple, and `set` is device-wide
+  // for everyone, so the daemon's scope table refuses the named app instead of the writer dropping
+  // it without a word.
+  if (input.setting === 'location') return input.app;
+  return undefined;
+}
 
 export const settingsCommandFacet = defineCommandFacet({
   name: SETTINGS_COMMAND_NAME,
   text: {
     summary: 'Change OS settings and app permissions',
-    cliDetail: `macOS supports only settings appearance <light|dark|toggle> and settings ${SETTINGS_MACOS_PERMISSION_USAGE}; wifi|airplane|location|animations|text-size remain unsupported on macOS. Mobile permission actions use the active session app. On Android, deny|reset of a permission the app currently holds kills a running app; the response reports priorGrantState (granted|not_granted|unknown) and warns for granted and unknown, with open <app> --relaunch to restore it. Permission changes require a resolvable foreground user and fail without mutating if adb cannot report one. Android settings airplane on|off is applied by the connectivity service (Android 11+) and reports the airplaneMode that service holds; older builds fail without changing device state. settings reset-keychain clear is iOS-simulator-only and resets the whole simulator keychain, not just the selected app: simctl exposes no per-app keychain reset, so every app on that simulator loses its keychain-backed credentials (e.g. Firebase auth). clear-app-state does not touch the keychain, so a full fresh-install reset needs both; relaunch the app afterward to observe the signed-out state. settings text-size reads the preferred text size the target holds and settings text-size <category> applies one, on iPhone and iPad simulators (simctl content size) and on Android targets (system font_scale); tvOS and visionOS simulators, physical Apple devices, and the macOS host refuse it. Android has no category ladder of its own, so the read names the nearest rung and reports the exact multiplier as platformValue; an already-running app adopts a changed size at its next configuration change, so relaunch the app under test to observe it.`,
+    cliDetail: `macOS supports only settings appearance <light|dark|toggle> and settings ${SETTINGS_MACOS_PERMISSION_USAGE}; wifi|airplane|location|animations|text-size remain unsupported on macOS. Mobile permission actions default to the active session app; pass --app <id> (or the app input) to aim a permission change, or an iOS-simulator location on|off, at an installed app no session has opened; no app needs to be running, and the CLI consumes the app only when this invocation names it, never from AGENT_DEVICE_TARGET_APP or config targetApp. clear-app-state takes its app positionally or with --app, and refuses two different apps. A device-wide change refuses an app with setting_app_not_consumed: location set moves the device's own coordinates on every target, the Android location toggle writes the device's location_mode, and a macOS permission is a host-level TCC grant. On Android, deny|reset of a permission the app currently holds kills a running app; the response reports priorGrantState (granted|not_granted|unknown) and warns for granted and unknown, with open <app> --relaunch to restore it. Permission changes require a resolvable foreground user and fail without mutating if adb cannot report one. Android settings airplane on|off is applied by the connectivity service (Android 11+) and reports the airplaneMode that service holds; older builds fail without changing device state. settings reset-keychain clear is iOS-simulator-only and resets the whole simulator keychain, not just the selected app: simctl exposes no per-app keychain reset, so every app on that simulator loses its keychain-backed credentials (e.g. Firebase auth). clear-app-state does not touch the keychain, so a full fresh-install reset needs both; relaunch the app afterward to observe the signed-out state. settings text-size reads the preferred text size the target holds and settings text-size <category> applies one, on iPhone and iPad simulators (simctl content size) and on Android targets (system font_scale); tvOS and visionOS simulators, physical Apple devices, and the macOS host refuse it. Android has no category ladder of its own, so the read names the nearest rung and reports the exact multiplier as platformValue; an already-running app adopts a changed size at its next configuration change, so relaunch the app under test to observe it.`,
   },
   metadata: settingsCommandMetadata,
   run: (client, input) => client.settings.update(input as SettingsUpdateOptions),
@@ -124,13 +163,29 @@ function readSettingsOptionsFromPositionals(
     };
   }
   if (setting === 'clear-app-state') {
-    const app = state === 'clear' ? positionals[2] : state;
-    return { ...base, setting, state: 'clear', app };
+    return { ...base, setting, state: 'clear', app: readClearAppStateApp(positionals, flags) };
   }
   if (setting === 'reset-keychain' && state === 'clear' && positionals.length === 2) {
     return { ...base, setting, state };
   }
   throw new AppError('INVALID_ARGS', 'Invalid settings arguments.');
+}
+
+/**
+ * The app `clear-app-state` clears: its positional, or `--app` when no positional names one. A
+ * positional and a different `--app` is a contradiction refused here, because clearing either one
+ * would silently drop the other, and an unnamed slot would fall through to the session app.
+ */
+function readClearAppStateApp(positionals: string[], flags: CliFlags): string | undefined {
+  const positionalApp = positionals[1] === 'clear' ? positionals[2] : positionals[1];
+  const flagApp = flags.targetApp;
+  if (positionalApp !== undefined && flagApp !== undefined && positionalApp !== flagApp) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `settings clear-app-state names two apps: ${positionalApp} and ${flagApp}. Name one.`,
+    );
+  }
+  return positionalApp ?? flagApp;
 }
 
 function settingsPositionals(input: SettingsUpdateOptions): string[] {

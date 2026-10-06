@@ -27,6 +27,19 @@ test('xctrace parser accepts Apple devices only from the online Devices section'
   );
 });
 
+test('xctrace parser reports the OS version printed beside a physical device', () => {
+  const [device] = parseXctracePhysicalAppleDevices(
+    [
+      '== Devices ==',
+      'Oskar’s Mac Mini (A80D8E51-93C6-5832-A2EC-FAF18C7F6B6C)',
+      'Oskar’s iPhone (18.6) (00008110-001A2B3C4D5E801E)',
+    ].join('\n'),
+  );
+  assert.equal(device?.id, '00008110-001A2B3C4D5E801E');
+  assert.equal(device?.osVersion, '18.6');
+  assert.equal(device?.model, undefined);
+});
+
 test('physical inventory prefers CoreDevice, supplements xctrace, and disposes its file', async () => {
   const calls: string[][] = [];
   let disposeCount = 0;

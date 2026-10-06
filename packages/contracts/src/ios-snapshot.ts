@@ -219,6 +219,11 @@ export type IosSnapshotPublication = Readonly<{
   presentationKey: IosSnapshotPresentationKey;
   comparisonIdentity: IosSnapshotComparisonIdentity;
   residue: readonly IosAcquisitionResidue[];
+  /**
+   * The box the regular projection validated this tree against (#3182), handed over by the engine
+   * that measured against it. A raw projection validates no box and carries none.
+   */
+  validatedViewport?: Rect;
 }>;
 
 export type IosSnapshotEngine = Readonly<{

@@ -44,7 +44,18 @@ export async function skipWhenLoopbackUnavailable(
   return true;
 }
 
+// Connections the test server accepted after it started listening. A `net.Server` refuses to close
+// while a connection is live, and a hung-request stand-in keeps one open past the client's RST, so
+// teardown destroys them — the job `DaemonServer.destroyConnections` does for the real daemon.
+const acceptedConnections = new WeakMap<LoopbackServer, Set<net.Socket>>();
+
 export async function listenOnLoopback(server: LoopbackServer): Promise<number> {
+  const sockets = new Set<net.Socket>();
+  acceptedConnections.set(server, sockets);
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+  });
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', () => {
@@ -60,6 +71,10 @@ export async function listenOnLoopback(server: LoopbackServer): Promise<number> 
 }
 
 export async function closeLoopbackServer(server: LoopbackServer): Promise<void> {
+  for (const socket of acceptedConnections.get(server) ?? []) {
+    socket.destroy();
+  }
+  acceptedConnections.delete(server);
   if (!server.listening) return;
   closeHttpConnections(server);
   await new Promise<void>((resolve, reject) => {
@@ -77,6 +92,29 @@ function closeHttpConnections(server: LoopbackServer): void {
   const maybeHttpServer = server as http.Server;
   maybeHttpServer.closeAllConnections?.();
   maybeHttpServer.closeIdleConnections?.();
+}
+
+/**
+ * `net.Server.close()` waits for every accepted connection to finish, and a request handler that
+ * never answers keeps its connection open forever — `http.Server` has `closeAllConnections()` and
+ * `net.Server` has no equivalent. Track the accepted sockets so a test whose assertion already
+ * failed can destroy them instead of hanging in teardown: a regression in cancellation wiring must
+ * surface as the failed assertion, not as the test timeout swallowing it.
+ */
+export function trackLoopbackSockets(server: net.Server): () => void {
+  const sockets = new Set<net.Socket>();
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => {
+      sockets.delete(socket);
+    });
+  });
+  return () => {
+    for (const socket of sockets) {
+      socket.destroy();
+    }
+    sockets.clear();
+  };
 }
 
 export function waitForHttpOk(url: string, timeoutMs: number): Promise<void> {

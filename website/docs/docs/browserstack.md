@@ -30,6 +30,8 @@ agent-device connect browserstack \
 
 During `connect`, agent-device verifies the BrowserStack credentials and the exact device/OS pair. It checks a `bs://` reference against recent uploads and confirms that a local artifact exists before saving its absolute path. A public URL stays configured and BrowserStack validates it when the session starts. `open` still needs the app's installed package or bundle identifier, not its upload name.
 
+A running daemon keeps the BrowserStack credentials it started with. If your shell holds different ones, the first command that allocates a lease, such as `open`, refuses before it creates a session; run `agent-device daemon stop` (with the same `--state-dir`) and rerun the command. A shell that sets neither variable uses the daemon's.
+
 Optional labels:
 
 ```bash

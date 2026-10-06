@@ -6,9 +6,8 @@ import type {
   MaestroObservation,
   MaestroRuntimePort,
   MaestroRuntimeRequest,
-  MaestroRuntimeResult,
 } from '../engine-types.ts';
-import { executeMaestroProgram } from './runtime-port-fixtures.ts';
+import { executeMaestroProgram, makePort } from './runtime-port-fixtures.ts';
 
 describe('executeMaestroProgram', () => {
   test('preserves authored percentage swipe intent without observing', async () => {
@@ -857,21 +856,3 @@ describe('executeMaestroProgram', () => {
     expect(execute.mock.calls[0]?.[0].signal).toBe(controller.signal);
   });
 });
-
-function makePort(overrides: Partial<MaestroRuntimePort> = {}): MaestroRuntimePort {
-  return {
-    execute: vi.fn(async (request): Promise<MaestroRuntimeResult> => {
-      const { command } = request;
-      if (
-        command.kind !== 'takeScreenshot' &&
-        command.kind !== 'runScript' &&
-        command.kind !== 'waitForAnimationToEnd'
-      ) {
-        request.invalidateObservation();
-      }
-      return command.kind === 'takeScreenshot' ? { artifactPaths: [command.path] } : {};
-    }),
-    observe: vi.fn(async ({ generation }) => ({ generation, matched: true })),
-    ...overrides,
-  };
-}

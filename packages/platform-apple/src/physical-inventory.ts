@@ -53,6 +53,7 @@ function parseXctracePhysicalAppleDeviceLine(line: string): DeviceInfo | undefin
     kind: 'device',
     target,
     appleOs: resolveAppleOs(target, osVersion ? [name, osVersion] : [name]),
+    ...(osVersion ? { osVersion } : {}),
     iosPhysicalDeviceBackend: 'xctest',
     booted: true,
   };

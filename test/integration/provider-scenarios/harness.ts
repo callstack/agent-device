@@ -17,6 +17,7 @@ import {
   type PlatformProviderResolvers,
 } from '../../../src/platform-runtime.ts';
 import { platformResourceCleanup } from '../../../src/platform-runtime-resource-cleanup.ts';
+import { readDaemonProviderCredentials } from '../../../src/provider-credential-fingerprint.ts';
 import type { AppleSimulatorScreenRecordingProcess } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
 import { trackDownloadableArtifact } from '../../../src/daemon/artifact-tracking.ts';
 import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
@@ -83,7 +84,7 @@ export type ProviderScenarioHarness = {
   token: string;
   session: (name?: string) => SessionState | undefined;
   sessionDir: (name?: string) => string;
-  setSession: (name: string, session: SessionState) => void;
+  publishSession: (name: string, session: SessionState) => void;
   close: () => Promise<void>;
 };
 
@@ -137,6 +138,7 @@ export async function createProviderScenarioHarness(
     vegaToolProvider,
     webProvider,
     appleSimulatorScreenRecordingTransport,
+    providerCredentials = readDaemonProviderCredentials({}, path.dirname(sessionDir)),
     ...routerDeps
   } = deps;
   const platformRuntimeOptions =
@@ -196,6 +198,7 @@ export async function createProviderScenarioHarness(
           ownedProcessRecords,
         },
       }),
+    providerCredentials,
     ...routerDeps,
   });
   const handleRequest: typeof requestHandler = async (request) => {
@@ -229,7 +232,7 @@ export async function createProviderScenarioHarness(
     token: PROVIDER_SCENARIO_TOKEN,
     session: (name = 'default') => sessionStore.get(name),
     sessionDir: (name = 'default') => sessionStore.resolveSessionDir(name),
-    setSession: (name, session) => sessionStore.set(name, session),
+    publishSession: (name, session) => sessionStore.publish(name, session),
     close: async () => {
       await deviceRuntimeGateway.shutdown();
       await removeProviderScenarioTempDir(sessionDir);

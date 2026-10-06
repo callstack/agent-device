@@ -1,5 +1,5 @@
 import { buildDeviceInventoryRequestFromFlags } from '@agent-device/device-selection/dispatch-resolve';
-import { listDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
+import { readDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
 import {
   countDeviceInventoryByGroup,
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
@@ -18,10 +18,13 @@ import { normalizeError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
 import type { DoctorCheck } from '@agent-device/contracts/observability';
+import type { DeviceInventoryDiscovery } from '@agent-device/contracts/platform-module';
 import { appendDoctorCheck } from './session-doctor-output.ts';
 
 export type DoctorDeviceInventory = {
   devices: DeviceInfo[];
+  /** The devices this host discovered itself; a provider-reported device is not on this host. */
+  hostDevices: DeviceInfo[];
   platform?: PlatformSelector;
   target?: DeviceTarget;
 };
@@ -53,7 +56,12 @@ export async function appendDeviceInventoryCheck(
     if (devices.length > 0) {
       appendInventoryFailureChecks(checks, inventory.failures);
     }
-    return { devices, platform: selector.platform, target: selector.target };
+    return {
+      devices,
+      hostDevices: devices.filter((device) => inventory.hostDevices.includes(device)),
+      platform: selector.platform,
+      target: selector.target,
+    };
   } catch (error) {
     const normalized = normalizeError(error);
     appendDoctorCheck(checks, {
@@ -64,7 +72,7 @@ export async function appendDeviceInventoryCheck(
       command: 'agent-device devices',
       evidence: { code: normalized.code, details: normalized.details },
     });
-    return { devices: [], platform: selector.platform, target: selector.target };
+    return { devices: [], hostDevices: [], platform: selector.platform, target: selector.target };
   }
 }
 
@@ -126,23 +134,37 @@ function filterInventoryForSelector(
   );
 }
 
-async function readDoctorDeviceInventory(
-  selector: DeviceInventoryRequest,
-): Promise<{ devices: DeviceInfo[]; failures: DoctorInventoryFailure[] }> {
+async function readDoctorDeviceInventory(selector: DeviceInventoryRequest): Promise<{
+  devices: DeviceInfo[];
+  hostDevices: DeviceInfo[];
+  failures: DoctorInventoryFailure[];
+}> {
   if (selector.platform) {
-    return { devices: await listDeviceInventory(selector), failures: [] };
+    return { ...combineDiscoveries([await readDeviceInventory(selector)]), failures: [] };
   }
 
-  const devices: DeviceInfo[] = [];
+  const discoveries: DeviceInventoryDiscovery[] = [];
   const failures: DoctorInventoryFailure[] = [];
   for (const platform of LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS) {
     try {
-      devices.push(...(await listDeviceInventory({ ...selector, platform })));
+      discoveries.push(await readDeviceInventory({ ...selector, platform }));
     } catch (error) {
       failures.push(inventoryFailure(platform, error));
     }
   }
-  return { devices, failures };
+  return { ...combineDiscoveries(discoveries), failures };
+}
+
+function combineDiscoveries(discoveries: readonly DeviceInventoryDiscovery[]): {
+  devices: DeviceInfo[];
+  hostDevices: DeviceInfo[];
+} {
+  return {
+    devices: discoveries.flatMap((discovery) => discovery.devices),
+    hostDevices: discoveries.flatMap((discovery) =>
+      discovery.source === 'local' ? discovery.devices : [],
+    ),
+  };
 }
 
 function appendInventoryFailureChecks(

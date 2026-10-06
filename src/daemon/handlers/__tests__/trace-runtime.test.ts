@@ -22,7 +22,7 @@ function fixture() {
     createdAt: Date.now(),
     actions: [],
   };
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   return { root, session, sessionStore };
 }
 

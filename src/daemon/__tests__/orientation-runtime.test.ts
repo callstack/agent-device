@@ -195,7 +195,7 @@ test('request router joins orientation admission to execution and ref invalidati
   const sessionStore = makeSessionStore('agent-device-orientation-generic-');
   const session = makeSession('orientation-runtime', { device: testDevice });
   activateCompleteRefFrame(session);
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const handler = createRequestHandler({
     logPath: '/tmp/daemon.log',
     token: 't',

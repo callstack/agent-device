@@ -22,6 +22,9 @@ Project-level values override user-level values where they are permitted. Enviro
 both. CLI flags always win. `--config <path>` or `AGENT_DEVICE_CONFIG` loads one explicit,
 operator-controlled file instead of the default locations.
 
+Set `AGENT_DEVICE_HOME` to an absolute path (or `~/...`) to relocate the user config and
+[managed provider plugins](./plugins.md). This setting does not relocate daemon state.
+
 `./agent-device.json` cannot contain endpoint, credential, daemon transport/server, tenant/run/lease,
 provider/cloud, Metro connection, or other operator-controlled fields. The CLI rejects those keys during
 parse, before it creates a daemon transport or sends a health request. This prevents a repository from
@@ -122,13 +125,15 @@ These env vars are the supported user-facing configuration surface. Other `AGENT
 
 | Category | Env vars | Decision |
 | --- | --- | --- |
-| CLI defaults and config | `AGENT_DEVICE_CONFIG`, `AGENT_DEVICE_SESSION`, `AGENT_DEVICE_PLATFORM`, `AGENT_DEVICE_SCREENSHOT_SCALE`, `AGENT_DEVICE_SESSION_LOCK`, `AGENT_DEVICE_DAEMON_BASE_URL`, `AGENT_DEVICE_DAEMON_AUTH_TOKEN`, `AGENT_DEVICE_CLOUD_BASE_URL` | Public |
+| CLI defaults and config | `AGENT_DEVICE_HOME`, `AGENT_DEVICE_CONFIG`, `AGENT_DEVICE_SESSION`, `AGENT_DEVICE_PLATFORM`, `AGENT_DEVICE_SCREENSHOT_SCALE`, `AGENT_DEVICE_SESSION_LOCK`, `AGENT_DEVICE_DAEMON_BASE_URL`, `AGENT_DEVICE_DAEMON_AUTH_TOKEN`, `AGENT_DEVICE_CLOUD_BASE_URL` | Public |
 | Device scoping | `AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST` | Public |
+| Android test IME | `AGENT_DEVICE_TEST_IME` | Public. Same setting as `--test-ime` / `--no-test-ime` on `open`, `test`, and `replay`; see known limitations. |
 | Local daemon storage | `AGENT_DEVICE_STATE_DIR` | Public |
 | Metro and install helpers | `AGENT_DEVICE_METRO_BEARER_TOKEN`, `AGENT_DEVICE_BUNDLETOOL_JAR` | Public |
 | App hooks and logs | `AGENT_DEVICE_APP_EVENT_URL_TEMPLATE`, `AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE`, `AGENT_DEVICE_MACOS_APP_EVENT_URL_TEMPLATE`, `AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE`, `AGENT_DEVICE_APP_LOG_MAX_BYTES`, `AGENT_DEVICE_APP_LOG_MAX_FILES`, `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS`, `AGENT_DEVICE_EVENT_LOG_MAX_BYTES` | Public. Byte caps take whole integers (`5242880`), not `5MB`. |
 | Apple runner setup | `AGENT_DEVICE_IOS_TEAM_ID`, `AGENT_DEVICE_IOS_SIGNING_IDENTITY`, `AGENT_DEVICE_IOS_PROVISIONING_PROFILE`, `AGENT_DEVICE_IOS_BUNDLE_ID`, `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH`, `AGENT_DEVICE_IOS_CLEAN_DERIVED` | Public operator controls. Cleanup is only automatic for override paths under project `.tmp/`. |
 | Install/update and platform helpers | `AGENT_DEVICE_NO_UPDATE_NOTIFIER`, `AGENT_DEVICE_MACOS_HELPER_BIN`, `AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION` | Public operator controls |
+| macOS app backend | `AGENT_DEVICE_MACOS_APP_BACKEND`, `AGENT_DEVICE_MACOS_GHOST_CURSOR` | Public operator controls, read by the daemon. `native` drives macOS app sessions through the macOS helper instead of XCTest; see [Commands](/docs/commands). Unset or `xctest` keeps the runner. The drawn agent pointer adds about 0.3 s to each native click, fill, type, and scroll; `AGENT_DEVICE_MACOS_GHOST_CURSOR=0` turns it off. Restart the daemon after changing either value. |
 
 ## Command-specific defaults
 

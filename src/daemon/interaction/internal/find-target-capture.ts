@@ -5,7 +5,7 @@ import type { CaptureProvenance, RequestCaptureProof } from '../../capture-discl
 import { createSelectorCaptureRuntime } from '../../selector-capture-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
-import type { SessionState } from '../../session-state.ts';
+import type { SessionRef, SessionState } from '../../session-state.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
 /** The tree a mutating find resolves its target against, plus what the capture disclosed. */
@@ -19,8 +19,8 @@ export type FindTargetTree = CaptureProvenance &
  */
 export function createFindTargetCapture(
   params: Readonly<{
+    ref: SessionRef;
     device: SessionState['device'];
-    session: SessionState;
     req: DaemonRequest;
     logPath: string;
     locator: FindLocator;
@@ -35,10 +35,10 @@ export function createFindTargetCapture(
     captureProof: RequestCaptureProof;
   }>,
 ): () => Promise<FindTargetTree> {
-  const { device, session, req, logPath, locator, query, sessionStore, sessionName } = params;
+  const { device, req, logPath, locator, query, sessionStore, sessionName } = params;
   const captureRuntime = createSelectorCaptureRuntime({
+    ref: params.ref,
     device,
-    session,
     sessionStore,
     sessionName,
     req,

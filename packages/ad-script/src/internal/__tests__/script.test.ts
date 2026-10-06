@@ -205,6 +205,190 @@ test('snapshot replay script writes interactive refresh flags', () => {
   assert.match(script, /snapshot -i -d 2 -s @e1/);
 });
 
+// #3197: reaching an off-screen element used to be CLI-only. `scroll --until` was
+// invisible to the script grammar, so its tokens fell through as positionals and the
+// daemon read `--until` as the scroll amount ("scroll amount must be a number").
+test('scroll replay script parses the --until stop condition as a flag, not an amount', () => {
+  const parsed = parseReplayScriptDetailed(
+    String.raw`scroll down --until "id=\"far-button\""` + '\n',
+  ).actions;
+
+  assert.deepEqual(parsed[0]?.positionals, ['down']);
+  assert.equal(parsed[0]?.flags.until, 'id="far-button"');
+});
+
+test('scroll replay script keeps an amount positional beside the stop condition', () => {
+  const parsed = parseReplayScriptDetailed('scroll down 0.8 --until label=Email\n').actions;
+
+  assert.deepEqual(parsed[0]?.positionals, ['down', '0.8']);
+  assert.equal(parsed[0]?.flags.until, 'label=Email');
+});
+
+test('a scroll --until value with spaces survives as one selector when quoted', () => {
+  const parsed = parseReplayScriptDetailed(
+    String.raw`scroll down --until "label=\"Sign in\" || label=\"Log in\""`,
+  ).actions;
+
+  assert.equal(parsed[0]?.flags.until, 'label="Sign in" || label="Log in"');
+});
+
+test('scroll replay script writes its stop condition back where the parser reads it', () => {
+  const actions: SessionAction[] = [
+    {
+      ts: Date.now(),
+      command: 'scroll',
+      positionals: ['down', '0.8'],
+      flags: { until: 'label="Sign in"' },
+    },
+  ];
+
+  const script = formatReplayScriptForTest(actions);
+
+  // The generic writer quotes a non-`@` positional as a JSON literal (pre-existing
+  // for every generic line); the parser reads either spelling back.
+  assert.match(script, /scroll "down" 0\.8 --until "label=\\"Sign in\\""/);
+  const reparsed = parseReplayScriptDetailed(script).actions[0];
+  assert.deepEqual(reparsed?.positionals, ['down', '0.8']);
+  assert.deepEqual(reparsed?.flags, { until: 'label="Sign in"' });
+});
+
+// The other half of #3197: `--raw`, `--depth`, and `--scope` are declared on `wait`
+// (`SELECTOR_SNAPSHOT_FLAGS`) and recorded, but a script line put them INSIDE the
+// positional list, where the wait parser refused the line as selector-shaped text.
+test('wait replay script parses its capture-scope flags out of the positionals', () => {
+  const parsed = parseReplayScriptDetailed(
+    [
+      'wait id="x" --raw',
+      'wait --raw label=Email',
+      String.raw`wait "label=\"Sign in\"" --scope "@e3" --depth 2`,
+      'wait "label=Checkout" 5000 --raw',
+    ].join('\n') + '\n',
+  ).actions;
+
+  assert.deepEqual(parsed[0]?.positionals, ['id="x"']);
+  assert.equal(parsed[0]?.flags.snapshotRaw, true);
+  assert.deepEqual(parsed[1]?.positionals, ['label=Email']);
+  assert.equal(parsed[1]?.flags.snapshotRaw, true);
+  assert.deepEqual(parsed[2]?.positionals, ['label="Sign in"']);
+  assert.equal(parsed[2]?.flags.snapshotScope, '@e3');
+  assert.equal(parsed[2]?.flags.snapshotDepth, 2);
+  // The budget positional and a capture flag compose in either written order.
+  assert.deepEqual(parsed[3]?.positionals, ['label=Checkout', '5000']);
+  assert.equal(parsed[3]?.flags.snapshotRaw, true);
+});
+
+// The `-d`/`-s` CLI aliases stay OUT of the script grammar: pre-existing lines
+// like `wait text -s so funny` meant the literal text, and a grammar that
+// reclassified them would silently change a passing script's oracle. Recordings
+// only ever write the long spelling.
+test('wait keeps the -d/-s CLI aliases out of the script grammar', () => {
+  const parsed = parseReplayScriptDetailed('wait text -d 2 hello world\n').actions;
+
+  assert.deepEqual(parsed[0]?.positionals, ['text', '-d', '2', 'hello', 'world']);
+  assert.equal(parsed[0]?.flags.snapshotDepth, undefined);
+});
+
+test('wait replay script writes its capture-scope flags back', () => {
+  const actions: SessionAction[] = [
+    {
+      ts: Date.now(),
+      command: 'wait',
+      positionals: ['label=Email', '2000'],
+      flags: { snapshotRaw: true, snapshotDepth: 3 },
+    },
+  ];
+
+  const script = formatReplayScriptForTest(actions);
+
+  assert.match(script, /wait "label=Email" 2000 --raw --depth 3/);
+  const reparsed = parseReplayScriptDetailed(script).actions[0];
+  assert.deepEqual(reparsed?.positionals, ['label=Email', '2000']);
+  assert.equal(reparsed?.flags.snapshotRaw, true);
+  assert.equal(reparsed?.flags.snapshotDepth, 3);
+});
+
+// The CLI hands a selector through the shell, whose single quotes strip to one
+// argument; the same text in a `.ad` line split into fragments (#3197).
+test('a single-quoted script token is one argument, with its double quotes intact', () => {
+  const parsed = parseReplayScriptDetailed(
+    ['press \'id="far-button"\'', 'wait \'label="Sign in"\' 2000'].join('\n') + '\n',
+  ).actions;
+
+  assert.deepEqual(parsed[0]?.positionals, ['id="far-button"']);
+  assert.deepEqual(parsed[1]?.positionals, ['label="Sign in"', '2000']);
+});
+
+test('a single-quoted script token carries a --until selector with spaces', () => {
+  const parsed = parseReplayScriptDetailed('scroll down --until \'label="Sign in"\'\n').actions;
+
+  assert.equal(parsed[0]?.flags.until, 'label="Sign in"');
+});
+
+test('an apostrophe inside a bare token keeps its old meaning: no quote, no error', () => {
+  // Only a token LEADING with `'` is a quoting candidate, so a value that merely
+  // contains an apostrophe still parses as one bare token, as it always did.
+  const parsed = parseReplayScriptDetailed("wait text it's fine\n").actions;
+
+  assert.deepEqual(parsed[0]?.positionals, ['text', "it's", 'fine']);
+});
+
+test("a quote that stops mid-word stays the apostrophe it was, not the shell's split", () => {
+  // The shell reads `'a b'c` as one glued argument. A script line has no second
+  // reader for that reading, and re-tokenizing would change what a previously-valid
+  // line means, so a closing quote that does not end the word keeps the old bare
+  // split (`'a` + `b'c`) rather than inventing a third meaning.
+  const parsed = parseReplayScriptDetailed("wait text 'a b'c\n").actions;
+
+  assert.deepEqual(parsed[0]?.positionals, ['text', "'a", "b'c"]);
+});
+
+test('an unclosed single quote never turns a previously valid line into an error', () => {
+  // A value with one stray apostrophe is not a quoted token; it parses as bare
+  // tokens exactly as it did before single quotes were quoting characters.
+  const parsed = parseReplayScriptDetailed("wait text don't\n").actions;
+
+  assert.deepEqual(parsed[0]?.positionals, ['text', "don't"]);
+});
+
+test("single quotes carry an apostrophe through ', and a backslash stays itself", () => {
+  // Shell parity: `agent-device wait 'label="don\'t"'` hands over the backslash-
+  // apostrophe pair, so the script has to read the same selector. A shell keeps a
+  // bare `\` inside single quotes, and so does the script line — including a `\\`
+  // pair, which the superseded decoder collapsed to one backslash; this assertion
+  // is what that regression would fail on.
+  const parsed = parseReplayScriptDetailed(
+    [
+      String.raw`wait 'label="don\'t"'`,
+      String.raw`snapshot --scope 'a\\b'`,
+      String.raw`snapshot --scope 'root\.section'`,
+    ].join('\n') + '\n',
+  ).actions;
+
+  assert.deepEqual(parsed[0]?.positionals, ['label="don\'t"']);
+  assert.equal(parsed[1]?.flags.snapshotScope, String.raw`a\\b`);
+  assert.equal(parsed[2]?.flags.snapshotScope, String.raw`root\.section`);
+});
+
+test('a quoted value ending in an even backslash run still closes', () => {
+  // `wait 'C:\\temp\\'` is one path with literal backslashes, not an unclosed
+  // quote: only an ODD run pairs with the quote as the apostrophe escape. The
+  // consequence is that a value ending in ONE literal backslash does not close in
+  // single quotes under this grammar (the `\'` escape owns that position); a
+  // double-quoted JSON string is the spelling for that one value.
+  const parsed = parseReplayScriptDetailed(String.raw`wait 'C:\\temp\\'` + '\n').actions;
+
+  assert.deepEqual(parsed[0]?.positionals, [String.raw`C:\\temp\\`]);
+});
+
+test('apostrophes that survive decoding keep the old bare reading', () => {
+  // The shell reads `'don't do this'` as three arguments. A script line has no
+  // second reader to hand it to, so re-tokenizing would change what a
+  // previously-valid line means; it stays one bare token run, as it always was.
+  const parsed = parseReplayScriptDetailed("wait text 'don't do this'\n").actions;
+
+  assert.deepEqual(parsed[0]?.positionals, ['text', "'don't", 'do', "this'"]);
+});
+
 test('a pre-removal gesture line fails the whole script instead of step N', () => {
   assert.throws(
     () =>

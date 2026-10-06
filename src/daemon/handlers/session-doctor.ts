@@ -96,7 +96,7 @@ export async function handleDoctorCommand(params: {
     bindDevice,
     req,
   });
-  const warmupDevice = appCheckDevice ?? resolveWarmupSimulator(inventory);
+  const warmupDevice = session?.device ?? resolveHostWarmupDevice(inventory, appCheckDevice);
   if (warmupDevice) {
     const warmup = await hostDiagnostics.warmupCheck(warmupDevice, context);
     if (warmup) appendDoctorCheck(checks, warmup);
@@ -137,11 +137,16 @@ function hostDiagnosticsContext(
 // background so the first `open` skips the ~10s xcodebuild build. The check
 // line makes the warmup visible either way. Any simulator record works as
 // the build device — the artifact builds against a generic simulator
-// destination and is shared across simulators and runtimes.
-function resolveWarmupSimulator(
+// destination and is shared across simulators and runtimes. Inventory names
+// the device only from what this host discovered: a provider-reported
+// simulator is not on this host, so the host runner cache is not its to warm.
+function resolveHostWarmupDevice(
   inventory: DoctorDeviceInventory | undefined,
+  appCheckDevice: DeviceInfo | undefined,
 ): DeviceInfo | undefined {
-  const simulators = (inventory?.devices ?? []).filter(
+  const hostDevices = inventory?.hostDevices ?? [];
+  if (appCheckDevice) return hostDevices.includes(appCheckDevice) ? appCheckDevice : undefined;
+  const simulators = hostDevices.filter(
     (device) => isIosFamily(device) && device.kind === 'simulator',
   );
   return simulators.find((device) => device.booted === true) ?? simulators[0];

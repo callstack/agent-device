@@ -74,7 +74,7 @@ test('press coordinates dispatches press and records as press', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'default';
   const storedSession = makeSession(sessionName);
-  sessionStore.set(sessionName, storedSession);
+  sessionStore.publish(sessionName, storedSession);
 
   const response = await handleInteractionCommands({
     req: {
@@ -116,7 +116,7 @@ test.each([
   const sessionName = `single-bind-${command}`;
   const session = makeSession(sessionName);
   if (web) session.device = WEB_DESKTOP_DEVICE;
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
     req: { token: 't', session: sessionName, command, positionals: [...positionals], flags: {} },
@@ -134,7 +134,7 @@ test.each([
 test('click rejects macOS desktop surface interactions until helper routing exists', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'macos-desktop-click';
-  sessionStore.set(sessionName, makeMacOsDesktopSession(sessionName));
+  sessionStore.publish(sessionName, makeMacOsDesktopSession(sessionName));
 
   const response = await handleInteractionCommands({
     req: {
@@ -160,7 +160,7 @@ test('click rejects macOS desktop surface interactions until helper routing exis
 test('fill rejects macOS menubar surface interactions until helper routing exists', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'macos-menubar-fill';
-  sessionStore.set(sessionName, makeMacOsMenubarSession(sessionName));
+  sessionStore.publish(sessionName, makeMacOsMenubarSession(sessionName));
 
   const response = await handleInteractionCommands({
     req: {
@@ -201,7 +201,7 @@ test('longpress @ref resolves the target and dispatches coordinate longpress', a
     createdAt: Date.now(),
     backend: 'xctest',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
     req: {
@@ -247,7 +247,7 @@ test('hover @ref on web dispatches through the provider hoverRef route, not coor
     createdAt: Date.now(),
     backend: 'web',
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   const response = await handleInteractionCommands({
     req: {
       token: 't',
@@ -275,7 +275,7 @@ test('hover selector on web resolves the target and dispatches coordinate hover'
   const sessionName = 'hover-selector';
   const session = makeSession(sessionName);
   session.device = WEB_DESKTOP_DEVICE;
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   mockCaptureSnapshotForSession.mockResolvedValue({
     nodes: attachRefs([
       {
@@ -315,7 +315,7 @@ test('hover selector on web resolves the target and dispatches coordinate hover'
 test('hover is refused by capability on touch platforms before any dispatch', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'hover-ios';
-  sessionStore.set(sessionName, makeSession(sessionName));
+  sessionStore.publish(sessionName, makeSession(sessionName));
 
   const response = await handleInteractionCommands({
     req: {

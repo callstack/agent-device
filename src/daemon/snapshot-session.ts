@@ -1,7 +1,7 @@
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import type { DaemonRequest } from './daemon-request.ts';
-import type { SessionState } from './session-state.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
 import type { SessionScope } from '@agent-device/contracts/session';
 import { isActiveProviderDevice } from './provider-device-admission.ts';
 import { SessionStore } from './session-store.ts';
@@ -10,10 +10,12 @@ export async function resolveSessionDevice(
   sessionStore: SessionStore,
   sessionName: string,
   flags: DaemonRequest['flags'],
+  boundRef?: SessionRef,
 ) {
-  const session = sessionStore.get(sessionName);
+  const ref = boundRef ?? sessionStore.lookup(sessionName);
+  const session = ref ? sessionStore.requireCurrent(ref) : undefined;
   const device = session?.device ?? (await resolveTargetDevice(flags ?? {}));
-  return { session, device };
+  return { ref, session, device };
 }
 
 export async function withSessionlessRunnerCleanup<T>(
@@ -37,38 +39,14 @@ export async function withSessionlessRunnerCleanup<T>(
   }
 }
 
-export function recordIfSession(
-  sessionStore: SessionStore,
-  session: SessionState | undefined,
-  req: DaemonRequest,
-  result: Record<string, unknown>,
-): void {
-  if (!session) return;
-  sessionStore.recordAction(session, {
-    command: req.command,
-    positionals: req.positionals ?? [],
-    flags: req.flags ?? {},
-    result,
-  });
-}
-
-export function buildSnapshotSession(params: {
-  session: SessionState | undefined;
+export function createSnapshotSession(params: {
   sessionName: string;
   sessionScope: SessionScope;
   device: SessionState['device'];
   snapshot: SessionState['snapshot'];
   appBundleId?: string;
 }): SessionState {
-  const { session, sessionName, sessionScope, device, snapshot, appBundleId } = params;
-  if (session) {
-    return {
-      ...session,
-      snapshot,
-      lastComparisonSafeSnapshot:
-        snapshot?.comparisonSafe === true ? snapshot : session.lastComparisonSafeSnapshot,
-    };
-  }
+  const { sessionName, sessionScope, device, snapshot, appBundleId } = params;
   return {
     name: sessionName,
     sessionScope,

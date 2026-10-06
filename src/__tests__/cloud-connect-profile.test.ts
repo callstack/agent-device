@@ -198,6 +198,27 @@ test('connect limrun generates a local daemon remote profile', async () => {
   }
 });
 
+test('connect limrun attaches to an existing instance without storing its token', async () => {
+  const stateDir = path.join(mkdtempForTestSync('agent-device-connect-limrun-attach-'), '.state');
+  const ios = { apiUrl: 'https://region.limrun.example/v1/ios_x/api', token: 'ios-instance-token' };
+  vi.stubEnv('LIMRUN_API_KEY', '');
+  vi.stubEnv('LIM_IOS_INSTANCE_URL', ios.apiUrl);
+  vi.stubEnv('LIM_IOS_INSTANCE_TOKEN', ios.token);
+
+  await captureConnectStdout(async () => {
+    await connectCommand({
+      positionals: ['limrun'],
+      flags: { json: true, help: false, version: false, stateDir, platform: 'ios' },
+      client: {} as AgentDeviceClient,
+    });
+  });
+
+  const state = readRequiredActiveState(stateDir);
+  assert.equal(state.leaseBackend, 'ios-instance');
+  assert.doesNotMatch(fs.readFileSync(state.remoteConfigPath, 'utf8'), /ios-instance-token/);
+  assert.deepEqual(mockedVerifyLimrunConnection.mock.calls[0]?.[0].instances?.ios, ios);
+});
+
 test('connect limrun persists deferred Metro bridge settings', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-limrun-metro-');
   const stateDir = path.join(tempRoot, '.state');
@@ -253,11 +274,13 @@ test('connect limrun persists deferred Metro bridge settings', async () => {
   }
 });
 
-test('connect limrun requires LIMRUN_API_KEY', async () => {
+test('connect limrun requires LIMRUN_API_KEY or access to an existing instance', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-limrun-env-');
   const stateDir = path.join(tempRoot, '.state');
   vi.stubEnv('LIMRUN_API_KEY', '');
   vi.stubEnv('LIM_API_KEY', 'lim_test_key');
+  vi.stubEnv('LIM_IOS_INSTANCE_URL', 'https://region.limrun.example/v1/ios_x/api');
+  vi.stubEnv('LIM_IOS_INSTANCE_TOKEN', 'ios-instance-token');
 
   try {
     await assert.rejects(
@@ -268,10 +291,11 @@ test('connect limrun requires LIMRUN_API_KEY', async () => {
           help: false,
           version: false,
           stateDir,
+          platform: 'android',
         },
         client: {} as AgentDeviceClient,
       }),
-      /connect limrun requires LIMRUN_API_KEY/,
+      /connect limrun requires LIMRUN_API_KEY, or LIM_ANDROID_INSTANCE_URL, LIM_ANDROID_INSTANCE_TOKEN, LIM_ANDROID_INSTANCE_ADB_URL/,
     );
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
@@ -411,6 +435,58 @@ test('connect browserstack generates local provider profile without credentials'
     assert.equal(generated.providerProject, 'agent-device');
     assert.equal(generated.providerBuild, 'build-a');
     assert.equal(JSON.stringify(generated).includes('browser-key'), false);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('connect browserstack canonicalizes the app scheme and refuses a malformed bs:// id', async () => {
+  const tempRoot = mkdtempForTestSync('agent-device-connect-browserstack-ref-');
+  const stateDir = path.join(tempRoot, '.state');
+  vi.stubEnv('BROWSERSTACK_USERNAME', 'browser-user');
+  vi.stubEnv('BROWSERSTACK_ACCESS_KEY', 'browser-key');
+  const flags = {
+    platform: 'android' as const,
+    device: 'Google Pixel 8',
+    providerOsVersion: '14.0',
+  };
+
+  try {
+    await connectWithGeneratedProviderProfile({
+      stateDir,
+      positionals: ['browserstack'],
+      flags: { ...flags, providerApp: 'Bs://app-id' },
+    });
+    assert.equal(
+      readGeneratedConfig(readRequiredActiveState(stateDir).remoteConfigPath).providerApp,
+      'bs://app-id',
+    );
+    // Verification must look up the reference the profile saved, not the spelling typed.
+    const verified = mockedVerifyWebDriverConnection.mock.calls[0]?.[0];
+    assert.equal(verified?.provider === 'browserstack' ? verified.app : undefined, 'bs://app-id');
+
+    for (const app of ['bs://', 'bs://a b', 'BS://a/b']) {
+      assert.throws(
+        () =>
+          resolveCloudWebDriverConnectProfile({
+            provider: 'browserstack',
+            stateDir,
+            cwd: tempRoot,
+            env: { BROWSERSTACK_USERNAME: 'browser-user', BROWSERSTACK_ACCESS_KEY: 'browser-key' },
+            flags: { json: false, help: false, version: false, ...flags, providerApp: app },
+          }),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'INVALID_ARGS');
+          assert.equal(error.message, `BrowserStack --provider-app ${app} is not a bs:// app id.`);
+          assert.deepEqual(error.details, {
+            providerApp: app,
+            hint: 'Pass <bs://app-id-or-local-path>.',
+          });
+          return true;
+        },
+      );
+    }
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
@@ -734,7 +810,7 @@ test('connect does not activate provider state when verification fails', async (
   }
 });
 
-test('connect aws-device-farm rejects BrowserStack-only device-feature flags', () => {
+test('connect aws-device-farm rejects device-feature flags it does not read', () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-aws-reject-');
 
   try {
@@ -760,8 +836,7 @@ test('connect aws-device-farm rejects BrowserStack-only device-feature flags', (
         assert.equal(error.code, 'INVALID_ARGS');
         // Names every offending flag, and fires before the provider's own required-arg checks so
         // the caller is told what is unsupported rather than what else is missing.
-        assert.match(error.message, /--provider-device-orientation, --provider-timezone/);
-        assert.match(error.message, /only supported by BrowserStack, not aws-device-farm/);
+        assert.equal(error.details?.provider, 'aws-device-farm');
         assert.deepEqual(error.details?.flags, [
           '--provider-device-orientation',
           '--provider-timezone',

@@ -37,7 +37,7 @@ function makeRequest(command: string, sessionName: string): DaemonRequest {
 
 function baseChainParams(sessionName: string) {
   const sessionStore = makeSessionStore('agent-device-provider-scope-');
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   return {
     req: makeRequest(INTERNAL_COMMANDS.runtime, sessionName),
     sessionName,

@@ -230,6 +230,7 @@ function bindLimrunAppLogs(
         platform: reader.platform,
         leaseId: reader.leaseId,
         instanceId: reader.instanceId,
+        ownership: reader.ownership,
         appBundleId: input.appBundleId,
         outputPath: input.outputPath,
       };

@@ -1,3 +1,4 @@
+import { makeStoredSessionRef } from '../__tests__/test-utils/store-factory.ts';
 import { test, expect } from 'vitest';
 import { buildSessionRecoveryHint } from './session-recovery-hints.ts';
 import type { SessionRef, SessionState } from './session-state.ts';
@@ -12,9 +13,8 @@ import { IOS_SIMULATOR } from '../__tests__/test-utils/device-fixtures.ts';
 const SCOPED_ADDRESS = 'cwd:8bea844ab16aa9b3:default';
 
 function scopedRef(overrides: Partial<SessionState> = {}): SessionRef {
-  return {
-    address: SCOPED_ADDRESS,
-    session: {
+  return makeStoredSessionRef(
+    {
       name: 'default',
       sessionScope: { kind: 'cwd', id: '8bea844ab16aa9b3' },
       device: IOS_SIMULATOR,
@@ -22,7 +22,8 @@ function scopedRef(overrides: Partial<SessionState> = {}): SessionRef {
       actions: [],
       ...overrides,
     },
-  };
+    SCOPED_ADDRESS,
+  );
 }
 
 test('device-in-use recovery names the address --session accepts, not the public name', () => {
@@ -55,10 +56,7 @@ test('a recording session recovery uses the address for both close and record st
 
 test('an explicitly named session addresses itself unchanged', () => {
   const hint = buildSessionRecoveryHint(
-    {
-      address: 'checkout',
-      session: { ...scopedRef().session, name: 'checkout', sessionScope: undefined },
-    },
+    makeStoredSessionRef({ ...scopedRef().session, name: 'checkout', sessionScope: undefined }),
     'device-in-use',
   );
 
@@ -81,10 +79,7 @@ test('a device or target conflict does not offer a platform session it cannot an
 
 test('selector-conflict recovery offers no platform session to a hand-named session', () => {
   const hint = buildSessionRecoveryHint(
-    {
-      address: 'checkout',
-      session: { ...scopedRef().session, name: 'checkout', sessionScope: undefined },
-    },
+    makeStoredSessionRef({ ...scopedRef().session, name: 'checkout', sessionScope: undefined }),
     'selector-conflict',
   );
 

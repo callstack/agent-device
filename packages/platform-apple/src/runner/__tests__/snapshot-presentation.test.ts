@@ -141,7 +141,7 @@ test('a sparse verdict still presents the nodes it did read', () => {
     ],
     truncated: true,
     quality: { state: 'sparse', backend: 'private-ax', reasonCode: 'sparse-tree' },
-  });
+  }).nodes;
 
   assert.deepEqual(
     nodes.map((node) => node.label),
@@ -200,7 +200,7 @@ test('a healthy payload with valid viewport roots still presents', () => {
   };
   const nodes = presentAppleRunnerSnapshot('device-1', undefined, {
     nodes: [screen, button],
-  });
+  }).nodes;
   assert.deepEqual(
     nodes.map((node) => node.index),
     [0, 1],
@@ -227,7 +227,7 @@ test('a runner payload with the hittable bit absent presents without declaring i
     },
   ];
   for (const interactiveOnly of [false, true]) {
-    const presented = presentAppleRunnerSnapshot('device-1', { interactiveOnly }, { nodes });
+    const presented = presentAppleRunnerSnapshot('device-1', { interactiveOnly }, { nodes }).nodes;
     const button = presented.find((node) => node.label === 'Not Now');
     assert.ok(button, `interactiveOnly=${interactiveOnly}: the undecided button is presented`);
     assert.equal('hittable' in button, false);
@@ -283,4 +283,106 @@ test('a malformed keyboard payload is restated by the kernel reader, never forwa
     const read = readAppleSnapshotResult({ keyboard: payload }).keyboard;
     assert.deepEqual(read, { kind: 'unmeasurable', reason }, `payload ${JSON.stringify(payload)}`);
   }
+});
+
+// #3182: the response publishes the box the fold already resolved for the presentation, never a
+// second box and never a zero. The viewport the validator receives and the viewport the capture
+// publishes must be the same evidence — if the fold validated against one box and the response
+// published another, a consumer scaling rects against `viewport` would scale against a screen the
+// numbers were never checked against.
+test('the published viewport is the root box the presentation validated against (#3182)', () => {
+  const screen: RawSnapshotNode = {
+    index: 0,
+    type: 'Application',
+    rect: { x: 0, y: 0, width: 390, height: 844 },
+  };
+  const button: RawSnapshotNode = {
+    index: 1,
+    parentIndex: 0,
+    type: 'Button',
+    label: 'Open',
+    rect: { x: 16, y: 400, width: 80, height: 32 },
+    hittable: true,
+  };
+
+  const presented = presentAppleRunnerSnapshot('device-1', undefined, {
+    nodes: [screen, button],
+  });
+
+  assert.deepEqual(presented.viewport, { width: 390, height: 844 });
+});
+
+test('the published viewport follows the quality payload the fold prefers (#3182)', () => {
+  // A scoped capture can carry an unscoped quality payload whose Application root is the screen;
+  // the fold resolves the viewport from those roots, and the response must publish that same box.
+  const scopedRoot: RawSnapshotNode = {
+    index: 0,
+    type: 'Application',
+    rect: { x: 0, y: 100, width: 390, height: 400 },
+  };
+  const qualityRoot: RawSnapshotNode = {
+    index: 0,
+    type: 'Application',
+    rect: { x: 0, y: 0, width: 390, height: 844 },
+  };
+
+  const presented = presentAppleRunnerSnapshot('device-1', undefined, {
+    nodes: [scopedRoot],
+    qualityPayload: { nodes: [qualityRoot], truncated: false, scope: null },
+  });
+
+  assert.deepEqual(presented.viewport, { width: 390, height: 844 });
+});
+
+test('a capture with no usable viewport box publishes no viewport, never a zero (#3182)', () => {
+  // `runnerFatal` skips presentation, so this exercises the publication seam alone: a zero-extent
+  // root is the failed Apple read, and the guard must answer with absence.
+  const fatalZero = presentAppleRunnerSnapshot('device-1', undefined, {
+    nodes: [{ index: 0, type: 'Application', rect: { x: 0, y: 0, width: 0, height: 0 } }],
+    runnerFatal: true,
+  });
+  assert.equal('viewport' in fatalZero, false);
+
+  const rootless = presentAppleRunnerSnapshot('device-1', undefined, {
+    nodes: [{ index: 0, type: 'Other' }],
+    runnerFatal: true,
+  });
+  assert.equal('viewport' in rootless, false);
+
+  // The guard itself, off the early return: raw is the projection that validates no box, so it is the
+  // one that reaches publication still holding an unchecked root. A zero-extent Application there
+  // must answer with absence rather than the failed read's dimensions.
+  const rawZero = presentAppleRunnerSnapshot(
+    'device-1',
+    { raw: true },
+    {
+      nodes: [{ index: 0, type: 'Application', rect: { x: 0, y: 0, width: 0, height: 0 } }],
+    },
+  );
+  assert.equal('viewport' in rawZero, false);
+});
+
+test('a raw projection publishes no viewport, because nothing validated its box (#3182)', () => {
+  // The engine validates the viewport only for the regular projection. Publishing the largest root
+  // under `raw` would hand the caller the same largest-rect guess #3182 exists to retire, labelled
+  // as a measured fact — and the regular path would refuse this very payload.
+  const presented = presentAppleRunnerSnapshot(
+    'device-1',
+    { raw: true },
+    {
+      nodes: [
+        { index: 0, type: 'Other', rect: { x: 0, y: 0, width: 120, height: 44 } },
+        {
+          index: 1,
+          parentIndex: 0,
+          type: 'Button',
+          label: 'Open',
+          rect: { x: 16, y: 900, width: 80, height: 32 },
+          hittable: true,
+        },
+      ],
+    },
+  );
+
+  assert.equal('viewport' in presented, false);
 });

@@ -1,7 +1,9 @@
+import { makeStoredSessionRef } from '../../__tests__/test-utils/store-factory.ts';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { assertSessionSelectorMatches } from '../session-selector.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { resolveDevice } from '@agent-device/kernel/device';
 import type { SessionRef, SessionState } from '../session-state.ts';
 
 function makeSession(overrides?: Partial<SessionState>): SessionState {
@@ -23,7 +25,7 @@ function makeSession(overrides?: Partial<SessionState>): SessionState {
 
 /** These sessions are explicitly named, so each is stored under — and addressed by — its name. */
 function ref(session: SessionState): SessionRef {
-  return { address: session.name, session };
+  return makeStoredSessionRef(session);
 }
 
 test('accepts matching platform and serial selectors', () => {
@@ -128,6 +130,20 @@ test('accepts matching device selector (case-insensitive)', () => {
   assert.doesNotThrow(() =>
     assertSessionSelectorMatches(ref(session), {
       device: 'pixel 9',
+    }),
+  );
+});
+
+test('accepts the AVD name selector that selected the bound device', async () => {
+  const avdName = 'Pixel_9_API_37';
+  const device = await resolveDevice(
+    [{ platform: 'android', id: 'emulator-5554', name: 'Pixel 9 API 37', kind: 'emulator' }],
+    { platform: 'android', deviceName: avdName },
+  );
+  assert.doesNotThrow(() =>
+    assertSessionSelectorMatches(ref(makeSession({ device })), {
+      platform: 'android',
+      device: avdName,
     }),
   );
 });

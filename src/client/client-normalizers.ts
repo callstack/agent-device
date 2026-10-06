@@ -111,9 +111,22 @@ export function normalizeDevice(value: unknown): AgentDeviceDevice {
     // Additive Apple-OS discriminant; Apple platforms only — gate on the platform so
     // a non-Apple record with a stray appleOs value is not preserved.
     ...(isApplePlatform(platform) && appleOs ? { appleOs } : {}),
+    ...readDeviceDescription(record),
     identifiers: buildDeviceIdentifiers(platform, id, name),
     ...readClaimedBy(record),
     ...buildClientDevicePlatformFields(platform, id),
+  };
+}
+
+/** Reads the optional presentation-only hardware model and OS version of a listed device. */
+function readDeviceDescription(
+  record: Record<string, unknown>,
+): Pick<AgentDeviceDevice, 'model' | 'osVersion'> {
+  const model = readOptionalString(record, 'model');
+  const osVersion = readOptionalString(record, 'osVersion');
+  return {
+    ...(model ? { model } : {}),
+    ...(osVersion ? { osVersion } : {}),
   };
 }
 

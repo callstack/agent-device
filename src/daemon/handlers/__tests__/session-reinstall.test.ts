@@ -70,7 +70,7 @@ test('reinstall requires active session or explicit device selector', async () =
 
 test('reinstall validates required args before runtime admission', async () => {
   const store = makeStore();
-  store.set(
+  store.publish(
     'default',
     makeSession('default', {
       platform: 'apple',
@@ -108,7 +108,7 @@ test('install binds the deployment use exactly once after one facts admission', 
     kind: 'emulator',
     booted: true,
   });
-  store.set(session.name, session);
+  store.publish(session.name, session);
   const root = mkdtempForTestSync('agent-device-install-runtime-');
   const appPath = path.join(root, 'Sample.apk');
   fs.writeFileSync(appPath, 'placeholder');
@@ -157,7 +157,7 @@ test('install fails closed before binding when its provider owner lacks deployme
     kind: 'device',
     booted: true,
   });
-  store.set(session.name, session);
+  store.publish(session.name, session);
   const root = mkdtempForTestSync('agent-device-install-provider-unavailable-');
   const appPath = path.join(root, 'Sample.apk');
   fs.writeFileSync(appPath, 'placeholder');
@@ -216,7 +216,7 @@ test('reinstall cleans an uploaded artifact after the request-scoped operation',
     kind: 'simulator',
     booted: true,
   });
-  store.set(session.name, session);
+  store.publish(session.name, session);
   const root = mkdtempForTestSync('agent-device-uploaded-artifact-');
   const appPath = path.join(root, 'Sample.app');
   fs.writeFileSync(appPath, 'placeholder');
@@ -252,7 +252,7 @@ test('HarmonyOS reinstall updates the active session identity from the runtime r
     kind: 'emulator',
     booted: true,
   });
-  store.set(session.name, session);
+  store.publish(session.name, session);
   const root = mkdtempForTestSync('agent-device-harmony-reinstall-');
   const appPath = path.join(root, 'Sample.hap');
   fs.writeFileSync(appPath, 'placeholder');
@@ -278,3 +278,73 @@ test('HarmonyOS reinstall updates the active session identity from the runtime r
     appName: 'com.example.application',
   });
 });
+
+test.each(['rebuild', 'retire'] as const)(
+  'held HarmonyOS deployment patches only its admitted lifetime across %s',
+  async (transition) => {
+    const store = makeStore();
+    const address = 'cwd:held-harmony-deploy:default';
+    const session = makeSession('default', {
+      platform: 'harmonyos',
+      id: '127.0.0.1:5555',
+      name: 'Emulator',
+      kind: 'emulator',
+      booted: true,
+    });
+    const ref = store.publish(address, session);
+    const appPath = path.join(mkdtempForTestSync('held-deploy-'), 'Sample.hap');
+    fs.writeFileSync(appPath, 'placeholder');
+    let start!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      start = resolve;
+    });
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mockDeployAppRuntime.mockImplementationOnce(async () => {
+      start();
+      await released;
+      return { packageName: 'com.example.updated' };
+    });
+    const running = handleSessionCommands({
+      req: {
+        token: 't',
+        session: 'default',
+        command: 'reinstall',
+        positionals: ['com.example.updated', appPath],
+        flags: {},
+      },
+      sessionName: address,
+      sessionStore: store,
+      logPath: '/tmp/daemon.log',
+      invoke,
+    });
+    await started;
+    let current = session;
+    if (transition === 'rebuild')
+      current = store.update(ref, {
+        actions: [],
+        trace: { outPath: '/latest.trace', startedAt: 1 },
+      });
+    else {
+      store.retire(ref);
+      current = store.publish(address, makeSession('default', session.device)).session;
+    }
+    release();
+    if (transition === 'rebuild') {
+      expect(await running).toMatchObject({ ok: true });
+      expect(store.requireCurrent(ref).trace).toEqual(current.trace);
+      expect(store.requireCurrent(ref).appBundleId).toBe('com.example.updated');
+      expect(current.actions.map((action) => action.command)).toEqual(['reinstall']);
+      expect(session.actions).toEqual([]);
+    } else {
+      await expect(running).rejects.toMatchObject({
+        details: { reason: 'session_lifetime_ended' },
+      });
+      expect(store.get(address)).toBe(current);
+      expect(current.appBundleId).toBeUndefined();
+      expect(current.actions).toEqual([]);
+    }
+  },
+);

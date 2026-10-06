@@ -80,6 +80,18 @@ test('burns touches into a playable recording without a warning', async () => {
   expect(result).toEqual({ telemetryPath: '/tmp/capture.telemetry.json' });
 });
 
+test('hands the caller fps to the touch overlay', async () => {
+  await createScreenRecordingFinalizer().complete({
+    outputPath: '/tmp/capture.mp4',
+    showTouches: true,
+    gestureEvents: [{ kind: 'tap', tMs: 500, x: 10, y: 20 }],
+    fps: 15,
+    targetLabel: 'test recording',
+  });
+
+  expect(overlay).toHaveBeenCalledWith(expect.objectContaining({ fps: 15 }));
+});
+
 test('#2707 reports a dropped overlay and keeps the raw when compositing throws', async () => {
   // overlay.ts verifies the composite and only renames it over the raw on success, so a compositor
   // that fails its own #2707 checks throws before any rename: the raw file survives and the caller

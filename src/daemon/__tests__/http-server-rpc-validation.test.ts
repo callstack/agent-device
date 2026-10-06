@@ -326,6 +326,39 @@ test('local command RPC keeps host paths unrestricted', async (t) => {
   }
 });
 
+test('lease.allocate forwards retainOnClose to the handler as lease meta', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const received: DaemonRequest[] = [];
+  const server = await createDaemonHttpServer({
+    handleRequest: async (request): Promise<DaemonResponse> => {
+      received.push(request);
+      return { ok: true, data: {} };
+    },
+  });
+  try {
+    const port = await listenOnLoopback(server);
+    for (const retainOnClose of [true, undefined]) {
+      const response = await fetch(`http://127.0.0.1:${port}/rpc`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'req-1',
+          method: 'agent_device.lease.allocate',
+          params: { tenantId: 'tenant-a', runId: 'run-1', retainOnClose },
+        }),
+      });
+      assert.equal(response.status, 200);
+    }
+    assert.deepEqual(
+      received.map((request) => request.meta?.leaseRetainOnClose),
+      [true, undefined],
+    );
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
 test('only local command RPC keeps the client developer dir', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const root = mkdtempForTestSync('agent-device-http-developer-dir-');
@@ -359,6 +392,54 @@ test('only local command RPC keeps the client developer dir', async (t) => {
     );
     assert.equal(
       await developerDirSeenBy(remoteHttpEnvironment(writeAllowingAuthHook(root))),
+      undefined,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('only local lease allocation RPC keeps the provider credential fingerprint', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const root = mkdtempForTestSync('agent-device-http-provider-credentials-');
+  const fingerprintSeenBy = async (env: NodeJS.ProcessEnv): Promise<unknown> => {
+    const received: DaemonRequest[] = [];
+    const server = await createDaemonHttpServer({
+      env,
+      handleRequest: async (request): Promise<DaemonResponse> => {
+        received.push(request);
+        return { ok: true, data: {} };
+      },
+    });
+    try {
+      const response = await fetch(`http://127.0.0.1:${await listenOnLoopback(server)}/rpc`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'lease-allocate-fingerprint',
+          method: 'agent_device.lease.allocate',
+          params: {
+            tenantId: 'tenant-test',
+            runId: 'run-a',
+            backend: 'ios-instance',
+            provider: 'limrun',
+            providerCredentialFingerprint: 'v1:0123456789abcdef',
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+      assert.equal(received[0]?.command, 'lease_allocate');
+      return received[0]?.meta?.providerCredentialFingerprint;
+    } finally {
+      await closeLoopbackServer(server);
+    }
+  };
+
+  try {
+    assert.equal(await fingerprintSeenBy(localHttpEnvironment()), 'v1:0123456789abcdef');
+    assert.equal(
+      await fingerprintSeenBy(remoteHttpEnvironment(writeAllowingAuthHook(root))),
       undefined,
     );
   } finally {

@@ -1,4 +1,3 @@
-import type { ReplayObservationAuthorityBinder } from '@agent-device/contracts/replay';
 import type {
   ReplayCoordinator,
   ReplaySession,
@@ -26,8 +25,7 @@ export type ReplaySessionPolicy = Readonly<{
   createCoordinator: () => ReplayCoordinator;
   assertSelectorMatches: ReplaySessionStore['assertSelectorMatches'];
   resolveOpenRuntimeHints: ReplaySessionStore['resolveOpenRuntimeHints'];
-  bindAuthority: ReplayObservationAuthorityBinder;
-  capture: ReplaySessionObservation['capture'];
+  bindAuthority: ReplaySessionObservation['bindAuthority'];
 }>;
 
 /**
@@ -53,7 +51,6 @@ export function bindReplaySession(
     observationStore: {
       get: container.get,
       bindAuthority: policy.bindAuthority,
-      capture: policy.capture,
     },
     coordinator: policy.createCoordinator(),
   };

@@ -9,6 +9,7 @@ import {
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
+import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
 import {
   bindProviderFocusInteractor,
   focusRuntimeOperationFacts,
@@ -195,15 +196,15 @@ const tvRemoteUnavailable = Object.freeze({
   hint: 'WebDriver provider runtimes do not expose tv-remote.',
 } as const);
 /**
- * The retired leaf never routed `keyboard` through provider resolution at all — it dispatched
- * directly by device platform, bypassing the interactor/provider seam entirely. Restating that as
- * a fact means declaring it honestly unavailable here rather than guessing at untested provider
- * behavior; see the unit record for the narrowing this states explicitly.
+ * `keyboardEnter`/`keyboardDismiss` call `requireSupport('keyboard')` inside the interactor, so a
+ * provider whose declared capability map refuses them still refuses at call time; this cell states
+ * whether the runtime has a reachable interactor to ask at all. `keyboardStatus` is iOS's gap:
+ * the probe's result shape is Android's.
  */
 const keyboardUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
-  hint: 'WebDriver provider runtimes do not expose keyboard actions.',
+  hint: 'This WebDriver provider runtime does not expose this keyboard action for this device.',
 } as const);
 
 /**
@@ -660,6 +661,21 @@ function webDriverFacts(
         orientation: declared('orientation', orientationUnavailable),
       }),
       ...tvRemoteRuntimeOperationFacts({ tvRemote: tvRemoteUnavailable }),
+      // Dismiss rides the same reachable interactor `back`/`home` do, over the driver's
+      // hide-keyboard route. Status is the Appium keyboard probe, whose result shape is Android's
+      // IME probe, so only an Android device serves it.
+      ...keyboardRuntimeOperationFacts({
+        unsupported: keyboardUnavailable,
+        dismiss: declared('keyboard', keyboardUnavailable),
+        // Enter is proven on Android only: the newline-through-`/keys` route is written for
+        // XCUITest but has not run against it, so an iOS device refuses until it has.
+        ...(device.platform === 'android'
+          ? {
+              enter: declared('keyboard', keyboardUnavailable),
+              status: declared('keyboard', keyboardUnavailable),
+            }
+          : {}),
+      }),
       // Clipboard rides the same reachable interactor `back`/`home` do; the declared-capability
       // gate stays inside the interactor, where it already lives.
       //

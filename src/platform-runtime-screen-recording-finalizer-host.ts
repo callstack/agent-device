@@ -45,6 +45,7 @@ async function overlayTouches(
       videoPath: input.outputPath,
       telemetryPath,
       exportQuality: input.exportQuality,
+      ...(input.fps === undefined ? {} : { fps: input.fps }),
       targetLabel: input.targetLabel,
     });
     if (!(await isPlayableVideo(input.outputPath))) {

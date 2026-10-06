@@ -27,7 +27,6 @@ import { readRemoteConnectionState } from '../remote/remote-connection-state.ts'
 afterEach(() => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
-  vi.unstubAllEnvs();
 });
 
 test('proxy install against an iOS-bound connection is not refused as a platform change', async () => {

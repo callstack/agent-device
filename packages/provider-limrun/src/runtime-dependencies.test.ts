@@ -314,6 +314,7 @@ function createContractFixture() {
       downloadFile: async () => undefined,
     },
     ios: {
+      applySimctlSetting: vi.fn(async () => undefined),
       resolveAppAlias: async (app: string) => app,
       readBundleAppName: async () => undefined,
     },

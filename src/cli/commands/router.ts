@@ -13,6 +13,7 @@ const dedicatedCliCommandHandlerLoaders = {
   disconnect: async () => (await import('./connection.ts')).disconnectCommand,
   connection: async () => (await import('./connection.ts')).connectionCommand,
   auth: async () => (await import('./auth.ts')).authCommand,
+  plugins: async () => (await import('./plugins.ts')).pluginsCommand,
   daemon: async () => (await import('./daemon.ts')).daemonCommand,
   device: async () => (await import('./device.ts')).deviceCommand,
   proxy: async () => (await import('./proxy.ts')).proxyCommand,

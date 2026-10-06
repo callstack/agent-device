@@ -80,20 +80,32 @@ extension RunnerTests {
 #endif
   }
 
+  /// Gives a tapped text input one readiness window to take focus, then taps it once more if focus did
+  /// not arrive. The caller has already decided this element is a text input, so this function must not
+  /// re-derive that fact from the element: both tap routes classify BEFORE dispatching, and asking the
+  /// handle afterwards re-runs its query. On a Flutter password field that re-run is exactly what fails
+  /// (#3060): XCTest refuses the element with "computed TextField from legacy attributes vs Other from
+  /// modern attribute", so a post-dispatch classification would also classify differently from the caller.
+  ///
+  /// The frame still has to be read, and reading it through `element.frame` records an XCTest failure when
+  /// the element has stopped answering its query; `didRecordXCTestFailure` turns that into
+  /// `XCTEST_RECORDED_FAILURE` plus an invalidated target for a tap the dispatch had already landed.
+  /// `snapshot()` answers the same question through the throwing channel and records nothing, which is why
+  /// `probeTextEntryInput` and `withElement` already read elements this way. It is read again after the
+  /// wait rather than reused, because focusing a field moves the layout: the repeat aims at where the
+  /// field is then, which is the moment the read it replaced ran at.
   func waitForTextEntryReadinessAfterTap(app: XCUIApplication, element: XCUIElement) {
 #if os(iOS)
-    switch element.elementType {
-    case .textField, .secureTextField, .searchField, .textView:
-      if waitForFocusedTextInput(app: app, timeout: TextEntryTiming.readinessTimeout) != nil {
-        return
-      }
-      let frame = element.frame
-      if !frame.isEmpty {
-        _ = tapAt(app: app, x: frame.midX, y: frame.midY)
-        _ = waitForFocusedTextInput(app: app, timeout: TextEntryTiming.readinessTimeout)
-      }
-    default:
+    if waitForFocusedTextInput(app: app, timeout: TextEntryTiming.readinessTimeout) != nil {
       return
+    }
+    guard let settled = safely("TEXT_ENTRY_READINESS_FRAME", { try? element.snapshot() }) else {
+      return
+    }
+    let frame = settled.frame
+    if !frame.isEmpty {
+      _ = tapAt(app: app, x: frame.midX, y: frame.midY)
+      _ = waitForFocusedTextInput(app: app, timeout: TextEntryTiming.readinessTimeout)
     }
 #endif
   }

@@ -1,7 +1,6 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import type { CloudArtifactsResult } from '@agent-device/contracts/observability';
 import type { LeaseLifecycleContext } from '@agent-device/contracts/device';
+import type { ProviderProfileFieldDeclaration } from '@agent-device/contracts/provider-profile-fields';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ProviderWebDriverDependencies } from './dependencies.ts';
 import {
@@ -17,14 +16,18 @@ import {
   buildBrowserStackCapabilities,
   createBrowserStackUploadApp,
   listBrowserStackCloudArtifacts,
-  uploadBrowserStackApp,
+  resolveBrowserStackAppReference,
 } from './browserstack.ts';
 import {
   buildBrowserStackDeviceFeatureCapabilities,
   readBrowserStackDeviceFeatureFields,
-  rejectBrowserStackOnlyDeviceFeatures,
 } from './browserstack-device-features.ts';
-import { CLOUD_WEBDRIVER_PROVIDERS, type CloudWebDriverKnownProviderName } from './providers.ts';
+import {
+  BROWSERSTACK_CREDENTIAL_VARIABLES,
+  CLOUD_WEBDRIVER_PROVIDERS,
+  readBrowserStackCredentials,
+  type CloudWebDriverKnownProviderName,
+} from './providers.ts';
 import { readAwsDeviceFarmRegionFromArn } from './connection-verification.ts';
 import {
   buildCloudWebDriverBaseCapabilities,
@@ -52,9 +55,75 @@ export type DefaultCloudWebDriverProviderRuntimeEnv = DefaultCloudWebDriverArtif
   AWS_DEVICE_FARM_APP_ARN?: string;
 };
 
+const BROWSERSTACK_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
+  provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+  label: 'BrowserStack',
+  fields: {
+    providerApp: 'consumed',
+    providerOsVersion: 'consumed',
+    providerProject: 'consumed',
+    providerBuild: 'consumed',
+    providerSessionName: 'consumed',
+    providerDeviceOrientation: 'consumed',
+    providerGeoLocation: 'consumed',
+    providerTimezone: 'consumed',
+    providerAppiumVersion: 'consumed',
+    providerLanguage: 'consumed',
+    providerLocale: 'consumed',
+    providerNetworkProfile: 'consumed',
+    providerCustomNetwork: 'consumed',
+    providerNoResignApp: 'consumed',
+    awsProjectArn: 'refused',
+    awsDeviceArn: 'refused',
+    awsAppArn: 'refused',
+    awsRegion: 'refused',
+    awsInteractionMode: 'refused',
+  },
+};
+
+const AWS_DEVICE_FARM_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
+  provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+  label: 'AWS Device Farm',
+  fields: {
+    providerApp: 'refused',
+    providerOsVersion: 'refused',
+    providerProject: 'refused',
+    providerBuild: 'refused',
+    providerSessionName: 'consumed',
+    providerDeviceOrientation: 'refused',
+    providerGeoLocation: 'refused',
+    providerTimezone: 'refused',
+    providerAppiumVersion: 'refused',
+    providerLanguage: 'refused',
+    providerLocale: 'refused',
+    providerNetworkProfile: 'refused',
+    providerCustomNetwork: 'refused',
+    providerNoResignApp: 'refused',
+    awsProjectArn: 'consumed',
+    awsDeviceArn: 'consumed',
+    awsAppArn: 'consumed',
+    awsRegion: 'consumed',
+    awsInteractionMode: 'consumed',
+  },
+};
+
+/** The profile fields each hub provider reads, for routes that check them before a runtime exists. */
+export const CLOUD_WEBDRIVER_PROFILE_FIELDS: Readonly<
+  Record<CloudWebDriverKnownProviderName, ProviderProfileFieldDeclaration>
+> = {
+  [CLOUD_WEBDRIVER_PROVIDERS.browserStack]: BROWSERSTACK_PROFILE_FIELDS,
+  [CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm]: AWS_DEVICE_FARM_PROFILE_FIELDS,
+};
+
 export type CloudWebDriverProviderDefinition = {
   provider: CloudWebDriverKnownProviderName;
-  createRuntime: (env: DefaultCloudWebDriverProviderRuntimeEnv) => CloudWebDriverRuntime;
+  /** Every profile field, consumed or refused; lease allocation refuses the refused ones. */
+  profileFields: ProviderProfileFieldDeclaration;
+  /** Receives `profileFields`, which the runtime requires, so the two cannot drift apart. */
+  createRuntime: (
+    env: DefaultCloudWebDriverProviderRuntimeEnv,
+    profileFields: ProviderProfileFieldDeclaration,
+  ) => CloudWebDriverRuntime;
   listArtifactsFromEnv: (
     providerSessionId: string,
     env: DefaultCloudWebDriverArtifactEnv,
@@ -67,23 +136,19 @@ export function createCloudWebDriverProviderDefinitions(
   return [
     {
       provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
-      createRuntime: (env) =>
+      profileFields: BROWSERSTACK_PROFILE_FIELDS,
+      createRuntime: (env, profileFields) =>
         createCloudWebDriverRuntime({
           clientVersion: dependencies.clientVersion,
           provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+          profileFields,
           platform: 'android',
           deviceName: 'BrowserStack device',
           endpoint: env.BROWSERSTACK_WEBDRIVER_ENDPOINT ?? BROWSERSTACK_APP_AUTOMATE_ENDPOINT,
           capabilityOverrides: BROWSERSTACK_CAPABILITY_OVERRIDES,
           listArtifacts: async ({ provider, providerSessionId }) => {
-            const username = requireEnv(
+            const { username, accessKey } = requireBrowserStackCredentials(
               env,
-              'BROWSERSTACK_USERNAME',
-              'BrowserStack artifact lookup',
-            );
-            const accessKey = requireEnv(
-              env,
-              'BROWSERSTACK_ACCESS_KEY',
               'BrowserStack artifact lookup',
             );
             return await listBrowserStackCloudArtifacts(provider, providerSessionId, {
@@ -95,8 +160,7 @@ export function createCloudWebDriverProviderDefinitions(
           },
           prepareSession: async ({ req, lease, base }) => {
             const request = requireRequest(req, 'BrowserStack');
-            const username = requireEnv(env, 'BROWSERSTACK_USERNAME', 'BrowserStack');
-            const accessKey = requireEnv(env, 'BROWSERSTACK_ACCESS_KEY', 'BrowserStack');
+            const { username, accessKey } = requireBrowserStackCredentials(env, 'BrowserStack');
             const platform = requireRequestPlatform(request, 'BrowserStack');
             const deviceName = requireFlag(
               request,
@@ -108,22 +172,24 @@ export function createCloudWebDriverProviderDefinitions(
               'providerOsVersion',
               'BrowserStack requires --provider-os-version <version>.',
             );
-            const app = await resolveBrowserStackAppReference({
-              clientVersion: dependencies.clientVersion,
-              app: requireFlag(
+            const app = await resolveBrowserStackAppReference(
+              requireFlag(
                 request,
                 'providerApp',
                 'BrowserStack requires --provider-app <bs://app-id-or-local-path>.',
               ),
-              cwd: request.cwd,
-              username,
-              accessKey,
-              uploadEndpoint: env.BROWSERSTACK_APP_UPLOAD_ENDPOINT,
-              // A local IPA/APK upload can run long (130 MB is routine); an
-              // upload is not a billed resource, so the request's cancellation
-              // may simply abort it — unlike the session creation that follows.
-              signal: request.signal,
-            });
+              {
+                clientVersion: dependencies.clientVersion,
+                username,
+                accessKey,
+                endpoint: env.BROWSERSTACK_APP_UPLOAD_ENDPOINT,
+                cwd: request.cwd,
+                // A local IPA/APK upload can run long (130 MB is routine); an
+                // upload is not a billed resource, so the request's cancellation
+                // may simply abort it — unlike the session creation that follows.
+                signal: request.signal,
+              },
+            );
             return {
               ...base,
               platform,
@@ -152,10 +218,8 @@ export function createCloudWebDriverProviderDefinitions(
           },
         }),
       listArtifactsFromEnv: async (providerSessionId, env) => {
-        const username = requireEnv(env, 'BROWSERSTACK_USERNAME', 'BrowserStack artifact lookup');
-        const accessKey = requireEnv(
+        const { username, accessKey } = requireBrowserStackCredentials(
           env,
-          'BROWSERSTACK_ACCESS_KEY',
           'BrowserStack artifact lookup',
         );
         return await listBrowserStackCloudArtifacts(
@@ -172,10 +236,12 @@ export function createCloudWebDriverProviderDefinitions(
     },
     {
       provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
-      createRuntime: (env) =>
+      profileFields: AWS_DEVICE_FARM_PROFILE_FIELDS,
+      createRuntime: (env, profileFields) =>
         createCloudWebDriverRuntime({
           clientVersion: dependencies.clientVersion,
           provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+          profileFields,
           endpoint: 'http://127.0.0.1/',
           platform: 'android',
           deviceName: 'AWS Device Farm device',
@@ -192,13 +258,6 @@ export function createCloudWebDriverProviderDefinitions(
           },
           prepareSession: async ({ req, lease, base }) => {
             const request = requireRequest(req, 'AWS Device Farm');
-            // Enforced here, not only in the CLI profile builder: the typed client and
-            // hand-authored remote-config profiles both reach session preparation without passing
-            // through `connect`, and would otherwise have these capabilities silently dropped.
-            rejectBrowserStackOnlyDeviceFeatures(
-              request.flags,
-              CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
-            );
             const platform = requireRequestPlatform(request, 'AWS Device Farm');
             const sessionOptions = {
               client: createAwsCliDeviceFarmClient({
@@ -249,40 +308,6 @@ export function createCloudWebDriverProviderDefinitions(
   ];
 }
 
-async function resolveBrowserStackAppReference(options: {
-  clientVersion: string;
-  app: string;
-  cwd?: string;
-  username: string;
-  accessKey: string;
-  uploadEndpoint?: string;
-  signal?: AbortSignal;
-}): Promise<string> {
-  if (isProviderAppReference(options.app)) return options.app;
-  const appPath = path.resolve(options.cwd ?? process.cwd(), options.app);
-  if (!fs.existsSync(appPath)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'BrowserStack --provider-app must be a bs:// app id, URL, or existing local app path.',
-      { providerApp: options.app },
-    );
-  }
-  return await uploadBrowserStackApp(
-    appPath,
-    {
-      clientVersion: options.clientVersion,
-      username: options.username,
-      accessKey: options.accessKey,
-      endpoint: options.uploadEndpoint,
-    },
-    options.signal,
-  );
-}
-
-function isProviderAppReference(value: string): boolean {
-  return value.startsWith('bs://') || /^https?:\/\//.test(value);
-}
-
 function requireRequest(
   req: LeaseLifecycleContext | undefined,
   providerLabel: string,
@@ -314,16 +339,6 @@ function readFlag(req: LeaseLifecycleContext, key: string): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-function requireEnv(
-  env: DefaultCloudWebDriverProviderRuntimeEnv,
-  key: keyof DefaultCloudWebDriverProviderRuntimeEnv,
-  providerLabel: string,
-): string {
-  const value = env[key];
-  if (value) return value;
-  throw new AppError('INVALID_ARGS', `${providerLabel} requires ${key} in the environment.`);
-}
-
 function requireAwsValue(
   req: LeaseLifecycleContext,
   env: DefaultCloudWebDriverProviderRuntimeEnv,
@@ -349,4 +364,16 @@ function readAwsInteractionMode(
 
 function dasherize(value: string): string {
   return value.replaceAll(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
+}
+
+export function requireBrowserStackCredentials(
+  env: Readonly<Record<string, string | undefined>>,
+  consumer: string,
+): { username: string; accessKey: string } {
+  const { username, accessKey } = readBrowserStackCredentials(env);
+  if (username && accessKey) return { username, accessKey };
+  const missing = username
+    ? BROWSERSTACK_CREDENTIAL_VARIABLES.accessKey
+    : BROWSERSTACK_CREDENTIAL_VARIABLES.username;
+  throw new AppError('INVALID_ARGS', `${consumer} requires ${missing} in the environment.`);
 }

@@ -3,8 +3,9 @@ import type { Rect } from '@agent-device/kernel/snapshot';
 /**
  * The evidence a `fill` carries when it changed a field but could not confirm the text it sent.
  * Both the fill response and `Interactor.fill`'s return need these shapes, so they sit below both
- * of those modules rather than in either. This is the cross-language shape, not Android's probing:
- * `packages/platform-android/src/fill-verification.ts` builds Android's copy of it.
+ * of those modules rather than in either. This is the cross-language shape, not a platform's probing:
+ * `packages/platform-android/src/fill-verification.ts` builds Android's copy of it, and the Apple
+ * runner's `RunnerTests+TextEntryConfirmation.swift` builds the iOS one.
  */
 
 /** The field a fill aimed at, as the platform that performed it names it. */
@@ -17,7 +18,8 @@ export type FillVerificationTarget = {
 
 /**
  * Target-bound evidence that a fill moved a field's content from `before` to `after` without raw
- * equality with `requested` being reachable, because app-owned formatting prevents it. Bound to the
+ * equality with `requested` being reachable, because app-owned formatting prevents it or the field's
+ * accessibility value does not echo the typed text. Bound to the
  * {@link FillVerificationTarget} it was collected against so another field, or the same field after
  * it re-laid out, cannot borrow this evidence.
  */

@@ -2,7 +2,7 @@ import {
   SCREENSHOT_CROP_REASONS,
   type ScreenshotCropReason,
 } from '@agent-device/contracts/capture';
-import { macOsSurfaceBackend, type SessionSurface } from '@agent-device/contracts/session';
+import type { SessionSurface } from '@agent-device/contracts/session';
 import { resolveDeviceAppleOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { validateSelectorExpression } from '@agent-device/selectors';
@@ -99,7 +99,8 @@ function classifyAppleCropTarget(
 }
 
 function classifyMacOsCropTarget(surface: SessionSurface | undefined): CropTarget {
-  return macOsSurfaceBackend(surface) === 'macos-helper' ? 'macos-helper' : 'macos-app-window';
+  // An app session's screenshot frames its window on either backend; the others frame the display.
+  return (surface ?? 'app') === 'app' ? 'macos-app-window' : 'macos-helper';
 }
 
 function cropRefusal(target: string, rejectionReason?: ScreenshotCropReason): AppError {

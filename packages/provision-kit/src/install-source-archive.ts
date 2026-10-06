@@ -15,10 +15,32 @@ type InstallableMatcher = (
   stat: { isFile(): boolean; isDirectory(): boolean },
 ) => boolean;
 
+type ResolvedInstallableCandidate = {
+  /** The outermost archive the source arrived as. */
+  archivePath?: string;
+  /** The innermost archive, the one the installable was extracted from directly. */
+  containingArchivePath?: string;
+  installablePath: string;
+};
+
+function resolvedCandidate(
+  installablePath: string,
+  params: { archivePath: string | undefined; containingArchivePath?: string },
+): ResolvedInstallableCandidate {
+  return {
+    archivePath: params.archivePath,
+    ...(params.containingArchivePath
+      ? { containingArchivePath: params.containingArchivePath }
+      : {}),
+    installablePath,
+  };
+}
+
 export async function resolveInstallableCandidate(
   candidatePath: string,
   params: {
     archivePath: string | undefined;
+    containingArchivePath?: string;
     isInstallablePath: InstallableMatcher;
     installableLabel: string;
     registerCleanup: (cleanup: () => Promise<void>) => void;
@@ -26,11 +48,11 @@ export async function resolveInstallableCandidate(
     archiveDepth: number;
     onArchiveAccepted?: (depth: number) => void;
   },
-): Promise<{ archivePath?: string; installablePath: string }> {
+): Promise<ResolvedInstallableCandidate> {
   const stat = await fs.stat(candidatePath).catch(() => null);
   if (!stat) throw new AppError('INVALID_ARGS', `App source not found: ${candidatePath}`);
   if (params.isInstallablePath(candidatePath, stat)) {
-    return { archivePath: params.archivePath, installablePath: candidatePath };
+    return resolvedCandidate(candidatePath, params);
   }
   if (stat.isFile() && isArchivePath(candidatePath)) {
     return await resolveExtractedArchive(candidatePath, params);
@@ -38,7 +60,7 @@ export async function resolveInstallableCandidate(
   if (stat.isDirectory()) {
     const installables = await collectMatchingPaths(candidatePath, params.isInstallablePath);
     if (installables.length === 1) {
-      return { archivePath: params.archivePath, installablePath: installables[0]! };
+      return resolvedCandidate(installables[0]!, params);
     }
     if (installables.length > 1) {
       throw new AppError(
@@ -77,6 +99,7 @@ async function resolveExtractedArchive(
   return await resolveInstallableCandidate(extracted.outputPath, {
     ...params,
     archivePath: params.archivePath ?? archivePath,
+    containingArchivePath: archivePath,
     archiveDepth: params.archiveDepth + 1,
   });
 }

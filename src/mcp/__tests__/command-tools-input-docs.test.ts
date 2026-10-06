@@ -101,7 +101,6 @@ const UNDESCRIBED_TOOL_INPUTS = new Set([
   'screenshot.stabilize',
   'screenshot.surface',
   'scroll.direction',
-  'settings.app',
   'settings.latitude',
   'settings.longitude',
   'settings.mode',

@@ -72,6 +72,11 @@ export type ScreenRecordingLiveSnapshot = Readonly<{
   recordOnlySession: boolean;
   activeSessionApp?: RecordingAppIdentity;
   exportQuality?: RecordingExportQuality;
+  /**
+   * The caller's `--fps`: the capture rate where the recorder takes one. The touch overlay renders
+   * at most this many frames a second, and never more than 30.
+   */
+  fps?: number;
   gestureEvents: readonly RecordingGestureEvent[];
   touchReferenceFrame?: GestureReferenceFrame;
   gestureClockOriginAtMs?: number;

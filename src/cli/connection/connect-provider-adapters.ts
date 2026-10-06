@@ -2,6 +2,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
 import { verifyLimrunConnection } from '@agent-device/provider-limrun';
 import { AppError } from '@agent-device/kernel/errors';
+import { readBrowserStackCredentials } from '@agent-device/provider-webdriver/providers';
 import { providerWebDriver } from '../../provider-webdriver.ts';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -10,6 +11,7 @@ import { type EnvMap } from '@agent-device/kernel/source-value';
 import { resolveCloudConnectProfile } from './cloud-profile.ts';
 import { resolveCloudWebDriverConnectProfile } from './cloud-webdriver-profile.ts';
 import { resolveLimrunConnectProfile } from './limrun-profile.ts';
+import { readLimrunCredentials } from '../../provider-limrun-credentials.ts';
 import { resolveProxyConnectProfile } from './proxy-profile.ts';
 import { profileToCliFlags } from '../remote-config-flags.ts';
 import { isConnectProviderName, type ConnectProvider } from './provider-policy.ts';
@@ -133,14 +135,15 @@ async function verifyBrowserStack(
   context: Pick<AdapterContext, 'flags' | 'env'>,
 ): Promise<ConnectVerification> {
   const { flags, env } = context;
+  const credentials = readBrowserStackCredentials(env);
   return await providerWebDriver.verifyConnection({
     provider: 'browserstack',
     username: requiredResolvedValue(
-      env.BROWSERSTACK_USERNAME,
+      credentials.username,
       'BrowserStack profile missed BROWSERSTACK_USERNAME.',
     ),
     accessKey: requiredResolvedValue(
-      env.BROWSERSTACK_ACCESS_KEY,
+      credentials.accessKey,
       'BrowserStack profile missed BROWSERSTACK_ACCESS_KEY.',
     ),
     platform: requiredResolvedPlatform(flags.platform, 'BrowserStack'),
@@ -177,13 +180,9 @@ async function verifyLimrun(
   context: Pick<AdapterContext, 'flags' | 'env'>,
 ): Promise<ConnectVerification> {
   return await verifyLimrunConnection({
-    apiKey: requiredResolvedValue(
-      context.env.LIMRUN_API_KEY,
-      'Limrun profile missed LIMRUN_API_KEY.',
-    ),
+    ...readLimrunCredentials(context.env),
     clientVersion: readVersion(),
     platform: requiredResolvedPlatform(context.flags.platform, 'Limrun'),
-    region: context.env.LIMRUN_REGION?.trim() || undefined,
   });
 }
 

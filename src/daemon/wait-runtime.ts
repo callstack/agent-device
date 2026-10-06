@@ -22,7 +22,7 @@ import {
 } from './selector-runtime.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
-import type { SessionState } from './session-state.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
 import { maybeWaitTimeoutSurfaceResponse } from './wait-current-surface.ts';
 import { withCaptureDisclosures } from './capture-disclosure.ts';
 import {
@@ -39,7 +39,7 @@ export async function dispatchWaitViaRuntime(params: DispatchWaitParams): Promis
   const parsedOrResponse = parseWaitRequest(req);
   if ('ok' in parsedOrResponse) return parsedOrResponse;
   const parsed = parsedOrResponse;
-  const { session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
+  const { ref, session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
   // ADR 0019: facts are the only support authority, through the selector family's one
   // admit-then-bind entry. A duration wait observes nothing, so it never asks for a binding —
   // exactly the cell legacy admission skipped by testing `parsed.kind !== 'sleep'`.
@@ -58,7 +58,7 @@ export async function dispatchWaitViaRuntime(params: DispatchWaitParams): Promis
   // A pure sleep consumes no capture, so it never earns the system-surface disclosure below.
   if (parsed.kind === 'sleep') {
     return await executeWaitRequest(
-      params,
+      { ...params, ref },
       waitParsed,
       session,
       device,
@@ -75,7 +75,7 @@ export async function dispatchWaitViaRuntime(params: DispatchWaitParams): Promis
       device,
       () =>
         executeWaitRequest(
-          params,
+          { ...params, ref },
           waitParsed,
           session,
           device,
@@ -146,7 +146,7 @@ function normalizeWaitPositionals(
 }
 
 async function executeWaitRequest(
-  params: DispatchWaitParams,
+  params: DispatchWaitParams & { ref: SessionRef | undefined },
   parsed: Exclude<WaitParsed, { kind: 'invalid' }>,
   session: SessionState | undefined,
   device: SessionState['device'],
@@ -157,6 +157,7 @@ async function executeWaitRequest(
   const { req, sessionName, sessionStore } = params;
   const runtime = createSelectorRuntimeForDevice({
     ...params,
+    ref: params.ref,
     session,
     device,
     bound: waitOperations,
@@ -170,7 +171,7 @@ async function executeWaitRequest(
     const recordedTarget = readRecordedResolutionTarget(result);
     recordIfSession(
       sessionStore,
-      sessionName,
+      params.ref,
       req,
       stripResolutionPayload(result),
       recordedTarget,

@@ -6,10 +6,9 @@
 // Three leak classes:
 //
 //   surviving daemon   at `after-shutdown` a daemon pid that is still alive IS
-//                      the leak. `stopProcessForTakeover` is best-effort and
-//                      returns silently on identity mismatch, signal failure, or
-//                      kill timeout, so a lane that only stops the daemon never
-//                      learns it survived.
+//                      the leak. `stopDaemonProcess` returns a retained result when exit
+//                      cannot be confirmed. The oracle still checks actual
+//                      liveness rather than accepting an attempted stop.
 //   state-dir residue  every entry must match EXPECTED_STATE_DIR_ENTRIES
 //                      (unknown ⇒ classify the new artifact, do not widen the
 //                      matcher): `*.tmp` write-then-publish temporaries are torn

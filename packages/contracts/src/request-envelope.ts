@@ -98,4 +98,9 @@ export type InternalRequestOptions = AgentDeviceClientConfig &
     leaseTtlMs?: number;
     provider?: string;
     providerSessionId?: string;
+    /**
+     * Cancels this one call in flight; never crosses the wire. The client hands it to the transport
+     * context and rejects its own promise on abort even when a custom transport ignores it.
+     */
+    signal?: AbortSignal;
   };

@@ -403,9 +403,10 @@ class TortureWorld {
         ownerStartTime: null,
       },
     };
-    this.sessionStore.set(name, state);
+    const ref = this.sessionStore.publish(name, state);
     const instanceId = this.nextInstanceId++;
     const instance: SessionInstance = {
+      ref,
       instanceId,
       name,
       deviceId: device.id,
@@ -449,10 +450,7 @@ class TortureWorld {
       this.fail('no leaked leases', `release threw for ${instance.name}: ${error.message}`);
     }
     this.claims.clear(instance.claim);
-    const stored = this.sessionStore.get(instance.name);
-    if (stored?.lease?.leaseId === instance.lease.leaseId) {
-      this.sessionStore.delete(instance.name);
-    }
+    this.sessionStore.retire(instance.ref);
     instance.reaped = true;
     if (this.deviceOwner.get(instance.deviceId) === instance.instanceId) {
       this.deviceOwner.delete(instance.deviceId);

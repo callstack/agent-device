@@ -1,4 +1,4 @@
-// Catches: a session resource field (appLog, appLogFailure, audioProbe, perfCapture) written
+// Catches: a session resource field (appLog, appLogFailure, audioProbe, perfCapture, screenRecording) written
 //   from outside its declared owner module — R7's session-state-ownership shape applied to the
 //   narrower set of per-resource fields these session-scoped runtimes carry, where the same
 //   aliasing hazard (get()/set() hand back and re-put the live reference) applies.
@@ -6,7 +6,7 @@
 //   the runtime-command migration; 4454aef139 (#2092) removed what it retired.
 // Cost: 115 LOC (57 rule + 58 test).
 // Kill criterion: none enforced today; retire only by maintainer decision that per-owner write
-//   authority over appLog/appLogFailure/audioProbe/perfCapture no longer matters. The fields
+//   authority over appLog/appLogFailure/audioProbe/perfCapture/screenRecording no longer matters. The fields
 //   are plain mutable properties on the shared session record, so an outside write type-checks.
 
 import { parseSync } from 'oxc-parser';
@@ -27,14 +27,12 @@ const SCANNED_ROOTS = ['src/daemon/', 'packages/capture-kit/src/capture-admissio
 const RESOURCE_OWNERS: Readonly<Record<string, ReadonlySet<string>>> = {
   appLog: new Set(['src/daemon/app-log-session-resource.ts', 'src/daemon/session-state.ts']),
   appLogFailure: new Set(['src/daemon/app-log-session-resource.ts', 'src/daemon/session-state.ts']),
-  audioProbe: new Set([
-    'packages/capture-kit/src/capture-admission/audio-probe-session-resource.ts',
+  audioProbe: new Set(['src/daemon/session-capture-binding.ts', 'src/daemon/session-state.ts']),
+  screenRecording: new Set([
+    'src/daemon/session-capture-binding.ts',
     'src/daemon/session-state.ts',
   ]),
-  perfCapture: new Set([
-    'packages/capture-kit/src/capture-admission/perf-capture-session-resource.ts',
-    'src/daemon/session-state.ts',
-  ]),
+  perfCapture: new Set(['src/daemon/session-capture-binding.ts', 'src/daemon/session-state.ts']),
 };
 
 /** Durable session-resource records have one whole-record construction owner per domain. */

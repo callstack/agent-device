@@ -4,24 +4,32 @@ import type { GestureReferenceFrame } from '@agent-device/contracts/scroll-gestu
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionStore } from '../../session-store.ts';
 import { getSnapshotReferenceFrame } from '@agent-device/capture-kit/touch-reference-frame';
-import type { SessionState } from '../../session-state.ts';
+import type { SessionRef } from '../../session-state.ts';
 import type { BoundContextFromFlags, CaptureSnapshotForSession } from './types.ts';
 import { isActiveProviderDevice } from '../../provider-device-admission.ts';
 
 async function resolveDirectTouchReferenceFrame(params: {
-  session: SessionState;
+  ref: SessionRef;
   flags: CommandFlags | undefined;
   sessionStore: SessionStore;
   contextFromFlags: BoundContextFromFlags;
   captureSnapshotForSession: CaptureSnapshotForSession;
   observation?: AndroidObservationAdapter;
 }): Promise<GestureReferenceFrame | undefined> {
-  const { session, flags, sessionStore, contextFromFlags, captureSnapshotForSession, observation } =
+  const { ref, flags, sessionStore, contextFromFlags, captureSnapshotForSession, observation } =
     params;
-  const recording = session.screenRecording?.handle;
-  if (!recording) {
+  const session = sessionStore.resolveCurrent(ref);
+  if (!session) return undefined;
+  const resource = session.screenRecording;
+  if (!resource) {
     return undefined;
   }
+  const recording = resource.handle;
+  const rememberFrame = (frame: GestureReferenceFrame | undefined) => {
+    if (!frame || sessionStore.resolveCurrent(ref)?.screenRecording !== resource) return undefined;
+    recording.setTouchReferenceFrame(frame);
+    return frame;
+  };
   const currentFrame = recording.inspect().touchReferenceFrame;
   if (currentFrame) {
     return currentFrame;
@@ -34,30 +42,25 @@ async function resolveDirectTouchReferenceFrame(params: {
   ) {
     if (!observation) throw new Error('Android observation was not injected into the request');
     const size = await observation.readScreenSize(session.device);
-    const referenceFrame = {
+    return rememberFrame({
       referenceWidth: size.width,
       referenceHeight: size.height,
-    };
-    recording.setTouchReferenceFrame(referenceFrame);
-    return referenceFrame;
+    });
   }
 
   const snapshotFrame = getSnapshotReferenceFrame(session.snapshot);
   if (snapshotFrame) {
-    recording.setTouchReferenceFrame(snapshotFrame);
-    return snapshotFrame;
+    return rememberFrame(snapshotFrame);
   }
 
-  const snapshot = await captureSnapshotForSession(session, flags, sessionStore, contextFromFlags, {
+  const snapshot = await captureSnapshotForSession(ref, flags, sessionStore, contextFromFlags, {
     interactiveOnly: true,
   });
-  const referenceFrame = getSnapshotReferenceFrame(snapshot);
-  if (referenceFrame) recording.setTouchReferenceFrame(referenceFrame);
-  return referenceFrame;
+  return rememberFrame(getSnapshotReferenceFrame(snapshot));
 }
 
 export async function resolveDirectTouchReferenceFrameSafely(params: {
-  session: SessionState;
+  ref: SessionRef;
   flags: CommandFlags | undefined;
   sessionStore: SessionStore;
   contextFromFlags: BoundContextFromFlags;
@@ -67,11 +70,13 @@ export async function resolveDirectTouchReferenceFrameSafely(params: {
   try {
     return await resolveDirectTouchReferenceFrame(params);
   } catch (error) {
+    const current = params.sessionStore.resolveCurrent(params.ref);
+    if (!current) return undefined;
     emitDiagnostic({
       level: 'warn',
       phase: 'touch_reference_frame_resolve_failed',
       data: {
-        platform: params.session.device.platform,
+        platform: current.device.platform,
         error: error instanceof Error ? error.message : String(error),
       },
     });

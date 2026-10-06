@@ -350,6 +350,7 @@ function maestroRuntimeDeviceFlags(
     platform,
     target: device.target,
     noRecord: true,
+    ...(requestedFlags?.testIme === undefined ? {} : { testIme: requestedFlags.testIme }),
   };
   if (platform === 'android') return { ...flags, serial: device.id };
   return {
@@ -367,6 +368,7 @@ function unresolvedMaestroRuntimeDeviceFlags(
     platform,
     target: requestedFlags?.target ?? 'mobile',
     noRecord: true,
+    ...(requestedFlags?.testIme === undefined ? {} : { testIme: requestedFlags.testIme }),
   };
   if (requestedFlags?.device) flags.device = requestedFlags.device;
   return platform === 'android'

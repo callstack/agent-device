@@ -781,8 +781,13 @@ test.each([
 
 test('an accept that dies with the runner session hands the URL over again and reads once more', async () => {
   let accepts = 0;
+  const readAlert = vi
+    .fn<() => Promise<Record<string, unknown>>>()
+    .mockResolvedValueOnce(CONFIRMATION)
+    .mockRejectedValueOnce(SPAWN_TIMEOUT)
+    .mockResolvedValue(CONFIRMATION);
   const { lifecycle, events } = launchUrlSimulator(
-    async () => CONFIRMATION,
+    readAlert,
     [UNOBSERVABLE, UNOBSERVABLE, OBSERVABLE],
     {
       acceptAlert: async () => {
@@ -804,6 +809,7 @@ test('an accept that dies with the runner session hands the URL over again and r
     'observe unobservable',
     'alert get',
     'alert accept',
+    'alert get',
     'observe unobservable',
     'open',
     'alert get',
@@ -811,6 +817,84 @@ test('an accept that dies with the runner session hands the URL over again and r
     'observe observable',
   ]);
 });
+
+test.each([
+  ['still coming up', COMING_UP],
+  ['observable', OBSERVABLE],
+  ['not running', UNOBSERVABLE],
+])(
+  'a failed accept rejects a persistent launch prompt while the app is %s',
+  async (_name, afterAnswer) => {
+    const { lifecycle, interactor, events } = launchUrlSimulator(
+      async () => CONFIRMATION,
+      [BRIDGE_CIRCUIT, afterAnswer],
+      {
+        acceptAlert: async () => {
+          throw new AppError('COMMAND_FAILED', 'alert accept exhausted its deadline', {
+            runnerErrorCode: 'ALERT_DEADLINE_EXCEEDED',
+          });
+        },
+      },
+    );
+
+    await expect(lifecycle.openApplication(launchUrlInput())).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'launch_confirmation_unanswered', appBundleId: 'com.example.app' },
+    });
+    expect(interactor.acceptAlert).toHaveBeenCalledOnce();
+    expect(interactor.readAlert).toHaveBeenCalledTimes(2);
+    expect(events.filter((event) => event === 'open' || event === `open ${LAUNCH_URL}`)).toEqual([
+      `open ${LAUNCH_URL}`,
+    ]);
+  },
+);
+
+test.each([
+  {
+    name: 'absent',
+    readAfterFailure: async () => {
+      throw alertNotFound();
+    },
+  },
+  {
+    name: 'unreadable',
+    readAfterFailure: async () => {
+      throw SPAWN_TIMEOUT;
+    },
+  },
+  {
+    name: 'replaced by the same title with unrelated buttons',
+    readAfterFailure: async () => ({ message: CONFIRMATION.message, items: ['Allow', 'Deny'] }),
+  },
+  {
+    name: 'replaced by another launch confirmation',
+    readAfterFailure: async () => ({ ...CONFIRMATION, message: 'Open in “Other App”?' }),
+  },
+])(
+  'a failed accept with its prompt $name preserves launch-transition policy',
+  async ({ readAfterFailure }) => {
+    const readAlert = vi.fn(readAfterFailure).mockResolvedValueOnce(CONFIRMATION);
+    const { lifecycle, interactor, events } = launchUrlSimulator(
+      readAlert,
+      [BRIDGE_CIRCUIT, COMING_UP],
+      {
+        acceptAlert: async () => {
+          throw SPAWN_TIMEOUT;
+        },
+      },
+    );
+
+    const outcome = await lifecycle.openApplication(launchUrlInput());
+
+    expect(outcome.launchConfirmation).toBeUndefined();
+    expect(outcome.timing.postOpenObservation).toBe('unobservable');
+    expect(interactor.acceptAlert).toHaveBeenCalledOnce();
+    expect(interactor.readAlert).toHaveBeenCalledTimes(2);
+    expect(events.filter((event) => event === 'open' || event === `open ${LAUNCH_URL}`)).toEqual([
+      `open ${LAUNCH_URL}`,
+    ]);
+  },
+);
 
 test('an accept leaving a launch-transition window open stays green and re-hands nothing', async () => {
   const { lifecycle, events } = launchUrlSimulator(
@@ -834,8 +918,14 @@ test('an accept leaving a launch-transition window open stays green and re-hands
 });
 
 test('a launch URL handed over twice that still leaves no process fails the open', async () => {
+  const readAlert = vi
+    .fn<() => Promise<Record<string, unknown>>>()
+    .mockResolvedValueOnce(CONFIRMATION)
+    .mockRejectedValueOnce(SPAWN_TIMEOUT)
+    .mockResolvedValueOnce(CONFIRMATION)
+    .mockRejectedValueOnce(SPAWN_TIMEOUT);
   const { lifecycle, events } = launchUrlSimulator(
-    async () => CONFIRMATION,
+    readAlert,
     Array.from({ length: 3 }, () => UNOBSERVABLE),
     {
       acceptAlert: async () => {

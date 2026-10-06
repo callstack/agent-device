@@ -16,6 +16,7 @@ export type HttpDaemonFixture = {
 
 export async function startHttpDaemonFixture(
   responseData: Record<string, unknown>,
+  options: { ready?: () => boolean } = {},
 ): Promise<HttpDaemonFixture> {
   const seenPaths: string[] = [];
   const rpcRequests: Record<string, any>[] = [];
@@ -24,7 +25,7 @@ export async function startHttpDaemonFixture(
     seenPaths.push(`${req.method ?? 'GET'} ${url.pathname}`);
 
     if (req.method === 'GET' && url.pathname === '/health') {
-      res.writeHead(200);
+      res.writeHead(options.ready?.() === false ? 503 : 200);
       res.end('ok');
       return;
     }

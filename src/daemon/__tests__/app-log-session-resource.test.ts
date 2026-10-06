@@ -19,6 +19,28 @@ import { adoptStartedSessionAppLog, finishSessionAppLog } from '../app-log-sessi
 import { createNextAppLogFence } from '../app-log-start-preflight.ts';
 import { appLogResourceStore } from '../app-log-resource-store.ts';
 import type { SessionState } from '../session-state.ts';
+import { stopSessionAppLog } from '../session-teardown.ts';
+
+test('teardown captures an adopted app log before its lazy import can cross retirement', async () => {
+  const context = makeContext();
+  const runtime = makeStartResult(context);
+  await adoptStartedSessionAppLog({
+    ...context,
+    ...runtime.result,
+    throwIfCanceled: () => {},
+  });
+  expect(context.ref.session.appLog).toBeUndefined();
+  const stopping = stopSessionAppLog(context);
+  context.sessionStore.retire(context.ref);
+  const successor = context.sessionStore.publish(context.sessionName, {
+    ...context.session,
+    appName: 'successor',
+  });
+  await stopping;
+  expect(runtime.forceCleanup).toHaveBeenCalledOnce();
+  expect(context.sessionStore.requireCurrent(successor)).toBe(successor.session);
+  expect(context.sessionStore.requireCurrent(successor).appLog).toBeUndefined();
+});
 
 test('start persists open recovery truth before adopting the live handle', async () => {
   const context = makeContext();
@@ -88,7 +110,7 @@ test('SessionStore failure after transfer disposes the transferred handle and pr
   const context = makeContext();
   const runtime = makeStartResult(context);
   const primary = new Error('store adoption failed');
-  vi.spyOn(context.sessionStore, 'set').mockImplementationOnce(() => {
+  vi.spyOn(context.sessionStore, 'update').mockImplementationOnce(() => {
     throw primary;
   });
   await expect(
@@ -296,7 +318,6 @@ test('app-log disposes on a failed finish because its retry is that same finish 
     finishSessionAppLog({
       intent: 'capture',
       ...context,
-      session: context.sessionStore.get(context.sessionName) ?? context.session,
     }),
   ).rejects.toBe(finishError);
 
@@ -315,6 +336,144 @@ test('app-log disposes on a failed finish because its retry is that same finish 
   ).not.toThrow();
 });
 
+test('shutdown admission rejects a late start while its existing session still occupies the address', async () => {
+  const context = makeContext();
+  const runtime = makeStartResult(context);
+  context.sessionStore.closeAdmission();
+  await expect(
+    adoptStartedSessionAppLog({ ...context, ...runtime.result, throwIfCanceled: () => {} }),
+  ).rejects.toMatchObject({ details: { reason: 'daemon_shutting_down' } });
+  expect(runtime.forceCleanup).toHaveBeenCalledOnce();
+  expect(context.sessionStore.requireCurrent(context.ref).appLog).toBeUndefined();
+  expect(appLogResourceStore.read(context.resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope: { lifecycle: 'completed' },
+  });
+});
+
+test('failed adoption cannot terminalize successor evidence after its cleanup yields', async () => {
+  const context = makeContext();
+  const runtime = makeStartResult(context);
+  let release!: () => void;
+  let entered!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const cleaning = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  runtime.forceCleanup.mockImplementationOnce(async () => {
+    entered();
+    await held;
+    return { status: 'cleaned' };
+  });
+  const canceled = new AppError('CANCELED', 'canceled');
+  const adoption = adoptStartedSessionAppLog({
+    ...context,
+    ...runtime.result,
+    throwIfCanceled: () => {
+      throw canceled;
+    },
+  });
+  const rejected = expect(adoption).rejects.toBe(canceled);
+  await cleaning;
+  context.sessionStore.retire(context.ref);
+  const successor = context.sessionStore.publish(context.sessionName, { ...context.session });
+  const successorEnvelope = {
+    ...runtime.result.envelope,
+    fence: { token: 'successor', generation: 2 },
+  };
+  appLogResourceStore.write(context.resourcePath, successorEnvelope);
+  release();
+  await rejected;
+  expect(context.sessionStore.requireCurrent(successor).appLog).toBeUndefined();
+  expect(appLogResourceStore.read(context.resourcePath)).toEqual({
+    status: 'decoded',
+    envelope: successorEnvelope,
+  });
+});
+
+test('late adoption disposes its pending handle without overwriting a successor manifest', async () => {
+  const context = makeContext();
+  const runtime = makeStartResult(context);
+  context.sessionStore.retire(context.ref);
+  const successor = context.sessionStore.publish(context.sessionName, { ...context.session });
+  const envelope = { ...runtime.result.envelope, fence: { token: 'successor', generation: 2 } };
+  appLogResourceStore.write(context.resourcePath, envelope);
+  await expect(
+    adoptStartedSessionAppLog({ ...context, ...runtime.result, throwIfCanceled: () => {} }),
+  ).rejects.toMatchObject({ details: { reason: 'session_lifetime_ended' } });
+  expect(runtime.forceCleanup).toHaveBeenCalledOnce();
+  expect(context.sessionStore.requireCurrent(successor).appLog).toBeUndefined();
+  expect(appLogResourceStore.read(context.resourcePath)).toMatchObject({
+    status: 'decoded',
+    envelope,
+  });
+});
+
+test.each(['rebuild', 'retire', 'replace-resource'] as const)(
+  'finishing app log after %s preserves the current record and its other fields',
+  async (change) => {
+    const context = makeContext();
+    const {
+      result: { envelope },
+    } = makeStartResult(context);
+    let enter!: () => void;
+    let resume!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    const release = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    const finish = vi.fn(async () => {
+      enter();
+      await release;
+      return {
+        status: 'completed' as const,
+        result: { backend: 'android' as const, outputPath: '/tmp/app.log', completedAt: 2 },
+      };
+    });
+    const handle = createTestAppLogLiveHandle({
+      inspect: () => ({ backend: 'android', state: 'active', startedAt: 1 }),
+      finish,
+      forceCleanup: async () => ({ status: 'cleaned' }),
+    });
+    await adoptStartedSessionAppLog({
+      ...context,
+      envelope,
+      pendingHandle: new PendingTransferGuard(handle),
+      throwIfCanceled: () => {},
+    });
+    const finishing = finishSessionAppLog({ ...context, intent: 'capture' });
+    await entered;
+    let currentRef = context.ref;
+    const active = context.sessionStore.requireCurrent(currentRef).appLog!;
+    const replacementHandle = makeStartResult(context).handle;
+    if (change === 'retire') {
+      context.sessionStore.retire(currentRef);
+      currentRef = context.sessionStore.publish(context.sessionName, {
+        ...context.session,
+        appLog: active,
+        appName: 'successor',
+      });
+    } else {
+      context.sessionStore.update(currentRef, {
+        appName: 'updated',
+        appLog:
+          change === 'replace-resource' ? { ...active, handle: replacementHandle } : { ...active },
+      });
+    }
+    resume();
+    await finishing;
+    expect(finish).toHaveBeenCalledOnce();
+    const current = context.sessionStore.requireCurrent(currentRef);
+    expect(current.appName).toBe(change === 'retire' ? 'successor' : 'updated');
+    if (change === 'rebuild') expect(current.appLog).toBeUndefined();
+    else expect(current.appLog?.handle).toBe(change === 'retire' ? handle : replacementHandle);
+  },
+);
+
 function makeContext(
   device: DeviceInfo = {
     platform: 'android',
@@ -331,10 +490,11 @@ function makeContext(
     createdAt: Date.now(),
     actions: [],
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   const resourcePath = appLogResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName));
   return {
     admissionLedger: createAppLogAdmissionLedger(),
+    ref: sessionStore.lookup(sessionName)!,
     session,
     sessionName,
     sessionStore,

@@ -1,3 +1,4 @@
+import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
 /**
  * ADR 0012 decision 6 repair-transaction `--force`/`--overwrite` semantics (#1258): a
  * `--save-script` target that already exists is refused at arm time, before any step runs, unless
@@ -110,6 +111,7 @@ test('#1258: close --save-script --force overwrites an existing COMPLETE healed 
   const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-force-overwrite-',
   );
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   makeCompleteRepairSession(sessionStore, sessionName, root);
   // A prior COMPLETE (sentinel-marked) healed artifact already sits at the
   // default path — `--force` must overwrite it instead of refusing.
@@ -244,7 +246,7 @@ test('#1258 preflight honors PERSISTED force: a --from continuation without --fo
 
   // The agent's corrective press (blessed @ref), recorded live.
   const session = sessionStore.get(sessionName)!;
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e7'],
     flags: {},
@@ -317,7 +319,7 @@ test('#1258 preflight is per-target: a --from continuation RETARGETING to an exi
   expect(sessionTargetPath(session)).toBe(targetA);
   expect(sessionTargetForce(session)).toBe(true);
   // The agent's corrective press.
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e7'],
     flags: {},
@@ -391,6 +393,7 @@ test('#1258 force is per-target: re-arming --save-script=<b> WITHOUT --force dro
     'agent-device-repair-transaction-retarget-clears-force-',
   );
   // Armed and forced for target <a> (flow.healed.ad).
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   const session = makeCompleteRepairSession(sessionStore, sessionName, root);
   session.scriptPublication = repairPublication('complete', {
     boundary: 0,
@@ -436,6 +439,7 @@ test('#1258 force per-target, contrast: re-arming --save-script=<b> WITH --force
   const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-retarget-force-overwrites-',
   );
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   const session = makeCompleteRepairSession(sessionStore, sessionName, root);
   session.scriptPublication = repairPublication('complete', {
     boundary: 0,

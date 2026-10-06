@@ -561,6 +561,14 @@
       }
     },
     {
+      "id": "authored/repeat-while",
+      "file": "authored/repeat-while.yaml",
+      "origin": {
+        "kind": "authored",
+        "note": "Coverage: repeat.while selector and JavaScript conditions, with and without a times limit."
+      }
+    },
+    {
       "id": "authored/repeat",
       "file": "authored/repeat.yaml",
       "origin": {

@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
+import { limrunTestDependencies } from '../../../src/platform-runtime-gateway.fixtures.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { mkdtempForTestSync } from '../../../src/__tests__/test-utils/tmp-dir.ts';
 
@@ -136,9 +137,6 @@ function limrunDependencies(): LimrunRuntimeDependencies {
       downloadFile: async () => undefined,
       archiveDirectory: async () => {},
     },
-    ios: {
-      resolveAppAlias: async (app) => app,
-      readBundleAppName: async () => undefined,
-    },
+    ios: limrunTestDependencies.ios,
   };
 }

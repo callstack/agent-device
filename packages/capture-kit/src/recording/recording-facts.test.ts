@@ -21,6 +21,7 @@ test('accepts the facts a caller asked for, with or without the optional ones', 
     true,
   );
   assert.equal(recordingFactsAreValid(facet({ exportQuality: 'high' })), true);
+  assert.equal(recordingFactsAreValid(facet({ fps: 15 })), true);
 });
 
 test('refuses a facet whose recording facts no start could have produced', () => {
@@ -32,6 +33,9 @@ test('refuses a facet whose recording facts no start could have produced', () =>
 
 test('refuses an optional fact that is present but unreadable rather than dropping it', () => {
   assert.equal(recordingFactsAreValid(facet({ exportQuality: 'ultra' })), false);
+  assert.equal(recordingFactsAreValid(facet({ fps: 0 })), false);
+  assert.equal(recordingFactsAreValid(facet({ fps: 12.5 })), false);
+  assert.equal(recordingFactsAreValid(facet({ fps: '15' })), false);
   assert.equal(recordingFactsAreValid(facet({ activeSessionApp: { bundleId: '' } })), false);
   assert.equal(recordingFactsAreValid(facet({ activeSessionApp: { name: 'Example' } })), false);
   assert.equal(recordingFactsAreValid(facet({ activeSessionApp: 'com.example.app' })), false);
@@ -42,6 +46,11 @@ test('refuses an optional fact that is present but unreadable rather than droppi
 });
 
 test('names every key of the facet it validates', () => {
-  const declared = Object.keys({ ...FACTS, activeSessionApp: undefined, exportQuality: undefined });
+  const declared = Object.keys({
+    ...FACTS,
+    activeSessionApp: undefined,
+    exportQuality: undefined,
+    fps: undefined,
+  });
   assert.deepEqual([...RECORDING_FACTS_KEYS].sort(), declared.sort());
 });

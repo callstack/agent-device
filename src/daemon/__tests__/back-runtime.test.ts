@@ -138,7 +138,7 @@ test('request router joins back admission to execution, recording, and ref inval
   const sessionStore = makeSessionStore('agent-device-back-generic-');
   const session = makeSession('back-runtime', { device: appleDevice });
   activateCompleteRefFrame(session);
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const handler = createRequestHandler({
     logPath: '/tmp/daemon.log',
     token: 't',

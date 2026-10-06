@@ -1,3 +1,4 @@
+import { makeStoredSessionRef } from '../../__tests__/test-utils/store-factory.ts';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
@@ -175,7 +176,7 @@ const ROWS: Row[] = [
 
 /** Every row's session is explicitly named, so it is stored under — and addressed by — its name. */
 function ref(session: SessionState | undefined): SessionRef | undefined {
-  return session ? { address: session.name, session } : undefined;
+  return session ? makeStoredSessionRef(session) : undefined;
 }
 
 for (const row of ROWS) {

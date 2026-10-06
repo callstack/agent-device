@@ -375,6 +375,37 @@ describe('runProtectedLeaseWork', () => {
     assert.equal(sawAbort, true, 'the upload is told to stop before the bytes finish');
   });
 
+  test('a caller abort stops the beats and cancels the beat already in flight', async () => {
+    vi.useFakeTimers();
+    // #3178: a beat owns a connection of its own, so a caller that has given up has to reach it —
+    // otherwise a renewal lands for a request nobody is waiting on anymore.
+    const caller = new AbortController();
+    const beatSignals: AbortSignal[] = [];
+    const upload = deferred<string>();
+    const running = runProtectedLeaseWork({
+      task: () => upload.promise,
+      heartbeat: (_budgetMs, signal) => {
+        beatSignals.push(signal);
+        return new Promise(() => undefined);
+      },
+      callerSignal: caller.signal,
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(beatSignals.length, 1, 'the opening beat started');
+    assert.equal(beatSignals[0]?.aborted, false);
+
+    caller.abort();
+    await vi.advanceTimersByTimeAsync(20_000);
+    assert.equal(beatSignals[0]?.aborted, true, 'the in-flight beat lost its connection');
+    assert.equal(beatSignals.length, 1, 'the caller abort ends the schedule, not just the beat');
+
+    // The phase belongs to the caller: the loop keeps no timer alive past the abort, so the upload
+    // still decides the outcome.
+    upload.resolve('uploaded');
+    assert.equal(await running, 'uploaded');
+  });
+
   test('a phase that throws synchronously still stops the beats', async () => {
     vi.useFakeTimers();
     const heartbeat = vi.fn(async () => ({ ok: true }));
@@ -620,10 +651,10 @@ describe('buildUploadLeaseHeartbeat', () => {
         installRequest,
       );
       assert.ok(beat);
-      await beat!(5_000);
+      await beat!(5_000, new AbortController().signal);
       // Two beats, because a beat that times out is canceled under its own id: sharing one would
       // let a later beat inherit an earlier cancellation and stop renewing a live lease.
-      await beat!(5_000);
+      await beat!(5_000, new AbortController().signal);
     } finally {
       // The server keeps the connection open, and `close()` waits for it.
       for (const connection of connections) connection.destroy();
@@ -666,7 +697,10 @@ describe('buildUploadLeaseHeartbeat', () => {
         installRequest,
       );
       assert.ok(beat);
-      const rejected = assert.rejects((async () => await beat!(1_000))(), /timed out/i);
+      const rejected = assert.rejects(
+        (async () => await beat!(1_000, new AbortController().signal))(),
+        /timed out/i,
+      );
       await vi.advanceTimersByTimeAsync(1_000);
       await rejected;
     } finally {

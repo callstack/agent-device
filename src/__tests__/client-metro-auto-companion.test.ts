@@ -21,7 +21,6 @@ afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
   vi.restoreAllMocks();
-  vi.unstubAllEnvs();
 });
 
 test('prepareMetroRuntime starts the local companion only after bridge setup needs it', async () => {

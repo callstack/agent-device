@@ -6,7 +6,12 @@
 // differences (regex-vs-literal selector storage, runScript path-vs-content,
 // nested runFlow expansion) that the two IR designs express differently.
 
-import type { MaestroCommand, MaestroProgram, MaestroSwipeGesture } from './program-ir.ts';
+import type {
+  MaestroCommand,
+  MaestroProgram,
+  MaestroRunFlowCondition,
+  MaestroSwipeGesture,
+} from './program-ir.ts';
 import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
 import { asRecord, bool, dropUndefined, numLike, str } from './conformance-value-coercion.ts';
 import {
@@ -35,6 +40,13 @@ export type CanonicalGesture =
       duration?: number | string;
     }
   | { mode: 'element'; from: CanonicalSelector; direction?: string; duration?: number | string };
+
+type CanonicalRepeatCondition = {
+  platform?: string;
+  visible?: CanonicalSelector;
+  notVisible?: CanonicalSelector;
+  true?: string;
+};
 
 export type CanonicalCommand =
   | {
@@ -85,7 +97,11 @@ export type CanonicalCommand =
   | { kind: 'stopApp' }
   | { kind: 'setPermissions'; appId?: string; permissions?: Record<string, string> }
   | { kind: 'clearState'; appId?: string }
-  | { kind: 'repeat'; times: string | number }
+  | {
+      kind: 'repeat';
+      times?: string | number;
+      while?: CanonicalRepeatCondition;
+    }
   | { kind: 'retry'; maxRetries?: string | number }
   | { kind: 'runFlow'; label?: string; source: 'file' | 'commands' }
   | { kind: 'runScript' }
@@ -232,7 +248,11 @@ function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand
         permissions: permissionsRecord(f.permissions),
       });
     case 'RepeatCommand':
-      return { kind: 'repeat', times: numLike(f.times) ?? str(f.times) ?? '' };
+      return dropUndefined({
+        kind: 'repeat' as const,
+        times: numLike(f.times) ?? str(f.times),
+        while: canonicalizeUpstreamRepeatCondition(f.condition),
+      });
     case 'RetryCommand':
       return dropUndefined({
         kind: 'retry',
@@ -249,6 +269,19 @@ function canonicalizeUpstreamCommand(command: UpstreamCommand): CanonicalCommand
     default:
       return { kind: 'unsupported', command: unsupportedName(command.type) };
   }
+}
+
+function canonicalizeUpstreamRepeatCondition(value: unknown): CanonicalRepeatCondition | undefined {
+  const condition = asRecord(value);
+  if (!condition) return undefined;
+  return dropUndefined({
+    platform: lower(str(condition.platform)),
+    visible:
+      condition.visible == null ? undefined : canonicalizeUpstreamSelector(condition.visible),
+    notVisible:
+      condition.notVisible == null ? undefined : canonicalizeUpstreamSelector(condition.notVisible),
+    true: str(condition.scriptCondition),
+  });
 }
 
 /**
@@ -526,7 +559,11 @@ function canonicalizeAgentCommand(
         permissions: command.permissions,
       });
     case 'repeat':
-      return { kind: 'repeat', times: numLike(command.times) ?? str(command.times) ?? '' };
+      return dropUndefined({
+        kind: 'repeat' as const,
+        times: numLike(command.times) ?? str(command.times),
+        while: canonicalizeAgentRepeatCondition(command.while),
+      });
     case 'retry':
       return dropUndefined({
         kind: 'retry',
@@ -545,6 +582,18 @@ function canonicalizeAgentCommand(
       throw new Error(`Unhandled agent command: ${JSON.stringify(exhaustive)}`);
     }
   }
+}
+
+function canonicalizeAgentRepeatCondition(
+  condition: MaestroRunFlowCondition | undefined,
+): CanonicalRepeatCondition | undefined {
+  if (!condition) return undefined;
+  return dropUndefined({
+    platform: condition.platform,
+    visible: condition.visible && canonicalizeAgentSelector(condition.visible),
+    notVisible: condition.notVisible && canonicalizeAgentSelector(condition.notVisible),
+    true: condition.true === undefined ? undefined : String(condition.true),
+  });
 }
 
 function agentGesture(gesture: MaestroSwipeGesture): CanonicalGesture {

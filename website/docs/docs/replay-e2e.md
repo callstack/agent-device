@@ -40,6 +40,36 @@ agent-device open Settings --platform ios --session e2e --save-script ./workflow
 - Parent directories are created automatically when they do not exist.
 - For ambiguous bare values, use `--save-script=workflow.ad` or a path-like value such as `./workflow.ad`.
 
+## `.ad` line grammar
+
+A `.ad` line is the CLI spelling of one command: `<command> [positional ...] [flag ...]`. Whitespace separates tokens, so a value with a space needs quotes.
+
+```sh
+open "com.example.app" --relaunch
+scroll down --until 'id="far-button"'
+press id="far-button"
+wait 'label="Order summary"' 5000
+close
+```
+
+- A token quoted with `"` or `'` is one argument. Single quotes keep a `"` literal, so `'id="far-button"'` and `"id=\"far-button\""` are the same selector — write whichever matches how you typed the command at the shell.
+- Values in double quotes are JSON strings, so escape `\\`, `\"`, `\t`, and `\n`. Values in single quotes are literal, as at the shell: a backslash keeps its own character, and the only escape is `\'` for an apostrophe.
+- A script carries only the flags declared for that command and marked recorded; CLI-only spellings and per-request options are not part of a step. `--settle`, `--verify`, `scroll --pixels`/`--duration-ms`, and the device-selection flags (`--platform`, `--serial`, `--device`) are the common ones a script does not carry.
+- `help <command>` prints the flags each command accepts. `help scripting` prints this grammar.
+
+Reaching an off-screen element is viewport-independent in a script exactly as it is at the CLI. Prefer the stop condition over a fixed amount, which passes on one screen size and fails on another:
+
+```sh
+# repeats until the element is on screen
+scroll down --until 'id="checkout-submit"'
+# one gesture, viewport-relative
+scroll down 0.8
+# run to the end of the content
+scroll bottom
+```
+
+A `#` only starts a comment at the beginning of a line. A scroll line carries `--until` and keeps its distance as a positional (`scroll down 0.8 --until <selector>`). `wait` carries `--raw`, `--depth <n>`, and `--scope <selector|@ref>` (long spellings; the `-d`/`-s` CLI aliases stay out of scripts so a hand-written line like `wait text -s so funny` keeps meaning its literal text) to choose the capture its target is read from.
+
 ## Run replay
 
 ```bash
@@ -83,7 +113,7 @@ agent-device test ./maestro-flows --maestro --platform android --artifacts-dir .
 
 Supported subset:
 
-- Flows: `launchApp` (with `clearState`, `permissions`, and Apple-only launch arguments; `permissions` apply after state clearing but before launch, and a `launchApp` without `permissions` touches nothing — there is no silent `all: allow` default); `setPermissions` (mid-flow permission grants, denials, and resets; `all` resolves in the backend — one simctl call on iOS, the declared permissions on Android — with specific entries overriding after it); `runFlow` file/inline with platform, visibility, and limited boolean conditions; `onFlowStart`/`onFlowComplete`; `repeat.times` and retry.
+- Flows: `launchApp` (with `clearState`, `permissions`, and Apple-only launch arguments; `permissions` apply after state clearing but before launch, and a `launchApp` without `permissions` touches nothing — there is no silent `all: allow` default); `setPermissions` (mid-flow permission grants, denials, and resets; `all` resolves in the backend — one simctl call on iOS, the declared permissions on Android — with specific entries overriding after it); `runFlow` file/inline; `runFlow.when` and `repeat.while` conditions (`platform`, `visible`, `notVisible`, and `true`, all re-evaluated before every `repeat` iteration); `onFlowStart`/`onFlowComplete`; `repeat` with `times`, `while`, or both; and retry.
 - Interactions: `tapOn`, `doubleTapOn`, `longPressOn`, `inputText` on the focused element, `eraseText`, `openLink`, `hideKeyboard`, basic `pressKey`, and `back`; selector targets poll until available and support recursive `index`, `childOf`, `above`, `below`, `leftOf`, `rightOf`, `containsChild`, `containsDescendants`, points, and `optional`; outer command labels are metadata, not target selectors.
 - Assertions and navigation: `assertVisible`, `assertNotVisible`, `assertTrue` (literal values and `${VAR}` lookups only; `""`, `"false"`, `"0"`, `"null"`, and `"undefined"` are falsy, everything else is truthy), `extendedWaitUntil`, `scroll`, `scrollUntilVisible`, absolute/percentage/target `swipe`, `takeScreenshot`, `waitForAnimationToEnd`, `clearState`, and `stopApp`.
 - Scripts: ordered `runScript` file/env scripts with `http.post`, `json`, and `output` variables; `evalScript` inline expressions run flow-scoped JavaScript and write `output.*` leaves for later steps.
@@ -92,10 +122,10 @@ Boundaries:
 
 - Permissions: every entry is one `settings permission` call, applied in order with `all` first; the step stops at the first entry the selected platform refuses, earlier entries stay applied, and the error names what landed. Android’s only allow level is while-in-use, so `location: inuse` and `location: never` mean `allow` and `deny` there, while `location: always` and `photos: limited` are Apple-only and fail. On iOS, which service a runtime changes is `simctl privacy`’s own verdict: current runtimes refuse a targeted `notifications` change and leave notifications untouched under `all`.
 - Runtime: iOS and Android only; `launchApp.clearState` and standalone `clearState` support Android and iOS simulators, launch arguments are Apple-only, and other standalone device utility/state commands are unsupported.
-- Expressions: `evalScript` is the only command whose payload is evaluated as JavaScript (flow `env` and prior `output` leaves are string-typed); with that exception, fields stay literal or `${VAR}` lookup-only — `assertTrue` supports literals and bare lookups, `repeat.while` is unsupported, and other expression-shaped payloads fail loud.
+- Expressions: `evalScript` and condition `true:` fields (`runFlow.when` and `repeat.while` share one evaluator) are evaluated as JavaScript (flow `env` and prior `output` leaves are string-typed); a `true:` field that is a boolean, a `maestro.platform` comparison, or plain literal text after `${VAR}` lookups is decided without JavaScript, with the `assertTrue` falsy table for literal text. Other fields stay literal or `${VAR}` lookup-only — `assertTrue` supports literals and bare lookups, and other expression-shaped payloads fail loud.
 - Environment: flow `env` is the default, `AD_VAR_*` overrides it, and CLI `-e KEY=VALUE` wins over both.
 - Failure diagnostics: resolved targets and `runFlow` paths are rendered, while `inputText` payloads remain hidden; do not place secrets in diagnostic identifiers.
-- Trust: `runScript` and `evalScript` execute flow scripts in-process via `node:vm`, which is not a security sandbox; `runScript` may make `http.post` network requests and its output keys cannot contain a dot. `evalScript` is refused outright for a flow accepted over the daemon’s remote HTTP surface, since that context can escape to the host.
+- Trust: `runScript`, `evalScript`, and JavaScript condition `true:` fields execute flow scripts in-process via `node:vm`, which is not a security sandbox; `runScript` may make `http.post` network requests and its output keys cannot contain a dot. `evalScript` and `true:` fields that need JavaScript are refused outright for a flow accepted over the daemon’s remote HTTP surface, since that context can escape to the host.
 - Errors and tracking: unsupported commands and fields fail with source context when available; open a focused issue only when implementation work is planned.
 - Session takeover: `--keep-session` is a native `.ad` replay option and is rejected for Maestro YAML.
 
@@ -130,7 +160,7 @@ agent-device test ./workflows --reporter default --reporter junit:./tmp/junit.xm
 - `test` discovers `.ad` files from files, directories, or globs and runs them serially.
 - Quote relative globs to expand them on the caller from its working directory, including when the directory name contains glob characters such as `[` or `{`. A missing file input without glob characters reports an error.
 - `context platform=...` inside each `.ad` file is the target source of truth for suite execution.
-- `--platform` is a filter for suite discovery; files without platform metadata are skipped when a filter is present.
+- `--platform` is a filter for suite discovery; files without platform metadata are skipped when a filter is present. When filtering leaves no runnable sources, the no-match error reports how many sources were skipped for having no `context platform=` header versus how many declared another platform. Add the header to run a file under a filter, or omit `--platform` and let the selected device decide.
 - `context timeout=...` and `context retries=...` can be declared per script; CLI flags override metadata. Retries are capped at `3`, and duplicate keys in the context header fail fast instead of silently overriding each other.
 - By default, suite artifacts are written under `.agent-device/test-artifacts/<run-id>/...`. Each attempt writes `replay.ad`, `result.txt`, and `replay-timing.ndjson`. Failed attempts also keep copied logs and artifact files when the replay produced them.
 - Copied diagnostic artifacts receive numbered filenames when their names collide with another artifact, a replay source, timing trace, or attempt manifest. `result.txt` lists the retained names in `copiedArtifacts`.
@@ -396,7 +426,11 @@ Passing `--plan-digest` that no longer matches the current script — because yo
 - Repeated re-runs are slow or the app is stateful, but the script is still correct:
   - Leave the replay plan unchanged, repair app state so the reported failed step can be retried, then use its `--from`/`--plan-digest`. Resume starts at `--from`; it does not skip that step.
 - Replay file parse error:
-  - Validate quoting in `.ad` lines (unclosed quotes are rejected).
+  - Validate quoting in `.ad` lines (unclosed double quotes are rejected). A selector with a space
+    needs quotes, and `help scripting` states how each quote form decodes.
+- A replay passes on one device size and fails on another because a target was off screen:
+  - The script used a fixed `scroll` amount. Replace it with the stop condition, `scroll down --until <selector>`,
+    which repeats until the element is actually on screen.
 - A `press` or `click` step fails because its target was not found, but the element is on the
   screenshot:
   - A `selector-miss` divergence, or `error.details.readiness.end: expired`, means the element was

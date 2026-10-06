@@ -28,12 +28,16 @@ function uniqueNonEmpty(values: readonly string[]): string[] {
 
 export function resolveAndroidSdkRoots(
   env: AndroidSdkEnvironment = requireAndroidAdbHost().environment,
+  platform: NodeJS.Platform,
 ): string[] {
   const configuredRoot = env.ANDROID_SDK_ROOT?.trim();
   const configuredHome = env.ANDROID_HOME?.trim();
   const homeDir = env.HOME?.trim();
+  // Android Studio installs the SDK here on macOS; the `Android/Sdk` layout is the Linux default.
+  const studioRoot =
+    platform === 'darwin' && homeDir ? path.join(homeDir, 'Library', 'Android', 'sdk') : '';
   const defaultRoot = homeDir ? path.join(homeDir, 'Android', 'Sdk') : '';
-  return uniqueNonEmpty([configuredRoot ?? '', configuredHome ?? '', defaultRoot]);
+  return uniqueNonEmpty([configuredRoot ?? '', configuredHome ?? '', studioRoot, defaultRoot]);
 }
 
 export async function ensureAndroidSdkPathConfigured(
@@ -43,7 +47,8 @@ export async function ensureAndroidSdkPathConfigured(
   const existingDirs: string[] = [];
   let detectedRoot: string | undefined;
 
-  for (const sdkRoot of resolveAndroidSdkRoots(env)) {
+  const { hostPlatform } = await import('@agent-device/host-kit/process');
+  for (const sdkRoot of resolveAndroidSdkRoots(env, hostPlatform())) {
     const presentDirs: string[] = [];
     for (const relativeDir of ANDROID_SDK_BIN_DIRS) {
       const candidate = path.join(sdkRoot, relativeDir);

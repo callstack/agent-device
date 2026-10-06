@@ -59,6 +59,7 @@ import {
 } from '../../session-lifecycle/index.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeAuthoringSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { MACOS_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   bindManagedLocalLifecycleRuntime,
@@ -75,7 +76,6 @@ const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintValues);
 const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
-const roots: string[] = [];
 const reconcileOrphanedDeviceClaim = async () => ({
   status: 'retained' as const,
   reason: 'test-no-recovery',
@@ -115,14 +115,12 @@ afterEach(() => {
   mockApplyRuntimeHints.mockResolvedValue(undefined);
   mockResolveAndroidPackage.mockResolvedValue(undefined);
   delete process.env.AGENT_DEVICE_CLAIMS_DIR;
-  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
 function setup(): { store: SessionStore; stateDir: string } {
   const stateDir = mkdtempForTestSync('agent-device-session-device-claim-');
   const claimsDir = path.join(stateDir, 'claims');
   process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
-  roots.push(stateDir);
   return { store: new SessionStore(path.join(stateDir, 'sessions')), stateDir };
 }
 
@@ -452,7 +450,7 @@ test('local close clears its matching device claim after teardown', async () => 
   });
   assert.equal(acquired.status, 'acquired');
   if (acquired.status !== 'acquired') return;
-  store.set('close-claim', {
+  store.publish('close-claim', {
     name: 'close-claim',
     device: android,
     deviceClaim: acquired.ownership,
@@ -497,7 +495,7 @@ test('#1391: a close-time script save failure still clears the device claim and 
       target: { kind: 'explicit', path: targetPath, force: false },
     },
   });
-  store.set('close-save-script-failure', session);
+  store.publish('close-save-script-failure', session);
   mockDispatch.mockResolvedValue(undefined);
 
   // Like the platform-close-error tests above, a failed close-time save is
@@ -548,4 +546,55 @@ test('#1391: a close-time script save failure still clears the device claim and 
     .readEvents('close-save-script-failure')
     .events.filter((event) => event.kind === 'action.recorded' && event.command === 'close');
   assert.equal(durableCloseEvents.length, session.actions.length);
+});
+
+test('an open under a macos-app lease holds only its app, beside other claims on the Mac', async () => {
+  const { store, stateDir } = setup();
+  mockResolveTargetDevice.mockResolvedValue(MACOS_DEVICE);
+  mockDispatch.mockResolvedValue(undefined);
+  const ownerStateDir = path.join(stateDir, 'host-user');
+  fs.mkdirSync(ownerStateDir);
+  const foreign = await acquireDeviceClaim({
+    device: MACOS_DEVICE,
+    session: 'host-user-session',
+    workspace: '/worktrees/host-user',
+    stateDir: ownerStateDir,
+  });
+  assert.equal(foreign.status, 'acquired');
+  store.publish('other-app', {
+    name: 'other-app',
+    device: MACOS_DEVICE,
+    appBundleId: 'com.example.other',
+    lease: { leaseId: 'b'.repeat(32), tenantId: 't2', runId: 'r2', leaseBackend: 'macos-app' },
+    createdAt: Date.now(),
+    actions: [],
+  });
+  const admittedLease = new LeaseRegistry().putHostLease('a'.repeat(32), {
+    tenantId: 't1',
+    runId: 'r1',
+    leaseBackend: 'macos-app',
+    deviceKey: 'com.example.app',
+  });
+
+  const response = await handleOpenCommand({
+    req: {
+      command: 'open',
+      token: 'test',
+      session: 'leased-app',
+      positionals: ['com.example.app'],
+      flags: { platform: 'macos' },
+      meta: { cwd: '/worktrees/client' },
+      internal: { admittedLease },
+    },
+    sessionName: 'leased-app',
+    logPath: path.join(stateDir, 'daemon.log'),
+    sessionStore: store,
+  });
+
+  assert.equal(response.ok, true, JSON.stringify(response));
+  assert.equal(store.get('leased-app')?.deviceClaim, undefined);
+  assert.deepEqual(
+    inspectDeviceClaims({ udid: MACOS_DEVICE.id }).map((entry) => entry.claim?.session),
+    ['host-user-session'],
+  );
 });

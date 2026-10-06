@@ -18,6 +18,7 @@ export function snapshot(
     recordOnlySession: input.recordOnlySession,
     ...(input.activeSessionApp ? { activeSessionApp: input.activeSessionApp } : {}),
     ...(input.exportQuality ? { exportQuality: input.exportQuality } : {}),
+    ...(input.fps === undefined ? {} : { fps: input.fps }),
     gestureEvents: [],
   });
 }

@@ -35,6 +35,7 @@ import {
   type SessionRuntimeHints,
 } from '@agent-device/kernel/contracts';
 import { AppError, throwDaemonError } from '@agent-device/kernel/errors';
+import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import {
   buildMeta,
   normalizeDeployResult,
@@ -71,9 +72,11 @@ import {
   type MetroSessionHints,
 } from './metro/metro-session-hints.ts';
 import { isRecord, readSnapshotKeyboardBandFact } from '@agent-device/kernel/record';
+import { readSnapshotViewportSize } from '@agent-device/kernel/rect';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { createLeaseClient } from './client/lease-client.ts';
 import { normalizeScreenshotCaptureResult } from './client/screenshot-result.ts';
+import { createRequestGuard } from './daemon-client/daemon-client-transport.ts';
 
 export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},
@@ -95,6 +98,12 @@ export function createAgentDeviceClient(
     input?: Record<string, unknown>,
   ): Promise<Record<string, unknown>> => {
     const merged = mergeClientOptions(config, options);
+    // The id is generated before the guard so a canceled call names itself in `request.meta`, and
+    // the daemon's diagnostics for the request the transport goes on to cancel carry the same id
+    // the caller's rejection carries.
+    const requestId = merged.requestId ?? createRequestId();
+    const cancellation = createRequestGuard({ signal: merged.signal, requestId });
+    cancellation.refuseIfAborted();
     const request = {
       session: resolveSessionName(merged.session),
       command,
@@ -102,9 +111,16 @@ export function createAgentDeviceClient(
       ...(input ? { input } : {}),
       flags: buildRequestFlags(merged, metadataFlags),
       runtime: merged.runtime,
-      meta: buildMeta(merged),
+      meta: { ...buildMeta(merged), requestId },
     };
-    const response = await transport(request, { authToken: merged.daemonAuthToken });
+    // `signal` rides the transport context (it is a live object, never wire data), and the guard
+    // answers for a custom transport that ignores it: the caller's promise settles on abort either
+    // way. The built-in transport closes the request's connection, which is what makes the daemon
+    // mark the request canceled.
+    const response = await cancellation.guard(
+      async () =>
+        await transport(request, { authToken: merged.daemonAuthToken, signal: merged.signal }),
+    );
     if (!response.ok) {
       throwDaemonError(response.error);
     }
@@ -529,6 +545,7 @@ function optionalSnapshotResponseFields(
     | 'unchanged'
     | 'visibility'
     | 'keyboard'
+    | 'viewport'
     | 'warnings'
     | 'snapshotQuality'
     | 'snapshotDiagnostics'
@@ -539,9 +556,11 @@ function optionalSnapshotResponseFields(
   const visibility = readObject(data.visibility);
   const unchanged = readObject(data.unchanged);
   const keyboard = readSnapshotKeyboardBandFact(data.keyboard);
+  const viewport = readSnapshotViewportSize(data.viewport);
   const snapshotDiagnostics = readSnapshotDiagnosticsSummary(data.snapshotDiagnostics);
   return {
     ...(keyboard ? { keyboard } : {}),
+    ...(viewport ? { viewport } : {}),
     ...(visibility ? { visibility: visibility as CaptureSnapshotResult['visibility'] } : {}),
     ...readSerializedSnapshotCaptureAnnotations(data),
     ...(unchanged ? { unchanged: unchanged as CaptureSnapshotResult['unchanged'] } : {}),

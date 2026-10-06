@@ -58,13 +58,13 @@ const SESSION_REQUEST_OVERHEAD_MS = 3_000;
 const FORWARD_TIMEOUT_MS = 5_000;
 // A helper that cannot start spends its whole start budget failing, and the one-shot transport that
 // answers afterwards still has to run. Retrying that on the very next command is what made commands
-// on the slow hosts of #2553 take roughly twice as long, so a failed start keeps the persistent path
-// away for at least this long.
-const SESSION_START_RETRY_FLOOR_MS = 10_000;
-// …and for no longer than this, however long the start took. The floor keeps a burst of commands
+// on the slow hosts of #2553 take roughly twice as long, so a failed start or session capture keeps
+// the persistent path away for at least this long.
+const SESSION_RETRY_FLOOR_MS = 10_000;
+// …and for no longer than this, however long the failure took. The floor keeps a burst of commands
 // from re-paying an instant failure; the ceiling keeps a host whose helper is simply broken from
 // being written off for longer than a working session would have lasted.
-const SESSION_START_RETRY_CEILING_MS = 60_000;
+const SESSION_RETRY_CEILING_MS = 60_000;
 
 export type AndroidSnapshotHelperSessionHelperIdentity = {
   packageName: string;
@@ -93,8 +93,11 @@ export type AndroidSnapshotHelperSessionAcquisition = {
 };
 
 const sessions = new Map<string, AndroidSnapshotHelperSession>();
-/** Capture identity → when this process may spawn that helper build again after a failed start. */
-const failedStarts = new Map<string, number>();
+/**
+ * Capture identity → when this process may spawn that helper build again after a failed start or a
+ * failed session capture.
+ */
+const failedSessions = new Map<string, number>();
 
 /**
  * Starts (or reuses) the session without capturing, so a helper-backed read that is not a snapshot
@@ -150,7 +153,7 @@ async function resolveAndroidSnapshotHelperSession(params: {
   resolved: AndroidSnapshotHelperResolvedCaptureOptions;
   startBudgetMs: number;
 }): Promise<AndroidSnapshotHelperSession | undefined> {
-  if (isAndroidSnapshotHelperStartBackedOff(params.identity)) return undefined;
+  if (isAndroidSnapshotHelperSessionBackedOff(params.identity)) return undefined;
   await retireUnusableAndroidSnapshotHelperSession(params.deviceKey, params.identity);
   return sessions.get(params.deviceKey) ?? (await tryStartAndroidSnapshotHelperSession(params));
 }
@@ -186,9 +189,9 @@ async function tryStartAndroidSnapshotHelperSession(params: {
     return await startAndroidSnapshotHelperSession(params);
   } catch (error) {
     params.options.signal?.throwIfAborted();
-    failedStarts.set(
+    failedSessions.set(
       params.identity,
-      Date.now() + androidSnapshotHelperStartRetryAfterMs(Date.now() - startedAtMs),
+      Date.now() + androidSnapshotHelperSessionRetryAfterMs(Date.now() - startedAtMs),
     );
     emitDiagnostic({
       level: 'warn',
@@ -203,24 +206,53 @@ async function tryStartAndroidSnapshotHelperSession(params: {
   }
 }
 
-/** A helper build whose last start failed is left alone until that start's backoff has run out. */
-function isAndroidSnapshotHelperStartBackedOff(identity: string): boolean {
-  const retryAtMs = failedStarts.get(identity);
+/** A helper build whose last start or capture failed is left alone until its backoff has run out. */
+function isAndroidSnapshotHelperSessionBackedOff(identity: string): boolean {
+  const retryAtMs = failedSessions.get(identity);
   if (retryAtMs === undefined) return false;
   if (retryAtMs > Date.now()) return true;
-  failedStarts.delete(identity);
+  failedSessions.delete(identity);
   return false;
 }
 
 /**
- * How long a failed start earns: as long as it spent failing, because a start that burned half a
- * minute on a wedged device would burn another half minute on the next command, bounded so a burst
+ * How long a failed start or capture earns: as long as it spent failing, because a start that burned
+ * half a minute on a wedged device would burn another half minute on the next command, bounded so a burst
  * of commands neither re-pays an instant failure nor writes a device off for the rest of the run.
  */
-function androidSnapshotHelperStartRetryAfterMs(startDurationMs: number): number {
-  return Math.min(
-    Math.max(startDurationMs, SESSION_START_RETRY_FLOOR_MS),
-    SESSION_START_RETRY_CEILING_MS,
+function androidSnapshotHelperSessionRetryAfterMs(failureDurationMs: number): number {
+  return Math.min(Math.max(failureDurationMs, SESSION_RETRY_FLOOR_MS), SESSION_RETRY_CEILING_MS);
+}
+
+/**
+ * Tears down a session whose capture failed and keeps its helper build off the persistent path for
+ * as long as a failed start would, counted from when the one-shot capture that answers instead has
+ * had its whole budget. A session that timed out once times out again on the same screen, so
+ * restarting it on the next attempt or command only spends its budget again before the one-shot
+ * transport answers. A cancellation is the caller's deadline, not evidence about the helper, so it
+ * earns no backoff.
+ */
+export async function retireFailedAndroidSnapshotHelperSession(params: {
+  deviceKey: string;
+  /** Helper build of the session whose capture failed. */
+  identity: string;
+  failedAfterMs: number;
+  /** Budget of the one-shot capture that answers in place of the failed session. */
+  fallbackBudgetMs: number;
+  signal?: AbortSignal;
+  cause: unknown;
+}): Promise<void> {
+  await stopAndroidSnapshotHelperSession(params.deviceKey, {
+    force: true,
+    signal: params.signal,
+    cause: params.cause,
+  });
+  if (params.signal?.aborted) return;
+  failedSessions.set(
+    params.identity,
+    Date.now() +
+      params.fallbackBudgetMs +
+      androidSnapshotHelperSessionRetryAfterMs(params.failedAfterMs),
   );
 }
 
@@ -285,7 +317,7 @@ async function startAndroidSnapshotHelperSession(params: {
       params.options.signal,
     );
     sessions.set(params.deviceKey, session);
-    failedStarts.delete(params.identity);
+    failedSessions.delete(params.identity);
     // `am instrument` force-stops whatever is already instrumenting this package, so a helper that
     // reported itself ready is the only helper process the device has left, and the release the
     // previous teardown could not prove went away with the process that owed it. Leaving the entry
@@ -530,7 +562,7 @@ export async function resetAndroidSnapshotHelperSessions(): Promise<void> {
     // One teardown that throws must not leave the next caller believing a session, a pending
     // retirement, or a failed start is still standing.
     sessions.clear();
-    failedStarts.clear();
+    failedSessions.clear();
     resetAndroidSnapshotHelperRetirements();
     resetAndroidAdbShellProtocolProbes();
   }

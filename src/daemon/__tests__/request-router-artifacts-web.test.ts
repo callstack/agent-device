@@ -19,7 +19,7 @@ import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 // device is web, the same round trip `request-router-events.test.ts` already proves for `events`.
 test('artifacts lists a daemon-tracked artifact produced during a web session', async () => {
   const sessionStore = makeSessionStore('agent-device-router-artifacts-web-');
-  sessionStore.set('web-session', makeSession('web-session', { device: WEB_DESKTOP_DEVICE }));
+  sessionStore.publish('web-session', makeSession('web-session', { device: WEB_DESKTOP_DEVICE }));
   const artifactDir = mkdtempForTestSync('agent-device-router-artifacts-web-file-');
   const artifactPath = path.join(artifactDir, 'web-smoke.png');
   fs.writeFileSync(artifactPath, 'fixture-bytes');

@@ -1,5 +1,11 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import type { SessionState } from '../session-state.ts';
+import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import {
+  createRequestExecutionScope,
+  prepareLockedRequestScope,
+} from '../request-execution-scope.ts';
+import { LeaseRegistry } from '../lease-registry.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 
 vi.mock('../../platform-runtime-apple-resources.ts', async (importOriginal) => ({
@@ -54,7 +60,9 @@ test('runner-backed iOS recordings still invalidate on runner restarts', async (
     sessionId: 'runner-after',
   });
 
-  await refreshRecordingHealth(session);
+  const store = makeSessionStore();
+  const ref = store.publish(session.name, session);
+  await refreshRecordingHealth(store, ref);
 
   expect(mockObserveRunnerSession).toHaveBeenCalledWith('sim-1');
   expect(session.screenRecording?.handle.inspect().invalidatedReason).toBe(
@@ -78,7 +86,9 @@ test.each([
   });
   mockObserveRunnerSession.mockResolvedValue(snapshot);
 
-  await refreshRecordingHealth(session);
+  const store = makeSessionStore();
+  const ref = store.publish(session.name, session);
+  await refreshRecordingHealth(store, ref);
 
   expect(session.screenRecording.handle.inspect().invalidatedReason).toBe(reason);
 });
@@ -91,9 +101,138 @@ test('a recording without a runner identity adopts the first live observation', 
   });
   mockObserveRunnerSession.mockResolvedValue({ alive: true, sessionId: 'runner-first' });
 
-  await refreshRecordingHealth(session);
+  const store = makeSessionStore();
+  const ref = store.publish(session.name, session);
+  await refreshRecordingHealth(store, ref);
 
   const recording = session.screenRecording.handle.inspect();
   expect(recording.runnerSessionId).toBe('runner-first');
   expect(recording.invalidatedReason).toBeUndefined();
 });
+
+test.each(['rebuild', 'retire', 'handle', 'token', 'generation'] as const)(
+  'a held health observation respects the current lifetime and resource: %s',
+  async (change) => {
+    const store = makeSessionStore();
+    const session = makeIosSimulatorSession(true);
+    const active = makeTestScreenRecordingResource(session, {
+      backend: 'runner AVAssetWriter',
+      showTouches: true,
+      runnerSessionId: 'runner-before',
+    });
+    session.screenRecording = active;
+    const ref = store.publish('default', session);
+    let finish!: (value: { alive: boolean; sessionId: string }) => void;
+    mockObserveRunnerSession.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const observation = refreshRecordingHealth(store, ref);
+    expect(mockObserveRunnerSession).toHaveBeenCalledWith('sim-1');
+    if (change === 'rebuild') {
+      store.update(ref, { appName: 'Intervening app' });
+    } else if (change === 'retire') {
+      store.retire(ref);
+      store.publish('default', session);
+    } else {
+      const replacement = makeTestScreenRecordingResource(session, {
+        backend: 'runner AVAssetWriter',
+        showTouches: true,
+        runnerSessionId: 'successor-runner',
+      });
+      store.update(ref, {
+        screenRecording: {
+          ...active,
+          handle: change === 'handle' ? replacement.handle : active.handle,
+          envelope: {
+            ...active.envelope,
+            fence: {
+              ...active.envelope.fence,
+              token: change === 'token' ? 'new-token' : active.envelope.fence.token,
+              generation: active.envelope.fence.generation + (change === 'generation' ? 1 : 0),
+            },
+          },
+        },
+      });
+    }
+    const current = store.get('default')!;
+    finish({ alive: true, sessionId: 'runner-after' });
+    await observation;
+    expect(store.get('default')).toBe(current);
+    expect(active.handle.inspect().invalidatedReason).toBe(
+      change === 'rebuild' ? 'iOS runner session restarted during recording' : undefined,
+    );
+    if (change === 'rebuild') expect(current.appName).toBe('Intervening app');
+    else expect(current.screenRecording?.handle.inspect().invalidatedReason).toBeUndefined();
+  },
+);
+
+test.each(['rebuild', 'retire'] as const)(
+  'locked request preparation keeps its captured lifetime after runner observation: %s',
+  async (change) => {
+    const store = makeSessionStore();
+    const session = makeIosSimulatorSession(true);
+    session.screenRecording = makeTestScreenRecordingResource(session, {
+      backend: 'runner AVAssetWriter',
+      showTouches: true,
+      runnerSessionId: 'runner-before',
+    });
+    const ref = store.publish('default', session);
+    let observed!: () => void;
+    const started = new Promise<void>((resolve) => {
+      observed = resolve;
+    });
+    let finish!: (value: { alive: boolean; sessionId: string }) => void;
+    mockObserveRunnerSession.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+          observed();
+        }),
+    );
+    await using scope = await createRequestExecutionScope({
+      req: { token: 'token', session: 'default', command: 'snapshot', positionals: [] },
+      sessionStore: store,
+      leaseRegistry: new LeaseRegistry(),
+    });
+    const prepared = scope.runLocked(() =>
+      prepareLockedRequestScope({
+        scope,
+        sessionStore: store,
+        trackDownloadableArtifact: () => 'artifact',
+      }),
+    );
+    const outcome = prepared.then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    );
+    await started;
+    let current;
+    if (change === 'rebuild') current = store.update(ref, { appName: 'Latest app' });
+    else {
+      store.retire(ref);
+      current = makeIosSimulatorSession(false);
+      store.publish('default', current);
+      store.setRuntimeHints('default', { metroPort: 8083 });
+    }
+    finish({ alive: true, sessionId: 'runner-before' });
+    const result = await outcome;
+    expect(store.get('default')).toBe(current);
+    if (change === 'rebuild') {
+      expect(result).toMatchObject({
+        value: { type: 'scope', scope: { existingSession: current } },
+      });
+      expect(current.appName).toBe('Latest app');
+      if ('value' in result && result.value.type === 'scope') {
+        store.retire(ref);
+        store.publish('default', { ...makeIosSimulatorSession(false), surface: 'app' });
+        expect(result.value.scope.handlerContextFromFlags(undefined).surface).toBeUndefined();
+      }
+    } else {
+      expect(result).toMatchObject({ error: { details: { reason: 'session_lifetime_ended' } } });
+      expect(store.getRuntimeHints('default')).toEqual({ metroPort: 8083 });
+    }
+  },
+);

@@ -54,12 +54,12 @@ test('resolveDaemonIdleReapMs ignores invalid overrides', () => {
 
 test('hasReapBlockingOpenSessions reflects the session store', () => {
   assert.equal(hasReapBlockingOpenSessions(sessionStore), false);
-  sessionStore.set('default', makeSession());
+  sessionStore.publish('default', makeSession());
   assert.equal(hasReapBlockingOpenSessions(sessionStore), true);
 });
 
 test('hasActiveRecording is true only when a stored session carries a recording', () => {
-  sessionStore.set('default', makeSession());
+  sessionStore.publish('default', makeSession());
   assert.equal(hasActiveRecording(sessionStore), false);
 
   const recordingSession = makeSession();
@@ -69,7 +69,9 @@ test('hasActiveRecording is true only when a stored session carries a recording'
     startedAt: Date.now(),
     showTouches: false,
   });
-  sessionStore.set('default', recordingSession);
+  sessionStore.update(sessionStore.lookup('default')!, {
+    screenRecording: recordingSession.screenRecording,
+  });
   assert.equal(hasActiveRecording(sessionStore), true);
 });
 
@@ -77,7 +79,7 @@ test('isDaemonIdle requires no in-flight requests, no sessions, and no recording
   assert.equal(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 }), true);
   assert.equal(isDaemonIdle({ sessionStore, inFlightRequestCount: 1 }), false);
 
-  sessionStore.set('default', makeSession());
+  sessionStore.publish('default', makeSession());
   assert.equal(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 }), false);
 });
 
@@ -86,7 +88,7 @@ test('isDaemonIdle requires no in-flight requests, no sessions, and no recording
 // reaped (with a tombstone) rather than pinning the daemon forever. ---
 
 test('a repair-armed, un-committed session does NOT block idle-reap', () => {
-  sessionStore.set(
+  sessionStore.publish(
     'default',
     makeSession({
       scriptPublication: {
@@ -102,7 +104,7 @@ test('a repair-armed, un-committed session does NOT block idle-reap', () => {
 });
 
 test('a repair-armed session that has already COMMITTED still blocks idle-reap (until close deletes it)', () => {
-  sessionStore.set(
+  sessionStore.publish(
     'default',
     makeSession({
       scriptPublication: {
@@ -118,13 +120,13 @@ test('a repair-armed session that has already COMMITTED still blocks idle-reap (
 });
 
 test('an ordinary (non-repair) open session still blocks idle-reap', () => {
-  sessionStore.set('default', makeSession());
+  sessionStore.publish('default', makeSession());
   assert.equal(hasReapBlockingOpenSessions(sessionStore), true);
   assert.equal(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 }), false);
 });
 
 test('a normal session alongside a reapable repair session still blocks idle-reap', () => {
-  sessionStore.set(
+  sessionStore.publish(
     'default',
     makeSession({
       name: 'default',
@@ -136,7 +138,7 @@ test('a normal session alongside a reapable repair session still blocks idle-rea
       },
     }),
   );
-  sessionStore.set('other', makeSession({ name: 'other' }));
+  sessionStore.publish('other', makeSession({ name: 'other' }));
   assert.equal(hasReapBlockingOpenSessions(sessionStore), true);
   assert.equal(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 }), false);
 });
@@ -147,6 +149,7 @@ test('idle reap fires after the idle window when nothing is using the daemon', a
   const idleReap = createDaemonIdleReap({
     sessionStore,
     getInFlightRequestCount: () => 0,
+    hasRetainedLeases: () => false,
     onIdleReap: () => {
       reaped++;
     },
@@ -161,13 +164,37 @@ test('idle reap fires after the idle window when nothing is using the daemon', a
   assert.equal(reaped, 1);
 });
 
-test('idle reap does not fire while a session is open', async () => {
+test('idle reap waits another window while a retained lease is still active', async () => {
   vi.useFakeTimers();
   let reaped = 0;
-  sessionStore.set('default', makeSession());
+  let retainedLeaseActive = true;
   const idleReap = createDaemonIdleReap({
     sessionStore,
     getInFlightRequestCount: () => 0,
+    hasRetainedLeases: () => retainedLeaseActive,
+    onIdleReap: () => {
+      reaped++;
+    },
+    env: { AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '40' },
+  });
+
+  idleReap.noteActivity();
+  await vi.advanceTimersByTimeAsync(120);
+  assert.equal(reaped, 0);
+  retainedLeaseActive = false;
+  await vi.advanceTimersByTimeAsync(40);
+
+  assert.equal(reaped, 1);
+});
+
+test('idle reap does not fire while a session is open', async () => {
+  vi.useFakeTimers();
+  let reaped = 0;
+  sessionStore.publish('default', makeSession());
+  const idleReap = createDaemonIdleReap({
+    sessionStore,
+    getInFlightRequestCount: () => 0,
+    hasRetainedLeases: () => false,
     onIdleReap: () => {
       reaped++;
     },
@@ -192,10 +219,11 @@ test('idle reap does not fire while a recording is active', async () => {
     startedAt: Date.now(),
     showTouches: false,
   });
-  sessionStore.set('default', recordingSession);
+  sessionStore.publish('default', recordingSession);
   const idleReap = createDaemonIdleReap({
     sessionStore,
     getInFlightRequestCount: () => 0,
+    hasRetainedLeases: () => false,
     onIdleReap: () => {
       reaped++;
     },
@@ -215,6 +243,7 @@ test('idle reap does not fire while a request is in flight', async () => {
   const idleReap = createDaemonIdleReap({
     sessionStore,
     getInFlightRequestCount: () => inFlightRequestCount,
+    hasRetainedLeases: () => false,
     onIdleReap: () => {
       reaped++;
     },
@@ -237,6 +266,7 @@ test('idle reap is disabled when the window is zero', async () => {
   const idleReap = createDaemonIdleReap({
     sessionStore,
     getInFlightRequestCount: () => 0,
+    hasRetainedLeases: () => false,
     onIdleReap: () => {
       reaped++;
     },
@@ -255,6 +285,7 @@ test('cancel prevents a scheduled reap from firing', async () => {
   const idleReap = createDaemonIdleReap({
     sessionStore,
     getInFlightRequestCount: () => 0,
+    hasRetainedLeases: () => false,
     onIdleReap: () => {
       reaped++;
     },

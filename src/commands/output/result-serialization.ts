@@ -63,6 +63,8 @@ export function serializeDevice(device: AgentDeviceDevice): Record<string, unkno
     name: device.name,
     kind: device.kind,
     target: device.target,
+    ...(device.model ? { model: device.model } : {}),
+    ...(device.osVersion ? { osVersion: device.osVersion } : {}),
     ...(typeof device.booted === 'boolean' ? { booted: device.booted } : {}),
     ...(device.claimedBy ? { claimedBy: device.claimedBy } : {}),
   };
@@ -76,6 +78,7 @@ export function serializeSnapshotResult(result: CaptureSnapshotResult): Record<s
     ...(result.appBundleId ? { appBundleId: result.appBundleId } : {}),
     ...(result.visibility ? { visibility: result.visibility } : {}),
     ...(result.keyboard ? { keyboard: result.keyboard } : {}),
+    ...(result.viewport ? { viewport: result.viewport } : {}),
     ...publicSnapshotCaptureAnnotations({
       ...result,
       ...(result.snapshotQuality ? { quality: result.snapshotQuality } : {}),

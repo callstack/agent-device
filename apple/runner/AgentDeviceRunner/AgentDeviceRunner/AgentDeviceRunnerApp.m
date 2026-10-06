@@ -66,6 +66,10 @@ int main(int argc, const char *argv[]) {
 @property(nonatomic, assign) NSUInteger firstAlertActions;
 @property(nonatomic, assign) NSUInteger replacementAlertActions;
 @property(nonatomic, strong) UILabel *textEntryWriteBackStatus;
+@property(nonatomic, strong) UILabel *textEntryDigitSlots;
+// Filled from the fixture field's own delegate callbacks so a test can tell that a gesture really
+// took focus from an input that has stopped answering the accessibility query that found it.
+@property(nonatomic, strong) UILabel *textEntryFocusWitness;
 @property(nonatomic, assign) NSUInteger textEntryWriteBacks;
 @property(nonatomic, copy, nullable) NSString *textEntryRenderedValue;
 @property(nonatomic, assign) NSTimeInterval textEntryLastEditTime;
@@ -73,6 +77,7 @@ int main(int argc, const char *argv[]) {
 @property(nonatomic, assign) NSUInteger textEntryBurstEdits;
 @property(nonatomic, assign) NSTimeInterval textEntryBurstMinGap;
 @property(nonatomic, assign) NSTimeInterval textEntryAcknowledgeWindowSeconds;
+@property(nonatomic, strong) NSLayoutConstraint *textEntryFieldTop;
 @property(nonatomic, assign) BOOL alertFixtureStarted;
 @property(nonatomic, strong) NSTimer *alertActivationBusyBackstop;
 @property(nonatomic, strong) NSTimer *alertBannerRepost;
@@ -80,6 +85,17 @@ int main(int argc, const char *argv[]) {
 
 #if TARGET_OS_IOS
 @interface AgentDeviceRunnerViewController () <UNUserNotificationCenterDelegate>
+@end
+
+// A one-time-code field that announces how many digits it holds instead of the digits, the way
+// React Native OTP inputs set `accessibilityValue` on their hidden text input.
+@interface AgentDeviceDigitCountTextField : UITextField
+@end
+
+@implementation AgentDeviceDigitCountTextField
+- (NSString *)accessibilityValue {
+  return [NSString stringWithFormat:@"%lu of 6 digits", (unsigned long)self.text.length];
+}
 @end
 #endif
 
@@ -265,6 +281,11 @@ static NSTimeInterval AgentDeviceTextEntryAcknowledgeWindow(void) {
 // Edits further apart than this belong to different bursts: one runner command's characters arrive
 // well inside it, and two commands are separated by at least a commit-wait poll and a status read.
 static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
+static const NSUInteger AgentDeviceTextEntryAutoSubmitLength = 6;
+
+static const CGFloat AgentDeviceTextEntryFieldTopInset = 24;
+static const CGFloat AgentDeviceTextEntryFieldHeight = 44;
+static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
 
 - (void)agentDeviceTextEntryDidChange:(UITextField *)textField {
   // A field whose app owns its value, the way a controlled React Native `TextInput` does. A burst
@@ -293,10 +314,56 @@ static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
     }
     [self updateTextEntryWriteBackStatus];
   }
+  self.textEntryDigitSlots.text = textField.text;
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-disappear-after-input"] &&
       textField.text.length > 0) {
     [textField removeFromSuperview];
   }
+  // An auto-submitting one-time-code field: the last digit navigates away, to a screen whose own
+  // input takes the code field's place or to one without an input. `replace-after-input` is the
+  // same navigation landing before the code is complete.
+  NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
+  BOOL codeComplete = textField.text.length >= AgentDeviceTextEntryAutoSubmitLength;
+  if (textField.superview == nil) {
+    return;
+  }
+  if ((codeComplete && [arguments containsObject:@"--agent-device-text-entry-auto-submit"]) ||
+      (textField.text.length > 0 && [arguments containsObject:@"--agent-device-text-entry-replace-after-input"])) {
+    UITextField *nextScreenField = [[UITextField alloc] initWithFrame:textField.frame];
+    if (![arguments containsObject:@"--agent-device-text-entry-unnamed-input"]) {
+      nextScreenField.accessibilityIdentifier = @"agent-device-auto-submit-next-screen-input";
+    }
+    nextScreenField.borderStyle = UITextBorderStyleRoundedRect;
+    [textField.superview addSubview:nextScreenField];
+    [textField removeFromSuperview];
+    [nextScreenField becomeFirstResponder];
+  } else if (codeComplete &&
+             [arguments containsObject:@"--agent-device-text-entry-auto-submit-without-successor"]) {
+    [textField removeFromSuperview];
+  }
+}
+
+// Stops answering the element-type query that found it, the moment it takes focus, under
+// `--agent-device-text-entry-unqueryable-on-focus`. #3060's Flutter password field reaches this shape
+// because its two accessibility channels disagree once focused — `TextField` through the legacy
+// attributes, `Other` through the modern ones — and what either channel leaves behind is the same:
+// the tap's element answers the query that resolved it up to the gesture and refuses it after, so a
+// read of it after dispatching records an XCTest failure instead of describing the tap that already
+// landed. The field keeps first-responder, so a test still needs a witness that is not the
+// accessibility tree to tell the gesture landed: `agent-device-text-entry-focus` is a label this
+// method fills in from the field's own delegate callback.
+- (void)agentDeviceTextEntryBecomesUnqueryable:(UITextField *)textField {
+  self.textEntryFocusWitness.text = @"focus";
+  textField.hidden = YES;
+}
+
+// Moves the field up by its own height plus the gap below it when it gains focus, the way keyboard
+// avoidance or a bottom sheet extending above the keyboard does, so the neighbouring field slides
+// into the point the focus tap hit.
+- (void)agentDeviceTextEntryDidBeginEditing:(UITextField *)textField {
+  self.textEntryFieldTop.constant =
+      AgentDeviceTextEntryFieldTopInset - AgentDeviceTextEntryFieldHeight - AgentDeviceTextEntryNeighbourGap;
+  [self.view layoutIfNeeded];
 }
 #endif
 
@@ -339,8 +406,13 @@ static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-regression"]) {
-    UITextField *textField = [[UITextField alloc] init];
-    textField.accessibilityIdentifier = @"agent-device-hardware-keyboard-input";
+    BOOL digitCountValue =
+        [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-digit-count-value"];
+    UITextField *textField =
+        digitCountValue ? [[AgentDeviceDigitCountTextField alloc] init] : [[UITextField alloc] init];
+    if (![NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-unnamed-input"]) {
+      textField.accessibilityIdentifier = @"agent-device-hardware-keyboard-input";
+    }
     textField.borderStyle = UITextBorderStyleRoundedRect;
     // An empty input view keeps the software keyboard down, which is the hardware-keyboard responder
     // these routes are addressed to. `--agent-device-text-entry-soft-keyboard` leaves the real input
@@ -354,12 +426,46 @@ static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
         forControlEvents:UIControlEventEditingChanged];
     textField.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:textField];
+    self.textEntryFieldTop = [textField.topAnchor constraintEqualToAnchor:label.bottomAnchor
+                                                                 constant:AgentDeviceTextEntryFieldTopInset];
     [NSLayoutConstraint activateConstraints:@[
       [textField.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-      [textField.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24],
+      self.textEntryFieldTop,
       [textField.widthAnchor constraintEqualToConstant:240],
-      [textField.heightAnchor constraintEqualToConstant:44],
+      [textField.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
     ]];
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-unqueryable-on-focus"]) {
+      self.textEntryFocusWitness = [[UILabel alloc] init];
+      self.textEntryFocusWitness.accessibilityIdentifier = @"agent-device-text-entry-focus";
+      self.textEntryFocusWitness.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:self.textEntryFocusWitness];
+      [NSLayoutConstraint activateConstraints:@[
+        [self.textEntryFocusWitness.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.textEntryFocusWitness.topAnchor constraintEqualToAnchor:textField.bottomAnchor constant:24],
+      ]];
+      [textField addTarget:self
+                    action:@selector(agentDeviceTextEntryBecomesUnqueryable:)
+          forControlEvents:UIControlEventEditingDidBegin];
+    }
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-moves-on-focus"]) {
+      textField.text = @"stale";
+      [textField addTarget:self
+                    action:@selector(agentDeviceTextEntryDidBeginEditing:)
+          forControlEvents:UIControlEventEditingDidBegin];
+      UITextField *neighbour = [[UITextField alloc] init];
+      neighbour.accessibilityIdentifier = @"agent-device-text-entry-neighbour";
+      neighbour.borderStyle = UITextBorderStyleRoundedRect;
+      neighbour.text = @"neighbour";
+      neighbour.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:neighbour];
+      [NSLayoutConstraint activateConstraints:@[
+        [neighbour.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [neighbour.topAnchor constraintEqualToAnchor:textField.bottomAnchor
+                                            constant:AgentDeviceTextEntryNeighbourGap],
+        [neighbour.widthAnchor constraintEqualToConstant:240],
+        [neighbour.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
+      ]];
+    }
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-app-owned-value"]) {
       self.textEntryAcknowledgeWindowSeconds = AgentDeviceTextEntryAcknowledgeWindow();
       // Reports how many edits this app rendered and how many writes it had to make because a
@@ -374,6 +480,17 @@ static const NSTimeInterval AgentDeviceTextEntryBurstBreakSeconds = 1.0;
         [self.textEntryWriteBackStatus.topAnchor constraintEqualToAnchor:textField.bottomAnchor constant:12],
       ]];
       [self updateTextEntryWriteBackStatus];
+    }
+    if (digitCountValue) {
+      // The slots an OTP screen renders next to its input: the digits the field really holds.
+      self.textEntryDigitSlots = [[UILabel alloc] init];
+      self.textEntryDigitSlots.accessibilityIdentifier = @"agent-device-text-entry-digit-slots";
+      self.textEntryDigitSlots.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:self.textEntryDigitSlots];
+      [NSLayoutConstraint activateConstraints:@[
+        [self.textEntryDigitSlots.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.textEntryDigitSlots.topAnchor constraintEqualToAnchor:textField.bottomAnchor constant:12],
+      ]];
     }
   }
 

@@ -185,13 +185,13 @@ test.each([
     { outcome: 'unreadable', step: 'url-owner' },
   ],
   [
-    'the accept rejects',
+    'the accept rejects and the confirmation remains',
     port(async () => CONFIRMATION, {
       acceptAlert: async () => {
         throw spawnTimeout();
       },
     }),
-    { outcome: 'unreadable', step: 'alert-accept' },
+    { outcome: 'unanswered', reason: 'alert-still-present' },
   ],
 ])('an answer attempt where %s reports %j', async (_case, { port: device }, expected) => {
   await expect(answerLaunchConfirmation(device)).resolves.toEqual(expected);
@@ -411,4 +411,35 @@ test('a runner that cannot be resolved reports an unreadable attempt', async () 
       new AbortController().signal,
     ),
   ).resolves.toEqual({ outcome: 'unreadable', step: 'runner' });
+});
+
+test('a confirmed persistent prompt reports its observed outcome without an accept-failure diagnostic', async () => {
+  vi.mocked(emitDiagnostic).mockClear();
+  const { port: device } = port(async () => CONFIRMATION, {
+    acceptAlert: async () => {
+      throw spawnTimeout();
+    },
+  });
+  await expect(answerLaunchConfirmation(device)).resolves.toEqual({
+    outcome: 'unanswered',
+    reason: 'alert-still-present',
+  });
+  expect(emitDiagnostic).toHaveBeenCalledExactlyOnceWith({
+    level: 'debug',
+    phase: 'ios_launch_confirmation_unanswered',
+    data: { reason: 'alert-still-present' },
+  });
+});
+
+test('a matching launch title with other buttons is left unanswered on the first read', async () => {
+  const { port: device, acceptAlert } = port(async () => ({
+    ...CONFIRMATION,
+    items: ['Cancel', 'Continue'],
+  }));
+  await expect(answerLaunchConfirmation(device)).resolves.toMatchObject({
+    outcome: 'unanswered',
+    reason: 'alert-unrecognized',
+  });
+  expect(device.readAlert).toHaveBeenCalledOnce();
+  expect(acceptAlert).not.toHaveBeenCalled();
 });

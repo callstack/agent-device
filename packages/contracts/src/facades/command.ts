@@ -13,7 +13,11 @@ export type { CommandExecutionOptions, InternalRequestOptions } from '../request
 export type { CommandFlags, MaestroRuntimeFlags } from '../command-flags.ts';
 export type { DaemonWireRequest, DaemonWireRequestMeta } from '../daemon-wire-request.ts';
 export type { DispatchedCommand } from '../dispatched-command.ts';
-export { readOptionalInteger, readOptionalNumber } from '../input-validation.ts';
+export {
+  ANDROID_SHELL_TEXT_UNSUPPORTED_REASON,
+  readOptionalInteger,
+  readOptionalNumber,
+} from '../input-validation.ts';
 export {
   IOS_SAFARI_BUNDLE_ID,
   isDeepLinkTarget,

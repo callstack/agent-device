@@ -5,8 +5,10 @@ export {
   macOsHelperSurface,
   macOsSurfaceBackend,
   parseSessionSurface,
+  readMacOsAppBackend,
 } from '../session-surface.ts';
 export type {
+  MacOsAppBackend,
   MacOsHelperSurface,
   MacOsSurfaceBackend,
   SessionSurface,

@@ -375,4 +375,30 @@ describe('devices output', () => {
     expect(lines[0]).not.toContain('claimed by');
     expect(lines[1]).toContain('claimed by session "qa" in /worktrees/qa');
   });
+
+  test('carries the discovered model and OS version through JSON data and the text line', async () => {
+    const output = await managementCliOutputFormatters.devices({
+      input: {},
+      result: [
+        {
+          platform: 'ios',
+          appleOs: 'ios',
+          target: 'mobile',
+          kind: 'simulator',
+          id: 'sim-1',
+          name: 'bsky-e2e',
+          model: 'iPhone 17 Pro',
+          osVersion: '26.5',
+          booted: true,
+          identifiers: { deviceId: 'sim-1', deviceName: 'bsky-e2e', udid: 'sim-1' },
+        },
+      ],
+    });
+
+    const devices = (output.data as { devices: Record<string, unknown>[] }).devices;
+    expect(devices[0]).toMatchObject({ model: 'iPhone 17 Pro', osVersion: '26.5' });
+    expect(output.text).toBe(
+      'bsky-e2e (ios simulator target=mobile model="iPhone 17 Pro" os=26.5) booted=true',
+    );
+  });
 });

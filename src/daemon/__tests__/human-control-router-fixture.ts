@@ -4,6 +4,7 @@ import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { buildSessionLeaseFromRequest } from '../lease-context.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from '../request-router.ts';
+import { readDaemonProviderCredentials } from '../../provider-credential-fingerprint.ts';
 import { tenantScopedSessionName } from '../session-tenant-scope.ts';
 import { lifecycleDeviceRuntimeGateway } from './test-device-runtime-gateway.ts';
 import { HUMAN_CONTROL_LEASE_REQUEST, humanControlRequest } from './human-control-fixtures.ts';
@@ -13,7 +14,7 @@ export function createHumanControlHarness() {
   const lease = registry.allocateLease(HUMAN_CONTROL_LEASE_REQUEST);
   const sessionStore = makeSessionStore('agent-device-human-control-');
   const sessionName = tenantScopedSessionName(lease.tenantId, 'takeover-test');
-  sessionStore.set(
+  sessionStore.publish(
     sessionName,
     makeIosAppSession(sessionName, {
       lease: buildSessionLeaseFromRequest(humanControlRequest(lease), lease),
@@ -24,6 +25,7 @@ export function createHumanControlHarness() {
     token: 'test-token',
     sessionStore,
     leaseRegistry: registry,
+    providerCredentials: readDaemonProviderCredentials({}, '/tmp'),
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     trackDownloadableArtifact: () => 'artifact-1',

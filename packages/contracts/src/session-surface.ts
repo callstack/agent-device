@@ -15,30 +15,54 @@ export function parseSessionSurface(value: string | undefined): SessionSurface {
 /** The backend that serves every operation on a macOS surface. */
 export type MacOsSurfaceBackend = Extract<SnapshotBackend, 'xctest' | 'macos-helper'>;
 
-const MACOS_SURFACE_BACKENDS = {
-  app: 'xctest',
+/**
+ * Which backend drives a macOS app session. `xctest` is the runner under XCTest Automation Mode;
+ * `native` drives the app through the macOS helper's accessibility actions and process-targeted
+ * events, so the app can stay in the background and the user keeps the pointer.
+ */
+const MACOS_APP_BACKENDS = ['xctest', 'native'] as const;
+export type MacOsAppBackend = (typeof MACOS_APP_BACKENDS)[number];
+const MACOS_APP_BACKEND_ENV = 'AGENT_DEVICE_MACOS_APP_BACKEND';
+const MACOS_APP_BACKEND_ENUM = defineStringEnum(MACOS_APP_BACKENDS, {
+  normalize: (raw) => raw.trim().toLowerCase(),
+  message: (value) =>
+    `Invalid ${MACOS_APP_BACKEND_ENV}: ${value}. Use ${MACOS_APP_BACKENDS.join('|')}.`,
+});
+
+/** The host's app-session backend; unset selects `xctest`. */
+export function readMacOsAppBackend(
+  readEnvironment: (name: string) => string | undefined,
+): MacOsAppBackend {
+  const raw = readEnvironment(MACOS_APP_BACKEND_ENV);
+  return raw === undefined || raw.trim() === '' ? 'xctest' : MACOS_APP_BACKEND_ENUM.parse(raw);
+}
+
+const MACOS_HELPER_SURFACE_BACKENDS = {
   'frontmost-app': 'macos-helper',
   desktop: 'macos-helper',
   menubar: 'macos-helper',
-} as const satisfies Record<SessionSurface, MacOsSurfaceBackend>;
+} as const satisfies Record<Exclude<SessionSurface, 'app'>, MacOsSurfaceBackend>;
 
 /** An absent surface is an app session, the reading every route already gives it. */
-export function macOsSurfaceBackend(surface: SessionSurface | undefined): MacOsSurfaceBackend {
-  return MACOS_SURFACE_BACKENDS[surface ?? 'app'];
+export function macOsSurfaceBackend(
+  surface: SessionSurface | undefined,
+  appBackend: MacOsAppBackend,
+): MacOsSurfaceBackend {
+  const resolved = surface ?? 'app';
+  if (resolved === 'app') return appBackend === 'native' ? 'macos-helper' : 'xctest';
+  return MACOS_HELPER_SURFACE_BACKENDS[resolved];
 }
-
-type HelperRoutedSurface = {
-  [S in SessionSurface]: (typeof MACOS_SURFACE_BACKENDS)[S] extends 'macos-helper' ? S : never;
-}[SessionSurface];
 
 declare const helperSurface: unique symbol;
 /** A surface the owner routed to the macOS helper; only `macOsHelperSurface` produces one. */
-export type MacOsHelperSurface = HelperRoutedSurface & { readonly [helperSurface]: true };
+export type MacOsHelperSurface = SessionSurface & { readonly [helperSurface]: true };
 
 export function macOsHelperSurface(
   surface: SessionSurface | undefined,
+  appBackend: MacOsAppBackend,
 ): MacOsHelperSurface | undefined {
-  return surface !== undefined && macOsSurfaceBackend(surface) === 'macos-helper'
-    ? (surface as MacOsHelperSurface)
+  const resolved = surface ?? 'app';
+  return macOsSurfaceBackend(resolved, appBackend) === 'macos-helper'
+    ? (resolved as MacOsHelperSurface)
     : undefined;
 }

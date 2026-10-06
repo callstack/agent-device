@@ -1,3 +1,4 @@
+import { makeCaptureSessionBinding, makeCaptureFixtureStore } from './session-binding.fixtures.ts';
 import path from 'node:path';
 import { vi, type Mock } from 'vitest';
 import {
@@ -13,9 +14,8 @@ import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 import type {
   DurableCaptureCleanupOutcome,
   DurableCaptureFailedFinishPolicy,
-  DurableCaptureResourceDefinition,
+  DurableCaptureRecordDefinition,
   DurableCaptureSessionResource,
-  DurableCaptureSessionStore,
 } from './definition.ts';
 import { createDurableCaptureResourceStore, type DurableCaptureResourceStore } from './store.ts';
 
@@ -49,21 +49,12 @@ export const testCaptureStore = createDurableCaptureResourceStore({
 export function createTestCaptureDefinition(
   store: DurableCaptureResourceStore<typeof TEST_CAPTURE_KIND> = testCaptureStore,
   failedFinishPolicy: DurableCaptureFailedFinishPolicy = 'dispose-on-failed-finish',
-): DurableCaptureResourceDefinition<
-  typeof TEST_CAPTURE_KIND,
-  TestCaptureHandle,
-  TestCaptureCompletion,
-  TestCaptureSession
-> {
+): DurableCaptureRecordDefinition<typeof TEST_CAPTURE_KIND, TestCaptureCompletion> {
   return {
     resourceKind: TEST_CAPTURE_KIND,
     displayName: 'test capture',
     store,
     failedFinishPolicy,
-    sessionSlot: {
-      read: (session) => session.capture,
-      replace: (session, capture) => ({ ...session, capture }),
-    },
     completionMetadata: (completion) => ({
       outputPath: completion.outputPath,
       completedAt: completion.completedAt,
@@ -87,20 +78,20 @@ export function makeDurableCaptureContext(
 ) {
   const sessionsDir = mkdtempForTestSync('durable-capture-resource-');
   const sessionName = 'session';
-  const sessions = new Map<string, TestCaptureSession>();
   const session: TestCaptureSession = { name: sessionName };
-  sessions.set(sessionName, session);
   const resolveSessionDir = (name: string): string => path.join(sessionsDir, name);
-  const sessionStore: DurableCaptureSessionStore<TestCaptureSession> = {
-    set: (name, next) => void sessions.set(name, next),
-    resolveSessionDir,
-  };
+  const sessionStore = makeCaptureFixtureStore<TestCaptureSession>(resolveSessionDir);
+  sessionStore.set(sessionName, session);
   const reportUndurableCleanup: Mock<
     (device: DeviceInfo, outcome: DurableCaptureCleanupOutcome) => void
   > = vi.fn();
   return {
     reportUndurableCleanup,
-    sessions,
+    binding: makeCaptureSessionBinding(sessionStore, sessionName, {
+      read: (session) => session.capture,
+      replace: (session, capture) => ({ ...session, capture }),
+    }),
+    sessions: sessionStore,
     sessionsDir,
     resolveSessionDir,
     session,

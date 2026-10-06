@@ -42,16 +42,29 @@ async function withTempSdkLayout(
   }
 }
 
-test('resolveAndroidSdkRoots prefers configured roots before HOME default', () => {
-  const roots = resolveAndroidSdkRoots({
-    HOME: '/tmp/home',
-    ANDROID_HOME: '/tmp/android-home',
-    ANDROID_SDK_ROOT: '/tmp/android-sdk-root',
-  });
-  assert.deepEqual(roots, [
+const CONFIGURED_ENV = {
+  HOME: '/tmp/home',
+  ANDROID_HOME: '/tmp/android-home',
+  ANDROID_SDK_ROOT: '/tmp/android-sdk-root',
+};
+
+test('resolveAndroidSdkRoots orders configured roots, the macOS Studio SDK, then HOME default', () => {
+  const linuxHome = path.join('/tmp/home', 'Android', 'Sdk');
+  assert.deepEqual(resolveAndroidSdkRoots(CONFIGURED_ENV, 'linux'), [
     '/tmp/android-sdk-root',
     '/tmp/android-home',
-    path.join('/tmp/home', 'Android', 'Sdk'),
+    linuxHome,
+  ]);
+  // The Studio layout joins the search only on macOS, between the env roots and the default.
+  assert.deepEqual(resolveAndroidSdkRoots(CONFIGURED_ENV, 'darwin'), [
+    '/tmp/android-sdk-root',
+    '/tmp/android-home',
+    path.join('/tmp/home', 'Library', 'Android', 'sdk'),
+    linuxHome,
+  ]);
+  assert.deepEqual(resolveAndroidSdkRoots({ HOME: '/Users/dev' }, 'darwin'), [
+    '/Users/dev/Library/Android/sdk',
+    '/Users/dev/Android/Sdk',
   ]);
 });
 

@@ -14,6 +14,15 @@ const scope: PlatformRequestScope = {
   progress: { report: () => undefined },
 };
 
+const RUNNING_EMULATOR_PROBES: ReadonlyArray<readonly [string, string]> = [
+  ['ro.boot.qemu.avd_name', 'Pixel_9_Pro_XL\n'],
+  ['sys.boot_completed', '1\n'],
+  ['getprop ro.product.model; getprop ro.build.version.release', 'sdk_gphone16k_arm64\n17\n'],
+  ['ro.build.characteristics', 'phone\n'],
+  ['has-feature', 'false\n'],
+  ['pm\0list\0features', ''],
+];
+
 test.each([
   ['include-stopped', true],
   ['running-only', false],
@@ -30,11 +39,8 @@ test.each([
           'List of devices attached\nemulator-5554 device model:Pixel_9_Pro_XL\nphysical-1 device model:Phone\n',
         );
       }
-      if (key.includes('ro.boot.qemu.avd_name')) return result('Pixel_9_Pro_XL\n');
-      if (key.includes('sys.boot_completed')) return result('1\n');
-      if (key.includes('ro.build.characteristics')) return result('phone\n');
-      if (key.includes('has-feature')) return result('false\n');
-      if (key.includes('pm\0list\0features')) return result('');
+      const probe = RUNNING_EMULATOR_PROBES.find(([fragment]) => key.includes(fragment));
+      if (probe) return result(probe[1]);
       throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
     });
 
@@ -44,14 +50,64 @@ test.each([
     );
 
     assert.deepEqual(
-      devices.map((candidate) => [candidate.id, candidate.name, candidate.booted]),
+      devices.map((candidate) => [
+        candidate.id,
+        candidate.name,
+        candidate.booted,
+        candidate.model,
+        candidate.osVersion,
+      ]),
       [
-        ['emulator-5554', 'Pixel 9 Pro XL', true],
-        ...(includesStoppedAvd ? [['Living_Room_TV', 'Living_Room_TV', false] as const] : []),
+        ['emulator-5554', 'Pixel 9 Pro XL', true, 'sdk_gphone16k_arm64', '17'],
+        ...(includesStoppedAvd
+          ? [['Living_Room_TV', 'Living_Room_TV', false, undefined, undefined] as const]
+          : []),
       ],
     );
-    assert.ok(calls.every((call) => call.timeoutMs === 10_000));
+    const isDescriptionProbe = (call: HostCommandRequest) =>
+      call.args.some((arg) => arg.includes('ro.product.model'));
+    assert.deepEqual(
+      calls.filter(isDescriptionProbe).map((call) => call.timeoutMs),
+      [2_000],
+    );
+    assert.ok(
+      calls.filter((call) => !isDescriptionProbe(call)).every((call) => call.timeoutMs === 10_000),
+    );
     assert.ok(calls.every((call) => call.allowFailure === true));
+  },
+);
+
+test.each([
+  ['exits non-zero', async () => result('', 'error: closed', 1)],
+  [
+    'times out',
+    async () => {
+      throw new AppError('COMMAND_FAILED', 'adb timed out after 2000ms', { timeoutMs: 2_000 });
+    },
+  ],
+] as const)(
+  'Android inventory leaves model and OS version unset when the description probe %s',
+  async (_case, describeProbe) => {
+    const host = createHost(async (request) => {
+      const key = request.args.join('\0');
+      if (key === 'devices\0-l') {
+        return result('List of devices attached\nR5CT1 device model:SM_S921B\n');
+      }
+      if (key.includes('ro.product.model')) return await describeProbe();
+      const probe = RUNNING_EMULATOR_PROBES.find(([fragment]) => key.includes(fragment));
+      if (probe) return result(probe[1]);
+      throw new Error(`Unexpected command: ${request.executable} ${request.args.join(' ')}`);
+    });
+
+    const [device] = await createAndroidInventory(host).discover(
+      { androidAvdSelection: 'running-only' },
+      scope,
+    );
+
+    assert.equal(device?.name, 'SM S921B');
+    assert.equal(device?.booted, true);
+    assert.equal(device?.model, undefined);
+    assert.equal(device?.osVersion, undefined);
   },
 );
 

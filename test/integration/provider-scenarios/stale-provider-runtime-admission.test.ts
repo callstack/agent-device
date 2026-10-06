@@ -6,6 +6,7 @@ import {
   createProviderWebDriver,
 } from '@agent-device/provider-webdriver';
 import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
+import { limrunTestDependencies } from '../../../src/platform-runtime-gateway.fixtures.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   CloudWebDriverTestServer,
@@ -285,10 +286,7 @@ function limrunDependencies(): LimrunRuntimeDependencies {
       downloadFile: async () => undefined,
       archiveDirectory: async () => {},
     },
-    ios: {
-      resolveAppAlias: async (app) => app,
-      readBundleAppName: async () => undefined,
-    },
+    ios: limrunTestDependencies.ios,
   };
 }
 

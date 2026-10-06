@@ -2,7 +2,7 @@ import { expect, test, vi } from 'vitest';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
-import { bindAppleFindTextRuntime } from './runtime-snapshot.ts';
+import { bindAppleFindTextRuntime, bindAppleSnapshotRuntime } from './runtime-snapshot.ts';
 
 const ios = {
   platform: 'apple',
@@ -13,6 +13,48 @@ const ios = {
   target: 'mobile',
   booted: true,
 } as const satisfies DeviceInfo;
+
+const mac = {
+  platform: 'apple',
+  appleOs: 'macos',
+  id: 'host',
+  name: 'Mac',
+  kind: 'device',
+  target: 'desktop',
+} as const satisfies DeviceInfo;
+
+function macSnapshotOwners(appBackend: 'native' | 'xctest') {
+  const helper = vi.fn(async () => ({ nodes: [], truncated: false }) as never);
+  const runner = vi.fn(async () => ({ nodes: [], truncated: false }) as never);
+  const fixture = platformRuntimeHostFixture();
+  const operation = bindAppleSnapshotRuntime(
+    {
+      ...fixture,
+      snapshot: { ...fixture.snapshot, captureSurface: helper },
+      localInteractors: { resolve: vi.fn(async () => ({ snapshot: runner }) as never) },
+    },
+    { device: mac, signal: new AbortController().signal, appBackend },
+  );
+  return { operation, helper, runner };
+}
+
+test('a native app session captures through the helper with its routed surface, never XCTest', async () => {
+  const { operation, helper, runner } = macSnapshotOwners('native');
+  await operation.captureSnapshot({ options: { appBundleId: 'com.apple.TextEdit' } });
+  expect(helper).toHaveBeenCalledWith(
+    mac,
+    { appBundleId: 'com.apple.TextEdit', surface: 'app' },
+    expect.anything(),
+  );
+  expect(runner).not.toHaveBeenCalled();
+});
+
+test('an XCTest app session captures through the runner interactor, never the helper', async () => {
+  const { operation, helper, runner } = macSnapshotOwners('xctest');
+  await operation.captureSnapshot({ options: { appBundleId: 'com.apple.TextEdit' } });
+  expect(runner).toHaveBeenCalledTimes(1);
+  expect(helper).not.toHaveBeenCalled();
+});
 
 test('findText resolves the owner interactor once with request execution and cancellation', async () => {
   const findText = vi.fn(
@@ -25,7 +67,11 @@ test('findText resolves the owner interactor once with request execution and can
   const host = hostWithRunner(true, resolve);
   const request = new AbortController();
   const poll = new AbortController();
-  const operation = bindAppleFindTextRuntime(host, { device: ios, signal: request.signal });
+  const operation = bindAppleFindTextRuntime(host, {
+    device: ios,
+    signal: request.signal,
+    appBackend: 'xctest',
+  });
 
   await expect(
     operation.findText({
@@ -66,6 +112,7 @@ test.each([
     const operation = bindAppleFindTextRuntime(host, {
       device,
       signal: new AbortController().signal,
+      appBackend: 'xctest',
     });
 
     await expect(
@@ -95,6 +142,7 @@ test('findText on a Simulator without a live runner reports not-proven', async (
   const operation = bindAppleFindTextRuntime(hostWithRunner(false, resolve), {
     device: ios,
     signal: new AbortController().signal,
+    appBackend: 'xctest',
   });
   await expect(
     operation.findText({ text: 'Settings', options: { appBundleId: 'com.example.app' } }),
@@ -108,6 +156,7 @@ test('findText on a Simulator with a live runner still asks the runner', async (
   const operation = bindAppleFindTextRuntime(hostWithRunner(true, resolve), {
     device: ios,
     signal: new AbortController().signal,
+    appBackend: 'xctest',
   });
 
   await expect(
@@ -123,6 +172,7 @@ test('findText on a physical iOS device resolves the runner regardless of sessio
   const operation = bindAppleFindTextRuntime(hostWithRunner(false, resolve), {
     device,
     signal: new AbortController().signal,
+    appBackend: 'xctest',
   });
 
   await expect(

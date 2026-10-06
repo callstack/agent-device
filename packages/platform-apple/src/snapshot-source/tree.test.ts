@@ -325,6 +325,31 @@ test('the bridge tree reads selected from the selected trait, matching the XCTes
   assert.equal(enabled(disabledSelected), false);
 });
 
+test('the bridge tree reads keyboard focus from the is-editing trait, matching the XCTest tree', () => {
+  const editor = (word?: unknown) => ({
+    [automationType]: 57,
+    [label]: 'Notes',
+    [frame]: { X: 16, Y: 184, Width: 370, Height: 150 },
+    ...(word === undefined ? {} : { [traits]: word }),
+    [children]: [],
+  });
+  const focused = (word?: unknown) =>
+    decodeSnapshotBridgeTree(
+      { [application]: 'Application', [children]: [editor(word)] },
+      { truncated: false },
+      limits,
+    ).nodes[1]?.focused;
+
+  // Real guest captures of a SwiftUI TextEditor on an iOS 27 simulator: the word gains exactly
+  // bit 21 when the editor takes keyboard focus and loses it when another field takes it.
+  const focusedEditorTraits = 140883519602688n;
+  const unfocusedEditorTraits = 140883517505536n;
+  assert.equal(focusedEditorTraits ^ unfocusedEditorTraits, 1n << 21n);
+  assert.equal(focused(focusedEditorTraits.toString()), true);
+  assert.equal(focused(unfocusedEditorTraits.toString()), undefined, 'unfocused omits focused');
+  assert.equal(focused(), undefined, 'no traits word leaves focused unknown');
+});
+
 test('the bridge tree rejects unknown fields, invalid frames, and bounded overflows', () => {
   assert.throws(
     () => decodeSnapshotBridgeTree({ [children]: [], unknown: true }, { truncated: false }, limits),

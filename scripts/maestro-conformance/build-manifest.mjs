@@ -36,6 +36,8 @@ const NOTES = {
     'Coverage: extendedWaitUntil (upstream 042 interpolates ${TIMEOUT} from a flow env block).',
   'authored/repeat':
     'Coverage: repeat.times with ${output.list.length} (upstream 053 exercises the same evalScript-to-repeat shape).',
+  'authored/repeat-while':
+    'Coverage: repeat.while selector and JavaScript conditions, with and without a times limit.',
   'authored/presskey':
     'Coverage: pressKey supported keys (upstream 034 exercises many unsupported keycodes).',
   'authored/numeric-variable-tap':

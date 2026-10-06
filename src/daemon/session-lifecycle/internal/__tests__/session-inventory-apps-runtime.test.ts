@@ -104,7 +104,7 @@ beforeEach(() => {
 test('macOS apps consumes generic readiness and app inventory through one runtime bind', async () => {
   const sessionName = 'macos-apps';
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName, MACOS_DEVICE));
+  sessionStore.publish(sessionName, makeSession(sessionName, MACOS_DEVICE));
   const req: DaemonRequest = {
     token: 'test-token',
     session: sessionName,

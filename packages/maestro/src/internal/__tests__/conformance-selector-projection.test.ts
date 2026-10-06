@@ -75,3 +75,70 @@ test('canonical selector projection preserves recursive tree relations', () => {
     containsDescendants: [{ text: 'Save', childOf: { id: 'body' } }],
   });
 });
+
+test('canonicalizes repeat conditions from agent and upstream command shapes', () => {
+  const program = parseMaestroProgram(
+    [
+      '---',
+      '- repeat:',
+      '    while:',
+      '      platform: Android',
+      '      notVisible: Ready',
+      '    commands: []',
+      '- repeat:',
+      '    times: 4',
+      '    while:',
+      '      true: "${output.counter < 3}"',
+      '    commands: []',
+      '- repeat:',
+      '    times: 2',
+      '    while:',
+      '      true: true',
+      '    commands: []',
+    ].join('\n'),
+  );
+
+  expect(canonicalizeAgentCommands(program)).toEqual([
+    { kind: 'repeat', while: { platform: 'android', notVisible: { text: 'Ready' } } },
+    { kind: 'repeat', times: 4, while: { true: '${output.counter < 3}' } },
+    { kind: 'repeat', times: 2, while: { true: 'true' } },
+  ]);
+  expect(
+    canonicalizeUpstreamFlow([
+      {
+        type: 'RepeatCommand',
+        fields: {
+          times: null,
+          condition: {
+            platform: 'Android',
+            visible: null,
+            notVisible: { textRegex: 'Ready' },
+            scriptCondition: null,
+          },
+        },
+      },
+      {
+        type: 'RepeatCommand',
+        fields: {
+          times: '4',
+          condition: {
+            visible: null,
+            notVisible: null,
+            scriptCondition: '${output.counter < 3}',
+          },
+        },
+      },
+      {
+        type: 'RepeatCommand',
+        fields: {
+          times: '2',
+          condition: { visible: null, notVisible: null, scriptCondition: 'true' },
+        },
+      },
+    ]),
+  ).toEqual([
+    { kind: 'repeat', while: { platform: 'android', notVisible: { text: 'Ready' } } },
+    { kind: 'repeat', times: 4, while: { true: '${output.counter < 3}' } },
+    { kind: 'repeat', times: 2, while: { true: 'true' } },
+  ]);
+});

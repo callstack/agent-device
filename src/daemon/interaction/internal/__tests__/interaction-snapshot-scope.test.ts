@@ -13,11 +13,15 @@ import { captureSnapshotForSession } from '../../index.ts';
 // capture that dropped it here would return the unscoped tree with nothing left to notice (#1832
 // C2, adversarial review of PR #1846).
 
-const captured = vi.hoisted(() => ({ options: [] as SnapshotOptions[] }));
+const captured = vi.hoisted(() => ({
+  options: [] as SnapshotOptions[],
+  held: undefined as Promise<void> | undefined,
+}));
 
 vi.mock('../../../snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(async ({ options }: { options: SnapshotOptions }) => {
     captured.options.push(options);
+    await captured.held;
     const nodes = [
       { index: 0, depth: 0, type: 'android.widget.FrameLayout', label: 'Root' },
       {
@@ -48,15 +52,16 @@ vi.mock('../../../snapshot-interactor-capture.ts', () => ({
 
 afterEach(() => {
   captured.options.length = 0;
+  captured.held = undefined;
 });
 
 test('interaction captures hand flags.snapshotScope to the Android platform and keep its scoped tree', async () => {
   const sessionStore = makeSessionStore('agent-device-interaction-scope-');
   const session = makeAndroidSession('scope');
-  sessionStore.set(session.name, session);
+  const ref = sessionStore.publish(session.name, session);
 
   const snapshot = await captureSnapshotForSession(
-    session,
+    ref,
     { snapshotScope: 'panel' },
     sessionStore,
     (flags: CommandFlags | undefined, appBundleId?: string, traceLogPath?: string) =>
@@ -70,3 +75,48 @@ test('interaction captures hand flags.snapshotScope to the Android platform and 
     'Save',
   ]);
 });
+
+for (const change of ['rebuild', 'replace'] as const) {
+  test(`a held interaction capture respects its scoped lifetime after ${change}`, async () => {
+    const sessionStore = makeSessionStore();
+    const address = 'cwd:interaction-capture:default';
+    const ref = sessionStore.publish(address, makeAndroidSession('default'));
+    let release!: () => void;
+    captured.held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const running = captureSnapshotForSession(ref, {}, sessionStore, () => ({}), {
+      interactiveOnly: true,
+    });
+    const result = running.then(
+      (snapshot) => ({ snapshot }),
+      (error: unknown) => ({ error }),
+    );
+    try {
+      await vi.waitFor(() => expect(captured.options).toHaveLength(1));
+      if (change === 'rebuild') {
+        sessionStore.update(ref, { appName: 'Intervening rebuild' });
+        release();
+        expect(await result).toHaveProperty('snapshot');
+        expect(sessionStore.requireCurrent(ref).appName).toBe('Intervening rebuild');
+        expect(sessionStore.requireCurrent(ref).snapshot?.nodes).toHaveLength(4);
+      } else {
+        sessionStore.retire(ref);
+        const successor = sessionStore.publish(
+          address,
+          makeAndroidSession('default', { appName: 'Successor' }),
+        );
+        release();
+        expect(await result).toMatchObject({
+          error: { details: { reason: 'session_lifetime_ended' } },
+        });
+        expect(sessionStore.requireCurrent(successor)).toBe(successor.session);
+        expect(successor.session.snapshot).toBeUndefined();
+      }
+      expect(sessionStore.get('default')).toBeUndefined();
+    } finally {
+      release();
+      await result;
+    }
+  });
+}

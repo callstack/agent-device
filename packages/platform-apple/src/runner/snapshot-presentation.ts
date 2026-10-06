@@ -21,10 +21,12 @@ import {
 } from '@agent-device/capture-kit/ios-snapshot-planning';
 import { AppError } from '@agent-device/kernel/errors';
 import { readSnapshotKeyboardBandFact } from '@agent-device/kernel/record';
+import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import type {
   RawSnapshotNode,
   SnapshotKeyboardBandFact,
   SnapshotQualityVerdict,
+  SnapshotViewportSize,
   IosTargetActivation,
 } from '@agent-device/kernel/snapshot';
 import {
@@ -84,14 +86,31 @@ function readSystemSurfaceProvenance(value: unknown): IosSystemSurfaceProvenance
   return host && { bundleId: host.bundleId, kind: host.kind };
 }
 
+/**
+ * What one Apple runner capture leaves behind after presentation: the presented tree, and the box
+ * its rects are measured in (#3182). The viewport is the evidence the regular fold validated against —
+ * the app's own box when the runner read one, otherwise the largest window root in the payload, which
+ * on tvOS is the screen every `XCUIApplication` rect is measured on — and it is published through the
+ * same guard every other producer passes, so an unusable box stays absent instead of reaching a
+ * reader as zero. A raw projection and a runner-declared failure publish no box: neither had a
+ * viewport checked against its tree, so the roots alone would be a guess. This is the host-side owner
+ * ADR 0004 gives the viewport question; the runner itself never grows a second wire key for a fact
+ * the host already derives from the payload's roots.
+ */
+export type AppleRunnerSnapshotPresentation = Readonly<{
+  nodes: RawSnapshotNode[];
+  viewport?: SnapshotViewportSize;
+}>;
+
 export function presentAppleRunnerSnapshot(
   deviceId: string,
   options: SnapshotOptions | undefined,
   result: AppleRunnerSnapshotResult,
-): RawSnapshotNode[] {
+): AppleRunnerSnapshotPresentation {
   const nodes = result.nodes ?? [];
+  const viewportEvidence = runnerViewportEvidence(nodes, result.qualityPayload?.nodes);
   if (result.runnerFatal === true || (nodes.length === 0 && result.qualityPayload === undefined)) {
-    return nodes;
+    return { nodes };
   }
 
   const request = createIosSnapshotRequest({
@@ -101,8 +120,6 @@ export function presentAppleRunnerSnapshot(
     scope: options?.scope,
     customActions: options?.customActions,
   });
-  const viewport = runnerViewportEvidence(nodes, result.qualityPayload?.nodes);
-
   const input: IosSnapshotInput = {
     stage: 'presented',
     presentation: {
@@ -119,7 +136,7 @@ export function presentAppleRunnerSnapshot(
     },
     validation: {
       presentationKey: buildIosSnapshotPresentationKey(request),
-      viewport,
+      viewport: viewportEvidence,
       hittability: { kind: 'available' },
       lineage: { targetId: deviceId },
       residue: [],
@@ -127,7 +144,14 @@ export function presentAppleRunnerSnapshot(
   };
 
   try {
-    return presentIosRunnerSnapshot(input, request).nodes;
+    // The engine returns the box its regular projection validated this payload against and no box
+    // for raw — deriving it here would only repeat that rule (#3182).
+    const presentation = presentIosRunnerSnapshot(input, request);
+    const validatedViewport = snapshotViewportSizeFrom(presentation.validatedViewport);
+    return {
+      nodes: presentation.nodes,
+      ...(validatedViewport ? { viewport: validatedViewport } : {}),
+    };
   } catch (error) {
     throwSnapshotPresentationError(error, result);
   }

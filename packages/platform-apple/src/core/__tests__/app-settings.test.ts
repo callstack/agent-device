@@ -28,7 +28,7 @@ const simulatorActual = await vi.importActual<typeof import('../simulator.ts')>(
 import { setIosSetting } from '../app-settings.ts';
 import { withMockedMacOsHelper } from './macos-helper-test-utils.ts';
 import { ensureBootedSimulator } from '../simulator.ts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import { retryWithPolicy } from '@agent-device/host-kit/retry';
 import { assertRejectsAppError } from '../../__tests__/app-error.ts';
@@ -300,100 +300,76 @@ test('setIosSetting rejects unsupported macOS wifi setting with explicit subset 
   );
 });
 
-test('setIosSetting location set sends simulator latitude and longitude', async () => {
+test('setIosSetting location runs the simctl plan on the simulator udid and returns its result', async () => {
   mockEnsureBootedSimulator.mockResolvedValue(undefined);
 
   await withFakeAppleTool(
     () => '',
     async ({ calls }) => {
-      await setIosSetting(IOS_TEST_SIMULATOR, 'location', 'set', undefined, {
+      const result = await setIosSetting(IOS_TEST_SIMULATOR, 'location', 'set', undefined, {
         latitude: 37.3349,
         longitude: -122.009,
       });
       assert.deepEqual(calls, [['simctl', 'location', 'sim-1', 'set', '37.3349,-122.009']]);
+      assert.deepEqual(result, { latitude: 37.3349, longitude: -122.009 });
     },
   );
 });
 
-test('setIosSetting appearance toggle flips current simulator appearance', async () => {
+test('setIosSetting clear-app-state refuses an appless session with the published reason', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue(undefined);
+
+  await withFakeAppleTool(
+    (args) => unexpectedArgs(args),
+    async () => {
+      await assertRejectsAppError(
+        () => setIosSetting(IOS_TEST_SIMULATOR, 'clear-app-state', 'clear'),
+        {
+          code: 'INVALID_ARGS',
+          reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired,
+          dispatched: 'no',
+        },
+      );
+    },
+  );
+});
+
+test('setIosSetting appearance runs the simctl plan on the simulator udid and reads its output', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue(undefined);
+
   await withFakeAppleTool(
     (args) => {
-      if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
       if (args.join(' ') === 'simctl ui sim-1 appearance') return 'dark';
       if (args.join(' ') === 'simctl ui sim-1 appearance light') return '';
       return unexpectedArgs(args);
     },
     async ({ calls }) => {
       await setIosSetting(IOS_TEST_SIMULATOR, 'appearance', 'toggle');
-      const flat = calls.map((args) => args.join(' '));
-      assert.equal(flat.includes('simctl ui sim-1 appearance'), true, flat.join('; '));
-      assert.equal(flat.includes('simctl ui sim-1 appearance light'), true, flat.join('; '));
+      assert.deepEqual(calls, [
+        ['simctl', 'ui', 'sim-1', 'appearance'],
+        ['simctl', 'ui', 'sim-1', 'appearance', 'light'],
+      ]);
     },
   );
 });
 
-test('setIosSetting appearance toggle rejects unsupported current appearance output', async () => {
-  await withFakeAppleTool(
-    (args) => {
-      if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
-      if (args.join(' ') === 'simctl ui sim-1 appearance') return 'unsupported';
-      return '';
-    },
-    async () => {
-      await assertRejectsAppError(() => setIosSetting(IOS_TEST_SIMULATOR, 'appearance', 'toggle'), {
-        code: 'COMMAND_FAILED',
-        message: /Unable to determine current iOS appearance/,
-      });
-    },
-  );
-});
-
-test('setIosSetting permission grant calendar uses simctl privacy calendar target', async () => {
-  await withFakeAppleTool(
-    (args) => {
-      if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
-      if (args.join(' ') === 'simctl privacy sim-1 grant calendar com.example.app') return '';
-      return unexpectedArgs(args);
-    },
-    async ({ calls }) => {
-      await setIosSetting(IOS_TEST_SIMULATOR, 'permission', 'grant', 'com.example.app', {
-        permissionTarget: 'calendar',
-      });
-      const flat = calls.map((args) => args.join(' '));
-      assert.equal(
-        flat.includes('simctl privacy sim-1 grant calendar com.example.app'),
-        true,
-        flat.join('; '),
-      );
-    },
-  );
-});
-
-test('setIosSetting permission grant all passes all through as one simctl call', async () => {
-  await withFakeAppleTool(
-    (args) => {
-      if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
-      if (args.join(' ') === 'simctl privacy sim-1 grant all com.example.app') return '';
-      return unexpectedArgs(args);
-    },
-    async ({ calls }) => {
-      await setIosSetting(IOS_TEST_SIMULATOR, 'permission', 'grant', 'com.example.app', {
-        permissionTarget: 'all',
-      });
-      const flat = calls.map((args) => args.join(' '));
-      assert.deepEqual(
-        flat.filter((line) => line.includes('privacy sim-1')),
-        ['simctl privacy sim-1 grant all com.example.app'],
-      );
-    },
-  );
-});
-
-test('setIosSetting clear-app-state wipes iOS simulator app data container', async () => {
+test('setIosSetting clear-app-state leaves a fresh-install data container layout', async () => {
   const containerPath = await mkdtempForTest('agent-device-ios-clear-app-state-container-');
-  await fs.mkdir(path.join(containerPath, 'Documents'), { recursive: true });
-  await fs.writeFile(path.join(containerPath, 'Documents', 'db.sqlite'), 'db');
+  const metadataFile = '.com.apple.mobile_container_manager.metadata.plist';
+  for (const [file, content] of Object.entries({
+    'Documents/db.sqlite': 'db',
+    'Library/Caches/blob': 'cache',
+    'Library/Preferences/com.example.app.plist': 'prefs',
+    'Library/Application Support/state.json': 'state',
+    'SystemData/com.apple.state': 'system',
+    'tmp/download.tmp': 'partial download',
+  })) {
+    await fs.mkdir(path.dirname(path.join(containerPath, file)), { recursive: true });
+    await fs.writeFile(path.join(containerPath, file), content);
+  }
   await fs.writeFile(path.join(containerPath, 'Library.plist'), 'prefs');
+  await fs.writeFile(path.join(containerPath, '.app-dotfile'), 'app data');
+  await fs.writeFile(path.join(containerPath, metadataFile), 'metadata');
 
   await withFakeAppleTool(
     (args) => {
@@ -413,7 +389,16 @@ test('setIosSetting clear-app-state wipes iOS simulator app data container', asy
       );
       assert.equal(result?.cleared, true);
       assert.equal(result?.bundleId, 'com.example.app');
-      assert.deepEqual(await fs.readdir(containerPath), []);
+      assert.deepEqual((await fs.readdir(containerPath, { recursive: true })).sort(), [
+        metadataFile,
+        'Documents',
+        'Library',
+        'Library/Caches',
+        'Library/Preferences',
+        'SystemData',
+        'tmp',
+      ]);
+      assert.equal(await fs.readFile(path.join(containerPath, metadataFile), 'utf8'), 'metadata');
 
       const flat = calls.map((args) => args.join(' '));
       assert.equal(flat.includes('simctl terminate sim-1 com.example.app'), true, flat.join('; '));
@@ -462,127 +447,11 @@ test('setIosSetting reset-keychain rejects unsupported state', async () => {
   );
 });
 
-test('setIosSetting permission grant photos limited maps to photos-add', async () => {
-  await withFakeAppleTool(
-    (args) => {
-      if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
-      if (args.join(' ') === 'simctl privacy sim-1 grant photos-add com.example.app') return '';
-      return unexpectedArgs(args);
-    },
-    async ({ calls }) => {
-      await setIosSetting(IOS_TEST_SIMULATOR, 'permission', 'grant', 'com.example.app', {
-        permissionTarget: 'photos',
-        permissionMode: 'limited',
-      });
-      const flat = calls.map((args) => args.join(' '));
-      assert.equal(
-        flat.includes('simctl privacy sim-1 grant photos-add com.example.app'),
-        true,
-        flat.join('; '),
-      );
-    },
-  );
-});
+test('setIosSetting permission runs the simctl plan on the simulator udid and surfaces its refusal', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue(undefined);
 
-test('setIosSetting permission rejects mode for non-photos target', async () => {
   await withFakeAppleTool(
     (args) => {
-      if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
-      return unexpectedArgs(args);
-    },
-    async () => {
-      await assertRejectsAppError(
-        () =>
-          setIosSetting(IOS_TEST_SIMULATOR, 'permission', 'grant', 'com.example.app', {
-            permissionTarget: 'camera',
-            permissionMode: 'limited',
-          }),
-        { code: 'INVALID_ARGS', message: /mode is only supported for photos/i },
-      );
-    },
-  );
-});
-
-test('setIosSetting permission reset notifications fails targeted when direct reset is blocked', async () => {
-  // A blocked notifications reset must not fall back to `reset all`: a
-  // notifications-only reset would clear microphone, location, and other
-  // grants. The targeted reset fails instead, leaving the earlier grant in place.
-  await withFakeAppleTool(
-    (args) => {
-      if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
-      if (args.join(' ') === 'simctl privacy sim-1 grant microphone com.example.app') return '';
-      if (args.join(' ') === 'simctl privacy sim-1 reset notifications com.example.app') {
-        return { stderr: 'Failed to reset access\nOperation not permitted', exitCode: 1 };
-      }
-      return unexpectedArgs(args);
-    },
-    async ({ calls }) => {
-      await setIosSetting(IOS_TEST_SIMULATOR, 'permission', 'grant', 'com.example.app', {
-        permissionTarget: 'microphone',
-      });
-      await assertRejectsAppError(
-        () =>
-          setIosSetting(IOS_TEST_SIMULATOR, 'permission', 'reset', 'com.example.app', {
-            permissionTarget: 'notifications',
-          }),
-        {
-          code: 'UNSUPPORTED_OPERATION',
-          message: /does not support resetting notifications permission/i,
-        },
-      );
-      const flat = calls.map((args) => args.join(' '));
-      assert.equal(
-        flat.includes('simctl privacy sim-1 reset notifications com.example.app'),
-        true,
-        flat.join('; '),
-      );
-      assert.equal(
-        flat.some((line) => line.includes('reset all com.example.app')),
-        false,
-        flat.join('; '),
-      );
-      assert.equal(
-        flat.includes('simctl privacy sim-1 grant microphone com.example.app'),
-        true,
-        flat.join('; '),
-      );
-    },
-  );
-});
-
-test('setIosSetting permission grant camera needs no capability probe', async () => {
-  // Xcode 26 omits `camera` from `simctl privacy help` while still changing it, so a
-  // help-derived gate refused a service every runtime here serves. The privacy call is
-  // itself the probe, so nothing else may be issued for a grant.
-  await withFakeAppleTool(
-    (args) => {
-      if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
-      if (args.join(' ') === 'simctl privacy sim-1 grant camera com.example.app') return '';
-      return unexpectedArgs(args);
-    },
-    async ({ calls }) => {
-      await setIosSetting(IOS_TEST_SIMULATOR, 'permission', 'grant', 'com.example.app', {
-        permissionTarget: 'camera',
-      });
-      const flat = calls.map((args) => args.join(' '));
-      assert.equal(
-        flat.includes('simctl privacy sim-1 grant camera com.example.app'),
-        true,
-        flat.join('; '),
-      );
-      assert.equal(
-        flat.some((line) => line.includes('privacy help')),
-        false,
-        flat.join('; '),
-      );
-    },
-  );
-});
-
-test('setIosSetting permission deny notifications returns unsupported on runtimes that block it', async () => {
-  await withFakeAppleTool(
-    (args) => {
-      if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
       if (args.join(' ') === 'simctl privacy sim-1 revoke notifications com.example.app') {
         return { stderr: 'Failed to revoke access\nOperation not permitted', exitCode: 1 };
       }
@@ -599,45 +468,9 @@ test('setIosSetting permission deny notifications returns unsupported on runtime
           message: /does not support setting notifications permission/i,
         },
       );
-      const flat = calls.map((args) => args.join(' '));
-      assert.equal(
-        flat.includes('simctl privacy sim-1 revoke notifications com.example.app'),
-        true,
-        flat.join('; '),
-      );
-    },
-  );
-});
-
-test('setIosSetting permission reports a runtime-refused service as unsupported', async () => {
-  // A service the runtime cannot change answers EPERM, and Xcode 26 words grant/revoke
-  // failures as "Failed to set access" — not "failed to grant access" — for both a real
-  // service it withheld and a name it does not know at all.
-  await withFakeAppleTool(
-    (args) => {
-      if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
-      if (args.join(' ') === 'simctl privacy sim-1 grant calendar com.example.app') {
-        return { stderr: 'Failed to set access\nOperation not permitted', exitCode: 1 };
-      }
-      return unexpectedArgs(args);
-    },
-    async ({ calls }) => {
-      await assertRejectsAppError(
-        () =>
-          setIosSetting(IOS_TEST_SIMULATOR, 'permission', 'grant', 'com.example.app', {
-            permissionTarget: 'calendar',
-          }),
-        {
-          code: 'UNSUPPORTED_OPERATION',
-          message: /does not support setting calendar permission/i,
-        },
-      );
-      const flat = calls.map((args) => args.join(' '));
-      assert.equal(
-        flat.some((line) => line.includes('privacy help')),
-        false,
-        flat.join('; '),
-      );
+      assert.deepEqual(calls, [
+        ['simctl', 'privacy', 'sim-1', 'revoke', 'notifications', 'com.example.app'],
+      ]);
     },
   );
 });

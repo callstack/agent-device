@@ -15,6 +15,7 @@ import type {
   SnapshotRuntimeAcquiredResult,
 } from '@agent-device/contracts/interactor-types';
 import { AppError } from '@agent-device/kernel/errors';
+import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 
 const IOS_SNAPSHOT_FACT_WARNINGS: Partial<Record<IosSnapshotFact, string>> = {
   'acquisition-depth':
@@ -41,6 +42,9 @@ export function presentIosSnapshotAcquisition(
 
   try {
     const presentation = publishIosSnapshot(input, request);
+    // The engine returns the box its regular fold validated against and no box for raw; this seam
+    // only passes it through the shared construction guard (#3182).
+    const validatedViewport = snapshotViewportSizeFrom(presentation.validatedViewport);
     return {
       backend: 'xctest',
       producer: acquired.acquisition.producer,
@@ -49,6 +53,7 @@ export function presentIosSnapshotAcquisition(
       ...(acquired.acquisition.truncated === undefined
         ? {}
         : { truncated: acquired.acquisition.truncated }),
+      ...(validatedViewport ? { viewport: validatedViewport } : {}),
       ...snapshotWarnings(acquired.acquisition.residue),
     };
   } catch (error) {

@@ -14,6 +14,8 @@ export type Lease = {
   leaseProvider?: string;
   deviceKey?: string;
   clientId?: string;
+  /** Present when the daemon keeps this lease through session `close`; an older daemon omits it. */
+  retainOnClose?: true;
   createdAt?: number;
   heartbeatAt?: number;
   expiresAt?: number;
@@ -32,6 +34,12 @@ export type LeaseAllocateOptions = LeaseOptions & {
   provider?: string;
   deviceKey?: string;
   clientId?: string;
+  /**
+   * Keeps the lease through session `close`; it then ends only through `leases.release`, expiry, or
+   * daemon shutdown. Asking for it on a lease the same client already holds for the run turns it on
+   * for that lease; the returned lease's `retainOnClose` says whether the daemon honored it.
+   */
+  retainOnClose?: boolean;
 };
 
 export type LeaseScopedOptions = LeaseOptions & {

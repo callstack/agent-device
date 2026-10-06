@@ -208,11 +208,15 @@ function parseSourceUrl(raw: string): URL {
   try {
     parsed = new URL(raw);
   } catch {
-    throw new AppError('INVALID_ARGS', 'Invalid source URL');
+    throw invalidSourceUrlError();
   }
 
   if (parsed.username || parsed.password) {
     throw new AppError('INVALID_ARGS', 'Source URL credentials are not allowed');
   }
   return parsed;
+}
+
+export function invalidSourceUrlError(): AppError {
+  return new AppError('INVALID_ARGS', 'Invalid source URL');
 }

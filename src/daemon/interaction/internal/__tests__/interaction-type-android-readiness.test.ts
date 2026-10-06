@@ -44,7 +44,7 @@ test('type continues and composes the recording readiness warning', async () => 
     startedAt: 0,
   });
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
     req: {

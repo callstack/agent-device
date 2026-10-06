@@ -44,7 +44,7 @@ function snapshotDeviceRuntimeGateway(): DeviceRuntimeGateway<PlatformRuntimeOpe
 
 function handlerForDevice(device: DeviceInfo) {
   const sessionStore = makeSessionStore('agent-device-custom-actions-guard-');
-  sessionStore.set('default', {
+  sessionStore.publish('default', {
     name: 'default',
     device,
     appBundleId: 'com.example.app',

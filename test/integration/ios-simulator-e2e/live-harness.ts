@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { resolveDaemonPaths } from '../../../src/daemon-resolution.ts';
+import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 import type { CliJsonResult } from '../cli-json.ts';
 import {
   createLiveDeviceContext,
@@ -129,14 +130,14 @@ export async function retryCleanupStep(
   return undefined;
 }
 
-// SESSION_NOT_FOUND: nothing left to reset, any step. INVALID_ARGS: only the
-// mic-permission reset needs an app bundle and app-settings.ts has no reason code for
-// it, so we match its exact message — scoped to this step so it can't hide another failure.
+// SESSION_NOT_FOUND: nothing left to reset, any step. INVALID_ARGS with the published
+// session-app reason: only the mic-permission reset needs an app bundle, and the refusal is
+// scoped to this step so it can't hide another failure.
 function sessionAlreadyClean(step: string, result: CliJsonResult): boolean {
   if (result.json?.error?.code === 'SESSION_NOT_FOUND') return true;
   return (
     step === MICROPHONE_PERMISSION_RESET_STEP &&
     result.json?.error?.code === 'INVALID_ARGS' &&
-    result.json?.error?.message === 'permission setting requires an active app in session'
+    result.json?.error?.details?.reason === PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired
   );
 }

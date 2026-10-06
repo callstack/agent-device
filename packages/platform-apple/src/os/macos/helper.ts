@@ -112,6 +112,48 @@ function appendMacOsHelperContextArgs(
   }
 }
 
+const MACOS_GHOST_CURSOR_ENV = 'AGENT_DEVICE_MACOS_GHOST_CURSOR';
+
+/**
+ * A background action on an app session draws its own pointer so the user can follow it while
+ * keeping the real one; `AGENT_DEVICE_MACOS_GHOST_CURSOR=0` turns the drawing off.
+ */
+function appendGhostCursorArg(args: string[], surface: SessionSurface | undefined): void {
+  if (surface !== 'app') return;
+  if (readHostEnvironmentVariable(MACOS_GHOST_CURSOR_ENV)?.trim() === '0') return;
+  args.push('--ghost-cursor');
+}
+
+/**
+ * The ghost cursor's glide and pulse take about 0.3 s; the budget also covers the helper's first
+ * WindowServer connection. Only a drawn cursor earns it.
+ */
+function ghostCursorBudgetMs(args: readonly string[]): number {
+  return args.includes('--ghost-cursor') ? 1_000 : 0;
+}
+
+/**
+ * The helper's app-surface vocabulary, pinned with its Swift enums by
+ * `contracts/fixtures/macos-native-helper-outcomes.json`.
+ */
+export const MACOS_HELPER_REFUSAL_REASONS = [
+  'background-pointer-gesture',
+  'no-accessible-target',
+  'no-settable-text-input',
+  'no-scroll-bar',
+] as const;
+export const MACOS_DELIVERY_MECHANISMS = [
+  'ax-press',
+  'ax-focus',
+  'ax-value',
+  'ax-selected-text',
+  'ax-confirm',
+  'ax-scroll-bar',
+  'key-events',
+] as const;
+/** How an app-surface action reached the app, as the helper reports it. */
+export type MacOsDeliveryMechanism = (typeof MACOS_DELIVERY_MECHANISMS)[number];
+
 export function resolveMacOsHelperPackageRootFrom(modulePath: string): string {
   let currentDir = path.dirname(modulePath);
   while (true) {
@@ -379,6 +421,8 @@ export async function runMacOsSnapshotAction(
   nodes: MacOsSnapshotNode[];
   truncated: boolean;
   backend: 'macos-helper';
+  /** Set when the app's Chromium accessibility tree could not be turned on in time. */
+  warnings?: string[];
 }> {
   const args = ['snapshot', '--surface', surface];
   appendMacOsHelperContextArgs(args, options);
@@ -388,13 +432,13 @@ export async function runMacOsSnapshotAction(
 export async function runMacOsReadTextAction(
   x: number,
   y: number,
-  options: { surface: MacOsHelperSurface; bundleId?: string },
+  options: { surface: MacOsHelperSurface; bundleId?: string; signal?: AbortSignal },
 ): Promise<{
   text: string;
 }> {
   const args = ['read', '--x', String(x), '--y', String(y)];
   appendMacOsHelperContextArgs(args, options);
-  return await runMacOsHelper(args);
+  return await runMacOsHelper(args, { signal: options.signal });
 }
 
 // Mirrors the helper's own floors (`MouseClickSchedule.swift`): the schedule the helper runs
@@ -448,6 +492,9 @@ export async function runMacOsPressAction(
   doubleClick?: boolean;
   bundleId?: string;
   surface?: SessionSurface;
+  mechanism?: MacOsDeliveryMechanism;
+  /** The window the helper acted in, for an app-surface press. */
+  windowTitle?: string;
 }> {
   const args = ['press', '--x', String(x), '--y', String(y)];
   if (options.holdMs && options.holdMs > 0) {
@@ -465,20 +512,74 @@ export async function runMacOsPressAction(
     args.push('--double-click');
   }
   appendMacOsHelperContextArgs(args, options);
+  appendGhostCursorArg(args, options.surface);
   return await runMacOsHelper(args, {
     signal: options.signal,
-    timeoutMs: macOsClickScheduleMs(options) + MACOS_HELPER_TIMEOUT_MS,
+    timeoutMs: macOsClickScheduleMs(options) + MACOS_HELPER_TIMEOUT_MS + ghostCursorBudgetMs(args),
+  });
+}
+
+/** Inserts text at the app session's focused element without activating the app. */
+export async function runMacOsTypeAction(
+  text: string,
+  options: { bundleId: string; delayMs?: number; signal?: AbortSignal },
+): Promise<{ mechanism?: MacOsDeliveryMechanism; role?: string; windowTitle?: string }> {
+  const args = ['type', '--text', text];
+  if (options.delayMs && options.delayMs > 0) args.push('--delay-ms', String(options.delayMs));
+  appendMacOsHelperContextArgs(args, { bundleId: options.bundleId });
+  appendGhostCursorArg(args, 'app');
+  return await runMacOsHelper(args, {
+    signal: options.signal,
+    timeoutMs:
+      MACOS_HELPER_TIMEOUT_MS + ghostCursorBudgetMs(args) + text.length * (options.delayMs ?? 0),
+  });
+}
+
+/** Replaces the value of the app session's text input at a point. */
+export async function runMacOsFillAction(
+  x: number,
+  y: number,
+  text: string,
+  options: { bundleId: string; signal?: AbortSignal },
+): Promise<{ mechanism?: MacOsDeliveryMechanism; role?: string; windowTitle?: string }> {
+  const args = ['fill', '--x', String(x), '--y', String(y), '--text', text];
+  appendMacOsHelperContextArgs(args, { bundleId: options.bundleId });
+  appendGhostCursorArg(args, 'app');
+  return await runMacOsHelper(args, {
+    signal: options.signal,
+    timeoutMs: MACOS_HELPER_TIMEOUT_MS + ghostCursorBudgetMs(args),
+  });
+}
+
+/** Scrolls the scroll area at the center of the app session's front window. */
+export async function runMacOsScrollAction(
+  direction: 'up' | 'down' | 'left' | 'right',
+  options: {
+    bundleId: string;
+    amount?: number;
+    pixels?: number;
+    signal?: AbortSignal;
+  },
+): Promise<Record<string, unknown>> {
+  const args = ['scroll', '--direction', direction];
+  if (options.amount !== undefined) args.push('--amount', String(options.amount));
+  if (options.pixels !== undefined) args.push('--pixels', String(options.pixels));
+  appendMacOsHelperContextArgs(args, { bundleId: options.bundleId });
+  appendGhostCursorArg(args, 'app');
+  return await runMacOsHelper(args, {
+    signal: options.signal,
+    timeoutMs: MACOS_HELPER_TIMEOUT_MS + ghostCursorBudgetMs(args),
   });
 }
 
 export async function runMacOsScreenshotAction(
   outPath: string,
-  options: { surface: MacOsHelperSurface },
+  options: { surface: MacOsHelperSurface; bundleId?: string; signal?: AbortSignal },
 ): Promise<{
   path: string;
   surface?: SessionSurface;
 }> {
   const args = ['screenshot', '--out', outPath];
   appendMacOsHelperContextArgs(args, options);
-  return await runMacOsHelper(args);
+  return await runMacOsHelper(args, { signal: options.signal });
 }

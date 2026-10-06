@@ -1,8 +1,22 @@
 import type {
   AndroidSnapshotCaptureMode,
   AndroidSnapshotHelperInstallReason,
+  AndroidSnapshotHelperMetadata,
   AndroidSnapshotHelperTransport,
 } from './snapshot-helper-types.ts';
+
+/**
+ * One Android capture as the host holds it: the tree, the backend metadata the response publishes,
+ * and the raw helper transport metadata behind it. The helper pair (display extent, density) rides
+ * as raw transport facts rather than as a pre-derived viewport, so the single place that answers the
+ * viewport question is `snapshotAndroid`, through the shared guard. The backend metadata stays free
+ * of a second copy of the display read: the response publishes that fact once, as `viewport` (#3182).
+ */
+export type AndroidUiHierarchyCapture = {
+  xml: string;
+  metadata: AndroidSnapshotBackendMetadata;
+  helperMetadata: AndroidSnapshotHelperMetadata;
+};
 
 export type AndroidSnapshotBackendMetadata = {
   backend: 'android-helper';

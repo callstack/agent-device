@@ -115,7 +115,7 @@ test('open --relaunch rejects Android app binary paths for active sessions', asy
   });
   session.appName = 'com.example.app';
   session.appBundleId = 'com.example.app';
-  sessionStore.set('default', session);
+  sessionStore.publish('default', session);
 
   const response = await handleSessionCommands({
     req: {
@@ -162,7 +162,7 @@ test('open --relaunch rejects Android app binary paths before resolving a new de
 
 test('open on in-use device returns DEVICE_IN_USE before readiness checks', async () => {
   const sessionStore = makeSessionStore();
-  sessionStore.set(
+  sessionStore.publish(
     'busy-session',
     makeSession('busy-session', {
       platform: 'apple',
@@ -225,7 +225,7 @@ test('open on device owned by recording session returns recording recovery hint'
     showTouches: false,
     recordOnlySession: true,
   });
-  sessionStore.set('default', recordingSession);
+  sessionStore.publish('default', recordingSession);
 
   mockResolveTargetDevice.mockResolvedValue({
     platform: 'apple',

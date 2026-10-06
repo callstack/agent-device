@@ -156,6 +156,100 @@ describe('settings CLI permission vocabulary', () => {
       positionals: ['permission', 'deny', 'screen-recording', 'full'],
     });
   });
+
+  // #3179: an app-scoped change can name an app the session never opened. `app` is no CLI flag key,
+  // so the request carries it as input the way a gesture payload does.
+  test('carries --app on a permission grant to the daemon request input', () => {
+    const input = settingsCliReader(['permission', 'grant', 'camera'], {
+      targetApp: 'com.example.app',
+    } as CliFlags);
+    expect(input).toMatchObject({ app: 'com.example.app' });
+    expect(settingsDaemonWriter(input)).toMatchObject({
+      command: 'settings',
+      positionals: ['permission', 'grant', 'camera'],
+      input: { app: 'com.example.app' },
+    });
+  });
+
+  test('carries an app on an iOS location toggle to the daemon request input', () => {
+    const input = settingsCliReader(['location', 'on'], {
+      targetApp: 'com.example.app',
+    } as CliFlags);
+    expect(settingsDaemonWriter(input)).toMatchObject({
+      positionals: ['location', 'on'],
+      input: { app: 'com.example.app' },
+    });
+  });
+
+  // r4176656835: the writer used to drop the app, so `location set ... --app X` ignored X silently.
+  // It now forwards, and the daemon's device-level refusal answers it (handler test below).
+  test('forwards the app on a location set to the device-level refusal', () => {
+    const input = settingsCliReader(['location', 'set', '37.7', '-122.4'], {
+      targetApp: 'com.example.app',
+    } as CliFlags);
+    expect(settingsDaemonWriter(input)).toMatchObject({
+      positionals: ['location', 'set', '37.7', '-122.4'],
+      input: { app: 'com.example.app' },
+    });
+  });
+
+  // The parser strips a configured default before the reader runs, so a `--app` the reader sees was
+  // typed on this invocation. A destructive clear must land on the app the caller named, never fall
+  // through to the session app or pick one of two named apps.
+  test('keeps a clear-app-state app positional and out of the request input', () => {
+    const input = settingsCliReader(['clear-app-state', 'com.example.app'], flags());
+    const writer = settingsDaemonWriter(input);
+    expect(writer.positionals).toEqual(['clear-app-state', 'com.example.app']);
+    expect(writer.input).toBeUndefined();
+    expect(input).toMatchObject({ app: 'com.example.app' });
+  });
+
+  test.each([[['clear-app-state']], [['clear-app-state', 'clear']]])(
+    'aims %j at the --app it names when no positional does',
+    (positionals) => {
+      const input = settingsCliReader(positionals, { targetApp: 'com.example.app' } as CliFlags);
+      expect(settingsDaemonWriter(input).positionals).toEqual([
+        'clear-app-state',
+        'com.example.app',
+      ]);
+    },
+  );
+
+  test('accepts the same app named positionally and with --app', () => {
+    const input = settingsCliReader(['clear-app-state', 'clear', 'com.example.app'], {
+      targetApp: 'com.example.app',
+    } as CliFlags);
+    expect(settingsDaemonWriter(input).positionals).toEqual(['clear-app-state', 'com.example.app']);
+  });
+
+  test('refuses a clear-app-state that names two different apps', () => {
+    expect(() =>
+      settingsCliReader(['clear-app-state', 'com.example.app'], {
+        targetApp: 'com.example.other',
+      } as CliFlags),
+    ).toThrow(/names two apps: com.example.app and com.example.other/);
+  });
+
+  test('omits the request input when no app is named', () => {
+    expect(
+      settingsDaemonWriter(settingsCliReader(['animations', 'off'], flags())).input,
+    ).toBeUndefined();
+  });
+
+  test('accepts --app for its app-scoped settings', () => {
+    expect(settingsCommandFacet.cliSchema.allowedFlags).toEqual(['targetApp']);
+  });
+
+  test('carries an app named through the client input to the daemon request input', () => {
+    expect(
+      settingsDaemonWriter({
+        setting: 'permission',
+        state: 'grant',
+        permission: 'camera',
+        app: 'com.example.app',
+      }),
+    ).toMatchObject({ input: { app: 'com.example.app' } });
+  });
 });
 
 describe('settings CLI text-size', () => {

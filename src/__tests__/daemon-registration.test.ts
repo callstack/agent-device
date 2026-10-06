@@ -7,9 +7,8 @@ import {
   readRegisteredDaemonIdentity,
   readRegisteredDaemonOwnership,
 } from '../daemon-registration.ts';
-import { writeInfo } from '../server/server-lifecycle.ts';
-import { publishDaemonRegistration } from '../../__tests__/test-utils/device-claim-store.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { publishDaemonRegistration } from './test-utils/device-claim-store.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 const roots: string[] = [];
 
@@ -29,14 +28,7 @@ function infoPathOf(stateDir: string): string {
 
 test('reads back the identity a running daemon publishes for its state dir', () => {
   const stateDir = useStateDir();
-  writeInfo(stateDir, infoPathOf(stateDir), path.join(stateDir, 'daemon.log'), {
-    socketPort: 1234,
-    token: 'token',
-    codeOrigin: 'checkout',
-    version: '0.0.0-test',
-    codeSignature: 'signature',
-    processStartTime: 'published-start',
-  });
+  publishDaemonRegistration(stateDir, { pid: process.pid, startTime: 'published-start' });
 
   assert.deepEqual(readRegisteredDaemonIdentity(infoPathOf(stateDir)), {
     pid: process.pid,

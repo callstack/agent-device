@@ -236,6 +236,10 @@
       "types": "./src/interaction.ts",
       "default": "./src/interaction.ts"
     },
+    "./input-validation": {
+      "types": "./src/input-validation.ts",
+      "default": "./src/input-validation.ts"
+    },
     "./is-predicate": {
       "types": "./src/is-predicate.ts",
       "default": "./src/is-predicate.ts"
@@ -363,6 +367,10 @@
     "./runtime-operation-names": {
       "types": "./src/runtime-operation-names.ts",
       "default": "./src/runtime-operation-names.ts"
+    },
+    "./provider-profile-fields": {
+      "types": "./src/provider-profile-fields.ts",
+      "default": "./src/provider-profile-fields.ts"
     },
     "./progress": {
       "types": "./src/facades/progress.ts",

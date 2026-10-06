@@ -58,7 +58,8 @@ import { isWebSession } from './web-session-names.ts';
 import { inferFillText } from '@agent-device/ad-script';
 import { createPlatformRequestScope } from './platform-request-scope.ts';
 import { createOwnerScopedDeviceClaimReconciler } from './device/device-claim-owner-recovery.ts';
-import { scopeRequestSession } from './request-admission.ts';
+import { isConfinedToAppLease, scopeRequestSession } from './request-admission.ts';
+import { redactMacOsAppLeaseResponse } from './macos-app-lease.ts';
 import { resolveEffectiveSessionName } from './session-routing.ts';
 import { sessionIdleExpiredError } from './session-idle-expiry.ts';
 import type { IdleSessionTombstone } from './session-idle-tombstone.ts';
@@ -84,6 +85,7 @@ import { discloseRequestDispatch, refusedBeforeDispatch } from './request-dispat
 import { recordNestedRequests } from './request-dispatch-ledger.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
+import type { DaemonProviderCredentials } from '../provider-credential-fingerprint.ts';
 import { restrictDeviceInventoryToDaemonPolicy } from './daemon-policy.ts';
 import type { DaemonPolicy } from '../daemon-policy-file.ts';
 
@@ -106,6 +108,7 @@ export type RequestRouterDeps = {
   hostDiagnostics?: HostDiagnostics;
   providerRuntimeIds?: readonly string[];
   providerRuntimeRequiredIds?: readonly string[];
+  providerCredentials: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
   providerAppCatalog?: ProviderAppCatalog;
@@ -163,6 +166,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     hostDiagnostics,
     providerRuntimeIds,
     providerRuntimeRequiredIds,
+    providerCredentials,
     leaseLifecycleProvider,
     cloudArtifactProvider,
     providerAppCatalog,
@@ -253,7 +257,20 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     } catch (error) {
       response = finalizeThrownRequestError(error);
     }
-    return await finalizeRequestBindingCleanup(scope, response);
+    return redactForMacOsAppLease(req, scope, await finalizeRequestBindingCleanup(scope, response));
+  }
+
+  // Not covered, by choice: a request refused before its scope exists that names no lease in its
+  // own metadata and relies on its session's lease. Leased remote clients always send the lease.
+  function redactForMacOsAppLease(
+    req: DaemonRequest,
+    scope: RequestExecutionScope | undefined,
+    response: DaemonResponse,
+  ): DaemonResponse {
+    const session = scope ? sessionStore.lookup(scope.sessionName)?.session : undefined;
+    return isConfinedToAppLease(scope?.req ?? req, leaseRegistry, session, daemonPolicy)
+      ? redactMacOsAppLeaseResponse(req.command, response)
+      : response;
   }
 
   async function executeRequestScope(
@@ -328,6 +345,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       leaseLifecycleProvider,
       providerRuntimeIds,
       providerRuntimeRequiredIds,
+      providerCredentials,
       cloudArtifactProvider,
       providerAppCatalog,
       invoke: recordNestedRequests(handleRequest, dispatchLedger),
@@ -493,10 +511,11 @@ async function dispatchGenericForLockedScope(params: {
   androidObservation: AndroidObservationAdapter;
 }): Promise<DaemonResponse> {
   const { lockedScope, logPath, sessionStore, androidObservation } = params;
-  const session = sessionStore.get(lockedScope.sessionName);
-  if (!session) {
+  const ref = sessionStore.lookup(lockedScope.sessionName);
+  if (!ref) {
     return noActiveSessionError();
   }
+  const session = sessionStore.requireCurrent(ref);
 
   const runtimeExecution = await resolveGenericRuntimeExecution({
     req: lockedScope.req,
@@ -516,7 +535,7 @@ async function dispatchGenericForLockedScope(params: {
   const { dispatchGenericCommand } = await loadGenericRequestHandlerModule();
   const dispatchResponse = await dispatchGenericCommand({
     req: lockedScope.req,
-    session,
+    ref,
     sessionName: lockedScope.sessionName,
     logPath,
     sessionStore,
@@ -616,7 +635,9 @@ function repairExpiredIfTombstoned(
   sessionStore: SessionStore,
 ): DaemonError {
   if (error.code !== 'SESSION_NOT_FOUND') return error;
-  const tombstone = sessionStore.readRepairTombstone(req.session);
+  const address = resolveTombstoneSessionAddress(req, sessionStore);
+  if (address === undefined) return error;
+  const tombstone = sessionStore.readRepairTombstone(address);
   if (!tombstone) return error;
   const reRun = tombstone.sourcePath
     ? `re-run: replay ${tombstone.sourcePath} --save-script`
@@ -659,22 +680,27 @@ function idleExpiredIfTombstoned(
   return normalizeError(sessionIdleExpiredError(tombstone.owner, tombstone));
 }
 
+function resolveTombstoneSessionAddress(
+  req: DaemonRequest,
+  sessionStore: SessionStore,
+): string | undefined {
+  try {
+    return resolveEffectiveSessionName(scopeRequestSession(req), sessionStore, {
+      attachesToSession: false,
+    });
+  } catch {
+    return undefined;
+  }
+}
+
 function readIdleExpiryTombstoneSafely(
   req: DaemonRequest,
   sessionStore: SessionStore,
 ): IdleSessionTombstone | undefined {
+  const address = resolveTombstoneSessionAddress(req, sessionStore);
+  if (address === undefined) return undefined;
   try {
-    // The address is resolved exactly as the request itself resolved it, tenant scope included: a
-    // tenant-isolated request keeps its sessions under `<tenant>:<name>`, so reading the raw name
-    // would miss this request's own marker and could instead surface another tenant's, reporting an
-    // unrelated device as the one this caller just lost.
-    const scopedReq = scopeRequestSession(req);
-    // `attachesToSession: false` is the inventory reading: it never refuses an ambiguous workspace,
-    // which is right here because this read is a question about an absent session, not a request to
-    // act through one.
-    return sessionStore.readIdleExpiryTombstone(
-      resolveEffectiveSessionName(scopedReq, sessionStore, { attachesToSession: false }),
-    );
+    return sessionStore.readIdleExpiryTombstone(address);
   } catch {
     return undefined;
   }

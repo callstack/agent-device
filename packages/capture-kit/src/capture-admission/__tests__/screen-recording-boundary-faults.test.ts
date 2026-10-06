@@ -1,3 +1,4 @@
+import { makeCaptureSessionBinding } from '../../durable-capture/session-binding.fixtures.ts';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { createDurableResourceEnvelope } from '../../durable-resource-envelope.ts';
@@ -187,16 +188,11 @@ function createScreenRecordingTestResource(
   return createDurableCaptureResource<
     'screen-recording',
     ScreenRecordingLiveHandle,
-    ScreenRecordingCompletion,
-    DurableCaptureSessionState
+    ScreenRecordingCompletion
   >({
     resourceKind: 'screen-recording',
     displayName: 'screen recording',
     store,
-    sessionSlot: {
-      read: (session) => session.screenRecording,
-      replace: (session, screenRecording) => ({ ...session, screenRecording }),
-    },
     completionMetadata: (completion) => ({
       backend: completion.backend,
       outputPath: completion.outPath,
@@ -217,9 +213,14 @@ function makeContext(resource: ReturnType<typeof createScreenRecordingTestResour
   const sessionName = 'recording';
   const session: DurableCaptureSessionState = {};
   sessionStore.set(sessionName, session);
+  const binding = makeCaptureSessionBinding(sessionStore, sessionName, {
+    read: (session) => session.screenRecording,
+    replace: (session, screenRecording) => ({ ...session, screenRecording }),
+  });
   return {
     admissionLedger: createDurableCaptureAdmissionLedger({ displayName: 'screen recording' }),
     session,
+    binding,
     sessionName,
     sessionStore,
     device,

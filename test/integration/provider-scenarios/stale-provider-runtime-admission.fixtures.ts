@@ -74,7 +74,7 @@ export async function inspectProviderDeploymentAdmission(params: {
   fs.writeFileSync(appPath, 'fixture');
 
   try {
-    sessionStore.set('default', {
+    sessionStore.publish('default', {
       name: 'default',
       createdAt: 1,
       actions: [],

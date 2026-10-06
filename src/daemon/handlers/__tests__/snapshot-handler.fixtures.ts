@@ -92,7 +92,7 @@ export const providerIosDevice: SessionState['device'] = {
 export function snapshotRequest(
   sessionName: string,
   command: DaemonRequest['command'],
-  options: Partial<Pick<DaemonRequest, 'positionals' | 'flags' | 'internal'>> = {},
+  options: Partial<Pick<DaemonRequest, 'positionals' | 'flags' | 'internal' | 'input'>> = {},
 ): DaemonRequest {
   return { token: 't', session: sessionName, command, positionals: [], flags: {}, ...options };
 }

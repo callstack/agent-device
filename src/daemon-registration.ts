@@ -1,10 +1,12 @@
 import fs from 'node:fs';
+import type { ProcessLockInspection } from '@agent-device/host-kit/file';
 import {
   ownerIdentityDiffers,
+  isProcessPid,
   ownerIdentityMatches,
   type OwnerIdentity,
 } from '@agent-device/host-kit/process';
-import { resolveDaemonPaths } from '../daemon-resolution.ts';
+import { resolveDaemonPaths } from './daemon-resolution.ts';
 
 /**
  * The daemon identity published in a state dir's `daemon.json`. It is the only
@@ -15,6 +17,18 @@ import { resolveDaemonPaths } from '../daemon-resolution.ts';
 export function readRegisteredDaemonIdentity(infoPath: string): OwnerIdentity | null {
   const record = readRegistration(infoPath);
   return record.status === 'registered' ? record.identity : null;
+}
+
+export function processLockHoldsDaemonIdentity(
+  inspection: ProcessLockInspection,
+  identity: OwnerIdentity,
+): boolean {
+  return (
+    inspection.state === 'held' &&
+    typeof identity.startTime === 'string' &&
+    identity.startTime.trim().length > 0 &&
+    ownerIdentityMatches(inspection.owner, identity)
+  );
 }
 
 /** The raw record's identity. A pid of `null` is a file that names no owner, not owner zero. */
@@ -53,7 +67,7 @@ function parseRegistration(parsed: {
   processStartTime?: unknown;
 }): ParsedRegistration {
   const pid = parsed.pid;
-  if (typeof pid !== 'number' || !Number.isInteger(pid) || pid <= 0) {
+  if (!isProcessPid(pid)) {
     return { pid: null, startTime: null };
   }
   return { pid, startTime: readableStartTime(parsed.processStartTime) };
@@ -80,10 +94,11 @@ export type RegisteredDaemonOwnership =
 
 export function readRegisteredDaemonOwnership(
   infoPath: string,
-  owner: OwnerIdentity,
+  owner: OwnerIdentity | null,
 ): RegisteredDaemonOwnership {
   const record = readRegistration(infoPath);
   if (record.status !== 'registered') return { state: record.status };
+  if (!owner) return { state: 'unproven' };
   if (ownerIdentityDiffers(record.identity, owner)) {
     return { state: 'replaced', identity: record.identity };
   }

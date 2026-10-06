@@ -1,17 +1,19 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { MaestroExecutionContext } from './engine-context.ts';
 import type { MaestroPlatform } from './program-ir.ts';
 
-export function evaluateMaestroBooleanExpression(
-  value: string,
-  context: MaestroExecutionContext,
+export function tryEvaluateMaestroBooleanExpression(
+  resolved: string,
   platform: MaestroPlatform | undefined,
-): boolean {
-  const resolved = unwrapMaestroExpression(context.resolve(value));
-  return new MaestroBooleanExpressionParser(
-    tokenizeMaestroBooleanExpression(resolved),
-    platform,
-  ).parse();
+): boolean | undefined {
+  try {
+    return new MaestroBooleanExpressionParser(
+      tokenizeMaestroBooleanExpression(unwrapMaestroExpression(resolved)),
+      platform,
+    ).parse();
+  } catch (error) {
+    if (error instanceof AppError && error.code === 'INVALID_ARGS') return undefined;
+    throw error;
+  }
 }
 
 function unwrapMaestroExpression(value: string): string {

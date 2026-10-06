@@ -81,7 +81,7 @@ test('typed Maestro keeps a port-only runtime digest stable after launch binds t
           metroPort: 8083,
         });
         if (!request.runtime) throw new Error('open must carry effective runtime hints');
-        sessionStore.set(sessionName, makeIosSession(sessionName));
+        sessionStore.publish(sessionName, makeIosSession(sessionName));
         sessionStore.setRuntimeHints(sessionName, request.runtime);
         return { ok: true, data: {} };
       }

@@ -17,6 +17,7 @@ const device: DeviceInfo = {
   booted: true,
 };
 
+const INVENTORY = 'package:com.example.app\npackage:com.android.shell\n';
 const run = vi.fn();
 const dispose = vi.fn(async () => {});
 
@@ -75,6 +76,20 @@ test('constructs a signal-bound adb install in the Android package', async () =>
     }),
     signal,
   );
+});
+
+test('the package inventory diff alone resolves nothing for a reinstall', async () => {
+  // The closest negative to install-artifact.test.ts's reinstall proof: the inventory is
+  // identical before and after, so the diff sees no new package and resolves nothing.
+  run.mockResolvedValue({ stdout: INVENTORY, stderr: '', exitCode: 0 });
+  const host = hostFixture();
+  const signal = new AbortController().signal;
+  await expect(
+    installAndroidArtifact(host, device, '/tmp/app.apk', undefined, signal),
+  ).resolves.toBeUndefined();
+  // The APK must really be reinstalled; the inventories resolve nothing even without it.
+  expect(run).toHaveBeenCalledWith(expect.objectContaining({ executable: 'adb-install' }), signal);
+  expect(run.mock.calls.filter(([request]) => request.executable === 'adb')).toHaveLength(2);
 });
 
 test('owns bundletool command construction and temporary output cleanup', async () => {

@@ -2,10 +2,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
+import { createInstanceClient as createAndroidInstanceClient } from '@limrun/api/instance-client';
+import { createInstanceClient as createIosInstanceClient } from '@limrun/api/ios-client';
 import { LimrunRuntime } from '../sdk/limrun.ts';
 import { createExpiredProviderLeaseReleaser } from '../daemon/provider-lease-expiry.ts';
 import type { SimulatorLease } from '../daemon/lease-registry.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import { readVersion } from '@agent-device/host-kit/version';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
@@ -35,6 +38,7 @@ const limrunMockState = vi.hoisted(() => {
     ]),
     androidOpenUrl: vi.fn(async () => undefined),
     androidDisconnect: vi.fn(),
+    androidKeepAlive: vi.fn(),
     androidSendAsset: vi.fn(async () => undefined),
     androidTunnelClose,
     androidStartAdbTunnel: vi.fn(async () => ({
@@ -108,6 +112,7 @@ vi.mock('@limrun/api/ios-client', () => ({
 vi.mock('@limrun/api/instance-client', () => ({
   createInstanceClient: vi.fn(async () => ({
     disconnect: limrunMockState.androidDisconnect,
+    keepAlive: limrunMockState.androidKeepAlive,
     openUrl: limrunMockState.androidOpenUrl,
     sendAsset: limrunMockState.androidSendAsset,
     startAdbTunnel: limrunMockState.androidStartAdbTunnel,
@@ -125,6 +130,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
 afterEach(() => {
   limrunMockState.constructorOptions.length = 0;
   vi.clearAllMocks();
+  vi.mocked(runCmd).mockReset();
 });
 
 test('Limrun runtime identifies direct CLI usage to the Limrun API', async () => {
@@ -167,6 +173,35 @@ test('Limrun runtime identifies direct CLI usage to the Limrun API', async () =>
       provider: 'limrun',
       source: 'agent-device-cli',
     });
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+test('Limrun refuses a refused field on a repeat allocation of its live lease', async () => {
+  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key' });
+  const lease: SimulatorLease = {
+    leaseId: 'lease-repeat',
+    tenantId: 'team-a',
+    runId: 'run-a',
+    backend: 'ios-instance',
+    leaseProvider: 'limrun',
+    createdAt: 1,
+    heartbeatAt: 1,
+    expiresAt: 60_001,
+  };
+  try {
+    const allocateLease = runtime.leaseLifecycle.allocate;
+    if (!allocateLease) throw new Error('Limrun runtime must provide lease allocation');
+    await allocateLease(lease);
+    await assert.rejects(
+      allocateLease(lease, { flags: { providerOsVersion: '18.0' } }),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        JSON.stringify(error.details?.flags) === '["--provider-os-version"]',
+    );
+    assert.equal(limrunMockState.iosCreate.mock.calls.length, 1);
   } finally {
     await runtime.shutdown();
   }
@@ -301,6 +336,52 @@ test('Limrun Android reverses localhost URL ports through the persistent ADB tun
     assertAndroidTunnelLifecycle('exp://127.0.0.1:8081');
   } finally {
     await runtime.shutdown();
+  }
+});
+
+test('Limrun keepAlive pings the session client every 30 s until release', async () => {
+  vi.useFakeTimers();
+  try {
+    const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', keepAlive: true });
+    const lease = androidLease();
+    await allocateLimrunDevice(runtime, lease);
+    await vi.advanceTimersByTimeAsync(60_000);
+    assert.equal(limrunMockState.androidKeepAlive.mock.calls.length, 2);
+
+    await runtime.leaseLifecycle.release?.(lease);
+    await vi.advanceTimersByTimeAsync(60_000);
+    assert.equal(limrunMockState.androidKeepAlive.mock.calls.length, 2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('Limrun keepAlive is off by default', async () => {
+  vi.useFakeTimers();
+  try {
+    const runtime = new LimrunRuntime({ apiKey: 'lim_test_key' });
+    await allocateLimrunDevice(runtime, androidLease());
+    await vi.advanceTimersByTimeAsync(60_000);
+    assert.equal(limrunMockState.androidKeepAlive.mock.calls.length, 0);
+    await runtime.shutdown();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('Limrun keepAlive keeps pinging after the client throws', async () => {
+  vi.useFakeTimers();
+  try {
+    limrunMockState.androidKeepAlive.mockImplementationOnce(() => {
+      throw new Error('socket closed');
+    });
+    const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', keepAlive: true });
+    await allocateLimrunDevice(runtime, androidLease());
+    await vi.advanceTimersByTimeAsync(60_000);
+    assert.equal(limrunMockState.androidKeepAlive.mock.calls.length, 2);
+    await runtime.shutdown();
+  } finally {
+    vi.useRealTimers();
   }
 });
 
@@ -729,6 +810,184 @@ test('Limrun keeps session tracked when release fails so release can be retried'
 
     await assert.rejects(() => releaseLease(lease), /temporary delete failure/);
     assert.deepEqual(await releaseLease(lease), { limrunInstanceId: 'android-instance-1' });
+  } finally {
+    await runtime.shutdown();
+  }
+});
+
+const ATTACHED_IOS = {
+  apiUrl: 'https://region.limrun.example/v1/ios_attached/api',
+  token: 'ios-instance-token',
+};
+const ATTACHED_ANDROID = {
+  apiUrl: 'https://region.limrun.example/v1/android_attached/api',
+  token: 'android-instance-token',
+  adbUrl: 'wss://region.limrun.example/v1/android_attached/adb',
+};
+
+function iosLease(leaseId: string): SimulatorLease {
+  return { ...androidLease(), leaseId, backend: 'ios-instance' };
+}
+
+test('Limrun drives existing instances without an API key and never deletes them', async () => {
+  const runtime = new LimrunRuntime({
+    instances: { ios: ATTACHED_IOS, android: ATTACHED_ANDROID },
+  });
+  const releaseLease = runtime.leaseLifecycle.release;
+  const allocateLease = runtime.leaseLifecycle.allocate;
+  if (!allocateLease || !releaseLease) throw new Error('Limrun runtime must provide lease hooks');
+
+  try {
+    const ios = await allocateLease(iosLease('lease-attached-ios'), { initialApp: 'Example.ipa' });
+    await allocateLease({ ...androidLease(), leaseId: 'lease-attached-android' });
+
+    assert.match(String(ios?.limrunInstanceId), /^attached-[a-f0-9]{12}$/);
+    assert.deepEqual(vi.mocked(createIosInstanceClient).mock.calls, [
+      [{ ...ATTACHED_IOS, logLevel: 'warn' }],
+    ]);
+    assert.deepEqual(vi.mocked(createAndroidInstanceClient).mock.calls, [
+      [{ ...ATTACHED_ANDROID, logLevel: 'warn' }],
+    ]);
+
+    await releaseLease(iosLease('lease-attached-ios'));
+    await releaseLease({ ...androidLease(), leaseId: 'lease-attached-android' });
+    assert.equal(await releaseLease(iosLease('lease-before-daemon-restart')), undefined);
+    assert.equal(limrunMockState.androidDisconnect.mock.calls.length, 1);
+  } finally {
+    await runtime.shutdown();
+  }
+  assert.equal(limrunMockState.constructorOptions.length, 0);
+  for (const controlPlaneCall of [
+    limrunMockState.iosCreate,
+    limrunMockState.iosList,
+    limrunMockState.iosDelete,
+    limrunMockState.androidCreate,
+    limrunMockState.androidList,
+    limrunMockState.androidDelete,
+  ]) {
+    assert.equal(controlPlaneCall.mock.calls.length, 0);
+  }
+});
+
+test('Limrun removes only its own port reverse mappings from an attached Android instance', async () => {
+  const runtime = new LimrunRuntime({ instances: { android: ATTACHED_ANDROID } });
+  const lease = { ...androidLease(), leaseId: 'lease-attached-android' };
+  vi.mocked(runCmd).mockImplementation(async (_command, args) => ({
+    stdout: args.includes('--list')
+      ? 'host-7 tcp:8081 tcp:8081\nhost-9 tcp:8097 tcp:8097\nhost-9 tcp:8099 tcp:8099\n'
+      : '',
+    stderr: '',
+    exitCode: 0,
+  }));
+
+  const device = await allocateLimrunDevice(runtime, lease);
+  await runtime.configurePortReverse({
+    leaseId: lease.leaseId,
+    devicePort: 8097,
+    hostPort: 8097,
+    name: 'react-devtools',
+  });
+  await runtime.getInteractor(device)?.open('http://127.0.0.1:8099/');
+  await runtime.shutdown();
+
+  const removals = vi
+    .mocked(runCmd)
+    .mock.calls.map(([, args]) => args)
+    .filter((args) => args.includes('--remove'))
+    .map((args) => args.at(-1))
+    .sort();
+  assert.deepEqual(removals, ['tcp:8097', 'tcp:8099']);
+});
+
+test('Limrun refuses to replace an owner port reverse on an attached Android instance', async () => {
+  const runtime = new LimrunRuntime({ instances: { android: ATTACHED_ANDROID } });
+  const lease = { ...androidLease(), leaseId: 'lease-attached-android' };
+  vi.mocked(runCmd).mockImplementation(async (_command, args) =>
+    args.includes('--no-rebind')
+      ? { stdout: '', stderr: 'adb: error: cannot rebind existing socket', exitCode: 1 }
+      : {
+          stdout: args.includes('--list') ? 'owner-host tcp:8081 tcp:8081\n' : '',
+          stderr: '',
+          exitCode: 0,
+        },
+  );
+  const isRebindRefusal = (error: unknown) =>
+    (error as { details?: { reason?: unknown } }).details?.reason ===
+    'android_port_reverse_rebind_refused';
+
+  const device = await allocateLimrunDevice(runtime, lease);
+  await assert.rejects(
+    () =>
+      runtime.configurePortReverse({
+        leaseId: lease.leaseId,
+        devicePort: 8081,
+        hostPort: 8081,
+        name: 'metro',
+      }),
+    isRebindRefusal,
+  );
+  const interactor = runtime.getInteractor(device);
+  if (!interactor) throw new Error('Limrun runtime must return an interactor');
+  await assert.rejects(() => interactor.open('exp://127.0.0.1:8081'), isRebindRefusal);
+  await runtime.shutdown();
+
+  const reverseCalls = vi
+    .mocked(runCmd)
+    .mock.calls.map(([, args]) => args.slice(2))
+    .filter((args) => args[0] === 'reverse' && args[1] !== '--list');
+  assert.deepEqual(reverseCalls, [
+    ['reverse', '--no-rebind', 'tcp:8081', 'tcp:8081'],
+    ['reverse', '--no-rebind', 'tcp:8081', 'tcp:8081'],
+  ]);
+});
+
+test('Limrun instance access wins over the API key for its platform only', async () => {
+  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key', instances: { ios: ATTACHED_IOS } });
+
+  await allocateLimrunDevice(runtime, iosLease('lease-attached-ios'));
+  await allocateLimrunDevice(runtime, androidLease());
+  await runtime.shutdown();
+
+  assert.equal(limrunMockState.iosCreate.mock.calls.length, 0);
+  assert.equal(limrunMockState.iosDelete.mock.calls.length, 0);
+  assert.equal(limrunMockState.androidCreate.mock.calls.length, 1);
+  assert.deepEqual(limrunMockState.androidDelete.mock.calls, [['android-instance-1']]);
+});
+
+test('Limrun without an API key refuses operations that need one', async () => {
+  const runtime = new LimrunRuntime({ instances: { ios: ATTACHED_IOS } });
+
+  try {
+    const device = await allocateLimrunDevice(runtime, iosLease('lease-attached-ios'));
+    await assert.rejects(runtime.installInstallablePath(device, '/tmp/Example.app'), {
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'Uploading an app requires a Limrun API key.',
+    });
+    await assert.rejects(allocateLimrunDevice(runtime, androidLease()), {
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'Creating an instance requires a Limrun API key.',
+    });
+    assert.equal(limrunMockState.assetsGetOrUpload.mock.calls.length, 0);
+  } finally {
+    await runtime.shutdown();
+  }
+  assert.throws(() => new LimrunRuntime({}), /requires an apiKey or instance access/);
+});
+
+test('Limrun attaches an existing instance under a consumed field and refuses a refused one', async () => {
+  const runtime = new LimrunRuntime({ instances: { ios: ATTACHED_IOS } });
+  const allocateLease = runtime.leaseLifecycle.allocate;
+  if (!allocateLease) throw new Error('Limrun runtime must provide lease allocation');
+  try {
+    await assert.rejects(
+      allocateLease(iosLease('lease-refused'), { flags: { providerOsVersion: '18.0' } }),
+      (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
+    );
+    assert.equal(vi.mocked(createIosInstanceClient).mock.calls.length, 0);
+    const ios = await allocateLease(iosLease('lease-attached-ios'), {
+      flags: { providerApp: 'Example.ipa' },
+    });
+    assert.match(String(ios?.limrunInstanceId), /^attached-[a-f0-9]{12}$/);
   } finally {
     await runtime.shutdown();
   }

@@ -24,7 +24,7 @@ test.each(NETWORK_RUNTIME_PROJECTION_PARITY)(
       kind: 'emulator',
       booted: true,
     });
-    sessionStore.set(sessionName, {
+    sessionStore.publish(sessionName, {
       ...session,
       appBundleId: 'com.example.app',
       appLog: makeTestAppLogResource(session, {
@@ -104,7 +104,7 @@ test('network admission remains fail-closed before parsing invalid input', async
     name: 'Harmony device',
     kind: 'device',
   });
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const runtime = createNetworkRuntime(session.device, async () => emptyAppLogResult('harmonyos'), {
     available: false,
     reason: 'unsupported-platform-leaf',
@@ -147,7 +147,7 @@ test('an explicit web provider preserves empty-success projection', async () => 
     kind: 'device',
     target: 'desktop',
   });
-  sessionStore.set(session.name, session);
+  sessionStore.publish(session.name, session);
   const runtime = createNetworkRuntime(
     session.device,
     async () => ({ source: 'provider', backend: 'agent-browser', entries: [], notes: [] }),
@@ -181,7 +181,7 @@ test.each(['browserstack', 'aws-device-farm', 'limrun'] as const)(
       name: `${provider} device`,
       kind: 'device',
     });
-    sessionStore.set(session.name, session);
+    sessionStore.publish(session.name, session);
     const runtime = createNetworkRuntime(
       session.device,
       async () => emptyAppLogResult('android'),

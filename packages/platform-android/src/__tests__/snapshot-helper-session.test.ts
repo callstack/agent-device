@@ -147,7 +147,8 @@ test('release the transport could not confirm falls back instead of failing the 
     });
     assert.equal(output, undefined, `attempt ${attempt}`);
   }
-  assert.equal(processes.length, 2);
+  // The malformed answer backs the session off, so the second command goes straight to one-shot.
+  assert.equal(processes.length, 1);
 });
 
 test('capture refuses a device the previous teardown found the helper still running', async () => {

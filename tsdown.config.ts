@@ -101,6 +101,7 @@ export default defineConfig({
     'install-source': 'src/sdk/install-source.ts',
     'android-adb': 'src/sdk/android-adb.ts',
     limrun: 'src/sdk/limrun.ts',
+    plugins: 'src/sdk/plugins.ts',
     contracts: 'src/sdk/contracts.ts',
     selectors: 'src/sdk/selectors.ts',
     finders: 'src/sdk/finders.ts',

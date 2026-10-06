@@ -64,10 +64,9 @@ export async function resolveRequestExecutionLockPlan(params: {
 
 export function prepareLockedRequestBinding(params: {
   req: DaemonRequest;
-  sessionName: string;
-  sessionStore: SessionStore;
+  existingRef: SessionRef | undefined;
 }): LockedRequestBinding {
-  const existingRef = params.sessionStore.lookup(params.sessionName);
+  const { existingRef } = params;
   return {
     req: applyRequestLockPolicy(params.req, existingRef),
     existingRef,

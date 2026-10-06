@@ -47,7 +47,7 @@ test('resume skips steps 1..from-1 without invoking them and executes only from 
   const root = mkdtempForTestSync('agent-device-replay-resume-skip-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, [
     'open "Demo"',
     'click label="Continue"',
@@ -106,7 +106,7 @@ test('resume requires both --from and --plan-digest together', async () => {
   const root = mkdtempForTestSync('agent-device-replay-resume-pair-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
 
   const fromOnly = await runReplayForTest({
@@ -138,7 +138,7 @@ test('resume rejects an out-of-range --from before any action', async () => {
   const root = mkdtempForTestSync('agent-device-replay-resume-range-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
 
   const response = await runReplayForTest({
@@ -173,7 +173,7 @@ test("a rejected --from/--plan-digest resume never reaches prepareReplaySession'
   const root = mkdtempForTestSync('agent-device-replay-resume-no-mutate-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Continue"', 'click "Save"']);
 
   // Arm a repair transaction and stamp a corrective-resume watermark
@@ -189,7 +189,6 @@ test("a rejected --from/--plan-digest resume never reaches prepareReplaySession'
   // from firing first (it needs `sessionActionsLength` to equal this), so
   // the rejection below is provably the plan-digest check, not a different one.
   armedSession.pendingRecordAndHeal = { expectedFrom: 2, actionsCountAtDivergence: 999 };
-  sessionStore.set(sessionName, armedSession);
 
   const beforeView = coordinator.view();
   const beforeActionsLength = sessionStore.get(sessionName)!.actions.length;
@@ -223,7 +222,7 @@ test('resume rejects a stale --plan-digest after the script changed', async () =
   const root = mkdtempForTestSync('agent-device-replay-resume-stale-digest-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
 
   const firstAttempt = await runReplayForTest({
@@ -270,7 +269,7 @@ test('resume rejects a digest from a different effective platform or target befo
   const root = mkdtempForTestSync('agent-device-replay-resume-effective-target-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const filePath = writeReplayFile(root, [
     'context platform=android target=tv',
     'open "Demo"',
@@ -326,7 +325,7 @@ test('resume rejects resuming past a retry-wrapped step in the skipped range', a
   const root = mkdtempForTestSync('agent-device-replay-resume-control-flow-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const mainPath = path.join(root, 'main.yaml');
   fs.writeFileSync(
     mainPath,
@@ -396,7 +395,7 @@ test('typed Maestro resume digest binds an inferred session target', async () =>
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   const session = makeIosSession(sessionName);
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   const flowPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(flowPath, 'appId: com.example.app\n---\n- back\n');
 
@@ -416,10 +415,9 @@ test('typed Maestro resume digest binds an inferred session target', async () =>
     resume: { from: number; planDigest: string };
   };
 
-  sessionStore.set(sessionName, {
-    ...session,
-    device: { ...session.device, target: 'tv' },
-  });
+  sessionStore.update(sessionStore.lookup(sessionName)!, (current) => ({
+    device: { ...current.device, target: 'tv' },
+  }));
   const resumedAttempt = await runReplayForTest({
     req: baseReq({
       positionals: [flowPath],
@@ -447,7 +445,7 @@ test('typed Maestro rejects selectors that conflict with an active session', asy
   const root = mkdtempForTestSync('agent-device-maestro-session-conflict-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   const flowPath = path.join(root, 'flow.yaml');
   fs.writeFileSync(flowPath, 'appId: com.example.app\n---\n- back\n');
   const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
@@ -573,7 +571,7 @@ test('typed Maestro resume digest binds effective stored runtime hints', async (
   const root = mkdtempForTestSync('agent-device-maestro-session-runtime-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
   sessionStore.setRuntimeHints(sessionName, {
     platform: 'ios',
     metroHost: '127.0.0.1',

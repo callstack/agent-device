@@ -53,7 +53,7 @@ export function makeRecordRuntimeHarness(
     createdAt: 1,
     actions: [],
   };
-  sessionStore.set(sessionName, session);
+  sessionStore.publish(sessionName, session);
   const runtime = makeRuntime(session, options.runtime);
   const common = {
     sessionName,

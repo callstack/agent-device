@@ -20,6 +20,10 @@ export type AgentDeviceDevice = {
    * Apple devices; `platform` still carries the leaf (`ios`/`macos`).
    */
   appleOs?: AppleOS;
+  /** Hardware model, for example `iPhone 17 Pro` or `Pixel 9`, when discovery reports it. */
+  model?: string;
+  /** OS version, for example `26.1` or `16`, when discovery reports it. */
+  osVersion?: string;
   identifiers: AgentDeviceIdentifiers;
   /**
    * Present when a host-local device claim currently blocks foreign use of

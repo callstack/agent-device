@@ -75,6 +75,64 @@ describe('parseMaestroProgram', () => {
     assert.equal(retry.commands[0]?.source.line, 27);
   });
 
+  test('parses repeat while conditions with an optional times limit', () => {
+    const program = parseMaestroProgram(
+      [
+        '---',
+        '- repeat:',
+        '    while:',
+        '      platform: Android',
+        '      notVisible: ValueX',
+        '    commands:',
+        '      - tapOn: Button',
+        '- repeat:',
+        '    times: 4',
+        '    while:',
+        '      true: "${output.counter < 3}"',
+        '    commands:',
+        '      - evalScript: ${output.counter++}',
+      ].join('\n'),
+    );
+
+    assert.deepEqual(program.commands[0], {
+      kind: 'repeat',
+      source: { line: 2 },
+      while: { platform: 'android', notVisible: { text: 'ValueX' } },
+      commands: [
+        {
+          kind: 'tapOn',
+          source: { line: 7 },
+          target: { space: 'target', selector: { text: 'Button' } },
+        },
+      ],
+    });
+    assert.deepEqual(program.commands[1], {
+      kind: 'repeat',
+      source: { line: 8 },
+      times: 4,
+      while: { true: '${output.counter < 3}' },
+      commands: [{ kind: 'evalScript', source: { line: 13 }, script: '${output.counter++}' }],
+    });
+  });
+
+  test('requires repeat times or a non-empty while condition', () => {
+    assert.throws(
+      () => parseMaestroProgram('---\n- repeat:\n    commands: []\n'),
+      /repeat requires times or while.*line 2/i,
+    );
+    assert.throws(
+      () => parseMaestroProgram('---\n- repeat:\n    while: {}\n    commands: []\n'),
+      /repeat\.while cannot be empty.*line 3/i,
+    );
+    assert.throws(
+      () =>
+        parseMaestroProgram(
+          '---\n- repeat:\n    while:\n      unsupported: Android\n    commands: []\n',
+        ),
+      /repeat\.while field "unsupported" is not supported.*line 4/i,
+    );
+  });
+
   test('parses flow tags as typed metadata and validates each tag', () => {
     const program = parseMaestroProgram(
       ['name: Pager', 'tags: [smoke, pager]', '---', '- launchApp'].join('\n'),

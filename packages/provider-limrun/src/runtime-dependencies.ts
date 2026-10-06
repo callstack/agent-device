@@ -4,6 +4,7 @@ import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { AndroidInputOwner } from '@agent-device/contracts/android-input-ownership';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppError } from '@agent-device/kernel/errors';
+import type { SimctlSettingRequest } from '@agent-device/contracts/settings';
 
 export type LimrunAdbCommandOptions = {
   allowFailure?: boolean;
@@ -75,7 +76,14 @@ export type LimrunAndroidKeyboardDismissResult = LimrunAndroidKeyboardState & {
 export type LimrunAndroidRuntimeAdapter = {
   // Interactors need provider-scoped capabilities; command helpers below need only ADB execution.
   createInteractor(device: DeviceInfo, adb: LimrunAdbProvider): Interactor;
-  createPortReverse(adb: LimrunAdbExecutor): Promise<LimrunPortReverse>;
+  /**
+   * `noRebind` refuses to replace a device mapping this session did not create, for an instance
+   * whose owner may hold reverse mappings of their own.
+   */
+  createPortReverse(
+    adb: LimrunAdbExecutor,
+    options: Readonly<{ noRebind: boolean }>,
+  ): Promise<LimrunPortReverse>;
   inferAppName(packageName: string): Promise<string>;
   listApps(
     adb: LimrunAdbExecutor,
@@ -134,6 +142,8 @@ export type LimrunHostAdapter = {
 };
 
 export type LimrunIosRuntimeAdapter = {
+  /** Runs the Apple simctl plan, supplied by the composition root so this provider imports no platform package. */
+  applySimctlSetting(request: SimctlSettingRequest): Promise<Record<string, unknown> | void>;
   resolveAppAlias(app: string): Promise<string>;
   readBundleAppName(appPath: string): Promise<string | undefined>;
 };

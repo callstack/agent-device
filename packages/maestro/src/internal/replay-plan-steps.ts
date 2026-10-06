@@ -7,7 +7,7 @@ import {
   registerIncludedProgramPaths,
   sourcePathKey,
 } from './engine-flow.ts';
-import { evaluateMaestroBooleanExpression } from './engine-expression.ts';
+import { tryEvaluateMaestroBooleanExpression } from './engine-expression.ts';
 import type { MaestroRuntimeCommand } from './engine-types.ts';
 import type { MaestroCommand, MaestroProgram, MaestroRunFlowCommand } from './program-ir.ts';
 import type {
@@ -214,9 +214,9 @@ function staticBooleanConditionDecision(
   if (typeof condition !== 'string') return undefined;
   const resolved = state.context.resolveDeferred(condition);
   if (hasUnresolvedVariable(resolved)) return 'opaque';
-  return evaluateMaestroBooleanExpression(condition, state.context, state.options.platform)
-    ? undefined
-    : 'omit';
+  const decision = tryEvaluateMaestroBooleanExpression(resolved, state.options.platform);
+  if (decision === undefined) return 'opaque';
+  return decision ? undefined : 'omit';
 }
 
 function resolveRunFlowInclude(
@@ -277,7 +277,12 @@ function opaqueControlCommand(
         ...(command.include.kind === 'file' ? { includePath: command.include.path } : {}),
       });
     case 'repeat':
-      return { kind: command.kind, source: command.source, times: command.times };
+      return stripUndefined({
+        kind: command.kind,
+        source: command.source,
+        times: command.times,
+        while: command.while,
+      });
     case 'retry':
       return stripUndefined({
         kind: command.kind,

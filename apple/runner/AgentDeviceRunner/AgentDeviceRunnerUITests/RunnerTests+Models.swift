@@ -470,6 +470,13 @@ struct DataPayload: Codable {
   var keyboardMinY: Double?
   var maestroNonHittableCoordinateFallbackUsed: Bool?
   var textEntryRoute: String?
+  /// A replacement whose field changed but whose value cannot echo the typed text: "unconfirmed",
+  /// with the TS `FillUnconfirmedVerification` evidence in `requested`, `before`, `after`, `target`.
+  var verification: String?
+  var requested: String?
+  var before: String?
+  var after: String?
+  var target: TextEntryVerificationTargetPayload?
   var runnerFatal: Bool?
   var runnerFatalReason: String?
   /// Whether main-thread XCTest work past the execution watchdog is still draining when this
@@ -484,6 +491,26 @@ struct DataPayload: Codable {
   /// Present on a screenshot the runner captured from a display it resolved, alongside the
   /// `message` path or `imageBase64` payload that carries the image itself (#2728).
   var screenshotMetadata: ScreenshotMetadataPayload?
+}
+
+/// Mirrors the TS `FillVerificationTarget`; its nullable identity fields encode as explicit nulls.
+struct TextEntryVerificationTargetPayload: Codable, Equatable {
+  let resourceId: String?
+  let className: String?
+  let packageName: String?
+  let rect: SnapshotRect
+
+  enum CodingKeys: String, CodingKey {
+    case resourceId, className, packageName, rect
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(resourceId, forKey: .resourceId)
+    try container.encode(className, forKey: .className)
+    try container.encode(packageName, forKey: .packageName)
+    try container.encode(rect, forKey: .rect)
+  }
 }
 
 /// `kind` mirrors the TS `SnapshotKeyboardBandFact`: "visible" carries `frame`, "unmeasurable"

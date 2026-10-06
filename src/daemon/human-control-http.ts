@@ -9,7 +9,7 @@ import {
 } from './human-control-contract.ts';
 import type { LeaseRegistry } from './lease-registry.ts';
 
-const MAX_HUMAN_CONTROL_BODY_BYTES = 16 * 1024;
+const MAX_HOST_ADMIN_BODY_BYTES = 16 * 1024;
 
 type HumanControlHttpRoute =
   | { kind: 'list' }
@@ -38,7 +38,7 @@ async function handleHumanControlRoute(
 ): Promise<void> {
   const { req, res, expectedToken } = params;
   try {
-    assertAuthorized(req, expectedToken);
+    assertHostAdminAuthorized(req, expectedToken);
     await executeHumanControlRoute(route, params);
   } catch (error) {
     sendRestJsonError(res, normalizeError(error));
@@ -138,26 +138,11 @@ function parseRequestPathname(url: string | undefined): string | null {
 }
 
 async function readHoldInput(req: http.IncomingMessage): Promise<HumanControlHoldInput> {
-  const raw = await readNodeHttpRequestBody(
-    req,
-    MAX_HUMAN_CONTROL_BODY_BYTES,
-    'Human-control request body is too large.',
-  );
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw.toString('utf8'));
-  } catch (error) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Human-control request body must be valid JSON.',
-      undefined,
-      error,
-    );
-  }
-  return parseHumanControlHoldInput(parsed);
+  return parseHumanControlHoldInput(await readHostAdminJsonBody(req, 'Human-control'));
 }
 
-function assertAuthorized(req: http.IncomingMessage, expectedToken: string): void {
+/** Host administration routes take the local daemon token, never a tenant credential. */
+export function assertHostAdminAuthorized(req: http.IncomingMessage, expectedToken: string): void {
   const authorization =
     typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
   const bearer = authorization.toLowerCase().startsWith('bearer ')
@@ -173,7 +158,24 @@ function assertAuthorized(req: http.IncomingMessage, expectedToken: string): voi
   }
 }
 
-function sendJson(res: http.ServerResponse, body: Record<string, unknown>): void {
+/** Reads a host administration route's JSON body, at most 16 KiB. */
+export async function readHostAdminJsonBody(
+  req: http.IncomingMessage,
+  label: string,
+): Promise<unknown> {
+  const raw = await readNodeHttpRequestBody(
+    req,
+    MAX_HOST_ADMIN_BODY_BYTES,
+    `${label} request body is too large.`,
+  );
+  try {
+    return JSON.parse(raw.toString('utf8'));
+  } catch (error) {
+    throw new AppError('INVALID_ARGS', `${label} request body must be valid JSON.`, {}, error);
+  }
+}
+
+export function sendJson(res: http.ServerResponse, body: Record<string, unknown>): void {
   res.statusCode ||= 200;
   res.setHeader('content-type', 'application/json');
   res.end(JSON.stringify(body));

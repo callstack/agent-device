@@ -183,17 +183,27 @@ export function appleNavigationFacts(device: DeviceInfo) {
   });
 }
 
-/** Binds whichever navigation operations {@link appleNavigationFacts} admitted. */
+/**
+ * Binds whichever navigation operations the device's admitted facts allow. The cells are those
+ * {@link appleNavigationFacts} declares, read from the admitted facts so a refusal layered over
+ * the leaf (a backend that cannot serve one) also withholds the binding.
+ */
 export function createAppleNavigationOperations(params: {
   host: Pick<PlatformRuntimeHost, 'localInteractors'>;
   device: DeviceInfo;
   signal: AbortSignal;
+  admitted: Readonly<Record<string, RuntimeOperationFact>>;
 }) {
-  const { host, device, signal } = params;
+  const { host, device, signal, admitted } = params;
+  const navigationKeys = Object.keys(appleNavigationFacts(device)) as Array<
+    keyof ReturnType<typeof appleNavigationFacts>
+  >;
   return bindAdmittedLocalInteractorOperations({
     device,
     signal,
     resolveInteractor: host.localInteractors.resolve,
-    facts: appleNavigationFacts(device),
+    facts: Object.fromEntries(navigationKeys.map((key) => [key, admitted[key]])) as ReturnType<
+      typeof appleNavigationFacts
+    >,
   });
 }

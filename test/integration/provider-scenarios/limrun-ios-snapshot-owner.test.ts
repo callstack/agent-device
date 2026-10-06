@@ -3,6 +3,7 @@ import { beforeEach, test, vi } from 'vitest';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
+import { limrunTestDependencies } from '../../../src/platform-runtime-gateway.fixtures.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import { snapshotCliOutput } from '../../../src/commands/capture/output.ts';
 import { assertRpcOk } from './assertions.ts';
@@ -166,9 +167,6 @@ function limrunRuntimeDependencies(): LimrunRuntimeDependencies {
     clientVersion: 'test-version',
     android: {} as LimrunRuntimeDependencies['android'],
     host: {} as LimrunRuntimeDependencies['host'],
-    ios: {
-      resolveAppAlias: async (app) => app,
-      readBundleAppName: async () => undefined,
-    },
+    ios: limrunTestDependencies.ios,
   };
 }

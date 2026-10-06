@@ -73,7 +73,7 @@ function harness(
 function request(positionals: string[]) {
   const sessionName = 'clipboard-session';
   const sessionStore = makeSessionStore();
-  sessionStore.set(sessionName, makeSession(sessionName, androidDevice));
+  sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
   mockResolveTargetDevice.mockResolvedValue(androidDevice);
   return {
     sessionName,
@@ -215,4 +215,46 @@ test('clipboard write with no text argument reports how to clear instead', async
   await expect(handleSessionClipboardCommand({ ...request(['write']), ...spies })).rejects.toThrow(
     'clipboard write requires text (use "" to clear clipboard)',
   );
+});
+
+for (const action of ['read', 'write'] as const) {
+  test(`clipboard ${action} refuses retirement during device resolution before binding`, async () => {
+    const spies = harness({ read: available, write: available });
+    const input = request(action === 'read' ? ['read'] : ['write', 'text']);
+    const ref = input.sessionStore.lookup(input.sessionName)!;
+    mockResolveTargetDevice.mockImplementationOnce(async () => {
+      input.sessionStore.retire(ref);
+      input.sessionStore.publish(input.sessionName, makeSession(input.sessionName, androidDevice));
+      return androidDevice;
+    });
+    await expect(
+      handleSessionClipboardCommand({
+        ...input,
+        req: { ...input.req, flags: { platform: 'android', serial: androidDevice.id } },
+        ...spies,
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'session_lifetime_ended' } });
+    expect(spies.inspectFacts).not.toHaveBeenCalled();
+    expect(spies.bindDevice).not.toHaveBeenCalled();
+    expect(mockEnsureDeviceReady).not.toHaveBeenCalled();
+    expect(spies.readClipboard).not.toHaveBeenCalled();
+    expect(spies.writeClipboard).not.toHaveBeenCalled();
+  });
+}
+
+test('clipboard read succeeds without journaling after its admitted lifetime ends', async () => {
+  const spies = harness({ read: available, write: available });
+  const input = request(['read']);
+  const retired = input.sessionStore.lookup(input.sessionName)!;
+  const successor = makeSession(input.sessionName, androidDevice);
+  spies.readClipboard.mockImplementationOnce(async () => {
+    input.sessionStore.retire(retired);
+    input.sessionStore.publish(input.sessionName, successor);
+    return 'copied text';
+  });
+  const response = await handleSessionClipboardCommand({ ...input, ...spies });
+  expect(response?.ok).toBe(true);
+  expect(spies.readClipboard).toHaveBeenCalledOnce();
+  expect(retired.session.actions).toEqual([]);
+  expect(successor.actions).toEqual([]);
 });

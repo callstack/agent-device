@@ -75,7 +75,7 @@ test.each([
   async (device) => {
     const sessionName = `record-${device.platform}-unsupported`;
     const sessionStore = makeSessionStore(`request-router-record-${device.platform}-unsupported-`);
-    sessionStore.set(sessionName, {
+    sessionStore.publish(sessionName, {
       name: sessionName,
       device,
       createdAt: 1,

@@ -11,7 +11,7 @@ import { getRequestSignal } from '@agent-device/host-kit/request';
 import { isLocalIosRunnerSession } from '../../direct-ios-selector.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionStore } from '../../session-store.ts';
-import type { SessionState } from '../../session-state.ts';
+import type { SessionRef, SessionState } from '../../session-state.ts';
 import type { BoundContextFromFlags, CaptureSnapshotForSession } from './types.ts';
 
 const XCTEST_RECORDED_FAILURE = 'XCTEST_RECORDED_FAILURE';
@@ -35,7 +35,7 @@ export type IosTapCorroborationParams = {
   command: string;
   requestId: string | undefined;
   flags: CommandFlags | undefined;
-  session: SessionState;
+  ref: SessionRef;
   sessionStore: SessionStore;
   contextFromFlags: BoundContextFromFlags;
   captureSnapshotForSession: CaptureSnapshotForSession;
@@ -54,8 +54,9 @@ export type IosTapCorroboration = {
 export async function corroborateIosTapFailure(
   params: IosTapCorroborationParams,
 ): Promise<IosTapCorroboration | undefined> {
-  if (!canCorroborateIosTapFailure(params)) return undefined;
-  const baseline = readCorroborationBaseline(params.session.snapshot);
+  const session = params.sessionStore.resolveCurrent(params.ref);
+  if (!session || !canCorroborateIosTapFailure(params, session)) return undefined;
+  const baseline = readCorroborationBaseline(session.snapshot);
   if (!baseline) return undefined;
 
   const after = await captureCorroborationSnapshot(
@@ -69,11 +70,14 @@ export async function corroborateIosTapFailure(
   return compareCorroborationEvidence(baseline.snapshot, after, params.command);
 }
 
-function canCorroborateIosTapFailure(params: IosTapCorroborationParams): boolean {
+function canCorroborateIosTapFailure(
+  params: IosTapCorroborationParams,
+  session: SessionState,
+): boolean {
   return (
     isTapCommand(params.command) &&
     asAppError(params.error).code === XCTEST_RECORDED_FAILURE &&
-    isLocalIosRunnerSession(params.session, { skipPendingPostGestureStabilization: false })
+    isLocalIosRunnerSession(session, { skipPendingPostGestureStabilization: false })
   );
 }
 
@@ -121,7 +125,7 @@ async function captureCorroborationSnapshot(
   try {
     const preferredBackend = preferredSnapshotBackendForVerdict(baselineVerdict);
     return await params.captureSnapshotForSession(
-      params.session,
+      params.ref,
       matchingCaptureFlags(params.flags, presentation),
       params.sessionStore,
       params.contextFromFlags,

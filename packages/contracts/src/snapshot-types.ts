@@ -4,6 +4,7 @@ import type {
   SnapshotOptions,
   SnapshotQualityVerdict,
   ScreenshotOverlayRef,
+  SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
 import type { DeviceRotation } from './device-rotation.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
@@ -28,6 +29,11 @@ export type BackendSnapshotResult = {
   appName?: string;
   appBundleId?: string;
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
+  /**
+   * The box the node rects are measured in, as the producer measured it (#3182). Absent means the
+   * producer measured no box; see {@link SnapshotViewportSize} for what each producer measures.
+   */
+  viewport?: SnapshotViewportSize;
   analysis?: { rawNodeCount: number; maxDepth: number };
   androidSnapshot?: AndroidSnapshotBackendMetadata;
   freshness?: {

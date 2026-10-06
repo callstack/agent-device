@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { AppLogRuntimeOperations } from '@agent-device/contracts/app-log-runtime';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
@@ -94,8 +95,7 @@ test('logs path binds only inspect and preserves public status projection', asyn
 test('logs doctor binds only doctor and merges live-state notes', async () => {
   const { sessionStore, sessionName } = openSession();
   const session = sessionStore.get(sessionName)!;
-  sessionStore.set(sessionName, {
-    ...session,
+  sessionStore.update(sessionStore.lookup(sessionName)!, {
     appLog: makeTestAppLogResource(session, {
       backend: 'ios-simulator',
       state: 'ended',
@@ -176,8 +176,7 @@ test.each([
   '$action proves the app session before binding start operations',
   async ({ action, flags = {}, message }) => {
     const { sessionStore, sessionName } = openSession();
-    const session = sessionStore.get(sessionName)!;
-    sessionStore.set(sessionName, { ...session, appBundleId: undefined });
+    sessionStore.update(sessionStore.lookup(sessionName)!, { appBundleId: undefined });
 
     const response = await runLogs(
       sessionStore,
@@ -269,7 +268,7 @@ test('rejected pending cleanup retains cleanup-pending record and blocks replace
 test('post-transfer SessionStore failure disposes the transferred handle and preserves primary error', async () => {
   const { sessionStore, sessionName } = openSession();
   const primary = new Error('store adoption failed');
-  vi.spyOn(sessionStore, 'set').mockImplementationOnce(() => {
+  vi.spyOn(sessionStore, 'update').mockImplementationOnce(() => {
     throw primary;
   });
   const response = await runLogs(sessionStore, sessionName, ['start'], {}, runtime.bindDevice);
@@ -281,7 +280,7 @@ test('post-transfer SessionStore failure disposes the transferred handle and pre
 function openSession() {
   const sessionStore = makeSessionStore();
   const sessionName = 'logs-session';
-  sessionStore.set(sessionName, {
+  sessionStore.publish(sessionName, {
     ...makeSession(sessionName, DEVICE),
     appBundleId: 'com.example.app',
   });
@@ -470,4 +469,35 @@ function createRuntimeHarness(options: { inspectAvailable?: boolean } = {}) {
 const unavailableRecording = Object.freeze({
   available: false as const,
   reason: 'owner-capability-missing' as const,
+});
+
+test('logs clear --restart leaves successor files intact after finish outlives its lifetime', async () => {
+  const { sessionStore, sessionName } = openSession();
+  await expectStarted(await runLogs(sessionStore, sessionName, ['start'], {}, runtime.bindDevice));
+  const ref = sessionStore.lookup(sessionName)!;
+  const logPath = sessionStore.resolveAppLogPath(sessionName);
+  runtime.finish.mockImplementationOnce(async () => {
+    sessionStore.retire(ref);
+    sessionStore.publish(sessionName, { ...ref.session, appLog: undefined });
+    fs.writeFileSync(logPath, 'successor log');
+    fs.writeFileSync(`${logPath}.1`, 'successor rotated log');
+    return {
+      status: 'completed',
+      result: { backend: 'ios-simulator', outputPath: logPath, completedAt: Date.now() },
+    };
+  });
+  const response = await runLogs(
+    sessionStore,
+    sessionName,
+    ['clear'],
+    { restart: true },
+    runtime.bindDevice,
+  );
+  expect(response).toMatchObject({
+    ok: false,
+    error: { details: { reason: 'session_lifetime_ended' } },
+  });
+  expect(fs.readFileSync(logPath, 'utf8')).toBe('successor log');
+  expect(fs.readFileSync(`${logPath}.1`, 'utf8')).toBe('successor rotated log');
+  expect(runtime.start).toHaveBeenCalledOnce();
 });

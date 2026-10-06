@@ -13,14 +13,33 @@ export async function evaluateMaestroEvalScript(
   script: string,
   values: Readonly<Record<string, string>>,
 ): Promise<Record<string, string>> {
+  return (await executeMaestroJavaScript(script, values, 'evalScript', {})).outputEnv;
+}
+
+export async function evaluateMaestroConditionScript(
+  script: string,
+  values: Readonly<Record<string, string>>,
+  platform: string | undefined,
+  field: string,
+): Promise<{ value: unknown; outputEnv: Record<string, string> }> {
+  return await executeMaestroJavaScript(script, values, field, { maestro: { platform } });
+}
+
+async function executeMaestroJavaScript(
+  script: string,
+  values: Readonly<Record<string, string>>,
+  name: string,
+  bindings: Record<string, unknown>,
+): Promise<{ value: unknown; outputEnv: Record<string, string> }> {
   const output = seedMaestroOutput(values);
   const expression = unwrapMaestroEvalScriptExpression(script);
   // ponytail: function-scoped import keeps node:vm out of the maestro eager closure.
   const { default: vm } = await import('node:vm');
-  const sandbox: Record<string, unknown> = { ...values, output };
+  const sandbox: Record<string, unknown> = { ...values, ...bindings, output };
+  let value: unknown;
   try {
-    vm.runInNewContext(expression, sandbox, {
-      filename: 'evalScript',
+    value = vm.runInNewContext(expression, sandbox, {
+      filename: name,
       timeout: MAESTRO_EVAL_SCRIPT_TIMEOUT_MS,
     });
   } catch (error) {
@@ -28,7 +47,7 @@ export async function evaluateMaestroEvalScript(
     // instances; read the message directly rather than through normalizeError.
     throw new AppError(
       'COMMAND_FAILED',
-      `Maestro evalScript failed: ${errorMessage(error)}`,
+      `Maestro ${name} failed: ${errorMessage(error)}`,
       undefined,
       error instanceof Error ? error : undefined,
     );
@@ -36,7 +55,7 @@ export async function evaluateMaestroEvalScript(
   // The script can replace the `output` binding (`output = { x: 1 }`), which
   // leaves the seeded host object stale; read the binding back from the vm
   // global instead of flattening the original reference.
-  return flattenMaestroOutput(sandbox['output']);
+  return { value, outputEnv: flattenMaestroOutput(sandbox['output']) };
 }
 
 function unwrapMaestroEvalScriptExpression(script: string): string {

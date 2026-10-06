@@ -11,7 +11,10 @@ import type {
   AndroidSnapshotHelperCaptureOptions,
   AndroidSnapshotHelperOutput,
 } from './snapshot-helper-types.ts';
-import type { AndroidSnapshotHelperResolvedCaptureOptions } from './snapshot-helper-capture.ts';
+import {
+  resolveAndroidSnapshotHelperCaptureOptions,
+  type AndroidSnapshotHelperResolvedCaptureOptions,
+} from './snapshot-helper-capture.ts';
 import {
   assertAndroidSnapshotHelperTouchSessionHeaders,
   parseAndroidSnapshotHelperSessionHeaders,
@@ -21,6 +24,7 @@ import {
 import {
   acquireAndroidSnapshotHelperSession,
   getLiveAndroidSnapshotHelperSession,
+  retireFailedAndroidSnapshotHelperSession,
   stopAndroidSnapshotHelperSession,
   type AndroidSnapshotHelperSession,
   type AndroidSnapshotHelperSessionHelperIdentity,
@@ -46,6 +50,7 @@ async function captureFromAndroidSnapshotHelperSession(params: {
   resolved: AndroidSnapshotHelperResolvedCaptureOptions;
 }): Promise<AndroidSnapshotHelperOutput | undefined> {
   const { session, deviceKey, options, resolved } = params;
+  const requestedAtMs = Date.now();
   try {
     const reused = session.capturedCount > 0;
     const output = await requestAndroidSnapshotHelperSessionSnapshot({
@@ -64,8 +69,11 @@ async function captureFromAndroidSnapshotHelperSession(params: {
       },
     };
   } catch (error) {
-    await stopAndroidSnapshotHelperSession(deviceKey, {
-      force: true,
+    await retireFailedAndroidSnapshotHelperSession({
+      deviceKey,
+      identity: session.identity,
+      failedAfterMs: Date.now() - requestedAtMs,
+      fallbackBudgetMs: resolveAndroidSnapshotHelperCaptureOptions(options).commandTimeoutMs,
       signal: options.signal,
       cause: error,
     });

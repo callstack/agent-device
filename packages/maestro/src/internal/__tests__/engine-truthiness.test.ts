@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { isMaestroConditionTruthy } from '../engine-truthiness.ts';
+import { isMaestroConditionTruthy, isMaestroScriptResultTruthy } from '../engine-truthiness.ts';
 
 // assertTrue phase 1 (#1295): pin the string-value truthiness table explicitly
 // rather than relying on native JS coercion (which would treat every non-empty
@@ -45,5 +45,24 @@ describe('isMaestroConditionTruthy', () => {
     expect(isMaestroConditionTruthy(1)).toBe(true);
     expect(isMaestroConditionTruthy(-1)).toBe(true);
     expect(isMaestroConditionTruthy(123)).toBe(true);
+  });
+});
+
+describe('isMaestroScriptResultTruthy', () => {
+  test.each([
+    ['', false],
+    ['false', false],
+    ['0', false],
+    [false, false],
+    [0, false],
+    [0n, false],
+    [null, false],
+    [undefined, false],
+    ['true', true],
+    [1, true],
+    [1n, true],
+    [{}, true],
+  ])('%o is %s', (value, expected) => {
+    expect(isMaestroScriptResultTruthy(value)).toBe(expected);
   });
 });

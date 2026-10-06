@@ -104,27 +104,41 @@ export async function runProtectedLeaseWork<T>(
      * One renewal. `budgetMs` is how long this beat may take before the loop abandons it: the window
      * the beat protects, so a slow round trip still gets a chance to answer inside the lease it is
      * renewing. Absent when the request names no lease to renew, which is the ordinary unleased
-     * install.
+     * install. `signal` is this beat's own cancellation: the caller's abort arrives on it, so a beat
+     * already in flight when the caller gave up closes its connection instead of finishing a
+     * renewal for work nobody is waiting on anymore.
      */
-    heartbeat?: ((budgetMs: number) => Promise<unknown>) | undefined;
+    heartbeat?: ((budgetMs: number, signal: AbortSignal) => Promise<unknown>) | undefined;
     task: (signal: AbortSignal) => Promise<T>;
+    /** The caller's per-call signal (#3178), observed between and during beats. */
+    callerSignal?: AbortSignal | undefined;
   }>,
 ): Promise<T> {
-  const { heartbeat } = options;
+  const { heartbeat, callerSignal } = options;
   if (!heartbeat) return await options.task(new AbortController().signal);
 
   const control = new AbortController();
+  // A beat owns a connection of its own, so the caller's abort is forwarded to it rather than left
+  // to the phase settle: without this, a beat already in flight renews the lease after the caller
+  // has given up.
+  const beatControl = new AbortController();
   // Until a beat names the window, the loop assumes the shortest window the daemon will accept: a
   // beat that budgets itself on a longer window than the lease actually has would outlive it.
   let windowMs = MIN_LEASE_WINDOW_MS;
   let intervalMs = leaseBeatIntervalMs(windowMs);
   let timer: ReturnType<typeof setTimeout> | undefined;
   let stopped = false;
+  const stopBeating = (): void => {
+    stopped = true;
+    if (timer) clearTimeout(timer);
+    beatControl.abort();
+  };
   let terminalError: unknown;
   let reportTerminal: ((error: unknown) => void) | undefined;
   const terminal = new Promise<never>((_, reject) => {
     reportTerminal = reject;
   });
+  if (callerSignal) callerSignal.addEventListener('abort', stopBeating, { once: true });
 
   const runBeat = (): void => {
     // Armed while this beat is still outstanding: a beat that never settles is abandoned on
@@ -134,15 +148,44 @@ export async function runProtectedLeaseWork<T>(
       if (timer) clearTimeout(timer);
       timer = setTimeout(runBeat, delayMs);
     };
+    // A beat that finds the lease gone (or finds this client can never renew it) ends the
+    // protection: the upload is pointed at a device nobody owns, so it is stopped rather than
+    // allowed to finish bytes nobody will use. A beat that ends after the phase settled cannot
+    // change that outcome, but a lease this client just learned is gone is still worth one
+    // diagnostic on the way out.
+    const reportTerminalBeatFailure = (error: unknown): void => {
+      terminalError = error;
+      if (stopped) {
+        emitDiagnostic({
+          level: 'warn',
+          phase: 'lease_lost_after_phase',
+          data: { message: error instanceof Error ? error.message : String(error) },
+        });
+        return;
+      }
+      control.abort();
+      reportTerminal?.(error);
+    };
+    const reportTransientBeatFailure = (error: unknown): void => {
+      // A beat the loop itself canceled — for a caller that has already given up — failed for a
+      // reason that says nothing about the lease, so it is not worth a warning.
+      if (stopped) return;
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'lease_heartbeat_failed',
+        data: { message: error instanceof Error ? error.message : String(error) },
+      });
+    };
     arm(intervalMs);
     const settle = (async () => {
       const budgetMs = windowMs;
       try {
-        const renewed = leaseWindowFromHeartbeatResponse(await heartbeat(budgetMs));
+        const renewed = leaseWindowFromHeartbeatResponse(
+          await heartbeat(budgetMs, beatControl.signal),
+        );
         // An answer that names no window keeps the cadence it was asked at: the loop only ever
         // moves on evidence of how long the lease is good for, and never on the absence of it.
-        if (renewed === undefined) return;
-        if (renewed === windowMs) return;
+        if (renewed === undefined || renewed === windowMs) return;
         const cadence = leaseBeatIntervalMs(renewed);
         windowMs = renewed;
         intervalMs = cadence;
@@ -150,28 +193,10 @@ export async function runProtectedLeaseWork<T>(
         arm(cadence);
       } catch (error) {
         if (isTerminalLeaseBeatError(error)) {
-          terminalError = error;
-          if (stopped) {
-            // The phase settled first; the outcome it returned already stands, but a lease this
-            // client just learned is gone is worth one diagnostic on the way out.
-            emitDiagnostic({
-              level: 'warn',
-              phase: 'lease_lost_after_phase',
-              data: { message: error instanceof Error ? error.message : String(error) },
-            });
-            return;
-          }
-          // The upload is the only thing still consuming this phase's time, and it is pointed at a
-          // device this client can no longer renew. Stop it rather than finish bytes nobody owns.
-          control.abort();
-          reportTerminal?.(error);
+          reportTerminalBeatFailure(error);
           return;
         }
-        emitDiagnostic({
-          level: 'warn',
-          phase: 'lease_heartbeat_failed',
-          data: { message: error instanceof Error ? error.message : String(error) },
-        });
+        reportTransientBeatFailure(error);
       }
     })();
     // A beat the loop has moved on from is still listened to, and nothing awaits it: its outcome is
@@ -190,8 +215,8 @@ export async function runProtectedLeaseWork<T>(
     // timer below is always cleared.
     (async () => await Promise.race([options.task(control.signal), terminal]))(),
   );
-  stopped = true;
-  if (timer) clearTimeout(timer);
+  stopBeating();
+  if (callerSignal) callerSignal.removeEventListener('abort', stopBeating);
   // No outstanding beat is awaited here: a beat on a half-open connection would hold a finished
   // upload behind its own budget for no decision the phase still has to make.
   // A beat that ended the protection outranks a phase that settled meanwhile, from either side: the
@@ -278,7 +303,7 @@ export function buildUploadLeaseHeartbeat(
   info: DaemonInfo,
   settings: DaemonClientSettings,
   request: Omit<DaemonRequest, 'token'>,
-): ((budgetMs: number) => Promise<unknown>) | undefined {
+): ((budgetMs: number, signal: AbortSignal) => Promise<unknown>) | undefined {
   if (!isRemoteDaemon(info)) return undefined;
   const leaseScope = leaseScopeFromRequest(request);
   if (!leaseScope.leaseId) return undefined;
@@ -286,7 +311,7 @@ export function buildUploadLeaseHeartbeat(
     resolveCommandTimeoutPolicy(INTERNAL_COMMANDS.leaseHeartbeat),
     { positionals: [] },
   );
-  return async (budgetMs) =>
+  return async (budgetMs, signal) =>
     await sendRequest(
       info,
       buildLeaseHeartbeatRequest(leaseScope, {
@@ -300,5 +325,6 @@ export function buildUploadLeaseHeartbeat(
       // The beat's own budget governs; the command's heartbeat policy only ever caps it, and an
       // unbounded policy leaves the budget standing on its own.
       policyTimeoutMs === undefined ? budgetMs : Math.min(policyTimeoutMs, budgetMs),
+      { signal },
     );
 }

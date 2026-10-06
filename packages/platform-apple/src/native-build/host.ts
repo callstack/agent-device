@@ -74,7 +74,6 @@ async function acquireNativeBuildLock(
     },
     timeoutMs: remainingNativeBuildMs(deadline, 'cache-lock-deadline'),
     pollMs: 100,
-    ownerGraceMs: 5_000,
     description: options.description,
   });
   const signal = deadline.signal;

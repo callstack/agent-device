@@ -99,8 +99,10 @@ test('screenshotAndroid drops a display rotation probe still running after the c
         facts = result;
       });
       // The image is written through real file I/O; the only timer this path installs is the
-      // grace that starts once the write is done. Yield to I/O until it exists.
-      for (let turn = 0; turn < 1_000 && vi.getTimerCount() === 0; turn++) {
+      // grace that starts once the write is done. Yield to I/O until it exists, bounded by wall
+      // time because a loaded thread pool can take any number of event-loop turns to finish it.
+      const writeDeadline = performance.now() + 10_000;
+      while (vi.getTimerCount() === 0 && performance.now() < writeDeadline) {
         await new Promise((resolve) => setImmediate(resolve));
       }
       assert.equal(vi.getTimerCount(), 1, 'the capture must start one grace timer once written');

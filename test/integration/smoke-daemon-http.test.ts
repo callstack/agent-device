@@ -1,3 +1,4 @@
+import { cleanupDaemonTestState } from './support/daemon-test-cleanup.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -5,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
 import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
-import { stopProcessForTakeover } from '../../src/daemon-process.ts';
+import { stopDaemonProcess } from '../../src/daemon-process.ts';
 import { formatResultDebug } from './cli-json.ts';
 import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import { runCliJson } from './test-helpers.ts';
@@ -24,6 +25,7 @@ test('daemon HTTP transport starts from CLI and accepts a command RPC', async (t
   }
 
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-http-smoke-'));
+  let info: DaemonInfo | null = null;
   try {
     const args = [
       'session',
@@ -46,7 +48,7 @@ test('daemon HTTP transport starts from CLI and accepts a command RPC', async (t
     assert.equal(cli.status, 0, formatResultDebug('start HTTP daemon', ['session', 'list'], cli));
     assert.equal(cli.json?.success, true, JSON.stringify(cli.json));
 
-    const info = readDaemonInfo(stateDir);
+    info = readDaemonInfo(stateDir);
     assert.equal(info.transport, 'http');
     assert.equal(typeof info.httpPort, 'number');
     assert.ok((info.httpPort ?? 0) > 0);
@@ -73,10 +75,7 @@ test('daemon HTTP transport starts from CLI and accepts a command RPC', async (t
     await stopDaemon(info);
     await assertNoDaemonLeaks({ stateDir, daemonPids: [info.pid], phase: 'after-shutdown' });
   } finally {
-    if (fs.existsSync(path.join(stateDir, 'daemon.json'))) {
-      await stopDaemon(readDaemonInfo(stateDir));
-    }
-    fs.rmSync(stateDir, { recursive: true, force: true });
+    await cleanupDaemonTestState(stateDir, info);
   }
 });
 
@@ -113,9 +112,9 @@ async function callCommandRpc(
 
 async function stopDaemon(info: DaemonInfo): Promise<void> {
   if (!Number.isInteger(info.pid) || info.pid <= 0) return;
-  await stopProcessForTakeover(info.pid, {
-    termTimeoutMs: 1500,
-    killTimeoutMs: 1500,
-    expectedStartTime: info.processStartTime,
-  });
+  const termination = await stopDaemonProcess(
+    { pid: info.pid, startTime: info.processStartTime ?? null },
+    { mode: 'graceful', termTimeoutMs: 1500, killTimeoutMs: 1500 },
+  );
+  assert.notEqual(termination.status, 'retained', JSON.stringify(termination));
 }

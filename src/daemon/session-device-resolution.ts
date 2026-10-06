@@ -1,5 +1,5 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, sessionOrDeviceSelectorRequiredDetails } from '@agent-device/kernel/errors';
 import { isActiveProviderDevice } from './provider-device-admission.ts';
 import { appleSessionObservation } from '../platform-runtime-apple-resources.ts';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
@@ -23,6 +23,7 @@ export function requireSessionOrExplicitSelector(
   return errorResponse(
     'INVALID_ARGS',
     `${command} requires an active session or an explicit device selector (e.g. --platform ios).`,
+    sessionOrDeviceSelectorRequiredDetails(),
   );
 }
 

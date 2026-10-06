@@ -2,6 +2,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import type { SessionState } from '../session-state.ts';
 
 import {
+  requireSessionOrExplicitSelector,
   resolveCommandDevice,
   refreshSessionDeviceIfNeeded,
   selectorTargetsSessionDevice,
@@ -10,6 +11,7 @@ import { appleSessionObservation } from '../../platform-runtime-apple-resources.
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { isActiveProviderDevice } from '../provider-device-admission.ts';
 import { ensureDeviceReady } from '../device/device-ready.ts';
+import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 
 vi.mock('../../platform-runtime-apple-resources.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../platform-runtime-apple-resources.ts')>()),
@@ -155,3 +157,25 @@ test('selectorTargetsSessionDevice uses session selector conflicts for simulator
     false,
   );
 });
+
+test('requireSessionOrExplicitSelector refuses with the published reason and dispatched no', () => {
+  const refusal = requireSessionOrExplicitSelector('clipboard', undefined, {});
+
+  expect(refusal).not.toBeNull();
+  expect(refusal?.ok).toBe(false);
+  if (!refusal || refusal.ok) return;
+  expect(refusal.error.code).toBe('INVALID_ARGS');
+  expect(refusal.error.details?.reason).toBe(
+    PRE_DISPATCH_REFUSAL_REASONS.sessionOrDeviceSelectorRequired,
+  );
+  expect(refusal.error.details?.dispatched).toBe('no');
+});
+
+for (const [label, session, flags] of [
+  ['an active session', iosSimulatorSession, {}],
+  ['an explicit platform selector', undefined, { platform: 'ios' }],
+] as const) {
+  test(`requireSessionOrExplicitSelector lets through ${label}`, () => {
+    expect(requireSessionOrExplicitSelector('clipboard', session, flags)).toBeNull();
+  });
+}

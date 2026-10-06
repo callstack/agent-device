@@ -2,6 +2,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { normalizeTenantId, resolveSessionIsolationMode } from './config.ts';
 import { isTenantOwnedSessionName, tenantScopedSessionName } from './session-tenant-scope.ts';
 import {
+  isAppLeaseAllowed,
   isLeaseAdmissionExempt,
   isHumanControlMutation,
   resolveSessionlessLeaseAdmissionExemption,
@@ -16,6 +17,9 @@ import { leaseScopeToHeartbeatRequest } from '@agent-device/contracts/lease-scop
 import type { LeaseRegistry } from './lease-registry.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
+import { assertMacOsAppLeaseAdmitsRequest } from './macos-app-lease.ts';
+import { assertDaemonPolicyAdmitsLease } from './daemon-policy.ts';
+import type { DaemonPolicy } from '../daemon-policy-file.ts';
 
 export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
   const isolation = resolveSessionIsolationMode(
@@ -65,14 +69,23 @@ export function assertRequestLeaseAdmission(
   req: DaemonRequest,
   leaseRegistry: LeaseRegistry,
   session?: SessionState,
-  options: Readonly<{ providerAppCatalog?: ProviderAppCatalog }> = {},
+  options: Readonly<{
+    providerAppCatalog?: ProviderAppCatalog;
+    daemonPolicy?: DaemonPolicy;
+  }> = {},
 ): DeviceLease | undefined {
-  if (isLeaseAdmissionExempt(req.command)) {
+  if (isExemptFromLeaseAdmission(req, leaseRegistry, session, options.daemonPolicy)) {
     return undefined;
   }
   const requestLeaseScope = resolveLeaseScope(req);
   assertProxyOpenLeaseMetadata(req, requestLeaseScope);
   const sessionLease = session?.lease;
+  if (options.daemonPolicy?.requiredLeaseBackend) {
+    const leased = Boolean(resolveRequestOrSessionLeaseScope(req, session).leaseId);
+    const lease = leased ? admitLease(req, leaseRegistry, session) : undefined;
+    assertDaemonPolicyAdmitsLease(options.daemonPolicy, lease);
+    return lease;
+  }
   if (
     session === undefined &&
     !requestLeaseScope.leaseId &&
@@ -90,15 +103,54 @@ export function assertRequestLeaseAdmission(
     if (!requestLeaseScope.leaseId) return undefined;
     if (!requestLeaseScope.tenantId && !requestLeaseScope.runId) return undefined;
   }
-  assertRequestSessionLeaseMatches(requestLeaseScope, sessionLease);
+  return admitLease(req, leaseRegistry, session);
+}
+
+function admitLease(
+  req: DaemonRequest,
+  leaseRegistry: LeaseRegistry,
+  session: SessionState | undefined,
+): DeviceLease {
+  assertRequestSessionLeaseMatches(resolveLeaseScope(req), session?.lease);
   const leaseScope = resolveRequestOrSessionLeaseScope(req, session);
   leaseRegistry.assertLeaseAdmission(leaseScopeToHeartbeatRequest(leaseScope));
   // Admission renews for the window the lease already carries, or the window this request named.
   // Naming a proxy-specific default here used to shorten every lease allocated above it — a client
   // that rented a device for longer than the default lost it on the next admitted command (#2946).
   const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(leaseScope));
+  assertMacOsAppLeaseAdmitsRequest(lease, req, session);
   if (isHumanControlMutation(req)) leaseRegistry.assertHumanControlAdmission(lease);
   return lease;
+}
+
+/**
+ * A daemon that requires a lease, or a request in a `macos-app` lease's scope, admits only the
+ * commands that opt into app leases; a lease-admission exemption does not carry past it.
+ */
+function isExemptFromLeaseAdmission(
+  req: DaemonRequest,
+  leaseRegistry: LeaseRegistry,
+  session: SessionState | undefined,
+  daemonPolicy: DaemonPolicy | undefined,
+): boolean {
+  if (!isLeaseAdmissionExempt(req.command)) return false;
+  if (isAppLeaseAllowed(req.command)) return true;
+  return !isConfinedToAppLease(req, leaseRegistry, session, daemonPolicy);
+}
+
+export function isConfinedToAppLease(
+  req: DaemonRequest,
+  leaseRegistry: LeaseRegistry,
+  session: SessionState | undefined,
+  daemonPolicy: DaemonPolicy | undefined,
+): boolean {
+  if (daemonPolicy?.requiredLeaseBackend) return true;
+  const scope = resolveRequestOrSessionLeaseScope(req, session);
+  if (scope.leaseBackend === 'macos-app') return true;
+  return (
+    scope.leaseId !== undefined &&
+    leaseRegistry.findActiveLeaseBackend(scope.leaseId) === 'macos-app'
+  );
 }
 
 function hasSessionlessLeaseAdmissionExemption(

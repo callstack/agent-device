@@ -42,11 +42,11 @@ function scenario() {
   const prior = snapshot('e1', 'Previously published');
   setSessionSnapshot(session, prior);
   markSessionPartialRefsIssued(session, ['e1']);
-  sessionStore.set(sessionName, session);
+  const ref = sessionStore.publish(sessionName, session);
   const captured = snapshot('e2', 'Internal capture');
   const authority = bindAuthority(sessionStore, sessionName);
   const stored = authority.store(captured);
-  return { sessionStore, sessionName, session, prior, captured, authority, ...stored };
+  return { sessionStore, sessionName, ref, session, prior, captured, authority, ...stored };
 }
 
 function publishCurrent(input: ReturnType<typeof scenario>, signal?: AbortSignal) {
@@ -59,17 +59,8 @@ function publishCurrent(input: ReturnType<typeof scenario>, signal?: AbortSignal
 
 function bindAuthority(sessionStore: SessionStore, sessionName: string, signal?: AbortSignal) {
   return bindInternalObservationAuthority({
-    sessionStore: {
-      get: () => sessionStore.get(sessionName),
-      update: (mutate) => {
-        const session = sessionStore.get(sessionName);
-        if (!session) return false;
-        mutate(session);
-        sessionStore.set(sessionName, session);
-        return true;
-      },
-    },
-    sessionName,
+    sessionStore,
+    ref: sessionStore.lookup(sessionName),
     ...(signal ? { signal } : {}),
   });
 }
@@ -173,12 +164,12 @@ test('runtime revision invalidates evidence even when the ref frame was already 
 
 test('session close invalidates capture evidence', () => {
   const input = scenario();
-  input.sessionStore.delete(input.sessionName);
+  input.sessionStore.retire(input.ref);
 
   expect(publishCurrent(input)).toEqual({ published: false, reason: 'stale-capture' });
   // Even restoring the exact same session object cannot revive evidence that
   // a stale finalization attempt already consumed.
-  input.sessionStore.set(input.sessionName, input.session);
+  input.sessionStore.publish(input.sessionName, input.session);
   expect(publishCurrent(input)).toEqual({ published: false, reason: 'stale-capture' });
   expect(refFrameScope(input.session)).toEqual(new Set(['e1']));
 });
@@ -186,7 +177,8 @@ test('session close invalidates capture evidence', () => {
 test('same-name session replacement cannot inherit capture evidence', () => {
   const input = scenario();
   const replacement = makeIosSession(input.sessionName, { appBundleId: 'com.example.app' });
-  input.sessionStore.set(input.sessionName, replacement);
+  input.sessionStore.retire(input.ref);
+  input.sessionStore.publish(input.sessionName, replacement);
 
   expect(publishCurrent(input)).toEqual({ published: false, reason: 'stale-capture' });
   expect(refFrameTree(replacement)).toBeUndefined();
@@ -213,4 +205,26 @@ test('generation and ref projection must match the exact captured tree', () => {
   expect(publishCurrent(wrongRef)).toEqual({ published: false, reason: 'stale-capture' });
   expect(refFrameScope(wrongGeneration.session)).toEqual(new Set(['e1']));
   expect(refFrameScope(wrongRef.session)).toEqual(new Set(['e1']));
+});
+
+test('a same-lifetime rebuild preserves evidence and publishes into the latest record', () => {
+  const input = scenario();
+  const current = input.sessionStore.update(input.ref, { appName: 'Rebuilt app' });
+  expect(publishCurrent(input)).toEqual({
+    published: true,
+    refsGeneration: input.refsGeneration,
+    refCount: 1,
+  });
+  expect(current.appName).toBe('Rebuilt app');
+  expect(refFrameState(current)).toBe('active');
+  expect(refFrameScope(current)).toEqual(new Set(['e2']));
+  expect(refFrameTree(current)).toBe(input.captured);
+});
+
+test('reusing the same record in a new lifetime cannot adopt unconsumed evidence', () => {
+  const input = scenario();
+  input.sessionStore.retire(input.ref);
+  input.sessionStore.publish(input.sessionName, input.session);
+  expect(publishCurrent(input)).toEqual({ published: false, reason: 'stale-capture' });
+  expect(refFrameScope(input.session)).toEqual(new Set(['e1']));
 });

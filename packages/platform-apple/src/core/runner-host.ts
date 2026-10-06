@@ -44,7 +44,12 @@ import {
   getRunnerLeaseOwnerStateDir,
 } from './runner-owner-state.ts';
 import { buildSimctlArgsForDevice, simulatorAddressFor } from './simctl.ts';
-import { readApplePlistJson, runAppleToolCommand, runXcrun } from './tool-provider.ts';
+import {
+  hasScopedAppleToolProvider,
+  readApplePlistJson,
+  runAppleToolCommand,
+  runXcrun,
+} from './tool-provider.ts';
 
 /**
  * The real host capabilities for `@agent-device/platform-apple/runner`: the one place
@@ -97,6 +102,7 @@ export const appleRunnerHost: AppleRunnerHost = {
   runAppleToolCommand,
   runXcrun,
   readApplePlistJson,
+  hasScopedAppleToolProvider,
   buildSimctlArgsForDevice,
   simulatorAddressFor,
   resolveIosPhysicalDeviceControl,

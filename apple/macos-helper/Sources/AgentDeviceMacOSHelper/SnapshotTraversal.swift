@@ -7,6 +7,8 @@ private enum SnapshotTraversalLimits {
   static let maxDesktopApps = 24
   static let maxNodes = 1500
   static let maxDepth = 12
+  /// An app session is one app's tree; Electron alone wraps its page in about ten groups.
+  static let maxAppDepth = 48
   static let maxMenuBarBandY = 64.0
   static let maxMenuBarBandHeight = 64.0
   static let maxMenuBarExtraWidth = 256.0
@@ -45,11 +47,13 @@ struct SnapshotResponse: Encodable {
   let nodes: [SnapshotNodeResponse]
   let truncated: Bool
   let backend = "macos-helper"
+  let warnings: [String]?
 }
 
 private struct SnapshotBuildResult {
   let nodes: [SnapshotNodeResponse]
   let truncated: Bool
+  var warnings: [String]? = nil
 }
 
 private struct SnapshotContext {
@@ -64,6 +68,8 @@ private struct SnapshotTraversalState {
   var nodes: [SnapshotNodeResponse] = []
   var visited: [AXUIElement] = []
   var truncated = false
+  /// An element sat at the depth cap with children the walk left out.
+  var depthCapped = false
 }
 
 private struct MenuBarWindowFallbackCandidate {
@@ -79,6 +85,8 @@ private struct MenuBarWindowFallbackCandidate {
 func captureSnapshotResponse(surface: String, bundleId: String? = nil) throws -> SnapshotResponse {
   let result: SnapshotBuildResult
   switch surface {
+  case "app":
+    result = try snapshotSessionApp(bundleId: bundleId)
   case "frontmost-app":
     result = try snapshotFrontmostApp()
   case "desktop":
@@ -86,10 +94,101 @@ func captureSnapshotResponse(surface: String, bundleId: String? = nil) throws ->
   case "menubar":
     result = try snapshotMenuBar(bundleId: bundleId)
   default:
-    throw HelperError.invalidArgs("snapshot requires --surface <frontmost-app|desktop|menubar>")
+    throw HelperError.invalidArgs("snapshot requires --surface <app|frontmost-app|desktop|menubar>")
   }
 
-  return SnapshotResponse(surface: surface, nodes: result.nodes, truncated: result.truncated)
+  return SnapshotResponse(
+    surface: surface, nodes: result.nodes, truncated: result.truncated, warnings: result.warnings)
+}
+
+/// The session's own app, whether or not it is frontmost.
+private func snapshotSessionApp(bundleId: String?) throws -> SnapshotBuildResult {
+  let app = try requireSessionApplication(bundleId: bundleId)
+  let webContentReady = enableRemoteAccessibilityTree(app)
+  var state = SnapshotTraversalState()
+  _ = appendApplicationSnapshot(
+    app,
+    depth: 0,
+    parentIndex: nil,
+    surface: "app",
+    maxDepth: SnapshotTraversalLimits.maxAppDepth,
+    state: &state
+  )
+  return SnapshotBuildResult(
+    nodes: state.nodes,
+    truncated: state.truncated || state.depthCapped,
+    warnings: webContentReady
+      ? nil
+      : [
+        "The app's Chromium accessibility tree did not populate, so web content may be missing from this snapshot."
+      ]
+  )
+}
+
+/// Chromium and Electron build their accessibility tree only once a client asks for it, so an
+/// unannounced reader sees a window of empty groups. Electron answers `AXManualAccessibility`;
+/// other Chromium shells answer the VoiceOver-style `AXEnhancedUserInterface`, which native apps
+/// also honor by changing window behavior, so it is set only on a Chromium app. The tree stays on
+/// for the app's lifetime, as it does for any assistive client.
+///
+/// Whether the app's web content is readable: true for an app that is not Chromium-based or whose
+/// tree is already on. The wait is paid only by the call that turns the tree on.
+private func enableRemoteAccessibilityTree(_ app: NSRunningApplication) -> Bool {
+  guard isChromiumApplication(app) else { return true }
+  let appElement = AXUIElementCreateApplication(app.processIdentifier)
+  let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"]
+  if attributes.contains(where: { boolAttribute(appElement, attribute: $0) == true }) {
+    return true
+  }
+  guard
+    attributes.contains(where: {
+      AXUIElementSetAttributeValue(appElement, $0 as CFString, kCFBooleanTrue) == .success
+    })
+  else {
+    return false
+  }
+  return awaitPopulatedWebContent(appElement)
+}
+
+/// Chromium builds the tree after the request returns, so a walk right after enabling it would see
+/// only the wrapper groups. Bounded well inside the helper's own deadline.
+private func awaitPopulatedWebContent(_ appElement: AXUIElement) -> Bool {
+  let deadline = Date().addingTimeInterval(1.0)
+  while !hasPopulatedWebArea(appElement) {
+    guard Date() < deadline else { return false }
+    Thread.sleep(forTimeInterval: 0.05)
+  }
+  return true
+}
+
+private func hasPopulatedWebArea(_ appElement: AXUIElement) -> Bool {
+  var budget = 400
+  func visit(_ element: AXUIElement, depth: Int) -> Bool {
+    guard budget > 0, depth < 16 else { return false }
+    budget -= 1
+    let elementChildren = children(of: element)
+    if stringAttribute(element, attribute: kAXRoleAttribute as String) == "AXWebArea" {
+      return !elementChildren.isEmpty
+    }
+    return elementChildren.contains { visit($0, depth: depth + 1) }
+  }
+  return windows(of: appElement).contains { visit($0, depth: 0) }
+}
+
+/// Every Chromium embedder, Electron or a renamed framework, ships Chromium's resource pack.
+private func isChromiumApplication(_ app: NSRunningApplication) -> Bool {
+  guard let frameworksURL = app.bundleURL?.appendingPathComponent("Contents/Frameworks"),
+    let frameworks = try? FileManager.default.contentsOfDirectory(atPath: frameworksURL.path)
+  else {
+    return false
+  }
+  return frameworks.contains { framework in
+    framework.hasSuffix(".framework")
+      && FileManager.default.fileExists(
+        atPath: frameworksURL.appendingPathComponent(framework)
+          .appendingPathComponent("Resources/chrome_100_percent.pak").path
+      )
+  }
 }
 
 private func snapshotFrontmostApp() throws -> SnapshotBuildResult {
@@ -166,6 +265,7 @@ private func appendApplicationSnapshot(
   depth: Int,
   parentIndex: Int?,
   surface: String,
+  maxDepth: Int = SnapshotTraversalLimits.maxDepth,
   state: inout SnapshotTraversalState
 ) -> Bool {
   let appElement = AXUIElementCreateApplication(app.processIdentifier)
@@ -207,7 +307,8 @@ private func appendApplicationSnapshot(
         appName: app.localizedName,
         windowTitle: windowTitle
       ),
-      state: &state
+      state: &state,
+      maxDepth: maxDepth
     )
   }
 
@@ -542,6 +643,9 @@ private func appendElementSnapshot(
   )
 
   guard depth < maxDepth, !state.truncated else {
+    if depth >= maxDepth, !snapshotChildren(of: element, role: role).isEmpty {
+      state.depthCapped = true
+    }
     return index
   }
 

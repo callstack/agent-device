@@ -1,3 +1,4 @@
+import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
 /**
  * ADR 0012 decision 6 "repair transaction" lifecycle fixes (Q1/Q2a/Q2b/Q2c):
  * proves the WHOLE chain end to end, at the layer these fixes actually live —
@@ -157,7 +158,7 @@ test('end-to-end repair transaction: cold divergence stays alive, corrective res
 
   // --- Agent performs the corrective press (blessed @ref), recorded live. ---
   const session = sessionStore.get(sessionName)!;
-  sessionStore.recordAction(session, {
+  sessionStore.recordAction(storeSessionForTest(sessionStore, session), {
     command: 'press',
     positionals: ['@e7'],
     flags: {},
@@ -304,8 +305,8 @@ test('C5a: an incomplete repair reaped by idle-reap leaves a tombstone (no heale
   // Idle-reap tears the still-incomplete repair session down: the writer commits
   // nothing (not complete) and a tombstone is left behind (the exact teardown
   // step daemon-runtime.ts's teardownDaemonSession runs).
-  sessionStore.finalizeRepairTeardown(session);
-  sessionStore.delete(sessionName);
+  sessionStore.finalizeRepairTeardown(storeSessionForTest(sessionStore, session));
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   expect(fs.existsSync(path.join(root, 'flow.healed.ad'))).toBe(false);
 
   const tombstone = sessionStore.readRepairTombstone(sessionName);
@@ -353,7 +354,7 @@ test('C5a/BLOCKER 3: teardown of a COMPLETE repair auto-commits a self-contained
 
   // Teardown (e.g. the client tearing down the ephemeral daemon after a clean
   // repair) auto-commits the completed transaction and leaves no tombstone.
-  sessionStore.finalizeRepairTeardown(session);
+  sessionStore.finalizeRepairTeardown(storeSessionForTest(sessionStore, session));
   expect(fs.existsSync(path.join(root, 'flow.healed.ad'))).toBe(true);
   const healedScript = fs.readFileSync(path.join(root, 'flow.healed.ad'), 'utf8');
   expect(healedScript).toContain(HEAL_COMPLETE_SENTINEL);
@@ -398,8 +399,8 @@ test('BLOCKER 1: a --from continuation on a reaped session returns SESSION_NOT_F
   const digest = leg1Divergence.resume.planDigest;
 
   // Idle-reap tears the incomplete repair down, leaving a tombstone.
-  sessionStore.finalizeRepairTeardown(sessionStore.get(sessionName)!);
-  sessionStore.delete(sessionName);
+  sessionStore.finalizeRepairTeardown(sessionStore.lookup(sessionName)!);
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   expect(sessionStore.readRepairTombstone(sessionName)).toBeDefined();
 
   // A `--from` continuation targeting the (now reaped) session must surface
@@ -422,6 +423,7 @@ test('BLOCKER 2b/2c: a close whose commit FAILS (no-clobber) keeps the session f
   const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-commit-fail-',
   );
+  sessionStore.retire(sessionStore.lookup(sessionName)!);
   makeCompleteRepairSession(sessionStore, sessionName, root);
   // A prior COMPLETE (sentinel-marked) healed artifact already sits at the
   // default path — the commit must refuse to clobber it.

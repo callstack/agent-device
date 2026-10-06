@@ -1,4 +1,4 @@
-import { afterEach, assert } from 'vitest';
+import { assert } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { SessionStore } from '../session-store.ts';
@@ -96,15 +96,9 @@ export function createIdleExpiryHarness(): Readonly<{
   // Registers the cleanup hook at collection time; the per-test calls below share its root list.
   claimStores();
 
-  const roots: string[] = [];
-  afterEach(() => {
-    for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
-  });
-
   return {
     makeFixture: (prefix) => {
       const root = mkdtempForTestSync(prefix);
-      roots.push(root);
       return { sessionStore: new SessionStore(path.join(root, 'sessions')), claims: claimStores() };
     },
     idleClaimedSession: (store, name = 'default') => {
@@ -112,7 +106,7 @@ export function createIdleExpiryHarness(): Readonly<{
         createdAt: NOW - WINDOW_MS - 1,
         deviceClaim: { ...CLAIM },
       });
-      store.set(name, session);
+      store.publish(name, session);
       return session;
     },
     // Past its window on time alone, and holding no claim — nothing another agent waits on.
@@ -136,7 +130,7 @@ export function createIdleExpiryHarness(): Readonly<{
         createdAt: NOW - WINDOW_MS - 1,
         deviceClaim: acquired.ownership,
       });
-      fixture.sessionStore.set(name, session);
+      fixture.sessionStore.publish(name, session);
       return { session, deviceClaim: acquired.ownership };
     },
     claimFileHeld: (deviceClaim) => fs.existsSync(resolveDeviceClaimPath(deviceClaim.deviceKey)),
