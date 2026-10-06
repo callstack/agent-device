@@ -29,16 +29,35 @@ export async function trimRunnerBuildScratch(
   return await trimDirectory(derived, derived, kept);
 }
 
-/** `Build/<x>` is the unit kept under `Build`, so the products survive and their siblings do not. */
+/**
+ * `Build/<x>` is the unit kept under `Build`, so the products survive and their siblings do not.
+ * A product that is missing or lies outside the key makes the trim a no-op. A product that is a
+ * symlink keeps its target's unit as well.
+ */
 function resolveKeptPaths(derived: string, protectedPaths: readonly string[]): Set<string> | null {
   const kept = new Set<string>([RUNNER_CACHE_METADATA_FILE]);
-  for (const protectedPath of protectedPaths) {
-    const relative = path.relative(derived, protectedPath);
-    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return null;
-    const segments = relative.split(path.sep);
-    kept.add(segments.slice(0, segments[0] === 'Build' ? 2 : 1).join(path.sep));
+  try {
+    const realDerived = fs.realpathSync(derived);
+    for (const protectedPath of protectedPaths) {
+      const lexical = path.relative(derived, protectedPath);
+      const real = path.relative(realDerived, fs.realpathSync(protectedPath));
+      if (isOutside(lexical) || isOutside(real)) return null;
+      kept.add(keptUnit(lexical));
+      kept.add(keptUnit(real));
+    }
+  } catch {
+    return null;
   }
   return kept;
+}
+
+function keptUnit(relative: string): string {
+  const segments = relative.split(path.sep);
+  return segments.slice(0, segments[0] === 'Build' ? 2 : 1).join(path.sep);
+}
+
+function isOutside(relative: string): boolean {
+  return !relative || relative.startsWith('..') || path.isAbsolute(relative);
 }
 
 async function trimDirectory(

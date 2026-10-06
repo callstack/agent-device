@@ -125,6 +125,23 @@ test('a product outside the cache root leaves the tree untouched', async () => {
   assert.deepEqual(tree(derived), before);
 });
 
+test('a product that is a symlink keeps the unit it points into', async () => {
+  const derived = path.join(base, KEY);
+  const [xctestrun] = seedBuiltKey(derived);
+  const target = path.join(derived, 'Build', 'Intermediates.noindex', 'Runner.build');
+  const link = path.join(derived, 'Build', 'Products', 'Linked.app');
+  fs.symlinkSync(target, link);
+
+  const removed = await trimRunnerBuildScratch(derived, [xctestrun!, link], {});
+
+  assert.deepEqual(removed.sort(), [
+    'Logs',
+    'ModuleCache.noindex',
+    'SDKExplicitPrecompiledModules',
+  ]);
+  assert.equal(fs.existsSync(path.join(target, 'obj.o')), true);
+});
+
 test('a runner build trims its key, and the next start reuses the products without rebuilding', async () => {
   resetAllProcessMemosForTests();
   const projectRoot = mkdtempForTestSync('agent-device-runner-trim-root-');

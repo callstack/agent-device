@@ -8,17 +8,18 @@ const PLATFORMS = ['ios', 'macos', 'tvos', 'visionos'];
 
 /**
  * Compiles the Apple runner for every platform the package supports, into a scratch directory
- * under `<root>/.tmp` that is removed afterwards. The package ships the runner source and the
- * daemon builds into its own keyed cache, so nothing reads these products; building them at the
- * default `~/.agent-device/apple-runner/derived` location only left about 1 GB there per machine.
+ * under `<root>/.tmp` that is removed before and after the builds, so an interrupted run leaves
+ * nothing past the next one. The package ships the runner source and the daemon builds into its
+ * own keyed cache, so nothing reads these products; building them at the default
+ * `~/.agent-device/apple-runner/derived` location only left about 1 GB there per machine.
  */
 export function buildPackageXcuitest(options = {}) {
   const root = path.resolve(options.root ?? process.cwd());
   const platforms = options.platforms ?? PLATFORMS;
   const build = options.build ?? runBuildScript;
-  const scratchParent = path.join(root, '.tmp');
-  fs.mkdirSync(scratchParent, { recursive: true });
-  const scratch = fs.mkdtempSync(path.join(scratchParent, 'package-xcuitest-'));
+  const scratch = path.join(root, '.tmp', 'package-xcuitest');
+  fs.rmSync(scratch, { recursive: true, force: true });
+  fs.mkdirSync(scratch, { recursive: true });
   try {
     for (const platform of platforms) {
       build({ root, platform, derivedPath: path.join(scratch, platform) });

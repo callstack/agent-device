@@ -24,7 +24,7 @@ test('builds every platform into a scratch directory under the repo and removes 
     ['ios', 'macos', 'tvos', 'visionos'],
   );
   for (const { derivedPath } of seen) {
-    assert.equal(path.dirname(path.dirname(derivedPath)), path.join(root, '.tmp'));
+    assert.equal(path.dirname(derivedPath), path.join(root, '.tmp', 'package-xcuitest'));
     assert.equal(fs.existsSync(derivedPath), false);
   }
   assert.deepEqual(fs.readdirSync(path.join(root, '.tmp')), []);
@@ -47,4 +47,21 @@ test('removes the scratch directory when a platform build fails', () => {
   );
 
   assert.deepEqual(fs.readdirSync(path.join(root, '.tmp')), []);
+});
+
+test('starts from an empty scratch directory when an interrupted run left one behind', () => {
+  const root = mkdtempForTestSync('agent-device-package-xcuitest-');
+  const leftover = path.join(root, '.tmp', 'package-xcuitest', 'ios', 'Build');
+  fs.mkdirSync(leftover, { recursive: true });
+  let leftoverSeen = true;
+
+  buildPackageXcuitest({
+    root,
+    platforms: ['ios'],
+    build: ({ derivedPath }: Build) => {
+      leftoverSeen = fs.existsSync(derivedPath);
+    },
+  });
+
+  assert.equal(leftoverSeen, false);
 });
