@@ -1,4 +1,3 @@
-import type { ServerResponse } from 'node:http';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 
 export function carriesUnbackedHostPathInstallSource(rpcBody: string | undefined): boolean {
@@ -9,20 +8,19 @@ export function carriesUnbackedHostPathInstallSource(rpcBody: string | undefined
   return isHostPathInstallSource(params.source) || isHostPathInstallSource(meta?.installSource);
 }
 
-export function sendHostPathInstallSourceRefused(res: ServerResponse, rpcId: unknown): void {
+export function hostPathInstallSourceRefusedResponse(rpcId: unknown): Response {
   const error = new AppError(
     'INVALID_ARGS',
     'Invalid params: an install source of kind "path" names a file on the daemon host and is not accepted through the proxy',
     { hint: 'Upload the artifact, or use a "url" or "github-actions-artifact" source.' },
   );
-  res.statusCode = 400;
-  res.setHeader('content-type', 'application/json');
-  res.end(
-    JSON.stringify({
+  return Response.json(
+    {
       jsonrpc: '2.0',
       id: rpcId,
       error: { code: -32602, message: error.message, data: normalizeError(error) },
-    }),
+    },
+    { status: 400 },
   );
 }
 

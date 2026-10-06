@@ -511,7 +511,7 @@ importers:
         version: 7.29.0
 
   packages/proxy:
-    dependencies:
+    devDependencies:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts

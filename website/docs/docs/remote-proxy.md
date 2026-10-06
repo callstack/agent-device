@@ -230,6 +230,16 @@ The proxy validates the client token and rewrites authorized upstream requests t
 The proxy deliberately does not forward `/admin/*`, including human-control holds. A caller inside
 the device-host VM must use the daemon's loopback port and local daemon token.
 
+## Embedding the Proxy in Your Own Gateway
+
+`agent-device proxy` is also available as a library, `@agent-device/proxy`, for gateways that front
+daemons on many hosts. It serves the same routes with the same token handling, but you choose the
+transport on both sides: it answers standard Fetch API `Request` objects, so you can host it on
+any HTTP server or carry requests over WebSocket, and it can reach the daemon through your own
+tunnel instead of HTTP. See the
+[package README](https://github.com/callstack/agent-device/tree/main/packages/proxy#readme)
+for the API.
+
 ## Compatibility
 
 Remote clients read `/health` before issuing commands and compare the daemon RPC protocol version. Keep the client and proxy versions reasonably close; patch-level differences should normally work, but incompatible RPC protocol versions fail before commands run.

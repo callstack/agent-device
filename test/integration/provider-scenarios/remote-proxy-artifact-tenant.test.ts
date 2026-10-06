@@ -12,7 +12,7 @@ import { finalizeDaemonResponse } from '../../../src/daemon/request-finalization
 import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
 import { normalizeAgentDeviceError } from '@agent-device/kernel/errors';
 import { downloadRemoteArtifact } from '../../../src/remote/daemon-artifacts.ts';
-import { createDaemonProxyServer } from '@agent-device/proxy';
+import { createDaemonProxyServer } from '@agent-device/proxy/node';
 import {
   closeLoopbackServer,
   listenOnLoopback,

@@ -9,7 +9,7 @@ import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
 import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
 import { resolveSessionRequestLogPath } from '../../../src/daemon/session-artifact-paths.ts';
 import type { DaemonRequest, DaemonResponse } from '../../../src/daemon/daemon-request.ts';
-import { createDaemonProxyServer } from '@agent-device/proxy';
+import { createDaemonProxyServer } from '@agent-device/proxy/node';
 import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import {
   closeLoopbackServer,

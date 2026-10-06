@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import http from 'node:http';
-import { createDaemonProxyServer } from '@agent-device/proxy';
+import { createDaemonProxyServer } from '@agent-device/proxy/node';
 import { createDaemonHttpServer } from '../daemon/server/http-server.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { readHostCpuArch } from '@agent-device/host-kit/process';

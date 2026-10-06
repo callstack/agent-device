@@ -1,1 +1,6 @@
-export { createDaemonProxyServer } from './daemon-proxy.ts';
+export {
+  createDaemonProxy,
+  type DaemonProxy,
+  type DaemonProxyOptions,
+  type DaemonProxyUpstreamFetch,
+} from './daemon-proxy.ts';

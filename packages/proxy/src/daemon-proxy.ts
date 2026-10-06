@@ -1,9 +1,6 @@
-import http, { type IncomingMessage, type ServerResponse } from 'node:http';
-import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 import { randomUUID } from 'node:crypto';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import { readNodeHttpRequestBody, timingSafeStringEqual } from '@agent-device/host-kit/transport';
+import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import {
   buildDaemonHealthPayload,
   buildDaemonInstanceMismatchRpcResponse,
@@ -19,19 +16,41 @@ import {
 } from '@agent-device/contracts/daemon-http';
 import {
   carriesUnbackedHostPathInstallSource,
-  sendHostPathInstallSourceRefused,
+  hostPathInstallSourceRefusedResponse,
 } from './install-source-admission.ts';
 
+/**
+ * Carries one request to the upstream daemon and resolves with its response. The default is the
+ * global `fetch`; supply your own to reach the daemon over another transport, such as a
+ * WebSocket tunnel. Abort the exchange when `request.signal` aborts.
+ */
+export type DaemonProxyUpstreamFetch = (request: Request) => Promise<Response>;
+
 export type DaemonProxyOptions = {
+  /** Base URL of the upstream agent-device daemon HTTP server. */
   upstreamBaseUrl: string;
+  /** Auth token of the upstream daemon. Never leaves the proxy. */
   upstreamToken: string;
+  /** Token proxy clients must present as their daemon auth token. */
   clientToken: string;
   maxRpcBodyBytes?: number;
   upstreamTimeoutMs?: number;
-  // di-seam-approved: injects the fetch global, which has no module boundary vi.mock can
-  // intercept, for the remote daemon proxy's upstream request.
-  fetchImpl?: typeof fetch;
+  upstreamFetch?: DaemonProxyUpstreamFetch;
 };
+
+export type DaemonProxy = {
+  /** Identifies this proxy instance in its health payload, so clients notice a restart. */
+  readonly instanceId: string;
+  /**
+   * Answers one client request. `request.url` must be the URL the client used, because upload
+   * tickets are rewritten to its origin; an `x-forwarded-proto` header overrides its scheme.
+   * Abort `request.signal` when the client goes away so in-flight daemon work is cancelled.
+   * Resolves with an error response rather than rejecting.
+   */
+  handle(request: Request): Promise<Response>;
+};
+
+type NormalizedProxyOptions = Required<DaemonProxyOptions>;
 
 const DEFAULT_MAX_RPC_BODY_BYTES = 1024 * 1024;
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 5 * 60 * 1000;
@@ -52,92 +71,93 @@ const FORWARDED_RESPONSE_HEADERS = [
   DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
 ];
 
-export function createDaemonProxyServer(options: DaemonProxyOptions): http.Server {
+export function createDaemonProxy(options: DaemonProxyOptions): DaemonProxy {
   const normalized = normalizeProxyOptions(options);
   const instanceId = randomUUID();
-  return http.createServer((req, res) => {
-    void handleProxyRequest(req, res, normalized, instanceId).catch((error: unknown) => {
-      sendProxyError(res, error);
-    });
-  });
+  return {
+    instanceId,
+    handle: async (request) => {
+      try {
+        return await handleProxyRequest(request, normalized, instanceId);
+      } catch (error) {
+        return proxyErrorResponse(error);
+      }
+    },
+  };
 }
 
 async function handleProxyRequest(
-  req: IncomingMessage,
-  res: ServerResponse,
-  options: Required<DaemonProxyOptions>,
+  request: Request,
+  options: NormalizedProxyOptions,
   instanceId: string,
-): Promise<void> {
-  const route = resolveProxyRoute(req.url ?? '/');
-  if (req.method === 'GET' && route === '/health') {
-    await sendProxyHealth(res, options, instanceId);
-    return;
+): Promise<Response> {
+  const route = resolveProxyRoute(request.url);
+  if (request.method === 'GET' && route === '/health') {
+    return await proxyHealthResponse(request, options, instanceId);
   }
 
-  if (!isSupportedDaemonRoute(route, req.method)) {
-    res.statusCode = 404;
-    res.end('Not found');
-    return;
+  if (!isSupportedDaemonRoute(route, request.method)) {
+    return new Response(new TextEncoder().encode('Not found'), { status: 404 });
   }
 
   let rpcBody: string | undefined;
   if (route === '/rpc') {
-    rpcBody = (
-      await readNodeHttpRequestBody(
-        req,
-        options.maxRpcBodyBytes,
-        'Proxy request body is too large.',
-      )
-    ).toString('utf8');
+    rpcBody = await readRequestText(
+      request,
+      options.maxRpcBodyBytes,
+      'Proxy request body is too large.',
+    );
   }
 
-  if (!isAuthorized(req, options.clientToken, rpcBody)) {
-    sendUnauthorized(res, route, readJsonRpcId(rpcBody));
-    return;
+  if (!isAuthorized(request, options.clientToken, rpcBody)) {
+    return unauthorizedResponse(route, readJsonRpcId(rpcBody));
   }
 
-  if (refuseStaleProxyInstance(req, res, route, readJsonRpcId(rpcBody), instanceId)) {
-    return;
-  }
+  const staleInstance = refuseStaleProxyInstance(
+    request,
+    route,
+    readJsonRpcId(rpcBody),
+    instanceId,
+  );
+  if (staleInstance) return staleInstance;
 
   if (carriesUnbackedHostPathInstallSource(rpcBody)) {
-    sendHostPathInstallSourceRefused(res, readJsonRpcId(rpcBody));
-    return;
+    return hostPathInstallSourceRefusedResponse(readJsonRpcId(rpcBody));
   }
 
-  await forwardProxyRequest({ req, res, route, options, rpcBody });
+  return await forwardProxyRequest({ request, route, options, rpcBody });
 }
 
-async function sendProxyHealth(
-  res: ServerResponse,
-  options: Required<DaemonProxyOptions>,
+async function proxyHealthResponse(
+  request: Request,
+  options: NormalizedProxyOptions,
   instanceId: string,
-) {
+): Promise<Response> {
   const [upstream, { readVersion }, { readHostCpuArch }] = await Promise.all([
-    readUpstreamHealth(options),
+    readUpstreamHealth(request, options),
     import('@agent-device/host-kit/version'),
     import('@agent-device/host-kit/process'),
   ]);
-  res.statusCode = 200;
-  res.setHeader('content-type', 'application/json');
-  res.end(
-    JSON.stringify(
-      buildDaemonHealthPayload('agent-device-proxy', readVersion(), {
-        upstream,
-        instanceId,
-        hostArch: await readHostCpuArch(),
-      }),
-    ),
+  return Response.json(
+    buildDaemonHealthPayload('agent-device-proxy', readVersion(), {
+      upstream,
+      instanceId,
+      hostArch: await readHostCpuArch(),
+    }),
   );
 }
 
-async function readUpstreamHealth(options: Required<DaemonProxyOptions>): Promise<unknown> {
-  const upstreamUrl = new URL(buildDaemonHttpUrl(options.upstreamBaseUrl, 'health'));
-  const response = await options.fetchImpl(upstreamUrl, {
-    method: 'GET',
-    headers: buildUpstreamHeaders({ headers: {} }, options.upstreamToken, '/health'),
-    signal: AbortSignal.timeout(options.upstreamTimeoutMs),
-  });
+async function readUpstreamHealth(
+  request: Request,
+  options: NormalizedProxyOptions,
+): Promise<unknown> {
+  const response = await options.upstreamFetch(
+    new Request(buildDaemonHttpUrl(options.upstreamBaseUrl, 'health'), {
+      method: 'GET',
+      headers: buildUpstreamHeaders(new Headers(), options.upstreamToken, '/health'),
+      signal: upstreamSignal(request, options),
+    }),
+  );
   const text = await response.text();
   try {
     return text ? JSON.parse(text) : { ok: response.ok, status: response.status };
@@ -147,100 +167,70 @@ async function readUpstreamHealth(options: Required<DaemonProxyOptions>): Promis
 }
 
 async function forwardProxyRequest(params: {
-  req: IncomingMessage;
-  res: ServerResponse;
+  request: Request;
   route: string;
-  options: Required<DaemonProxyOptions>;
+  options: NormalizedProxyOptions;
   rpcBody?: string;
-}): Promise<void> {
-  const { req, res, route, options, rpcBody } = params;
-  const upstreamUrl = buildUpstreamUrl(options.upstreamBaseUrl, route, req.url ?? '/');
-  const method = req.method ?? 'GET';
-  const headers = buildUpstreamHeaders(req, options.upstreamToken, route);
-  const body = resolveUpstreamBody(req, route, rpcBody, options.upstreamToken);
-  const response = await options.fetchImpl(upstreamUrl, {
-    method,
-    headers,
-    signal: upstreamRequestSignal(req, res, options.upstreamTimeoutMs),
-    ...(body ? { body, duplex: 'half' as const } : {}),
-  });
+}): Promise<Response> {
+  const { request, route, options, rpcBody } = params;
+  const body = resolveUpstreamBody(request, route, rpcBody, options.upstreamToken);
+  const upstreamResponse = await options.upstreamFetch(
+    new Request(buildUpstreamUrl(options.upstreamBaseUrl, route, request.url), {
+      method: request.method,
+      headers: buildUpstreamHeaders(request.headers, options.upstreamToken, route),
+      signal: upstreamSignal(request, options),
+      ...(body ? { body, duplex: 'half' as const } : {}),
+    }),
+  );
 
-  await sendProxyResponse({ req, res, route, response, clientToken: options.clientToken });
+  const headers = copyProxyResponseHeaders(upstreamResponse, request);
+  if (isUploadPreflightRoute(route)) {
+    return await rewrittenUploadPreflightResponse({
+      request,
+      upstreamResponse,
+      headers,
+      clientToken: options.clientToken,
+    });
+  }
+  return new Response(upstreamResponse.body, { status: upstreamResponse.status, headers });
 }
 
 /**
- * The upstream request lives exactly as long as the client keeps waiting for it. The daemon's
- * HTTP boundary turns a vanished client into request cancellation, so the proxy has to drop its
- * own upstream socket for a remote client's disconnect to reach in-flight runner work.
+ * An upstream exchange lives exactly as long as the client keeps waiting for it: the daemon
+ * turns a dropped upstream request into cancellation of in-flight runner work.
  */
-function upstreamRequestSignal(
-  req: IncomingMessage,
-  res: ServerResponse,
-  timeoutMs: number,
-): AbortSignal {
-  const clientGone = new AbortController();
-  const abortIfResponseIncomplete = () => {
-    if (res.writableFinished || clientGone.signal.aborted) return;
-    clientGone.abort(
-      new AppError(
-        'COMMAND_FAILED',
-        'Proxy client disconnected before the upstream response ended',
-      ),
-    );
-  };
-  req.on('aborted', abortIfResponseIncomplete);
-  res.on('close', abortIfResponseIncomplete);
-  return AbortSignal.any([clientGone.signal, AbortSignal.timeout(timeoutMs)]);
+function upstreamSignal(request: Request, options: NormalizedProxyOptions): AbortSignal {
+  return AbortSignal.any([request.signal, AbortSignal.timeout(options.upstreamTimeoutMs)]);
 }
 
-async function sendProxyResponse(params: {
-  req: IncomingMessage;
-  res: ServerResponse;
-  route: string;
-  response: Response;
-  clientToken: string;
-}): Promise<void> {
-  const { req, res, route, response, clientToken } = params;
-  res.statusCode = response.status;
-  copyProxyResponseHeaders(response, res);
-  ensureProxyRequestId(req, res);
-
-  if (isUploadPreflightRoute(route)) {
-    await sendRewrittenUploadPreflightResponse({ req, res, response, clientToken });
-    return;
-  }
-
-  await pipeProxyResponseBody(response, res);
-}
-
-function copyProxyResponseHeaders(response: Response, res: ServerResponse): void {
+function copyProxyResponseHeaders(upstreamResponse: Response, request: Request): Headers {
+  const headers = new Headers();
   for (const name of FORWARDED_RESPONSE_HEADERS) {
-    const value = response.headers.get(name);
-    if (value) res.setHeader(name, value);
+    const value = upstreamResponse.headers.get(name);
+    if (value) headers.set(name, value);
   }
+  if (!headers.has('x-request-id')) headers.set('x-request-id', resolveRequestId(request));
+  return headers;
 }
 
-function ensureProxyRequestId(req: IncomingMessage, res: ServerResponse): void {
-  if (!res.hasHeader('x-request-id')) {
-    res.setHeader('x-request-id', resolveRequestId(req));
-  }
-}
-
-async function sendRewrittenUploadPreflightResponse(params: {
-  req: IncomingMessage;
-  res: ServerResponse;
-  response: Response;
+async function rewrittenUploadPreflightResponse(params: {
+  request: Request;
+  upstreamResponse: Response;
+  headers: Headers;
   clientToken: string;
-}): Promise<void> {
-  const { req, res, response, clientToken } = params;
-  const text = await response.text();
-  res.setHeader('content-type', response.headers.get('content-type') ?? 'application/json');
-  res.end(rewriteUploadPreflightResponse(text, req, clientToken));
+}): Promise<Response> {
+  const { request, upstreamResponse, headers, clientToken } = params;
+  const text = await upstreamResponse.text();
+  headers.set('content-type', upstreamResponse.headers.get('content-type') ?? 'application/json');
+  return new Response(rewriteUploadPreflightResponse(text, request, clientToken), {
+    status: upstreamResponse.status,
+    headers,
+  });
 }
 
 function rewriteUploadPreflightResponse(
   body: string,
-  req: IncomingMessage,
+  request: Request,
   clientToken: string,
 ): string {
   let parsed: unknown;
@@ -256,7 +246,7 @@ function rewriteUploadPreflightResponse(
     return body;
   }
 
-  const rewrittenUrl = rewriteUploadDirectUrl(record.upload.url, req);
+  const rewrittenUrl = rewriteUploadDirectUrl(record.upload.url, request);
   if (!rewrittenUrl) return body;
 
   const headers =
@@ -275,7 +265,7 @@ function rewriteUploadPreflightResponse(
   });
 }
 
-function rewriteUploadDirectUrl(upstreamUrl: string, req: IncomingMessage): string | null {
+function rewriteUploadDirectUrl(upstreamUrl: string, request: Request): string | null {
   let parsed: URL;
   try {
     parsed = new URL(upstreamUrl);
@@ -287,29 +277,19 @@ function rewriteUploadDirectUrl(upstreamUrl: string, req: IncomingMessage): stri
     return null;
   }
 
-  const host = typeof req.headers.host === 'string' ? req.headers.host : '';
-  if (!host) return null;
-
-  const requestPath = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
-  const uploadIndex = requestPath.lastIndexOf('/upload/preflight');
-  const uploadPrefix = uploadIndex >= 0 ? requestPath.slice(0, uploadIndex) : '';
-  const forwardedProto = req.headers['x-forwarded-proto'];
-  const proto = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto;
-  const rewritten = new URL(`${proto || 'http'}://${host}`);
+  const requestUrl = new URL(request.url);
+  const uploadIndex = requestUrl.pathname.lastIndexOf('/upload/preflight');
+  const uploadPrefix = uploadIndex >= 0 ? requestUrl.pathname.slice(0, uploadIndex) : '';
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+  const rewritten = new URL(
+    `${forwardedProto || requestUrl.protocol.replace(/:$/, '')}://${requestUrl.host}`,
+  );
   rewritten.pathname = `${uploadPrefix}${parsed.pathname}`;
   rewritten.search = parsed.search;
   return rewritten.toString();
 }
 
-async function pipeProxyResponseBody(response: Response, res: ServerResponse): Promise<void> {
-  if (!response.body) {
-    res.end();
-    return;
-  }
-  await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), res);
-}
-
-function normalizeProxyOptions(options: DaemonProxyOptions): Required<DaemonProxyOptions> {
+function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOptions {
   const upstreamBaseUrl = normalizeBaseUrl(options.upstreamBaseUrl, 'upstreamBaseUrl');
   const upstreamToken = normalizeToken(options.upstreamToken, 'upstreamToken');
   const clientToken = normalizeToken(options.clientToken, 'clientToken');
@@ -319,7 +299,7 @@ function normalizeProxyOptions(options: DaemonProxyOptions): Required<DaemonProx
     clientToken,
     maxRpcBodyBytes: options.maxRpcBodyBytes ?? DEFAULT_MAX_RPC_BODY_BYTES,
     upstreamTimeoutMs: options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS,
-    fetchImpl: options.fetchImpl ?? fetch,
+    upstreamFetch: options.upstreamFetch ?? ((request) => fetch(request)),
   };
 }
 
@@ -344,7 +324,7 @@ function normalizeToken(value: string, label: string): string {
 }
 
 function resolveProxyRoute(requestUrl: string): string {
-  const pathname = new URL(requestUrl, 'http://127.0.0.1').pathname;
+  const pathname = new URL(requestUrl).pathname;
   if (pathname === DAEMON_HTTP_BASE_PATH) return '/';
   if (pathname.startsWith(DAEMON_PROXY_PREFIX)) {
     return `/${pathname.slice(DAEMON_PROXY_PREFIX.length)}`;
@@ -352,7 +332,7 @@ function resolveProxyRoute(requestUrl: string): string {
   return pathname;
 }
 
-function isSupportedDaemonRoute(route: string, method: string | undefined): boolean {
+function isSupportedDaemonRoute(route: string, method: string): boolean {
   if (route === '/rpc') return method === 'POST';
   if (isSupportedUploadRoute(route, method)) return true;
   if (route === '/artifacts' || route === '/artifacts/') return method === 'GET';
@@ -378,7 +358,7 @@ function isRequestDiagnosticsRoute(route: string): boolean {
   );
 }
 
-function isSupportedUploadRoute(route: string, method: string | undefined): boolean {
+function isSupportedUploadRoute(route: string, method: string): boolean {
   if (route === '/upload') return method === 'POST';
   if (isUploadPreflightRoute(route)) return method === 'POST';
   if (route === '/upload/finalize') return method === 'POST';
@@ -390,38 +370,37 @@ function isUploadPreflightRoute(route: string): boolean {
   return route === '/upload/preflight';
 }
 
-function buildUpstreamUrl(upstreamBaseUrl: string, route: string, rawUrl: string): URL {
+function buildUpstreamUrl(upstreamBaseUrl: string, route: string, requestUrl: string): URL {
   const upstreamUrl = new URL(buildDaemonHttpUrl(upstreamBaseUrl, route));
-  const rawSearchIndex = rawUrl.indexOf('?');
-  if (rawSearchIndex >= 0) upstreamUrl.search = rawUrl.slice(rawSearchIndex);
+  upstreamUrl.search = new URL(requestUrl).search;
   return upstreamUrl;
 }
 
-function buildUpstreamInstancePreconditionHeaders(
-  req: Pick<IncomingMessage, 'headers'>,
-): Record<string, string> {
-  const expectedUpstreamInstance = req.headers[DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER];
-  return typeof expectedUpstreamInstance === 'string'
+function buildUpstreamInstancePreconditionHeaders(requestHeaders: Headers): Record<string, string> {
+  const expectedUpstreamInstance = requestHeaders.get(DAEMON_HTTP_UPSTREAM_INSTANCE_HEADER);
+  return expectedUpstreamInstance !== null
     ? { [DAEMON_HTTP_INSTANCE_HEADER]: expectedUpstreamInstance }
     : {};
 }
 
 function buildUpstreamHeaders(
-  req: Pick<IncomingMessage, 'headers'>,
+  requestHeaders: Headers,
   upstreamToken: string,
   route: string,
 ): Headers {
   const headers = new Headers();
   for (const name of FORWARDED_REQUEST_HEADERS) {
-    const value = req.headers[name];
-    if (typeof value === 'string' && value.trim()) headers.set(name, value);
+    const value = requestHeaders.get(name);
+    if (value?.trim()) headers.set(name, value);
   }
   if (route === '/rpc' && !headers.has('content-type')) {
     headers.set('content-type', 'application/json');
   }
   if (route === '/rpc') {
     headers.set(DAEMON_HTTP_NETWORK_ACCESS_HEADER, DAEMON_HTTP_PUBLIC_NETWORK_ACCESS);
-    for (const [name, value] of Object.entries(buildUpstreamInstancePreconditionHeaders(req))) {
+    for (const [name, value] of Object.entries(
+      buildUpstreamInstancePreconditionHeaders(requestHeaders),
+    )) {
       headers.set(name, value);
     }
   }
@@ -432,28 +411,50 @@ function buildUpstreamHeaders(
 }
 
 function resolveUpstreamBody(
-  req: IncomingMessage,
+  request: Request,
   route: string,
   rpcBody: string | undefined,
   upstreamToken: string,
-): BodyInit | undefined {
-  if (req.method === 'GET' || req.method === 'HEAD') return undefined;
+): BodyInit | null {
+  if (request.method === 'GET' || request.method === 'HEAD') return null;
   if (route === '/rpc') return rewriteRpcToken(rpcBody ?? '', upstreamToken);
-  return req as unknown as BodyInit;
+  return request.body;
 }
 
-function isAuthorized(req: IncomingMessage, expectedToken: string, rpcBody: string | undefined) {
-  const requestToken = resolveRequestToken(req, rpcBody);
+async function readRequestText(
+  request: Request,
+  maxBodyBytes: number,
+  tooLargeMessage: string,
+): Promise<string> {
+  if (!request.body) return '';
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bodyBytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bodyBytes += value.byteLength;
+    if (bodyBytes > maxBodyBytes) {
+      await reader.cancel();
+      throw new AppError('INVALID_ARGS', tooLargeMessage);
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+function isAuthorized(request: Request, expectedToken: string, rpcBody: string | undefined) {
+  const requestToken = resolveRequestToken(request, rpcBody);
   return requestToken.length > 0 && timingSafeStringEqual(requestToken, expectedToken);
 }
 
-function resolveRequestToken(req: IncomingMessage, rpcBody: string | undefined): string {
-  const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
+function resolveRequestToken(request: Request, rpcBody: string | undefined): string {
+  const authHeader = request.headers.get('authorization') ?? '';
   if (authHeader.toLowerCase().startsWith('bearer ')) {
     return authHeader.slice('bearer '.length);
   }
-  const tokenHeader = req.headers['x-agent-device-token'];
-  if (typeof tokenHeader === 'string') return tokenHeader;
+  const tokenHeader = request.headers.get('x-agent-device-token');
+  if (tokenHeader !== null) return tokenHeader;
   if (rpcBody) {
     const bodyToken = readJsonRpcToken(rpcBody);
     if (bodyToken) return bodyToken;
@@ -489,51 +490,43 @@ function readJsonRpcId(body: string | undefined): unknown {
   }
 }
 
-function resolveRequestId(req: IncomingMessage): string {
-  const header = req.headers['x-request-id'];
-  if (typeof header === 'string' && header.trim()) return header.trim().slice(0, 128);
+function resolveRequestId(request: Request): string {
+  const header = request.headers.get('x-request-id');
+  if (header?.trim()) return header.trim().slice(0, 128);
   return randomUUID();
 }
 
 function refuseStaleProxyInstance(
-  req: IncomingMessage,
-  res: ServerResponse,
+  request: Request,
   route: string,
   rpcId: unknown,
   instanceId: string,
-): boolean {
-  if (route !== '/rpc') return false;
-  const expectedInstanceId = req.headers[DAEMON_HTTP_INSTANCE_HEADER];
-  if (typeof expectedInstanceId !== 'string' || expectedInstanceId === instanceId) return false;
-  sendInstanceMismatch(res, rpcId);
-  return true;
+): Response | null {
+  if (route !== '/rpc') return null;
+  const expectedInstanceId = request.headers.get(DAEMON_HTTP_INSTANCE_HEADER);
+  if (expectedInstanceId === null || expectedInstanceId === instanceId) return null;
+  return sendInstanceMismatch(rpcId);
 }
 
-function sendInstanceMismatch(res: ServerResponse, rpcId: unknown): void {
-  res.statusCode = 409;
-  res.setHeader('content-type', 'application/json');
-  res.setHeader(DAEMON_HTTP_INSTANCE_MISMATCH_HEADER, 'true');
-  res.end(
-    JSON.stringify(
-      buildDaemonInstanceMismatchRpcResponse(
-        rpcId,
-        'Proxy instance changed',
-        normalizeError(
-          new AppError('COMMAND_FAILED', 'Proxy instance changed', {
-            reason: 'remote_instance_mismatch',
-          }),
-        ),
+function sendInstanceMismatch(rpcId: unknown): Response {
+  return Response.json(
+    buildDaemonInstanceMismatchRpcResponse(
+      rpcId,
+      'Proxy instance changed',
+      normalizeError(
+        new AppError('COMMAND_FAILED', 'Proxy instance changed', {
+          reason: 'remote_instance_mismatch',
+        }),
       ),
     ),
+    { status: 409, headers: { [DAEMON_HTTP_INSTANCE_MISMATCH_HEADER]: 'true' } },
   );
 }
 
-function sendUnauthorized(res: ServerResponse, route: string, rpcId: unknown): void {
-  res.statusCode = 401;
-  res.setHeader('content-type', 'application/json');
+function unauthorizedResponse(route: string, rpcId: unknown): Response {
   if (route === '/rpc') {
-    res.end(
-      JSON.stringify({
+    return Response.json(
+      {
         jsonrpc: '2.0',
         id: rpcId,
         error: {
@@ -541,27 +534,20 @@ function sendUnauthorized(res: ServerResponse, route: string, rpcId: unknown): v
           message: 'Invalid proxy token',
           data: normalizeError(new AppError('UNAUTHORIZED', 'Invalid proxy token')),
         },
-      }),
+      },
+      { status: 401 },
     );
-    return;
   }
-  res.end(
-    JSON.stringify({
-      ok: false,
-      error: 'Invalid proxy token',
-      code: 'UNAUTHORIZED',
-    }),
+  return Response.json(
+    { ok: false, error: 'Invalid proxy token', code: 'UNAUTHORIZED' },
+    { status: 401 },
   );
 }
 
-function sendProxyError(res: ServerResponse, error: unknown): void {
-  if (res.destroyed) return;
-  if (res.headersSent) {
-    res.destroy(error instanceof Error ? error : undefined);
-    return;
-  }
+function proxyErrorResponse(error: unknown): Response {
   const normalized = normalizeError(error);
-  res.statusCode = normalized.code === 'INVALID_ARGS' ? 400 : 500;
-  res.setHeader('content-type', 'application/json');
-  res.end(JSON.stringify({ ok: false, error: normalized.message, code: normalized.code }));
+  return Response.json(
+    { ok: false, error: normalized.message, code: normalized.code },
+    { status: normalized.code === 'INVALID_ARGS' ? 400 : 500 },
+  );
 }
