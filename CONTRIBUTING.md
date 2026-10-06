@@ -119,8 +119,8 @@ still requires registry access unless the dependencies are cached. Publishing re
 If core publication succeeds but a later package fails, run `pnpm release:publish` to finish the
 release. It skips versions already published and commits the development marker once every package
 succeeds. Plain `npm publish` cannot retry an already-published core version.
-If every upload succeeds but Git refuses the development-marker commit, fix the Git error and
-run `pnpm release:mark-dev` to finish any interrupted version synchronization, then commit the
+If every upload succeeds but development-marker synchronization or its Git commit fails, fix the
+reported error and run `pnpm release:mark-dev` to finish any interrupted version synchronization, then commit the
 changed public manifests and `server.json` before pushing. No package needs republishing.
 
 Use `npm pack` to build and validate a development-version package locally. The normal npm and
