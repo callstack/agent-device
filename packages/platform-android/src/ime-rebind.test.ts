@@ -7,6 +7,7 @@ import { bindAndroidAdbHostStub, type AndroidAdbHostStub } from './adb-host.fixt
 import { withAndroidAdbProvider } from './adb-provider-scope.ts';
 import { activateAndroidTestIme } from './ime-activation.ts';
 import { rebindAndroidTestIme } from './ime-rebind.ts';
+import { typeAndroid } from './text-input.ts';
 import { restoreAndroidTestIme } from './ime-restore.ts';
 import { fakeImeDeviceAdb, type FakeImeDeviceState } from './ime-device.fixtures.ts';
 import {
@@ -94,7 +95,7 @@ test("a rebind that displaces the helper keeps ownership and the user's IME as r
   state.imeDisableFallback = 'com.android.inputmethod.latin/.LatinIME';
   state.imeSetFails = true;
 
-  expect(await rebindWith(state)).toEqual({ kind: 'unconfirmed', cause: 'helper-not-selected' });
+  expect(await rebindWith(state)).toEqual({ kind: 'unconfirmed', cause: 'command-failed' });
   expect(isAndroidTestImeActive(DEVICE)).toBe(true);
   expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
   expect(state.settings.get('agent_device_ime_helper_rebind_displaced')).toBe('1');
@@ -218,7 +219,7 @@ async function withDeviceAdb<T>(exec: AndroidAdbExecutor, task: () => Promise<T>
 
 const REBIND_DISPLACED = 'agent_device_ime_helper_rebind_displaced';
 
-test('a rebind whose device record cannot be written stays unconfirmed', async () => {
+test.each(['rejected', 'throws'])('a %s device-record write stays unconfirmed', async (failure) => {
   activationHost();
   const state: FakeImeDeviceState = {
     settings: new Map([['default_input_method', 'com.samsung/.Keyboard']]),
@@ -227,15 +228,38 @@ test('a rebind whose device record cannot be written stays unconfirmed', async (
   const deviceAdb = fakeImeDeviceAdb(state);
 
   const rebound = await withDeviceAdb(
-    async (args) =>
-      args[1] === 'settings' && args[2] === 'put' && args[4] === REBIND_DISPLACED
-        ? { exitCode: 1, stdout: '', stderr: 'rejected' }
-        : await deviceAdb(args),
+    async (args) => {
+      if (args[1] === 'settings' && args[2] === 'put' && args[4] === REBIND_DISPLACED) {
+        if (failure === 'throws') throw new Error('adb timed out');
+        return { exitCode: 1, stdout: '', stderr: 'rejected' };
+      }
+      return await deviceAdb(args);
+    },
     async () => await rebindAndroidTestIme(DEVICE),
   );
 
   expect(rebound).toEqual({ kind: 'unconfirmed', cause: 'record-write' });
   expect(getAndroidTestImeOwnership(DEVICE)?.rebindUnconfirmed).toBe(true);
+});
+
+test.each(['disable', 'enable', 'set'])('a failed ime %s never confirms a rebind', async (verb) => {
+  const host = activationHost();
+  const state: FakeImeDeviceState = {
+    settings: new Map([['default_input_method', 'com.samsung/.Keyboard']]),
+  };
+  await activateWith(state);
+  const deviceAdb = fakeImeDeviceAdb(state);
+  const rebound = await withDeviceAdb(
+    async (args) =>
+      args[1] === 'ime' && args[2] === verb
+        ? { exitCode: 1, stdout: '', stderr: 'rejected' }
+        : await deviceAdb(args),
+    async () => await rebindAndroidTestIme(DEVICE),
+  );
+  expect(rebound).toEqual({ kind: 'unconfirmed', cause: 'command-failed' });
+  expect(state.settings.get(REBIND_DISPLACED)).toBe('1');
+  expect(isAndroidTestImeActive(DEVICE)).toBe(true);
+  expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
 });
 
 test('a confirmed rebind whose device record stays set is retried at the next entry', async () => {
@@ -261,4 +285,17 @@ test('a confirmed rebind whose device record stays set is retried at the next en
     phase: 'android_test_ime_rebind_record_clear_failed',
     level: 'warn',
   });
+  const calls: string[] = [];
+  await withDeviceAdb(
+    async (args) => {
+      calls.push(`${args[1]} ${args[2]}`);
+      return args[1] === 'am' ? { exitCode: 0, stdout: '', stderr: '' } : await deviceAdb(args);
+    },
+    async () => await typeAndroid(DEVICE, 'Jane'),
+  );
+  expect(calls.indexOf('ime set')).toBeLessThan(calls.indexOf('am broadcast'));
+  expect(calls).toContain('ime set');
+  expect(calls).toContain('am broadcast');
+  expect(state.settings.has(REBIND_DISPLACED)).toBe(false);
+  expect(getAndroidTestImeOwnership(DEVICE)?.rebindUnconfirmed).toBe(false);
 });

@@ -151,12 +151,14 @@ export function completeAndroidFillVerification(
   );
 }
 
-/** Whether none of a fill's commit reached the field: it shows its hint, or the value it held before. */
+/** Whether a failed fill left an observed field empty, showing its hint, or holding its old value. */
 export function isAndroidFillCommitDropped(
   verification: AndroidFillVerification,
   beforeTarget: AndroidFillVerification['targetInput'],
 ): boolean {
-  if (verification.actualInput?.hintShowing === true) return true;
+  if (verification.ok) return false;
+  const input = verification.actualInput;
+  if (input && (input.hintShowing === true || input.text === null)) return true;
   return beforeTarget?.text != null && verification.actual === beforeTarget.text;
 }
 

@@ -285,79 +285,50 @@ test('fillAndroid re-focuses the target when the first helper attempt fails veri
   );
 });
 
-test('fillAndroid rebinds the helper IME before retrying a commit that left the field on its hint', async () => {
-  setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
-  let rebound = false;
-  let currentText = '';
-  const calls: (readonly string[])[] = [];
-  const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
-    exec: async (args) => {
-      calls.push(args);
-      if (args[1] === 'settings' && args[2] === 'get') return helperSelected(args);
-      if (args[1] === 'ime' && args[2] === 'set') rebound = true;
-      if (args[1] === 'am' && args[2] === 'broadcast') {
+test.each([true, false])(
+  'fillAndroid recovers a cleared field with hint=%s',
+  async (hintShowing) => {
+    setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
+    let rebound = false;
+    let currentText = 'old name';
+    const calls: (readonly string[])[] = [];
+    const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
+      exec: async (args) => {
+        calls.push(args);
+        if (args[1] === 'settings' && args[2] === 'get') return helperSelected(args);
+        if (args[1] === 'ime' && args[2] === 'set') rebound = true;
         const action = args[args.indexOf('-a') + 1];
-        // A stale input session: the app drops every commit until the IME is rebound.
+        // The clear lands, then the session goes stale and drops the commit until the rebind.
+        if (action === 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT') currentText = '';
         if (rebound && action === 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64') {
           currentText += decodeBroadcastText(args);
         }
-      }
-      return { exitCode: 0, stdout: '', stderr: '' };
-    },
-    captureXml: () =>
-      currentText
-        ? androidInputXml({ text: currentText })
-        : `<?xml version="1.0" encoding="UTF-8"?><hierarchy><node package="com.example" class="android.widget.EditText" text="e.g. Jane" hint="e.g. Jane" hint-showing="true" focused="true" bounds="[0,0][200,100]"/></hierarchy>`,
-  });
+        return { exitCode: 0, stdout: '', stderr: '' };
+      },
+      captureXml: () =>
+        currentText
+          ? androidInputXml({ text: currentText })
+          : hintShowing
+            ? `<?xml version="1.0" encoding="UTF-8"?><hierarchy><node package="com.example" class="android.widget.EditText" text="e.g. Jane" hint="e.g. Jane" hint-showing="true" focused="true" bounds="[0,0][200,100]"/></hierarchy>`
+            : androidInputXml({ text: '' }),
+    });
 
-  await withAndroidAdbProvider(
-    { exec: adb, snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
-    { serial: ANDROID_EMULATOR.id },
-    async () => {
-      await fillAndroid(ANDROID_EMULATOR, 10, 10, 'Jane');
-    },
-  );
+    const result = await withAndroidAdbProvider(
+      { exec: adb, snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
+      { serial: ANDROID_EMULATOR.id },
+      async () => await fillAndroid(ANDROID_EMULATOR, 10, 10, 'Jane'),
+    );
 
-  assert.equal(currentText, 'Jane');
-  const imeVerbs = calls.filter((args) => args[1] === 'ime').map((args) => args[2]);
-  assert.deepEqual(imeVerbs, ['disable', 'enable', 'set']);
-  const commands = calls.map((args) => `${args[1]} ${args[2]}`);
-  const lastImeCall = commands.lastIndexOf('ime set');
-  const retryTap = commands.lastIndexOf('input tap');
-  assert.ok(lastImeCall < retryTap, 'the rebind comes before the retry re-focuses the field');
-});
-
-test('fillAndroid does not take a pre-filled field left on its hint for app formatting', async () => {
-  setAndroidTestImeActiveForTests(ANDROID_EMULATOR, true);
-  let rebound = false;
-  let currentText = 'old name';
-  const adb: AndroidAdbExecutor = createAndroidSnapshotHelperExecutor({
-    exec: async (args) => {
-      if (args[1] === 'settings' && args[2] === 'get') return helperSelected(args);
-      if (args[1] === 'ime' && args[2] === 'set') rebound = true;
-      const action = args[args.indexOf('-a') + 1];
-      // The clear lands, then the session goes stale and drops the commit until the rebind.
-      if (action === 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT') currentText = '';
-      if (rebound && action === 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64') {
-        currentText += decodeBroadcastText(args);
-      }
-      return { exitCode: 0, stdout: '', stderr: '' };
-    },
-    captureXml: () =>
-      currentText
-        ? androidInputXml({ text: currentText })
-        : `<?xml version="1.0" encoding="UTF-8"?><hierarchy><node package="com.example" class="android.widget.EditText" text="e.g. Jane" hint="e.g. Jane" hint-showing="true" focused="true" bounds="[0,0][200,100]"/></hierarchy>`,
-  });
-
-  const result = await withAndroidAdbProvider(
-    { exec: adb, snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
-    { serial: ANDROID_EMULATOR.id },
-    async () => await fillAndroid(ANDROID_EMULATOR, 10, 10, 'Jane'),
-  );
-
-  assert.equal(result, undefined, 'a verified fill, not unconfirmed evidence');
-  assert.equal(currentText, 'Jane');
-});
+    assert.equal(result, undefined, 'a verified fill, not unconfirmed evidence');
+    assert.equal(currentText, 'Jane');
+    assert.deepEqual(
+      calls.filter((args) => args[1] === 'ime').map((args) => args[2]),
+      ['disable', 'enable', 'set'],
+    );
+    const commands = calls.map((args) => `${args[1]} ${args[2]}`);
+    assert.ok(commands.lastIndexOf('ime set') < commands.lastIndexOf('input tap'));
+  },
+);
 
 test('fillAndroid stops on an unconfirmed rebind and leaves the helper for close-time restore', async () => {
   const stateDir = await mkdtempForTest('agent-device-ime-rebind-');

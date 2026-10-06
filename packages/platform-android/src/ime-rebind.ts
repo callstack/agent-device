@@ -1,9 +1,12 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { emitAndroidAdbDiagnostic } from './adb-host.ts';
-import { resolveAndroidAdbExecutor } from './adb-provider-scope.ts';
-import type { AndroidAdbExecutor } from './adb-transport.ts';
-import { ANDROID_IME_HELPER_SERVICE_COMPONENT, rebindAndroidImeHelper } from './ime-helper.ts';
+import {
+  resolveAndroidAdbExecutor,
+  resolveAndroidAdbProvider,
+  runAdbShell,
+} from './adb-provider-scope.ts';
+import { selectAndroidImeHelperArtifact } from './ime-helper.ts';
 import {
   clearPersistedRebindDisplacement,
   readAndroidDefaultInputMethod,
@@ -11,27 +14,17 @@ import {
 } from './ime-settings-record.ts';
 import { getAndroidTestImeOwnership, withAndroidTestImeRecoveryLock } from './ime-state.ts';
 
-// The rebind transaction, beside activation and restore: recreate the owned test IME so the focused
-// field starts a fresh input session with it.
-
 export type AndroidTestImeRebindOutcome =
   | Readonly<{ kind: 'confirmed' }>
   | Readonly<{ kind: 'not-owned' }>
   | Readonly<{
       kind: 'unconfirmed';
-      /**
-       * `record-write`: the device record could not mark the rebind, so the helper was left alone.
-       * `helper-not-selected`: another IME reads back as selected. `read-failed`: the rebind or its
-       * read-back failed, so the selected IME is unknown.
-       */
-      cause: 'record-write' | 'helper-not-selected' | 'read-failed';
+      cause: 'record-write' | 'command-failed' | 'helper-not-selected' | 'read-failed';
     }>;
 
 /**
- * Rebinds the owned test IME and reads back whether the helper is the selected IME. Serialized with
- * activation and restore under the owner's recovery lock. The device record marks the rebind before
- * the helper is disabled and is cleared only on confirmation, so restore — at close or after a
- * crash — returns an unconfirmed device to the user's IME even when Android fell back to another one.
+ * Recreates the owned IME's input session under the activation/restore lock. The displacement
+ * record survives failure or cancellation so close and startup recovery can restore the user's IME.
  */
 export async function rebindAndroidTestIme(
   device: DeviceInfo,
@@ -41,64 +34,56 @@ export async function rebindAndroidTestIme(
   return await withAndroidTestImeRecoveryLock(ownership.stateDir, device.id, async () => {
     if (getAndroidTestImeOwnership(device) !== ownership) return { kind: 'not-owned' };
     const adb = resolveAndroidAdbExecutor(device);
+    const { manifest } = await selectAndroidImeHelperArtifact(resolveAndroidAdbProvider(device));
     emitAndroidAdbDiagnostic({
       level: 'warn',
       phase: 'android_test_ime_rebind',
       data: { device: device.id },
     });
-    // Set first so a canceled rebind, which rejects, still leaves the next entry on the rebind path.
     ownership.rebindUnconfirmed = true;
-    const outcome = await rebindAndConfirm(adb, device.id);
-    // A confirmed helper whose record could not be cleared still needs the next entry to rebind.
-    ownership.rebindUnconfirmed =
-      outcome.kind !== 'confirmed' || !(await clearRebindRecord(adb, device.id));
-    return outcome;
+    let cause: Extract<AndroidTestImeRebindOutcome, { kind: 'unconfirmed' }>['cause'] =
+      'record-write';
+    try {
+      if (await writePersistedRebindDisplacement(adb)) {
+        cause = 'command-failed';
+        for (const verb of ['disable', 'enable', 'set'] as const) {
+          const result = await runAdbShell(adb, ['ime', verb, manifest.serviceComponent], {
+            allowFailure: true,
+            timeoutMs: 10_000,
+          });
+          if (result.exitCode !== 0) return unconfirmed(device.id, cause);
+        }
+        cause = 'read-failed';
+        const activeIme = await readAndroidDefaultInputMethod(adb);
+        if (activeIme === manifest.serviceComponent) {
+          // A failed record clear keeps admission on the rebind path, even with the helper selected.
+          ownership.rebindUnconfirmed = !(await clearPersistedRebindDisplacement(adb));
+          if (ownership.rebindUnconfirmed) {
+            emitAndroidAdbDiagnostic({
+              level: 'warn',
+              phase: 'android_test_ime_rebind_record_clear_failed',
+              data: { device: device.id },
+            });
+          }
+          return { kind: 'confirmed' };
+        }
+        cause = activeIme ? 'helper-not-selected' : 'read-failed';
+      }
+    } catch (error) {
+      if (isRequestCanceledError(error)) throw error;
+    }
+    return unconfirmed(device.id, cause);
   });
 }
 
-async function rebindAndConfirm(
-  adb: AndroidAdbExecutor,
+function unconfirmed(
   deviceId: string,
-): Promise<AndroidTestImeRebindOutcome> {
-  if (!(await writePersistedRebindDisplacement(adb))) {
-    emitAndroidAdbDiagnostic({
-      level: 'warn',
-      phase: 'android_test_ime_rebind_record_failed',
-      data: { device: deviceId },
-    });
-    return { kind: 'unconfirmed', cause: 'record-write' };
-  }
-  const activeIme = await rebindAndReadSelectedIme(adb);
-  if (activeIme === ANDROID_IME_HELPER_SERVICE_COMPONENT) return { kind: 'confirmed' };
-  const cause = activeIme ? 'helper-not-selected' : 'read-failed';
+  cause: Extract<AndroidTestImeRebindOutcome, { kind: 'unconfirmed' }>['cause'],
+): AndroidTestImeRebindOutcome {
   emitAndroidAdbDiagnostic({
     level: 'warn',
     phase: 'android_test_ime_rebind_failed',
-    data: { device: deviceId, activeIme, cause },
+    data: { device: deviceId, cause },
   });
   return { kind: 'unconfirmed', cause };
-}
-
-async function clearRebindRecord(adb: AndroidAdbExecutor, deviceId: string): Promise<boolean> {
-  if (await clearPersistedRebindDisplacement(adb)) return true;
-  emitAndroidAdbDiagnostic({
-    level: 'warn',
-    phase: 'android_test_ime_rebind_record_clear_failed',
-    data: { device: deviceId },
-  });
-  return false;
-}
-
-/**
- * The IME selected after the rebind, or `undefined` when the rebind or its read-back failed. A
- * canceled request rejects instead; the device record stays set for restore either way.
- */
-async function rebindAndReadSelectedIme(adb: AndroidAdbExecutor): Promise<string | undefined> {
-  try {
-    await rebindAndroidImeHelper(adb);
-    return (await readAndroidDefaultInputMethod(adb)) || undefined;
-  } catch (error) {
-    if (isRequestCanceledError(error)) throw error;
-    return undefined;
-  }
 }
