@@ -6,7 +6,7 @@ import process from 'node:process';
 // The version on main must never equal a published version: registry scanners
 // diff the repository's tool surface per version string, so a released number
 // left in place while main keeps moving reads as a rug-pull republish
-// (AS-012). `release:publish` runs this after publishing to move
+// (AS-012). `postpublish` runs this after all packages publish to move
 // main to the next patch with a `-dev` prerelease marker; `--check-release-version`
 // is the inverse guard in `release:prepare`, refusing to publish a `-dev`
 // version because the maintainer has not set the release version yet.

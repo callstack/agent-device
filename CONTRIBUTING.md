@@ -98,23 +98,27 @@ npm version patch
 The version hook synchronizes all public workspace manifests and MCP metadata, stages them, and
 includes them in npm's version commit and `v<version>` tag. Do not bump plugin versions separately.
 
-Publish the full release with one command:
+Publish and push using the normal npm workflow:
 
 ```bash
-pnpm release:publish
+npm publish && git push && git push --tags
 ```
 
-It rejects version drift before building, prepares and validates the core package, builds and
-packs the public workspace packages, then uses `pnpm --recursive publish` to publish every
-unpublished package version. pnpm excludes private packages and skips versions already published,
-so the same command can finish a partially completed release. Publish lifecycle scripts are skipped
-only after preparation succeeds. The command then marks all public manifests and MCP metadata with
-the next `-dev` version; commit and push that development marker. Push the single release tag and
-write one GitHub release covering the core and plugins.
+The publish hooks prepare and validate every public package before uploading the core, then
+publish the remaining workspace packages at the same version. Private packages stay unpublished.
+After every package succeeds, the hook commits all public manifests and MCP metadata at the next
+`-dev` version. Your `git push` includes that commit; the version bump created the single release
+tag. Write one GitHub release covering the core and plugins.
 
-For a local packaging preview, run `pnpm release:prepare`, then
-`pnpm --recursive --include-workspace-root publish --dry-run --ignore-scripts --access public --no-git-checks`.
-Publishing requires npm registry access for `agent-device` and the `@agent-device` scope.
+After setting the version, preview the full release with `npm publish --dry-run`. It builds and checks the packages without
+uploading them, changing versions, or creating commits. Publishing requires npm registry access for
+`agent-device` and the `@agent-device` scope.
+
+If core publication succeeds but a later package fails, run `pnpm release:publish` to finish the
+release. It skips versions already published and commits the development marker once every package
+succeeds. Plain `npm publish` cannot retry an already-published core version.
+If every upload succeeds but Git refuses the development-marker commit, fix the Git error and
+commit the changed public manifests and `server.json` before pushing. No package needs republishing.
 
 A public package owns its `files`, published `exports`, license, repository metadata, README,
 and `prepack` build (including any prerequisites). Use `publishConfig.exports` for source-only
@@ -129,9 +133,9 @@ Run its packed-install smoke before releasing.
 
 ### The version on main never equals a published version
 
-`release:publish` runs `release:mark-dev` after publishing, moving all public package manifests
+`postpublish` runs `release:mark-dev` after all packages publish, moving all public manifests
 and synchronized `server.json` to the next patch with a `-dev` prerelease marker (for example
-`0.20.11-dev`). Commit that bump as part of the release. The invariant it protects: MCP registry
+`0.20.11-dev`) and committing that bump as part of the release. The invariant it protects: MCP registry
 scanners diff the repository's tool surface per version string, so a released number left on `main`
 while `main` keeps changing is indistinguishable from a republished ("rug-pull") version.
 `release:prepare` enforces the inverse direction and refuses to publish while the `-dev` marker is

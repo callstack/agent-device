@@ -5,10 +5,10 @@ import path from 'node:path';
 const root = process.cwd();
 const [command, ...options] = process.argv.slice(2);
 if (
-  !['sync', 'check', 'pack'].includes(command) ||
+  !['sync', 'check', 'pack', 'publish'].includes(command) ||
   options.some((option) => option !== '--stage')
 ) {
-  throw new Error('Usage: node scripts/release-workspace.mjs <sync|check|pack> [--stage]');
+  throw new Error('Usage: node scripts/release-workspace.mjs <sync|check|pack|publish> [--stage]');
 }
 const packages = JSON.parse(
   execFileSync('pnpm', ['list', '--recursive', '--depth', '-1', '--json'], {
@@ -39,6 +39,7 @@ if (command === 'sync') {
     }
   }
   if (command === 'pack') packWorkspacePackages();
+  if (command === 'publish') publishWorkspacePackages();
 }
 
 function syncVersions() {
@@ -63,9 +64,9 @@ function packWorkspacePackages() {
       destination,
       `${pkg.manifest.name.replace('@', '').replace('/', '-')}-${version}.tgz`,
     );
-    const args = ['pack', '--out', tarball];
-    if (pkg.directory === root) args.push('--config.ignore-scripts=true');
-    execFileSync('pnpm', args, { cwd: pkg.directory, stdio: 'inherit' });
+    if (pkg.directory !== root) {
+      execFileSync('pnpm', ['pack', '--out', tarball], { cwd: pkg.directory, stdio: 'inherit' });
+    }
     const packed = JSON.parse(
       execFileSync('tar', ['-xOf', tarball, 'package/package.json'], { encoding: 'utf8' }),
     );
@@ -99,4 +100,37 @@ function checkPackedIdentity(packed, name) {
   if (packed.name !== name || packed.version !== version || packed.private === true) {
     throw new Error('Packed package identity differs from the synchronized public package.');
   }
+}
+
+function publishWorkspacePackages() {
+  const dryRun = process.env.npm_config_dry_run === 'true';
+  const args = [
+    '--recursive',
+    '--include-workspace-root',
+    'publish',
+    '--access',
+    'public',
+    '--no-git-checks',
+    '--ignore-scripts',
+  ];
+  if (process.env.npm_lifecycle_event === 'postpublish') {
+    args.push('--filter', `!${rootPackage.manifest.name}`);
+  }
+  if (dryRun) args.push('--dry-run');
+  execFileSync('pnpm', args, { cwd: root, stdio: 'inherit' });
+  if (dryRun) return;
+  execFileSync(process.execPath, ['scripts/release-mark-dev.mjs'], { cwd: root, stdio: 'inherit' });
+  execFileSync(
+    'git',
+    [
+      'commit',
+      '--only',
+      '-m',
+      `chore: mark ${version} as released`,
+      '--',
+      ...publicPackages.map((pkg) => pkg.manifestPath),
+      path.join(root, 'server.json'),
+    ],
+    { cwd: root, stdio: 'inherit' },
+  );
 }
