@@ -2,8 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { RUNNER_CACHE_METADATA_FILE } from './runner-cache-metadata.ts';
 
-const CACHE_KEY_DIRECTORY = /^cache-[0-9a-f]{16}$/;
-
 /**
  * Removes the build scratch from a keyed runner cache after a successful build: intermediates,
  * precompiled and module caches, logs. Reuse and launch read only the products the manifest
@@ -11,19 +9,13 @@ const CACHE_KEY_DIRECTORY = /^cache-[0-9a-f]{16}$/;
  * scratch, so the scratch is never read again; a runner source or Xcode change mints a new key
  * instead of building into this one.
  *
- * Returns the removed entries relative to `derived`. Nothing is removed when
- * `AGENT_DEVICE_IOS_RUNNER_CACHE_TRIM=0`, when `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` overrides the
- * layout (a fixed path is a development loop that rebuilds into the same tree incrementally), or
- * when a product lies outside `derived`.
+ * Returns the removed entries relative to `derived`. Nothing is removed when a product lies
+ * outside `derived`. The caller trims only a keyed cache directory.
  */
 export async function trimRunnerBuildScratch(
   derived: string,
   protectedPaths: readonly string[],
-  env: NodeJS.ProcessEnv = process.env,
 ): Promise<string[]> {
-  if (env.AGENT_DEVICE_IOS_RUNNER_CACHE_TRIM?.trim() === '0') return [];
-  if (env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH?.trim()) return [];
-  if (!CACHE_KEY_DIRECTORY.test(path.basename(derived))) return [];
   const kept = resolveKeptPaths(derived, protectedPaths);
   if (!kept) return [];
   return await trimDirectory(derived, derived, kept);

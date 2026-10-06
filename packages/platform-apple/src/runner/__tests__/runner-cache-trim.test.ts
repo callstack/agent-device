@@ -21,14 +21,12 @@ beforeEach(() => {
   base = mkdtempForTestSync('agent-device-runner-trim-');
   previousDerivedOverride = process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH;
   delete process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH;
-  delete process.env.AGENT_DEVICE_IOS_RUNNER_CACHE_TRIM;
 });
 
 afterEach(() => {
   if (previousDerivedOverride === undefined)
     delete process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH;
   else process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH = previousDerivedOverride;
-  delete process.env.AGENT_DEVICE_IOS_RUNNER_CACHE_TRIM;
 });
 
 function seedBuiltKey(derived: string): string[] {
@@ -88,39 +86,12 @@ test('trimming keeps the products and the metadata file and removes the rest', a
   );
 });
 
-test('trimming is skipped when disabled, under a derived path override, or outside a keyed cache', async () => {
-  const derived = path.join(base, KEY);
-  const protectedPaths = seedBuiltKey(derived);
-  const before = tree(derived);
-
-  assert.deepEqual(
-    await trimRunnerBuildScratch(derived, protectedPaths, {
-      AGENT_DEVICE_IOS_RUNNER_CACHE_TRIM: '0',
-    }),
-    [],
-  );
-  assert.deepEqual(
-    await trimRunnerBuildScratch(derived, protectedPaths, {
-      AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: derived,
-    }),
-    [],
-  );
-  const unkeyed = path.join(base, 'derived');
-  const unkeyedProducts = seedBuiltKey(unkeyed);
-  assert.deepEqual(await trimRunnerBuildScratch(unkeyed, unkeyedProducts, {}), []);
-
-  assert.deepEqual(tree(derived), before);
-});
-
 test('a product outside the cache root leaves the tree untouched', async () => {
   const derived = path.join(base, KEY);
   seedBuiltKey(derived);
   const before = tree(derived);
 
-  assert.deepEqual(
-    await trimRunnerBuildScratch(derived, [path.join(base, 'elsewhere.app')], {}),
-    [],
-  );
+  assert.deepEqual(await trimRunnerBuildScratch(derived, [path.join(base, 'elsewhere.app')]), []);
 
   assert.deepEqual(tree(derived), before);
 });
@@ -132,7 +103,7 @@ test('a product that is a symlink keeps the unit it points into', async () => {
   const link = path.join(derived, 'Build', 'Products', 'Linked.app');
   fs.symlinkSync(target, link);
 
-  const removed = await trimRunnerBuildScratch(derived, [xctestrun!, link], {});
+  const removed = await trimRunnerBuildScratch(derived, [xctestrun!, link]);
 
   assert.deepEqual(removed.sort(), [
     'Logs',
@@ -142,7 +113,7 @@ test('a product that is a symlink keeps the unit it points into', async () => {
   assert.equal(fs.existsSync(path.join(target, 'obj.o')), true);
 });
 
-test('a runner build trims its key, and the next start reuses the products without rebuilding', async () => {
+function mockRunnerBuild() {
   resetAllProcessMemosForTests();
   const projectRoot = mkdtempForTestSync('agent-device-runner-trim-root-');
   fs.mkdirSync(
@@ -177,6 +148,12 @@ test('a runner build trims its key, and the next start reuses the products witho
     readVersion: () => '0.0.0-test',
   });
 
+  return { runCmdStreaming };
+}
+
+test('a runner build trims its key, and the next start reuses the products without rebuilding', async () => {
+  const { runCmdStreaming } = mockRunnerBuild();
+
   const built = await ensureXctestrunArtifact(IOS_SIMULATOR, {});
 
   assert.equal(built.artifact, 'rebuilt');
@@ -191,4 +168,15 @@ test('a runner build trims its key, and the next start reuses the products witho
   assert.equal(reused.artifact, 'valid');
   assert.equal(reused.xctestrunPath, built.xctestrunPath);
   assert.equal(runCmdStreaming.mock.calls.length, 1);
+});
+
+test('a runner build under a derived path override keeps its build scratch', async () => {
+  mockRunnerBuild();
+  process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH = path.join(base, 'fixed-derived');
+
+  const built = await ensureXctestrunArtifact(IOS_SIMULATOR, {});
+
+  assert.equal(built.artifact, 'rebuilt');
+  assert.equal(fs.existsSync(path.join(built.derived, 'Build', 'Intermediates.noindex')), true);
+  assert.equal(fs.existsSync(path.join(built.derived, 'Logs')), true);
 });

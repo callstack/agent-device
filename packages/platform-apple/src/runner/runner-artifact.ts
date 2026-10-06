@@ -7,6 +7,7 @@ import {
   runCmdStreaming,
   withKeyedLock,
   withProcessLock,
+  emitDiagnostic,
   emitRequestProgress,
   findProjectRoot,
   getRequestSignal,
@@ -365,7 +366,10 @@ async function buildXctestrunArtifact(params: {
     ),
     derived,
   );
-  await trimRunnerBuildScratchBestEffort(derived, [built, ...builtProductPaths]);
+  // An AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH override is a fixed tree rebuilt incrementally, not a keyed cache.
+  if (path.basename(derived) === resolveRunnerCacheKey(expectedCacheMetadata)) {
+    await trimRunnerBuildScratchBestEffort(derived, [built, ...builtProductPaths]);
+  }
   emitRunnerXctestrunDecision('build', 'built_new', {
     derived,
     xctestrunPath: built,
@@ -392,7 +396,13 @@ async function trimRunnerBuildScratchBestEffort(
     const removed = await trimRunnerBuildScratch(derived, protectedPaths);
     if (removed.length > 0)
       emitRunnerXctestrunDecision('clean', 'build_scratch_trimmed', { derived });
-  } catch {}
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'runner_xctestrun_cache_trim_failed',
+      data: { derived, error: error instanceof Error ? error.message : String(error) },
+    });
+  }
 }
 
 async function tryReuseExistingXctestrun(
