@@ -141,7 +141,9 @@ The lease id is 16 to 128 hex characters the host chooses. Repeating the PUT ren
 that names another scope for an existing id is refused. The lease stays allocated across the
 client's `close` unless the body sets `retainOnClose: false`, and DELETE revokes it at once. It
 expires after `ttlMs` without a renewal or a client request, like any lease. A client heartbeat can
-shorten that window but never extend it past the `ttlMs` of the last PUT.
+shorten that window but never extend it past the `ttlMs` of the last PUT. A client cannot release
+it: `disconnect` drops only its local connection state, and a tenant `lease_release` is refused
+with `MACOS_APP_LEASE_HOST_OWNED`.
 
 The client connects with a remote config that names the lease, and runs `open <bundleId>`:
 
