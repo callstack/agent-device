@@ -141,9 +141,10 @@ The lease id is 16 to 128 hex characters the host chooses. Repeating the PUT ren
 that names another scope for an existing id is refused. The lease stays allocated across the
 client's `close` unless the body sets `retainOnClose: false`, and DELETE revokes it at once. It
 expires after `ttlMs` without a renewal or a client request, like any lease. A client heartbeat can
-shorten that window but never extend it past the `ttlMs` of the last PUT. A client cannot release
-it: `disconnect` drops only its local connection state, and a tenant `lease_release` is refused
-with `MACOS_APP_LEASE_HOST_OWNED`.
+shorten that window but never extend it past the `ttlMs` of the last PUT. Only the host ends
+the lease: `DELETE /admin/leases`, expiry, or `close` when `retainOnClose` is false. A client cannot
+release it: `disconnect` drops only its local connection state, and a tenant `lease_release` is
+refused with `MACOS_APP_LEASE_HOST_OWNED`.
 
 The client connects with a remote config that names the lease, and runs `open <bundleId>`:
 
@@ -164,7 +165,7 @@ The client connects with a remote config that names the lease, and runs `open <b
 
 Requests under a `macos-app` lease are limited to `open`, `close`, `snapshot`, `wait`,
 `find`, `get`, `is`, `click`, `fill`, `press`, `type`, `focus`, `scroll`, `screenshot`, and `batch`,
-plus the lease's own heartbeat and release; `doctor`, `devices`, `session list` and the other
+plus the lease's own heartbeat; `doctor`, `devices`, `session list` and the other
 inventory commands are refused too.
 `open` and `close` accept only the leased bundle id, only the `app` surface is allowed, screenshots
 capture only the app window, inputs that name a host path or a launch (`--save-script`,

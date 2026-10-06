@@ -38,14 +38,9 @@ export function parseMacOsAppLeaseKey(deviceKey: string | undefined): MacOsAppLe
 
 /**
  * The requests that run without the leased app's session: `open` creates it, each `batch` step is
- * admitted again when it runs, and a heartbeat acts on the lease alone, and a release is refused (the host ends the lease).
+ * admitted again when it runs.
  */
-const SESSIONLESS_COMMANDS: ReadonlySet<string> = new Set([
-  'open',
-  'batch',
-  'lease_heartbeat',
-  'lease_release',
-]);
+const SESSIONLESS_COMMANDS: ReadonlySet<string> = new Set(['open', 'batch']);
 
 type MacOsAppLeaseRule =
   | 'command'
