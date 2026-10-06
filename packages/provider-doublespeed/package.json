@@ -1,6 +1,6 @@
 {
   "name": "@agent-device/doublespeed",
-  "version": "0.1.0",
+  "version": "0.21.22",
   "private": false,
   "type": "module",
   "description": "Doublespeed iOS simulator plugin for agent-device.",
@@ -47,6 +47,14 @@
       ".": {
         "import": "./dist/plugin.mjs"
       }
-    }
-  }
+    },
+    "access": "public"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/callstack/agent-device.git",
+    "directory": "packages/provider-doublespeed"
+  },
+  "homepage": "https://agent-device.dev/docs/doublespeed"
 }
