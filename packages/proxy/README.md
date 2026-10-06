@@ -25,7 +25,7 @@ different RPC protocol version, before any command runs.
 ## Serve the proxy over HTTP
 
 ```ts
-import { createDaemonProxyServer } from '@agent-device/proxy/node';
+import { createDaemonProxyServer } from '@agent-device/proxy';
 
 const server = createDaemonProxyServer({
   upstreamBaseUrl: 'http://127.0.0.1:4310',

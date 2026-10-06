@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import http, { type IncomingMessage, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { Socket } from 'node:net';
 import { Readable } from 'node:stream';
 import { TLSSocket } from 'node:tls';
@@ -53,4 +54,31 @@ test('plain requests reach the proxy with an http URL', async () => {
 test('a Host header that cannot form a URL is answered with 400 instead of a dropped socket', async () => {
   const served = await serveThroughListener(new Socket(), 'gateway example');
   expect(served).toEqual({ seenUrl: null, status: 400 });
+});
+
+test('a method Fetch refuses is answered with 404 instead of a dropped socket', async () => {
+  const proxy: DaemonProxy = {
+    instanceId: 'test',
+    handle: async () => new Response(null, { status: 204 }),
+  };
+  const server = http.createServer(createDaemonProxyRequestListener(proxy));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const { port } = server.address() as AddressInfo;
+    const status = await new Promise<number | undefined>((resolve, reject) => {
+      http
+        .request(
+          { port, host: '127.0.0.1', method: 'TRACE', path: '/agent-device/health' },
+          (res) => {
+            res.resume();
+            resolve(res.statusCode);
+          },
+        )
+        .on('error', reject)
+        .end();
+    });
+    expect(status).toBe(404);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 });

@@ -6,7 +6,7 @@ const { default: getTypeScript7ExePath } = await import(
 );
 
 export default defineConfig({
-  entry: { index: 'src/index.ts', node: 'src/node.ts' },
+  entry: { index: 'src/index.ts' },
   outDir: 'dist',
   format: 'esm',
   platform: 'node',

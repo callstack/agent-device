@@ -21,7 +21,7 @@ import {
   sendRequest,
 } from '../daemon-client-transport.ts';
 import { resolveDaemonPaths } from '../../daemon-resolution.ts';
-import { createDaemonProxyServer } from '@agent-device/proxy/node';
+import { createDaemonProxyServer } from '@agent-device/proxy';
 import {
   closeLoopbackServer,
   listenOnLoopback,
