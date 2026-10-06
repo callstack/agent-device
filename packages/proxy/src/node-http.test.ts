@@ -56,6 +56,11 @@ test('a Host header that cannot form a URL is answered with 400 instead of a dro
   expect(served).toEqual({ seenUrl: null, status: 400 });
 });
 
+test('a URL carrying credentials is answered with 400 instead of a dropped socket', async () => {
+  const served = await serveThroughListener(new Socket(), 'user:secret@gateway.example.test');
+  expect(served).toEqual({ seenUrl: null, status: 400 });
+});
+
 test('a method Fetch refuses is answered with 404 instead of a dropped socket', async () => {
   const proxy: DaemonProxy = {
     instanceId: 'test',
