@@ -54,10 +54,7 @@ test('Fallow exposes one changed-code gate and an explicit full-tree audit', () 
 test('the npm package build covers every package-owned output before verification', () => {
   assert.deepEqual(script('build:package').split(' && '), [
     'pnpm build',
-    'pnpm build:xcuitest:ios',
-    'pnpm build:xcuitest:macos',
-    'pnpm build:xcuitest:tvos',
-    'pnpm build:xcuitest:visionos',
+    'pnpm build:xcuitest:package',
     'pnpm build:macos-helper:clean',
     'pnpm prepare:publish-assets',
   ]);

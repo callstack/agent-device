@@ -70,7 +70,8 @@ Use `pnpm build:macos-helper:clean` if a Swift cache was created in another work
 
 `pnpm publish` and package-manager pack commands run `prepack`, which first checks synchronized MCP
 metadata and then runs `pnpm package:npm`. This is the one completeness-oriented aggregate: it
-builds the TypeScript distribution and all four Apple runner targets, clean-builds the macOS helper,
+builds the TypeScript distribution and all four Apple runner targets (into a scratch directory under
+`.tmp/` that it removes afterwards, not into `~/.agent-device`), clean-builds the macOS helper,
 packages the Apple runner source, and rebuilds both Android helper APKs. Any failed build stops
 packaging. It deliberately does not stop the worktree's development daemon; use `pnpm rebuild:cli`
 when a running daemon needs to pick up a new TypeScript build.
