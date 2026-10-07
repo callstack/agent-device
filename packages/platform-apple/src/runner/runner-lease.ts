@@ -444,33 +444,37 @@ function listRunnerLeasesForOwner(owner: {
   pid: number;
   startTime?: string | null;
 }): RunnerLease[] {
-  return listRunnerLeases().filter(
+  return readAllRunnerLeases({ strict: false }).filter(
     (lease) =>
       lease.ownerPid === owner.pid &&
       (owner.startTime === undefined || lease.ownerStartTime === owner.startTime),
   );
 }
 
-function listRunnerLeases(): RunnerLease[] {
-  try {
-    return readAllRunnerLeases();
-  } catch {
-    return [];
-  }
-}
-
-/** Throws unless the lease directory and every lease file in it could be read; only ENOENT means absent. */
-function readAllRunnerLeases(): RunnerLease[] {
+/**
+ * Reads every lease file. Strict reads throw unless the directory and every file could be read, with
+ * only ENOENT meaning absent; non-strict reads skip each unreadable file on its own.
+ */
+function readAllRunnerLeases(options: { strict: boolean }): RunnerLease[] {
+  const read = options.strict ? readOptionalSync : readSkippingErrors;
   const root = resolveRunnerLeaseRoot();
-  const entries = readOptionalSync(() => fs.readdirSync(root, { withFileTypes: true })) ?? [];
+  const entries = read(() => fs.readdirSync(root, { withFileTypes: true })) ?? [];
   const leases: RunnerLease[] = [];
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
-    const contents = readOptionalSync(() => fs.readFileSync(path.join(root, entry.name), 'utf8'));
+    const contents = read(() => fs.readFileSync(path.join(root, entry.name), 'utf8'));
     const lease = contents === null ? null : parseRunnerLease(contents);
     if (lease) leases.push(lease);
   }
   return leases;
+}
+
+function readSkippingErrors<T>(read: () => T): T | null {
+  try {
+    return read();
+  } catch {
+    return null;
+  }
 }
 
 function readOptionalSync<T>(read: () => T): T | null {
@@ -490,7 +494,7 @@ function readOptionalSync<T>(read: () => T): T | null {
  * so a caller never mistakes an unreadable lease directory for an empty one.
  */
 export function listActiveRunnerLeaseArtifacts(): { xctestrunPath: string; cacheKey?: string }[] {
-  return readAllRunnerLeases()
+  return readAllRunnerLeases({ strict: true })
     .filter((lease) => !isLeaseProvenDead(lease))
     .map(({ xctestrunPath, cacheKey }) => ({ xctestrunPath, cacheKey }));
 }

@@ -10,7 +10,11 @@ import {
 } from '../runner-cache.ts';
 import { evictStaleRunnerCaches, resolveRunnerCacheKeepCount } from '../runner-cache-retention.ts';
 import { ensureXctestrunArtifact } from '../runner-xctestrun.ts';
-import { writeRunnerLease, type RunnerLease } from '../runner-lease.ts';
+import {
+  cleanupRunnerLeasesForOwner,
+  writeRunnerLease,
+  type RunnerLease,
+} from '../runner-lease.ts';
 import { appleToolchainProbeResult } from './apple-toolchain-fixtures.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { seedRunnerProductBundle } from './runner-xctestrun.fixtures.ts';
@@ -211,6 +215,39 @@ test('evicts nothing when the lease directory cannot be listed', async () => {
 
   assert.deepEqual(await evictStaleRunnerCaches(current, process.env, NOW_MS), []);
   assert.deepEqual(remaining(), [key(1), key(2), 'leases-is-a-file'].sort());
+});
+
+test('evicts nothing when one lease file cannot be read', async () => {
+  process.env.AGENT_DEVICE_IOS_RUNNER_CACHE_KEEP = '1';
+  const current = seedKey(key(1), 0);
+  seedKey(key(2), 30);
+  const leaseRoot = process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR!;
+  const unreadable = path.join(leaseRoot, 'unreadable.json');
+  fs.writeFileSync(unreadable, '{}');
+  fs.chmodSync(unreadable, 0o000);
+
+  assert.deepEqual(await evictStaleRunnerCaches(current, process.env, NOW_MS), []);
+  assert.deepEqual(remaining(), [key(1), key(2)]);
+});
+
+test('owner cleanup still stops a readable lease next to an unreadable lease file', async () => {
+  const owned = leaseFor(seedKey(key(1), 0), { ownerPid: 4242, ownerStartTime: null });
+  writeRunnerLease(owned);
+  const unreadable = path.join(process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR!, 'a-unreadable.json');
+  fs.writeFileSync(unreadable, '{}');
+  fs.chmodSync(unreadable, 0o000);
+  const cleanupTempFile = vi.fn(async () => {});
+
+  await cleanupRunnerLeasesForOwner(
+    { pid: 4242, startTime: null },
+    {
+      cleanupRunnerProcessTree: async () => {},
+      cleanupRunnerXcodebuildProcesses: async () => {},
+      cleanupTempFile,
+    },
+  );
+
+  assert.deepEqual(cleanupTempFile.mock.calls, [[owned.xctestrunPath], [owned.jsonPath]]);
 });
 
 test('a keep count of 0 turns eviction off', async () => {
