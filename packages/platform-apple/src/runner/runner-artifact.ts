@@ -39,7 +39,6 @@ import {
   resolveRunnerBuildLocationSettings,
   resolveRunnerBundleBuildSettings,
   resolveRunnerDerivedPath,
-  resolveRunnerKeyedDerivedPath,
   resolveRunnerMaxConcurrentDestinationsFlag,
   resolveRunnerPerformanceBuildSettings,
   resolveRunnerSandboxBuildArgs,
@@ -61,7 +60,7 @@ import {
   resolveRunnerBuildDestination,
   resolveRunnerXctestrunHints,
 } from './apple-runner-platform.ts';
-import { resolveRunnerCacheKey } from './runner-cache-metadata.ts';
+import { resolveRunnerCacheKey, resolveRunnerKeyedDerivedPath } from './runner-cache-metadata.ts';
 import { resolveAppleRunnerProjectPath } from './runner-source.ts';
 export { prepareXctestrunWithEnv } from './runner-artifact-env.ts';
 
