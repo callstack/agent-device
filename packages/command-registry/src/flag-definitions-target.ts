@@ -392,7 +392,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     names: ['--github-actions-artifact'],
     type: 'string',
     usageLabel: '--github-actions-artifact <owner/repo:artifact>',
-    usageDescription: 'install-from-source: GitHub Actions artifact resolved by a remote daemon',
+    usageDescription:
+      'install-from-source: GitHub Actions artifact the daemon resolves with its own token',
     projectConfig: false,
     recorded: false,
   },

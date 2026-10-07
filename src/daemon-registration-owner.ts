@@ -51,6 +51,7 @@ export type DaemonRegistrationFields = Readonly<{
   codeOrigin: DaemonCodeOrigin;
   codeSignature: string;
   policyDigest?: string;
+  githubTokenFingerprint?: string;
 }>;
 type DaemonRegistrationRemoval =
   | Readonly<{ state: 'removed' }>

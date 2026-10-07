@@ -162,6 +162,7 @@ export async function ensureDaemon(settings: DaemonClientSettings): Promise<Ensu
   const ensured = await ensureLocalDaemon(settings);
   // Checked on both branches: a startup can resolve to a daemon another caller raced in.
   await assertDaemonPolicyMatches(ensured.info, settings.paths.baseDir);
+  await assertDaemonGitHubTokenMatches(ensured.info, settings.paths.baseDir);
   return ensured;
 }
 
@@ -312,6 +313,28 @@ async function assertDaemonPolicyMatches(existing: DaemonInfo, stateDir: string)
       expectedPolicyDigest: expected,
       daemonPolicyDigest: existing.policyDigest ?? null,
       hint: `Stop the running daemon (agent-device daemon stop --state-dir ${shellQuoteIfNeeded(stateDir)}), then retry so a daemon starts with this policy.`,
+    },
+  );
+}
+
+/**
+ * A caller holding a GitHub token must not silently use a daemon started without it, or with
+ * another one: that daemon would refuse or misattribute every artifact install.
+ */
+async function assertDaemonGitHubTokenMatches(
+  existing: DaemonInfo,
+  stateDir: string,
+): Promise<void> {
+  const { DAEMON_GITHUB_TOKEN_ENV, daemonGitHubTokenFingerprint } =
+    await import('../daemon-github-token.ts');
+  const expected = daemonGitHubTokenFingerprint(process.env);
+  if (!expected || expected === existing.githubTokenFingerprint) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `The running daemon does not hold the GitHub token named by ${DAEMON_GITHUB_TOKEN_ENV}.`,
+    {
+      reason: 'DAEMON_GITHUB_TOKEN_MISMATCH',
+      hint: `Stop the running daemon (agent-device daemon stop --state-dir ${shellQuoteIfNeeded(stateDir)}), then retry so a daemon starts with this token.`,
     },
   );
 }

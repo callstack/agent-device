@@ -466,7 +466,7 @@ await client.apps.installFromSource({
 });
 ```
 
-The daemon also accepts `{ kind: 'github-actions-artifact', owner, repo, artifactName }` (the newest artifact with that name) or `{ kind: 'github-actions-artifact', owner, repo, runId, artifactName }`. The client preserves these payloads and never performs GitHub authentication or artifact download; a daemon without `AGENT_DEVICE_GITHUB_TOKEN` refuses them with `github-token-missing`.
+The daemon also accepts `{ kind: 'github-actions-artifact', owner, repo, artifactName }` (the newest live artifact with that name from the repository's own runs, never a fork pull request) or `{ kind: 'github-actions-artifact', owner, repo, runId, artifactName }`. The client preserves these payloads and never performs GitHub authentication or artifact download; a daemon without `AGENT_DEVICE_GITHUB_TOKEN` refuses them with `github-token-missing`.
 
 Android `.apk` and `.aab` URL sources resolve package identity from the downloaded install artifact. Archive URLs may contain one installable `.apk`, `.aab`, `.ipa`, or iOS `.app`, including inside nested archives.
 
