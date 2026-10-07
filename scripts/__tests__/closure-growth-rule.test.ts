@@ -4,11 +4,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   eagerClosureGraphOf,
+  statementTextsOf,
   topLevelStatementCount,
   topLevelStatementWeightsOf,
   type SourceTreeReader,
 } from '../../src/__tests__/eager-import-closure.fixtures.ts';
-import { createCommittedSourceTree } from './committed-source-tree.ts';
+import { createCommittedSourceTree, deletedSourcesSince } from './committed-source-tree.ts';
 import { mkGitFixtureRepo } from './eager-closure-gate-fixtures.ts';
 import {
   classifyGrowth,
@@ -112,7 +113,7 @@ test('a pre-existing module newly made eager fails at flat weight: shrinkage can
     addedModulesAreNew: false,
   });
   expect(finding).toMatch(/evaluates 4 modules.*merge-base evaluated 2/);
-  expect(finding).toMatch(/newly evaluates a module the merge-base tree already had/);
+  expect(finding).toMatch(/newly evaluates code the merge-base tree already had/);
   expect(finding).toMatch(/shrinkage elsewhere cannot fund a new eager edge/);
 });
 
@@ -156,7 +157,12 @@ function mkSplitFixtureRepo(
   return { repo, entry: path.join(repo, 'packages/demo/src/entry.ts'), hubTree, write };
 }
 
-function evidenceFromHub(entry: string, hubTree: SourceTreeReader): ClosureGrowthEvidence {
+function evidenceFromHub(
+  entry: string,
+  hubTree: SourceTreeReader,
+  repo: string,
+  baseRef = 'HEAD',
+): ClosureGrowthEvidence {
   const baseGraph = eagerClosureGraphOf(entry, hubTree);
   const headGraph = eagerClosureGraphOf(entry);
   return closureGrowthEvidence({
@@ -164,13 +170,20 @@ function evidenceFromHub(entry: string, hubTree: SourceTreeReader): ClosureGrowt
     headGraph,
     baseWeights: topLevelStatementWeightsOf(baseGraph.keys(), hubTree),
     headWeights: topLevelStatementWeightsOf(headGraph.keys()),
+    headStatementTexts: statementTextsOf(headGraph.keys()),
     baseTree: hubTree,
+    deletedSourceTexts: [
+      ...statementTextsOf(
+        deletedSourcesSince(repo, baseRef).map((file) => path.join(repo, file)),
+        hubTree,
+      ).values(),
+    ],
   });
 }
 
 test('planted pure split passes end to end: count grows, every base module survives, weight flat', () => {
-  const { entry, hubTree } = mkSplitFixtureRepo('eager-closure-split-pure-');
-  const evidence = evidenceFromHub(entry, hubTree);
+  const { entry, hubTree, repo } = mkSplitFixtureRepo('eager-closure-split-pure-');
+  const evidence = evidenceFromHub(entry, hubTree, repo);
   expect(evidence, 'one module became three: the count grows by two').toMatchObject({
     baseCount: 1,
     headCount: 3,
@@ -186,13 +199,13 @@ test('planted pure split passes end to end: count grows, every base module survi
 });
 
 test('planted split smuggling a new heavy edge fails, naming the smuggled weight', () => {
-  const { entry, hubTree, write } = mkSplitFixtureRepo('eager-closure-split-smuggled-');
+  const { entry, hubTree, write, repo } = mkSplitFixtureRepo('eager-closure-split-smuggled-');
   write(
     'packages/demo/src/part-c.ts',
     "import { scan } from './scanner.ts';\nexport const c = scan();\n",
   );
   write('packages/demo/src/scanner.ts', 'export function scan() {\n  return 4;\n}\n');
-  const evidence = evidenceFromHub(entry, hubTree);
+  const evidence = evidenceFromHub(entry, hubTree, repo);
   expect(evidence.headWeight, 'scan() runs at module scope: that is eager work').toBe(4);
   expect(classifyGrowth('demo/entry', evidence)).toMatch(
     /adds 3 module\(s\) and 1 top-level statement\(s\)/,
@@ -205,12 +218,12 @@ test('planted split pulling in a PRE-EXISTING closure-external module fails at o
   // side-effect-imports it, and the weight is offset by merging b and c into one declaration --
   // containment holds and weight is flat, so a two-fact rule passes it. The added module is not
   // new to the tree, so the novelty fact fails and the verdict names shrinkage-funding.
-  const { entry, hubTree, write } = mkSplitFixtureRepo('eager-closure-split-pre-existing-', {
+  const { entry, hubTree, write, repo } = mkSplitFixtureRepo('eager-closure-split-pre-existing-', {
     'packages/demo/src/pre-existing-heavy.ts': 'export const heavy = 42;\n',
   });
   write('packages/demo/src/part-b.ts', 'export const bc = { b: 2, c: 3 };\n');
   write('packages/demo/src/part-c.ts', "import './pre-existing-heavy.ts';\n");
-  const evidence = evidenceFromHub(entry, hubTree);
+  const evidence = evidenceFromHub(entry, hubTree, repo);
   expect(
     evidence,
     'the two facts this shape defeats both hold: 1+1+0+1 weight against 3, containment intact',
@@ -222,8 +235,144 @@ test('planted split pulling in a PRE-EXISTING closure-external module fails at o
   });
   const finding = classifyGrowth('demo/entry', evidence);
   expect(finding, 'the third fact is the one that refuses it').toMatch(
-    /newly evaluates a module the merge-base tree already had/,
+    /newly evaluates code the merge-base tree already had/,
   );
+});
+
+test('a moved-in pre-existing module survives only as a detected rename', () => {
+  // The rename-canonicalization scope, pinned: canonicalization preserves modules ALREADY IN
+  // the base closure. Here `facades/top.ts` sat outside the entry's closure at the merge-base;
+  // the PR renames it (a `git mv` so `-M` pairs it) under a new name and imports it. At the
+  // HEAD path it is new to the tree, so a head-path check would pass it; checking the
+  // canonicalized BASE path -- where the merge-base necessarily has it -- reads it as what it
+  // is: pre-existing code newly made eager.
+  const repo = mkGitFixtureRepo('eager-closure-split-move-in-');
+  fs.writeFileSync(
+    path.join(repo, 'packages/demo/src/entry.ts'),
+    "import { b } from './facades/nested/moved.ts';\nexport { b };\n",
+  );
+  execFileSync(
+    'git',
+    ['mv', 'packages/demo/src/facades/top.ts', 'packages/demo/src/facades/nested/moved.ts'],
+    {
+      cwd: repo,
+    },
+  );
+  const baseTree = createCommittedSourceTree(repo, 'HEAD');
+  const entry = path.join(repo, 'packages/demo/src/entry.ts');
+  const evidence = closureGrowthEvidence({
+    baseGraph: eagerClosureGraphOf(entry, baseTree),
+    headGraph: eagerClosureGraphOf(entry),
+    baseWeights: topLevelStatementWeightsOf(eagerClosureGraphOf(entry, baseTree).keys(), baseTree),
+    headWeights: topLevelStatementWeightsOf(eagerClosureGraphOf(entry).keys()),
+    headStatementTexts: statementTextsOf(eagerClosureGraphOf(entry).keys()),
+    baseTree,
+    renamedBaseToHead: new Map([
+      [
+        path.join(repo, 'packages/demo/src/facades/top.ts'),
+        path.join(repo, 'packages/demo/src/facades/nested/moved.ts'),
+      ],
+    ]),
+  });
+  expect(
+    evidence,
+    'count 1 -> 2 at flat weight: path-level novelty is what refuses it',
+  ).toMatchObject({
+    baseWeight: 1,
+    headWeight: 1,
+    preservedBaseClosure: true,
+    addedModulesAreNew: false,
+  });
+});
+
+test('planted rewritten move of a pre-existing heavy module fails at offset weight, beyond -M', () => {
+  // The Cubic follow-up: a PR deletes `heavy.ts` (committed, closure-external), rewrites it into
+  // a much smaller `moved-heavy.ts` under a new path -- similar enough to still carry real code,
+  // different enough that git's `-M` reports D + A rather than R -- imports it from the split's
+  // part-c, and pays for the carried statements by flattening the hub's own declarations. Path
+  // novelty alone reads moved-heavy.ts as brand new; the deleted-source content comparison is
+  // what refuses it.
+  const repo = mkGitFixtureRepo('eager-closure-split-rewritten-move-');
+  const write = (rel: string, content: string) => fs.writeFileSync(path.join(repo, rel), content);
+  write(
+    'packages/demo/src/entry.ts',
+    'export const a = 1;\nexport const b = 2;\nexport const c = 3;\n',
+  );
+  write(
+    'packages/demo/src/heavy.ts',
+    [
+      'const tableA = { alpha: 1, beta: 2 };',
+      'const tableB = { gamma: 3, delta: 4 };',
+      'const tableC = { epsilon: 5, zeta: 6 };',
+      'function padOne() {',
+      '  return tableA.alpha;',
+      '}',
+      'function padTwo() {',
+      '  return tableB.gamma;',
+      '}',
+      'function padThree() {',
+      '  return tableC.epsilon;',
+      '}',
+      'function padFour() {',
+      '  return tableA.beta + tableB.delta;',
+      '}',
+      'function padFive() {',
+      '  return tableC.zeta;',
+      '}',
+      'export function lookupA(key: string) {',
+      '  return tableA[key];',
+      '}',
+      'export function lookupB(key: string) {',
+      '  return tableB[key];',
+      '}',
+      'export function lookupC(key: string) {',
+      '  return tableC[key];',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  execFileSync('git', ['add', '-A'], { cwd: repo });
+  execFileSync(
+    'git',
+    ['-c', 'user.name=Gate', '-c', 'user.email=gate@example.test', 'commit', '-qm', 'hub'],
+    { cwd: repo },
+  );
+  const hubTree = createCommittedSourceTree(repo, 'HEAD');
+  // The rewritten move: only two statements survive, one with layout churn and one with a
+  // re-export, so `-M` calls it delete + new file.
+  fs.rmSync(path.join(repo, 'packages/demo/src/heavy.ts'));
+  write(
+    'packages/demo/src/moved-heavy.ts',
+    '// relocated from heavy.ts during the split\n\n\nconst tableA = {   alpha: 1,   beta: 2 };\n\n\n/** the surviving lookup */\nexport function lookupA(key: string) {\n\n\n  return tableA[key];\n}\n',
+  );
+  // Hub flattened to wiring; b and c merged into one declaration: the offset payment.
+  write(
+    'packages/demo/src/entry.ts',
+    "export * from './part-b.ts';\nexport * from './part-c.ts';\n",
+  );
+  write('packages/demo/src/part-b.ts', 'export const bc = { b: 2, c: 3 };\n');
+  write('packages/demo/src/part-c.ts', "import './moved-heavy.ts';\n");
+  const renameStatus = execFileSync('git', ['diff', '--name-status', '-M', 'HEAD'], {
+    cwd: repo,
+    encoding: 'utf8',
+  });
+  expect(
+    renameStatus,
+    'the planted evasion must hold: -M must NOT pair the move, or this tests rename handling',
+  ).toMatch(/^D\tpackages\/demo\/src\/heavy\.ts$/m);
+  const entry = path.join(repo, 'packages/demo/src/entry.ts');
+  const evidence = evidenceFromHub(entry, hubTree, repo);
+  expect(
+    evidence,
+    'count 1 -> 4 at flat weight 3 -> 3 with containment intact: only content provenance refuses it',
+  ).toMatchObject({
+    baseWeight: 3,
+    headWeight: 3,
+    preservedBaseClosure: true,
+    addedModulesAreNew: false,
+  });
+  const finding = classifyGrowth('demo/entry', evidence);
+  expect(finding).toMatch(/newly evaluates code the merge-base tree already had/);
 });
 
 test('a renamed module inside the growth is not a dropped module', () => {
@@ -241,6 +390,7 @@ test('a renamed module inside the growth is not a dropped module', () => {
     headGraph: new Map([[headEntry, null]]),
     baseWeights,
     headWeights,
+    headStatementTexts: statementTextsOf([headEntry]),
     baseTree,
   };
   expect(

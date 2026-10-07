@@ -5,9 +5,11 @@
 Accepted (2026-10-07, #2469). The conflict below is resolved in favor of allowing
 **byte-neutral (statement-neutral) re-homing**: the eager-closure budget's NO-GROWTH rule now
 tolerates exactly the split shape — the head closure still evaluates every merge-base module,
-every module it newly evaluates is new to the merge-base tree (or a rename), and the closure's
-total module-scope statement count does not grow. The rule lives in
-`scripts/__tests__/closure-growth-rule.ts`, planted in every failing direction by
+every module it newly evaluates is new to the merge-base tree and to its deleted sources (a
+`git mv` inside the base closure stays the same module through rename canonicalization, which
+preserves modules already in the closure and is no pass for a pre-existing external module
+moved in), and the closure's total module-scope statement count does not grow. The rule lives
+in `scripts/__tests__/closure-growth-rule.ts`, planted in every failing direction by
 `scripts/__tests__/closure-growth-rule.test.ts`. The hard ADR-0019 checks (façade exactness, no
 platform implementation before binding) are untouched: the tolerance relaxes the module-count
 proxy, never the loading property.
@@ -34,9 +36,11 @@ the file must be divided, the other says the division must not be visible to any
 ## Rules at a glance, resolved
 
 - A hub split is allowed when it is statement-neutral: every merge-base module stays in every
-  affected closure, every newly evaluated module is new to the merge-base tree (or a rename), and
-  total module-scope statements do not grow. The gate enforces this; an unexplained count growth
-  still fails with no approval path, as before.
+  affected closure, every newly evaluated module is new to the merge-base tree and to its
+  deleted sources (rename canonicalization preserves modules already in the base closure — it
+  does not make a moved-in external module novel), and total module-scope statements do not
+  grow. The gate enforces this; an unexplained count growth still fails with no approval path,
+  as before.
 - Do not add an approved-growth row, a baseline entry, or a suppression to pass the gate. That is
   the allowlist `AGENTS.md` forbids; the split tolerance is a rule, not a waiver — it decides from
   the two graphs, and nothing is hand-entered per split.
@@ -87,10 +91,13 @@ facts computed from the two closure graphs and the merge-base tree, not by an en
 1. **Containment:** the head closure evaluates every module the merge-base closure evaluated
    (renames canonicalized), so nothing was dropped or swapped.
 2. **Added-module novelty:** every module the head closure evaluates that the base closure did
-   not is absent from the merge-base tree at its rename-canonicalized path. A module the tree
-   already had, sitting outside the closure, becoming eager — under its own name or a renamed
-   one — is a new edge, not re-homed code; and without this fact, weight deleted elsewhere in
-   the closure would fund it.
+   not is absent from the merge-base tree at its rename-canonicalized path AND carries no code
+   from a source deleted since the merge-base. A module the tree already had, sitting outside
+   the closure, becoming eager — under its own name, a renamed one, or a rewritten move that
+   evades git's `-M` similarity pairing — is a new edge, not re-homed code; and without this
+   fact, weight deleted elsewhere in the closure would fund it. Rename canonicalization
+   preserves modules ALREADY IN the base closure; it is not a pass for an external module
+   moved in, which fails the check at the base path the merge-base necessarily still has.
 3. **Flat weight:** the closure's total top-level statement count — wiring lines excluded, so
    re-homing is invisible to it — does not exceed the merge-base closure's.
 
@@ -102,16 +109,17 @@ unrelated shrinkage paying for a smuggled edge — and the three together admit 
 while refusing any growth in the closure's module-scope statement weight. Statements were chosen
 over bytes because formatting and comment churn move bytes while statements track the thing being
 preserved: module-scope declarations and calls. The guarantee is exactly **newly evaluated
-modules are new files, and total statement weight is flat over a preserved closure**, not
-equality of eager behavior: a split that REPLACES an existing statement with a more expensive
-top-level call inside an existing file moves no count and no weight, so it passes — nothing
-count-based, in modules or statements, can see a like-for-like replacement. That residue is
-bounded by what the tolerance cannot hide: every module the head newly evaluates is a file the
-merge-base tree did not have (so it cannot smuggle pre-existing implementation into eager scope),
-the hard ADR-0019 checks (façade exactness, no platform implementation before binding) stay
-count- and pattern-based under it, and the added-module listing every failure prints is what a
-reviewer reads. The planted tests in `scripts/__tests__/closure-growth-rule.test.ts` pin all
-three failing directions.
+modules are new code — new paths carrying no deleted source's statements — and total statement
+weight is flat over a preserved closure**, not equality of eager behavior: a split that REPLACES
+an existing statement with a more expensive top-level call inside an existing file moves no
+count and no weight, so it passes — nothing count-based, in modules or statements, can see a
+like-for-like replacement. That residue is bounded by what the tolerance cannot hide: every
+module the head newly evaluates is a path the merge-base tree did not have AND carries none of
+the statements of any source deleted since the merge-base (so it cannot smuggle pre-existing
+implementation into eager scope, rewritten or not), the hard ADR-0019 checks (façade exactness,
+no platform implementation before binding) stay count- and pattern-based under it, and the
+added-module listing every failure prints is what a reviewer reads. The planted tests in
+`scripts/__tests__/closure-growth-rule.test.ts` pin every failing direction.
 
 Maintenance cost of an ordinary extraction under this rule: zero configuration edits. No row,
 baseline, or number is touched per split — the merge-base comparison recomputes everything. (The
@@ -131,6 +139,10 @@ shippable, so an oversized hub is addressable debt rather than accepted state.
 - **Containment + weight without added-module novelty (the rule's first draft on #3298):** refuted
   by the planted pre-existing-heavy test — deleting statements elsewhere in the closure funds a
   static edge to a merge-base module that sat outside it, which is real growth, not a split.
+- **Novelty by merge-base tree path alone (the rule's second draft on #3298):** refuted by the
+  planted rewritten-move test — a move that changes the path and churns formatting reports to
+  git as delete + add, so an absent destination is not proof of new code. The deleted sources'
+  statement texts are the heuristic-free provenance that closes it.
 - **Weight alone (#2469 candidate 1):** refuted by the planted drop test — a swap can keep the
   statement total flat while quietly making the closure evaluate different modules.
 - **Leave the array in place:** the status quo, not a resolution — it leaves the size debt unowned and

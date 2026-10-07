@@ -115,7 +115,7 @@ export function topLevelStatementCount(fileName: string, source: string): number
   return parseEagerModule(fileName, source).topLevelStatements;
 }
 
-type EagerModule = { specifiers: string[]; topLevelStatements: number };
+type EagerModule = { specifiers: string[]; topLevelStatements: number; statementTexts: string[] };
 
 function parseEagerModule(fileName: string, source: string): EagerModule {
   const parsed = parseSync(fileName, source);
@@ -124,7 +124,37 @@ function parseEagerModule(fileName: string, source: string): EagerModule {
   return {
     specifiers: [...new Set([...staticEvaluatedRefs(parsed.module), ...dynamic])],
     topLevelStatements: countTopLevelStatements(parsed.program),
+    statementTexts: statementTexts(parsed.program, source),
   };
+}
+
+function statementTexts(program: unknown, source: string): string[] {
+  const body = (program as { body?: unknown[] } | undefined)?.body;
+  if (!Array.isArray(body)) return [];
+  const texts: string[] = [];
+  for (const statement of body) {
+    if (statement === null || typeof statement !== 'object') continue;
+    const node = statement as AstNode;
+    if (isWiringOnlyStatement(node)) continue;
+    const start = node.start;
+    const end = node.end;
+    if (typeof start !== 'number' || typeof end !== 'number') continue;
+    texts.push(normalizeStatementText(source.slice(start, end)));
+  }
+  return texts;
+}
+
+/**
+ * Comments sit outside statement spans, so a move that rewrites only comments and layout keeps
+ * texts equal; the `export` keyword is stripped because re-exporting a moved declaration is
+ * still the same module-scope code.
+ */
+function normalizeStatementText(text: string): string {
+  return text
+    .replaceAll(/\s+/g, ' ')
+    .trim()
+    .replace(/^export\s+default\s+/, '')
+    .replace(/^export\s+/, '');
 }
 
 function isWiringOnlyStatement(statement: AstNode): boolean {
@@ -241,6 +271,8 @@ type TreeMemo = {
   directEdges: Map<string, string[]>;
   /** Weight of each walked file, memoized with its edges (#2469). */
   weights: Map<string, number>;
+  /** Statement texts of each read file, memoized beside the weights (#3298 review). */
+  statementTexts: Map<string, string[]>;
 };
 const treeMemos = new WeakMap<SourceTreeReader, TreeMemo>();
 
@@ -251,6 +283,7 @@ function memoOf(tree: SourceTreeReader): TreeMemo {
       packageDirs: readWorkspacePackageDirs(tree),
       directEdges: new Map(),
       weights: new Map(),
+      statementTexts: new Map(),
     };
     treeMemos.set(tree, memo);
   }
@@ -285,6 +318,24 @@ export function topLevelStatementWeightsOf(
   return weights;
 }
 
+/**
+ * Per-file weight-bearing statement texts, as whitespace-normalized source text with the same
+ * exclusions as {@link topLevelStatementCount} plus a leading `export` keyword, so a declaration
+ * re-exported when it moved still matches the text it had as a private binding. Two files whose
+ * texts agree carried the same module-scope code; that is the equality the split tolerance's
+ * deleted-source provenance uses (#3298 review), so a move that evades git's rename detection
+ * still reads as pre-existing code. Comments sit outside statement spans, and an `export`
+ * keyword or reformatting is invisible to it, so only rewritten code differs.
+ */
+export function statementTextsOf(
+  files: Iterable<string>,
+  tree: SourceTreeReader = workingTreeReader,
+): Map<string, string[]> {
+  const texts = new Map<string, string[]>();
+  for (const file of files) texts.set(file, textsOf(file, tree));
+  return texts;
+}
+
 /** The repo files `file` evaluates directly, already resolved to absolute paths. */
 function directEagerEdges(file: string, tree: SourceTreeReader): string[] {
   const memo = memoOf(tree);
@@ -308,6 +359,15 @@ function weightOf(file: string, tree: SourceTreeReader): number {
   const weight = parsedModuleOf(file, tree.readFile(file)).topLevelStatements;
   memo.weights.set(file, weight);
   return weight;
+}
+
+function textsOf(file: string, tree: SourceTreeReader): string[] {
+  const memo = memoOf(tree);
+  const cached = memo.statementTexts.get(file);
+  if (cached) return cached;
+  const texts = parsedModuleOf(file, tree.readFile(file)).statementTexts;
+  memo.statementTexts.set(file, texts);
+  return texts;
 }
 
 /**

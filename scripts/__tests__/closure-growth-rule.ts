@@ -14,10 +14,13 @@
 //    (renames canonicalized), so nothing was dropped or swapped -- the growth is purely
 //    addition.
 // 2. ADDED-MODULE NOVELTY: every module the head closure evaluates that the base closure did
-//    not is absent from the merge-base tree at its rename-canonicalized path. A module the
-//    merge-base tree already had, sitting outside the closure, becoming eager -- under its own
-//    name or a new one -- is a NEW EDGE, not re-homed code; without this fact, weight deleted
-//    elsewhere in the closure would fund it.
+//    not is absent from the merge-base tree AT ITS RENAME-CANONICALIZED PATH and carries no
+//    statement text from a source deleted since the merge-base. A module the merge-base tree
+//    already had, sitting outside the closure, becoming eager -- under its own name, a new
+//    one, or a rewritten move `-M` cannot pair -- is a NEW EDGE, not re-homed code; without
+//    this fact, weight deleted elsewhere in the closure would fund it. Canonicalization
+//    preserves modules ALREADY IN the base closure; a moved-in external module fails novelty
+//    at the base path the merge-base still has.
 // 3. FLAT WEIGHT: the closure's total top-level statement count (`topLevelStatementCount`:
 //    wiring excluded) did not grow. Smuggled eager work that ADDS a module-scope statement --
 //    a call into a new heavy edge -- raises the weight and stays red.
@@ -26,12 +29,13 @@
 // pre-existing module in at flat weight; novelty without containment accepts dropping a
 // merge-base module; weight without the other two accepts an unrelated shrinkage paying for a
 // smuggled edge. The guarantee the triple states is exactly "newly evaluated modules are new
-// files, and total statement weight is flat over a preserved closure" -- a split that REPLACES
-// a statement with a more expensive one inside an existing file is invisible to any count, in
-// modules or in statements, and is not what this tolerance was built to admit. It replaces
-// neither the count comparison (which still fires first: growth must exist to be tolerated)
-// nor the hard ADR-0019 checks (façade exactness, no platform implementation before binding),
-// which stay count- and pattern-based and untouched.
+// CODE -- new paths carrying no deleted source's statements -- and total statement weight is
+// flat over a preserved closure" -- a split that REPLACES a statement with a more expensive
+// one inside an existing file is invisible to any count, in modules or in statements, and is
+// not what this tolerance was built to admit. It replaces neither the count comparison (which
+// still fires first: growth must exist to be tolerated) nor the hard ADR-0019 checks (façade
+// exactness, no platform implementation before binding), which stay count- and pattern-based
+// and untouched.
 
 /**
  * What one entry's no-growth verdict reads. Counts come from the closure graphs; weights are the
@@ -65,11 +69,30 @@ export function closureGrowthEvidence(params: {
   headGraph: ReadonlyMap<string, string | null>;
   baseWeights: ReadonlyMap<string, number>;
   headWeights: ReadonlyMap<string, number>;
+  /** Statement texts of each head-closure file, for the deleted-source comparison below. */
+  headStatementTexts: ReadonlyMap<string, readonly string[]>;
   /** The committed merge-base tree, for the question every added module must answer: did you exist? */
   baseTree: { exists(file: string): boolean };
   renamedBaseToHead?: ReadonlyMap<string, string>;
+  /**
+   * Weight-bearing statement texts of each merge-base production source DELETED since the
+   * merge-base (`deletedSourcesSince`, which deliberately skips `-M`, mapped through
+   * `statementTextsOf`). Git's rename detection is a similarity heuristic and a rewritten move
+   * evades it, showing up as delete + brand-new path; content is not a heuristic, so an added
+   * module carrying a deleted source's code is a move of pre-existing code, not a new file.
+   */
+  deletedSourceTexts?: readonly (readonly string[])[];
 }): ClosureGrowthEvidence {
-  const { baseGraph, headGraph, baseWeights, headWeights, baseTree, renamedBaseToHead } = params;
+  const {
+    baseGraph,
+    headGraph,
+    baseWeights,
+    headWeights,
+    headStatementTexts,
+    baseTree,
+    renamedBaseToHead,
+    deletedSourceTexts = [],
+  } = params;
   const sum = (files: Iterable<string>, weights: ReadonlyMap<string, number>) =>
     [...files].reduce((total, file) => total + (weights.get(file) ?? 0), 0);
   const baseOfRenamedHead = new Map<string, string>();
@@ -84,16 +107,38 @@ export function closureGrowthEvidence(params: {
     preservedBaseClosure: [...baseGraph.keys()].every((baseFile) =>
       headGraph.has(renamedBaseToHead?.get(baseFile) ?? baseFile),
     ),
-    // A module the base closure evaluated (under its pre-rename path) is not an added one;
-    // every other head module must be absent from the merge-base tree AT ITS CANONICALIZED
-    // PATH. A rename head is checked at its BASE path, which the merge-base necessarily has --
-    // so moving a closure-external module into the closure under a new name reads as what it
-    // is: pre-existing code newly made eager, not a split artifact.
+    // A module the base closure evaluated (under its pre-rename path) is not an added one --
+    // canonicalization preserves modules ALREADY IN the base closure, and is not a pass for a
+    // pre-existing external module moved in under a new name: that fails here on its
+    // canonicalized path, or, when the move was rewritten past `-M`, on its content.
     addedModulesAreNew: [...headGraph.keys()].every((headFile) => {
       const baseFile = baseOfRenamedHead.get(headFile) ?? headFile;
-      return baseGraph.has(baseFile) || !baseTree.exists(baseFile);
+      if (baseGraph.has(baseFile)) return true;
+      if (baseTree.exists(baseFile)) return false;
+      return !movedFromDeletedSource(headStatementTexts.get(headFile) ?? [], deletedSourceTexts);
     }),
   };
+}
+
+/**
+ * Two identical weight-bearing statements from the SAME deleted source is a move signal; one
+ * shared line is coincidence (short constants like a schema version repeat across the repo), so
+ * a single match does not brand a new file as pre-existing code.
+ */
+function movedFromDeletedSource(
+  texts: readonly string[],
+  deletedSourceTexts: readonly (readonly string[])[],
+): boolean {
+  if (texts.length === 0) return false;
+  const distinct = new Set(texts);
+  return deletedSourceTexts.some((deleted) => {
+    const deletedSet = new Set(deleted);
+    let shared = 0;
+    for (const text of distinct) {
+      if (deletedSet.has(text) && ++shared >= 2) return true;
+    }
+    return false;
+  });
 }
 
 /**
@@ -120,7 +165,7 @@ export function classifyGrowth(id: string, evidence: ClosureGrowthEvidence): str
   }
   if (!addedModulesAreNew) {
     reasons.push(
-      'It newly evaluates a module the merge-base tree already had, which no split of existing code explains; shrinkage elsewhere cannot fund a new eager edge.',
+      'It newly evaluates code the merge-base tree already had -- at that path, or in a source deleted since the merge-base -- which no split of existing code explains; shrinkage elsewhere cannot fund a new eager edge.',
     );
   }
   if (headWeight > baseWeight) {

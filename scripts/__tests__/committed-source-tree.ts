@@ -54,6 +54,20 @@ export function renamedSince(repoRoot: string, base: string): ReadonlyMap<string
   return renamed;
 }
 
+/**
+ * Production source paths tracked at `base` but gone from the working tree, WITHOUT `-M`, so a
+ * rename the similarity detector would pair stays visible here too. `renamedSince` answers by
+ * detection and misses a moved-and-rewritten module; the split tolerance reads these paths'
+ * content directly so such a move stays non-novel (#3298 review).
+ */
+export function deletedSourcesSince(repoRoot: string, base: string): string[] {
+  const status = git(repoRoot, ['diff', '--name-only', '--diff-filter=D', '-z', base]);
+  return status
+    .toString('utf8')
+    .split('\0')
+    .filter((file) => file !== '' && WALKED_SOURCE.test(file) && isProductionSourceFile(file));
+}
+
 /** A carried entry must have been a source the base closure walker could actually read. */
 export function baseProductionPathOf(
   repoRoot: string,

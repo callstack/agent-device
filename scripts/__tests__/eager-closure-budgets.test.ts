@@ -4,11 +4,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   eagerClosureGraphOf,
+  statementTextsOf,
   topLevelStatementWeightsOf,
 } from '../../src/__tests__/eager-import-closure.fixtures.ts';
 import {
   baseProductionPathOf,
   createCommittedSourceTree,
+  deletedSourcesSince,
   headCommit,
   mergeBaseWithMain,
   renamedSince,
@@ -640,6 +642,16 @@ function headWeightsOf(graph: ReadonlyMap<string, string | null>): Map<string, n
 }
 
 /**
+ * Sources deleted since the merge-base, by CONTENT rather than by `-M` pairing: an added module
+ * carrying one of these files' statements is a rewritten move of pre-existing code, so the
+ * novelty fact must not read it as new. Computed once for the whole lane; the texts come from
+ * the base tree, which is where those files still exist.
+ */
+const deletedSourceTexts = [
+  ...statementTextsOf(deletedSourcesSince(repoRoot, mergeBase).map(absolute), baseTree).values(),
+];
+
+/**
  * Every carried entry's growth data, computed once so the per-entry NO-GROWTH test below and the
  * cross-entry shared-homes note after it read the same graphs instead of walking each closure
  * twice.
@@ -661,8 +673,10 @@ const carriedGrowth = carried.map((entry) => {
       headGraph: graph,
       baseWeights: topLevelStatementWeightsOf(baseGraph.keys(), baseTree),
       headWeights: headWeightsOf(graph),
+      headStatementTexts: statementTextsOf(graph.keys()),
       baseTree,
       renamedBaseToHead,
+      deletedSourceTexts,
     }),
   };
 });
