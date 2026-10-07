@@ -16,6 +16,7 @@ const dedicatedCliCommandHandlerLoaders = {
   plugins: async () => (await import('./plugins.ts')).pluginsCommand,
   daemon: async () => (await import('./daemon.ts')).daemonCommand,
   device: async () => (await import('./device.ts')).deviceCommand,
+  host: async () => (await import('./host.ts')).hostCommand,
   proxy: async () => (await import('./proxy.ts')).proxyCommand,
   takeover: async () => (await import('./takeover.ts')).takeoverCommand,
   replay: async () => (await import('./replay.ts')).replayCommand,

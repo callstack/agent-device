@@ -48,6 +48,7 @@ import { tryHandleUploadHttpRoute } from '../upload-http.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../downloadable-artifact-http.ts';
 import { tryHandleRequestDiagnosticsHttpRoute } from '../request-diagnostics-http.ts';
 import { resolveTrustedTenant, tenantTrustRejectionError } from './tenant-trust.ts';
+import { hostPrincipalInvalidError, readHostPrincipal } from './host-principal.ts';
 import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
 import type { TenantSessionNamespace } from '../session-tenant-scope.ts';
 import { tryHandleHostAdminHttpRoute } from '../host-lease-http.ts';
@@ -755,6 +756,10 @@ export async function createDaemonHttpServer(options: {
         };
         requestAbortRegistration = registerRequestAbort(requestIdForCleanup);
         const clientDeclaredTenant = daemonRequest.meta?.tenantId ?? daemonRequest.flags?.tenant;
+        // The principal counts only on a request that already holds the daemon token.
+        const hostPrincipal = enforceDaemonToken(daemonRequest.token, token)
+          ? undefined
+          : readHostPrincipal(req.headers);
 
         const authResult = await runHttpAuthHook(authHook, {
           headers: req.headers,
@@ -769,9 +774,10 @@ export async function createDaemonHttpServer(options: {
           hookConfigured: authHook !== null,
           hookAttestedTenant: authResult.tenantId,
           clientDeclaredTenant,
+          hostPrincipal: hostPrincipal ?? undefined,
         });
         if (!tenantTrust.trusted) {
-          const normalized = tenantTrustRejectionError();
+          const normalized = tenantTrustRejectionError(tenantTrust);
           sendJson(
             res,
             createRpcError(rpcRequest.id ?? null, -32001, normalized.message, normalized),
@@ -785,6 +791,15 @@ export async function createDaemonHttpServer(options: {
             res,
             createRpcError(rpcRequest.id ?? null, -32000, tokenError.message, tokenError),
             401,
+          );
+          return;
+        }
+        if (hostPrincipal === null) {
+          const normalized = normalizeError(hostPrincipalInvalidError());
+          sendJson(
+            res,
+            createRpcError(rpcRequest.id ?? null, -32602, normalized.message, normalized),
+            400,
           );
           return;
         }
@@ -810,6 +825,9 @@ export async function createDaemonHttpServer(options: {
         // must not see the isolation the meta just overrode.
         if (tenantTrust.attested && daemonRequest.flags?.sessionIsolation !== undefined) {
           daemonRequest.flags = { ...daemonRequest.flags, sessionIsolation: 'tenant' };
+        }
+        if (hostPrincipal) {
+          daemonRequest.internal = { ...daemonRequest.internal, hostPrincipal };
         }
         daemonRequest = restrictRemoteHttpRequest(
           daemonRequest,
@@ -941,6 +959,11 @@ async function authorizeAuxiliaryHttpRequest(params: {
     sendRestJsonError(res, tokenError);
     return null;
   }
+  const hostPrincipal = readHostPrincipal(req.headers);
+  if (hostPrincipal === null) {
+    sendRestJsonError(res, normalizeError(hostPrincipalInvalidError()));
+    return null;
+  }
 
   const syntheticRpc: JsonRpcRequest = {
     jsonrpc: '2.0',
@@ -967,9 +990,10 @@ async function authorizeAuxiliaryHttpRequest(params: {
     hookConfigured: authHook !== null,
     hookAttestedTenant: authResult.tenantId,
     clientDeclaredTenant: tenantId,
+    hostPrincipal,
   });
   if (!tenantTrust.trusted) {
-    sendRestJsonError(res, tenantTrustRejectionError());
+    sendRestJsonError(res, tenantTrustRejectionError(tenantTrust));
     return null;
   }
 

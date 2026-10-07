@@ -27,6 +27,15 @@ import {
  */
 export type DaemonProxyUpstreamFetch = (request: Request) => Promise<Response>;
 
+/**
+ * Admits one authorized JSON-RPC request before it is forwarded: return the params to forward,
+ * possibly rewritten, or a response to answer with instead. It runs after the proxy checked the
+ * client token, so an embedder applies its own policy without repeating authentication.
+ */
+export type DaemonProxyRpcAdmission = (
+  rpc: Readonly<{ id: unknown; method: string; params: Record<string, unknown> }>,
+) => Record<string, unknown> | Response;
+
 export type DaemonProxyOptions = {
   /** Base URL of the upstream agent-device daemon HTTP server. */
   upstreamBaseUrl: string;
@@ -37,6 +46,7 @@ export type DaemonProxyOptions = {
   maxRpcBodyBytes?: number;
   upstreamTimeoutMs?: number;
   upstreamFetch?: DaemonProxyUpstreamFetch;
+  admitRpc?: DaemonProxyRpcAdmission;
 };
 
 export type DaemonProxy = {
@@ -51,7 +61,8 @@ export type DaemonProxy = {
   handle(request: Request): Promise<Response>;
 };
 
-type NormalizedProxyOptions = Required<DaemonProxyOptions>;
+type NormalizedProxyOptions = Required<Omit<DaemonProxyOptions, 'admitRpc'>> &
+  Pick<DaemonProxyOptions, 'admitRpc'>;
 
 const DEFAULT_MAX_RPC_BODY_BYTES = 1024 * 1024;
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 5 * 60 * 1000;
@@ -137,11 +148,35 @@ async function handleProxyRequest(
   );
   if (staleInstance) return staleInstance;
 
+  const admitted = admitRpcBody(rpcBody, options.admitRpc);
+  if (admitted instanceof Response) return admitted;
+  rpcBody = admitted;
+
   if (carriesUnbackedHostPathInstallSource(rpcBody)) {
     return hostPathInstallSourceRefusedResponse(readJsonRpcId(rpcBody));
   }
 
   return await forwardProxyRequest({ request, route, options, rpcBody });
+}
+
+/** A body that is not a JSON-RPC request is forwarded as it came, for the daemon to refuse. */
+function admitRpcBody(
+  rpcBody: string | undefined,
+  admitRpc: DaemonProxyRpcAdmission | undefined,
+): string | undefined | Response {
+  if (rpcBody === undefined || !admitRpc) return rpcBody;
+  let envelope: Record<string, unknown>;
+  try {
+    envelope = JSON.parse(rpcBody) as Record<string, unknown>;
+  } catch {
+    return rpcBody;
+  }
+  const { method, params } = envelope ?? {};
+  if (typeof method !== 'string' || !params || typeof params !== 'object') return rpcBody;
+  const admitted = admitRpc({ id: envelope.id, method, params: params as Record<string, unknown> });
+  return admitted instanceof Response
+    ? admitted
+    : JSON.stringify({ ...envelope, params: admitted });
 }
 
 async function proxyHealthResponse(
@@ -316,6 +351,7 @@ function normalizeProxyOptions(options: DaemonProxyOptions): NormalizedProxyOpti
     maxRpcBodyBytes: options.maxRpcBodyBytes ?? DEFAULT_MAX_RPC_BODY_BYTES,
     upstreamTimeoutMs: options.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS,
     upstreamFetch: options.upstreamFetch ?? ((request) => fetch(request)),
+    admitRpc: options.admitRpc,
   };
 }
 

@@ -24,6 +24,7 @@ import {
   qaReportHelpTopics,
   WAIT_FAILURE_CONTRACT,
 } from './cli-help-workflows.ts';
+import { hostHelpTopics } from './cli-help-host.ts';
 import { renderCliHelpOverview } from './cli-help-overview.ts';
 import { foldableHelpTopic } from '../system/index.ts';
 
@@ -709,6 +710,7 @@ Rules:
   For remote Android and iOS bridge React DevTools, run agent-device react-devtools normally. The CLI opens the needed local service tunnel for the DevTools daemon and keeps it alive until agent-device react-devtools stop or disconnect.
   Use --debug when remote connection or transport errors need diagnostic ids and remote log hints.`,
   },
+  ...hostHelpTopics,
   macos: {
     summary: 'macOS desktop, frontmost-app, and menu bar surfaces',
     body: `agent-device help macos

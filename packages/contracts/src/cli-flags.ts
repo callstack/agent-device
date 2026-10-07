@@ -43,6 +43,8 @@ export type CliFlags = CloudProviderProfileFields &
     daemonServerMode?: DaemonServerMode;
     proxyHost?: string;
     proxyPort?: number;
+    hostTlsCert?: string;
+    hostTlsKey?: string;
     tenant?: string;
     sessionIsolation?: SessionIsolationMode;
     runId?: string;

@@ -3,7 +3,7 @@
   "declarations": {
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_BASE_PATH": "sha256:a1ada25c6f90d9c69c8c836538e8882547bf239559f7c1accacd0654355802dd",
     "packages/contracts/src/daemon-http.ts#DAEMON_HTTP_TENANT_HEADER": "sha256:ed49119d232500885f014ac73f6123d298d404c6c176abdae59cf324825927e5",
-    "packages/contracts/src/daemon-http.ts#DaemonHealthPayload": "sha256:ece08b91cc46c1397309a05a68f1e1be3999cd4b069c4c3b6bc5b75a5700f108",
+    "packages/contracts/src/daemon-http.ts#DaemonHealthPayload": "sha256:5ba198a6820269e1b60f4098334dc1f5588d5850d201c2211088df184431a4ae",
     "packages/contracts/src/daemon-http.ts#buildDaemonHealthPayload": "sha256:49a46bd62207a69a359e7c8be6f97c07748af21344452be1d32507b95ce4650b",
     "packages/contracts/src/daemon-http.ts#buildDaemonHttpAuthHeaders": "sha256:5548a44d6248ed858d19a0b2985ec4ae8a7181bae8294b85edf3c1b3b58e80d4",
     "packages/contracts/src/daemon-http.ts#buildDaemonHttpBaseUrl": "sha256:f92697208d9f42ec0dcfb006b6f2dce761bd5307db27ce2e52927fd7742e3a9a",
@@ -109,7 +109,7 @@
     "src/daemon/server/http-server.ts#MAX_HTTP_RPC_BODY_BYTES": "sha256:3cb06e12b3110fa27e390d5c6473578b3f13c93b9f2b571e0e8e42d7ce29d48a",
     "src/daemon/server/http-server.ts#RELEASE_MATERIALIZED_PATHS_RPC_METHODS": "sha256:75a18d3496894309dd6042b16c4dcc241c16ec6336783e6310eddd6db7437ccb",
     "src/daemon/server/http-server.ts#SUPPORTED_RPC_METHODS": "sha256:4d5ed730dcb669b0dacca3bb4977f35686bab9b7fb464c0590fd50f838e6c243",
-    "src/daemon/server/http-server.ts#authorizeAuxiliaryHttpRequest": "sha256:1c323f97c3cefec8f95633b6abd127342bf75494bfb109d1cc6eadf3ceacaeae",
+    "src/daemon/server/http-server.ts#authorizeAuxiliaryHttpRequest": "sha256:28acfc0b437378a401f52823b098498758f5aa45d71793a37ddc4123005557ea",
     "src/daemon/server/http-server.ts#createRpcError": "sha256:1921762129636afc7772937d48e8afb8f09047b343e3a27d18b49c1c4385bbe8",
     "src/daemon/server/http-server.ts#enforceDaemonToken": "sha256:60036cffc34388b33fc0dad39c905d9cb3fc18c9ed0cf24255bb7105f5d444c7",
     "src/daemon/server/http-server.ts#isCommandRpcMethod": "sha256:9922102ba9c72c3032f205717d772ab7c3506c6f3012f55b8e7e5636b672ed7e",
@@ -281,8 +281,8 @@
     },
     {
       "declaration": "src/daemon/server/http-server.ts#authorizeAuxiliaryHttpRequest",
-      "digest": "sha256:1c323f97c3cefec8f95633b6abd127342bf75494bfb109d1cc6eadf3ceacaeae",
-      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers — sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added — an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses."
+      "digest": "sha256:28acfc0b437378a401f52823b098498758f5aa45d71793a37ddc4123005557ea",
+      "rationale": "#2198 context: adds one optional field to the value this DAEMON-INTERNAL gate hands its own route handlers — sessionNamespace, the caller's tenant plus whether the daemon partitioned that caller's session names. Nothing about it is serialized: no request header is read that was not read before, no response field is added, and a refusal keeps the same 401 {ok:false,error,code} REST body sendRestJsonError already sent. What it enables is a refusal DROPPED, never one added — an unattested (client-declared) tenant no longer has the <tenant>: prefix rule applied to it, because scopeRequestSession never applied that prefix to its sessions either. A released peer that now gets 200 where it got 401 is getting the ndjson record it asked for and already parses. #3266 reads the Host front-end's x-agent-device-principal header only after the daemon token matched and treats it as an attested tenant; no released client sends that header and the proxy never forwards it, so every released request is authorized exactly as before."
     },
     {
       "declaration": "src/daemon/request-diagnostics-http.ts#RequestDiagnosticsHttpAuthorizer",
@@ -351,8 +351,8 @@
     },
     {
       "declaration": "packages/contracts/src/daemon-http.ts#DaemonHealthPayload",
-      "digest": "sha256:ece08b91cc46c1397309a05a68f1e1be3999cd4b069c4c3b6bc5b75a5700f108",
-      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged."
+      "digest": "sha256:5ba198a6820269e1b60f4098334dc1f5588d5850d201c2211088df184431a4ae",
+      "rationale": "#2650 adds an optional daemon instance ID to health metadata or reads it when present, #3047 adds an optional hostArch the same way, and #3229 adds an optional leaseBackends list the same way. Older peers ignore the added fields, and new clients keep probing legacy peers that send neither; existing fields and RPC envelopes are unchanged. #3266 widens `service` with 'agent-device-host' for the Host front-end; clients read `service` as an opaque diagnostic string, and the daemon and proxy keep sending exactly the values they sent before."
     },
     {
       "declaration": "packages/contracts/src/daemon-http.ts#buildDaemonHealthPayload",
