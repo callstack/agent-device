@@ -1,17 +1,14 @@
 import { randomBytes } from 'node:crypto';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import { buildDaemonHttpBaseUrl } from '@agent-device/contracts/daemon-http';
+import {
+  ensureDaemon,
+  resolveClientSettings,
+} from '../../daemon-client/daemon-client-lifecycle.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { colorize, supportsColor } from '../../commands/output/color.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { writeCommandOutput } from './shared.ts';
-import {
-  ensureLocalHttpDaemon,
-  formatHostForUrl,
-  listenOnTcp,
-  resolveLocalHttpDaemonSettings,
-  waitForever,
-} from './local-daemon-front-end.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
 type ProxyStartup = {
@@ -33,31 +30,67 @@ export const proxyCommand: ClientCommandHandler = async ({ positionals, flags })
 };
 
 async function startProxy(flags: CliFlags): Promise<ProxyStartup> {
-  const { upstreamBaseUrl, upstreamToken, stateDir } = await ensureLocalHttpDaemon(
-    'proxy',
-    resolveLocalHttpDaemonSettings({ command: 'proxy', stateDir: flags.stateDir }),
-  );
+  const settings = resolveClientSettings({
+    session: 'default',
+    command: 'proxy',
+    positionals: [],
+    flags: {
+      stateDir: flags.stateDir,
+      daemonBaseUrl: '',
+      daemonTransport: 'http',
+      daemonServerMode: 'http',
+    },
+  });
+  const daemon = await ensureDaemon(settings);
+  const upstreamBaseUrl = resolveLocalDaemonBaseUrl(daemon.info.httpPort);
   const token = resolveProxyClientToken(flags);
   const server = createDaemonProxyServer({
     upstreamBaseUrl,
-    upstreamToken,
+    upstreamToken: daemon.info.token,
     clientToken: token,
   });
   const host = flags.proxyHost?.trim() || '127.0.0.1';
   const port = flags.proxyPort ?? 0;
-  const address = await listenOnTcp(server, host, port);
+  await listen(server, host, port);
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    throw new AppError('COMMAND_FAILED', 'Proxy did not bind to a TCP address.');
+  }
   const proxyBaseUrl = `http://${formatHostForUrl(address.address)}:${address.port}`;
   return {
     proxyBaseUrl,
     agentDeviceBaseUrl: buildDaemonHttpBaseUrl(proxyBaseUrl),
     token,
     upstreamBaseUrl,
-    stateDir,
+    stateDir: settings.paths.baseDir,
   };
+}
+
+function resolveLocalDaemonBaseUrl(httpPort: number | undefined): string {
+  if (!httpPort) {
+    throw new AppError('COMMAND_FAILED', 'Local daemon HTTP endpoint is unavailable.', {
+      hint: 'Retry after cleaning daemon state, or run proxy with a fresh --state-dir.',
+    });
+  }
+  return `http://127.0.0.1:${httpPort}`;
 }
 
 function resolveProxyClientToken(flags: CliFlags): string {
   return flags.daemonAuthToken?.trim() || randomBytes(32).toString('hex');
+}
+
+function listen(server: ReturnType<typeof createDaemonProxyServer>, host: string, port: number) {
+  return new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, host, () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+}
+
+function formatHostForUrl(host: string): string {
+  return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
 }
 
 export function renderProxyStartup(
@@ -85,4 +118,8 @@ function formatProxyOutputValue(
   useColor: boolean,
 ): string {
   return useColor ? colorize(value, format, { validateStream: false }) : value;
+}
+
+function waitForever(): Promise<never> {
+  return new Promise(() => {});
 }

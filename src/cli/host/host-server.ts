@@ -1,7 +1,6 @@
 import http from 'node:http';
 import https from 'node:https';
-import { createDaemonProxy } from '@agent-device/proxy';
-import { createDaemonProxyRequestListener } from '@agent-device/proxy/node';
+import { createDaemonProxy, createDaemonProxyRequestListener } from '@agent-device/proxy';
 import type { HostServiceCredential } from './service-credential.ts';
 
 export type HostTlsMaterial = Readonly<{ cert: Buffer; key: Buffer }>;

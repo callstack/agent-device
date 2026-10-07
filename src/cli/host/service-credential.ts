@@ -15,7 +15,13 @@ export type HostServiceCredential = Readonly<{
 export type HostServiceCredentialLoad = Readonly<{
   credential: HostServiceCredential;
   credentialFile: string;
+  /** True when this start generated the credential; it reaches disk only through `publish`. */
   created: boolean;
+  /**
+   * Writes a generated credential. Host calls it once it is serving, so a start that fails
+   * earlier leaves no credential behind and the next start shows the token it creates.
+   */
+  publish(): void;
 }>;
 
 const CREDENTIAL_FILE_NAME = 'service-credential.json';
@@ -30,15 +36,26 @@ function hostPrincipalForCredential(credentialId: string): string {
 }
 
 /**
- * Returns the persisted credential, creating it on first start. An existing file is never
- * replaced: regenerating it would silently lock out every worker holding the old token.
+ * Returns the persisted credential, or a new one to publish once Host is serving. An existing
+ * file is never replaced: regenerating it would silently lock out every worker holding the token.
  */
-export function loadOrCreateHostServiceCredential(hostDir: string): HostServiceCredentialLoad {
+export function prepareHostServiceCredential(hostDir: string): HostServiceCredentialLoad {
   const credentialFile = path.join(hostDir, CREDENTIAL_FILE_NAME);
   ensurePrivateDirectory(hostDir);
   const existing = readCredential(credentialFile);
-  if (existing) return { credential: existing, credentialFile, created: false };
+  if (existing) {
+    return { credential: existing, credentialFile, created: false, publish: () => {} };
+  }
   const credential = generateCredential();
+  return {
+    credential,
+    credentialFile,
+    created: true,
+    publish: () => publishCredential(credentialFile, credential),
+  };
+}
+
+function publishCredential(credentialFile: string, credential: HostServiceCredential): void {
   try {
     publishDurableFileSync({
       destination: credentialFile,
@@ -47,11 +64,17 @@ export function loadOrCreateHostServiceCredential(hostDir: string): HostServiceC
       publish: 'link-exclusive',
     });
   } catch (error) {
-    const concurrent = isAlreadyExistsError(error) ? readCredential(credentialFile) : undefined;
-    if (!concurrent) throw error;
-    return { credential: concurrent, credentialFile, created: false };
+    if ((error as NodeJS.ErrnoException | undefined)?.code !== 'EEXIST') throw error;
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Another Host start created the service credential first.',
+      {
+        reason: 'host-credential-raced',
+        path: credentialFile,
+        hint: 'Run one Host per state dir, then restart this Host to use the stored credential.',
+      },
+    );
   }
-  return { credential, credentialFile, created: true };
 }
 
 function generateCredential(): HostServiceCredential {
@@ -67,21 +90,46 @@ function generateCredential(): HostServiceCredential {
 function ensurePrivateDirectory(hostDir: string): void {
   fs.mkdirSync(hostDir, { recursive: true, mode: 0o700 });
   const stat = fs.lstatSync(hostDir);
-  if (!stat.isDirectory() || !isPrivateToCurrentUser(stat)) {
-    throw insecureCredentialError(hostDir);
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw insecureCredentialError(hostDir, `${hostDir} must be a real directory, not a link.`);
   }
+  if (!isPrivateToCurrentUser(stat)) throw insecureCredentialError(hostDir, privateHint(hostDir));
 }
 
 function readCredential(credentialFile: string): HostServiceCredential | undefined {
-  const descriptor = openVerifiedFileForRead(credentialFile);
+  const descriptor = openCredentialFile(credentialFile);
   if (descriptor === undefined) return undefined;
   try {
     if (!isPrivateToCurrentUser(fs.fstatSync(descriptor))) {
-      throw insecureCredentialError(credentialFile);
+      throw insecureCredentialError(credentialFile, privateHint(credentialFile));
     }
     return parseCredential(fs.readFileSync(descriptor, 'utf8'), credentialFile);
   } finally {
     fs.closeSync(descriptor);
+  }
+}
+
+function openCredentialFile(credentialFile: string): number | undefined {
+  try {
+    return openVerifiedFileForRead(credentialFile);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | undefined)?.code;
+    if (code === 'EACCES' || code === 'EPERM') {
+      throw new AppError(
+        'COMMAND_FAILED',
+        'Host service credential file is not readable.',
+        {
+          reason: 'host-credential-unreadable',
+          path: credentialFile,
+          hint: `Make ${credentialFile} readable by the Host user (chmod 600).`,
+        },
+        error,
+      );
+    }
+    throw insecureCredentialError(
+      credentialFile,
+      `${credentialFile} must be a regular file, not a link or directory.`,
+    );
   }
 }
 
@@ -116,16 +164,22 @@ function matchingString(value: unknown, pattern: RegExp): string | undefined {
   return typeof value === 'string' && pattern.test(value) ? value : undefined;
 }
 
+/** Platforms without POSIX ownership (no getuid) report synthetic mode bits, so only POSIX checks them. */
 function isPrivateToCurrentUser(stat: fs.Stats): boolean {
   const uid = process.getuid?.();
-  return (stat.mode & GROUP_OR_OTHER_ACCESS) === 0 && (uid === undefined || stat.uid === uid);
+  if (uid === undefined) return true;
+  return (stat.mode & GROUP_OR_OTHER_ACCESS) === 0 && stat.uid === uid;
 }
 
-function insecureCredentialError(target: string): AppError {
+function privateHint(target: string): string {
+  return `Make ${target} owned by the Host user and inaccessible to group and others (chmod 700 for the directory, 600 for the file).`;
+}
+
+function insecureCredentialError(target: string, hint: string): AppError {
   return new AppError('COMMAND_FAILED', 'Host service credential is not private to this user.', {
     reason: 'host-credential-insecure',
     path: target,
-    hint: `Make ${target} owned by the Host user and inaccessible to group and others (chmod 700 for the directory, 600 for the file).`,
+    hint,
   });
 }
 
@@ -135,8 +189,4 @@ function invalidCredentialError(credentialFile: string): AppError {
     path: credentialFile,
     hint: `Delete ${credentialFile} to create a new credential. Workers then need the new token.`,
   });
-}
-
-function isAlreadyExistsError(error: unknown): boolean {
-  return (error as NodeJS.ErrnoException | undefined)?.code === 'EEXIST';
 }

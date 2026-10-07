@@ -453,7 +453,10 @@ test('usageForCommand resolves host help topic', async () => {
   assert.match(help, /^agent-device \S+ — host/);
   assert.match(help, /host\/service-credential\.json \(mode 0600, directory 0700\)/);
   assert.match(help, /--tls-cert <path> --tls-key <path>/);
-  assert.match(help, /GET \/health is public\. Every other route needs the service token/);
+  assert.match(
+    help,
+    /GET \/health is public\. Every other route needs the service token \(401 without it\);\s+unserved routes get 404\./,
+  );
 });
 
 test('usageForCommand resolves physical-device help topic', async () => {

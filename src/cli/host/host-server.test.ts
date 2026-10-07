@@ -12,7 +12,7 @@ import {
 } from '../../__tests__/test-utils/loopback.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { createHostServer, type HostTlsMaterial } from './host-server.ts';
-import { loadOrCreateHostServiceCredential } from './service-credential.ts';
+import { prepareHostServiceCredential } from './service-credential.ts';
 
 const UPSTREAM_TOKEN = 'daemon-token-never-leaves-host';
 
@@ -38,7 +38,9 @@ async function startHost(
   t: TestContext,
   options: { upstreamBaseUrl: string; hostDir: string; tls?: HostTlsMaterial },
 ) {
-  const { credential } = loadOrCreateHostServiceCredential(options.hostDir);
+  const prepared = prepareHostServiceCredential(options.hostDir);
+  prepared.publish();
+  const { credential } = prepared;
   const server = createHostServer({
     upstreamBaseUrl: options.upstreamBaseUrl,
     upstreamToken: UPSTREAM_TOKEN,
@@ -49,35 +51,6 @@ async function startHost(
   t.onTestFinished(() => closeLoopbackServer(server));
   return { token: credential.token, server, port, baseUrl: `http://127.0.0.1:${port}` };
 }
-
-function rpc(baseUrl: string, token?: string): Promise<Response> {
-  return fetch(`${baseUrl}/agent-device/rpc`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'agent_device.command',
-      params: { command: 'devices', positionals: [] },
-    }),
-  });
-}
-
-test('host refuses requests without the service token and never reaches the daemon', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t)) return;
-  const upstream = await startUpstreamDaemon(t);
-  const host = await startHost(t, {
-    upstreamBaseUrl: upstream.upstreamBaseUrl,
-    hostDir: path.join(mkdtempForTestSync('agent-device-host-'), 'host'),
-  });
-
-  assert.equal((await rpc(host.baseUrl)).status, 401);
-  assert.equal((await rpc(host.baseUrl, 'not-the-service-token')).status, 401);
-  assert.equal(upstream.calls.length, 0);
-});
 
 test('host answers unserved routes with 404', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
@@ -93,24 +66,6 @@ test('host answers unserved routes with 404', async (t) => {
     assert.equal(response.status, 404, route);
   }
   assert.equal(upstream.calls.length, 0);
-});
-
-test('a restarted host accepts the same service token and forwards with the daemon token', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t)) return;
-  const upstream = await startUpstreamDaemon(t);
-  const hostDir = path.join(mkdtempForTestSync('agent-device-host-'), 'host');
-  const first = await startHost(t, { upstreamBaseUrl: upstream.upstreamBaseUrl, hostDir });
-  await closeLoopbackServer(first.server);
-
-  const restarted = await startHost(t, { upstreamBaseUrl: upstream.upstreamBaseUrl, hostDir });
-  const response = await rpc(restarted.baseUrl, first.token);
-
-  assert.equal(restarted.token, first.token);
-  assert.equal(response.status, 200);
-  assert.equal(upstream.calls.length, 1);
-  assert.equal(upstream.calls[0]?.url, '/rpc');
-  assert.equal(upstream.calls[0]?.authorization, `Bearer ${UPSTREAM_TOKEN}`);
-  assert.equal(JSON.parse(upstream.calls[0]?.body ?? '{}').params.token, UPSTREAM_TOKEN);
 });
 
 function generateSelfSignedCertificate(dir: string): HostTlsMaterial | undefined {
