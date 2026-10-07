@@ -9,7 +9,7 @@ import {
 import type { DaemonRequest } from '../daemon-request.ts';
 import type { ManagedCommandHorizon } from './lease-admission.ts';
 
-const MANAGED_COMMAND_TEARDOWN_TIMEOUT_MS =
+export const MANAGED_COMMAND_TEARDOWN_TIMEOUT_MS =
   DAEMON_SESSION_TEARDOWN_TIMEOUT_MS + SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS;
 
 /** Reserve recording cleanup even when this command is the one that starts the capture. */
