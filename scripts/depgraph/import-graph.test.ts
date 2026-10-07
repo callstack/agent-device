@@ -43,3 +43,13 @@ test('importGraph adds explicit files that no kept edge touches', () => {
     ['src/core/a.ts', 'src/core/b.ts', 'src/core/c.ts'],
   );
 });
+
+test('importGraph keeps distinct file pairs distinct even when a path contains the arrow', () => {
+  const pair = (from: string, to: string) => ({ ...edges[0]!, from, to });
+  const graph = importGraph(
+    [pair('src/a -> b.ts', 'src/c.ts'), pair('src/a', 'b.ts -> src/c.ts')],
+    VALUE_EDGES,
+  );
+
+  assert.equal(new Set(graph.edges.map((edge) => edge.id)).size, 2);
+});

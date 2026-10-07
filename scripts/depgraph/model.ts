@@ -148,10 +148,6 @@ export function authorityLabelsForEdge(edge: ResolvedImportEdge): AuthorityLabel
   return authorityLabelsForDeclared(declaredAuthorities(edge));
 }
 
-function edgePair(from: string, to: string): string {
-  return `${from}\u0000${to}`;
-}
-
 function countAuthorityLabels(edgeAuthorities: readonly AuthorityLabel[][]): AuthorityCounts {
   const counts = Object.fromEntries(AUTHORITY_LABELS.map((label) => [label, 0])) as AuthorityCounts;
   for (const labels of edgeAuthorities) {
@@ -184,7 +180,7 @@ export function collapseEdges(edges: readonly ResolvedImportEdge[]): GraphEdge[]
   const byPair = new Map<string, GraphEdge>();
   for (const edge of edges) {
     if (edge.file === edge.target) continue;
-    const key = edgePair(edge.file, edge.target);
+    const key = importEdgeId(edge.file, edge.target);
     const kind = edgeKind(edge);
     const existing = byPair.get(key);
     const authorities = orderedDeclaredAuthorities([

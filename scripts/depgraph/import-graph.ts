@@ -15,9 +15,12 @@ export const VALUE_EDGES: ReadonlySet<EdgeKind> = new Set(['value']);
  */
 export const EXECUTABLE_EDGES: ReadonlySet<EdgeKind> = new Set(['value', 'dynamic']);
 
-/** Graph edge id for a collapsed file pair; `collapseEdges` keeps one edge per pair. */
+/**
+ * Identity of one file pair, shared by `collapseEdges` and the graph's edge ids. NUL cannot occur
+ * in a file path, so distinct pairs never share an id.
+ */
 export function importEdgeId(from: string, to: string): string {
-  return `${from} -> ${to}`;
+  return `${from}\u0000${to}`;
 }
 
 /**
