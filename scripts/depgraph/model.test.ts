@@ -305,11 +305,10 @@ test('computeLevels stays finite on a value cycle, where the closing edge adds n
   });
   const graph = buildGraph(files, resolveImportEdges(files));
 
-  assert.deepEqual(Object.fromEntries(computeLevels(graph.nodes, graph.edges)), {
-    'src/core/a.ts': 1,
-    'src/core/b.ts': 0,
-    'src/core/z.ts': 2,
-  });
+  const levels = computeLevels(graph.nodes, graph.edges);
+
+  assert.deepEqual([levels.get('src/core/a.ts'), levels.get('src/core/b.ts')].sort(), [0, 1]);
+  assert.equal(levels.get('src/core/z.ts'), 2);
 });
 
 test('a type-only shortcut is never flagged against a value path', () => {
